@@ -491,7 +491,7 @@ int main(int argc, const char* argv[])
     options.AddLongOption("dq-block-ast")
         .RequiredArgument("PATH")
         .StoreResult(&runParams.DqBlockAstFile)
-        .Help("Textual AsTuple of extractKey/init/update/finalize lambdas and the output key width");
+        .Help("Textual input transform, aggregation lambdas, and output key width");
 
     NLastGetopt::TOptsParseResult parsedOptions(&options, argc, argv);
 

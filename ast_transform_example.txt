@@ -1,0 +1,10 @@
+'(
+    (lambda '($1 $2) 
+      (BlockAsStruct '('"URL" $1) '('"UserID" $2)
+    ))
+    (lambda '($10) (Member $10 '"URL") (Member $10 '"UserID")) 
+    (lambda '($20 $21 $22) (Uint64 '1)) 
+    (lambda '($30 $31 $32 $33) (AggrAdd $33 (Uint64 '1))) 
+    (lambda '($40 $41 $42) $40 $41 $42)
+    (Uint64 '2)
+)

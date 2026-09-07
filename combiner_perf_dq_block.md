@@ -56,16 +56,18 @@ The mode accepts the existing `--block-size`, `--run-count`, `--num-attempts`, `
 - Handles integer, floating-point, Boolean, UTF-8/binary string, date32/date64, and timestamp physical types. Arrays are cast to the physical Arrow representation expected by MKQL blocks where necessary (for example Boolean to `uint8`). Unsupported complex types fail with an explicit error.
 - Uses the requested block size as the Parquet record-batch size, stops precisely at the row limit, retains all selected arrays in RAM, and reports inferred types.
 - Builds a block-wide stream type containing one `TBlockType::Many` per selected column plus the scalar `Uint64` block-length column.
+- If the custom AST contains an input transform, compiles it into a separate non-LLVM graph, runs it once over the preloaded input blocks, and retains its Arrow datums before constructing the measured aggregation graph. The datums are rewrapped in the aggregation graph's allocator, so the Arrow data stays zero-copy without sharing allocator-owned MKQL wrappers.
 - Either synthesizes key extraction, initialization, update, and finalization lambdas from the CLI aggregation description, or loads them from `--dq-block-ast`.
 - Builds `DqHashAggregate` through `TKqpProgramBuilder` in both cases.
 - Wraps retained arrays and block lengths into `TUnboxedValue` Arrow blocks before measurements. `--run-count` replays the prebuilt blocks without rereading the file.
 
 ### Custom aggregation AST
 
-The AST file has the following strict shape:
+The AST file has the following shape (the older `AsTuple` root is also accepted):
 
 ```lisp
-(AsTuple
+'(
+    <input-transform lambda or ()>
     <extractKey lambda>
     <init lambda>
     <update lambda>
@@ -73,17 +75,19 @@ The AST file has the following strict shape:
     (Uint64 '<output-key-width>))
 ```
 
-- The first four tuple elements must be wide lambdas in the same argument order used by `DqPhyHashCombine`: input columns for `extractKey`; keys followed by input columns for `init`; keys, input columns, and state for `update`; and keys followed by state for `finalize`.
+- The input transform is either `()` or a wide lambda whose arguments are the selected input columns as Arrow blocks. Its outputs become the aggregation input columns. The block-length scalar is preserved separately and is not passed to the transform.
+- The next four elements must be wide lambdas in the same argument order used by `DqPhyHashCombine`: transformed input columns for `extractKey`; keys followed by input columns for `init`; keys, input columns, and state for `update`; and keys followed by state for `finalize`.
 - The last element declares how many leading columns produced by `finalize` constitute the result key. Custom ASTs taken from production plans may therefore need their finalize lambda reordered to emit keys first.
-- The loader deliberately accepts only this tuple, not a surrounding `DqPhyHashCombine` callable. Each lambda is wrapped in a temporary `return` statement and passed independently through `CompileExpr`.
+- The loader deliberately accepts only this list/tuple, not a surrounding `DqPhyHashCombine` callable. Each lambda is wrapped in a temporary `return` statement and passed independently through `CompileExpr`.
 - At each program-builder callback, the actual typed MKQL argument nodes are converted back to YQL type annotations with `ConvertMiniKQLType`. `UpdateLambdaAllArgumentsTypes` supplies those contextual types, and a `CreateExtCallableTypeAnnotationTransformer`/`CreateTypeAnnotationTransformer` pair annotates the lambda before `MkqlBuildWideLambda` lowers it to `TRuntimeNode`s.
 - No YQL optimizer pipeline is run. A simple UDF resolver backed by the test function registry is installed for type annotation.
 - Lambda arities are checked against the arguments supplied by the aggregation builder.
-- Final output types are derived from the lowered RuntimeNodes. Currently every output must be a DataSlot or optional DataSlot.
+- Transform output types are derived from the lowered RuntimeNodes and retain their full MKQL item types, including complex types such as structs. Final aggregation output types are also derived from RuntimeNodes, but every final output must currently be a DataSlot or optional DataSlot.
 
 ### Measurement isolation
 
 - The dataset, graph, and prebuilt block stream are prepared in the parent.
+- Custom input transforms run during this preparation and are not part of the timed aggregation loop. `--run-count` replays the transformed blocks rather than rerunning the transform.
 - Every `--num-attempts` run uses `RunForked`, so each child receives the same pristine graph/input through fork copy-on-write.
 - Timing covers graph consumption only. Reference timing remains zero, and the best runtime/max RSS are merged with the existing metrics machinery.
 
@@ -137,6 +141,10 @@ ydb/core/kqp/tools/combiner_perf/bin/combiner_perf \
 - Verified the custom AST over 10,000 rows: 130 groups from both `DqHashAggregate` and the scalar WideCombiner reference.
 - Verified the custom AST with LLVM enabled over 1,000 rows: 26 groups from both implementations.
 - Confirmed that the original synthesized `sum`/`count` path still passes reference verification after adding custom AST support.
+- Verified the empty-transform AST over 10,000 rows after changing the root to a quoted list: 130 groups from both implementations.
+- Verified the struct-packing input transform over 10,000 rows: the transform precomputed all rows in 79 blocks and both aggregation implementations produced 3,459 groups.
+- Verified the input transform with LLVM enabled and `--run-count 2` over 1,000 rows: 338 groups from both implementations.
+- Verified the input transform with spilling enabled over 1,000 rows: 338 groups from both implementations.
 - Confirmed DQ-block-specific options produce an error with another test mode.
 - After the rename, rebuilt `ydb/core/kqp/tools/combiner_perf/bin` and verified the synthesized `sum`/`count` path over 1,000 rows through the new `dq-block` CLI and JSON field names.
 - `git diff --check` passed before commit.

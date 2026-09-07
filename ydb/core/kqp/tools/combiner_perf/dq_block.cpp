@@ -12,6 +12,7 @@
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/minikql/computation/mkql_block_impl.h>
+#include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
@@ -75,6 +76,7 @@ struct TAggregation {
 
 struct TAggregationAst {
     NYql::TExprContext ExprContext;
+    NYql::TExprNode::TPtr InputTransform;
     std::array<NYql::TExprNode::TPtr, 4> Lambdas;
     std::vector<EDataSlot> OutputSlots;
     size_t KeyWidth = 0;
@@ -84,6 +86,16 @@ bool IsAstLambda(const NYql::TAstNode& node)
 {
     return node.IsList() && node.GetChildrenCount() > 0 &&
         node.GetChild(0)->IsAtom() && node.GetChild(0)->GetContent() == "lambda";
+}
+
+bool IsAstEmptyList(const NYql::TAstNode& node)
+{
+    if (node.IsList() && node.GetChildrenCount() == 0) {
+        return true;
+    }
+    return node.IsList() && node.GetChildrenCount() == 2 &&
+        node.GetChild(0)->IsAtom() && node.GetChild(0)->GetContent() == "quote" &&
+        node.GetChild(1)->IsList() && node.GetChild(1)->GetChildrenCount() == 0;
 }
 
 size_t ParseAstKeyWidth(const NYql::TAstNode& node)
@@ -102,45 +114,83 @@ size_t ParseAstKeyWidth(const NYql::TAstNode& node)
     return result;
 }
 
-std::array<NYql::TAstNode*, 4> ExtractAggregationAstLambdas(
-    NYql::TAstNode& root,
-    size_t& keyWidth)
+std::vector<NYql::TAstNode*> ExtractAstTuple(NYql::TAstNode& root)
 {
-    Y_ENSURE(root.IsList() && root.GetChildrenCount() == 6,
-        "Aggregation AST must be an AsTuple of four lambdas and a key width");
-    Y_ENSURE(root.GetChild(0)->IsAtom() && root.GetChild(0)->GetContent() == "AsTuple",
-        "Aggregation AST must start with AsTuple");
-
-    std::array<NYql::TAstNode*, 4> result;
-    for (size_t i = 0; i < result.size(); ++i) {
-        result[i] = root.GetChild(i + 1);
-        Y_ENSURE(IsAstLambda(*result[i]), "Aggregation AST item " << i << " is not a lambda");
+    NYql::TAstNode* list = nullptr;
+    size_t firstItem = 0;
+    if (root.IsList() && root.GetChildrenCount() > 0 &&
+        root.GetChild(0)->IsAtom() && root.GetChild(0)->GetContent() == "AsTuple") {
+        list = &root;
+        firstItem = 1;
+    } else if (root.IsList() && root.GetChildrenCount() == 2 &&
+        root.GetChild(0)->IsAtom() && root.GetChild(0)->GetContent() == "quote" &&
+        root.GetChild(1)->IsList()) {
+        list = root.GetChild(1);
     }
-    keyWidth = ParseAstKeyWidth(*root.GetChild(5));
+    Y_ENSURE(list, "Custom AST must be an AsTuple or a quoted list");
+    Y_ENSURE(list->GetChildrenCount() == firstItem + 6,
+        "Custom AST must contain an input transform, four aggregation lambdas, and a key width");
+
+    std::vector<NYql::TAstNode*> result;
+    result.reserve(6);
+    for (size_t i = 0; i < 6; ++i) {
+        result.push_back(list->GetChild(firstItem + i));
+    }
+    return result;
+}
+
+NYql::TExprNode::TPtr CompileAstLambda(
+    NYql::TAstNode& lambda,
+    NYql::TAstParseResult& ast,
+    NYql::TExprContext& exprContext,
+    TStringBuf name,
+    const std::string& path)
+{
+    // CompileExpr expects a statement program.
+    auto* returnAtom = NYql::TAstNode::NewAtom(lambda.GetPosition(), "return", *ast.Pool);
+    auto* returnStatement = NYql::TAstNode::NewList(
+        lambda.GetPosition(), *ast.Pool, returnAtom, &lambda);
+    auto* lambdaProgram = NYql::TAstNode::NewList(
+        lambda.GetPosition(), *ast.Pool, returnStatement);
+    NYql::TExprNode::TPtr result;
+    Y_ENSURE(NYql::CompileExpr(*lambdaProgram, result, exprContext, nullptr, nullptr),
+        "Cannot compile " << name << " lambda from " << path << ": "
+            << exprContext.IssueManager.GetIssues().ToString());
+    Y_ENSURE(result->IsLambda(), "Custom AST " << name << " item did not compile to a lambda");
     return result;
 }
 
 THolder<TAggregationAst> LoadAggregationAst(const std::string& path)
 {
-    auto ast = NYql::ParseAst(TFileInput(path).ReadAll(), nullptr, TString(path));
-    Y_ENSURE(ast.IsOk(), "Cannot parse aggregation AST " << path << ": " << ast.Issues.ToString());
-    auto result = MakeHolder<TAggregationAst>();
-    const auto astLambdas = ExtractAggregationAstLambdas(*ast.Root, result->KeyWidth);
-    for (size_t i = 0; i < result->Lambdas.size(); ++i) {
-        // CompileExpr expects a statement program, so wrap each lambda in a return statement.
-        auto* returnAtom = NYql::TAstNode::NewAtom(
-            astLambdas[i]->GetPosition(), "return", *ast.Pool);
-        auto* returnStatement = NYql::TAstNode::NewList(
-            astLambdas[i]->GetPosition(), *ast.Pool, returnAtom, astLambdas[i]);
-        auto* lambdaProgram = NYql::TAstNode::NewList(
-            astLambdas[i]->GetPosition(), *ast.Pool, returnStatement);
-        Y_ENSURE(NYql::CompileExpr(
-            *lambdaProgram, result->Lambdas[i], result->ExprContext, nullptr, nullptr),
-            "Cannot compile aggregation lambda " << i << " from " << path << ": "
-                << result->ExprContext.IssueManager.GetIssues().ToString());
-        Y_ENSURE(result->Lambdas[i]->IsLambda(),
-            "Aggregation AST item " << i << " did not compile to a lambda");
+    TString source = TFileInput(path).ReadAll();
+    const size_t first = source.find_first_not_of(" \t\r\n");
+    const bool quotedRoot = first != TString::npos && source[first] == '\'';
+    if (quotedRoot) {
+        source = TStringBuilder() << "(return " << source << ')';
     }
+    auto ast = NYql::ParseAst(source, nullptr, TString(path));
+    Y_ENSURE(ast.IsOk(), "Cannot parse custom AST " << path << ": " << ast.Issues.ToString());
+    auto* root = ast.Root;
+    if (quotedRoot) {
+        Y_ENSURE(root->IsList() && root->GetChildrenCount() == 2 &&
+            root->GetChild(0)->IsAtom() && root->GetChild(0)->GetContent() == "return",
+            "Cannot unwrap quoted custom AST root");
+        root = root->GetChild(1);
+    }
+    auto result = MakeHolder<TAggregationAst>();
+    const auto items = ExtractAstTuple(*root);
+    if (!IsAstEmptyList(*items[0])) {
+        Y_ENSURE(IsAstLambda(*items[0]), "Custom AST input transform is neither a lambda nor an empty list");
+        result->InputTransform = CompileAstLambda(
+            *items[0], ast, result->ExprContext, "input transform", path);
+    }
+    for (size_t i = 0; i < result->Lambdas.size(); ++i) {
+        Y_ENSURE(IsAstLambda(*items[i + 1]), "Custom AST aggregation item " << i << " is not a lambda");
+        result->Lambdas[i] = CompileAstLambda(
+            *items[i + 1], ast, result->ExprContext,
+            TStringBuilder() << "aggregation item " << i, path);
+    }
+    result->KeyWidth = ParseAstKeyWidth(*items[5]);
     return result;
 }
 
@@ -149,6 +199,42 @@ void EnsureLambdaArity(const NYql::TExprNode& lambda, size_t expected, TStringBu
     Y_ENSURE(lambda.Head().ChildrenSize() == expected,
         name << " lambda expects " << lambda.Head().ChildrenSize()
              << " arguments, but the aggregation operator supplies " << expected);
+}
+
+TRuntimeNode::TList BuildAstLambda(
+    NYql::TExprNode::TPtr& lambda,
+    const TRuntimeNode::TList& args,
+    TStringBuf name,
+    TProgramBuilder& pb,
+    IFunctionRegistry& functionRegistry,
+    NYql::TExprContext& exprContext)
+{
+    EnsureLambdaArity(*lambda, args.size(), name);
+
+    std::vector<const NYql::TTypeAnnotationNode*> argumentTypes;
+    argumentTypes.reserve(args.size());
+    for (const auto& arg : args) {
+        argumentTypes.push_back(NYql::NCommon::ConvertMiniKQLType(
+            exprContext.GetPosition(lambda->Pos()), arg.GetStaticType(), exprContext));
+    }
+    Y_ENSURE(NYql::UpdateLambdaAllArgumentsTypes(lambda, argumentTypes, exprContext));
+
+    NYql::TTypeAnnotationContext typeContext;
+    typeContext.DeprecatedSQL = true;
+    typeContext.TimeProvider = CreateDefaultTimeProvider();
+    typeContext.RandomProvider = CreateDefaultRandomProvider();
+    typeContext.UdfResolver = NYql::NCommon::CreateSimpleUdfResolver(&functionRegistry);
+    auto callableTransformer = NYql::CreateExtCallableTypeAnnotationTransformer(typeContext);
+    auto typeTransformer = NYql::CreateTypeAnnotationTransformer(
+        callableTransformer, typeContext);
+    const auto status = NYql::InstantTransform(*typeTransformer, lambda, exprContext);
+    Y_ENSURE(status.Level == NYql::IGraphTransformer::TStatus::Ok,
+        "Cannot type annotate " << name << " lambda: "
+            << exprContext.IssueManager.GetIssues().ToString());
+
+    NYql::NCommon::TMkqlCommonCallableCompiler compiler;
+    NYql::NCommon::TMkqlBuildContext buildContext(compiler, pb, exprContext);
+    return NYql::NCommon::MkqlBuildWideLambda(*lambda, buildContext, args);
 }
 
 EDataSlot GetOutputDataSlot(TType* type)
@@ -478,12 +564,26 @@ TUnboxedValuePod ArrowValueToUnboxed(
 #undef DQ_BLOCK_NUMERIC_VALUE
 }
 
-class TScalarDqBlockStream final : public NUdf::TBoxedValue {
+class TScalarBlockStream final : public NUdf::TBoxedValue {
 public:
-    TScalarDqBlockStream(const TDqBlockData& data, size_t iterations)
-        : Data_(data)
+    TScalarBlockStream(
+        const std::vector<std::vector<TUnboxedValue>>& blocks,
+        const std::vector<TType*>& itemTypes,
+        const TComputationContext& context,
+        size_t iterations)
+        : Blocks_(blocks)
+        , ItemTypes_(itemTypes)
+        , Context_(context)
         , Iterations_(iterations)
     {
+        TTypeInfoHelper typeInfoHelper;
+        Readers_.reserve(ItemTypes_.size());
+        Converters_.reserve(ItemTypes_.size());
+        for (const auto* type : ItemTypes_) {
+            Readers_.push_back(NUdf::MakeBlockReader(typeInfoHelper, type));
+            Converters_.push_back(MakeBlockItemConverter(
+                typeInfoHelper, type, Context_.Builder->GetPgBuilder()));
+        }
     }
 
     NUdf::EFetchStatus Fetch(TUnboxedValue&) final
@@ -496,15 +596,21 @@ public:
         if (Iteration_ == Iterations_) {
             return NUdf::EFetchStatus::Finish;
         }
-        Y_ENSURE(width == Data_.Columns.size(), "Unexpected scalar stream width");
-        const auto& batch = Data_.Batches[Batch_];
-        for (size_t column = 0; column < Data_.Columns.size(); ++column) {
-            result[column] = ArrowValueToUnboxed(
-                batch.Columns[column], Row_, Data_.Columns[column].Slot);
+        Y_ENSURE(width == ItemTypes_.size(), "Unexpected scalar stream width");
+        const auto& batch = Blocks_[Batch_];
+        Y_ENSURE(batch.size() == ItemTypes_.size() + 1, "Unexpected block stream width");
+        for (size_t column = 0; column < ItemTypes_.size(); ++column) {
+            const auto& datum = TArrowBlock::From(batch[column]).GetDatum();
+            const auto item = datum.is_scalar()
+                ? Readers_[column]->GetScalarItem(*datum.scalar())
+                : Readers_[column]->GetItem(*datum.array(), Row_);
+            result[column] = Converters_[column]->MakeValue(item, Context_.HolderFactory);
         }
-        if (++Row_ == batch.Rows) {
+        const size_t rows = TArrowBlock::From(batch.back()).GetDatum()
+            .scalar_as<arrow::UInt64Scalar>().value;
+        if (++Row_ == rows) {
             Row_ = 0;
-            if (++Batch_ == Data_.Batches.size()) {
+            if (++Batch_ == Blocks_.size()) {
                 Batch_ = 0;
                 ++Iteration_;
             }
@@ -513,17 +619,116 @@ public:
     }
 
 private:
-    const TDqBlockData& Data_;
+    const std::vector<std::vector<TUnboxedValue>>& Blocks_;
+    const std::vector<TType*>& ItemTypes_;
+    const TComputationContext& Context_;
+    std::vector<std::unique_ptr<NUdf::IBlockReader>> Readers_;
+    std::vector<std::unique_ptr<IBlockItemConverter>> Converters_;
     const size_t Iterations_;
     size_t Batch_ = 0;
     size_t Row_ = 0;
     size_t Iteration_ = 0;
 };
 
+std::vector<TType*> MakeRawInputItemTypes(TProgramBuilder& pb, const TDqBlockData& data)
+{
+    std::vector<TType*> result;
+    result.reserve(data.Columns.size());
+    for (const auto& column : data.Columns) {
+        result.push_back(pb.NewDataType(column.Slot, column.Optional));
+    }
+    return result;
+}
+
+std::vector<TType*> MakeBlockTypes(
+    TProgramBuilder& pb,
+    const std::vector<TType*>& itemTypes)
+{
+    std::vector<TType*> result;
+    result.reserve(itemTypes.size());
+    for (auto* type : itemTypes) {
+        result.push_back(pb.NewBlockType(type, TBlockType::EShape::Many));
+    }
+    return result;
+}
+
+std::vector<TType*> ExtractTransformBlockTypes(const TRuntimeNode::TList& output)
+{
+    Y_ENSURE(!output.empty(), "Input transform must produce at least one column");
+    std::vector<TType*> result;
+    result.reserve(output.size());
+    for (const auto& node : output) {
+        Y_ENSURE(node.GetStaticType()->IsBlock(),
+            "Input transform outputs must be BlockTypes, got " << *node.GetStaticType());
+        result.push_back(node.GetStaticType());
+    }
+    return result;
+}
+
+std::vector<TType*> ExtractBlockItemTypes(const std::vector<TType*>& blockTypes)
+{
+    std::vector<TType*> result;
+    result.reserve(blockTypes.size());
+    for (auto* type : blockTypes) {
+        Y_ENSURE(type->IsBlock(), "Expected a BlockType, got " << *type);
+        result.push_back(static_cast<TBlockType*>(type)->GetItemType());
+    }
+    return result;
+}
+
+template<bool LLVM, bool Spilling>
+std::vector<TType*> MakeAggregationInputBlockTypes(
+    TKqpSetup<LLVM, Spilling>& setup,
+    const TDqBlockData& data,
+    TAggregationAst* aggregationAst)
+{
+    auto& pb = setup.GetKqpBuilder();
+    auto result = MakeBlockTypes(pb, MakeRawInputItemTypes(pb, data));
+    if (!aggregationAst || !aggregationAst->InputTransform) {
+        return result;
+    }
+
+    TRuntimeNode::TList args;
+    args.reserve(result.size());
+    for (auto* type : result) {
+        args.push_back(pb.Arg(type));
+    }
+    return ExtractTransformBlockTypes(BuildAstLambda(
+        aggregationAst->InputTransform, args, "input transform", pb,
+        *setup.FunctionRegistry, aggregationAst->ExprContext));
+}
+
+THolder<IComputationGraph> BuildInputTransformGraph(
+    TKqpSetup<false, false>& setup,
+    const TDqBlockData& data,
+    TAggregationAst& aggregationAst,
+    std::vector<TType*>& outputBlockTypes)
+{
+    auto& pb = setup.GetKqpBuilder();
+    auto inputTypes = MakeBlockTypes(pb, MakeRawInputItemTypes(pb, data));
+    inputTypes.push_back(pb.NewBlockType(
+        pb.NewDataType(EDataSlot::Uint64), TBlockType::EShape::Scalar));
+    auto* streamType = pb.NewStreamType(pb.NewMultiType(inputTypes));
+    auto streamCallable = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", streamType).Build();
+    const auto input = TRuntimeNode(streamCallable, false);
+    auto output = pb.WideMap(input, [&](TRuntimeNode::TList items) {
+        const auto blockLength = items.back();
+        items.pop_back();
+        auto transformed = BuildAstLambda(
+            aggregationAst.InputTransform, items, "input transform", pb,
+            *setup.FunctionRegistry, aggregationAst.ExprContext);
+        outputBlockTypes = ExtractTransformBlockTypes(transformed);
+        transformed.push_back(blockLength);
+        return transformed;
+    });
+    output = pb.BlockExpandChunked(output);
+    return setup.BuildGraph(output, {streamCallable});
+}
+
 template<bool LLVM, bool Spilling>
 THolder<IComputationGraph> BuildGraph(
     TKqpSetup<LLVM, Spilling>& setup,
-    const TDqBlockData& data,
+    const std::vector<TType*>& inputBlockTypes,
     const std::vector<size_t>& keys,
     const std::vector<TAggregation>& aggregations,
     bool blocks,
@@ -531,12 +736,7 @@ THolder<IComputationGraph> BuildGraph(
     TAggregationAst* aggregationAst = nullptr)
 {
     auto& pb = setup.GetKqpBuilder();
-    std::vector<TType*> inputTypes;
-    inputTypes.reserve(data.Columns.size() + (blocks ? 1 : 0));
-    for (const auto& column : data.Columns) {
-        auto* type = pb.NewDataType(column.Slot, column.Optional);
-        inputTypes.push_back(blocks ? pb.NewBlockType(type, TBlockType::EShape::Many) : type);
-    }
+    auto inputTypes = blocks ? inputBlockTypes : ExtractBlockItemTypes(inputBlockTypes);
     if (blocks) {
         inputTypes.push_back(pb.NewBlockType(
             pb.NewDataType(EDataSlot::Uint64), TBlockType::EShape::Scalar));
@@ -547,41 +747,10 @@ THolder<IComputationGraph> BuildGraph(
 
     const auto input = pb.ToFlow(TRuntimeNode(streamCallable, false), {});
     if (aggregationAst) {
-        NYql::TTypeAnnotationContext typeContext;
-        typeContext.DeprecatedSQL = true;
-        typeContext.TimeProvider = CreateDefaultTimeProvider();
-        typeContext.RandomProvider = CreateDefaultRandomProvider();
-        typeContext.UdfResolver = NYql::NCommon::CreateSimpleUdfResolver(
-            setup.FunctionRegistry.Get());
-        auto callableTransformer = NYql::CreateExtCallableTypeAnnotationTransformer(typeContext);
-        auto typeTransformer = NYql::CreateTypeAnnotationTransformer(
-            callableTransformer, typeContext);
-
-        NYql::NCommon::TMkqlCommonCallableCompiler compiler;
-        NYql::NCommon::TMkqlBuildContext buildContext(
-            compiler, pb, aggregationAst->ExprContext);
-
         auto buildLambda = [&](size_t index, const TRuntimeNode::TList& args, TStringBuf name) {
-            auto& lambda = aggregationAst->Lambdas[index];
-            EnsureLambdaArity(*lambda, args.size(), name);
-
-            std::vector<const NYql::TTypeAnnotationNode*> argumentTypes;
-            argumentTypes.reserve(args.size());
-            for (const auto& arg : args) {
-                argumentTypes.push_back(NYql::NCommon::ConvertMiniKQLType(
-                    aggregationAst->ExprContext.GetPosition(lambda->Pos()),
-                    arg.GetStaticType(), aggregationAst->ExprContext));
-            }
-            Y_ENSURE(NYql::UpdateLambdaAllArgumentsTypes(
-                lambda, argumentTypes, aggregationAst->ExprContext));
-
-            typeTransformer->Rewind();
-            const auto status = NYql::InstantTransform(
-                *typeTransformer, lambda, aggregationAst->ExprContext);
-            Y_ENSURE(status.Level == NYql::IGraphTransformer::TStatus::Ok,
-                "Cannot type annotate " << name << " lambda: "
-                    << aggregationAst->ExprContext.IssueManager.GetIssues().ToString());
-            return NYql::NCommon::MkqlBuildWideLambda(*lambda, buildContext, args);
+            return BuildAstLambda(
+                aggregationAst->Lambdas[index], args, name, pb,
+                *setup.FunctionRegistry, aggregationAst->ExprContext);
         };
 
         auto keyExtractor = [&](TRuntimeNode::TList items) {
@@ -675,6 +844,59 @@ std::vector<std::vector<TUnboxedValue>> WrapBlockValues(
         }
         values.push_back(MakeBlockCount(
             context.HolderFactory, batch.Rows, context.RuntimeSettings.DatumValidation.Get()));
+        result.push_back(std::move(values));
+    }
+    return result;
+}
+
+using TBlockDatums = std::vector<std::vector<arrow::Datum>>;
+
+TBlockDatums CollectBlockDatums(
+    IComputationGraph& graph,
+    size_t width,
+    size_t expectedRows)
+{
+    TBlockDatums result;
+    std::vector<TUnboxedValue> values(width + 1);
+    size_t rows = 0;
+    const auto stream = graph.GetValue();
+    NUdf::EFetchStatus status;
+    while ((status = stream.WideFetch(values.data(), values.size())) !=
+        NUdf::EFetchStatus::Finish) {
+        if (status == NUdf::EFetchStatus::Yield) {
+            continue;
+        }
+        rows += TArrowBlock::From(values.back()).GetDatum()
+            .scalar_as<arrow::UInt64Scalar>().value;
+        std::vector<arrow::Datum> datums;
+        datums.reserve(values.size());
+        for (const auto& value : values) {
+            datums.push_back(TArrowBlock::From(value).GetDatum());
+        }
+        result.push_back(std::move(datums));
+    }
+    Y_ENSURE(rows == expectedRows, "Input transform changed the row count from "
+        << expectedRows << " to " << rows);
+    Y_ENSURE(!result.empty(), "Input transform produced no blocks");
+    Cerr << "Precomputed " << rows << " transformed rows in " << result.size()
+         << " Arrow blocks" << Endl;
+    return result;
+}
+
+std::vector<std::vector<TUnboxedValue>> WrapBlockDatums(
+    const TBlockDatums& blocks,
+    const TComputationContext& context)
+{
+    std::vector<std::vector<TUnboxedValue>> result;
+    result.reserve(blocks.size());
+    for (const auto& block : blocks) {
+        std::vector<TUnboxedValue> values;
+        values.reserve(block.size());
+        for (const auto& datum : block) {
+            auto datumCopy = datum;
+            values.push_back(context.HolderFactory.CreateArrowBlock(
+                std::move(datumCopy), context.RuntimeSettings.DatumValidation.Get()));
+        }
         result.push_back(std::move(values));
     }
     return result;
@@ -904,6 +1126,7 @@ template<bool LLVM, bool Spilling>
 void Verify(
     IComputationGraph& blockGraph,
     const TDqBlockData& data,
+    const std::vector<std::vector<TUnboxedValue>>& blockValues,
     const std::vector<size_t>& keys,
     const std::vector<TAggregation>& aggregations,
     TAggregationAst* aggregationAst,
@@ -919,9 +1142,13 @@ void Verify(
     auto actual = CollectBlockResults(blockGraph.GetValue(), outputSlots, keyWidth);
 
     TKqpSetup<false, false> referenceSetup(GetPerfTestFactory());
+    const auto referenceInputBlockTypes = MakeAggregationInputBlockTypes(
+        referenceSetup, data, aggregationAst);
     auto referenceGraph = BuildGraph(
-        referenceSetup, data, keys, aggregations, false, false, aggregationAst);
-    auto scalarStream = TUnboxedValuePod(new TScalarDqBlockStream(data, iterations));
+        referenceSetup, referenceInputBlockTypes, keys, aggregations, false, false, aggregationAst);
+    const auto referenceInputItemTypes = ExtractBlockItemTypes(referenceInputBlockTypes);
+    auto scalarStream = TUnboxedValuePod(new TScalarBlockStream(
+        blockValues, referenceInputItemTypes, referenceGraph->GetContext(), iterations));
     referenceGraph->GetEntryPoint(0, true)->SetValue(
         referenceGraph->GetContext(), std::move(scalarStream));
     auto expected = CollectScalarResults(referenceGraph->GetValue(), outputSlots, keyWidth);
@@ -952,9 +1179,41 @@ void RunTestDqBlock(TRunParams params, TTestResultCollector& printout)
     const auto aggregations = aggregationAst ? std::vector<TAggregation>() : ResolveAggregations(params, data);
     params.RowsPerRun = data.Rows;
 
-    TKqpSetup<LLVM, Spilling> setup(GetPerfTestFactory());
-    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(Spilling);
-    auto graph = BuildGraph(setup, data, keys, aggregations, true, true, aggregationAst.Get());
+    THolder<TKqpSetup<false, false>> transformSetup;
+    THolder<IComputationGraph> transformGraph;
+    std::vector<TType*> transformOutputBlockTypes;
+    TBlockDatums transformedBlocks;
+    THolder<TKqpSetup<LLVM, Spilling>> setup;
+    std::vector<std::vector<TUnboxedValue>> blockValues;
+    if (aggregationAst && aggregationAst->InputTransform) {
+        transformSetup = MakeHolder<TKqpSetup<false, false>>(GetPerfTestFactory());
+        transformGraph = BuildInputTransformGraph(
+            *transformSetup, data, *aggregationAst, transformOutputBlockTypes);
+        auto inputStream = TUnboxedValuePod(new TPrebuiltBlockStream(
+            WrapBlockValues(data, transformGraph->GetContext()), 1));
+        transformGraph->GetEntryPoint(0, true)->SetValue(
+            transformGraph->GetContext(), std::move(inputStream));
+        transformedBlocks = CollectBlockDatums(
+            *transformGraph, transformOutputBlockTypes.size(), data.Rows);
+        transformGraph.Reset();
+    }
+
+    setup = MakeHolder<TKqpSetup<LLVM, Spilling>>(GetPerfTestFactory());
+    setup->Alloc.Ref().ForcefullySetMemoryYellowZone(Spilling);
+    const auto inputBlockTypes = MakeAggregationInputBlockTypes(*setup, data, aggregationAst.Get());
+    if (!transformOutputBlockTypes.empty()) {
+        Y_ENSURE(inputBlockTypes.size() == transformOutputBlockTypes.size(),
+            "Input transform output width changed between graph builds");
+        for (size_t i = 0; i < inputBlockTypes.size(); ++i) {
+            const TString transformType = TStringBuilder() << *transformOutputBlockTypes[i];
+            const TString inputType = TStringBuilder() << *inputBlockTypes[i];
+            Y_ENSURE(inputType == transformType,
+                "Input transform output type changed between graph builds: "
+                    << transformType << " vs " << inputType);
+        }
+    }
+    auto graph = BuildGraph(
+        *setup, inputBlockTypes, keys, aggregations, true, true, aggregationAst.Get());
     const size_t outputWidth = aggregationAst
         ? aggregationAst->OutputSlots.size()
         : keys.size() + aggregations.size();
@@ -962,8 +1221,12 @@ void RunTestDqBlock(TRunParams params, TTestResultCollector& printout)
         graph->GetContext().SpillerFactory = std::make_shared<TPreallocatedSpillerFactory>();
     }
 
-    auto blockStream = TUnboxedValuePod(new TPrebuiltBlockStream(
-        WrapBlockValues(data, graph->GetContext()), params.NumRuns));
+    if (!transformedBlocks.empty()) {
+        blockValues = WrapBlockDatums(transformedBlocks, graph->GetContext());
+    } else {
+        blockValues = WrapBlockValues(data, graph->GetContext());
+    }
+    auto blockStream = TUnboxedValuePod(new TPrebuiltBlockStream(blockValues, params.NumRuns));
     graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(blockStream));
 
     std::optional<TRunResult> finalResult;
@@ -982,7 +1245,8 @@ void RunTestDqBlock(TRunParams params, TTestResultCollector& printout)
     if (params.EnableVerification) {
         RunForked([&] {
             Verify<LLVM, Spilling>(
-                *graph, data, keys, aggregations, aggregationAst.Get(), params.NumRuns);
+                *graph, data, blockValues, keys, aggregations,
+                aggregationAst.Get(), params.NumRuns);
             return TRunResult{};
         });
     }

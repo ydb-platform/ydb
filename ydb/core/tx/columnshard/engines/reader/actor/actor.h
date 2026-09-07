@@ -45,8 +45,8 @@ public:
         ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId, TDuration timeout,
         const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
         const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
-        std::optional<NConveyorComposite::TWorkloadManagerQueryIdentity> workloadManagerQueryIdentity,
-        std::shared_ptr<NLWTrace::TOrbit> orbit, ui64 pathId = 0);
+        std::optional<NConveyorComposite::TWorkloadManagerQueryIdentity> workloadManagerQueryIdentity, std::shared_ptr<NLWTrace::TOrbit> orbit,
+        ui64 pathId = 0);
 
     void Bootstrap(const TActorContext& ctx);
 

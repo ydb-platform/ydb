@@ -79,10 +79,8 @@ public:
     }
 
     bool SendTaskToExecute(const std::shared_ptr<NConveyorComposite::ITask>& task) const {
-        return ConveyorProcessGuard.SendTaskToExecute(task,
-            WorkloadManagerQueryGuard
-                ? std::make_optional(WorkloadManagerQueryGuard->GetIdentity())
-                : std::nullopt);
+        return ConveyorProcessGuard.SendTaskToExecute(
+            task, WorkloadManagerQueryGuard ? std::make_optional(WorkloadManagerQueryGuard->GetIdentity()) : std::nullopt);
     }
 
     template <class T>

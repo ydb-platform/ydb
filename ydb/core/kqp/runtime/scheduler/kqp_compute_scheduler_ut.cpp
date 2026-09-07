@@ -1138,7 +1138,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
         work.StopExecution(executionDuration);
 
-        UNIT_ASSERT_VALUES_EQUAL(query->CpuUsage.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(query->GetParent()->CpuUsage.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(query->CpuBurstUsage.load(), executionDuration.MicroSeconds());
         UNIT_ASSERT_VALUES_EQUAL(query->GetParent()->CpuBurstUsage.load(), executionDuration.MicroSeconds());
         UNIT_ASSERT_VALUES_EQUAL(query->GetParent()->GetParent()->CpuBurstUsage.load(), executionDuration.MicroSeconds());
@@ -1217,4 +1217,3 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 }
 
 } // namespace NKikimr::NKqp::NScheduler
-

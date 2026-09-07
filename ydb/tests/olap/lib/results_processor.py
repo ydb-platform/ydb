@@ -240,7 +240,7 @@ class ResultsProcessor:
             if os.getenv('CI_TEST_VERSION'):
                 info['test_version'] = os.getenv('CI_TEST_VERSION')
             tags: str = get_external_param('tags', '')
-            info['tags'] = list(filter(lambda x: bool(x), tags.split(', ')))
+            info['tags'] = [t.strip() for t in tags.split(',') if t.strip()]
 
             data = {
                 'Db': cls.get_cluster_id(),

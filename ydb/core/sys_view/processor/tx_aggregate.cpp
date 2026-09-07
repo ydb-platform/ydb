@@ -34,61 +34,7 @@ struct TSysViewProcessor::TTxAggregate : public TTxBase {
         return selectedHashes;
     }
 
-    std::unordered_set<TQueryHash> SelectTextsToFetch(
-        const THashVector& selectedHashes) const
-    {
-        const std::unordered_set<TQueryHash> selectedSet(
-            selectedHashes.begin(), selectedHashes.end());
-
-        std::unordered_set<TQueryHash> result;
-        for (size_t i = 0;
-            i < selectedHashes.size() && i < NQueryMetricsLimits::OneMinuteResultCount;
-            ++i)
-        {
-            result.insert(selectedHashes[i]);
-        }
-
-        TRankedQueryMetrics prospectiveHourTop;
-        prospectiveHourTop.reserve(Self->CurrentHourMetrics.size() + selectedHashes.size());
-        for (const auto& [queryHash, metrics] : Self->CurrentHourMetrics) {
-            ui64 cpu = metrics.GetCpuTimeUs().GetSum();
-            if (selectedSet.contains(queryHash)) {
-                cpu += Self->Queries.at(queryHash).Cpu;
-            }
-            prospectiveHourTop.emplace_back(cpu, queryHash);
-        }
-        for (auto queryHash : selectedHashes) {
-            if (!Self->CurrentHourMetrics.contains(queryHash)) {
-                prospectiveHourTop.emplace_back(Self->Queries.at(queryHash).Cpu, queryHash);
-            }
-        }
-        std::sort(prospectiveHourTop.begin(), prospectiveHourTop.end(),
-            Self->QueryMetricsRankCompare);
-
-        std::unordered_set<TQueryHash> knownHourTexts;
-        const ui64 hourEndUs = Self->EndOfHourInterval(Self->IntervalEnd).MicroSeconds();
-        auto persisted = Self->MetricsOneHour.lower_bound(std::make_pair(hourEndUs, 0));
-        while (persisted != Self->MetricsOneHour.end() && persisted->first.first == hourEndUs) {
-            if (!persisted->second.Text.empty()) {
-                knownHourTexts.insert(persisted->second.Metrics.GetQueryTextHash());
-            }
-            ++persisted;
-        }
-
-        for (size_t i = 0;
-            i < prospectiveHourTop.size() && i < NQueryMetricsLimits::OneHourResultCount;
-            ++i)
-        {
-            const auto queryHash = prospectiveHourTop[i].second;
-            if (selectedSet.contains(queryHash) && !knownHourTexts.contains(queryHash)) {
-                result.insert(queryHash);
-            }
-        }
-        return result;
-    }
-
     void AddQueryMetricRequests(const THashVector& selectedHashes,
-        const std::unordered_set<TQueryHash>& textsToFetch,
         TNodeRequests& requests, std::unordered_set<TNodeId>& metricsNodes) const
     {
         static constexpr size_t TextReplicaCount = 3;
@@ -100,10 +46,8 @@ struct TSysViewProcessor::TTxAggregate : public TTxBase {
                 metricsNodes.insert(node.first);
             }
 
-            if (!textsToFetch.contains(queryHash)) {
-                continue;
-            }
-
+            // Missing responses can change both public tops relative to the
+            // summaries. Fetch text for every candidate that can enter them.
             if (nodes.size() <= TextReplicaCount) {
                 for (const auto& node : nodes) {
                     requests[node.first].TextsToGet.emplace_back(queryHash);
@@ -179,12 +123,10 @@ struct TSysViewProcessor::TTxAggregate : public TTxBase {
         }
 
         const auto selectedHashes = SelectMetricCandidates();
-        const auto textsToFetch = SelectTextsToFetch(selectedHashes);
 
         TNodeRequests nodesToRequest;
         std::unordered_set<TNodeId> metricsNodesToRequest;
-        AddQueryMetricRequests(selectedHashes, textsToFetch,
-            nodesToRequest, metricsNodesToRequest);
+        AddQueryMetricRequests(selectedHashes, nodesToRequest, metricsNodesToRequest);
         AddTopQueryRequests(nodesToRequest);
 
         Self->QueryMetricsCoverage.SummaryNodes = Self->SummaryNodes.size();

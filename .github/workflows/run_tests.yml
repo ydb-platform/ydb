@@ -47,6 +47,11 @@ on:
         required: false
         type: string
         default: '52'
+      collect_coredumps:
+        description: "Collect coredumps to a 100G loop volume at /coredumps (for ya test recovery)"
+        required: false
+        type: boolean
+        default: true
 
   workflow_dispatch:
     inputs:

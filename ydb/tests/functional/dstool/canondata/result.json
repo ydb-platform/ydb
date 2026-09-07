@@ -17,6 +17,18 @@
         null,
         {
             "uri": "file://test_canonical_requests.Test.test_cluster_balance/results.txt.0"
+        },
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_balance/results.txt.1"
+        },
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_balance/results.txt.2"
+        },
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_balance/results.txt.3"
         }
     ],
     "test_canonical_requests.Test.test_cluster_balance_mismatching_size_in_units": [

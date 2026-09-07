@@ -390,7 +390,12 @@ public:
         auto* resourceMetrics = Self->Executor()->GetResourceMetrics();
 
         if (resourceMetrics != nullptr) {
+            const TInstant now = AppData(ctx)->TimeProvider->Now();
+            resourceMetrics->CPUWithKeys.Increment(0, now);
+            resourceMetrics->CPUWithoutKeys.Increment(0, now);
             resourceMetrics->Fill(*(Result->Record.MutableTabletMetrics()));
+            Result->Record.MutableTableStats()->SetCPUWithKeys(resourceMetrics->CPUWithKeys.GetValue());
+            Result->Record.MutableTableStats()->SetCPUWithoutKeys(resourceMetrics->CPUWithoutKeys.GetValue());
         }
 
         return true;
@@ -781,8 +786,11 @@ void TDataShard::CollectCpuUsage(const TActorContext &ctx) {
     auto* metrics = Executor()->GetResourceMetrics();
     TInstant now = AppData(ctx)->TimeProvider->Now();
 
-    // advance CPU usage collector to the current time and report very-very small usage
+    // Advance CPU usage collectors to the current time and report very small
+    // keyless usage from this bookkeeping operation.
     metrics->CPU.Increment(10, now);
+    metrics->CPUWithKeys.Increment(0, now);
+    metrics->CPUWithoutKeys.Increment(10, now);
     metrics->TryUpdate(ctx);
 
     if (!metrics->CPU.IsValueReady()) {

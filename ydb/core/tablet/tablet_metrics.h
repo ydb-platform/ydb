@@ -43,6 +43,8 @@ constexpr TTimeBase<TInstant>::TValue DurationPer15Seconds = DurationPerSecond *
 class TResourceMetricsValues {
 public:
     TDecayingAverageValue<ui64, DurationPer15Seconds, DurationPerSecond> CPU;
+    TDecayingAverageValue<ui64, DurationPer15Seconds, DurationPerSecond> CPUWithKeys;
+    TDecayingAverageValue<ui64, DurationPer15Seconds, DurationPerSecond> CPUWithoutKeys;
     TGaugeValue<ui64> Memory;
     TDecayingAverageValue<ui64, DurationPer15Seconds, DurationPerSecond> Network;
     TGaugeValue<ui64> StorageSystem;

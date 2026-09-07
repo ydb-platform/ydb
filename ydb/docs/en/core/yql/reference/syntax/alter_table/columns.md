@@ -11,7 +11,7 @@ Builds a new column with the specified name, type, and options for the specified
 ALTER TABLE table_name ADD COLUMN column_name column_data_type [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])] [ENCODING([OFF|DICT])];
 ```
 
-When adding a column with the `NOT NULL` constraint, you must also specify `DEFAULT`. The default value is used for existing rows.
+When adding a `NOT NULL` column to a [row-oriented table](../../../../concepts/datamodel/table.md#row-oriented-tables), you must also specify `DEFAULT` so that the new column can be populated in existing rows. Column-oriented tables do not support adding a `NOT NULL` column because they do not support `DEFAULT` values.
 
 
 ## Request parameters

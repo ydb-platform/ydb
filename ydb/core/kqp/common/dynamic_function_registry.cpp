@@ -4,12 +4,18 @@
 #include <yql/essentials/minikql/mkql_utils.h>
 #include <yql/essentials/public/udf/udf_static_registry.h>
 
+#include <library/cpp/threading/hot_swap/hot_swap.h>
+
 #include <util/folder/path.h>
+#include <util/generic/hash.h>
 #include <util/stream/str.h>
 #include <util/string/builder.h>
 #include <util/system/dynlib.h>
-#include <util/system/rwlock.h>
+#include <util/system/guard.h>
+#include <util/system/mutex.h>
+#include <util/system/spinlock.h>
 
+#include <atomic>
 #include <utility>
 
 namespace NKikimr::NKqp {
@@ -38,6 +44,22 @@ class TDynamicFunctionRegistry: public IDynamicFunctionRegistry {
         TDynamicLibrary Lib;
     };
     using TUdfLibraryPtr = TIntrusivePtr<TUdfLibrary>;
+
+    struct TSnapshot: public TAtomicRefCount<TSnapshot> {
+        THashMap<TString, TUdfLibraryPtr> LoadedLibraries;
+        TUdfModulesMap UdfModules;
+        TUdfModulePathsMap SystemModulePaths;
+
+        TSnapshot() = default;
+
+        TSnapshot(const TSnapshot& other)
+            : LoadedLibraries(other.LoadedLibraries)
+            , UdfModules(other.UdfModules)
+            , SystemModulePaths(other.SystemModulePaths)
+        {
+        }
+    };
+    using TSnapshotPtr = TIntrusivePtr<TSnapshot>;
 
     class TUdfModuleLoader: public NUdf::IRegistrator {
     public:
@@ -107,20 +129,21 @@ class TDynamicFunctionRegistry: public IDynamicFunctionRegistry {
 public:
     explicit TDynamicFunctionRegistry(IBuiltinFunctionRegistry::TPtr builtins)
         : Builtins_(std::move(builtins))
+        , State_(MakeIntrusive<TSnapshot>())
     {
     }
 
-    //! Caller must hold rhs.Lock_ (shared or exclusive), or rhs must be unused by
-    //! other threads. Lock_ itself is not copied (default-constructed).
+    //! Snapshot is copied; WriterMutex_ / LoadMutex_ are not shared with rhs.
     TDynamicFunctionRegistry(const TDynamicFunctionRegistry& rhs)
         : IDynamicFunctionRegistry()
         , Builtins_(rhs.Builtins_)
-        , LoadedLibraries_(rhs.LoadedLibraries_)
-        , UdfModules_(rhs.UdfModules_)
-        , SystemModulePaths_(rhs.SystemModulePaths_)
-        , BackTraceCallback_(rhs.BackTraceCallback_)
-        , SupportsSizedAllocators_(rhs.SupportsSizedAllocators_)
+        , State_(MakeIntrusive<TSnapshot>(*rhs.State_.AtomicLoad()))
+        , SupportsSizedAllocators_(
+              rhs.SupportsSizedAllocators_.load(std::memory_order_relaxed))
     {
+        with_lock (rhs.WriterMutex_) {
+            BackTraceCallback_ = rhs.BackTraceCallback_;
+        }
     }
 
     void AllowUdfPatch() override {
@@ -133,13 +156,28 @@ public:
         const TString& customUdfPrefix = {},
         THashSet<TString>* modules = nullptr) override
     {
-        TWriteGuard guard(Lock_);
+        // Serialize unsafe .so entry points; readers stay on wait-free snapshots.
+        // Lock order: LoadMutex_ -> WriterMutex_ (never reverse).
+        TGuard<TMutex> loadGuard(LoadMutex_);
 
         TUdfLibraryPtr lib;
+        NUdf::TBackTraceCallback backTraceCallback = nullptr;
+        bool needOpen = false;
+        {
+            auto snap = State_.AtomicLoad();
+            auto libIt = snap->LoadedLibraries.find(libraryPath);
+            if (libIt != snap->LoadedLibraries.end() && libIt->second) {
+                lib = libIt->second;
+            } else {
+                needOpen = true;
+                with_lock (WriterMutex_) {
+                    backTraceCallback = BackTraceCallback_;
+                }
+            }
+        }
 
-        auto libIt = LoadedLibraries_.find(libraryPath);
-        if (libIt == LoadedLibraries_.end()) {
-            lib = MakeIntrusive<TUdfLibrary>();
+        if (needOpen) {
+            auto opened = MakeIntrusive<TUdfLibrary>();
 #ifdef _win32_
             ui32 loadFlags = 0;
 #else
@@ -151,11 +189,11 @@ public:
                 absPath = JoinPaths(TFsPath::Cwd().PathSplit(), absPathSplit);
             }
 
-            lib->Lib.Open(absPath.data(), loadFlags);
-            lib->Lib.SetUnloadable(false);
+            opened->Lib.Open(absPath.data(), loadFlags);
+            opened->Lib.SetUnloadable(false);
 
             auto abiVersionFunc = reinterpret_cast<NUdf::TAbiVersionFunctionPtr>(
-                lib->Lib.SymOptional(AbiVersionFuncName));
+                opened->Lib.SymOptional(AbiVersionFuncName));
             if (!abiVersionFunc) {
                 return;
             }
@@ -168,40 +206,70 @@ public:
                                                                   << "; try to re-compile library using "
                                                                   << "YQL_ABI_VERSION(" << UDF_ABI_VERSION_MAJOR
                                                                   << " " << UDF_ABI_VERSION_MINOR << " 0) macro in ya.make");
-            lib->AbiVersion = version;
-            if (version < NUdf::MakeAbiVersion(2, 8, 0)) {
-                SupportsSizedAllocators_ = false;
-            }
+            opened->AbiVersion = version;
 
 #if defined(_win_) || defined(_darwin_)
-            auto bindSymbolsFunc = reinterpret_cast<NUdf::TBindSymbolsFunctionPtr>(lib->Lib.Sym(BindSymbolsFuncName));
+            auto bindSymbolsFunc = reinterpret_cast<NUdf::TBindSymbolsFunctionPtr>(
+                opened->Lib.Sym(BindSymbolsFuncName));
             bindSymbolsFunc(NUdf::GetStaticSymbols());
 #endif
 
-            if (BackTraceCallback_) {
-                auto setter = reinterpret_cast<NUdf::TSetBackTraceCallbackPtr>(lib->Lib.SymOptional(SetBackTraceCallbackName));
+            if (backTraceCallback) {
+                auto setter = reinterpret_cast<NUdf::TSetBackTraceCallbackPtr>(
+                    opened->Lib.SymOptional(SetBackTraceCallbackName));
                 if (setter) {
-                    setter(BackTraceCallback_);
+                    setter(backTraceCallback);
                 }
             }
 
-            libIt = LoadedLibraries_.insert({libraryPath, lib}).first;
-        } else {
-            lib = libIt->second;
+            with_lock (WriterMutex_) {
+                auto next = MakeIntrusive<TSnapshot>(*State_.AtomicLoad());
+                auto& slot = next->LoadedLibraries[libraryPath];
+                if (!slot) {
+                    slot = opened;
+                }
+                lib = slot;
+                State_.AtomicStore(next);
+            }
         }
+
+        Y_ENSURE(lib, "UDF library handle missing for " << libraryPath);
 
         auto registerFunc = reinterpret_cast<NUdf::TRegisterFunctionPtr>(
             lib->Lib.Sym(RegisterFuncName));
 
+        TUdfModulesMap staging;
         THashSet<TString> newModules;
         TUdfModuleLoader loader(
-            UdfModules_,
+            staging,
             &newModules,
             libraryPath,
             remmapings,
             lib->AbiVersion, customUdfPrefix);
         registerFunc(loader, flags);
         Y_ENSURE(!loader.HasError(), loader.GetError());
+
+        with_lock (WriterMutex_) {
+            auto next = MakeIntrusive<TSnapshot>(*State_.AtomicLoad());
+            for (const auto& [name, module] : staging) {
+                Y_UNUSED(module);
+                if (const TUdfModule* oldModule = next->UdfModules.FindPtr(name)) {
+                    ythrow yexception()
+                        << "UDF module duplication: name " << name
+                        << ", already loaded from " << oldModule->LibraryPath
+                        << ", trying to load from " << libraryPath;
+                }
+            }
+            for (auto& [name, module] : staging) {
+                next->UdfModules.emplace(name, std::move(module));
+            }
+            // Ensure library slot exists even if open raced with a placeholder.
+            auto& slot = next->LoadedLibraries[libraryPath];
+            if (!slot) {
+                slot = lib;
+            }
+            State_.AtomicStore(next);
+        }
 
         if (modules) {
             *modules = std::move(newModules);
@@ -213,49 +281,72 @@ public:
         const TStringBuf& moduleName,
         NUdf::TUniquePtr<NUdf::IUdfModule> module) override
     {
-        TWriteGuard guard(Lock_);
-
         TString libraryPathStr(libraryPath);
-        // Track the path for RemoveModule cleanup; multiple in-memory modules may
-        // share one synthetic path (unlike LoadUdfs which opens a real .so once).
-        LoadedLibraries_.emplace(libraryPathStr, nullptr);
-
         TUdfModuleRemappings remappings;
+        TUdfModulesMap staging;
         TUdfModuleLoader loader(
-            UdfModules_, /*newModules=*/nullptr, libraryPathStr,
+            staging, /*newModules=*/nullptr, libraryPathStr,
             remappings, NUdf::CurrentAbiVersion());
         loader.AddModule(moduleName, std::move(module));
-
         Y_ENSURE(!loader.HasError(), loader.GetError());
+
+        with_lock (WriterMutex_) {
+            auto next = MakeIntrusive<TSnapshot>(*State_.AtomicLoad());
+            // Track path for RemoveModule cleanup; multiple in-memory modules may
+            // share one synthetic path (unlike LoadUdfs which opens a real .so once).
+            next->LoadedLibraries.emplace(libraryPathStr, nullptr);
+            for (const auto& [name, staged] : staging) {
+                Y_UNUSED(staged);
+                if (const TUdfModule* oldModule = next->UdfModules.FindPtr(name)) {
+                    ythrow yexception()
+                        << "UDF module duplication: name " << name
+                        << ", already loaded from " << oldModule->LibraryPath
+                        << ", trying to load from " << libraryPathStr;
+                }
+            }
+            for (auto& [name, staged] : staging) {
+                next->UdfModules.emplace(name, std::move(staged));
+            }
+            State_.AtomicStore(next);
+        }
     }
 
     void RemoveModule(const TStringBuf& moduleName) override {
-        TWriteGuard guard(Lock_);
-
-        // Only UdfModules_ / LoadedLibraries_. SystemModulePaths_ is a separate
-        // catalog and must survive unload so FindUdfPath can still resolve it.
-        auto it = UdfModules_.find(TString(moduleName));
-        if (it == UdfModules_.end()) {
-            return;
-        }
-        const TString libraryPath = it->second.LibraryPath;
-        UdfModules_.erase(it);
-        bool pathStillUsed = false;
-        for (const auto& [name, module] : UdfModules_) {
-            Y_UNUSED(name);
-            if (module.LibraryPath == libraryPath) {
-                pathStillUsed = true;
-                break;
+        with_lock (WriterMutex_) {
+            auto cur = State_.AtomicLoad();
+            auto it = cur->UdfModules.find(TString(moduleName));
+            if (it == cur->UdfModules.end()) {
+                return;
             }
-        }
-        if (!pathStillUsed) {
-            LoadedLibraries_.erase(libraryPath);
+
+            auto next = MakeIntrusive<TSnapshot>(*cur);
+            it = next->UdfModules.find(TString(moduleName));
+            Y_ABORT_UNLESS(it != next->UdfModules.end());
+            const TString libraryPath = it->second.LibraryPath;
+            next->UdfModules.erase(it);
+
+            // SystemModulePaths is a separate catalog and must survive unload.
+            bool pathStillUsed = false;
+            for (const auto& [name, module] : next->UdfModules) {
+                Y_UNUSED(name);
+                if (module.LibraryPath == libraryPath) {
+                    pathStillUsed = true;
+                    break;
+                }
+            }
+            if (!pathStillUsed) {
+                next->LoadedLibraries.erase(libraryPath);
+            }
+            State_.AtomicStore(next);
         }
     }
 
     void SetSystemModulePaths(const TUdfModulePathsMap& paths) override {
-        TWriteGuard guard(Lock_);
-        SystemModulePaths_ = paths;
+        with_lock (WriterMutex_) {
+            auto next = MakeIntrusive<TSnapshot>(*State_.AtomicLoad());
+            next->SystemModulePaths = paths;
+            State_.AtomicStore(next);
+        }
     }
 
     const IBuiltinFunctionRegistry::TPtr& GetBuiltins() const override {
@@ -287,9 +378,9 @@ public:
 
         std::shared_ptr<NUdf::IUdfModule> module;
         {
-            TReadGuard guard(Lock_);
-            auto it = UdfModules_.find(moduleName);
-            if (it == UdfModules_.end()) {
+            auto snap = State_.AtomicLoad();
+            auto it = snap->UdfModules.find(moduleName);
+            if (it == snap->UdfModules.end()) {
                 return TStatus::Error()
                        << "Module " << moduleName << " is not registered";
             }
@@ -335,13 +426,13 @@ public:
     }
 
     TMaybe<TString> FindUdfPath(const TStringBuf& moduleName) const override {
-        TReadGuard guard(Lock_);
+        auto snap = State_.AtomicLoad();
 
-        if (const TUdfModule* udf = UdfModules_.FindPtr(moduleName)) {
+        if (const TUdfModule* udf = snap->UdfModules.FindPtr(moduleName)) {
             return udf->LibraryPath;
         }
 
-        if (const TString* path = SystemModulePaths_.FindPtr(moduleName)) {
+        if (const TString* path = snap->SystemModulePaths.FindPtr(moduleName)) {
             return *path;
         }
 
@@ -349,16 +440,14 @@ public:
     }
 
     bool IsLoadedUdfModule(const TStringBuf& moduleName) const override {
-        TReadGuard guard(Lock_);
-        return UdfModules_.contains(moduleName);
+        return State_.AtomicLoad()->UdfModules.contains(moduleName);
     }
 
     THashSet<TString> GetAllModuleNames() const override {
-        TReadGuard guard(Lock_);
-
+        auto snap = State_.AtomicLoad();
         THashSet<TString> names;
-        names.reserve(UdfModules_.size());
-        for (const auto& module : UdfModules_) {
+        names.reserve(snap->UdfModules.size());
+        for (const auto& module : snap->UdfModules) {
             names.insert(module.first);
         }
         return names;
@@ -394,9 +483,9 @@ public:
 
         std::shared_ptr<NUdf::IUdfModule> module;
         {
-            TReadGuard guard(Lock_);
-            const auto it = UdfModules_.find(moduleName);
-            if (UdfModules_.cend() == it) {
+            auto snap = State_.AtomicLoad();
+            const auto it = snap->UdfModules.find(moduleName);
+            if (snap->UdfModules.cend() == it) {
                 return TFunctionsMap();
             }
             module = it->second.Impl;
@@ -407,8 +496,7 @@ public:
     }
 
     bool SupportsSizedAllocators() const override {
-        TReadGuard guard(Lock_);
-        return SupportsSizedAllocators_;
+        return SupportsSizedAllocators_.load(std::memory_order_relaxed);
     }
 
     void PrintInfoTo(IOutputStream& out) const override {
@@ -418,9 +506,9 @@ public:
     void CleanupModulesOnTerminate() const override {
         TVector<std::shared_ptr<NUdf::IUdfModule>> modules;
         {
-            TReadGuard guard(Lock_);
-            modules.reserve(UdfModules_.size());
-            for (const auto& module : UdfModules_) {
+            auto snap = State_.AtomicLoad();
+            modules.reserve(snap->UdfModules.size());
+            for (const auto& module : snap->UdfModules) {
                 modules.push_back(module.second.Impl);
             }
         }
@@ -430,24 +518,23 @@ public:
     }
 
     TIntrusivePtr<IMutableFunctionRegistry> Clone() const override {
-        TReadGuard guard(Lock_);
         return new TDynamicFunctionRegistry(*this);
     }
 
     void SetBackTraceCallback(NUdf::TBackTraceCallback callback) override {
-        TWriteGuard guard(Lock_);
-        BackTraceCallback_ = callback;
+        with_lock (WriterMutex_) {
+            BackTraceCallback_ = callback;
+        }
     }
 
 private:
     const IBuiltinFunctionRegistry::TPtr Builtins_;
 
-    mutable TRWMutex Lock_;
-    THashMap<TString, TUdfLibraryPtr> LoadedLibraries_;
-    TUdfModulesMap UdfModules_;
-    TUdfModulePathsMap SystemModulePaths_;
+    THotSwap<TSnapshot> State_;
+    mutable TAdaptiveLock WriterMutex_;
+    TMutex LoadMutex_;
     NUdf::TBackTraceCallback BackTraceCallback_ = nullptr;
-    bool SupportsSizedAllocators_ = true;
+    std::atomic<bool> SupportsSizedAllocators_{true};
 };
 
 } // namespace

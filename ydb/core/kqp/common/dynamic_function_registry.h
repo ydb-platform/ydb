@@ -4,23 +4,27 @@
 
 namespace NKikimr::NKqp {
 
-//! Thread-safe mutable UDF registry with RemoveModule.
+//! Hot-mutable UDF registry with RemoveModule (WASM / dynamic load).
 //!
-//! Contract for a single instance:
-//! - All methods may be called concurrently from multiple threads.
-//! - Mutations (LoadUdfs / AddModule / RemoveModule / Set*) are serialized.
-//! - Concurrent Find* / Get* during RemoveModule either observe the module
-//!   (and keep it alive via shared_ptr for the duration of the module call)
-//!   or get "not registered" — never use-after-free.
-//! - Clone() takes a consistent snapshot under a shared lock; the clone is
-//!   independent of the source.
+//! Concurrency model (actor-friendly):
+//! - Readers (Find* / Get* / IsLoaded*) are wait-free via an immutable snapshot
+//!   (THotSwap): no registry lock is held across module callbacks.
+//! - Mutations (AddModule / RemoveModule / Set* / committing LoadUdfs) publish a
+//!   new snapshot under a short writer lock (COW). Concurrent mutations from
+//!   multiple threads/actors are supported; writers briefly serialize on publish.
+//! - After RemoveModule publishes, new lookups do not observe the module
+//!   (no phantom re-fetch). An in-flight call that already held shared_ptr may
+//!   still finish — never use-after-free.
+//! - LoadUdfs runs dlopen / Register under a separate load mutex (not on the
+//!   reader path); do not hold actor mailboxes across that work when possible.
+//! - Clone() copies the current snapshot; module Impl pointers are shared.
 class IDynamicFunctionRegistry: public NMiniKQL::IMutableFunctionRegistry {
 public:
     using TPtr = TIntrusivePtr<IDynamicFunctionRegistry>;
 
     //! Unloads a dynamically registered module by YQL module name. No-op if missing.
-    //! Drops the LoadedLibraries_ entry when no modules from that path remain.
-    //! Does not modify SystemModulePaths_: FindUdfPath may still return a system
+    //! Drops the LoadedLibraries entry when no modules from that path remain.
+    //! Does not modify SystemModulePaths: FindUdfPath may still return a system
     //! catalog path after unload (same as for never-loaded system modules).
     virtual void RemoveModule(const TStringBuf& moduleName) = 0;
 };

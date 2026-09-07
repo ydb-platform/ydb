@@ -6,12 +6,14 @@ SIZE(MEDIUM)
 PEERDIR(
     library/cpp/testing/unittest
     ydb/core/tablet_flat/test/libs/table
+    ydb/core/testlib
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
 )
 
 SRCS(
     query_metrics_retention_db_ut.cpp
+    query_metrics_ut.cpp
 )
 
 END()

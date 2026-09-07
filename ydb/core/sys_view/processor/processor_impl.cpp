@@ -166,7 +166,7 @@ ui32 TSysViewProcessor::PersistMinuteQueryMetrics(NIceDb::TNiceDb& db,
         }
         auto key = std::make_pair(intervalEndUs, ++rank);
 
-        auto& queryMetrics = QueryMetrics[entry.second];
+        const auto& queryMetrics = QueryMetrics.at(entry.second);
         auto& resultMetrics = MetricsOneMinute[key];
         resultMetrics.Text = queryMetrics.Text;
         resultMetrics.Metrics = queryMetrics.Metrics;
@@ -232,7 +232,7 @@ ui32 TSysViewProcessor::PersistCurrentHourQueryMetrics(NIceDb::TNiceDb& db,
 
         auto key = std::make_pair(hourEndUs, ++hourRank);
         auto& result = MetricsOneHour[key];
-        result.Metrics = CurrentHourMetrics[queryHash];
+        result.Metrics = CurrentHourMetrics.at(queryHash);
 
         if (auto it = QueryMetrics.find(queryHash);
             it != QueryMetrics.end() && !it->second.Text.empty())
@@ -317,7 +317,7 @@ void TSysViewProcessor::UpdateAndLogQueryMetricsCoverage(
     for (const auto& node : NodesToRequest) {
         timedOutNodes += !node.Hashes.empty();
     }
-    for (const auto& [_, node] : NodesInFlight) {
+    for (const auto& [_, node] : RequestsInFlight) {
         timedOutNodes += !node.Hashes.empty();
     }
 
@@ -343,20 +343,21 @@ void TSysViewProcessor::UpdateAndLogQueryMetricsCoverage(
     counters[COUNTER_QUERY_METRICS_LAST_INTERVAL_TIMED_OUT_NODES]
         .Set(timedOutNodes);
 
-    SVLOG_D("[" << TabletID() << "] Persist hour query metrics: "
-        << "hour end# " << hourEnd
-        << ", accumulator size# " << CurrentHourMetrics.size()
-        << ", persisted# " << persistedHourMetrics
-        << ", summary nodes# " << QueryMetricsCoverage.SummaryNodes
-        << ", coverage nodes# " << QueryMetricsCoverage.Nodes
-        << ", requested nodes# " << QueryMetricsCoverage.RequestedNodes
-        << ", responded nodes# " << QueryMetricsCoverage.RespondedNodes
-        << ", failed nodes# " << QueryMetricsCoverage.FailedNodes
-        << ", timed out nodes# " << timedOutNodes
-        << ", total cpu us# " << QueryMetricsCoverage.TotalCpuTimeUs
-        << ", node retained cpu us# " << QueryMetricsCoverage.NodeRetainedCpuTimeUs
-        << ", processor retained cpu us# " << QueryMetricsCoverage.ProcessorRetainedCpuTimeUs
-        << ", received cpu us# " << receivedCpuTimeUs);
+    YDB_LOG_DEBUG("Persist hour query metrics",
+        {"tabletId", TabletID()},
+        {"hourEnd", hourEnd},
+        {"accumulatorSize", CurrentHourMetrics.size()},
+        {"persistedCount", persistedHourMetrics},
+        {"summaryNodes", QueryMetricsCoverage.SummaryNodes},
+        {"coverageNodes", QueryMetricsCoverage.Nodes},
+        {"requestedNodes", QueryMetricsCoverage.RequestedNodes},
+        {"respondedNodes", QueryMetricsCoverage.RespondedNodes},
+        {"failedNodes", QueryMetricsCoverage.FailedNodes},
+        {"timedOutNodes", timedOutNodes},
+        {"totalCpuTimeUs", QueryMetricsCoverage.TotalCpuTimeUs},
+        {"nodeRetainedCpuTimeUs", QueryMetricsCoverage.NodeRetainedCpuTimeUs},
+        {"processorRetainedCpuTimeUs", QueryMetricsCoverage.ProcessorRetainedCpuTimeUs},
+        {"receivedCpuTimeUs", receivedCpuTimeUs});
 }
 
 void TSysViewProcessor::FinalizeQueryMetricsInterval(NIceDb::TNiceDb& db) {
@@ -519,11 +520,11 @@ void TSysViewProcessor::Reset(NIceDb::TNiceDb& db, const TActorContext& ctx) {
     for (const auto& node : NodesToRequest) {
         db.Table<Schema::NodesToRequest>().Key(node.NodeId).Delete();
     }
-    for (const auto& [nodeId, _] : NodesInFlight) {
-        db.Table<Schema::NodesToRequest>().Key(nodeId).Delete();
+    for (const auto& [_, request] : RequestsInFlight) {
+        db.Table<Schema::NodesToRequest>().Key(request.NodeId).Delete();
     }
     NodesToRequest.clear();
-    NodesInFlight.clear();
+    RequestsInFlight.clear();
 
     QueryMetricsCoverage = {};
 
@@ -610,7 +611,7 @@ void TSysViewProcessor::Reset(NIceDb::TNiceDb& db, const TActorContext& ctx) {
 }
 
 void TSysViewProcessor::SendRequests() {
-    while (!NodesToRequest.empty() && NodesInFlight.size() < MaxInFlightRequests) {
+    while (!NodesToRequest.empty() && RequestsInFlight.size() < MaxInFlightRequests) {
         auto& req = NodesToRequest.back();
 
         auto request = MakeHolder<TEvSysView::TEvGetIntervalMetricsRequest>();
@@ -642,30 +643,37 @@ void TSysViewProcessor::SendRequests() {
             {"topByCpuTimeCount", req.ByCpuTime.size()},
             {"topByRequestUnitsCount", req.ByRequestUnits.size()});
 
+        const ui64 requestId = ++NextMetricsRequestId;
         Send(MakeSysViewServiceID(req.NodeId),
             std::move(request),
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-            req.NodeId);
+            requestId);
 
-        NodesInFlight[req.NodeId] = std::move(req);
+        RequestsInFlight.emplace(requestId, std::move(req));
         NodesToRequest.pop_back();
     }
 }
 
 void TSysViewProcessor::Handle(TEvents::TEvUndelivered::TPtr& ev) {
-    auto nodeId = (TNodeId)ev.Get()->Cookie;
+    if (ev->Get()->SourceType != TEvSysView::TEvGetIntervalMetricsRequest::EventType) {
+        return;
+    }
     YDB_LOG_WARN("Handle TEvents::TEvUndelivered: interval metrics request undelivered",
         {"tabletId", TabletID()},
-        {"nodeId", nodeId});
-    HandleIntervalMetricsFailure(nodeId);
+        {"requestId", ev->Cookie});
+    HandleIntervalMetricsFailure(ev->Cookie);
 }
 
 void TSysViewProcessor::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     auto nodeId = ev->Get()->NodeId;
     YDB_LOG_WARN("Handle TEvInterconnect::TEvNodeDisconnected: node disconnected during metrics request",
         {"tabletId", TabletID()},
-        {"nodeId", nodeId});
-    HandleIntervalMetricsFailure(nodeId);
+        {"nodeId", nodeId},
+        {"requestId", ev->Cookie});
+    auto request = RequestsInFlight.find(ev->Cookie);
+    if (request != RequestsInFlight.end() && request->second.NodeId == nodeId) {
+        HandleIntervalMetricsFailure(ev->Cookie);
+    }
 }
 
 void TSysViewProcessor::Handle(TEvSysView::TEvGetQueryMetricsRequest::TPtr& ev) {
@@ -985,8 +993,8 @@ bool TSysViewProcessor::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                     dumpNode(node);
                 }
                 str << Endl;
-                str << "NodesInFlight" << Endl;
-                for (const auto& [_, node] : NodesInFlight) {
+                str << "RequestsInFlight" << Endl;
+                for (const auto& [_, node] : RequestsInFlight) {
                     dumpNode(node);
                 }
                 str << Endl;

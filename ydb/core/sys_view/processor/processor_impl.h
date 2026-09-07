@@ -206,7 +206,7 @@ private:
     void Reset(NIceDb::TNiceDb& db, const TActorContext& ctx);
 
     void SendRequests();
-    void HandleIntervalMetricsFailure(TNodeId nodeId);
+    void HandleIntervalMetricsFailure(ui64 requestId);
 
     static void EntryToProto(NKikimrSysView::TQueryMetricsEntry& dst, const TQueryToMetrics& src);
     static void EntryToProto(NKikimrSysView::TQueryStatsEntry& dst, const NKikimrSysView::TQueryStats& src);
@@ -354,7 +354,10 @@ private:
         THashVector ByRequestUnits;
     };
     std::vector<TNodeToQueries> NodesToRequest;
-    std::unordered_map<TNodeId, TNodeToQueries> NodesInFlight;
+    // Cookies identify send attempts within this actor incarnation. After a
+    // reboot the new actor id prevents old replies from reaching this state.
+    ui64 NextMetricsRequestId = 0;
+    std::unordered_map<ui64, TNodeToQueries> RequestsInFlight;
 
     // IntervalTops
     TQueryTop ByDurationMinute;

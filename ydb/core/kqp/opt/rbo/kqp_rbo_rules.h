@@ -222,6 +222,19 @@ public:
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
 };
 
+/**
+ * Expand a logical grouping sets, currently only rollup is supported.
+ */
+class TExpandGroupingSetsRule: public ISimplifiedRule {
+public:
+    TExpandGroupingSetsRule()
+        : ISimplifiedRule("Expand grouping sets rule", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {
+    }
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
 /***
  * Fuse two consequtive filters
  */

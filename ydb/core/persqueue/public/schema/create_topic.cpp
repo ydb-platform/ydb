@@ -46,6 +46,14 @@ TResult ApplyChangesInt(
             error = TStringBuilder() << "Partitions count must be less than " << Max<ui32>() << ", provided " << settings.min_active_partitions();
             return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
         }
+        if (settings.max_active_partitions() < 0) {
+            error = TStringBuilder() << "Max active partitions must be non-negative, provided " << settings.max_active_partitions();
+            return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
+        }
+        if (settings.max_active_partitions() >= Max<ui32>()) {
+            error = TStringBuilder() << "Max active partitions must be less than " << Max<ui32>() << ", provided " << settings.max_active_partitions();
+            return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
+        }
         minParts = std::max<ui32>(1, settings.min_active_partitions());
         if (request.partitioning_settings().has_auto_partitioning_settings() &&
             request.partitioning_settings().auto_partitioning_settings().strategy() != ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED) {

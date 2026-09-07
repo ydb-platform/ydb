@@ -30,6 +30,7 @@ class PlanConverter {
     TIntrusivePtr<IOperator> ConvertTKqpOpSetOp(TExprNode::TPtr node);
     TIntrusivePtr<IOperator> ConvertTKqpOpSort(TExprNode::TPtr node);
     TIntrusivePtr<IOperator> ConvertTKqpOpAggregate(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ConvertTKqpOpGroupingSets(TExprNode::TPtr node);
     TIntrusivePtr<IOperator> ConvertTKqpInfuseDependents(TExprNode::TPtr node);
     TIntrusivePtr<IOperator> ConvertTKqpOpReplaceAlias(TExprNode::TPtr node);
 

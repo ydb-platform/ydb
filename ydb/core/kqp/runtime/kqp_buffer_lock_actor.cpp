@@ -69,7 +69,6 @@ public:
         , LogPrefix(TStringBuilder() << "Table: `" << Settings.TablePath << "` (" << Settings.TableId << "), "
             << "SessionActorId: " << Settings.SessionActorId)
         , LockActorSpan(TWilsonKqp::LockActor, std::move(Settings.ParentTraceId), "LockActor") {
-        AFL_ENSURE(Settings.MvccSnapshot); // Read Committed tx always acquires snapshot.
     }
 
     void Bootstrap() {
@@ -160,8 +159,10 @@ public:
     void SetLockSettings(
             ui64 cookie,
             TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
-            bool skipAbsent) override
+            bool skipAbsent,
+            const NKikimrDataEvents::TMvccSnapshot& mvccSnapshot) override
     {
+        AFL_ENSURE(mvccSnapshot.GetStep() || mvccSnapshot.GetTxId()); // Snapshot must be set for the operation.
         TKqpStreamLockSettings lockSettings(Settings.HolderFactory);
         lockSettings.Table.SetOwnerId(Settings.TableId.PathId.OwnerId);
         lockSettings.Table.SetTableId(Settings.TableId.PathId.LocalPathId);
@@ -178,7 +179,7 @@ public:
         lockSettings.SkipAbsent = skipAbsent;
         lockSettings.QuerySpanId = Settings.QuerySpanId;
         lockSettings.Database = Settings.Database;
-        lockSettings.Snapshot = *Settings.MvccSnapshot;
+        lockSettings.Snapshot = mvccSnapshot;
 
         if (KeyColumnTypes.empty()) {
             for (const auto& keyColumn : keyColumns) {

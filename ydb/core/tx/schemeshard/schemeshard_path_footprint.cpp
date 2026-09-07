@@ -8,6 +8,9 @@
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
 
+#include <array>
+#include <string_view>
+
 namespace NKikimr::NSchemeShard {
 
 namespace {
@@ -46,6 +49,76 @@ static_assert(std::size(FieldProtoNames) == PathFieldCount);
 static_assert(std::size(FieldKinds) == PathFieldCount);
 static_assert(std::size(FieldRoles) == PathFieldCount);
 
+enum class EPlaceholder {
+    None,
+    Index,
+    SubIndex,
+    MapKey,
+};
+
+struct TTemplatePart {
+    TStringBuf Literal;
+    EPlaceholder Placeholder = EPlaceholder::None;
+};
+
+struct TTemplateRange {
+    size_t Begin = 0;
+    size_t End = 0;
+};
+
+constexpr size_t TemplatePartCount = [] {
+    size_t count = PathFieldCount;
+    for (const auto tpl : FieldTemplates) {
+        for (const char c : tpl) {
+            count += c == '{';
+        }
+    }
+    return count;
+}();
+
+struct TCompiledTemplates {
+    std::array<TTemplatePart, TemplatePartCount> Parts;
+    std::array<TTemplateRange, PathFieldCount> Ranges;
+};
+
+consteval TCompiledTemplates CompileTemplates() {
+    TCompiledTemplates result{};
+    size_t next = 0;
+    for (size_t field = 0; field < PathFieldCount; ++field) {
+        const std::string_view tpl(FieldTemplates[field].data(), FieldTemplates[field].size());
+        result.Ranges[field].Begin = next;
+        size_t pos = 0;
+        while (true) {
+            const size_t open = tpl.find_first_of("{}", pos);
+            if (open == std::string_view::npos) {
+                result.Parts[next++] = {TStringBuf(tpl.data() + pos, tpl.size() - pos)};
+                break;
+            }
+            const size_t close = tpl.find('}', open + 1);
+            if (tpl[open] != '{' || close == std::string_view::npos) {
+                throw "Unmatched brace in path field template";
+            }
+            const auto placeholder = tpl.substr(open + 1, close - open - 1);
+            EPlaceholder kind;
+            if (placeholder == "i") {
+                kind = EPlaceholder::Index;
+            } else if (placeholder == "j") {
+                kind = EPlaceholder::SubIndex;
+            } else if (placeholder == "key") {
+                kind = EPlaceholder::MapKey;
+            } else {
+                throw "Unknown path field placeholder";
+            }
+            result.Parts[next++] = {TStringBuf(tpl.data() + pos, open - pos), kind};
+            pos = close + 1;
+        }
+        result.Ranges[field].End = next;
+    }
+    return result;
+}
+
+constexpr auto CompiledTemplates = CompileTemplates();
+
 size_t FieldIndex(EPathField field) {
     const size_t index = static_cast<size_t>(field);
     Y_DEBUG_ABORT_UNLESS(index < PathFieldCount);
@@ -71,33 +144,27 @@ EPathRefRole PathFieldDefaultRole(EPathField field) {
 }
 
 TString FieldPath(const TPathRef& ref) {
-    const TStringBuf tpl = PathFieldName(ref.Field);
-    if (tpl.find('{') == TStringBuf::npos) {
-        return TString(tpl);
+    const auto range = CompiledTemplates.Ranges[FieldIndex(ref.Field)];
+    if (range.End == range.Begin + 1) {
+        return TString(CompiledTemplates.Parts[range.Begin].Literal);
     }
     TStringBuilder rendered;
-    size_t pos = 0;
-    while (pos < tpl.size()) {
-        const size_t open = tpl.find('{', pos);
-        if (open == TStringBuf::npos) {
-            rendered << tpl.substr(pos);
+    for (size_t i = range.Begin; i < range.End; ++i) {
+        const auto& part = CompiledTemplates.Parts[i];
+        rendered << part.Literal;
+        switch (part.Placeholder) {
+        case EPlaceholder::None:
             break;
-        }
-        rendered << tpl.substr(pos, open - pos);
-        const size_t close = tpl.find('}', open + 1);
-        if (close == TStringBuf::npos) {
-            rendered << tpl.substr(open);
-            break;
-        }
-        const TStringBuf placeholder = tpl.substr(open + 1, close - open - 1);
-        if (placeholder == "i") {
+        case EPlaceholder::Index:
             rendered << ref.Index;
-        } else if (placeholder == "j") {
+            break;
+        case EPlaceholder::SubIndex:
             rendered << ref.SubIndex;
-        } else {
+            break;
+        case EPlaceholder::MapKey:
             rendered << ref.MapKey;
+            break;
         }
-        pos = close + 1;
     }
     return rendered;
 }

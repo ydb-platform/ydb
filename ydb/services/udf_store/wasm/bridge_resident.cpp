@@ -200,6 +200,11 @@ void TCompartmentResidentCache::EvictFor(ui64 length) {
         Free(pin->Offset);
         PinnedBytes_ -= pin->BlockSize;
         ++Evictions_;
+        // The guest keyed its own state on the same identity, and that state
+        // usually points into the block that just went away. Hand it back the
+        // way the user-data LRU does instead of leaving the guest to read an
+        // offset whose bytes now belong to another pin.
+        ReleaseUserState(*it);
         Pins_.erase(*it);
         it = Lru_.erase(it);
     }
@@ -278,12 +283,9 @@ void TCompartmentResidentCache::SetUserData(
     }
 
     while (UserStates_.size() >= MaxUserStates && !UserStatesLru_.empty()) {
-        const TBridgeIdentity victim = UserStatesLru_.front();
-        if (auto* state = UserStates_.FindPtr(victim); state && state->Value != 0) {
-            ReleasedUserData_.push_back(state->Value);
+        if (!ReleaseUserState(UserStatesLru_.front())) {
+            UserStatesLru_.pop_front();
         }
-        UserStates_.erase(victim);
-        UserStatesLru_.pop_front();
     }
 
     TUserState state;
@@ -292,6 +294,19 @@ void TCompartmentResidentCache::SetUserData(
     UserStatesLru_.push_back(key);
     state.LruIt = std::prev(UserStatesLru_.end());
     UserStates_.emplace(key, std::move(state));
+}
+
+bool TCompartmentResidentCache::ReleaseUserState(const TBridgeIdentity& key) {
+    auto* state = UserStates_.FindPtr(key);
+    if (!state) {
+        return false;
+    }
+    if (state->Value != 0) {
+        ReleasedUserData_.push_back(state->Value);
+    }
+    UserStatesLru_.erase(state->LruIt);
+    UserStates_.erase(key);
+    return true;
 }
 
 bool TCompartmentResidentCache::PopReleasedUserData(ui64& value) {

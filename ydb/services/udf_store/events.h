@@ -41,9 +41,11 @@ struct TEvStoreInitFailed : public NActors::TEventLocal<TEvStoreInitFailed, EvSt
 struct TEvReadBodyResponse : public NActors::TEventLocal<TEvReadBodyResponse, EvReadBodyResponse> {
     bool Success;
     TString Name;
-    //! Which pending queue the reply belongs to: one name may be a native UDF
-    //! and a WASM UDF at the same time, and the two are fetched by different
-    //! actors that both answer with this event.
+    //! Which pending queue the reply belongs to. Native bodies and WASM
+    //! artifacts are fetched by different actors that both answer with this
+    //! event, and a name can sit at the front of both queues while a type
+    //! change works its way through the snapshot, so the name alone does not
+    //! say whose reply this is.
     EUdfType Type;
     TString ErrorMessage;
 

@@ -25,7 +25,7 @@ struct TModuleSourceRow {
 struct TWasmArtifactRow {
     TString Id;
     TString Kind;
-    TString SourceMd5;
+    TString Uid;
     ui64 Version = 0;
     TString Format;
     ui64 WasmDataSize = 0;
@@ -54,11 +54,15 @@ TString BuildSelectSourceChunksQuery(const TString& tablePath);
 void SetSelectSourceChunksParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& ownerKey);
 bool ParseSourceChunksResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TVector<TString>& chunks);
 
+//! Artifacts are keyed by the upload they were built from, so a lookup that
+//! finds nothing means this upload has not been compiled here yet, not that
+//! the module is unknown.
 TString BuildSelectArtifactQuery(const TString& tablePath);
 void SetSelectArtifactParams(
     Ydb::Table::ExecuteDataQueryRequest& request,
     const TString& id,
-    const TString& kind);
+    const TString& kind,
+    const TString& uid);
 bool ParseArtifactResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TWasmArtifactRow& row);
 
 TString BuildSelectArtifactChunksQuery(const TString& tablePath);
@@ -66,6 +70,7 @@ void SetSelectArtifactChunksParams(
     Ydb::Table::ExecuteDataQueryRequest& request,
     const TString& id,
     const TString& kind,
+    const TString& uid,
     const TString& blobKind);
 bool ParseArtifactChunksResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TVector<TString>& chunks);
 
@@ -74,26 +79,50 @@ void SetUpsertArtifactParams(
     Ydb::Table::ExecuteDataQueryRequest& request,
     const TWasmArtifactRow& row);
 
+//! Clears a partial write of this very upload before it is retried. Scoped by
+//! uid: at this point the compile has not yet confirmed that its upload is
+//! still the current one, so it has no business touching anybody else's rows.
 TString BuildDeleteArtifactChunksQuery(const TString& tablePath);
 void SetDeleteArtifactChunksParams(
     Ydb::Table::ExecuteDataQueryRequest& request,
     const TString& id,
-    const TString& kind);
+    const TString& kind,
+    const TString& uid);
+
+//! Drops everything compiled for this module from uploads other than `uid`.
+//! Gated on `modules` still carrying that same uid in the same statement: a
+//! compile that lost the race to a re-upload must not wipe the winner's rows.
+TString BuildDeleteStaleArtifactChunksQuery(
+    const TString& artifactChunksTablePath,
+    const TString& modulesTablePath);
+TString BuildDeleteStaleArtifactsQuery(
+    const TString& artifactTablePath,
+    const TString& modulesTablePath);
+void SetDeleteStaleArtifactsParams(
+    Ydb::Table::ExecuteDataQueryRequest& request,
+    const TString& id,
+    const TString& kind,
+    const TString& uid,
+    const TString& type);
 
 TString BuildUpsertArtifactChunkQuery(const TString& tablePath);
 void SetUpsertArtifactChunkParams(
     Ydb::Table::ExecuteDataQueryRequest& request,
     const TString& id,
     const TString& kind,
+    const TString& uid,
     const TString& blobKind,
     ui64 chunkIdx,
     const TString& data);
 
+//! Scoped by uid as well as name and type: the compile that started for an
+//! earlier upload must not overwrite the status of the one that replaced it.
 TString BuildUpdateCompileStatusQuery(const TString& tablePath);
 void SetUpdateCompileStatusParams(
     Ydb::Table::ExecuteDataQueryRequest& request,
     const TString& name,
     const TString& type,
+    const TString& uid,
     const TString& status,
     const TString& errorMessage);
 

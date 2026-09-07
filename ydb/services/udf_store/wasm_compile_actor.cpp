@@ -42,6 +42,7 @@ void TWasmCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
                 request,
                 Name_,
                 TUdfModule::TypeToString(EUdfType::WASM),
+                ModuleSource_.Uid,
                 TUdfModule::CompileStatusToString(ECompileStatus::Compiling),
                 "");
             break;
@@ -52,10 +53,11 @@ void TWasmCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
             NTableQuery::SetSelectArtifactParams(
                 request,
                 PendingLibraryName_,
-                WasmArtifactKindToString(EWasmArtifactKind::Library));
+                WasmArtifactKindToString(EWasmArtifactKind::Library),
+                PendingLibraryUid_);
             break;
         case EStep::DeleteArtifactChunks:
-            NTableQuery::SetDeleteArtifactChunksParams(request, Name_, ModuleKind_);
+            NTableQuery::SetDeleteArtifactChunksParams(request, Name_, ModuleKind_, ModuleSource_.Uid);
             break;
         case EStep::UpsertModuleArtifact:
             NTableQuery::SetUpsertArtifactParams(request, ArtifactRow_);
@@ -67,6 +69,7 @@ void TWasmCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
                 request,
                 Name_,
                 ModuleKind_,
+                ModuleSource_.Uid,
                 chunk.BlobKind,
                 chunk.ChunkIdx,
                 chunk.Data);
@@ -77,14 +80,32 @@ void TWasmCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
                 request,
                 Name_,
                 TUdfModule::TypeToString(EUdfType::WASM),
+                ModuleSource_.Uid,
                 TUdfModule::CompileStatusToString(ECompileStatus::Ready),
                 "");
+            break;
+        case EStep::VerifyStillCurrent:
+        case EStep::ConfirmStillCurrent:
+            NTableQuery::SetSelectModuleByNameParams(
+                request,
+                Name_,
+                TUdfModule::TypeToString(EUdfType::WASM));
+            break;
+        case EStep::DeleteStaleArtifactChunks:
+        case EStep::DeleteStaleArtifacts:
+            NTableQuery::SetDeleteStaleArtifactsParams(
+                request,
+                Name_,
+                ModuleKind_,
+                ModuleSource_.Uid,
+                TUdfModule::TypeToString(EUdfType::WASM));
             break;
         case EStep::UpdateMetaFailed:
             NTableQuery::SetUpdateCompileStatusParams(
                 request,
                 Name_,
                 TUdfModule::TypeToString(EUdfType::WASM),
+                ModuleSource_.Uid,
                 TUdfModule::CompileStatusToString(ECompileStatus::Failed),
                 ErrorMessage_);
             break;
@@ -101,6 +122,16 @@ void TWasmCompileActor::HandleQueryResult(
 }
 
 void TWasmCompileActor::HandleQueryFailed(NMetadata::NRequest::TEvRequestFailed::TPtr& ev) {
+    if (Step_ == EStep::DeleteStaleArtifactChunks || Step_ == EStep::DeleteStaleArtifacts) {
+        // Leftover rows of replaced uploads are not worth failing over, but
+        // still confirm we own the modules row before anyone loads us.
+        ALS_WARN(NKikimrServices::METADATA_PROVIDER)
+            << "TWasmCompileActor: failed to drop stale artifacts of name=" << Name_
+            << ": " << ev->Get()->GetErrorMessage();
+        Step_ = EStep::ConfirmStillCurrent;
+        ExecuteQuery(NTableQuery::BuildSelectModuleByNameQuery(ModulesTablePath_), true);
+        return;
+    }
     ReplyError(TStringBuilder()
         << "YQL request failed at compile step " << static_cast<int>(Step_)
         << ": " << ev->Get()->GetErrorMessage());
@@ -185,9 +216,79 @@ void TWasmCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRespons
                 ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(ModulesTablePath_), false);
                 return;
             }
-            case EStep::UpdateMetaReady:
+            case EStep::UpdateMetaReady: {
+                // The status update is scoped by uid, so it silently does
+                // nothing when the module was re-uploaded while this compile
+                // was running. Read the row back to tell that case apart from
+                // a real success before anyone loads the artifact.
+                Step_ = EStep::VerifyStillCurrent;
+                ExecuteQuery(NTableQuery::BuildSelectModuleByNameQuery(ModulesTablePath_), true);
+                return;
+            }
+            case EStep::VerifyStillCurrent: {
+                NTableQuery::TModuleSourceRow current;
+                if (!NTableQuery::ParseModuleSourceResponse(response, current)) {
+                    ReplyDeferred(TStringBuilder()
+                        << "WASM module row disappeared while compiling name=" << Name_);
+                    return;
+                }
+                if (current.Uid != ModuleSource_.Uid) {
+                    // Our artifact was built from an upload nobody wants any
+                    // more. Leave it alone: the compile of the current upload
+                    // is the one entitled to clean up, and it will collect
+                    // ours too.
+                    ReplyDeferred(TStringBuilder()
+                        << "WASM module name=" << Name_ << " was re-uploaded while compiling: uid="
+                        << ModuleSource_.Uid << " is now " << current.Uid);
+                    return;
+                }
+                // Our upload is the current one, so every other artifact of
+                // this module belongs to an upload that has been replaced.
+                // Chunks first: the reverse order would leave chunks nobody
+                // can find if the actor dies in between. The delete itself is
+                // gated on modules.uid still matching, so a re-upload that
+                // lands after this read cannot be wiped by us.
+                Step_ = EStep::DeleteStaleArtifactChunks;
+                ExecuteQuery(
+                    NTableQuery::BuildDeleteStaleArtifactChunksQuery(
+                        ArtifactChunksTablePath_,
+                        ModulesTablePath_),
+                    false);
+                return;
+            }
+            case EStep::DeleteStaleArtifactChunks: {
+                Step_ = EStep::DeleteStaleArtifacts;
+                ExecuteQuery(
+                    NTableQuery::BuildDeleteStaleArtifactsQuery(
+                        ArtifactTablePath_,
+                        ModulesTablePath_),
+                    false);
+                return;
+            }
+            case EStep::DeleteStaleArtifacts: {
+                // Deletes are gated, but ReplySuccess would still load our
+                // artifact under a name whose modules.uid may already be
+                // someone else's. Read the row once more before publishing.
+                Step_ = EStep::ConfirmStillCurrent;
+                ExecuteQuery(NTableQuery::BuildSelectModuleByNameQuery(ModulesTablePath_), true);
+                return;
+            }
+            case EStep::ConfirmStillCurrent: {
+                NTableQuery::TModuleSourceRow current;
+                if (!NTableQuery::ParseModuleSourceResponse(response, current)) {
+                    ReplyDeferred(TStringBuilder()
+                        << "WASM module row disappeared while compiling name=" << Name_);
+                    return;
+                }
+                if (current.Uid != ModuleSource_.Uid) {
+                    ReplyDeferred(TStringBuilder()
+                        << "WASM module name=" << Name_ << " was re-uploaded while compiling: uid="
+                        << ModuleSource_.Uid << " is now " << current.Uid);
+                    return;
+                }
                 ReplySuccess();
                 return;
+            }
             case EStep::UpdateMetaFailed:
                 ReplyError(ErrorMessage_);
                 return;
@@ -203,6 +304,15 @@ void TWasmCompileActor::StartNextLibrary() {
         return;
     }
     PendingLibraryName_ = ParsedManifest_.RequiredLibraries[NextLibraryIndex_];
+    const auto* uid = LibraryUids_.FindPtr(PendingLibraryName_);
+    if (!uid) {
+        // The library was not in the snapshot this compile was queued from; a
+        // later snapshot will re-queue it once it appears.
+        ReplyDeferred(TStringBuilder()
+            << "Library '" << PendingLibraryName_ << "' is not known yet");
+        return;
+    }
+    PendingLibraryUid_ = *uid;
     ExecuteQuery(NTableQuery::BuildSelectArtifactQuery(ArtifactTablePath_), true);
 }
 
@@ -270,6 +380,12 @@ void TWasmCompileActor::ValidateExports() {
             }
             if (const auto* callSignature = requireExport(descriptor.CallExport)) {
                 requireAbiTypes(*callSignature, descriptor.CallExport);
+                // TWasmConfiguredCallable::Run passes the object handle ahead
+                // of the method arguments, so the export takes three fixed
+                // slots plus one per declared argument.
+                requireArity(*callSignature, descriptor.CallExport,
+                    3 + descriptor.Args.size(),
+                    "context, result pointer, object handle, one slot per argument");
             }
             if (const auto* destroySignature = requireExport(descriptor.DestroyExport)) {
                 requireAbiTypes(*destroySignature, descriptor.DestroyExport);
@@ -334,7 +450,7 @@ void TWasmCompileActor::CompileUserModule() {
         ArtifactRow_ = NTableQuery::TWasmArtifactRow{
             .Id = Name_,
             .Kind = ModuleKind_,
-            .SourceMd5 = ModuleSource_.Md5,
+            .Uid = ModuleSource_.Uid,
             .Version = ModuleSource_.Version,
             .Format = ParsedManifest_.ModuleExtension,
             .WasmDataSize = ModuleSource_.Body.size(),

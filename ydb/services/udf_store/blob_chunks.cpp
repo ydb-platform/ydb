@@ -96,6 +96,7 @@ TVector<NKikimrSchemeOp::TColumnDescription> TArtifactChunkSchema::GetColumnDesc
     return {
         MakeCol(IdColName, "Utf8"),
         MakeCol(KindColName, "Utf8"),
+        MakeCol(UidColName, "Utf8"),
         MakeCol(BlobKindColName, "Utf8"),
         MakeCol(ChunkIdxColName, "Uint64"),
         MakeCol(DataColName, "String"),
@@ -103,7 +104,7 @@ TVector<NKikimrSchemeOp::TColumnDescription> TArtifactChunkSchema::GetColumnDesc
 }
 
 TVector<TString> TArtifactChunkSchema::GetPk() {
-    return {IdColName, KindColName, BlobKindColName, ChunkIdxColName};
+    return {IdColName, KindColName, UidColName, BlobKindColName, ChunkIdxColName};
 }
 
 } // namespace NKikimr::NUdfStore

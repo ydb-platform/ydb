@@ -50,6 +50,9 @@ struct TSourceChunkSchema {
 struct TArtifactChunkSchema {
     static inline const TString IdColName = "id";
     static inline const TString KindColName = "kind";
+    //! Keyed alongside the artifact it belongs to, so chunks of different
+    //! uploads of the same module never mix.
+    static inline const TString UidColName = "uid";
     static inline const TString BlobKindColName = "blob_kind";
     static inline const TString ChunkIdxColName = "chunk_idx";
     static inline const TString DataColName = "data";

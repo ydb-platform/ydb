@@ -136,6 +136,9 @@ private:
     ui64 AllocBlock(ui64 length);
     void GrowArena(ui64 length);
     void EvictFor(ui64 length);
+    //! Drop the guest state cached for `key` and queue its value for the guest
+    //! to free. Returns false when there was nothing cached under that key.
+    bool ReleaseUserState(const TBridgeIdentity& key);
     void Touch(const TBridgeIdentity& key, TPin& pin);
     void WriteBytes(ui64 offset, NYql::NUdf::TStringRef bytes);
 

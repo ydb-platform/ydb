@@ -38,6 +38,21 @@ void BridgeKindsFromTypeNode(
     EBridgeNodeKind& outNodeKind,
     EBridgeValueKind& outValueKind);
 
+//! Declared result reduced to what a returned handle can be checked against.
+//! Optionality is transparent on both sides of the bridge and says nothing
+//! about the payload, so the family is taken from under the Optional layers:
+//! a declared Optional<List<...>> still may not be answered with a scalar.
+struct TDeclaredResultShape {
+    //! Family of the payload; Null when the declared type tells us nothing.
+    EBridgeKindFamily Family = EBridgeKindFamily::Null;
+    //! Declared type accepts a null, so the guest may return one.
+    bool Optional = false;
+
+    bool Accepts(EBridgeValueKind kind) const;
+};
+
+TDeclaredResultShape DeclaredResultShape(const TType* type, const ITypeInfoHelper* helper);
+
 class TWasmUdfFunction: public TBoxedValue {
 public:
     static TType* BuildYqlType(IFunctionTypeInfoBuilder& builder, EUdfValueType type);
@@ -84,7 +99,7 @@ private:
     //! Nothing downstream re-reads the declared type, so a guest that returns
     //! a handle of the wrong shape hands MiniKQL a value it will read as the
     //! declared one. Compare what can be compared cheaply: the family of the
-    //! returned node against the family of ResultType_.
+    //! returned node against the payload family of ResultType_.
     void EnsureResultFamily(EBridgeValueKind kind) const;
 
     TWasmCompartmentStatePtr State_;
@@ -92,7 +107,7 @@ private:
     TVector<TType*> ArgTypes_;
     TType* ResultType_ = nullptr;
     ITypeInfoHelper::TPtr TypeInfoHelper_;
-    EBridgeKindFamily ResultFamily_ = EBridgeKindFamily::Null;
+    TDeclaredResultShape ResultShape_;
 };
 
 class TWasmSoModule: public IUdfModule {

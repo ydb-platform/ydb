@@ -1121,6 +1121,44 @@ Y_UNIT_TEST(ResidentCacheEvictsBeyondBudget) {
     UNIT_ASSERT(resident.ArenaBytes() <= 2 * kBudget);
 }
 
+Y_UNIT_TEST(EvictedPinHandsBackItsUserData) {
+    TMiniKqlEnv mkql;
+
+    auto compartment = CreateEmptyImage();
+    compartment->AddSdk(MakeNamedLibrary("sdk", SdkStubWast).Bytecode);
+
+    constexpr ui64 kBudget = 4ull << 20;
+    constexpr size_t kBlob = 1024 * 1024;
+    TCompartmentResidentCache resident(compartment.get(), kBudget);
+
+    TVector<TUnboxedValue> blobs;
+    for (int i = 0; i < 12; ++i) {
+        TString payload(kBlob, static_cast<char>('a' + i));
+        blobs.push_back(mkql.ValueBuilder.NewString(TStringRef(payload.data(), payload.size())));
+    }
+
+    // Every pin carries guest state built over the bytes of that very block.
+    for (int i = 0; i < 12; ++i) {
+        resident.BeginRun();
+        const TBridgeIdentity key = BridgeIdentityKey(blobs[i]);
+        UNIT_ASSERT(key);
+        UNIT_ASSERT(resident.Pin(key, blobs[i], blobs[i].AsStringRef()) != 0);
+        resident.SetUserData(key, blobs[i], static_cast<ui64>(i + 1));
+    }
+
+    UNIT_ASSERT(resident.EvictionCount() > 0);
+
+    // The block behind an evicted pin is free for reuse, so the state built
+    // over it must come back to the guest instead of pointing at other bytes.
+    const TBridgeIdentity firstKey = BridgeIdentityKey(blobs[0]);
+    UNIT_ASSERT_VALUES_EQUAL(resident.GetUserData(firstKey), 0u);
+
+    ui64 released = 0;
+    UNIT_ASSERT(resident.PopReleasedUserData(released));
+    UNIT_ASSERT_VALUES_EQUAL(released, 1u);
+    UNIT_ASSERT_VALUES_EQUAL(resident.UserDataCount(), resident.PinCount());
+}
+
 Y_UNIT_TEST(PinFencesTheGuestHeapAboveHostBytes) {
     // Pinning grows linear memory on the host and then calls the guest's own
     // "sbrk" to push the allocator break past the new region. That sbrk call is
@@ -1282,6 +1320,56 @@ Y_UNIT_TEST(KindsFollowDeclaredTypes) {
         == EBridgeValueKind::String);
     UNIT_ASSERT(kindOf(NKikimr::NMiniKQL::TOptionalType::Create(innerDict, mkql.Env))
         == EBridgeValueKind::Optional);
+}
+
+Y_UNIT_TEST(DeclaredResultShapeLooksUnderOptional) {
+    TMiniKqlEnv mkql;
+    NYql::NUdf::ITypeInfoHelper::TPtr helper = new NKikimr::NMiniKQL::TTypeInfoHelper();
+
+    using NKikimr::NMiniKQL::TDataType;
+    auto* i32Type = TDataType::Create(NYql::NUdf::TDataType<i32>::Id, mkql.Env);
+    auto* stringType = TDataType::Create(NYql::NUdf::TDataType<char*>::Id, mkql.Env);
+
+    const auto shapeOf = [&](NKikimr::NMiniKQL::TType* type) {
+        return DeclaredResultShape(static_cast<const NYql::NUdf::TType*>(type), helper.Get());
+    };
+
+    auto* listType = NKikimr::NMiniKQL::TListType::Create(i32Type, mkql.Env);
+    const auto optionalList = shapeOf(NKikimr::NMiniKQL::TOptionalType::Create(listType, mkql.Env));
+    UNIT_ASSERT(optionalList.Family == EBridgeKindFamily::List);
+    UNIT_ASSERT(optionalList.Optional);
+    // The declared payload is a list, so an inline scalar handle is not a
+    // result MiniKQL could read: optionality alone must not wave it through.
+    UNIT_ASSERT(!optionalList.Accepts(EBridgeValueKind::Int64));
+    UNIT_ASSERT(!optionalList.Accepts(EBridgeValueKind::String));
+    UNIT_ASSERT(optionalList.Accepts(EBridgeValueKind::List));
+    UNIT_ASSERT(optionalList.Accepts(EBridgeValueKind::Optional));
+    UNIT_ASSERT(optionalList.Accepts(EBridgeValueKind::Null));
+
+    // Without the Optional wrapper a null is not a legal result either.
+    const auto plainList = shapeOf(listType);
+    UNIT_ASSERT(plainList.Family == EBridgeKindFamily::List);
+    UNIT_ASSERT(!plainList.Optional);
+    UNIT_ASSERT(!plainList.Accepts(EBridgeValueKind::Null));
+
+    auto* dictType = NKikimr::NMiniKQL::TDictType::Create(stringType, i32Type, mkql.Env);
+    const auto optionalDict = shapeOf(NKikimr::NMiniKQL::TOptionalType::Create(dictType, mkql.Env));
+    UNIT_ASSERT(optionalDict.Family == EBridgeKindFamily::Dict);
+    UNIT_ASSERT(!optionalDict.Accepts(EBridgeValueKind::List));
+    UNIT_ASSERT(optionalDict.Accepts(EBridgeValueKind::Dict));
+
+    auto* resourceType = NKikimr::NMiniKQL::TResourceType::Create("Trie", mkql.Env);
+    const auto optionalResource = shapeOf(
+        NKikimr::NMiniKQL::TOptionalType::Create(resourceType, mkql.Env));
+    UNIT_ASSERT(optionalResource.Family == EBridgeKindFamily::Resource);
+    UNIT_ASSERT(!optionalResource.Accepts(EBridgeValueKind::Int64));
+
+    // A leaf result keeps its historical Optional<data> shape, and scalar
+    // kinds share one family, so Int64 and Uint32 are interchangeable there.
+    const auto optionalScalar = shapeOf(NKikimr::NMiniKQL::TOptionalType::Create(i32Type, mkql.Env));
+    UNIT_ASSERT(optionalScalar.Family == EBridgeKindFamily::Number);
+    UNIT_ASSERT(optionalScalar.Accepts(EBridgeValueKind::Uint32));
+    UNIT_ASSERT(!optionalScalar.Accepts(EBridgeValueKind::String));
 }
 
 Y_UNIT_TEST(UserDataSurvivesNodeDeath) {

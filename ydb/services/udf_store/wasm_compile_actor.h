@@ -23,6 +23,10 @@ private:
         WriteArtifactChunk,
         UpsertModuleArtifact,
         UpdateMetaReady,
+        VerifyStillCurrent,
+        DeleteStaleArtifactChunks,
+        DeleteStaleArtifacts,
+        ConfirmStillCurrent,
         UpdateMetaFailed,
     };
 
@@ -34,12 +38,17 @@ private:
     TString ModuleChunksTablePath_;
     TString ArtifactTablePath_;
     TString ArtifactChunksTablePath_;
+    //! Uid of every required library as of the snapshot this compile was
+    //! queued from: library artifacts are keyed by uid, and this actor never
+    //! reads the library rows itself.
+    THashMap<TString, TString> LibraryUids_;
 
     EStep Step_ = EStep::ReadModuleSource;
     NTableQuery::TModuleSourceRow ModuleSource_;
     NWasm::TWasmManifest ParsedManifest_;
     size_t NextLibraryIndex_ = 0;
     TString PendingLibraryName_;
+    TString PendingLibraryUid_;
     TString ModuleKind_;
     NTableQuery::TWasmArtifactRow ArtifactRow_;
     TVector<NTableQuery::TPendingChunkWrite> PendingChunkWrites_;
@@ -69,7 +78,8 @@ public:
         const TString& modulesTablePath,
         const TString& moduleChunksTablePath,
         const TString& artifactTablePath,
-        const TString& artifactChunksTablePath)
+        const TString& artifactChunksTablePath,
+        THashMap<TString, TString> libraryUids)
         : ReplyTo_(replyTo)
         , Name_(name)
         , Manifest_(manifest)
@@ -78,6 +88,7 @@ public:
         , ModuleChunksTablePath_(moduleChunksTablePath)
         , ArtifactTablePath_(artifactTablePath)
         , ArtifactChunksTablePath_(artifactChunksTablePath)
+        , LibraryUids_(std::move(libraryUids))
     {}
 
     void Bootstrap();

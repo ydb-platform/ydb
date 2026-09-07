@@ -10,6 +10,7 @@
 
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/udf/udf_type_builder.h>
+#include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/minikql/mkql_terminator.h>
 #include <yql/essentials/public/issue/yql_issue.h>
@@ -193,6 +194,49 @@ TType* BuildTypeFromWasmTypeNode(
         }
     }
     return builder.Null();
+}
+
+bool TDeclaredResultShape::Accepts(EBridgeValueKind kind) const {
+    if (Family == EBridgeKindFamily::Null) {
+        // The declared type told us nothing to check against.
+        return true;
+    }
+    const auto family = BridgeKindFamily(kind);
+    if (family == Family) {
+        return true;
+    }
+    // BridgeMakeOptional registers an Optional node whenever the payload has
+    // no identity of its own to reuse, and the node carries no cheap way to
+    // look inside, so an Optional handle fits any declared payload.
+    if (family == EBridgeKindFamily::Optional) {
+        return true;
+    }
+    return family == EBridgeKindFamily::Null && Optional;
+}
+
+TDeclaredResultShape DeclaredResultShape(const TType* type, const ITypeInfoHelper* helper) {
+    if (!type || !helper) {
+        return {};
+    }
+    TDeclaredResultShape shape;
+    const TType* payload = type;
+    // BridgeKindsFromType reports Optional for Optional<container>, which
+    // would leave the payload unchecked, so peel the wrappers here instead.
+    for (ui32 depth = 0; payload && depth <= MaxWasmTypeNodeDepth; ++depth) {
+        switch (helper->GetTypeKind(payload)) {
+            case ETypeKind::Optional:
+                shape.Optional = true;
+                payload = TOptionalTypeInspector(*helper, payload).GetItemType();
+                continue;
+            case ETypeKind::Tagged:
+                payload = TTaggedTypeInspector(*helper, payload).GetBaseType();
+                continue;
+            default:
+                shape.Family = BridgeKindFamily(BridgeKindsFromType(payload, helper).Value);
+                return shape;
+        }
+    }
+    return {};
 }
 
 void BridgeKindsFromTypeNode(
@@ -415,14 +459,14 @@ TUnboxedValue ReadResultUnboxed(
                     << "Wasm UDF returned wrong value type for Int64 result: "
                     << static_cast<int>(result.Type);
             }
-            return TUnboxedValuePod(result.Data.Int64);
+            return TUnboxedValuePod(static_cast<i64>(result.Data.Int64));
         case EUdfValueType::Uint64:
             if (result.Type != EAbiValueType::Uint64) {
                 ythrow yexception()
                     << "Wasm UDF returned wrong value type for Uint64 result: "
                     << static_cast<int>(result.Type);
             }
-            return TUnboxedValuePod(result.Data.Uint64);
+            return TUnboxedValuePod(static_cast<ui64>(result.Data.Uint64));
         case EUdfValueType::Double:
             if (result.Type != EAbiValueType::Double) {
                 ythrow yexception()
@@ -617,27 +661,20 @@ TWasmBridgeFunction::TWasmBridgeFunction(
     , ArgTypes_(std::move(argTypes))
     , ResultType_(resultType)
     , TypeInfoHelper_(std::move(typeInfoHelper))
-    , ResultFamily_(BridgeKindFamily(
-        BridgeKindsFromType(ResultType_, TypeInfoHelper_.Get()).Value))
+    , ResultShape_(DeclaredResultShape(ResultType_, TypeInfoHelper_.Get()))
 {
 }
 
 void TWasmBridgeFunction::EnsureResultFamily(EBridgeValueKind kind) const {
-    // Optionality is transparent on both sides and says nothing about the
-    // payload: BridgeKindsFromType reports Optional for Optional<container>,
-    // and BridgeMakeOptional registers an Optional node whenever the payload
-    // has no identity of its own to reuse. Null means the declared type told
-    // us nothing to check against.
-    if (ResultFamily_ == EBridgeKindFamily::Optional || ResultFamily_ == EBridgeKindFamily::Null) {
+    if (ResultShape_.Accepts(kind)) {
         return;
     }
-    const auto family = BridgeKindFamily(kind);
-    if (family != EBridgeKindFamily::Optional && family != ResultFamily_) {
-        ythrow yexception()
-            << "Wasm UDF '" << Descriptor_.Name << "' returned a "
-            << BridgeKindFamilyAsStr(family) << " value, but its result type is "
-            << BridgeKindFamilyAsStr(ResultFamily_);
-    }
+    ythrow yexception()
+        << "Wasm UDF '" << Descriptor_.Name << "' returned a "
+        << BridgeKindFamilyAsStr(BridgeKindFamily(kind))
+        << " value, but its result type is "
+        << (ResultShape_.Optional ? "optional " : "")
+        << BridgeKindFamilyAsStr(ResultShape_.Family);
 }
 
 TUnboxedValue TWasmBridgeFunction::Run(

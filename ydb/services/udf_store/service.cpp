@@ -95,6 +95,28 @@ bool TUdfStoreService::AreLibraryDependenciesReady(
     }
 }
 
+THashMap<TString, TString> TUdfStoreService::CollectLibraryUids(
+    TStringBuf manifest,
+    const TSnapshot* snapshot) const
+{
+    THashMap<TString, TString> uids;
+    const TSnapshot* snap = snapshot ? snapshot : CurrentSnapshot.get();
+    if (!snap) {
+        return uids;
+    }
+    try {
+        const auto parsed = NWasm::ParseManifest(manifest);
+        for (const auto& libraryName : parsed.RequiredLibraries) {
+            if (const auto* library = snap->GetLibraryByName(libraryName)) {
+                uids[libraryName] = library->GetUid();
+            }
+        }
+    } catch (...) {
+        // A manifest that does not parse never reaches compile or load anyway.
+    }
+    return uids;
+}
+
 void TUdfStoreService::EnqueueNativeUdfIfNeeded(const TUdfModule& udf) {
     const TString& name = udf.GetName();
     if (udf.GetSize() == 0) {
@@ -133,11 +155,13 @@ void TUdfStoreService::EnqueueWasmCompileIfNeeded(const TUdfModule& udf, const T
     }
     PendingWasmCompile.push_back(TPendingUdf{
         .Name = udf.GetName(),
+        .Uid = udf.GetUid(),
         .Md5 = udf.GetMd5(),
         .ExpectedSize = udf.GetSize(),
         .Type = EUdfType::WASM,
         .Manifest = udf.GetManifest(),
         .ModuleExtension = GetModuleExtensionFromManifest(udf.GetManifest()),
+        .LibraryUids = CollectLibraryUids(udf.GetManifest(), snapshot),
     });
 }
 
@@ -170,11 +194,13 @@ void TUdfStoreService::EnqueueWasmLoadIfNeeded(const TUdfModule& udf) {
     }
     PendingWasmLoad.push_back(TPendingUdf{
         .Name = name,
+        .Uid = udf.GetUid(),
         .Md5 = udf.GetMd5(),
         .ExpectedSize = udf.GetSize(),
         .Type = EUdfType::WASM,
         .Manifest = udf.GetManifest(),
         .ModuleExtension = GetModuleExtensionFromManifest(udf.GetManifest()),
+        .LibraryUids = CollectLibraryUids(udf.GetManifest()),
     });
 }
 
@@ -196,8 +222,7 @@ void TUdfStoreService::RetryPendingWasmCompilesForLibrary(const TString& library
     if (!CurrentSnapshot) {
         return;
     }
-    for (const auto& [name, udf] : CurrentSnapshot->GetUdfs()) {
-        Y_UNUSED(name);
+    for (const auto& [_, udf] : CurrentSnapshot->GetUdfs()) {
         if (udf.GetType() != EUdfType::WASM
             || udf.GetCompileStatus() == ECompileStatus::Ready
             || udf.GetCompileStatus() == ECompileStatus::Failed)
@@ -312,12 +337,18 @@ void TUdfStoreService::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TP
                 << ", md5=" << library.GetMd5()
                 << ", version=" << library.GetVersion();
             EnqueueLibraryCompileIfNeeded(library);
-        } else if (existing->GetMd5() != library.GetMd5()
+        } else if (existing->GetUid() != library.GetUid()
+            || existing->GetMd5() != library.GetMd5()
+            || existing->GetSize() != library.GetSize()
             || existing->GetVersion() != library.GetVersion())
         {
+            // uid is the primary re-upload signal: md5 alone is only a checksum
+            // and may stay the same across uploads of identical bytes.
             ALS_INFO(NKikimrServices::METADATA_PROVIDER)
                 << "TUdfStoreService: library changed"
                 << ", name=" << name
+                << ", old_uid=" << existing->GetUid()
+                << ", new_uid=" << library.GetUid()
                 << ", old_md5=" << existing->GetMd5()
                 << ", new_md5=" << library.GetMd5();
             UnloadWasmUdfsDependingOnLibrary(name);
@@ -527,7 +558,8 @@ void TUdfStoreService::FetchNextWasmCompile() {
         ModulesTablePath,
         ModuleChunksTablePath,
         ArtifactTablePath,
-        ArtifactChunksTablePath));
+        ArtifactChunksTablePath,
+        pending.LibraryUids));
 }
 
 void TUdfStoreService::FetchNextWasmLoad() {
@@ -543,8 +575,10 @@ void TUdfStoreService::FetchNextWasmLoad() {
         SelfId(),
         pending.Name,
         pending.Manifest,
+        pending.Uid,
         ArtifactTablePath,
         ArtifactChunksTablePath,
+        pending.LibraryUids,
         FunctionRegistry));
 }
 

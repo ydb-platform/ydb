@@ -55,13 +55,15 @@ void TWasmArtifactLoadActor::ExecuteQuery(const TString& yql, bool readOnly) {
             NTableQuery::SetSelectArtifactParams(
                 request,
                 Name_,
-                WasmArtifactKindToString(EWasmArtifactKind::Module));
+                WasmArtifactKindToString(EWasmArtifactKind::Module),
+                Uid_);
             break;
         case EStep::ReadModuleWasmChunks:
             NTableQuery::SetSelectArtifactChunksParams(
                 request,
                 Name_,
                 WasmArtifactKindToString(EWasmArtifactKind::Module),
+                Uid_,
                 BlobKindWasmData());
             break;
         case EStep::ReadModuleObjectChunks:
@@ -69,19 +71,22 @@ void TWasmArtifactLoadActor::ExecuteQuery(const TString& yql, bool readOnly) {
                 request,
                 Name_,
                 WasmArtifactKindToString(EWasmArtifactKind::Module),
+                Uid_,
                 BlobKindObjectCode());
             break;
         case EStep::ReadLibraryArtifact:
             NTableQuery::SetSelectArtifactParams(
                 request,
                 PendingLibraryName_,
-                WasmArtifactKindToString(EWasmArtifactKind::Library));
+                WasmArtifactKindToString(EWasmArtifactKind::Library),
+                PendingLibraryUid_);
             break;
         case EStep::ReadLibraryWasmChunks:
             NTableQuery::SetSelectArtifactChunksParams(
                 request,
                 PendingLibraryName_,
                 WasmArtifactKindToString(EWasmArtifactKind::Library),
+                PendingLibraryUid_,
                 BlobKindWasmData());
             break;
         case EStep::ReadLibraryObjectChunks:
@@ -89,6 +94,7 @@ void TWasmArtifactLoadActor::ExecuteQuery(const TString& yql, bool readOnly) {
                 request,
                 PendingLibraryName_,
                 WasmArtifactKindToString(EWasmArtifactKind::Library),
+                PendingLibraryUid_,
                 BlobKindObjectCode());
             break;
         case EStep::RegisterModule:
@@ -117,7 +123,8 @@ void TWasmArtifactLoadActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRe
             if (!NTableQuery::ParseArtifactResponse(response, ModuleArtifact_)
                 || ModuleArtifact_.ObjectCodeChunkCount == 0)
             {
-                ReplyError(TStringBuilder() << "Compiled module artifact not found for name=" << Name_);
+                ReplyError(TStringBuilder()
+                    << "Compiled module artifact not found for name=" << Name_ << " uid=" << Uid_);
                 return;
             }
             Step_ = EStep::ReadModuleWasmChunks;
@@ -161,7 +168,8 @@ void TWasmArtifactLoadActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRe
                 || PendingLibraryArtifact_.ObjectCodeChunkCount == 0)
             {
                 ReplyError(TStringBuilder()
-                    << "Compiled library artifact not found for '" << PendingLibraryName_ << "'");
+                    << "Compiled library artifact not found for '" << PendingLibraryName_
+                    << "' uid=" << PendingLibraryUid_);
                 return;
             }
             Step_ = EStep::ReadLibraryWasmChunks;
@@ -222,6 +230,13 @@ void TWasmArtifactLoadActor::StartNextLibrary() {
         return;
     }
     PendingLibraryName_ = ParsedManifest_.RequiredLibraries[NextLibraryIndex_];
+    const auto* uid = LibraryUids_.FindPtr(PendingLibraryName_);
+    if (!uid) {
+        ReplyError(TStringBuilder()
+            << "Library '" << PendingLibraryName_ << "' required by name=" << Name_ << " is not known");
+        return;
+    }
+    PendingLibraryUid_ = *uid;
     ExecuteQuery(NTableQuery::BuildSelectArtifactQuery(ArtifactTablePath_), true);
 }
 

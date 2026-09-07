@@ -21,6 +21,10 @@ struct TPendingUdf {
     //! Identity of the module: for a WASM UDF the manifest's module_name, i.e.
     //! the name YQL calls it by.
     TString Name;
+    //! Uid of the upload this entry was queued for, taken from the snapshot.
+    //! Artifacts are keyed by it, so the actors need it to find the object code
+    //! built from this very upload.
+    TString Uid;
     //! Content hash of the uploaded body. Used to notice a replace of the same
     //! name and, for native UDFs, to verify the KV download. Not an identity.
     TString Md5;
@@ -28,6 +32,10 @@ struct TPendingUdf {
     EUdfType Type = EUdfType::NATIVE_UNSAFE;
     TString Manifest;
     TString ModuleExtension = "wasm";
+    //! Uids of the required_libraries as of the snapshot this entry was queued
+    //! from. Library artifacts are keyed by uid too, and neither actor reads
+    //! the library rows itself.
+    THashMap<TString, TString> LibraryUids;
 };
 
 struct TPendingLibrary {
@@ -75,6 +83,9 @@ private:
     void EnqueueWasmLoadIfNeeded(const TUdfModule& udf);
     void EnqueueLibraryCompileIfNeeded(const TUdfModule& library);
     bool AreLibraryDependenciesReady(TStringBuf manifest, const TSnapshot* snapshot = nullptr) const;
+    THashMap<TString, TString> CollectLibraryUids(
+        TStringBuf manifest,
+        const TSnapshot* snapshot = nullptr) const;
     void RetryPendingWasmCompilesForLibrary(const TString& libraryName);
     void UnloadWasmUdfsDependingOnLibrary(const TString& libraryName);
     void FetchNextNativeBody();

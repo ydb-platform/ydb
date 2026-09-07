@@ -69,6 +69,7 @@ class ClusterInfo:
         self.pdisk_usage_w_donors = None
         self.group_map = None
         self.pdisk_slot_size_in_units_map = None
+        self.expected_slot_count_map = None
 
     @staticmethod
     def collect_cluster_info(count_replicating_pdisks=False):
@@ -81,10 +82,13 @@ class ClusterInfo:
         info.pdisk_usage_w_donors = common.build_pdisk_usage_map(info.base_config, count_donors=True)
 
         info.group_map = common.build_group_map(info.base_config)
-        info.pdisk_slot_size_in_units_map = {
-            common.get_pdisk_id(pdisk): common.get_pdisk_inferred_settings(pdisk)[1]
-            for pdisk in info.base_config.PDisk
-        }
+        info.pdisk_slot_size_in_units_map = {}
+        info.expected_slot_count_map = {}
+        for pdisk in info.base_config.PDisk:
+            pdisk_id = common.get_pdisk_id(pdisk)
+            expected_slot_count, slot_size_in_units = common.get_pdisk_inferred_settings(pdisk)
+            info.pdisk_slot_size_in_units_map[pdisk_id] = slot_size_in_units
+            info.expected_slot_count_map[pdisk_id] = expected_slot_count
 
         info.storage_pool_names_map = common.build_storage_pool_names_map(info.storage_pools)
         info.group_id_to_storage_pool_name_map = {
@@ -142,7 +146,7 @@ class GroupsInfo:
 def list_overpopulated_pdisks(cluster_info):
     overpopulated_pdisks = set()
     for pdisk_id in cluster_info.pdisk_map.keys():
-        expected_slot_count = cluster_info.pdisk_map[pdisk_id].ExpectedSlotCount
+        expected_slot_count = cluster_info.expected_slot_count_map.get(pdisk_id, 0)
         pdisk_usage = cluster_info.pdisk_usage[pdisk_id]
         if expected_slot_count and pdisk_usage > expected_slot_count:
             overpopulated_pdisks.add(pdisk_id)
@@ -278,7 +282,7 @@ class BalancingStrategy(IBalancingStrategy):
 
         pdisk_usage = self.cluster_info.pdisk_usage
         pdisk_usage_w_donors = self.cluster_info.pdisk_usage_w_donors
-        pdisk_map = self.cluster_info.pdisk_map
+        expected_slot_count_map = self.cluster_info.expected_slot_count_map
         histo = self.histo
 
         weight_from = self.cluster_info.get_vslot_weight_on_pdisk(vslot.GroupId, pdisk_id)
@@ -304,14 +308,14 @@ class BalancingStrategy(IBalancingStrategy):
         pdisk_from = item.From.NodeId, item.From.PDiskId
         pdisk_to = item.To.NodeId, item.To.PDiskId
         weight_to = self.cluster_info.get_vslot_weight_on_pdisk(vslot.GroupId, pdisk_to)
-        if pdisk_usage[pdisk_to] + weight_to > pdisk_usage[pdisk_from] - weight_from:
-            if pdisk_usage_w_donors[pdisk_to] + weight_to > pdisk_map[pdisk_to].ExpectedSlotCount:
-                common.print_if_not_quiet(
-                    self.args,
-                    'NOTICE: Attempted to reassign vdisk from pdisk [%d:%d] to pdisk [%d:%d] with slot usage %d and slot limit %d on the latter' %
-                    (*pdisk_from, *pdisk_to, pdisk_usage_w_donors[pdisk_to], pdisk_map[pdisk_to].ExpectedSlotCount), file=sys.stdout)
-                return False
+        if pdisk_usage_w_donors[pdisk_to] + weight_to > expected_slot_count_map.get(pdisk_to, 0):
+            common.print_if_not_quiet(
+                self.args,
+                'NOTICE: Attempted to reassign vdisk from pdisk [%d:%d] to pdisk [%d:%d] with slot usage %d and slot limit %d on the latter' %
+                (*pdisk_from, *pdisk_to, pdisk_usage_w_donors[pdisk_to], expected_slot_count_map.get(pdisk_to, 0)), file=sys.stdout)
+            return False
 
+        if not self.args.only_from_overpopulated_pdisks and pdisk_usage[pdisk_to] + weight_to > pdisk_usage[pdisk_from] - weight_from:
             if not try_blocking:
                 return False
             request = common.kikimr_bsconfig.TConfigRequest(Rollback=True)
@@ -319,11 +323,9 @@ class BalancingStrategy(IBalancingStrategy):
             for pdisk in self.cluster_info.base_config.PDisk:
                 check_pdisk_id = common.get_pdisk_id(pdisk)
                 check_weight = self.cluster_info.get_vslot_weight_on_pdisk(vslot.GroupId, check_pdisk_id)
-                disk_is_better = pdisk_usage_w_donors[check_pdisk_id] + check_weight <= pdisk_map[check_pdisk_id].ExpectedSlotCount
-                if disk_is_better:
-                    if not self.healthy_vslots_from_overpopulated_pdisks and pdisk_usage[check_pdisk_id] + check_weight > pdisk_usage[pdisk_id] - weight_from:
-                        disk_is_better = False
-                    if self.healthy_vslots_from_overpopulated_pdisks:
+                disk_is_better = pdisk_usage_w_donors[check_pdisk_id] + check_weight <= expected_slot_count_map.get(check_pdisk_id, 0)
+                if disk_is_better and not self.args.only_from_overpopulated_pdisks:
+                    if pdisk_usage[check_pdisk_id] + check_weight > pdisk_usage[pdisk_id] - weight_from:
                         disk_is_better = False
 
                 if not disk_is_better:
@@ -334,7 +336,7 @@ class BalancingStrategy(IBalancingStrategy):
             for pdisk in inactive:
                 self._add_update_drive_status(request, pdisk, pdisk.DriveStatus)
             response = common.invoke_bsc_request(request)
-            if len(response.Status) != 1 or not response.Status[index].Success:
+            if len(response.Status) <= index or not response.Status[index].Success:
                 return False
 
         request.Rollback = self.args.dry_run

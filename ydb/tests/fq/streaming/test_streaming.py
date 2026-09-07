@@ -2319,7 +2319,7 @@ FROM `{table_name}`"""
                 assert "Previous query retries" in issues, issues
             # JSON depth can grow with retries; only enforce a reasonable upper bound.
             depth = max_json_depth(json.loads(issues))
-            assert depth <= 30, f"Issues JSON depth {depth} exceeds limit: {issues}"
+            assert depth <= 10, f"Issues JSON depth {depth} exceeds limit: {issues}"
 
         self.write_stream(["2"], endpoint=endpoint)
         assert wait_for(lambda: "Previous query retries" in get_issues(), timeout_seconds=60, step_seconds=1), "Failed to wait for Previous query retries"

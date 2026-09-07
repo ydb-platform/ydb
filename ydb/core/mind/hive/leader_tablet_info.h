@@ -99,7 +99,7 @@ public:
         , ObjectId(0, 0)
         , ChannelProfileReassignReason(NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_NO)
         , KnownGeneration(0)
-        , ConfirmedStorageVersion(Max<ui32>())
+        , ConfirmedStorageVersion(0)
         , Category(nullptr)
         , BootMode(NKikimrHive::TABLET_BOOT_MODE_DEFAULT)
         , PendingUnlockSeqNo(0)

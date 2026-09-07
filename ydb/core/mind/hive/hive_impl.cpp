@@ -1167,15 +1167,6 @@ void THive::Handle(TEvHive::TEvGetTabletStorageInfo::TPtr& ev) {
         return;
     }
 
-    if (tablet->HasUnconfirmedStorage()) {
-        Send(
-            ev->Sender,
-            new TEvHive::TEvGetTabletStorageInfoResult(tabletId, NKikimrProto::TRYLATER,
-                "Tablet storage info is not confirmed"),
-            0, ev->Cookie);
-        return;
-    }
-
     switch (tablet->State) {
     case ETabletState::Unknown:
     case ETabletState::StoppingInGroupAssignment:
@@ -1191,6 +1182,7 @@ void THive::Handle(TEvHive::TEvGetTabletStorageInfo::TPtr& ev) {
         break;
     case ETabletState::Deleting:
     case ETabletState::GroupAssignment:
+    case ETabletState::BlockStorage:
         // We need to subscribe until group assignment or deletion is finished
         tablet->StorageInfoSubscribers.emplace_back(ev->Sender);
         Send(ev->Sender, new TEvHive::TEvGetTabletStorageInfoRegistered(tabletId), 0, ev->Cookie);

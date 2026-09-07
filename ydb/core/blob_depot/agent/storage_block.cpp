@@ -52,9 +52,7 @@ namespace NKikimr::NBlobDepot {
                         Agent.BlocksManager.SetBlockForTablet(Request.TabletId, Request.Generation,
                             blockContext.Timestamp, TDuration::MilliSeconds(msg.Record.GetTimeToLiveMs()));
                     }
-                    auto result = std::make_unique<TEvBlobStorage::TEvBlockResult>(NKikimrProto::OK);
-                    result->ActualGeneration = msg.Record.GetActualGeneration();
-                    EndWithSuccess(std::move(result));
+                    EndWithSuccess(std::make_unique<TEvBlobStorage::TEvBlockResult>(NKikimrProto::OK));
                 }
             }
 

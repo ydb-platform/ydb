@@ -17,7 +17,7 @@ public:
     void ReplyAndDie(NKikimrProto::EReplyStatus status, const TString &reason = { },
             bool isTabletStorageInfoVersionObsolete = false, ui32 actualGeneration = 0) {
         Send(Owner, new TEvTabletBase::TEvBlockBlobStorageResult(status, TabletId, reason,
-            isTabletStorageInfoVersionObsolete, actualGeneration, Version));
+            isTabletStorageInfoVersionObsolete, actualGeneration));
         PassAway();
     }
 
@@ -38,7 +38,7 @@ public:
 
         switch (msg->Status) {
         case NKikimrProto::OK:
-            return ReplyAndDie(NKikimrProto::OK, {}, false, msg->ActualGeneration);
+            return ReplyAndDie(NKikimrProto::OK);
         case NKikimrProto::ALREADY:
         case NKikimrProto::BLOCKED:
         case NKikimrProto::RACE:
@@ -85,7 +85,6 @@ class TTabletReqBlockBlobStorage : public TActorBootstrapped<TTabletReqBlockBlob
     ui32 Generation;
     ui32 Version;
     ui32 Replied = 0;
-    ui32 ActualGeneration = 0;
     TVector<THolder<TTabletReqBlockBlobStorageGroup>> Requests;
     TVector<TActorId> ReqActors;
     ui64 IssuerGuid = RandomNumber<ui64>() | 1;
@@ -101,7 +100,7 @@ class TTabletReqBlockBlobStorage : public TActorBootstrapped<TTabletReqBlockBlob
     void ReplyAndDie(NKikimrProto::EReplyStatus status, const TString &reason = { },
             bool isTabletStorageInfoVersionObsolete = false, ui32 actualGeneration = 0) {
         Send(Owner, new TEvTabletBase::TEvBlockBlobStorageResult(status, TabletId, reason,
-            isTabletStorageInfoVersionObsolete, actualGeneration, Version));
+            isTabletStorageInfoVersionObsolete, actualGeneration));
         PassAway();
     }
 
@@ -110,16 +109,15 @@ class TTabletReqBlockBlobStorage : public TActorBootstrapped<TTabletReqBlockBlob
         auto it = Find(ReqActors, ev->Sender);
         Y_ABORT_UNLESS(it != ReqActors.end(), "must not get response from unknown actor");
         *it = TActorId();
-        ActualGeneration = Max(ActualGeneration, msg->ActualGeneration);
 
         switch (msg->Status) {
         case NKikimrProto::OK:
             if (++Replied == ReqActors.size())
-                return ReplyAndDie(NKikimrProto::OK, {}, false, ActualGeneration);
+                return ReplyAndDie(NKikimrProto::OK);
             break;
         default:
             return ReplyAndDie(msg->Status, msg->ErrorReason, msg->IsTabletStorageInfoVersionObsolete,
-                ActualGeneration);
+                msg->ActualGeneration);
         }
     }
 

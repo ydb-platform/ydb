@@ -313,6 +313,7 @@ public:
         db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(newTabletState);
         tablet->State = newTabletState;
         if (changed && newTabletState == ETabletState::ReadyToWork) {
+            // initial group assignment is considered automatically confirmed
             tablet->ConfirmedStorageVersion = tabletStorageInfo->Version;
             db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::ConfirmedStorageVersion>(
                 tablet->ConfirmedStorageVersion);

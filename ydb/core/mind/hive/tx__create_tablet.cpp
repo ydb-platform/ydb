@@ -432,7 +432,8 @@ public:
                                                         NIceDb::TUpdate<Schema::Tablet::Statistics>(tablet.Statistics),
                                                         NIceDb::TUpdate<Schema::Tablet::BalancerPolicy>(tablet.BalancerPolicy),
                                                         NIceDb::TUpdate<Schema::Tablet::StoppedByTenant>(tablet.StoppedByTenant),
-                                                        NIceDb::TUpdate<Schema::Tablet::IsBackup>(tablet.IsBackup));
+                                                        NIceDb::TUpdate<Schema::Tablet::IsBackup>(tablet.IsBackup),
+                                                        NIceDb::TUpdate<Schema::Tablet::ConfirmedStorageVersion>(tablet.ConfirmedStorageVersion));
 
         Self->PendingCreateTablets.erase({OwnerId, OwnerIdx});
 

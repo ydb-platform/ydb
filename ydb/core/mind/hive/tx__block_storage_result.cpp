@@ -28,16 +28,6 @@ public:
             {"replyStatus", NKikimrProto::EReplyStatus_Name(msg->Status)});
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId);
         if (tablet != nullptr) {
-            if (!tablet->IsDeleting() && (!tablet->IsReadyToBlockStorage()
-                    || msg->StorageVersion != tablet->TabletStorageInfo->Version)) {
-                YDB_LOG_WARN("THive::TTxBlockStorageResult::Execute ignoring stale block storage result",
-                    {"logPrefix", GetLogPrefix()},
-                    {"tabletId", TabletId},
-                    {"tabletState", ETabletStateName(tablet->State)},
-                    {"resultStorageVersion", msg->StorageVersion},
-                    {"currentStorageVersion", tablet->TabletStorageInfo->Version});
-                return true;
-            }
             NIceDb::TNiceDb db(txc.DB);
             if (msg->Status == NKikimrProto::OK
                     || msg->Status == NKikimrProto::ALREADY
@@ -72,12 +62,6 @@ public:
                 }
             } else if (msg->Status == NKikimrProto::ERROR && !tablet->IsDeleting()) {
                 ui32 confirmedVersion = tablet->ConfirmedStorageVersion;
-                const bool legacyConfirmation = confirmedVersion == Max<ui32>();
-                if (legacyConfirmation) {
-                    confirmedVersion = tablet->TabletStorageInfo->Version
-                        ? tablet->TabletStorageInfo->Version - 1
-                        : 0;
-                }
 
                 struct THistoryEntry {
                     ui32 Channel;
@@ -93,12 +77,8 @@ public:
                         rowset.GetValue<Schema::TabletChannelGen::Generation>());
                     const ui32 version =
                         rowset.GetValueOrDefault<Schema::TabletChannelGen::Version>();
-                    const bool unversionedPendingEntry = !legacyConfirmation
-                        && !version
-                        && tablet->TabletStorageInfo->Version > confirmedVersion
-                        && generation == tablet->KnownGeneration;
                     if (!rowset.GetValueOrDefault<Schema::TabletChannelGen::DeletedAtGeneration>()
-                            && (version > confirmedVersion || unversionedPendingEntry)) {
+                            && version > confirmedVersion) {
                         entries.push_back({
                             .Channel = static_cast<ui32>(
                                 rowset.GetValue<Schema::TabletChannelGen::Channel>()),
@@ -113,18 +93,6 @@ public:
                 std::unordered_set<ui32> affectedChannels;
                 for (const auto& entry : entries) {
                     affectedChannels.insert(entry.Channel);
-                }
-                if (affectedChannels.empty()) {
-                    YDB_LOG_ERROR("THive::TTxBlockStorageResult::Execute found no unconfirmed history entries",
-                        {"logPrefix", GetLogPrefix()},
-                        {"tabletId", TabletId},
-                        {"storageVersion", tablet->TabletStorageInfo->Version},
-                        {"confirmedStorageVersion", confirmedVersion});
-                    for (const auto& channel : tablet->TabletStorageInfo->Channels) {
-                        if (!channel.History.empty()) {
-                            affectedChannels.insert(channel.Channel);
-                        }
-                    }
                 }
                 for (ui32 channel : affectedChannels) {
                     tablet->ReleaseAllocationUnit(channel);

@@ -1373,17 +1373,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         createHive->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
         ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false);
 
-        bool sawConfirmedStorageVersion = false;
         TTestActorRuntime::TEventObserver prevObserverFunc;
         prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult) {
                 event->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->MutableRecord()->
                 MutablePathDescription()->MutableDomainDescription()->MutableProcessingParams()->SetHive(subHiveTablet);
-            } else if (event->GetTypeRewrite() == TEvHive::TEvSeizeTabletsReply::EventType) {
-                for (const auto& tablet : event->Get<TEvHive::TEvSeizeTabletsReply>()->Record.GetTablets()) {
-                    UNIT_ASSERT(tablet.HasConfirmedStorageVersion());
-                    sawConfirmedStorageVersion = true;
-                }
             }
             return prevObserverFunc(event);
         });
@@ -1746,7 +1740,6 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT(createTabletReply);
         UNIT_ASSERT(createTabletReply->Record.HasForwardRequest());
         UNIT_ASSERT_VALUES_EQUAL(createTabletReply->Record.GetForwardRequest().GetHiveTabletId(), subHiveTablet);
-        UNIT_ASSERT(sawConfirmedStorageVersion);
 
         runtime.SetObserverFunc(prevObserverFunc);
     }
@@ -7124,7 +7117,6 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(tabletId, tabletId2);
         MakeSureTabletIsDown(runtime, tabletId2, 0);
     }
-
     void SendGetTabletStorageInfo(TTestActorRuntime& runtime, ui64 hiveTablet, ui64 tabletId, ui32 nodeIndex) {
         TActorId senderB = runtime.AllocateEdgeActor(nodeIndex);
         runtime.SendToPipe(hiveTablet, senderB, new TEvHive::TEvGetTabletStorageInfo(tabletId), nodeIndex, GetPipeConfigWithRetries());
@@ -7151,10 +7143,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestGetStorageInfoWaitsForStorageConfirmation) {
-        UNIT_ASSERT_VALUES_EQUAL(Schema::Tablet::ConfirmedStorageVersion::Default, Max<ui32>());
-
         TTestBasicRuntime runtime(1, false);
-        Setup(runtime, true);
+        Setup(runtime, true, 2);
         const ui64 hiveTablet = MakeDefaultHiveID();
         const ui64 testerTablet = MakeTabletID(false, 1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
@@ -7180,9 +7170,9 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TActorId sender = runtime.AllocateEdgeActor();
         runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvGetTabletStorageInfo(tabletId), 0,
             GetPipeConfigWithRetries());
+        // Must register the request instead of replying instantly
         TAutoPtr<IEventHandle> handle;
-        auto* pending = runtime.GrabEdgeEventRethrow<TEvHive::TEvGetTabletStorageInfoResult>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(pending->Record.GetStatus(), NKikimrProto::TRYLATER);
+        runtime.GrabEdgeEventRethrow<TEvHive::TEvGetTabletStorageInfoRegistered>(handle);
 
         runtime.SetObserverFunc(previousObserver);
         for (auto& result : blockedResults) {
@@ -7190,15 +7180,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
         MakeSureTabletIsUp(runtime, tabletId, 0);
 
-        runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvGetTabletStorageInfo(tabletId), 0,
-            GetPipeConfigWithRetries());
         auto* confirmed = runtime.GrabEdgeEventRethrow<TEvHive::TEvGetTabletStorageInfoResult>(handle);
         UNIT_ASSERT_VALUES_EQUAL(confirmed->Record.GetStatus(), NKikimrProto::OK);
     }
 
     Y_UNIT_TEST(TestBlockStorageErrorRestartsReassignAtActualGeneration) {
         TTestBasicRuntime runtime(1, false);
-        Setup(runtime, true);
+        Setup(runtime, true, 2);
         const ui64 hiveTablet = MakeDefaultHiveID();
         const ui64 testerTablet = MakeTabletID(false, 1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);

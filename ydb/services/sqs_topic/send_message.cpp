@@ -323,15 +323,8 @@ namespace NKikimr::NSqsTopic::V1 {
                             CalcRuConsumption(PayloadSize_),
                             NBilling::WRITE_BASE_COST,
                             NBilling::WRITE_COST_PER_BLOCK,
-<<<<<<< HEAD
-                            Fifo_,
-                            ContentBasedDeduplication_);
-                        Y_ABORT_UNLESS(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, TlsActivationContext->AsActorContext()));
-=======
                             Fifo_);
-                        AFL_ENSURE(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, TlsActivationContext->AsActorContext()))
-                            ("ru", ru)("path", FullTopicPath_);
->>>>>>> eb8fd9eea4d ([SQS] Do not charge extra RU for content-based deduplication (#52353))
+                        Y_ABORT_UNLESS(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, TlsActivationContext->AsActorContext()));
                         return;
                     }
                 }

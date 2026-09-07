@@ -433,7 +433,7 @@ public:
             if (!delay) {
                 break;
             }
-            (void)WaitForSpecificEvent<NActors::TEvents::TEvWakeup>(&TS3ReadCoroImpl::ProcessUnexpectedEvent, now + *delay);
+            (void)WaitForSpecificEvent<NActors::TEvents::TEvWakeup>(&TS3ReadCoroImpl::ProcessEventWhileAcquiringSlot, now + *delay);
         }
         Working = true;
     }
@@ -503,20 +503,25 @@ public:
         );
 
         while (true) {
-            StartUnit();
+            bool isCancelled = false;
+            {
+                StartUnit();
+                // Stop-only, no pause toggle — StopUnit does not yield, so this
+                // Y_DEFER is safe during exception unwind (e.g. stream->read()
+                // throwing on malformed input).
+                Y_DEFER { StopUnit(); };
 
-            NDB::Block batch = stream->read();
-            if (!batch) {
-                StopUnit();
-                break;
-            }
+                NDB::Block batch = stream->read();
+                if (!batch) {
+                    break;
+                }
 
-            if (SourceContext->Add(batch.bytes(), SelfActorId)) {
-                SetDownstreamPause(true);
+                if (SourceContext->Add(batch.bytes(), SelfActorId)) {
+                    SetDownstreamPause(true);
+                }
+                isCancelled = StopIfConsumedEnough(batch.rows());
+                Send(ParentActorId, new TEvS3Provider::TEvNextBlock(batch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta(), ReadSpec->Compression ? TakeIngressDecompressedDelta(buffer->count()) : 0ULL));
             }
-            const bool isCancelled = StopIfConsumedEnough(batch.rows());
-            Send(ParentActorId, new TEvS3Provider::TEvNextBlock(batch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta(), ReadSpec->Compression ? TakeIngressDecompressedDelta(buffer->count()) : 0ULL));
-            StopUnit();
 
             if (IsPaused()) {
                 CpuTime += GetCpuTimeDelta();
@@ -1370,6 +1375,18 @@ private:
 
     void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) {
         return StateFunc(ev);
+    }
+
+    // Process events while waiting for a slot to start a unit of work.
+    // The event processing MUST NOT re-enter StartUnit / ReconcileWorking —
+    // that would double-acquire the slot.
+    void ProcessEventWhileAcquiringSlot(TAutoPtr<IEventHandle> ev) {
+        if (ev->GetTypeRewrite() == TEvS3Provider::TEvContinue::EventType) {
+            // CA is ready to process data
+            DownstreamPaused = false;
+            return;
+        }
+        StateFunc(ev);
     }
 
     TString GetLastDataAsText() {

@@ -576,8 +576,8 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             const auto& tiers = ttl->GetOrderedTiers();
             UNIT_ASSERT_EQUAL(tiers.size(), 1);
             const auto& tier = *tiers.begin();
-            UNIT_ASSERT_VALUES_EQUAL(tier->GetEvictColumnName(), TTestSchema::DefaultTtlColumn);
-            UNIT_ASSERT_VALUES_EQUAL(tier->GetEvictDuration(), ttlDuration);
+            UNIT_ASSERT_VALUES_EQUAL(tier.Get().GetEvictColumnName(), TTestSchema::DefaultTtlColumn);
+            UNIT_ASSERT_VALUES_EQUAL(tier.Get().GetEvictDuration(), ttlDuration);
         }
 
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::TruncateTableTxBody(pathId, 1), ++txId);
@@ -596,8 +596,8 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             const auto& tiers = ttl->GetOrderedTiers();
             UNIT_ASSERT_EQUAL(tiers.size(), 1);
             const auto& tier = *tiers.begin();
-            UNIT_ASSERT_VALUES_EQUAL(tier->GetEvictColumnName(), TTestSchema::DefaultTtlColumn);
-            UNIT_ASSERT_VALUES_EQUAL(tier->GetEvictDuration(), ttlDuration);
+            UNIT_ASSERT_VALUES_EQUAL(tier.Get().GetEvictColumnName(), TTestSchema::DefaultTtlColumn);
+            UNIT_ASSERT_VALUES_EQUAL(tier.Get().GetEvictDuration(), ttlDuration);
         }
 
         // (c) Write data with a TTL column value that is already stale (older than the TTL
@@ -1962,8 +1962,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             const auto& tablesManager = restartedShard->GetTablesManager();
             const auto& table = tablesManager.GetTable(*oldInternalPathId);
             const auto pathDropVersion = table.GetPathDropVersionOptional(TSchemeShardLocalPathId::FromRawValue(srcPathId));
-            UNIT_ASSERT(pathDropVersion.has_value())
-                << "Path-local drop version lost after restart (v0 overwrote V1 during Merge)";
+            UNIT_ASSERT(pathDropVersion.has_value());
             UNIT_ASSERT_VALUES_EQUAL(*pathDropVersion, truncateSnapshot);
         }
 
@@ -1981,8 +1980,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         {
             const auto& tablesManager = restartedShard->GetTablesManager();
             const auto& table = tablesManager.GetTable(*oldInternalPathId);
-            UNIT_ASSERT(table.IsDropped())
-                << "Old generation not fully dropped after copy drop (path-local drop was lost)";
+            UNIT_ASSERT(table.IsDropped());
         }
 
         // (f) Drive GC: the old generation must be finalized and removed.
@@ -1991,8 +1989,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         // (g) After GC, the old generation is gone from Tables.
         {
             const auto& tablesManager = restartedShard->GetTablesManager();
-            UNIT_ASSERT(!tablesManager.HasTable(*oldInternalPathId))
-                << "Old generation not finalized by GC after drop copy";
+            UNIT_ASSERT(!tablesManager.HasTable(*oldInternalPathId));
         }
     }
 }

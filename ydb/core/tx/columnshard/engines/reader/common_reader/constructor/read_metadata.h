@@ -129,6 +129,7 @@ private:
     virtual TConclusionStatus DoInitCustom(const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription) = 0;
 
     mutable std::unique_ptr<ISourcesConstructor> SourcesConstructor;
+    bool DuplicateFilteringNeeded = false;
 
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
@@ -191,6 +192,11 @@ public:
 
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
+
+    bool NeedDuplicateFiltering() const {
+        return DuplicateFilteringNeeded;
+    }
+
     EScanGroupedMemoryLimiterOperator GroupedMemoryLimiterOperator = EScanGroupedMemoryLimiterOperator::Scan;
     std::shared_ptr<TReadStats> ReadStats;
 

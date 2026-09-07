@@ -88,15 +88,20 @@ const TTypeAnnotationNode* GetAggregationType(const TTypeAnnotationNode* inputTy
     return resultType;
 }
 
-TIntrusivePtr<IOperator> BuildNullMapElementsExceptOneColumn(const TIntrusivePtr<IOperator>& input, const TTypeAnnotationNode* inputType,
-                                                             const TVector<TOpAggregationTraits>& aggTraitsList, const TOpAggregationTraits& realAggTraits,
-                                                             const TString& prefix, TPlanProps& props, TExprContext& ctx) {
+TIntrusivePtr<IOperator> BuildMapWithNullElements(const TIntrusivePtr<IOperator>& input, const TTypeAnnotationNode* inputType,
+                                                  const TVector<TOpAggregationTraits>& aggTraitsList, const TVector<TOpAggregationTraits>& realAggTraits,
+                                                  const TString& prefix, TPlanProps& props, TExprContext& ctx) {
     Y_ENSURE(inputType);
     auto inputStructType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
-    auto aggTraitsComparator = [](const TOpAggregationTraits& left, const TOpAggregationTraits& right) {
-        return left.OriginalColName.GetFullName() == right.OriginalColName.GetFullName() && left.AggFunction == right.AggFunction &&
-               left.ResultColName.GetFullName() == right.ResultColName.GetFullName();
+    auto aggTraitsExists = [](const TOpAggregationTraits& left, const TVector<TOpAggregationTraits>& traitsList) {
+        for (const auto& right : traitsList) {
+            if (left.OriginalColName.GetFullName() == right.OriginalColName.GetFullName() && left.AggFunction == right.AggFunction &&
+                left.ResultColName.GetFullName() == right.ResultColName.GetFullName()) {
+                return true;
+            }
+        }
+        return false;
     };
 
     TVector<TMapElement> mapElements;
@@ -110,7 +115,7 @@ TIntrusivePtr<IOperator> BuildNullMapElementsExceptOneColumn(const TIntrusivePtr
         TExprNode::TPtr columnExpr;
         auto fieldType = inputStructType->FindItemType(originalColName);
         Y_ENSURE(fieldType, "Aggregation column not found in input type:" << resultColName;);
-        if (aggTraitsComparator(aggTraits, realAggTraits)) {
+        if (aggTraitsExists(aggTraits, realAggTraits)) {
             const bool needsOptionalWrap = !fieldType->IsOptionalOrNull() || aggTraits.AggFunction == "count";
             if (!needsOptionalWrap) {
                 continue;
@@ -196,9 +201,14 @@ TIntrusivePtr<IOperator> ExpandMultiDistinct(const TIntrusivePtr<TOpAggregate>& 
 
     TIntrusivePtr<IOperator> unionAllResult;
     TVector<TOpAggregationTraits> finalAggTraitsList;
+    TVector<TOpAggregationTraits> aggTraitsListNotDistinct;
+    TVector<TOpAggregationTraits> partialAggregationTraitsListNotDistinct;
+    TVector<TOpAggregationTraits> partialAggregationTraitsListDistinct;
+
     for (const auto& aggTraits : aggTraitsList) {
         auto partialResult = aggregate->GetInput();
-        if (aggTraits.Distinct) {
+        const bool isDistinct = aggTraits.Distinct;
+        if (isDistinct) {
             // Aggregation column + keys.
             TVector<TInfoUnit> distColumns = aggregate->GetKeyColumns();
             distColumns.emplace_back(aggTraits.OriginalColName);
@@ -211,29 +221,55 @@ TIntrusivePtr<IOperator> ExpandMultiDistinct(const TIntrusivePtr<TOpAggregate>& 
         const auto finalAggTraits = TOpAggregationTraits(
             intermediateColName, aggFunctions.second, aggTraits.ResultColName, false,
             NeedToUnwrapOptional(aggregate->GetInput()->Type, aggTraits.OriginalColName.GetFullName(), aggFunctions, aggregate->KeyColumns));
-        TVector<TOpAggregationTraits> partialAggregationTraitsList{partialAggTraits};
+
         finalAggTraitsList.emplace_back(finalAggTraits);
-
-        partialResult = MakeIntrusive<TOpAggregate>(partialResult, partialAggregationTraitsList, aggregate->GetKeyColumns(), EOpPhase::Intermediate,
-                                                    /*distinctAll=*/false, pos);
-        partialResult =
-            BuildNullMapElementsExceptOneColumn(partialResult, aggregate->GetInput()->Type, aggTraitsList, aggTraits, intermediateColumnPrefix, props, ctx);
-
-        if (unionAllResult) {
-            TVector<TInfoUnit> columns;
-            columns.reserve(aggregate->GetKeyColumns().size() + aggTraitsList.size());
-            for (const auto& keyColumn : aggregate->GetKeyColumns()) {
-                columns.push_back(keyColumn);
-            }
-            for (const auto& unionAggTraits : aggTraitsList) {
-                const auto column = TInfoUnit(intermediateColumnPrefix + unionAggTraits.ResultColName.GetFullName());
-                columns.push_back(column);
-            }
-
-            unionAllResult = MakeIntrusive<TOpUnionAll>(unionAllResult, partialResult, aggregate->Pos, std::move(columns));
+        if (!isDistinct) {
+            // For not distinct we keep traits and will put them in one aggregation.
+            partialAggregationTraitsListNotDistinct.push_back(partialAggTraits);
+            aggTraitsListNotDistinct.push_back(aggTraits);
         } else {
-            unionAllResult = partialResult;
+            partialAggregationTraitsListDistinct = {partialAggTraits};
+            partialResult = MakeIntrusive<TOpAggregate>(partialResult, partialAggregationTraitsListDistinct, aggregate->GetKeyColumns(), EOpPhase::Intermediate,
+                                                        /*distinctAll=*/false, pos);
+            partialResult =
+                BuildMapWithNullElements(partialResult, aggregate->GetInput()->Type, aggTraitsList, {aggTraits}, intermediateColumnPrefix, props, ctx);
+
+            if (unionAllResult) {
+                TVector<TInfoUnit> columns;
+                columns.reserve(aggregate->GetKeyColumns().size() + aggTraitsList.size());
+                for (const auto& keyColumn : aggregate->GetKeyColumns()) {
+                    columns.push_back(keyColumn);
+                }
+                for (const auto& unionAggTraits : aggTraitsList) {
+                    const auto column = TInfoUnit(intermediateColumnPrefix + unionAggTraits.ResultColName.GetFullName());
+                    columns.push_back(column);
+                }
+
+                unionAllResult = MakeIntrusive<TOpUnionAll>(unionAllResult, partialResult, aggregate->Pos, std::move(columns));
+            } else {
+                unionAllResult = partialResult;
+            }
         }
+    }
+
+    if (!partialAggregationTraitsListNotDistinct.empty()) {
+        TIntrusivePtr<IOperator> partialResult =
+            MakeIntrusive<TOpAggregate>(aggregate->GetInput(), partialAggregationTraitsListNotDistinct, aggregate->GetKeyColumns(), EOpPhase::Intermediate,
+                                        /*distinctAll=*/false, pos);
+        partialResult =
+            BuildMapWithNullElements(partialResult, aggregate->GetInput()->Type, aggTraitsList, aggTraitsListNotDistinct, intermediateColumnPrefix, props, ctx);
+
+        TVector<TInfoUnit> columns;
+        columns.reserve(aggregate->GetKeyColumns().size() + aggTraitsList.size());
+        for (const auto& keyColumn : aggregate->GetKeyColumns()) {
+            columns.push_back(keyColumn);
+        }
+        for (const auto& unionAggTraits : aggTraitsList) {
+            const auto column = TInfoUnit(intermediateColumnPrefix + unionAggTraits.ResultColName.GetFullName());
+            columns.push_back(column);
+        }
+
+        unionAllResult = MakeIntrusive<TOpUnionAll>(unionAllResult, partialResult, aggregate->Pos, std::move(columns));
     }
 
     return MakeIntrusive<TOpAggregate>(unionAllResult, finalAggTraitsList, aggregate->GetKeyColumns(), EOpPhase::Final, /*distinctAll=*/false, pos);
@@ -252,6 +288,7 @@ TIntrusivePtr<IOperator> TExpandDistinctAggregationRule::SimpleMatchAndApply(con
 
     const auto aggregate = CastOperator<TOpAggregate>(input);
     if (aggregate->GetAggregationTraits().size() == 1) {
+        // Fast path.
         return ExpandSingleDistinct(aggregate);
     }
     return ExpandMultiDistinct(aggregate, props, rboCtx.ExprCtx);

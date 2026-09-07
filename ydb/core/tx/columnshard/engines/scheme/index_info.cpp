@@ -494,11 +494,11 @@ NKikimr::TConclusionStatus TIndexInfo::ReuseIndexChunks(std::vector<std::shared_
     AFL_VERIFY(checkRecordsCount == recordsCount)("index_id", indexId)("sum", checkRecordsCount)("portion", recordsCount);
     const TString& indexStorageId = GetIndexStorageId(indexId, specialTier);
     auto opStorage = operators->GetOperatorVerified(indexStorageId);
+    const i64 maxBlobSize = opStorage->GetBlobSplitSettings().GetMaxBlobSize();
     for (auto&& chunk : chunks) {
-        if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
+        if ((i64)chunk->GetPackedSize() > maxBlobSize) {
             return TConclusionStatus::Fail("blob size for secondary data (" + ::ToString(indexId) + ":" + ::ToString(chunk->GetPackedSize()) +
-                                           ":" + ::ToString(recordsCount) + ") bigger than limit (" +
-                                           ::ToString(opStorage->GetBlobSplitSettings().GetMaxBlobSize()) + ")");
+                                           ":" + ::ToString(recordsCount) + ") bigger than limit (" + ::ToString(maxBlobSize) + ")");
         }
     }
     if (indexStorageId == IStoragesManager::LocalMetadataStorageId) {

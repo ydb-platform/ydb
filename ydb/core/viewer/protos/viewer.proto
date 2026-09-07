@@ -493,6 +493,7 @@ message TStorageGroupInfo {
     optional double MaxVDiskRawUsage = 26;
     optional double MaxNormalizedOccupancy = 27;
     optional string CapacityAlert = 28;
+    optional uint32 GroupSizeInUnits = 29;
     repeated TStorageVDisk VDisks = 30;
 }
 

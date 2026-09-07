@@ -425,7 +425,7 @@ private:
 
         tableDesc->MutableKeyColumnNames()->CopyFrom(req->primary_key());
 
-        if (!FillIndexDescription(*modifyScheme->MutableCreateIndexedTable(), *req, code, error)) {
+        if (!FillIndexDescription(*modifyScheme->MutableCreateIndexedTable(), *req, AppData()->FeatureFlags.GetEnableCompactFulltextIndex(), code, error)) {
             NYql::TIssues issues;
             issues.AddIssue(NYql::TIssue(error));
             return Reply(code, issues, ctx);

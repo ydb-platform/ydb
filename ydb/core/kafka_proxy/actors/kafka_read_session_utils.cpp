@@ -26,21 +26,7 @@ std::optional<TConsumerProtocolSubscription> GetSubscriptions(const TJoinGroupRe
         return std::nullopt;
     }
 
-    auto& metadata = p->Metadata;
-
-    if (metadata.value().size_bytes() < sizeof(TKafkaVersion)) {
-        return std::nullopt;
-    }
-
-    TKafkaVersion version = *(TKafkaVersion*)(metadata.value().data() + sizeof(TKafkaVersion));
-
-    TBuffer buffer(metadata.value().data() + sizeof(TKafkaVersion), metadata.value().size_bytes() - sizeof(TKafkaVersion));
-    TKafkaReadable readable(buffer);
-
-    TConsumerProtocolSubscription result;
-    result.Read(readable, version);
-
-    return result;
+    return TryReadConsumerProtocolBlob<TConsumerProtocolSubscription>(p->Metadata);
 }
 
 }

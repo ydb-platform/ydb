@@ -614,9 +614,10 @@ class TRefreshTokenImpl
     , public TEventLocal<TRefreshTokenImpl<TRpcId>, TRpcId>
 {
 public:
-    TRefreshTokenImpl(const TString& token, const TString& database, TActorId from)
+    TRefreshTokenImpl(const TString& token, const TString& database, const TString& peerName, TActorId from)
         : Token_(token)
         , Database_(database)
+        , PeerName_(peerName)
         , From_(from)
         , State_(true)
     { }
@@ -664,7 +665,7 @@ public:
     }
 
     TString GetPeerName() const override {
-        return {};
+        return PeerName_;
     }
 
     void SetRlPath(TMaybe<NRpcService::TRlPath>&&) override {
@@ -809,6 +810,7 @@ public:
 private:
     const TString Token_;
     const TString Database_;
+    const TString PeerName_;
     const TActorId From_;
     NYdbGrpc::TAuthState State_;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;

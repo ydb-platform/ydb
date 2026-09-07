@@ -229,7 +229,9 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
                     tablesSet.insert(indexSettings.GetTable().GetPath());
                     if (indexSettings.HasFulltextSettings()) {
                         tablesSet.insert(indexSettings.GetDocsTable().GetPath());
-                        tablesSet.insert(indexSettings.GetDictTable().GetPath());
+                        if (indexSettings.HasDictTable()) {
+                            tablesSet.insert(indexSettings.GetDictTable().GetPath());
+                        }
                         tablesSet.insert(indexSettings.GetStatsTable().GetPath());
                     }
                 }
@@ -331,7 +333,9 @@ void TPreparedQueryHolder::FillTables(const google::protobuf::RepeatedPtrField< 
                             }
                         };
                         fillColumns(indexSettings.GetDocsTable(), indexSettings.GetDocsColumns());
-                        fillColumns(indexSettings.GetDictTable(), indexSettings.GetDictColumns());
+                        if (indexSettings.HasDictTable()) {
+                            fillColumns(indexSettings.GetDictTable(), indexSettings.GetDictColumns());
+                        }
                         fillColumns(indexSettings.GetStatsTable(), indexSettings.GetStatsColumns());
                     }
                 }

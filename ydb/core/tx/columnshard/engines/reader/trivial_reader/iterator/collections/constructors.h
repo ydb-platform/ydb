@@ -63,6 +63,7 @@ public:
 class TPortionsSources: public NCommon::TSourcesConstructorWithAccessors<TSourceConstructor> {
 private:
     using TBase = NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>;
+    std::deque<std::shared_ptr<TPortionInfo>> DuplicateFilterPortions;
 
     virtual void DoFillReadStats(TReadStats& stats) const override {
         ui64 compactedPortionsBytes = 0;
@@ -95,10 +96,25 @@ private:
     }
 
 public:
-    TPortionsSources(std::deque<TSourceConstructor>&& sources, const ERequestSorting sorting, const bool sortByFinish = false)
+    TPortionsSources(std::deque<TSourceConstructor>&& sources, const ERequestSorting sorting, const bool sortByFinish = false,
+        const bool needDuplicateFiltering = false)
         : TBase(sorting, sortByFinish)
     {
+        if (needDuplicateFiltering) {
+            // Cursor drops already processed portions.
+            // But DuplicateFilter needs all the portions selected for the scan.
+            // So we have to materialize portions for DuplicateFilter before they get filtered by cursor.
+            for (const auto& source : sources) {
+                if (!source.IsConflicting()) {
+                    DuplicateFilterPortions.emplace_back(source.GetPortion());
+                }
+            }
+        }
         InitializeConstructors(std::move(sources));
+    }
+
+    std::deque<std::shared_ptr<TPortionInfo>> ExtractDuplicateFilterPortions() {
+        return std::move(DuplicateFilterPortions);
     }
 
     static std::unique_ptr<TPortionsSources> BuildEmpty() {

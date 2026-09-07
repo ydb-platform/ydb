@@ -174,7 +174,7 @@ public:
     void Handle(TEvPlaceRequestIntoPool::TPtr& ev) {
         const TActorId& workerActorId = ev->Sender;
         if (!EnabledResourcePools) {
-            ReplyContinueError(workerActorId, Ydb::StatusIds::UNSUPPORTED, "Workload manager is disabled. Please contact your system administrator to enable it");
+            ReplyContinueError(workerActorId, ev->Get()->QueryId, Ydb::StatusIds::UNSUPPORTED, "Workload manager is disabled. Please contact your system administrator to enable it");
             return;
         }
 
@@ -371,7 +371,7 @@ private:
             databaseState->RemovePendingSession(event->Get()->SessionId, [this](TEvCleanupRequest::TPtr event) {
                 ReplyCleanupError(event->Sender, Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Pool " << event->Get()->PoolId << " not found");
             });
-            ReplyContinueError(event->Sender, ev->Get()->Status, ev->Get()->Issues);
+            ReplyContinueError(event->Sender, event->Get()->QueryId, ev->Get()->Status, ev->Get()->Issues);
             return;
         }
 
@@ -634,17 +634,17 @@ private:
     }
 
 private:
-    void ReplyContinueError(const TActorId& replyActorId, Ydb::StatusIds::StatusCode status, const TString& message) const {
-        ReplyContinueError(replyActorId, status, {NYql::TIssue(message)});
+    void ReplyContinueError(const TActorId& replyActorId, ui64 queryId, Ydb::StatusIds::StatusCode status, const TString& message) const {
+        ReplyContinueError(replyActorId, queryId, status, {NYql::TIssue(message)});
     }
 
-    void ReplyContinueError(const TActorId& replyActorId, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) const {
+    void ReplyContinueError(const TActorId& replyActorId, ui64 queryId, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) const {
         if (status == Ydb::StatusIds::UNSUPPORTED) {
             LOG_T("Reply unsupported to " << replyActorId << ": " << issues.ToOneLineString());
         } else {
             LOG_W("Reply continue error " << status << " to " << replyActorId << ": " << issues.ToOneLineString());
         }
-        Send(replyActorId, new TEvContinueRequest(status, {}, {}, std::move(issues)));
+        Send(replyActorId, new TEvContinueRequest(queryId, status, {}, {}, std::move(issues)));
     }
 
     void ReplyCleanupError(const TActorId& replyActorId, Ydb::StatusIds::StatusCode status, const TString& message) const {

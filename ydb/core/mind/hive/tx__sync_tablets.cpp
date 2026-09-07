@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -38,7 +40,9 @@ public:
     }
 
     bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
-        BLOG_D("THive::TTxSyncTablets(" << Local << ")::Execute");
+        YDB_LOG_DEBUG("THive::TTxSyncTablets::Execute synchronizing tablets with node",
+            {"logPrefix", GetLogPrefix()},
+            {"nodeId", Local.NodeId()});
         SideEffects.Reset(Self->SelfId());
         NIceDb::TNiceDb db(txc.DB);
         TNodeInfo& node = Self->GetNode(Local.NodeId());
@@ -55,10 +59,18 @@ public:
         auto foundTablet = [&](TTabletInfo* tablet, const TString& state) {
             auto tabletId = tablet->GetFullTabletId();
             if (node.MatchesFilter(tablet->NodeFilter)) {
-                BLOG_TRACE("THive::TTxSyncTablets(" << Local << ") confirmed " << state << " tablet " << tabletId);
+                YDB_LOG_TRACE("THive::TTxSyncTablets::Execute confirmed tablet",
+                    {"logPrefix", GetLogPrefix()},
+                    {"nodeId", Local.NodeId()},
+                    {"state", state},
+                    {"tabletId", tabletId});
                 tabletsToStop.erase(tabletId);
             } else {
-                BLOG_TRACE("THive::TTxSyncTablets(" << Local << ") confirmed " << state << " tablet " << tabletId << ", but it's not allowed to run on this node");
+                YDB_LOG_TRACE("THive::TTxSyncTablets::Execute confirmed tablet not allowed on this node",
+                    {"logPrefix", GetLogPrefix()},
+                    {"nodeId", Local.NodeId()},
+                    {"state", state},
+                    {"tabletId", tabletId});
             }
             if (tablet->GetLeader().IsBootingSuppressed()) {
                 tablet->InitiateStop(SideEffects);
@@ -86,7 +98,10 @@ public:
                 }
             } else {
                 SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId));
-                BLOG_TRACE("THive::TTxSyncTablets(" << Local << ") rejected unknown starting tablet " << tabletId);
+                YDB_LOG_TRACE("THive::TTxSyncTablets::Execute rejected unknown starting tablet",
+                    {"logPrefix", GetLogPrefix()},
+                    {"nodeId", Local.NodeId()},
+                    {"tabletId", tabletId});
                 tabletsToStop.erase(tabletId);
             }
         }
@@ -113,14 +128,20 @@ public:
                     continue;
                 } else if (ti.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER) {
                     SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId)); // the tablet is running somewhere else
-                    BLOG_TRACE("THive::TTxSyncTablets(" << Local << ") confirmed and stopped running tablet " << tabletId);
+                    YDB_LOG_TRACE("THive::TTxSyncTablets::Execute stopped running tablet on wrong node",
+                        {"logPrefix", GetLogPrefix()},
+                        {"nodeId", Local.NodeId()},
+                        {"tabletId", tabletId});
                     tabletsToBoot.insert(tabletId);
                     tabletsToStop.erase(tabletId);
                     continue;
                 }
             } else {
                 SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId));
-                BLOG_TRACE("THive::TTxSyncTablets(" << Local << ") rejected unknown running tablet " << tabletId);
+                YDB_LOG_TRACE("THive::TTxSyncTablets::Execute rejected unknown running tablet",
+                    {"logPrefix", GetLogPrefix()},
+                    {"nodeId", Local.NodeId()},
+                    {"tabletId", tabletId});
                 tabletsToStop.erase(tabletId);
             }
         }
@@ -138,7 +159,9 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxSyncTablets(" << Local << ")::Complete");
+        YDB_LOG_DEBUG("THive::TTxSyncTablets::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"nodeId", Local.NodeId()});
         SideEffects.Complete(ctx);
     }
 };

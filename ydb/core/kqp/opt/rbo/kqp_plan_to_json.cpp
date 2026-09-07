@@ -17,10 +17,15 @@ void AddOptimizerEstimates(NJson::TJsonValue& json, const TIntrusivePtr<IOperato
     json["E-Cost"] = TStringBuilder() << *op->Props.Cost;
 }
 
-NJson::TJsonValue MakeJson(const TIntrusivePtr<IOperator>& op, ui32 operatorId, ui32 explainFlags) {
+NJson::TJsonValue MakeJson(const TIntrusivePtr<IOperator>& op, ui32 explainFlags) {
     auto res = op->ToJson(explainFlags);
 
     AddOptimizerEstimates(res, op);
+    return res;
+}
+
+NJson::TJsonValue MakeJson(const TIntrusivePtr<IOperator>& op, ui32 operatorId, ui32 explainFlags) {
+    auto res = MakeJson(op, explainFlags);
     res["OperatorId"] = operatorId;
     return res;
 }
@@ -68,7 +73,12 @@ NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, TExplain
     result["PlanNodeId"] = ctx.NextNodeId();
     result["Node Type"] = op->GetExplainName();
     NJson::TJsonValue operatorList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-    operatorList.AppendValue(MakeJson(op, ctx.OperatorIds.at(op.Get()), ctx.ExplainFlags));
+    auto operatorJson = MakeJson(op, ctx.ExplainFlags);
+    // Synthetic operators that are absent from the execution plan cannot be correlated with runtime stats.
+    if (auto operatorId = ctx.OperatorIds.find(op.Get()); operatorId != ctx.OperatorIds.end()) {
+        operatorJson["OperatorId"] = operatorId->second;
+    }
+    operatorList.AppendValue(std::move(operatorJson));
     result["Operators"] = operatorList;
 
     auto getChildJson = [&](const auto& child, ui32 childIndex) {
@@ -101,93 +111,83 @@ NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, TExplain
     return result;
 }
 
-void FindPlanNodes(const NJson::TJsonValue& node, const TString& key, std::vector<NJson::TJsonValue>& results) {
-    if (node.IsArray()) {
-        for (const auto& item: node.GetArray()) {
-            FindPlanNodes(item, key, results);
+struct TOperatorLocation {
+    NJson::TJsonValue* Stage = nullptr;
+    NJson::TJsonValue* Operator = nullptr;
+    int OperatorIndex = 0;
+};
+
+struct TConnectionInfo {
+    bool FromBroadcast = false;
+    int ParentTaskCount = 0;
+};
+
+struct TPlanLookupIndex {
+    THashMap<i64, TOperatorLocation> Operators;
+    THashMap<TString, TConnectionInfo> Connections;
+    TVector<i64> OperatorOrder;
+};
+
+enum class EPlanIndexKind {
+    Execution,
+    Simplified,
+};
+
+void BuildPlanLookupIndex(
+    NJson::TJsonValue& planNode,
+    TPlanLookupIndex& index,
+    EPlanIndexKind kind)
+{
+    if (planNode.IsArray()) {
+        for (auto& item: planNode.GetArraySafe()) {
+            BuildPlanLookupIndex(item, index, kind);
         }
         return;
     }
 
-    if (!node.IsMap()) {
+    if (!planNode.IsMap()) {
         return;
     }
 
-    if (auto* valueNode = node.GetValueByPath(key)) {
-        results.push_back(*valueNode);
-    }
-
-    for (const auto& [_, value]: node.GetMap()) {
-        FindPlanNodes(value, key, results);
-    }
-}
-
-bool FindStageAndOpByOpId(NJson::TJsonValue& planNode, int opId, NJson::TJsonValue*& stage, NJson::TJsonValue*& op, int& operatorIdx) {
-
-    if (planNode.IsArray()) {
-        for (auto& item: planNode.GetArraySafe()) {
-            if (FindStageAndOpByOpId(item, opId, stage, op, operatorIdx)) {
-                return true;
-            }
-        }
-        return false;
-    } else if (planNode.IsMap()) {
-        if (planNode.GetMapSafe().contains("Operators")) {
-            auto& operatorArray = planNode.GetMapSafe().at("Operators").GetArraySafe();
-            for (size_t i=0; i<operatorArray.size(); i++) {
-                auto& item = operatorArray.at(i);
-                if (item.GetMapSafe().at("OperatorId").GetInteger() == opId) {
-                    operatorIdx = i;
-                    stage = &planNode;
-                    op = &item;
-                    return true;
+    auto& planMap = planNode.GetMapSafe();
+    if (auto operators = planMap.find("Operators"); operators != planMap.end()) {
+        auto& operatorArray = operators->second.GetArraySafe();
+        for (size_t i = 0; i < operatorArray.size(); ++i) {
+            auto& item = operatorArray.at(i);
+            auto& itemMap = item.GetMapSafe();
+            if (auto itemId = itemMap.find("OperatorId"); itemId != itemMap.end()) {
+                const i64 id = itemId->second.GetIntegerSafe();
+                if (kind == EPlanIndexKind::Simplified) {
+                    index.OperatorOrder.push_back(id);
                 }
+                index.Operators.try_emplace(
+                    id,
+                    TOperatorLocation{&planNode, &item, static_cast<int>(i)}
+                );
             }
-        }
-        if (planNode.GetMapSafe().contains("Plans")) {
-            for (auto& item: planNode.GetMapSafe().at("Plans").GetArraySafe()) {
-                if (FindStageAndOpByOpId(item, opId, stage, op, operatorIdx)) {
-                    return true;
-                }
-            }
-            return false;
         }
     }
 
-    return false;
-}
-
-bool FindConnection(NJson::TJsonValue& planNode, const TString& stageGuid, bool& fromBroadcast, int& parentTaskCount) {
-    if (planNode.IsArray()) {
-        for (auto& item: planNode.GetArraySafe()) {
-            if (FindConnection(item, stageGuid, fromBroadcast, parentTaskCount)) {
-                return true;
-            }
-        }
-        return false;
-    } else if (planNode.IsMap()) {
-        const auto& planMap = planNode.GetMapSafe();
+    if (kind == EPlanIndexKind::Execution) {
         if (planMap.contains("PlanNodeType") && planMap.at("PlanNodeType") == "Connection") {
-            const auto& subplan = planMap.at("Plans").GetArraySafe().at(0);
-            if (subplan.GetMapSafe().at("StageGuid") == stageGuid) {
-                fromBroadcast = planMap.at("Node Type") == "Broadcast";
-                if (planMap.contains("Stats") && planMap.at("Stats").GetMapSafe().contains("Tasks")) {
-                    parentTaskCount = planMap.at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe();
-                }
-                return true;
+            auto& subplan = planMap.at("Plans").GetArraySafe().at(0);
+            TConnectionInfo connectionInfo;
+            connectionInfo.FromBroadcast = planMap.at("Node Type") == "Broadcast";
+            if (planMap.contains("Stats") && planMap.at("Stats").GetMapSafe().contains("Tasks")) {
+                connectionInfo.ParentTaskCount = planMap.at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe();
             }
-        }
-        if (planNode.GetMapSafe().contains("Plans")) {
-            for (auto& item: planNode.GetMapSafe().at("Plans").GetArraySafe()) {
-                if (FindConnection(item, stageGuid, fromBroadcast, parentTaskCount)) {
-                    return true;
-                }
-            }
-            return false;
+            index.Connections.try_emplace(
+                subplan.GetMapSafe().at("StageGuid").GetStringSafe(),
+                connectionInfo
+            );
         }
     }
 
-    return false;
+    if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+        for (auto& item: plans->second.GetArraySafe()) {
+            BuildPlanLookupIndex(item, index, kind);
+        }
+    }
 }
 
 double ComputeCpuTimes(NJson::TJsonValue& plan) {
@@ -224,28 +224,23 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
     auto& simplifiedPlan = txPlan.GetMapSafe().at("SimplifiedPlan");
     auto& execPlan = txPlan.GetMapSafe().at("Plans")[0];
 
-    // Extract all operator ids from SimplifiedPlan and look up stages and operators
-    // in the execution plan
-    // FIXME: This tries to look up by connections, let's not find the connections as operators in the first place
-    std::vector<NJson::TJsonValue> opIds;
-    FindPlanNodes(simplifiedPlan, "OperatorId", opIds);
+    TPlanLookupIndex execPlanIndex;
+    TPlanLookupIndex simplifiedPlanIndex;
+    BuildPlanLookupIndex(simplifiedPlan, simplifiedPlanIndex, EPlanIndexKind::Simplified);
+    execPlanIndex.Operators.reserve(simplifiedPlanIndex.OperatorOrder.size());
+    execPlanIndex.Connections.reserve(simplifiedPlanIndex.OperatorOrder.size());
+    BuildPlanLookupIndex(execPlan, execPlanIndex, EPlanIndexKind::Execution);
 
-    for (auto & idNode : opIds) {
-        int execOperatorIdx;
-        int explainOperatorIdx;
-        NJson::TJsonValue* execPlanStage;
-        NJson::TJsonValue* execPlanOp;
-        NJson::TJsonValue* explainPlanStage;
-        NJson::TJsonValue* explainPlanOp;
+    for (const auto opId : simplifiedPlanIndex.OperatorOrder) {
+        const auto execLocation = execPlanIndex.Operators.find(opId);
+        const auto explainLocation = simplifiedPlanIndex.Operators.find(opId);
+        Y_ENSURE(execLocation != execPlanIndex.Operators.end());
+        Y_ENSURE(explainLocation != simplifiedPlanIndex.Operators.end());
 
-        if (!FindStageAndOpByOpId(execPlan, idNode.GetIntegerSafe(), execPlanStage, execPlanOp, execOperatorIdx)) {
-            YQL_CLOG(TRACE, CoreDq) << "Did not find operator: " << idNode.GetIntegerSafe() << " in exec plan";
-            continue;
-        }
-        if (!FindStageAndOpByOpId(simplifiedPlan, idNode.GetIntegerSafe(), explainPlanStage, explainPlanOp, explainOperatorIdx)) {
-            YQL_CLOG(TRACE, CoreDq) << "Did not find operator: " << idNode.GetIntegerSafe() << " in simplified plan";
-
-        }
+        auto* execPlanStage = execLocation->second.Stage;
+        auto* execPlanOp = execLocation->second.Operator;
+        const int execOperatorIdx = execLocation->second.OperatorIndex;
+        auto* explainPlanOp = explainLocation->second.Operator;
 
         if(!execPlanStage->GetMapSafe().contains("Stats")) {
             continue;
@@ -319,15 +314,15 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
 
         if (execOperatorIdx == 0 && !explainPlanOp->GetMapSafe().contains("A-Rows")) {
             // Find enclosing connection to process broadcast correctly
-            bool fromBroadcast = false;
-            int parentTaskCount = 0;
-            TString stageGuid = execPlanStage->GetMapSafe().at("StageGuid").GetStringSafe();
-            FindConnection(execPlan, stageGuid, fromBroadcast, parentTaskCount);
+            const TString stageGuid = execPlanStage->GetMapSafe().at("StageGuid").GetStringSafe();
+            const auto connection = execPlanIndex.Connections.find(stageGuid);
+            const bool fromBroadcast = connection != execPlanIndex.Connections.end() && connection->second.FromBroadcast;
+            const int parentTaskCount = connection == execPlanIndex.Connections.end() ? 0 : connection->second.ParentTaskCount;
             // top level rows/size have to match stage output
             if (!operatorRows && stats.contains("OutputRows")) {
                 auto outputRows = stats.at("OutputRows");
                 int aRows = outputRows.IsMap() ? outputRows.GetMapSafe().at("Sum").GetIntegerSafe() : outputRows.GetIntegerSafe();
-    
+
                 if (fromBroadcast && parentTaskCount && (aRows % parentTaskCount == 0)) {
                     aRows /= parentTaskCount;
                 }
@@ -341,7 +336,9 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
                 }
                 explainPlanOp->InsertValue("A-Size", aSize);
             }
+        }
 
+        if (execOperatorIdx == 0) {
             // cpu usage available for stage only, so assign it to top level operator
             if (stats.contains("CpuTimeUs")) {
                 double opCpuTime;
@@ -387,7 +384,6 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperato
 
     for (const auto& it : *this) {
         auto & currOp = it.Current;
-        operatorIds.insert({currOp.Get(), operatorId++});
         int stageId = *currOp->Props.StageId;
         if (!stageOpMap.contains(stageId)) {
             stageOpMap.insert({stageId, {}});
@@ -395,8 +391,9 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperato
 
         auto & stageOps = stageOpMap.at(stageId);
 
-        //if (currOp->Kind != EOperator::Map && currOp->Kind != EOperator::EmptySource) {
         if (currOp->Kind != EOperator::EmptySource) {
+            // This map defines which operators can be correlated across execution and simplified plans.
+            operatorIds.insert({currOp.Get(), operatorId++});
 
             YQL_CLOG(TRACE, CoreDq) << "Adding operator to explain json: " << currOp->GetExplainName() << ", stageId: " << stageId;
 

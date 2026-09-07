@@ -23,6 +23,8 @@ using namespace NJsonIndex;
 namespace {
 
 constexpr std::string_view kErrorMessage = "Failed to extract jsonpath tokens from the predicate: ";
+constexpr std::string_view kFullRangeSearchMessage =
+    "full-range search cannot be performed using full-text search";
 
 struct TPredicateCollectResult {
     TString ColumnName;
@@ -809,7 +811,9 @@ std::optional<TPredicateCollectResult> VisitJsonPredicate(
 
 std::expected<TJsonIndexSettings, TIssue> CollectJsonIndexPredicate(
     const TExprBase& body, const TExprBase& node, TExprContext& ctx, const THashSet<TString>& indexedColumns,
-    const TVector<TString>& prefixColumns, const TVector<std::pair<TString, TExprNode::TPtr>>& seedPrefixColumns) {
+    const TVector<TString>& prefixColumns, const TVector<std::pair<TString, TExprNode::TPtr>>& seedPrefixColumns,
+    EJsonIndexSelectionMode selectionMode)
+{
     auto result = VisitJsonPredicate(body, ctx, indexedColumns);
     if (!result.has_value()) {
         return std::unexpected(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << kErrorMessage << "nothing to extract"));
@@ -822,6 +826,23 @@ std::expected<TJsonIndexSettings, TIssue> CollectJsonIndexPredicate(
 
     if (collectResult.GetTokens().empty()) {
         return std::unexpected(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << kErrorMessage << "empty tokens set"));
+    }
+
+    for (const auto& token : collectResult.GetTokens()) {
+        if (!token.PathToken.empty() || !token.ParamName.empty()) {
+            continue;
+        }
+
+        const TString message = selectionMode == EJsonIndexSelectionMode::Automatic
+            ? TStringBuilder() << "JSON index was not auto-selected: " << kFullRangeSearchMessage
+            : TStringBuilder() << "JSON index cannot be used: " << kFullRangeSearchMessage;
+        TIssue issue(ctx.GetPosition(node.Pos()), message);
+
+        if (selectionMode == EJsonIndexSelectionMode::Automatic) {
+            SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_WRONG_INDEX_USAGE, issue);
+        }
+
+        return std::unexpected(std::move(issue));
     }
 
     TVector<TExprNode::TPtr> tokenNodes;

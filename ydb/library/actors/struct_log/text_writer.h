@@ -3,6 +3,7 @@
 #include "base_writer.h"
 
 #include <util/generic/string.h>
+#include <util/generic/maybe.h>
 #include <util/string/builder.h>
 
 namespace NActors::NStructuredLog {
@@ -14,6 +15,10 @@ public:
     TTextWriter() = default;
 
     bool Write(TStringBuilder& outputText, const TStructuredMessage& message);
+
+    static TString EscapeFieldValue(const TString& value);
+    static TMaybe<TString> UnescapeFieldValue(const TString& escapedFieldValue);
+    static TMaybe<TString> UnescapeFieldValue(const TString& escapedFieldValue, std::string::size_type& startPos);
 
 protected:
     TStringBuilder* OutputText{nullptr};

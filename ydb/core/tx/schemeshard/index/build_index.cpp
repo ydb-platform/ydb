@@ -331,7 +331,13 @@ void TSchemeShard::PersistBuildIndexShardStatusFulltext(NIceDb::TNiceDb& db, TIn
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::FirstToken>(shardStatus.FirstToken),
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::LastToken>(shardStatus.LastToken),
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::FirstTokenRows>(shardStatus.FirstTokenRows),
-        NIceDb::TUpdate<Schema::IndexBuildShardStatus::LastTokenRows>(shardStatus.LastTokenRows)
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::LastTokenRows>(shardStatus.LastTokenRows),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::FirstPrefix>(shardStatus.FirstPrefix),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::FirstPrefixDocCount>(shardStatus.FirstPrefixDocCount),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::FirstPrefixSumDocLength>(shardStatus.FirstPrefixSumDocLength),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::LastPrefix>(shardStatus.LastPrefix),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::LastPrefixDocCount>(shardStatus.LastPrefixDocCount),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::LastPrefixSumDocLength>(shardStatus.LastPrefixSumDocLength)
     );
 }
 
@@ -361,7 +367,13 @@ void TSchemeShard::PersistBuildIndexShardStatusReset(NIceDb::TNiceDb& db, TIndex
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::FirstToken>(""),
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::LastToken>(""),
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::FirstTokenRows>(0),
-        NIceDb::TUpdate<Schema::IndexBuildShardStatus::LastTokenRows>(0)
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::LastTokenRows>(0),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::FirstPrefix>(""),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::FirstPrefixDocCount>(0),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::FirstPrefixSumDocLength>(0),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::LastPrefix>(""),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::LastPrefixDocCount>(0),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::LastPrefixSumDocLength>(0)
     );
 }
 

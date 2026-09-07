@@ -147,6 +147,7 @@ public:
         auto wrapper = std::make_shared<TWmSessionUpdaterWrapper>(FinalState, msg->WmSessionUpdater);
 
         auto* proxyMsg = new NWorkloadManager::TEvPlaceRequestIntoPool(
+            msg->QueryId,
             msg->DatabaseId,
             msg->SessionId,
             msg->PoolId,
@@ -162,7 +163,7 @@ public:
             senderForWorkload = Register(interceptor);
         }
 
-        Send(new IEventHandle(WorkloadServiceId, senderForWorkload, proxyMsg));
+        Send(new IEventHandle(WorkloadServiceId, senderForWorkload, proxyMsg, 0, ev->Cookie));
     }
 
 private:

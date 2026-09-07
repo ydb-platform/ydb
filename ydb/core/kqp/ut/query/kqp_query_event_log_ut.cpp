@@ -22,9 +22,24 @@ struct TReqJsonEntry {
     TString Priority;  // "DEBUG" | "WARN" | ...
 };
 
-// The test backend writes records into one continuous blob without `\n`
-// separators, so we extract each [REQ_JSON] object by tracking brace balance
-// with proper string-escape handling.
+// Scan back from `markerPos` to the preceding ":KQP_REQUEST <PRIO>:" token.
+TString ExtractPriority(TStringBuf blob, size_t markerPos) {
+    constexpr size_t WINDOW = 256;
+    const size_t winStart = markerPos > WINDOW ? markerPos - WINDOW : 0;
+    const TStringBuf window = blob.SubStr(winStart, markerPos - winStart);
+    constexpr TStringBuf NEEDLE = ":KQP_REQUEST ";
+    const size_t kqpPos = window.rfind(NEEDLE);
+    if (kqpPos == TStringBuf::npos) {
+        return {};
+    }
+    const size_t prioStart = kqpPos + NEEDLE.size();
+    const size_t prioEnd = window.find(':', prioStart);
+    if (prioEnd == TStringBuf::npos) {
+        return {};
+    }
+    return TString(window.SubStr(prioStart, prioEnd - prioStart));
+}
+
 size_t FindJsonObjectEnd(TStringBuf data, size_t start) {
     int depth = 0;
     bool inStr = false;
@@ -57,24 +72,6 @@ size_t FindJsonObjectEnd(TStringBuf data, size_t start) {
     return TStringBuf::npos;
 }
 
-// Scan back from `markerPos` to the preceding ":KQP_REQUEST <PRIO>:" token.
-TString ExtractPriority(TStringBuf blob, size_t markerPos) {
-    constexpr size_t WINDOW = 256;
-    const size_t winStart = markerPos > WINDOW ? markerPos - WINDOW : 0;
-    const TStringBuf window = blob.SubStr(winStart, markerPos - winStart);
-    constexpr TStringBuf NEEDLE = ":KQP_REQUEST ";
-    const size_t kqpPos = window.rfind(NEEDLE);
-    if (kqpPos == TStringBuf::npos) {
-        return {};
-    }
-    const size_t prioStart = kqpPos + NEEDLE.size();
-    const size_t prioEnd = window.find(':', prioStart);
-    if (prioEnd == TStringBuf::npos) {
-        return {};
-    }
-    return TString(window.SubStr(prioStart, prioEnd - prioStart));
-}
-
 TVector<TReqJsonEntry> CollectReqJson(TStringBuf blob) {
     TVector<TReqJsonEntry> entries;
     size_t pos = 0;
@@ -83,7 +80,7 @@ TVector<TReqJsonEntry> CollectReqJson(TStringBuf blob) {
         if (markerPos == TStringBuf::npos) {
             break;
         }
-        const size_t jsonStart = blob.find('{', markerPos + REQ_JSON_MARKER.size());
+        size_t jsonStart = blob.find('{', markerPos + REQ_JSON_MARKER.size());
         if (jsonStart == TStringBuf::npos) {
             break;
         }

@@ -217,14 +217,19 @@ struct TKiExploreTxResults {
                 YQL_ENSURE(indexTables.size() == 1, "Global fulltext plain index should have 1 table");
                 dataTable = indexTable = indexTables[0];
                 YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::ImplTable));
-            } else if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance ||
-                index.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
+            } else if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance) {
                 YQL_ENSURE(indexTables.size() == 4, "Global fulltext relevance index should have 4 tables");
                 indexTable = indexTables[3];
                 YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::ImplTable));
                 dictTable = indexTables[0];
                 YQL_ENSURE(dictTable.EndsWith(NKikimr::NTableIndex::NFulltext::DictTable));
                 dataTable = indexTables[1];
+                YQL_ENSURE(dataTable.EndsWith(NKikimr::NTableIndex::NFulltext::DocsTable));
+            } else if (index.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
+                YQL_ENSURE(indexTables.size() == 3, "Global fulltext compact relevance index should have 3 tables");
+                indexTable = indexTables[2];
+                YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::ImplTable));
+                dataTable = indexTables[0];
                 YQL_ENSURE(dataTable.EndsWith(NKikimr::NTableIndex::NFulltext::DocsTable));
             } else {
                 YQL_ENSURE(indexTables.size() == 1, "Only index with one impl table is supported");
@@ -233,8 +238,7 @@ struct TKiExploreTxResults {
 
             if (!isUpdate) {
                 ops[indexTable] = TPrimitiveYdbOperation::Write;
-                if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance ||
-                    index.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
+                if (!dictTable.empty()) {
                     ops[dictTable] |= TPrimitiveYdbOperation::Read|TPrimitiveYdbOperation::Write;
                 }
             } else {
@@ -242,8 +246,7 @@ struct TKiExploreTxResults {
                     if (updateColumns.contains(column)) {
                         // delete old index values and upsert rows into index table
                         ops[indexTable] = TPrimitiveYdbOperation::Write;
-                        if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance ||
-                            index.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
+                        if (!dictTable.empty()) {
                             ops[dictTable] |= TPrimitiveYdbOperation::Read|TPrimitiveYdbOperation::Write;
                         }
                         break;

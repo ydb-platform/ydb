@@ -2,6 +2,8 @@
 
 #include <util/string/builder.h>
 
+#include <algorithm>
+
 
 namespace NKikimr::NWorkloadManager {
 
@@ -51,6 +53,10 @@ double TCpuQuotaManager::GetInstantLoad() const {
 
 double TCpuQuotaManager::GetAverageLoad() const {
     return AverageLoad;
+}
+
+double TCpuQuotaManager::GetQuotedLoad() const {
+    return QuotedLoad;
 }
 
 TDuration TCpuQuotaManager::GetMonitoringRequestDelay() const {
@@ -138,16 +144,13 @@ void TCpuQuotaManager::AdjustCpuQuota(double quota, TDuration duration, double c
         return;
     }
 
-    if (duration && duration < AverageLoadInterval / 2 && quota <= 1.0) {
+    if (duration && quota <= 1.0) {
         quota = quota ? quota : DefaultQueryLoad;
         auto load = (cpuSecondsConsumed * 1000.0 / duration.MilliSeconds()) / CpuNumber;
         if (quota > load) {
             auto adjustment = (quota - load) / 2;
-            if (QuotedLoad > adjustment) {
-                QuotedLoad -= adjustment;
-            } else {
-                QuotedLoad = 0.0;
-            }
+            // A refund may not claim the cluster is emptier than it was last measured to be
+            QuotedLoad = std::max(QuotedLoad - adjustment, InstantLoad);
             Counters.QuotedLoadPercentage->Set(static_cast<ui64>(QuotedLoad * 100));
         }
     }

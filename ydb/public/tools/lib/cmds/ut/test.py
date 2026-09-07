@@ -253,12 +253,13 @@ def test_cgroup_v2_quota(cgroups, quota, expected):
 
 
 @pytest.mark.parametrize('quota,expected', [('250000', 3), ('0', 1), ('-1', 8), ('bad', 8)])
-def test_cgroup_v1_quota(cgroups, quota, expected):
+@pytest.mark.parametrize('mountpoint', ['/sys/fs/cgroup/cpu,cpuacct', '/controllers/compute'])
+def test_cgroup_v1_quota(cgroups, quota, expected, mountpoint):
     cgroups.update({
         '/proc/self/cgroup': '3:cpu,cpuacct:/docker/container',
-        '/proc/self/mountinfo': '30 20 0:30 /docker/container /sys/fs/cgroup/cpu,cpuacct ro - cgroup cgroup rw,cpu,cpuacct',
-        '/sys/fs/cgroup/cpu,cpuacct/cpu.cfs_quota_us': quota,
-        '/sys/fs/cgroup/cpu,cpuacct/cpu.cfs_period_us': '100000',
+        '/proc/self/mountinfo': '30 20 0:30 /docker/container {} ro - cgroup cgroup rw,cpu,cpuacct'.format(mountpoint),
+        mountpoint + '/cpu.cfs_quota_us': quota,
+        mountpoint + '/cpu.cfs_period_us': '100000',
     })
     assert cmds.available_cpu_count() == expected
 
@@ -306,3 +307,56 @@ def test_unavailable_cpu_count(cgroups, monkeypatch):
 
 def test_read_unavailable_cgroup_file(tmp_path):
     assert cmds._read_text(str(tmp_path / 'missing')) == ''
+
+
+def test_wait_for_process_exit():
+    with mock.patch.object(cmds, '_process_is_alive', side_effect=[True, False]):
+        with mock.patch.object(cmds.time, 'sleep') as sleep:
+            cmds._wait_for_process_exit(123)
+    sleep.assert_called_once_with(0.1)
+
+
+def test_wait_for_process_exit_timeout():
+    with mock.patch.object(cmds, '_process_is_alive', return_value=True):
+        with pytest.raises(RuntimeError, match='did not exit'):
+            cmds._wait_for_process_exit(123, timeout=0)
+
+
+@pytest.mark.parametrize('state,alive', [('S', True), ('Z', False)])
+def test_process_is_alive_handles_zombies(monkeypatch, state, alive):
+    monkeypatch.setattr(cmds.sys, 'platform', 'linux')
+    with mock.patch.object(cmds.os, 'kill'), mock.patch('builtins.open', mock.mock_open(read_data='123 (a ) name) ' + state)):
+        assert cmds._process_is_alive(123) is alive
+
+
+def test_update_waits_for_stopped_process(tmp_path, monkeypatch):
+    arguments = EmptyArguments()
+    arguments.ydb_working_dir = str(tmp_path)
+    (tmp_path / 'ydb_recipe.json').write_text('{"nodes":{"1":{"pid":123,"stderr_file":"missing"}}}')
+    events = []
+    monkeypatch.setattr(cmds.os, 'kill', lambda pid, sig: events.append('kill'))
+    monkeypatch.setattr(cmds, '_wait_for_process_exit', lambda pid: events.append('wait'))
+    monkeypatch.setattr(cmds, 'start', lambda args: events.append('start'))
+    cmds.update(arguments)
+    assert events == ['kill', 'wait', 'start']
+
+
+def test_deploy_reports_reused_actor_config(tmp_path, monkeypatch, caplog):
+    arguments = EmptyArguments()
+    arguments.ydb_working_dir = str(tmp_path)
+    (tmp_path / 'ydb_recipe.json').write_text('{}')
+    monkeypatch.setattr(cmds, 'start', lambda args: 'started')
+    with caplog.at_level('INFO', logger=cmds.__name__):
+        assert cmds.deploy(arguments, actor_system_config={'use_auto_config': True}) == 'started'
+    assert 'Reusing the existing deployment configuration' in caplog.text
+
+
+def test_update_does_not_start_before_process_exit(tmp_path, monkeypatch):
+    arguments = EmptyArguments()
+    arguments.ydb_working_dir = str(tmp_path)
+    (tmp_path / 'ydb_recipe.json').write_text('{"nodes":{"1":{"pid":123,"stderr_file":"missing"}}}')
+    with mock.patch.object(cmds.os, 'kill'), mock.patch.object(cmds, 'start') as start:
+        with mock.patch.object(cmds, '_wait_for_process_exit', side_effect=RuntimeError('still alive')):
+            with pytest.raises(RuntimeError, match='still alive'):
+                cmds.update(arguments)
+    start.assert_not_called()

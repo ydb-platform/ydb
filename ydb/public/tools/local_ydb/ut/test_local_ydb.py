@@ -16,6 +16,8 @@ from library.python.port_manager import PortManager, PortManagerException
 TLS_FILES = ('ca.pem', 'cert.pem', 'key.pem')
 LOCAL_YDB_TIMEOUT = 180
 READY_TIMEOUT = 90
+QUERY_TIMEOUT = 30
+RESERVED_PORT_COUNT = 32
 
 
 def _binary_path(environment_variable):
@@ -134,8 +136,8 @@ class LocalYdb:
         # Keep the global reservation across CLI exits and server restarts. The
         # child allocates individual ports inside this range using its own locks.
         self.port_manager = PortManager()
-        first_port = self.port_manager.get_port_range(0, 32)
-        self.environment['VALID_PORT_RANGE'] = '{}:{}'.format(first_port, first_port + 32)
+        first_port = self.port_manager.get_port_range(0, RESERVED_PORT_COUNT)
+        self.environment['VALID_PORT_RANGE'] = '{}:{}'.format(first_port, first_port + RESERVED_PORT_COUNT)
         self.environment['PORT_SYNC_PATH'] = str(self.working_directory / 'port-sync')
 
     def _command(self, action, *extra_arguments, check=True):
@@ -201,7 +203,7 @@ class LocalYdb:
             endpoint = '{}:{}'.format(endpoint.rsplit(':', 1)[0], tls_ports[0])
         return endpoint, '/' + database.lstrip('/')
 
-    def query(self, statement, tls_ca=None, output_format=None, check=True, timeout=30):
+    def query(self, statement, tls_ca=None, output_format=None, check=True, timeout=QUERY_TIMEOUT):
         endpoint, database = self._connection(tls=tls_ca is not None)
         command = [
             _binary_path('YDB_CLI_BINARY'),
@@ -231,7 +233,7 @@ class LocalYdb:
                     tls_ca=tls_ca,
                     output_format=output_format,
                     check=False,
-                    timeout=min(30, remaining),
+                    timeout=min(QUERY_TIMEOUT, remaining),
                 )
             except yatest.common.ExecutionTimeoutError as error:
                 last_result = error.execution_result
@@ -325,7 +327,7 @@ def test_wait_for_query_retries_timeouts(tmp_path, monkeypatch, ready):
             with pytest.raises(AssertionError, match='server recovery diagnostics'):
                 instance.wait_for_query('SELECT 1')
             assert len(timeouts) == 3
-            assert timeouts[-1] < 30
+            assert timeouts[-1] < QUERY_TIMEOUT
             assert clock[0] == READY_TIMEOUT
     finally:
         instance.close()

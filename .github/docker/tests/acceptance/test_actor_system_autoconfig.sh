@@ -4,8 +4,8 @@ test_actor_system_autoconfig() {
     local tiny_mode
     for tiny_mode in true false; do
         test_actor_system_autoconfig_mode "$tiny_mode" 1 1
+        test_actor_system_autoconfig_mode "$tiny_mode" 1.5 2
     done
-    test_actor_system_autoconfig_mode true 1.5 2
 }
 
 test_actor_system_autoconfig_mode() {

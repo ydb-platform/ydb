@@ -12,6 +12,8 @@ import string
 import typing  # noqa: F401
 import sys
 import types
+import time
+import errno
 from six.moves.urllib.parse import urlparse
 
 import yatest
@@ -471,6 +473,11 @@ def deploy(arguments, actor_system_config=None):
     recipe = Recipe(arguments)
 
     if os.path.exists(recipe.metafile_path()):
+        if actor_system_config is not None:
+            logger.info(
+                "Reusing the existing deployment configuration; "
+                "actor_system_config only applies to a new configuration"
+            )
         return start(arguments)
 
     if getattr(arguments, 'use_packages', None) is not None:
@@ -634,6 +641,29 @@ def deploy(arguments, actor_system_config=None):
     return endpoint, database
 
 
+def _process_is_alive(pid):
+    try:
+        os.kill(pid, 0)
+        if sys.platform.startswith('linux'):
+            # An orphaned zombie has already closed its sockets, even if PID 1
+            # has not reaped it yet. The command name may itself contain ')'.
+            with open('/proc/{}/stat'.format(pid)) as stream:
+                return stream.read().rsplit(')', 1)[1].split()[0] != 'Z'
+        return True
+    except OSError as error:
+        if error.errno in (errno.ESRCH, errno.ENOENT):
+            return False
+        raise
+
+
+def _wait_for_process_exit(pid, timeout=30):
+    deadline = time.time() + timeout
+    while _process_is_alive(pid):
+        if time.time() >= deadline:
+            raise RuntimeError("YDB process {} did not exit within {} seconds".format(pid, timeout))
+        time.sleep(0.1)
+
+
 def _stop_instances(arguments):
     recipe = Recipe(arguments)
     if not os.path.exists(recipe.metafile_path()):
@@ -650,6 +680,7 @@ def _stop_instances(arguments):
             os.kill(pid, signal.SIGKILL)
         except OSError:
             pass
+        _wait_for_process_exit(pid)
 
         try:
             with open(node_meta['stderr_file'], "r") as r:

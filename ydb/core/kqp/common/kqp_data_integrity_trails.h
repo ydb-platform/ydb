@@ -74,7 +74,7 @@ inline void LogIntegrityTrails(const NKqp::TEvKqp::TEvQueryRequest::TPtr& reques
     if (!ShouldBeLogged(request->Get()->GetAction(), request->Get()->GetType())) {
         return;
     }
-    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+    auto message = YDB_LOG_CREATE_MESSAGE(
         {"component", "SessionActor"},
         {"sessionId", request->Get()->GetSessionId()},
         {"traceId", request->Get()->GetTraceId()},
@@ -83,6 +83,12 @@ inline void LogIntegrityTrails(const NKqp::TEvKqp::TEvQueryRequest::TPtr& reques
         {"queryType", ToString(request->Get()->GetType())},
         LogQueryText(request->Get()->GetQuery())
     );
+
+    if (request->Get()->HasTxControl()) {
+        YDB_LOG_UPDATE_MESSAGE(message, LogTxSettings(request->Get()->GetTxControl()));
+    }
+
+    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "", message);
 }
 
 inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction action, NKikimrKqp::EQueryType type, const std::unique_ptr<NKqp::TEvKqp::TEvQueryResponse>& response, const TActorContext& ctx) {
@@ -120,7 +126,7 @@ inline TStructuredMessage ToStructuredMessage(const NKikimrDataEvents::TLock& lo
     }
 
     if (lock.HasSchemeShard()) {
-        YDB_LOG_UPDATE_MESSAGE(result , {"schemeShard", lock.GetCounter()});
+        YDB_LOG_UPDATE_MESSAGE(result , {"schemeShard", lock.GetSchemeShard()});
     }
 
     if (lock.HasPathId()) {
@@ -144,11 +150,6 @@ inline void LogIntegrityTrails(const TString& state, const TString& traceId, con
         {"shardId", ToString(record.GetOrigin())},
         {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())},
         {"issues", issues.ToString()});
-
-    if (record.GetTxLocks().empty()) {
-        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "", message);
-        return ;
-    }
 
     if (record.GetTxLocks().empty()) {
         YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "", message);

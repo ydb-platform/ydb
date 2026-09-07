@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(KafkaSaslAuthActor) {
 
         auto authorizeTicket = runtime.GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicket>(edge, TDuration::Seconds(5));
         UNIT_ASSERT(authorizeTicket);
-        UNIT_ASSERT_VALUES_EQUAL(authorizeTicket->Get()->TraceContext.RequestId, requestId + "-1");
+        UNIT_ASSERT_VALUES_EQUAL(authorizeTicket->Get()->TraceContext.RequestId, requestId);
     }
 }
 

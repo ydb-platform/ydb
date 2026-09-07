@@ -719,10 +719,11 @@ protected:
     void StartTokenRecheck(const TActorContext& ctx) {
         TokenRecheckInFlight = true;
         ++TokenRecheckCookie;
+        const TString requestId = CreateGuidAsString();
         Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
             .Ticket = Context->Token.Ticket,
             .Database = Context->Token.AuthDatabasePath ? Context->Token.AuthDatabasePath : Context->DatabasePath,
-            .TraceContext = {Context->Token.PeerName, ""},
+            .TraceContext = {Context->Token.PeerName, requestId},
             .Entries = Context->Token.TicketParserEntries,
         }), 0, TokenRecheckCookie);
         ctx.Schedule(TokenRecheckRequestTimeout, new TEvKafka::TEvTokenRecheck(

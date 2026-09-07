@@ -238,8 +238,8 @@ Y_UNIT_TEST(CanSetPermissionsWithoutGizmoResourse) {
         userToken,
         setup.DbPath,
         TTestSetup::PeerName,
-        setup.FakeMonActor,
-        requestId);
+        requestId,
+        setup.FakeMonActor);
     setup.RequestCheckActor(std::move(ev));
 
     TAutoPtr<IEventHandle> handle;
@@ -281,8 +281,8 @@ Y_UNIT_TEST(CanSetPermissionsForRootDb) {
         userToken,
         setup.DbPath,
         TTestSetup::PeerName,
-        setup.FakeMonActor,
-        requestId);
+        requestId,
+        setup.FakeMonActor);
     setup.RequestCheckActor(std::move(ev));
 
     TAutoPtr<IEventHandle> handle;
@@ -326,8 +326,8 @@ Y_UNIT_TEST(CanSetPermissionsForDbWithoutCloudUserAttributes) {
         userToken,
         setup.DbPath,
         TTestSetup::PeerName,
-        setup.FakeMonActor,
-        requestId);
+        requestId,
+        setup.FakeMonActor);
     setup.RequestCheckActor(std::move(ev));
 
     TAutoPtr<IEventHandle> handle;

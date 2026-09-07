@@ -155,9 +155,9 @@ protected:
         TExternalAuthInfo ExternalAuthInfo;
         bool IsLowRequestPriority = false;
 
-        TTokenRecordBase(const TStringBuf ticket)
+        TTokenRecordBase(const TStringBuf ticket, const TString& peerName, const TString& requestId)
             : Ticket(ticket)
-            , TraceContext("", "")
+            , TraceContext(peerName, requestId)
         {}
 
         void SetToken(const TIntrusivePtr<NACLib::TUserToken>& token) {
@@ -1102,6 +1102,13 @@ private:
             }
         }
 
+        if (ev->Get()->TraceContext.RequestId.empty()) {
+            YDB_LOG_WARN_COMP(NKikimrServices::TICKET_PARSER, "TEvAuthorizeTicket has empty request id",
+                {"token", MaskTicket(ev->Get()->Ticket)},
+                {"peerName", ev->Get()->TraceContext.PeerName},
+                {"database", ev->Get()->Database});
+        }
+
         TStringBuf ticket;
         TStringBuf ticketType;
         if (IsTicketCertificate(ev->Get()->Ticket)) {
@@ -1162,14 +1169,17 @@ private:
             CounterTicketsCacheHit->Inc();
             return;
         } else {
-            it = userTokens.emplace(key, ticket).first;
+            it = userTokens.try_emplace(
+                key,
+                ticket,
+                ev->Get()->TraceContext.PeerName,
+                ev->Get()->TraceContext.RequestId).first;
             CounterTicketsCacheMiss->Inc();
         }
 
         auto& record = it->second;
         record.CurrentDelay = MinErrorRefreshTime;
         record.RefreshRetryableErrorImmediately = true;
-        record.TraceContext = ev->Get()->TraceContext;
         record.Database = std::move(ev->Get()->Database);
         record.Signature = ev->Get()->Signature;
         for (const auto& entry: ev->Get()->Entries) {
@@ -1188,13 +1198,11 @@ private:
                 {"ticket", record.GetMaskedTicket()},
                 {"error", record.Error}
             );
-            record.TraceContext.RequestId.clear();
             Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.Error), 0, cookie);
             return;
         }
         if (record.IsTokenReady()) {
             // offline check ready
-            record.TraceContext.RequestId.clear();
             Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.GetToken()), 0, cookie);
             return;
         }
@@ -1956,6 +1964,7 @@ private:
             html << "<th>Expire</th>";
             html << "<th>Access</th>";
             html << "<th>Peer</th>";
+            html << "<th>Request ID</th>";
             html << "</tr></thead><tbody>";
             for (const auto& [key, record] : GetDerived()->GetUserTokens()) {
                 WriteTokenRecordValues(html, key, record);
@@ -2211,7 +2220,6 @@ protected:
             }
         }
         record.AuthorizeRequests.clear();
-        record.TraceContext.RequestId.clear();
     }
 
     template <typename TTokenRecord>
@@ -2394,6 +2402,7 @@ protected:
         html << "<tr><td>Expire Time</td><td>" << record.ExpireTime << "</td></tr>";
         html << "<tr><td>Access Time</td><td>" << record.AccessTime << "</td></tr>";
         html << "<tr><td>Peer Name</td><td>" << record.TraceContext.PeerName << "</td></tr>";
+        html << "<tr><td>Request ID</td><td>" << EncodeHtmlPcdata(record.TraceContext.RequestId) << "</td></tr>";
         if (record.IsTokenReady()) {
             html << "<tr><td>User SID</td><td>" << record.GetToken()->GetUserSID() << "</td></tr>";
             for (const TString& group : record.GetToken()->GetGroupSIDs()) {
@@ -2436,6 +2445,7 @@ protected:
         html << "<td>" << record.ExpireTime << "</td>";
         html << "<td>" << record.AccessTime << "</td>";
         html << "<td>" << record.TraceContext.PeerName << "</td>";
+        html << "<td>" << EncodeHtmlPcdata(record.TraceContext.RequestId) << "</td>";
         html << "</tr>";
     }
 

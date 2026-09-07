@@ -165,6 +165,20 @@ public:
         return now + TDuration::Hours(1);
     }
 
+    static TString RenderTokenRecordInfoForMonitoring(const TString& requestId) {
+        TTokenRecord record("ticket", PEER_NAME, requestId);
+        TStringBuilder html;
+        TBase::WriteTokenRecordInfo(html, record);
+        return html;
+    }
+
+    static TString RenderTokenRecordValuesForMonitoring(const TString& requestId) {
+        TTokenRecord record("ticket", PEER_NAME, requestId);
+        TStringBuilder html;
+        TBase::WriteTokenRecordValues(html, "key", record);
+        return html;
+    }
+
 private:
     THashMap<TString, TTokenRecord> UserTokens;
 
@@ -180,6 +194,16 @@ private:
 namespace NKikimr::NCertTestUtils {
 
 Y_UNIT_TEST_SUITE(TTicketParserTest) {
+
+    Y_UNIT_TEST(MonitoringPageIncludesRequestId) {
+        const TString requestId = "monitoring-request-id";
+        const TString infoHtml = TTicketParserWithCustomExpireTime::RenderTokenRecordInfoForMonitoring(requestId);
+        const TString valuesHtml = TTicketParserWithCustomExpireTime::RenderTokenRecordValuesForMonitoring(requestId);
+
+        UNIT_ASSERT_STRING_CONTAINS(infoHtml, "Request ID");
+        UNIT_ASSERT_STRING_CONTAINS(infoHtml, requestId);
+        UNIT_ASSERT_STRING_CONTAINS(valuesHtml, requestId);
+    }
 
     Y_UNIT_TEST(LoginGood) {
         using namespace Tests;

@@ -213,14 +213,14 @@ public:
     }
 
     TString GetRequestId() const {
-        TString key = "x-request-id";
         const auto& clientMetadata = Context.client_metadata();
-        const auto range = clientMetadata.equal_range(grpc::string_ref{key.data(), key.size()});
-        if (range.first == range.second) {
-            return "";
+        for (const TStringBuf key : {TStringBuf("x-ydb-trace-id"), TStringBuf("x-request-id")}) {
+            const auto range = clientMetadata.equal_range(grpc::string_ref{key.data(), key.size()});
+            if (range.first != range.second) {
+                return TString(range.first->second.data(), range.first->second.size());
+            }
         }
-
-        return TString(range.first->second.data(), range.first->second.size());
+        return "";
     }
 
     TString GetPeerName() const {

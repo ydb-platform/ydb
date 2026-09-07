@@ -225,7 +225,7 @@ void TKafkaSaslAuthActor::SendTicketParserRequest() {
     Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
         .Ticket = Ticket,
         .Database = AuthDatabasePath,
-        .TraceContext = {TStringBuilder() << Address, NextRequestId()},
+        .TraceContext = {TStringBuilder() << Address, RequestId},
         .Entries = TicketParserEntries,
     }));
 
@@ -369,13 +369,9 @@ void TKafkaSaslAuthActor::SendMtlsAuthRequest(const NActors::TActorContext&) {
     Send(NKikimr::MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
         .Ticket = ClientCert,
         .Database = DatabasePath,
-        .TraceContext = {TStringBuilder() << Address, NextRequestId()},
+        .TraceContext = {TStringBuilder() << Address, RequestId},
     }));
     Become(&TKafkaSaslAuthActor::StateTicketResolve);
-}
-
-TString TKafkaSaslAuthActor::NextRequestId() {
-    return TStringBuilder() << RequestId << "-" << ++RequestIdCounter;
 }
 
 void TKafkaSaslAuthActor::SendDescribeRequest() {

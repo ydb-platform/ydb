@@ -635,12 +635,12 @@ class TRefreshTokenImpl
     , public TEventLocal<TRefreshTokenImpl<TRpcId>, TRpcId>
 {
 public:
-    TRefreshTokenImpl(const TString& token, const TString& database, const TString& peerName, TActorId from, TString traceId)
+    TRefreshTokenImpl(const TString& token, const TString& database, const TString& peerName, const TString& traceId, TActorId from)
         : Token_(token)
         , Database_(database)
         , PeerName_(peerName)
         , From_(from)
-        , TraceId_(std::move(traceId))
+        , TraceId_(traceId)
         , State_(true)
     { }
 
@@ -2138,7 +2138,7 @@ public:
     TInstant deadline = TInstant::Now() + TDuration::Seconds(10);
     TAuditMode AuditMode;
     TString PeerName;
-    const TString RequestId;
+    TString RequestId;
 
     inline static const TString EmptySerializedTokenMessage;
 };

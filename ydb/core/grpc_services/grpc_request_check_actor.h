@@ -173,8 +173,7 @@ public:
         TString peerName = GrpcRequestBaseCtx_->GetPeerName();
         TBase::SetPeerName(peerName);
         const TMaybe<TString> traceId = GrpcRequestBaseCtx_->GetTraceId();
-        Y_ABORT_UNLESS(traceId && !traceId->empty(), "request trace id must be non-empty");
-        TBase::SetRequestId(*traceId);
+        TBase::SetRequestId(traceId.GetOrElse(""));
         InitializeAttributes(schemeData, rootAttributes);
         TBase::SetDatabase(CheckedDatabaseName_);
         InitializeAuditSettings(schemeData);

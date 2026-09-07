@@ -1983,13 +1983,18 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             UNIT_ASSERT(table.IsDropped());
         }
 
-        // (f) Drive GC: the old generation must be finalized and removed.
-        UNIT_ASSERT(WaitForPathsToDropEmpty(csController, runtime, sender));
+        // (f) Drive GC: advance the plan step on the live source so the read-staleness
+        // floor passes the drop version, then run cleanup until the old generation is gone.
+        auto advancePlanStep = [&] {
+            AdvanceShardPlanStep(runtime, sender, txId, writeId, srcPathId, testTable);
+        };
+        UNIT_ASSERT(WaitForPathsToDropEmpty(csController, runtime, sender, advancePlanStep));
 
         // (g) After GC, the old generation is gone from Tables.
         {
-            const auto& tablesManager = restartedShard->GetTablesManager();
-            UNIT_ASSERT(!tablesManager.HasTable(*oldInternalPathId));
+            const auto* finalizedShard = csController.GetShard();
+            UNIT_ASSERT(finalizedShard);
+            UNIT_ASSERT(!finalizedShard->GetTablesManager().HasTable(*oldInternalPathId));
         }
     }
 }

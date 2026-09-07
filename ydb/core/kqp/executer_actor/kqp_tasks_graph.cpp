@@ -1335,6 +1335,21 @@ static bool HasHashShuffleInput(const TStageInfo& stageInfo) {
     return false;
 }
 
+// Returns true if the stage has a HashShuffle input with ColumnShardHashV1 hash function.
+// This is the specific indicator of the CTAS write affinity plan (BuildCsWriteAffinitySinkStage).
+// Regular HashShuffle connections (e.g., for aggregation) use different hash functions
+// and should NOT trigger the affinity path.
+static bool HasColumnShardHashV1Input(const TStageInfo& stageInfo) {
+    const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+    for (const auto& input : stage.GetInputs()) {
+        if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kHashShuffle
+                && input.GetHashShuffle().has_columnshardhashv1()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Extract sharding column names from the HashShuffle (ColumnShardHashV1) connection
 // in the physical plan proto. Used as a fallback when the table resolver could not
 // populate CsShardingColumns (e.g., CTAS without PARTITION BY where the target table
@@ -3902,7 +3917,7 @@ void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const T
 
         FillKqpTableSinkSettings(settings, internalSinksOrder, task);
 
-        // Per-shard affinity for OLAP writes (EnableCsWriteAffinity).
+        // Per-shard affinity for OLAP writes (detected via HashShuffle input).
         //
         // Populate TargetShardIds with the target table shards that belong to this
         // task. CountComputeTasks() creates one task per shard (pinned to the shard's
@@ -3922,14 +3937,11 @@ void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const T
         // where the target table does not exist at compile time.
         std::vector<TString> shardingColumnsFallback;
         const auto& effectiveShardingColumns = GetEffectiveShardingColumns(stageInfo, shardingColumnsFallback);
-        // Use EnableCsWriteAffinity instead of settings.GetIsOlap() because for CTAS
-        // the target table does not exist at the time the table resolver runs, so
-        // entry.Kind is not KindColumnTable and IsOlap is set to false. The
-        // EnableCsWriteAffinity flag is the authoritative source for whether write
-        // affinity is enabled.
-        if (stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()
-                && !effectiveShardingColumns.empty()
-                && HasHashShuffleInput(stageInfo)) {
+        // Affinity is detected from the DQ graph: if the stage has a ColumnShardHashV1
+        // HashShuffle input and effective sharding columns, the optimizer emitted the
+        // affinity plan.
+        if (!effectiveShardingColumns.empty()
+                && HasColumnShardHashV1Input(stageInfo)) {
             // Collect all target shards. Use GetCsShardingOrderedShardIds to match
             // IShardingBase::GetOrderedShardIds() / SplitByShardsToArrowBatches order.
             TVector<ui64> resolvedShardIds;
@@ -3983,29 +3995,6 @@ void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const T
             }
         }
 
-#ifdef QP_FORCE_CS_WRITE_AFFINITY
-        if (stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()) {
-            // Invariant: with the force flag, TargetShardIds must always be populated.
-            AFL_VERIFY(settings.TargetShardIdsSize() > 0)
-                ("stageId", stageInfo.Id)
-                ("tasksCount", stageInfo.Tasks.size())
-                ("msg", "QP_FORCE_CS_WRITE_AFFINITY requires TargetShardIds for OLAP task");
-
-            if (stageInfo.Tasks.size() > 1) {
-                // Multi-task per-shard invariant: each task must have exactly 1 shard,
-                // and ALL input channels must use ColumnShardHashV1 routing.
-                AFL_VERIFY(settings.TargetShardIdsSize() == 1)
-                    ("stageId", stageInfo.Id)
-                    ("targetShardIdsSize", settings.TargetShardIdsSize())
-                    ("msg", "QP_FORCE_CS_WRITE_AFFINITY: multi-task OLAP task must have exactly 1 TargetShardId");
-
-                // NOTE: Input channel verification (ColumnShardHashV1 / Broadcast) is done
-                // AFTER BuildKqpStageChannels in BuildAllTasks, because channels are built
-                // after BuildInternalSinks runs. See the QP_FORCE_CS_WRITE_AFFINITY check
-                // following BuildKqpStageChannels.
-            }
-        }
-#endif
 
         output.SinkSettings.ConstructInPlace();
         output.SinkSettings->PackFrom(settings);
@@ -4844,25 +4833,23 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
         }
     }
 
-    // Per-Shard CTAS Write: if EnableCsWriteAffinity is set and this stage has a
-    // HashShuffle input, create one task per target shard, each pinned to the node
-    // that hosts that shard. Data arrives via ColumnShardHashV1 which routes rows
-    // to the correct shard task. Each task writes its own shard using TargetShardIds.
+    // Per-Shard CTAS Write: if this stage has a HashShuffle input, create one task
+    // per target shard, each pinned to the node that hosts that shard. Data arrives
+    // via ColumnShardHashV1 which routes rows to the correct shard task. Each task
+    // writes its own shard using TargetShardIds.
     //
-    // For CTAS the target table is always a column table (specified in the query),
-    // so no IsOlap check is needed. The gate is EnableCsWriteAffinity.
+    // Affinity is detected from the DQ graph: HasColumnShardHashV1Input means the
+    // optimizer emitted the affinity plan (Transform → HashShuffle(ColumnShardHashV1) → Sink).
     //
     // Invariants (all must hold, otherwise this is a bug):
-    //  - EnableCsWriteAffinity is true
     //  - Not a pure stage (has inputs, so HashShuffle channel exists)
     //  - HasHashShuffleInput (affinity plan layout)
     //  - ColumnTableInfo or ShardKey available (shard list resolvable)
     //  - All target shards present in ShardIdToNodeId (resolved by ResolveShards)
     {
         const bool isPureStage = stage.InputsSize() == 0;
-        if (stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()
-                && !isPureStage
-                && HasHashShuffleInput(stageInfo)) {
+        if (!isPureStage
+                && HasColumnShardHashV1Input(stageInfo)) {
             // Collect (shardId, nodeId) pairs. One task per shard, pinned to the
             // node hosting that shard.
             TVector<std::pair<ui64 /* shardId */, ui64 /* nodeId */>> shardNodes;

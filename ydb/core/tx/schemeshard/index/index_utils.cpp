@@ -2,6 +2,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
 #include <ydb/core/tx/schemeshard/schemeshard_generated_column_utils.h>
 #include <ydb/core/tx/schemeshard/index/index_utils.h>
+#include <ydb/core/tx/schemeshard/schemeshard_schema.h>
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/persqueue/public/utils.h>

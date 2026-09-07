@@ -2,6 +2,8 @@
 
 #include "schemeshard_info_types_base.h"
 
+#include <ydb/core/base/table_index.h>
+
 #include <string_view>
 #include <variant>
 
@@ -132,7 +134,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
         alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady;
 
-        switch (GetIndexType(config)) {
+        switch (NTableIndex::GetIndexType(config)) {
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
@@ -164,7 +166,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                 alterData->SpecializedIndexDescription = config.GetBloomNGrammFilterDescription();
                 break;
             case NKikimrSchemeOp::EIndexTypeInvalid:
-                errMsg += InvalidIndexType(config.GetType());
+                errMsg += NTableIndex::InvalidIndexType(config.GetType());
                 return nullptr;
         }
 
@@ -192,7 +194,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
         alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady;
 
-        switch (GetIndexType(config)) {
+        switch (NTableIndex::GetIndexType(config)) {
             case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
                 alterData->SpecializedIndexDescription = config.GetBloomFilterDescription();
                 break;

@@ -30,18 +30,29 @@ private:
 
         struct TEvSchemaSecretsResolved : TEventLocal<TEvSchemaSecretsResolved, EvSchemaSecretsResolved> {
             NTiers::TExternalStorageId TierId;
+            ui64 SeqNo = 0;
             NTiers::TTierConfig TierConfig;
             NKqp::TEvDescribeSecretsResponse::TDescription Description;
 
             TEvSchemaSecretsResolved(
                 NTiers::TExternalStorageId tierId,
+                ui64 seqNo,
                 NTiers::TTierConfig tierConfig,
                 NKqp::TEvDescribeSecretsResponse::TDescription description)
                 : TierId(std::move(tierId))
+                , SeqNo(seqNo)
                 , TierConfig(std::move(tierConfig))
                 , Description(std::move(description))
             {}
         };
+    };
+
+    struct TSchemaSecretsResolveState {
+        ui64 LatestSeqNo = 0;
+        ui64 InFlightSeqNo = 0;
+        bool InFlight = false;
+        NTiers::TTierConfig PendingConfig;
+        TVector<TString> SecretNames;
     };
 
     using IRetryPolicy = IRetryPolicy<const ERetryErrorClass>;
@@ -49,6 +60,7 @@ private:
     std::shared_ptr<TTiersManager> Owner;
     IRetryPolicy::TPtr RetryPolicy;
     THashMap<NTiers::TExternalStorageId, IRetryPolicy::IRetryState::TPtr> RetryStateByObject;
+    THashMap<NTiers::TExternalStorageId, TSchemaSecretsResolveState> SchemaSecretsResolveByTier;
     NMetadata::NFetcher::ISnapshotsFetcher::TPtr SecretsFetcher;
     TActorId TiersFetcher;
 
@@ -122,6 +134,55 @@ private:
         RetryStateByObject.erase(tier);
     }
 
+    void DropSchemaSecretsResolveState(const NTiers::TExternalStorageId& tierId) {
+        SchemaSecretsResolveByTier.erase(tierId);
+    }
+
+    // At most one DescribeSecret in flight per tier. A newer description bumps LatestSeqNo and is
+    // resolved after the current request completes; stale replies with a smaller seqno are ignored.
+    void StartSchemaSecretsResolve(const NTiers::TExternalStorageId& tierId) {
+        auto* state = SchemaSecretsResolveByTier.FindPtr(tierId);
+        AFL_VERIFY(state);
+        AFL_VERIFY(!state->InFlight);
+        AFL_VERIFY(!state->SecretNames.empty());
+        state->InFlight = true;
+        state->InFlightSeqNo = state->LatestSeqNo;
+
+        auto userToken = MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{});
+        auto future = NSecret::DescribeSecret(
+            state->SecretNames,
+            userToken,
+            AppDataVerified().TenantName,
+            ActorContext().ActorSystem());
+
+        const auto selfId = SelfId();
+        const auto seqNo = state->InFlightSeqNo;
+        const auto tierIdCopy = tierId;
+        const auto tier = state->PendingConfig;
+        future.Subscribe([actorSystem = ActorContext().ActorSystem(), selfId, tierIdCopy, seqNo, tier](
+                             const NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription>& result) {
+            actorSystem->Send(selfId, new TEvPrivate::TEvSchemaSecretsResolved(tierIdCopy, seqNo, tier, result.GetValue()));
+        });
+    }
+
+    void RequestSchemaSecretsResolve(
+        const NTiers::TExternalStorageId& tierId, NTiers::TTierConfig tier, TVector<TString> secretNames) {
+        auto& state = SchemaSecretsResolveByTier[tierId];
+        ++state.LatestSeqNo;
+        state.PendingConfig = std::move(tier);
+        state.SecretNames = std::move(secretNames);
+        if (state.InFlight) {
+            YDB_LOG_DEBUG("",
+                {"component", "tiers_manager"},
+                {"event", "schema_secrets_resolve_coalesced"},
+                {"object", tierId.GetConfigPath()},
+                {"seqNo", state.LatestSeqNo},
+                {"inFlightSeqNo", state.InFlightSeqNo});
+            return;
+        }
+        StartSchemaSecretsResolve(tierId);
+    }
+
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
@@ -170,6 +231,7 @@ private:
                 YDB_LOG_WARN("",
                     {"event", "fetched_invalid_tier_settings"},
                     {"error", status.GetErrorMessage()});
+                DropSchemaSecretsResolveState(tierId);
                 ResetRetryState(tierId);
                 Owner->UpdateTierConfig(std::nullopt, tierId);
                 return;
@@ -184,24 +246,7 @@ private:
                 };
 
                 if (NSecret::UseSchemaSecrets(AppDataVerified().FeatureFlags, schemaSecretNames)) {
-                    auto userToken = MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{});
-
-                    auto future = NSecret::DescribeSecret(
-                        schemaSecretNames,
-                        userToken,
-                        AppDataVerified().TenantName,
-                        ActorContext().ActorSystem());
-
-                    const auto selfId = SelfId();
-                    const auto tierIdCopy = tierId;
-
-                    future.Subscribe([actorSystem = ActorContext().ActorSystem(),
-                                      selfId,
-                                      tierIdCopy,
-                                      tier](const NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription>& result) {
-                        actorSystem->Send(selfId, new TEvPrivate::TEvSchemaSecretsResolved(tierIdCopy, tier, result.GetValue()));
-                    });
-
+                    RequestSchemaSecretsResolve(tierId, std::move(tier), std::move(schemaSecretNames));
                     return;
                 }
             } else {
@@ -211,6 +256,7 @@ private:
                     {"identityCase", static_cast<int>(auth.identity_case())});
             }
 
+            DropSchemaSecretsResolveState(tierId);
             ResetRetryState(tierId);
             Owner->UpdateTierConfig(tier, tierId);
         } else {
@@ -218,37 +264,61 @@ private:
                 {"error", "invalid_object_type"},
                 {"type", static_cast<ui64>(description.GetSelf().GetPathType())},
                 {"path", tierId.GetConfigPath()});
+            DropSchemaSecretsResolveState(tierId);
             ResetRetryState(tierId);
             Owner->UpdateTierConfig(std::nullopt, tierId);
         }
     }
 
     void Handle(TEvPrivate::TEvSchemaSecretsResolved::TPtr& ev) {
-        if (ev->Get()->Description.Status != Ydb::StatusIds::SUCCESS) {
-            YDB_LOG_ERROR("",
-                {"event", "cannot_read_schema_secrets"},
-                {"tier", ev->Get()->TierId.GetConfigPath()},
-                {"status", Ydb::StatusIds::StatusCode_Name(ev->Get()->Description.Status)},
-                {"reason", ev->Get()->Description.Issues.ToOneLineString()});
-            OnSchemaSecretsResolutionFailed(ev->Get()->TierId, GetRetryErrorClass(ev->Get()->Description.Status));
+        const auto& event = *ev->Get();
+        auto* state = SchemaSecretsResolveByTier.FindPtr(event.TierId);
+        if (!state || !state->InFlight || event.SeqNo != state->InFlightSeqNo) {
+            YDB_LOG_DEBUG("",
+                {"event", "stale_schema_secrets_resolved"},
+                {"tier", event.TierId.GetConfigPath()},
+                {"seqNo", event.SeqNo},
+                {"latestSeqNo", state ? state->LatestSeqNo : 0},
+                {"inFlightSeqNo", state ? state->InFlightSeqNo : 0});
+            return;
+        }
+        state->InFlight = false;
+
+        if (event.SeqNo != state->LatestSeqNo) {
+            YDB_LOG_DEBUG("",
+                {"event", "superseded_schema_secrets_resolved"},
+                {"tier", event.TierId.GetConfigPath()},
+                {"seqNo", event.SeqNo},
+                {"latestSeqNo", state->LatestSeqNo});
+            StartSchemaSecretsResolve(event.TierId);
             return;
         }
 
-        if (ev->Get()->Description.SecretValues.size() != 2) {
+        if (event.Description.Status != Ydb::StatusIds::SUCCESS) {
             YDB_LOG_ERROR("",
                 {"event", "cannot_read_schema_secrets"},
-                {"tier", ev->Get()->TierId.GetConfigPath()},
-                {"reason", TStringBuilder() << "expected 2 secrets, got " << ev->Get()->Description.SecretValues.size()});
-            OnSchemaSecretsResolutionFailed(ev->Get()->TierId, ERetryErrorClass::LongRetry);
+                {"tier", event.TierId.GetConfigPath()},
+                {"status", Ydb::StatusIds::StatusCode_Name(event.Description.Status)},
+                {"reason", event.Description.Issues.ToOneLineString()});
+            OnSchemaSecretsResolutionFailed(event.TierId, GetRetryErrorClass(event.Description.Status));
             return;
         }
 
-        ResetRetryState(ev->Get()->TierId);
+        if (event.Description.SecretValues.size() != 2) {
+            YDB_LOG_ERROR("",
+                {"event", "cannot_read_schema_secrets"},
+                {"tier", event.TierId.GetConfigPath()},
+                {"reason", TStringBuilder() << "expected 2 secrets, got " << event.Description.SecretValues.size()});
+            OnSchemaSecretsResolutionFailed(event.TierId, ERetryErrorClass::LongRetry);
+            return;
+        }
+
+        ResetRetryState(event.TierId);
         Owner->UpdateTierConfig(
-            ev->Get()->TierConfig.BuildWithPatchedSecrets(
-                ev->Get()->Description.SecretValues[0],
-                ev->Get()->Description.SecretValues[1]),
-            ev->Get()->TierId);
+            event.TierConfig.BuildWithPatchedSecrets(
+                event.Description.SecretValues[0],
+                event.Description.SecretValues[1]),
+            event.TierId);
     }
 
     void Handle(NTiers::TEvNotifySchemeObjectDeleted::TPtr& ev) {
@@ -256,6 +326,7 @@ private:
             {"component", "tiering_manager"},
             {"event", "object_deleted"},
             {"name", ev->Get()->GetObjectPath()});
+        DropSchemaSecretsResolveState(ev->Get()->GetObjectPath());
         ResetRetryState(ev->Get()->GetObjectPath());
         Owner->UpdateTierConfig(std::nullopt, ev->Get()->GetObjectPath());
     }
@@ -268,6 +339,7 @@ private:
             {"reason", static_cast<ui64>(ev->Get()->GetReason())});
         switch (ev->Get()->GetReason()) {
             case NTiers::TEvSchemeObjectResolutionFailed::NOT_FOUND:
+                DropSchemaSecretsResolveState(objectPath);
                 Owner->UpdateTierConfig(std::nullopt, objectPath);
                 break;
             case NTiers::TEvSchemeObjectResolutionFailed::LOOKUP_ERROR:

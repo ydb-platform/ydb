@@ -529,6 +529,113 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         UNIT_ASSERT_C(restored, "tier access was not restored after a transient secret resolution failure: " << lastError);
     }
 
+    Y_UNIT_TEST(InFlightReadRetriesAfterTransientSchemaSecretsFailure) {
+        auto secretsServiceFactory = std::make_shared<TFlakySchemaSecretsServiceFactory>();
+        TTieringTestHelper tieringHelper(true, [&](TKikimrSettings& settings) {
+            settings.SetDescribeSchemaSecretsServiceFactory(secretsServiceFactory);
+            // Keep the same TReadingAction alive long enough for secrets to recover and the holder to pick up the new operator.
+            auto* policy = settings.AppConfig.MutableColumnShardConfig()->MutableReadRetryPolicy();
+            policy->SetInitialRetryDelayMs(50);
+            policy->SetMaxRetryDelayMs(500);
+            policy->SetMaxRetries(200);
+        });
+        auto& secretsService = *secretsServiceFactory->GetState();
+        auto& csController = tieringHelper.GetCsController();
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+
+        olapHelper.CreateTestOlapTable();
+        {
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                CREATE SECRET `/Root/tier1-access-key` WITH (value = "secretAccessKey");
+                CREATE SECRET `/Root/tier1-secret-key` WITH (value = "fakeSecret");
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                CREATE EXTERNAL DATA SOURCE `)" + DEFAULT_TIER_PATH + R"(` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="http://fake.fake/olap-)" + DEFAULT_TIER_NAME + R"(",
+                    AUTH_METHOD="AWS",
+                    AWS_ACCESS_KEY_ID_SECRET_PATH="/Root/tier1-access-key",
+                    AWS_SECRET_ACCESS_KEY_SECRET_PATH="/Root/tier1-secret-key",
+                    AWS_REGION="ru-central1"
+                );
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        tieringHelper.WriteSampleData();
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::TTL);
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+
+        const TString selectQuery = R"(SELECT MAX(level) AS level FROM `/Root/olapStore/olapTable`)";
+        i32 expectedLevel;
+        {
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            expectedLevel = GetInt32(rows[0].at("level"));
+        }
+
+        std::vector<ui64> tableShards;
+        {
+            auto* runtime = testHelper.GetKikimr().GetTestServer().GetRuntime();
+            const auto describeResult = DescribeTable(&testHelper.GetKikimr().GetTestServer(), runtime->AllocateEdgeActor(), DEFAULT_TABLE_PATH);
+            for (const auto shard : describeResult.GetPathDescription().GetColumnTableDescription().GetSharding().GetColumnShards()) {
+                tableShards.push_back(shard);
+            }
+        }
+        UNIT_ASSERT(!tableShards.empty());
+        const auto allTableShardsActive = [&]() {
+            for (const auto shard : tableShards) {
+                if (!csController->IsActiveTablet(shard)) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        UNIT_ASSERT(allTableShardsActive());
+
+        secretsService.Fail = true;
+        testHelper.RebootTablets(DEFAULT_TABLE_PATH);
+        const TInstant rebootDeadline = TInstant::Now() + TDuration::Seconds(30);
+        while (TInstant::Now() < rebootDeadline && (secretsService.FailedRequests.load() < tableShards.size() || !allTableShardsActive())) {
+            Sleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT_GE(secretsService.FailedRequests.load(), tableShards.size());
+        UNIT_ASSERT(allTableShardsActive());
+
+        auto it = tableClient.StreamExecuteScanQuery(selectQuery).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        auto partFuture = it.ReadNext();
+
+        // The scan must start while the operator is still unavailable and keep retrying on the same TReadingAction.
+        const TInstant startedReadDeadline = TInstant::Now() + TDuration::Seconds(5);
+        while (TInstant::Now() < startedReadDeadline && !partFuture.HasValue()) {
+            Sleep(TDuration::MilliSeconds(50));
+        }
+        UNIT_ASSERT_C(!partFuture.HasValue(), "in-flight scan finished before the tier recovered");
+
+        secretsService.Fail = false;
+
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(60);
+        while (!partFuture.HasValue() && TInstant::Now() < deadline) {
+            Sleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT_C(partFuture.HasValue(), "in-flight scan did not finish after secrets were restored");
+        auto part = partFuture.GetValueSync();
+        UNIT_ASSERT_C(part.IsSuccess(), part.GetIssues().ToString());
+        UNIT_ASSERT(part.HasResultSet());
+        auto resultSet = part.ExtractResultSet();
+        NYdb::TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(GetInt32(parser.GetValue("level")), expectedLevel);
+    }
+
     Y_UNIT_TEST(TtlBorders) {
         TTieringTestHelper tieringHelper;
         auto& csController = tieringHelper.GetCsController();

@@ -1,10 +1,9 @@
 #include "schemeshard_audit_log_fragment.h"
 
-#include <ydb/core/base/path.h>
+#include "schemeshard_path_footprint.h"
+
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
-#include <ydb/core/protos/subdomains.pb.h>
 
 #include <ydb/library/aclib/aclib.h>
 
@@ -324,425 +323,50 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
     Y_ABORT("switch should cover all operation types");
 }
 
+// The paths an audit record shows for one request.
+//
+// ExtractPathRefs (schemeshard_path_footprint.h) already knows which protobuf
+// field of every operation type carries a path and how Propose() resolves it;
+// JoinPathRef turns one such ref into a string using nothing but the request.
+// This is the same knowledge the 136-arm switch that used to live here
+// duplicated by hand, which is why several operations logged a wrong path or
+// none at all.
+//
+// Only Target and Source refs are reported: "changing paths" means the paths
+// the operation changes, plus the ones it reads to produce them. A Parent ref
+// (the table a cdc stream hangs off) and a Dependency ref (a replication
+// destination, an external data source) are not what the record is about.
+//
+// A by-id ref and an Implicit ref produce no entry: resolving a path id, or
+// enumerating the children a cascade will touch, needs schemeshard state that
+// a pure function over TModifyScheme does not have. That is deliberate -- the
+// old code logged the bare working dir for an id-addressed request, a path
+// that has nothing to do with the target -- and an empty result makes the
+// audit line omit the "paths" field entirely.
 TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) {
-    TVector<TString> result;
+    using namespace NKikimr::NSchemeShard;
 
-    switch (tx.GetOperationType()) {
-    case NKikimrSchemeOp::EOperationType::ESchemeOpMkDir:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetMkDir().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateTable().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreatePersQueueGroup().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTable:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterTable().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterPersQueueGroup().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetModifyACL().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpRmDir:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpSplitMergeTablePartitions:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetSplitMergeTablePartitions().GetTablePath()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpBackup:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetBackup().GetTableName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetSubDomain().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropSubDomain:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateRtmrVolume:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateRtmrVolume().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlockStoreVolume:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateBlockStoreVolume().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBlockStoreVolume:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterBlockStoreVolume().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAssignBlockStoreVolume:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAssignBlockStoreVolume().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropBlockStoreVolume:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateKesus:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetKesus().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropKesus:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropSubDomain:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSolomonVolume:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateSolomonVolume().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropSolomonVolume:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterKesus:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetKesus().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetSubDomain().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterUserAttributes().GetPathName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropUnsafe:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateIndexedTable().GetTableDescription().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateTableIndex().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables:
-        for (const auto& item : tx.GetCreateConsistentCopyTables().GetCopyTableDescriptions()) {
-            result.emplace_back(item.GetDstPath());
-        }
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain:
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomain:
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomainCreateHive:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetSubDomain().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropExtSubDomain:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOp_DEPRECATED_35:
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomain:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetUpgradeSubDomain().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomainDecision:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetUpgradeSubDomain().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexBuild:
-        result.emplace_back(NKikimr::JoinPath({tx.GetInitiateIndexBuild().GetTable(), tx.GetInitiateIndexBuild().GetIndex().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetInitiateBuildIndexMainTable().GetTableName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpPrepareIndexValidation:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetPrepareIndexValidation().GetTableName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetLockConfig().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpApplyIndexBuild:
-        result.emplace_back(NKikimr::JoinPath({tx.GetApplyIndexBuild().GetTablePath(), tx.GetApplyIndexBuild().GetIndexName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetFinalizeBuildIndexMainTable().GetTableName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterTableIndex().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSolomonVolume:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterSolomonVolume().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropLock:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetLockConfig().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexImplTable:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterTable().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateTable().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropIndex:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropIndex().GetTableName(), tx.GetDropIndex().GetIndexName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndexAtMainTable:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropIndex().GetTableName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCancelIndexBuild:
-        result.emplace_back(NKikimr::JoinPath({tx.GetCancelIndexBuild().GetTablePath(), tx.GetCancelIndexBuild().GetIndexName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateFileStore().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterFileStore:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterFileStore().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropFileStore:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpRestore:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestore().GetTableName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateColumnStore().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnStore:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterColumnStore().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnStore:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterColumnTable().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterColumnTable().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin:
-        result.emplace_back(tx.GetWorkingDir());
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateCdcStream().GetTableName(), tx.GetCreateCdcStream().GetStreamDescription().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamImpl:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateCdcStream().GetStreamDescription().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamAtTable:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateCdcStream().GetTableName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStream:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterCdcStream().GetTableName(), tx.GetAlterCdcStream().GetStreamName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamImpl:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterCdcStream().GetStreamName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamAtTable:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterCdcStream().GetTableName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStream:
-        {
-            const auto& tablePath = NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropCdcStream().GetTableName()});
-            // Add entry for each stream being dropped
-            for (const auto& streamName : tx.GetDropCdcStream().GetStreamName()) {
-                result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropCdcStream().GetTableName(), streamName}));
-            }
-        }
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamAtTable:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropCdcStream().GetTableName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStream:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRotateCdcStream().GetTableName(), tx.GetRotateCdcStream().GetOldStreamName()}));
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRotateCdcStream().GetTableName(), tx.GetRotateCdcStream().GetNewStream().GetStreamDescription().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamImpl:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRotateCdcStream().GetOldStreamName()}));
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRotateCdcStream().GetNewStream().GetStreamDescription().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamAtTable:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRotateCdcStream().GetTableName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveTable:
-        result.emplace_back(tx.GetMoveTable().GetSrcPath());
-        result.emplace_back(tx.GetMoveTable().GetDstPath());
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveTableIndex:
-        result.emplace_back(tx.GetMoveTableIndex().GetSrcPath());
-        result.emplace_back(tx.GetMoveTableIndex().GetDstPath());
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveSequence:
-        result.emplace_back(tx.GetMoveSequence().GetSrcPath());
-        result.emplace_back(tx.GetMoveSequence().GetDstPath());
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetSequence().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSequence:
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication:
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetReplication().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterReplication:
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTransfer:
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication:
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade:
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTransfer:
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTransferCascade:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlobDepot:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetBlobDepot().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBlobDepot:
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropBlobDepot:
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex:
-        result.emplace_back(NKikimr::JoinPath({tx.GetMoveIndex().GetTablePath(), tx.GetMoveIndex().GetSrcPath()}));
-        result.emplace_back(NKikimr::JoinPath({tx.GetMoveIndex().GetTablePath(), tx.GetMoveIndex().GetDstPath()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateExternalTable().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalTable:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalTable:
-        // TODO: unimplemented
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateExternalDataSource().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalDataSource:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalDataSource:
-        // TODO: unimplemented
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild:
-        result.emplace_back(tx.GetInitiateColumnBuild().GetTable());
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnBuild:
-        result.emplace_back(tx.GetDropColumnBuild().GetSettings().GetTable());
-        break;
-
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateView().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropView:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterView:
-        // TODO: implement
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackup:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateContinuousBackup().GetTableName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackup:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterContinuousBackup().GetTableName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackup:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropContinuousBackup().GetTableName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
-        result.emplace_back(tx.GetCreateResourcePool().GetName());
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool:
-        result.emplace_back(tx.GetDrop().GetName());
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
-        result.emplace_back(tx.GetCreateResourcePool().GetName());
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreMultipleIncrementalBackups:
-    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
-        for (const auto& table : tx.GetRestoreMultipleIncrementalBackups().GetSrcTablePaths()) {
-            result.emplace_back(table);
-        }
-        result.emplace_back(tx.GetRestoreMultipleIncrementalBackups().GetDstTablePath());
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateBackupCollection().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBackupCollection:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterBackupCollection().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropBackupCollection().GetName()}));
-        break;
-
-    case NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetBackupBackupCollection().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetBackupIncrementalBackupCollection().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetBackupIncrementalBackupCollection().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFullBackupOp:
-        // The aggregator does not carry a target name in its proto; its
-        // WorkingDir already points at the backup-collection path.
-        result.emplace_back(tx.GetWorkingDir());
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalRestoreOp:
-        // For long incremental restore operations, extract the backup collection name
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateSysView().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetChangePathState().GetPath()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreLockTargets:
-    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreUnlockTargets:
-        for (const auto& dst : tx.GetIncrementalRestoreLockTargets().GetDstPaths()) {
-            result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), dst}));
-        }
-        for (const auto& src : tx.GetIncrementalRestoreLockTargets().GetSrcPaths()) {
-            result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), src}));
-        }
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
-        // For incremental restore finalization, we don't have a specific path in the message
-        // since it operates on paths determined at runtime
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateSecret().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSecret:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetAlterSecret().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateStreamingQuery:
-        result.emplace_back(tx.GetCreateStreamingQuery().GetName());
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery:
-        result.emplace_back(tx.GetDrop().GetName());
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterStreamingQuery:
-        result.emplace_back(tx.GetCreateStreamingQuery().GetName());
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
-        result.emplace_back(tx.GetTruncateTable().GetTableName());
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShardSet:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateTestShardSet().GetName()}));
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShardSet:
-        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
-        break;
+    // ESchemeOpAlterLogin resolves no TPath at all: it only checks that the
+    // working dir names the login audience, so the extractor emits nothing for
+    // it. The audit record has always shown the working dir, and for a login
+    // operation that is the whole of what it touches.
+    if (tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin) {
+        return {tx.GetWorkingDir()};
     }
 
+    // One string per ref, in extraction order, including the ones left out of
+    // the result: a sibling leaf whose base is another ref reads it from here.
+    TVector<TString> joined;
+    TVector<TString> result;
+    for (const auto& ref : ExtractPathRefs(tx)) {
+        joined.push_back(JoinPathRef(tx.GetWorkingDir(), ref, joined));
+        if (joined.back().empty()) {
+            continue;
+        }
+        if (ref.Role == EPathRefRole::Target || ref.Role == EPathRefRole::Source) {
+            result.push_back(joined.back());
+        }
+    }
     return result;
 }
 

@@ -420,6 +420,10 @@ struct TPathRefs {
     TVector<TPathRef>::const_iterator end() const { return Refs.end(); }
 };
 
+// Layer 1: pure, state-free extraction. Covers every EOperationType. Allocates
+// nothing per string: every value is a view into tx or into the result itself.
+TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx);
+
 // Joins request paths without state lookup, canonization, or existence checks.
 // joined contains preceding results in extraction order for sibling lookup.
 // Returns empty for ById, Implicit, or a sibling with no base.

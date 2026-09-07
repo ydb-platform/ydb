@@ -244,9 +244,6 @@ public:
     virtual void OnSelectShardingFilter() {
     }
 
-    virtual void OnSysViewLimitSyncPointPassthrough() {
-    }
-
     ui64 GetLimitForPortionsMetadataAsk() const {
         const ui64 defaultValue = GetConfig().GetLimitForPortionsMetadataAsk();
         return DoGetLimitForPortionsMetadataAsk(defaultValue);

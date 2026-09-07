@@ -1,27 +1,17 @@
 #include "limit.h"
 
-#include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/limit_sorted.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
-#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
 LWTRACE_USING(YDB_CS_DATA_SOURCE);
-
-namespace {
-ui32 GetSysViewMaxHeldPortions() {
-    return HasAppData() ? AppDataVerified().ColumnShardConfig.GetLimitSyncPointConfig().GetSysViewMaxHeldPortions() : 0;
-}
-}   // namespace
 
 TSyncPointLimitControl::TSyncPointLimitControl(const ui32 limit, const ui32 pointIndex, const std::shared_ptr<TSpecialReadContext>& context,
     const std::shared_ptr<TScanWithLimitCollection>& collection)
     : TBase(pointIndex, "SYNC_LIMIT", context, collection)
     , Limit(limit)
     , Collection(collection)
-    , SysViewMaxHeldPortions(GetSysViewMaxHeldPortions())
 {
     AFL_VERIFY(Collection);
 }
@@ -52,10 +42,8 @@ bool TSyncPointLimitControl::DrainToLimit() {
 }
 
 std::shared_ptr<NCommon::IDataSource> TSyncPointLimitControl::OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) {
-    if (!Passthrough) {
-        AFL_VERIFY(FetchedCount < Limit)("fetched", FetchedCount)("limit", Limit);
-        UnfilledIterators.emplace_back(TSourceIterator(source));
-    }
+    AFL_VERIFY(FetchedCount < Limit)("fetched", FetchedCount)("limit", Limit);
+    UnfilledIterators.emplace_back(TSourceIterator(source));
 
     return TBase::OnAddSource(source);
 }
@@ -69,10 +57,6 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
         source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead(), DebugString());
     if (FetchedCount >= Limit) {
         return ESourceAction::Finish;
-    }
-
-    if (Passthrough) {
-        return source->GetStageResult().IsEmpty() ? ESourceAction::Finish : ESourceAction::ProvideNext;
     }
 
     AFL_VERIFY(UnfilledIterators.size());
@@ -138,14 +122,7 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
         AFL_VERIFY(FilledIterators.back().IsFilled());
         std::push_heap(FilledIterators.begin(), FilledIterators.end());
     }
-    if (SysViewMaxHeldPortions && source->GetType() == IDataSource::EType::SimpleSysInfo && FilledIterators.size() > SysViewMaxHeldPortions) {
-        Passthrough = true;
-        // FetchedCount is intentionally abandoned here: in passthrough it never gates emission again (KQP re-limits)
-        FilledIterators.clear();
-        UnfilledIterators.clear();
-        NYDBTest::TControllers::GetColumnShardController()->OnSysViewLimitSyncPointPassthrough();
-    }
-    if (!Passthrough && DrainToLimit()) {
+    if (DrainToLimit()) {
         Collection->Clear();
     }
     if (source->GetStageResult().IsEmpty()) {

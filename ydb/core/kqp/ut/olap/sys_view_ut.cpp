@@ -412,18 +412,12 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
                 UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[i].at("PortionId")), GetUint64(expected.at("PortionId")));
             }
         }
-        // default cap is not exceeded here, so the normal (non-passthrough) sorted-limit path is what ran above
-        UNIT_ASSERT_VALUES_EQUAL(csController->GetSysViewLimitPassthroughsCount().Val(), 0);
     }
 
-    Y_UNIT_TEST(StatsSysViewOrderByPKWithLimitPassthrough) {
+    Y_UNIT_TEST(StatsSysViewOrderByPKPrefixWithLimit) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableFeatureFlags()->SetEnableSysViewOrderByLimitPushdown(true);
-        // Cap at 1 so the sync point switches to passthrough as soon as it holds a second portion.
-        settings.AppConfig.MutableColumnShardConfig()->MutableLimitSyncPointConfig()->SetSysViewMaxHeldPortions(1);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        // Single shard + no compaction: every write stays a separate portion on one tablet, so the
-        // per-tablet limit sync point holds more than the cap and the passthrough path is exercised.
         csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
         TKikimrRunner kikimr(settings);
 
@@ -434,7 +428,6 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         csController->WaitActualization(TDuration::Seconds(5));
 
         const ui32 limit = 3;
-
         auto tableClient = kikimr.GetTableClient();
         auto allRows = ExecuteScanQuery(tableClient, R"(
             SELECT PathId, TabletId, PortionId
@@ -442,40 +435,20 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             ORDER BY PathId, TabletId, PortionId
         )");
         UNIT_ASSERT_GT(allRows.size(), limit);
-        // Precondition for the passthrough path: the single tablet must hold more portions than the cap.
-        THashSet<ui64> portionIds;
-        for (const auto& row : allRows) {
-            portionIds.insert(GetUint64(row.at("PortionId")));
-        }
-        UNIT_ASSERT_GT(portionIds.size(), 1u);
 
-        for (const bool desc : {false, true}) {
-            const TString dir = desc ? "DESC" : "ASC";
-            auto rows = ExecuteScanQuery(tableClient, Sprintf(R"(
-                SELECT PathId, TabletId, PortionId
-                FROM `/Root/olapStore/olapTable/.sys/primary_index_stats`
-                ORDER BY PathId %s, TabletId %s, PortionId %s
-                LIMIT %u
-            )", dir.c_str(), dir.c_str(), dir.c_str(), limit));
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), limit);
-            for (ui32 i = 0; i < limit; ++i) {
-                const auto& expected = desc ? allRows[allRows.size() - 1 - i] : allRows[i];
-                UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[i].at("TabletId")), GetUint64(expected.at("TabletId")));
-                UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[i].at("PortionId")), GetUint64(expected.at("PortionId")));
-            }
-        }
-
-        // A full-PK ORDER BY drains the sync point one source at a time. PathId and TabletId are constant within a
-        // shard, so ordering by that prefix leaves the heap unable to drain and the cap is what bounds it.
-        UNIT_ASSERT_VALUES_EQUAL(csController->GetSysViewLimitPassthroughsCount().Val(), 0);
-        auto prefixRows = ExecuteScanQuery(tableClient, Sprintf(R"(
+        // PathId and TabletId are constant within a shard, so every source ties on this prefix and the limit
+        // sync point can only make progress if it drains through equal keys
+        auto rows = ExecuteScanQuery(tableClient, Sprintf(R"(
             SELECT PathId, TabletId
             FROM `/Root/olapStore/olapTable/.sys/primary_index_stats`
             ORDER BY PathId, TabletId
             LIMIT %u
         )", limit));
-        UNIT_ASSERT_VALUES_EQUAL(prefixRows.size(), limit);
-        UNIT_ASSERT_GT(csController->GetSysViewLimitPassthroughsCount().Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), limit);
+        for (const auto& row : rows) {
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(row.at("PathId")), GetUint64(allRows[0].at("PathId")));
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(row.at("TabletId")), GetUint64(allRows[0].at("TabletId")));
+        }
     }
 
     Y_UNIT_TEST(StatsSysViewOrderByPKWithIndexes) {
@@ -638,112 +611,6 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
     // Highest-risk scenario: interleaved entity ids (per-source PK reorder) AND passthrough (cross-source stream to
     // KQP) must both be correct at once. Single shard + compaction disabled keeps many portions; cap = 1 forces the
     // limit sync point onto the passthrough path.
-    Y_UNIT_TEST(StatsSysViewOrderByPKWithIndexesPassthrough) {
-        const TString tablePath = "/Root/olapStore/olapTable";
-        const ui32 insertRowsCount = 10;
-        const ui32 limitSweepMax = 64;
-
-        auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableSysViewOrderByLimitPushdown(true);
-        settings.AppConfig.MutableColumnShardConfig()->MutableLimitSyncPointConfig()->SetSysViewMaxHeldPortions(1);
-        TKikimrRunner kikimr(settings);
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        // no compaction merge: every write stays a separate portion on the one tablet, so the sync point holds
-        // more than the cap and passes the rest straight through to KQP
-        csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
-
-        auto helper = TLocalHelper(kikimr);
-        helper.CreateTestOlapTable("olapTable", "olapStore", 1, 1);
-        auto tableClient = kikimr.GetTableClient();
-        auto session = tableClient.CreateSession().GetValueSync().GetSession();
-
-        const auto executeSchemeQuery = [&](const TString& query) {
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        };
-
-        // same interleaving as StatsSysViewOrderByPKWithIndexes: the index entity id lands below new_column_ui64,
-        // and a portion emits column chunks before index chunks, so rows interleave on InternalEntityId
-        WriteTestData(kikimr, tablePath, 1000000, 300000000, 1000);
-        executeSchemeQuery(
-            R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_level, TYPE=MIN_MAX, FEATURES=`{"column_name" : "level"}`);)");
-        executeSchemeQuery("ALTER TABLESTORE `/Root/olapStore` ADD COLUMN new_column_ui64 Uint64;");
-        {
-            auto db = kikimr.GetQueryClient();
-            TStringBuilder insertQuery;
-            insertQuery << "INSERT INTO `" << tablePath << "` (timestamp, uid, resource_id, level, new_column_ui64) VALUES";
-            for (ui32 rowIdx = 0; rowIdx < insertRowsCount; ++rowIdx) {
-                insertQuery << (rowIdx ? "," : "") << " (Timestamp('1970-01-01T00:00:0" << rowIdx % 10 << "Z'), 'uid_" << rowIdx
-                            << "', '" << rowIdx << "', " << rowIdx << ", " << rowIdx << "u)";
-            }
-            insertQuery << ";";
-            auto result = db.ExecuteQuery(insertQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-        // actualization rewrites the existing portions to carry the index chunk (compaction is off)
-        executeSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
-        AdvancePlanStep(kikimr);
-        csController->WaitActualization(TDuration::Seconds(10));
-
-        const auto buildStatsQuery = [&](const bool desc, const std::optional<ui32> limit) {
-            const TString direction = desc ? " DESC" : "";
-            TStringBuilder query;
-            query << "SELECT PathId, TabletId, PortionId, InternalEntityId, ChunkIdx" << Endl
-                  << "FROM `" << tablePath << "/.sys/primary_index_stats`" << Endl
-                  << "ORDER BY PathId" << direction << ", TabletId" << direction << ", PortionId" << direction << ", InternalEntityId"
-                  << direction << ", ChunkIdx" << direction << Endl;
-            if (limit) {
-                query << "LIMIT " << *limit << Endl;
-            }
-            return TString(query);
-        };
-        using TRowKey = std::tuple<ui64, ui64, ui64, ui64, ui64>;
-        const auto readKeys = [](const auto& rows) {
-            std::vector<TRowKey> keys;
-            for (auto&& row : rows) {
-                keys.emplace_back(GetUint64(row.at("PathId")), GetUint64(row.at("TabletId")), GetUint64(row.at("PortionId")),
-                    GetUint32(row.at("InternalEntityId")), GetUint64(row.at("ChunkIdx")));
-            }
-            return keys;
-        };
-
-        auto fullRows = ExecuteScanQuery(tableClient, buildStatsQuery(false, std::nullopt));
-        auto keys = readKeys(fullRows);
-        UNIT_ASSERT(keys.size());
-        // precondition: the single tablet must hold more portions than the cap, otherwise passthrough never triggers
-        THashSet<ui64> portionIds;
-        for (auto&& key : keys) {
-            portionIds.insert(std::get<2>(key));
-        }
-        UNIT_ASSERT_GT(portionIds.size(), 1u);
-
-        const auto keyToString = [](const TRowKey& key) {
-            return TStringBuilder() << "(" << std::get<0>(key) << "," << std::get<1>(key) << "," << std::get<2>(key) << ","
-                                    << std::get<3>(key) << "," << std::get<4>(key) << ")";
-        };
-        auto sortedKeys = keys;
-        std::sort(sortedKeys.begin(), sortedKeys.end());
-
-        for (ui32 limit = 1; limit <= Min<ui32>(keys.size(), limitSweepMax); ++limit) {
-            auto rows = ExecuteScanQuery(tableClient, buildStatsQuery(true, limit));
-            auto limitKeys = readKeys(rows);
-            UNIT_ASSERT_VALUES_EQUAL(limitKeys.size(), limit);
-            for (ui32 i = 0; i < limit; ++i) {
-                const auto& expected = sortedKeys[sortedKeys.size() - 1 - i];
-                UNIT_ASSERT_C(limitKeys[i] == expected,
-                    TStringBuilder() << "wrong row for DESC limit " << limit << " at " << i << ": " << keyToString(limitKeys[i])
-                                     << " != " << keyToString(expected));
-            }
-        }
-
-        // ordering by the constant PathId/TabletId prefix ties every source, so the heap cannot drain and the cap bounds it
-        UNIT_ASSERT_VALUES_EQUAL(csController->GetSysViewLimitPassthroughsCount().Val(), 0);
-        ExecuteScanQuery(tableClient, TStringBuilder() << "SELECT PathId, TabletId FROM `" << tablePath
-                                                      << "/.sys/primary_index_stats` ORDER BY PathId, TabletId LIMIT 3");
-        UNIT_ASSERT_GT(csController->GetSysViewLimitPassthroughsCount().Val(), 0);
-    }
-
     Y_UNIT_TEST(StatsSysViewBytesPackActualization) {
         ui64 rawBytesPK1;
         ui64 bytesPK1;

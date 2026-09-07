@@ -54,7 +54,11 @@ class TPrintingResultCollector : public TTestResultCollector {
         const bool dqBlock = TStringBuf(testName).Contains("DqBlock");
         Cout << "Data rows total: " << runParams.RowsPerRun << " x " << runParams.NumRuns << Endl;
         if (dqBlock) {
-            Cout << "Input file: " << runParams.DqBlockFile << Endl;
+            if (runParams.DqBlockGenerator.empty()) {
+                Cout << "Input file: " << runParams.DqBlockFile << Endl;
+            } else {
+                Cout << "Input generator: " << runParams.DqBlockGenerator << Endl;
+            }
             Cout << "Columns: " << JoinSeq(",", runParams.DqBlockColumns) << Endl;
             if (runParams.DqBlockAstFile.empty()) {
                 Cout << "Keys: " << JoinSeq(",", runParams.DqBlockKeyColumns) << Endl;
@@ -119,6 +123,7 @@ NJson::TJsonValue MakeJsonMetrics(const TRunParams& runParams, const TRunResult&
     }
     if (dqBlock) {
         out["dqBlockFile"] = runParams.DqBlockFile;
+        out["dqBlockGenerator"] = runParams.DqBlockGenerator;
         out["dqBlockRowLimit"] = runParams.DqBlockRowLimit;
         out["dqBlockColumns"] = JoinSeq(",", runParams.DqBlockColumns);
         out["dqBlockKeys"] = JoinSeq(",", runParams.DqBlockKeyColumns);
@@ -472,10 +477,14 @@ int main(int argc, const char* argv[])
         .RequiredArgument("PATH")
         .StoreResult(&runParams.DqBlockFile)
         .Help("Input file for the dq-block test (currently Parquet)");
+    options.AddLongOption("dq-block-generator")
+        .RequiredArgument("shuffle[:SEED]")
+        .StoreResult(&runParams.DqBlockGenerator)
+        .Help("Generated dq-block input; shuffle produces a shuffled Uint32 column named i");
     options.AddLongOption("dq-block-row-limit")
         .RequiredArgument("ROWS")
         .StoreResult(&runParams.DqBlockRowLimit)
-        .Help("Maximum number of rows to preload, or 0 for the whole file");
+        .Help("Maximum file rows to preload, or required generated row count");
     options.AddLongOption("dq-block-columns")
         .RequiredArgument("NAME,...")
         .SplitHandler(&runParams.DqBlockColumns, ',')
@@ -495,9 +504,9 @@ int main(int argc, const char* argv[])
 
     NLastGetopt::TOptsParseResult parsedOptions(&options, argc, argv);
 
-    const std::array<TString, 6> dqBlockOptions = {
-        "dq-block-file", "dq-block-row-limit", "dq-block-columns", "dq-block-keys", "dq-block-aggregations",
-        "dq-block-ast"};
+    const std::array<TString, 7> dqBlockOptions = {
+        "dq-block-file", "dq-block-generator", "dq-block-row-limit", "dq-block-columns", "dq-block-keys",
+        "dq-block-aggregations", "dq-block-ast"};
     if (testType != ETestType::DqBlock) {
         for (const auto& option : dqBlockOptions) {
             if (parsedOptions.Has(option)) {
@@ -505,8 +514,25 @@ int main(int argc, const char* argv[])
             }
         }
     } else {
-        Y_ENSURE(parsedOptions.Has("dq-block-file"), "--dq-block-file is required with -t dq-block");
-        Y_ENSURE(parsedOptions.Has("dq-block-columns"), "--dq-block-columns is required with -t dq-block");
+        const bool hasFile = parsedOptions.Has("dq-block-file");
+        const bool hasGenerator = parsedOptions.Has("dq-block-generator");
+        Y_ENSURE(hasFile != hasGenerator,
+            "Specify exactly one of --dq-block-file and --dq-block-generator");
+        if (hasFile) {
+            Y_ENSURE(parsedOptions.Has("dq-block-columns"),
+                "--dq-block-columns is required with --dq-block-file");
+        } else {
+            Y_ENSURE(!runParams.DqBlockGenerator.empty(),
+                "--dq-block-generator cannot be empty");
+            Y_ENSURE(parsedOptions.Has("dq-block-row-limit") && runParams.DqBlockRowLimit > 0,
+                "A positive --dq-block-row-limit is required with --dq-block-generator");
+            if (parsedOptions.Has("dq-block-columns")) {
+                Y_ENSURE(runParams.DqBlockColumns == std::vector<std::string>{"i"},
+                    "The shuffle generator only provides column i");
+            } else {
+                runParams.DqBlockColumns = {"i"};
+            }
+        }
         const bool hasAst = parsedOptions.Has("dq-block-ast");
         const bool hasKeys = parsedOptions.Has("dq-block-keys");
         const bool hasAggregations = parsedOptions.Has("dq-block-aggregations");

@@ -1,6 +1,6 @@
 # `combiner_perf` DQ block mode
 
-This mode was originally called `parquet`. It is now named `dq-block` because Parquet is only one possible source of block data; future sources may include random sample generators. The current implementation still reads its input from a Parquet file.
+This mode was originally called `parquet`. It is now named `dq-block` because Parquet is only one possible source of block data. It currently supports Parquet files and a shuffled `Uint32` sample generator.
 
 ## Task
 
@@ -18,6 +18,7 @@ Requirements were:
 - Provide an untimed correctness check by any suitable slower method.
 - Make all new CLI parameters valid only for `-t dq-block`, reporting an error otherwise.
 - Keep this change limited to `DqHashAggregate` block mode. Adding `DqHashCombine` block mode is a possible follow-up.
+- Support non-file sources, beginning with a reproducibly shuffled `Uint32` range.
 
 ## Commits
 
@@ -38,20 +39,22 @@ These are the commit hashes after rebasing onto `e0b13ea3ee69b9496ecbdade5d3aa24
 
 New CLI options:
 
-- `--dq-block-file PATH` — required input file, currently in Parquet format.
-- `--dq-block-row-limit ROWS` — maximum rows to preload; zero or omission means the whole file.
-- `--dq-block-columns NAME,...` — required selected columns, preserving input order.
+- `--dq-block-file PATH` — input file, currently in Parquet format; mutually exclusive with `--dq-block-generator`.
+- `--dq-block-generator shuffle[:SEED]` — generate a shuffled `Uint32` column named `i`; the optional numeric seed makes the shuffle reproducible. Without it, the existing `--rand-seed` value is used (and defaults to the current time).
+- `--dq-block-row-limit ROWS` — maximum rows to preload from a file; required generated row count for the shuffle source.
+- `--dq-block-columns NAME,...` — selected file columns, preserving input order. This is required for file input and defaults to `i` for the generator.
 - `--dq-block-keys NAME,...` — key columns for synthesized aggregation; every key must be in `--dq-block-columns`.
 - `--dq-block-aggregations AGG,...` — synthesized aggregations containing `sum:column_name` and/or `count`; sum columns must be selected.
 - `--dq-block-ast PATH` — external textual AST defining the four aggregation lambdas and output key width.
 
-The caller must provide either both `--dq-block-keys` and `--dq-block-aggregations`, or `--dq-block-ast`. The two forms are mutually exclusive.
+The caller must provide exactly one of `--dq-block-file` and `--dq-block-generator`. It must also provide either both `--dq-block-keys` and `--dq-block-aggregations`, or `--dq-block-ast`; the two aggregation forms are mutually exclusive.
 
 The mode accepts the existing `--block-size`, `--run-count`, `--num-attempts`, `--no-verify`, `--llvm`, and `--spilling` controls. It accepts only `--mode=all` and `--mode=graph`; no timed reference-only/generator-only path exists. DQ-block-specific options are rejected for every other `-t` mode.
 
 ### Input and graph construction
 
 - Opens the file with vendored Arrow/Parquet (`contrib/libs/apache/arrow`, including `parquet/arrow/reader.h`).
+- Alternatively, materializes the range `[0, row-limit)` as `Uint32`, shuffles it in RAM, and packages it into Arrow blocks of at most 30,000 rows under the implicit column name `i`. A zero row count or a count greater than `Uint32`'s maximum is rejected.
 - Resolves requested columns against the Arrow schema, rejects missing/duplicate names, and maps supported primitive Arrow types to MKQL data slots.
 - Handles integer, floating-point, Boolean, UTF-8/binary string, date32/date64, and timestamp physical types. Arrays are cast to the physical Arrow representation expected by MKQL blocks where necessary (for example Boolean to `uint8`). Unsupported complex types fail with an explicit error.
 - Uses the requested block size as the Parquet record-batch size, stops precisely at the row limit, retains all selected arrays in RAM, and reports inferred types.
@@ -77,11 +80,12 @@ The AST file has the following shape (the older `AsTuple` root is also accepted)
 
 - The input transform is either `()` or a single-argument lambda. Its argument is a wide stream containing the selected input columns as Arrow blocks followed by the scalar `Uint64` block-height column. It must return another wide block stream with at least one data column followed by the same kind of height column.
 - A per-element transform can return `WideMap` over that stream. Its mapper receives every stream column, including the height, and should normally pass the height through unchanged. The common MKQL compiler expands chunked block output from `WideMap`, keeping generated Arrow buffers within the MKQL size limit.
+- A transform which is more convenient to express with scalar operators can use `WideFromBlocks`, convert its scalar stream to a flow for `WideMap`, then return through `FromFlow` and `WideToBlocks`. `ast_generator_example.txt` uses this form for `% 100`; `WideToBlocks` restores correctly sized Arrow blocks and the height column.
 - The next four elements must be wide lambdas in the same argument order used by `DqPhyHashCombine`: transformed input columns for `extractKey`; keys followed by input columns for `init`; keys, input columns, and state for `update`; and keys followed by state for `finalize`.
 - The last element declares how many leading columns produced by `finalize` constitute the result key. Custom ASTs taken from production plans may therefore need their finalize lambda reordered to emit keys first.
 - The loader deliberately accepts only this list/tuple, not a surrounding `DqPhyHashCombine` callable. Each lambda is wrapped in a temporary `return` statement and passed independently through `CompileExpr`.
 - At each program-builder callback, the actual typed MKQL argument nodes are converted back to YQL type annotations with `ConvertMiniKQLType`. `UpdateLambdaAllArgumentsTypes` supplies those contextual types, and a `CreateExtCallableTypeAnnotationTransformer`/`CreateTypeAnnotationTransformer` pair annotates the lambda. `MkqlBuildLambda` lowers the stream transform, while `MkqlBuildWideLambda` lowers the aggregation lambdas, to `TRuntimeNode`s.
-- No YQL optimizer pipeline is run. A simple UDF resolver backed by the test function registry is installed for type annotation.
+- No YQL optimizer pipeline is run. Simple UDF and Arrow resolvers backed by the test function registry are installed for type annotation.
 - Lambda arities are checked against the arguments supplied by the aggregation builder.
 - Transform output types are derived from the returned stream's `TMultiType` and retain their full MKQL item types, including complex types such as structs. The trailing scalar `Uint64` height block is validated and omitted from the aggregation-lambda arguments. Final aggregation output types are also derived from RuntimeNodes, but every final output must currently be a DataSlot or optional DataSlot.
 
@@ -126,6 +130,19 @@ ydb/core/kqp/tools/combiner_perf/bin/combiner_perf \
   --block-size 128
 ```
 
+Generator and stream-transform example, using `ast_generator_example.txt`:
+
+```bash
+ydb/core/kqp/tools/combiner_perf/bin/combiner_perf \
+  -t dq-block \
+  --dq-block-generator shuffle:42 \
+  --dq-block-row-limit 100000 \
+  --dq-block-ast ast_generator_example.txt \
+  --block-size 30000
+```
+
+The generator also supports the synthesized aggregation path, for example `--dq-block-keys i --dq-block-aggregations count`, without `--dq-block-columns`.
+
 ## Validation performed
 
 - Built from the checkout root:
@@ -146,6 +163,9 @@ ydb/core/kqp/tools/combiner_perf/bin/combiner_perf \
 - Verified the stream-level `WideMap` struct-packing transform over 10,000 rows with an 8,192-row input block size: the transform precomputed the full output stream before timing and both aggregation implementations produced 3,459 groups.
 - Verified the input transform with LLVM enabled and `--run-count 2` over 1,000 rows: 338 groups from both implementations.
 - Verified the input transform with spilling enabled over 1,000 rows: 338 groups from both implementations.
+- Verified `shuffle:42` produces 1,000 generated rows without an explicit column list, and that the synthesized `count` path produces and verifies 1,000 groups.
+- Verified the scalar `WideFromBlocks`/`WideToBlocks` transform over the generated input: `% 100` precomputed 1,000 transformed rows and both aggregation implementations produced 100 groups.
+- Confirmed that specifying both input sources is rejected and that a generated row count of 4,294,967,296 is rejected as outside the `Uint32` range.
 - Confirmed DQ-block-specific options produce an error with another test mode.
 - After the rename, rebuilt `ydb/core/kqp/tools/combiner_perf/bin` and verified the synthesized `sum`/`count` path over 1,000 rows through the new `dq-block` CLI and JSON field names.
 - `git diff --check` passed before commit.

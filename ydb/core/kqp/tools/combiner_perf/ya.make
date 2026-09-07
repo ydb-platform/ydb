@@ -21,6 +21,7 @@ PEERDIR(
 
     yql/essentials/ast
     yql/essentials/core
+    yql/essentials/providers/common/arrow_resolve
     yql/essentials/providers/common/mkql
     yql/essentials/providers/common/udf_resolve
 

@@ -14,6 +14,7 @@
 #include <yql/essentials/minikql/computation/mkql_block_impl.h>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/public/udf/udf_string.h>
@@ -35,6 +36,7 @@
 #include <limits>
 #include <memory>
 #include <numeric>
+#include <random>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
@@ -223,6 +225,7 @@ void PrepareAstLambda(
     typeContext.TimeProvider = CreateDefaultTimeProvider();
     typeContext.RandomProvider = CreateDefaultRandomProvider();
     typeContext.UdfResolver = NYql::NCommon::CreateSimpleUdfResolver(&functionRegistry);
+    typeContext.ArrowResolver = NYql::MakeSimpleArrowResolver(functionRegistry);
     auto callableTransformer = NYql::CreateExtCallableTypeAnnotationTransformer(typeContext);
     auto typeTransformer = NYql::CreateTypeAnnotationTransformer(
         callableTransformer, typeContext);
@@ -441,6 +444,61 @@ TDqBlockData ReadDqBlockDataFromParquet(const TRunParams& params)
         Cerr << "  " << column.Name << ": " << NUdf::GetDataTypeInfo(column.Slot).Name
              << (column.Optional ? "?" : "") << Endl;
     }
+    return data;
+}
+
+ui64 ResolveShuffleSeed(TRunParams& params)
+{
+    constexpr TStringBuf name = "shuffle";
+    constexpr TStringBuf prefix = "shuffle:";
+    const TStringBuf specification = params.DqBlockGenerator;
+    ui64 seed;
+    if (specification == name) {
+        seed = params.RandomSeed.value_or(0);
+    } else {
+        Y_ENSURE(specification.StartsWith(prefix),
+            "Unsupported dq-block generator: " << specification);
+        const auto seedText = specification.SubStr(prefix.size());
+        Y_ENSURE(!seedText.empty() && TryFromString(seedText, seed),
+            "Invalid shuffle generator seed: " << seedText);
+    }
+    params.DqBlockGenerator = TStringBuilder() << name << ':' << seed;
+    return seed;
+}
+
+TDqBlockData GenerateShuffledUint32Data(TRunParams& params)
+{
+    Y_ENSURE(params.DqBlockRowLimit <= std::numeric_limits<ui32>::max(),
+        "Shuffle generator row limit exceeds the Uint32 range: " << params.DqBlockRowLimit);
+
+    std::vector<ui32> numbers(params.DqBlockRowLimit);
+    std::iota(numbers.begin(), numbers.end(), 0);
+    const ui64 seed = ResolveShuffleSeed(params);
+    std::mt19937_64 random(seed);
+    std::shuffle(numbers.begin(), numbers.end(), random);
+
+    constexpr size_t maxBlockRows = 30'000;
+    const size_t blockRows = std::min(params.BlockSize, maxBlockRows);
+    TDqBlockData data;
+    data.Columns.push_back({"i", EDataSlot::Uint32, false});
+    data.Batches.reserve((numbers.size() + blockRows - 1) / blockRows);
+    for (size_t offset = 0; offset < numbers.size(); offset += blockRows) {
+        const size_t rows = std::min(blockRows, numbers.size() - offset);
+        arrow::UInt32Builder builder;
+        EnsureArrowStatus(
+            builder.AppendValues(numbers.data() + offset, rows),
+            "Cannot build shuffle generator block");
+        auto array = builder.Finish();
+        Y_ENSURE(array.ok(),
+            "Cannot finish shuffle generator block: " << array.status().ToString());
+        TDqBlockBatch batch;
+        batch.Columns.push_back(array.ValueOrDie());
+        batch.Rows = rows;
+        data.Batches.push_back(std::move(batch));
+    }
+    data.Rows = numbers.size();
+    Cerr << "Generated " << data.Rows << " shuffled Uint32 rows in "
+         << data.Batches.size() << " Arrow blocks with seed " << seed << Endl;
     return data;
 }
 
@@ -1209,7 +1267,9 @@ void RunTestDqBlock(TRunParams params, TTestResultCollector& printout)
 {
     NYql::NLog::InitLogger("cerr", false);
 
-    auto data = ReadDqBlockDataFromParquet(params);
+    auto data = params.DqBlockGenerator.empty()
+        ? ReadDqBlockDataFromParquet(params)
+        : GenerateShuffledUint32Data(params);
     auto aggregationAst = params.DqBlockAstFile.empty()
         ? THolder<TAggregationAst>()
         : LoadAggregationAst(params.DqBlockAstFile);

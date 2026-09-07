@@ -2426,7 +2426,7 @@ FROM `{table_name}`"""
 
     @pytest.mark.parametrize(
         "max_tasks_per_stage, expected_actor_count",
-        [(1, 1), (0, 20), (50, 27)],
+        [(1, 1), (0, 6), (5, 5)],
         ids=["max_tasks_1", "default", "max_tasks_50"],
     )
     def test_pq_source_actor_count(
@@ -2447,7 +2447,7 @@ FROM `{table_name}`"""
             partitions_count=partitions_count,
         )
         query_name = test_name
-        path = f"/Root/{query_name}"
+        path = f"{kikimr.get_database_name()}/{query_name}"
 
         kikimr.ydb_client.query(
             f"""
@@ -2458,7 +2458,7 @@ FROM `{table_name}`"""
             END DO;
             """
         )
-        self.wait_completed_checkpoints(kikimr, path)
+        self.wait_completed_checkpoints(kikimr, query_name)
 
         def streaming_query_tasks_count():
             return sum(
@@ -2466,7 +2466,7 @@ FROM `{table_name}`"""
                     {"path": path, "subsystem": "streaming_queries", "sensor": "streaming.query.tasks.count"}
                 )
                 or 0
-                for node_id in kikimr.cluster.nodes
+                for node_id in kikimr.cluster.slots
             )
 
         assert wait_for(lambda: streaming_query_tasks_count() == expected_actor_count, timeout_seconds=60, step_seconds=1), (

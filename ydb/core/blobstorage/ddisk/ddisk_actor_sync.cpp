@@ -308,6 +308,18 @@ namespace NKikimr::NDDisk {
         }
 
         TRope data = ev->Get()->GetPayload(0);
+        if (data.size() != request.Selector.Size) {
+            SyncReadCookiesInFlight.erase(ev->Cookie);
+            request.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST;
+            request.ErrorReason << "source payload size " << data.size()
+                << " does not match requested size " << request.Selector.Size;
+            sync.ErrorReason << "[request_idx=" << ev->Cookie - sync.FirstRequestId
+                << "] source payload size mismatch; ";
+            if (--sync.RequestsInFlight == 0) {
+                MaybeReplySync(it);
+            }
+            return;
+        }
         if (Config.EnableChecksums) {
             if (!HasRequiredBlockChecksums(record.ChecksumsSize(),
                     request.Selector.OffsetInBytes, request.Selector.Size)) {

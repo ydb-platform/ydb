@@ -690,6 +690,63 @@ void AssertDirectRead(const std::unique_ptr<TEventHandle<NDDisk::TEvReadResult>>
 
 Y_UNIT_TEST_SUITE(TDDiskChecksumTests) {
 
+    Y_UNIT_TEST(SyncRejectsPayloadSizeMismatch) {
+        for (const bool enableChecksums : {false, true}) {
+            for (const bool checkChecksumBeforeWrite : {false, true}) {
+                for (const bool fromPersistentBuffer : {false, true}) {
+                    TTestContext ctx;
+                    NDDisk::TDDiskConfig config;
+                    config.EnableChecksums = enableChecksums;
+                    config.CheckChecksumBeforeWrite = checkChecksumBeforeWrite;
+                    const TDiskHandle disk = ctx.CreateDDisk(50, 1, config);
+                    const auto creds = Connect(ctx, disk.ServiceId, 100, 1);
+                    const auto sourceEdge = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
+                    const auto sourceId = fromPersistentBuffer
+                        ? MakeBlobStoragePersistentBufferId(NodeId, 999, 1)
+                        : MakeBlobStorageDDiskId(NodeId, 999, 1);
+                    ctx.Runtime.RegisterService(sourceId, sourceEdge);
+
+                    const NDDisk::TBlockSelector selector{0, BlockSize, 2 * BlockSize};
+                    const auto checksums = CalculateChecksums(MakeData('S', selector.Size));
+                    for (const ui32 payloadSize : {BlockSize, 3 * BlockSize}) {
+                        auto sync = std::make_unique<NDDisk::TEvSync>(creds);
+                        if (fromPersistentBuffer) {
+                            sync->AddSegmentFromPB({NodeId, 999, 1}, 42, selector, 1, creds.Generation);
+                        } else {
+                            sync->AddSegmentFromDDisk({NodeId, 999, 1}, 42, selector);
+                        }
+                        SendToDDisk(ctx, disk.ServiceId, sync.release());
+                        auto read = ctx.Runtime.WaitForEdgeActorEvent({sourceEdge});
+                        UNIT_ASSERT_VALUES_EQUAL(read->GetTypeRewrite(), fromPersistentBuffer
+                            ? NDDisk::TEvReadPersistentBuffer::EventType : NDDisk::TEvRead::EventType);
+
+                        // Keep the expected checksum count even though the payload has the wrong size.
+                        const auto payload = MakeAlignedRope(MakeData('S', payloadSize));
+                        std::unique_ptr<IEventBase> response;
+                        if (fromPersistentBuffer) {
+                            response = std::make_unique<NDDisk::TEvReadPersistentBufferResult>(
+                                TReplyStatus::OK, std::nullopt, selector.VChunkIndex,
+                                selector.OffsetInBytes, selector.Size, payload, checksums);
+                        } else {
+                            response = std::make_unique<NDDisk::TEvReadResult>(
+                                TReplyStatus::OK, std::nullopt, payload, checksums);
+                        }
+                        ctx.Runtime.Send(new IEventHandle(
+                            read->Sender, sourceEdge, response.release(), 0, read->Cookie), NodeId);
+
+                        auto result = WaitFromDDisk<NDDisk::TEvSyncResult>(ctx);
+                        AssertStatus(result, TReplyStatus::ERROR);
+                        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.SegmentResultsSize(), 1);
+                        const auto& segment = result->Get()->Record.GetSegmentResults(0);
+                        UNIT_ASSERT(segment.GetStatus() == TReplyStatus::INCORRECT_REQUEST);
+                        UNIT_ASSERT_STRING_CONTAINS(segment.GetErrorReason(), "source payload size");
+                        AssertNoDiskWrite(ctx, {disk.PDiskEdge});
+                    }
+                }
+            }
+        }
+    }
+
     // 1. Single PB write with a single 4 KiB block: a mismatched checksum must be rejected with
     // CORRUPTED and must not reach PDisk at all.
     Y_UNIT_TEST(SinglePBWriteChecksumMismatchOneBlock) {

@@ -276,10 +276,13 @@ public:
             return ReplyErrorAndPassAway("401", "Unauthorized", "No ydb_session_id cookie");
         }
 
-        Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
+        Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
             .Ticket = TString("Login ") + ydbSessionId,
             .Database = TString(),
-            .PeerName = Request->Address->ToString(),
+            .TraceContext = {
+                Request->Address->ToString(),
+                TString(NHttp::THeaders(Request->Headers)["x-request-id"])
+            },
         }));
 
         Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());

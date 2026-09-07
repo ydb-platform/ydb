@@ -19,6 +19,8 @@
 
 #include "kafka_metrics.h"
 
+#include <util/generic/guid.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
 namespace NKafka {
@@ -324,7 +326,7 @@ protected:
 
     void EnsureKafkaSaslAuthActor() {
         if (!AuthActorId) {
-            AuthActorId = RegisterWithSameMailbox(CreateKafkaSaslAuthActor(Context, Address));
+            AuthActorId = RegisterWithSameMailbox(CreateKafkaSaslAuthActor(Context, Address, CreateGuidAsString()));
         }
     }
 
@@ -717,10 +719,10 @@ protected:
     void StartTokenRecheck(const TActorContext& ctx) {
         TokenRecheckInFlight = true;
         ++TokenRecheckCookie;
-        Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
+        Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
             .Ticket = Context->Token.Ticket,
             .Database = Context->Token.AuthDatabasePath ? Context->Token.AuthDatabasePath : Context->DatabasePath,
-            .PeerName = Context->Token.PeerName,
+            .TraceContext = {Context->Token.PeerName, ""},
             .Entries = Context->Token.TicketParserEntries,
         }), 0, TokenRecheckCookie);
         ctx.Schedule(TokenRecheckRequestTimeout, new TEvKafka::TEvTokenRecheck(

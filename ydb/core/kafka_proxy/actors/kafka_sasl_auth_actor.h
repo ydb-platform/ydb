@@ -26,9 +26,10 @@ struct TAuthData {
 };
 
 public:
-    TKafkaSaslAuthActor(const TContext::TPtr context, NRawSocket::TSocketDescriptor::TSocketAddressType address)
+    TKafkaSaslAuthActor(const TContext::TPtr context, NRawSocket::TSocketDescriptor::TSocketAddressType address, TString requestId)
         : Context(context)
-        , Address(address) {
+        , Address(address)
+        , RequestId(std::move(requestId)) {
     }
 
     void Bootstrap();
@@ -123,6 +124,7 @@ private:
     void SendScramLoginRequest(const NActors::TActorContext& ctx);
     void SendMtlsAuthRequest(const NActors::TActorContext& ctx);
     void SendTicketParserRequest();
+    TString NextRequestId();
     void SendDescribeRequest();
     [[nodiscard]] bool TryParseAuthDataTo(TKafkaSaslAuthActor::TAuthData& authData, const NActors::TActorContext& ctx);
     void CleanupAndDie(const NActors::TActorContext& ctx);
@@ -137,6 +139,8 @@ private:
     TString AuthRequest = "";
     TString AuthResponse = "";
     const NRawSocket::TNetworkConfig::TSocketAddressType Address;
+    const TString RequestId;
+    ui64 RequestIdCounter = 0;
 
     static const TDuration Timeout;
 

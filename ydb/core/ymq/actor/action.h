@@ -764,9 +764,9 @@ private:
     }
 
     void RequestTicketParser() {
-        this->Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
+        this->Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
             .Ticket = SecurityToken_,
-            .PeerName = SourceAddress_,
+            .TraceContext = {SourceAddress_, RequestId_},
         }));
     }
 

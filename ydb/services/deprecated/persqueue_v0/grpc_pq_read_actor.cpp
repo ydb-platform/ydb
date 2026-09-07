@@ -714,6 +714,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
 
     PeerName = event->PeerName;
     Database = CanonizePath(event->Database);
+    RequestId = event->RequestId;
 
     ReadOnlyLocal = init.GetReadOnlyLocal();
 
@@ -827,10 +828,10 @@ void TReadSessionActor::HandleDescribeTopicsResponse(TEvDescribeTopicsResponse::
             return;
     }
 
-    ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
+    ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
             .Ticket = ticket,
             .Database = Database,
-            .PeerName = PeerName,
+            .TraceContext = {PeerName, RequestId},
             .Entries = entries
         }));
 }

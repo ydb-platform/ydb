@@ -32,8 +32,8 @@ void AuditLogLogin(const NRawSocket::TNetworkConfig::TSocketAddressType& address
 
 const TDuration TKafkaSaslAuthActor::Timeout = TDuration::MilliSeconds(60000);
 
-NActors::IActor* CreateKafkaSaslAuthActor(const TContext::TPtr context, const NRawSocket::TSocketDescriptor::TSocketAddressType address) {
-    return new TKafkaSaslAuthActor(context, address);
+NActors::IActor* CreateKafkaSaslAuthActor(const TContext::TPtr context, const NRawSocket::TSocketDescriptor::TSocketAddressType address, TString requestId) {
+    return new TKafkaSaslAuthActor(context, address, std::move(requestId));
 }
 
 void TKafkaSaslAuthActor::Bootstrap() {
@@ -222,10 +222,10 @@ void TKafkaSaslAuthActor::HandleTimeout(const NActors::TActorContext& ctx) {
 }
 
 void TKafkaSaslAuthActor::SendTicketParserRequest() {
-    Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
+    Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
         .Ticket = Ticket,
         .Database = AuthDatabasePath,
-        .PeerName = TStringBuilder() << Address,
+        .TraceContext = {TStringBuilder() << Address, NextRequestId()},
         .Entries = TicketParserEntries,
     }));
 
@@ -366,10 +366,16 @@ void TKafkaSaslAuthActor::SendScramLoginRequest(const NActors::TActorContext& ct
 }
 
 void TKafkaSaslAuthActor::SendMtlsAuthRequest(const NActors::TActorContext&) {
-    Send(NKikimr::MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({.Ticket = ClientCert,
-                                                                                                     .Database = DatabasePath,
-                                                                                                     .PeerName = TStringBuilder() << Address}));
+    Send(NKikimr::MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+        .Ticket = ClientCert,
+        .Database = DatabasePath,
+        .TraceContext = {TStringBuilder() << Address, NextRequestId()},
+    }));
     Become(&TKafkaSaslAuthActor::StateTicketResolve);
+}
+
+TString TKafkaSaslAuthActor::NextRequestId() {
+    return TStringBuilder() << RequestId << "-" << ++RequestIdCounter;
 }
 
 void TKafkaSaslAuthActor::SendDescribeRequest() {

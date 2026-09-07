@@ -186,13 +186,17 @@ Y_UNIT_TEST(CanSetAllPermissions) {
         {"database_id", TTestSetup::DatabaseId}
     });
     const TString userToken = "Bearer " + setup.UserSid;
+    const TString requestId = "request-id-12345";
     // Use TEvRequestAuthAndCheck to check permissions for gizmo resource
     std::unique_ptr<NGRpcService::TEvRequestAuthAndCheck> ev = std::make_unique<NGRpcService::TEvRequestAuthAndCheck>(
         setup.DbPath,
         TMaybe<TString>(userToken),
         setup.FakeMonActor,
         NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin),
-        "192.168.0.101");
+        "192.168.0.101",
+        requestId);
+    UNIT_ASSERT(ev->GetTraceId());
+    UNIT_ASSERT_VALUES_EQUAL(*ev->GetTraceId(), requestId);
 
     setup.RequestCheckActor(std::move(ev));
 
@@ -200,6 +204,7 @@ Y_UNIT_TEST(CanSetAllPermissions) {
     NGRpcService::TEvRequestAuthAndCheckResult* requestAuthAndCheckResultEv = setup.GetRuntime()->GrabEdgeEvent<NGRpcService::TEvRequestAuthAndCheckResult>(handle);
     UNIT_ASSERT_EQUAL(requestAuthAndCheckResultEv->Status, Ydb::StatusIds::SUCCESS);
     UNIT_ASSERT(requestAuthAndCheckResultEv->UserToken);
+    UNIT_ASSERT_VALUES_EQUAL(setup.AccessServiceMock.CapturedRequestId, requestId);
     UNIT_ASSERT_EQUAL_C(requestAuthAndCheckResultEv->UserToken->GetUserSID(), "user1@as", requestAuthAndCheckResultEv->UserToken->GetUserSID());
     UNIT_ASSERT_EQUAL_C(requestAuthAndCheckResultEv->UserToken->GetGroupSIDs().size(), 23, requestAuthAndCheckResultEv->UserToken->GetGroupSIDs().size());
     THashSet<TString> groups;
@@ -227,17 +232,20 @@ Y_UNIT_TEST(CanSetPermissionsWithoutGizmoResourse) {
         {"database_id", TTestSetup::DatabaseId}
     });
     const TString userToken = "Bearer " + setup.UserSid;
+    const TString requestId = "refresh-token-without-gizmo-request-id";
     // Use TRefreshTokenGenericRequest to simple initialize it
     std::unique_ptr<NGRpcService::TRefreshTokenGenericRequest> ev = std::make_unique<NGRpcService::TRefreshTokenGenericRequest>(
         userToken,
         setup.DbPath,
         TTestSetup::PeerName,
-        setup.FakeMonActor);
+        setup.FakeMonActor,
+        requestId);
     setup.RequestCheckActor(std::move(ev));
 
     TAutoPtr<IEventHandle> handle;
     NGRpcService::TRefreshTokenGenericRequest* refreshTokenGenericRequestEv = setup.GetRuntime()->GrabEdgeEvent<NGRpcService::TRefreshTokenGenericRequest>(handle);
     UNIT_ASSERT_EQUAL(refreshTokenGenericRequestEv->GetPeerName(), TTestSetup::PeerName);
+    UNIT_ASSERT_VALUES_EQUAL(setup.AccessServiceMock.CapturedRequestId, requestId);
     UNIT_ASSERT_EQUAL(refreshTokenGenericRequestEv->GetAuthState().State, NYdbGrpc::TAuthState::AS_OK);
     UNIT_ASSERT(refreshTokenGenericRequestEv->GetInternalToken());
     UNIT_ASSERT_EQUAL_C(refreshTokenGenericRequestEv->GetInternalToken()->GetUserSID(), "user1@as", refreshTokenGenericRequestEv->GetInternalToken()->GetUserSID());
@@ -267,17 +275,20 @@ Y_UNIT_TEST(CanSetPermissionsForRootDb) {
         {"folder_id", TTestSetup::ClusterFolderId},
     });
     const TString userToken = "Bearer " + setup.UserSid;
+    const TString requestId = "refresh-token-root-db-request-id";
     // Use TRefreshTokenGenericRequest to simple initialize it
     std::unique_ptr<NGRpcService::TRefreshTokenGenericRequest> ev = std::make_unique<NGRpcService::TRefreshTokenGenericRequest>(
         userToken,
         setup.DbPath,
         TTestSetup::PeerName,
-        setup.FakeMonActor);
+        setup.FakeMonActor,
+        requestId);
     setup.RequestCheckActor(std::move(ev));
 
     TAutoPtr<IEventHandle> handle;
     NGRpcService::TRefreshTokenGenericRequest* refreshTokenGenericRequestEv = setup.GetRuntime()->GrabEdgeEvent<NGRpcService::TRefreshTokenGenericRequest>(handle);
     UNIT_ASSERT_EQUAL(refreshTokenGenericRequestEv->GetPeerName(), TTestSetup::PeerName);
+    UNIT_ASSERT_VALUES_EQUAL(setup.AccessServiceMock.CapturedRequestId, requestId);
     UNIT_ASSERT_EQUAL(refreshTokenGenericRequestEv->GetAuthState().State, NYdbGrpc::TAuthState::AS_OK);
     UNIT_ASSERT(refreshTokenGenericRequestEv->GetInternalToken());
     UNIT_ASSERT_EQUAL_C(refreshTokenGenericRequestEv->GetInternalToken()->GetUserSID(), "user1@as", refreshTokenGenericRequestEv->GetInternalToken()->GetUserSID());
@@ -309,17 +320,20 @@ Y_UNIT_TEST(CanSetPermissionsForDbWithoutCloudUserAttributes) {
         {"test_attr_1", "333"}
     });
     const TString userToken = "Bearer " + setup.UserSid;
+    const TString requestId = "refresh-token-without-cloud-attributes-request-id";
     // Use TRefreshTokenGenericRequest to simple initialize it
     std::unique_ptr<NGRpcService::TRefreshTokenGenericRequest> ev = std::make_unique<NGRpcService::TRefreshTokenGenericRequest>(
         userToken,
         setup.DbPath,
         TTestSetup::PeerName,
-        setup.FakeMonActor);
+        setup.FakeMonActor,
+        requestId);
     setup.RequestCheckActor(std::move(ev));
 
     TAutoPtr<IEventHandle> handle;
     NGRpcService::TRefreshTokenGenericRequest* refreshTokenGenericRequestEv = setup.GetRuntime()->GrabEdgeEvent<NGRpcService::TRefreshTokenGenericRequest>(handle);
     UNIT_ASSERT_EQUAL(refreshTokenGenericRequestEv->GetPeerName(), TTestSetup::PeerName);
+    UNIT_ASSERT_VALUES_EQUAL(setup.AccessServiceMock.CapturedRequestId, requestId);
     UNIT_ASSERT_EQUAL(refreshTokenGenericRequestEv->GetAuthState().State, NYdbGrpc::TAuthState::AS_OK);
     UNIT_ASSERT(refreshTokenGenericRequestEv->GetInternalToken());
     UNIT_ASSERT_EQUAL_C(refreshTokenGenericRequestEv->GetInternalToken()->GetUserSID(), "user1@as", refreshTokenGenericRequestEv->GetInternalToken()->GetUserSID());

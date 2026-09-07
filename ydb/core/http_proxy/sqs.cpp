@@ -432,10 +432,10 @@ namespace NKikimr::NHttpProxy {
 
                 ReportInputCounters(ctx);
                 if (!HttpContext.SecurityToken.empty()) {
-                    ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
+                    ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
                         .Ticket = HttpContext.SecurityToken,
                         .Database = HttpContext.DatabasePath,
-                        .PeerName = HttpContext.SourceAddress,
+                        .TraceContext = {HttpContext.SourceAddress, HttpContext.RequestId},
                     }));
                 } else if (!HttpContext.IamToken.empty() || Signature) {
                     AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(

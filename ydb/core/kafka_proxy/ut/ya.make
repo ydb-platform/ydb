@@ -13,6 +13,7 @@ ENDIF()
 
 SRCS(
     actors_ut.cpp
+    kafka_sasl_auth_actor_ut.cpp
     metarequest_ut.cpp
     topic_location_actor_ut.cpp
     topic_offsets_actor_ut.cpp

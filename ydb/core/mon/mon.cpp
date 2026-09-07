@@ -188,7 +188,17 @@ void ReplyCsrfError(const TActorContext& ctx, NHttp::TEvHttpProxy::TEvHttpIncomi
 
 } // namespace
 
-IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const TString& database, const TString& ticket, TString peerName) {
+IEventHandle* GetRequestAuthAndCheckHandle(
+    const NActors::TActorId& owner,
+    const TString& database,
+    const TString& ticket,
+    TString peerName,
+    TString requestId)
+{
+    if (requestId.empty()) {
+        requestId = CreateGuidAsString();
+    }
+
     return new NActors::IEventHandle(
         NGRpcService::CreateGRpcRequestProxyId(),
         owner,
@@ -197,7 +207,8 @@ IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const
             ticket ? TMaybe<TString>(ticket) : Nothing(),
             owner,
             NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin),
-            std::move(peerName)),
+            std::move(peerName),
+            std::move(requestId)),
         IEventHandle::FlagTrackDelivery
     );
 }
@@ -211,12 +222,13 @@ NActors::IEventHandle* SelectAuthorizationScheme(
     NHttp::TCookies cookies(headers["Cookie"]);
     TStringBuf ydbSessionId = cookies["ydb_session_id"];
     TStringBuf authorization = headers["Authorization"];
+    TString requestId(headers["x-request-id"]);
     if (!authorization.empty()) {
-        return GetRequestAuthAndCheckHandle(owner, database, TString(authorization), NMonitoring::NAudit::ExtractRemoteAddress(request));
+        return GetRequestAuthAndCheckHandle(owner, database, TString(authorization), NMonitoring::NAudit::ExtractRemoteAddress(request), requestId);
     } else if (!ydbSessionId.empty()) {
-        return GetRequestAuthAndCheckHandle(owner, database, TString("Login ") + TString(ydbSessionId), NMonitoring::NAudit::ExtractRemoteAddress(request));
+        return GetRequestAuthAndCheckHandle(owner, database, TString("Login ") + TString(ydbSessionId), NMonitoring::NAudit::ExtractRemoteAddress(request), requestId);
     } else if (!request->MTlsClientCertificate.empty()) {
-        return GetRequestAuthAndCheckHandle(owner, database, request->MTlsClientCertificate, NMonitoring::NAudit::ExtractRemoteAddress(request));
+        return GetRequestAuthAndCheckHandle(owner, database, request->MTlsClientCertificate, NMonitoring::NAudit::ExtractRemoteAddress(request), requestId);
     } else {
         return nullptr;
     }
@@ -292,7 +304,12 @@ NActors::IEventHandle* TMon::DefaultAuthorizer(const NActors::TActorId& owner, N
         return eventHandle;
     }
 
-    return GetRequestAuthAndCheckHandle(owner, event->Database, "", NMonitoring::NAudit::ExtractRemoteAddress(request));
+    return GetRequestAuthAndCheckHandle(
+        owner,
+        event->Database,
+        "",
+        NMonitoring::NAudit::ExtractRemoteAddress(request),
+        TString(NHttp::THeaders(request->Headers)["x-request-id"]));
 }
 
 // compatibility layer

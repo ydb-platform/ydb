@@ -13,6 +13,7 @@ namespace NKikimr::NCertTestUtils {
 namespace {
 
 const TString PEER_NAME = "192.168.0.101";
+const TString REQUEST_ID = "ldap-auth-test-request-id";
 
 class TLdapKikimrServer {
 public:
@@ -74,9 +75,9 @@ TAutoPtr<IEventHandle> LdapAuthenticate(TLdapKikimrServer& server, const TString
     auto loginResponse = GetLoginResponse(server, login);
     TTestActorRuntime* runtime = server.GetRuntime();
     TActorId sender = runtime->AllocateEdgeActor();
-    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
         .Ticket = loginResponse.Token,
-        .PeerName = PEER_NAME,
+        .TraceContext = {PEER_NAME, REQUEST_ID},
     })), 0);
 
     TAutoPtr<IEventHandle> handle;
@@ -919,9 +920,9 @@ Y_UNIT_TEST(CanRefreshGroupsInfo) {
     auto loginResponse = GetLoginResponse(ydbServer, login);
     TTestActorRuntime* runtime = ydbServer.GetRuntime();
     TActorId sender = runtime->AllocateEdgeActor();
-    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
         .Ticket = loginResponse.Token,
-        .PeerName = PEER_NAME,
+        .TraceContext = {PEER_NAME, REQUEST_ID},
     })), 0);
     TAutoPtr<IEventHandle> handle;
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -943,9 +944,9 @@ Y_UNIT_TEST(CanRefreshGroupsInfo) {
     ldapServer.ReplaceResponses(std::move(updatedResponses));
     Sleep(TDuration::Seconds(10));
 
-    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
         .Ticket = loginResponse.Token,
-        .PeerName = PEER_NAME,
+        .TraceContext = {PEER_NAME, REQUEST_ID},
     })), 0);
     ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
@@ -978,9 +979,9 @@ Y_UNIT_TEST(CanRefreshGroupsInfoWithDisabledNestedGroups) {
     auto loginResponse = GetLoginResponse(ydbServer, login);
     TTestActorRuntime* runtime = ydbServer.GetRuntime();
     TActorId sender = runtime->AllocateEdgeActor();
-    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
         .Ticket = loginResponse.Token,
-        .PeerName = PEER_NAME,
+        .TraceContext = {PEER_NAME, REQUEST_ID},
     })), 0);
     TAutoPtr<IEventHandle> handle;
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1002,9 +1003,9 @@ Y_UNIT_TEST(CanRefreshGroupsInfoWithDisabledNestedGroups) {
     ldapServer.ReplaceResponses(std::move(updatedResponses));
     Sleep(TDuration::Seconds(10));
 
-    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
         .Ticket = loginResponse.Token,
-        .PeerName = PEER_NAME,
+        .TraceContext = {PEER_NAME, REQUEST_ID},
     })), 0);
     ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
@@ -1042,9 +1043,9 @@ Y_UNIT_TEST(CanNotRefreshRemovedUser) {
     auto loginResponse = GetLoginResponse(ydbServer, login);
     TTestActorRuntime* runtime = ydbServer.GetRuntime();
     TActorId sender = runtime->AllocateEdgeActor();
-    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
         .Ticket = loginResponse.Token,
-        .PeerName = PEER_NAME,
+        .TraceContext = {PEER_NAME, REQUEST_ID},
     })), 0);
     TAutoPtr<IEventHandle> handle;
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1067,9 +1068,9 @@ Y_UNIT_TEST(CanNotRefreshRemovedUser) {
     ldapServer.ReplaceResponses(std::move(updatedResponses));
     Sleep(TDuration::Seconds(10));
 
-    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
         .Ticket = loginResponse.Token,
-        .PeerName = PEER_NAME,
+        .TraceContext = {PEER_NAME, REQUEST_ID},
     })), 0);
     ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
@@ -1098,9 +1099,9 @@ Y_UNIT_TEST(CanRefreshGroupsInfoWithError) {
     auto loginResponse = GetLoginResponse(ydbServer, login);
     TTestActorRuntime* runtime = ydbServer.GetRuntime();
     TActorId sender = runtime->AllocateEdgeActor();
-    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
         .Ticket = loginResponse.Token,
-        .PeerName = PEER_NAME,
+        .TraceContext = {PEER_NAME, REQUEST_ID},
     })), 0);
     TAutoPtr<IEventHandle> handle;
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1115,9 +1116,9 @@ Y_UNIT_TEST(CanRefreshGroupsInfoWithError) {
     ldapServer.ReplaceResponses(std::move(updatedResponses));
     Sleep(TDuration::Seconds(7));
 
-    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
         .Ticket = loginResponse.Token,
-        .PeerName = PEER_NAME,
+        .TraceContext = {PEER_NAME, REQUEST_ID},
     })), 0);
     ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
@@ -1173,9 +1174,9 @@ Y_UNIT_TEST(CanFetchGroupsWithDelayUpdateSecurityState) {
     TActorId sender = runtime->AllocateEdgeActor();
 
     auto loginResponse = provider.LoginUser({.User = login, .ExternalAuth = "ldap"});
-    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
         .Ticket = loginResponse.Token,
-        .PeerName = PEER_NAME,
+        .TraceContext = {PEER_NAME, REQUEST_ID},
     })), 0);
     Sleep(TDuration::Seconds(1));
     // Send update security state in 1 second after send TEvAuthorizeTicket
@@ -1214,9 +1215,9 @@ Y_UNIT_TEST(CanGetErrorIfAppropriateLoginProviderIsAbsent) {
     TActorId sender = runtime->AllocateEdgeActor();
 
     auto loginResponse = provider.LoginUser({.User = login, .ExternalAuth = "ldap"});
-    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
         .Ticket = loginResponse.Token,
-        .PeerName = PEER_NAME,
+        .TraceContext = {PEER_NAME, REQUEST_ID},
     })), 0);
     Sleep(TDuration::Seconds(1));
     // Do no send update security state

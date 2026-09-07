@@ -226,6 +226,7 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
         return;
     }
     PeerName = event->PeerName;
+    RequestId = event->RequestId;
     if (!event->Database.empty()) {
         Database = CanonizePath(event->Database);
     }
@@ -445,10 +446,10 @@ void TWriteSessionActor::InitCheckACL(const TActorContext& ctx) {
      }
 
     auto entries = NKikimr::NGRpcProxy::V1::GetTicketParserEntries(DatabaseId, FolderId);
-    ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
+    ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
             .Ticket = ticket,
             .Database = Database,
-            .PeerName = PeerName,
+            .TraceContext = {PeerName, RequestId},
             .Entries = entries
         }));
 }

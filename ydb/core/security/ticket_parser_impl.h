@@ -148,7 +148,7 @@ protected:
         TInstant ExpireTime;
         TInstant AccessTime;
         TDuration CurrentDelay = TDuration::Seconds(1);
-        TString PeerName;
+        TEvTicketParser::TEvAuthorizeTicket::TTraceContext TraceContext;
         TString Database;
         TStackVec<TString> AdditionalSIDs;
         bool RefreshRetryableErrorImmediately = false;
@@ -157,6 +157,7 @@ protected:
 
         TTokenRecordBase(const TStringBuf ticket)
             : Ticket(ticket)
+            , TraceContext("", "")
         {}
 
         void SetToken(const TIntrusivePtr<NACLib::TUserToken>& token) {
@@ -447,12 +448,14 @@ private:
             }
         }
 
+        request->RequestId = record.TraceContext.RequestId;
+
         auto& headers = request->Headers;
         if (record.IsLowRequestPriority) {
             headers["x-ya-priority"] = "low";
         }
-        if (!record.PeerName.empty()) {
-            headers["x-user-ip"] = record.PeerName;
+        if (!record.TraceContext.PeerName.empty()) {
+            headers["x-user-ip"] = record.TraceContext.PeerName;
         }
 
         return request;
@@ -569,8 +572,9 @@ private:
     template <typename TTokenRecord>
     void NebiusAccessServiceAuthorize(const TString& key, TTokenRecord& record) const {
         auto request = MakeHolder<TEvNebiusAccessServiceAuthorizeRequest>(key);
-        if (!record.PeerName.empty()) {
-            request->Headers["x-user-ip"] = record.PeerName;
+        request->RequestId = record.TraceContext.RequestId;
+        if (!record.TraceContext.PeerName.empty()) {
+            request->Headers["x-user-ip"] = record.TraceContext.PeerName;
         }
         TStringBuilder requestForPermissions;
         i64 i = 0;
@@ -621,9 +625,10 @@ private:
     template <typename TTokenRecord>
     void NebiusAccessServiceAuthenticate(const TString& key, TTokenRecord& record) const {
         auto request = MakeHolder<TEvNebiusAccessServiceAuthenticateRequest>(key);
+        request->RequestId = record.TraceContext.RequestId;
         request->Request.set_iam_token(record.Ticket);
-        if (!record.PeerName.empty()) {
-            request->Headers["x-user-ip"] = record.PeerName;
+        if (!record.TraceContext.PeerName.empty()) {
+            request->Headers["x-user-ip"] = record.TraceContext.PeerName;
         }
         Send(NebiusAccessServiceValidator, request.Release());
     }
@@ -1080,11 +1085,11 @@ private:
     }
 
     void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
-        if (!NSecurity::IsGoodPeernameFormat(ev->Get()->PeerName)) {
+        if (!NSecurity::IsGoodPeernameFormat(ev->Get()->TraceContext.PeerName)) {
             CounterWrongPeernameFormat->Inc();
             YDB_LOG_WARN_COMP(NKikimrServices::TICKET_PARSER, "Ticket has invalid peer name format",
                 {"token", MaskTicket(ev->Get()->Ticket)},
-                {"peerName", ev->Get()->PeerName},
+                {"peerName", ev->Get()->TraceContext.PeerName},
                 {"database", ev->Get()->Database}
             );
 
@@ -1164,7 +1169,7 @@ private:
         auto& record = it->second;
         record.CurrentDelay = MinErrorRefreshTime;
         record.RefreshRetryableErrorImmediately = true;
-        record.PeerName = std::move(ev->Get()->PeerName);
+        record.TraceContext = ev->Get()->TraceContext;
         record.Database = std::move(ev->Get()->Database);
         record.Signature = ev->Get()->Signature;
         for (const auto& entry: ev->Get()->Entries) {
@@ -1183,11 +1188,13 @@ private:
                 {"ticket", record.GetMaskedTicket()},
                 {"error", record.Error}
             );
+            record.TraceContext.RequestId.clear();
             Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.Error), 0, cookie);
             return;
         }
         if (record.IsTokenReady()) {
             // offline check ready
+            record.TraceContext.RequestId.clear();
             Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.GetToken()), 0, cookie);
             return;
         }
@@ -2145,7 +2152,7 @@ protected:
         }
         YDB_LOG_DEBUG_COMP(NKikimrServices::TICKET_PARSER, "Ticket has now valid token for subject",
             {"ticket", record.GetMaskedTicket()},
-            {"peerName", record.PeerName},
+            {"peerName", record.TraceContext.PeerName},
             {"subject", record.Subject}
         );
         record.IsLowRequestPriority = true;
@@ -2166,7 +2173,7 @@ protected:
             CounterTicketsErrorsRetryable->Inc();
             YDB_LOG_WARN_COMP(NKikimrServices::TICKET_PARSER, "Failed to process ticket",
                 {"ticket", record.GetMaskedTicket()},
-                {"peerName", record.PeerName},
+                {"peerName", record.TraceContext.PeerName},
                 {"error", error.Message + errorLogMessage},
                 {"retryable", true}
             );
@@ -2183,7 +2190,7 @@ protected:
             CounterTicketsErrorsPermanent->Inc();
             YDB_LOG_WARN_COMP(NKikimrServices::TICKET_PARSER, "Failed to process ticket",
                 {"ticket", record.GetMaskedTicket()},
-                {"peerName", record.PeerName},
+                {"peerName", record.TraceContext.PeerName},
                 {"error", error.Message + errorLogMessage},
                 {"retryable", false}
             );
@@ -2204,6 +2211,7 @@ protected:
             }
         }
         record.AuthorizeRequests.clear();
+        record.TraceContext.RequestId.clear();
     }
 
     template <typename TTokenRecord>
@@ -2385,7 +2393,7 @@ protected:
         html << "<tr><td>Refresh Time</td><td>" << record.RefreshTime << "</td></tr>";
         html << "<tr><td>Expire Time</td><td>" << record.ExpireTime << "</td></tr>";
         html << "<tr><td>Access Time</td><td>" << record.AccessTime << "</td></tr>";
-        html << "<tr><td>Peer Name</td><td>" << record.PeerName << "</td></tr>";
+        html << "<tr><td>Peer Name</td><td>" << record.TraceContext.PeerName << "</td></tr>";
         if (record.IsTokenReady()) {
             html << "<tr><td>User SID</td><td>" << record.GetToken()->GetUserSID() << "</td></tr>";
             for (const TString& group : record.GetToken()->GetGroupSIDs()) {
@@ -2427,7 +2435,7 @@ protected:
         html << "<td>" << record.RefreshTime << "</td>";
         html << "<td>" << record.ExpireTime << "</td>";
         html << "<td>" << record.AccessTime << "</td>";
-        html << "<td>" << record.PeerName << "</td>";
+        html << "<td>" << record.TraceContext.PeerName << "</td>";
         html << "</tr>";
     }
 

@@ -197,14 +197,14 @@ namespace NKikimr::NHttpProxy {
                     signature.Region = Signature->GetRegion();
                     signature.SignedAt = signedAt;
 
-                    ctx.Send(MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({.Signature = std::move(signature),
+                    ctx.Send(MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithSignature{.Signature = std::move(signature),
                                                                                                      .Database = DatabasePath,
-                                                                                                     .PeerName = SourceAddress,
+                                                                                                     .TraceContext = {SourceAddress, RequestId},
                                                                                                      .Entries = entries}));
                 } else {
-                    ctx.Send(MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({.Ticket = IamToken,
+                    ctx.Send(MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{.Ticket = IamToken,
                                                                                                      .Database = DatabasePath,
-                                                                                                     .PeerName = SourceAddress,
+                                                                                                     .TraceContext = {SourceAddress, RequestId},
                                                                                                      .Entries = entries}));
                 }
                 return;

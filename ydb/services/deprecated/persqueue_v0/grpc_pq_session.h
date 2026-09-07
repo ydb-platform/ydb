@@ -212,6 +212,17 @@ public:
         return "";
     }
 
+    TString GetRequestId() const {
+        TString key = "x-request-id";
+        const auto& clientMetadata = Context.client_metadata();
+        const auto range = clientMetadata.equal_range(grpc::string_ref{key.data(), key.size()});
+        if (range.first == range.second) {
+            return "";
+        }
+
+        return TString(range.first->second.data(), range.first->second.size());
+    }
+
     TString GetPeerName() const {
         auto res = Context.peer();
         // Remove percent-encoding

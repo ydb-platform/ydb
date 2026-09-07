@@ -172,6 +172,9 @@ public:
     void Initialize(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, const TVector<std::pair<TString, TString>>& rootAttributes) {
         TString peerName = GrpcRequestBaseCtx_->GetPeerName();
         TBase::SetPeerName(peerName);
+        const TMaybe<TString> traceId = GrpcRequestBaseCtx_->GetTraceId();
+        Y_ABORT_UNLESS(traceId && !traceId->empty(), "request trace id must be non-empty");
+        TBase::SetRequestId(*traceId);
         InitializeAttributes(schemeData, rootAttributes);
         TBase::SetDatabase(CheckedDatabaseName_);
         InitializeAuditSettings(schemeData);

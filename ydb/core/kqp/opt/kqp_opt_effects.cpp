@@ -304,7 +304,7 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
             .Output(dqUnion.Output())
             .Done();
     if (csWriteAffinity) {
-        auto transformStage = Build<TDqStage>(ctx, node.Pos())
+        auto stageInput = Build<TDqStage>(ctx, node.Pos())
             .Inputs()
                 .Add(mapCn)
                 .Build()
@@ -318,7 +318,7 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
             .Done();
 
         effect = Build<TKqpSinkEffect>(ctx, node.Pos())
-            .Stage(BuildCsWriteAffinitySinkStage(ctx, node.Pos(), transformStage.Ptr(), node.CtasShardingColumns(), sink.Ptr()))
+            .Stage(BuildCsWriteAffinitySinkStage(ctx, node.Pos(), stageInput.Ptr(), node.CtasShardingColumns(), sink.Ptr()))
             .SinkIndex().Build("0")
             .Done();
     } else {

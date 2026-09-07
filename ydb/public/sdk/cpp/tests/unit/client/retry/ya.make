@@ -10,7 +10,7 @@ ENDIF()
 FORK_SUBTESTS()
 
 SRCS(
-    retry_range_ut.cpp
+    retry_ut.cpp
 )
 
 PEERDIR(

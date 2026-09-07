@@ -293,7 +293,9 @@ Y_UNIT_TEST_SUITE(TTableRangeErrorRetryTest) {
         UNIT_ASSERT(status.IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(attempts, 2u);
     }
+}
 
+Y_UNIT_TEST_SUITE(TRetryCancellationTest) {
     Y_UNIT_TEST(AsyncCancellationCompletesBeforeLateResult) {
         TTableClientFixture fixture;
         std::stop_source stopSource;

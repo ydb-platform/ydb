@@ -1,3 +1,4 @@
+import csv
 import hashlib
 import inspect
 import io
@@ -32,6 +33,7 @@ from ydb.tools.ydb_bench.lib import (
     linux_telemetry,
     load_control,
     local_ydb,
+    local_ydb_workloads,
     runner,
     topology,
     web,
@@ -112,6 +114,19 @@ class YdbBenchTest(unittest.TestCase):
             timeout_seconds=timeout,
         )
 
+    @staticmethod
+    def _local_ydb_command_result(command, stdout="", exit_code=0, interrupted=False):
+        return runner.CommandResult(
+            command=tuple(str(part) for part in command),
+            stdout=stdout,
+            stderr="",
+            exit_code=exit_code,
+            started_at="2026-08-25T10:00:00+00:00",
+            finished_at="2026-08-25T10:00:01+00:00",
+            duration_seconds=1.0,
+            interrupted=interrupted,
+        )
+
     def _worker_metrics_benchmark(self):
         return replace(
             PING_BENCHMARK,
@@ -172,6 +187,394 @@ class YdbBenchTest(unittest.TestCase):
         local_load_schema = CONFIG_SCHEMA["properties"]["local-ydb"]["additionalProperties"]["properties"]["load"]
         self.assertEqual(local_load_schema["properties"]["allow-errors"], {"type": "boolean"})
 
+    def test_local_ydb_workload_registry_preserves_defaults_and_validation(self):
+        upsert = local_ydb_workloads.normalize_workload(
+            {"type": "kv", "operation": "upsert"},
+            "local-ydb.profile.workload",
+        )
+        select = local_ydb_workloads.normalize_workload(
+            {"type": "kv", "operation": "select"},
+            "local-ydb.profile.workload",
+        )
+        stock = local_ydb_workloads.normalize_workload(
+            {"type": "stock", "operation": "put-rand-order"},
+            "local-ydb.profile.workload",
+        )
+        self.assertEqual(upsert["options"]["init-upserts"], 0)
+        self.assertEqual(select["options"]["init-upserts"], 1000)
+        self.assertEqual(stock["options"]["orders"], 100)
+
+        invalid = (
+            ({"type": [], "operation": "upsert"}, r"workload\.type.*must be one of kv, stock"),
+            ({"type": "log", "operation": "bulk-upsert"}, r"workload\.type.*must be one of kv, stock"),
+            ({"type": "tpcc", "operation": "run"}, r"workload\.type.*must be one of kv, stock"),
+            ({"type": "topic", "operation": "full"}, r"workload\.type.*must be one of kv, stock"),
+            ({"type": "kv", "operation": "put-rand-order"}, r"workload\.operation.*must be one of upsert"),
+            (
+                {"type": "stock", "operation": "put-rand-order", "options": {"products": 500001}},
+                r"products.*must not exceed 500000",
+            ),
+            (
+                {"type": "stock", "operation": "put-rand-order", "options": {"auto-partition": 2}},
+                r"auto-partition.*must be 0 or 1",
+            ),
+            (
+                {"type": "stock", "operation": "put-rand-order", "options": {"max-partitions": 10}},
+                r"options.*unknown fields: max-partitions",
+            ),
+        )
+        for workload, message in invalid:
+            with self.subTest(workload=workload), self.assertRaisesRegex(BenchmarkError, message):
+                local_ydb_workloads.normalize_workload(workload, "local-ydb.profile.workload")
+
+    def test_local_ydb_workload_registry_supports_typed_options(self):
+        definition = local_ydb_workloads.WorkloadDefinition(
+            name="synthetic",
+            default_operation="run",
+            operations=("run",),
+            load_parameters=("threads",),
+            options=(
+                local_ydb_workloads.WorkloadOption(
+                    "tx-mode",
+                    "serializable-rw",
+                    kind="string",
+                    choices=("serializable-rw", "snapshot-rw"),
+                ),
+                local_ydb_workloads.WorkloadOption("enabled", True, kind="boolean"),
+                local_ydb_workloads.WorkloadOption(
+                    "warmup",
+                    "10s",
+                    kind="duration",
+                    pattern=r"^[1-9][0-9]*s$",
+                ),
+                local_ydb_workloads.WorkloadOption("label", "mode: fast # tagged", kind="string"),
+            ),
+            uses_path=True,
+            table_name=None,
+            init_builder=None,
+            run_builder=None,
+            options_validator=lambda options, location: None,
+        )
+        local_ydb_workloads._validate_catalog((definition,))
+        divergent = replace(
+            definition,
+            name="other",
+            options=(local_ydb_workloads.WorkloadOption("tx-mode", 1),),
+        )
+        with self.assertRaisesRegex(ValueError, "tx-mode has incompatible schemas"):
+            local_ydb_workloads._validate_catalog((definition, divergent))
+        for pattern in (r"(?P<seconds>[0-9]+)s", r"^[0-9]+\s+s$"):
+            nonportable = replace(
+                definition,
+                options=(local_ydb_workloads.WorkloadOption("warmup", "10s", kind="duration", pattern=pattern),),
+            )
+            with self.subTest(pattern=pattern), self.assertRaisesRegex(ValueError, "pattern.*is not portable"):
+                local_ydb_workloads._validate_catalog((nonportable,))
+        with mock.patch.object(local_ydb_workloads, "_DEFINITIONS", (definition,)), mock.patch.object(
+            local_ydb_workloads,
+            "_WORKLOADS",
+            {definition.name: definition},
+        ):
+            workload = local_ydb_workloads.normalize_workload(
+                {"type": "synthetic", "operation": "run"},
+                "workload",
+            )
+            self.assertEqual(
+                workload["options"],
+                {
+                    "tx-mode": "serializable-rw",
+                    "enabled": True,
+                    "warmup": "10s",
+                    "label": "mode: fast # tagged",
+                },
+            )
+            schema = local_ydb_workloads.workload_config_schema()["properties"]["options"]["properties"]
+            self.assertEqual(
+                schema["tx-mode"],
+                {
+                    "type": "string",
+                    "minLength": 1,
+                    "enum": ["serializable-rw", "snapshot-rw"],
+                },
+            )
+            self.assertEqual(schema["enabled"], {"type": "boolean"})
+            self.assertEqual(schema["warmup"]["pattern"], r"^[1-9][0-9]*s$")
+            catalog = local_ydb_workloads.web_workload_catalog()
+            self.assertEqual(
+                [option["kind"] for option in catalog[0]["options"]],
+                ["string", "boolean", "duration", "string"],
+            )
+            self.assertEqual(catalog[0]["options"][2]["schema"], schema["warmup"])
+            special = "mode: fast # tagged\nsecond line"
+            self.assertEqual(yaml.safe_load("option: " + json.dumps(special))["option"], special)
+
+            invalid = (
+                ({"tx-mode": "", "enabled": True, "warmup": "10s"}, "tx-mode.*must not be empty"),
+                ({"tx-mode": "snapshot-rw", "enabled": 1, "warmup": "10s"}, "enabled.*must be a boolean"),
+                ({"tx-mode": "snapshot-rw", "enabled": False, "warmup": "0s"}, "warmup.*must match pattern"),
+            )
+            for options, message in invalid:
+                with self.subTest(options=options), self.assertRaisesRegex(BenchmarkError, message):
+                    local_ydb_workloads.normalize_workload(
+                        {"type": "synthetic", "operation": "run", "options": options},
+                        "workload",
+                    )
+
+    def test_local_ydb_workload_registry_builds_golden_cli_commands(self):
+        cli_context = local_ydb_workloads.WorkloadCli(
+            Path("/tmp/ydb cli"),
+            "grpc://benchmark-host.example:2135",
+            "/Root/bench",
+        )
+        workload = local_ydb_workloads.normalize_workload(
+            {"type": "kv", "operation": "select"},
+            "workload",
+        )
+        base = [
+            Path("/tmp/ydb cli"),
+            "--endpoint",
+            "grpc://benchmark-host.example:2135",
+            "--database",
+            "/Root/bench",
+            "workload",
+            "kv",
+            "--path",
+            "table-prefix",
+        ]
+        self.assertEqual(
+            local_ydb_workloads.build_init_argv(cli_context, "table-prefix", workload),
+            base
+            + [
+                "init",
+                "--init-upserts",
+                1000,
+                "--min-partitions",
+                40,
+                "--max-partitions",
+                1000,
+                "--partition-size",
+                2000,
+                "--max-first-key",
+                65536,
+                "--len",
+                64,
+                "--cols",
+                2,
+                "--int-cols",
+                1,
+                "--key-cols",
+                1,
+                "--rows",
+                1,
+            ],
+        )
+        self.assertEqual(
+            local_ydb_workloads.build_run_argv(cli_context, "table-prefix", workload, "rate", 250, 30, 64),
+            base
+            + [
+                "run",
+                "select",
+                "--seconds",
+                30,
+                "--threads",
+                64,
+                "--quiet",
+                "--max-first-key",
+                65536,
+                "--int-cols",
+                1,
+                "--key-cols",
+                1,
+                "--cols",
+                2,
+                "--rows",
+                1,
+                "--rate",
+                250,
+            ],
+        )
+        self.assertEqual(
+            local_ydb_workloads.build_clean_argv(cli_context, "table-prefix", "kv"),
+            base + ["clean"],
+        )
+        prepare = local_ydb_workloads.build_prepare_plan(cli_context, "table-prefix", workload)
+        run = local_ydb_workloads.build_run_plan(
+            cli_context,
+            "table-prefix",
+            workload,
+            "rate",
+            250,
+            30,
+            64,
+        )
+        cleanup = local_ydb_workloads.build_cleanup_plan(cli_context, "table-prefix", workload)
+        self.assertEqual(
+            prepare,
+            (
+                local_ydb_workloads.WorkloadCommandPlan(
+                    "init",
+                    tuple(
+                        base
+                        + [
+                            "init",
+                            "--init-upserts",
+                            1000,
+                            "--min-partitions",
+                            40,
+                            "--max-partitions",
+                            1000,
+                            "--partition-size",
+                            2000,
+                            "--max-first-key",
+                            65536,
+                            "--len",
+                            64,
+                            "--cols",
+                            2,
+                            "--int-cols",
+                            1,
+                            "--key-cols",
+                            1,
+                            "--rows",
+                            1,
+                        ]
+                    ),
+                    120,
+                ),
+            ),
+        )
+        self.assertEqual(
+            run.argv,
+            tuple(
+                local_ydb_workloads.build_run_argv(
+                    cli_context,
+                    "table-prefix",
+                    workload,
+                    "rate",
+                    250,
+                    30,
+                    64,
+                )
+            ),
+        )
+        self.assertEqual(run.timeout_seconds, 60)
+        self.assertEqual(cleanup[0].argv, tuple(base + ["clean"]))
+        self.assertEqual(cleanup[0].timeout_seconds, 120)
+
+    def test_local_ydb_cleanup_plan_rejects_custom_plan_without_timeout(self):
+        cli_context = local_ydb_workloads.WorkloadCli(Path("ydb"), "grpc://host:2135", "/Root/bench")
+
+        def unbounded_cleanup(*_args):
+            return (local_ydb_workloads.WorkloadCommandPlan("clean", ("ydb", "clean")),)
+
+        definition = replace(
+            local_ydb_workloads.workload_definition("kv"),
+            cleanup_plan_builder=unbounded_cleanup,
+        )
+        with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {"kv": definition}):
+            with self.assertRaisesRegex(BenchmarkError, "must have a positive timeout"):
+                local_ydb_workloads.build_cleanup_plan(cli_context, "table-prefix", {"type": "kv"})
+
+    def test_local_ydb_workload_registry_validates_lifecycle_metadata_and_plans(self):
+        definition = local_ydb_workloads.WorkloadDefinition(
+            name="inline",
+            default_operation="run",
+            operations=("run",),
+            load_parameters=("sessions",),
+            options=(),
+            uses_path=True,
+            table_name=None,
+            init_builder=lambda *_args: (),
+            run_builder=lambda *_args: (),
+            options_validator=lambda *_args: None,
+            dataset_scope="profile",
+            warmup_mode="inline",
+            run_plan_builder=lambda *_args: local_ydb_workloads.WorkloadCommandPlan("run", ("ydb",), 1),
+        )
+        local_ydb_workloads._validate_catalog((definition,))
+        local_ydb_workloads._validate_catalog((replace(definition, dataset_scope="geometry"),))
+        with self.assertRaisesRegex(ValueError, "dataset scope"):
+            local_ydb_workloads._validate_catalog((replace(definition, dataset_scope="attempt"),))
+        with self.assertRaisesRegex(ValueError, "inline warmup requires"):
+            local_ydb_workloads._validate_catalog((replace(definition, run_plan_builder=None),))
+        with self.assertRaisesRegex(ValueError, "default client threads"):
+            local_ydb_workloads._validate_catalog((replace(definition, default_client_threads=0),))
+        for invalid_maximum in (0, True, "10"):
+            with self.subTest(maximum_total_seconds=invalid_maximum), self.assertRaisesRegex(
+                ValueError, "maximum total duration"
+            ):
+                local_ydb_workloads._validate_catalog((replace(definition, maximum_total_seconds=invalid_maximum),))
+        with self.assertRaisesRegex(ValueError, "cannot fit"):
+            local_ydb_workloads._validate_catalog((replace(definition, maximum_total_seconds=10),))
+        for invalid_warmup in (-1, True, "10"):
+            with self.subTest(default_warmup_seconds=invalid_warmup), self.assertRaisesRegex(
+                ValueError, "default warmup"
+            ):
+                local_ydb_workloads._validate_catalog((replace(definition, default_warmup_seconds=invalid_warmup),))
+        with self.assertRaisesRegex(ValueError, "automatic warmup requires"):
+            local_ydb_workloads._validate_catalog(
+                (replace(definition, default_warmup_seconds=None, effective_warmup_builder=None),)
+            )
+        string_limit = replace(
+            definition,
+            options=(local_ydb_workloads.WorkloadOption("scale", "auto", kind="string"),),
+            load_limits=(("sessions", "scale", 10),),
+        )
+        with self.assertRaisesRegex(ValueError, "invalid load limit"):
+            local_ydb_workloads._validate_catalog((string_limit,))
+        with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {"inline": definition}):
+            with self.assertRaisesRegex(BenchmarkError, "CPU measurement window"):
+                local_ydb_workloads.build_run_plan(
+                    local_ydb_workloads.WorkloadCli("ydb", "endpoint", "database"),
+                    "path",
+                    {"type": "inline", "operation": "run", "options": {}},
+                    "sessions",
+                    1,
+                    1,
+                    1,
+                    warmup_seconds=0,
+                )
+            with self.assertRaisesRegex(BenchmarkError, "non-empty argv"):
+                invalid = replace(
+                    definition,
+                    run_plan_builder=lambda *_args: local_ydb_workloads.WorkloadCommandPlan("run", (), 1),
+                )
+                with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {"inline": invalid}):
+                    local_ydb_workloads.build_run_plan(
+                        local_ydb_workloads.WorkloadCli("ydb", "endpoint", "database"),
+                        "path",
+                        {"type": "inline", "operation": "run", "options": {}},
+                        "sessions",
+                        1,
+                        1,
+                        1,
+                        warmup_seconds=1,
+                    )
+            for timeout in (float("nan"), float("inf"), True, 10**1000):
+                nonfinite = replace(
+                    definition,
+                    run_plan_builder=lambda *_args, timeout=timeout: local_ydb_workloads.WorkloadCommandPlan(
+                        "run",
+                        ("ydb",),
+                        timeout,
+                    ),
+                )
+                with self.subTest(timeout=timeout), mock.patch.object(
+                    local_ydb_workloads,
+                    "_WORKLOADS",
+                    {"inline": nonfinite},
+                ), self.assertRaisesRegex(BenchmarkError, "positive timeout"):
+                    local_ydb_workloads.build_run_plan(
+                        local_ydb_workloads.WorkloadCli("ydb", "endpoint", "database"),
+                        "path",
+                        {"type": "inline", "operation": "run", "options": {}},
+                        "sessions",
+                        1,
+                        1,
+                        1,
+                        warmup_seconds=1,
+                    )
+
     def test_local_ydb_cli_total_row_is_parsed_in_milliseconds(self):
         metrics = parse_cli_metrics("""
             Window Txs Txs/Sec Retries Errors p50(ms) p95(ms) p99(ms) pMax(ms)
@@ -198,6 +601,76 @@ class YdbBenchTest(unittest.TestCase):
                 Total Txs Txs/Sec Retries Errors p50(ms) p95(ms) p99(ms) pMax(ms)
                 20 nan 0 0 1 2 3 4
             """)
+
+    def test_local_ydb_result_adapter_rejects_invalid_metric_mappings(self):
+        metric_schema = (
+            local_ydb_workloads.WorkloadMetric("throughput", "widgets/s", required=True),
+            local_ydb_workloads.WorkloadMetric("latency_ms", "ms"),
+        )
+        request = local_ydb_workloads.WorkloadRunRequest("threads", 4, 10, 0, 8, None)
+        command_result = self._local_ydb_command_result(("ydb", "workload", "fake"))
+        invalid_results = (
+            ({"throughput": 1, "unknown": 2}, "unknown metrics"),
+            ({"latency_ms": 2}, "omitted required metrics: throughput"),
+            ({"throughput": float("nan")}, "finite non-negative number"),
+            ({"throughput": True}, "finite non-negative number"),
+            ({"throughput": -1}, "finite non-negative number"),
+        )
+        for index, (metrics, message) in enumerate(invalid_results):
+            with self.subTest(metrics=metrics):
+                adapter = local_ydb_workloads.WorkloadResultAdapter(
+                    "fake-invalid-{}".format(index),
+                    lambda _result, _workload, _request, metrics=metrics: local_ydb_workloads.WorkloadResult(metrics),
+                    metric_schema,
+                )
+                definition = replace(
+                    local_ydb_workloads.workload_definition("kv"),
+                    result_adapter=adapter,
+                    throughput_unit="widgets/s",
+                )
+                with mock.patch.object(local_ydb_workloads, "_WORKLOADS", {"kv": definition}):
+                    with self.assertRaisesRegex(BenchmarkError, message):
+                        local_ydb_workloads.parse_workload_result(
+                            "kv",
+                            command_result,
+                            {"type": "kv", "operation": "upsert", "options": {}},
+                            request,
+                        )
+
+    def test_local_ydb_catalog_rejects_unsafe_result_metric_contracts(self):
+        definition = local_ydb_workloads.workload_definition("kv")
+        generic = local_ydb_workloads.GENERIC_TOTAL_RESULT
+
+        def changed_metric(name, **changes):
+            return tuple(replace(metric, **changes) if metric.name == name else metric for metric in generic.metrics)
+
+        invalid_adapters = (
+            (replace(generic, schema_id="x" * 257), "schema id"),
+            (replace(generic, metrics=changed_metric("throughput", repetition_aggregation="sum")), "throughput"),
+            (replace(generic, metrics=changed_metric("transactions", required=False)), "transactions"),
+            (replace(generic, metrics=changed_metric("errors", required=False)), "errors"),
+            (replace(generic, metrics=changed_metric("p99_ms", repetition_aggregation="sum")), "SLO metric"),
+            (replace(generic, slo_metrics=(("latency", "p99_ms"),)), "SLO metric mapping"),
+            (
+                local_ydb_workloads.WorkloadResultAdapter(
+                    "reserved-v1",
+                    generic.parse,
+                    (
+                        local_ydb_workloads.WorkloadMetric("throughput", "operations/s", required=True),
+                        local_ydb_workloads.WorkloadMetric("load", "items"),
+                    ),
+                ),
+                "reserved",
+            ),
+        )
+        for adapter, message in invalid_adapters:
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                local_ydb_workloads._validate_catalog((replace(definition, result_adapter=adapter),))
+
+    def test_local_ydb_cli_total_row_rejects_negative_counters(self):
+        for values in ("-1 10 0 0 1 2 3 4", "1 10 -1 0 1 2 3 4", "1 10 0 -1 1 2 3 4"):
+            with self.subTest(values=values), self.assertRaisesRegex(BenchmarkError, "valid Total row"):
+                parse_cli_metrics("Total Txs Txs/Sec Retries Errors p50(ms) p95(ms) p99(ms) pMax(ms)\n" + values)
 
     def test_local_ydb_profile_parses_geometry_load_and_role_affinity(self):
         loaded = load_config(self._config("""
@@ -806,6 +1279,43 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(metrics["throughput"], 20)
         self.assertEqual(metrics["errors"], 100)
 
+    def test_local_ydb_summary_omits_points_with_an_empty_repetition(self):
+        rows = [
+            {"load": 1, "dynamic_nodes": 1, "transactions": 10},
+            {"load": 1, "dynamic_nodes": 1, "transactions": 0},
+            {"load": 2, "dynamic_nodes": 1, "transactions": 20},
+        ]
+        for row in rows:
+            row.update({metric.name: row.get(metric.name, 1) for metric in LOCAL_YDB_BENCHMARK.metrics})
+        summary = LOCAL_YDB_BENCHMARK.summarize_metrics(rows, LOCAL_YDB_BENCHMARK)
+        self.assertEqual([(row["load"], row["dynamic_nodes"]) for row in summary], [(2, 1)])
+
+    def test_local_ydb_summary_exports_schema_aggregation(self):
+        rows = [
+            {"load": 10, "dynamic_nodes": 1, "throughput": 100, "errors": 1},
+            {"load": 10, "dynamic_nodes": 1, "throughput": 120, "errors": 1},
+            {"load": 10, "dynamic_nodes": 1, "throughput": 110, "errors": 1},
+        ]
+        metric_names = ("throughput", "errors")
+        aggregations = {"throughput": "median", "errors": "sum"}
+        summary = LOCAL_YDB_BENCHMARK.summarize_metrics(
+            rows,
+            LOCAL_YDB_BENCHMARK,
+            metric_names,
+            aggregations,
+        )
+        self.assertEqual(summary[0]["median_throughput"], 110)
+        self.assertEqual(summary[0]["max_errors"], 1)
+        self.assertEqual(summary[0]["sum_errors"], 3)
+        rendered = LOCAL_YDB_BENCHMARK.render_summary(
+            summary,
+            LOCAL_YDB_BENCHMARK,
+            metric_names,
+            aggregations,
+        )
+        parsed = next(csv.DictReader(io.StringIO(rendered)))
+        self.assertEqual(parsed["sum_errors"], "3")
+
     def test_local_ydb_scaling_uses_failing_boundary_and_minimum_attempt(self):
         attempts = (
             {"load": 50, "dynamic_cpu_mean": 90, "static_cpu_mean": 20},
@@ -1065,45 +1575,6 @@ class YdbBenchTest(unittest.TestCase):
         config = yaml.safe_load((cluster_directory / "cluster.yaml").read_text(encoding="utf-8"))
         self.assertEqual(config["config"]["host_configs"][0]["ssd"], ["SectorMap:map_0:64:NONE"])
         self.assertEqual(start_process.call_args.kwargs["parent_death_wrapper"], self.root / "process_guard")
-
-    def test_local_ydb_scaling_waits_for_every_new_registered_node(self):
-        cluster_directory = self.root / "scaling-cluster"
-        cluster_directory.mkdir()
-        cluster = local_ydb.LocalYdbCluster(
-            self.root / "ydbd",
-            self.root / "ydb",
-            self.root / "process_guard",
-            cluster_directory,
-            {
-                "static_nodes": 1,
-                "dynamic_nodes": 1,
-                "max_dynamic_nodes": 2,
-                "storage_groups": 1,
-                "disk_size_gb": 64,
-            },
-            {"ydb_cli": None, "static_nodes": None, "dynamic_nodes": None},
-            30,
-        )
-        cluster.hostname = "benchmark-host"
-        cluster.static_nodes = [{"grpc_port": 2135}]
-        nodes = (
-            {"grpc_port": 2136, "ic_port": 19002, "mon_port": 8766},
-            {"grpc_port": 2137, "ic_port": 19003, "mon_port": 8767},
-        )
-        with mock.patch.object(cluster, "_node_ports", side_effect=nodes), mock.patch.object(
-            cluster, "_wait_for_port"
-        ) as wait_for_port, mock.patch.object(cluster, "_wait_database_ready") as wait_database, mock.patch.object(
-            cluster, "_wait_tenant_ready"
-        ), mock.patch.object(
-            local_ydb, "start_managed_process", side_effect=(mock.Mock(pid=101), mock.Mock(pid=102))
-        ):
-            cluster.add_dynamic_nodes(2)
-
-        self.assertEqual(
-            wait_for_port.call_args_list,
-            [mock.call(2136, "dynamic node 1"), mock.call(2137, "dynamic node 2")],
-        )
-        wait_database.assert_called_once_with({"benchmark-host:19002", "benchmark-host:19003"})
 
     def test_local_ydb_tenant_readiness_checks_every_dynamic_node(self):
         cluster_directory = self.root / "tenant-ready-cluster"
@@ -3829,7 +4300,3 @@ class WebTest(unittest.TestCase):
         self.assertTrue(service._runs[passed["id"]]["finished"].wait(2))
         self.assertEqual(service.detail(failed["id"])["state"], "failed")
         self.assertEqual(service.detail(passed["id"])["state"], "passed")
-
-
-if __name__ == "__main__":
-    unittest.main()

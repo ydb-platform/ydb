@@ -132,6 +132,7 @@ private:
         const ui64 TxId;
         const ui64 Step;
         const ui64 TabletId;
+        const ui64 SeqNo;
         const bool BrokenFlag;
         std::unique_ptr<TEvTxProcessing::TEvReadSetAck> BrokenFlagAck;
 
@@ -143,11 +144,11 @@ private:
                     {"event", "repeated shard broken_flag info, operator not found"},
                     {"shardId", TabletId});
                 // send the ack anyway, so that the secondary waits less time to progress
-                TEvWriteCommitSyncTransactionOperator::SendBrokenFlagAck(*Self, Step, TxId, TabletId);
+                TEvWriteCommitSyncTransactionOperator::SendBrokenFlagAck(*Self, Step, TxId, TabletId, SeqNo);
                 return true;
             }
 
-            BrokenFlagAck = TEvWriteCommitSyncTransactionOperator::MakeBrokenFlagAck(op->GetStep(), op->GetTxId(), Self->TabletID(), TabletId);
+            BrokenFlagAck = TEvWriteCommitSyncTransactionOperator::MakeBrokenFlagAck(*Self, op->GetStep(), op->GetTxId(), TabletId, SeqNo);
             if (txController.IsTxCompleting(TxId)) {
                 return true;
             }
@@ -170,16 +171,18 @@ private:
 
         virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
             if (BrokenFlagAck != nullptr) {
-                TEvWriteCommitSyncTransactionOperator::SendBrokenFlagAck(*Self, std::move(BrokenFlagAck));
+                TEvWriteCommitSyncTransactionOperator::SendBrokenFlagAck(*Self, TabletId, std::move(BrokenFlagAck));
             }
         }
 
     public:
-        TTxWriteReceivedBrokenFlag(TColumnShard& owner, const ui64 txId, const ui64 step, const ui64 tabletId, const bool broken)
+        TTxWriteReceivedBrokenFlag(
+            TColumnShard& owner, const ui64 txId, const ui64 step, const ui64 tabletId, const ui64 seqNo, const bool broken)
             : TBase(&owner, ::ToString(txId))
             , TxId(txId)
             , Step(step)
             , TabletId(tabletId)
+            , SeqNo(seqNo)
             , BrokenFlag(broken)
         {
         }
@@ -229,8 +232,8 @@ private:
     };
 
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateReceiveBrokenFlagTx(
-        TColumnShard& owner, const ui64 sendTabletId, const bool broken) const override {
-        return std::make_unique<TTxWriteReceivedBrokenFlag>(owner, GetTxId(), GetStep(), sendTabletId, broken);
+        TColumnShard& owner, const ui64 sendTabletId, const ui64 seqNo, const bool broken) const override {
+        return std::make_unique<TTxWriteReceivedBrokenFlag>(owner, GetTxId(), GetStep(), sendTabletId, seqNo, broken);
     }
 
     virtual bool IsTxBroken() const override {

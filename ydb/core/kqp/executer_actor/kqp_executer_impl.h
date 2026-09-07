@@ -168,7 +168,7 @@ public:
             if (policy.CollectShardSamples) {
                 collectionStatsMode = Max(collectionStatsMode,
                     Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
-            } else if (policy.CollectStageAggregates || policy.CollectTaskSamples) {
+            } else if (policy.CollectStages) {
                 collectionStatsMode = Max(collectionStatsMode,
                     Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC);
             }
@@ -1907,8 +1907,7 @@ protected:
         if (!Request.DiagnosticsPolicy) {
             return;
         }
-        Stats->CollectExecutionDiagnostics = Request.DiagnosticsPolicy->CollectStageAggregates
-            || Request.DiagnosticsPolicy->CollectTaskSamples;
+        Stats->CollectExecutionDiagnostics = Request.DiagnosticsPolicy->CollectStages;
         Stats->CollectBufferLookupDiagnostics = Request.DiagnosticsPolicy->CollectBufferLookup;
 
         if constexpr (ExecType == EExecType::Data) {

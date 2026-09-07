@@ -10,9 +10,16 @@
 
 namespace NKikimr::NKqp {
 
+TString UserFacingQueryDatabase(const NPrivateEvents::TEvQueryRequest& request) {
+    // For an omitted database, TDatabasesCache resolves DatabaseId to the tenant
+    // path. Explicit databases may have opaque ids, so prefer their request path.
+    return request.GetDatabase() ? request.GetDatabase() : request.GetDatabaseId();
+}
+
 TProxyUserFacingTraceContext::TProxyUserFacingTraceContext(
         NPrivateEvents::TEvQueryRequest& request)
     : ParentTraceId(request.GetUserFacingWilsonTraceId())
+    , Database(UserFacingQueryDatabase(request))
     , Action(request.GetAction())
     , Origin(request.Record.GetUserFacingTrace().ProxyRequestHopsSize() == 0) {
     if (request.GetQuerySize() <= MaxUserFacingQueryTextSize) {
@@ -59,21 +66,19 @@ std::optional<TProxyUserFacingTraceSnapshot> TProxyUserFacingTraceContext::Detac
     const TInstant startedAt = HasStart ? StartedAt : finishedAt;
     const bool hasSessionTrace = bool(name);
     if (!hasSessionTrace) {
-        name = NKikimrKqp::EQueryAction_Name(Action);
-        constexpr TStringBuf prefix = "QUERY_ACTION_";
-        if (name.StartsWith(prefix)) {
-            name = name.substr(prefix.size());
-        }
+        name = UserFacingQueryActionName(Action);
         operation = name;
     }
     return TProxyUserFacingTraceSnapshot{
         .ParentTraceId = std::move(ParentTraceId),
         .RootTraceId = std::move(RootTraceId),
         .QueryText = std::move(QueryText),
+        .Database = std::move(Database),
         .StartedAt = startedAt,
         .SentAt = SentAt,
         .FinishedAt = finishedAt,
-        .Name = std::move(name),
+        .Name = UserFacingQuerySpanName(Action),
+        .QuerySummary = std::move(name),
         .Operation = std::move(operation),
         .Status = status,
         .NodeId = nodeId,
@@ -81,10 +86,6 @@ std::optional<TProxyUserFacingTraceSnapshot> TProxyUserFacingTraceContext::Detac
         .HasSessionTrace = hasSessionTrace,
         .Coverage = std::move(coverage),
     };
-}
-
-bool TProxyUserFacingTraceContext::IsOrigin() const {
-    return Origin;
 }
 
 NActors::IActor* CreateRejectedUserFacingTraceRendererActor(
@@ -97,6 +98,7 @@ NActors::IActor* CreateRejectedUserFacingTraceRendererActor(
 
     TRejectedUserFacingQuerySnapshot snapshot;
     snapshot.TraceId = std::move(traceId);
+    snapshot.Database = UserFacingQueryDatabase(request);
     if (request.GetQuerySize() <= MaxUserFacingQueryTextSize) {
         snapshot.QueryText = request.GetQuery();
     }
@@ -139,8 +141,7 @@ TUserFacingTraceContext::TUserFacingTraceContext(NWilson::TTraceId traceId,
     const ui8 level = TraceId.GetVerbosity();
     using TLevels = TComponentTracingLevels::TQueryProcessor;
     DiagnosticsPolicy.CollectTimeline = true;
-    DiagnosticsPolicy.CollectStageAggregates = level >= TLevels::Detailed;
-    DiagnosticsPolicy.CollectTaskSamples = level >= TLevels::Detailed;
+    DiagnosticsPolicy.CollectStages = level >= TLevels::Detailed;
     DiagnosticsPolicy.CollectShardSamples = level >= TLevels::Diagnostic;
     DiagnosticsPolicy.CollectBufferLookup = level >= TLevels::Detailed;
     DiagnosticsPolicy.CollectCommitTimeline = level >= TLevels::Detailed;
@@ -309,7 +310,7 @@ void ShiftShardAcks(std::vector<TShardAckDiagnostic>& shards, i64 offsetUs) {
 void ShiftExecutionTrace(TExecutionTraceSnapshot& trace, i64 offsetUs) {
     ShiftWindow(trace.Timeline.Execute, offsetUs);
     for (auto& phase : trace.Timeline.Phases) {
-        ShiftWindow(phase, offsetUs);
+        ShiftWindow(phase.Window, offsetUs);
     }
     for (auto& stage : trace.Stages) {
         ShiftWindow(stage.Window, offsetUs);
@@ -319,9 +320,9 @@ void ShiftExecutionTrace(TExecutionTraceSnapshot& trace, i64 offsetUs) {
         }
     }
     ShiftShardReads(trace.BufferLookup.Shards, offsetUs);
-    ShiftWindow(trace.Commit.PrepareShards, offsetUs);
-    ShiftWindow(trace.Commit.Coordinator, offsetUs);
-    ShiftWindow(trace.Commit.ApplyShards, offsetUs);
+    ShiftWindow(trace.Commit.PrepareShards.Window, offsetUs);
+    ShiftWindow(trace.Commit.Coordinator.Window, offsetUs);
+    ShiftWindow(trace.Commit.ApplyShards.Window, offsetUs);
     ShiftShardAcks(trace.Commit.PreparedShards, offsetUs);
     ShiftShardAcks(trace.Commit.CommittedShards, offsetUs);
 }
@@ -368,6 +369,7 @@ TUserFacingQuerySnapshot TUserFacingTraceContext::DetachSnapshot(
     snapshot.RootName = RootName ? RootName : std::move(completion.FallbackName);
     snapshot.Operation = Operation ? Operation : snapshot.RootName;
     snapshot.QueryText = std::move(completion.QueryText);
+    snapshot.Database = std::move(completion.Database);
     snapshot.RootEnd = ShiftTimestamp(localRootEnd, TimestampOffsetUs);
     snapshot.StartTime = SessionStart;
     snapshot.ProxyRequestHops = std::move(ProxyHops);
@@ -384,8 +386,7 @@ TUserFacingQuerySnapshot TUserFacingTraceContext::DetachSnapshot(
     snapshot.CompileAttempts = std::move(CompileAttempts);
     snapshot.CompileAttemptsDropped = CompileAttemptsDropped;
     snapshot.ExecutionDelegated = ExecutionDelegated;
-    snapshot.Success = completion.Success;
-    snapshot.StatusCode = std::move(completion.StatusCode);
+    snapshot.Status = completion.Status;
     return snapshot;
 }
 

@@ -9,6 +9,10 @@
 #include <utility>
 #include <vector>
 
+namespace NYql::NDqProto {
+class TDqTaskStats;
+}
+
 namespace NKikimr::NKqp {
 
 constexpr size_t MaxInterestingTasksPerStage = 5;
@@ -24,15 +28,14 @@ constexpr size_t MaxCommitShardDiagnosticsPerQuery = 32;
 
 struct TExecutionDiagnosticsPolicy {
     bool CollectTimeline = false;
-    bool CollectStageAggregates = false;
-    bool CollectTaskSamples = false;
+    bool CollectStages = false;
     bool CollectShardSamples = false;
     bool CollectBufferLookup = false;
     bool CollectCommitTimeline = false;
     size_t MaxExecutions = MaxExecutionTraceSnapshots;
 
     explicit operator bool() const {
-        return CollectTimeline || CollectStageAggregates || CollectTaskSamples
+        return CollectTimeline || CollectStages
             || CollectShardSamples || CollectBufferLookup || CollectCommitTimeline;
     }
 };
@@ -52,24 +55,15 @@ enum class EExecutionPhase : size_t {
 
 struct TExecutionTimeline {
     TTimeWindow Execute;
-    std::array<TTimeWindow, static_cast<size_t>(EExecutionPhase::Count)> Phases;
+    std::array<TPhaseDiagnostic, static_cast<size_t>(EExecutionPhase::Count)> Phases;
 
-    TTimeWindow& Phase(EExecutionPhase phase) {
+    TPhaseDiagnostic& Phase(EExecutionPhase phase) {
         return Phases[static_cast<size_t>(phase)];
     }
 
-    const TTimeWindow& Phase(EExecutionPhase phase) const {
+    const TPhaseDiagnostic& Phase(EExecutionPhase phase) const {
         return Phases[static_cast<size_t>(phase)];
     }
-};
-
-enum class EStageOperation : ui8 {
-    Compute,
-    Read,
-    Write,
-    Join,
-    Aggregate,
-    Filter,
 };
 
 struct TTaskTraceSnapshot {
@@ -98,6 +92,16 @@ struct TTaskTraceSnapshot {
     }
 };
 
+inline bool TaskDiagnosticsLess(const TTaskTraceSnapshot& lhs, const TTaskTraceSnapshot& rhs) {
+    const auto rank = [](const TTaskTraceSnapshot& task) {
+        return std::tuple(task.Failed, task.HasAnomaly(), task.SpilledBytes > 0,
+            task.ReadRetries > 0, task.DurationUs());
+    };
+    return rank(lhs) < rank(rhs);
+}
+
+TTaskTraceSnapshot MakeTaskTraceSnapshot(const NYql::NDqProto::TDqTaskStats& task);
+
 struct TTaskDurationSummary {
     ui64 MinUs = 0;
     ui64 MaxUs = 0;
@@ -108,7 +112,11 @@ struct TTaskDurationSummary {
 struct TStageTraceSnapshot {
     ui32 StageId = 0;
     TString TablePath;
-    EStageOperation Operation = EStageOperation::Compute;
+    bool HasJoins = false;
+    bool HasAggregations = false;
+    bool HasFilters = false;
+    bool HasReads = false;
+    bool HasWrites = false;
     TTimeWindow Window;
     ui64 Tasks = 0;
     ui64 FailedTasks = 0;
@@ -125,6 +133,8 @@ struct TStageTraceSnapshot {
     std::vector<TTaskTraceSnapshot> InterestingTasks;
 };
 
+void KeepInterestingTask(TStageTraceSnapshot& stage, TTaskTraceSnapshot&& task);
+
 struct TBufferLookupDiagnostics {
     std::vector<NKqpProto::TKqpShardReadStats> Shards;
     ui32 ShardsTruncated = 0;
@@ -134,7 +144,6 @@ struct TExecutionTraceSnapshot {
     TString ExecuterActorType;
     TString ComputeActorType;
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
-    std::optional<EExecutionPhase> FailedPhase;
     TExecutionTimeline Timeline;
     ui64 CpuUs = 0;
     ui64 WaitUs = 0;
@@ -175,7 +184,7 @@ public:
     TExecutionTraceSnapshot Finish(Ydb::StatusIds::StatusCode status);
 
 private:
-    void EndCurrentPhase(TInstant finishAt);
+    void EndCurrentPhase(TInstant finishAt, Ydb::StatusIds::StatusCode status);
 
 private:
     TExecutionTraceSnapshot Snapshot;
@@ -213,7 +222,7 @@ public:
     void OnShardPrepared(ui64 shardId);
     void OnShardCommitted(ui64 shardId);
 
-    TCommitDiagnostics Finish();
+    TCommitDiagnostics Finish(Ydb::StatusIds::StatusCode status);
 
 private:
     bool CollectTimeline = false;

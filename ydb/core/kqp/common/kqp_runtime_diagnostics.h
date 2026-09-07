@@ -38,6 +38,13 @@ struct TTimeWindow {
     }
 };
 
+// A bounded interval can also describe interrupted work. Its end timestamp alone
+// does not certify success; UNSPECIFIED means that no result was observed.
+struct TPhaseDiagnostic {
+    TTimeWindow Window;
+    Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+};
+
 inline auto ShardReadDiagnosticsRank(const NKqpProto::TKqpShardReadStats& shard) {
     const bool failed = shard.GetStatus() != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED
         && shard.GetStatus() != Ydb::StatusIds::SUCCESS;
@@ -217,9 +224,9 @@ private:
 };
 
 struct TCommitDiagnostics {
-    TTimeWindow PrepareShards;
-    TTimeWindow Coordinator;
-    TTimeWindow ApplyShards;
+    TPhaseDiagnostic PrepareShards;
+    TPhaseDiagnostic Coordinator;
+    TPhaseDiagnostic ApplyShards;
     std::vector<TShardAckDiagnostic> PreparedShards;
     std::vector<TShardAckDiagnostic> CommittedShards;
     size_t PreparedShardsTruncated = 0;

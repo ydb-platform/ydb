@@ -221,20 +221,18 @@ public:
 
         Y_ENSURE(it->second.CompileActor == compileActor);
         auto request = std::move(it->second);
-        --ActiveRequestsSize;
         ActiveRequests.erase(it);
 
         return request;
     }
 
     size_t ActiveRequestsCount() const {
-        return ActiveRequestsSize;
+        return ActiveRequests.size();
     }
 
     void AddActiveRequest(TKqpCompileRequest&& request) {
         const auto [_, inserted] = ActiveRequests.emplace(request.Query, std::move(request));
         Y_ENSURE(inserted);
-        ++ActiveRequestsSize;
     }
 
 private:
@@ -243,7 +241,6 @@ private:
     TRequestsList Queue;
     THashMap<TKqpQueryId, TRequestsIteratorSet> QueryIndex;
     THashMap<TKqpQueryId, TKqpCompileRequest> ActiveRequests;
-    size_t ActiveRequestsSize = 0;
 };
 
 class TKqpCompileService : public TActorBootstrapped<TKqpCompileService> {

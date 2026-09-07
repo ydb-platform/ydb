@@ -1,19 +1,35 @@
 #include "kqp_execution_trace.h"
 
+#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
+#include <util/string/cast.h>
+
 #include <algorithm>
 #include <tuple>
 
 namespace NKikimr::NKqp {
 namespace {
 
+void KeepInterestingShard(TTaskTraceSnapshot& snapshot, NKqpProto::TKqpShardReadStats&& candidate) {
+    if (snapshot.Shards.size() < MaxShardReadDiagnostics) {
+        snapshot.Shards.push_back(std::move(candidate));
+        return;
+    }
+
+    ++snapshot.ShardsTruncated;
+    const auto leastInteresting = std::min_element(snapshot.Shards.begin(), snapshot.Shards.end(),
+        [](const auto& lhs, const auto& rhs) {
+            return ShardReadDiagnosticsRank(lhs) < ShardReadDiagnosticsRank(rhs);
+        });
+    if (leastInteresting != snapshot.Shards.end()
+            && ShardReadDiagnosticsRank(*leastInteresting) < ShardReadDiagnosticsRank(candidate)) {
+        *leastInteresting = std::move(candidate);
+    }
+}
+
+
 bool Failed(Ydb::StatusIds::StatusCode status) {
     return status != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED
         && status != Ydb::StatusIds::SUCCESS;
-}
-
-auto TaskRank(const TTaskTraceSnapshot& task) {
-    return std::tuple(task.Failed, task.HasAnomaly(), task.SpilledBytes > 0, task.ReadRetries > 0,
-        task.DurationUs());
 }
 
 auto StageRank(const TStageTraceSnapshot& stage) {
@@ -40,6 +56,13 @@ void FinishWindow(TTimeWindow& window, TInstant at) {
 void CloseOpenWindow(TTimeWindow& window, TInstant at) {
     if (window.End == TInstant::Zero()) {
         FinishWindow(window, at);
+    }
+}
+
+void FinishPhase(TPhaseDiagnostic& phase, TInstant at, Ydb::StatusIds::StatusCode status) {
+    if (phase.Window.Start != TInstant::Zero() && phase.Window.End == TInstant::Zero()) {
+        FinishWindow(phase.Window, at);
+        phase.Status = status;
     }
 }
 
@@ -97,6 +120,95 @@ struct TOwnedCommitShard {
 
 } // namespace
 
+TTaskTraceSnapshot MakeTaskTraceSnapshot(const NYql::NDqProto::TDqTaskStats& task) {
+    TTaskTraceSnapshot snapshot;
+    snapshot.TaskId = task.GetTaskId();
+    snapshot.NodeId = task.GetNodeId();
+    const ui64 startMs = task.GetStartTimeMs() ? task.GetStartTimeMs() : task.GetCreateTimeMs();
+    const ui64 finishMs = task.GetFinishTimeMs() ? task.GetFinishTimeMs() : task.GetUpdateTimeMs();
+    if (startMs && finishMs >= startMs) {
+        snapshot.Window = {
+            TInstant::MilliSeconds(startMs),
+            finishMs == startMs
+                ? TInstant::MilliSeconds(finishMs) + TDuration::MicroSeconds(1)
+                : TInstant::MilliSeconds(finishMs),
+        };
+    }
+    if (task.GetCreateTimeMs() && task.GetStartTimeMs() > task.GetCreateTimeMs()) {
+        snapshot.QueueDelayUs = (task.GetStartTimeMs() - task.GetCreateTimeMs()) * 1000;
+    }
+    snapshot.ComputeCpuUs = task.GetComputeCpuTimeUs();
+    snapshot.BuildCpuUs = task.GetBuildCpuTimeUs();
+    snapshot.InputRows = task.GetInputRows();
+    snapshot.OutputRows = task.GetOutputRows();
+    snapshot.WaitUs = task.GetWaitInputTimeUs() + task.GetWaitOutputTimeUs();
+    snapshot.SpilledBytes = task.GetSpillingComputeWriteBytes() + task.GetSpillingChannelWriteBytes();
+
+    if (task.HasExtra()) {
+        NKqpProto::TKqpTaskExtraStats extra;
+        if (task.GetExtra().UnpackTo(&extra)) {
+            snapshot.ReadRetries = extra.GetReadRetriesCount() + extra.GetScanTaskExtraStats().GetRetriesCount();
+            snapshot.ShardsTruncated = extra.GetShardReadsDroppedCount();
+            for (const auto& shard : extra.GetShardReads()) {
+                KeepInterestingShard(snapshot, NKqpProto::TKqpShardReadStats(shard));
+            }
+        }
+    }
+    for (const auto& source : task.GetSources()) {
+        for (const auto& partition : source.GetExternalPartitions()) {
+            ui64 shardId = 0;
+            if (!TryFromString(partition.GetPartitionId(), shardId)) {
+                continue;
+            }
+            NKqpProto::TKqpShardReadStats shard;
+            shard.SetShardId(shardId);
+            shard.SetStartTimeMs(partition.GetFirstMessageMs());
+            shard.SetFinishTimeMs(partition.GetLastMessageMs());
+            shard.SetRowCount(partition.GetExternalRows());
+            shard.SetTimingBoundary(
+                NKqpProto::TKqpShardReadStats::FIRST_MESSAGE_TO_LAST_MESSAGE);
+            KeepInterestingShard(snapshot, std::move(shard));
+        }
+    }
+
+    for (const auto& shard : snapshot.Shards) {
+        if (!shard.GetStartTimeMs() || shard.GetFinishTimeMs() < shard.GetStartTimeMs()) {
+            continue;
+        }
+        const TInstant shardStart = TInstant::MilliSeconds(shard.GetStartTimeMs());
+        const TInstant shardEnd = TInstant::MilliSeconds(shard.GetFinishTimeMs());
+        snapshot.Window.Start = snapshot.Window.Start == TInstant::Zero()
+            ? shardStart : Min(snapshot.Window.Start, shardStart);
+        snapshot.Window.End = Max(snapshot.Window.End, shardEnd);
+    }
+    std::sort(snapshot.Shards.begin(), snapshot.Shards.end(), [&](const auto& lhs, const auto& rhs) {
+        return ShardReadDiagnosticsRank(lhs) > ShardReadDiagnosticsRank(rhs);
+    });
+    if (snapshot.Shards.size() > MaxInterestingShardsPerTask) {
+        snapshot.ShardsTruncated += snapshot.Shards.size() - MaxInterestingShardsPerTask;
+        snapshot.Shards.resize(MaxInterestingShardsPerTask);
+    }
+    return snapshot;
+}
+
+void KeepInterestingTask(TStageTraceSnapshot& stage, TTaskTraceSnapshot&& task) {
+    auto& tasks = stage.InterestingTasks;
+    if (auto it = std::find_if(tasks.begin(), tasks.end(), [&](const auto& item) {
+            return item.TaskId == task.TaskId;
+        }); it != tasks.end()) {
+        *it = std::move(task);
+        return;
+    }
+    if (tasks.size() < MaxInterestingTasksPerStage) {
+        tasks.push_back(std::move(task));
+        return;
+    }
+    auto least = std::min_element(tasks.begin(), tasks.end(), TaskDiagnosticsLess);
+    if (least != tasks.end() && TaskDiagnosticsLess(*least, task)) {
+        *least = std::move(task);
+    }
+}
+
 void AccumulateExecutionTraceTotals(TExecutionTraceTotals& totals,
         const TExecutionTraceSnapshot& snapshot) {
     totals.CpuUs += snapshot.CpuUs;
@@ -122,23 +234,20 @@ TExecutionDiagnosticsCapture::TExecutionDiagnosticsCapture(TString executerActor
 
 void TExecutionDiagnosticsCapture::OnPhaseStarted(EExecutionPhase phase) {
     const TInstant transitionAt = TInstant::Now();
-    EndCurrentPhase(transitionAt);
+    EndCurrentPhase(transitionAt, Ydb::StatusIds::SUCCESS);
     CurrentPhase = phase;
-    Snapshot.Timeline.Phase(phase).Start = transitionAt;
+    Snapshot.Timeline.Phase(phase) = {{transitionAt, {}}, Ydb::StatusIds::STATUS_CODE_UNSPECIFIED};
 }
 
 void TExecutionDiagnosticsCapture::OnTableResolverFinished(
         const TTimeWindow& navigateWindow, const TTimeWindow& resolveKeysWindow,
         Ydb::StatusIds::StatusCode status) {
-    Snapshot.Timeline.Phase(EExecutionPhase::ResolveMetadata) = navigateWindow;
-    Snapshot.Timeline.Phase(EExecutionPhase::ResolvePartitioning) = resolveKeysWindow;
-    if (status != Ydb::StatusIds::SUCCESS) {
-        if (resolveKeysWindow) {
-            Snapshot.FailedPhase = EExecutionPhase::ResolvePartitioning;
-        } else if (navigateWindow) {
-            Snapshot.FailedPhase = EExecutionPhase::ResolveMetadata;
-        }
-    }
+    // Resolver envelopes may overlap and do not carry individual results. A
+    // resolver failure cannot be attributed to either envelope from timing alone.
+    const auto childStatus = status == Ydb::StatusIds::SUCCESS
+        ? status : Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+    Snapshot.Timeline.Phase(EExecutionPhase::ResolveMetadata) = {navigateWindow, childStatus};
+    Snapshot.Timeline.Phase(EExecutionPhase::ResolvePartitioning) = {resolveKeysWindow, childStatus};
 }
 
 void TExecutionDiagnosticsCapture::SetCommitDiagnostics(TCommitDiagnostics diagnostics) {
@@ -149,18 +258,15 @@ TExecutionTraceSnapshot TExecutionDiagnosticsCapture::Finish(
         Ydb::StatusIds::StatusCode status) {
     const TInstant finishAt = TInstant::Now();
     Snapshot.Status = status;
-    if (status != Ydb::StatusIds::SUCCESS && !Snapshot.FailedPhase
-            && CurrentPhase != EExecutionPhase::Count) {
-        Snapshot.FailedPhase = CurrentPhase;
-    }
-    EndCurrentPhase(finishAt);
+    EndCurrentPhase(finishAt, status);
     FinishWindow(Snapshot.Timeline.Execute, finishAt);
     return std::move(Snapshot);
 }
 
-void TExecutionDiagnosticsCapture::EndCurrentPhase(TInstant finishAt) {
+void TExecutionDiagnosticsCapture::EndCurrentPhase(TInstant finishAt,
+        Ydb::StatusIds::StatusCode status) {
     if (CurrentPhase != EExecutionPhase::Count) {
-        FinishWindow(Snapshot.Timeline.Phase(CurrentPhase), finishAt);
+        FinishPhase(Snapshot.Timeline.Phase(CurrentPhase), finishAt, status);
         CurrentPhase = EExecutionPhase::Count;
     }
 }
@@ -197,27 +303,27 @@ TCommitDiagnosticsCapture::TCommitDiagnosticsCapture(bool collectTimeline, bool 
 
 void TCommitDiagnosticsCapture::OnPrepareStarted(TInstant at) {
     if (CollectTimeline) {
-        Snapshot.PrepareShards.Start = at;
+        Snapshot.PrepareShards.Window.Start = at;
     }
 }
 
 void TCommitDiagnosticsCapture::OnImmediateCommitStarted(TInstant at) {
     if (CollectTimeline) {
-        Snapshot.ApplyShards.Start = at;
+        Snapshot.ApplyShards.Window.Start = at;
     }
 }
 
 void TCommitDiagnosticsCapture::OnDistributedCommitStarted(TInstant at) {
     if (CollectTimeline) {
-        FinishWindow(Snapshot.PrepareShards, at);
-        Snapshot.Coordinator.Start = at;
+        FinishPhase(Snapshot.PrepareShards, at, Ydb::StatusIds::SUCCESS);
+        Snapshot.Coordinator.Window.Start = at;
     }
 }
 
 void TCommitDiagnosticsCapture::OnCoordinatorPlanned() {
     if (CollectTimeline) {
-        FinishWindow(Snapshot.Coordinator, TInstant::Now());
-        Snapshot.ApplyShards.Start = Snapshot.Coordinator.End;
+        FinishPhase(Snapshot.Coordinator, TInstant::Now(), Ydb::StatusIds::SUCCESS);
+        Snapshot.ApplyShards.Window.Start = Snapshot.Coordinator.Window.End;
     }
 }
 
@@ -233,12 +339,12 @@ void TCommitDiagnosticsCapture::OnShardCommitted(ui64 shardId) {
     }
 }
 
-TCommitDiagnostics TCommitDiagnosticsCapture::Finish() {
+TCommitDiagnostics TCommitDiagnosticsCapture::Finish(Ydb::StatusIds::StatusCode status) {
     if (CollectTimeline) {
         const TInstant finishedAt = TInstant::Now();
-        CloseOpenWindow(Snapshot.PrepareShards, finishedAt);
-        CloseOpenWindow(Snapshot.Coordinator, finishedAt);
-        CloseOpenWindow(Snapshot.ApplyShards, finishedAt);
+        FinishPhase(Snapshot.PrepareShards, finishedAt, status);
+        FinishPhase(Snapshot.Coordinator, finishedAt, status);
+        FinishPhase(Snapshot.ApplyShards, finishedAt, status);
     }
     if (CollectShards) {
         Snapshot.PreparedShards = PreparedShards.Shards();
@@ -250,6 +356,16 @@ TCommitDiagnostics TCommitDiagnosticsCapture::Finish() {
 }
 
 void TrimExecutionTraceSnapshots(std::vector<TExecutionTraceSnapshot>& snapshots) {
+    for (auto& trace : snapshots) {
+        auto& buffer = trace.BufferLookup;
+        std::sort(buffer.Shards.begin(), buffer.Shards.end(), [](const auto& lhs, const auto& rhs) {
+            return ShardReadDiagnosticsRank(lhs) > ShardReadDiagnosticsRank(rhs);
+        });
+        if (buffer.Shards.size() > MaxInterestingShardsPerTask) {
+            buffer.ShardsTruncated += buffer.Shards.size() - MaxInterestingShardsPerTask;
+            buffer.Shards.resize(MaxInterestingShardsPerTask);
+        }
+    }
     std::vector<TOwnedStage> stages;
     std::vector<size_t> originalStages(snapshots.size());
     for (size_t execution = 0; execution < snapshots.size(); ++execution) {
@@ -285,7 +401,7 @@ void TrimExecutionTraceSnapshots(std::vector<TExecutionTraceSnapshot>& snapshots
         }
     }
     RetainBest(tasks, MaxTaskTraceSnapshotsPerQuery, [](const auto& lhs, const auto& rhs) {
-        return TaskRank(lhs.Value) > TaskRank(rhs.Value);
+        return TaskDiagnosticsLess(rhs.Value, lhs.Value);
     });
     for (auto& task : tasks) {
         snapshots[task.Execution].Stages[task.Stage].InterestingTasks.push_back(std::move(task.Value));
@@ -293,7 +409,7 @@ void TrimExecutionTraceSnapshots(std::vector<TExecutionTraceSnapshot>& snapshots
     for (auto& trace : snapshots) {
         for (auto& stage : trace.Stages) {
             std::sort(stage.InterestingTasks.begin(), stage.InterestingTasks.end(),
-                [](const auto& lhs, const auto& rhs) { return TaskRank(lhs) > TaskRank(rhs); });
+                [](const auto& lhs, const auto& rhs) { return TaskDiagnosticsLess(rhs, lhs); });
         }
     }
 
@@ -358,6 +474,9 @@ void TrimExecutionTraceSnapshots(std::vector<TExecutionTraceSnapshot>& snapshots
         for (size_t stage = 0; stage < snapshots[execution].Stages.size(); ++stage) {
             auto& snapshot = snapshots[execution].Stages[stage];
             snapshot.NodesTruncated += originalNodes[execution][stage] - snapshot.TasksByNode.size();
+            std::sort(snapshot.TasksByNode.begin(), snapshot.TasksByNode.end(), [](const auto& lhs, const auto& rhs) {
+                return lhs.second > rhs.second;
+            });
         }
     }
 
@@ -388,15 +507,15 @@ void TrimExecutionTraceSnapshots(std::vector<TExecutionTraceSnapshot>& snapshots
         auto& commit = snapshots[execution].Commit;
         originalCommitShards[execution] = {commit.PreparedShards.size(), commit.CommittedShards.size()};
         for (auto& shard : commit.PreparedShards) {
-            const ui64 durationUs = commit.PrepareShards.Start != TInstant::Zero()
-                    && shard.AcknowledgedAt >= commit.PrepareShards.Start
-                ? (shard.AcknowledgedAt - commit.PrepareShards.Start).MicroSeconds() : 0;
+            const ui64 durationUs = commit.PrepareShards.Window.Start != TInstant::Zero()
+                    && shard.AcknowledgedAt >= commit.PrepareShards.Window.Start
+                ? (shard.AcknowledgedAt - commit.PrepareShards.Window.Start).MicroSeconds() : 0;
             commitShards.push_back({execution, true, durationUs, std::move(shard)});
         }
         for (auto& shard : commit.CommittedShards) {
-            const ui64 durationUs = commit.ApplyShards.Start != TInstant::Zero()
-                    && shard.AcknowledgedAt >= commit.ApplyShards.Start
-                ? (shard.AcknowledgedAt - commit.ApplyShards.Start).MicroSeconds() : 0;
+            const ui64 durationUs = commit.ApplyShards.Window.Start != TInstant::Zero()
+                    && shard.AcknowledgedAt >= commit.ApplyShards.Window.Start
+                ? (shard.AcknowledgedAt - commit.ApplyShards.Window.Start).MicroSeconds() : 0;
             commitShards.push_back({execution, false, durationUs, std::move(shard)});
         }
         commit.PreparedShards.clear();

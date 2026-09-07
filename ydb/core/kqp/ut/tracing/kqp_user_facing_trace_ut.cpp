@@ -135,6 +135,14 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         return nullptr;
     }
 
+    void AssertStringAttribute(const TFakeWilsonUploader::TOtelSpan* span,
+            TStringBuf key, TStringBuf expected) {
+        UNIT_ASSERT(span);
+        const auto* attribute = FindAttribute(*span, key);
+        UNIT_ASSERT_C(attribute, "missing attribute: " << key);
+        UNIT_ASSERT_VALUES_EQUAL_C(attribute->value().string_value(), expected, key);
+    }
+
     const NWilson::TFakeWilsonUploader::TOtelSpan* FindSpanById(
             const TFakeWilsonUploader& uploader, const TString& spanId) {
         for (const auto& span : uploader.Spans) {
@@ -283,8 +291,9 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         TFakeWilsonUploader* devUploader, TFakeWilsonUploader* userUploader);
     void CheckProxyReject(TTestActorRuntime& runtime, TActorId sender,
         TFakeWilsonUploader* devUploader, TFakeWilsonUploader* userUploader);
-    void CheckClientLost(TTestActorRuntime& runtime, TActorId sender,
-        TFakeWilsonUploader* devUploader, TFakeWilsonUploader* userUploader);
+    TString CheckClientLost(TTestActorRuntime& runtime, TActorId sender,
+        TFakeWilsonUploader* devUploader, TFakeWilsonUploader* userUploader,
+        bool userTrace = true, ui32 requestNode = 0);
     void CheckProxyForwarding(TTestActorRuntime& runtime, TServer::TPtr server,
         TActorId sender, TFakeWilsonUploader* devUploader, TFakeWilsonUploader* userUploader);
     void CheckDistributedCommit(TTestActorRuntime& runtime, TActorId sender,
@@ -373,6 +382,36 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         }), "successful execution with retry anomaly was evicted by normal executions");
     }
 
+    Y_UNIT_TEST(RequestDatabaseSurvivesDetachedRendering) {
+        auto [runtime, server, sender] = CreateServer();
+        Y_UNUSED(server);
+        Y_UNUSED(sender);
+        auto [devUploader, userUploader] = RegisterUploaders(runtime);
+        Y_UNUSED(devUploader);
+
+        auto request = MakeSQLRequest("SELECT * FROM `/Root/request_db/table`;", true);
+        request->Record.MutableRequest()->SetDatabase("/Root/request_db");
+        NWilson::TTraceId::NewTraceId(15, 4095).Serialize(
+            request->Record.MutableUserFacingTrace()->MutableTraceId());
+        NKqp::TProxyUserFacingTraceContext context(*request);
+        request->Record.MutableRequest()->SetDatabase("/Root/rejected_db");
+        auto snapshot = context.Detach(Ydb::StatusIds::SUCCESS, runtime.GetNodeId(0),
+            "SELECT /Root/request_db/table", "SELECT");
+        UNIT_ASSERT(snapshot);
+        runtime.Register(NKqp::CreateProxyUserFacingTraceRendererActor(std::move(*snapshot)));
+        runtime.Register(NKqp::CreateRejectedUserFacingTraceRendererActor(
+            *request, Ydb::StatusIds::SESSION_BUSY));
+        request.Reset();
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        const auto* root = FindSpan(*userUploader, "Execute query");
+        AssertStringAttribute(root, "db.namespace", "/Root/request_db");
+        AssertStringAttribute(root, "db.query.summary", "SELECT /Root/request_db/table");
+        AssertStringAttribute(root, "db.operation.name", "SELECT");
+        AssertStringAttribute(FindSpan(*userUploader, "Session"),
+            "db.namespace", "/Root/rejected_db");
+    }
+
     Y_UNIT_TEST(RoutingAndEarlyFailures) {
         auto [runtime, server, sender] = CreateServer();
         Y_UNUSED(server);
@@ -387,8 +426,9 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         )", {.Dml = false});
 
         UNIT_ASSERT_C(FindSpan(*userUploader, "KQP proxy"), "forwarded script lost proxy snapshot");
-        const auto* root = FindSpan(*userUploader, "DDL");
+        const auto* root = FindSpan(*userUploader, "Execute query");
         UNIT_ASSERT_C(root, "forwarded DDL root span missing");
+        AssertStringAttribute(root, "db.query.summary", "DDL");
         const auto* coverage = FindAttribute(*root, "ydb.trace.coverage");
         UNIT_ASSERT_C(coverage, "forwarded DDL does not declare partial trace coverage");
         UNIT_ASSERT_VALUES_EQUAL(coverage->value().string_value(), "routing_session_only");
@@ -441,10 +481,10 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
 
         UNIT_ASSERT(devUploader->Spans.empty());
         UNIT_ASSERT(userUploader->BuildTraceTrees());
-        AssertSpanStatus(FindSpan(*userUploader, "EXECUTE"),
+        AssertSpanStatus(FindSpan(*userUploader, "Execute query"),
             NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
             "session-busy request did not finish its user trace");
-        const auto* root = FindSpan(*userUploader, "EXECUTE");
+        const auto* root = FindSpan(*userUploader, "Execute query");
         UNIT_ASSERT_VALUES_EQUAL(
             FindAttribute(*root, "ydb.trace.coverage")->value().string_value(),
             "rejected_before_query_state");
@@ -473,7 +513,7 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
 
         UNIT_ASSERT(devUploader->Spans.empty());
         UNIT_ASSERT(userUploader->BuildTraceTrees());
-        const auto* root = FindSpan(*userUploader, "EXECUTE");
+        const auto* root = FindSpan(*userUploader, "Execute query");
         AssertSpanStatus(root, NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
             "proxy reject did not finish its root span");
         UNIT_ASSERT_VALUES_EQUAL(
@@ -529,7 +569,7 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         UNIT_ASSERT(devUploader->Spans.empty());
         UNIT_ASSERT(userUploader->BuildTraceTrees());
         const size_t roots = std::ranges::count_if(userUploader->Spans, [](const auto& span) {
-            return span.name() == "EXECUTE";
+            return span.name() == "Execute query";
         });
         UNIT_ASSERT_VALUES_EQUAL_C(roots, 1u,
             "proxy timeout and session abort both rendered the user-facing root");
@@ -557,10 +597,10 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         UNIT_ASSERT_VALUES_EQUAL(1, devUploader->Traces.size());
         UNIT_ASSERT_VALUES_EQUAL(1, userUploader->Traces.size());
 
-        auto* userRoot = FindRootChild(*userUploader, "SELECT /Root/table-1");
+        auto* userRoot = FindRootChild(*userUploader, "Execute query");
         UNIT_ASSERT_C(userRoot, "user-facing root span missing, traces: " << userUploader->PrintTraces());
         UNIT_ASSERT_C(FindRootChild(*devUploader, "Session.query.QUERY_ACTION_EXECUTE"), "dev root span missing");
-        UNIT_ASSERT_C(!FindRootChild(*devUploader, "SELECT /Root/table-1"), "user tree leaked into dev uploader");
+        UNIT_ASSERT_C(!FindRootChild(*devUploader, "Execute query"), "user tree leaked into dev uploader");
         UNIT_ASSERT_C(!FindRootChild(*userUploader, "Session.query.QUERY_ACTION_EXECUTE"),
             "dev tree leaked into user uploader");
         UNIT_ASSERT_C(userRoot->FindOne("KQP proxy"), "KQP proxy phase missing");
@@ -574,8 +614,13 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         UNIT_ASSERT(sessionSpan);
         const auto* roundTripSpan = FindSpan(*userUploader, "KQP session round trip");
         UNIT_ASSERT(roundTripSpan);
-        const auto* rootSpan = FindSpan(*userUploader, "SELECT /Root/table-1");
+        const auto* rootSpan = FindSpan(*userUploader, "Execute query");
         UNIT_ASSERT(rootSpan);
+        for (const auto* span : {rootSpan, sessionSpan}) {
+            AssertStringAttribute(span, "db.namespace", "/Root");
+            AssertStringAttribute(span, "db.query.summary", "SELECT /Root/table-1");
+            AssertStringAttribute(span, "db.operation.name", "SELECT");
+        }
         UNIT_ASSERT_VALUES_EQUAL(sessionSpan->trace_id(), rootSpan->trace_id());
         UNIT_ASSERT_VALUES_EQUAL(roundTripSpan->trace_id(), rootSpan->trace_id());
         UNIT_ASSERT_VALUES_EQUAL(sessionSpan->parent_span_id(), rootSpan->span_id());
@@ -651,8 +696,10 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
 
         trace.Run("UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 400);");
         UNIT_ASSERT_VALUES_EQUAL(userUploader->Traces.size(), 1u);
-        UNIT_ASSERT_C(FindRootChild(*userUploader, "UPSERT /Root/table-1"),
+        UNIT_ASSERT_C(FindRootChild(*userUploader, "Execute query"),
             "user tree missing when dev tracing is off");
+        AssertStringAttribute(FindSpan(*userUploader, "Execute query"),
+            "db.query.summary", "UPSERT /Root/table-1");
         UNIT_ASSERT_C(FindSpan(*userUploader, "Apply commit"),
             "immediate commit Apply commit span missing");
         const auto* commitShard = FindSpanWithAttribute(*userUploader, "ydb.shard_id");
@@ -673,9 +720,12 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         AssertSpanStatus(FindSpan(*userUploader, "Compile"),
             NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
             "compile error was exported as successful");
-        auto* compileRoot = FindRootChild(*userUploader, "EXECUTE");
+        AssertSpanStatus(FindSpan(*userUploader, "Compile query"),
+            NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
+            "failed compile actor was exported as successful");
+        auto* compileRoot = FindRootChild(*userUploader, "Execute query");
         UNIT_ASSERT_C(compileRoot, "compile error root span missing");
-        AssertSpanStatus(FindSpan(*userUploader, "EXECUTE"),
+        AssertSpanStatus(FindSpan(*userUploader, "Execute query"),
             NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
             "compile error root span was exported as successful");
 
@@ -698,15 +748,16 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         AssertSpanStatus(FindSpan(*userUploader, "Execute"),
             NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
             "runtime error Execute span was exported as successful");
-        auto* runtimeRoot = FindRootChild(*userUploader, "UPSERT /Root/UniqueValues");
+        auto* runtimeRoot = FindRootChild(*userUploader, "Execute query");
         UNIT_ASSERT_C(runtimeRoot, "runtime error root span missing");
-        AssertSpanStatus(FindSpan(*userUploader, "UPSERT /Root/UniqueValues"),
+        AssertSpanStatus(FindSpan(*userUploader, "Execute query"),
             NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
             "runtime error root span was exported as successful");
     }
 
-    void CheckClientLost(TTestActorRuntime& runtime, TActorId sender,
-            TFakeWilsonUploader* devUploader, TFakeWilsonUploader* userUploader) {
+    TString CheckClientLost(TTestActorRuntime& runtime, TActorId sender,
+            TFakeWilsonUploader* devUploader, TFakeWilsonUploader* userUploader,
+            bool userTrace, ui32 requestNode) {
         ClearUploader(*devUploader);
         ClearUploader(*userUploader);
 
@@ -732,9 +783,12 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         auto request = MakeSQLRequest("SELECT 1;", true);
         request->Record.MutableRequest()->SetSessionId(
             createSession->Get()->Record.GetResponse().GetSessionId());
-        NWilson::TTraceId::NewTraceId(15, 4095).Serialize(
-            request->Record.MutableUserFacingTrace()->MutableTraceId());
-        runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId(0)), sender,
+        request->Record.MutableRequest()->SetKeepSession(true);
+        if (userTrace) {
+            NWilson::TTraceId::NewTraceId(15, 4095).Serialize(
+                request->Record.MutableUserFacingTrace()->MutableTraceId());
+        }
+        runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId(requestNode)), sender,
             request.Release()));
         TDispatchOptions compileBlocked;
         compileBlocked.FinalEvents.emplace_back([&](IEventHandle&) { return bool(blockedCompile); });
@@ -745,13 +799,61 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
             new NGRpcService::TEvClientLost()));
         runtime.SimulateSleep(TDuration::Seconds(1));
 
+        const auto cancelled = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(cancelled->Get()->Record.GetYdbStatus(), Ydb::StatusIds::CANCELLED);
         UNIT_ASSERT(devUploader->Spans.empty());
-        UNIT_ASSERT_C(userUploader->BuildTraceTrees(),
-            "missing parents: " << DescribeMissingParents(*userUploader));
-        UNIT_ASSERT_VALUES_EQUAL(userUploader->Traces.size(), 1u);
-        AssertSpanStatus(FindSpan(*userUploader, "EXECUTE"),
-            NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
-            "client-lost request did not finish its user trace");
+        if (userTrace) {
+            UNIT_ASSERT_C(userUploader->BuildTraceTrees(),
+                "missing parents: " << DescribeMissingParents(*userUploader));
+            UNIT_ASSERT_VALUES_EQUAL(userUploader->Traces.size(), 1u);
+            AssertSpanStatus(FindSpan(*userUploader, "Execute query"),
+                NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
+                "client-lost request did not finish its user trace");
+        } else {
+            UNIT_ASSERT(userUploader->Spans.empty());
+        }
+
+        auto list = MakeHolder<NKqp::TEvKqp::TEvListSessionsRequest>();
+        list->Record.SetFreeSpace(1000000);
+        list->Record.AddColumns(1);
+        list->Record.AddColumns(3);
+        list->Record.AddColumns(4);
+        runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId(0)), sender,
+            list.Release()));
+        const auto sessions = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvListSessionsResponse>(sender);
+        const TString sessionId = createSession->Get()->Record.GetResponse().GetSessionId();
+        const auto found = std::ranges::find_if(sessions->Get()->Record.GetSessions(),
+            [&](const auto& item) { return item.GetSessionId() == sessionId; });
+        UNIT_ASSERT_C(found != sessions->Get()->Record.GetSessions().end(),
+            sessions->Get()->Record.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(found->GetState(), "IDLE", "cancelled query kept as active");
+        UNIT_ASSERT_C(found->GetQuery().empty(), "cancelled query text remained attached to session");
+        return sessionId;
+    }
+
+    Y_UNIT_TEST(ClientLostRestoresSessionIdleTimeout) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableTableServiceConfig()->SetSessionIdleDurationSeconds(5);
+        auto [runtime, server, sender] = CreateServer(2, std::move(config));
+        Y_UNUSED(server);
+        auto [devUploader, userUploader] = RegisterUploaders(runtime);
+        for (const bool userTrace : {false, true}) {
+            for (const ui32 requestNode : {0u, 1u}) {
+                const TString sessionId = CheckClientLost(runtime, sender, devUploader,
+                    userUploader, userTrace, requestNode);
+                runtime.SimulateSleep(TDuration::Seconds(10));
+
+                auto list = MakeHolder<NKqp::TEvKqp::TEvListSessionsRequest>();
+                list->Record.SetFreeSpace(1000000);
+                list->Record.AddColumns(1);
+                runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId(0)),
+                    sender, list.Release()));
+                const auto sessions = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvListSessionsResponse>(sender);
+                UNIT_ASSERT_C(std::ranges::none_of(sessions->Get()->Record.GetSessions(),
+                    [&](const auto& item) { return item.GetSessionId() == sessionId; }),
+                    "cancelled session survived its idle timeout: " << sessions->Get()->Record.DebugString());
+            }
+        }
     }
 
     Y_UNIT_TEST(RuntimeExecutionPaths) {
@@ -856,8 +958,10 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
             DELETE FROM `/Root/table-2` WHERE key = 2u;
         )");
 
-        UNIT_ASSERT_C(FindRootChild(*userUploader, "EXECUTE SCRIPT"),
-            "multi-statement query kept the first operation as its root name");
+        UNIT_ASSERT_C(FindRootChild(*userUploader, "Execute query"),
+            "multi-statement query lost the common root name");
+        AssertStringAttribute(FindSpan(*userUploader, "Execute query"),
+            "db.query.summary", "EXECUTE SCRIPT");
     }
 
     Y_UNIT_TEST(CoalescedCompileDoesNotDependOnFirstRequestSampling) {
@@ -998,6 +1102,9 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
             "failed distributed commit was exported as successful");
         UNIT_ASSERT_C(FindSpan(*userUploader, "Prepare shards"),
             "failed distributed commit lost its prepare diagnostics");
+        AssertSpanStatus(FindSpan(*userUploader, "Prepare shards"),
+            NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
+            "failed prepare phase was exported as successful");
     }
 
     void CheckBasicVerbosity(TTestActorRuntime& runtime, TActorId sender,
@@ -1214,9 +1321,9 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
             /*collectShards*/ false);
         timeline.OnPrepareStarted(transitionAt);
         timeline.OnDistributedCommitStarted(transitionAt);
-        auto snapshot = timeline.Finish();
-        UNIT_ASSERT(snapshot.PrepareShards);
-        UNIT_ASSERT_VALUES_EQUAL(snapshot.PrepareShards.End - snapshot.PrepareShards.Start,
+        auto snapshot = timeline.Finish(Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(snapshot.PrepareShards.Window);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.PrepareShards.Window.End - snapshot.PrepareShards.Window.Start,
             TDuration::MicroSeconds(1));
 
         NKqp::TShardAckDiagnosticsCollector commitCollector;
@@ -1230,6 +1337,118 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
             UNIT_ASSERT_C(shard.ShardId > 2,
                 "commit diagnostics retained an early acknowledgement instead of a straggler");
         }
+    }
+
+    Y_UNIT_TEST(PhaseDiagnosticsPreserveOutcomes) {
+        const TInstant at = TInstant::Seconds(1);
+        for (const auto status : {Ydb::StatusIds::SUCCESS, Ydb::StatusIds::UNAVAILABLE,
+                Ydb::StatusIds::CANCELLED, Ydb::StatusIds::STATUS_CODE_UNSPECIFIED}) {
+            for (size_t phase = 0; phase < 3; ++phase) {
+                NKqp::TCommitDiagnosticsCapture capture(true, false);
+                capture.OnPrepareStarted(at);
+                if (phase >= 1) {
+                    capture.OnDistributedCommitStarted(at + TDuration::Seconds(1));
+                }
+                if (phase >= 2) {
+                    capture.OnCoordinatorPlanned();
+                }
+                const auto snapshot = capture.Finish(status);
+                UNIT_ASSERT(snapshot.PrepareShards.Window);
+                UNIT_ASSERT_VALUES_EQUAL(snapshot.PrepareShards.Status,
+                    phase == 0 ? status : Ydb::StatusIds::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL(bool(snapshot.Coordinator.Window), phase >= 1);
+                if (phase >= 1) {
+                    UNIT_ASSERT_VALUES_EQUAL(snapshot.Coordinator.Status,
+                        phase == 1 ? status : Ydb::StatusIds::SUCCESS);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(bool(snapshot.ApplyShards.Window), phase >= 2);
+                if (phase >= 2) {
+                    UNIT_ASSERT_VALUES_EQUAL(snapshot.ApplyShards.Status, status);
+                }
+            }
+
+            NKqp::TExecutionDiagnosticsCapture execution("executer", "compute");
+            execution.OnPhaseStarted(NKqp::EExecutionPhase::ResolveTables);
+            execution.OnPhaseStarted(NKqp::EExecutionPhase::RunTasks);
+            const auto snapshot = execution.Finish(status);
+            UNIT_ASSERT_VALUES_EQUAL(snapshot.Timeline.Phase(NKqp::EExecutionPhase::ResolveTables).Status,
+                Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(snapshot.Timeline.Phase(NKqp::EExecutionPhase::RunTasks).Status, status);
+        }
+    }
+
+    Y_UNIT_TEST(UnknownPhaseIsNotSuccessful) {
+        auto [runtime, server, sender] = CreateServer();
+        Y_UNUSED(server);
+        Y_UNUSED(sender);
+        auto [devUploader, userUploader] = RegisterUploaders(runtime);
+        Y_UNUSED(devUploader);
+        const TInstant at = TInstant::Now();
+        const NKqp::TTimeWindow window{at, at + TDuration::Seconds(1)};
+
+        NKqp::TUserFacingQuerySnapshot query;
+        query.TraceId = NWilson::TTraceId::NewTraceId(15, 4095);
+        query.StartTime = window.Start;
+        query.RootEnd = window.End;
+        query.Status = Ydb::StatusIds::CANCELLED;
+        NKqp::TCompileAttemptDiagnostic compile;
+        compile.Start = window.Start;
+        compile.End = window.End;
+        compile.Actor = NKqp::TCompileActorDiagnostic{window.Start, window.End};
+        query.CompileAttempts.push_back(std::move(compile));
+        NKqp::TExecutionTraceSnapshot execution;
+        execution.Status = query.Status;
+        execution.Timeline.Execute = window;
+        execution.Timeline.Phase(NKqp::EExecutionPhase::Commit) = {window, query.Status};
+        execution.Commit.PrepareShards.Window = window;
+        query.ExecutionTraces.push_back(std::move(execution));
+
+        runtime.Register(NKqp::CreateUserFacingTraceRendererActor(std::move(query)));
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        AssertSpanStatus(FindSpan(*userUploader, "Commit"),
+            NWilson::NTraceProto::Status::STATUS_CODE_ERROR, "cancelled commit lost its error");
+        for (const TString name : {"Compile", "Compile query", "Prepare shards"}) {
+            AssertSpanStatus(FindSpan(*userUploader, name),
+                NWilson::NTraceProto::Status::STATUS_CODE_UNSET,
+                "phase without a result inherited a terminal status");
+        }
+    }
+
+    Y_UNIT_TEST(FailedTasksSurviveBothRetentionLimits) {
+        const TInstant at = TInstant::Seconds(1);
+        NKqp::TExecutionTraceSnapshot execution;
+        for (size_t index = 0; index <= NKqp::MaxTaskTraceSnapshotsPerQuery / NKqp::MaxInterestingTasksPerStage; ++index) {
+            NKqp::TStageTraceSnapshot stage;
+            stage.StageId = index;
+            for (size_t taskId = 1; taskId <= NKqp::MaxInterestingTasksPerStage; ++taskId) {
+                NKqp::TTaskTraceSnapshot task;
+                task.TaskId = taskId;
+                task.Window = {at, at + TDuration::Seconds(taskId)};
+                task.SpilledBytes = 1;
+                NKqp::KeepInterestingTask(stage, std::move(task));
+            }
+            if (index == 0) {
+                NKqp::TTaskTraceSnapshot failed;
+                failed.TaskId = 1000;
+                failed.Window = {at, at + TDuration::MicroSeconds(1)};
+                failed.Failed = true;
+                NKqp::KeepInterestingTask(stage, std::move(failed));
+                UNIT_ASSERT_C(std::ranges::any_of(stage.InterestingTasks,
+                    [](const auto& task) { return task.Failed; }),
+                    "online task retention discarded a short failure in favor of slow successes");
+            }
+            execution.Stages.push_back(std::move(stage));
+        }
+        NKqp::TrimExecutionTraceSnapshot(execution);
+        size_t tasks = 0;
+        bool failedRetained = false;
+        for (const auto& stage : execution.Stages) {
+            tasks += stage.InterestingTasks.size();
+            failedRetained |= std::ranges::any_of(stage.InterestingTasks,
+                [](const auto& task) { return task.Failed; });
+        }
+        UNIT_ASSERT_VALUES_EQUAL(tasks, NKqp::MaxTaskTraceSnapshotsPerQuery);
+        UNIT_ASSERT_C(failedRetained, "query-wide retention discarded the failure preserved by online collection");
     }
 
     Y_UNIT_TEST(BoundedDiagnosticsAndTiming) {
@@ -1320,7 +1539,7 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
 
         UNIT_ASSERT(devUploader->Spans.empty());
         UNIT_ASSERT(userUploader->BuildTraceTrees());
-        UNIT_ASSERT_C(FindRootChild(*userUploader, "SELECT /Root/table-1"),
+        UNIT_ASSERT_C(FindRootChild(*userUploader, "Execute query"),
             "user-facing trace was not sampled from UserFacingTracingConfig");
 
         bool shardSeen = false;
@@ -1352,8 +1571,12 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         trace.Run("SELECT * FROM `/Root/table-1`;", {.SessionId = sessionId});
 
         UNIT_ASSERT_VALUES_EQUAL(userUploader->Traces.size(), 1u);
-        UNIT_ASSERT_C(FindRootChild(*userUploader, "SELECT /Root/table-1"),
-            "forwarded request did not keep a single descriptive root");
+        UNIT_ASSERT_C(FindRootChild(*userUploader, "Execute query"),
+            "forwarded request did not keep a single root");
+        AssertStringAttribute(FindSpan(*userUploader, "Execute query"),
+            "db.namespace", "/Root");
+        AssertStringAttribute(FindSpan(*userUploader, "Execute query"),
+            "db.query.summary", "SELECT /Root/table-1");
         const auto* forwarding = FindSpan(*userUploader, "Forward to KQP proxy");
         UNIT_ASSERT_C(forwarding, "inter-node forwarding span missing");
         const auto* sourceNode = FindAttribute(*forwarding, "ydb.source_node_id");

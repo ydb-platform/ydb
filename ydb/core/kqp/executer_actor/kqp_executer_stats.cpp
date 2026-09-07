@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <numeric>
-#include <tuple>
 
 namespace NKikimr::NKqp {
 
@@ -22,117 +21,6 @@ ui64 ExportMinStats(std::vector<ui64>& data);
 ui64 ExportMaxStats(std::vector<ui64>& data);
 
 namespace {
-
-void KeepInterestingShard(TTaskTraceSnapshot& snapshot, NKqpProto::TKqpShardReadStats&& candidate) {
-    if (snapshot.Shards.size() < MaxShardReadDiagnostics) {
-        snapshot.Shards.push_back(std::move(candidate));
-        return;
-    }
-
-    ++snapshot.ShardsTruncated;
-    const auto leastInteresting = std::min_element(snapshot.Shards.begin(), snapshot.Shards.end(),
-        [](const auto& lhs, const auto& rhs) {
-            return ShardReadDiagnosticsRank(lhs) < ShardReadDiagnosticsRank(rhs);
-        });
-    if (leastInteresting != snapshot.Shards.end()
-            && ShardReadDiagnosticsRank(*leastInteresting) < ShardReadDiagnosticsRank(candidate)) {
-        *leastInteresting = std::move(candidate);
-    }
-}
-
-TTaskTraceSnapshot MakeTaskTraceSnapshot(const NYql::NDqProto::TDqTaskStats& task) {
-    TTaskTraceSnapshot snapshot;
-    snapshot.TaskId = task.GetTaskId();
-    snapshot.NodeId = task.GetNodeId();
-    const ui64 startMs = task.GetStartTimeMs() ? task.GetStartTimeMs() : task.GetCreateTimeMs();
-    const ui64 finishMs = task.GetFinishTimeMs() ? task.GetFinishTimeMs() : task.GetUpdateTimeMs();
-    if (startMs && finishMs >= startMs) {
-        snapshot.Window = {
-            TInstant::MilliSeconds(startMs),
-            finishMs == startMs
-                ? TInstant::MilliSeconds(finishMs) + TDuration::MicroSeconds(1)
-                : TInstant::MilliSeconds(finishMs),
-        };
-    }
-    if (task.GetCreateTimeMs() && task.GetStartTimeMs() > task.GetCreateTimeMs()) {
-        snapshot.QueueDelayUs = (task.GetStartTimeMs() - task.GetCreateTimeMs()) * 1000;
-    }
-    snapshot.ComputeCpuUs = task.GetComputeCpuTimeUs();
-    snapshot.BuildCpuUs = task.GetBuildCpuTimeUs();
-    snapshot.InputRows = task.GetInputRows();
-    snapshot.OutputRows = task.GetOutputRows();
-    snapshot.WaitUs = task.GetWaitInputTimeUs() + task.GetWaitOutputTimeUs();
-    snapshot.SpilledBytes = task.GetSpillingComputeWriteBytes() + task.GetSpillingChannelWriteBytes();
-
-    if (task.HasExtra()) {
-        NKqpProto::TKqpTaskExtraStats extra;
-        if (task.GetExtra().UnpackTo(&extra)) {
-            snapshot.ReadRetries = extra.GetReadRetriesCount() + extra.GetScanTaskExtraStats().GetRetriesCount();
-            snapshot.ShardsTruncated = extra.GetShardReadsDroppedCount();
-            for (const auto& shard : extra.GetShardReads()) {
-                KeepInterestingShard(snapshot, NKqpProto::TKqpShardReadStats(shard));
-            }
-        }
-    }
-    for (const auto& source : task.GetSources()) {
-        for (const auto& partition : source.GetExternalPartitions()) {
-            ui64 shardId = 0;
-            if (!TryFromString(partition.GetPartitionId(), shardId)) {
-                continue;
-            }
-            NKqpProto::TKqpShardReadStats shard;
-            shard.SetShardId(shardId);
-            shard.SetStartTimeMs(partition.GetFirstMessageMs());
-            shard.SetFinishTimeMs(partition.GetLastMessageMs());
-            shard.SetRowCount(partition.GetExternalRows());
-            shard.SetTimingBoundary(
-                NKqpProto::TKqpShardReadStats::FIRST_MESSAGE_TO_LAST_MESSAGE);
-            KeepInterestingShard(snapshot, std::move(shard));
-        }
-    }
-
-    for (const auto& shard : snapshot.Shards) {
-        if (!shard.GetStartTimeMs() || shard.GetFinishTimeMs() < shard.GetStartTimeMs()) {
-            continue;
-        }
-        const TInstant shardStart = TInstant::MilliSeconds(shard.GetStartTimeMs());
-        const TInstant shardEnd = TInstant::MilliSeconds(shard.GetFinishTimeMs());
-        snapshot.Window.Start = snapshot.Window.Start == TInstant::Zero()
-            ? shardStart : Min(snapshot.Window.Start, shardStart);
-        snapshot.Window.End = Max(snapshot.Window.End, shardEnd);
-    }
-    std::sort(snapshot.Shards.begin(), snapshot.Shards.end(), [&](const auto& lhs, const auto& rhs) {
-        return ShardReadDiagnosticsRank(lhs) > ShardReadDiagnosticsRank(rhs);
-    });
-    if (snapshot.Shards.size() > MaxInterestingShardsPerTask) {
-        snapshot.ShardsTruncated += snapshot.Shards.size() - MaxInterestingShardsPerTask;
-        snapshot.Shards.resize(MaxInterestingShardsPerTask);
-    }
-    return snapshot;
-}
-
-bool LessInteresting(const TTaskTraceSnapshot& lhs, const TTaskTraceSnapshot& rhs) {
-    return std::tuple(lhs.HasAnomaly(), lhs.DurationUs())
-        < std::tuple(rhs.HasAnomaly(), rhs.DurationUs());
-}
-
-void KeepInterestingTask(TStageTraceSnapshot& stage, TTaskTraceSnapshot&& task) {
-    auto& tasks = stage.InterestingTasks;
-    if (auto it = std::find_if(tasks.begin(), tasks.end(), [&](const auto& item) {
-            return item.TaskId == task.TaskId;
-        }); it != tasks.end()) {
-        *it = std::move(task);
-        return;
-    }
-    if (tasks.size() < MaxInterestingTasksPerStage) {
-        tasks.push_back(std::move(task));
-        return;
-    }
-    auto least = std::min_element(tasks.begin(), tasks.end(), LessInteresting);
-    if (least != tasks.end() && LessInteresting(*least, task)) {
-        *least = std::move(task);
-    }
-}
 
 ui64 Sum(const std::vector<ui64>& values) {
     return std::accumulate(values.begin(), values.end(), ui64{0});
@@ -1684,11 +1572,6 @@ void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {
     metrics->OutputBytes = outputBytes;
 }
 
-void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats,
-        Ydb::Table::QueryStatsCollection::Mode exportMode) {
-    ExportExecStatsImpl(stats, exportMode);
-}
-
 void TQueryExecutionStats::ExportDiagnosticsSnapshot(TExecutionTraceSnapshot& snapshot) {
     snapshot.CpuUs = StorageCpuTimeUs + ComputeCpuTimeUs.Sum;
     for (const auto& [stageId, stageInfo] : TasksGraph->GetStagesInfo()) {
@@ -1707,17 +1590,14 @@ void TQueryExecutionStats::ExportDiagnosticsSnapshot(TExecutionTraceSnapshot& sn
             stage.WaitUs = stats.WaitInputTimeUs.Sum + stats.WaitOutputTimeUs.Sum;
             stage.SpilledBytes = stats.SpillingComputeBytes.Sum + stats.SpillingChannelBytes.Sum;
 
-            if (!stats.Joins.empty()) {
-                stage.Operation = EStageOperation::Join;
-            } else if (!stats.Aggregations.empty()) {
-                stage.Operation = EStageOperation::Aggregate;
-            } else if (!stats.Filters.empty()) {
-                stage.Operation = EStageOperation::Filter;
-            } else if (!stats.Tables.empty()) {
+            stage.HasJoins = !stats.Joins.empty();
+            stage.HasAggregations = !stats.Aggregations.empty();
+            stage.HasFilters = !stats.Filters.empty();
+            if (!stats.Tables.empty()) {
                 const auto& [tablePath, table] = *stats.Tables.begin();
                 stage.TablePath = tablePath;
-                stage.Operation = Sum(table.WriteRows) + Sum(table.EraseRows) > 0
-                    ? EStageOperation::Write : EStageOperation::Read;
+                stage.HasWrites = Sum(table.WriteRows) + Sum(table.EraseRows) > 0;
+                stage.HasReads = Sum(table.ReadRows) > 0;
             }
         }
         for (const auto& input : stageInfo.Meta.GetStage(stageId).GetInputs()) {
@@ -1727,17 +1607,15 @@ void TQueryExecutionStats::ExportDiagnosticsSnapshot(TExecutionTraceSnapshot& sn
             const auto strategy = input.GetStreamLookup().GetLookupStrategy();
             if (strategy == NKqpProto::EStreamLookupStrategy::JOIN
                     || strategy == NKqpProto::EStreamLookupStrategy::SEMI_JOIN) {
-                stage.Operation = EStageOperation::Join;
+                stage.HasJoins = true;
                 break;
             }
         }
         if (!stage.TablePath && stageInfo.Meta.TablePath) {
             stage.TablePath = stageInfo.Meta.TablePath;
-            if (stage.Operation == EStageOperation::Compute) {
-                stage.Operation = stageInfo.Meta.HasWrites()
-                    ? EStageOperation::Write : EStageOperation::Read;
-            }
         }
+        stage.HasWrites |= stageInfo.Meta.HasWrites();
+        stage.HasReads |= bool(stageInfo.Meta.TablePath) && !stageInfo.Meta.HasWrites();
         snapshot.WaitUs += stage.WaitUs;
         snapshot.SpilledBytes += stage.SpilledBytes;
         if (stage.Durations.Count > 1 && stage.Durations.SumUs > 0) {
@@ -1745,26 +1623,12 @@ void TQueryExecutionStats::ExportDiagnosticsSnapshot(TExecutionTraceSnapshot& sn
             snapshot.MaxTaskSkew = Max(snapshot.MaxTaskSkew,
                 static_cast<double>(stage.Durations.MaxUs) / average);
         }
-        std::sort(stage.TasksByNode.begin(), stage.TasksByNode.end(), [](const auto& lhs, const auto& rhs) {
-            return lhs.second > rhs.second;
-        });
-        std::sort(stage.InterestingTasks.begin(), stage.InterestingTasks.end(), [](const auto& lhs, const auto& rhs) {
-            return LessInteresting(rhs, lhs);
-        });
         snapshot.Stages.push_back(std::move(stage));
     }
-    std::sort(snapshot.Stages.begin(), snapshot.Stages.end(), [](const auto& lhs, const auto& rhs) {
-        return lhs.StageId < rhs.StageId;
-    });
     snapshot.BufferLookup = std::move(BufferLookupDiagnostics);
-    if (snapshot.BufferLookup.Shards.size() > MaxInterestingShardsPerTask) {
-        snapshot.BufferLookup.ShardsTruncated +=
-            snapshot.BufferLookup.Shards.size() - MaxInterestingShardsPerTask;
-        snapshot.BufferLookup.Shards.resize(MaxInterestingShardsPerTask);
-    }
 }
 
-void TQueryExecutionStats::ExportExecStatsImpl(NYql::NDqProto::TDqExecutionStats& stats,
+void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats,
         Ydb::Table::QueryStatsCollection::Mode mode) {
     switch (mode) {
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE:

@@ -357,11 +357,6 @@ message TEvQueryResponse {
     optional TUserFacingTraceResult UserFacingTrace = 8;
 }
 
-message TEvUserFacingTraceCompletion {
-    optional Ydb.StatusIds.StatusCode YdbStatus = 1;
-    optional TUserFacingTraceResult UserFacingTrace = 2;
-}
-
 message TCloseSessionRequest {
     optional bytes SessionId = 1;
 }

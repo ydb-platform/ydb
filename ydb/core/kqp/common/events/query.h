@@ -579,7 +579,5 @@ struct TEvQueryResponse: public TEventPBWithArena<TEvQueryResponse, NKikimrKqp::
     {}
 };
 
-struct TEvUserFacingTraceCompletion : public TEventPB<TEvUserFacingTraceCompletion,
-    NKikimrKqp::TEvUserFacingTraceCompletion, TKqpEvents::EvUserFacingTraceCompletion> {};
 
 } // namespace NKikimr::NKqp

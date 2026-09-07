@@ -189,12 +189,42 @@ TString FallbackUserFacingQueryName(NKikimrKqp::EQueryType queryType,
         default:
             break;
     }
-    TString name = NKikimrKqp::EQueryAction_Name(queryAction);
+    return UserFacingQueryActionName(queryAction);
+}
+
+TString UserFacingQueryActionName(NKikimrKqp::EQueryAction action) {
+    TString name = NKikimrKqp::EQueryAction_Name(action);
     constexpr TStringBuf prefix = "QUERY_ACTION_";
     if (name.StartsWith(prefix)) {
         name = name.substr(prefix.size());
     }
     return name;
+}
+
+TString UserFacingQuerySpanName(NKikimrKqp::EQueryAction action) {
+    switch (action) {
+        case NKikimrKqp::QUERY_ACTION_EXECUTE:
+        case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED:
+            return "Execute query";
+        case NKikimrKqp::QUERY_ACTION_EXPLAIN:
+            return "Explain query";
+        case NKikimrKqp::QUERY_ACTION_VALIDATE:
+            return "Validate query";
+        case NKikimrKqp::QUERY_ACTION_PREPARE:
+            return "Prepare query";
+        case NKikimrKqp::QUERY_ACTION_BEGIN_TX:
+            return "Begin transaction";
+        case NKikimrKqp::QUERY_ACTION_COMMIT_TX:
+            return "Commit transaction";
+        case NKikimrKqp::QUERY_ACTION_ROLLBACK_TX:
+            return "Rollback transaction";
+        case NKikimrKqp::QUERY_ACTION_PARSE:
+            return "Parse query";
+        case NKikimrKqp::QUERY_ACTION_TOPIC:
+            return "Topic operation";
+        default:
+            return "Query request";
+    }
 }
 
 } // namespace NKikimr::NKqp

@@ -1086,37 +1086,6 @@ public:
         PendingRequests.Erase(requestId);
     }
 
-    void Handle(TEvKqp::TEvUserFacingTraceCompletion::TPtr& ev) {
-        const ui64 requestId = ev->Cookie;
-        StopQueryTimeout(requestId);
-        auto proxyRequest = PendingRequests.FindPtr(requestId);
-        if (!proxyRequest) {
-            return;
-        }
-
-        if (proxyRequest->UserFacingTrace && !proxyRequest->UserFacingTrace->IsOrigin()) {
-            Send<ESendingType::Tail>(proxyRequest->Sender, ev->Release().Release(), 0,
-                proxyRequest->SenderCookie);
-            PendingRequests.Erase(requestId);
-            return;
-        }
-
-        IActor* renderer = nullptr;
-        if (proxyRequest->UserFacingTrace) {
-            const auto& record = ev->Get()->Record;
-            const auto& trace = record.GetUserFacingTrace();
-            if (auto snapshot = proxyRequest->UserFacingTrace->Detach(
-                    record.GetYdbStatus(), SelfId().NodeId(),
-                    trace.GetName(), trace.GetOperation(), trace.GetCoverage())) {
-                renderer = CreateProxyUserFacingTraceRendererActor(std::move(*snapshot));
-            }
-        }
-        if (renderer) {
-            Register(renderer, TMailboxType::HTSwap, AppData()->BatchPoolId);
-        }
-        PendingRequests.Erase(requestId);
-    }
-
     void ForwardProgress(TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
         ui64 requestId = ev->Cookie;
 
@@ -1531,7 +1500,6 @@ public:
             hFunc(TEvKqp::TEvScriptRequest, Handle);
             hFunc(TEvKqp::TEvCloseSessionRequest, Handle);
             hFunc(TEvKqp::TEvQueryResponse, ForwardEvent);
-            hFunc(TEvKqp::TEvUserFacingTraceCompletion, Handle);
             hFunc(TEvKqpExecuter::TEvExecuterProgress, ForwardProgress);
             hFunc(TEvKqp::TEvCreateSessionRequest, Handle);
             hFunc(TEvKqp::TEvPingSessionRequest, Handle);

@@ -54,7 +54,6 @@ struct TKqpEvents {
         EvListCompileCacheQueriesResponse,
         EvWarmupComplete,
         EvStartWarmup,
-        EvUserFacingTraceCompletion,
     };
 
     static_assert (EvCompileInvalidateRequest + 1 == EvAbortExecution);

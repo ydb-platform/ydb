@@ -33,6 +33,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
+#include <ydb/library/yql/dq/actors/dq.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
@@ -5872,7 +5873,7 @@ public:
             OnOperationFinished(Counters->BufferActorCommitLatencyHistogram);
             auto result = std::make_unique<TEvKqpBuffer::TEvResult>(BuildStats(), std::move(CommitTimestamp));
             if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
-                result->CommitDiagnostics = CommitDiagnosticsCapture->Finish();
+                result->CommitDiagnostics = CommitDiagnosticsCapture->Finish(Ydb::StatusIds::SUCCESS);
             }
             Send<ESendingType::Tail>(ExecuterActorId, result.release());
             ExecuterActorId = {};
@@ -6150,7 +6151,7 @@ public:
 
         TCommitDiagnostics diagnostics;
         if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
-            diagnostics = CommitDiagnosticsCapture->Finish();
+            diagnostics = CommitDiagnosticsCapture->Finish(NYql::NDq::DqStatusToYdbStatus(statusCode));
         }
         Send<ESendingType::Tail>(SessionActorId, new TEvKqpBuffer::TEvError{
             statusCode,

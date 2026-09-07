@@ -135,8 +135,8 @@ TUserFacingQueryMetrics BuildUserFacingQueryMetrics(const TKqpQueryStats& stats)
     return result;
 }
 
-IActor* CreateUserFacingTraceRenderer(TKqpQueryState& state, bool success,
-        const TString& statusCode, NKikimrKqp::TEvQueryResponse* response = nullptr) {
+IActor* CreateUserFacingTraceRenderer(TKqpQueryState& state,
+        Ydb::StatusIds::StatusCode status, NKikimrKqp::TEvQueryResponse* response = nullptr) {
     auto context = std::move(state.UserFacingTrace);
     if (!context) {
         return nullptr;
@@ -144,6 +144,9 @@ IActor* CreateUserFacingTraceRenderer(TKqpQueryState& state, bool success,
 
     TUserFacingQueryCompletion completion;
     completion.FallbackName = FallbackUserFacingQueryName(state.GetType(), state.GetAction());
+    if (state.RequestEv) {
+        completion.Database = UserFacingQueryDatabase(*state.RequestEv);
+    }
     if (state.RequestEv && state.RequestEv->GetQuerySize() <= MaxUserFacingQueryTextSize) {
         completion.QueryText = state.RequestEv->ExtractQuery();
     }
@@ -151,8 +154,7 @@ IActor* CreateUserFacingTraceRenderer(TKqpQueryState& state, bool success,
         completion.PoolId = state.UserRequestContext->PoolId;
     }
     completion.Metrics = BuildUserFacingQueryMetrics(state.QueryStats);
-    completion.Success = success;
-    completion.StatusCode = statusCode;
+    completion.Status = status;
 
     auto snapshot = context->DetachSnapshot(std::move(completion));
     if (response) {
@@ -3510,11 +3512,7 @@ public:
 
         if (request->Get()->Record.HasUserFacingTrace()
                 && request->Get()->Record.GetUserFacingTrace().HasTraceId()) {
-            TString traceName = NKikimrKqp::EQueryAction_Name(request->Get()->GetAction());
-            constexpr TStringBuf actionPrefix = "QUERY_ACTION_";
-            if (traceName.StartsWith(actionPrefix)) {
-                traceName = traceName.substr(actionPrefix.size());
-            }
+            const TString traceName = UserFacingQueryActionName(request->Get()->GetAction());
             auto* trace = response->Record.MutableUserFacingTrace();
             trace->SetName(traceName);
             trace->SetOperation(traceName);
@@ -3590,7 +3588,7 @@ public:
 
         auto& record = QueryResponse->Record;
         auto& response = *record.MutableResponse();
-        const auto& status = record.GetYdbStatus();
+        const auto status = record.GetYdbStatus();
 
         AddTrailingInfo(record);
 
@@ -3630,8 +3628,7 @@ public:
 
         KQP_REQ_LOG(TLogQuery::Completed(*QueryState, record, responseByteSize));
 
-        IActor* userFacingRenderer = CreateUserFacingTraceRenderer(*QueryState,
-            status == Ydb::StatusIds::SUCCESS, Ydb::StatusIds::StatusCode_Name(status), &record);
+        IActor* userFacingRenderer = CreateUserFacingTraceRenderer(*QueryState, status, &record);
 
         Send<ESendingType::Tail>(QueryState->Sender, QueryResponse.release(), 0, QueryState->ProxyRequestId);
         if (userFacingRenderer) {
@@ -3937,23 +3934,14 @@ public:
             {"isFinal", isFinal},
             {"traceId", TraceId()});
 
+        if (QueryState && !QueryResponse) {
+            // Even if the client disappeared, the proxy needs the terminal response
+            // to release the pending request and restart the session's idle timer.
+            QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
+            QueryResponse->Record.SetYdbStatus(Ydb::StatusIds::CANCELLED);
+        }
         if (QueryResponse) {
             Reply();
-        } else if (QueryState && QueryState->UserFacingTrace) {
-            if (QueryState->KqpSessionSpan) {
-                QueryState->KqpSessionSpan.EndError("Request ended without a response");
-            }
-            NKikimrKqp::TEvQueryResponse traceSummary;
-            if (IActor* renderer = CreateUserFacingTraceRenderer(*QueryState, /*success*/ false,
-                    Ydb::StatusIds::StatusCode_Name(Ydb::StatusIds::CANCELLED), &traceSummary)) {
-                Register(renderer, TMailboxType::HTSwap, AppData()->BatchPoolId);
-
-                auto completion = MakeHolder<TEvKqp::TEvUserFacingTraceCompletion>();
-                completion->Record.SetYdbStatus(Ydb::StatusIds::CANCELLED);
-                completion->Record.MutableUserFacingTrace()->CopyFrom(
-                    traceSummary.GetUserFacingTrace());
-                Send(QueryState->Sender, completion.Release(), 0, QueryState->ProxyRequestId);
-            }
         }
 
         if (CleanupCtx)

@@ -46,10 +46,10 @@ struct TUserFacingQueryMetrics {
 struct TUserFacingQueryCompletion {
     TString FallbackName;
     TString QueryText;
+    TString Database;
     TString PoolId;
     TUserFacingQueryMetrics Metrics;
-    bool Success = false;
-    TString StatusCode;
+    Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
 };
 
 struct TUserFacingQuerySnapshot;
@@ -111,6 +111,7 @@ struct TUserFacingQuerySnapshot {
     TString RootName;
     TString Operation;
     TString QueryText;
+    TString Database;
     TInstant RootEnd;
     TInstant StartTime;
     std::vector<NKikimrKqp::TProxyRequestHop> ProxyRequestHops;
@@ -125,13 +126,13 @@ struct TUserFacingQuerySnapshot {
     std::vector<TCompileAttemptDiagnostic> CompileAttempts;
     size_t CompileAttemptsDropped = 0;
     bool ExecutionDelegated = false;
-    bool Success = false;
-    TString StatusCode;
+    Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
 };
 
 struct TRejectedUserFacingQuerySnapshot {
     NWilson::TTraceId TraceId;
     TString QueryText;
+    TString Database;
     std::vector<NKikimrKqp::TProxyRequestHop> ProxyRequestHops;
     TInstant RejectedAt;
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
@@ -141,10 +142,12 @@ struct TProxyUserFacingTraceSnapshot {
     NWilson::TTraceId ParentTraceId;
     NWilson::TTraceId RootTraceId;
     TString QueryText;
+    TString Database;
     TInstant StartedAt;
     TInstant SentAt;
     TInstant FinishedAt;
     TString Name;
+    TString QuerySummary;
     TString Operation;
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
     ui32 NodeId = 0;
@@ -170,12 +173,11 @@ public:
         Ydb::StatusIds::StatusCode status, ui32 nodeId,
         TString name = {}, TString operation = {}, TString coverage = {});
 
-    bool IsOrigin() const;
-
 private:
     NWilson::TTraceId ParentTraceId;
     NWilson::TTraceId RootTraceId;
     TString QueryText;
+    TString Database;
     TInstant StartedAt;
     NActors::TMonotonic MonotonicStartedAt;
     NKikimrKqp::EQueryAction Action;
@@ -215,16 +217,8 @@ public:
         return true;
     }
 
-    size_t Remaining() const {
-        return Remaining_;
-    }
-
     ui64 Dropped() const {
         return Dropped_;
-    }
-
-    void Drop(size_t count = 1) {
-        Dropped_ += count;
     }
 
 private:
@@ -237,6 +231,9 @@ TUserFacingQueryDescription DescribeUserFacingQuery(NKikimrKqp::EQueryType query
     size_t statementCount, const NKqpProto::TKqpPhyQuery& physicalQuery,
     const TMaybe<TString>& commandTag);
 TString ProtectUserFacingQueryText(const TString& text);
+TString UserFacingQueryDatabase(const NPrivateEvents::TEvQueryRequest& request);
+TString UserFacingQueryActionName(NKikimrKqp::EQueryAction action);
+TString UserFacingQuerySpanName(NKikimrKqp::EQueryAction action);
 TString FallbackUserFacingQueryName(NKikimrKqp::EQueryType queryType,
     NKikimrKqp::EQueryAction queryAction);
 

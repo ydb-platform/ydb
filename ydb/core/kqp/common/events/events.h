@@ -50,7 +50,6 @@ struct TEvKqp {
     struct TEvDataQueryStreamPartAck : public TEventLocal<TEvDataQueryStreamPartAck, TKqpEvents::EvDataQueryStreamPartAck> {};
 
     using TEvQueryResponse = NPrivateEvents::TEvQueryResponse;
-    using TEvUserFacingTraceCompletion = NPrivateEvents::TEvUserFacingTraceCompletion;
 
     struct TEvListQueryCacheQueriesRequest: public TEventPB<
         TEvListQueryCacheQueriesRequest,

@@ -9,11 +9,16 @@ public:
     TLRUPatternCacheImpl(size_t maxPatternsSize,
                          size_t maxPatternsSizeBytes,
                          size_t maxCompiledPatternsSize,
-                         size_t maxCompiledPatternsSizeBytes)
+                         size_t maxCompiledPatternsSizeBytes,
+                         const NMonitoring::TDynamicCounterPtr& counters)
         : MaxPatternsSize_(maxPatternsSize)
         , MaxPatternsSizeBytes_(maxPatternsSizeBytes)
         , MaxCompiledPatternsSize_(maxCompiledPatternsSize)
         , MaxCompiledPatternsSizeBytes_(maxCompiledPatternsSizeBytes)
+        , Evictions_(counters->GetCounter("PatternCache/Evictions", /*derivative=*/true))
+        , EvictedUnused_(counters->GetCounter("PatternCache/EvictedUnused", /*derivative=*/true))
+        , CompiledCodeEvictions_(counters->GetCounter("PatternCache/CompiledCodeEvictions", /*derivative=*/true))
+        , WastedCompilations_(counters->GetCounter("PatternCache/WastedCompilations", /*derivative=*/true))
     {
     }
 
@@ -78,6 +83,8 @@ public:
     void NotifyPatternCompiled(const TProgramKey& key) {
         auto it = ProgramKeyToPatternCacheHolder_.find(key);
         if (it == ProgramKeyToPatternCacheHolder_.end()) {
+            // The entry has left the cache while it was being compiled, so the compiled code has nowhere to go.
+            ++*WastedCompilations_;
             return;
         }
 
@@ -85,8 +92,8 @@ public:
 
         if (!entry->Pattern->IsCompiled()) {
             // This is possible if the old entry got removed from cache while being compiled - and the new entry got in.
-            // TODO: add metrics for this inefficient cache usage.
             // TODO: make this scenario more consistent - don't waste compilation result.
+            ++*WastedCompilations_;
             return;
         }
 
@@ -211,6 +218,13 @@ private:
         while (ProgramKeyToPatternCacheHolder_.size() > MaxPatternsSize_ ||
                CurrentPatternsSizeBytes_ > MaxPatternsSizeBytes_) {
             TPatternCacheHolder* holder = LruPatternList_.Front();
+
+            ++*Evictions_;
+            if (!holder->Entry->AccessTimes.load()) {
+                // Nobody has ever taken this entry out of the cache since it was put there.
+                ++*EvictedUnused_;
+            }
+
             RemoveEntryFromLists(holder);
             ProgramKeyToPatternCacheHolder_.erase(holder->Key);
         }
@@ -219,6 +233,8 @@ private:
         while (CurrentCompiledPatternsSize_ > MaxCompiledPatternsSize_ ||
                CurrentPatternsCompiledCodeSizeInBytes_ > MaxCompiledPatternsSizeBytes_) {
             TPatternCacheHolder* holder = LruCompiledPatternList_.PopFront();
+
+            ++*CompiledCodeEvictions_;
 
             Y_ASSERT(CurrentCompiledPatternsSize_ > 0);
             --CurrentCompiledPatternsSize_;
@@ -247,13 +263,21 @@ private:
     THashMap<TProgramKey, TPatternCacheHolder> ProgramKeyToPatternCacheHolder_;
     TIntrusiveList<TPatternCacheHolder, TPatternLRUListTag> LruPatternList_;
     TIntrusiveList<TPatternCacheHolder, TCompiledPatternLRUListTag> LruCompiledPatternList_;
+
+    NMonitoring::TDynamicCounters::TCounterPtr Evictions_;
+    NMonitoring::TDynamicCounters::TCounterPtr EvictedUnused_;
+    NMonitoring::TDynamicCounters::TCounterPtr CompiledCodeEvictions_;
+    NMonitoring::TDynamicCounters::TCounterPtr WastedCompilations_;
 };
 
 TComputationPatternLRUCache::TComputationPatternLRUCache(
     const TComputationPatternLRUCache::TConfig& configuration,
     NMonitoring::TDynamicCounterPtr counters)
-    : Cache_(std::make_unique<TLRUPatternCacheImpl>(
-          CacheMaxElementsSize, configuration.MaxSizeBytes, CacheMaxElementsSize, configuration.MaxCompiledSizeBytes))
+    : Cache_(std::make_unique<TLRUPatternCacheImpl>(CacheMaxElementsSize,
+                                                    configuration.MaxSizeBytes,
+                                                    CacheMaxElementsSize,
+                                                    configuration.MaxCompiledSizeBytes,
+                                                    counters))
     , Configuration_(configuration)
     , Hits_(counters->GetCounter("PatternCache/Hits", /*derivative=*/true))
     , HitsCompiled_(counters->GetCounter("PatternCache/HitsCompiled", /*derivative=*/true))

@@ -1126,8 +1126,11 @@ Y_UNIT_TEST(EvictedCompiledCodeIsNotCompiledAgain) {
     constexpr size_t patternSize = 100;
     constexpr size_t accessTimesBeforeCompile = 2;
 
+    auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    auto compiledCodeEvictions = counters->GetCounter("PatternCache/CompiledCodeEvictions", /*derivative=*/true);
+
     // The compiled code budget only fits a single pattern.
-    TComputationPatternLRUCache cache({10 * patternSize, patternSize, accessTimesBeforeCompile});
+    TComputationPatternLRUCache cache({10 * patternSize, patternSize, accessTimesBeforeCompile}, counters);
 
     const TProgramKey key{NYql::UnknownLangVersion, {}, "program"};
     auto entry = MakeMockEntry(patternSize);
@@ -1151,6 +1154,7 @@ Y_UNIT_TEST(EvictedCompiledCodeIsNotCompiledAgain) {
     otherEntry->Pattern->Compile("", /*stats=*/nullptr);
     cache.EmplacePattern(TProgramKey{NYql::UnknownLangVersion, {}, "other"}, otherEntry);
     UNIT_ASSERT(!entry->Pattern->IsCompiled());
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*compiledCodeEvictions), 1);
 
     // Once the code has been evicted, the pattern must not be queued for compilation over and over again.
     for (size_t i = 0; i < 10 * accessTimesBeforeCompile; ++i) {
@@ -1165,6 +1169,8 @@ Y_UNIT_TEST(EvictedCompiledCodeIsNotCompiledAgain) {
 Y_UNIT_TEST(EvictedEntryIsMarkedAsNotCached) {
     auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
     auto sizeBytes = counters->GetCounter("PatternCache/SizeBytes", /*derivative=*/false);
+    auto evictions = counters->GetCounter("PatternCache/Evictions", /*derivative=*/true);
+    auto evictedUnused = counters->GetCounter("PatternCache/EvictedUnused", /*derivative=*/true);
 
     constexpr size_t accessTimesBeforeCompile = 1;
     constexpr size_t initialMaxBytes = 100'000'000;
@@ -1219,6 +1225,37 @@ Y_UNIT_TEST(EvictedEntryIsMarkedAsNotCached) {
     UNIT_ASSERT(!cache.Find(firstKey));
     UNIT_ASSERT(!first->IsInCache.load());
     UNIT_ASSERT(second->IsInCache.load());
+
+    // Nobody ever got the evicted entry out of the cache, so building it was work done for nothing.
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*evictions), 1);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*evictedUnused), 1);
+}
+
+Y_UNIT_TEST(WastedCompilationsAreCounted) {
+    auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    auto wastedCompilations = counters->GetCounter("PatternCache/WastedCompilations", /*derivative=*/true);
+
+    constexpr size_t maxBytes = 1'000'000;
+    TComputationPatternLRUCache cache({maxBytes, maxBytes}, counters);
+
+    // Compiled by the service after the entry had left the cache: there is nothing to attribute the code to.
+    cache.NotifyPatternCompiled(TProgramKey{NYql::UnknownLangVersion, {}, "gone"});
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*wastedCompilations), 1);
+
+    // Compiled by the service while a new entry has taken the key: the code belongs to the old entry, which is not
+    // the one the cache holds now.
+    const TProgramKey key{NYql::UnknownLangVersion, {}, "replaced"};
+    cache.EmplacePattern(key, MakeMockEntry());
+    cache.NotifyPatternCompiled(key);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*wastedCompilations), 2);
+
+    // And a compilation that does land in the cache is not counted.
+    auto entry = MakeMockEntry();
+    entry->Pattern->Compile("", /*stats=*/nullptr);
+    const TProgramKey liveKey{NYql::UnknownLangVersion, {}, "live"};
+    cache.EmplacePattern(liveKey, entry);
+    cache.NotifyPatternCompiled(liveKey);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*wastedCompilations), 2);
 }
 
 Y_UNIT_TEST(DuplicateEmplaceKeepsTheCachedEntry) {

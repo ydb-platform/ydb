@@ -59,9 +59,9 @@ public:
         CurrentPatternsSizeBytes_ += it->second.Entry->SizeForCache;
         LruPatternList_.PushBack(&it->second);
 
-        if (it->second.Entry->Pattern->IsCompiled()) {
+        if (const size_t compiledCodeSize = GetCompiledCodeSize(*it->second.Entry)) {
             ++CurrentCompiledPatternsSize_;
-            CurrentPatternsCompiledCodeSizeInBytes_ += it->second.Entry->Pattern->CompiledCodeSize();
+            CurrentPatternsCompiledCodeSizeInBytes_ += compiledCodeSize;
             LruCompiledPatternList_.PushBack(&it->second);
         }
 
@@ -84,6 +84,11 @@ public:
             return;
         }
 
+        const size_t compiledCodeSize = GetCompiledCodeSize(*entry);
+        if (!compiledCodeSize) {
+            return;
+        }
+
         if (it->second.LinkedInCompiledPatternLRUList()) {
             return;
         }
@@ -91,7 +96,7 @@ public:
         PromoteEntry(&it->second);
 
         ++CurrentCompiledPatternsSize_;
-        CurrentPatternsCompiledCodeSizeInBytes_ += entry->Pattern->CompiledCodeSize();
+        CurrentPatternsCompiledCodeSizeInBytes_ += compiledCodeSize;
         LruCompiledPatternList_.PushBack(&it->second);
 
         ClearIfNeeded();
@@ -102,13 +107,16 @@ public:
         CurrentCompiledPatternsSize_ = 0;
         CurrentPatternsCompiledCodeSizeInBytes_ = 0;
 
-        ProgramKeyToPatternCacheHolder_.clear();
+        // The holders are the values of the hash map, and both LRU lists merely point at them, so the lists have to
+        // be walked and dropped before the map is cleared.
         for (auto& holder : LruPatternList_) {
             holder.Entry->IsInCache.store(false);
         }
 
         LruPatternList_.Clear();
         LruCompiledPatternList_.Clear();
+
+        ProgramKeyToPatternCacheHolder_.clear();
     }
 
     void UpdateMaxSizes(size_t maxPatternsSizeBytes, size_t maxCompiledPatternsSizeBytes) {
@@ -144,6 +152,15 @@ private:
         TPatternCacheEntryPtr Entry;
     };
 
+    /** A pattern whose codegen was rejected by its limits reports itself as compiled while holding no code at all.
+     * Such an entry has neither anything to account for nor anything to evict, so it is kept out of the compiled
+     * LRU list entirely - otherwise evicting it under memory pressure would free no bytes at all, and the pattern
+     * would just be compiled over and over again to no effect.
+     */
+    static size_t GetCompiledCodeSize(const TPatternCacheEntry& entry) {
+        return entry.Pattern->IsCompiled() ? entry.Pattern->CompiledCodeSize() : 0;
+    }
+
     void PromoteEntry(TPatternCacheHolder* holder) {
         Y_ASSERT(holder->LinkedInPatternLRUList());
         LruPatternList_.Remove(holder);
@@ -164,6 +181,11 @@ private:
         Y_ASSERT(holder->Entry->SizeForCache <= CurrentPatternsSizeBytes_);
         CurrentPatternsSizeBytes_ -= holder->Entry->SizeForCache;
 
+        // The entry is leaving the cache regardless of whether it has any compiled code, and it is exactly the
+        // entries without it that may be waiting in the compilation queue - the flag is what stops them from being
+        // compiled for nothing.
+        holder->Entry->IsInCache.store(false);
+
         if (!holder->LinkedInCompiledPatternLRUList()) {
             return;
         }
@@ -176,8 +198,6 @@ private:
         CurrentPatternsCompiledCodeSizeInBytes_ -= patternCompiledCodeSize;
 
         LruCompiledPatternList_.Remove(holder);
-
-        holder->Entry->IsInCache.store(false);
     }
 
     void ClearIfNeeded() {
@@ -202,8 +222,10 @@ private:
             Y_ASSERT(patternCompiledSize <= CurrentPatternsCompiledCodeSizeInBytes_);
             CurrentPatternsCompiledCodeSizeInBytes_ -= patternCompiledSize;
 
+            // Note that AccessTimes is deliberately left as it is: the entry has already crossed the compilation
+            // threshold once, and resetting the counter here would make it cross the very same threshold again in
+            // a few accesses, so the pattern would be recompiled just to be evicted again.
             pattern->RemoveCompiledCode();
-            holder->Entry->AccessTimes.store(0);
         }
     }
 

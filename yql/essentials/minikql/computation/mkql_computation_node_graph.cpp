@@ -1006,17 +1006,25 @@ public:
     }
 
     void RemoveCompiledCode() override {
-        // Stop handing the code out first, drop it afterwards: a Clone() racing
-        // in between just takes a reference and keeps the code alive for its own
-        // graph.
-        IsPatternCompiled_.store(false, std::memory_order_release);
-        CompiledCodeSize_.store(0, std::memory_order_relaxed);
-
         NYql::NCodegen::ICodegen::TSharedPtr codegen;
         {
             TGuard<TAdaptiveLock> codegenLock(CodegenLock_);
+            if (!Codegen_) {
+                // A pattern whose codegen was rejected by the limits above is
+                // marked as compiled while holding no code at all. There is
+                // nothing to free here, and running the codegen again would only
+                // hit the very same limits, so keep the pattern as it is.
+                return;
+            }
             codegen.swap(Codegen_);
         }
+
+        // Stop handing the code out only after it has been taken away: a Clone()
+        // racing with us either takes a reference and keeps the code alive for
+        // its own graph, or builds an interpreted graph, and both are fine.
+        IsPatternCompiled_.store(false, std::memory_order_release);
+        CompiledCodeSize_.store(0, std::memory_order_relaxed);
+
         // The code itself is released here, outside of the lock, and only once
         // the last graph using it is gone.
     }

@@ -314,23 +314,6 @@ protected:
     bool PermissionNameClause(const TRule_permission_name_target& node, TVector<TDeferredAtom>& result, bool withGrantOption);
     bool PermissionNameClause(const TRule_permission_name& node, TDeferredAtom& result);
     bool PermissionNameClause(const TRule_permission_id& node, TDeferredAtom& result);
-    bool StoreStringSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result);
-    bool StoreStringSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result);
-    bool ParseBackupCollectionSettings(std::map<TString, TDeferredAtom>& result, const TRule_backup_collection_settings& settings);
-    bool ParseBackupCollectionSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_backup_collection_actions& actions);
-    bool ParseBackupCollectionTables(TVector<TDeferredAtom>& result, const TRule_table_list& tables);
-    bool ParseBackupCollectionEntry(
-        bool& addDatabase,
-        bool& removeDatabase,
-        TVector<TDeferredAtom>& addTables,
-        TVector<TDeferredAtom>& removeTables,
-        const TRule_alter_backup_collection_entry& entry);
-    bool ParseBackupCollectionEntries(
-        bool& addDatabase,
-        bool& removeDatabase,
-        TVector<TDeferredAtom>& addTables,
-        TVector<TDeferredAtom>& removeTables,
-        const TRule_alter_backup_collection_entries& entries);
     bool ParseTransferLambda(TString& lambdaText, const TRule_lambda_or_parameter& lambdaOrParameter);
     bool ParseDatabaseSettings(const TRule_database_settings& in, THashMap<TString, TNodePtr>& out);
     bool ParseDatabaseSetting(const TRule_database_setting& in, THashMap<TString, TNodePtr>& out);

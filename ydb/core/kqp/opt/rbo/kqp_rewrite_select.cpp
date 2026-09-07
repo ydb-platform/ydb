@@ -181,6 +181,29 @@ TExprNode::TPtr BuildAggregate(TExprNode::TPtr resultExpr, const TVector<TExprNo
     // clang-format on
 }
 
+TExprNode::TPtr BuildGroupingSets(TExprNode::TPtr aggregate, const TVector<TVector<TInfoUnit>>& groupingSets,
+                                  TExprContext& ctx, TPositionHandle pos) {
+    TVector<TKqpOpGroupingSet> groupingSetNodes;
+    groupingSetNodes.reserve(groupingSets.size());
+    for (const auto& groupingSet : groupingSets) {
+        TVector<TCoAtom> keys;
+        keys.reserve(groupingSet.size());
+        for (const auto& key : groupingSet) {
+            keys.push_back(Build<TCoAtom>(ctx, pos).Value(key.GetFullName()).Done());
+        }
+        groupingSetNodes.push_back(Build<TKqpOpGroupingSet>(ctx, pos).Add(keys).Done());
+    }
+
+    // clang-format off
+    return Build<TKqpOpGroupingSets>(ctx, pos)
+        .Input(aggregate)
+        .GroupingSets<TKqpOpGroupingSetList>()
+            .Add(groupingSetNodes)
+        .Build()
+    .Done().Ptr();
+    // clang-format on
+}
+
 TVector<std::pair<TInfoUnit, TExprNode::TPtr>> BuildExpressionsFromColumns(const TVector<TInfoUnit>& colNames, TExprContext& ctx,
                                                                            TPositionHandle pos) {
     TVector<std::pair<TInfoUnit, TExprNode::TPtr>> renameExprMap;
@@ -655,8 +678,8 @@ void EliminateDuplicateAggregations(TVector<std::tuple<TInfoUnit, TExprNode::TPt
 TExprNode::TPtr BuildAggregationPipeline(TExprNode::TPtr resultExpr, TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>&& expressionsMapPreAgg,
                                          TVector<std::pair<TInfoUnit, TExprNode::TPtr>>&& groupByKeysExpressionsMap, TAggregationTraits&& aggTraits,
                                          TAggregationTraits&& distinctAggregationTraitsPostAggregate, TExprNode::TPtr& havingFilterLambda,
-                                         TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>&& expressionsMapPostAgg, TExprContext& ctx,
-                                         TPositionHandle pos) {
+                                         TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>&& expressionsMapPostAgg,
+                                         const TVector<TVector<TInfoUnit>>& groupingSets, TExprContext& ctx, TPositionHandle pos) {
     // While processing aggregations and having we could have the same aggregations functions on the same column, here we want to eliminate them.
     // TODO: Make a special rule in optimizer for that and support more cases, currently we support only simple one aka:
     // select f(a) ... having f(a) > val ...;
@@ -670,6 +693,10 @@ TExprNode::TPtr BuildAggregationPipeline(TExprNode::TPtr resultExpr, TVector<std
     // Build Aggreegate.
     if (!aggTraits.AggTraitsList.empty()) {
         resultExpr = BuildAggregate(resultExpr, aggTraits.AggTraitsList, aggTraits.KeyColumns, /*distinct=*/false, ctx, pos);
+        if (!groupingSets.empty()) {
+            // Emit grouping sets.
+            resultExpr = BuildGroupingSets(resultExpr, groupingSets, ctx, pos);
+        }
     }
      // Build a having filter for aggregation result.
     if (havingFilterLambda) {
@@ -942,15 +969,13 @@ TExprNode::TPtr BuildLimit(TExprNode::TPtr input, TExprNode::TPtr limit, TExprNo
     return limitBuilder.Done().Ptr();
 }
 
-bool HasRollup(const TVector<TVector<TVector<TString>>>& groupBySets) {
+bool HasRollup(const TVector<TVector<TVector<ui32>>>& groupingSetComponents) {
     bool hasRollup = false;
-    for (const auto& groupBySet : groupBySets) {
-        if (!hasRollup) {
-            hasRollup = groupBySet.size() > 1;
-        }
+    for (const auto& component : groupingSetComponents) {
+        hasRollup = hasRollup || component.size() > 1;
     }
 
-    Y_ENSURE(!hasRollup || (hasRollup && groupBySets.size() == 1), "Unsupported group sets.");
+    Y_ENSURE(!hasRollup || groupingSetComponents.size() == 1, "Unsupported grouping sets. Only rollup is supported.");
     return hasRollup;
 }
 
@@ -1290,8 +1315,8 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
         THashSet<TString> aggregationUniqueColNames;
         // Group by fields for renames or expressions.
         TVector<std::pair<TInfoUnit, TExprNode::TPtr>> groupByKeysExpressionsMap;
-        // Specifies a group sets.
-        TVector<TVector<TVector<TString>>> groupBySets;
+        // Grouping-set components as indexes into groupByKeysExpressionsMap.
+        TVector<TVector<TVector<ui32>>> groupingSetComponents;
 
         // Some additional information needed to build an aggregation pipeline.
         const bool distinctAll = !!GetSetting(setItem->Tail(), "distinct_all");
@@ -1307,23 +1332,22 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
             const auto groupSetsList = groupSetsExpr->TailPtr();
             for (ui32 i = 0; i < groupSetsList->ChildrenSize(); ++i) {
                 const auto setList = groupSetsList->ChildPtr(i);
-                TVector<TVector<TString>> groupBySet;
+                TVector<TVector<ui32>> groupingSetComponent;
                 for (ui32 j = 0; j < setList->ChildrenSize(); ++j) {
                     const auto setIndexes = setList->ChildPtr(j);
-                    TVector<TString> groupByIndexes;
-                    if (setIndexes->ChildrenSize() == 0) {
-                        groupByIndexes.emplace_back("empty");
-                    } else {
-                        for (ui32 k = 0; k < setIndexes->ChildrenSize(); ++k) {
-                            groupByIndexes.emplace_back(TString(setIndexes->ChildPtr(k)->Content()));
-                        }
+                    TVector<ui32> groupByIndexes;
+                    for (ui32 k = 0; k < setIndexes->ChildrenSize(); ++k) {
+                        ui32 groupIndex = 0;
+                        Y_ENSURE(TryFromString<ui32>(setIndexes->ChildPtr(k)->Content(), groupIndex));
+                        groupByIndexes.emplace_back(groupIndex);
                     }
-                    groupBySet.emplace_back(std::move(groupByIndexes));
+                    groupingSetComponent.emplace_back(std::move(groupByIndexes));
                 }
-                groupBySets.emplace_back(std::move(groupBySet));
+                groupingSetComponents.emplace_back(std::move(groupingSetComponent));
             }
         }
-        const bool hasRollup = HasRollup(groupBySets);
+        // TODO: Add support for other combination of grouping sets, currently only rollup is supported.
+        const bool hasRollup = HasRollup(groupingSetComponents);
 
         const auto groupExprsExpr = GetSetting(setItem->Tail(), "group_exprs");
         if (groupExprsExpr) {
@@ -1382,86 +1406,29 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
         ProcessAggregationsInResultItems(result, aggregationUniqueColNames, expressionsMapPreAgg, groupByKeysExpressionsMap, aggregationTraits,
                                          distinctAggregationTraitsPostAggregate, expressionsMapPostAgg, uniqueAggColumnId, distinctAll, ctx, node->Pos());
 
+        TVector<TVector<TInfoUnit>> groupingSets;
         if (hasRollup) {
-            Y_ENSURE(groupBySets.size() == 1, "Invalid group sets size for rollup.");
-            Y_ENSURE(distinctAggregationTraitsPostAggregate.AggTraitsList.empty(), "Unsupported rollup with distinct all.");
-            const auto groupBySet = groupBySets.front();
-            TExprNode::TPtr rollupResultExpr;
-
-            for (const auto& groupByIndexes : groupBySet) {
-                auto aggregationTraitsForSet = aggregationTraits;
-                // We have to use keys based on group set.
-                aggregationTraitsForSet.KeyColumns.clear();
-                TVector<std::pair<TInfoUnit, TExprNode::TPtr>> groupByKeysExpressionsMapForSet;
-                TAggregationTraits distinctAggregationTraitsPostAggregateForSet = distinctAggregationTraitsPostAggregate;
-                TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>> expressionsMapPostAggForSet = expressionsMapPostAgg;
-                TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>> expressionsMapPreAggForSet = expressionsMapPreAgg;
-                THashSet<ui32> indexInGroupBySet;
-
-                for (const TString& groupByIndex : groupByIndexes) {
-                    // For empty set - no keys.
-                    if (groupByIndex != "empty") {
-                        ui32 groupIndex = 0;
-                        Y_ENSURE(TryFromString<ui32>(groupByIndex, groupIndex));
-                        Y_ENSURE(groupIndex < groupByKeysExpressionsMap.size());
-                        indexInGroupBySet.insert(groupIndex);
+            Y_ENSURE(distinctAggregationTraitsPostAggregate.AggTraitsList.empty(), "Unsupported grouping sets with distinct all.");
+            for (const auto& groupingSetIndexes : groupingSetComponents.front()) {
+                THashSet<ui32> indexes(groupingSetIndexes.begin(), groupingSetIndexes.end());
+                TVector<TInfoUnit> groupingSet;
+                for (const auto index : groupingSetIndexes) {
+                    Y_ENSURE(index < groupByKeysExpressionsMap.size(), "Grouping key index is out of range");
+                }
+                for (ui32 index = 0; index < groupByKeysExpressionsMap.size(); ++index) {
+                    if (indexes.contains(index)) {
+                        groupingSet.emplace_back(groupByKeysExpressionsMap[index].first);
                     }
                 }
-
-                for (ui32 i = 0; i < groupByKeysExpressionsMap.size(); ++i) {
-                    const auto groupByKeyPair = groupByKeysExpressionsMap[i];
-                    const auto keyColumn = groupByKeyPair.first;
-                    if (indexInGroupBySet.contains(i)) {
-                        aggregationTraitsForSet.KeyColumns.emplace_back(keyColumn);
-                        groupByKeysExpressionsMapForSet.emplace_back(std::move(groupByKeyPair));
-                    } else {
-                        const TTypeAnnotationNode* groupByKeyType = groupByKeyPair.second->GetTypeAnn();
-                        Y_ENSURE(groupByKeyType, "No type for group by key with rollup");
-
-                        if (groupByKeyType->IsOptionalOrNull()) {
-                            groupByKeyType = groupByKeyType->Cast<TOptionalExprType>()->GetItemType();
-                        }
-
-                        // clang-format off
-                        auto nullColumn = Build<TCoLambda>(ctx, node->Pos())
-                            .Args({"arg"})
-                            .Body<TCoNothing>()
-                                .OptionalType<TCoOptionalType>()
-                                    .ItemType(ExpandType(node->Pos(), *groupByKeyType, ctx))
-                                .Build()
-                            .Build()
-                        .Done().Ptr();
-                        // clang-format on
-                        expressionsMapPostAggForSet.emplace_back(keyColumn, nullColumn, false);
-                    }
-                }
-
-                auto aggregationForGroupSetResultExpr = BuildAggregationPipeline(
-                    resultExpr, std::move(expressionsMapPreAggForSet), std::move(groupByKeysExpressionsMapForSet),
-                    std::move(aggregationTraitsForSet),
-                    std::move(distinctAggregationTraitsPostAggregateForSet), havingFilterLambda, std::move(expressionsMapPostAggForSet), ctx, node->Pos());
-
-                if (rollupResultExpr) {
-                    // clang-format off
-                    rollupResultExpr = Build<TKqpOpSetOp>(ctx, node->Pos())
-                        .LeftInput(rollupResultExpr)
-                        .RightInput(aggregationForGroupSetResultExpr)
-                        .SetOp()
-                            .Value("union_all")
-                        .Build()
-                    .Done().Ptr();
-                    // clang-format on
-                } else {
-                    rollupResultExpr = aggregationForGroupSetResultExpr;
-                }
+                groupingSets.emplace_back(std::move(groupingSet));
             }
-            resultExpr = rollupResultExpr;
-        } else {
-            // Build an aggregation pipeline.
-            resultExpr = BuildAggregationPipeline(resultExpr, std::move(expressionsMapPreAgg), std::move(groupByKeysExpressionsMap),
-                                                  std::move(aggregationTraits), std::move(distinctAggregationTraitsPostAggregate), havingFilterLambda,
-                                                  std::move(expressionsMapPostAgg), ctx, node->Pos());
         }
+
+        // Build an aggregation pipeline.
+        // We emit grouping sets op and will rewrite it in rbo.
+        resultExpr = BuildAggregationPipeline(resultExpr, std::move(expressionsMapPreAgg), std::move(groupByKeysExpressionsMap),
+                                              std::move(aggregationTraits), std::move(distinctAggregationTraitsPostAggregate), havingFilterLambda,
+                                              std::move(expressionsMapPostAgg), groupingSets, ctx, node->Pos());
 
         finalColumnOrder.clear();
         TVector<TString> finalProjection;

@@ -290,7 +290,7 @@ struct TStageExecutionStats {
     ui64 UpdateAsyncStats(ui32 index, TAsyncStats& aggrAsyncStats, const NYql::NDqProto::TDqAsyncBufferStats& asyncStats);
     ui64 UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, NYql::NDqProto::EComputeState state, ui64 memoryUsage, ui64 maxMemoryUsage, ui64 durationUs);
     bool IsDeadlocked(ui64 deadline) const;
-    bool IsFinished();
+    bool IsFinished() const;
 };
 
 struct TGlobalMemoryUsage {

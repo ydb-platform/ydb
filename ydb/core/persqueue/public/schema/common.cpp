@@ -456,7 +456,7 @@ TResult AddConsumer(
 
     if (consumerConfig.important()) {
         if (pqConfig.GetTopicsAreFirstClassCitizen() && !enableTopicDiskSubDomainQuota) {
-            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "important flag is forbiden for consumer " << consumerConfig.name()};
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "important flag is forbidden for consumer " << consumerConfig.name()};
         }
         consumer->SetImportant(true);
     }

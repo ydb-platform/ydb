@@ -1,5 +1,5 @@
-<svg width='1280' height='648' xmlns='http://www.w3.org/2000/svg'>
-<clipPath id='clipTextPath'><rect x='0' y='0' width='298' height='648'/></clipPath>
+<svg width='1280' height='666' xmlns='http://www.w3.org/2000/svg'>
+<clipPath id='clipTextPath'><rect x='0' y='0' width='298' height='666'/></clipPath>
 
 <defs>
   <g id='icon_memory'>
@@ -68,6 +68,9 @@
   .textc { text-anchor:end; dominant-baseline:middle; font-family:Verdana; font-size:8px; fill:var(--stage-text, #262626); }
   circle.stage { stroke:var(--stage-main, #F2F2F2); stroke-width:1; fill:var(--stage-clone, #D9D9D9); }
   line.opdiv { stroke-width:1; stroke:var(--stage-grid, #B2B2B2); stroke-dasharray:1,2; }
+  #columnHeaders text { font-weight:bold; }
+  rect.columns { stroke-width:0; fill:var(--column-header, #D9D9D9); }
+  line.columns { stroke-width:1; stroke:var(--stage-grid, #B2B2B2); }
   text.clipped { clip-path:url(#clipTextPath); }
   polygon.conn { stroke-width:0; fill:var(--conn-fill, #BFBFBF); }
   path.conn { stroke-width:1; stroke:var(--conn-line, #BFBFBF); fill:var(--conn-fill, #BFBFBF); }
@@ -238,7 +241,22 @@
         }
     }
 
+    // The column header strip is an ordinary SVG element, so CSS positioning
+    // does not apply to it: it is moved by hand to the top of the viewport on
+    // every scroll instead. It is the last element of the document, so it paints
+    // over the plans it slides across.
+    function update_column_headers() {
+        var headers = document.getElementById("columnHeaders");
+        if (headers) {
+            var y = window.scrollY || window.pageYOffset || 0;
+            headers.setAttribute("transform", "translate(0," + y + ")");
+        }
+    }
+
+    window.addEventListener("scroll", update_column_headers, false);
+
     window.onload = function() {
+        update_column_headers();
         var nodes = document.querySelectorAll(".selected");
         if (nodes.length > 0) {
             selectedGroups = [];
@@ -287,12 +305,8 @@
 	}, false)
 ]]>
 </script>
-<svg data-height='647' width='1280' height='647' x='0' y='0'>
+<svg data-height='647' width='1280' height='647' x='0' y='18'>
 <svg width='1280' height='647' x='0' y='0'>
-<g><title>1970-01-01T00:00:00.000000Z</title>
-<text x='602' y='13' class='texts'>0:00</text>
-
-</g>
 <g data-group='g1' class='selectable'><title> ResultSet_1</title>
 <rect x='0' y='0' width='298' height='24' class='background'/>
 <text x='36' y='13' class='texts'>Query - ResultSet_1</text>
@@ -301,21 +315,18 @@
 <use href='#icon_arrowdn' transform='translate(2 0) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/></g>
 <g class='aruu button'><rect x='2' y='14' width='14' height='14' class='transparent'/>
 <use href='#icon_arrowup' transform='translate(2 14) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/></g>
-<text x='303' y='13' class='texts'>Rows</text>
-<text x='397' y='13' class='texts'>Statistics</text>
-<text x='390' y='13' class='texte'>Tasks</text>
-<text x='390' y='23' class='texte'>0</text>
+<text x='396' y='23' class='texte'>0</text>
 <g><title>Ingress 0B, Rows 0, Avg 0B/s</title>
-  <rect x='395' y='15' width='65' height='10' stroke-width='0' fill='var(--ingress-medium, #466364)'/>
-  <text font-family='Verdana' font-size='8px' fill='var(--text-light, #FFFFFF)' x='397' y='23'>0B</text>
+  <rect x='401' y='15' width='65' height='10' stroke-width='0' fill='var(--ingress-medium, #466364)'/>
+  <text font-family='Verdana' font-size='8px' fill='var(--text-light, #FFFFFF)' x='403' y='23'>0B</text>
 </g>
 <g><title>CPU Usage 0.00s, Avg 0.00 CPU/s</title>
-  <rect class='cpupath' data-groups='g2,g3,g4,g5,g6,g7,g8,g9,g10,g11,g12' x='462' y='15' width='66' height='10' stroke-width='0' fill='var(--cpu-medium, #A36D7B)'/>
-  <text class='cpupath' data-groups='g2,g3,g4,g5,g6,g7,g8,g9,g10,g11,g12' font-family='Verdana' font-size='8px' fill='var(--text-light, #FFFFFF)' x='464' y='23'>0.00s</text>
+  <rect class='cpupath' data-groups='g2,g3,g4,g5,g6,g7,g8,g9,g10,g11,g12' x='468' y='15' width='66' height='10' stroke-width='0' fill='var(--cpu-medium, #A36D7B)'/>
+  <text class='cpupath' data-groups='g2,g3,g4,g5,g6,g7,g8,g9,g10,g11,g12' font-family='Verdana' font-size='8px' fill='var(--text-light, #FFFFFF)' x='470' y='23'>0.00s</text>
 </g>
 <g><title>Memory 0B</title>
-  <rect x='530' y='15' width='65' height='10' stroke-width='0' fill='var(--mem-medium, #7E4E5B)'/>
-  <text font-family='Verdana' font-size='8px' fill='var(--text-light, #FFFFFF)' x='532' y='23'>0B</text>
+  <rect x='536' y='15' width='65' height='10' stroke-width='0' fill='var(--mem-medium, #7E4E5B)'/>
+  <text font-family='Verdana' font-size='8px' fill='var(--text-light, #FFFFFF)' x='538' y='23'>0B</text>
 </g>
 <g><title>Duration: 0:00.00, Total 0:00.00</title>
   <rect class='timepath' data-groups='g2,g3,g4,g5,g6,g7,g8,g9,g10,g11,g12' x='1215' y='5' width='65' height='10' stroke-width='0' fill='var(--stage-grid, #B2B2B2)'/>
@@ -326,9 +337,9 @@
 <g data-group='g2' class='selectable'><title>Stage 0</title>
 <rect x='0' y='0' width='298' height='100%' class='stage'/>
 <rect x='301' y='0' width='64' height='100%' class='stage'/>
-<rect x='395' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='24' height='100%' class='stage'/>
-<rect x='598' y='0' width='682' height='100%' class='stage'/>
+<rect x='401' y='0' width='200' height='100%' class='stage'/>
+<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Sort: cntrycode</title><text x='36' y='13' class='texts clipped'>Sort: cntrycode</text>
 </g>
 <circle cx='26' cy='9' r='7' class='stage' />
@@ -345,9 +356,9 @@
 <g data-group='g4' class='selectable'><title>Stage 0</title>
 <rect x='0' y='0' width='298' height='100%' class='stage'/>
 <rect x='301' y='0' width='64' height='100%' class='stage'/>
-<rect x='395' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='24' height='100%' class='stage'/>
-<rect x='598' y='0' width='682' height='100%' class='stage'/>
+<rect x='401' y='0' width='200' height='100%' class='stage'/>
+<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Aggregate: SUM(1),SUM(c_acctbal), Group By: cntrycode</title><text x='36' y='13' class='texts clipped'>Aggregate: SUM(1),SUM(c_acctbal), Group By: cntrycode</text>
 </g>
 <circle cx='26' cy='9' r='7' class='stage' />
@@ -367,9 +378,9 @@
 <g data-group='g6' class='selectable'><title>Stage 0</title>
 <rect x='0' y='0' width='298' height='100%' class='stage'/>
 <rect x='301' y='0' width='64' height='100%' class='stage'/>
-<rect x='395' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='24' height='100%' class='stage'/>
-<rect x='598' y='0' width='682' height='100%' class='stage'/>
+<rect x='401' y='0' width='200' height='100%' class='stage'/>
+<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>LeftOnlyJoin (Grace): j.c_custkey = o.o_custkey</title><text x='36' y='13' class='texts clipped'>LeftOnlyJoin (Grace): j.c_custkey = o.o_custkey</text>
 </g>
 <circle cx='26' cy='9' r='7' class='stage' />
@@ -386,9 +397,9 @@
 <g data-group='g8' class='selectable'><title>Stage 0</title>
 <rect x='11' y='0' width='287' height='100%' class='stage'/>
 <rect x='301' y='0' width='64' height='100%' class='stage'/>
-<rect x='395' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='24' height='100%' class='stage'/>
-<rect x='598' y='0' width='682' height='100%' class='stage'/>
+<rect x='401' y='0' width='200' height='100%' class='stage'/>
+<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Filter: c.c_acctbal &gt; a.a</title><text x='47' y='13' class='texts clipped'>Filter: c.c_acctbal &gt; a.a</text>
 </g>
 <circle cx='37' cy='9' r='7' class='stage' />
@@ -408,9 +419,9 @@
 <g data-group='g10' class='selectable'><title>Stage 0</title>
 <rect x='11' y='0' width='287' height='100%' class='stage'/>
 <rect x='301' y='0' width='64' height='100%' class='stage'/>
-<rect x='395' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='24' height='100%' class='stage'/>
-<rect x='598' y='0' width='682' height='100%' class='stage'/>
+<rect x='401' y='0' width='200' height='100%' class='stage'/>
+<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>CrossJoin: </title><text x='47' y='13' class='texts clipped'>CrossJoin: </text>
 </g>
 <circle cx='37' cy='9' r='7' class='stage' />
@@ -427,9 +438,9 @@
 <g data-group='g12' class='selectable'><title>Stage 0</title>
 <rect x='22' y='0' width='276' height='100%' class='stage'/>
 <rect x='301' y='0' width='64' height='100%' class='stage'/>
-<rect x='395' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='24' height='100%' class='stage'/>
-<rect x='598' y='0' width='682' height='100%' class='stage'/>
+<rect x='401' y='0' width='200' height='100%' class='stage'/>
+<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>customer: </title><text x='58' y='13' class='texts clipped'>customer: </text>
 </g>
 <circle cx='48' cy='9' r='7' class='stage' />
@@ -448,9 +459,9 @@
 <g data-group='g14' class='selectable'><title>Stage 0</title>
 <rect x='22' y='0' width='276' height='100%' class='stage'/>
 <rect x='301' y='0' width='64' height='100%' class='stage'/>
-<rect x='395' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='24' height='100%' class='stage'/>
-<rect x='598' y='0' width='682' height='100%' class='stage'/>
+<rect x='401' y='0' width='200' height='100%' class='stage'/>
+<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Aggregate: </title><text x='58' y='13' class='texts clipped'>Aggregate: </text>
 </g>
 <circle cx='48' cy='9' r='7' class='stage' />
@@ -467,9 +478,9 @@
 <g data-group='g16' class='selectable'><title>Stage 0</title>
 <rect x='22' y='0' width='276' height='100%' class='stage'/>
 <rect x='301' y='0' width='64' height='100%' class='stage'/>
-<rect x='395' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='24' height='100%' class='stage'/>
-<rect x='598' y='0' width='682' height='100%' class='stage'/>
+<rect x='401' y='0' width='200' height='100%' class='stage'/>
+<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Limit: 1</title><text x='58' y='13' class='texts clipped'>Limit: 1</text>
 </g>
 <circle cx='48' cy='9' r='7' class='stage' />
@@ -486,9 +497,9 @@
 <g data-group='g18' class='selectable'><title>Stage 0</title>
 <rect x='22' y='0' width='276' height='100%' class='stage'/>
 <rect x='301' y='0' width='64' height='100%' class='stage'/>
-<rect x='395' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='24' height='100%' class='stage'/>
-<rect x='598' y='0' width='682' height='100%' class='stage'/>
+<rect x='401' y='0' width='200' height='100%' class='stage'/>
+<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Aggregate: </title><text x='58' y='13' class='texts clipped'>Aggregate: </text>
 </g>
 <circle cx='48' cy='9' r='7' class='stage' />
@@ -505,9 +516,9 @@
 <g data-group='g20' class='selectable'><title>Stage 0</title>
 <rect x='22' y='0' width='276' height='100%' class='stage'/>
 <rect x='301' y='0' width='64' height='100%' class='stage'/>
-<rect x='395' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='24' height='100%' class='stage'/>
-<rect x='598' y='0' width='682' height='100%' class='stage'/>
+<rect x='401' y='0' width='200' height='100%' class='stage'/>
+<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>Filter: Substring == "31" Or Substring == "29" Or Substring == "30" Or Substring == "26" Or Substring == "28" Or Substring == "25" Or Substring == "15" And c_acctbal &gt; "0.00"</title><text x='58' y='13' class='texts clipped'>Filter: Substring == "31" Or Substring == "29" Or Substring == "30" Or Substring == "26" Or Substring == "28" Or Substring == "25" Or Substring == "15" And c_acctbal &gt; "0.00"</text>
 </g>
 <circle cx='48' cy='9' r='7' class='stage' />
@@ -524,9 +535,9 @@
 <g data-group='g22' class='selectable'><title>Stage 0</title>
 <rect x='22' y='0' width='276' height='100%' class='stage'/>
 <rect x='301' y='0' width='64' height='100%' class='stage'/>
-<rect x='395' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='24' height='100%' class='stage'/>
-<rect x='598' y='0' width='682' height='100%' class='stage'/>
+<rect x='401' y='0' width='200' height='100%' class='stage'/>
+<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>customer: </title><text x='58' y='13' class='texts clipped'>customer: </text>
 </g>
 <circle cx='48' cy='9' r='7' class='stage' />
@@ -575,9 +586,9 @@
 <g data-group='g24' class='selectable'><title>Stage 0</title>
 <rect x='11' y='0' width='287' height='100%' class='stage'/>
 <rect x='301' y='0' width='64' height='100%' class='stage'/>
-<rect x='395' y='0' width='200' height='100%' class='stage'/>
-<rect x='368' y='0' width='24' height='100%' class='stage'/>
-<rect x='598' y='0' width='682' height='100%' class='stage'/>
+<rect x='401' y='0' width='200' height='100%' class='stage'/>
+<rect x='368' y='0' width='30' height='100%' class='stage'/>
+<rect x='604' y='0' width='676' height='100%' class='stage'/>
 <g><title>orders: </title><text x='47' y='13' class='texts clipped'>orders: </text>
 </g>
 <circle cx='37' cy='9' r='7' class='stage' />
@@ -605,5 +616,22 @@
 </svg>
 </svg>
 
-<line x1='600' y1='0' x2='600' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
+<line x1='606' y1='0' x2='606' y2='100%' stroke-width='1' stroke='var(--stage-grid, #B2B2B2)' stroke-dasharray='1,2'/>
+<g id='columnHeaders'>
+<svg width='1280' height='18' x='0' y='0'>
+<rect x='0' y='0' width='298' height='18' class='columns'/>
+<rect x='301' y='0' width='64' height='18' class='columns'/>
+<rect x='368' y='0' width='30' height='18' class='columns'/>
+<rect x='401' y='0' width='200' height='18' class='columns'/>
+<rect x='604' y='0' width='676' height='18' class='columns'/>
+<text x='2' y='13' class='texts'>Stages and Operators</text>
+<text x='303' y='13' class='texts'>Rows</text>
+<text x='396' y='13' class='texte'>Tasks</text>
+<text x='403' y='13' class='texts'>Statistics</text>
+<g><title>1970-01-01T00:00:00.000000Z</title>
+<text x='608' y='13' class='texts'>0:00</text>
+</g>
+</svg>
+<line x1='0' y1='18' x2='1280' y2='18' class='columns' />
+</g>
 </svg>

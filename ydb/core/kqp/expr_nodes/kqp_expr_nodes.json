@@ -1054,6 +1054,23 @@
             ]
         },
         {
+            "Name": "TKqpOpGroupingSet",
+            "ListBase": "TCoAtom"
+        },
+        {
+            "Name": "TKqpOpGroupingSetList",
+            "ListBase": "TKqpOpGroupingSet"
+        },
+        {
+            "Name": "TKqpOpGroupingSets",
+            "Base": "TCallable",
+            "Match" : {"Type": "Callable", "Name": "KqpOpGroupingSets"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TKqpOpAggregate"},
+                {"Index": 1, "Name": "GroupingSets", "Type": "TKqpOpGroupingSetList"}
+            ]
+        },
+        {
             "Name": "TKqpSublinkBase",
             "Base": "TCallable",
             "Match":  {"Type": "CallableBase"},

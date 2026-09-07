@@ -13,7 +13,6 @@
 #include <functional>
 #include <limits>
 
-#include <boost/bind/bind.hpp>
 #include <boost/tuple/tuple.hpp>
 #include <boost/type_traits/is_same.hpp>
 #include <boost/type_traits/remove_const.hpp>
@@ -241,14 +240,10 @@ namespace detail
             typename graph_traits< Graph >::out_edge_iterator oei, oeie;
             for (boost::tie(vi, vie) = vertices(m_g); vi != vie; ++vi)
             {
-                using namespace boost::placeholders;
-
                 boost::tie(oei, oeie) = out_edges(*vi, m_g);
-                typename graph_traits< Graph >::out_edge_iterator mei
-                    = boost::first_max_element(oei, oeie,
-                        boost::bind(m_cmp,
-                            boost::bind(&EdgeWeight1::operator[], m_ew1m, _1),
-                            boost::bind(&EdgeWeight1::operator[], m_ew1m, _2)));
+                auto mei = boost::first_max_element(oei, oeie,
+                    [this](const auto& first, const auto& second)
+                    { return m_cmp(m_ew1m[first], m_ew1m[second]); });
                 if (mei == oeie)
                 {
                     if (m_sink == graph_traits< Graph >().null_vertex())
@@ -356,16 +351,17 @@ namespace detail
          */
         float_t policy_mcr()
         {
-            using namespace boost::placeholders;
-
             std::fill(m_col_bfs.begin(), m_col_bfs.end(), my_white);
             color_map_t vcm_ = color_map_t(m_col_bfs.begin(), m_vim);
             typename graph_traits< Graph >::vertex_iterator uv_itr, vie;
             boost::tie(uv_itr, vie) = vertices(m_g);
             float_t mcr = m_bound;
             while ((uv_itr = std::find_if(uv_itr, vie,
-                        boost::bind(std::equal_to< my_color_type >(), my_white,
-                            boost::bind(&color_map_t::operator[], vcm_, _1))))
+                        [&](const auto& uv)
+                        {
+                            return std::equal_to< my_color_type >()(
+                                my_white, vcm_[uv]);
+                        }))
                 != vie)
             /// While there are undiscovered vertices
             {

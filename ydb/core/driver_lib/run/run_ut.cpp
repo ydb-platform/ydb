@@ -187,7 +187,7 @@ Y_UNIT_TEST(BasicAndIoExecutorsWithoutPlacementUseCurrentAffinity) {
     AssertCpuMasksEqual(cpuManager.IO.front().Affinity, expectedAffinity);
 }
 
-Y_UNIT_TEST(InterconnectSessionExecutorsReferencePoolList) {
+Y_UNIT_TEST(BlobStorageAndInterconnectSessionExecutorsReferencePoolLists) {
     NKikimrConfig::TActorSystemConfig systemConfig;
 
     for (const TString& name : {"System", "BS0", "BS1", "ICSession"}) {
@@ -195,20 +195,26 @@ Y_UNIT_TEST(InterconnectSessionExecutorsReferencePoolList) {
         executor->SetThreads(1);
     }
 
+    systemConfig.AddBlobStorageExecutor(1);
+    systemConfig.AddBlobStorageExecutor(2);
     systemConfig.AddInterconnectSessionExecutor(3);
     systemConfig.AddInterconnectSessionExecutor(2);
 
+    UNIT_ASSERT_VALUES_EQUAL(
+        NActorSystemConfigHelpers::GetBlobStorageExecutorPoolIds(systemConfig),
+        (TVector<ui32>{1, 2}));
     UNIT_ASSERT_VALUES_EQUAL(
         NActorSystemConfigHelpers::GetInterconnectSessionExecutorPoolIds(systemConfig),
         (TVector<ui32>{3, 2}));
 }
 
-Y_UNIT_TEST(InterconnectSessionExecutorPoolListIsEmptyByDefault) {
+Y_UNIT_TEST(ExecutorPoolListsAreEmptyByDefault) {
     NKikimrConfig::TActorSystemConfig systemConfig;
 
     auto* system = AddExecutor(systemConfig, TExecutorConfig::BASIC, "System");
     system->SetThreads(1);
 
+    UNIT_ASSERT(NActorSystemConfigHelpers::GetBlobStorageExecutorPoolIds(systemConfig).empty());
     UNIT_ASSERT(NActorSystemConfigHelpers::GetInterconnectSessionExecutorPoolIds(systemConfig).empty());
 }
 
@@ -228,6 +234,9 @@ Y_UNIT_TEST(BasicExecutorsUsePlacementAffinityWithoutAffectingOtherPools) {
 
     auto* io = AddExecutor(systemConfig, TExecutorConfig::IO, "IO");
     io->SetThreads(1);
+
+    systemConfig.AddBlobStorageExecutor(1);
+    systemConfig.AddBlobStorageExecutor(2);
 
     TCpuTopology cpuTopology;
     cpuTopology.AllCpus = TCpuMask(TString("0-7"));

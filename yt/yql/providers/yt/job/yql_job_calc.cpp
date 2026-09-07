@@ -50,7 +50,9 @@ void TYqlCalcJob::DoImpl(const TFile& inHandle, const TVector<TFile>& outHandles
     Init();
 
     TLambdaBuilder builder(FunctionRegistry.Get(), *Alloc,Env.Get(),
-        RandomProvider.Get(), TimeProvider.Get(), JobStats.Get(), nullptr, SecureParamsProvider.Get(), LogProvider.Get());
+        RandomProvider.Get(), TimeProvider.Get(), JobStats.Get(), nullptr, SecureParamsProvider.Get(), LogProvider.Get(),
+        LangVer, RuntimeSettings,
+        BridgeMode, BridgeMode == NKikimr::NUdf::EBridgeMode::OutProcess ? TString("./udf_bridge") : TString());
 
     std::function<void(const NUdf::TUnboxedValuePod&, TType*, TVector<ui32>*)> flush;
     if (UseResultYson_) {

@@ -299,7 +299,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
             if (ShouldBeCharged_ && IsQuotaRequired()) {
                 const ui64 ru = NBilling::CalcRu(
-                    CalcRuConsumption(payloadSize), NBilling::READ_BASE_COST, NBilling::READ_COST_PER_BLOCK, Fifo_, false);
+                    CalcRuConsumption(payloadSize), NBilling::READ_BASE_COST, NBilling::READ_COST_PER_BLOCK, Fifo_);
                 AFL_ENSURE(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx))("ru", ru)("path", FullTopicPath_);
                 return;
             }

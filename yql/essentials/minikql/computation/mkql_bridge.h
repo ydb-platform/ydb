@@ -87,6 +87,8 @@ private:
     void ServeOneRequest();
     void Dispatch(EBridgeCommand command);
 
+    TString WithModule(TStringBuf message) const;
+
     void EncodeValue(const TType* type, const NUdf::TUnboxedValuePod& value);
     NUdf::TUnboxedValue DecodeValue(const TType* type);
 
@@ -119,6 +121,8 @@ private:
     const IFunctionRegistry* const WorkerFunctionRegistry_;
     const TTypeEnvironment* const WorkerEnv_;
     const NYql::TRuntimeSettings::TConstPtr WorkerRuntimeSettings_;
+
+    TString ModuleName_;
 
     THashMap<TBridgeNodeId, TNode> Nodes_;
     // Plain ui64, not TBridgeNodeId, since it needs to be incremented -- the

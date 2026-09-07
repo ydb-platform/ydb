@@ -54,9 +54,9 @@ ENDIF()
 
 SRCS(
     converters.cpp
+    dq_block.cpp
     dq_combine_vs.cpp
     factories.cpp
-    parquet.cpp
     printout.cpp
     simple.cpp
     simple_block.cpp

@@ -2,7 +2,7 @@
 #include <filesystem>
 #include <ydb/core/kqp/tools/combiner_perf/dq_combine_vs.h>
 #include <ydb/core/kqp/tools/combiner_perf/fs_utils.h>
-#include <ydb/core/kqp/tools/combiner_perf/parquet.h>
+#include <ydb/core/kqp/tools/combiner_perf/dq_block.h>
 #include <ydb/core/kqp/tools/combiner_perf/printout.h>
 #include <ydb/core/kqp/tools/combiner_perf/simple.h>
 #include <ydb/core/kqp/tools/combiner_perf/simple_block.h>
@@ -51,16 +51,16 @@ class TPrintingResultCollector : public TTestResultCollector {
             Cout << ", " << (spilling.value() ? "+" : "-") << "spilling";
         }
         Cout << Endl;
-        const bool parquet = TStringBuf(testName).Contains("Parquet");
+        const bool dqBlock = TStringBuf(testName).Contains("DqBlock");
         Cout << "Data rows total: " << runParams.RowsPerRun << " x " << runParams.NumRuns << Endl;
-        if (parquet) {
-            Cout << "Parquet file: " << runParams.ParquetFile << Endl;
-            Cout << "Columns: " << JoinSeq(",", runParams.ParquetColumns) << Endl;
-            if (runParams.ParquetAstFile.empty()) {
-                Cout << "Keys: " << JoinSeq(",", runParams.ParquetKeyColumns) << Endl;
-                Cout << "Aggregations: " << JoinSeq(",", runParams.ParquetAggregations) << Endl;
+        if (dqBlock) {
+            Cout << "Input file: " << runParams.DqBlockFile << Endl;
+            Cout << "Columns: " << JoinSeq(",", runParams.DqBlockColumns) << Endl;
+            if (runParams.DqBlockAstFile.empty()) {
+                Cout << "Keys: " << JoinSeq(",", runParams.DqBlockKeyColumns) << Endl;
+                Cout << "Aggregations: " << JoinSeq(",", runParams.DqBlockAggregations) << Endl;
             } else {
-                Cout << "Aggregation AST: " << runParams.ParquetAstFile << Endl;
+                Cout << "Aggregation AST: " << runParams.DqBlockAstFile << Endl;
             }
             Cout << "Block size: " << runParams.BlockSize << Endl;
         } else {
@@ -74,7 +74,7 @@ class TPrintingResultCollector : public TTestResultCollector {
         Cout << Endl;
 
         Cout << "Graph runtime is: " << result.ResultTime;
-        if (!parquet) {
+        if (!dqBlock) {
             Cout << " vs. reference C++ implementation: " << result.ReferenceTime;
         }
         Cout << Endl;
@@ -113,17 +113,17 @@ NJson::TJsonValue MakeJsonMetrics(const TRunParams& runParams, const TRunResult&
     }
     out["rowsPerRun"] = runParams.RowsPerRun;
     out["numRuns"] = runParams.NumRuns;
-    const bool parquet = TStringBuf(testName).Contains("Parquet");
-    if (TStringBuf(testName).Contains("Block") || parquet) {
+    const bool dqBlock = TStringBuf(testName).Contains("DqBlock");
+    if (TStringBuf(testName).Contains("Block") || dqBlock) {
         out["blockSize"] = runParams.BlockSize;
     }
-    if (parquet) {
-        out["parquetFile"] = runParams.ParquetFile;
-        out["parquetRowLimit"] = runParams.ParquetRowLimit;
-        out["parquetColumns"] = JoinSeq(",", runParams.ParquetColumns);
-        out["parquetKeys"] = JoinSeq(",", runParams.ParquetKeyColumns);
-        out["parquetAggregations"] = JoinSeq(",", runParams.ParquetAggregations);
-        out["parquetAstFile"] = runParams.ParquetAstFile;
+    if (dqBlock) {
+        out["dqBlockFile"] = runParams.DqBlockFile;
+        out["dqBlockRowLimit"] = runParams.DqBlockRowLimit;
+        out["dqBlockColumns"] = JoinSeq(",", runParams.DqBlockColumns);
+        out["dqBlockKeys"] = JoinSeq(",", runParams.DqBlockKeyColumns);
+        out["dqBlockAggregations"] = JoinSeq(",", runParams.DqBlockAggregations);
+        out["dqBlockAstFile"] = runParams.DqBlockAstFile;
     } else {
         out["longStringKeys"] = runParams.LongStringKeys;
         out["numKeys"] = runParams.NumKeys;
@@ -229,7 +229,7 @@ enum class ETestType {
     SimpleLastCombiner,
     BlockCombiner,
     DqHashCombinerVs,
-    Parquet,
+    DqBlock,
     SimpleGraceJoin,
 };
 
@@ -277,17 +277,17 @@ void DoSelectedTest(TRunParams params, ETestType testType, bool llvm, bool spill
                 NKikimr::NMiniKQL::RunTestDqHashCombineVsWideCombine<false, false>(params, printout);
             }
         }
-    } else if (testType == ETestType::Parquet) {
+    } else if (testType == ETestType::DqBlock) {
         if (spilling) {
             if (llvm) {
-                NKikimr::NMiniKQL::RunTestParquet<true, true>(params, printout);
+                NKikimr::NMiniKQL::RunTestDqBlock<true, true>(params, printout);
             } else {
-                NKikimr::NMiniKQL::RunTestParquet<false, true>(params, printout);
+                NKikimr::NMiniKQL::RunTestDqBlock<false, true>(params, printout);
             }
         } else if (llvm) {
-            NKikimr::NMiniKQL::RunTestParquet<true, false>(params, printout);
+            NKikimr::NMiniKQL::RunTestDqBlock<true, false>(params, printout);
         } else {
-            NKikimr::NMiniKQL::RunTestParquet<false, false>(params, printout);
+            NKikimr::NMiniKQL::RunTestDqBlock<false, false>(params, printout);
         }
     } else if (testType == ETestType::SimpleGraceJoin) {
         if (params.NumRuns != 1) {
@@ -398,7 +398,7 @@ int main(int argc, const char* argv[])
         .Help("Hash map type (std::unordered_map or absl::dense_hash_map)");
 
     options.AddLongOption('t', "test")
-        .Choices({"combiner", "last-combiner", "block-combiner", "dq-hash-combiner", "parquet", "grace-join"})
+        .Choices({"combiner", "last-combiner", "block-combiner", "dq-hash-combiner", "dq-block", "grace-join"})
         .RequiredArgument("TEST_TYPE")
         .Handler1([&](const NLastGetopt::TOptsParser* option) {
             auto val = TStringBuf(option->CurVal());
@@ -410,8 +410,8 @@ int main(int argc, const char* argv[])
                 testType = ETestType::BlockCombiner;
             } else if (val == "dq-hash-combiner") {
                 testType = ETestType::DqHashCombinerVs;
-            } else if (val == "parquet") {
-                testType = ETestType::Parquet;
+            } else if (val == "dq-block") {
+                testType = ETestType::DqBlock;
             } else if (val == "grace-join") {
                 testType = ETestType::SimpleGraceJoin;
             } else {
@@ -468,58 +468,58 @@ int main(int argc, const char* argv[])
         .StoreResult(&runParams.CombineVsTestColumnSet)
         .Help("Select the set of columns for the dq-hash-combiner test from a list of named configurations");
 
-    options.AddLongOption("parquet-file")
+    options.AddLongOption("dq-block-file")
         .RequiredArgument("PATH")
-        .StoreResult(&runParams.ParquetFile)
-        .Help("Parquet input file for the parquet test");
-    options.AddLongOption("parquet-row-limit")
+        .StoreResult(&runParams.DqBlockFile)
+        .Help("Input file for the dq-block test (currently Parquet)");
+    options.AddLongOption("dq-block-row-limit")
         .RequiredArgument("ROWS")
-        .StoreResult(&runParams.ParquetRowLimit)
+        .StoreResult(&runParams.DqBlockRowLimit)
         .Help("Maximum number of rows to preload, or 0 for the whole file");
-    options.AddLongOption("parquet-columns")
+    options.AddLongOption("dq-block-columns")
         .RequiredArgument("NAME,...")
-        .SplitHandler(&runParams.ParquetColumns, ',')
-        .Help("Parquet columns to preload, in input order");
-    options.AddLongOption("parquet-keys")
+        .SplitHandler(&runParams.DqBlockColumns, ',')
+        .Help("Input columns to preload, in input order");
+    options.AddLongOption("dq-block-keys")
         .RequiredArgument("NAME,...")
-        .SplitHandler(&runParams.ParquetKeyColumns, ',')
-        .Help("Key columns for the parquet aggregation");
-    options.AddLongOption("parquet-aggregations")
+        .SplitHandler(&runParams.DqBlockKeyColumns, ',')
+        .Help("Key columns for the dq-block aggregation");
+    options.AddLongOption("dq-block-aggregations")
         .RequiredArgument("AGG,...")
-        .SplitHandler(&runParams.ParquetAggregations, ',')
+        .SplitHandler(&runParams.DqBlockAggregations, ',')
         .Help("Aggregations: sum:column_name or count");
-    options.AddLongOption("parquet-ast")
+    options.AddLongOption("dq-block-ast")
         .RequiredArgument("PATH")
-        .StoreResult(&runParams.ParquetAstFile)
+        .StoreResult(&runParams.DqBlockAstFile)
         .Help("Textual AsTuple of extractKey/init/update/finalize lambdas and the output key width");
 
     NLastGetopt::TOptsParseResult parsedOptions(&options, argc, argv);
 
-    const std::array<TString, 6> parquetOptions = {
-        "parquet-file", "parquet-row-limit", "parquet-columns", "parquet-keys", "parquet-aggregations",
-        "parquet-ast"};
-    if (testType != ETestType::Parquet) {
-        for (const auto& option : parquetOptions) {
+    const std::array<TString, 6> dqBlockOptions = {
+        "dq-block-file", "dq-block-row-limit", "dq-block-columns", "dq-block-keys", "dq-block-aggregations",
+        "dq-block-ast"};
+    if (testType != ETestType::DqBlock) {
+        for (const auto& option : dqBlockOptions) {
             if (parsedOptions.Has(option)) {
-                ythrow yexception() << "--" << option << " is only valid with -t parquet";
+                ythrow yexception() << "--" << option << " is only valid with -t dq-block";
             }
         }
     } else {
-        Y_ENSURE(parsedOptions.Has("parquet-file"), "--parquet-file is required with -t parquet");
-        Y_ENSURE(parsedOptions.Has("parquet-columns"), "--parquet-columns is required with -t parquet");
-        const bool hasAst = parsedOptions.Has("parquet-ast");
-        const bool hasKeys = parsedOptions.Has("parquet-keys");
-        const bool hasAggregations = parsedOptions.Has("parquet-aggregations");
+        Y_ENSURE(parsedOptions.Has("dq-block-file"), "--dq-block-file is required with -t dq-block");
+        Y_ENSURE(parsedOptions.Has("dq-block-columns"), "--dq-block-columns is required with -t dq-block");
+        const bool hasAst = parsedOptions.Has("dq-block-ast");
+        const bool hasKeys = parsedOptions.Has("dq-block-keys");
+        const bool hasAggregations = parsedOptions.Has("dq-block-aggregations");
         Y_ENSURE(hasAst || (hasKeys && hasAggregations),
-            "Specify either --parquet-ast or both --parquet-keys and --parquet-aggregations");
+            "Specify either --dq-block-ast or both --dq-block-keys and --dq-block-aggregations");
         Y_ENSURE(!hasAst || (!hasKeys && !hasAggregations),
-            "--parquet-ast cannot be combined with --parquet-keys or --parquet-aggregations");
+            "--dq-block-ast cannot be combined with --dq-block-keys or --dq-block-aggregations");
         Y_ENSURE(runParams.TestMode == NKikimr::NMiniKQL::ETestMode::Full ||
                 runParams.TestMode == NKikimr::NMiniKQL::ETestMode::GraphOnly,
-            "The parquet test only supports mode=all and mode=graph");
+            "The dq-block test only supports mode=all and mode=graph");
     }
 
-    if (testType != ETestType::Parquet) {
+    if (testType != ETestType::DqBlock) {
         Y_ENSURE(runParams.NumKeys >= 1);
         Y_ENSURE(runParams.NumKeys <= runParams.RowsPerRun);
     }

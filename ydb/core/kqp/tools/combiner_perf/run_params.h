@@ -46,12 +46,12 @@ struct TRunParams {
     // Specific test params
     std::string CombineVsTestColumnSet; // key/value column configuration for DqHashCombineVsWideCombine
 
-    std::string ParquetFile;
-    size_t ParquetRowLimit = 0;
-    std::vector<std::string> ParquetColumns;
-    std::vector<std::string> ParquetKeyColumns;
-    std::vector<std::string> ParquetAggregations;
-    std::string ParquetAstFile;
+    std::string DqBlockFile;
+    size_t DqBlockRowLimit = 0;
+    std::vector<std::string> DqBlockColumns;
+    std::vector<std::string> DqBlockKeyColumns;
+    std::vector<std::string> DqBlockAggregations;
+    std::string DqBlockAstFile;
 
     size_t JoinOverlap = 0; // Table generation params for joins
     size_t JoinRightRows = 0;

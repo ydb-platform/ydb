@@ -1,4 +1,4 @@
-#include "parquet.h"
+#include "dq_block.h"
 
 #include "factories.h"
 #include "kqp_setup.h"
@@ -45,20 +45,20 @@ using NUdf::EDataSlot;
 using NUdf::TUnboxedValue;
 using NUdf::TUnboxedValuePod;
 
-struct TParquetColumn {
+struct TDqBlockColumn {
     std::string Name;
     EDataSlot Slot;
     bool Optional;
 };
 
-struct TParquetBatch {
+struct TDqBlockBatch {
     std::vector<std::shared_ptr<arrow::Array>> Columns;
     size_t Rows = 0;
 };
 
-struct TParquetData {
-    std::vector<TParquetColumn> Columns;
-    std::vector<TParquetBatch> Batches;
+struct TDqBlockData {
+    std::vector<TDqBlockColumn> Columns;
+    std::vector<TDqBlockBatch> Batches;
     size_t Rows = 0;
 };
 
@@ -250,10 +250,10 @@ std::shared_ptr<arrow::Array> CanonicalizeArray(
     return cast.ValueOrDie();
 }
 
-TParquetData ReadParquetData(const TRunParams& params)
+TDqBlockData ReadDqBlockDataFromParquet(const TRunParams& params)
 {
-    auto fileResult = arrow::io::ReadableFile::Open(params.ParquetFile);
-    Y_ENSURE(fileResult.ok(), "Cannot open Parquet file " << params.ParquetFile << ": "
+    auto fileResult = arrow::io::ReadableFile::Open(params.DqBlockFile);
+    Y_ENSURE(fileResult.ok(), "Cannot open Parquet file " << params.DqBlockFile << ": "
         << fileResult.status().ToString());
     auto file = fileResult.ValueOrDie();
 
@@ -265,13 +265,13 @@ TParquetData ReadParquetData(const TRunParams& params)
     std::shared_ptr<arrow::Schema> schema;
     EnsureArrowStatus(fileReader->GetSchema(&schema), "Cannot read Parquet schema");
 
-    TParquetData data;
+    TDqBlockData data;
     std::vector<int> columnIndices;
     std::unordered_set<std::string> seenColumns;
-    for (const auto& name : params.ParquetColumns) {
-        Y_ENSURE(!name.empty(), "Empty name in --parquet-columns");
+    for (const auto& name : params.DqBlockColumns) {
+        Y_ENSURE(!name.empty(), "Empty name in --dq-block-columns");
         Y_ENSURE(seenColumns.emplace(name).second,
-            "Duplicate column in --parquet-columns: " << name);
+            "Duplicate column in --dq-block-columns: " << name);
         const int index = schema->GetFieldIndex(name);
         Y_ENSURE(index >= 0, "Column not found in Parquet schema: " << name);
         const auto& field = schema->field(index);
@@ -288,7 +288,7 @@ TParquetData ReadParquetData(const TRunParams& params)
         fileReader->GetRecordBatchReader(rowGroups, columnIndices, &batchReader),
         "Cannot create Parquet record batch reader");
 
-    while (!params.ParquetRowLimit || data.Rows < params.ParquetRowLimit) {
+    while (!params.DqBlockRowLimit || data.Rows < params.DqBlockRowLimit) {
         std::shared_ptr<arrow::RecordBatch> batch;
         EnsureArrowStatus(batchReader->ReadNext(&batch), "Cannot read Parquet record batch");
         if (!batch) {
@@ -296,14 +296,14 @@ TParquetData ReadParquetData(const TRunParams& params)
         }
 
         size_t rows = batch->num_rows();
-        if (params.ParquetRowLimit) {
-            rows = std::min(rows, params.ParquetRowLimit - data.Rows);
+        if (params.DqBlockRowLimit) {
+            rows = std::min(rows, params.DqBlockRowLimit - data.Rows);
         }
         if (!rows) {
             break;
         }
 
-        TParquetBatch savedBatch;
+        TDqBlockBatch savedBatch;
         savedBatch.Rows = rows;
         savedBatch.Columns.reserve(data.Columns.size());
         Y_ENSURE(static_cast<size_t>(batch->num_columns()) == data.Columns.size(),
@@ -321,7 +321,7 @@ TParquetData ReadParquetData(const TRunParams& params)
 
     Y_ENSURE(data.Rows > 0, "The selected Parquet input is empty");
     Cerr << "Preloaded " << data.Rows << " rows in " << data.Batches.size()
-         << " Arrow blocks from " << params.ParquetFile << Endl;
+         << " Arrow blocks from " << params.DqBlockFile << Endl;
     for (const auto& column : data.Columns) {
         Cerr << "  " << column.Name << ": " << NUdf::GetDataTypeInfo(column.Slot).Name
              << (column.Optional ? "?" : "") << Endl;
@@ -348,27 +348,27 @@ bool IsSummable(EDataSlot slot)
     }
 }
 
-std::vector<size_t> ResolveKeys(const TRunParams& params, const TParquetData& data)
+std::vector<size_t> ResolveKeys(const TRunParams& params, const TDqBlockData& data)
 {
-    Y_ENSURE(!params.ParquetKeyColumns.empty(), "At least one --parquet-keys column is required");
+    Y_ENSURE(!params.DqBlockKeyColumns.empty(), "At least one --dq-block-keys column is required");
     std::vector<size_t> result;
     std::unordered_set<std::string> seen;
-    for (const auto& name : params.ParquetKeyColumns) {
+    for (const auto& name : params.DqBlockKeyColumns) {
         Y_ENSURE(seen.emplace(name).second, "Duplicate key column: " << name);
         auto it = std::find_if(data.Columns.begin(), data.Columns.end(), [&](const auto& column) {
             return column.Name == name;
         });
-        Y_ENSURE(it != data.Columns.end(), "Key column was not selected by --parquet-columns: " << name);
+        Y_ENSURE(it != data.Columns.end(), "Key column was not selected by --dq-block-columns: " << name);
         result.push_back(std::distance(data.Columns.begin(), it));
     }
     return result;
 }
 
-std::vector<TAggregation> ResolveAggregations(const TRunParams& params, const TParquetData& data)
+std::vector<TAggregation> ResolveAggregations(const TRunParams& params, const TDqBlockData& data)
 {
-    Y_ENSURE(!params.ParquetAggregations.empty(), "At least one aggregation is required");
+    Y_ENSURE(!params.DqBlockAggregations.empty(), "At least one aggregation is required");
     std::vector<TAggregation> result;
-    for (const auto& text : params.ParquetAggregations) {
+    for (const auto& text : params.DqBlockAggregations) {
         if (text == "count") {
             result.push_back({EAggregationKind::Count, 0, EDataSlot::Uint64});
             continue;
@@ -382,7 +382,7 @@ std::vector<TAggregation> ResolveAggregations(const TRunParams& params, const TP
             return column.Name == name;
         });
         Y_ENSURE(it != data.Columns.end(),
-            "Sum column was not selected by --parquet-columns: " << name);
+            "Sum column was not selected by --dq-block-columns: " << name);
         Y_ENSURE(IsSummable(it->Slot), "Cannot sum column " << name << " of type "
             << NUdf::GetDataTypeInfo(it->Slot).Name);
         result.push_back({
@@ -437,26 +437,26 @@ TUnboxedValuePod ArrowValueToUnboxed(
         return {};
     }
 
-#define PARQUET_NUMERIC_VALUE(dataSlot, arrowArray, cppType) \
+#define DQ_BLOCK_NUMERIC_VALUE(dataSlot, arrowArray, cppType) \
     case EDataSlot::dataSlot: \
         return TUnboxedValuePod(static_cast<cppType>( \
             std::static_pointer_cast<arrow::arrowArray>(array)->Value(row)))
 
     switch (slot) {
-        PARQUET_NUMERIC_VALUE(Bool, UInt8Array, bool);
-        PARQUET_NUMERIC_VALUE(Int8, Int8Array, i8);
-        PARQUET_NUMERIC_VALUE(Uint8, UInt8Array, ui8);
-        PARQUET_NUMERIC_VALUE(Int16, Int16Array, i16);
-        PARQUET_NUMERIC_VALUE(Uint16, UInt16Array, ui16);
-        PARQUET_NUMERIC_VALUE(Int32, Int32Array, i32);
-        PARQUET_NUMERIC_VALUE(Uint32, UInt32Array, ui32);
-        PARQUET_NUMERIC_VALUE(Int64, Int64Array, i64);
-        PARQUET_NUMERIC_VALUE(Uint64, UInt64Array, ui64);
-        PARQUET_NUMERIC_VALUE(Float, FloatArray, float);
-        PARQUET_NUMERIC_VALUE(Double, DoubleArray, double);
-        PARQUET_NUMERIC_VALUE(Date32, Int32Array, i32);
-        PARQUET_NUMERIC_VALUE(Datetime64, Int64Array, i64);
-        PARQUET_NUMERIC_VALUE(Timestamp64, Int64Array, i64);
+        DQ_BLOCK_NUMERIC_VALUE(Bool, UInt8Array, bool);
+        DQ_BLOCK_NUMERIC_VALUE(Int8, Int8Array, i8);
+        DQ_BLOCK_NUMERIC_VALUE(Uint8, UInt8Array, ui8);
+        DQ_BLOCK_NUMERIC_VALUE(Int16, Int16Array, i16);
+        DQ_BLOCK_NUMERIC_VALUE(Uint16, UInt16Array, ui16);
+        DQ_BLOCK_NUMERIC_VALUE(Int32, Int32Array, i32);
+        DQ_BLOCK_NUMERIC_VALUE(Uint32, UInt32Array, ui32);
+        DQ_BLOCK_NUMERIC_VALUE(Int64, Int64Array, i64);
+        DQ_BLOCK_NUMERIC_VALUE(Uint64, UInt64Array, ui64);
+        DQ_BLOCK_NUMERIC_VALUE(Float, FloatArray, float);
+        DQ_BLOCK_NUMERIC_VALUE(Double, DoubleArray, double);
+        DQ_BLOCK_NUMERIC_VALUE(Date32, Int32Array, i32);
+        DQ_BLOCK_NUMERIC_VALUE(Datetime64, Int64Array, i64);
+        DQ_BLOCK_NUMERIC_VALUE(Timestamp64, Int64Array, i64);
         case EDataSlot::Utf8: {
             const auto value = std::static_pointer_cast<arrow::StringArray>(array)->GetView(row);
             if (value.empty()) {
@@ -475,12 +475,12 @@ TUnboxedValuePod ArrowValueToUnboxed(
             ythrow yexception() << "Cannot scalarize data slot " << NUdf::GetDataTypeInfo(slot).Name;
     }
 
-#undef PARQUET_NUMERIC_VALUE
+#undef DQ_BLOCK_NUMERIC_VALUE
 }
 
-class TScalarParquetStream final : public NUdf::TBoxedValue {
+class TScalarDqBlockStream final : public NUdf::TBoxedValue {
 public:
-    TScalarParquetStream(const TParquetData& data, size_t iterations)
+    TScalarDqBlockStream(const TDqBlockData& data, size_t iterations)
         : Data_(data)
         , Iterations_(iterations)
     {
@@ -513,7 +513,7 @@ public:
     }
 
 private:
-    const TParquetData& Data_;
+    const TDqBlockData& Data_;
     const size_t Iterations_;
     size_t Batch_ = 0;
     size_t Row_ = 0;
@@ -523,7 +523,7 @@ private:
 template<bool LLVM, bool Spilling>
 THolder<IComputationGraph> BuildGraph(
     TKqpSetup<LLVM, Spilling>& setup,
-    const TParquetData& data,
+    const TDqBlockData& data,
     const std::vector<size_t>& keys,
     const std::vector<TAggregation>& aggregations,
     bool blocks,
@@ -661,7 +661,7 @@ THolder<IComputationGraph> BuildGraph(
 }
 
 std::vector<std::vector<TUnboxedValue>> WrapBlockValues(
-    const TParquetData& data,
+    const TDqBlockData& data,
     const TComputationContext& context)
 {
     std::vector<std::vector<TUnboxedValue>> result;
@@ -694,24 +694,24 @@ void AppendUnboxed(std::string& result, const TUnboxedValue& value, EDataSlot sl
     }
     result.push_back(1);
 
-#define PARQUET_APPEND_VALUE(dataSlot, cppType) \
+#define DQ_BLOCK_APPEND_VALUE(dataSlot, cppType) \
     case EDataSlot::dataSlot: AppendPod(result, value.Get<cppType>()); return
 
     switch (slot) {
-        PARQUET_APPEND_VALUE(Bool, bool);
-        PARQUET_APPEND_VALUE(Int8, i8);
-        PARQUET_APPEND_VALUE(Uint8, ui8);
-        PARQUET_APPEND_VALUE(Int16, i16);
-        PARQUET_APPEND_VALUE(Uint16, ui16);
-        PARQUET_APPEND_VALUE(Int32, i32);
-        PARQUET_APPEND_VALUE(Uint32, ui32);
-        PARQUET_APPEND_VALUE(Int64, i64);
-        PARQUET_APPEND_VALUE(Uint64, ui64);
-        PARQUET_APPEND_VALUE(Float, float);
-        PARQUET_APPEND_VALUE(Double, double);
-        PARQUET_APPEND_VALUE(Date32, i32);
-        PARQUET_APPEND_VALUE(Datetime64, i64);
-        PARQUET_APPEND_VALUE(Timestamp64, i64);
+        DQ_BLOCK_APPEND_VALUE(Bool, bool);
+        DQ_BLOCK_APPEND_VALUE(Int8, i8);
+        DQ_BLOCK_APPEND_VALUE(Uint8, ui8);
+        DQ_BLOCK_APPEND_VALUE(Int16, i16);
+        DQ_BLOCK_APPEND_VALUE(Uint16, ui16);
+        DQ_BLOCK_APPEND_VALUE(Int32, i32);
+        DQ_BLOCK_APPEND_VALUE(Uint32, ui32);
+        DQ_BLOCK_APPEND_VALUE(Int64, i64);
+        DQ_BLOCK_APPEND_VALUE(Uint64, ui64);
+        DQ_BLOCK_APPEND_VALUE(Float, float);
+        DQ_BLOCK_APPEND_VALUE(Double, double);
+        DQ_BLOCK_APPEND_VALUE(Date32, i32);
+        DQ_BLOCK_APPEND_VALUE(Datetime64, i64);
+        DQ_BLOCK_APPEND_VALUE(Timestamp64, i64);
         case EDataSlot::Utf8:
         case EDataSlot::String: {
             const auto string = value.AsStringRef();
@@ -723,7 +723,7 @@ void AppendUnboxed(std::string& result, const TUnboxedValue& value, EDataSlot sl
             ythrow yexception() << "Cannot encode data slot " << NUdf::GetDataTypeInfo(slot).Name;
     }
 
-#undef PARQUET_APPEND_VALUE
+#undef DQ_BLOCK_APPEND_VALUE
 }
 
 using TResultMap = std::unordered_map<std::string, std::string>;
@@ -774,25 +774,25 @@ bool EncodedAggregatesEqual(
     const char* right = rightValues.data();
     for (EDataSlot slot : slots) {
         bool equal = false;
-#define PARQUET_COMPARE_VALUE(dataSlot, cppType) \
+#define DQ_BLOCK_COMPARE_VALUE(dataSlot, cppType) \
         case EDataSlot::dataSlot: equal = EncodedValueEqual<cppType>(left, right); break
 
         switch (slot) {
-            PARQUET_COMPARE_VALUE(Int8, i8);
-            PARQUET_COMPARE_VALUE(Uint8, ui8);
-            PARQUET_COMPARE_VALUE(Int16, i16);
-            PARQUET_COMPARE_VALUE(Uint16, ui16);
-            PARQUET_COMPARE_VALUE(Int32, i32);
-            PARQUET_COMPARE_VALUE(Uint32, ui32);
-            PARQUET_COMPARE_VALUE(Int64, i64);
-            PARQUET_COMPARE_VALUE(Uint64, ui64);
-            PARQUET_COMPARE_VALUE(Float, float);
-            PARQUET_COMPARE_VALUE(Double, double);
+            DQ_BLOCK_COMPARE_VALUE(Int8, i8);
+            DQ_BLOCK_COMPARE_VALUE(Uint8, ui8);
+            DQ_BLOCK_COMPARE_VALUE(Int16, i16);
+            DQ_BLOCK_COMPARE_VALUE(Uint16, ui16);
+            DQ_BLOCK_COMPARE_VALUE(Int32, i32);
+            DQ_BLOCK_COMPARE_VALUE(Uint32, ui32);
+            DQ_BLOCK_COMPARE_VALUE(Int64, i64);
+            DQ_BLOCK_COMPARE_VALUE(Uint64, ui64);
+            DQ_BLOCK_COMPARE_VALUE(Float, float);
+            DQ_BLOCK_COMPARE_VALUE(Double, double);
             default:
                 ythrow yexception() << "Cannot compare aggregate data slot "
                                     << NUdf::GetDataTypeInfo(slot).Name;
         }
-#undef PARQUET_COMPARE_VALUE
+#undef DQ_BLOCK_COMPARE_VALUE
         if (!equal) {
             return false;
         }
@@ -802,7 +802,7 @@ bool EncodedAggregatesEqual(
 }
 
 std::vector<EDataSlot> MakeOutputSlots(
-    const TParquetData& data,
+    const TDqBlockData& data,
     const std::vector<size_t>& keys,
     const std::vector<TAggregation>& aggregations)
 {
@@ -903,7 +903,7 @@ TRunResult MeasureGraph(IComputationGraph& graph, size_t outputWidth)
 template<bool LLVM, bool Spilling>
 void Verify(
     IComputationGraph& blockGraph,
-    const TParquetData& data,
+    const TDqBlockData& data,
     const std::vector<size_t>& keys,
     const std::vector<TAggregation>& aggregations,
     TAggregationAst* aggregationAst,
@@ -921,7 +921,7 @@ void Verify(
     TKqpSetup<false, false> referenceSetup(GetPerfTestFactory());
     auto referenceGraph = BuildGraph(
         referenceSetup, data, keys, aggregations, false, false, aggregationAst);
-    auto scalarStream = TUnboxedValuePod(new TScalarParquetStream(data, iterations));
+    auto scalarStream = TUnboxedValuePod(new TScalarDqBlockStream(data, iterations));
     referenceGraph->GetEntryPoint(0, true)->SetValue(
         referenceGraph->GetContext(), std::move(scalarStream));
     auto expected = CollectScalarResults(referenceGraph->GetValue(), outputSlots, keyWidth);
@@ -940,14 +940,14 @@ void Verify(
 } // namespace
 
 template<bool LLVM, bool Spilling>
-void RunTestParquet(TRunParams params, TTestResultCollector& printout)
+void RunTestDqBlock(TRunParams params, TTestResultCollector& printout)
 {
     NYql::NLog::InitLogger("cerr", false);
 
-    auto data = ReadParquetData(params);
-    auto aggregationAst = params.ParquetAstFile.empty()
+    auto data = ReadDqBlockDataFromParquet(params);
+    auto aggregationAst = params.DqBlockAstFile.empty()
         ? THolder<TAggregationAst>()
-        : LoadAggregationAst(params.ParquetAstFile);
+        : LoadAggregationAst(params.DqBlockAstFile);
     const auto keys = aggregationAst ? std::vector<size_t>() : ResolveKeys(params, data);
     const auto aggregations = aggregationAst ? std::vector<TAggregation>() : ResolveAggregations(params, data);
     params.RowsPerRun = data.Rows;
@@ -968,7 +968,7 @@ void RunTestParquet(TRunParams params, TTestResultCollector& printout)
 
     std::optional<TRunResult> finalResult;
     for (int attempt = 1; attempt <= params.NumAttempts; ++attempt) {
-        Cerr << "------ Parquet run " << attempt << " of " << params.NumAttempts << Endl;
+        Cerr << "------ DQ block run " << attempt << " of " << params.NumAttempts << Endl;
         auto result = RunForked([&] {
             return MeasureGraph<LLVM, Spilling>(*graph, outputWidth);
         });
@@ -987,12 +987,12 @@ void RunTestParquet(TRunParams params, TTestResultCollector& printout)
         });
     }
 
-    printout.SubmitMetrics(params, *finalResult, "DqHashAggregateParquet", LLVM, Spilling);
+    printout.SubmitMetrics(params, *finalResult, "DqHashAggregateDqBlock", LLVM, Spilling);
 }
 
-template void RunTestParquet<false, false>(TRunParams params, TTestResultCollector& printout);
-template void RunTestParquet<false, true>(TRunParams params, TTestResultCollector& printout);
-template void RunTestParquet<true, false>(TRunParams params, TTestResultCollector& printout);
-template void RunTestParquet<true, true>(TRunParams params, TTestResultCollector& printout);
+template void RunTestDqBlock<false, false>(TRunParams params, TTestResultCollector& printout);
+template void RunTestDqBlock<false, true>(TRunParams params, TTestResultCollector& printout);
+template void RunTestDqBlock<true, false>(TRunParams params, TTestResultCollector& printout);
+template void RunTestDqBlock<true, true>(TRunParams params, TTestResultCollector& printout);
 
 } // namespace NKikimr::NMiniKQL

@@ -6,6 +6,6 @@
 namespace NKikimr::NMiniKQL {
 
 template<bool LLVM, bool Spilling>
-void RunTestParquet(TRunParams params, TTestResultCollector& printout);
+void RunTestDqBlock(TRunParams params, TTestResultCollector& printout);
 
 }

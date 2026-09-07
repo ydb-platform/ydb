@@ -222,7 +222,7 @@ void TKafkaSaslAuthActor::HandleTimeout(const NActors::TActorContext& ctx) {
 }
 
 void TKafkaSaslAuthActor::SendTicketParserRequest() {
-    Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+    Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = Ticket,
         .Database = AuthDatabasePath,
         .TraceContext = {TStringBuilder() << Address, RequestId},
@@ -366,7 +366,7 @@ void TKafkaSaslAuthActor::SendScramLoginRequest(const NActors::TActorContext& ct
 }
 
 void TKafkaSaslAuthActor::SendMtlsAuthRequest(const NActors::TActorContext&) {
-    Send(NKikimr::MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+    Send(NKikimr::MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = ClientCert,
         .Database = DatabasePath,
         .TraceContext = {TStringBuilder() << Address, RequestId},

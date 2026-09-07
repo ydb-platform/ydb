@@ -18,6 +18,7 @@
 #include <ydb/library/security/util.h>
 
 #include <util/datetime/base.h>  // for ToInstant
+#include <util/generic/guid.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::HTTP
 
@@ -270,19 +271,28 @@ public:
             return ReplyErrorAndPassAway("400", "Bad Request", "Invalid method");
         }
 
-        NHttp::TCookies cookies(NHttp::THeaders(Request->Headers)["Cookie"]);
+        NHttp::THeaders headers(Request->Headers);
+        NHttp::TCookies cookies(headers["Cookie"]);
         TStringBuf ydbSessionId = cookies["ydb_session_id"];
         if (ydbSessionId.empty()) {
             return ReplyErrorAndPassAway("401", "Unauthorized", "No ydb_session_id cookie");
         }
 
-        Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+        TString requestId(headers["x-request-id"]);
+        if (requestId.empty()) {
+            requestId = CreateGuidAsString();
+            YDB_LOG_WARN("x-request-id is missing in Web UI logout request, generated a new one",
+                {"requestId", requestId},
+                {"address", Request->Address},
+                {"method", Request->Method},
+                {"uri", Request->GetURI()}
+            );
+        }
+
+        Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = TString("Login ") + ydbSessionId,
             .Database = TString(),
-            .TraceContext = {
-                Request->Address->ToString(),
-                TString(NHttp::THeaders(Request->Headers)["x-request-id"])
-            },
+            .TraceContext = {Request->Address->ToString(), std::move(requestId)},
         }));
 
         Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());

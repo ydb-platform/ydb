@@ -213,7 +213,7 @@ public:
                 THolder<TEvTicketParser::TEvAuthorizeTicketResult> authorizeTicketResult = MakeHolder<TEvTicketParser::TEvAuthorizeTicketResult>(TString(), userToken);
                 ctx.Send(ctx.SelfID, authorizeTicketResult.Release());
             } else {
-                ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+                ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
                     .Ticket = SecurityToken,
                     .Database = Database,
                     .TraceContext = {PeerName, RequestId},

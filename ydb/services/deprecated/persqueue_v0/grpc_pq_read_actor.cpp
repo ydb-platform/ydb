@@ -828,7 +828,7 @@ void TReadSessionActor::HandleDescribeTopicsResponse(TEvDescribeTopicsResponse::
             return;
     }
 
-    ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+    ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = ticket,
             .Database = Database,
             .TraceContext = {PeerName, RequestId},

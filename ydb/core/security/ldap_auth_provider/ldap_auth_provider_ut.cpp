@@ -75,7 +75,7 @@ TAutoPtr<IEventHandle> LdapAuthenticate(TLdapKikimrServer& server, const TString
     auto loginResponse = GetLoginResponse(server, login);
     TTestActorRuntime* runtime = server.GetRuntime();
     TActorId sender = runtime->AllocateEdgeActor();
-    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = loginResponse.Token,
         .TraceContext = {PEER_NAME, REQUEST_ID},
     })), 0);
@@ -920,7 +920,7 @@ Y_UNIT_TEST(CanRefreshGroupsInfo) {
     auto loginResponse = GetLoginResponse(ydbServer, login);
     TTestActorRuntime* runtime = ydbServer.GetRuntime();
     TActorId sender = runtime->AllocateEdgeActor();
-    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = loginResponse.Token,
         .TraceContext = {PEER_NAME, REQUEST_ID},
     })), 0);
@@ -944,7 +944,7 @@ Y_UNIT_TEST(CanRefreshGroupsInfo) {
     ldapServer.ReplaceResponses(std::move(updatedResponses));
     Sleep(TDuration::Seconds(10));
 
-    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = loginResponse.Token,
         .TraceContext = {PEER_NAME, REQUEST_ID},
     })), 0);
@@ -979,7 +979,7 @@ Y_UNIT_TEST(CanRefreshGroupsInfoWithDisabledNestedGroups) {
     auto loginResponse = GetLoginResponse(ydbServer, login);
     TTestActorRuntime* runtime = ydbServer.GetRuntime();
     TActorId sender = runtime->AllocateEdgeActor();
-    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = loginResponse.Token,
         .TraceContext = {PEER_NAME, REQUEST_ID},
     })), 0);
@@ -1003,7 +1003,7 @@ Y_UNIT_TEST(CanRefreshGroupsInfoWithDisabledNestedGroups) {
     ldapServer.ReplaceResponses(std::move(updatedResponses));
     Sleep(TDuration::Seconds(10));
 
-    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = loginResponse.Token,
         .TraceContext = {PEER_NAME, REQUEST_ID},
     })), 0);
@@ -1043,7 +1043,7 @@ Y_UNIT_TEST(CanNotRefreshRemovedUser) {
     auto loginResponse = GetLoginResponse(ydbServer, login);
     TTestActorRuntime* runtime = ydbServer.GetRuntime();
     TActorId sender = runtime->AllocateEdgeActor();
-    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = loginResponse.Token,
         .TraceContext = {PEER_NAME, REQUEST_ID},
     })), 0);
@@ -1068,7 +1068,7 @@ Y_UNIT_TEST(CanNotRefreshRemovedUser) {
     ldapServer.ReplaceResponses(std::move(updatedResponses));
     Sleep(TDuration::Seconds(10));
 
-    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = loginResponse.Token,
         .TraceContext = {PEER_NAME, REQUEST_ID},
     })), 0);
@@ -1099,7 +1099,7 @@ Y_UNIT_TEST(CanRefreshGroupsInfoWithError) {
     auto loginResponse = GetLoginResponse(ydbServer, login);
     TTestActorRuntime* runtime = ydbServer.GetRuntime();
     TActorId sender = runtime->AllocateEdgeActor();
-    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = loginResponse.Token,
         .TraceContext = {PEER_NAME, REQUEST_ID},
     })), 0);
@@ -1116,7 +1116,7 @@ Y_UNIT_TEST(CanRefreshGroupsInfoWithError) {
     ldapServer.ReplaceResponses(std::move(updatedResponses));
     Sleep(TDuration::Seconds(7));
 
-    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = loginResponse.Token,
         .TraceContext = {PEER_NAME, REQUEST_ID},
     })), 0);
@@ -1174,7 +1174,7 @@ Y_UNIT_TEST(CanFetchGroupsWithDelayUpdateSecurityState) {
     TActorId sender = runtime->AllocateEdgeActor();
 
     auto loginResponse = provider.LoginUser({.User = login, .ExternalAuth = "ldap"});
-    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = loginResponse.Token,
         .TraceContext = {PEER_NAME, REQUEST_ID},
     })), 0);
@@ -1215,7 +1215,7 @@ Y_UNIT_TEST(CanGetErrorIfAppropriateLoginProviderIsAbsent) {
     TActorId sender = runtime->AllocateEdgeActor();
 
     auto loginResponse = provider.LoginUser({.User = login, .ExternalAuth = "ldap"});
-    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = loginResponse.Token,
         .TraceContext = {PEER_NAME, REQUEST_ID},
     })), 0);

@@ -446,7 +446,7 @@ void TWriteSessionActor::InitCheckACL(const TActorContext& ctx) {
      }
 
     auto entries = NKikimr::NGRpcProxy::V1::GetTicketParserEntries(DatabaseId, FolderId);
-    ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(NKikimr::TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+    ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = ticket,
             .Database = Database,
             .TraceContext = {PeerName, RequestId},

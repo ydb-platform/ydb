@@ -3453,60 +3453,6 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT(sysNodeHosts.contains(resp.GetPermissions(3).GetAction().GetHost()));
     }
 
-    Y_UNIT_TEST(SysTabletsNodeSortOrderPartialWithLimit)
-    {
-        TCmsTestEnv env(TTestEnvOpts(8, 0));
-
-        // Nodes 0-5: sys tablet candidates. Nodes 6-7: no sys tablets.
-        NKikimrConfig::TBootstrap bootstrapConfig;
-        TVector<ui32> sysNodes;
-        for (ui32 i = 0; i < 6; ++i) {
-            sysNodes.push_back(env.GetNodeId(i));
-        }
-        auto addTablet = [&](NKikimrConfig::TBootstrap::ETabletType type) {
-            auto *tablet = bootstrapConfig.AddTablet();
-            tablet->SetType(type);
-            for (ui32 nodeId : sysNodes) {
-                tablet->AddNode(nodeId);
-            }
-        };
-        addTablet(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
-
-        TFakeNodeWhiteboardService::BootstrapConfig = bootstrapConfig;
-        env.EnableSysNodeChecking();
-        env.RestartCms();
-
-        THashSet<TString> sysNodeHosts;
-        for (ui32 id : sysNodes) {
-            sysNodeHosts.insert(ToString(id));
-        }
-
-        // Request restart of all 8 nodes: 6 sys-tablet + 2 non-sys-tablet.
-        // In MODE_MAX_AVAILABILITY, limit is ~N/2 = 3 sys-tablet nodes can be locked.
-        // Non-sys-tablet nodes (6, 7) should get permission first,
-        // then 3 sys-tablet nodes get permission, remaining 3 get scheduled.
-        auto resp = env.CheckPermissionRequest("user", true, false, true, true,
-                                               MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL,
-                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
-                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"),
-                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
-                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"),
-                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
-                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"),
-                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(6), 60000000, "storage"),
-                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(7), 60000000, "storage"));
-
-        // 2 non-sys-tablet + 3 sys-tablet = 5 permissions
-        UNIT_ASSERT_VALUES_EQUAL(resp.PermissionsSize(), 5);
-        // First 2 permissions must be non-sys-tablet nodes
-        UNIT_ASSERT(!sysNodeHosts.contains(resp.GetPermissions(0).GetAction().GetHost()));
-        UNIT_ASSERT(!sysNodeHosts.contains(resp.GetPermissions(1).GetAction().GetHost()));
-        // Remaining 3 permissions must be sys-tablet nodes
-        for (int i = 2; i < 5; ++i) {
-            UNIT_ASSERT(sysNodeHosts.contains(resp.GetPermissions(i).GetAction().GetHost()));
-        }
-    }
-
     Y_UNIT_TEST(SysTabletsNodeSortOrderScheduledRequest)
     {
         TCmsTestEnv env(TTestEnvOpts(8, 0));
@@ -3559,8 +3505,10 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             UNIT_ASSERT(sysNodeHosts.contains(resp.GetPermissions(i).GetAction().GetHost()));
         }
 
-        // Mark all granted permissions as done
+        THashSet<TString> grantedHosts;
         for (size_t i = 0; i < resp.PermissionsSize(); ++i) {
+            const auto &host = resp.GetPermissions(i).GetAction().GetHost();
+            UNIT_ASSERT_C(grantedHosts.insert(host).second, "Duplicate permission for host " << host);
             env.CheckDonePermission("user", resp.GetPermissions(i).GetId());
         }
 
@@ -3570,7 +3518,13 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                       MODE_MAX_AVAILABILITY, TStatus::ALLOW, 3);
         UNIT_ASSERT_VALUES_EQUAL(resp2.PermissionsSize(), 3);
         for (size_t i = 0; i < resp2.PermissionsSize(); ++i) {
-            UNIT_ASSERT(sysNodeHosts.contains(resp2.GetPermissions(i).GetAction().GetHost()));
+            const auto &host = resp2.GetPermissions(i).GetAction().GetHost();
+            UNIT_ASSERT(sysNodeHosts.contains(host));
+            UNIT_ASSERT_C(grantedHosts.insert(host).second, "Duplicate permission for host " << host);
+        }
+        for (ui32 i = 0; i < 8; ++i) {
+            UNIT_ASSERT_C(grantedHosts.contains(ToString(env.GetNodeId(i))),
+                          "Missing permission for node " << env.GetNodeId(i));
         }
     }
 

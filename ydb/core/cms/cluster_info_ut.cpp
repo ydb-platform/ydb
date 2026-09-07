@@ -561,7 +561,6 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         {
             auto cluster = makeCluster();
             cluster->AddTablet(1, MakeTabletInfo(tabletId, TTabletTypes::BSController, TTabletStateInfo::Dead, true));
-            cluster->GenerateSysTabletsNodesCheckers();
             UNIT_ASSERT(!cluster->NodeHasRunningSystemTablet(1));
         }
 
@@ -569,7 +568,6 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         {
             auto cluster = makeCluster();
             cluster->AddTablet(1, MakeTabletInfo(tabletId, TTabletTypes::BSController, TTabletStateInfo::Created, true));
-            cluster->GenerateSysTabletsNodesCheckers();
             UNIT_ASSERT(!cluster->NodeHasRunningSystemTablet(1));
         }
 
@@ -577,7 +575,6 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         {
             auto cluster = makeCluster();
             cluster->AddTablet(1, MakeTabletInfo(tabletId, TTabletTypes::BSController, TTabletStateInfo::Active, true));
-            cluster->GenerateSysTabletsNodesCheckers();
             UNIT_ASSERT(cluster->NodeHasRunningSystemTablet(1));
         }
     }
@@ -595,8 +592,6 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         auto &ssTab = *cluster->BootstrapConfig.AddTablet();
         ssTab.SetType(NKikimrConfig::TBootstrap::FLAT_SCHEMESHARD);
         ssTab.AddNode(1);
-        cluster->GenerateSysTabletsNodesCheckers();
-
         cluster->AddTablet(1, MakeTabletInfo(bscTabletId, TTabletTypes::BSController, TTabletStateInfo::Active, true));
         cluster->AddTablet(1, MakeTabletInfo(ssTabletId, TTabletTypes::SchemeShard, TTabletStateInfo::Active, true));
         UNIT_ASSERT(cluster->NodeHasRunningSystemTablet(1));
@@ -630,7 +625,6 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
                 cluster->AddTablet(2, dead);
                 cluster->AddTablet(1, active);
             }
-            cluster->GenerateSysTabletsNodesCheckers();
 
             UNIT_ASSERT_C(cluster->NodeHasRunningSystemTablet(1), activeReportFirst);
             UNIT_ASSERT_C(!cluster->NodeHasRunningSystemTablet(2), activeReportFirst);
@@ -649,6 +643,10 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
                                              TTabletStateInfo::Active, true));
         cluster->AddTablet(2, MakeTabletInfo(tabletId, TTabletTypes::BSController,
                                              TTabletStateInfo::Dead, true));
+        cluster->AddTablet(2, MakeTabletInfo(201, TTabletTypes::SchemeShard,
+                                             TTabletStateInfo::Active, true));
+        UNIT_ASSERT(cluster->NodeHasRunningSystemTablet(1));
+        UNIT_ASSERT(cluster->NodeHasRunningSystemTablet(2));
 
         cluster->ClearNode(2);
         UNIT_ASSERT(cluster->NodeHasRunningSystemTablet(1));
@@ -686,7 +684,6 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
             TClusterInfoPtr cluster(new TClusterInfo);
             cluster->AddNode(nodeInfo, nullptr);
             cluster->AddTablet(1, MakeTabletInfo(1000 + type, type, TTabletStateInfo::Active, true));
-            cluster->GenerateSysTabletsNodesCheckers();
             UNIT_ASSERT_C(cluster->NodeHasRunningSystemTablet(1), "tablet type " << type);
         }
 
@@ -711,7 +708,6 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
             TClusterInfoPtr cluster(new TClusterInfo);
             cluster->AddNode(nodeInfo, nullptr);
             cluster->AddTablet(1, MakeTabletInfo(1000 + type, type, TTabletStateInfo::Active, true));
-            cluster->GenerateSysTabletsNodesCheckers();
             UNIT_ASSERT_C(!cluster->NodeHasRunningSystemTablet(1), "tablet type " << type);
         }
     }

@@ -252,46 +252,25 @@ public:
 
         // Restore ancestor locks transferred from the src shard.
         // These represent persistent write-only locks whose uncommitted writes are in the borrowed snapshot.
-        if (record.LocksSize() > 0) {
+        const bool lockTransferEnabled = AppData(ctx)
+                ->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
+        if (lockTransferEnabled && record.LocksSize() > 0) {
             TDataShardLocksDb locksDb(*Self, txc);
             for (const auto& srcLockInfo : record.GetLocks()) {
-                const ui64 lockId = srcLockInfo.GetLockId();
-
-                // Create TLockInfo if needed
-                if (!Self->SysLocksTable().GetRawLock(lockId)) {
-                    // Persist lock entry to Schema::Locks so it survives restarts
-                    locksDb.PersistAddLock(lockId, srcLockInfo.GetLockNodeId(),
-                        srcLockInfo.GetGeneration(), srcLockInfo.GetCounter(),
-                        srcLockInfo.GetCreateTimestamp(), /*flags=*/0);
-
-                    // Create in-memory TLockInfo
-                    ILocksDb::TLockRow row;
-                    row.LockId = lockId;
-                    row.LockNodeId = srcLockInfo.GetLockNodeId();
-                    row.Generation = srcLockInfo.GetGeneration();
-                    row.Counter = srcLockInfo.GetCounter();
-                    row.CreateTs = srcLockInfo.GetCreateTimestamp();
-                    row.Flags = ui64(ELockFlags::Persistent);
-                    Self->SysLocksTable().AddPersistentLockFromRow(row);
+                if (!srcLockInfo.GetReadTables().empty()) {
+                    // Skip if someone sent us a read lock.
+                    continue;
                 }
 
-                auto lockPtr = Self->SysLocksTable().GetRawLock(lockId);
-                Y_ENSURE(lockPtr, "Expected TLockInfo to exist after creation");
+                ILocksDb::TLockRow row;
+                row.LockId = srcLockInfo.GetLockId();
+                row.LockNodeId = srcLockInfo.GetLockNodeId();
+                row.Generation = srcLockInfo.GetGeneration();
+                row.Counter = srcLockInfo.GetCounter();
+                row.CreateTs = srcLockInfo.GetCreateTimestamp();
+                row.Flags = ui64(ELockFlags::Persistent);
 
-                // Add ancestor entry for the src shard itself
-                {
-                    TAncestorLock ancestorLock;
-                    ancestorLock.TabletId = srcTabletId;
-                    ancestorLock.Generation = srcLockInfo.GetGeneration();
-                    ancestorLock.Counter = srcLockInfo.GetCounter();
-                    ancestorLock.CreationTime = TInstant::MicroSeconds(srcLockInfo.GetCreateTimestamp());
-                    ancestorLock.Flags = ELockFlags(srcLockInfo.GetFlags());
-
-                    locksDb.PersistAddAncestorLock(lockId, ancestorLock);
-                    lockPtr->AddAncestorLock(std::move(ancestorLock));
-                }
-
-                // Add ancestor entries for grandparent shards (multi-hop split/merge)
+                row.AncestorLocks.reserve(srcLockInfo.GetAncestorLocks().size());
                 for (const auto& protoLock : srcLockInfo.GetAncestorLocks()) {
                     TAncestorLock ancestorLock;
                     ancestorLock.TabletId = protoLock.GetTabletId();
@@ -299,16 +278,20 @@ public:
                     ancestorLock.Counter = protoLock.GetCounter();
                     ancestorLock.CreationTime = TInstant::MicroSeconds(protoLock.GetCreateTimestamp());
                     ancestorLock.Flags = ELockFlags(protoLock.GetFlags());
-
-                    locksDb.PersistAddAncestorLock(lockId, ancestorLock);
-                    lockPtr->AddAncestorLock(std::move(ancestorLock));
+                    row.AncestorLocks.push_back(ancestorLock);
                 }
 
-                // Mark the lock as writing to all user tables so that reads
-                // with this LockTxId can see the uncommitted data in the borrowed snapshot.
-                for (const auto& kv : Self->GetUserTables()) {
-                    TPathId pathId(Self->GetPathOwnerId(), kv.first);
-                    Self->SysLocksTable().MarkAncestorLockAsWritingToTable(lockId, pathId);
+                for (const auto& pathProto : srcLockInfo.GetWriteTables()) {
+                    row.WriteTables.push_back(TPathId::FromProto(pathProto));
+                }
+
+                if (!Self->SysLocksTable().RestoreLockFromSplitSrc(
+                        srcTabletId, std::move(row), locksDb)) {
+                    YDB_LOG_WARN_CTX(ctx, "Too many locks, couldn't restore all",
+                        {"tabletId", Self->TabletID()},
+                        {"opId", opId},
+                        {"srcTabletId", srcTabletId});
+                    break;
                 }
             }
         }

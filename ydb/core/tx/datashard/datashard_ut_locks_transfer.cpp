@@ -117,6 +117,7 @@ Y_UNIT_TEST(LocksTransferSimple) {
 
     env.Split(1, 15);
     env.Merge(0, 1);
+    RebootTablet(runtime, shards.at(1), sender);
     env.PrintPartitioning();
 
     UNIT_ASSERT_VALUES_EQUAL(

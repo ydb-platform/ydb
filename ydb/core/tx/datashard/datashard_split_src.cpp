@@ -212,6 +212,10 @@ public:
                     proto.SetCreateTimestamp(ancestorLock.CreationTime.MicroSeconds());
                     proto.SetFlags(ui64(ancestorLock.Flags));
                 }
+
+                for (const auto& pathId : lock.GetWriteTables()) {
+                    pathId.ToProto(srcLockInfo.AddWriteTables());
+                }
             }
         } else {
             Self->SrcLocksToTransfer.clear();

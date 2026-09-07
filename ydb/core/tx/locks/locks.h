@@ -931,10 +931,6 @@ public:
         return result;
     }
 
-    void AddPendingSubscribeLock(ui64 lockId, ui32 lockNodeId) {
-        PendingSubscribeLocks.emplace_back(lockId, lockNodeId);
-    }
-
     void RemoveSubscribedLock(ui64 lockId, ILocksDb* db);
 
     ui32 Generation() const { return Self->Generation(); }
@@ -995,6 +991,7 @@ private:
 
     TLockInfo::TPtr GetOrAddLock(ui64 lockId, ui32 lockNodeId);
     TLockInfo::TPtr AddLock(const ILocksDb::TLockRow& row);
+    TLockInfo::TPtr AddLockToPersist(ui64 lockId, ui32 lockNodeId);
     TLockInfo::TPtr RestoreInMemoryLock(const ILocksDb::TLockRow& row);
     void RemoveOneLock(ui64 lockId, ILocksDb* db = nullptr);
 
@@ -1277,31 +1274,6 @@ public:
 
     bool Load(ILocksDb& db);
 
-    // Creates a persistent TLockInfo from the given row and adds it to the in-memory state.
-    // Used when restoring ancestor locks transferred during split/merge.
-    // The caller must have already persisted the lock to Schema::Locks via ILocksDb::PersistAddLock.
-    // Returns the new TLockInfo pointer, or the existing one if the lock already exists.
-    TLockInfo* AddPersistentLockFromRow(const ILocksDb::TLockRow& row) {
-        if (auto* existing = Locker.FindLockPtr(row.LockId)) {
-            return existing;
-        }
-        return Locker.AddLock(row).Get();
-    }
-
-    // Marks the given persistent lock as having uncommitted writes to a table.
-    // Used when restoring ancestor locks from split/merge snapshots.
-    void MarkAncestorLockAsWritingToTable(ui64 lockId, const TPathId& pathId) {
-        auto* lock = Locker.FindLockPtr(lockId);
-        if (!lock) {
-            return;
-        }
-        if (lock->AddWriteLock(pathId)) {
-            if (auto* table = Locker.FindTablePtr(TTableId(pathId))) {
-                table->AddWriteLock(lock);
-            }
-        }
-    }
-
     /**
      * Restores in-memory lock state migrated from previous generations
      *
@@ -1344,6 +1316,8 @@ public:
             Update->BreakerQuerySpanIdExplicitlySet = true;
         }
     }
+
+    bool RestoreLockFromSplitSrc(ui64 srcTabletId, ILocksDb::TLockRow&& row, ILocksDb& db);
 
 private:
     THolder<TLocksDataShard> Self;

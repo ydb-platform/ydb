@@ -998,6 +998,17 @@ TLockInfo::TPtr TLockLocker::AddLock(const ILocksDb::TLockRow& row) {
     return lock;
 }
 
+TLockInfo::TPtr TLockLocker::AddLockToPersist(ui64 lockId, ui32 lockNodeId) {
+    Y_ENSURE(Locks.find(lockId) == Locks.end());
+
+    TLockInfo::TPtr lock = MakeIntrusive<TLockInfo>(this, lockId, lockNodeId);
+    Locks[lockId] = lock;
+    if (lockNodeId) {
+        PendingSubscribeLocks.emplace_back(lockId, lockNodeId);
+    }
+    return lock;
+}
+
 TLockInfo::TPtr TLockLocker::RestoreInMemoryLock(const ILocksDb::TLockRow& row) {
     auto flags = ELockFlags(row.Flags);
     if (!!(flags & ELockFlags::Persistent)) {
@@ -1870,6 +1881,53 @@ TRuntimeLockHolder TSysLocks::AddRuntimeLock(const TTableId& tableId, TConstArra
     auto* table = Locker.FindTablePtr(tableId);
     Y_ENSURE(table, "Cannot find table " << tableId);
     return table->AddRuntimeLock(key, Update->Lock);
+}
+
+bool TSysLocks::RestoreLockFromSplitSrc(ui64 srcTabletId, ILocksDb::TLockRow&& row, ILocksDb& locksDb) {
+    Y_ENSURE(row.ReadTables.empty(), "Read locks are not supported");
+
+    // Create TLockInfo if needed
+    TLockInfo::TPtr lock = Locker.GetLock(row.LockId);
+    if (!lock) {
+        if (Locker.LocksCount() >= Locker.LockLimit()) {
+            return false;
+        }
+        lock = Locker.AddLockToPersist(row.LockId, row.LockNodeId);
+    }
+
+    if (!lock->IsPersistent()) {
+        lock->PersistLock(&locksDb);
+    }
+
+    for (const auto& pathId : row.WriteTables) {
+        if (auto* table = Locker.FindTablePtr(TTableId(pathId))) {
+            if (lock->AddWriteLock(pathId)) {
+                table->AddWriteLock(lock.get());
+            }
+        }
+    }
+    lock->PersistRanges(&locksDb);
+
+    // Add ancestor entry for the src shard itself
+    {
+        TAncestorLock ancestorLock;
+        ancestorLock.TabletId = srcTabletId;
+        ancestorLock.Generation = row.Generation;
+        ancestorLock.Counter = row.Counter;
+        ancestorLock.CreationTime = TInstant::MicroSeconds(row.CreateTs);
+        ancestorLock.Flags = ELockFlags(row.Flags);
+
+        lock->AddAncestorLock(std::move(ancestorLock));
+        locksDb.PersistAddAncestorLock(row.LockId, ancestorLock);
+    }
+
+    // Add ancestor entries for grandparent shards (multi-hop split/merge)
+    for (const auto& ancestorLock : row.AncestorLocks) {
+        locksDb.PersistAddAncestorLock(row.LockId, ancestorLock);
+        lock->AddAncestorLock(std::move(ancestorLock));
+    }
+
+    return true;
 }
 
 }}

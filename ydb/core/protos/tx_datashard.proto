@@ -919,6 +919,14 @@ message TPersistentSnapshot {
     optional uint64 TimeoutMs = 7;
 }
 
+// Info about the state of a writer to a lock.
+message TWriteSeqNumState {
+    optional uint64 WriterIndex = 1;
+    optional uint64 WriteSeqNum = 2;
+    // Opaque serialized NKikimrDataEvents.TEvWriteResult
+    optional bytes SerializedResult = 3;
+}
+
 // Info about a lock being transferred from src to dst during split/merge.
 message TSplitSrcLockInfo {
     // Info about locks further up the ancestor chain.
@@ -928,6 +936,7 @@ message TSplitSrcLockInfo {
         optional uint64 Counter         = 3;
         optional uint64 CreateTimestamp = 4;
         optional uint64 Flags           = 5;
+        repeated TWriteSeqNumState WriteSeqNumStates = 6;
     }
 
     optional uint64 LockId          = 1;
@@ -936,7 +945,13 @@ message TSplitSrcLockInfo {
     optional uint64 Counter         = 4;
     optional uint64 CreateTimestamp = 5;
     optional uint64 Flags           = 6;
-    repeated TAncestorLock AncestorLocks = 7;
+
+    repeated TWriteSeqNumState WriteSeqNumStates = 7;
+    repeated uint64 Conflicts = 8 [packed = true];
+    repeated TAncestorLock AncestorLocks = 9;
+
+    repeated NKikimrProto.TPathID ReadTables = 10;
+    repeated NKikimrProto.TPathID WriteTables = 11;
 }
 
 // Src datashard -> Dst datashard
@@ -2757,13 +2772,6 @@ message TInMemoryVars {
     optional NKikimrProto.TRowVersion ImmediateWriteEdge = 1;
     optional NKikimrProto.TRowVersion ImmediateWriteEdgeReplied = 2;
     optional NKikimrProto.TRowVersion UnprotectedReadEdge = 3;
-}
-
-message TWriteSeqNumState {
-    optional uint64 WriterIndex = 1;
-    optional uint64 WriteSeqNum = 2;
-    // Opaque serialized NKikimrDataEvents.TEvWriteResult
-    optional bytes SerializedResult = 3;
 }
 
 // In-memory locks

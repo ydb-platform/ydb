@@ -85,7 +85,7 @@ inline void LogIntegrityTrails(const NKqp::TEvKqp::TEvQueryRequest::TPtr& reques
     );
 
     if (request->Get()->HasTxControl()) {
-        YDB_LOG_UPDATE_MESSAGE(message, LogTxSettings(request->Get()->GetTxControl()));
+        YDB_LOG_UPDATE_MESSAGE(message, LogTxControl(request->Get()->GetTxControl()));
     }
 
     YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "", message);

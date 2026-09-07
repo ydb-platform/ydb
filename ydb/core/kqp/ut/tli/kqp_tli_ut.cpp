@@ -275,7 +275,7 @@ namespace {
         return foundField ? std::make_optional(result) : std::nullopt;
     }
 
-    std::optional<std::vector<ui64>> ExtractVictimQuerySpanIdOccurrences(
+    std::optional<std::vector<ui64>> ExtractQuerySpanIdOccurrences(
         const TString& logs,
         const TString& component,
         const TString& messagePattern)
@@ -412,7 +412,7 @@ namespace {
         data.VictimSessionCurrentQuerySpanId = ExtractCurrentQuerySpanId(logs, "SessionActor", patterns.VictimSessionActorMessagePattern);
         data.VictimShardCurrentQuerySpanId = ExtractCurrentQuerySpanId(logs, "DataShard", patterns.VictimDatashardMessage);
         data.VictimShardVictimQuerySpanId = ExtractVictimQuerySpanId(logs, "DataShard", patterns.VictimDatashardMessage);
-        data.VictimSessionVictimQuerySpanIdOccurrences = ExtractVictimQuerySpanIdOccurrences(
+        data.VictimSessionVictimQuerySpanIdOccurrences = ExtractQuerySpanIdOccurrences(
             logs, "SessionActor", patterns.VictimSessionActorMessagePattern);
 
         auto [foundBreaker, matchingVictimIds] = ExtractMatchingFromBreakerDatashard(logs, patterns.BreakerDatashardMessage, data.BreakerSessionBreakerQuerySpanId);
@@ -842,6 +842,22 @@ namespace {
             sessionActorVictimCount,
             dataShardBreakerCount,
             dataShardVictimCount);
+    }
+
+    void VerifyCommitLogRecord(TStringStream& ss)
+    {
+        auto records = ExtractTliRecords(ss.Str());
+        bool found = false;
+        for(auto& record: records) {
+            if (record.Contains("queryText=COMMIT")) {
+                auto querySpanId = ExtractNumericField(record, "querySpanId");
+                auto victimTxSpanId = ExtractNumericField(record, "victimTxSpanId");
+                UNIT_ASSERT(querySpanId.has_value());
+                UNIT_ASSERT_EQUAL(querySpanId, victimTxSpanId);
+                found = true;
+            }
+        }
+        UNIT_ASSERT(found);
     }
 
     void VerifyTliIssueAndLogsWhenDisabled(
@@ -1376,6 +1392,9 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         // Verify issue and TLI logs using common verification function
         VerifyTliIssueAndLogs(issues, ss, breakerUpsert, victimUpsertSelect, {}, 1, 2, 1, 1);
+
+        // Check COMMIT message
+        VerifyCommitLogRecord(ss);
     }
 
     // Test: Concurrent UPSERT...SELECT transactions - replicates user's production scenario
@@ -1415,6 +1434,9 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         // Verify issue and TLI logs using common verification function
         VerifyTliIssueAndLogs(issues, ss, breakerUpsert, victimUpsertSelect, {}, 1, 2, 1, 1);
+
+        // Check COMMIT message
+        VerifyCommitLogRecord(ss);
     }
 
     // ==================== 2-Node Tests ====================
@@ -1523,6 +1545,9 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         // Verify issue and TLI logs
         VerifyTliIssueAndLogs(issues, ss, breakerUpsert, victimUpsertSelect, {}, 1, 2, 1, 1);
+
+        // Check COMMIT message
+        VerifyCommitLogRecord(ss);
     }
 
     // Test: Basic TLI flow with Wilson tracing enabled.

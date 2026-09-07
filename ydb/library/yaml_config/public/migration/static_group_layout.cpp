@@ -23,6 +23,10 @@ namespace {
     using NMigrationDetail::FindSequence;
 
     constexpr ui32 DefaultInterconnectPort = 19001;
+    constexpr ui32 DataCenterLevel = 10;
+    constexpr ui32 RoomLevel = 20;
+    constexpr ui32 BodyLevel = 40;
+    constexpr ui32 MinimalLevel = 256;
 
     enum class EDomainType {
         Rack,
@@ -134,11 +138,11 @@ namespace {
         std::optional<EDomainType> domainType;
         if (!realmBegin && !realmEnd && !domainBegin && !domainEnd) {
             domainType = EDomainType::Rack;
-        } else if (realmBegin != 10 || realmEnd != 20 || domainBegin != 10) {
+        } else if (realmBegin != DataCenterLevel || realmEnd != RoomLevel || domainBegin != DataCenterLevel) {
             return std::nullopt;
-        } else if (domainEnd == 40) {
+        } else if (domainEnd == BodyLevel) {
             domainType = EDomainType::Rack;
-        } else if (domainEnd == 256) {
+        } else if (domainEnd == MinimalLevel) {
             domainType = EDomainType::Disk;
         } else {
             return std::nullopt;
@@ -159,44 +163,96 @@ namespace {
         };
     }
 
+    std::optional<TStaticGroupGeometry> GetStoragePoolGeometry(const NFyaml::TNodeRef& storagePoolTypeNode) {
+        const auto storagePoolType = AsMap(storagePoolTypeNode);
+        if (!storagePoolType) {
+            return std::nullopt;
+        }
+
+        const auto poolConfig = FindMap(*storagePoolType, "pool_config");
+        if (storagePoolType->Has("pool_config") && !poolConfig) {
+            return std::nullopt;
+        }
+        if (!poolConfig) {
+            return TStaticGroupGeometry{.DomainType = EDomainType::Rack};
+        }
+
+        const auto geometry = FindMap(*poolConfig, "geometry");
+        if (poolConfig->Has("geometry") && !geometry) {
+            return std::nullopt;
+        }
+        return geometry
+               ? GetGeometry(*geometry)
+               : std::make_optional(TStaticGroupGeometry{.DomainType = EDomainType::Rack});
+    }
+
+    bool AppendStoragePoolGeometries(const NFyaml::TSequence& storagePoolTypes,
+                                     TVector<TStaticGroupGeometry>& result) {
+        for (const auto& storagePoolTypeNode : storagePoolTypes) {
+            const auto geometry = GetStoragePoolGeometry(storagePoolTypeNode);
+            if (!geometry) {
+                return false;
+            }
+            result.push_back(*geometry);
+        }
+        return true;
+    }
+
+    std::optional<TStaticGroupGeometry> GetGeneratedStoragePoolGeometry(const NFyaml::TMapping& config) {
+        const auto failDomainType = FindScalar(config, "fail_domain_type");
+        if (!failDomainType || AsciiEqualsIgnoreCase(*failDomainType, "rack")) {
+            return TStaticGroupGeometry{.DomainType = EDomainType::Rack};
+        }
+        if (AsciiEqualsIgnoreCase(*failDomainType, "disk")) {
+            return TStaticGroupGeometry{.DomainType = EDomainType::Disk};
+        }
+        return std::nullopt;
+    }
+
     std::optional<TVector<TStaticGroupGeometry>> GetStoragePoolGeometries(const NFyaml::TMapping& config) {
-        const auto domainsConfig = FindMap(config, "domains_config");
-        const auto domains = domainsConfig ? FindSequence(*domainsConfig, "domain") : std::nullopt;
-        if (!domains) {
+        const auto topLevelStoragePoolTypes = FindSequence(config, "storage_pool_types");
+        if (config.Has("storage_pool_types") && !topLevelStoragePoolTypes) {
             return std::nullopt;
         }
 
         TVector<TStaticGroupGeometry> result;
-        for (const auto& domainNode : *domains) {
-            const auto domain = AsMap(domainNode);
-            if (!domain) {
-                return std::nullopt;
-            }
-            const auto storagePoolTypes = FindSequence(*domain, "storage_pool_types");
-            if (!storagePoolTypes) {
-                return std::nullopt;
-            }
-            for (const auto& storagePoolTypeNode : *storagePoolTypes) {
-                const auto storagePoolType = AsMap(storagePoolTypeNode);
-                const auto poolConfig = storagePoolType ? FindMap(*storagePoolType, "pool_config") : std::nullopt;
-                if (!poolConfig) {
+        const bool hasTopLevelStoragePoolTypes = topLevelStoragePoolTypes && !topLevelStoragePoolTypes->empty();
+        if (hasTopLevelStoragePoolTypes && !AppendStoragePoolGeometries(*topLevelStoragePoolTypes, result)) {
+            return std::nullopt;
+        }
+
+        const auto domainsConfig = FindMap(config, "domains_config");
+        if (config.Has("domains_config") && !domainsConfig) {
+            return std::nullopt;
+        }
+        const auto domains = domainsConfig ? FindSequence(*domainsConfig, "domain") : std::nullopt;
+        if (domainsConfig && domainsConfig->Has("domain") && !domains) {
+            return std::nullopt;
+        }
+
+        if (domains) {
+            for (const auto& domainNode : *domains) {
+                const auto domain = AsMap(domainNode);
+                if (!domain) {
                     return std::nullopt;
                 }
-                const auto geometry = FindMap(*poolConfig, "geometry");
-                if (poolConfig->Has("geometry") && !geometry) {
+                const auto storagePoolTypes = FindSequence(*domain, "storage_pool_types");
+                if (domain->Has("storage_pool_types") && !storagePoolTypes) {
                     return std::nullopt;
                 }
-                const auto current = geometry
-                                     ? GetGeometry(*geometry)
-                                     : std::make_optional(TStaticGroupGeometry{.DomainType = EDomainType::Rack});
-                if (!current) {
+                if (storagePoolTypes && !storagePoolTypes->empty()
+                    && (hasTopLevelStoragePoolTypes || !AppendStoragePoolGeometries(*storagePoolTypes, result))) {
                     return std::nullopt;
                 }
-                result.push_back(*current);
             }
         }
+
         if (result.empty()) {
-            return std::nullopt;
+            const auto generatedGeometry = GetGeneratedStoragePoolGeometry(config);
+            if (!generatedGeometry) {
+                return std::nullopt;
+            }
+            result.push_back(*generatedGeometry);
         }
         return std::make_optional(std::move(result));
     }
@@ -268,12 +324,10 @@ namespace {
         ui32 nextBodyId = 1;
         for (const auto& hostNode : hosts) {
             if (const auto host = AsMap(hostNode)) {
-                auto location = FindMap(*host, "walle_location");
-                if (!location) {
-                    location = FindMap(*host, "location");
-                }
-                if (location) {
-                    nextBodyId = std::max(nextBodyId, FindUi32(*location, "body").value_or(0) + 1);
+                for (const TStringBuf key : {TStringBuf("location"), TStringBuf("walle_location")}) {
+                    if (const auto location = FindMap(*host, key)) {
+                        nextBodyId = std::max(nextBodyId, FindUi32(*location, "body").value_or(0) + 1);
+                    }
                 }
             }
         }
@@ -285,7 +339,9 @@ namespace {
 
             const ui32 nodeId = FindUi32(*host, "node_id").value_or(static_cast<ui32>(index + 1));
             if (const auto walleLocation = FindMap(*host, "walle_location")) {
-                AddNode(result, nodeId, ReadLocation(*walleLocation), *host);
+                // PrepareHosts skips generated defaults in this case, while storage config consumes location first.
+                const auto location = FindMap(*host, "location");
+                AddNode(result, nodeId, ReadLocation(location ? *location : *walleLocation), *host);
                 continue;
             }
 
@@ -299,10 +355,10 @@ namespace {
             if (!body) {
                 ++nextBodyId;
             }
-            if (!location.DataCenter) {
+            if (!yamlLocation || !yamlLocation->Has("data_center")) {
                 location.DataCenter = "default";
             }
-            if (!location.Rack) {
+            if (!yamlLocation || !yamlLocation->Has("rack")) {
                 location.Rack = TStringBuilder() << "generated-rack-" << bodyId;
             }
             AddNode(result, nodeId, std::move(location), *host);
@@ -403,40 +459,35 @@ namespace {
             }
 
             std::optional<TPhysicalRealm> realm;
+            std::optional<ui32> realmNodeId;
             for (const auto& failDomainNode : *failDomains) {
                 const auto failDomain = AsMap(failDomainNode);
                 const auto vdisks = failDomain ? FindSequence(*failDomain, "vdisk_locations") : std::nullopt;
-                if (!vdisks || vdisks->size() != shape.NumVDisksPerFailDomain) {
+                if (!vdisks || vdisks->size() != 1) {
                     return false;
                 }
 
-                std::optional<TPhysicalDomain> domain;
-                for (const auto& vdiskNode : *vdisks) {
-                    const auto vdisk = AsMap(vdiskNode);
-                    if (!vdisk) {
-                        return false;
-                    }
-                    const auto node = FindScalar(*vdisk, "node_id");
-                    if (!node) {
-                        return false;
-                    }
-                    const ui32 nodeId = ResolveNodeId(nodes, *node);
-                    const auto location = nodes.Locations.find(nodeId);
-                    Y_ENSURE_EX(location != nodes.Locations.end(),
-                                TYamlConfigEx() << "Static group references unknown node " << nodeId);
-                    const auto pdiskId = ResolvePDiskId(*vdisk, nodeId, usedPDiskIds);
-                    if (!pdiskId) {
-                        return false;
-                    }
-
-                    if (!KeepSame(realmGroup, location->second.BridgePile)
-                        || !KeepSame(realm, GetRealm(location->second))
-                        || !KeepSame(domain,
-                                    GetDomain(location->second, nodeId, *pdiskId, geometry.DomainType))) {
-                        return false;
-                    }
+                const auto vdisk = AsMap(vdisks->at(0));
+                if (!vdisk) {
+                    return false;
                 }
-                if (!domain || !usedDomains.insert(*domain).second) {
+                const auto node = FindScalar(*vdisk, "node_id");
+                if (!node) {
+                    return false;
+                }
+                const ui32 nodeId = ResolveNodeId(nodes, *node);
+                const auto location = nodes.Locations.find(nodeId);
+                Y_ENSURE_EX(location != nodes.Locations.end(),
+                            TYamlConfigEx() << "Static group references unknown node " << nodeId);
+                const auto pdiskId = ResolvePDiskId(*vdisk, nodeId, usedPDiskIds);
+                if (!pdiskId) {
+                    return false;
+                }
+
+                if (!KeepSame(realmGroup, location->second.BridgePile)
+                    || !KeepSame(realm, GetRealm(location->second))
+                    || (geometry.DomainType == EDomainType::Disk && !KeepSame(realmNodeId, nodeId))
+                    || !usedDomains.insert(GetDomain(location->second, nodeId, *pdiskId, geometry.DomainType)).second) {
                     return false;
                 }
             }

@@ -249,23 +249,26 @@ int TCommandConfigToggleSelfManagement::Run(TConfig&) {
     };
 
     const auto input = ReadMigrationConfig(InputPath);
-    const bool enabling = Enabled() && !NYamlConfig::IsSelfManagementEnabled(input);
-    auto result = NYamlConfig::SetSelfManagement(input, Enabled());
-    const auto layout = Enabled()
+    const bool enableRequested = Enabled();
+    const bool transitioningToEnabled = enableRequested && !NYamlConfig::IsSelfManagementEnabled(input);
+    auto result = NYamlConfig::SetSelfManagement(input, enableRequested);
+    if (enableRequested && UseMirror3dc3NodesLayout) {
+        NYamlConfig::SetDiskFailDomainType(result);
+    }
+    const auto layout = enableRequested
                         ? NYamlConfig::CheckStaticGroupLayout(result)
                         : NYamlConfig::EStaticGroupLayoutCheckResult::NotApplicable;
-    const bool hasDiskFailDomainType = Enabled() && NYamlConfig::HasDiskFailDomainType(result);
+    const bool hasDiskFailDomainType = enableRequested && NYamlConfig::HasDiskFailDomainType(result);
     std::optional<TLayoutIssue> layoutIssue;
 
-    if (Enabled() && UseMirror3dc3NodesLayout) {
+    if (enableRequested && UseMirror3dc3NodesLayout) {
         if (layout != NYamlConfig::EStaticGroupLayoutCheckResult::Mirror3dc3Nodes) {
             Cerr << "--mirror-3-dc-3-nodes requires a consistent mirror-3-dc (3 nodes) layout in "
-                 << "pool_config.geometry under domains_config and in blob_storage_config; fix the configuration"
+                 << "storage-pool geometry and blob_storage_config; fix the configuration"
                  << Endl;
             return EXIT_FAILURE;
         }
-        NYamlConfig::SetDiskFailDomainType(result);
-    } else if (enabling && layout == NYamlConfig::EStaticGroupLayoutCheckResult::Mirror3dc
+    } else if (transitioningToEnabled && layout == NYamlConfig::EStaticGroupLayoutCheckResult::Mirror3dc
                && hasDiskFailDomainType) {
         layoutIssue = TLayoutIssue{
             .Error = "Configuration uses mirror-3-dc (9 nodes), but fail_domain_type: disk would make "
@@ -274,7 +277,7 @@ int TCommandConfigToggleSelfManagement::Run(TConfig&) {
             .Warning = "enabling self-management with fail_domain_type: disk although the configuration "
                        "uses mirror-3-dc (9 nodes)",
         };
-    } else if (enabling && layout == NYamlConfig::EStaticGroupLayoutCheckResult::Block42
+    } else if (transitioningToEnabled && layout == NYamlConfig::EStaticGroupLayoutCheckResult::Block42
                && hasDiskFailDomainType) {
         layoutIssue = TLayoutIssue{
             .Error = "Configuration uses block-4-2, but fail_domain_type: disk would make self-management "
@@ -283,20 +286,19 @@ int TCommandConfigToggleSelfManagement::Run(TConfig&) {
             .Warning = "enabling self-management with fail_domain_type: disk although the configuration "
                        "uses block-4-2",
         };
-    } else if (enabling && layout == NYamlConfig::EStaticGroupLayoutCheckResult::Mirror3dc3Nodes
+    } else if (transitioningToEnabled && layout == NYamlConfig::EStaticGroupLayoutCheckResult::Mirror3dc3Nodes
                && !hasDiskFailDomainType) {
         layoutIssue = TLayoutIssue{
             .Error = "Configuration uses mirror-3-dc (3 nodes). Rerun with --mirror-3-dc-3-nodes to preserve this "
                      "layout in the generated config",
             .Warning = "enabling self-management without preserving the configured mirror-3-dc (3 nodes) layout",
         };
-    } else if (enabling && layout == NYamlConfig::EStaticGroupLayoutCheckResult::Incorrect) {
+    } else if (transitioningToEnabled && layout == NYamlConfig::EStaticGroupLayoutCheckResult::Incorrect) {
         layoutIssue = TLayoutIssue{
-            .Error = "The static-group layout in domains_config and blob_storage_config cannot be migrated "
-                     "automatically. Review and fix pool_config.geometry and static-group placement before "
-                     "enabling self-management",
-            .Warning = "enabling self-management although the static-group layout in domains_config and "
-                       "blob_storage_config cannot be migrated automatically",
+            .Error = "The static-group layout cannot be migrated automatically. Review and fix storage-pool "
+                     "geometry and static-group placement before enabling self-management",
+            .Warning = "enabling self-management although the static-group layout cannot be migrated "
+                       "automatically",
         };
     }
 

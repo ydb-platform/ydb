@@ -23,6 +23,12 @@ namespace {
         Disk,
     };
 
+    enum class EStoragePools {
+        Nested,
+        TopLevel,
+        Generated,
+    };
+
     struct TGroupShape {
         ui32 Rings = 3;
         ui32 FailDomains = 3;
@@ -32,9 +38,14 @@ namespace {
     struct TConfigOptions {
         EPlacement Placement = EPlacement::OneNodePerVDisk;
         EPoolGeometry PoolGeometry = EPoolGeometry::Rack;
+        EStoragePools StoragePools = EStoragePools::Nested;
         bool DuplicatePDisk = false;
+        bool DuplicateDataCenter = false;
         bool DuplicateRack = false;
+        bool EmptyRack = false;
+        bool ConflictingWalleLocation = false;
         bool OmitPDiskIds = false;
+        bool OmitPoolConfig = false;
         bool SplitRealmGroups = false;
         TStringBuf PoolErasure = "mirror-3-dc";
         TStringBuf GroupErasure = "mirror-3-dc";
@@ -42,22 +53,20 @@ namespace {
         std::optional<TGroupShape> GeometryShape;
     };
 
-    TString MakeConfig(const TConfigOptions& options) {
-        TStringBuilder config;
-        config << "config:\n"
-               << "  hosts:\n";
-
-        const bool oneNodePerRealm = options.Placement == EPlacement::OneNodePerRealm;
-        const ui32 nodesPerRealm = options.GroupShape.FailDomains * options.GroupShape.VDisks;
+    void AppendHosts(TStringBuilder& config, const TConfigOptions& options, bool oneNodePerRealm,
+                     ui32 nodesPerRealm) {
+        config << "  hosts:\n";
         const ui32 nodeCount = oneNodePerRealm
                                ? options.GroupShape.Rings
                                : options.GroupShape.Rings * nodesPerRealm;
         for (ui32 nodeId = 1; nodeId <= nodeCount; ++nodeId) {
-            const ui32 dataCenter = oneNodePerRealm || options.Placement == EPlacement::SplitRealms
-                                    ? nodeId
-                                    : options.Placement == EPlacement::SharedRealms
-                                      ? (nodeId - 1) % nodesPerRealm + 1
-                                      : (nodeId - 1) / nodesPerRealm + 1;
+            const ui32 dataCenter = options.DuplicateDataCenter
+                                    ? 1
+                                    : oneNodePerRealm || options.Placement == EPlacement::SplitRealms
+                                      ? nodeId
+                                      : options.Placement == EPlacement::SharedRealms
+                                        ? (nodeId - 1) % nodesPerRealm + 1
+                                        : (nodeId - 1) / nodesPerRealm + 1;
             const ui32 rack = options.DuplicateRack && nodeId == 2 ? 1 : nodeId;
             config << "  - node_id: " << nodeId << '\n'
                    << "    host: host-" << nodeId << '\n'
@@ -66,30 +75,65 @@ namespace {
             if (options.SplitRealmGroups) {
                 config << "      bridge_pile_name: pile-" << (nodeId - 1) / nodesPerRealm + 1 << '\n';
             }
-            config << "      data_center: dc-" << dataCenter << '\n'
-                   << "      rack: rack-" << rack << '\n';
-        }
-
-        config << "  domains_config:\n"
-               << "    domain:\n"
-               << "    - storage_pool_types:\n"
-               << "      - pool_config:\n"
-               << "          erasure_species: " << options.PoolErasure << '\n'
-               << "          kind: ssd\n";
-        if (options.PoolGeometry != EPoolGeometry::Missing) {
-            config << "          geometry:\n"
-                   << "            realm_level_begin: 10\n"
-                   << "            realm_level_end: 20\n"
-                   << "            domain_level_begin: 10\n"
-                   << "            domain_level_end: "
-                   << (options.PoolGeometry == EPoolGeometry::Disk ? 256 : 40) << '\n';
-            if (options.GeometryShape) {
-                config << "            num_fail_realms: " << options.GeometryShape->Rings << '\n'
-                       << "            num_fail_domains_per_fail_realm: " << options.GeometryShape->FailDomains << '\n'
-                       << "            num_vdisks_per_fail_domain: " << options.GeometryShape->VDisks << '\n';
+            config << "      data_center: dc-" << dataCenter << '\n';
+            if (options.EmptyRack) {
+                config << "      rack: ''\n";
+            } else {
+                config << "      rack: rack-" << rack << '\n';
+            }
+            if (options.ConflictingWalleLocation && nodeId == 2) {
+                config << "    walle_location:\n"
+                       << "      data_center: dc-1\n"
+                       << "      rack: rack-1\n";
             }
         }
+    }
 
+    void AppendStoragePools(TStringBuilder& config, const TConfigOptions& options) {
+        if (options.StoragePools == EStoragePools::Generated || options.OmitPoolConfig) {
+            config << "  erasure: " << options.PoolErasure << '\n'
+                   << "  default_disk_type: SSD\n";
+        }
+
+        const auto appendStoragePool = [&](TStringBuf itemIndent) {
+            config << itemIndent << "-";
+            if (options.OmitPoolConfig) {
+                config << " kind: ssd\n";
+                return;
+            }
+            config << " pool_config:\n"
+                   << itemIndent << "    erasure_species: " << options.PoolErasure << '\n'
+                   << itemIndent << "    kind: ssd\n";
+            if (options.PoolGeometry != EPoolGeometry::Missing) {
+                config << itemIndent << "    geometry:\n"
+                       << itemIndent << "      realm_level_begin: 10\n"
+                       << itemIndent << "      realm_level_end: 20\n"
+                       << itemIndent << "      domain_level_begin: 10\n"
+                       << itemIndent << "      domain_level_end: "
+                       << (options.PoolGeometry == EPoolGeometry::Disk ? 256 : 40) << '\n';
+                if (options.GeometryShape) {
+                    config << itemIndent << "      num_fail_realms: " << options.GeometryShape->Rings << '\n'
+                           << itemIndent << "      num_fail_domains_per_fail_realm: "
+                           << options.GeometryShape->FailDomains << '\n'
+                           << itemIndent << "      num_vdisks_per_fail_domain: "
+                           << options.GeometryShape->VDisks << '\n';
+                }
+            }
+        };
+
+        if (options.StoragePools == EStoragePools::Nested) {
+            config << "  domains_config:\n"
+                   << "    domain:\n"
+                   << "    - storage_pool_types:\n";
+            appendStoragePool("      ");
+        } else if (options.StoragePools == EStoragePools::TopLevel) {
+            config << "  storage_pool_types:\n";
+            appendStoragePool("  ");
+        }
+    }
+
+    void AppendStaticGroup(TStringBuilder& config, const TConfigOptions& options, bool oneNodePerRealm,
+                           ui32 nodesPerRealm) {
         config << "  self_management_config:\n"
                << "    enabled: false\n"
                << "  blob_storage_config:\n"
@@ -120,6 +164,17 @@ namespace {
                 }
             }
         }
+    }
+
+    TString MakeConfig(const TConfigOptions& options) {
+        TStringBuilder config;
+        config << "config:\n";
+
+        const bool oneNodePerRealm = options.Placement == EPlacement::OneNodePerRealm;
+        const ui32 nodesPerRealm = options.GroupShape.FailDomains * options.GroupShape.VDisks;
+        AppendHosts(config, options, oneNodePerRealm, nodesPerRealm);
+        AppendStoragePools(config, options);
+        AppendStaticGroup(config, options, oneNodePerRealm, nodesPerRealm);
         return config;
     }
 
@@ -146,6 +201,34 @@ Y_UNIT_TEST_SUITE(StaticGroupLayout) {
                     == NYamlConfig::EStaticGroupLayoutCheckResult::Mirror3dc);
     }
 
+    Y_UNIT_TEST(TopLevelStoragePoolTypesAreAccepted) {
+        auto config = MakeDocument({.StoragePools = EStoragePools::TopLevel});
+        UNIT_ASSERT(NYamlConfig::CheckStaticGroupLayout(config)
+                    == NYamlConfig::EStaticGroupLayoutCheckResult::Mirror3dc);
+    }
+
+    Y_UNIT_TEST(StoragePoolTypeWithoutPoolConfigUsesRackDefaults) {
+        auto config = MakeDocument({.OmitPoolConfig = true});
+        UNIT_ASSERT(NYamlConfig::CheckStaticGroupLayout(config)
+                    == NYamlConfig::EStaticGroupLayoutCheckResult::Mirror3dc);
+    }
+
+    Y_UNIT_TEST(GeneratedStoragePoolUsesRackDefaults) {
+        auto config = MakeDocument({.StoragePools = EStoragePools::Generated});
+        UNIT_ASSERT(NYamlConfig::CheckStaticGroupLayout(config)
+                    == NYamlConfig::EStaticGroupLayoutCheckResult::Mirror3dc);
+    }
+
+    Y_UNIT_TEST(GeneratedStoragePoolUsesDiskFailDomainType) {
+        auto config = MakeDocument({
+            .Placement = EPlacement::OneNodePerRealm,
+            .StoragePools = EStoragePools::Generated,
+        });
+        NYamlConfig::SetDiskFailDomainType(config);
+        UNIT_ASSERT(NYamlConfig::CheckStaticGroupLayout(config)
+                    == NYamlConfig::EStaticGroupLayoutCheckResult::Mirror3dc3Nodes);
+    }
+
     Y_UNIT_TEST(FailDomainTypeDoesNotOverrideMissingStoragePoolGeometry) {
         auto config = MakeDocument({
             .Placement = EPlacement::OneNodePerRealm,
@@ -163,6 +246,22 @@ Y_UNIT_TEST_SUITE(StaticGroupLayout) {
         });
         UNIT_ASSERT(NYamlConfig::CheckStaticGroupLayout(config)
                     == NYamlConfig::EStaticGroupLayoutCheckResult::Mirror3dc3Nodes);
+    }
+
+    Y_UNIT_TEST(DiskGeometryRejectsNineNodePlacement) {
+        auto config = MakeDocument({.PoolGeometry = EPoolGeometry::Disk});
+        UNIT_ASSERT(NYamlConfig::CheckStaticGroupLayout(config)
+                    == NYamlConfig::EStaticGroupLayoutCheckResult::Incorrect);
+    }
+
+    Y_UNIT_TEST(DiskGeometryRejectsDuplicateDataCenter) {
+        auto config = MakeDocument({
+            .Placement = EPlacement::OneNodePerRealm,
+            .PoolGeometry = EPoolGeometry::Disk,
+            .DuplicateDataCenter = true,
+        });
+        UNIT_ASSERT(NYamlConfig::CheckStaticGroupLayout(config)
+                    == NYamlConfig::EStaticGroupLayoutCheckResult::Incorrect);
     }
 
     Y_UNIT_TEST(Mirror3dc3NodesRejectsDuplicatePDisk) {
@@ -187,6 +286,18 @@ Y_UNIT_TEST_SUITE(StaticGroupLayout) {
 
     Y_UNIT_TEST(Mirror3dcConfigurationAccepted) {
         auto config = MakeDocument();
+        UNIT_ASSERT(NYamlConfig::CheckStaticGroupLayout(config)
+                    == NYamlConfig::EStaticGroupLayoutCheckResult::Mirror3dc);
+    }
+
+    Y_UNIT_TEST(ExplicitEmptyRackIsNotDefaulted) {
+        auto config = MakeDocument({.EmptyRack = true});
+        UNIT_ASSERT(NYamlConfig::CheckStaticGroupLayout(config)
+                    == NYamlConfig::EStaticGroupLayoutCheckResult::Incorrect);
+    }
+
+    Y_UNIT_TEST(LocationTakesPrecedenceOverWalleLocation) {
+        auto config = MakeDocument({.ConflictingWalleLocation = true});
         UNIT_ASSERT(NYamlConfig::CheckStaticGroupLayout(config)
                     == NYamlConfig::EStaticGroupLayoutCheckResult::Mirror3dc);
     }

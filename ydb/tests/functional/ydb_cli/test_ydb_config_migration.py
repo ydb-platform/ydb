@@ -17,7 +17,8 @@ class CliResult:
 
 
 def make_config(*, one_node_per_realm=False, geometry="rack", erasure="mirror-3-dc",
-                shape=(3, 3, 1), fail_domain_type=None, self_management_enabled=False):
+                shape=(3, 3, 1), fail_domain_type=None, self_management_enabled=False,
+                storage_pools=True):
     rings, fail_domains, vdisks = shape
     nodes_per_realm = fail_domains * vdisks
     node_count = rings if one_node_per_realm else rings * nodes_per_realm
@@ -64,11 +65,6 @@ def make_config(*, one_node_per_realm=False, geometry="rack", erasure="mirror-3-
     config = {
         "feature_flags": {"switch_to_config_v2": True},
         "hosts": hosts,
-        "domains_config": {
-            "domain": [{
-                "storage_pool_types": [{"pool_config": pool_config}],
-            }],
-        },
         "self_management_config": {"enabled": self_management_enabled},
         "blob_storage_config": {
             "service_set": {
@@ -79,6 +75,15 @@ def make_config(*, one_node_per_realm=False, geometry="rack", erasure="mirror-3-
             },
         },
     }
+    if storage_pools:
+        config["domains_config"] = {
+            "domain": [{
+                "storage_pool_types": [{"pool_config": pool_config}],
+            }],
+        }
+    else:
+        config["erasure"] = erasure
+        config["default_disk_type"] = "SSD"
     if fail_domain_type is not None:
         config["fail_domain_type"] = fail_domain_type
     return {"config": config}
@@ -114,7 +119,18 @@ def test_three_node_mirror_requires_explicit_layout(tmp_path):
     assert rejected.exit_code != 0
     assert "Rerun with --mirror-3-dc-3-nodes" in rejected.stderr
 
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        make_config(one_node_per_realm=True, geometry="disk"),
+        make_config(one_node_per_realm=True, storage_pools=False),
+    ],
+    ids=["explicit-pool", "generated-pool"],
+)
+def test_three_node_mirror_accepts_explicit_layout(tmp_path, config):
     accepted = run_toggle_self_management(tmp_path, config, "--enable", "--mirror-3-dc-3-nodes")
+
     assert accepted.exit_code == 0, accepted.stderr
     accepted_config = output_config(accepted)
     assert accepted_config["self_management_config"]["enabled"] is True

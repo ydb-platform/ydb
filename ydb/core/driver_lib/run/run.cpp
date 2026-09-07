@@ -1469,9 +1469,7 @@ void TKikimrRunner::InitializeAllocator(const TKikimrRunConfig& runConfig) {
     }
 
     if (allocConfig.GetEnableDefaultAllocator()) {
-#if defined(ALLOW_DEFAULT_ALLOCATOR)
         NKikimr::UseDefaultAllocator();
-#endif
         NKikimr::UseDefaultArrowAllocator();
     }
 

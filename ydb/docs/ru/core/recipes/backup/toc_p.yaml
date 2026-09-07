@@ -11,5 +11,3 @@ items:
     path: system-tablet-backup/toc_p.yaml
 - name: Резервное копирование в NFS
   href: nfs-backup/nfs-backup.md
-- name: Импорт и экспорт данных в колоночные таблицы
-  href: import-export-column-tables.md

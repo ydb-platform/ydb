@@ -4,6 +4,20 @@
 
 namespace NKikimr::NMiniKQL {
 
+/// Compiling a pattern only pays off if it stays in the cache long enough to be executed many times afterwards. When
+/// the cache is thrashing, entries do not live that long, so a pattern is not queued for compilation until it has
+/// proven it survives - which is what stops a churning cache from feeding the compilation service for nothing.
+constexpr TDuration MinResidencyBeforeCompile = TDuration::Seconds(30);
+
+/// Compiled code is given up as soon as the configured limit is exceeded, but the patterns that lost it are only let
+/// back into the compilation queue once the usage drops well below that limit. The gap between the two is what keeps
+/// a saturated budget from cycling through compile - evict - compile forever.
+constexpr double CompiledCodeRecompileWatermark = 0.8;
+
+/// How many times a pattern may be compiled after its code has been given up. Bounds the worst case even if the
+/// watermark above happens to be tuned badly for the workload.
+constexpr size_t MaxCompileAttempts = 2;
+
 class TComputationPatternLRUCache::TLRUPatternCacheImpl {
 public:
     TLRUPatternCacheImpl(size_t maxPatternsSize,
@@ -58,6 +72,7 @@ public:
             RemoveEntryFromLists(&it->second);
         } else {
             it->second.Entry->UpdateSizeForCache();
+            it->second.Entry->CachedAt = TInstant::Now();
         }
 
         /// New item is inserted, insert it in the back of both LRU lists and recalculate sizes
@@ -136,6 +151,14 @@ public:
         MaxPatternsSizeBytes_ = maxPatternsSizeBytes;
         MaxCompiledPatternsSizeBytes_ = maxCompiledPatternsSizeBytes;
         ClearIfNeeded();
+    }
+
+    /** Patterns are queued for compilation at most once per epoch, and the epoch is bumped whenever the compiled code
+     * budget goes from tight to roomy - so raising the limit, or simply having the patterns that took the budget leave
+     * the cache, gives the ones that lost their code a chance to get it back.
+     */
+    ui64 GetCompileEpoch() const {
+        return CompileEpoch_;
     }
 
 private:
@@ -244,11 +267,25 @@ private:
             Y_ASSERT(patternCompiledSize <= CurrentPatternsCompiledCodeSizeInBytes_);
             CurrentPatternsCompiledCodeSizeInBytes_ -= patternCompiledSize;
 
-            // Note that AccessTimes is deliberately left as it is: the entry has already crossed the compilation
-            // threshold once, and resetting the counter here would make it cross the very same threshold again in
-            // a few accesses, so the pattern would be recompiled just to be evicted again.
+            // Note that AccessTimes is deliberately left as it is: it means popularity and nothing else, while
+            // whether the pattern is to be compiled again is decided by the epoch below.
             pattern->RemoveCompiledCode();
         }
+
+        ArmRecompilationIfBudgetFreed();
+    }
+
+    /// Edge-triggered on purpose: a budget sitting right at its limit must not re-arm the very pattern whose code it
+    /// has just taken away, or the compile - evict - compile cycle is back.
+    void ArmRecompilationIfBudgetFreed() {
+        const bool isTight = static_cast<double>(CurrentPatternsCompiledCodeSizeInBytes_) >
+                             static_cast<double>(MaxCompiledPatternsSizeBytes_) * CompiledCodeRecompileWatermark;
+
+        if (CompiledBudgetIsTight_ && !isTight) {
+            ++CompileEpoch_;
+        }
+
+        CompiledBudgetIsTight_ = isTight;
     }
 
     const size_t MaxPatternsSize_;
@@ -259,6 +296,9 @@ private:
     size_t CurrentPatternsSizeBytes_ = 0;
     size_t CurrentCompiledPatternsSize_ = 0;
     size_t CurrentPatternsCompiledCodeSizeInBytes_ = 0;
+
+    ui64 CompileEpoch_ = 1;              // entries start at 0, so everything is eligible for compilation at first
+    bool CompiledBudgetIsTight_ = false; // whether the compiled code usage is above the re-compilation watermark
 
     THashMap<TProgramKey, TPatternCacheHolder> ProgramKeyToPatternCacheHolder_;
     TIntrusiveList<TPatternCacheHolder, TPatternLRUListTag> LruPatternList_;
@@ -284,6 +324,7 @@ TComputationPatternLRUCache::TComputationPatternLRUCache(
     , Waits_(counters->GetCounter("PatternCache/Waits", /*derivative=*/true))
     , Misses_(counters->GetCounter("PatternCache/Misses", /*derivative=*/true))
     , NotSuitablePattern_(counters->GetCounter("PatternCache/NotSuitablePattern", /*derivative=*/true))
+    , CompilationsPostponed_(counters->GetCounter("PatternCache/CompilationsPostponed", /*derivative=*/true))
     , SizeItems_(counters->GetCounter("PatternCache/SizeItems", /*derivative=*/false))
     , SizeCompiledItems_(counters->GetCounter("PatternCache/SizeCompiledItems", /*derivative=*/false))
     , SizeBytes_(counters->GetCounter("PatternCache/SizeBytes", /*derivative=*/false))
@@ -434,11 +475,32 @@ void TComputationPatternLRUCache::AccessPattern(const TProgramKey& key, TPattern
         return;
     }
 
-    size_t PatternAccessTimes = entry->AccessTimes.fetch_add(1) + 1;
-    if (PatternAccessTimes == *Configuration_.PatternAccessTimesBeforeTryToCompile ||
-        (*Configuration_.PatternAccessTimesBeforeTryToCompile == 0 && PatternAccessTimes == 1)) {
-        PatternsToCompile_.emplace(key, entry);
+    const size_t accessTimes = entry->AccessTimes.fetch_add(1) + 1;
+    if (accessTimes < Max<size_t>(*Configuration_.PatternAccessTimesBeforeTryToCompile, 1)) {
+        return;
     }
+
+    // Queued at most once per compilation epoch. The epoch is bumped when the compiled code budget frees up, and that
+    // is the only thing that gives a pattern which has lost its code a chance to get it back.
+    const ui64 compileEpoch = Cache_->GetCompileEpoch();
+    if (entry->LastCompileEpoch >= compileEpoch) {
+        return;
+    }
+
+    if (entry->CompileAttempts >= MaxCompileAttempts) {
+        return;
+    }
+
+    if (TInstant::Now() - entry->CachedAt < MinResidencyBeforeCompile) {
+        // Too young to tell whether it is going to live long enough for the compilation to pay off. Note this is not
+        // a lost chance: the pattern is looked at again on every next access, and gets queued once it is old enough.
+        ++*CompilationsPostponed_;
+        return;
+    }
+
+    entry->LastCompileEpoch = compileEpoch;
+    ++entry->CompileAttempts;
+    PatternsToCompile_.emplace(key, entry);
 }
 
 } // namespace NKikimr::NMiniKQL

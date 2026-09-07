@@ -127,6 +127,8 @@ struct TKqpCleanupCtx {
     std::deque<TIntrusivePtr<TKqpTransactionContext>> TransactionsToBeAborted;
     bool IsWaitingForWorkerToClose = false;
     bool IsWaitingForWorkloadServiceCleanup = false;
+    TActorId WorkerId;
+    TActorId WorkloadServiceActorId;
     bool Final = false;
     TInstant Start = TInstant::Now();
 
@@ -209,6 +211,21 @@ private:
 };
 
 class TKqpSessionActor : public TActorBootstrapped<TKqpSessionActor>, IActorExceptionHandler {
+
+    static constexpr TDuration CleanupWatchdogWarningTimeout = TDuration::Minutes(1);
+    static constexpr TDuration CleanupWatchdogHardTimeout = TDuration::Minutes(5);
+
+    struct TEvCleanupWatchdog
+        : public TEventLocal<TEvCleanupWatchdog, EventSpaceBegin(TEvents::ES_PRIVATE)>
+    {
+        explicit TEvCleanupWatchdog(ui64 generation, bool hardTimeout = false)
+            : Generation(generation)
+            , HardTimeout(hardTimeout)
+        {}
+
+        const ui64 Generation;
+        const bool HardTimeout;
+    };
 
     class TTimerGuard {
     public:
@@ -3560,6 +3577,7 @@ public:
     void HandleExecute(TEvKqp::TEvCloseSessionRequest::TPtr&) {
         YQL_ENSURE(QueryState);
         QueryState->KeepSession = false;
+        StartCleanupWatchdog();
         {
             auto abort = MakeHolder<NYql::NDq::TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, "Query execution is cancelled because session was requested to be closed.");
             Send(SelfId(), abort.Release());
@@ -3571,6 +3589,7 @@ public:
         if (!CleanupCtx->Final) {
             YQL_ENSURE(QueryState);
             QueryState->KeepSession = false;
+            StartCleanupWatchdog();
         }
     }
 
@@ -3632,6 +3651,117 @@ public:
         Cleanup(true);
     }
 
+    void StartCleanupWatchdog() {
+        if (CleanupWatchdogActive) {
+            return;
+        }
+
+        CleanupWatchdogActive = true;
+        CleanupWatchdogStartedAt = TActivationContext::Monotonic();
+        Schedule(CleanupWatchdogWarningTimeout, new TEvCleanupWatchdog(++CleanupWatchdogGeneration));
+    }
+
+    void StopCleanupWatchdog() {
+        CleanupWatchdogActive = false;
+        ++CleanupWatchdogGeneration;
+    }
+
+    void HandleCleanupWatchdog(TEvCleanupWatchdog::TPtr& ev) {
+        if (!CleanupWatchdogActive || ev->Get()->Generation != CleanupWatchdogGeneration) {
+            return;
+        }
+
+        const bool waitingForTempTablesCleanup =
+            CurrentStateFunc() == &TThis::FinalCleanupState;
+        const bool closingDuringExecution =
+            CurrentStateFunc() == &TThis::ExecuteState && QueryState && !QueryState->KeepSession;
+        const bool finalCleanup = CleanupCtx
+            ? CleanupCtx->Final
+            : waitingForTempTablesCleanup || closingDuringExecution;
+        const TDuration cleanupDuration = TActivationContext::Monotonic() - CleanupWatchdogStartedAt;
+
+        if (!ev->Get()->HardTimeout) {
+            YDB_LOG_WARN("Session cleanup is taking too long",
+                {"marker", "KQPSA"},
+                {"logPrefix", LogPrefix()},
+                {"cleanupDurationMs", cleanupDuration.MilliSeconds()},
+                {"cleanupFinal", finalCleanup},
+                {"waitingForQueryExecution", closingDuringExecution},
+                {"transactionsToBeAbortedSize", CleanupCtx ? CleanupCtx->TransactionsToBeAborted.size() : 0},
+                {"waitingForWorkerClose", CleanupCtx ? CleanupCtx->IsWaitingForWorkerToClose : false},
+                {"workerId", CleanupCtx ? CleanupCtx->WorkerId : TActorId()},
+                {"waitingForWorkloadServiceCleanup", CleanupCtx ? CleanupCtx->IsWaitingForWorkloadServiceCleanup : false},
+                {"workloadServiceActorId", CleanupCtx ? CleanupCtx->WorkloadServiceActorId : TActorId()},
+                {"executerId", ExecuterId},
+                {"waitingForTempTablesCleanup", waitingForTempTablesCleanup},
+                {"tempTablesCleanupActorId", TempTablesCleanupActorId},
+                {"traceId", TraceId()});
+
+            Schedule(CleanupWatchdogHardTimeout - CleanupWatchdogWarningTimeout,
+                new TEvCleanupWatchdog(CleanupWatchdogGeneration, true));
+            return;
+        }
+
+        YDB_LOG_ERROR("Session cleanup timed out; forcing session close",
+            {"marker", "KQPSA"},
+            {"logPrefix", LogPrefix()},
+            {"cleanupDurationMs", cleanupDuration.MilliSeconds()},
+            {"cleanupFinal", finalCleanup},
+            {"waitingForQueryExecution", closingDuringExecution},
+            {"transactionsToBeAbortedSize", CleanupCtx ? CleanupCtx->TransactionsToBeAborted.size() : 0},
+            {"waitingForWorkerClose", CleanupCtx ? CleanupCtx->IsWaitingForWorkerToClose : false},
+            {"workerId", CleanupCtx ? CleanupCtx->WorkerId : TActorId()},
+            {"waitingForWorkloadServiceCleanup", CleanupCtx ? CleanupCtx->IsWaitingForWorkloadServiceCleanup : false},
+            {"workloadServiceActorId", CleanupCtx ? CleanupCtx->WorkloadServiceActorId : TActorId()},
+            {"executerId", ExecuterId},
+            {"waitingForTempTablesCleanup", waitingForTempTablesCleanup},
+            {"tempTablesCleanupActorId", TempTablesCleanupActorId},
+            {"traceId", TraceId()});
+
+        // Final cleanup is best effort. A node restart can interrupt it at any
+        // point as well, so it must not be allowed to own a session quota slot
+        // forever. The rollback executer and temp-tables manager may still finish
+        // independently; their late replies will be discarded after this actor dies.
+        if (CurrentStateFunc() == &TThis::CleanupState && CleanupCtx) {
+            Counters->ReportSessionActorCleanupLatency(
+                Settings.DbCounters, TInstant::Now() - CleanupCtx->Start);
+            for (const auto& txCtx : CleanupCtx->TransactionsToBeAborted) {
+                TerminateBufferActor(txCtx);
+            }
+        }
+        if (closingDuringExecution) {
+            TerminateBufferActor(QueryState->TxCtx);
+        }
+        if (ExecuterId) {
+            Send(ExecuterId, new TEvents::TEvPoison());
+        }
+        if (QueryResponse) {
+            Reply();
+        }
+
+        Counters->ReportSessionActorClosedError(Settings.DbCounters);
+        FinishSessionActor();
+    }
+
+    void FinishSessionActor() {
+        StopCleanupWatchdog();
+        const auto lifeSpan = TInstant::Now() - CreationTime;
+        Counters->ReportSessionActorFinished(Settings.DbCounters, lifeSpan);
+        Counters->ReportQueriesPerSessionActor(Settings.DbCounters, QueryId);
+
+        auto closeEv = std::make_unique<TEvKqp::TEvCloseSessionResponse>();
+        closeEv->Record.SetStatus(Ydb::StatusIds::SUCCESS);
+        closeEv->Record.MutableResponse()->SetSessionId(SessionId);
+        closeEv->Record.MutableResponse()->SetClosed(true);
+        Send(Owner, closeEv.release());
+
+        YDB_LOG_DEBUG("Session actor destroyed",
+            {"marker", "KQPSA"},
+            {"logPrefix", LogPrefix()},
+            {"traceId", TraceId()});
+        PassAway();
+    }
+
     void Cleanup(bool isFinal = false) {
         isFinal = isFinal || QueryState && !QueryState->KeepSession;
 
@@ -3667,6 +3797,7 @@ public:
             YQL_ENSURE(!CleanupCtx);
             CleanupCtx.reset(new TKqpCleanupCtx);
             CleanupCtx->IsWaitingForWorkerToClose = true;
+            CleanupCtx->WorkerId = *workerId;
         }
 
         if (Transactions.ToBeAbortedSize()) {
@@ -3683,6 +3814,7 @@ public:
             }
             CleanupCtx->Final = isFinal;
             CleanupCtx->IsWaitingForWorkloadServiceCleanup = true;
+            CleanupCtx->WorkloadServiceActorId = *QueryState->PoolHandlerActor;
 
             const auto& stats = QueryState->QueryStats;
             auto event = std::make_unique<NWorkloadManager::TEvCleanupRequest>(
@@ -3712,6 +3844,10 @@ public:
             {"workloadServiceCleanup", CleanupCtx ? CleanupCtx->IsWaitingForWorkloadServiceCleanup : false},
             {"traceId", TraceId()});
         if (CleanupCtx) {
+            CleanupCtx->Final = isFinal;
+            if (isFinal) {
+                StartCleanupWatchdog();
+            }
             Become(&TKqpSessionActor::CleanupState);
         } else {
             EndCleanup(isFinal);
@@ -3720,6 +3856,7 @@ public:
 
     void HandleCleanup(TEvKqp::TEvCloseSessionResponse::TPtr&) {
         CleanupCtx->IsWaitingForWorkerToClose = false;
+        CleanupCtx->WorkerId = {};
         if (CleanupCtx->CleanupFinished()) {
             EndCleanup(CleanupCtx->Final);
         }
@@ -3773,6 +3910,7 @@ public:
     void HandleCleanup(NWorkloadManager::TEvCleanupResponse::TPtr& ev) {
         YQL_ENSURE(CleanupCtx);
         CleanupCtx->IsWaitingForWorkloadServiceCleanup = false;
+        CleanupCtx->WorkloadServiceActorId = {};
 
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS && ev->Get()->Status != Ydb::StatusIds::NOT_FOUND) {
             YDB_LOG_ERROR("Failed to cleanup workload service",
@@ -3802,6 +3940,7 @@ public:
             Counters->ReportSessionActorCleanupLatency(Settings.DbCounters, TInstant::Now() - CleanupCtx->Start);
 
         if (isFinal) {
+            StartCleanupWatchdog();
             auto userToken = QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>();
             Become(&TKqpSessionActor::FinalCleanupState);
 
@@ -3813,12 +3952,15 @@ public:
             auto tempTablesManager = CreateKqpTempTablesManager(
                 std::move(TempTablesState), std::move(userToken), SelfId(), Settings.Database);
 
-            RegisterWithSameMailbox(tempTablesManager);
+            TempTablesCleanupActorId = RegisterWithSameMailbox(tempTablesManager);
             return;
         } else {
+            bool doNotKeepSession = QueryState && !QueryState->KeepSession;
+            if (!doNotKeepSession) {
+                StopCleanupWatchdog();
+            }
             CleanupCtx.reset();
             ExecuterId = TActorId{};
-            bool doNotKeepSession = QueryState && !QueryState->KeepSession;
             QueryState.reset();
             if (doNotKeepSession) {
                 // TEvCloseSessionRequest was received in final=false CleanupState, so actor should rerun Cleanup with final=true
@@ -3898,21 +4040,7 @@ public:
     }
 
     void HandleFinalCleanup(TEvents::TEvGone::TPtr&) {
-        auto lifeSpan = TInstant::Now() - CreationTime;
-        Counters->ReportSessionActorFinished(Settings.DbCounters, lifeSpan);
-        Counters->ReportQueriesPerSessionActor(Settings.DbCounters, QueryId);
-
-        auto closeEv = std::make_unique<TEvKqp::TEvCloseSessionResponse>();
-        closeEv->Record.SetStatus(Ydb::StatusIds::SUCCESS);
-        closeEv->Record.MutableResponse()->SetSessionId(SessionId);
-        closeEv->Record.MutableResponse()->SetClosed(true);
-        Send(Owner, closeEv.release());
-
-        YDB_LOG_DEBUG("Session actor destroyed",
-            {"marker", "KQPSA"},
-            {"logPrefix", LogPrefix()},
-            {"traceId", TraceId()});
-        PassAway();
+        FinishSessionActor();
     }
 
     void HandleFinalCleanup(TEvKqp::TEvQueryRequest::TPtr& ev) {
@@ -3930,6 +4058,7 @@ public:
 
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleReady);
                 hFunc(TEvKqp::TEvCancelQueryRequest, Handle);
+                hFunc(TEvCleanupWatchdog, HandleCleanupWatchdog);
 
                 // forgotten messages from previous aborted request
                 hFunc(TEvKqp::TEvCompileResponse, HandleNoop);
@@ -3986,6 +4115,7 @@ public:
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleExecute);
                 hFunc(NGRpcService::TEvClientLost, HandleClientLost);
                 hFunc(TEvKqp::TEvCancelQueryRequest, Handle);
+                hFunc(TEvCleanupWatchdog, HandleCleanupWatchdog);
 
                 // forgotten messages from previous aborted request
                 hFunc(TEvKqp::TEvCompileResponse, Handle);
@@ -4024,6 +4154,7 @@ public:
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleCleanup);
                 hFunc(NGRpcService::TEvClientLost, HandleNoop);
                 hFunc(TEvKqp::TEvCancelQueryRequest, HandleNoop);
+                hFunc(TEvCleanupWatchdog, HandleCleanupWatchdog);
 
                 // forgotten messages from previous aborted request
                 hFunc(TEvKqp::TEvCompileResponse, HandleNoop);
@@ -4059,6 +4190,7 @@ public:
                 hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
                 hFunc(NWorkloadManager::TEvContinueRequest, HandleNoop);
                 hFunc(TEvKqp::TEvQueryRequest, HandleFinalCleanup);
+                hFunc(TEvCleanupWatchdog, HandleCleanupWatchdog);
             }
         } catch (const yexception& ex) {
             InternalError(ex.what());
@@ -4078,6 +4210,8 @@ private:
             return "ExecuteState";
         } else if (func == &TThis::CleanupState) {
             return "CleanupState";
+        } else if (func == &TThis::FinalCleanupState) {
+            return "FinalCleanupState";
         } else {
             return "unknown state";
         }
@@ -4239,6 +4373,10 @@ private:
 
     std::shared_ptr<TKqpQueryState> QueryState;
     std::unique_ptr<TKqpCleanupCtx> CleanupCtx;
+    bool CleanupWatchdogActive = false;
+    ui64 CleanupWatchdogGeneration = 0;
+    NActors::TMonotonic CleanupWatchdogStartedAt;
+    TActorId TempTablesCleanupActorId;
     ui32 QueryId = 0;
     ui64 LastAcceptedWmAdmissionQueryId = 0;
     TIntrusiveConstPtr<TKikimrConfiguration> Config;

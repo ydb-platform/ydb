@@ -173,11 +173,14 @@ public:
         Versions.insert(other.Versions.begin(), other.Versions.end());
         for (auto&& [schemeShardLocalPathId, pathInfo] : other.SchemeShardLocalPathIds) {
             auto it = SchemeShardLocalPathIds.find(schemeShardLocalPathId);
-            if (it != SchemeShardLocalPathIds.end() && it->second.DropVersion && !pathInfo.DropVersion) {
-                // The existing entry has a path-local drop version (e.g. from V1 retention
-                // recovery) that the incoming entry (e.g. from v0) does not carry.
-                // Preserve the drop version — it is the authoritative state for this path.
-                pathInfo.DropVersion = it->second.DropVersion;
+            if (it != SchemeShardLocalPathIds.end() && it->second.DropVersion) {
+                if (pathInfo.DropVersion) {
+                    AFL_VERIFY(*it->second.DropVersion == *pathInfo.DropVersion)("existing", it->second.DropVersion->DebugString())(
+                        "incoming", pathInfo.DropVersion->DebugString())("ss", schemeShardLocalPathId);
+                } else {
+                    // V1 retention recovery: drop is stored only in V1, v0 does not carry it.
+                    pathInfo.DropVersion = it->second.DropVersion;
+                }
             }
             SchemeShardLocalPathIds[schemeShardLocalPathId] = std::move(pathInfo);
         }
@@ -446,18 +449,6 @@ private:
         LivePathIds.erase(it);
     }
 
-    // Removes the live mapping for `ss` if present. No verification — the mapping may
-    // legitimately be absent. Scenarios where LivePathIds does not contain `ss`:
-    //  - TruncateTableProgress (retention mode): the path was already fenced by
-    //    TruncateTablePropose, which called ForgetLivePathId. The second call is a no-op.
-    //  - TruncateTablePropose (idempotent re-propose): the path was already fenced by a
-    //    previous propose. The conditional-insert guard returns early, but if the fence
-    //    was set and then the tablet restarted, DoOnTabletInit re-calls TruncateTablePropose
-    //    and the live mapping is already gone.
-    void ForgetLivePathId(TSchemeShardLocalPathId ss) {
-        LivePathIds.erase(ss);
-    }
-
     void ForgetGeneration(TSchemeShardLocalPathId ss, TInternalPathId id) {
         // The path must be present in AllPathIds: it was added via SetLivePathId or AddToHistory
         // before any drop/finalize operation that calls ForgetGeneration.
@@ -470,14 +461,11 @@ private:
     }
 
     void RenamePathId(TSchemeShardLocalPathId fromSs, TSchemeShardLocalPathId toSs) {
-        // Live mapping may have been already removed by the propose phase (e.g., MoveTablePropose
-        // calls ForgetLivePathIdVerified). Only move it if present.
-        if (const auto itLive = LivePathIds.find(fromSs); itLive != LivePathIds.end()) {
-            LivePathIds[toSs] = itLive->second;
-            LivePathIds.erase(itLive);
-        }
-        // Full history must be present: the source path was added to AllPathIds when the table
-        // was registered and is only removed by ForgetGeneration on drop.
+        // Propose (MoveTablePropose) always fences the source, so live mapping on `fromSs`
+        // must already be gone. Destination must not already have history or a live mapping.
+        AFL_VERIFY(!LivePathIds.FindPtr(fromSs))("from", fromSs)("to", toSs);
+        AFL_VERIFY(!LivePathIds.FindPtr(toSs))("from", fromSs)("to", toSs);
+        AFL_VERIFY(!AllPathIds.FindPtr(toSs))("from", fromSs)("to", toSs);
         auto itAll = AllPathIds.find(fromSs);
         AFL_VERIFY(itAll != AllPathIds.end())("from", fromSs)("to", toSs);
         AllPathIds[toSs] = std::move(itAll->second);
@@ -501,9 +489,8 @@ private:
     }
 
     // Returns a pointer to the set of all generations for `ss`, or nullptr if none are tracked.
-    // nullptr is a legitimate result for tables created before this change deployed
-    // (rolling deploy): their AllPathIds entries are not yet populated. The caller
-    // (ResolveInternalPathIdForSnapshot) falls back to ResolveInternalPathIdOptional.
+    // nullptr is legitimate only for tables created before this change deployed (rolling
+    // deploy, before restart / first truncate). After a truncate, AllPathIds must be populated.
     const THashSet<TInternalPathId>* Generations(TSchemeShardLocalPathId ss) const {
         return AllPathIds.FindPtr(ss);
     }

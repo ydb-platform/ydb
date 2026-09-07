@@ -47,6 +47,8 @@
 
 #include "kqp_full_text_source.h"
 
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -56,7 +58,6 @@
 #include <ydb/core/base/table_index.h>
 
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
-#include <ydb/core/kqp/common/kqp_runtime_diagnostics.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -1979,6 +1980,7 @@ class TReadsState {
     const TIntrusivePtr<TKqpCounters> Counters;
     TActorId SelfId;
     const TString LogPrefix;
+    NWilson::TTraceId TraceId;
     ui64 NextReadId = 1;
 
 
@@ -1989,11 +1991,10 @@ class TReadsState {
 
 public:
 
-    explicit TReadsState(const TIntrusivePtr<TKqpCounters>& counters, const TString& logPrefix,
-        TShardReadDiagnosticsCollector* shardReadDiagnostics)
+    explicit TReadsState(const TIntrusivePtr<TKqpCounters>& counters, const TString& logPrefix, NWilson::TTraceId traceId)
         : Counters(counters)
         , LogPrefix(logPrefix)
-        , ShardReadDiagnostics(shardReadDiagnostics)
+        , TraceId(std::move(traceId))
     {}
 
     ui64 GetNextReadId() {
@@ -2050,9 +2051,6 @@ public:
         auto& record = request->Record;
         auto readId = request->Record.GetReadId();
         const bool needToCreatePipe = PipesCreated.insert(shardId).second;
-        if (ShardReadDiagnostics) {
-            ShardReadDiagnostics->OnStart(shardId);
-        }
 
         YDB_LOG_DEBUG("Sending EvRead request from full text source",
             {"logPrefix", this->LogPrefix},
@@ -2074,7 +2072,7 @@ public:
                     .Subscribe = needToCreatePipe,
                 }),
             IEventHandle::FlagTrackDelivery,
-            readId));
+            readId, nullptr, NWilson::TTraceId(TraceId)));
 
         AddRead(readId, readInfo);
     }
@@ -2096,11 +2094,6 @@ public:
             return false;
         }
         return it->second.Retries > maxRetries;
-    }
-
-    ui32 GetRetries(ui64 shardId) const {
-        const auto it = ReadsByShardId.find(shardId);
-        return it == ReadsByShardId.end() ? 0 : static_cast<ui32>(it->second.Retries);
     }
 
     bool Empty() const {
@@ -2144,9 +2137,6 @@ public:
             }
         }
     }
-
-private:
-    TShardReadDiagnosticsCollector* ShardReadDiagnostics;
 };
 
 /**
@@ -2511,7 +2501,7 @@ private:
     static constexpr size_t RowIdResolveBatchSize = 5000;
 
     // Read infrastructure.
-    std::unique_ptr<TShardReadDiagnosticsCollector> ShardReadDiagnostics;
+    NWilson::TSpan ReadSpan;
     TReadsState ReadsState;                                // Tracks all in-flight reads
     TReadItemsQueue<TDocInfoPtr> DocsReadingQueue;         // Docs table + main table reads
     TVector<TWordStatePtr> Words;                          // Tokenized query terms
@@ -2879,9 +2869,8 @@ public:
         const NKikimr::NMiniKQL::TTypeEnvironment& ,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-        const NWilson::TTraceId&,
-        TIntrusivePtr<TKqpCounters> counters,
-        bool collectShardReadDiagnostics)
+        const NWilson::TTraceId& traceId,
+        TIntrusivePtr<TKqpCounters> counters)
         : Settings(settings)
         , Arena(arena)
         , ComputeActorId(computeActorId)
@@ -2901,10 +2890,8 @@ public:
         , StatsTableReader(TStatsTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings, MainTableReader->GetWithRelevance(), PrefixCells))
         , UniqueIndexReader(TUniqueIndexReader::FromSettings(Counters, Snapshot, LogPrefix, Settings))
         , UseRowIdAsDocId(UniqueIndexReader != nullptr)
-        , ShardReadDiagnostics(collectShardReadDiagnostics
-            ? std::make_unique<TShardReadDiagnosticsCollector>() : nullptr)
-        , ReadsState(Counters, LogPrefix,
-            ShardReadDiagnostics.get())
+        , ReadSpan(TWilsonKqp::ReadActor, NWilson::TTraceId(traceId), "Full-text search")
+        , ReadsState(Counters, LogPrefix, ReadSpan.GetTraceId())
         , DocsReadingQueue(this->SelfId(), ReadsState)
     {
         Y_ABORT_UNLESS(Arena);
@@ -2992,16 +2979,22 @@ public:
             }
         }
         this->Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
-
+        if (ReadSpan) {
+            ReadSpan.Attribute("ydb.output_rows", static_cast<i64>(ProducedItemsCount));
+            if (IsFinished()) {
+                ReadSpan.EndOk();
+            } else {
+                ReadSpan.End();
+            }
+        }
         TBase::PassAway();
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode,
         const NYql::TIssues& subIssues = {})
     {
-        if (Y_UNLIKELY(ShardReadDiagnostics)) {
-            ShardReadDiagnostics->OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
-                ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::ABORTED);
+        if (ReadSpan) {
+            ReadSpan.EndError(message);
         }
         NYql::TIssue issue(message);
         for (const auto& subIssue : subIssues) {
@@ -3499,14 +3492,6 @@ public:
             if (UniqueIndexReader) {
                 ExportTableReaderStats(stats, UniqueIndexReader);
             }
-            if (ShardReadDiagnostics && !ShardReadDiagnostics->Empty()) {
-                NKqpProto::TKqpTaskExtraStats extraStats;
-                if (stats->HasExtra()) {
-                    stats->GetExtra().UnpackTo(&extraStats);
-                }
-                ShardReadDiagnostics->Export(extraStats, 0);
-                stats->MutableExtra()->PackFrom(extraStats);
-            }
         }
     }
 
@@ -3647,12 +3632,6 @@ public:
             {"txLocks", txLocks},
             {"brokenTxLocks", borkenTxlocks});
 
-        if (Y_UNLIKELY(ShardReadDiagnostics)) {
-            ShardReadDiagnostics->OnFinish(readInfo.ShardId, record.GetRowCount(),
-                ReadsState.GetRetries(readInfo.ShardId), record.HasNodeId() ? record.GetNodeId() : 0,
-                record.GetStatus().GetCode(), record.GetFinished());
-        }
-
         if (record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
             HandleReadResultError(readId, readInfo, record);
             return;
@@ -3727,12 +3706,11 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpFullTextSourc
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     const NWilson::TTraceId& traceId,
-    TIntrusivePtr<TKqpCounters> counters,
-    bool collectShardReadDiagnostics)
+    TIntrusivePtr<TKqpCounters> counters)
 {
     auto makeActor = [&](auto docIdTag) -> std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> {
         using TDocId = decltype(docIdTag);
-        auto* actor = new TFullTextSource<TDocId>(settings, arena, computeActorId, inputIndex, statsLevel, txId, taskId, typeEnv, holderFactory, alloc, traceId, counters, collectShardReadDiagnostics);
+        auto* actor = new TFullTextSource<TDocId>(settings, arena, computeActorId, inputIndex, statsLevel, txId, taskId, typeEnv, holderFactory, alloc, traceId, counters);
         return {actor, actor};
     };
 
@@ -3756,8 +3734,7 @@ void RegisterKqpFullTextSource(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusive
         TString(NYql::KqpFullTextSourceName),
         [counters] (const NKikimrKqp::TKqpFullTextSourceSettings* settings, NYql::NDq::TDqAsyncIoFactory::TSourceArguments&& args) {
             return CreateKqpFullTextSource(settings, args.Arena, args.ComputeActorId, args.InputIndex, args.StatsLevel,
-        args.TxId, args.TaskId, args.TypeEnv, args.HolderFactory, args.Alloc, args.TraceId, counters,
-        ShouldCollectShardReadDiagnostics(args.TaskParams));
+        args.TxId, args.TaskId, args.TypeEnv, args.HolderFactory, args.Alloc, args.TraceId, counters);
         });
 }
 

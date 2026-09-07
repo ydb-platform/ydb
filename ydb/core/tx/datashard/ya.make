@@ -159,6 +159,7 @@ JOIN_SRCS(
 JOIN_SRCS(
     all_datashard_read.cpp
     datashard__read_columns.cpp
+    datashard_read_tracing.cpp
     datashard__read_iterator.cpp
 )
 

@@ -46,6 +46,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/tracing
     contrib/libs/apache/arrow
     library/cpp/regex/pire
     library/cpp/threading/hot_swap

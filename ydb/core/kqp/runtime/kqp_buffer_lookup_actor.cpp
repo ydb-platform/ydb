@@ -1,8 +1,8 @@
+#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
 #include "kqp_buffer_lookup_actor.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/common/kqp_locks_tli_helpers.h>
-#include <ydb/core/kqp/common/kqp_runtime_diagnostics.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_stream_lookup_worker.h>
@@ -79,10 +79,7 @@ public:
         : Settings(std::move(settings))
         , Partitioning(Settings.TxManager->GetPartitioning(Settings.TableId))
         , LogPrefix(TStringBuilder() << "Table: `" << Settings.TablePath << "` (" << Settings.TableId << "), "
-            << "SessionActorId: " << Settings.SessionActorId)
-        , ShardReadDiagnostics(Settings.CollectShardDiagnostics
-            ? std::make_unique<TShardReadDiagnosticsCollector>() : nullptr)
-        , LookupActorSpan(TWilsonKqp::LookupActor, std::move(Settings.ParentTraceId), "LookupActor") {
+            << "SessionActorId: " << Settings.SessionActorId) {
     }
 
     ~TKqpBufferLookupActor() {
@@ -100,6 +97,8 @@ public:
     static constexpr char ActorName[] = "KQP_BUFFER_LOOKUP_ACTOR";
 
     void PassAway() final {
+        ShardTraceEvents.Finish(LookupActorSpan);
+        EndQueryTraceSpan(LookupActorSpan, Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
         Settings.Counters->StreamLookupActorsCount->Dec();
 
         ClearAllWorkerResults();
@@ -115,8 +114,6 @@ public:
         Unlink();
 
         TActorBootstrapped<TKqpBufferLookupActor>::PassAway();
-
-        LookupActorSpan.End();
     }
 
     void Terminate() override {
@@ -125,6 +122,8 @@ public:
 
     void Unlink() override {
         AFL_ENSURE(ReadIdToState.empty());
+        ShardTraceEvents.Finish(LookupActorSpan);
+        EndQueryTraceSpan(LookupActorSpan, Ydb::StatusIds::SUCCESS);
 
         for (auto& [_, state] : ShardToState) {
             state.HasPipe = false;
@@ -163,7 +162,11 @@ public:
             size_t lookupKeyPrefix,
             TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
             TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> lookupColumns,
-            const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot) override {
+            const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot,
+            const NWilson::TTraceId& traceId) override {
+        if (!LookupActorSpan) {
+            LookupActorSpan = NWilson::TSpan(TWilsonKqp::LookupActor, NWilson::TTraceId(traceId), "Check rows");
+        }
         TLookupSettings settings {
             .TablePath = Settings.TablePath,
             .TableId = Settings.TableId,
@@ -341,9 +344,6 @@ public:
     }
 
     void StartTableRead(ui64 cookie, ui64 shardId, bool isUniqueCheck, bool failOnUniqueCheck, THolder<TEvDataShard::TEvRead> request) {
-        if (Y_UNLIKELY(ShardReadDiagnostics)) {
-            ShardReadDiagnostics->OnStart(shardId);
-        }
         Settings.Counters->CreatedIterators->Inc();
         auto& record = request->Record;
 
@@ -444,14 +444,10 @@ public:
         Settings.TxManager->AddParticipantNode(ev->Sender.NodeId());
 
         auto& read = readIt->second;
+        ShardTraceEvents.ReadResult(LookupActorSpan, read.ShardId, ev->Sender.NodeId(),
+            record.GetReadId(), record.GetRowCount(), record.GetStatus().GetCode(), record.GetFinished());
         const auto shardId = read.ShardId;
         const auto cookie = read.LookupCookie;
-
-        if (Y_UNLIKELY(ShardReadDiagnostics)) {
-            ShardReadDiagnostics->OnFinish(shardId, record.GetRowCount(), read.RetryAttempts,
-                record.HasNodeId() ? record.GetNodeId() : 0,
-                record.GetStatus().GetCode(), record.GetFinished());
-        }
 
         auto& shardState = ShardToState.at(shardId);
 
@@ -824,20 +820,11 @@ public:
             NYql::EYqlIssueCode id,
             const TString& message,
             const NYql::TIssues& subIssues = {}) {
-        if (Y_UNLIKELY(ShardReadDiagnostics)) {
-            ShardReadDiagnostics->OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
-                ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::ABORTED);
-        }
+        ShardTraceEvents.Finish(LookupActorSpan);
         if (LookupActorSpan) {
             LookupActorSpan.EndError(message);
         }
         Settings.Callbacks->OnLookupError(statusCode, id, message, subIssues);
-    }
-
-    void ResetShardDiagnostics(bool collect) override {
-        ShardReadDiagnostics = collect
-            ? std::make_unique<TShardReadDiagnosticsCollector>()
-            : nullptr;
     }
 
     void FillStats(NYql::NDqProto::TDqTaskStats* stats) override {
@@ -859,19 +846,14 @@ public:
         ReadRowsCount = 0;
         ReadBytesCount = 0;
 
-        if (BrokenLocksCount > 0 || (ShardReadDiagnostics && !ShardReadDiagnostics->Empty())) {
+        // Add lock stats for broken locks
+        if (BrokenLocksCount > 0) {
             NKqpProto::TKqpTaskExtraStats extraStats;
             if (stats->HasExtra()) {
                 stats->GetExtra().UnpackTo(&extraStats);
             }
-            if (BrokenLocksCount > 0) {
-                extraStats.MutableLockStats()->SetBrokenAsVictim(
-                    extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocksCount);
-            }
-            if (ShardReadDiagnostics) {
-                ShardReadDiagnostics->Export(extraStats, 0);
-                ResetShardDiagnostics(true);
-            }
+            extraStats.MutableLockStats()->SetBrokenAsVictim(
+                extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocksCount);
             stats->MutableExtra()->PackFrom(extraStats);
             BrokenLocksCount = 0;
         }
@@ -899,7 +881,6 @@ private:
     THashMap<ui64, TLookupState> CookieToLookupState;
     THashMap<ui64, TShardState> ShardToState;
     THashMap<ui64, TReadState> ReadIdToState;
-    std::unique_ptr<TShardReadDiagnosticsCollector> ShardReadDiagnostics;
 
     ui64 ReadId = 0;
 
@@ -911,6 +892,7 @@ private:
     ui64 ReadBytesCount = 0;
     ui64 BrokenLocksCount = 0;
 
+    TShardTraceEvents ShardTraceEvents;
     NWilson::TSpan LookupActorSpan;
 };
 

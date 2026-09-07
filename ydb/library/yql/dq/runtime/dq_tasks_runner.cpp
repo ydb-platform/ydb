@@ -948,8 +948,6 @@ public:
 
         if (Y_UNLIKELY(CollectFull())) {
             if (SpillingTaskCounters) {
-                Stats->SpillingComputeWriteBytes = SpillingTaskCounters->ComputeWriteBytes.load();
-                Stats->SpillingChannelWriteBytes = SpillingTaskCounters->ChannelWriteBytes.load();
                 Stats->SpillingComputeReadTime = TDuration::MilliSeconds(SpillingTaskCounters->ComputeReadTime.load());
                 Stats->SpillingComputeWriteTime = TDuration::MilliSeconds(SpillingTaskCounters->ComputeWriteTime.load());
                 Stats->SpillingChannelReadTime = TDuration::MilliSeconds(SpillingTaskCounters->ChannelReadTime.load());
@@ -1109,6 +1107,10 @@ public:
     }
 
     const TDqTaskRunnerStats* GetStats() const override {
+        if (Stats && SpillingTaskCounters) {
+            Stats->SpillingComputeWriteBytes = SpillingTaskCounters->ComputeWriteBytes.load();
+            Stats->SpillingChannelWriteBytes = SpillingTaskCounters->ChannelWriteBytes.load();
+        }
         return Stats.get();
     }
 

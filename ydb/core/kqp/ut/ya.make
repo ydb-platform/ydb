@@ -1,4 +1,5 @@
 RECURSE_FOR_TESTS(
+    tracing
     arrow
     batch_operations
     channels
@@ -26,7 +27,6 @@ RECURSE_FOR_TESTS(
     sysview
     tli
     topics
-    tracing
     tx
     view
     yql

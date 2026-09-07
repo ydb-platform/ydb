@@ -1,5 +1,6 @@
 #include "kqp_compile_service.h"
 
+#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -63,7 +64,6 @@ public:
         TKqpDbCountersPtr dbCounters, std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState, bool collectFullDiagnostics,
-        bool collectTraceDiagnostics,
         bool perStatementResult,
         ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst,
         std::shared_ptr<NYql::TExprContext> splitCtx,
@@ -88,9 +88,7 @@ public:
         , SplitCtx(std::move(splitCtx))
         , SplitExpr(std::move(splitExpr))
         , UserRequestContext(userRequestContext)
-        , CompileActorSpan(TWilsonKqp::CompileActor, std::move(traceId), "CompileActor")
-        , CompileDiagnosticsCollector(collectTraceDiagnostics
-            ? std::make_shared<TCompileDiagnosticsCollector>() : nullptr)
+        , CompileActorSpan(TWilsonKqp::CompileActor, std::move(traceId), "Compile query")
         , TempTablesState(std::move(tempTablesState))
         , CollectFullDiagnostics(collectFullDiagnostics)
         , CompileAction(compileAction)
@@ -224,9 +222,7 @@ private:
 
         Counters->ReportCompileFinish(DbCounters);
 
-        if (CompileActorSpan) {
-            CompileActorSpan.End();
-        }
+        EndQueryTraceSpan(CompileActorSpan, GetYdbStatus(result));
 
         PassAway();
     }
@@ -373,7 +369,7 @@ private:
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader =
             std::make_shared<TKqpTableMetadataLoader>(
                 QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState, FederatedQuerySetup,
-                CompileDiagnosticsCollector);
+                CompileActorSpan.GetTraceId());
         Gateway = CreateKikimrIcGateway(QueryId.Cluster, QueryId.Settings.QueryType, QueryId.Database, QueryId.DatabaseId, std::move(loader),
             ctx.ActorSystem(), ctx.SelfID.NodeId(), counters, QueryServiceConfig);
         Gateway->SetToken(QueryId.Cluster, UserToken);
@@ -479,29 +475,21 @@ private:
             KqpCompileResult->ReplayMessageUserView = std::move(*ReplayMessageUserView);
         }
         auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(KqpCompileResult);
-        const TInstant finishTime = TInstant::Now();
-        if (CompileDiagnosticsCollector) {
-            responseEv->CompileDiagnostics = CompileDiagnosticsCollector->Snapshot(finishTime);
-            responseEv->CompileActorDiagnostic = TCompileActorDiagnostic{
-                .Start = StartTime,
-                .End = finishTime,
-            };
-        }
 
         responseEv->ReplayMessage = std::move(ReplayMessage);
         ReplayMessage = std::nullopt;
         ReplayMessageUserView = std::nullopt;
         auto& stats = responseEv->Stats;
         stats.FromCache = false;
-        stats.DurationUs = (finishTime - StartTime).MicroSeconds();
+        stats.DurationUs = (TInstant::Now() - StartTime).MicroSeconds();
         stats.CpuTimeUs = CompileCpuTime.MicroSeconds();
         Send(Owner, responseEv.Release());
 
         Counters->ReportCompileFinish(DbCounters);
 
-        if (CompileActorSpan) {
-            CompileActorSpan.End();
-        }
+        CompileActorSpan.Attribute("ydb.actor.type", TString("TKqpCompileActor"));
+        CompileActorSpan.Attribute("ydb.cpu_us", static_cast<i64>(CompileCpuTime.MicroSeconds()));
+        EndQueryTraceSpan(CompileActorSpan, KqpCompileResult->Status);
 
         PassAway();
     }
@@ -572,9 +560,7 @@ private:
 
         Counters->ReportCompileFinish(DbCounters);
 
-        if (CompileActorSpan) {
-            CompileActorSpan.End();
-        }
+        EndQueryTraceSpan(CompileActorSpan, Ydb::StatusIds::SUCCESS);
 
         PassAway();
     }
@@ -755,7 +741,6 @@ private:
 
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     NWilson::TSpan CompileActorSpan;
-    std::shared_ptr<TCompileDiagnosticsCollector> CompileDiagnosticsCollector;
 
     TKqpTempTablesState::TConstPtr TempTablesState;
     bool CollectFullDiagnostics;
@@ -778,14 +763,13 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState,
     ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst, bool collectFullDiagnostics,
     bool perStatementResult, std::shared_ptr<NYql::TExprContext> splitCtx, NYql::TExprNode::TPtr splitExpr,
-    bool usePessimisticLocks, bool collectTraceDiagnostics)
+    bool usePessimisticLocks)
 {
     return new TKqpCompileActor(owner, kqpSettings, tableServiceConfig, queryServiceConfig,
                                 moduleResolverState, counters, gUCSettings, applicationName,
                                 uid, query, userToken, clientAddress, dbCounters,
                                 federatedQuerySetup, userRequestContext,
                                 std::move(traceId), std::move(tempTablesState), collectFullDiagnostics,
-                                collectTraceDiagnostics,
                                 perStatementResult, compileAction, std::move(queryAst),
                                 std::move(splitCtx), std::move(splitExpr), usePessimisticLocks);
 }

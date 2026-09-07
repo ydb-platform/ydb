@@ -1,6 +1,5 @@
+#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
 #include "kqp_stream_lookup_actor.h"
-
-#include <ydb/core/kqp/common/kqp_runtime_diagnostics.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -83,8 +82,6 @@ public:
         , UseFollowers(settings.GetAllowUseFollowers())
         , IsTableImmutable(settings.GetIsTableImmutable())
         , HasVectorTopK(settings.HasVectorTopK())
-        , ShardReadDiagnostics(ShouldCollectShardReadDiagnostics(args.TaskParams)
-            ? std::make_unique<TShardReadDiagnosticsCollector>() : nullptr)
         , PipeCacheId(UseFollowers ? FollowersPipeCacheId : MainPipeCacheId)
         , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())
         , NodeLockId(settings.HasLockNodeId() ? settings.GetLockNodeId() : TMaybe<ui32>())
@@ -114,7 +111,7 @@ public:
         , MaxInFlightLocks(MaxInFlightLocksStreamLookup())
         , Counters(counters)
         , VectorIndexLevelsCache(std::move(vectorIndexLevelsCache))
-        , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "LookupActor")
+        , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "Lookup rows")
     {
         IngressStats.Level = args.StatsLevel;
     }
@@ -146,6 +143,7 @@ public:
 
     void FillExtraStats(NYql::NDqProto::TDqTaskStats* stats , bool last, const NYql::NDq::TDqMeteringStats* mstats) override {
         if (last) {
+            AddReadTraceStats(LookupActorSpan, *stats, StreamLookupWorker->GetTablePath(), ReadRowsCount, TotalRetryAttempts);
             NYql::NDqProto::TDqTableStats* tableStats = nullptr;
             for (auto& table : *stats->MutableTables()) {
                 if (table.GetTablePath() == StreamLookupWorker->GetTablePath()) {
@@ -191,19 +189,13 @@ public:
             tableStats->MutableExtra()->PackFrom(tableExtraStats);
 
             // Add lock stats for broken locks from stream lookup operations
-            if (!BrokenLocks.empty() || (ShardReadDiagnostics
-                    && (TotalRetryAttempts > 0 || !ShardReadDiagnostics->Empty()))) {
+            if (!BrokenLocks.empty()) {
                 NKqpProto::TKqpTaskExtraStats extraStats;
                 if (stats->HasExtra()) {
                     stats->GetExtra().UnpackTo(&extraStats);
                 }
-                if (!BrokenLocks.empty()) {
-                    extraStats.MutableLockStats()->SetBrokenAsVictim(
-                        extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
-                }
-                if (ShardReadDiagnostics) {
-                    ShardReadDiagnostics->Export(extraStats, TotalRetryAttempts);
-                }
+                extraStats.MutableLockStats()->SetBrokenAsVictim(
+                    extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
                 stats->MutableExtra()->PackFrom(extraStats);
             }
         }
@@ -455,6 +447,7 @@ private:
     }
 
     void PassAway() final {
+        ShardTraceEvents.Finish(LookupActorSpan);
         Counters->StreamLookupActorsCount->Dec();
 
         if (!LockSendTime.empty()) {
@@ -490,9 +483,10 @@ private:
         }
 
         Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
+        if (LookupActorSpan) {
+            LookupActorSpan.End();
+        }
         TActorBootstrapped<TKqpStreamLookupActor>::PassAway();
-
-        LookupActorSpan.End();
     }
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& maybeWatermark, bool& finished, i64 freeSpace) final {
@@ -673,16 +667,9 @@ private:
         }
 
         auto& read = readIt->second;
+        ShardTraceEvents.ReadResult(LookupActorSpan, read.ShardId, ev->Sender.NodeId(),
+            record.GetReadId(), record.GetRowCount(), record.GetStatus().GetCode(), record.GetFinished());
         ui64 shardId = read.ShardId;
-
-        if (Y_UNLIKELY(ShardReadDiagnostics)) {
-            ui32 retryAttempts = 0;
-            if (auto it = Reads.ShardsState.find(shardId); it != Reads.ShardsState.end()) {
-                retryAttempts = it->second.RetryAttempts;
-            }
-            ShardReadDiagnostics->OnFinish(shardId, record.GetRowCount(), retryAttempts, 0,
-                record.GetStatus().GetCode(), record.GetFinished());
-        }
 
         TStringBuilder txLocks;
         for (const auto& lock : record.GetTxLocks()) {
@@ -1209,9 +1196,6 @@ private:
     }
 
     void StartTableRead(ui64 shardId, THolder<TEvDataShard::TEvRead> request) {
-        if (Y_UNLIKELY(ShardReadDiagnostics)) {
-            ShardReadDiagnostics->OnStart(shardId);
-        }
         Counters->CreatedIterators->Inc();
         auto& record = request->Record;
 
@@ -1420,7 +1404,7 @@ private:
 
         Counters->IteratorsShardResolve->Inc();
         LookupActorStateSpan = NWilson::TSpan(TWilsonKqp::LookupActorShardsResolve, LookupActorSpan.GetTraceId(),
-            "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
+            "Locate shards", NWilson::EFlags::AUTO_END);
 
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
 
@@ -1437,10 +1421,6 @@ private:
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
-        if (Y_UNLIKELY(ShardReadDiagnostics)) {
-            ShardReadDiagnostics->OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
-                ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::ABORTED);
-        }
         NYql::TIssue issue(message);
         for (const auto& i : subIssues) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
@@ -1449,6 +1429,7 @@ private:
         NYql::TIssues issues;
         issues.AddIssue(std::move(issue));
 
+        ShardTraceEvents.Finish(LookupActorSpan);
         if (LookupActorSpan) {
             LookupActorSpan.EndError(issues.ToOneLineString());
         }
@@ -1469,7 +1450,6 @@ private:
     const bool UseFollowers;
     const bool IsTableImmutable;
     const bool HasVectorTopK;
-    std::unique_ptr<TShardReadDiagnosticsCollector> ShardReadDiagnostics;
     const TActorId PipeCacheId;
     const TMaybe<ui64> LockTxId;
     const TMaybe<ui32> NodeLockId;
@@ -1513,6 +1493,7 @@ private:
     TIntrusivePtr<TKqpCounters> Counters;
     TIntrusivePtr<TVectorIndexLevelsCache> VectorIndexLevelsCache;
 
+    TShardTraceEvents ShardTraceEvents;
     NWilson::TSpan LookupActorSpan;
     NWilson::TSpan LookupActorStateSpan;
 

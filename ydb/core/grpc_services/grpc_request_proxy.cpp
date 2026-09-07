@@ -507,10 +507,9 @@ void TGRpcRequestProxyImpl::MaybeStartTracing(TAutoPtr<TEventHandle<TEvent>>& ev
         return;
     }
 
-    const TMaybe<TString> traceparentHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER);
     NWilson::TTraceId traceId(event->TraceId);
-    const bool internalSubrequest = static_cast<bool>(traceId);
-    if (!internalSubrequest) {
+    if (!traceId) {
+        TMaybe<TString> traceparentHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER);
         traceId = NJaegerTracing::HandleTracing(ctx.GetRequestDiscriminator(), traceparentHeader);
     }
 
@@ -521,15 +520,6 @@ void TGRpcRequestProxyImpl::MaybeStartTracing(TAutoPtr<TEventHandle<TEvent>>& ev
         }
         grpcRequestProxySpan.Attribute("request_type", ctx.GetRequestName());
         ctx.StartTracing(std::move(grpcRequestProxySpan));
-    }
-
-    // Internal subrequests must not start an independently sampled user trace.
-    if (!internalSubrequest) {
-        NWilson::TTraceId userTraceId = NJaegerTracing::HandleUserFacingTracing(
-            ctx.GetRequestDiscriminator(), traceparentHeader);
-        if (userTraceId) {
-            ctx.SetUserFacingTraceId(std::move(userTraceId));
-        }
     }
 }
 

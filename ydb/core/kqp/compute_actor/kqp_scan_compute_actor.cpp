@@ -266,6 +266,8 @@ void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
 }
 
 void TKqpScanComputeActor::DoBootstrap() {
+    ComputeActorSpan.Name("Compute task");
+    ComputeActorSpan.Attribute("ydb.actor.type", TString("TKqpScanComputeActor"));
     YDB_LOG_DEBUG("Starting KQP scan compute actor bootstrap",
         {"logPrefix", this->LogPrefix});
 

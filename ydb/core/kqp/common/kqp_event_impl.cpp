@@ -57,10 +57,6 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
         builder.WithUserTraceId(ctx->GetWilsonTraceId());
     }
 
-    if (NWilson::TTraceId userFacingTraceId = ctx->GetUserFacingWilsonTraceId()) {
-        userFacingTraceId.Serialize(Record.MutableUserFacingTrace()->MutableTraceId());
-    }
-
     UserCtx = builder.Build();
 }
 

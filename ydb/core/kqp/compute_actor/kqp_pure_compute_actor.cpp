@@ -1,3 +1,4 @@
+#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
 #include "kqp_pure_compute_actor.h"
 
 #include "kqp_compute_actor_impl.h"
@@ -45,6 +46,8 @@ TKqpComputeActor::TKqpComputeActor(
 }
 
 void TKqpComputeActor::DoBootstrap() {
+    ComputeActorSpan.Name("Compute task");
+    ComputeActorSpan.Attribute("ydb.actor.type", TString("TKqpComputeActor"));
     const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
 
     const auto& taskParams = GetTask().GetTaskParams();
@@ -234,6 +237,9 @@ void TKqpComputeActor::PollSources(ui64 prevFreeSpace) {
 }
 
 void TKqpComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, bool last) {
+    if (last) {
+        AddKqpTaskTraceAttributes(ComputeActorSpan, *dst);
+    }
     if (last && SysViewActorId && ScanData && dst->TasksSize() > 0) {
         YQL_ENSURE(dst->TasksSize() == 1);
 

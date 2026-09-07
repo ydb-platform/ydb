@@ -8,6 +8,7 @@ SRCS(
     dq_compute_actor_checkpoints.cpp
     dq_compute_actor_metrics.cpp
     dq_compute_actor_stats.cpp
+    dq_compute_actor_tracing.cpp
     dq_compute_actor.cpp
     dq_compute_issues_buffer.cpp
     dq_request_context.h
@@ -17,6 +18,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/actors/core
+    ydb/library/actors/wilson
     ydb/library/actors/wilson/protos
     ydb/library/services
     ydb/library/ydb_issue/proto

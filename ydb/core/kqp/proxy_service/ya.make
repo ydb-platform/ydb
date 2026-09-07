@@ -10,6 +10,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/tracing
     library/cpp/protobuf/interop
     library/cpp/protobuf/json
     library/cpp/string_utils/quote
@@ -25,7 +26,6 @@ PEERDIR(
     ydb/core/kqp/proxy_service/proto
     ydb/core/kqp/proxy_service/script_executions_utils
     ydb/core/kqp/run_script_actor
-    ydb/core/kqp/tracing
     ydb/services/workload_manager
     ydb/core/mind
     ydb/core/mon

@@ -28,7 +28,8 @@ public:
         size_t lookupKeyPrefix,
         TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
         TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> lookupColumns,
-        const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot) = 0;
+        const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot,
+        const NWilson::TTraceId& traceId) = 0;
 
     virtual void AddLookupTask(
         ui64 cookie,
@@ -45,7 +46,6 @@ public:
     virtual const TVector<NScheme::TTypeInfo>& GetKeyColumnTypes() const = 0;
     virtual ui32 LookupColumnsCount(ui64 cookie) const = 0;
 
-    virtual void ResetShardDiagnostics(bool collect) = 0;
     virtual void FillStats(NYql::NDqProto::TDqTaskStats* stats) = 0;
 
     // Clear all memory
@@ -73,8 +73,6 @@ struct TKqpBufferTableLookupSettings {
     TActorId SessionActorId;
     TIntrusivePtr<TKqpCounters> Counters;
 
-    NWilson::TTraceId ParentTraceId;
-    bool CollectShardDiagnostics = false;
 
     TString Database;
     TString PoolId;

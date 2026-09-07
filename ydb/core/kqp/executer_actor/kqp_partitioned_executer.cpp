@@ -40,7 +40,6 @@ void FillRequestFrom(IKqpGateway::TExecPhysicalRequest& request, const IKqpGatew
     request.MkqlMemoryLimit = from.MkqlMemoryLimit;
     request.PerShardKeysSizeLimitBytes = from.PerShardKeysSizeLimitBytes;
     request.StatsMode = from.StatsMode;
-    request.DiagnosticsPolicy = from.DiagnosticsPolicy;
     request.ProgressStatsPeriod = from.ProgressStatsPeriod;
     request.Snapshot = from.Snapshot;
     request.ResourceManager_ = from.ResourceManager_;
@@ -255,13 +254,6 @@ public:
 
         AbortBuffer(partInfo->BufferId);
         ForgetExecuterAndBuffer(partInfo);
-        if (Request.DiagnosticsPolicy) {
-            AccumulateExecutionTraceTotals(ResponseEv->ExecutionTraceTotals,
-                ev->Get()->ExecutionTraceTotals);
-            AppendExecutionTraceSnapshots(ResponseEv->ExecutionTraces,
-                ResponseEv->ExecutionTracesDropped, ev->Get()->ExecutionTraces,
-                ev->Get()->ExecutionTracesDropped, Request.DiagnosticsPolicy->MaxExecutions);
-        }
 
         switch (response->GetStatus()) {
             case Ydb::StatusIds::SUCCESS:
@@ -660,12 +652,12 @@ private:
         TKqpBufferWriterSettings settings {
             .SessionActorId = SelfId(),
             .TxManager = txManager,
-            .TraceId = Request.TraceId.GetTraceId(),
+            .TraceId = NWilson::TTraceId(Request.TraceId),
             .QuerySpanId = QuerySpanId,
             .Counters = RequestCounters->Counters,
             .TxProxyMon = RequestCounters->TxProxyMon,
             .Alloc = std::move(alloc),
-            .UserCtx = UserCtx,
+            .UserCtx = UserCtx
         };
 
         auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));

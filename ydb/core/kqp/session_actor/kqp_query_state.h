@@ -1,7 +1,8 @@
 #pragma once
 
+#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
+
 #include "kqp_query_stats.h"
-#include <ydb/core/kqp/tracing/kqp_user_facing.h>
 #include "kqp_worker_common.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -109,19 +110,15 @@ public:
         QueryType = RequestEv->GetType();
 
         SetQueryDeadlines(tableServiceConfig, queryServiceConfig);
-
-        if (NWilson::TTraceId traceId = RequestEv->GetUserFacingWilsonTraceId()) {
-            const auto& userFacingTrace = RequestEv->Record.GetUserFacingTrace();
-            UserFacingTrace = std::make_unique<TUserFacingTraceContext>(std::move(traceId),
-                StartTime, userFacingTrace.GetProxyRequestHops(),
-                TInstant::MicroSeconds(userFacingTrace.GetOriginSentAtUs()));
-        }
-
         KqpSessionSpan = NWilson::TSpan(
             TWilsonKqp::KqpSession, std::move(ev->TraceId),
-            "Session.query." + NKikimrKqp::EQueryAction_Name(QueryAction), NWilson::EFlags::AUTO_END);
-        if (KqpSessionSpan && AppData()) {
-            KqpSessionSpan.Attribute("database", AppData()->TenantName);
+            QueryTraceSpanName(QueryAction), NWilson::EFlags::AUTO_END);
+        AddQueryTraceAttributes(KqpSessionSpan, QueryType, QueryAction,
+            Database ? Database : AppData()->TenantName, RequestEv->GetQuery());
+        KqpSessionSpan.Attribute("ydb.actor.type", TString("TKqpSessionActor"));
+        if (KqpSessionSpan) {
+            const auto fallback = FallbackQueryTraceName(QueryType, QueryAction);
+            TraceDescription = {fallback, fallback};
         }
         if (IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
             if (KqpSessionSpan) {
@@ -201,7 +198,8 @@ public:
 
     NLWTrace::TOrbit Orbit;
     NWilson::TSpan KqpSessionSpan;
-    std::unique_ptr<TUserFacingTraceContext> UserFacingTrace;
+    NWilson::TSpan AdmissionSpan;
+    TQueryTraceDescription TraceDescription;
     ETableReadType MaxReadType = ETableReadType::Other;
 
     TQueryTxId TxId; // User tx
@@ -716,10 +714,6 @@ public:
 
     bool GetCollectDiagnostics() {
         return RequestEv->GetCollectDiagnostics();
-    }
-
-    bool ShouldCollectCompileDiagnostics() const {
-        return UserFacingTrace != nullptr;
     }
 
     TDuration GetProgressStatsPeriod() {

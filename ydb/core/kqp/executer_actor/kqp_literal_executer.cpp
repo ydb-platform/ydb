@@ -85,9 +85,10 @@ public:
         , Counters(counters)
         , OwnerActor(owner)
         , TasksGraph({}, Request.Transactions, Request.TxAlloc, {}, {}, Counters, {}, nullptr, false)
-        , LiteralExecuterSpan(TWilsonKqp::LiteralExecuter, std::move(Request.TraceId), "LiteralExecuter")
+        , LiteralExecuterSpan(TWilsonKqp::LiteralExecuter, std::move(Request.TraceId), "Execute")
         , UserRequestContext(userRequestContext)
     {
+        LiteralExecuterSpan.Attribute("ydb.actor.type", TString("TKqpLiteralExecuter"));
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(
             Request.TxAlloc, TEvKqpExecuter::TEvTxResponse::EExecutionType::Literal);
 
@@ -95,10 +96,6 @@ public:
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), 0);
         TasksGraph.GetMeta().CollectAffectedRows = Request.CollectAffectedRows;
-        if (Request.DiagnosticsPolicy) {
-            ExecutionDiagnostics = std::make_unique<TExecutionDiagnosticsCapture>(
-                "TKqpLiteralExecuter", "TKqpLiteralExecuter");
-        }
         StartTime = TAppData::TimeProvider->Now();
         if (Request.Timeout) {
             Deadline = StartTime + Request.Timeout;
@@ -304,8 +301,7 @@ public:
             Stats->FinishTs = Stats->StartTs + TDuration::MicroSeconds(elapsedMicros);
             Stats->ResultRows = ResponseEv->GetResultRowsCount();
             Stats->ResultBytes = ResponseEv->GetByteSize();
-            ExportExecutionTrace(Ydb::StatusIds::SUCCESS);
-            Stats->ExportExecStats(*response.MutableResult()->MutableStats(), Request.StatsMode);
+            Stats->ExportExecStats(*response.MutableResult()->MutableStats());
 
             if (Y_UNLIKELY(CollectFullStats(Request.StatsMode))) {
                 for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
@@ -317,7 +313,11 @@ public:
         }
 
         LWTRACK(KqpLiteralExecuterFinalize, ResponseEv->Orbit, TxId);
-        LiteralExecuterSpan.EndOk();
+        if (LiteralExecuterSpan) {
+            LiteralExecuterSpan.Attribute("ydb.cpu_us",
+                static_cast<i64>(ResponseEv->Record.GetResponse().GetResult().GetStats().GetCpuTimeUs()));
+        }
+        EndQueryTraceSpan(LiteralExecuterSpan, Ydb::StatusIds::SUCCESS);
         CleanupCtx();
         YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_EXECUTER, "Execution is complete",
             {"marker", "KQPLIT"},
@@ -421,11 +421,10 @@ private:
 
         response.SetStatus(status);
         response.MutableIssues()->Swap(issues);
-        ExportExecutionTrace(status);
 
         LWTRACK(KqpLiteralExecuterCreateErrorResponse, ResponseEv->Orbit, TxId);
 
-        LiteralExecuterSpan.EndError(response.DebugString());
+        EndQueryTraceSpan(LiteralExecuterSpan, status);
 
         CleanupCtx();
         UpdateCounters();
@@ -434,18 +433,6 @@ private:
     void UpdateCounters() {
         auto totalTime = TInstant::Now() - StartTime;
         Counters->Counters->LiteralTxTotalTimeHistogram->Collect(totalTime.MilliSeconds());
-    }
-
-    void ExportExecutionTrace(Ydb::StatusIds::StatusCode status) {
-        if (!ExecutionDiagnostics) {
-            return;
-        }
-        auto snapshot = ExecutionDiagnostics->Finish(status);
-        Stats->ExportDiagnosticsSnapshot(snapshot);
-        AccumulateExecutionTraceTotals(ResponseEv->ExecutionTraceTotals, snapshot);
-        TrimExecutionTraceSnapshot(snapshot);
-        ResponseEv->ExecutionTraces.push_back(std::move(snapshot));
-        ExecutionDiagnostics.reset();
     }
 
     const TIntrusivePtr<TUserRequestContext>& GetUserRequestContext() {
@@ -464,7 +451,6 @@ private:
     TKqpTasksGraph TasksGraph;
     std::unordered_map<ui64, ui32> TaskId2StageId;
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
-    std::unique_ptr<TExecutionDiagnosticsCapture> ExecutionDiagnostics;
 
     TVector<TIntrusivePtr<NYql::NDq::IDqTaskRunner>> TaskRunners;
     std::unique_ptr<NKikimr::NMiniKQL::TKqpComputeContextBase> ComputeCtx;

@@ -6,7 +6,7 @@ SPLIT_FACTOR(3)
 SIZE(MEDIUM)
 
 SRCS(
-    kqp_user_facing_trace_ut.cpp
+    kqp_query_trace_ut.cpp
 )
 
 PEERDIR(

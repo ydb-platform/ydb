@@ -1,12 +1,162 @@
-#include "kqp_user_facing.h"
+#include "kqp_query_tracing.h"
+#include "kqp_trace_settings.h"
 
 #include <ydb/core/kqp/common/simple/helpers.h>
+#include <ydb/core/kqp/common/simple/query_stats.h>
 #include <ydb/library/security/util.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 #include <google/protobuf/any.pb.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NKqp {
+
+void AddQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescription& description,
+        const TKqpQueryStats& stats, ui64 requestUnits, Ydb::StatusIds::StatusCode status) {
+    if (!span) {
+        return;
+    }
+    span.Attribute("db.query.summary", description.DisplayName);
+    span.Attribute("db.operation.name", description.Operation);
+    ui64 cpuUs = stats.WorkerCpuTimeUs;
+    ui64 rowsRead = 0;
+    ui64 bytesRead = 0;
+    ui64 rowsWritten = 0;
+    ui64 waitUs = 0;
+    ui64 spilledBytes = 0;
+    double maxTaskSkew = 0;
+    bool taskStatsIncomplete = false;
+    for (const auto& execution : stats.Executions) {
+        cpuUs += execution.GetCpuTimeUs();
+        NKqpProto::TKqpExecutionExtraStats extra;
+        if (execution.GetExtra().UnpackTo(&extra)) {
+            waitUs += extra.GetWaitTimeUs();
+            spilledBytes += extra.GetSpilledBytes();
+            maxTaskSkew = Max(maxTaskSkew, extra.GetMaxTaskSkew());
+            taskStatsIncomplete |= extra.GetTaskStatsIncomplete();
+        }
+        for (const auto& table : execution.GetTables()) {
+            rowsRead += table.GetReadRows();
+            bytesRead += table.GetReadBytes();
+            rowsWritten += table.GetWriteRows() + table.GetEraseRows();
+        }
+    }
+    if (stats.Compilation) {
+        cpuUs += stats.Compilation->CpuTimeUs;
+        span.Attribute("ydb.compile.cache_hit", stats.Compilation->FromCache);
+        span.Attribute("ydb.compile.duration_us", static_cast<i64>(stats.Compilation->DurationUs));
+    }
+    span.Attribute("ydb.cpu_us", static_cast<i64>(cpuUs));
+    span.Attribute("ydb.rows_read", static_cast<i64>(rowsRead));
+    span.Attribute("ydb.bytes_read", static_cast<i64>(bytesRead));
+    span.Attribute("ydb.rows_written", static_cast<i64>(rowsWritten));
+    if (span.GetTraceId().GetVerbosity() >= TComponentTracingLevels::TQueryProcessor::Basic) {
+        span.Attribute("ydb.wait_us", static_cast<i64>(waitUs));
+        span.Attribute("ydb.spilled_bytes", static_cast<i64>(spilledBytes));
+        span.Attribute("ydb.max_task_skew", maxTaskSkew);
+        span.Attribute("ydb.task_stats_incomplete", taskStatsIncomplete);
+    }
+    span.Attribute("ydb.locks_broken_as_victim", static_cast<i64>(stats.LocksBrokenAsVictim));
+    span.Attribute("ydb.locks_broken_as_breaker", static_cast<i64>(stats.LocksBrokenAsBreaker));
+    span.Attribute("ydb.consumed_ru", static_cast<i64>(requestUnits));
+    span.Attribute("ydb.status_code", Ydb::StatusIds::StatusCode_Name(status));
+}
+
+void AddReadTraceStats(NWilson::TSpan& span, NYql::NDqProto::TDqTaskStats& stats,
+        const TString& table, ui64 rows, ui64 retries) {
+    if (span) {
+        span.Attribute("db.collection.name", table);
+        span.Attribute("ydb.rows", static_cast<i64>(rows));
+        span.Attribute("ydb.read_retries", static_cast<i64>(retries));
+    }
+    if (span.GetTraceId() && retries) {
+        NKqpProto::TKqpTaskExtraStats extra;
+        stats.GetExtra().UnpackTo(&extra);
+        extra.SetReadRetriesCount(extra.GetReadRetriesCount() + retries);
+        stats.MutableExtra()->PackFrom(extra);
+    }
+}
+
+void AddKqpTaskTraceAttributes(NWilson::TSpan& span, const NYql::NDqProto::TDqComputeActorStats& stats) {
+    if (span && stats.TasksSize() == 1) {
+        NKqpProto::TKqpTaskExtraStats extra;
+        if (stats.GetTasks(0).GetExtra().UnpackTo(&extra)) {
+            span.Attribute("ydb.read_retries", static_cast<i64>(extra.GetReadRetriesCount()));
+        }
+    }
+}
+
+NWilson::TSpan MakeMetadataTraceSpan(const NWilson::TTraceId& parent, NActors::TActorSystem* actorSystem,
+        const TString& name, const TString& table, const char* purpose) {
+    NWilson::TSpan span(TComponentTracingLevels::TQueryProcessor::Detailed,
+        NWilson::TTraceId(parent), name, NWilson::EFlags::NONE, actorSystem);
+    span.Attribute("db.collection.name", table);
+    span.Attribute("ydb.actor.type", TString("TActorRequestHandler"));
+    span.Attribute("ydb.code.component", TString("KqpTableMetadataLoader"));
+    span.Attribute("ydb.peer.actor.type", TString(name == "Load metadata" ? "SchemeCache" : "StatisticsService"));
+    span.Attribute("ydb.compile_dependency.purpose", TString(purpose));
+    return span;
+}
+
+bool TShardTraceEvents::Retain(const NWilson::TSpan& span, bool last) {
+    if (!span || span.GetTraceId().GetVerbosity() < TComponentTracingLevels::TQueryProcessor::Diagnostic) {
+        return false;
+    }
+    if (Count >= NQueryTraceSettings::MaxShardEvents
+            || (Count >= NQueryTraceSettings::MaxShardEvents - 1 && !last)) {
+        ++Dropped;
+        return false;
+    }
+    ++Count;
+    return true;
+}
+
+void TShardTraceEvents::ReadResult(NWilson::TSpan& span, ui64 shardId, ui32 nodeId, ui64 readId,
+        ui64 rows, Ydb::StatusIds::StatusCode status, bool finished) {
+    if (Retain(span, status != Ydb::StatusIds::SUCCESS)) {
+        span.Event("Shard read result", {
+            {"ydb.shard_id", static_cast<i64>(shardId)},
+            {"ydb.node_id", static_cast<i64>(nodeId)},
+            {"ydb.read_id", static_cast<i64>(readId)},
+            {"ydb.rows", static_cast<i64>(rows)},
+            {"ydb.status_code", Ydb::StatusIds::StatusCode_Name(status)},
+            {"ydb.finished", finished},
+        });
+    }
+}
+
+void TShardTraceEvents::Acknowledge(NWilson::TSpan& span, ui64 shardId, bool last) {
+    if (Retain(span, last)) {
+        span.Event("Shard acknowledged", {
+            {"ydb.shard_id", static_cast<i64>(shardId)},
+            {"ydb.last_shard", last},
+        });
+    }
+}
+
+void TShardTraceEvents::Finish(NWilson::TSpan& span) {
+    if (span && Dropped) {
+        span.Attribute("ydb.shard_events_dropped", static_cast<i64>(Dropped));
+    }
+    Count = 0;
+    Dropped = 0;
+}
+
+void TCommitTracePhase::Start(const NWilson::TSpan& parent, const char* name, ui64 shards) {
+    End(Ydb::StatusIds::SUCCESS);
+    Span = parent.CreateChild(TComponentTracingLevels::TQueryProcessor::Detailed, name, NWilson::EFlags::AUTO_END);
+    Span.Attribute("ydb.actor.type", TString("TKqpBufferWriteActor"));
+    Span.Attribute("ydb.shards", static_cast<i64>(shards));
+}
+
+void TCommitTracePhase::Acknowledge(ui64 shardId, bool last) {
+    Events.Acknowledge(Span, shardId, last);
+}
+
+void TCommitTracePhase::End(Ydb::StatusIds::StatusCode status) {
+    Events.Finish(Span);
+    EndQueryTraceSpan(Span, status);
+}
 
 namespace {
 
@@ -23,7 +173,7 @@ const char* GetTableSinkModeVerb(NKikimrKqp::TKqpTableSinkSettings::EType mode) 
     }
 }
 
-TUserFacingQueryDescription DescribePhysicalQuery(const NKqpProto::TKqpPhyQuery& query,
+TQueryTraceDescription DescribePhysicalQuery(const NKqpProto::TKqpPhyQuery& query,
         const TMaybe<TString>& commandTag) {
     TString inferredWriteVerb;
     TString writeTable;
@@ -156,7 +306,7 @@ TUserFacingQueryDescription DescribePhysicalQuery(const NKqpProto::TKqpPhyQuery&
 
 } // namespace
 
-TUserFacingQueryDescription DescribeUserFacingQuery(NKikimrKqp::EQueryType queryType,
+TQueryTraceDescription DescribeQueryTrace(NKikimrKqp::EQueryType queryType,
         size_t statementCount, const NKqpProto::TKqpPhyQuery& physicalQuery,
         const TMaybe<TString>& commandTag) {
     switch (queryType) {
@@ -173,11 +323,7 @@ TUserFacingQueryDescription DescribeUserFacingQuery(NKikimrKqp::EQueryType query
     return DescribePhysicalQuery(physicalQuery, commandTag);
 }
 
-TString ProtectUserFacingQueryText(const TString& text) {
-    return NKikimr::ProtectQueryForLoggingIfSensitive(text);
-}
-
-TString FallbackUserFacingQueryName(NKikimrKqp::EQueryType queryType,
+TString FallbackQueryTraceName(NKikimrKqp::EQueryType queryType,
         NKikimrKqp::EQueryAction queryAction) {
     switch (queryType) {
         case NKikimrKqp::QUERY_TYPE_SQL_DDL:
@@ -189,10 +335,10 @@ TString FallbackUserFacingQueryName(NKikimrKqp::EQueryType queryType,
         default:
             break;
     }
-    return UserFacingQueryActionName(queryAction);
+    return QueryTraceActionName(queryAction);
 }
 
-TString UserFacingQueryActionName(NKikimrKqp::EQueryAction action) {
+TString QueryTraceActionName(NKikimrKqp::EQueryAction action) {
     TString name = NKikimrKqp::EQueryAction_Name(action);
     constexpr TStringBuf prefix = "QUERY_ACTION_";
     if (name.StartsWith(prefix)) {
@@ -201,7 +347,7 @@ TString UserFacingQueryActionName(NKikimrKqp::EQueryAction action) {
     return name;
 }
 
-TString UserFacingQuerySpanName(NKikimrKqp::EQueryAction action) {
+TString QueryTraceSpanName(NKikimrKqp::EQueryAction action) {
     switch (action) {
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
         case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED:
@@ -224,6 +370,36 @@ TString UserFacingQuerySpanName(NKikimrKqp::EQueryAction action) {
             return "Topic operation";
         default:
             return "Query request";
+    }
+}
+
+void AddQueryTraceAttributes(NWilson::TSpan& span, NKikimrKqp::EQueryType queryType,
+        NKikimrKqp::EQueryAction action, const TString& database, const TString& query) {
+    if (!span) {
+        return;
+    }
+    span.Attribute("db.system.name", TString("ydb"));
+    span.Attribute("ydb.query.type", NKikimrKqp::EQueryType_Name(queryType));
+    span.Attribute("ydb.query.action", QueryTraceActionName(action));
+    if (database) {
+        span.Attribute("db.namespace", database);
+    }
+    if (!query.empty() && query.size() <= NQueryTraceSettings::MaxQueryTextBytes) {
+        span.Attribute("db.query.text", NKikimr::ProtectQueryForLoggingIfSensitive(query));
+    }
+}
+
+void EndQueryTraceSpan(NWilson::TSpan& span, Ydb::StatusIds::StatusCode status) {
+    if (!span) {
+        return;
+    }
+    span.Attribute("ydb.status_code", Ydb::StatusIds::StatusCode_Name(status));
+    if (status == Ydb::StatusIds::SUCCESS) {
+        span.EndOk();
+    } else if (status == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
+        span.End();
+    } else {
+        span.EndError(Ydb::StatusIds::StatusCode_Name(status));
     }
 }
 

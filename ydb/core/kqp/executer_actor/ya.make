@@ -22,6 +22,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/tracing
     library/cpp/containers/absl
     library/cpp/html/pcdata
     ydb/core/actorlib_impl

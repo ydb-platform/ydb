@@ -1,5 +1,6 @@
 #include "kqp_write_actor.h"
 
+#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
 #include "kqp_buffer_lookup_actor.h"
 #include "kqp_buffer_lock_actor.h"
 #include "kqp_write_actor_settings.h"
@@ -33,7 +34,6 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
-#include <ydb/library/yql/dq/actors/dq.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
@@ -705,7 +705,7 @@ public:
         ResolvingInProgress = true;
         AFL_ENSURE(InconsistentTx || IsOlap);
         TableWriteActorSpan = NWilson::TSpan(TWilsonKqp::TableWriteActor, NWilson::TTraceId(ParentTraceId),
-            "WaitForTableResolve", NWilson::EFlags::AUTO_END);
+            "Resolve table", NWilson::EFlags::AUTO_END);
 
         if (IsOlap) {
             ResolveTable();
@@ -2949,7 +2949,7 @@ public:
             Settings.GetTable().GetOwnerId(),
             Settings.GetTable().GetTableId(),
             Settings.GetTable().GetVersion())
-        , DirectWriteActorSpan(TWilsonKqp::DirectWriteActor, NWilson::TTraceId(args.TraceId), "TKqpDirectWriteActor")
+        , DirectWriteActorSpan(TWilsonKqp::DirectWriteActor, NWilson::TTraceId(args.TraceId), "Write rows", NWilson::EFlags::AUTO_END)
         , UserCtx(userCtx)
     {
         EgressStats.Level = args.StatsLevel;
@@ -3190,6 +3190,7 @@ private:
             if (Closed && WriteTableActor->IsFinished()) {
                 YDB_LOG_DEBUG("Write actor finished",
                     {"logPrefix", this->LogPrefix});
+                EndQueryTraceSpan(DirectWriteActorSpan, Ydb::StatusIds::SUCCESS);
                 Callbacks->OnAsyncOutputFinished(GetOutputIndex());
             }
         } catch (const TMemoryLimitExceededException&) {
@@ -3381,7 +3382,6 @@ struct TWriteSettings {
 
     bool EnableStreamWrite = false;
     ui64 QuerySpanId = 0;
-    ui64 BufferLookupDiagnosticsExecutionId = 0;
 };
 
 struct TBufferWriteMessage {
@@ -3438,12 +3438,11 @@ public:
             Alloc->Ref(), MemInfo, AppData()->FunctionRegistry))
         , Counters(settings.Counters)
         , TxProxyMon(settings.TxProxyMon)
-        , BufferWriteActorSpan(TWilsonKqp::BufferWriteActor, NWilson::TTraceId(settings.TraceId), "BufferWriteActor", NWilson::EFlags::AUTO_END)
         , UserCtx(settings.UserCtx)
         , QuerySpanId(settings.QuerySpanId)
     {
         Counters->BufferActorsCount->Inc();
-        UpdateTracingState("Write", BufferWriteActorSpan.GetTraceId());
+        UpdateTracingState("Write", std::move(settings.TraceId));
     }
 
     void Bootstrap() {
@@ -3732,8 +3731,6 @@ public:
             .SessionActorId = SessionActorId,
             .Counters = Counters,
 
-            .ParentTraceId = BufferWriteActorStateSpan.GetTraceId(),
-            .CollectShardDiagnostics = CollectBufferLookupDiagnostics,
             .Database = settings.Database,
         });
 
@@ -3782,7 +3779,6 @@ public:
             .SessionActorId = SessionActorId,
             .Counters = Counters,
 
-            .ParentTraceId = BufferWriteActorStateSpan.GetTraceId(),
         });
 
         TActorId id = RegisterWithSameMailbox(actor);
@@ -4065,7 +4061,7 @@ public:
                         token.Cookie,
                         indexSettings.KeyColumns,
                         /* skipAbsent */ false,
-                        *settings.TransactionSettings.MvccSnapshot);
+                        *settings.TransactionSettings.MvccSnapshot, BufferWriteActorStateSpan.GetTraceId());
                 }
 
                 {
@@ -4114,7 +4110,7 @@ public:
                         {},
                         settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
                             ? std::nullopt // Locked (pessimistic) rows must be read using last version, not snapshot.
-                            : settings.TransactionSettings.MvccSnapshot);
+                            : settings.TransactionSettings.MvccSnapshot, BufferWriteActorStateSpan.GetTraceId());
                 }
             }
         }
@@ -4179,7 +4175,7 @@ public:
                 token.Cookie,
                 settings.KeyColumns,
                 skipAbsent,
-                *settings.TransactionSettings.MvccSnapshot);
+                *settings.TransactionSettings.MvccSnapshot, BufferWriteActorStateSpan.GetTraceId());
         }
 
         // Main table lookup
@@ -4203,7 +4199,7 @@ public:
                 settings.LookupColumns,
                 settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
                     ? std::nullopt // Locked (pessimistic) rows must be read using last version, not snapshot.
-                    : settings.TransactionSettings.MvccSnapshot);
+                    : settings.TransactionSettings.MvccSnapshot, BufferWriteActorStateSpan.GetTraceId());
         }
 
         // Returning info
@@ -4326,18 +4322,14 @@ public:
     }
 
     void Handle(TEvBufferWrite::TPtr& ev) {
+        if (ev->TraceId && !BufferWriteActorStateSpan.GetTraceId()) {
+            UpdateTracingState("Write", NWilson::TTraceId(ev->TraceId));
+        }
         Counters->ForwardActorWritesLatencyHistogram->Collect((TInstant::Now() - ev->Get()->SendTime).MicroSeconds());
         TWriteToken token;
         if (!ev->Get()->Token) {
             AFL_ENSURE(ev->Get()->Settings);
             auto& settings = *ev->Get()->Settings;
-            if (BufferLookupDiagnosticsExecutionId != settings.BufferLookupDiagnosticsExecutionId) {
-                BufferLookupDiagnosticsExecutionId = settings.BufferLookupDiagnosticsExecutionId;
-                CollectBufferLookupDiagnostics = BufferLookupDiagnosticsExecutionId != 0;
-                ForEachLookupActor([&](IKqpBufferTableLookup* actor, const TActorId) {
-                    actor->ResetShardDiagnostics(CollectBufferLookupDiagnostics);
-                });
-            }
             if (!WriteInfos.empty()) {
                 AFL_ENSURE(LockTxId == settings.TransactionSettings.LockTxId);
                 AFL_ENSURE(LockNodeId == settings.TransactionSettings.LockNodeId);
@@ -4582,7 +4574,11 @@ public:
         Become(&TThis::StateFlush);
 
         Counters->BufferActorFlushes->Inc();
-        UpdateTracingState("Flush", std::move(traceId));
+        if (TxId) {
+            StartCommitPhase("Flush effects");
+        } else {
+            UpdateTracingState("Flush effects", std::move(traceId), TComponentTracingLevels::TQueryProcessor::Basic);
+        }
         OperationStartTime = TInstant::Now();
 
         ForEachWriteActor([](TKqpTableWriteActor* actor, const TActorId) {
@@ -4603,7 +4599,10 @@ public:
 
         if (!TxManager->NeedCommit()) {
             Rollback(std::move(traceId), /* waitForResult */ true);
-        } else if (TxManager->BrokenLocks()) {
+            return;
+        }
+        UpdateTracingState("Commit", std::move(traceId), TComponentTracingLevels::TQueryProcessor::Basic);
+        if (TxManager->BrokenLocks()) {
             NYql::TIssues issues;
             issues.AddIssue(*TxManager->GetLockIssue());
             ReplyError(
@@ -4612,7 +4611,7 @@ public:
             return;
         } else if ((!WriteInfos.empty() || TxManager->HasTopics()) && TxManager->CanUseImmediateCommit()) {
             TxManager->StartExecute();
-            ImmediateCommit(std::move(traceId));
+            ImmediateCommit();
         } else {
             AFL_ENSURE(txId);
             TxId = txId;
@@ -4623,20 +4622,17 @@ public:
             });
 
             if (needToFlushBeforeCommit) {
-                Flush(std::move(traceId));
+                Flush({});
             } else {
                 TxManager->StartPrepare();
-                Prepare(std::move(traceId));
+                Prepare();
             }
         }
     }
 
-    bool Prepare(std::optional<NWilson::TTraceId> traceId) {
-        UpdateTracingState("Commit", std::move(traceId));
+    bool Prepare() {
+        StartCommitPhase("Prepare shards");
         OperationStartTime = TInstant::Now();
-        if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
-            CommitDiagnosticsCapture->OnPrepareStarted(OperationStartTime);
-        }
 
         YDB_LOG_DEBUG("Start prepare for distributed commit",
             {"logPrefix", this->LogPrefix});
@@ -4661,13 +4657,10 @@ public:
         return true;
     }
 
-    bool ImmediateCommit(NWilson::TTraceId traceId) {
+    bool ImmediateCommit() {
         Counters->BufferActorImmediateCommits->Inc();
-        UpdateTracingState("Commit", std::move(traceId));
+        StartCommitPhase("Apply commit");
         OperationStartTime = TInstant::Now();
-        if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
-            CommitDiagnosticsCapture->OnImmediateCommitStarted(OperationStartTime);
-        }
 
         YDB_LOG_DEBUG("Start immediate commit",
             {"logPrefix", this->LogPrefix});
@@ -4690,11 +4683,9 @@ public:
     }
 
     void DistributedCommit() {
+        StartCommitPhase("Coordinator");
         Counters->BufferActorDistributedCommits->Inc();
         OperationStartTime = TInstant::Now();
-        if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
-            CommitDiagnosticsCapture->OnDistributedCommitStarted(OperationStartTime);
-        }
 
         YDB_LOG_DEBUG("Start distributed commit with",
             {"logPrefix", this->LogPrefix},
@@ -4715,7 +4706,9 @@ public:
         Become(&TThis::StateRollback);
         try {
             Counters->BufferActorRollbacks->Inc();
-            UpdateTracingState("RollBack", std::move(traceId));
+            CommitPhase.End(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
+            EndQueryTraceSpan(BufferWriteActorStateSpan, Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
+            UpdateTracingState("Rollback", std::move(traceId), TComponentTracingLevels::TQueryProcessor::Basic);
 
             YDB_LOG_DEBUG("Start rollback",
                 {"logPrefix", this->LogPrefix});
@@ -5062,9 +5055,7 @@ public:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned:
                 TxProxyMon->ClientTxStatusPlanned->Inc();
                 TxPlanned = true;
-                if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
-                    CommitDiagnosticsCapture->OnCoordinatorPlanned();
-                }
+                StartCommitPhase("Apply commit");
                 if (TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE) {
                     AFL_ENSURE(res->Record.HasStepId());
                     AFL_ENSURE(res->Record.HasTxId());
@@ -5381,7 +5372,7 @@ public:
     void Handle(TEvKqpBuffer::TEvTerminate::TPtr&) {
         if (!TxManager->IsRollBack()) {
             CancelProposal();
-            Rollback(BufferWriteActorSpan.GetTraceId(), /* waitForResult */ false);
+            Rollback(BufferWriteActorStateSpan.GetTraceId(), /* waitForResult */ false);
         }
         PassAway();
     }
@@ -5393,7 +5384,7 @@ public:
         }
         YQL_ENSURE(CurrentStateFunc() == &TThis::StateWrite);
         Become(&TThis::StateWaitTasks);
-        UpdateTracingState("WaitTasks", NWilson::TTraceId(ev->TraceId));
+        UpdateTracingState("Wait for writes", NWilson::TTraceId(ev->TraceId));
 
         AfterWaitTasksState = TAfterWaitTasksState{
             .IsCommit = false,
@@ -5405,16 +5396,12 @@ public:
 
     void Handle(TEvKqpBuffer::TEvCommit::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
-        if (ev->Get()->CollectTimeline || ev->Get()->CollectShards) {
-            CommitDiagnosticsCapture = std::make_unique<TCommitDiagnosticsCapture>(
-                ev->Get()->CollectTimeline, ev->Get()->CollectShards);
-        }
         for (auto& [_, writeTask] : WriteTasks) {
             AFL_ENSURE(writeTask.IsClosed());
         }
         YQL_ENSURE(CurrentStateFunc() == &TThis::StateWrite);
         Become(&TThis::StateWaitTasks);
-        UpdateTracingState("WaitTasks", NWilson::TTraceId(ev->TraceId));
+        UpdateTracingState("Wait for writes", NWilson::TTraceId(ev->TraceId));
 
         AfterWaitTasksState = TAfterWaitTasksState{
             .IsCommit = true,
@@ -5856,9 +5843,6 @@ public:
     }
 
     void OnPrepared(IKqpTransactionManager::TPrepareResult&& preparedInfo, ui64) override {
-        if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
-            CommitDiagnosticsCapture->OnShardPrepared(preparedInfo.ShardId);
-        }
         if (HandleDeferredLocksBrokenOnPrepare()) return;
         if (!preparedInfo.Coordinator || (TxManager->GetCoordinator() && preparedInfo.Coordinator != TxManager->GetCoordinator())) {
             YDB_LOG_ERROR("Handle TEvWriteResult: unable to select coordinator. Tx canceled, previously selected coordinator selected at propose",
@@ -5873,7 +5857,10 @@ public:
                 "Unable to choose coordinator.");
             return;
         }
-        if (TxManager->ConsumePrepareTransactionResult(std::move(preparedInfo))) {
+        const auto shardId = preparedInfo.ShardId;
+        const bool prepared = TxManager->ConsumePrepareTransactionResult(std::move(preparedInfo));
+        CommitPhase.Acknowledge(shardId, prepared);
+        if (prepared) {
             OnOperationFinished(Counters->BufferActorPrepareLatencyHistogram);
             TxManager->StartExecute();
             AFL_ENSURE(GetTotalMemory() == 0);
@@ -5896,13 +5883,12 @@ public:
                 ("writeResult", writeResultTimestamp->TxId)
                 ("shardId", shardId);
         }
-        if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
-            CommitDiagnosticsCapture->OnShardCommitted(shardId);
-        }
         if (PendingCommitShards > 0) {
             --PendingCommitShards;
         }
-        if (TxManager->ConsumeCommitResult(shardId)) {
+        const bool committed = TxManager->ConsumeCommitResult(shardId);
+        CommitPhase.Acknowledge(shardId, committed);
+        if (committed) {
             if (FlushDeferredLocksBrokenIfPending()) return;
             if (TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE) {
                 AFL_ENSURE(CommitTimestamp.has_value());
@@ -5911,11 +5897,12 @@ public:
                 {"logPrefix", this->LogPrefix},
                 {"txId", TxId.value_or(0)});
             OnOperationFinished(Counters->BufferActorCommitLatencyHistogram);
-            auto result = std::make_unique<TEvKqpBuffer::TEvResult>(BuildStats(), std::move(CommitTimestamp));
-            if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
-                result->CommitDiagnostics = CommitDiagnosticsCapture->Finish(Ydb::StatusIds::SUCCESS);
-            }
-            Send<ESendingType::Tail>(ExecuterActorId, result.release());
+            CommitPhase.End(Ydb::StatusIds::SUCCESS);
+            EndQueryTraceSpan(BufferWriteActorStateSpan, Ydb::StatusIds::SUCCESS);
+            Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
+                BuildStats(),
+                std::move(CommitTimestamp)
+            });
             ExecuterActorId = {};
             AFL_ENSURE(GetTotalMemory() == 0);
             PassAway();
@@ -5941,6 +5928,7 @@ public:
             {"logPrefix", this->LogPrefix},
             {"txId", TxId.value_or(0)});
         OnOperationFinished(Counters->BufferActorRollbackLatencyHistogram);
+        EndQueryTraceSpan(BufferWriteActorStateSpan, Ydb::StatusIds::SUCCESS);
         Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
             BuildStats()
         });
@@ -5954,7 +5942,11 @@ public:
 
     void OnFlushed() {
         YQL_ENSURE(CurrentStateFunc() == &TThis::StateFlush);
-        UpdateTracingState("Write", BufferWriteActorSpan.GetTraceId());
+        CommitPhase.End(Ydb::StatusIds::SUCCESS);
+        if (!TxId) {
+            EndQueryTraceSpan(BufferWriteActorStateSpan, Ydb::StatusIds::SUCCESS);
+            BufferWriteActorStateSpan = {};
+        }
         OnOperationFinished(Counters->BufferActorFlushLatencyHistogram);
 
         ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
@@ -5964,6 +5956,7 @@ public:
             }
             if (!TxId) {
                 actor->Unlink();
+                actor->SetParentTraceId({});
             }
 
             AFL_ENSURE(!actor->FlushBeforeCommit());
@@ -5971,7 +5964,7 @@ public:
 
         if (TxId) {
             TxManager->StartPrepare();
-            Prepare(std::nullopt);
+            Prepare();
             return;
         }
         Become(&TKqpBufferWriteActor::StateWrite);
@@ -6161,24 +6154,23 @@ public:
         ReplyErrorImpl(statusCode, std::move(issues));
     }
 
-    void UpdateTracingState(const char* name, std::optional<NWilson::TTraceId> traceId) {
-        if (!traceId) {
-            return;
-        }
-        if (BufferWriteActorStateSpan) {
-            BufferWriteActorStateSpan.EndOk();
-        }
-        BufferWriteActorStateSpan = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, std::move(*traceId),
+    void StartCommitPhase(const char* name) {
+        CommitPhase.Start(BufferWriteActorStateSpan, name, CountParticipatingShards());
+    }
+
+    void UpdateTracingState(const char* name, NWilson::TTraceId traceId,
+            ui8 verbosity = TWilsonKqp::BufferWriteActorState) {
+        CommitPhase.End(Ydb::StatusIds::SUCCESS);
+        EndQueryTraceSpan(BufferWriteActorStateSpan, Ydb::StatusIds::SUCCESS);
+        BufferWriteActorStateSpan = NWilson::TSpan(verbosity, std::move(traceId),
             name, NWilson::EFlags::AUTO_END);
-        if (BufferWriteActorStateSpan.GetTraceId() != BufferWriteActorSpan.GetTraceId()) {
-            BufferWriteActorStateSpan.Link(BufferWriteActorSpan.GetTraceId());
-        }
         ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
             actor->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
         });
     }
 
     void ReplyErrorImpl(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::TIssues&& issues) {
+        CommitPhase.End(NYql::NDq::DqStatusToYdbStatus(statusCode));
         YDB_LOG_ERROR("Buffer write actor is replying with error to session.",
             {"logPrefix", this->LogPrefix},
             {"statusCode", NYql::NDqProto::StatusIds_StatusCode_Name(statusCode)},
@@ -6189,15 +6181,10 @@ public:
         CancelProposal();
         Become(&TKqpBufferWriteActor::StateError);
 
-        TCommitDiagnostics diagnostics;
-        if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
-            diagnostics = CommitDiagnosticsCapture->Finish(NYql::NDq::DqStatusToYdbStatus(statusCode));
-        }
         Send<ESendingType::Tail>(SessionActorId, new TEvKqpBuffer::TEvError{
             statusCode,
             std::move(issues),
-            BuildStats(),
-            std::move(diagnostics)
+            BuildStats()
         });
 
         Clear();
@@ -6320,9 +6307,6 @@ private:
     bool TxPlanned = false;
     std::optional<ui64> Coordinator;
     std::optional<TCommitTimestamp> CommitTimestamp;
-    bool CollectBufferLookupDiagnostics = false;
-    ui64 BufferLookupDiagnosticsExecutionId = 0;
-    std::unique_ptr<TCommitDiagnosticsCapture> CommitDiagnosticsCapture;
 
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;
@@ -6423,8 +6407,8 @@ private:
 
     std::optional<TAfterWaitTasksState> AfterWaitTasksState;
 
-    NWilson::TSpan BufferWriteActorSpan;
     NWilson::TSpan BufferWriteActorStateSpan;
+    TCommitTracePhase CommitPhase;
     TIntrusivePtr<NACLib::TUserContext> UserCtx;
     ui64 QuerySpanId = 0;
 };
@@ -6452,7 +6436,7 @@ public:
             Settings.GetTable().GetOwnerId(),
             Settings.GetTable().GetTableId(),
             Settings.GetTable().GetVersion())
-        , ForwardWriteActorSpan(TWilsonKqp::ForwardWriteActor, NWilson::TTraceId(args.TraceId), "ForwardWriteActor",
+        , ForwardWriteActorSpan(TWilsonKqp::ForwardWriteActor, NWilson::TTraceId(args.TraceId), "Buffer rows",
                 NWilson::EFlags::AUTO_END)
         , TransformOutput(ExtractTransformOutput(args))
     {
@@ -6672,7 +6656,6 @@ private:
 
                 .EnableStreamWrite = Settings.GetEnableStreamWrite(),
                 .QuerySpanId = Settings.GetQuerySpanId(),
-                .BufferLookupDiagnosticsExecutionId = Settings.GetBufferLookupDiagnosticsExecutionId(),
             };
 
             for (const auto& indexSettings : Settings.GetIndexes()) {
@@ -6741,7 +6724,7 @@ private:
             {"data", DataSize},
             {"closed", Closed},
             {"bufferActorId", BufferActorId});
-        AFL_ENSURE(Send(BufferActorId, ev.release()));
+        AFL_ENSURE(Send(BufferActorId, ev.release(), 0, 0, ForwardWriteActorSpan.GetTraceId()));
     }
 
     void CommitState(const NYql::NDqProto::TCheckpoint&) final {};

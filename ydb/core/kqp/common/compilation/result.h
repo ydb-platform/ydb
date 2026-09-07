@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <ydb/core/kqp/common/simple/query_stats.h>
 #include <util/datetime/base.h>
 #include <util/digest/multi.h>
 #include <ydb/core/kqp/common/simple/query_ast.h>
@@ -70,11 +71,7 @@ struct TKqpCompileResult {
     TMaybe<NJson::TJsonValue> CompileMeta; // consist of parameters of query
 };
 
-struct TKqpStatsCompile {
-    bool FromCache = false;
-    ui64 DurationUs = 0;
-    ui64 CpuTimeUs = 0;
-};
+
 } // namespace NKikimr::NKqp
 
 template<>

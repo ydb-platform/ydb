@@ -74,29 +74,29 @@ namespace NKikimr {
 
                 DataExecuter = TComponentTracingLevels::TQueryProcessor::Basic,
                     DataExecuterAcquireSnapshot = TComponentTracingLevels::TQueryProcessor::Detailed,
-                    DataExecuterRunTasks = TComponentTracingLevels::TQueryProcessor::Detailed,
+                    DataExecuterRunTasks = TComponentTracingLevels::TQueryProcessor::Basic,
 
                 ScanExecuter = TComponentTracingLevels::TQueryProcessor::Basic,
-                    ScanExecuterRunTasks = TComponentTracingLevels::TQueryProcessor::Detailed,
+                    ScanExecuterRunTasks = TComponentTracingLevels::TQueryProcessor::Basic,
 
-                KqpNodeSendTasks = TComponentTracingLevels::TQueryProcessor::Basic,
-                KqpNodeCreateTasks = TComponentTracingLevels::TQueryProcessor::Basic,
+                KqpNodeSendTasks = TComponentTracingLevels::TQueryProcessor::Detailed,
+                KqpNodeCreateTasks = TComponentTracingLevels::TQueryProcessor::Detailed,
 
                 ProposeTransaction = TComponentTracingLevels::TQueryProcessor::Basic,
 
-                ComputeActor = TComponentTracingLevels::TQueryProcessor::Basic,
+                ComputeActor = TComponentTracingLevels::TQueryProcessor::Detailed,
 
-                ReadActor = TComponentTracingLevels::TQueryProcessor::Basic,
+                ReadActor = TComponentTracingLevels::TQueryProcessor::Detailed,
                     ReadActorShardsResolve = TComponentTracingLevels::TQueryProcessor::Detailed,
 
-                LookupActor = TComponentTracingLevels::TQueryProcessor::Basic,
+                LookupActor = TComponentTracingLevels::TQueryProcessor::Detailed,
                     LookupActorShardsResolve = TComponentTracingLevels::TQueryProcessor::Detailed,
 
-                LockActor = TComponentTracingLevels::TQueryProcessor::Basic,
+                LockActor = TComponentTracingLevels::TQueryProcessor::Detailed,
 
-                ForwardWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
-                DirectWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
-                BufferWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
+                ForwardWriteActor = TComponentTracingLevels::TQueryProcessor::Detailed,
+                DirectWriteActor = TComponentTracingLevels::TQueryProcessor::Detailed,
+                BufferWriteActor = TComponentTracingLevels::TQueryProcessor::Detailed,
                     BufferWriteActorState = TComponentTracingLevels::TQueryProcessor::Detailed,
                     TableWriteActor = TComponentTracingLevels::TQueryProcessor::Detailed,
 

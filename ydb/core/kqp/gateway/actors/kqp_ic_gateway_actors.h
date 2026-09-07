@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
+
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/appdata.h>
 #include <yql/essentials/providers/common/gateway/yql_provider_gateway.h>
@@ -8,9 +10,6 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
-#include <functional>
-#include <utility>
-
 
 namespace NKikimr::NKqp {
 
@@ -18,7 +17,6 @@ template<typename TDerived, typename TRequest, typename TResponse, typename TRes
 class TRequestHandlerBase: public TActorBootstrapped<TDerived> {
 public:
     using TCallbackFunc = std::function<void(NThreading::TPromise<TResult>, TResponse&&)>;
-    using TFailureCallbackFunc = std::function<void()>;
     using TBase = TRequestHandlerBase<TDerived, TRequest, TResponse, TResult>;
 
 public:
@@ -26,16 +24,12 @@ public:
         return NKikimrServices::TActivity::KQP_REQUEST_HANDLER;
     }
 
-    TRequestHandlerBase(TRequest* request, NThreading::TPromise<TResult> promise, TCallbackFunc callback,
-            TFailureCallbackFunc failureCallback = {})
+    TRequestHandlerBase(TRequest* request, NThreading::TPromise<TResult> promise, TCallbackFunc callback)
         : Request(request)
         , Promise(promise)
-        , Callback(callback)
-        , FailureCallback(std::move(failureCallback))
-    {}
+        , Callback(callback) {}
 
     void HandleError(const TString &error, const TActorContext &ctx) {
-        NotifyFailure();
         Promise.SetValue(NYql::NCommon::ResultFromError<TResult>(error));
         this->Die(ctx);
     }
@@ -50,7 +44,6 @@ public:
             {"requestType", requestType},
             {"eventType", eventType});
 
-        NotifyFailure();
         Promise.SetValue(NYql::NCommon::ResultFromError<TResult>(YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, TStringBuilder()
             << "Unexpected event in " << requestType << ": " << eventType)));
         this->PassAway();
@@ -58,7 +51,6 @@ public:
 
     void Handle(NKikimr::TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         if (ev->Get()->Status != NKikimrProto::OK) {
-            NotifyFailure();
             Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
                 TStringBuilder() << "Tablet not available, status: " << (ui32)ev->Get()->Status, {}));
             this->Die(ctx);
@@ -67,7 +59,6 @@ public:
 
     void Handle(NKikimr::TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
         Y_UNUSED(ev);
-        NotifyFailure();
         Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
             "Connection to tablet was lost.", {}));
         this->Die(ctx);
@@ -75,7 +66,6 @@ public:
 
     void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
         Y_UNUSED(ev);
-        NotifyFailure();
         Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
             "Failed to deliver request to destination.", {}));
         this->Die(ctx);
@@ -83,7 +73,6 @@ public:
 
     ~TRequestHandlerBase() override {
         if (Promise.Initialized() && !Promise.IsReady()) {
-            NotifyFailure();
             Promise.TrySetValue(NYql::NCommon::ResultFromIssues<TResult>(
                 NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
                 "Shutting down.", {}));
@@ -91,20 +80,11 @@ public:
     }
 
 protected:
-    void NotifyFailure() {
-        if (FailureCallback) {
-            auto callback = std::move(FailureCallback);
-            FailureCallback = {};
-            callback();
-        }
-    }
-
     THolder<TRequest> Request;
     // Note: Promise must be moved into Callback to avoid racing with
     // the destructor.
     NThreading::TPromise<TResult> Promise;
     TCallbackFunc Callback;
-    TFailureCallbackFunc FailureCallback;
 };
 
 template<typename TRequest, typename TResponse, typename TResult>
@@ -118,19 +98,36 @@ public:
     using TBase = typename TActorRequestHandler::TBase;
     using TCallbackFunc = typename TBase::TCallbackFunc;
 
+    using TStatusFunc = std::function<Ydb::StatusIds::StatusCode(const TResponse&)>;
+
     TActorRequestHandler(TActorId actorId, TRequest* request, NThreading::TPromise<TResult> promise,
-            TCallbackFunc callback, typename TBase::TFailureCallbackFunc failureCallback = {})
-        : TBase(request, promise, callback, std::move(failureCallback))
-        , ActorId(actorId) {}
+            TCallbackFunc callback, NWilson::TSpan span = {}, TStatusFunc status = {})
+        : TBase(request, promise, std::move(callback))
+        , ActorId(actorId)
+        , Span(std::move(span))
+        , Status(std::move(status))
+    {}
+
+    ~TActorRequestHandler() override {
+        if (Span) {
+            Span.EndError("Request did not complete");
+        }
+    }
+
+    void HandleResponse(typename TResponse::TPtr& ev, const TActorContext& ctx) override {
+        if (Span) {
+            EndQueryTraceSpan(Span, Status ? Status(*ev->Get()) : Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
+        }
+        TBase::HandleResponse(ev, ctx);
+    }
 
     void Bootstrap(const TActorContext& ctx) {
-        ctx.Send(ActorId, this->Request.Release(), IEventHandle::FlagTrackDelivery);
+        ctx.Send(ActorId, this->Request.Release(), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
 
         this->Become(&TActorRequestHandler::AwaitState);
     }
 
     using TBase::Handle;
-    using TBase::HandleResponse;
 
     STFUNC(AwaitState) {
         switch (ev->GetTypeRewrite()) {
@@ -143,6 +140,8 @@ public:
 
 private:
     TActorId ActorId;
+    NWilson::TSpan Span;
+    TStatusFunc Status;
 };
 
 }

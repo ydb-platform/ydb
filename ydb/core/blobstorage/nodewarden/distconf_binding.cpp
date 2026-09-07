@@ -195,7 +195,9 @@ namespace NKikimr::NStorage {
         }
 
         Y_ABORT_UNLESS(QuorumValid);
-        Y_ABORT_UNLESS(!GlobalQuorum);
+        if (!NeedMoreNodes && GlobalQuorum) {
+            return;
+        }
 
         const TMonotonic now = TActivationContext::Monotonic();
 

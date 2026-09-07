@@ -106,7 +106,16 @@ TFakeCASetup::TFakeCASetup()
 }
 
 TFakeCASetup::~TFakeCASetup() {
-    auto shouldStop = std::make_shared<std::atomic<bool>>(); 
+    Terminate();
+}
+
+void TFakeCASetup::Terminate() {
+    if (Terminated) {
+        return;
+    }
+    Terminated = true;
+
+    auto shouldStop = std::make_shared<std::atomic<bool>>();
     Execute([shouldStop](TFakeActor& actor) {
         actor.Terminate(shouldStop);
     });

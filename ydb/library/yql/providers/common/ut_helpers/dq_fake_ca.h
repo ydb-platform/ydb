@@ -188,6 +188,12 @@ struct TFakeCASetup {
     TFakeCASetup();
     ~TFakeCASetup();
 
+    // Passes away async input / output actors owned by the fake compute actor while the actor
+    // system is still running. Idempotent; the destructor calls it if it was not called explicitly.
+    // Call it before stopping external clients (e.g. NYdb::TDriver) whose callbacks may still
+    // send events to the actor system, and only then destroy the setup (and the runtime).
+    void Terminate();
+
     template<typename T>
     std::vector<std::variant<T, TInstant>> AsyncInputRead(
         const TReadValueParser<T> parser,
@@ -270,6 +276,9 @@ public:
     NActors::TActorId FakeActorId;
     std::shared_ptr<TAsyncInputPromises> AsyncInputPromises = std::make_shared<TAsyncInputPromises>();
     std::shared_ptr<TAsyncOutputPromises> AsyncOutputPromises = std::make_shared<TAsyncOutputPromises>();
+
+private:
+    bool Terminated = false;
 };
 
 } // namespace NYql::NDq

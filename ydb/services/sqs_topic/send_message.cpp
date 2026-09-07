@@ -280,7 +280,6 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         void ApplyContentBasedDeduplication(bool enabled) {
-            ContentBasedDeduplication_ = enabled;
             if (!Fifo_ || !WriterSettings_) {
                 return;
             }
@@ -324,8 +323,7 @@ namespace NKikimr::NSqsTopic::V1 {
                             CalcRuConsumption(PayloadSize_),
                             NBilling::WRITE_BASE_COST,
                             NBilling::WRITE_COST_PER_BLOCK,
-                            Fifo_,
-                            ContentBasedDeduplication_);
+                            Fifo_);
                         Y_ABORT_UNLESS(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, TlsActivationContext->AsActorContext()));
                         return;
                     }
@@ -417,7 +415,6 @@ namespace NKikimr::NSqsTopic::V1 {
         TActorId WriterActor_;
         ui64 PayloadSize_{};
         bool Fifo_{};
-        bool ContentBasedDeduplication_ = false;
         TMaybe<NPQ::NMLP::TWriterSettings> WriterSettings_;
     };
 

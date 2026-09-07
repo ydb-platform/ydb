@@ -1910,8 +1910,8 @@ public:
     void OnPartitioningChanged(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) override {
         IsOlap = true;
         SchemeEntry = schemeEntry;
-//DO NOT REMOVE THESE CHECKS 
-#ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK 
+//DO NOT REMOVE THESE CHECKS
+#ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK
         // Diagnostic: Verify TargetShardIds is set before creating serializer.
         AFL_VERIFY(Settings.TargetShardIds.has_value())
             ("targetShardIdsHasValue", Settings.TargetShardIds.has_value())

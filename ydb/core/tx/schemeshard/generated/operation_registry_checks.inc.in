@@ -1,7 +1,0 @@
-// Generated from EOperationType; do not edit.
-{% for opType in opTypes %}
-static_assert(GetSchemeOperationSupport({{ opType }}) != ESchemeOperationSupport::Unknown,
-    "Missing operation registry entry: {{ opType }}");
-{% endfor %}
-static_assert(sizeof(SchemeOperations) / sizeof(SchemeOperations[0]) == {{ opTypes | length }},
-    "Operation registry must cover the protobuf enum exactly");

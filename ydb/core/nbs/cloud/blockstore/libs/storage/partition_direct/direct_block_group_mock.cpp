@@ -372,13 +372,17 @@ TDirectBlockGroupMock::BatchEraseFromPBuffer(
 
 void TDirectBlockGroupMock::BarrierEraseFromPBuffer(ui64 lsn)
 {
-    Y_UNUSED(lsn);
+    if (BarrierEraseFromPBufferHandler) {
+        BarrierEraseFromPBufferHandler(lsn);
+    }
 }
 
 NThreading::TFuture<std::optional<TPBufferKey>>
 TDirectBlockGroupMock::GatherSafeBarrierForErase()
 {
-    return NThreading::MakeFuture<std::optional<TPBufferKey>>(std::nullopt);
+    return NThreading::MakeFuture<std::optional<TPBufferKey>>(
+        GatherSafeBarrierForEraseHandler ? GatherSafeBarrierForEraseHandler()
+                                         : std::nullopt);
 }
 
 NThreading::TFuture<TDBGRestoreResponse>

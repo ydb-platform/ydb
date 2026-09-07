@@ -4997,6 +4997,8 @@ public:
     }
 
     void PassAway() override {
+        CommitPhase.End(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
+        EndQueryTraceSpan(BufferWriteActorStateSpan, Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
         Counters->BufferActorsCount->Dec();
         for (auto& [_, queue] : RequestQueues) {
             while (!queue.empty()) {
@@ -6576,6 +6578,7 @@ private:
             if (TransformOutput) {
                 TransformOutput->Finish();
             }
+            EndQueryTraceSpan(ForwardWriteActorSpan, Ydb::StatusIds::SUCCESS);
             YDB_LOG_DEBUG("Finished",
                 {"logPrefix", this->LogPrefix});
             Callbacks->OnAsyncOutputFinished(GetOutputIndex());
@@ -6782,6 +6785,7 @@ private:
     }
 
     void PassAway() override {
+        EndQueryTraceSpan(ForwardWriteActorSpan, Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
         Counters->ForwardActorsCount->Dec();
 
         if (TransformOutput) {

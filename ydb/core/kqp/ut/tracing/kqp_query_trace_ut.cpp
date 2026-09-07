@@ -8,6 +8,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_tracing.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
 #include <ydb/core/grpc_services/cancelation/cancelation_event.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
@@ -140,6 +141,25 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         }
         request->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(keepInCache);
         ExecRequest(runtime, sender, std::move(request), level, status, proxyNode);
+    }
+
+    TString CreateSession(TTestActorRuntime& runtime, TActorId sender, NKikimrKqp::EQueryType type) {
+        runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender,
+            new NKqp::TEvKqp::TEvCreateSessionRequest()));
+        auto created = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvCreateSessionResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(created->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        const auto sessionId = created->Get()->Record.GetResponse().GetSessionId();
+        if (type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
+            auto attach = MakeHolder<NKqp::TEvKqp::TEvPingSessionRequest>();
+            auto& request = *attach->Record.MutableRequest();
+            request.SetSessionId(sessionId);
+            ActorIdToProto(sender, request.MutableExtSessionCtrlActorId());
+            runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender,
+                attach.Release()));
+            auto attached = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvPingSessionResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(attached->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
+        }
+        return sessionId;
     }
 
     Y_UNIT_TEST(CommonTreeIncludesKqpAndDatashard) {
@@ -569,20 +589,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         )", 0, Ydb::StatusIds::SUCCESS, {}, 0, NKikimrKqp::QUERY_TYPE_SQL_DDL);
         auto* uploader = RegisterUploader(runtime);
         for (const auto type : {NKikimrKqp::QUERY_TYPE_SQL_DML, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY}) {
-            runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender,
-                new NKqp::TEvKqp::TEvCreateSessionRequest()));
-            auto created = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvCreateSessionResponse>(sender);
-            const auto sessionId = created->Get()->Record.GetResponse().GetSessionId();
-            if (type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
-                auto attach = MakeHolder<NKqp::TEvKqp::TEvPingSessionRequest>();
-                auto& request = *attach->Record.MutableRequest();
-                request.SetSessionId(sessionId);
-                ActorIdToProto(sender, request.MutableExtSessionCtrlActorId());
-                runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender,
-                    attach.Release()));
-                auto attached = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvPingSessionResponse>(sender);
-                UNIT_ASSERT_VALUES_EQUAL(attached->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
-            }
+            const auto sessionId = CreateSession(runtime, sender, type);
             TString txId;
             for (ui32 step = 0; step < 3; ++step) {
                 const ui8 level = step == 1 ? 0 : 15;
@@ -619,7 +626,63 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 }), "type=" << static_cast<int>(type) << " step=" << step << " " << uploader->PrintTraces());
                 UNIT_ASSERT_VALUES_EQUAL(uploader->Traces.size(), 1);
                 AssertDescendant(*uploader, "Check rows", "Execute query");
+                AssertStatus(*uploader, "Buffer rows", NTraceProto::Status::STATUS_CODE_OK);
             }
+        }
+    }
+
+    Y_UNIT_TEST(SnapshotTraceEndsWithCancelledQuery) {
+        auto [runtime, server, sender] = CreateServer();
+        CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
+        auto* uploader = RegisterUploader(runtime);
+        for (const auto type : {NKikimrKqp::QUERY_TYPE_SQL_DML, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY}) {
+            const auto sessionId = CreateSession(runtime, sender, type);
+            auto makeRequest = [&] {
+                auto request = MakeSQLRequest("SELECT * FROM `/Root/table-1`;");
+                auto& query = *request->Record.MutableRequest();
+                query.SetType(type);
+                query.SetSessionId(sessionId);
+                query.MutableTxControl()->set_commit_tx(false);
+                ActorIdToProto(sender, request->Record.MutableRequestActorId());
+                return request;
+            };
+
+            ClearUploader(*uploader);
+            TAutoPtr<IEventHandle> blockedSnapshot;
+            TTestActorRuntimeBase::TEventFilter previous;
+            previous = runtime.SetEventFilter([&](TTestActorRuntimeBase& rt, TAutoPtr<IEventHandle>& ev) {
+                if (!blockedSnapshot && ev->GetTypeRewrite() == NKqp::TEvKqpSnapshot::TEvCreateSnapshotResponse::EventType) {
+                    blockedSnapshot = ev.Release();
+                    return true;
+                }
+                return previous ? previous(rt, ev) : false;
+            });
+            runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender,
+                makeRequest().Release(), 0, 0, nullptr, NWilson::TTraceId::NewTraceId(15, 4095)));
+            TDispatchOptions blocked;
+            blocked.FinalEvents.emplace_back([&](IEventHandle&) { return bool(blockedSnapshot); });
+            runtime.DispatchEvents(blocked);
+            runtime.SetEventFilter(std::move(previous));
+            runtime.Send(new IEventHandle(blockedSnapshot->Recipient, sender, new NGRpcService::TEvClientLost()));
+            const auto cancelled = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(cancelled->Get()->Record.GetYdbStatus(), Ydb::StatusIds::CANCELLED);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            UNIT_ASSERT(uploader->BuildTraceTrees());
+            AssertStatus(*uploader, "Acquire snapshot", NTraceProto::Status::STATUS_CODE_ERROR);
+            const auto* snapshot = FindSpan(*uploader, "Acquire snapshot");
+            const auto* query = FindSpan(*uploader, "Execute query");
+            UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*snapshot, "ydb.status_code")->value().string_value(), "CANCELLED");
+            UNIT_ASSERT(snapshot->end_time_unix_nano() <= query->end_time_unix_nano());
+
+            ClearUploader(*uploader);
+            runtime.Send(blockedSnapshot.Release());
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            UNIT_ASSERT(uploader->Spans.empty());
+            ExecRequest(runtime, sender, makeRequest());
+            UNIT_ASSERT(uploader->BuildTraceTrees());
+            UNIT_ASSERT_VALUES_EQUAL(uploader->Traces.size(), 1);
+            AssertStatus(*uploader, "Acquire snapshot", NTraceProto::Status::STATUS_CODE_OK);
+            AssertStatus(*uploader, "Execute query", NTraceProto::Status::STATUS_CODE_OK);
         }
     }
 

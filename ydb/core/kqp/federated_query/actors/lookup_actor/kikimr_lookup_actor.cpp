@@ -66,8 +66,7 @@ void Backtick(IOutputStream& os, const std::string_view s) {
 }
 } // namespace {
 
-namespace NYql::NDq {
-
+namespace NYql::NDq::NDqSourceLookup {
 namespace {
     // TODO consider moving to lookup parameters (...but likely not)
     constexpr ui32 RetriesLimit = 22;
@@ -121,7 +120,7 @@ namespace {
             EvQuerySessionState,
             EvDatabaseStatesCleanup,
 
-            // TDqSourceKikimrLookupActor
+            // TKikimrLookupActor
             // public
             EvSessionAcquired,
             EvSessionError,
@@ -564,10 +563,10 @@ namespace {
         delete sessionInfo;
     }
 
-    class TDqSourceKikimrLookupActor
+    class TKikimrLookupActor
         : public NYql::NDq::IDqAsyncLookupSource,
-          public NActors::TActorBootstrapped<TDqSourceKikimrLookupActor> {
-        using TBase = NActors::TActorBootstrapped<TDqSourceKikimrLookupActor>;
+          public NActors::TActorBootstrapped<TKikimrLookupActor> {
+        using TBase = NActors::TActorBootstrapped<TKikimrLookupActor>;
 
         struct TLookupState {
             using TPtr = std::shared_ptr<TLookupState>;
@@ -616,12 +615,12 @@ namespace {
         //               1) if invalidate - destroy session
         //               2) if not invalidate - serve WaitingQueue or return session to pool if empty
     public:
-        TDqSourceKikimrLookupActor(
+        TKikimrLookupActor(
             NActors::TActorId&& parentId,
             ::NMonitoring::TDynamicCounterPtr taskCounters,
             std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
             std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
-            NKqpProto::TDqSourceKikimrLookupSource&& lookupSource,
+            NKqpProto::TKikimrLookupSource&& lookupSource,
             const NKikimr::NMiniKQL::TStructType* keyType,
             const NKikimr::NMiniKQL::TStructType* payloadType,
             const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
@@ -648,7 +647,7 @@ namespace {
             InitMonCounters(taskCounters);
         }
 
-        ~TDqSourceKikimrLookupActor() {
+        ~TKikimrLookupActor() {
             Free();
         }
 
@@ -682,10 +681,10 @@ namespace {
                     COMMON_LOG,
                     {"database", LookupSource.GetDatabase()},
                     {"parentId", ParentId});
-            Become(&TDqSourceKikimrLookupActor::StateFunc);
+            Become(&TKikimrLookupActor::StateFunc);
         }
 
-        static constexpr char ActorName[] = "KIKIMR_PROVIDER_LOOKUP_ACTOR";
+        static constexpr char ActorName[] = "DQ_SOURCE_KIKIMR_LOOKUP_ACTOR";
 
     private: // IDqAsyncLookupSource
         size_t GetMaxSupportedKeysInRequest() const override {
@@ -1256,7 +1255,7 @@ namespace {
 
     } // namespace
 
-    std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateDqSourceKikimrLookupActor(
+    std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateKikimrLookupActor(
         NActors::TActorId parentId,
         ::NMonitoring::TDynamicCounterPtr taskCounters,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
@@ -1271,7 +1270,7 @@ namespace {
     )
     {
         auto guard = Guard(*alloc);
-        const auto actor = new TDqSourceKikimrLookupActor(
+        const auto actor = new TKikimrLookupActor(
             std::move(parentId),
             taskCounters,
             alloc,
@@ -1293,4 +1292,4 @@ namespace {
         return NActors::TActorId(0, "kqp_fq_qspsa");
     }
 
-} // namespace NYql::NDq
+} // namespace NYql::NDq::NDqSourceLookup

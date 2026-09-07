@@ -2121,10 +2121,10 @@ private:
         if (!FeatureFlags.GetEnableDqSourceStreamLookupJoinLocalLookups() || DqSourceStreamLookupJoinQueryPoolService) {
             return;
         }
-        auto actor = NYql::NDq::CreateQuerySessionPoolActor();
+        auto actor = NYql::NDq::NDqSourceLookup::CreateQuerySessionPoolActor();
         DqSourceStreamLookupJoinQueryPoolService = TActivationContext::Register(actor);
         TActivationContext::ActorSystem()->RegisterLocalService(
-                NYql::NDq::QuerySessionPoolServiceActorId(), DqSourceStreamLookupJoinQueryPoolService);
+                NYql::NDq::NDqSourceLookup::QuerySessionPoolServiceActorId(), DqSourceStreamLookupJoinQueryPoolService);
     }
 
 private:

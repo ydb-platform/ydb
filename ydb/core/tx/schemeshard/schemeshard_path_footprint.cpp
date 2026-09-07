@@ -15,8 +15,7 @@ namespace {
 using EKind = EPathRefKind;
 using ERole = EPathRefRole;
 
-////////////////////////////////////////////////////////////////////////////////
-// The static columns of SCHEMESHARD_PATH_FIELDS, indexed by EPathField.
+// Metadata indexed by EPathField.
 
 #define SCHEMESHARD_PATH_FIELD_TEMPLATE(name, tpl, proto, kind, role) TStringBuf(tpl),
 #define SCHEMESHARD_PATH_FIELD_PROTO(name, tpl, proto, kind, role) TStringBuf(proto),
@@ -108,15 +107,12 @@ const TVector<TStringBuf>& KnownPathFieldNames() {
         TVector<TStringBuf> collected;
         collected.reserve(PathFieldCount);
         for (const TStringBuf name : FieldProtoNames) {
-            // Empty for a synthetic Implicit marker, for the working dir, and
-            // for an id-valued field: the descriptor walk classifies string
-            // fields only.
+            // Synthetic and ID fields have no protobuf string field.
             if (!name.empty()) {
                 collected.push_back(name);
             }
         }
-        // Several fields share one protobuf field (the same submessage read
-        // under two prefixes, e.g. Replication and AlterReplication).
+        // Operations may share a protobuf field.
         SortUnique(collected);
         return collected;
     }();
@@ -148,11 +144,7 @@ TStringBuf PathRefRoleName(EPathRefRole role) {
 
 namespace {
 
-// NKikimr::JoinPath always inserts the separator, so joining an empty leaf
-// yields a trailing slash. An empty leaf here means "the directory itself":
-// that is what a PathUnderWorkingDir/Absolute ref with no value stands for
-// (CreateFullBackupOp's working dir), and TPath::Child would not add a segment
-// for it either.
+// An empty leaf denotes the directory itself, without a trailing slash.
 TString JoinLeafUnder(TStringBuf dir, TStringBuf leaf) {
     if (leaf.empty()) {
         return TString(dir);
@@ -163,8 +155,6 @@ TString JoinLeafUnder(TStringBuf dir, TStringBuf leaf) {
     return TStringBuilder() << dir << '/' << leaf;
 }
 
-// The string form of ResolveRelativeOrAbsolute: a base that starts with a
-// slash is already absolute, anything else hangs off the working dir.
 TString JoinRelativeOrAbsolute(TStringBuf workingDir, TStringBuf value) {
     if (value.StartsWith('/')) {
         return TString(value);
@@ -181,13 +171,11 @@ TString JoinPathRef(TStringBuf workingDir, const TPathRef& ref, const TVector<TS
     case EPathRefKind::PathUnderWorkingDir:
         return JoinRelativeOrAbsolute(workingDir, ref.Value);
     case EPathRefKind::PathUnderWorkingDirSplit:
-        // TPath::Child(value, TSplitChildTag{}) dives the value one segment at
-        // a time under the working dir, so a leading slash does not escape it.
+        // A leading slash does not escape WorkingDir with TSplitChildTag.
         return JoinLeafUnder(workingDir,
             ref.Value.StartsWith('/') ? ref.Value.substr(1) : ref.Value);
     case EPathRefKind::Absolute:
-        // Propose() resolves these on their own; the working dir is never
-        // joined in. An empty value stands for the working dir itself.
+        // An empty value denotes WorkingDir.
         return ref.Value.empty() ? TString(workingDir) : TString(ref.Value);
     case EPathRefKind::LeafUnderSibling: {
         const TString base = ref.BasePath.empty() && ref.AnchorIndex >= 0
@@ -198,7 +186,6 @@ TString JoinPathRef(TStringBuf workingDir, const TPathRef& ref, const TVector<TS
     }
     case EPathRefKind::ById:
     case EPathRefKind::Implicit:
-        // A path id and a runtime-derived set both need schemeshard state.
         return TString();
     }
     return TString();

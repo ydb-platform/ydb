@@ -321,7 +321,9 @@ namespace NKikimr::NDDisk {
                 }
                 return;
             }
-            if (const auto validation = ValidatePayloadChecksums(record, data)) {
+            if (const auto validation = Config.CheckChecksumBeforeWrite
+                    ? ValidatePayloadChecksums(record, data)
+                    : std::nullopt) {
                 SyncReadCookiesInFlight.erase(ev->Cookie);
                 request.Status = validation->Status;
                 request.ErrorReason << validation->ErrorReason;

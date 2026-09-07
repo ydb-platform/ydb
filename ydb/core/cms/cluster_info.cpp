@@ -510,17 +510,13 @@ void TClusterInfo::AddTablet(ui32 nodeId, const NKikimrWhiteboard::TTabletStateI
     tablet.Leader = info.GetLeader();
     tablet.NodeId = nodeId;
 
-    const TTabletInstanceId tabletInstanceId = {
-        info.GetTabletId(),
-        info.GetFollowerId(),
-    };
     if (tablet.Leader
         && tablet.State == NKikimrWhiteboard::TTabletStateInfo::Active
         && IsSystemTablet(tablet.Type))
     {
-        RunningSystemTabletsByNode[nodeId].insert(tabletInstanceId);
+        RunningSystemTabletsByNode[nodeId].insert(tablet.TabletId);
     } else if (auto it = RunningSystemTabletsByNode.find(nodeId); it != RunningSystemTabletsByNode.end()) {
-        it->second.erase(tabletInstanceId);
+        it->second.erase(tablet.TabletId);
         if (it->second.empty()) {
             RunningSystemTabletsByNode.erase(it);
         }

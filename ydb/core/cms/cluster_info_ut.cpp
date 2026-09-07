@@ -587,47 +587,57 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         const ui64 bscTabletId = MakeBSControllerID();
         const ui64 ssTabletId = 201;
 
-        auto makeCluster = [&]() {
+        TClusterInfoPtr cluster(new TClusterInfo);
+        cluster->AddNode(nodeInfo, nullptr);
+        auto &bscTab = *cluster->BootstrapConfig.AddTablet();
+        bscTab.SetType(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
+        bscTab.AddNode(1);
+        auto &ssTab = *cluster->BootstrapConfig.AddTablet();
+        ssTab.SetType(NKikimrConfig::TBootstrap::FLAT_SCHEMESHARD);
+        ssTab.AddNode(1);
+        cluster->GenerateSysTabletsNodesCheckers();
+
+        cluster->AddTablet(1, MakeTabletInfo(bscTabletId, TTabletTypes::BSController, TTabletStateInfo::Active, true));
+        cluster->AddTablet(1, MakeTabletInfo(ssTabletId, TTabletTypes::SchemeShard, TTabletStateInfo::Active, true));
+        UNIT_ASSERT(cluster->NodeHasRunningSystemTablet(1));
+
+        cluster->AddTablet(1, MakeTabletInfo(bscTabletId, TTabletTypes::BSController, TTabletStateInfo::Dead, true));
+        UNIT_ASSERT(cluster->NodeHasRunningSystemTablet(1));
+
+        cluster->AddTablet(1, MakeTabletInfo(ssTabletId, TTabletTypes::SchemeShard, TTabletStateInfo::Dead, true));
+        UNIT_ASSERT(!cluster->NodeHasRunningSystemTablet(1));
+
+        cluster->AddTablet(1, MakeTabletInfo(bscTabletId, TTabletTypes::BSController, TTabletStateInfo::Active, true));
+        UNIT_ASSERT(cluster->NodeHasRunningSystemTablet(1));
+    }
+
+    Y_UNIT_TEST(SysTabletMigratedLeaderOnDifferentNodes) {
+        const TEvInterconnect::TNodeInfo node1 = { 1, "::1", "test1", "test1", 1, TNodeLocation() };
+        const TEvInterconnect::TNodeInfo node2 = { 2, "::2", "test2", "test2", 2, TNodeLocation() };
+        const ui64 tabletId = MakeBSControllerID();
+        const auto active = MakeTabletInfo(tabletId, TTabletTypes::BSController, TTabletStateInfo::Active, true);
+        const auto dead = MakeTabletInfo(tabletId, TTabletTypes::BSController, TTabletStateInfo::Dead, true);
+
+        for (const bool activeReportFirst : {true, false}) {
             TClusterInfoPtr cluster(new TClusterInfo);
-            cluster->AddNode(nodeInfo, nullptr);
-            auto &bscTab = *cluster->BootstrapConfig.AddTablet();
-            bscTab.SetType(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
-            bscTab.AddNode(1);
-            auto &ssTab = *cluster->BootstrapConfig.AddTablet();
-            ssTab.SetType(NKikimrConfig::TBootstrap::FLAT_SCHEMESHARD);
-            ssTab.AddNode(1);
-            return cluster;
-        };
+            cluster->AddNode(node1, nullptr);
+            cluster->AddNode(node2, nullptr);
 
-        // BSController leader + SchemeShard follower → running (from BSController)
-        {
-            auto cluster = makeCluster();
-            cluster->AddTablet(1, MakeTabletInfo(bscTabletId, TTabletTypes::BSController, TTabletStateInfo::Active, true));
-            cluster->AddTablet(1, MakeTabletInfo(ssTabletId, TTabletTypes::SchemeShard, TTabletStateInfo::Active, false));
+            if (activeReportFirst) {
+                cluster->AddTablet(1, active);
+                cluster->AddTablet(2, dead);
+            } else {
+                cluster->AddTablet(2, dead);
+                cluster->AddTablet(1, active);
+            }
             cluster->GenerateSysTabletsNodesCheckers();
-            UNIT_ASSERT(cluster->NodeHasRunningSystemTablet(1));
-        }
 
-        // BSController follower + SchemeShard leader → running (from SchemeShard)
-        {
-            auto cluster = makeCluster();
-            cluster->AddTablet(1, MakeTabletInfo(bscTabletId, TTabletTypes::BSController, TTabletStateInfo::Active, false));
-            cluster->AddTablet(1, MakeTabletInfo(ssTabletId, TTabletTypes::SchemeShard, TTabletStateInfo::Active, true));
-            cluster->GenerateSysTabletsNodesCheckers();
-            UNIT_ASSERT(cluster->NodeHasRunningSystemTablet(1));
-        }
-
-        // Both followers — not running
-        {
-            auto cluster = makeCluster();
-            cluster->AddTablet(1, MakeTabletInfo(bscTabletId, TTabletTypes::BSController, TTabletStateInfo::Active, false));
-            cluster->AddTablet(1, MakeTabletInfo(ssTabletId, TTabletTypes::SchemeShard, TTabletStateInfo::Active, false));
-            cluster->GenerateSysTabletsNodesCheckers();
-            UNIT_ASSERT(!cluster->NodeHasRunningSystemTablet(1));
+            UNIT_ASSERT_C(cluster->NodeHasRunningSystemTablet(1), activeReportFirst);
+            UNIT_ASSERT_C(!cluster->NodeHasRunningSystemTablet(2), activeReportFirst);
         }
     }
 
-    Y_UNIT_TEST(SysTabletLeaderAndFollowerOnDifferentNodes) {
+    Y_UNIT_TEST(SysTabletClearNodeKeepsOtherNodeState) {
         TClusterInfoPtr cluster(new TClusterInfo);
         const TEvInterconnect::TNodeInfo node1 = { 1, "::1", "test1", "test1", 1, TNodeLocation() };
         const TEvInterconnect::TNodeInfo node2 = { 2, "::2", "test2", "test2", 2, TNodeLocation() };
@@ -638,29 +648,17 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         cluster->AddTablet(1, MakeTabletInfo(tabletId, TTabletTypes::BSController,
                                              TTabletStateInfo::Active, true));
         cluster->AddTablet(2, MakeTabletInfo(tabletId, TTabletTypes::BSController,
-                                             TTabletStateInfo::Active, false));
-        cluster->GenerateSysTabletsNodesCheckers();
+                                             TTabletStateInfo::Dead, true));
 
+        cluster->ClearNode(2);
         UNIT_ASSERT(cluster->NodeHasRunningSystemTablet(1));
         UNIT_ASSERT(!cluster->NodeHasRunningSystemTablet(2));
-    }
 
-    Y_UNIT_TEST(SysTabletFollowerDoesNotHideLeaderOnSameNode) {
-        TClusterInfoPtr cluster(new TClusterInfo);
-        const TEvInterconnect::TNodeInfo node = { 1, "::1", "test1", "test1", 1, TNodeLocation() };
-        cluster->AddNode(node, nullptr);
+        cluster->ClearNode(1);
+        UNIT_ASSERT(!cluster->NodeHasRunningSystemTablet(1));
 
-        const ui64 tabletId = MakeBSControllerID();
-        auto leader = MakeTabletInfo(tabletId, TTabletTypes::BSController,
-                                     TTabletStateInfo::Active, true);
-        leader.SetFollowerId(0);
-        auto follower = MakeTabletInfo(tabletId, TTabletTypes::BSController,
-                                       TTabletStateInfo::Active, false);
-        follower.SetFollowerId(1);
-
-        cluster->AddTablet(1, leader);
-        cluster->AddTablet(1, follower);
-
+        cluster->AddTablet(1, MakeTabletInfo(tabletId, TTabletTypes::BSController,
+                                             TTabletStateInfo::Active, true));
         UNIT_ASSERT(cluster->NodeHasRunningSystemTablet(1));
     }
 

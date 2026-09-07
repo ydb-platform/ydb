@@ -711,8 +711,7 @@ class TClusterInfo : public TThrRefBase {
 public:
     using TNodes = THashMap<ui32, TNodeInfoPtr>;
     using TTablets = THashMap<ui64, TTabletInfo>;
-    using TTabletInstanceId = std::pair<ui64, ui32>;
-    using TRunningSystemTabletsByNode = THashMap<ui32, THashSet<TTabletInstanceId>>;
+    using TRunningSystemTabletsByNode = THashMap<ui32, THashSet<ui64>>;
     using TPDisks = THashMap<TPDiskID, TPDiskInfoPtr, TPDiskIDHash>;
     using TVDisks = THashMap<TVDiskID, TVDiskInfoPtr>;
     using TBSGroups = THashMap<ui32, TBSGroupInfo>;

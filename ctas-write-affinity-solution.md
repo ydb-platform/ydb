@@ -640,39 +640,19 @@ for (const auto& stage : tx.Stages()) {
 
 Каждая стадия (`TDqStage`) сериализуется в `TKqpPhyStage`: Sources, Program, Connections (включая `TDqCnHashShuffle` → `TKqpPhyCnHashShuffle`), Sinks.
 
-**Было:** Сериализация плана Transform → Map → Sink. Поле `EnableCsWriteAffinity` отсутствует в proto.
+**Было:** Сериализация плана Transform → Map → Sink.
 
-**Стало (без аффинити):** Сериализация плана Transform → Map → Sink (логика не изменилась). Поле `EnableCsWriteAffinity` записывается как `false`.
+**Стало (без аффинити):** Сериализация плана Transform → Map → Sink (логика не изменилась).
 
-**Стало (с аффинити):** Сериализация плана Transform → HashShuffle(`ColumnShardHashV1`) → Sink. Поле `EnableCsWriteAffinity` записывается как `true`.
+**Стало (с аффинити):** Сериализация плана Transform → HashShuffle(`ColumnShardHashV1`) → Sink.
 
-##### 2.2.4.2 Запись `EnableCsWriteAffinity` в proto
 
-```cpp
-// kqp_query_compiler.cpp:1223
-txProto.SetEnableCsWriteAffinity(Config->GetEnableCsWriteAffinity());
-```
-
-Config Setting `TKikimrConfiguration::EnableCsWriteAffinity` (раздел 2.4.1) копируется в proto `TKqpPhyTx.EnableCsWriteAffinity`. Поле записывается для информационных целей, но **не используется исполнителем как gate** — исполнитель детектит affinity по наличию `ColumnShardHashV1` в DQ-графе (раздел 2.3).
-
-Определение поля ([`kqp_physical.proto:752`](ydb/core/protos/kqp_physical.proto:752)):
-```protobuf
-bool EnableCsWriteAffinity = 13;
-```
-
-**Было:** Поле `EnableCsWriteAffinity` отсутствует в `TKqpPhyTx` proto.
-
-**Стало (без аффинити):** `EnableCsWriteAffinity=false` записывается в proto. План не содержит `ColumnShardHashV1` — исполнитель не активирует affinity-путь.
-
-**Стало (с аффинити):** `EnableCsWriteAffinity=true` записывается в proto. План содержит `ColumnShardHashV1` — исполнитель активирует affinity-путь (раздел 2.3).
-
-##### 2.2.4.3 Выход: `TKqpPhyTx` proto
+##### 2.2.4.2 Выход: `TKqpPhyTx` proto
 
 Сводная таблица ключевых данных в proto:
 
 | Поле proto | Было | Стало (без аффинити) | Стало (с аффинити) | Источник |
 |------------|------|----------------------|---------------------|----------|
-| `TKqpPhyTx.EnableCsWriteAffinity` | поле отсутствует | `false` | `true` | `TKikimrConfiguration::GetEnableCsWriteAffinity()` |
 | `TKqpPhyCnHashShuffle.ColumnShardHashV1` | нет HashShuffle | нет HashShuffle (`Map`) | `oneof HashKind = ColumnShardHashV1` | Оптимизатор (раздел 2.2.3) |
 | `TKqpPhyCnHashShuffle.KeyColumns` | не заполняется | не заполняется | `["Col1", ...]` | `CtasShardingColumns` из Rewrite-фазы (раздел 2.1.1) |
 
@@ -687,7 +667,7 @@ bool EnableCsWriteAffinity = 13;
 - `Stages[].Inputs[].HashShuffle.KeyColumns` — sharding columns (заполняются `FillStages()`)
 - `Stages[].Sinks[].InternalSink` — настройки sink (заполняются Table Resolver'ом)
 
-**Детекция affinity:** Исполнитель определяет, что запрос скомпилирован с аффинити, по наличию `ColumnShardHashV1`-входа в DQ-графе. Если оптимизатор построил план с `ColumnShardHashV1` (раздел 2.2.3), исполнитель активирует affinity-путь. Флаг `EnableCsWriteAffinity` в proto (раздел 2.2.4) записывается компилятором, но не используется исполнителем как gate — если запрос был скомпилирован с аффинити, он выполняется с аффинити.
+**Детекция affinity:** Исполнитель определяет, что запрос скомпилирован с аффинити, по наличию `ColumnShardHashV1`-входа в DQ-графе. Если оптимизатор построил план с `ColumnShardHashV1` (раздел 2.2.3), исполнитель активирует affinity-путь.
 
 KqpExecuter превращает физический план (`TKqpPhyTx`) в исполняемые задачи и маршрутизирует данные к целевым ColumnShard'ам. Для CTAS с write affinity ключевая задача — создать **N per-shard задач** (по одной на шард), пиннить каждую к ноде своего шарда и настроить HashShuffle-маршрутизацию, чтобы каждая строка попала в задачу, владеющую её шардом.
 
@@ -1115,9 +1095,8 @@ settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(true));
 | `true` | Новый (с affinity) | Transform → HashShuffle(`ColumnShardHashV1`) → Sink (N per-shard задач) |
 | `false` | Старый (без affinity) | Один stage с inlined sink (стандартный путь) |
 
-[2] Флаг читается в двух местах:
+[2] Флаг читается в одном месте:
 - **Rewrite-фаза** ([`kqp_statement_rewrite.cpp:319`](ydb/core/kqp/host/kqp_statement_rewrite.cpp:319)): `GetEnableCsWriteAffinity()` — при `true` в FILL-стейтмент добавляются `CtasShardingColumns` (раздел 2.1.1).
-- **Компилятор** ([`kqp_query_compiler.cpp:1223`](ydb/core/kqp/query_compiler/kqp_query_compiler.cpp:1223)): значение копируется в proto `TKqpPhyTx.EnableCsWriteAffinity` (информационное поле, не используется исполнителем как gate — раздел 2.2.4).
 
 [3] Оптимизатор ([`kqp_opt_effects.cpp:221`](ydb/core/kqp/opt/kqp_opt_effects.cpp:221)) использует `node.CtasShardingColumns().IsValid()` как индикатор affinity: sharding columns установлены только когда флаг включён.
 
@@ -1180,10 +1159,7 @@ TaskIndexByHash[bucket] = i       — bucket = hash(sharding_key) / (Max/N)
 |------|------|
 | [`kqp_opt_effects.cpp`](ydb/core/kqp/opt/kqp_opt_effects.cpp:183) | Transform→HashShuffle→Sink |
 | [`kqp_opt_hash_func_propagate_transformer.cpp`](ydb/core/kqp/opt/kqp_opt_hash_func_propagate_transformer.cpp:100) | Сохранение ColumnShardHashV1 |
-| [`kqp_query_compiler.cpp`](ydb/core/kqp/query_compiler/kqp_query_compiler.cpp:1214) | EnableCsWriteAffinity |
 | [`kqp.proto`](ydb/core/protos/kqp.proto:930) | TargetShardIds, ExpectedNodeId |
-| [`kqp_physical.proto`](ydb/core/protos/kqp_physical.proto:751) | EnableCsWriteAffinity flag |
-| [`kqp_prepared_query.h`](ydb/core/kqp/query_data/kqp_prepared_query.h:71) | EnableCsWriteAffinity() accessor |
 | [`kqp_table_resolver.cpp`](ydb/core/kqp/executer_actor/kqp_table_resolver.cpp:230) | CsShardingColumns + ShardKey |
 | [`kqp_executer_impl.h`](ydb/core/kqp/executer_actor/kqp_executer_impl.h:319) | Destination shard resolution |
 | [`kqp_tasks_graph.cpp`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp) | Tasks, channels, sinks + helper функции |

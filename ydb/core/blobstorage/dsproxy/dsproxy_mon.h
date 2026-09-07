@@ -151,9 +151,8 @@ protected:
     TIntrusivePtr<::NMonitoring::TDynamicCounters> PercentileCounters;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> ResponseGroup;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> StateGroup;
-    ::NMonitoring::TDynamicCounters::TCounterPtr IsDormant;
-    ::NMonitoring::TDynamicCounters::TCounterPtr IsActive;
-    ::NMonitoring::TDynamicCounters::TCounterPtr DormancyTransitions;
+    ::NMonitoring::TDynamicCounters::TCounterPtr TransitionsToDormant;
+    ::NMonitoring::TDynamicCounters::TCounterPtr TransitionsToActive;
     ui64 GroupIdGen = Max<ui64>(); // group id:group gen
     std::atomic<bool> IsLimitedMon = ATOMIC_VAR_INIT(true);
 
@@ -305,8 +304,7 @@ public:
             const TIntrusivePtr<::NMonitoring::TDynamicCounters>& overviewCounters,
             const TIntrusivePtr<TBlobStorageGroupInfo>& info,
             const TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
-            bool isLimitedMon,
-            bool isDormant = false);
+            bool isLimitedMon);
 
     bool GetGroupIdGen(ui32 *groupId, ui32 *groupGen) const;
 
@@ -403,7 +401,7 @@ public:
     void ThroughputUpdate();
     void PrepareForDormancy();
     void ResetThroughput();
-    void SetDormant(bool isDormant);
+    void CountDormancyTransition(bool isDormant);
 };
 
 } // NKikimr

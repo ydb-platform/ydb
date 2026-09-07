@@ -38,7 +38,7 @@ namespace NKikimr {
             {"isDormant", IsDormant});
 
         if (Mon) {
-            Mon->SetDormant(IsDormant);
+            Mon->CountDormancyTransition(IsDormant);
         }
         if (MonActor) {
             Send(MonActor, new TEvSetProxyDormant(IsDormant));

@@ -10,8 +10,7 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
         const TIntrusivePtr<::NMonitoring::TDynamicCounters>& overviewCounters,
         const TIntrusivePtr<TBlobStorageGroupInfo>& info,
         const TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
-        bool constructLimited,
-        bool isDormant)
+        bool constructLimited)
     : NodeMon(nodeMon)
     , Counters(counters)
     , PercentileCounters(percentileCounters)
@@ -23,11 +22,8 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
     , ActiveRequestsGroup(Counters->GetSubgroup("subsystem", "requests"))
     , CancellationGroup(Counters->GetSubgroup("subsystem", "cancellation"))
 {
-    IsDormant = StateGroup->GetCounter("IsDormant");
-    IsActive = StateGroup->GetCounter("IsActive");
-    DormancyTransitions = StateGroup->GetCounter("DormancyTransitions", true);
-    *IsDormant = isDormant;
-    *IsActive = !isDormant;
+    TransitionsToDormant = StateGroup->GetCounter("TransitionsToDormant", true);
+    TransitionsToActive = StateGroup->GetCounter("TransitionsToActive", true);
 
     if (info) {
         const TBlobStorageGroupInfo::TDynamicInfo& dyn = info->GetDynamicInfo();
@@ -130,10 +126,12 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
     CancelledEvents = CancellationGroup->GetCounter("CancelledEvents", true);
 }
 
-void TBlobStorageGroupProxyMon::SetDormant(bool isDormant) {
-    *IsDormant = isDormant;
-    *IsActive = !isDormant;
-    ++*DormancyTransitions;
+void TBlobStorageGroupProxyMon::CountDormancyTransition(bool isDormant) {
+    if (isDormant) {
+        ++*TransitionsToDormant;
+    } else {
+        ++*TransitionsToActive;
+    }
 }
 
 void TBlobStorageGroupProxyMon::BecomeFull() {

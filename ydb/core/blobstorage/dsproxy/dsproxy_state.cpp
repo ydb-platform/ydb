@@ -378,8 +378,7 @@ namespace NKikimr {
             TIntrusivePtr<::NMonitoring::TDynamicCounters> overviewGroup = GetServiceCounters(
                     AppData()->Counters, "dsproxy_overview");
 
-            Mon.Reset(new TBlobStorageGroupProxyMon(group, percentileGroup, overviewGroup, Info, NodeMon, limited,
-                    IsDormant));
+            Mon.Reset(new TBlobStorageGroupProxyMon(group, percentileGroup, overviewGroup, Info, NodeMon, limited));
             BSProxyCtx.Reset(new TBSProxyContext(group->GetSubgroup("subsystem", "memproxy")));
             MonActor = RegisterWithSameMailbox(CreateBlobStorageGroupProxyMon(Mon, GroupId.GetRawId(), Info, SelfId(),
                     IsDormant));

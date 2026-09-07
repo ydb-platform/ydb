@@ -139,19 +139,16 @@ Y_UNIT_TEST_SUITE(TDSProxyDormantTest) {
         const auto stateCounters = GetServiceCounters(runtime.GetAppData(env.NodeIdx).Counters, "dsproxy")
             ->GetSubgroup("blobstorageproxy", Sprintf("%09" PRIu64, env.GroupId))
             ->GetSubgroup("subsystem", "state");
-        const auto dormantCounter = stateCounters->GetCounter("IsDormant");
-        const auto activeCounter = stateCounters->GetCounter("IsActive");
-        const auto transitionCounter = stateCounters->GetCounter("DormancyTransitions", true);
-        UNIT_ASSERT_VALUES_EQUAL(dormantCounter->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(activeCounter->Val(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(transitionCounter->Val(), 0);
+        const auto transitionsToDormant = stateCounters->GetCounter("TransitionsToDormant", true);
+        const auto transitionsToActive = stateCounters->GetCounter("TransitionsToActive", true);
+        UNIT_ASSERT_VALUES_EQUAL(transitionsToDormant->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(transitionsToActive->Val(), 0);
 
         AdvancePastOneMinute(runtime);
         const TProxyState dormant = QueryProxyState(runtime, env);
         UNIT_ASSERT(dormant.IsDormant);
-        UNIT_ASSERT_VALUES_EQUAL(dormantCounter->Val(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(activeCounter->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(transitionCounter->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(transitionsToDormant->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(transitionsToActive->Val(), 0);
         UNIT_ASSERT(!sawDormantDeadlineWakeup.load(std::memory_order_relaxed));
         UNIT_ASSERT_VALUES_EQUAL(dormant.GroupQueues.Get(), initial.GroupQueues.Get());
         UNIT_ASSERT_VALUES_EQUAL(GetQueueActorIds(dormant.GroupQueues), queueActorIds);
@@ -160,9 +157,8 @@ Y_UNIT_TEST_SUITE(TDSProxyDormantTest) {
         SendGetBlock(runtime, env);
         const TProxyState awake = QueryProxyState(runtime, env);
         UNIT_ASSERT(!awake.IsDormant);
-        UNIT_ASSERT_VALUES_EQUAL(dormantCounter->Val(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(activeCounter->Val(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(transitionCounter->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(transitionsToDormant->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(transitionsToActive->Val(), 1);
         UNIT_ASSERT(sawActiveDeadlineCadenceAfterWake.load(std::memory_order_relaxed));
         UNIT_ASSERT_VALUES_EQUAL(awake.GroupQueues.Get(), initial.GroupQueues.Get());
         UNIT_ASSERT_VALUES_EQUAL(GetQueueActorIds(awake.GroupQueues), queueActorIds);

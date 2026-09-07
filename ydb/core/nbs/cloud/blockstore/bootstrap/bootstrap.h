@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/compat/libs/service/public.h>
+#include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/public.h>
 
 namespace NKikimrConfig {
 class TNbsConfig;
@@ -15,7 +15,8 @@ void StartNbsService();
 void StopNbsService();
 
 // Returns NBS2 frontend facade.
-NCloud::NBlockStore::IBlockStorePtr GetNbsFrontendBlockStore();
+NYdb::NBS::NNbs1CompatApi::NBlockStore::IBlockStorePtr
+GetNbsFrontendBlockStore();
 
 ////////////////////////////////////////////////////////////////////////////////
 

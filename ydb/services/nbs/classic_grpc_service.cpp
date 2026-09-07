@@ -1,9 +1,9 @@
 #include "classic_grpc_service.h"
 
-#include <ydb/core/nbs/cloud/blockstore/compat/libs/service/service_method.h>
+#include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service_method.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 
-#include <ydb/core/nbs/cloud/storage/core/compat/protos/request_source.pb.h>
+#include <ydb/core/nbs/nbs1_compat_api/cloud/storage/core/protos/request_source.pb.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 
 #include <ydb/library/grpc/server/grpc_counters.h>
@@ -11,7 +11,7 @@
 
 namespace NKikimr::NGRpcService {
 
-    using namespace NCloud::NBlockStore;
+    using namespace NYdb::NBS::NNbs1CompatApi::NBlockStore;
 
     ////////////////////////////////////////////////////////////////////////////////
 
@@ -51,7 +51,7 @@ namespace NKikimr::NGRpcService {
         auto& internal = *request->MutableHeaders()->MutableInternal();
         internal.Clear();
         internal.SetRequestSource(
-            NCloud::NProto::SOURCE_INSECURE_CONTROL_CHANNEL);
+            NYdb::NBS::NNbs1CompatApi::NProto::SOURCE_INSECURE_CONTROL_CHANNEL);
         internal.SetPeer(requestContext->GetPeer());
 
         auto retainedRequestContext =
@@ -99,7 +99,7 @@ namespace NKikimr::NGRpcService {
         NYdbGrpc::FakeCounterBlock())                                 \
         ->Run();
 
-        BLOCKSTORE_GRPC_SERVICE(SETUP_CLASSIC_NBS_METHOD)
+        NBS1_COMPAT_BLOCKSTORE_GRPC_SERVICE(SETUP_CLASSIC_NBS_METHOD)
 
 #undef SETUP_CLASSIC_NBS_METHOD
     }

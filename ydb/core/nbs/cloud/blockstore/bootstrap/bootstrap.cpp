@@ -124,7 +124,8 @@ void StopNbsService()
     }
 }
 
-NCloud::NBlockStore::IBlockStorePtr GetNbsFrontendBlockStore()
+NYdb::NBS::NNbs1CompatApi::NBlockStore::IBlockStorePtr
+GetNbsFrontendBlockStore()
 {
     if (!NbsService || !NbsService->Frontend) {
         return {};

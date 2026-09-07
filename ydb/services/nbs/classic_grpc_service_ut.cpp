@@ -1,9 +1,10 @@
 #include <ydb/services/nbs/classic_grpc_service.h>
 
-#include <ydb/core/nbs/cloud/blockstore/compat/libs/service/service_method.h>
+#include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/public/api/grpc/service.pb.h>
+#include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service_method.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/blockstore_facade.h>
 
-#include <ydb/core/nbs/cloud/storage/core/compat/protos/request_source.pb.h>
+#include <ydb/core/nbs/nbs1_compat_api/cloud/storage/core/protos/request_source.pb.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 
 #include <ydb/library/grpc/server/grpc_server.h>
@@ -15,6 +16,7 @@
 
 #include <grpcpp/create_channel.h>
 #include <grpcpp/generic/generic_stub.h>
+#include <grpcpp/impl/client_unary_call.h>
 
 #include <chrono>
 #include <mutex>
@@ -23,9 +25,43 @@ namespace NKikimr::NGRpcService {
 
     namespace {
 
-        using namespace NCloud::NBlockStore;
+        using namespace NYdb::NBS::NNbs1CompatApi::NBlockStore;
 
         ////////////////////////////////////////////////////////////////////////////////
+
+        // Calls literal classic paths independently of server registration and
+        // the renamed service.proto. This must not use the adapter's name.
+        class TClassicNbsTestClient final {
+        public:
+            explicit TClassicNbsTestClient(std::shared_ptr<grpc::Channel> channel)
+                : Channel(std::move(channel))
+            {
+            }
+
+#define TEST_CLIENT_METHOD(name)                                        \
+    grpc::Status name(grpc::ClientContext* context,                     \
+                      const NProto::T##name##Request& request,          \
+                      NProto::T##name##Response* response) {            \
+        return grpc::internal::BlockingUnaryCall(                       \
+            Channel.get(),                                              \
+            grpc::internal::RpcMethod(                                  \
+                "/NCloud.NBlockStore.NProto.TBlockStoreService/" #name, \
+                grpc::internal::RpcMethod::NORMAL_RPC),                 \
+            context, request, response);                                \
+    }
+
+            // Deliberately independent of the server's supported-method macro.
+            TEST_CLIENT_METHOD(Ping)
+            TEST_CLIENT_METHOD(MountVolume)
+            TEST_CLIENT_METHOD(UnmountVolume)
+            TEST_CLIENT_METHOD(ReadBlocks)
+            TEST_CLIENT_METHOD(WriteBlocks)
+
+#undef TEST_CLIENT_METHOD
+
+        private:
+            const std::shared_ptr<grpc::Channel> Channel;
+        };
 
         // Runs the classic service on a real YDB gRPC server for transport tests.
         class TClassicNbsGrpcTestServer final {
@@ -53,8 +89,8 @@ namespace NKikimr::NGRpcService {
             }
 
             // Returns a control-service stub connected to the test server.
-            std::unique_ptr<NProto::TBlockStoreService::Stub> CreateControlStub() const {
-                return NProto::TBlockStoreService::NewStub(Channel);
+            std::unique_ptr<TClassicNbsTestClient> CreateControlStub() const {
+                return std::make_unique<TClassicNbsTestClient>(Channel);
             }
 
             // Returns a type-agnostic stub connected to the test server.
@@ -129,6 +165,22 @@ namespace NKikimr::NGRpcService {
         ////////////////////////////////////////////////////////////////////////////////
 
         Y_UNIT_TEST_SUITE(TClassicNbsGrpcServiceTest) {
+            Y_UNIT_TEST(ShouldIsolateProtobufDescriptors) {
+                const auto* file = google::protobuf::DescriptorPool::generated_pool()
+                                       ->FindFileByName(
+                                           "ydb/core/nbs/nbs1_compat_api/cloud/blockstore/public/api/grpc/service.proto");
+                UNIT_ASSERT(file);
+                const auto* service = file->FindServiceByName("TBlockStoreService");
+                UNIT_ASSERT(service);
+                UNIT_ASSERT_VALUES_EQUAL(service->full_name(),
+                                         "NYdb.NBS.NNbs1CompatApi.NBlockStore.NProto.TBlockStoreService");
+                UNIT_ASSERT_VALUES_EQUAL(service->method_count(), 5);
+                UNIT_ASSERT_VALUES_EQUAL(NProto::TPingRequest::descriptor()->full_name(),
+                                         "NYdb.NBS.NNbs1CompatApi.NBlockStore.NProto.TPingRequest");
+                UNIT_ASSERT_VALUES_EQUAL(TClassicNbsGrpcServiceAdapter::service_full_name(),
+                                         "NCloud.NBlockStore.NProto.TBlockStoreService");
+            }
+
             Y_UNIT_TEST(ShouldReflectFacadeLifecycleThroughTransport) {
                 auto blockStore = NYdb::NBS::NBlockStore::CreateNbsFrontendBlockStore();
                 TClassicNbsGrpcTestServer server(blockStore);
@@ -169,8 +221,8 @@ namespace NKikimr::NGRpcService {
                 TClassicNbsGrpcTestServer server(blockStore);
                 auto stub = server.CreateControlStub();
 
-#define TEST_METHOD(name, ...)                                                \
-    if (TStringBuf(#name) != "Ping") {                                        \
+#define TEST_METHOD(name)                                                     \
+    {                                                                         \
         NProto::T##name##Request request;                                     \
         NProto::T##name##Response response;                                   \
         grpc::ClientContext context;                                          \
@@ -183,7 +235,12 @@ namespace NKikimr::NGRpcService {
         UNIT_ASSERT_STRING_CONTAINS(response.GetError().GetMessage(), #name); \
     }
 
-                BLOCKSTORE_GRPC_SERVICE(TEST_METHOD)
+                // Keep the expected API independent of registration macros.
+                // Ping is exercised separately by the lifecycle test.
+                TEST_METHOD(MountVolume)
+                TEST_METHOD(UnmountVolume)
+                TEST_METHOD(ReadBlocks)
+                TEST_METHOD(WriteBlocks)
 
 #undef TEST_METHOD
             }
@@ -215,7 +272,7 @@ namespace NKikimr::NGRpcService {
                     static_cast<ui32>(
                         recorded.Headers.GetInternal().GetRequestSource()),
                     static_cast<ui32>(
-                        NCloud::NProto::SOURCE_INSECURE_CONTROL_CHANNEL));
+                        NYdb::NBS::NNbs1CompatApi::NProto::SOURCE_INSECURE_CONTROL_CHANNEL));
                 UNIT_ASSERT(!recorded.Headers.GetInternal().GetPeer().empty());
 
                 request.MutableHeaders()->MutableInternal()->SetPeer("client-peer");
@@ -236,39 +293,45 @@ namespace NKikimr::NGRpcService {
                     1);
             }
 
-            Y_UNIT_TEST(ShouldRejectUnknownMethodAtTransportLevel) {
+            Y_UNIT_TEST(ShouldRejectUnknownAndPrivateMethodPaths) {
                 auto blockStore = NYdb::NBS::NBlockStore::CreateNbsFrontendBlockStore();
                 blockStore->Start();
                 TClassicNbsGrpcTestServer server(blockStore);
                 auto stub = server.CreateGenericStub();
 
-                grpc::ClientContext context;
-                SetDeadline(&context);
-                grpc::ByteBuffer request;
-                grpc::ByteBuffer response;
-                grpc::CompletionQueue completionQueue;
-                auto call = stub->PrepareUnaryCall(
-                    &context,
+                // The isolated protobuf package is not another public API.
+                TVector<TString> notSupportedMethods = {
                     "/NCloud.NBlockStore.NProto.TBlockStoreService/DescribeVolume",
-                    request,
-                    &completionQueue);
-                UNIT_ASSERT(call);
+                    "/NYdb.NBS.NNbs1CompatApi.NBlockStore.NProto.TBlockStoreService/Ping"};
+                for (TString &path : notSupportedMethods) {
+                    grpc::ClientContext context;
+                    SetDeadline(&context);
+                    grpc::ByteBuffer request;
+                    grpc::ByteBuffer response;
+                    grpc::CompletionQueue completionQueue;
+                    auto call = stub->PrepareUnaryCall(
+                        &context,
+                        path.c_str(),
+                        request,
+                        &completionQueue);
+                    UNIT_ASSERT(call);
 
-                call->StartCall();
-                grpc::Status status;
-                void* const expectedTag = reinterpret_cast<void*>(1);
-                call->Finish(&response, &status, expectedTag);
+                    call->StartCall();
+                    grpc::Status status;
+                    void* const expectedTag = reinterpret_cast<void*>(1);
+                    call->Finish(&response, &status, expectedTag);
 
-                void* actualTag = nullptr;
-                bool ok = false;
-                UNIT_ASSERT(completionQueue.Next(&actualTag, &ok));
-                UNIT_ASSERT(ok);
-                UNIT_ASSERT(actualTag == expectedTag);
-                completionQueue.Shutdown();
+                    void* actualTag = nullptr;
+                    bool ok = false;
+                    UNIT_ASSERT(completionQueue.Next(&actualTag, &ok));
+                    UNIT_ASSERT(ok);
+                    UNIT_ASSERT(actualTag == expectedTag);
+                    completionQueue.Shutdown();
 
-                UNIT_ASSERT_VALUES_EQUAL(
-                    status.error_code(),
-                    grpc::StatusCode::UNIMPLEMENTED);
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        status.error_code(),
+                        grpc::StatusCode::UNIMPLEMENTED);
+                }
             }
         } // Y_UNIT_TEST_SUITE(TClassicNbsGrpcServiceTest)
 

@@ -1,13 +1,14 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/compat/libs/service/public.h>
+#include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/public.h>
 
 namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 // Creates the classic-compatible block store facade
-NCloud::NBlockStore::IBlockStorePtr CreateNbsFrontendBlockStore();
+NYdb::NBS::NNbs1CompatApi::NBlockStore::IBlockStorePtr
+CreateNbsFrontendBlockStore();
 
 ////////////////////////////////////////////////////////////////////////////////
 

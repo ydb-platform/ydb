@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/compat/libs/service/public.h>
+#include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/public.h>
 
 namespace NYdb::NBS::NBlockStore {
 
@@ -21,10 +21,11 @@ public:
     void Stop();
 
     // Returns the shared classic-compatible facade.
-    [[nodiscard]] NCloud::NBlockStore::IBlockStorePtr GetBlockStore() const;
+    [[nodiscard]] NYdb::NBS::NNbs1CompatApi::NBlockStore::IBlockStorePtr
+    GetBlockStore() const;
 
 private:
-    NCloud::NBlockStore::IBlockStorePtr BlockStore;
+    NYdb::NBS::NNbs1CompatApi::NBlockStore::IBlockStorePtr BlockStore;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

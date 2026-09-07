@@ -2,12 +2,12 @@ LIBRARY()
 
 SRCS(
     classic_grpc_service.cpp
+    classic_grpc_service_adapter.cpp
     grpc_service.cpp
 )
 
 PEERDIR(
-    ydb/core/nbs/cloud/blockstore/compat/libs/service
-    ydb/core/nbs/cloud/blockstore/compat/public/api/grpc
+    ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service
     ydb/core/nbs/cloud/storage/core/libs/common
     ydb/public/api/grpc
     ydb/library/grpc/server

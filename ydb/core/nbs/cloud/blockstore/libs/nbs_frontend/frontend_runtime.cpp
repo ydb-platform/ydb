@@ -2,7 +2,7 @@
 
 #include "blockstore_facade.h"
 
-#include <ydb/core/nbs/cloud/blockstore/compat/libs/service/service.h>
+#include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service.h>
 
 namespace NYdb::NBS::NBlockStore {
 
@@ -22,7 +22,8 @@ void TNbsFrontendRuntime::Stop()
     BlockStore->Stop();
 }
 
-NCloud::NBlockStore::IBlockStorePtr TNbsFrontendRuntime::GetBlockStore() const
+NYdb::NBS::NNbs1CompatApi::NBlockStore::IBlockStorePtr
+TNbsFrontendRuntime::GetBlockStore() const
 {
     return BlockStore;
 }

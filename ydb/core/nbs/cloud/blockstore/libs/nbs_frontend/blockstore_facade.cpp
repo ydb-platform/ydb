@@ -1,8 +1,8 @@
 #include "blockstore_facade.h"
 
-#include <ydb/core/nbs/cloud/blockstore/compat/libs/service/service_method.h>
-
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
+
+#include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service_method.h>
 
 #include <util/string/builder.h>
 #include <util/system/yassert.h>
@@ -20,9 +20,9 @@ constexpr TStringBuf NotAcceptingRequestsMessage =
 
 // Implements the classic IBlockStore boundary for the NBS2 frontend skeleton.
 class TNbsFrontendBlockStore final
-    : public NCloud::NBlockStore::TBlockStoreImpl<
+    : public NYdb::NBS::NNbs1CompatApi::NBlockStore::TBlockStoreImpl<
           TNbsFrontendBlockStore,
-          NCloud::NBlockStore::IBlockStore>
+          NYdb::NBS::NNbs1CompatApi::NBlockStore::IBlockStore>
 {
 public:
     // Opens the admission gate for requests.
@@ -38,7 +38,7 @@ public:
     }
 
     // The skeleton does not allocate data-path buffers.
-    NCloud::NBlockStore::TStorageBuffer AllocateBuffer(
+    NYdb::NBS::NNbs1CompatApi::NBlockStore::TStorageBuffer AllocateBuffer(
         size_t bytesCount) override
     {
         Y_UNUSED(bytesCount);
@@ -61,8 +61,9 @@ public:
             *response.MutableError() =
                 MakeError(E_REJECTED, TString(NotAcceptingRequestsMessage));
         } else if constexpr (
-            !std::
-                is_same_v<TMethod, NCloud::NBlockStore::TBlockStorePingMethod>)
+            !std::is_same_v<
+                TMethod,
+                NYdb::NBS::NNbs1CompatApi::NBlockStore::TBlockStorePingMethod>)
         {
             *response.MutableError() = MakeError(
                 E_NOT_IMPLEMENTED,
@@ -81,7 +82,8 @@ private:
 
 }   // namespace
 
-NCloud::NBlockStore::IBlockStorePtr CreateNbsFrontendBlockStore()
+NYdb::NBS::NNbs1CompatApi::NBlockStore::IBlockStorePtr
+CreateNbsFrontendBlockStore()
 {
     return std::make_shared<TNbsFrontendBlockStore>();
 }

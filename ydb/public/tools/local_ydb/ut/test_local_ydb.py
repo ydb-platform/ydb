@@ -147,6 +147,7 @@ class LocalYdb:
         # child allocates individual ports inside this range using its own locks.
         self.port_manager = PortManager()
         first_port = self.port_manager.get_port_range(0, RESERVED_PORT_COUNT)
+        # PortManager interprets the upper bound as exclusive.
         self.environment['VALID_PORT_RANGE'] = '{}:{}'.format(first_port, first_port + RESERVED_PORT_COUNT)
         self.environment['PORT_SYNC_PATH'] = str(self.working_directory / 'port-sync')
 

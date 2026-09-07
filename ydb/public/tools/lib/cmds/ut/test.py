@@ -333,7 +333,8 @@ def test_process_is_alive_handles_zombies(monkeypatch, state, threads, alive):
 def test_update_waits_for_stopped_process(tmp_path, monkeypatch):
     arguments = EmptyArguments()
     arguments.ydb_working_dir = str(tmp_path)
-    (tmp_path / 'ydb_recipe.json').write_text('{"nodes":{"1":{"pid":123,"stderr_file":"missing"}}}')
+    monkeypatch.setattr(cmds, '_verify_process_command', lambda *args: None)
+    (tmp_path / 'ydb_recipe.json').write_text('{"nodes":{"1":{"pid":123,"command":["/ydbd","server"],"stderr_file":"missing"}}}')
     events = []
     monkeypatch.setattr(cmds.os, 'kill', lambda pid, sig: events.append('kill'))
     monkeypatch.setattr(cmds, '_wait_for_process_exit', lambda pid: events.append('wait'))
@@ -355,9 +356,42 @@ def test_deploy_reports_reused_actor_config(tmp_path, monkeypatch, caplog):
 def test_update_does_not_start_before_process_exit(tmp_path, monkeypatch):
     arguments = EmptyArguments()
     arguments.ydb_working_dir = str(tmp_path)
-    (tmp_path / 'ydb_recipe.json').write_text('{"nodes":{"1":{"pid":123,"stderr_file":"missing"}}}')
+    monkeypatch.setattr(cmds, '_verify_process_command', lambda *args: None)
+    (tmp_path / 'ydb_recipe.json').write_text('{"nodes":{"1":{"pid":123,"command":["/ydbd","server"],"stderr_file":"missing"}}}')
     with mock.patch.object(cmds.os, 'kill'), mock.patch.object(cmds, 'start') as start:
         with mock.patch.object(cmds, '_wait_for_process_exit', side_effect=RuntimeError('still alive')):
             with pytest.raises(RuntimeError, match='still alive'):
                 cmds.update(arguments)
     start.assert_not_called()
+
+
+@pytest.mark.parametrize('actual,matches', [(b'/ydbd\0server\0', True), (b'/other\0server\0', False)])
+def test_verify_process_command(monkeypatch, actual, matches):
+    monkeypatch.setattr(cmds.sys, 'platform', 'linux')
+    with mock.patch('builtins.open', mock.mock_open(read_data=actual)):
+        if matches:
+            cmds._verify_process_command(123, ['/ydbd', 'server'])
+        else:
+            with pytest.raises(RuntimeError, match='command differs'):
+                cmds._verify_process_command(123, ['/ydbd', 'server'])
+
+
+@pytest.mark.parametrize('action', ['stop', 'update', 'cleanup'])
+def test_stop_permission_error_preserves_deployment(tmp_path, monkeypatch, action):
+    arguments = EmptyArguments()
+    arguments.ydb_working_dir = str(tmp_path)
+    (tmp_path / 'ydb_recipe.json').write_text('{"nodes":{"1":{"pid":123,"command":["/ydbd","server"]}}}')
+    monkeypatch.setattr(cmds, '_verify_process_command', lambda *args: None)
+    with mock.patch.object(cmds.os, 'kill', side_effect=OSError(cmds.errno.EPERM, 'not permitted')):
+        with mock.patch.object(cmds, 'start') as start, mock.patch.object(cmds, '_wait_for_process_exit') as wait:
+            with pytest.raises(RuntimeError, match='keeping the deployment intact'):
+                getattr(cmds, action)(arguments)
+    start.assert_not_called()
+    wait.assert_not_called()
+    assert (tmp_path / 'ydb_recipe.json').exists()
+
+
+def test_wait_permission_error_is_not_treated_as_exit():
+    with mock.patch.object(cmds, '_process_is_alive', side_effect=OSError(cmds.errno.EPERM, 'not permitted')):
+        with pytest.raises(RuntimeError, match='Cannot verify exit'):
+            cmds._wait_for_process_exit(123)

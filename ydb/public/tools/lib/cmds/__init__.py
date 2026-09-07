@@ -659,10 +659,29 @@ def _process_is_alive(pid):
 
 def _wait_for_process_exit(pid, timeout=30):
     deadline = time.time() + timeout
-    while _process_is_alive(pid):
-        if time.time() >= deadline:
-            raise RuntimeError("YDB process {} did not exit within {} seconds".format(pid, timeout))
-        time.sleep(0.1)
+    try:
+        while _process_is_alive(pid):
+            if time.time() >= deadline:
+                raise RuntimeError("YDB process {} did not exit within {} seconds".format(pid, timeout))
+            time.sleep(0.1)
+    except OSError as error:
+        raise RuntimeError("Cannot verify exit of YDB process {}: {}".format(pid, error))
+
+
+def _verify_process_command(pid, command):
+    if not sys.platform.startswith('linux'):
+        return
+    try:
+        with open('/proc/{}/cmdline'.format(pid), 'rb') as stream:
+            actual = stream.read().rstrip(b'\0').split(b'\0')
+    except OSError as error:
+        if error.errno in (errno.ENOENT, errno.ESRCH):
+            return
+        raise RuntimeError("Cannot verify YDB process {}: {}".format(pid, error))
+    if actual == [b''] and not _process_is_alive(pid):
+        return  # An unreaped zombie no longer has a command line.
+    if actual != [argument.encode('utf-8') for argument in command]:
+        raise RuntimeError("Refusing to stop PID {}: command differs from the recorded YDB command".format(pid))
 
 
 def _stop_instances(arguments):
@@ -677,10 +696,14 @@ def _stop_instances(arguments):
 
     for node_id, node_meta in info['nodes'].items():
         pid = node_meta['pid']
+        _verify_process_command(pid, node_meta['command'])
         try:
             os.kill(pid, signal.SIGKILL)
-        except OSError:
-            pass
+        except OSError as error:
+            if error.errno != errno.ESRCH:
+                raise RuntimeError(
+                    "Cannot stop YDB process {}: {}; keeping the deployment intact".format(pid, error)
+                )
         _wait_for_process_exit(pid)
 
         try:

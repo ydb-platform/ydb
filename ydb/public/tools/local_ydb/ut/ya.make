@@ -6,6 +6,10 @@ TEST_SRCS(
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
+PEERDIR(
+    library/python/port_manager
+)
+
 DEPENDS(
     ydb/public/tools/local_ydb
 )

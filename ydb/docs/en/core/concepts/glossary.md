@@ -42,7 +42,7 @@ A **hybrid node** is a process that simultaneously serves both roles of a [datab
 
 **Static nodes** are manually configured during the initial cluster initialization or re-configuration. Typically, they play the role of [storage nodes](#storage-node), but technically, it is possible to configure them to be [database nodes](#database-node) as well.
 
-#### Dynamic node {#dynamic-node}
+#### Dynamic node {#dynamic-node} {#dynamic}
 
 **Dynamic nodes** are added and removed from the cluster on the fly. They can only play the role of [database nodes](#database-node).
 

@@ -29,6 +29,18 @@
 
 #|
 || **Версия** | **Дата выпуска** | **Скачать** | **Контрольные суммы** | **Список изменений** ||
+|| **v26.1** |  |  |  |  ||
+|| v.26.1.1.ent.3 | 03.08.2026 |
+
+[Дистрибутив](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/26.1.1.ent.3/ydbd-enterprise-26.1.1.ent.3-stable-linux-amd64.tar.xz)
+[Отладочные символы](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/26.1.1.ent.3/ydbd-enterprise-26.1.1.ent.3-stable-linux-amd64-debug.tar.xz)
+
+|
+
+[К дистрибутиву](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/26.1.1.ent.3/checksums.txt)
+[К отладочным символам](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/26.1.1.ent.3/checksums.debug.txt)
+
+| [См. список](../changelog-enterprise.md#26-1-1-ent-3) ||
 || **v25.4** |  |  |  |  ||
 || v.25.4.1.ent.2 | 17.06.2026 |
 
@@ -190,6 +202,8 @@
 
 #|
 || **Версия** | **Дата выпуска** | **Скачать** | **Список изменений** ||
+|| **v26.1** |  |  |  |  ||
+|| v.26.1.1.ent.3 | 03.08.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterprise:26.1.1.ent.3` | [См. список](../changelog-enterprise.md#26-1-1-ent-3) ||
 || **v25.4** |  |  |  |  ||
 || v.25.4.1.ent.2 | 17.06.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.4.1.ent.2` | [См. список](../changelog-enterprise.md#25-4-1-ent-2) ||
 || **v25.3** |  |  |  |  ||

@@ -224,6 +224,12 @@ namespace NKikimr::NStorage {
                 if (Cfg->DDiskConfig->HasEnableChecksums()) {
                     ddiskConfig.EnableChecksums = Cfg->DDiskConfig->GetEnableChecksums();
                 }
+                if (Cfg->DDiskConfig->HasCheckChecksumBeforeWrite()) {
+                    ddiskConfig.CheckChecksumBeforeWrite = Cfg->DDiskConfig->GetCheckChecksumBeforeWrite();
+                }
+                if (Cfg->DDiskConfig->HasCheckChecksumWhenRead()) {
+                    ddiskConfig.CheckChecksumWhenRead = Cfg->DDiskConfig->GetCheckChecksumWhenRead();
+                }
             }
             if (Cfg->PBufferConfig) {
                 if (Cfg->PBufferConfig->HasInitChunks()) {

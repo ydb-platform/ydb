@@ -3,6 +3,7 @@
 #include <library/cpp/lwtrace/shuttle.h>
 #include <ydb/core/kqp/common/kqp_batch_operations.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
+#include <ydb/core/kqp/common/kqp_execution_trace.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
@@ -53,6 +54,10 @@ struct TEvKqpExecuter {
         // For BATCH operations only
         TVector<TSerializedCellVec> BatchOperationMaxKeys;
         TVector<ui32> BatchOperationKeyIds;
+
+        std::vector<TExecutionTraceSnapshot> ExecutionTraces;
+        TExecutionTraceTotals ExecutionTraceTotals;
+        size_t ExecutionTracesDropped = 0;
 
         enum class EExecutionType {
             Data,
@@ -122,6 +127,8 @@ struct TEvKqpExecuter {
         Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
         NYql::TIssues Issues;
         TDuration CpuTime;
+        TTimeWindow NavigateWindow;
+        TTimeWindow ResolveKeysWindow;
     };
 
     struct TEvPqTopicResolveStatus : public TEventLocal<TEvPqTopicResolveStatus,

@@ -5,6 +5,7 @@ package NKqpProto;
 option java_package = "ru.yandex.kikimr.proto";
 
 import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
 
 message TKqpStatsCompile {
     bool FromCache = 1;
@@ -56,10 +57,32 @@ message TKqpLockStats {
     repeated uint32 DeferredBreakerNodeIds = 6;  // Node IDs matching DeferredBreakerQuerySpanIds
 }
 
+// Bounded per-shard diagnostics collected for a task.
+message TKqpShardReadStats {
+    enum ETimingBoundary {
+        TIMING_BOUNDARY_UNSPECIFIED = 0;
+        REQUEST_SENT_TO_LAST_MESSAGE = 1;
+        FIRST_MESSAGE_TO_LAST_MESSAGE = 2;
+    }
+
+    uint64 ShardId = 1;
+    uint64 StartTimeMs = 2;  // absolute epoch milliseconds
+    uint64 FinishTimeMs = 3;
+    uint32 RetryCount = 4;
+    uint64 RowCount = 5;
+    uint32 NodeId = 6;
+    ETimingBoundary TimingBoundary = 7;
+    Ydb.StatusIds.StatusCode Status = 8;
+    bool Finished = 9;
+}
+
 // extra for NYql.NDqProto.TDqTaskStats
 message TKqpTaskExtraStats {
     TKqpScanTaskExtraStats ScanTaskExtraStats = 1;
     TKqpLockStats LockStats = 2;
+    uint32 ReadRetriesCount = 3;  // Total task read retries; independent of the bounded shard sample.
+    repeated TKqpShardReadStats ShardReads = 4;  // Failures, retried reads, and slowest successful reads.
+    uint32 ShardReadsDroppedCount = 5;  // Entries omitted from ShardReads by bounded retention.
 }
 
 message TNodeExecutionStats {

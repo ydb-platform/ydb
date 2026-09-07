@@ -31,7 +31,8 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpReadActor(con
     // Pre-parsed point lookups handed over in-process, in place of the settings'
     // serialized KeyPoints (which each cost a copy plus a cell re-parse to load).
     // Mutually exclusive with ranges/points in the settings proto.
-    TVector<TSerializedCellVec> keyPoints = {});
+    TVector<TSerializedCellVec> keyPoints = {},
+    bool collectShardReadDiagnostics = false);
 void RegisterKqpReadActor(NYql::NDq::TDqAsyncIoFactory&, TIntrusivePtr<TKqpCounters>);
 void InterceptReadActorPipeCache(NActors::TActorId);
 

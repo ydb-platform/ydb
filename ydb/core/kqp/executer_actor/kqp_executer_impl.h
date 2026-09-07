@@ -3,6 +3,7 @@
 #include "kqp_executer.h"
 #include "kqp_executer_stats.h"
 #include "kqp_planner.h"
+#include <ydb/core/kqp/common/kqp_execution_trace.h>
 #include "kqp_table_resolver.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -161,7 +162,21 @@ public:
         TasksGraph.GetMeta().ChannelTransportVersion = executerConfig.TableServiceConfig.GetChannelTransportVersion();
         TasksGraph.GetMeta().UserRequestContext = userRequestContext;
         TasksGraph.GetMeta().CheckDuplicateRows = executerConfig.MutableConfig->EnableRowsDuplicationCheck.load();
-        TasksGraph.GetMeta().StatsMode = Request.StatsMode;
+        auto collectionStatsMode = Request.StatsMode;
+        if (Request.DiagnosticsPolicy) {
+            const auto& policy = *Request.DiagnosticsPolicy;
+            if (policy.CollectShardSamples) {
+                collectionStatsMode = Max(collectionStatsMode,
+                    Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
+            } else if (policy.CollectStages) {
+                collectionStatsMode = Max(collectionStatsMode,
+                    Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC);
+            }
+            TasksGraph.GetMeta().CollectShardDiagnostics = policy.CollectShardSamples;
+            TasksGraph.GetMeta().CollectBufferLookupDiagnostics = policy.CollectBufferLookup;
+            TasksGraph.GetMeta().CollectTimeline = policy.CollectTimeline;
+        }
+        TasksGraph.GetMeta().StatsMode = collectionStatsMode;
         TasksGraph.GetMeta().CollectAffectedRows = Request.CollectAffectedRows;
         for (const auto& regex : executerConfig.TliConfig.GetIgnoredTableRegexes()) {
             TasksGraph.GetMeta().AddIgnoredTliTableRegex(regex);
@@ -171,10 +186,11 @@ public:
         }
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc, ExecType);
         ResponseEv->Orbit = std::move(Request.Orbit);
-        Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
+        Stats = std::make_unique<TQueryExecutionStats>(collectionStatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), executerConfig.TableServiceConfig.GetQueryDeadlockTimeoutMs());
 
         StartTime = TAppData::TimeProvider->Now();
+        InitializeExecutionDiagnostics();
         if (Request.Timeout) {
             Deadline = StartTime + Request.Timeout;
         }
@@ -221,6 +237,11 @@ protected:
         auto& reply = *ev->Get();
 
         KqpTableResolverId = {};
+
+        if (Y_UNLIKELY(ExecutionDiagnostics)) {
+            ExecutionDiagnostics->OnTableResolverFinished(reply.NavigateWindow,
+                reply.ResolveKeysWindow, reply.Status);
+        }
 
         if (reply.Status != Ydb::StatusIds::SUCCESS) {
             if (ExecuterStateSpan) {
@@ -329,7 +350,8 @@ protected:
                 {"ctx", *GetUserRequestContext()},
                 {"shardIdsCount", shardIds.size()},
                 {"traceId", TraceId()});
-            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterShardsResolve, ExecuterSpan.GetTraceId(), "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
+            ExecuterStateSpan = StartExecutionPhase(EExecutionPhase::ResolveShards,
+                TWilsonKqp::ExecuterShardsResolve, "WaitForShardsResolve");
 
             auto kqpShardsResolver = CreateKqpShardsResolver(this->SelfId(), TxId, static_cast<TDerived*>(this)->GetSimplifiedUseFollowers(), std::move(shardIds));
 
@@ -602,7 +624,7 @@ protected:
                     if (!channel.DstTask) {
                         Y_ENSURE(ChannelService && ResultInputBuffers.find(channelId) == ResultInputBuffers.end());
                         auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, task.ComputeActorId, SelfId(), task.StageId.StageId, 0,
-                            NYql::NDq::StatsModeToCollectStatsLevel(GetDqStatsMode(Request.StatsMode))), nullptr);
+                            NYql::NDq::StatsModeToCollectStatsLevel(GetDqStatsMode(Stats->StatsMode))), nullptr);
                         ReadResultFromInputBuffer(channelId, inputBuffer);
                         ResultInputBuffers.emplace(channelId, inputBuffer);
                     }
@@ -917,7 +939,7 @@ protected:
                     if (LastProgressStats + Request.ProgressStatsPeriod <= now) {
                         auto progress = MakeHolder<TEvKqpExecuter::TEvExecuterProgress>();
                         auto& execStats = *progress->Record.MutableQueryStats()->AddExecutions();
-                        Stats->ExportExecStats(execStats);
+                        Stats->ExportExecStats(execStats, Request.StatsMode);
                         for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                             const auto& tx = Request.Transactions[txId].Body;
                             auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), execStats, NewRboEnabled);
@@ -1013,7 +1035,7 @@ protected:
     }
 
     void HandleNodeState(NYql::NDq::TEvDqCompute::TEvNodeState::TPtr& ev) {
-        if (CollectProfileStats(Request.StatsMode)) {
+        if (CollectProfileStats(Stats->StatsMode)) {
             Stats->UpdateNodeStats(ev->Sender.NodeId(), ev->Get()->Record);
         }
     }
@@ -1026,7 +1048,7 @@ protected:
         auto view = cgi.Get("view");
         if (view == "plan") {
             NYql::NDqProto::TDqExecutionStats execStats;
-            Stats->ExportExecStats(execStats);
+            Stats->ExportExecStats(execStats, Stats->StatsMode);
 
             for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                 const auto& tx = Request.Transactions[txId].Body;
@@ -1223,7 +1245,8 @@ protected:
             co_return;
         }
 
-        ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterTableResolve, ExecuterSpan.GetTraceId(), "WaitForTableResolve", NWilson::EFlags::AUTO_END);
+        ExecuterStateSpan = StartExecutionPhase(EExecutionPhase::ResolveTables,
+            TWilsonKqp::ExecuterTableResolve, "WaitForTableResolve");
 
         auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, TasksGraph, false);
         KqpTableResolverId = this->RegisterWithSameMailbox(kqpTableResolver);
@@ -1595,7 +1618,7 @@ protected:
             .Database = Database,
             .UserToken = UserToken,
             .Deadline = Deadline.GetOrElse(TInstant::Zero()),
-            .StatsMode = Request.StatsMode,
+            .StatsMode = Stats->StatsMode,
             .WithProgressStats = Request.ProgressStatsPeriod != TDuration::Zero(),
             .RlPath = Request.RlPath,
             .ExecuterSpan =  ExecuterSpan,
@@ -1626,7 +1649,7 @@ protected:
             Y_ENSURE(ChannelService);
             for (auto& [channelId, outputActorId] : Planner->ResultChannels) {
                 auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, outputActorId, SelfId(), 0, 0,
-                    NYql::NDq::StatsModeToCollectStatsLevel(GetDqStatsMode(Request.StatsMode))), nullptr);
+                    NYql::NDq::StatsModeToCollectStatsLevel(GetDqStatsMode(Stats->StatsMode))), nullptr);
                 ReadResultFromInputBuffer(channelId, inputBuffer);
                 ResultInputBuffers.emplace(channelId, inputBuffer);
             }
@@ -1882,6 +1905,43 @@ protected:
     }
 
 protected:
+    void InitializeExecutionDiagnostics() {
+        if (!Request.DiagnosticsPolicy) {
+            return;
+        }
+        Stats->CollectExecutionDiagnostics = Request.DiagnosticsPolicy->CollectStages;
+        Stats->CollectBufferLookupDiagnostics = Request.DiagnosticsPolicy->CollectBufferLookup;
+
+        if constexpr (ExecType == EExecType::Data) {
+            ExecutionDiagnostics = std::make_unique<TExecutionDiagnosticsCapture>(
+                "TKqpDataExecuter", "TKqpComputeActor");
+        } else {
+            ExecutionDiagnostics = std::make_unique<TExecutionDiagnosticsCapture>(
+                "TKqpScanExecuter", "TKqpScanComputeActor");
+        }
+    }
+
+    void ExportExecutionDiagnostics() {
+        if (!ExecutionDiagnostics) {
+            return;
+        }
+
+        auto snapshot = ExecutionDiagnostics->Finish(ResponseEv->Record.GetResponse().GetStatus());
+        Stats->ExportDiagnosticsSnapshot(snapshot);
+        AccumulateExecutionTraceTotals(ResponseEv->ExecutionTraceTotals, snapshot);
+        TrimExecutionTraceSnapshot(snapshot);
+        ResponseEv->ExecutionTraces.push_back(std::move(snapshot));
+        ExecutionDiagnostics.reset();
+    }
+
+    NWilson::TSpan StartExecutionPhase(EExecutionPhase phase, ui8 devVerbosity, const TString& devName,
+            NWilson::TFlags flags = NWilson::EFlags::AUTO_END) {
+        if (Y_UNLIKELY(ExecutionDiagnostics)) {
+            ExecutionDiagnostics->OnPhaseStarted(phase);
+        }
+        return ExecuterSpan.CreateChild(devVerbosity, devName, flags);
+    }
+
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const {
         return TasksGraph.GetMeta().Snapshot;
     }
@@ -1912,7 +1972,8 @@ protected:
 
             {
                 ui64 cycleCount = GetCycleCountFast();
-                Stats->ExportExecStats(*response.MutableResult()->MutableStats());
+                ExportExecutionDiagnostics();
+                Stats->ExportExecStats(*response.MutableResult()->MutableStats(), Request.StatsMode);
 
                 if (CollectFullStats(Request.StatsMode)) {
                     ui64 jsonSize = 0;
@@ -2170,6 +2231,7 @@ protected:
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
     NWilson::TSpan ExecuterSpan;
     NWilson::TSpan ExecuterStateSpan;
+    std::unique_ptr<TExecutionDiagnosticsCapture> ExecutionDiagnostics;
     THashMap<ui32, std::shared_ptr<NYql::NDq::IChannelBuffer>> ResultInputBuffers;
 
     struct TResultChannelFlowState {

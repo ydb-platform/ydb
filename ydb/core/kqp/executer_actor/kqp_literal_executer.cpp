@@ -95,6 +95,10 @@ public:
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), 0);
         TasksGraph.GetMeta().CollectAffectedRows = Request.CollectAffectedRows;
+        if (Request.DiagnosticsPolicy) {
+            ExecutionDiagnostics = std::make_unique<TExecutionDiagnosticsCapture>(
+                "TKqpLiteralExecuter", "TKqpLiteralExecuter");
+        }
         StartTime = TAppData::TimeProvider->Now();
         if (Request.Timeout) {
             Deadline = StartTime + Request.Timeout;
@@ -300,7 +304,8 @@ public:
             Stats->FinishTs = Stats->StartTs + TDuration::MicroSeconds(elapsedMicros);
             Stats->ResultRows = ResponseEv->GetResultRowsCount();
             Stats->ResultBytes = ResponseEv->GetByteSize();
-            Stats->ExportExecStats(*response.MutableResult()->MutableStats());
+            ExportExecutionTrace(Ydb::StatusIds::SUCCESS);
+            Stats->ExportExecStats(*response.MutableResult()->MutableStats(), Request.StatsMode);
 
             if (Y_UNLIKELY(CollectFullStats(Request.StatsMode))) {
                 for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
@@ -416,6 +421,7 @@ private:
 
         response.SetStatus(status);
         response.MutableIssues()->Swap(issues);
+        ExportExecutionTrace(status);
 
         LWTRACK(KqpLiteralExecuterCreateErrorResponse, ResponseEv->Orbit, TxId);
 
@@ -428,6 +434,18 @@ private:
     void UpdateCounters() {
         auto totalTime = TInstant::Now() - StartTime;
         Counters->Counters->LiteralTxTotalTimeHistogram->Collect(totalTime.MilliSeconds());
+    }
+
+    void ExportExecutionTrace(Ydb::StatusIds::StatusCode status) {
+        if (!ExecutionDiagnostics) {
+            return;
+        }
+        auto snapshot = ExecutionDiagnostics->Finish(status);
+        Stats->ExportDiagnosticsSnapshot(snapshot);
+        AccumulateExecutionTraceTotals(ResponseEv->ExecutionTraceTotals, snapshot);
+        TrimExecutionTraceSnapshot(snapshot);
+        ResponseEv->ExecutionTraces.push_back(std::move(snapshot));
+        ExecutionDiagnostics.reset();
     }
 
     const TIntrusivePtr<TUserRequestContext>& GetUserRequestContext() {
@@ -446,6 +464,7 @@ private:
     TKqpTasksGraph TasksGraph;
     std::unordered_map<ui64, ui32> TaskId2StageId;
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
+    std::unique_ptr<TExecutionDiagnosticsCapture> ExecutionDiagnostics;
 
     TVector<TIntrusivePtr<NYql::NDq::IDqTaskRunner>> TaskRunners;
     std::unique_ptr<NKikimr::NMiniKQL::TKqpComputeContextBase> ComputeCtx;

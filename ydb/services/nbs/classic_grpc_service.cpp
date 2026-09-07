@@ -9,8 +9,6 @@
 #include <ydb/library/grpc/server/grpc_counters.h>
 #include <ydb/library/grpc/server/grpc_request.h>
 
-#include <library/cpp/string_utils/quote/quote.h>
-
 namespace NKikimr::NGRpcService {
 
     using namespace NCloud::NBlockStore;
@@ -54,7 +52,7 @@ namespace NKikimr::NGRpcService {
         internal.Clear();
         internal.SetRequestSource(
             NCloud::NProto::SOURCE_INSECURE_CONTROL_CHANNEL);
-        internal.SetPeer(UrlUnescapeRet(requestContext->GetPeer()));
+        internal.SetPeer(requestContext->GetPeer());
 
         auto retainedRequestContext =
             TIntrusivePtr<NYdbGrpc::IRequestContextBase>(requestContext);
@@ -82,6 +80,8 @@ namespace NKikimr::NGRpcService {
     #error SETUP_CLASSIC_NBS_METHOD macro already defined
 #endif
 
+        // TODO: Replace FakeCounterBlock with per-method counters on
+        // enabling data-path methods.
 #define SETUP_CLASSIC_NBS_METHOD(name, ...)                           \
     MakeIntrusive<NYdbGrpc::TGRpcRequest<                             \
         NProto::T##name##Request,                                     \

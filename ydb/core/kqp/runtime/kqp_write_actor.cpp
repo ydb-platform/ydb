@@ -487,6 +487,9 @@ public:
               && !inconsistentTx
               && !isOlap
               && lockTxId != 0)
+#ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK
+        , TargetShardIds(targetShardIds)
+#endif
         , KeyColumnTypes(std::move(keyColumnTypes))
         , Callbacks(callbacks)
         , TxManager(txManager ? txManager : CreateKqpTransactionManager(/* collectOnly= */ true))
@@ -915,6 +918,17 @@ public:
             {"cookie", ev->Cookie});
 
         TxManager->AddParticipantNode(ev->Sender.NodeId());
+
+        //DO NOT REMOVE THESE CHECKS
+        #ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK
+        if (TargetShardIds.has_value()) {
+            AFL_VERIFY(ev->Sender.NodeId() == SelfId().NodeId())
+                ("shardNodeId", ev->Sender.NodeId())
+                ("localNodeId", SelfId().NodeId())
+                ("shardId", ev->Get()->Record.GetOrigin())
+                ("msg", "CS Write Affinity: shard must be on local node");
+        }
+        #endif
 
         const bool handleOverload = ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE
                     || ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
@@ -1768,6 +1782,9 @@ private:
     static constexpr ui64 WriterIndex = 0;
     // Seq nums of the batch in flight at each shard, reused on resend until the shard acks it.
     THashMap<ui64, TVector<ui64>> InFlightWriteSeqNum;
+#ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK
+    const std::optional<THashSet<ui64>> TargetShardIds;
+#endif
     const TVector<NScheme::TTypeInfo> KeyColumnTypes;
 
     IKqpTableWriterCallbacks* Callbacks;

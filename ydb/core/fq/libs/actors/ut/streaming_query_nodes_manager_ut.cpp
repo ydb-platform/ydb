@@ -5,6 +5,7 @@
 
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/actors/core/events.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -35,6 +36,21 @@ void InjectLookupFailure(TTestActorRuntime& runtime, TActorId target) {
                 "/Root/test", /* success */ false)));
 }
 
+// Helper: inject compute states from tasks placed on the supplied nodes.
+void InjectTaskStates(
+    TTestActorRuntime& runtime,
+    TActorId target,
+    const TVector<ui32>& nodeIds)
+{
+    for (ui64 taskId = 0; taskId < nodeIds.size(); ++taskId) {
+        auto state = MakeHolder<NYql::NDq::TEvDqCompute::TEvState>();
+        state->Record.SetTaskId(taskId);
+        state->Record.SetState(NYql::NDqProto::COMPUTE_STATE_EXECUTING);
+        runtime.Send(new IEventHandle(
+            target, TActorId(nodeIds[taskId], "compute"), state.Release()));
+    }
+}
+
 } // anonymous namespace
 
 // ============================================================================
@@ -56,7 +72,8 @@ Y_UNIT_TEST(NoAbortWhenRatioSufficient) {
             "/Root/test",
             /* taskCount */ 4,
             "query-1",
-            TDuration::Hours(1) // use large period so wakeup doesn't auto-fire
+            TDuration::Hours(1), // use large period so wakeup doesn't auto-fire
+            TDuration::Zero()
         ));
 
     runtime.EnableScheduleForActor(manager, true);
@@ -70,7 +87,8 @@ Y_UNIT_TEST(NoAbortWhenRatioSufficient) {
     // which we won't respond to – just inject the result directly).
     runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
 
-    // Now inject: 4 tenant nodes → nodesWithQuery = min(4,4) = 4, ratio = 1.0
+    InjectTaskStates(runtime, manager, {1, 2, 3, 4});
+    // Now inject: 4 tenant nodes → nodesWithQuery = 4, ratio = 1.0
     InjectLookupResult(runtime, manager, {1, 2, 3, 4});
     runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
 
@@ -90,15 +108,14 @@ Y_UNIT_TEST(AbortWhenRatioBelowThreshold) {
 
     TActorId edgeActor = runtime.AllocateEdgeActor();
 
-    // 1 task running, 10 nodes total → estimated nodes with query = min(1,10) = 1
-    // ratio = 1/10 = 0.1 < 0.5 → abort
+    // 1 task running on 10 tenant nodes → ratio = 1/10 = 0.1 < 0.5 → abort.
     TActorId manager = runtime.Register(
         CreateStreamingQueryNodesManager(
             edgeActor,
             "/Root/test",
             /* taskCount */ 1,
             "query-2",
-            TDuration::Hours(1)));
+            TDuration::Hours(1), TDuration::Zero()));
 
     runtime.EnableScheduleForActor(manager, true);
     runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
@@ -108,6 +125,7 @@ Y_UNIT_TEST(AbortWhenRatioBelowThreshold) {
         new TEvents::TEvWakeup(/* tag */ 1)));
     runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
 
+    InjectTaskStates(runtime, manager, {1});
     // Inject: 10 tenant nodes, only 1 node hosting our query.
     InjectLookupResult(runtime, manager, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
     runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
@@ -120,31 +138,28 @@ Y_UNIT_TEST(AbortWhenRatioBelowThreshold) {
 }
 
 // ---------------------------------------------------------------------------
-// 3. Explicit node set via TEvSetTaskNodes overrides the estimation.
+// 3. Compute states identify the nodes hosting query tasks.
 // ---------------------------------------------------------------------------
-Y_UNIT_TEST(ExplicitNodeSetOverridesEstimation) {
+Y_UNIT_TEST(ComputeStatesDetermineQueryNodes) {
     TTestActorRuntime runtime(1, false);
     runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
 
     TActorId edgeActor = runtime.AllocateEdgeActor();
 
     // 10 tasks, but only 2 distinct nodes running them → ratio = 2/10 = 0.2 < 0.5
-    // Without TEvSetTaskNodes the fallback is min(10,10) = 10 → would NOT abort.
-    // With TEvSetTaskNodes we tell the manager only 2 nodes → SHOULD abort.
     TActorId manager = runtime.Register(
         CreateStreamingQueryNodesManager(
             edgeActor,
             "/Root/test",
             /* taskCount */ 10,
             "query-3",
-            TDuration::Hours(1)));
+            TDuration::Hours(1), TDuration::Zero()));
 
     runtime.EnableScheduleForActor(manager, true);
     runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
 
-    // Set explicit node info: tasks are on nodes 1 and 2 only.
-    runtime.Send(new IEventHandle(manager, edgeActor,
-        new TEvStreamingQueryNodesManager::TEvSetTaskNodes({1, 1, 2, 2, 1, 2, 1, 2, 1, 2})));
+    // Ten tasks report states from nodes 1 and 2 only.
+    InjectTaskStates(runtime, manager, {1, 1, 2, 2, 1, 2, 1, 2, 1, 2});
     runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
 
     // Trigger check cycle.
@@ -177,12 +192,13 @@ Y_UNIT_TEST(AbortSentOnlyOnce) {
             "/Root/test",
             /* taskCount */ 1,
             "query-4",
-            TDuration::Hours(1)));
+            TDuration::Hours(1), TDuration::Zero()));
 
     runtime.EnableScheduleForActor(manager, true);
     runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
 
     auto triggerBadCheck = [&]() {
+        InjectTaskStates(runtime, manager, {1});
         runtime.Send(new IEventHandle(manager, edgeActor,
             new TEvents::TEvWakeup(/* tag */ 1)));
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
@@ -223,7 +239,7 @@ Y_UNIT_TEST(FailedLookupDoesNotAbort) {
             "/Root/test",
             /* taskCount */ 1,
             "query-5",
-            TDuration::Hours(1)));
+            TDuration::Hours(1), TDuration::Zero()));
 
     runtime.EnableScheduleForActor(manager, true);
     runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
@@ -250,7 +266,7 @@ Y_UNIT_TEST(NoAbortAtExactlyHalf) {
 
     TActorId edgeActor = runtime.AllocateEdgeActor();
 
-    // 5 tasks, 10 total nodes → nodesWithQuery = min(5,10) = 5
+    // 5 tasks on 5 nodes, 10 total nodes.
     // 5 * 2 == 10 → NOT less than 10 → no abort
     TActorId manager = runtime.Register(
         CreateStreamingQueryNodesManager(
@@ -258,7 +274,7 @@ Y_UNIT_TEST(NoAbortAtExactlyHalf) {
             "/Root/test",
             /* taskCount */ 5,
             "query-6",
-            TDuration::Hours(1)));
+            TDuration::Hours(1), TDuration::Zero()));
 
     runtime.EnableScheduleForActor(manager, true);
     runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
@@ -267,6 +283,7 @@ Y_UNIT_TEST(NoAbortAtExactlyHalf) {
         new TEvents::TEvWakeup(/* tag */ 1)));
     runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
 
+    InjectTaskStates(runtime, manager, {1, 2, 3, 4, 5});
     InjectLookupResult(runtime, manager, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
     runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
 
@@ -285,7 +302,7 @@ Y_UNIT_TEST(NoAbortWhenManyTasksOnFewNodesButRatioOk) {
 
     TActorId edgeActor = runtime.AllocateEdgeActor();
 
-    // 100 tasks, but only 4 total nodes → nodesWithQuery = min(100,4) = 4
+    // 100 tasks on four nodes, with four tenant nodes total.
     // ratio = 4/4 = 1.0 → no abort
     // taskCount (100) > 2 * nodesWithQuery (8) → just a warning, not an abort
     TActorId manager = runtime.Register(
@@ -294,7 +311,7 @@ Y_UNIT_TEST(NoAbortWhenManyTasksOnFewNodesButRatioOk) {
             "/Root/test",
             /* taskCount */ 100,
             "query-7",
-            TDuration::Hours(1)));
+            TDuration::Hours(1), TDuration::Zero()));
 
     runtime.EnableScheduleForActor(manager, true);
     runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
@@ -303,6 +320,7 @@ Y_UNIT_TEST(NoAbortWhenManyTasksOnFewNodesButRatioOk) {
         new TEvents::TEvWakeup(/* tag */ 1)));
     runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
 
+    InjectTaskStates(runtime, manager, {1, 2, 3, 4});
     InjectLookupResult(runtime, manager, {1, 2, 3, 4});
     runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
 

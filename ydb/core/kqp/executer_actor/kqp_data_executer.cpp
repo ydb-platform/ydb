@@ -1307,7 +1307,9 @@ private:
                 SelfId(),
                 Database,
                 static_cast<ui64>(graphParams.GetTasks().size()),
-                ToString(TxId)));
+                ToString(TxId),
+                TDuration::Minutes(1),
+                TDuration::Minutes(1)));
         YDB_LOG_DEBUG("Created new StreamingQueryNodesManager",
             {"marker", "KQPDATA"},
             {"actorId", SelfId()},

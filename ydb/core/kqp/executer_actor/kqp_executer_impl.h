@@ -1003,6 +1003,13 @@ protected:
             return;
         }
 
+        if (StreamingQueryNodesManagerId) {
+            auto stateEvent = MakeHolder<NYql::NDq::TEvDqCompute::TEvState>();
+            stateEvent->Record = state;
+            TlsActivationContext->Send(new IEventHandle(
+                StreamingQueryNodesManagerId, computeActor, stateEvent.Release()));
+        }
+
         if (CheckpointCoordinatorId) {
             TlsActivationContext->Send(ev->Forward(CheckpointCoordinatorId));
         }
@@ -2028,7 +2035,7 @@ protected:
         }
 
         if (StreamingQueryNodesManagerId) {
-            Send(StreamingQueryNodesManagerId, new NActors::TEvents::TEvPoisonPill());
+            this->Send(StreamingQueryNodesManagerId, new NActors::TEvents::TEvPoisonPill());
             StreamingQueryNodesManagerId = TActorId{};
         }
 

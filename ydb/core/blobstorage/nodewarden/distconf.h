@@ -339,6 +339,7 @@ namespace NKikimr::NStorage {
         ui64 ScepterCounter = 1; // increased every time Scepter gets changed
         TString ErrorReason;
         std::optional<TString> CurrentSelfAssemblyUUID;
+        bool NeedMoreNodes = false;
         bool GlobalQuorum = false;
         bool QuorumValid = false;
 

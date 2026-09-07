@@ -102,19 +102,24 @@ namespace {
         void StateFunc(TAutoPtr<IEventHandle>&) {}
     };
 
-    struct TBindingObservation {
+    struct TNodeWardenTestState {
         THashSet<ui32> MobileNodes;
+        THashMap<std::pair<ui32, TString>, NKikimrBlobStorage::TPDiskMetadataRecord> Metadata;
+        ui32 RequiredRootNodeId = 0;
         bool SawCompleteMobileBinding = false;
         bool SawScatter = false;
 
-        TBindingObservation() = default;
+        TNodeWardenTestState() = default;
 
-        explicit TBindingObservation(std::initializer_list<ui32> mobileNodes)
+        explicit TNodeWardenTestState(std::initializer_list<ui32> mobileNodes)
             : MobileNodes(mobileNodes.begin(), mobileNodes.end())
         {}
 
         bool ShouldRejectBinding(ui32 senderNodeId, ui32 recipientNodeId,
                                  const NKikimrBlobStorage::TEvNodeConfigPush& record) {
+            if (RequiredRootNodeId) {
+                return recipientNodeId != RequiredRootNodeId;
+            }
             const bool senderIsMobile = MobileNodes.contains(senderNodeId);
             const bool recipientIsMobile = MobileNodes.contains(recipientNodeId);
             if (senderIsMobile == recipientIsMobile) {
@@ -139,7 +144,7 @@ namespace {
 
     class TNodeWardenProxyActor : public TActor<TNodeWardenProxyActor> {
         const TActorId KeeperId;
-        TBindingObservation& Observation;
+        TNodeWardenTestState& State;
 
         void RejectBinding(const IEventHandle& request) {
             auto response = NStorage::TEvNodeConfigReversePush::MakeRejected();
@@ -150,30 +155,39 @@ namespace {
         }
 
     public:
-        TNodeWardenProxyActor(TActorId keeperId, TBindingObservation& observation)
+        TNodeWardenProxyActor(TActorId keeperId, TNodeWardenTestState& state)
             : TActor(&TThis::StateFunc)
             , KeeperId(keeperId)
-            , Observation(observation)
+            , State(state)
         {}
 
         void StateFunc(TAutoPtr<IEventHandle>& ev) {
             const ui32 type = ev->GetTypeRewrite();
             if (!ev->InterconnectSession) {
                 if (type == NStorage::TEvNodeWardenReadMetadata::EventType) {
+                    const auto *msg = ev->Get<NStorage::TEvNodeWardenReadMetadata>();
+                    const auto it = State.Metadata.find(std::make_pair(SelfId().NodeId(), msg->Path));
+                    const bool found = it != State.Metadata.end();
                     Send(ev->Sender, new NStorage::TEvNodeWardenReadMetadataResult(
-                        std::nullopt, NPDisk::EPDiskMetadataOutcome::NO_METADATA, {}), 0, ev->Cookie);
+                        std::nullopt, found ? NPDisk::EPDiskMetadataOutcome::OK : NPDisk::EPDiskMetadataOutcome::NO_METADATA,
+                        found ? it->second : NKikimrBlobStorage::TPDiskMetadataRecord()), 0, ev->Cookie);
+                } else if (type == NStorage::TEvNodeWardenWriteMetadata::EventType) {
+                    const auto *msg = ev->Get<NStorage::TEvNodeWardenWriteMetadata>();
+                    State.Metadata[std::make_pair(SelfId().NodeId(), msg->Path)] = msg->Record;
+                    Send(ev->Sender, new NStorage::TEvNodeWardenWriteMetadataResult(
+                        std::nullopt, NPDisk::EPDiskMetadataOutcome::OK), 0, ev->Cookie);
                 }
                 return;
             }
 
             if (type == NStorage::TEvNodeConfigPush::EventType) {
                 const auto *msg = ev->Get<NStorage::TEvNodeConfigPush>();
-                if (msg->Record.GetInitial() && Observation.ShouldRejectBinding(ev->Sender.NodeId(), SelfId().NodeId(), msg->Record)) {
+                if (msg->Record.GetInitial() && State.ShouldRejectBinding(ev->Sender.NodeId(), SelfId().NodeId(), msg->Record)) {
                     RejectBinding(*ev);
                     return;
                 }
             } else if (type == NStorage::TEvNodeConfigScatter::EventType) {
-                Observation.SawScatter = true;
+                State.SawScatter = true;
             }
 
             ev->Rewrite(type, KeeperId);
@@ -235,13 +249,14 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
     }
 
     TActorId RegisterKeeper(TTestActorSystem& runtime, const NKikimrBlobStorage::TStorageConfig& config, ui32 nodeId,
-                            TBindingObservation& observation) {
+                            TNodeWardenTestState& state, const TString& startupConfigYaml = {}) {
         auto nodeWardenConfig = MakeNodeWardenConfig(config);
+        nodeWardenConfig->StartupConfigYaml = startupConfigYaml;
         auto storageConfig = std::make_shared<NKikimrBlobStorage::TStorageConfig>(config);
         const TActorId keeperId = runtime.Register(
             new NStorage::TDistributedConfigKeeper(std::move(nodeWardenConfig), storageConfig, true), nodeId);
 
-        const TActorId nodeWardenProxyId = runtime.Register(new TNodeWardenProxyActor(keeperId, observation), nodeId);
+        const TActorId nodeWardenProxyId = runtime.Register(new TNodeWardenProxyActor(keeperId, state), nodeId);
         runtime.RegisterService(MakeBlobStorageNodeWardenID(nodeId), nodeWardenProxyId);
 
         const TActorId nameserviceId = runtime.Register(new TIgnoreActor, nodeId);
@@ -274,7 +289,31 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         return rootNodeId;
     }
 
-    ui32 RunUntilConverged(const NKikimrBlobStorage::TStorageConfig& config, TBindingObservation& observation,
+    template<typename TCondition>
+    bool SimUntil(TTestActorSystem& runtime, TCondition&& condition, TDuration timeout = TDuration::Seconds(30),
+                  ui32 nodeId = 1) {
+        const TInstant deadline = runtime.GetClock() + timeout;
+        runtime.Schedule(deadline, nullptr, new TFakeSchedulerCookie, nodeId);
+        runtime.Sim([&] { return !condition() && runtime.GetClock() < deadline; });
+        return condition();
+    }
+
+    void CheckStaysConverged(TTestActorSystem& runtime, const std::vector<TActorId>& keeperIds) {
+        UNIT_ASSERT_C(!SimUntil(runtime, [&] { return !FindConvergedRoot(runtime, keeperIds); }),
+                      "binding tree lost convergence without new failures");
+    }
+
+    void BootstrapCluster(TTestActorSystem& runtime, TActorId keeperId) {
+        const TActorId edge = runtime.AllocateEdgeActor(keeperId.NodeId());
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        request->Record.MutableBootstrapCluster()->SetSelfAssemblyUUID("partial-bootstrap-test");
+        runtime.Send(new IEventHandle(keeperId, edge, request.release()), keeperId.NodeId());
+        auto response = runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge);
+        UNIT_ASSERT_C(response->Get()->Record.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+                      response->Get()->Record.DebugString());
+    }
+
+    ui32 RunUntilConverged(const NKikimrBlobStorage::TStorageConfig& config, TNodeWardenTestState& state,
                            TDuration timeout = TDuration::Seconds(30), bool waitForScatter = false) {
         TTestActorSystem runtime(config.AllNodesSize());
         runtime.Start();
@@ -284,20 +323,16 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
 
         std::vector<TActorId> keeperIds;
         for (ui32 nodeId = 1; nodeId <= static_cast<ui32>(config.AllNodesSize()); ++nodeId) {
-            keeperIds.push_back(RegisterKeeper(runtime, config, nodeId, observation));
+            keeperIds.push_back(RegisterKeeper(runtime, config, nodeId, state));
         }
 
-        const TInstant deadline = runtime.GetClock() + timeout;
-        runtime.Schedule(deadline, nullptr, new TFakeSchedulerCookie, 1);
-
         std::optional<ui32> rootNodeId;
-        runtime.Sim([&] {
+        const bool converged = SimUntil(runtime, [&] {
             rootNodeId = FindConvergedRoot(runtime, keeperIds);
-            const bool done = rootNodeId && (!waitForScatter || observation.SawScatter);
-            return !done && runtime.GetClock() < deadline;
-        });
-        UNIT_ASSERT_C(rootNodeId && (!waitForScatter || observation.SawScatter),
-                      "binding tree did not converge before the deadline");
+            return rootNodeId && (!waitForScatter || state.SawScatter);
+        }, timeout);
+        UNIT_ASSERT_C(converged, "binding tree did not converge before the deadline");
+        CheckStaysConverged(runtime, keeperIds);
         return *rootNodeId;
     }
 
@@ -311,9 +346,9 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
 
     Y_UNIT_TEST(InitialConfigConvergesToSingleRootThroughMailbox) {
         const auto config = MakeInitialStorageConfig(3);
-        TBindingObservation observation;
-        const ui32 rootNodeId = RunUntilConverged(config, observation, TDuration::Seconds(30), true);
-        UNIT_ASSERT(observation.SawScatter);
+        TNodeWardenTestState state;
+        const ui32 rootNodeId = RunUntilConverged(config, state, TDuration::Seconds(30), true);
+        UNIT_ASSERT(state.SawScatter);
         UNIT_ASSERT(1 <= rootNodeId && rootNodeId <= 3);
     }
 
@@ -331,10 +366,250 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
 
     Y_UNIT_TEST(ThreeNodeSplitConvergesThroughMailbox) {
         const auto config = MakeStorageConfig(3, 0, {1});
-        TBindingObservation observation{2, 3};
-        const ui32 rootNodeId = RunUntilConverged(config, observation);
-        UNIT_ASSERT(observation.SawCompleteMobileBinding);
+        TNodeWardenTestState state{2, 3};
+        const ui32 rootNodeId = RunUntilConverged(config, state);
+        UNIT_ASSERT(state.SawCompleteMobileBinding);
         UNIT_ASSERT_VALUES_EQUAL(rootNodeId, 1u);
+    }
+
+    enum class ERestartOrder {
+        ConfigMajorityFirst,
+        StorageQuorumFirst,
+        Simultaneous,
+        Partitioned,
+        PartitionAfterCollection,
+    };
+
+    void CheckPartialBootstrapRestart(ERestartOrder order, TDuration bindFailureDelay = TDuration::Seconds(5),
+                                      bool unevenDrives = false) {
+        auto config = MakeStorageConfig(3, 0);
+        auto *selfManagement = config.MutableSelfManagementConfig();
+        selfManagement->SetEnabled(true);
+        selfManagement->SetAutomaticBootstrap(false);
+        selfManagement->SetErasureSpecies("none");
+        selfManagement->SetPDiskType(NKikimrBlobStorage::EPDiskType::ROT);
+        for (ui32 nodeId : {2, 3}) {
+            config.MutableBlobStorageConfig()->MutableDefineHostConfig(nodeId - 1)->MutableDrive(0)->SetType(
+                NKikimrBlobStorage::EPDiskType::SSD);
+        }
+        if (unevenDrives) {
+            config.MutableBlobStorageConfig()->ClearServiceSet();
+            for (auto& node : *config.MutableAllNodes()) {
+                node.MutableLocation()->SetDataCenter("dc-1");
+            }
+            auto *hostConfig = config.MutableBlobStorageConfig()->MutableDefineHostConfig(0);
+            for (ui32 diskId : {2, 3}) {
+                auto *drive = hostConfig->AddDrive();
+                drive->SetPath("/dev/disk1_" + std::to_string(diskId));
+                drive->SetType(NKikimrBlobStorage::EPDiskType::ROT);
+            }
+        }
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+        const TString startupConfigYaml = R"(metadata:
+  kind: MainConfig
+  version: 0
+  cluster: ""
+config: {}
+allowed_labels: {}
+selector_config: []
+)";
+        TNodeWardenTestState state;
+        state.RequiredRootNodeId = 1;
+        const auto metadata = [&](ui32 nodeId) -> const NKikimrBlobStorage::TPDiskMetadataRecord& {
+            return state.Metadata.at(std::pair<ui32, TString>{nodeId, "/dev/disk" + std::to_string(nodeId) + "_1"});
+        };
+
+        {
+            TTestActorSystem runtime(3);
+            runtime.Start();
+            Y_DEFER { runtime.Stop(); };
+
+            std::vector<TActorId> keeperIds;
+            for (ui32 nodeId = 1; nodeId <= 3; ++nodeId) {
+                keeperIds.push_back(RegisterKeeper(runtime, config, nodeId, state, startupConfigYaml));
+            }
+            UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keeperIds) == 1; }));
+
+            runtime.FilterFunction = [](ui32, std::unique_ptr<IEventHandle>& ev) {
+                return ev->GetTypeRewrite() != NStorage::TEvNodeConfigReversePush::EventType
+                       || !ev->Get<NStorage::TEvNodeConfigReversePush>()->Record.HasCommittedStorageConfig();
+            };
+            BootstrapCluster(runtime, keeperIds.front());
+            UNIT_ASSERT(SimUntil(runtime, [&] {
+                return state.Metadata.size() == (unevenDrives ? 5 : 3) && metadata(1).HasCommittedStorageConfig();
+            }));
+
+            const auto& committed = metadata(1).GetCommittedStorageConfig();
+            UNIT_ASSERT_VALUES_EQUAL(committed.GetGeneration(), 1u);
+            UNIT_ASSERT(HasQuorum(committed, {1}));
+            for (ui32 nodeId : {2, 3}) {
+                UNIT_ASSERT(!metadata(nodeId).HasCommittedStorageConfig());
+                UNIT_ASSERT_VALUES_EQUAL(metadata(nodeId).GetProposedStorageConfig().GetGeneration(), 1u);
+            }
+        }
+
+        state.RequiredRootNodeId = 0;
+        TTestActorSystem runtime(3);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        std::vector<TActorId> keeperIds;
+        THashMap<TActorId, ui32> peerByProxy;
+        THashSet<ui32> stoppedNodes;
+        auto registerNode = [&](ui32 nodeId) {
+            stoppedNodes.erase(nodeId);
+            keeperIds.push_back(RegisterKeeper(runtime, config, nodeId, state, startupConfigYaml));
+            runtime.WrapInActorContext(keeperIds.back(), [&](IActor*) {
+                for (ui32 peerNodeId = 1; peerNodeId <= 3; ++peerNodeId) {
+                    if (peerNodeId != nodeId) {
+                        peerByProxy.emplace(TActivationContext::InterconnectProxy(peerNodeId), peerNodeId);
+                    }
+                }
+            });
+        };
+
+        bool partitioned = order == ERestartOrder::Partitioned;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvents::TSystem::Subscribe) {
+                const auto it = peerByProxy.find(ev->GetRecipientRewrite());
+                if (it != peerByProxy.end()
+                    && (stoppedNodes.contains(it->second) || (partitioned && (nodeId == 1 || it->second == 1)))) {
+                    auto response = std::make_unique<IEventHandle>(ev->Sender, ev->GetRecipientRewrite(),
+                                                                   new TEvInterconnect::TEvNodeDisconnected(it->second),
+                                                                   0, ev->Cookie);
+                    runtime.Schedule(bindFailureDelay, response.release(), nullptr, nodeId);
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        const auto describeRoots = [&] {
+            TStringBuilder result;
+            for (TActorId id : keeperIds) {
+                result << " " << id.NodeId() << "->" << FindConvergedRoot(runtime, {id}).value_or(0);
+            }
+            return TString(result);
+        };
+        TString rootsBeforeHealing;
+        if (order == ERestartOrder::ConfigMajorityFirst) {
+            runtime.StopNode(1);
+            stoppedNodes.insert(1);
+            registerNode(2);
+            registerNode(3);
+            UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keeperIds).has_value(); },
+                                 TDuration::Seconds(30), 2));
+            runtime.StartNode(1);
+            registerNode(1);
+        } else if (order == ERestartOrder::StorageQuorumFirst) {
+            runtime.StopNode(2);
+            runtime.StopNode(3);
+            stoppedNodes = {2, 3};
+            registerNode(1);
+            SimUntil(runtime, [] { return false; });
+            for (ui32 nodeId : {2, 3}) {
+                runtime.StartNode(nodeId);
+                registerNode(nodeId);
+            }
+        } else if (order == ERestartOrder::PartitionAfterCollection) {
+            runtime.StopNode(3);
+            stoppedNodes.insert(3);
+            state.RequiredRootNodeId = 1;
+            registerNode(1);
+            registerNode(2);
+            UNIT_ASSERT(SimUntil(runtime, [&] {
+                return FindConvergedRoot(runtime, keeperIds) == 1 && metadata(2).HasCommittedStorageConfig();
+            }));
+            CheckStaysConverged(runtime, keeperIds);
+
+            partitioned = true;
+            state.RequiredRootNodeId = 3;
+            runtime.WrapInActorContext(keeperIds.front(), [&](IActor*) {
+                TActivationContext::Send(new IEventHandle(TEvInterconnect::EvDisconnect, 0,
+                                                         TActivationContext::InterconnectProxy(2), {}, nullptr, 0));
+            });
+            runtime.StartNode(3);
+            registerNode(3);
+            UNIT_ASSERT(SimUntil(runtime, [&] {
+                return FindConvergedRoot(runtime, {keeperIds[1], keeperIds[2]}) == 3;
+            }));
+            rootsBeforeHealing = describeRoots();
+            partitioned = false;
+            state.RequiredRootNodeId = 0;
+        } else {
+            for (ui32 nodeId = 1; nodeId <= 3; ++nodeId) {
+                registerNode(nodeId);
+            }
+            if (partitioned) {
+                SimUntil(runtime, [] { return false; });
+                rootsBeforeHealing = describeRoots();
+                partitioned = false;
+            }
+        }
+        const bool converged = SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keeperIds).has_value(); },
+                                        TDuration::Minutes(5));
+        UNIT_ASSERT_C(converged,
+                      "nodes with committed and proposed bootstrap configs did not join the same binding tree"
+                      << "; bindFailureDelay=" << bindFailureDelay
+                      << "; before healing:" << rootsBeforeHealing << "; after healing:" << describeRoots());
+
+        const TString fingerprint = metadata(1).GetCommittedStorageConfig().GetFingerprint();
+        const ui32 rootNodeId = *FindConvergedRoot(runtime, keeperIds);
+        const auto root = std::ranges::find_if(keeperIds, [&](TActorId id) { return id.NodeId() == rootNodeId; });
+        BootstrapCluster(runtime, *root);
+        UNIT_ASSERT_C(SimUntil(runtime, [&] {
+            return std::ranges::all_of(keeperIds, [&](TActorId id) {
+                return metadata(id.NodeId()).GetCommittedStorageConfig().GetFingerprint() == fingerprint;
+            });
+        }), "bootstrap configuration was not recovered on all nodes");
+        CheckStaysConverged(runtime, keeperIds);
+    }
+
+    Y_UNIT_TEST(PartialBootstrapRestartConvergesThroughMailbox) {
+        CheckPartialBootstrapRestart(ERestartOrder::ConfigMajorityFirst);
+    }
+
+    Y_UNIT_TEST(PartialBootstrapStorageQuorumStartsFirst) {
+        CheckPartialBootstrapRestart(ERestartOrder::StorageQuorumFirst);
+    }
+
+    Y_UNIT_TEST(PartialBootstrapStorageQuorumStartsFirstWithFastFailures) {
+        CheckPartialBootstrapRestart(ERestartOrder::StorageQuorumFirst, TDuration::MilliSeconds(10));
+    }
+
+    Y_UNIT_TEST(PartialBootstrapSimultaneousRestart) {
+        CheckPartialBootstrapRestart(ERestartOrder::Simultaneous);
+    }
+
+    Y_UNIT_TEST(PartialBootstrapPartitionHeals) {
+        CheckPartialBootstrapRestart(ERestartOrder::Partitioned);
+    }
+
+    Y_UNIT_TEST(PartialBootstrapPartitionHealsAfterFastFailures) {
+        CheckPartialBootstrapRestart(ERestartOrder::Partitioned, TDuration::MilliSeconds(10));
+    }
+
+    Y_UNIT_TEST(PartialBootstrapUnevenDrivesPartitionHeals) {
+        CheckPartialBootstrapRestart(ERestartOrder::Partitioned, TDuration::MilliSeconds(10), true);
+    }
+
+    Y_UNIT_TEST(PartialBootstrapPartitionAfterSuccessfulCollectionHeals) {
+        CheckPartialBootstrapRestart(ERestartOrder::PartitionAfterCollection, TDuration::MilliSeconds(10));
+    }
+
+    Y_UNIT_TEST(PartialBootstrapPartitionHealsAfter500msFailures) {
+        CheckPartialBootstrapRestart(ERestartOrder::Partitioned, TDuration::MilliSeconds(500));
+    }
+
+    Y_UNIT_TEST(PartialBootstrapPartitionHealsAfter999msFailures) {
+        CheckPartialBootstrapRestart(ERestartOrder::Partitioned, TDuration::MilliSeconds(999));
+    }
+
+    Y_UNIT_TEST(PartialBootstrapPartitionHealsAfter1000msFailures) {
+        CheckPartialBootstrapRestart(ERestartOrder::Partitioned, TDuration::Seconds(1));
+    }
+
+    Y_UNIT_TEST(PartialBootstrapPartitionHealsAfter1001msFailures) {
+        CheckPartialBootstrapRestart(ERestartOrder::Partitioned, TDuration::MilliSeconds(1001));
     }
 
     Y_UNIT_TEST(Block42QuorumOverridesNodeMajority) {
@@ -347,10 +622,10 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
     Y_UNIT_TEST(Block42SplitConvergesThroughMailbox) {
         const auto config = MakeStorageConfig(17, 0, {1, 2, 3, 4, 5, 6, 7, 8},
                                               TBlobStorageGroupType::Erasure4Plus2Block);
-        TBindingObservation observation{9, 10, 11, 12, 13, 14, 15, 16, 17};
-        const ui32 rootNodeId = RunUntilConverged(config, observation, TDuration::Minutes(10), true);
-        UNIT_ASSERT(observation.SawCompleteMobileBinding);
-        UNIT_ASSERT(observation.SawScatter);
+        TNodeWardenTestState state{9, 10, 11, 12, 13, 14, 15, 16, 17};
+        const ui32 rootNodeId = RunUntilConverged(config, state, TDuration::Minutes(10), true);
+        UNIT_ASSERT(state.SawCompleteMobileBinding);
+        UNIT_ASSERT(state.SawScatter);
         UNIT_ASSERT(1 <= rootNodeId && rootNodeId <= 8);
     }
 }

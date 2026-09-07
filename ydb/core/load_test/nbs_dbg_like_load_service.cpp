@@ -639,7 +639,7 @@ private:
                 // Tablet was previously created by Hive but we don't know whether
                 // its TEvNbsLoadTabletAllocateGroups succeeded. Bypass TEvTabletCreationResult
                 // (Hive only sends that on first boot) and try the idempotent
-                // tablet handler directly. Phase 1.2 spec §23.10 case 1.
+                // tablet handler directly.
                 WaitingForTabletCreation = false;
                 LOG_N("Tablet already exists OwnerIdx# " << OwnerIdx
                     << " TabletId# " << TabletId);

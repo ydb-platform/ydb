@@ -482,8 +482,8 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
         f.ClosePipe(pipe);
     }
 
-    // End-to-end data-integrity test that drives the merged tablet directly,
-    // bypassing the load-actor / Run path. Spec §12.1: TEvNbsWrite/Read
+    // End-to-end data-integrity test that drives the load tablet directly,
+    // bypassing the load-actor / Run path. TEvNbsWrite/Read
     // travel over the tablet pipe and carry user payload via TRope. The
     // first 8 bytes of each block encode the block number; we write 1000
     // unique 4 KiB blocks and read them back, asserting the round-trip
@@ -700,12 +700,10 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
     // Regression for cross-DBG LSN collision. With a single DDisk group PB
     // slots are scarce, so the BSC packs both DBGs of one tablet onto the SAME
     // persistent-buffer slot instance (AllocatePersistentBuffer refcounts and
-    // reuses slots; there is no cross-DBG exclusion). A PB record is deduped by
-    // {TabletId, Generation, Lsn} only -- the per-DBG DDiskInstanceGuid is the
-    // slot-instance id, not part of the key. Each DBG worker used to assign LSNs
-    // from an independent sequence starting at 1, so DBG0 and DBG1 emitted
-    // identical LSNs with different data to the shared slot -> "duplicate record
-    // with incorrect data" -> the write lost quorum (NBSIO_QUORUM_LOST). Drives
+    // reuses slots; there is no cross-DBG exclusion). The original regression
+    // predated the DBG index in PB record identity: independent sequences
+    // starting at 1 collided on the shared slot and lost write quorum.
+    // Current PB keys include the DBG index and load LSNs remain strided. Drives
     // a few writes per DBG at distinct offsets (so flushes hit different DD
     // blocks); every write must be accepted.
     Y_UNIT_TEST(MultiDbgSharedDDiskNoLsnCollision) {

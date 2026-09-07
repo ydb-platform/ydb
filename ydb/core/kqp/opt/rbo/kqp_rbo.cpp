@@ -103,7 +103,7 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
         for (const auto& iter : root) {
             for (const auto& rule : Rules) {
                 auto op = iter.Current;
-                if (!rule->QuickMatch(op)) {
+                if (!rule->QuickMatch(op, root.PlanProps)) {
                     continue;
                 }
 

@@ -56,6 +56,7 @@ class TInlineScalarSubplanRule : public IRule {
   public:
     TInlineScalarSubplanRule() : IRule("Inline scalar subplan", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {}
 
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input, TPlanProps& props) const override;
     virtual bool MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
 
@@ -63,6 +64,7 @@ class TInlineSimpleInExistsSubplanRule : public ISimplifiedRule {
   public:
     TInlineSimpleInExistsSubplanRule() : ISimplifiedRule("Inline simple in or exists subplan", ERuleProperties::RequireParents) {}
 
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input, TPlanProps& props) const override;
     virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
@@ -71,6 +73,7 @@ class TInlineGenericInExistsSubplanRule : public ISimplifiedRule {
   public:
     TInlineGenericInExistsSubplanRule() : ISimplifiedRule("Inline generic in or exists subplan", ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireMetadata) {}
 
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input, TPlanProps& props) const override;
     virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };

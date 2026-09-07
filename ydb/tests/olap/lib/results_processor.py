@@ -239,6 +239,8 @@ class ResultsProcessor:
                 info['test_tools_git'] = test_git_info
             if os.getenv('CI_TEST_VERSION'):
                 info['test_version'] = os.getenv('CI_TEST_VERSION')
+            tags: str = get_external_param('tags', '')
+            info['tags'] = list(filter(lambda x: bool(x), tags.split(', ')))
 
             data = {
                 'Db': cls.get_cluster_id(),

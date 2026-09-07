@@ -1,8 +1,8 @@
+# Changing the `NOT NULL` constraint
+
+The `NOT NULL` constraint is a column-level data integrity constraint that prohibits writing `NULL` values. It ensures that the column always contains a valid value.
+
 {% if feature_alter_column_not_null == true %}
-
-# Setting and dropping the `NOT NULL` constraint
-
-A column-level data integrity constraint that prohibits writing `NULL` as values. This constraint ensures that the column always contains a valid value.
 
 In YDB, the `SET NOT NULL` operation is performed as a synchronous SQL operation that waits for the schema change to be applied. At the same time, a background operation is created to check the table for `NULL` values in existing data.
 
@@ -33,6 +33,8 @@ Notes:
 
 * If validation fails, the `SET NOT NULL` operation will complete with error `Validation failed for SET NOT NULL on table ...: one or more columns contain NULL values`.
 
+{% endif %}
+
 ## Dropping `NOT NULL`
 
 `DROP NOT NULL` removes the `NOT NULL` constraint from the specified column.
@@ -45,12 +47,8 @@ ALTER TABLE table_name ALTER COLUMN column_name DROP NOT NULL;
 ```
 
 
-Note:
-
-* `DROP NOT NULL` is only supported for [row tables](../../../../concepts/datamodel/table.md#row-oriented-tables).
+`DROP NOT NULL` can be applied to non-key columns in both row-oriented and column-oriented tables.
 
 ## See also
 
 * [ALTER COLUMN](columns.md)
-
-{% endif %}

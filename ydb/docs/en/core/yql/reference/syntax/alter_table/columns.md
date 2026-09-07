@@ -56,7 +56,7 @@ Modifies properties of an existing column in the specified table. Property chang
 
 ```yql
 ALTER TABLE table_name ALTER COLUMN column_name SET [FAMILY <family_name>]{% if feature_alter_column_not_null == true %} [NOT NULL]{% endif %} [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])] [ENCODING([OFF|DICT])];
-ALTER TABLE table_name ALTER COLUMN column_name DROP [FAMILY]{% if feature_alter_column_not_null == true %} [NOT NULL]{% endif %} [DEFAULT] [COMPRESSION] [ENCODING];
+ALTER TABLE table_name ALTER COLUMN column_name DROP [FAMILY] [NOT NULL] [DEFAULT] [COMPRESSION] [ENCODING];
 ```
 
 

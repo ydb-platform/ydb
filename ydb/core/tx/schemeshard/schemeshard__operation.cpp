@@ -1046,7 +1046,14 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
 ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::ETxState txState, TOperationContext& context) const {
     TTxState* state = context.SS->FindTx(NextPartId());
     switch (txType) {
-    SCHEME_OPERATION_RECOVERY_CASES
+    case TTxState::TxAlterView:
+        AbortUnimplementedSchemeOperation<NKikimrSchemeOp::ESchemeOpAlterView>();
+    case TTxState::TxAlterBackupCollection:
+        AbortUnimplementedSchemeOperation<NKikimrSchemeOp::ESchemeOpAlterBackupCollection>();
+    case TTxState::TxCreateContinuousBackup:
+    case TTxState::TxAlterContinuousBackup:
+    case TTxState::TxDropContinuousBackup:
+        Y_ABORT("Transient operation has no persisted transaction");
     case TTxState::ETxType::TxMkDir:
         return CreateMkDir(NextPartId(), txState);
     case TTxState::ETxType::TxRmDir:
@@ -1358,11 +1365,7 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         const TTxTransaction& tx,
         TOperationContext& context) const
 {
-    switch (tx.GetOperationType()) {
-    SCHEME_OPERATION_FACTORY_CASES(op, tx, context)
-    }
-
-    Y_UNREACHABLE();
+    return MakeRegisteredOperationParts(op, tx, context);
 }
 
 TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx, TOperationContext& context) const {

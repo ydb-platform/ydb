@@ -15,7 +15,6 @@ RUN_PROGRAM(
     OUTPUT_INCLUDES
         ydb/core/protos/flat_scheme_op.pb.h
         ydb/core/protos/schemeshard/operations.pb.h
-        util/system/yassert.h
 )
 
 END()

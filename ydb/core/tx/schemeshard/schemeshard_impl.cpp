@@ -1,7 +1,7 @@
 #include "schemeshard_impl.h"
-#include "schemeshard_operation_registry.h"
 #include "schemeshard__local_index_migration.h"
 #include "schemeshard_svp_migration.h"
+#include "schemeshard_operation_registry.h"
 
 #include "olap/bg_tasks/adapter/adapter.h"
 #include "olap/bg_tasks/events/global.h"
@@ -10,6 +10,7 @@
 #include "schemeshard__root_shred_manager.h"
 #include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard_svp_migration.h"
+#include "schemeshard_operation_registry.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tx_processing.h>

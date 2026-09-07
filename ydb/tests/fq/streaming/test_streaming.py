@@ -2366,4 +2366,3 @@ FROM `{table_name}`"""
         second_node = list(kikimr.cluster.slots.values())[1]
         second_ydb_client = YdbClient.from_driver_config(database=kikimr.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
         check_issues("Lease expired", client=second_ydb_client)
-

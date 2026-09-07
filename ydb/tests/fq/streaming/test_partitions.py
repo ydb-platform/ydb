@@ -99,11 +99,22 @@ class TestStreamingPartitions(StreamingTestBase):
         for message_index in range(10):
             for producer_id in ("auto-split-producer-1", "auto-split-producer-2"):
                 load_message = f"{producer_id}-{message_index}-{load_message_payload}"
-                kikimr.ydb_client.topic_write(
-                    input_topic,
-                    [load_message],
-                    producer_id=producer_id,
-                )
+                for attempt in range(5):
+                    try:
+                        kikimr.ydb_client.topic_write(
+                            input_topic,
+                            [load_message],
+                            producer_id=producer_id,
+                        )
+                        break
+                    except RuntimeError as error:
+                        if (
+                            str(error) != "StopIteration interacts badly with generators and cannot be raised into a Future"
+                            or attempt == 4
+                        ):
+                            raise
+                        logger.warning("Write stream closed during auto-partitioning; retrying with a new writer")
+                        time.sleep(1)
 
         def has_real_split() -> bool:
             partitions = {
@@ -196,11 +207,22 @@ class TestStreamingPartitions(StreamingTestBase):
             for producer_id in ("auto-split-restart-producer-1", "auto-split-restart-producer-2"):
                 load_message = f"{producer_id}-{message_index}-{load_message_payload}"
                 load_messages.append(load_message)
-                kikimr.ydb_client.topic_write(
-                    input_topic,
-                    [load_message],
-                    producer_id=producer_id,
-                )
+                for attempt in range(5):
+                    try:
+                        kikimr.ydb_client.topic_write(
+                            input_topic,
+                            [load_message],
+                            producer_id=producer_id,
+                        )
+                        break
+                    except RuntimeError as error:
+                        if (
+                            str(error) != "StopIteration interacts badly with generators and cannot be raised into a Future"
+                            or attempt == 4
+                        ):
+                            raise
+                        logger.warning("Write stream closed during auto-partitioning; retrying with a new writer")
+                        time.sleep(1)
 
         def has_real_split() -> bool:
             partitions = {

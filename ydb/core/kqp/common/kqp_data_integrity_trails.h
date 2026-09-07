@@ -120,7 +120,7 @@ inline TStructuredMessage ToStructuredMessage(const NKikimrDataEvents::TLock& lo
     }
 
     if (lock.HasSchemeShard()) {
-        YDB_LOG_UPDATE_MESSAGE(result , {"schemeShard", lock.GetCounter()});
+        YDB_LOG_UPDATE_MESSAGE(result , {"schemeShard", lock.GetSchemeShard()});
     }
 
     if (lock.HasPathId()) {

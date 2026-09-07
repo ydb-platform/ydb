@@ -5759,8 +5759,8 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             true, true);
         AssertStatus(initial.WriteResult, TReplyStatus::OK);
 
-        // Hold the I/O callback before it reaches the DDisk actor. No client
-        // reply is emitted directly from the I/O thread.
+        // Hold the completion-thread callback before it reaches the DDisk actor. No client reply
+        // is emitted directly from the completion thread.
         std::unique_ptr<IEventHandle> heldCompletion;
         ctx.Runtime.FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
             if (!heldCompletion && ev->GetTypeRewrite()

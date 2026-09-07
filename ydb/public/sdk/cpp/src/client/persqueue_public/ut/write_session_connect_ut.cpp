@@ -23,8 +23,10 @@ TContinuationToken WaitForWriteToken(IWriteSession& session) {
 
 Y_UNIT_TEST_SUITE(WriteSessionConnect) {
     // After TDriver::Stop the driver scope is cancelled and
-    // ClientContext->CreateContext() returns nullptr. Direct CDS is disabled so
-    // reconnect calls DoConnect() and must AbortImpl instead of Y_ASSERT.
+    // subclient->CreateContext() returns nullptr. Direct CDS is disabled so
+    // reconnect calls DoConnect() and must AbortImpl (releasing ClientContext)
+    // instead of keeping the established context. Stop(true) waits for that
+    // context to be destroyed; keeping it deadlocks here.
     Y_UNIT_TEST(ReconnectAfterDriverStopDoesNotAbortOnNullConnectContext) {
         TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
         auto& driver = setup.GetDriver();
@@ -40,20 +42,8 @@ Y_UNIT_TEST_SUITE(WriteSessionConnect) {
         auto session = client.CreateWriteSession(settings);
         Y_UNUSED(WaitForWriteToken(*session));
 
-        driver.Stop(false);
-
-        const auto deadline = TInstant::Now() + TDuration::Seconds(10);
-        while (TInstant::Now() < deadline) {
-            session->WaitEvent().Wait(TDuration::MilliSeconds(200));
-            for (auto& event : session->GetEvents()) {
-                if (std::get_if<TSessionClosedEvent>(&event)) {
-                    session->Close(TDuration::Zero());
-                    return;
-                }
-            }
-        }
-
-        session->Close(TDuration::Zero());
+        driver.Stop(true);
+        session.reset();
     }
 }
 

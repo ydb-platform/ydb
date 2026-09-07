@@ -25,11 +25,10 @@ TContinuationToken WaitForWriteToken(IWriteSession& session) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(WriteSessionConnect) {
-    // Reproduces Y_ASSERT(ConnectContext) in TWriteSessionImpl::Connect:
-    // ClientContext is kept across reconnect, but after TDriver::Stop the
-    // driver scope is cancelled and ClientContext->CreateContext() returns
-    // nullptr. DirectWriteToPartition(false) makes reconnect call Connect()
-    // directly instead of DescribePartition (which already handled nullptr).
+    // After TDriver::Stop the driver scope is cancelled. DirectWriteToPartition
+    // (false) makes reconnect call Connect() with a still-live ClientContext.
+    // Connect must AbortImpl instead of creating children of that context.
+    // Stop(true) waits for ClientContext to be destroyed; keeping it deadlocks.
     Y_UNIT_TEST(ReconnectAfterDriverStopDoesNotAbortOnNullConnectContext) {
         TTopicSdkTestSetup setup(TEST_CASE_NAME);
         TDriver driver(setup.MakeDriverConfig());
@@ -46,20 +45,8 @@ Y_UNIT_TEST_SUITE(WriteSessionConnect) {
 
         Y_UNUSED(WaitForWriteToken(*session));
 
-        driver.Stop(false);
-
-        const auto deadline = TInstant::Now() + TDuration::Seconds(10);
-        while (TInstant::Now() < deadline) {
-            session->WaitEvent().Wait(TDuration::MilliSeconds(200));
-            for (auto& event : session->GetEvents()) {
-                if (std::get_if<TSessionClosedEvent>(&event)) {
-                    session->Close(TDuration::Zero());
-                    return;
-                }
-            }
-        }
-
-        session->Close(TDuration::Zero());
+        driver.Stop(true);
+        session.reset();
     }
 }
 

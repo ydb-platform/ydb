@@ -426,16 +426,14 @@ void TWriteSessionImpl::DoConnect(const TDuration& delay, const std::string& end
         ++ConnectionGeneration;
         auto subclient = Client->GetClientForEndpoint(endpoint);
         auto clientContext = subclient->CreateContext();
-        NYdbGrpc::IQueueClientContextPtr prevClientContext;
-        if (clientContext) {
-            prevClientContext = std::exchange(ClientContext, clientContext);
-        } else if (!ClientContext) {
+        if (!clientContext) {
             AbortImpl();
-            // Grpc and WriteSession is closing right now.
+            // Driver is stopping. Do not keep ClientContext: children of an
+            // existing context can still be created after TDriver::Stop, which
+            // leaves CQ Contexts_ non-empty and deadlocks Stop(true).
             return;
         }
-        // Keep ClientContext if subclient->CreateContext() failed: after
-        // TDriver::Stop children are also null and the check below aborts.
+        auto prevClientContext = std::exchange(ClientContext, clientContext);
 
         ServerMessage = std::make_shared<TServerMessage>();
 

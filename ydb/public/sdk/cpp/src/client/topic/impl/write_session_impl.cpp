@@ -913,6 +913,12 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
                 // Grpc and WriteSession is closing right now.
                 return;
             }
+        } else if (ClientContext->IsCancelled()) {
+            AbortImpl();
+            // Driver is stopping. Children of a cancelled ClientContext can
+            // still be created, which leaves CQ Contexts_ non-empty and
+            // deadlocks TDriver::Stop(true).
+            return;
         }
 
         ServerMessage = std::make_shared<TServerMessage>();
@@ -925,9 +931,8 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
             connectDelayContext = ClientContext->CreateContext();
         connectTimeoutContext = ClientContext->CreateContext();
 
-        // ClientContext can outlive driver shutdown: TDriverScope::Cancel()
-        // drops the root so CreateContext() returns nullptr. Y_ASSERT used to
-        // abort here (topic balancing stress, write session reconnect).
+        // A missing child used to Y_ASSERT. After driver stop, Connect aborts
+        // earlier on a cancelled ClientContext.
         const bool missingDelayContext = delay && !connectDelayContext;
         if (!connectContext || !connectTimeoutContext || missingDelayContext) {
             // Drop children before AbortImpl resets ClientContext; otherwise a

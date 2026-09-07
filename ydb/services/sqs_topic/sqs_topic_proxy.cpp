@@ -55,16 +55,8 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void Bootstrap(const NActors::TActorContext& ctx) {
             TBase::Bootstrap(ctx);
-            this->Become(&TNotImplementedRequestActor::StateWork);
+            this->Become(&TNotImplementedRequestActor::TBase::StateWork);
             this->ChargeRequestUnits(ctx);
-        }
-
-        void StateWork(TAutoPtr<IEventHandle>& ev) {
-            TBase::StateWork(ev);
-        }
-
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            Y_UNUSED(ev);
         }
 
         ui64 GetRUCost() override {

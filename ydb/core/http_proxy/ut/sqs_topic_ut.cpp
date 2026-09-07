@@ -11,6 +11,7 @@
 #include <ydb/library/testlib/service_mocks/iam_token_service_mock.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_session.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/metering/stream_ru_calculator.h>
 #include <ydb/core/quoter/public/quoter.h>
@@ -302,19 +303,6 @@ namespace {
             .EndAddConsumer());
     }
 
-    // Replicates TStreamRequestUnitsCalculator::CalcConsumption for a freshly
-    // constructed calculator (Remainder == blockSize). Each RU-metered request
-    // uses its own actor and therefore its own fresh calculator, so a single
-    // charge maps its payload onto blocks with this formula. Used by the
-    // metering tests to predict the block-based part of a write/read charge.
-    ui64 RuPayloadBlocks(ui64 payloadSize, ui64 blockSize) {
-        if (payloadSize <= blockSize) {
-            return 0;
-        }
-        payloadSize -= blockSize;
-        return payloadSize / blockSize + ((payloadSize % blockSize) ? 1 : 0);
-    }
-
     struct TRuCharge {
         TString Quoter;
         TString Resource;
@@ -334,11 +322,13 @@ namespace {
     public:
         TRuQuoterServiceMock(std::shared_ptr<TMutex> lock,
                              std::shared_ptr<TVector<TRuCharge>> charges,
-                             TString resourceFilter)
+                             TString resourceFilter,
+                             TEvQuota::TEvClearance::EResult result)
             : TActor(&TRuQuoterServiceMock::StateWork)
             , Lock_(std::move(lock))
             , Charges_(std::move(charges))
             , ResourceFilter_(std::move(resourceFilter))
+            , Result_(result)
         {}
 
         STFUNC(StateWork) {
@@ -357,7 +347,7 @@ namespace {
                 }
             }
             Send(ev->Sender,
-                 new TEvQuota::TEvClearance(TEvQuota::TEvClearance::EResult::Success),
+                 new TEvQuota::TEvClearance(Result_),
                  0, ev->Cookie);
         }
 
@@ -365,6 +355,7 @@ namespace {
         std::shared_ptr<TMutex> Lock_;
         std::shared_ptr<TVector<TRuCharge>> Charges_;
         TString ResourceFilter_;
+        TEvQuota::TEvClearance::EResult Result_;
     };
 
     // Registers a TRuQuoterServiceMock in place of the real quoter service and
@@ -375,13 +366,16 @@ namespace {
     // polls briefly to be robust against cross-thread memory ordering.
     class TRuRecorder {
     public:
-        TRuRecorder(TTestActorRuntime* runtime, TString resourceFilter)
+        TRuRecorder(
+            TTestActorRuntime* runtime,
+            TString resourceFilter,
+            TEvQuota::TEvClearance::EResult result = TEvQuota::TEvClearance::EResult::Success)
             : Lock_(std::make_shared<TMutex>())
             , Charges_(std::make_shared<TVector<TRuCharge>>())
         {
             const ui32 nodeIndex = 0;
             const ui32 systemPoolId = runtime->GetAppData().SystemPoolId;
-            auto* actor = new TRuQuoterServiceMock(Lock_, Charges_, std::move(resourceFilter));
+            auto* actor = new TRuQuoterServiceMock(Lock_, Charges_, std::move(resourceFilter), result);
             const TActorId actorId = runtime->Register(actor, nodeIndex, systemPoolId);
             runtime->RegisterService(MakeQuoterServiceID(), actorId);
         }
@@ -2280,7 +2274,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         // Total payload = count * size (24 KiB) mapped onto WRITE_BLOCK_SIZE
         // blocks by a fresh calculator. 
         // => Cost = base + blocks
-        const ui64 blocks = RuPayloadBlocks(
+        const ui64 blocks = NBilling::PayloadBlocks(
             RuMetering_MessageCount * RuMetering_MessageSize, NBilling::WRITE_BLOCK_SIZE);
         const ui64 expected = NBilling::CalcRu(blocks, NBilling::WRITE_BASE_COST, NBilling::WRITE_COST_PER_BLOCK, false);
         UNIT_ASSERT_VALUES_EQUAL(blocks, 5);
@@ -2347,7 +2341,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         // Total payload = count * size (24 KiB) mapped onto READ_BLOCK_SIZE
         // blocks by a fresh calculator. 
         // => Cost = base + blocks
-        const ui64 blocks = RuPayloadBlocks(
+        const ui64 blocks = NBilling::PayloadBlocks(
             RuMetering_MessageCount * RuMetering_MessageSize, NBilling::READ_BLOCK_SIZE);
         const ui64 expected = NBilling::CalcRu(blocks, NBilling::READ_BASE_COST, NBilling::READ_COST_PER_BLOCK, false);
         UNIT_ASSERT_VALUES_EQUAL(totalReadRu, expected);
@@ -2674,6 +2668,79 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         PurgeQueue({{"QueueUrl", ""}}, 400);
 
         AssertNoRequestUnitsCharge(recorder, metering);
+    }
+
+    Y_UNIT_TEST_F(TestNoKesusAcquireWithoutServerlessRtAttrs, TFixture) {
+        namespace NBilling = NKikimr::NSqsTopic::V1::NBilling;
+
+        const TRuTopicSetup ru;
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        UNIT_ASSERT(CreateTopic(driver, path.TopicName, path.ConsumerName));
+
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+        TMeteringRecorder metering(ActorRuntime);
+
+        auto sendJson = SendMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"MessageBody", "no-rl-attrs"},
+        });
+        UNIT_ASSERT(!sendJson["MessageId"].GetString().empty());
+
+        auto charges = recorder.Take(1, TDuration::MilliSeconds(300));
+        UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 0, "kesus acquire requires serverless_rt_* attrs");
+
+        auto bills = metering.Take();
+        UNIT_ASSERT_VALUES_EQUAL_C(bills.size(), 1, "metering ids are present on /Root even without RL attrs");
+        AssertYdsRequestUnitsBill(bills[0], NBilling::RoundRu(NBilling::WRITE_BASE_COST));
+    }
+
+    Y_UNIT_TEST_F(TestThrottlingExceptionOnKesusDeadline, TFixture) {
+        const TRuTopicSetup ru;
+        SetupServerlessRuAttributes(*this, ru);
+
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        UNIT_ASSERT(CreateTopic(driver, path.TopicName, path.ConsumerName));
+
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath, TEvQuota::TEvClearance::EResult::Deadline);
+        TMeteringRecorder metering(ActorRuntime);
+
+        auto json = SendMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"MessageBody", "throttled"},
+        }, 403);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "ThrottlingException");
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "message"), "Request was throttled by the rate limiter");
+
+        auto bills = metering.Take(1, TDuration::MilliSeconds(300));
+        UNIT_ASSERT_VALUES_EQUAL_C(bills.size(), 0, "throttled requests must not write a bill");
+    }
+
+    Y_UNIT_TEST_F(TestSendAndGetQueueUrlOnTablePath, TFixture) {
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        NYdb::NTable::TTableClient tableClient(driver, NYdb::NTable::TClientSettings().UseQueryCache(false));
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        const auto createTable = session.ExecuteSchemeQuery(R"-(
+            --!syntax_v1
+            CREATE TABLE `/Root/topic1` (
+                id Uint64,
+                PRIMARY KEY (id)
+            );
+        )-").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(createTable.GetStatus(), NYdb::EStatus::SUCCESS, createTable.GetIssues().ToString());
+
+        auto urlJson = GetQueueUrl({{"QueueName", path.TopicName}}, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(urlJson, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(urlJson, "message"), "Queue name used by another scheme object");
+
+        auto sendJson = SendMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"MessageBody", "x"},
+        }, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(sendJson, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(sendJson, "message"), "Queue name used by another scheme object");
     }
 
     Y_UNIT_TEST_F(TestChangeMessageVisibilityInvalid, TFixture) {

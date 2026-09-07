@@ -36,8 +36,6 @@
 
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
-#include <ydb/services/sqs_topic/statuses.h>
-
 namespace NKikimr::NSqsTopic::V1 {
 
     using namespace NGRpcService;
@@ -58,7 +56,6 @@ namespace NKikimr::NSqsTopic::V1 {
         void Bootstrap(const NActors::TActorContext& ctx);
 
         void StateWork(TAutoPtr<IEventHandle>& ev);
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
         void Handle(TEvPQ::TEvListAllTopicsResponse::TPtr& ev);
         void Handle(NPQ::NDescriber::TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx);
         ui64 GetRUCost() override;
@@ -215,10 +212,6 @@ namespace NKikimr::NSqsTopic::V1 {
             default:
                 TBase::StateWork(ev);
         }
-    }
-
-    void TListQueuesActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        Y_UNUSED(ev);
     }
 
     std::unique_ptr<NActors::IActor> CreateListQueuesActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {

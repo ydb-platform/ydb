@@ -37,7 +37,6 @@
 
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
-#include <ydb/core/persqueue/public/pq_rl_helpers.h>
 
 #include <ydb/services/sqs_topic/billing.h>
 
@@ -106,7 +105,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
             PrepareWrite();
 
-            this->SendDescribeProposeRequest(ctx);
+            this->DescribeTopic(NACLib::UpdateRow);
             this->Become(&TSendMessageActorBase::StateWork);
         }
 
@@ -292,36 +291,22 @@ namespace NKikimr::NSqsTopic::V1 {
             CreateWriter();
         }
 
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            AFL_ENSURE(result->ResultSet.size() == 1)("result_set_size", result->ResultSet.size())("path", FullTopicPath_);
-            const auto& response = result->ResultSet.front();
-            if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-                if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-                    return this->ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION, TStringBuilder() << "Writing to the Changefeed is not supported"));
-                }
-                if (response.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
-                    return this->ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE, TStringBuilder() << "Queue name used by another scheme object"));
-                }
-                // ok
-            } else if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
-                return this->ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist")));
-            } else {
-                return this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
-                                                TStringBuilder() << "Failed to describe topic: " << response.Status));
-            }
+        TTopicDescribePolicy GetTopicDescribePolicy() const {
+            return ExistingQueuePolicy(TString("Writing to the Changefeed is not supported"));
+        }
 
-            AFL_ENSURE(response.PQGroupInfo)("path", FullTopicPath_);
+        void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo& topicInfo) {
+            AFL_ENSURE(topicInfo.Info)("path", FullTopicPath_);
             Fifo_ = QueueUrl_->Fifo;
             ApplyContentBasedDeduplication(
-                Fifo_ && response.PQGroupInfo->Description.GetPQTabletConfig().GetContentBasedDeduplication());
+                Fifo_ && topicInfo.Info->Description.GetPQTabletConfig().GetContentBasedDeduplication());
 
             this->ChargeRequestUnits(TlsActivationContext->AsActorContext());
         }
 
         ui64 GetRUCost() override {
             return NBilling::CalcRu(
-                this->CalcRuConsumption(PayloadSize_),
+                NBilling::PayloadBlocks(PayloadSize_, NBilling::WRITE_BLOCK_SIZE),
                 NBilling::WRITE_BASE_COST,
                 NBilling::WRITE_COST_PER_BLOCK,
                 Fifo_);

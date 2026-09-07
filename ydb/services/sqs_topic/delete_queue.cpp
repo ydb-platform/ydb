@@ -90,44 +90,17 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
                 hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
                 default:
                     TBase::StateWork(ev);
             }
         }
 
-        void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-            const auto* result = ev->Get();
-            AFL_ENSURE(result->Topics.size() == 1)("topics_size", result->Topics.size())("path", FullTopicPath_);
-            const auto& topicInfo = result->Topics.begin()->second;
+        TTopicDescribePolicy GetTopicDescribePolicy() const {
+            return DeleteQueueDescribePolicy();
+        }
 
-            switch(topicInfo.Status) {
-                case NDescriber::EStatus::SUCCESS: {
-                    if (topicInfo.CdcStream) {
-                        return ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION,
-                            "Deleting the changefeed is not supported"));
-                    }
-                    break;
-                }
-                case NDescriber::EStatus::NOT_TOPIC:
-                    return ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE,
-                        "Queue name used by another scheme object"));
-                case NDescriber::EStatus::NOT_FOUND:
-                case NDescriber::EStatus::UNAUTHORIZED:
-                    return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE,
-                        "The specified queue doesn't exist"));
-                case NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
-                    return ReplyWithError(MakeError(NSQS::NErrors::ACCESS_DENIED,
-                        "Access denied"));
-                case NDescriber::EStatus::BAD_REQUEST:
-                    return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE,
-                        NDescriber::Description(FullTopicPath_, topicInfo.Status)));
-                case NDescriber::EStatus::UNKNOWN_ERROR:
-                    return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
-                        "Failed to describe topic"));
-            }
-
+        void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo& topicInfo) {
             const auto& pqGroup = topicInfo.Info->Description;
 
             auto consumerConfig = GetConsumerConfig(pqGroup.GetPQTabletConfig(), QueueUrl_->Consumer, ActorContext());
@@ -174,10 +147,6 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void OnRequestUnitsCharged(const TActorContext&) {
             this->Reply(Ydb::StatusIds::SUCCESS);
-        }
-
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&) {
-            // TODO remove it
         }
 
     protected:

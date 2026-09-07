@@ -34,11 +34,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <ydb/core/persqueue/public/mlp/mlp.h>
-#include <ydb/core/persqueue/public/pq_rl_helpers.h>
 
 #include <ydb/services/sqs_topic/billing.h>
-
-#include <ydb/services/sqs_topic/statuses.h>
 
 #include <ydb/library/actors/core/log.h>
 
@@ -63,8 +60,7 @@ namespace NKikimr::NSqsTopic::V1 {
     template <class TDerived, class TServiceRequest>
     class TDeleteMessageActorBase:
         public TQueueUrlHolder,
-        public TGrpcActorBase<TDeleteMessageActorBase<TDerived, TServiceRequest>, TServiceRequest>,
-        public TCdcStreamCompatible {
+        public TGrpcActorBase<TDeleteMessageActorBase<TDerived, TServiceRequest>, TServiceRequest> {
     protected:
         using TBase = TGrpcActorBase<TDeleteMessageActorBase, TServiceRequest>;
         using TProtoRequest = typename TBase::TProtoRequest;
@@ -136,7 +132,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 .UserToken = this->Request_->GetInternalToken(),
             };
 
-            this->SendDescribeProposeRequest(ctx);
+            this->DescribeTopic(NACLib::DescribeSchema);
             this->Become(&TDeleteMessageActorBase::StateWork);
         }
 
@@ -223,28 +219,7 @@ namespace NKikimr::NSqsTopic::V1 {
             this->TBase::Die(ctx);
         }
 
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            AFL_ENSURE(result->ResultSet.size() == 1)("result_set_size", result->ResultSet.size())("path", FullTopicPath_);
-            const auto& response = result->ResultSet.front();
-            if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-                if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-                    if (this->ProcessCdc(response)) {
-                        return;
-                    }
-                    return this->ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION, TStringBuilder() << "Deleting from the Changefeed is not supported"));
-                }
-                if (response.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
-                    return this->ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE, TStringBuilder() << "Queue name used by another scheme object"));
-                }
-                // ok
-            } else if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
-                return this->ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist")));
-            } else {
-                return this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
-                                                TStringBuilder() << "Failed to describe topic: " << response.Status));
-            }
-
+        void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo&) {
             this->ChargeRequestUnits(TlsActivationContext->AsActorContext());
         }
 

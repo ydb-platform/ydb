@@ -134,10 +134,6 @@ namespace NKikimr::NSqsTopic::V1 {
             this->TBase::Die(ctx);
         }
 
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            Y_UNUSED(ev);
-        }
-
     private:
 
         const TProtoRequest& Request() const {

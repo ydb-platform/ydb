@@ -1,16 +1,20 @@
 #include <ydb/services/sqs_topic/billing.h>
+#include <ydb/services/sqs_topic/metering_attrs.h>
+#include <ydb/services/sqs_topic/statuses.h>
 #include <ydb/services/sqs_topic/utils.h>
 #include <ydb/services/sqs_topic/queue_url/utils.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/event_local.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/hash.h>
 #include <util/system/hostname.h>
 
 using namespace NKikimr::NSqsTopic;
@@ -255,5 +259,83 @@ Y_UNIT_TEST_SUITE(SqsTopicBilling) {
         UNIT_ASSERT_VALUES_EQUAL(CalcRu(0, WRITE_BASE_COST, WRITE_COST_PER_BLOCK, true), 3);
         UNIT_ASSERT_VALUES_EQUAL(CalcRu(5, WRITE_BASE_COST, WRITE_COST_PER_BLOCK, false), 7);
         UNIT_ASSERT_VALUES_EQUAL(CalcRu(5, WRITE_BASE_COST, WRITE_COST_PER_BLOCK, true), 8);
+    }
+
+    Y_UNIT_TEST(PayloadBlocksMatchesOneShotCalculator) {
+        using namespace NKikimr::NSqsTopic::V1::NBilling;
+
+        UNIT_ASSERT_VALUES_EQUAL(PayloadBlocks(0, WRITE_BLOCK_SIZE), 0);
+        UNIT_ASSERT_VALUES_EQUAL(PayloadBlocks(WRITE_BLOCK_SIZE, WRITE_BLOCK_SIZE), 0);
+        UNIT_ASSERT_VALUES_EQUAL(PayloadBlocks(3 * READ_BLOCK_SIZE, WRITE_BLOCK_SIZE), 5);
+        UNIT_ASSERT_VALUES_EQUAL(
+            CalcRu(PayloadBlocks(3 * READ_BLOCK_SIZE, WRITE_BLOCK_SIZE), WRITE_BASE_COST, WRITE_COST_PER_BLOCK, false),
+            7);
+    }
+}
+
+Y_UNIT_TEST_SUITE(SqsTopicMeteringAttrs) {
+    Y_UNIT_TEST(ParseRlContextRequiresBothAttrs) {
+        using namespace NKikimr::NSqsTopic::V1;
+
+        THashMap<TString, TString> attrs;
+        UNIT_ASSERT(!ParseRlContext(attrs, "/Root", "token"));
+        attrs[TString(RL_COORDINATION_NODE_ATTR)] = "/Root/ru";
+        UNIT_ASSERT(!ParseRlContext(attrs, "/Root", "token"));
+        attrs[TString(RL_TOPIC_RESOURCE_ATTR)] = "resource";
+        auto ctx = ParseRlContext(attrs, "/Root", "token");
+        UNIT_ASSERT(ctx.Defined());
+        UNIT_ASSERT(*ctx);
+    }
+
+    Y_UNIT_TEST(ParseMeteringIdsIsCompleteOnlyWhenAllPresent) {
+        using namespace NKikimr::NSqsTopic::V1;
+
+        THashMap<TString, TString> attrs;
+        UNIT_ASSERT(!ParseMeteringIds(attrs).IsComplete());
+        attrs[TString(CLOUD_ID_ATTR)] = "cloud";
+        attrs[TString(FOLDER_ID_ATTR)] = "folder";
+        UNIT_ASSERT(!ParseMeteringIds(attrs).IsComplete());
+        attrs[TString(DATABASE_ID_ATTR)] = "database";
+        UNIT_ASSERT(ParseMeteringIds(attrs).IsComplete());
+    }
+}
+
+Y_UNIT_TEST_SUITE(SqsTopicDescribeStatus) {
+    Y_UNIT_TEST(MapTopicInfoCreateVsSendPolicies) {
+        using namespace NKikimr::NSqsTopic::V1;
+        using NKikimr::NPQ::NDescriber::TTopicInfo;
+        using NKikimr::NPQ::NDescriber::EStatus;
+
+        TTopicInfo notTopic;
+        notTopic.Status = EStatus::NOT_TOPIC;
+        {
+            auto error = MapTopicInfoToSqsError("/Root/q", notTopic, ExistingQueuePolicy());
+            UNIT_ASSERT(error.Defined());
+            UNIT_ASSERT_VALUES_EQUAL(error->GetErrorCode(), "AWS.SimpleQueueService.NonExistentQueue");
+            UNIT_ASSERT_VALUES_EQUAL(error->GetMessage(), QUEUE_USED_BY_ANOTHER_SCHEME_OBJECT);
+        }
+        {
+            auto error = MapTopicInfoToSqsError("/Root/q", notTopic, CreateQueueDescribePolicy());
+            UNIT_ASSERT(error.Defined());
+            UNIT_ASSERT_VALUES_EQUAL(error->GetErrorCode(), "InvalidParameterValue");
+            UNIT_ASSERT_VALUES_EQUAL(error->GetMessage(), QUEUE_USED_BY_ANOTHER_SCHEME_OBJECT);
+        }
+
+        TTopicInfo missing;
+        missing.Status = EStatus::NOT_FOUND;
+        UNIT_ASSERT(MapTopicInfoToSqsError("/Root/q", missing, ExistingQueuePolicy()).Defined());
+        UNIT_ASSERT(!MapTopicInfoToSqsError("/Root/q", missing, CreateQueueDescribePolicy()).Defined());
+
+        TTopicInfo cdc;
+        cdc.Status = EStatus::SUCCESS;
+        cdc.CdcStream = true;
+        cdc.Info = new NKikimr::NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo();
+        {
+            auto error = MapTopicInfoToSqsError(
+                "/Root/q", cdc, ExistingQueuePolicy(TString("Writing to the Changefeed is not supported")));
+            UNIT_ASSERT(error.Defined());
+            UNIT_ASSERT_VALUES_EQUAL(error->GetErrorCode(), "AWS.SimpleQueueService.UnsupportedOperation");
+        }
+        UNIT_ASSERT(!MapTopicInfoToSqsError("/Root/q", cdc, ExistingQueuePolicy()).Defined());
     }
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/metering/bill_record.h>
+#include <ydb/core/metering/stream_ru_calculator.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/size_literals.h>
@@ -53,8 +54,16 @@ namespace NKikimr::NSqsTopic::V1::NBilling {
         return static_cast<ui64>(std::llround(ru));
     }
 
-    // payloadBlocks is the block-based consumption produced by
-    // TRlHelpers::CalcRuConsumption(payloadSize).
+    // One-shot mapping of a payload onto RU blocks. Matches
+    // TStreamRequestUnitsCalculator on a freshly constructed actor
+    // (Remainder == blockSize): the first blockSize bytes add 0 extra blocks.
+    inline ui64 PayloadBlocks(ui64 payloadSize, ui64 blockSize) {
+        NKikimr::NMetering::TStreamRequestUnitsCalculator calculator(blockSize);
+        return calculator.CalcConsumption(payloadSize);
+    }
+
+    // payloadBlocks is the block-based consumption produced by PayloadBlocks
+    // (historically TRlHelpers::CalcRuConsumption after RL context is set).
     inline ui64 CalcRu(ui64 payloadBlocks, double baseCost, double costPerBlock, bool fifo = false) {
         const double ru = baseCost + payloadBlocks * costPerBlock + CostAdjunct(fifo);
         return RoundRu(ru);

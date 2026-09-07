@@ -104,50 +104,23 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
                 hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
                 default:
                     TBase::StateWork(ev);
             }
         }
 
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&) {
-            // TODO remove it
+        TTopicDescribePolicy GetTopicDescribePolicy() const {
+            return CreateQueueDescribePolicy();
         }
 
-        void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-            const auto* result = ev->Get();
-            AFL_ENSURE(result->Topics.size() == 1)("topics_size", result->Topics.size())("path", TopicPath);
-            const auto& topicInfo = result->Topics.begin()->second;
-
-            switch(topicInfo.Status) {
-                case NDescriber::EStatus::SUCCESS: {
-                    if (topicInfo.CdcStream) {
-                        return ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION,
-                            "Creating the changefeed is not supported"));
-                    }
-
-                    PQGroup = topicInfo.Info->Description;
-                    SelfInfo = topicInfo.Self->Info;
-
-                    return HandleExistingTopic(ActorContext());
-                }
-                case NDescriber::EStatus::NOT_TOPIC:
-                    return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE,
-                        TStringBuilder() << "Queue name used by another scheme object"));
-                case NDescriber::EStatus::NOT_FOUND:
-                    return CreateTopic();
-                case NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
-                    return ReplyWithError(MakeError(NSQS::NErrors::ACCESS_DENIED,
-                        "Access denied"));
-                case NDescriber::EStatus::BAD_REQUEST:
-                    return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE,
-                        NDescriber::Description(TopicPath, topicInfo.Status)));
-                case NDescriber::EStatus::UNAUTHORIZED:
-                case NDescriber::EStatus::UNKNOWN_ERROR:
-                    return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
-                        NDescriber::Description(topicInfo.RealPath, topicInfo.Status)));
+        void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo& topicInfo) {
+            if (topicInfo.Status == NPQ::NDescriber::EStatus::NOT_FOUND) {
+                return CreateTopic();
             }
+            PQGroup = topicInfo.Info->Description;
+            SelfInfo = topicInfo.Self->Info;
+            return HandleExistingTopic(ActorContext());
         }
 
         void CreateTopic() {

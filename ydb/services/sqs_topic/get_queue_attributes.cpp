@@ -87,8 +87,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
     class TGetQueueAttributesActor
         : public TQueueUrlHolder
-        , public TGrpcActorBase<TGetQueueAttributesActor, TEvSqsTopicGetQueueAttributesRequest>
-        , public TCdcStreamCompatible {
+        , public TGrpcActorBase<TGetQueueAttributesActor, TEvSqsTopicGetQueueAttributesRequest> {
     protected:
         using TBase = TGrpcActorBase<TGetQueueAttributesActor, TEvSqsTopicGetQueueAttributesRequest>;
         using TProtoRequest = typename TBase::TProtoRequest;
@@ -121,7 +120,7 @@ namespace NKikimr::NSqsTopic::V1 {
             }
 
             ++RequestInflight;
-            SendDescribeProposeRequest(ctx);
+            DescribeTopic(NACLib::DescribeSchema);
 
             if (AttributesRequest.NeedRuntimeAttributes) {
                 ++RequestInflight;
@@ -190,30 +189,14 @@ namespace NKikimr::NSqsTopic::V1 {
             }
         }
 
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            AFL_ENSURE(result->ResultSet.size() == 1)("result_set_size", result->ResultSet.size())("path", FullTopicPath_);
-            const auto& response = result->ResultSet.front();
-            if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-                if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-                    if (ProcessCdc(response)) {
-                        return;
-                    }
-                }
-                if (response.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
-                    return ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE,
-                                                    std::format("The specified queue doesn't exist")));
-                }
-                // ok
-            } else if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
-                return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist")));
-            } else {
-                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
-                                                TStringBuilder() << "Failed to describe topic: " << response.Status));
-            }
-            AFL_ENSURE(response.PQGroupInfo)("path", FullTopicPath_);
-            PQGroup = response.PQGroupInfo->Description;
-            SelfInfo = response.Self->Info;
+        TTopicDescribePolicy GetTopicDescribePolicy() const {
+            return GetQueueAttributesDescribePolicy();
+        }
+
+        void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo& topicInfo) {
+            AFL_ENSURE(topicInfo.Info)("path", FullTopicPath_);
+            PQGroup = topicInfo.Info->Description;
+            SelfInfo = topicInfo.Self->Info;
             ConsumerConfig = GetConsumerConfig(PQGroup.GetPQTabletConfig(), QueueUrl_->Consumer, ActorContext());
             if (!ConsumerConfig && QueueUrl_->Consumer != GetDefaultSqsConsumerName()) {
                 return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist (consumer: \"{}\")", QueueUrl_->Consumer.c_str())));

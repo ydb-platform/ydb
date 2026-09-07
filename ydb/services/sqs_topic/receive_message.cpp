@@ -39,7 +39,6 @@
 
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/mlp/mlp.h>
-#include <ydb/core/persqueue/public/pq_rl_helpers.h>
 
 #include <ydb/services/sqs_topic/billing.h>
 
@@ -60,8 +59,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
     class TReceiveMessageActor:
         public TQueueUrlHolder,
-        public TGrpcActorBase<TReceiveMessageActor, TEvSqsTopicReceiveMessageRequest>,
-        public TCdcStreamCompatible {
+        public TGrpcActorBase<TReceiveMessageActor, TEvSqsTopicReceiveMessageRequest> {
     protected:
         using TBase = TGrpcActorBase<TReceiveMessageActor, TEvSqsTopicReceiveMessageRequest>;
         using TProtoRequest = typename TBase::TProtoRequest;
@@ -69,7 +67,7 @@ namespace NKikimr::NSqsTopic::V1 {
     public:
         TReceiveMessageActor(NKikimr::NGRpcService::IRequestOpCtx* request)
             : TQueueUrlHolder(ParseQueueUrl(GetRequest<TProtoRequest>(request).queue_url()))
-            , TBase(request, TQueueUrlHolder::GetTopicPath().value_or(""), NBilling::READ_BLOCK_SIZE)
+            , TBase(request, TQueueUrlHolder::GetTopicPath().value_or(""))
         {
         }
 
@@ -91,7 +89,7 @@ namespace NKikimr::NSqsTopic::V1 {
             }
             ReaderSettings_ = std::move(readerSettings);
 
-            this->SendDescribeProposeRequest(ctx);
+            this->DescribeTopic(NACLib::DescribeSchema);
             this->Become(&TReceiveMessageActor::StateWork);
         }
 
@@ -281,7 +279,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
         ui64 GetRUCost() override {
             return NBilling::CalcRu(
-                this->CalcRuConsumption(PayloadSize_),
+                NBilling::PayloadBlocks(PayloadSize_, NBilling::READ_BLOCK_SIZE),
                 NBilling::READ_BASE_COST,
                 NBilling::READ_COST_PER_BLOCK,
                 Fifo_);
@@ -302,28 +300,7 @@ namespace NKikimr::NSqsTopic::V1 {
             this->TBase::Die(ctx);
         }
 
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            AFL_ENSURE(result->ResultSet.size() == 1)("result_set_size", result->ResultSet.size())("path", FullTopicPath_);
-            const auto& response = result->ResultSet.front();
-            if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-                if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-                    if (this->ProcessCdc(response)) {
-                        return;
-                    }
-                    return this->ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION, TStringBuilder() << "Reading from the Changefeed is not supported"));
-                }
-                if (response.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
-                    return this->ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE, TStringBuilder() << "Queue name used by another scheme object"));
-                }
-                // ok
-            } else if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
-                return this->ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist")));
-            } else {
-                return this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
-                                                TStringBuilder() << "Failed to describe topic: " << response.Status));
-            }
-
+        void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo&) {
             Fifo_ = QueueUrl_->Fifo;
             CreateReader();
         }

@@ -14,6 +14,7 @@ SRCS(
     limits.cpp
     list_queues.cpp
     purge_queue.cpp
+    quoter.cpp
     receipt.cpp
     receive_message.cpp
     send_message.cpp

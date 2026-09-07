@@ -36,8 +36,6 @@
 
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
-#include <ydb/services/sqs_topic/statuses.h>
-
 using namespace NActors;
 using namespace NKikimrClient;
 
@@ -246,10 +244,6 @@ namespace NKikimr::NSqsTopic::V1 {
                 ctx.Send(DeadlineChangerActorId_, new TEvents::TEvPoison);
             }
             this->TBase::Die(ctx);
-        }
-
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            Y_UNUSED(ev);
         }
 
     protected:

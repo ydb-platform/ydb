@@ -209,6 +209,10 @@ public:
         return TableMetadataAccessor->OrderByLimitAllowed() && !GetFakeSort();
     }
 
+    bool UseSortedLimitPushdown() const {
+        return IsSorted() && HasLimit() && OrderByLimitAllowed();
+    }
+
     EScanGroupedMemoryLimiterOperator GetGroupedMemoryLimiterOperator() const {
         return GroupedMemoryLimiterOperator;
     }

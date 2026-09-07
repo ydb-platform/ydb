@@ -29,7 +29,7 @@ namespace NActors {
         // v2 establishes exactly one connection for its lifetime (no continuation)
         Y_ABORT_UNLESS(!Socket, "TInterconnectSessionTCPv2 does not support connection continuation");
 
-        YDB_LOG_INFO("Handshake done socket: %li",
+        YDB_LOG_INFO("Handshake done socket",
             {"marker", "ICS91"},
             {"sender", ev->Sender},
             {"self", ev->Get()->Self},
@@ -116,7 +116,7 @@ namespace NActors {
         // data-plane stub: the payload event is dropped for now
         YDB_LOG_DEBUG("V2 stub dropping forwarded event to",
             {"marker", "ICS95"},
-            {"recepient", ev->Recipient.ToString().data()});
+            {"recipient", ev->Recipient.ToString().data()});
     }
 
     void TInterconnectSessionTCPv2::ForwardWithSubscribe(STATEFN_SIG) {

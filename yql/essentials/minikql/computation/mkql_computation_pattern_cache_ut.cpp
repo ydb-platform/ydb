@@ -1221,6 +1221,50 @@ Y_UNIT_TEST(EvictedEntryIsMarkedAsNotCached) {
     UNIT_ASSERT(second->IsInCache.load());
 }
 
+Y_UNIT_TEST(FindOrSubscribeTellsBuilderFromWaiter) {
+    const TProgramKey key{NYql::UnknownLangVersion, {}, "program"};
+    TComputationPatternLRUCache cache({1'000'000, 1'000'000});
+
+    // The first miss hands out an uninitialized future: this caller is the one to build the entry.
+    auto builderFuture = cache.FindOrSubscribe(key);
+    UNIT_ASSERT(!builderFuture.Initialized());
+
+    // Every next miss for the same key gets an initialized future without a value yet - it has to be told apart
+    // from the one above, since HasValue() is false for both.
+    auto waiterFuture = cache.FindOrSubscribe(key);
+    UNIT_ASSERT(waiterFuture.Initialized());
+    UNIT_ASSERT(!waiterFuture.HasValue());
+
+    auto entry = MakeMockEntry();
+    cache.EmplacePattern(key, entry);
+
+    UNIT_ASSERT(waiterFuture.HasValue());
+    UNIT_ASSERT_EQUAL(waiterFuture.GetValue(), entry);
+
+    // And a hit is an initialized future that already holds the entry.
+    auto hitFuture = cache.FindOrSubscribe(key);
+    UNIT_ASSERT(hitFuture.Initialized() && hitFuture.HasValue());
+    UNIT_ASSERT_EQUAL(hitFuture.GetValue(), entry);
+}
+
+Y_UNIT_TEST(DuplicateEmplaceKeepsTheCachedEntry) {
+    const TProgramKey key{NYql::UnknownLangVersion, {}, "program"};
+    TComputationPatternLRUCache cache({1'000'000, 1'000'000});
+
+    auto cachedEntry = MakeMockEntry();
+    cache.EmplacePattern(key, cachedEntry);
+
+    // Emplacing a duplicate for a known key keeps the entry already in the cache ...
+    auto duplicateEntry = MakeMockEntry();
+    cache.EmplacePattern(key, duplicateEntry);
+
+    UNIT_ASSERT_EQUAL(cache.Find(key), cachedEntry);
+    UNIT_ASSERT(cachedEntry->IsInCache.load());
+
+    // ... and the duplicate is dropped on the floor, so nobody may be handed it as if it were cached.
+    UNIT_ASSERT(!duplicateEntry->IsInCache.load());
+}
+
 Y_UNIT_TEST(CleanCacheMarksEntriesAsNotCached) {
     const TProgramKey key{NYql::UnknownLangVersion, {}, "program"};
     auto entry = MakeMockEntry();

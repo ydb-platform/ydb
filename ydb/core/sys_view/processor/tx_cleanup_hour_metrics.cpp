@@ -1,6 +1,8 @@
 #include "processor_impl.h"
 #include "query_metrics_retention_db.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
+
 namespace NKikimr {
 namespace NSysView {
 
@@ -78,10 +80,11 @@ struct TSysViewProcessor::TTxCleanupHourMetrics : public TTxBase {
 
     void Complete(const TActorContext&) override {
         Self->MetricsOneHourEvictBeforeHourEndUs = NewEvictBeforeHourEndUs;
-        SVLOG_D("[" << Self->TabletID() << "] TTxCleanupHourMetrics::Complete: "
-            << "deleted# " << Deleted
-            << ", size evicted buckets# " << SizeEvictedBuckets
-            << ", more# " << More);
+        YDB_LOG_DEBUG("TTxCleanupHourMetrics::Complete",
+            {"tabletId", Self->TabletID()},
+            {"deletedCount", Deleted},
+            {"sizeEvictedBuckets", SizeEvictedBuckets},
+            {"more", More});
 
         Self->UpdateMetricsOneHourRetentionCounters(
             Self->MetricsOneHourRetainedBytes, SizeEvictedBuckets);

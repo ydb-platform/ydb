@@ -89,10 +89,11 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
         }
 
         Self->UpdateMetricsOneHourRetentionCounters(loaded.RetainedBytes, 0);
-        SVLOG_D("[" << Self->TabletID() << "] Loading byte-bounded hour metrics: "
-            << "result count# " << Self->MetricsOneHour.size()
-            << ", retained bytes# " << loaded.RetainedBytes
-            << ", evict before# " << Self->MetricsOneHourEvictBeforeHourEndUs);
+        YDB_LOG_DEBUG("Loading byte-bounded hour metrics",
+            {"tabletId", Self->TabletID()},
+            {"resultCount", Self->MetricsOneHour.size()},
+            {"retainedBytes", loaded.RetainedBytes},
+            {"evictBeforeHourEndUs", Self->MetricsOneHourEvictBeforeHourEndUs});
         return true;
     }
 
@@ -264,14 +265,15 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                     case Schema::SysParam_LastMergedQueryMetricsIntervalEnd:
                         Self->LastMergedQueryMetricsIntervalEnd =
                             TInstant::MicroSeconds(FromString<ui64>(value));
-                        SVLOG_D("[" << Self->TabletID() << "] Loading last merged query metrics interval end: "
-                            << Self->LastMergedQueryMetricsIntervalEnd);
+                        YDB_LOG_DEBUG("Loading last merged query metrics interval end",
+                            {"tabletId", Self->TabletID()},
+                            {"lastMergedIntervalEnd", Self->LastMergedQueryMetricsIntervalEnd});
                         break;
                     case Schema::SysParam_MetricsOneHourEvictBeforeHourEnd:
                         Self->MetricsOneHourEvictBeforeHourEndUs = FromString<ui64>(value);
-                        SVLOG_D("[" << Self->TabletID()
-                            << "] Loading query metrics one hour eviction cutoff: "
-                            << Self->MetricsOneHourEvictBeforeHourEndUs);
+                        YDB_LOG_DEBUG("Loading query metrics one hour eviction cutoff",
+                            {"tabletId", Self->TabletID()},
+                            {"evictBeforeHourEndUs", Self->MetricsOneHourEvictBeforeHourEndUs});
                         break;
                     default:
                         YDB_LOG_CRIT("TTxInit::Execute: unexpected sys param id",
@@ -380,9 +382,10 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                 }
             }
 
-            SVLOG_D("[" << Self->TabletID() << "] Loading hour query metrics: "
-                << "hour end# " << Self->CurrentHourEnd
-                << ", query count# " << Self->CurrentHourMetrics.size());
+            YDB_LOG_DEBUG("Loading hour query metrics",
+                {"tabletId", Self->TabletID()},
+                {"hourEnd", Self->CurrentHourEnd},
+                {"queryCount", Self->CurrentHourMetrics.size()});
         }
 
         // IntervalTops
@@ -469,7 +472,7 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
         // NodesToRequest
         {
             Self->NodesToRequest.clear();
-            Self->NodesInFlight.clear();
+            Self->RequestsInFlight.clear();
 
             auto rowset = db.Table<Schema::NodesToRequest>().Range().Select();
             if (!rowset.IsReady()) {

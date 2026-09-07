@@ -9,6 +9,7 @@ import shutil
 import signal
 import socket
 import stat
+import subprocess
 import tempfile
 import textwrap
 import threading
@@ -16,6 +17,7 @@ import time
 import unittest
 import urllib.request
 import zipfile
+from collections import deque
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import FrozenInstanceError, fields, replace
 from pathlib import Path
@@ -459,6 +461,39 @@ class YdbBenchTest(unittest.TestCase):
         )
         local_load_schema = CONFIG_SCHEMA["properties"]["local-ydb"]["additionalProperties"]["properties"]["load"]
         self.assertEqual(local_load_schema["properties"]["allow-errors"], {"type": "boolean"})
+
+    def test_local_ydb_workload_registry_generates_schema_and_web_catalog(self):
+        workload_schema = CONFIG_SCHEMA["properties"]["local-ydb"]["additionalProperties"]["properties"]["workload"]
+        self.assertEqual(workload_schema, local_ydb_workloads.workload_config_schema())
+
+        catalog = local_ydb_workloads.web_workload_catalog()
+        self.assertEqual([item["type"] for item in catalog], ["kv", "stock"])
+        self.assertEqual(catalog[0]["operations"], ["upsert", "select", "read-rows", "mixed"])
+        self.assertEqual(catalog[0]["load_parameters"], ["rate", "threads"])
+        self.assertEqual(catalog[1]["default_operation"], "put-rand-order")
+        self.assertEqual([item["result_schema_id"] for item in catalog], ["generic-total-v1"] * 2)
+        self.assertEqual([item["throughput_unit"] for item in catalog], ["requests/s", "query operations/s"])
+        self.assertTrue(all(item["reports_errors"] for item in catalog))
+        self.assertTrue(all(item["slo_metrics"]["p99"] == "p99_ms" for item in catalog))
+        self.assertEqual([item["default_warmup_seconds"] for item in catalog], [10, 10])
+        self.assertEqual([item["maximum_total_seconds"] for item in catalog], [None, None])
+        catalog_parameters = tuple(
+            dict.fromkeys(parameter for definition in catalog for parameter in definition["load_parameters"])
+        )
+        load_schema = CONFIG_SCHEMA["properties"]["local-ydb"]["additionalProperties"]["properties"]["load"]
+        self.assertEqual(tuple(load_schema["properties"]["parameter"]["enum"]), catalog_parameters)
+        self.assertEqual(local_ydb_workloads.all_load_parameters(), catalog_parameters)
+        self.assertEqual(
+            next(option for option in catalog[0]["options"] if option["name"] == "init-upserts")["operation_defaults"],
+            {"upsert": 0},
+        )
+        operation_enum = workload_schema["properties"]["operation"]["enum"]
+        expected_operations = list(
+            dict.fromkeys(operation for definition in catalog for operation in definition["operations"])
+        )
+        self.assertEqual(operation_enum, expected_operations)
+        self.assertEqual(len(operation_enum), len(set(operation_enum)))
+        json.dumps(catalog, allow_nan=False)
 
     def test_local_ydb_workload_registry_preserves_defaults_and_validation(self):
         upsert = local_ydb_workloads.normalize_workload(
@@ -2158,12 +2193,14 @@ class YdbBenchTest(unittest.TestCase):
         model = web.editor_model(loaded, self.root / "results")
         benchmark = next(item for item in model["benchmarks"] if item["name"] == "local-ydb")
         profile = model["profiles"][0]
+        self.assertEqual(model["local_ydb_workloads"], local_ydb_workloads.web_workload_catalog())
         self.assertTrue(benchmark["builder_supported"])
         self.assertEqual(benchmark["profile_kind"], "local-ydb")
         self.assertEqual(profile["local_ydb"]["workload"]["type"], "stock")
         self.assertEqual(profile["local_ydb"]["geometry"]["max_dynamic_nodes"], 4)
         self.assertEqual(profile["local_ydb"]["load"]["values"], [10, 20])
         self.assertTrue(profile["local_ydb"]["load"]["allow_errors"])
+        self.assertEqual(profile["local_ydb"]["measurement"]["verification_repetitions"], 0)
         self.assertEqual(profile["local_ydb"]["affinity"]["ydb_cli"]["cpus"], "one-chiplet")
         self.assertEqual(profile["parameters"], {})
 
@@ -2192,6 +2229,738 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(workload["type"], "stock")
         self.assertEqual(workload["operation"], "put-rand-order")
         self.assertEqual(workload["options"]["products"], 10)
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the web Builder behavior test")
+    def test_local_ydb_web_builder_resets_only_incompatible_load_parameters(self):
+        start = web._JS.index("const localYdbLoadDefaults=")
+        finish = web._JS.index("function defaultLocalYdbWorkload", start)
+        unit_start = web._JS.index("function localSearchAxisLabel")
+        unit_finish = web._JS.index("function localAttemptRows", unit_start)
+        script = web._JS[start:finish] + web._JS[unit_start:unit_finish] + """
+            const points=localYdbResetLoadParameter(
+              {parameter:'rate',allow_errors:false,values:[1000]},'threads'
+            );
+            const automatic=localYdbResetLoadParameter({
+              parameter:'rate',allow_errors:true,
+              search:{start:777,maximum:9999,multiplier:3,resolution_percent:7},
+              objective:{type:'latency-slo',percentile:'p99',max_ms:10}
+            },'threads');
+            const custom={
+              parameter:'threads',allow_errors:false,
+              search:{start:7,maximum:91,multiplier:4,resolution_percent:9},
+              objective:{type:'maximize-throughput',target_role:'dynamic'}
+            };
+            const compatible=localYdbLoadForWorkload(custom,['rate','threads']);
+            process.stdout.write(JSON.stringify({
+              points,automatic,compatible,same_reference:compatible===custom,
+              units:['kv','stock','future'].map(localYdbThroughputUnit),
+              axes:['kv','stock'].map(workload=>localSearchAxisLabel('rate',workload)),
+              historicalStock:localResultSchema({
+                parameters:{workload:{type:'stock'}},
+                workload_result_schema:{
+                  schema_id:'generic-total-v1',throughput_unit:'transactions/s',
+                  metrics:[{name:'throughput',unit:'transactions/s'}]
+                }
+              })
+            }));
+        """
+        completed = subprocess.run(
+            [shutil.which("node"), "-e", script],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        result = json.loads(completed.stdout)
+        self.assertEqual(
+            result["points"],
+            {
+                "parameter": "threads",
+                "allow_errors": False,
+                "values": [1, 2, 4, 8, 16, 32, 64],
+            },
+        )
+        self.assertEqual(
+            result["automatic"],
+            {
+                "parameter": "threads",
+                "allow_errors": True,
+                "search": {"start": 1, "maximum": 256, "multiplier": 3, "resolution_percent": 7},
+                "objective": {"type": "latency-slo", "percentile": "p99", "max_ms": 10},
+            },
+        )
+        self.assertTrue(result["same_reference"])
+        self.assertEqual(
+            result["compatible"],
+            {
+                "parameter": "threads",
+                "allow_errors": False,
+                "search": {"start": 7, "maximum": 91, "multiplier": 4, "resolution_percent": 9},
+                "objective": {"type": "maximize-throughput", "target_role": "dynamic"},
+            },
+        )
+        self.assertEqual(result["units"], ["requests/s", "query operations/s", "operations/s"])
+        self.assertEqual(result["axes"], ["Offered rate (requests/s)", "Offered rate (query operations/s)"])
+        self.assertEqual(result["historicalStock"]["throughput_unit"], "query operations/s")
+        self.assertEqual(result["historicalStock"]["metrics"][0]["unit"], "query operations/s")
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the verification provenance UI test")
+    def test_local_ydb_web_shows_verification_cluster_provenance(self):
+        label_start = web._JS.index("function localVerificationClusterLabel")
+        label_finish = web._JS.index("function localVerificationBadge", label_start)
+        summary_start = web._JS.index("function localVerificationSummary")
+        summary_finish = web._JS.index("function localElapsed", summary_start)
+        context_start = web._JS.index("function localComparisonContext")
+        context_finish = web._JS.index("function localComparisonBuild", context_start)
+        mount_start = web._JS.index("function mountLocalYdbComparison(container")
+        mount_finish = web._JS.index("const localPhaseLabels", mount_start)
+        script = (
+            """
+            const esc=value=>String(value??'');
+            const metricLabel=value=>String(value??'—');
+            const localVerificationCount=()=>1;
+            const localVerificationBadge=()=>'<badge>';
+            const localComparisonStable=value=>value;
+            const localResultMetrics=result=>({
+              verified:result?.metrics_source==='verification',
+              source:result?.metrics_source==='verification'?'Holdout':'Search',
+              metrics:result?.verified_metrics||result?.selected_metrics||{}
+            });
+            """
+            + web._JS[label_start:label_finish]
+            + web._JS[summary_start:summary_finish]
+            + web._JS[context_start:context_finish]
+            + """
+            const localComparisonKey=item=>JSON.stringify([item.run,item.profile]);
+            const localComparisonId=item=>item.run+' / '+item.profile;
+            const localResultSchema=()=>({schema_id:'test',throughput_unit:'items/s'});
+            const localDisplayedMetrics=()=>[];
+            const localComparisonConfig=()=>({});
+            const localComparisonBuild=()=>({});
+            const localComparisonSemantic=()=>({same:true});
+            const localMetricLabel=()=>'';
+            const localMetricDirection=()=>null;
+            const localComparisonDelta=()=>'';
+            const mountLocalYdbComparisonCurves=()=>{};
+            """
+            + web._JS[mount_start:mount_finish]
+            + """
+            const verified=cluster=>({
+              result:{metrics_source:'verification',verified_metrics:{throughput:1},holdout_accepted:true},
+              parameters:{},verification:{cluster,status:'completed',accepted:true}
+            });
+            const container={dataset:{},closest:()=>({}),querySelector:()=>({}),_html:'',
+              set innerHTML(value){this._html=value},get innerHTML(){return this._html}};
+            mountLocalYdbComparison(container,{entries:[
+              {run:'base',profile:'p',state:'passed',...verified('search')},
+              {run:'candidate',profile:'p',state:'passed',...verified('fresh')}
+            ]});
+            process.stdout.write(JSON.stringify({
+              fresh:localVerificationSummary(verified('fresh')),
+              search:localVerificationSummary(verified('search')),
+              comparison:container.innerHTML
+            }));
+            """
+        )
+        completed = subprocess.run(
+            [shutil.which("node"), "-e", script],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        result = json.loads(completed.stdout)
+        self.assertIn("fresh cluster", result["fresh"])
+        self.assertIn("retained search cluster", result["search"])
+        self.assertIn("Comparable with warnings", result["comparison"])
+        self.assertIn("Verification cluster", result["comparison"])
+        self.assertIn("retained search cluster → fresh cluster", result["comparison"])
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the local YDB validity UI test")
+    def test_local_ydb_web_hides_latency_for_empty_measurements(self):
+        result_start = web._JS.index("function localResultMetrics")
+        result_finish = web._JS.index("function localVerificationCount", result_start)
+        attempt_start = web._JS.index("function localLegacyResultSchema")
+        attempt_finish = web._JS.index("function localChart", attempt_start)
+        script = web._JS[result_start:result_finish] + web._JS[attempt_start:attempt_finish] + """
+            const empty={attempt:1,empty_repetitions:1,throughput:123,errors:7,p99_ms:0};
+            const valid={attempt:2,empty_repetitions:0,throughput:100,errors:1,p99_ms:9};
+            const schema=localLegacyResultSchema('kv');
+            const rows=localAttemptRows([empty,valid],schema);
+            const holdout=localResultMetrics({
+              metrics_source:'verification',
+              verified_metrics:{empty_repetitions:1,throughput:123,errors:7,p99_ms:0}
+            },schema);
+            process.stdout.write(JSON.stringify({
+              empty_label:localAttemptMetric(empty,'p99_ms',schema),
+              valid_label:localAttemptMetric(valid,'p99_ms',schema),
+              empty_chart:rows.get('1'),valid_chart:rows.get('2'),holdout
+            }));
+        """
+        completed = subprocess.run(
+            [shutil.which("node"), "-e", script],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        result = json.loads(completed.stdout)
+        self.assertEqual(result["empty_label"], "—")
+        self.assertEqual(result["valid_label"], 9)
+        self.assertIsNone(result["empty_chart"]["p99_ms"])
+        self.assertEqual(result["empty_chart"]["throughput"], 123)
+        self.assertEqual(result["empty_chart"]["errors"], 7)
+        self.assertEqual(result["valid_chart"]["p99_ms"], 9)
+        self.assertIsNone(result["holdout"]["metrics"]["p99_ms"])
+        self.assertEqual(result["holdout"]["metrics"]["throughput"], 123)
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the schema-aware local YDB UI test")
+    def test_local_ydb_web_uses_custom_schema_units_slo_and_identity(self):
+        result_start = web._JS.index("function localResultMetrics")
+        result_finish = web._JS.index("function localVerificationCount", result_start)
+        stable_start = web._JS.index("function localComparisonStable")
+        stable_finish = result_start
+        schema_start = web._JS.index("function localLegacyResultSchema")
+        schema_finish = web._JS.index("function localChart", schema_start)
+        number_start = web._JS.index("function chartNumber")
+        number_finish = web._JS.index("function chartSeriesLabel", number_start)
+        script = (
+            web._JS[stable_start:stable_finish]
+            + web._JS[result_start:result_finish]
+            + web._JS[schema_start:schema_finish]
+            + web._JS[number_start:number_finish]
+            + """
+            const customSchema={
+              schema_id:'fake-json-v1',throughput_unit:'widgets/s',reports_errors:false,
+              metrics:[
+                {name:'throughput',unit:'widgets/s',required:true,repetition_aggregation:'median'},
+                {name:'latency_ms',unit:'ms',required:true,repetition_aggregation:'median'},
+                {name:'queue_depth',unit:'messages',required:false,repetition_aggregation:'median'}
+              ],
+              slo_metrics:{p90:'latency_ms'}
+            };
+            const parameters={workload:{type:'kv',operation:'upsert'},load:{parameter:'rate',objective:{type:'latency-slo',percentile:'p90'}}};
+            const custom={parameters,workload_result_schema:customSchema};
+            const changed={parameters,workload_result_schema:{...customSchema,schema_id:'fake-json-v2'}};
+            const legacy={parameters:{workload:{type:'kv',operation:'upsert'},load:{parameter:'rate',objective:{type:'points'}}}};
+            const explicitLegacy={...legacy,workload_result_schema:localLegacyResultSchema('kv')};
+            const empty=localResultMetrics({selected_metrics:{empty_repetitions:1,throughput:4,latency_ms:0,queue_depth:8}},customSchema);
+            const genericSchema=localLegacyResultSchema('kv');
+            process.stdout.write(JSON.stringify({
+              slo:localSloMetric(customSchema,'p90'),unit:localYdbThroughputUnit(custom),
+              metrics:localDisplayedMetrics(customSchema).map(item=>item.name),empty:empty.metrics,
+              generic_table:localDisplayedMetrics(genericSchema,{type:'latency-slo',percentile:'p95'}).map(
+                item=>[item.name,localMetricLabel(genericSchema,item.name)]
+              ),
+              generic_curves:localComparisonCurveMetrics(
+                genericSchema,{type:'latency-slo',percentile:'p95'}
+              ).map(item=>item.name),
+              custom_identity:localComparisonSemantic(custom),changed_identity:localComparisonSemantic(changed),
+              legacy_identity:localComparisonSemantic(legacy),explicit_legacy_identity:localComparisonSemantic(explicitLegacy),
+              empty_number:Number.isFinite(chartNumber('   '))
+            }));
+            """
+        )
+        completed = subprocess.run(
+            [shutil.which("node"), "-e", script],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        result = json.loads(completed.stdout)
+        self.assertEqual(result["slo"], "latency_ms")
+        self.assertEqual(result["unit"], "widgets/s")
+        self.assertEqual(result["metrics"], ["throughput", "latency_ms", "queue_depth"])
+        self.assertEqual(
+            result["generic_table"],
+            [["throughput", "Throughput"], ["p95_ms", "p95"], ["errors", "Errors"]],
+        )
+        self.assertEqual(result["generic_curves"], ["throughput", "p95_ms", "errors"])
+        self.assertIsNone(result["empty"]["latency_ms"])
+        self.assertEqual(result["empty"]["queue_depth"], 8)
+        self.assertNotEqual(result["custom_identity"], result["changed_identity"])
+        self.assertEqual(result["legacy_identity"], result["explicit_legacy_identity"])
+        self.assertFalse(result["empty_number"])
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the local YDB result view-model test")
+    def test_local_ydb_result_view_model_is_objective_and_workload_aware(self):
+        result_start = web._JS.index("function localResultMetrics")
+        result_finish = web._JS.index("function localVerificationCount", result_start)
+        label_start = web._JS.index("function localOutcomeLabel")
+        schema_start = web._JS.index("function localLegacyResultSchema", label_start)
+        schema_finish = web._JS.index("function localChart", schema_start)
+        view_start = web._JS.index("function localMetricPresent", schema_finish)
+        view_finish = web._JS.index("function localResultFacts", view_start)
+        script = (
+            """
+            const metricLabel=value=>String(value);
+            const cpuRanges=value=>value.join(',');
+            """
+            + web._JS[result_start:result_finish]
+            + web._JS[label_start:schema_start]
+            + web._JS[schema_start:schema_finish]
+            + web._JS[view_start:view_finish]
+            + """
+            const profile=(workload,load,result,workload_result_schema=null)=>({
+              parameters:{
+                workload,
+                load,
+                geometry:{static_nodes:1,dynamic_nodes:1,storage_groups:1},
+                client:{threads:7},
+                measurement:{warmup:1,duration:10,repetitions:3}
+              },
+              role_affinity:{ydb_cli:[0],static_nodes:[1],dynamic_nodes:[2]},
+              workload_result_schema,
+              result
+            });
+            const metric=(name,unit)=>({name,unit,repetition_aggregation:'median',required:true});
+            const kv=localResultViewModel(profile(
+              {type:'kv',operation:'upsert',options:{}},
+              {parameter:'rate',objective:{type:'latency-slo',percentile:'p95',max_ms:10}},
+              {
+                outcome:'boundary-found',parameter:'rate',selected_load:82,passing_load:82,failing_load:85,
+                dynamic_nodes:1,metrics_source:'verification',holdout_accepted:true,
+                selected_metrics:{throughput:5000,p95_ms:8,errors:0,dynamic_cpu_mean:80,dynamic_cpu_max:90},
+                verified_metrics:{throughput:4500,p95_ms:9,errors:0,dynamic_cpu_mean:75,dynamic_cpu_max:88}
+              }
+            ));
+            const stock=localResultViewModel(profile(
+              {type:'stock',operation:'put-rand-order',options:{products:100}},
+              {parameter:'threads',values:[4,8],objective:{type:'points'}},
+              {outcome:'best-observed',parameter:'threads',selected_load:8,dynamic_nodes:1,
+                selected_metrics:{throughput:200,p99_ms:3,errors:0,retries:1}}
+            ));
+            const noFeasible=localResultViewModel(profile(
+              {type:'kv',operation:'upsert',options:{}},
+              {parameter:'rate',objective:{type:'latency-slo',percentile:'p99',max_ms:5}},
+              {outcome:'no-feasible-point',parameter:'rate',selected_load:null,failing_load:10,dynamic_nodes:1,
+                selected_metrics:null}
+            ));
+            const skippedVerification=localResultViewModel(profile(
+              {type:'kv',operation:'upsert',options:{}},
+              {parameter:'rate',values:[10],objective:{type:'points'}},
+              {outcome:'best-observed',parameter:'rate',selected_load:10,dynamic_nodes:1,
+                metrics_source:'search',holdout_accepted:false,
+                selected_metrics:{throughput:100,p99_ms:2,errors:0}}
+            ));
+            const rejectedValidity=localResultViewModel({
+              ...profile(
+                {type:'kv',operation:'upsert',options:{}},
+                {parameter:'rate',objective:{type:'maximize-throughput',target_role:'dynamic'}},
+                {outcome:'plateau-found',parameter:'rate',selected_load:10,dynamic_nodes:1,
+                  metrics_source:'verification',holdout_accepted:false,
+                  verified_metrics:{throughput:0,p99_ms:0,errors:1}}
+              ),
+              verification:{evaluation_kind:'validity'}
+            });
+            const noFeasibleThreads=localResultViewModel(profile(
+              {type:'stock',operation:'put-rand-order',options:{}},
+              {parameter:'threads',objective:{type:'latency-slo',percentile:'p99',max_ms:5}},
+              {outcome:'no-feasible-point',parameter:'threads',selected_load:null,failing_load:1,dynamic_nodes:1,
+                selected_metrics:null}
+            ));
+            const partialResult={outcome:'plateau-found',parameter:'rate',selected_load:10,dynamic_nodes:1,
+              selected_metrics:{throughput:100,p99_ms:2,errors:0}};
+            const failedPartial=localResultViewModel({
+              ...profile(
+                {type:'kv',operation:'upsert',options:{}},
+                {parameter:'rate',objective:{type:'maximize-throughput'}},
+                partialResult
+              ),
+              state:'failed',error:'cleanup exploded'
+            });
+            const cancelledPartial=localResultViewModel({
+              ...profile(
+                {type:'kv',operation:'upsert',options:{}},
+                {parameter:'rate',objective:{type:'maximize-throughput'}},
+                partialResult
+              ),
+              state:'cancelled'
+            });
+            const cards=view=>Object.fromEntries(view.primary.map(card=>[card.label,card]));
+            process.stdout.write(JSON.stringify({
+              kv,stock,noFeasible,skippedVerification,rejectedValidity,noFeasibleThreads,
+              failedPartial,cancelledPartial,
+              cardMaps:{kv:cards(kv),stock:cards(stock),
+                noFeasible:cards(noFeasible)}}));
+            """
+        )
+        completed = subprocess.run(
+            [shutil.which("node"), "-e", script],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        result = json.loads(completed.stdout)
+        cards = result["cardMaps"]
+
+        self.assertEqual(result["kv"]["source"], "Holdout")
+        self.assertEqual(cards["kv"]["Achieved throughput"]["value"], "4500")
+        self.assertEqual(cards["kv"]["p95"]["value"], "9")
+        self.assertIn("first failing 85", cards["kv"]["Maximum passing load"]["help"])
+        self.assertEqual(
+            next(item for item in result["kv"]["cpu"] if item["label"] == "Dynamic nodes")["value"],
+            "75% mean · 88% max",
+        )
+
+        self.assertEqual(cards["stock"]["Successful query operations"]["unit"], "query operations/s")
+        self.assertEqual(cards["stock"]["Successful query operations"]["help"], "")
+        self.assertEqual(cards["stock"]["p99"]["help"], "")
+        self.assertEqual(
+            next(item for item in result["stock"]["config"] if item["label"] == "YDB CLI")["value"],
+            "8 threads",
+        )
+
+        self.assertEqual(result["noFeasible"]["tone"], "bad")
+        self.assertEqual(cards["noFeasible"]["Maximum passing load"]["value"], "No passing load")
+        self.assertIn("first failing 10", cards["noFeasible"]["Maximum passing load"]["help"])
+        self.assertNotIn("Achieved throughput", cards["noFeasible"])
+        self.assertEqual(result["skippedVerification"]["tone"], "good")
+        self.assertNotIn("independent holdout", result["skippedVerification"]["detail"])
+        self.assertEqual(result["rejectedValidity"]["tone"], "bad")
+        self.assertIn("did not pass validity checks", result["rejectedValidity"]["detail"])
+        self.assertNotIn("configured objective", result["rejectedValidity"]["detail"])
+        self.assertEqual(
+            next(item for item in result["noFeasibleThreads"]["config"] if item["label"] == "YDB CLI")["value"],
+            "No feasible selected load",
+        )
+        self.assertEqual(result["failedPartial"]["tone"], "bad")
+        self.assertIn("Profile failed · partial result", result["failedPartial"]["label"])
+        self.assertIn("cleanup exploded", result["failedPartial"]["detail"])
+        self.assertIn("Recorded search outcome", result["failedPartial"]["detail"])
+        self.assertEqual(result["cancelledPartial"]["tone"], "warn")
+        self.assertIn("Profile interrupted · partial result", result["cancelledPartial"]["label"])
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the local YDB profile view parser test")
+    def test_local_ydb_profile_selection_and_default_view(self):
+        route_start = web._JS.index("function routeParts")
+        route_finish = web._JS.index("function setRoute", route_start)
+        parser_start = web._JS.index("function parseLocalYdbProfileSelection")
+        parser_finish = web._JS.index("function profileGroups", parser_start)
+        default_start = web._JS.index("function localYdbDefaultView")
+        default_finish = web._JS.index("function localYdbDiscoveryLabel", default_start)
+        script = (
+            "const location={hash:'#run/imports%2Fimport-1/profile/local-ydb%2Fcapacity%2Fview%2Fresult'};"
+            + web._JS[route_start:route_finish]
+            + web._JS[parser_start:parser_finish]
+            + web._JS[default_start:default_finish]
+            + """
+            const groups={
+              'local-ydb/capacity':[{}],
+              'local-ydb/nested/profile':[{}],
+              'local-ydb/literal/view/result':[{}],
+              'ping-bench/base':[{}]
+            };
+            process.stdout.write(JSON.stringify({
+              direct:parseLocalYdbProfileSelection(groups,'local-ydb/capacity'),
+              result:parseLocalYdbProfileSelection(groups,'local-ydb/nested/profile/view/result'),
+              discovery:parseLocalYdbProfileSelection(groups,'local-ydb/capacity/view/discovery'),
+              exact:parseLocalYdbProfileSelection(groups,'local-ydb/literal/view/result'),
+              missingMarker:parseLocalYdbProfileSelection(groups,'local-ydb/capacity/result'),
+              nonLocalSuffix:parseLocalYdbProfileSelection(groups,'ping-bench/base/view/result'),
+              importedRoute:routeParts(),
+              views:{
+                running:localYdbDefaultView({state:'running',result:{selected_load:10}}),
+                preparing:localYdbDefaultView({state:'preparing',result:{selected_load:10}}),
+                completed:localYdbDefaultView({state:'passed',result:{selected_load:10}}),
+                noResult:localYdbDefaultView({state:'passed'}),
+                noFeasible:localYdbDefaultView({state:'passed',result:{selected_load:null}})
+              }
+            }));
+            """
+        )
+        completed = subprocess.run(
+            [shutil.which("node"), "-e", script],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        result = json.loads(completed.stdout)
+        self.assertEqual(result["direct"], {"profile": "local-ydb/capacity", "view": ""})
+        self.assertEqual(result["result"], {"profile": "local-ydb/nested/profile", "view": "result"})
+        self.assertEqual(result["discovery"], {"profile": "local-ydb/capacity", "view": "discovery"})
+        self.assertEqual(result["exact"], {"profile": "local-ydb/literal/view/result", "view": ""})
+        self.assertEqual(result["missingMarker"], {"profile": "", "view": ""})
+        self.assertEqual(result["nonLocalSuffix"], {"profile": "", "view": ""})
+        self.assertEqual(
+            result["importedRoute"],
+            ["run", "imports/import-1", "profile", "local-ydb/capacity/view/result"],
+        )
+        self.assertEqual(
+            result["views"],
+            {
+                "running": "discovery",
+                "preparing": "discovery",
+                "completed": "result",
+                "noResult": "discovery",
+                "noFeasible": "result",
+            },
+        )
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the local YDB profile panel test")
+    def test_local_ydb_profile_renders_separate_result_and_discovery_panels(self):
+        schema_start = web._JS.index("function localLegacyResultSchema")
+        schema_finish = web._JS.index("function localChart", schema_start)
+        render_start = web._JS.index("function localBestRows")
+        render_finish = web._JS.index("async function mountLocalYdbProfile", render_start)
+        script = (
+            """
+            const esc=value=>String(value??'');
+            const metricLabel=value=>String(value??'—');
+            const elapsedLabel=value=>String(value??0);
+            const localElapsed=()=>0;
+            const localPhaseLabel=value=>value||'';
+            const localActivityLog=()=>'<activity>';
+            const localRestoreActivityScroll=()=>{};
+            const localProfileDetails=()=>'<profile-details>';
+            const localVerificationSummary=()=>'<verification>';
+            const localKpi=(label,value)=>'<kpi>'+label+': '+value+'</kpi>';
+            const localOutcomeLabel=value=>value||'';
+            const localSearchAxisLabel=value=>value||'load';
+            const localChart=()=>'<chart>';
+            const localCommandDetails=()=>'';
+            const localCommandText=()=>'';
+            const localResultMetrics=result=>({
+              source:result.metrics_source==='verification'?'Holdout':'Search',
+              verified:result.metrics_source==='verification',
+              metrics:result.verified_metrics||result.selected_metrics||{}
+            });
+            const bindChartTooltips=()=>{};
+            const chartColors=[];
+            const document={activeElement:null};
+            function makeContainer(initial={}){
+              const container={dataset:{...initial},_html:'',tabs:[],panels:[]};
+              Object.defineProperty(container,'innerHTML',{
+                get(){return this._html},
+                set(value){
+                  this._html=value;
+                  this.tabs=['result','discovery'].filter(view=>
+                    value.includes('data-local-ydb-view="'+view+'"')
+                  ).map(view=>({
+                    dataset:{localYdbView:view},classList:{toggle:()=>{}},setAttribute:()=>{},removeAttribute:()=>{},
+                    focus:options=>{container.focused=view;container.preventedFocusScroll=options?.preventScroll===true}
+                  }));
+                  this.panels=['result','discovery'].filter(view=>
+                    value.includes('data-local-ydb-panel='+view)
+                  ).map(view=>({dataset:{localYdbPanel:view},hidden:false}));
+                }
+              });
+              container.querySelector=()=>null;
+              container.querySelectorAll=selector=>{
+                if(selector==='[data-local-ydb-view]')return container.tabs;
+                if(selector==='[data-local-ydb-panel]')return container.panels;
+                return []
+              };
+              container.contains=item=>container.tabs.includes(item);
+              return container
+            }
+            """
+            + web._JS[schema_start:schema_finish]
+            + web._JS[render_start:render_finish]
+            + """
+            const schema={
+              schema_id:'generic-total-v1',throughput_unit:'requests/s',reports_errors:true,
+              metrics:[
+                {name:'transactions',unit:'operations',repetition_aggregation:'median'},
+                {name:'throughput',unit:'requests/s',repetition_aggregation:'median'},
+                {name:'errors',unit:'errors',repetition_aggregation:'sum'},
+                {name:'p99_ms',unit:'ms',repetition_aggregation:'median'}
+              ],
+              slo_metrics:{p99:'p99_ms'}
+            };
+            const base={
+              started_at:'2025-01-01T00:00:00Z',finished_at:'2025-01-01T00:01:00Z',
+              progress:{search_stage:1},attempts:[],searches:[],workload_result_schema:schema,
+              parameters:{
+                workload:{type:'kv',operation:'upsert',options:{}},
+                geometry:{static_nodes:1,dynamic_nodes:1,storage_groups:1},client:{threads:4},
+                measurement:{warmup:1,duration:10,repetitions:1},
+                load:{parameter:'rate',objective:{type:'latency-slo',percentile:'p99',max_ms:10}}
+              }
+            };
+            const finished=makeContainer();
+            const finishedData={...base,state:'passed',result:{
+              outcome:'boundary-found',parameter:'rate',selected_load:80,dynamic_nodes:1,
+              selected_metrics:{transactions:100,throughput:10,errors:0,p99_ms:4},metrics_source:'search'
+            }};
+            renderLocalYdbProfile(finished,finishedData);
+            document.activeElement=finished.tabs.find(item=>item.dataset.localYdbView==='discovery');
+            renderLocalYdbProfile(finished,finishedData);
+            const running=makeContainer();
+            renderLocalYdbProfile(running,{...base,state:'running',finished_at:null,result:null});
+            const summarize=container=>({
+              view:container.dataset.localYdbView,
+              tabs:container.tabs.map(item=>item.dataset.localYdbView),
+              panels:Object.fromEntries(container.panels.map(item=>[item.dataset.localYdbPanel,item.hidden])),
+              hasResultMarkup:container.innerHTML.includes('data-local-ydb-panel=result'),
+              hasDiscoveryMarkup:container.innerHTML.includes('data-local-ydb-panel=discovery'),
+              hasResultContent:container.innerHTML.includes('Metric source'),
+              hasDiscoveryContent:container.innerHTML.includes('Geometry stages'),
+              focused:container.focused||null,preventedFocusScroll:Boolean(container.preventedFocusScroll)
+            });
+            process.stdout.write(JSON.stringify({finished:summarize(finished),running:summarize(running)}));
+            """
+        )
+        completed = subprocess.run(
+            [shutil.which("node"), "-e", script],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        result = json.loads(completed.stdout)
+        self.assertEqual(result["finished"]["view"], "result")
+        self.assertEqual(result["finished"]["tabs"], ["result", "discovery"])
+        self.assertEqual(result["finished"]["panels"], {"result": False, "discovery": True})
+        self.assertTrue(result["finished"]["hasResultMarkup"])
+        self.assertTrue(result["finished"]["hasDiscoveryMarkup"])
+        self.assertTrue(result["finished"]["hasResultContent"])
+        self.assertTrue(result["finished"]["hasDiscoveryContent"])
+        self.assertEqual(result["finished"]["focused"], "discovery")
+        self.assertTrue(result["finished"]["preventedFocusScroll"])
+        self.assertEqual(result["running"]["view"], "discovery")
+        self.assertEqual(result["running"]["tabs"], ["result", "discovery"])
+        self.assertEqual(result["running"]["panels"], {"result": True, "discovery": False})
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the local YDB attempts UI test")
+    def test_local_ydb_web_attempts_use_objective_latency_percentile(self):
+        schema_start = web._JS.index("function localLegacyResultSchema")
+        schema_finish = web._JS.index("function localChart", schema_start)
+        render_start = web._JS.index("function renderLocalYdbProfile")
+        render_finish = web._JS.index("async function mountLocalYdbProfile", render_start)
+        script = (
+            """
+            const esc=value=>String(value??'');
+            const metricLabel=value=>String(value??'—');
+            const elapsedLabel=value=>String(value??0);
+            const localElapsed=()=>0;
+            const localPhaseLabel=value=>value||'';
+            const localActivityLog=()=>'';
+            const localRestoreActivityScroll=()=>{};
+            const localProfileDetails=()=>'';
+            const localVerificationSummary=()=>'';
+            const localKpi=()=>'';
+            const localYdbDefaultView=()=>'discovery';
+            const localYdbViewTabs=()=>'';
+            const localResultPanel=()=>'';
+            const localApplyYdbView=()=>{};
+            const localBindYdbViews=()=>{};
+            const localRestoreYdbViewFocus=()=>{};
+            const localOutcomeLabel=value=>value||'';
+            const localSearchAxisLabel=value=>value||'load';
+            const localBestRows=(attempts,objective,xField)=>new Map(
+              attempts.map(item=>[String(item[xField]),item])
+            );
+            const chartColors=[];
+            const localChart=()=>'';
+            const localCommandDetails=()=>'';
+            const bindChartTooltips=()=>{};
+            """
+            + web._JS[schema_start:schema_finish]
+            + web._JS[render_start:render_finish]
+            + """
+            const schema={
+              schema_id:'generic-total-v1',throughput_unit:'requests/s',reports_errors:true,
+              metrics:[
+                {name:'throughput',unit:'requests/s',repetition_aggregation:'median'},
+                {name:'errors',unit:'errors',repetition_aggregation:'sum'},
+                {name:'p95_ms',unit:'ms',repetition_aggregation:'median'},
+                {name:'p99_ms',unit:'ms',repetition_aggregation:'median'}
+              ],
+              slo_metrics:{p95:'p95_ms',p99:'p99_ms'}
+            };
+            const container={
+              dataset:{},innerHTML:'',querySelector:()=>null,querySelectorAll:()=>[]
+            };
+            renderLocalYdbProfile(container,{
+              state:'passed',started_at:'2025-01-01T00:00:00Z',progress:{search_stage:1},searches:[],
+              parameters:{
+                workload:{type:'kv'},
+                load:{parameter:'rate',objective:{type:'latency-slo',percentile:'p95',max_ms:10}}
+              },
+              workload_result_schema:schema,
+              attempts:[{
+                attempt:1,search_stage:1,dynamic_nodes:1,load:90,throughput:80,
+                p95_ms:5.95,p99_ms:99.99,errors:0,empty_repetitions:0,
+                static_cpu_mean:10,dynamic_cpu_mean:20,cli_cpu_mean:30,
+                passed:true,decision:'within SLO',duration_seconds:1
+              }]
+            });
+            const table=container.innerHTML.slice(container.innerHTML.indexOf('<table class=local-attempts>'));
+            process.stdout.write(JSON.stringify({table}));
+            """
+        )
+        completed = subprocess.run(
+            [shutil.which("node"), "-e", script],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        table = json.loads(completed.stdout)["table"]
+        self.assertIn(">p95 (ms)</th>", table)
+        self.assertNotIn(">p99 (ms)</th>", table)
+        self.assertIn(">5.95</td>", table)
+        self.assertNotIn(">99.99</td>", table)
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the schema-aware Builder test")
+    def test_local_ydb_web_builder_omits_unsupported_error_controls(self):
+        start = web._JS.index("function localField")
+        finish = web._JS.index("function localNumber", start)
+        script = (
+            """
+            const esc=value=>String(value??'');
+            const localYdbGeometryKeys={static_nodes:'static-nodes',dynamic_nodes:'dynamic-nodes',max_dynamic_nodes:'max-dynamic-nodes',disk_size_gb:'disk-size-gb',storage_groups:'storage-groups'};
+            const localYdbAffinityKeys={ydb_cli:'ydb-cli',static_nodes:'static-nodes',dynamic_nodes:'dynamic-nodes'};
+            const definition={type:'fake',operations:['run'],load_parameters:['rate'],options:[],
+              slo_metrics:{p90:'latency_ms'},reports_errors:false,minimum_duration_seconds:1,
+              maximum_total_seconds:3600};
+            const editor={model:{local_ydb_workloads:[definition],affinity_modes:['none'],benchmarks:[{name:'local-ydb'}]}};
+            function localYdbWorkloadDefinition(){return definition}
+            function localYdbDefaultWarmupSeconds(){return 10}
+            function localYdbMeasurementMaximumDuration(definition,warmup){
+              return definition.maximum_total_seconds-warmup
+            }
+        """
+            + web._JS[start:finish]
+            + """
+            const profile={benchmark:'local-ydb',name:'custom',timeout:null,local_ydb:{
+              workload:{type:'fake',operation:'run',options:{}},
+              geometry:{preset:'single',static_nodes:1,dynamic_nodes:1,max_dynamic_nodes:1,disk_size_gb:1,storage_groups:1},
+              client:{threads:1},
+              load:{parameter:'rate',allow_errors:false,search:{start:1,maximum:10,multiplier:2,resolution_percent:2},objective:{type:'latency-slo',percentile:'p90',max_ms:5,max_errors:0,min_achieved_rate_ratio:.9}},
+              measurement:{warmup:0,duration:1,repetitions:1,verification_repetitions:0},
+              affinity:{ydb_cli:{mode:'none',cpus:null},static_nodes:{mode:'none',cpus:null},dynamic_nodes:{mode:'none',cpus:null}}
+            }};
+            const html=localYdbProfileEditor(profile);
+            process.stdout.write(JSON.stringify({
+              error_toggle:html.includes('local-load-allow-errors'),error_limit:html.includes('local-slo-max-errors'),
+              duration_limit:html.includes('Warmup plus duration must not exceed 3600 seconds.'),
+              p90:html.includes('value="p90"'),p99_default:localYdbSloPercentile({slo_metrics:{p50:'x',p99:'y'}},'missing'),
+              first_default:localYdbSloPercentile({slo_metrics:{p90:'x'}},'missing')
+            }));
+        """
+        )
+        completed = subprocess.run(
+            [shutil.which("node"), "-e", script],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        result = json.loads(completed.stdout)
+        self.assertFalse(result["error_toggle"])
+        self.assertFalse(result["error_limit"])
+        self.assertTrue(result["duration_limit"])
+        self.assertTrue(result["p90"])
+        self.assertEqual(result["p99_default"], "p99")
+        self.assertEqual(result["first_default"], "p90")
+        self.assertIn("document.querySelector('#local-load-allow-errors')?.checked", web._JS)
+        self.assertIn("workloadDefinition.reports_errors?localInteger('local-slo-max-errors',0):0", web._JS)
+        self.assertIn("config.load.objective.max_errors=0", web._JS)
 
     def test_local_ydb_stock_commands_do_not_use_kv_path_option(self):
         cli_context = local_ydb_workloads.WorkloadCli(
@@ -5287,6 +6056,165 @@ class WebTest(unittest.TestCase):
         (directory / "run.json").write_text(json.dumps(value), encoding="utf-8")
         (directory / "artifact.txt").write_text("artifact", encoding="utf-8")
 
+    def _local_ydb_result(
+        self,
+        directory,
+        throughput,
+        operation="put",
+        verified=False,
+        result_schema=None,
+        extra_metrics=None,
+        verification_cluster="search",
+    ):
+        self._manifest(directory)
+        main_path = directory / "run.json"
+        main = json.loads(main_path.read_text(encoding="utf-8"))
+        relative = Path("local-ydb") / "capacity"
+        main["runs"] = [
+            {
+                "benchmark": "local-ydb",
+                "profile": "capacity",
+                "status": "completed",
+                "directory": str(relative),
+                "manifest": str(relative / "run.json"),
+            }
+        ]
+        main["steps"] = [
+            {
+                "id": "step-1",
+                "benchmark": "local-ydb",
+                "profile": "capacity",
+                "affinity": "roles",
+                "threads": 64,
+                "case": 1,
+                "parameters": {},
+                "repeat": 1,
+                "state": "passed",
+                "artifacts": [str(relative / "run.json")],
+            }
+        ]
+        main_path.write_text(json.dumps(main), encoding="utf-8")
+        profile_root = directory / relative
+        profile_root.mkdir(parents=True)
+        selected_metrics = {
+            "throughput": throughput,
+            "p99_ms": 10,
+            "errors": 0,
+            "static_cpu_mean": 50,
+            "dynamic_cpu_mean": 80,
+            "cli_cpu_mean": 30,
+            "commands": [{"argv": ["must", "not", "leak"]}],
+        }
+        selected_metrics.update(extra_metrics or {})
+        result = {
+            "outcome": "best-observed",
+            "parameter": "rate",
+            "dynamic_nodes": 1,
+            "selected_load": 100,
+            "selected_metrics": selected_metrics,
+        }
+        verification = None
+        if verified:
+            result.update(
+                {
+                    "metrics_source": "verification",
+                    "holdout_accepted": True,
+                    "verified_metrics": {
+                        **selected_metrics,
+                        "throughput": throughput + 50,
+                        "commands": [{"argv": ["must", "also", "not", "leak"]}],
+                    },
+                }
+            )
+            verification = {
+                "status": "completed",
+                "cluster": verification_cluster,
+                "configured_repetitions": 3,
+                "completed_repetitions": 3,
+                "accepted": True,
+                "evaluation_kind": "validity",
+                "decision": "workload completed without errors",
+                "throughput_delta_percent": 5,
+                "saturated_repetitions": 3,
+                "samples": [{"commands": [{"argv": ["not", "in", "comparison"]}]}],
+            }
+        profile = {
+            "schema_version": SCHEMA_VERSION,
+            "benchmark": "local-ydb",
+            "profile": "capacity",
+            "status": "completed",
+            "state": "passed",
+            "started_at": "2025-01-01T00:00:00+00:00",
+            "finished_at": "2025-01-01T00:01:00+00:00",
+            "tool_revision": "test-revision",
+            "binaries": {
+                "ydbd": {"sha256": "server-sha"},
+                "ydb_cli": {"sha256": "cli-sha"},
+                "process_guard": {"sha256": "guard-sha", "private": "not projected"},
+            },
+            "platform": {
+                "cpu_model": "test CPU",
+                "uname": {"node": "test-host", "release": "test-kernel"},
+                "private": "not projected",
+            },
+            "cpu_topology": {"version": 2, "allowed_cpus": [0, 1, 2], "private": "not projected"},
+            "parameters": {
+                "workload": {"type": "kv", "operation": operation, "options": {"partitions": 16}},
+                "geometry": {
+                    "preset": "single",
+                    "static_nodes": 1,
+                    "dynamic_nodes": 1,
+                    "max_dynamic_nodes": 1,
+                    "storage_groups": 1,
+                    "disk_size_gb": 64,
+                },
+                "client": {"threads": 64},
+                "load": {"parameter": "rate", "values": [100]},
+                "measurement": {"warmup": 1, "duration": 10, "repetitions": 3},
+                "private": "not projected",
+            },
+            "role_affinity": {"ydb_cli": [0], "static_nodes": [1], "dynamic_nodes": [2]},
+            "attempts": [],
+            "searches": [],
+            "result": result,
+        }
+        if result_schema is not None:
+            profile["workload_result_schema"] = result_schema
+        if verification is not None:
+            profile["verification"] = verification
+        (profile_root / "run.json").write_text(json.dumps(profile), encoding="utf-8")
+
+    def _custom_local_ydb_result_schema(self, schema_id="fake-json-v1", queue_unit="messages"):
+        return {
+            "schema_id": schema_id,
+            "metrics": [
+                {
+                    "name": "throughput",
+                    "unit": "widgets/s",
+                    "repetition_aggregation": "median",
+                    "required": True,
+                    "description": "delivered widgets",
+                },
+                {
+                    "name": "latency_ms",
+                    "unit": "ms",
+                    "repetition_aggregation": "median",
+                    "required": True,
+                    "description": "fake SLO latency",
+                },
+                {
+                    "name": "queue_depth",
+                    "unit": queue_unit,
+                    "repetition_aggregation": "median",
+                    "required": False,
+                    "description": "queued widgets",
+                },
+            ],
+            "slo_metrics": {"p90": "latency_ms"},
+            "throughput_unit": "widgets/s",
+            "reports_errors": False,
+        }
+
     def _portable_archive(self, extra=None, version=SCHEMA_VERSION, corrupt=False, run_updates=None):
         run = {
             "schema_version": version,
@@ -5551,6 +6479,368 @@ class WebTest(unittest.TestCase):
         finally:
             service.shutdown()
 
+    def test_run_service_compacts_oversized_event_log_records_without_changing_lifecycle(self):
+        def oversized_executor(run, emit, _cancelled):
+            step_id = run["store"].manifest["steps"][0]["id"]
+            emit({"type": "step-started", "step_id": step_id})
+            emit(
+                {
+                    "type": "step-finished",
+                    "step_id": step_id,
+                    "state": "passed",
+                    "fields": {"reason": "x" * 4096},
+                }
+            )
+
+        with mock.patch.object(web, "_EVENT_LOG_RECORD_BYTES", 512):
+            service = RunService(self.root, executor=oversized_executor)
+            try:
+                run_id = service.start(
+                    "ping-bench:\n  oversized: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
+                )["id"]
+                run = service._runs[run_id]
+                self.assertTrue(run["finished"].wait(2))
+                manifest = json.loads((run["root"] / "run.json").read_text(encoding="utf-8"))
+                self.assertEqual(manifest["state"], "passed")
+                self.assertEqual(manifest["steps"][0]["state"], "passed")
+                persisted = [
+                    json.loads(line) for line in (run["root"] / "events.jsonl").read_text(encoding="utf-8").splitlines()
+                ]
+                compacted = next(event for event in persisted if event.get("payload_truncated"))
+                self.assertEqual(compacted["type"], "step-finished")
+                self.assertEqual(compacted["state"], "passed")
+                self.assertGreater(compacted["original_size_bytes"], web._EVENT_LOG_RECORD_BYTES)
+                self.assertTrue(
+                    all(
+                        len((json.dumps(event, sort_keys=True) + "\n").encode("utf-8")) <= web._EVENT_LOG_RECORD_BYTES
+                        for event in persisted
+                    )
+                )
+            finally:
+                service.shutdown()
+
+    def test_run_service_keeps_original_failure_when_compacting_oversized_event(self):
+        def oversized_executor(run, emit, _cancelled):
+            step_id = run["store"].manifest["steps"][0]["id"]
+            emit({"type": "step-started", "step_id": step_id})
+            emit(
+                {
+                    "type": "step-finished",
+                    "step_id": step_id,
+                    "state": "failed",
+                    "fields": {"error": "x" * 4096},
+                }
+            )
+            raise BenchmarkError("original benchmark failure")
+
+        with mock.patch.object(web, "_EVENT_LOG_RECORD_BYTES", 512):
+            service = RunService(self.root, executor=oversized_executor)
+            try:
+                run_id = service.start(
+                    "ping-bench:\n  oversized: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
+                )["id"]
+                run = service._runs[run_id]
+                self.assertTrue(run["finished"].wait(2))
+                manifest = json.loads((run["root"] / "run.json").read_text(encoding="utf-8"))
+                self.assertEqual(manifest["state"], "failed")
+                self.assertEqual(manifest["steps"][0]["state"], "failed")
+                self.assertEqual(manifest["error"], "original benchmark failure")
+                persisted = [
+                    json.loads(line) for line in (run["root"] / "events.jsonl").read_text(encoding="utf-8").splitlines()
+                ]
+                compacted = next(event for event in persisted if event.get("payload_truncated"))
+                self.assertEqual(compacted["type"], "step-finished")
+                self.assertEqual(compacted["state"], "failed")
+            finally:
+                service.shutdown()
+
+    def test_local_ydb_activity_is_profile_scoped_bounded_and_strictly_projected(self):
+        run_root = self.root / "local-ydb-activity"
+        self._manifest(run_root)
+        manifest_path = run_root / "run.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["runs"] = [
+            {"benchmark": "local-ydb", "profile": "capacity", "status": "running"},
+            {"benchmark": "local-ydb", "profile": "other", "status": "running"},
+        ]
+        manifest["steps"] = [
+            {
+                "id": "capacity-step",
+                "benchmark": "local-ydb",
+                "profile": "capacity",
+                "state": "running",
+            },
+            {
+                "id": "other-step",
+                "benchmark": "local-ydb",
+                "profile": "other",
+                "state": "running",
+            },
+        ]
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        events = [
+            {
+                "sequence": 1,
+                "at": "2025-01-01T00:00:00+00:00",
+                "type": "step-started",
+                "step_id": "capacity-step",
+                "fields": {"role_affinity": {"private": list(range(1000))}},
+            }
+        ]
+        for index in range(205):
+            progress = {
+                "phase": "measuring",
+                "search_stage": 1,
+                "attempt": index + 1,
+                "parameter": "rate",
+                "load": 1000 + index,
+                "latest_attempt": {"commands": [{"private": "not projected"}]},
+            }
+            if index == 204:
+                progress.update(
+                    {
+                        "current_command": {
+                            "phase": "measuring",
+                            "repetition": 2,
+                            "argv": ["/tmp/ydb", "workload", "run"],
+                            "cpu_affinity": [0, 128],
+                            "private": "not projected",
+                        },
+                        "verification": {
+                            "status": "completed",
+                            "configured_repetitions": 3,
+                            "completed_repetitions": 3,
+                            "accepted": True,
+                            "evaluation_kind": "objective",
+                            "decision": "latency-slo-passed",
+                            "samples": [{"commands": ["not projected"]}],
+                        },
+                    }
+                )
+            events.append(
+                {
+                    "sequence": index + 2,
+                    "at": "2025-01-01T00:00:{:02d}+00:00".format(index % 60),
+                    "type": "step-progress",
+                    "step_id": "capacity-step",
+                    "fields": {"progress": progress},
+                }
+            )
+        last_target_sequence = events[-1]["sequence"]
+        events.append(
+            {
+                "sequence": last_target_sequence + 1,
+                "at": "2025-01-01T00:04:00+00:00",
+                "type": "step-progress",
+                "step_id": "other-step",
+                "fields": {"progress": {"phase": "measuring", "attempt": 999}},
+            }
+        )
+        (run_root / "events.jsonl").write_text(
+            "".join(json.dumps(event) + "\n" for event in events),
+            encoding="utf-8",
+        )
+
+        service = RunService(self.root)
+        try:
+            with mock.patch.object(service, "events", side_effect=AssertionError("must stream event log")):
+                activity = service.local_ydb_activity("local-ydb-activity", "capacity")
+            self.assertTrue(activity["truncated"])
+            self.assertEqual(len(activity["events"]), web._LOCAL_YDB_ACTIVITY_LIMIT)
+            self.assertEqual(activity["after"], last_target_sequence + 1)
+            self.assertTrue(all(item["sequence"] <= last_target_sequence for item in activity["events"]))
+            projected = activity["events"][-1]
+            self.assertEqual(projected["current_command"]["argv"], ["/tmp/ydb", "workload", "run"])
+            self.assertEqual(projected["current_command"]["cpu_affinity"], [0, 128])
+            self.assertNotIn("private", projected["current_command"])
+            self.assertNotIn("latest_attempt", projected)
+            self.assertTrue(projected["verification"]["accepted"])
+            self.assertEqual(projected["verification"]["evaluation_kind"], "objective")
+            self.assertNotIn("samples", projected["verification"])
+            replay = service.local_ydb_activity("local-ydb-activity", "capacity", after=last_target_sequence)
+            self.assertEqual(replay, {"events": [], "after": last_target_sequence + 1, "truncated": False})
+            live_event = {
+                "sequence": last_target_sequence + 2,
+                "type": "step-progress",
+                "step_id": "capacity-step",
+                "fields": {"progress": {"phase": "finishing"}},
+            }
+            service._runs["local-ydb-activity"] = {
+                "lock": threading.RLock(),
+                "events": deque([live_event]),
+                "store": mock.Mock(manifest={"events": live_event["sequence"]}),
+            }
+            try:
+                with mock.patch.object(web, "load_manifest", return_value=manifest), mock.patch.object(
+                    Path, "open", side_effect=AssertionError("live poll must not replay the event log")
+                ):
+                    live = service.local_ydb_activity("local-ydb-activity", "capacity", after=last_target_sequence + 1)
+                self.assertEqual(live["after"], live_event["sequence"])
+                self.assertEqual(live["events"][0]["phase"], "finishing")
+            finally:
+                del service._runs["local-ydb-activity"]
+            with self.assertRaisesRegex(BenchmarkError, "non-negative integer"):
+                service.local_ydb_activity("local-ydb-activity", "capacity", after=-1)
+            with self.assertRaisesRegex(BenchmarkError, "JSON safe range"):
+                service.local_ydb_activity("local-ydb-activity", "capacity", after=web._MAX_SAFE_JSON_INTEGER + 1)
+            with self.assertRaisesRegex(BenchmarkError, "profile not found"):
+                service.local_ydb_activity("local-ydb-activity", "missing")
+            (run_root / "events.jsonl").write_text(
+                json.dumps({"sequence": "one", "type": "step-progress"}) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(BenchmarkError, "strictly increasing integers"):
+                service.local_ydb_activity("local-ydb-activity", "capacity")
+            (run_root / "events.jsonl").write_text(
+                json.dumps({"sequence": 1, "type": 7}) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(BenchmarkError, "type must be a string"):
+                service.local_ydb_activity("local-ydb-activity", "capacity")
+            (run_root / "events.jsonl").write_text(
+                json.dumps({"sequence": web._MAX_SAFE_JSON_INTEGER + 1, "type": "step-progress"}) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(BenchmarkError, "strictly increasing integers"):
+                service.local_ydb_activity("local-ydb-activity", "capacity")
+
+            large_events = []
+            for sequence in range(1, 41):
+                large_events.append(
+                    {
+                        "sequence": sequence,
+                        "type": "step-progress",
+                        "step_id": "capacity-step",
+                        "fields": {
+                            "progress": {
+                                "phase": "measuring",
+                                "current_command": {"argv": ["x" * 512] * 64},
+                            }
+                        },
+                    }
+                )
+            (run_root / "events.jsonl").write_text(
+                "".join(json.dumps(event) + "\n" for event in large_events),
+                encoding="utf-8",
+            )
+            bounded = service.local_ydb_activity("local-ydb-activity", "capacity")
+            self.assertTrue(bounded["truncated"])
+            self.assertLess(len(bounded["events"]), len(large_events))
+            self.assertLessEqual(
+                len(json.dumps(bounded["events"], separators=(",", ":")).encode("utf-8")),
+                web._LOCAL_YDB_ACTIVITY_RESPONSE_BYTES + 2,
+            )
+        finally:
+            service.shutdown()
+
+    def test_local_ydb_activity_http_endpoint_validates_profile_and_cursor(self):
+        run_root = self.root / "local-ydb-http-activity"
+        self._manifest(run_root)
+        manifest_path = run_root / "run.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["runs"] = [{"benchmark": "local-ydb", "profile": "capacity", "status": "running"}]
+        manifest["steps"] = [
+            {
+                "id": "capacity-step",
+                "benchmark": "local-ydb",
+                "profile": "capacity",
+                "state": "running",
+            }
+        ]
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        (run_root / "events.jsonl").write_text(
+            json.dumps(
+                {
+                    "sequence": 1,
+                    "at": "2025-01-01T00:00:00+00:00",
+                    "type": "step-progress",
+                    "step_id": "capacity-step",
+                    "fields": {"progress": {"phase": "warming-up", "load": 1000}},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        server = make_server("127.0.0.1", 0, self.root)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        base = "http://127.0.0.1:{}".format(server.server_port)
+        endpoint = base + "/api/runs/local-ydb-http-activity/local-ydb-activity"
+        try:
+            with urllib.request.urlopen(endpoint + "?profile=capacity&after=0") as response:
+                activity = json.loads(response.read())
+            self.assertEqual(activity["after"], 1)
+            self.assertEqual(activity["events"][0]["phase"], "warming-up")
+            for query, message in (
+                ("?after=0", "profile is required"),
+                ("?profile=capacity&after=abc", "non-negative integer"),
+                ("?profile=capacity&after=-1", "non-negative integer"),
+                (
+                    "?profile=capacity&after={}".format(web._MAX_SAFE_JSON_INTEGER + 1),
+                    "JSON safe range",
+                ),
+            ):
+                with self.assertRaises(HTTPError) as context:
+                    urllib.request.urlopen(endpoint + query)
+                self.assertEqual(context.exception.code, 400)
+                self.assertIn(message, json.loads(context.exception.read())["error"])
+        finally:
+            server.shutdown()
+            worker.join()
+            server.server_close()
+
+    def test_local_ydb_activity_bounds_persisted_replay_to_recent_tail(self):
+        run_root = self.root / "local-ydb-tail-activity"
+        self._manifest(run_root)
+        manifest_path = run_root / "run.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["runs"] = [{"benchmark": "local-ydb", "profile": "capacity", "status": "running"}]
+        manifest["steps"] = [
+            {
+                "id": "capacity-step",
+                "benchmark": "local-ydb",
+                "profile": "capacity",
+                "state": "running",
+            }
+        ]
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        events = [
+            {
+                "sequence": sequence,
+                "type": "step-progress",
+                "step_id": "capacity-step",
+                "fields": {"progress": {"phase": "measuring", "attempt": sequence, "padding": "x" * 80}},
+            }
+            for sequence in range(1, 21)
+        ]
+        (run_root / "events.jsonl").write_text(
+            "".join(json.dumps(event, separators=(",", ":")) + "\n" for event in events),
+            encoding="utf-8",
+        )
+
+        with mock.patch.object(web, "_LOCAL_YDB_ACTIVITY_SCAN_BYTES", 256), mock.patch.object(
+            web, "_EVENT_LOG_RECORD_BYTES", 512
+        ):
+            service = RunService(self.root)
+            try:
+                activity = service.local_ydb_activity("local-ydb-tail-activity", "capacity")
+                self.assertTrue(activity["truncated"])
+                self.assertGreater(activity["events"][0]["sequence"], 1)
+                self.assertEqual(activity["events"][-1]["sequence"], 20)
+                self.assertEqual(activity["after"], 20)
+
+                first_sequence = activity["events"][0]["sequence"]
+                replay = service.local_ydb_activity(
+                    "local-ydb-tail-activity",
+                    "capacity",
+                    after=first_sequence - 1,
+                )
+                self.assertFalse(replay["truncated"])
+                self.assertEqual(replay["events"], activity["events"])
+                self.assertEqual(replay["after"], 20)
+            finally:
+                service.shutdown()
+
     def test_local_ydb_profile_projection_supports_preparing_and_live_results(self):
         run_root = self.root / "local-ydb-run"
         self._manifest(run_root, "running")
@@ -5640,6 +6930,145 @@ class WebTest(unittest.TestCase):
             self.assertEqual(recovered["state"], "recovery_required")
         finally:
             service.shutdown()
+
+    def test_local_ydb_comparison_returns_bounded_profile_results(self):
+        self._local_ydb_result(self.root / "baseline", 1000, verified=True)
+        self._local_ydb_result(self.root / "candidate", 1100, operation="mixed")
+        service = RunService(self.root)
+        try:
+            comparison = service.local_ydb_comparison(["baseline", "candidate"])
+            self.assertEqual(
+                [(item["run"], item["profile"]) for item in comparison["entries"]],
+                [("baseline", "capacity"), ("candidate", "capacity")],
+            )
+            self.assertEqual(comparison["entries"][0]["result"]["selected_metrics"]["throughput"], 1000)
+            self.assertEqual(comparison["entries"][0]["binaries"]["ydbd"]["sha256"], "server-sha")
+            self.assertEqual(comparison["entries"][0]["cpu_topology"]["allowed_cpus"], [0, 1, 2])
+            self.assertNotIn("process_guard", comparison["entries"][0]["binaries"])
+            self.assertNotIn("private", comparison["entries"][0]["platform"])
+            self.assertNotIn("private", comparison["entries"][0]["cpu_topology"])
+            self.assertNotIn("private", comparison["entries"][0]["parameters"])
+            self.assertNotIn("attempts", comparison["entries"][0])
+            self.assertNotIn("commands", comparison["entries"][0]["result"]["selected_metrics"])
+            self.assertEqual(comparison["entries"][0]["result"]["metrics_source"], "verification")
+            self.assertEqual(comparison["entries"][0]["result"]["verified_metrics"]["throughput"], 1050)
+            self.assertNotIn("commands", comparison["entries"][0]["result"]["verified_metrics"])
+            self.assertTrue(comparison["entries"][0]["verification"]["accepted"])
+            self.assertEqual(comparison["entries"][0]["verification"]["cluster"], "search")
+            self.assertNotIn("samples", comparison["entries"][0]["verification"])
+            self.assertEqual(comparison["entries"][1]["parameters"]["workload"]["operation"], "mixed")
+            with self.assertRaisesRegex(BenchmarkError, "between 1 and 20"):
+                service.local_ydb_comparison([])
+            with self.assertRaisesRegex(BenchmarkError, "between 1 and 20"):
+                service.local_ydb_comparison(["baseline"] * 21)
+            with self.assertRaisesRegex(BenchmarkError, "must be unique"):
+                service.local_ydb_comparison(["baseline", "baseline"])
+            with self.assertRaisesRegex(BenchmarkError, "run not found"):
+                service.local_ydb_comparison(["missing"])
+            with mock.patch.object(
+                service,
+                "local_ydb_profile",
+                return_value={"tool_revision": "x" * (4 * 1024 * 1024)},
+            ):
+                with self.assertRaisesRegex(BenchmarkError, "response is too large"):
+                    service.local_ydb_comparison(["baseline"])
+        finally:
+            service.shutdown()
+
+    def test_local_ydb_profile_and_comparison_project_custom_result_schema(self):
+        schema = self._custom_local_ydb_result_schema()
+        self._local_ydb_result(
+            self.root / "custom-schema",
+            123,
+            verified=True,
+            result_schema=schema,
+            extra_metrics={"latency_ms": 4.5, "queue_depth": 17},
+        )
+        service = RunService(self.root)
+        try:
+            profile = service.local_ydb_profile("custom-schema", "capacity")
+            comparison = service.local_ydb_comparison(["custom-schema"])["entries"][0]
+        finally:
+            service.shutdown()
+
+        self.assertEqual(profile["workload_result_schema"], schema)
+        self.assertEqual(comparison["workload_result_schema"], schema)
+        self.assertEqual(comparison["result"]["selected_metrics"]["latency_ms"], 4.5)
+        self.assertEqual(comparison["result"]["selected_metrics"]["queue_depth"], 17)
+        self.assertEqual(comparison["result"]["verified_metrics"]["queue_depth"], 17)
+        self.assertNotIn("errors", comparison["result"]["selected_metrics"])
+        self.assertNotIn("commands", comparison["result"]["selected_metrics"])
+
+    def test_local_ydb_profile_uses_historical_schema_when_manifest_has_none(self):
+        self._local_ydb_result(self.root / "legacy-schema", 100)
+        service = RunService(self.root)
+        try:
+            schema = service.local_ydb_profile("legacy-schema", "capacity")["workload_result_schema"]
+        finally:
+            service.shutdown()
+
+        self.assertEqual(schema["schema_id"], "generic-total-v1")
+        self.assertEqual(schema["throughput_unit"], "requests/s")
+        self.assertEqual(schema["slo_metrics"]["p99"], "p99_ms")
+        self.assertTrue(schema["reports_errors"])
+
+    def test_local_ydb_result_schema_projection_rejects_incompatible_contracts(self):
+        schema = self._custom_local_ydb_result_schema()
+        invalid = []
+        invalid.append({**schema, "schema_id": "Unsafe schema"})
+        invalid.append(
+            {
+                **schema,
+                "metrics": [
+                    {**schema["metrics"][0], "name": "static_cpu_mean"},
+                    *schema["metrics"][1:],
+                ],
+            }
+        )
+        invalid.append({**schema, "throughput_unit": "requests/s"})
+        invalid.append({**schema, "reports_errors": True})
+        invalid.append({**schema, "slo_metrics": {"latency": "latency_ms"}})
+        invalid.append(
+            {
+                **schema,
+                "metrics": [
+                    schema["metrics"][0],
+                    {**schema["metrics"][1], "unit": "seconds"},
+                    schema["metrics"][2],
+                ],
+            }
+        )
+        for value in invalid:
+            with self.subTest(value=value), self.assertRaises(BenchmarkError):
+                web._project_local_ydb_result_schema(value)
+        with self.assertRaisesRegex(BenchmarkError, "schema must be an object"):
+            web._resolved_local_ydb_result_schema(
+                {"parameters": {"workload": {"type": "kv"}}, "workload_result_schema": None}
+            )
+
+    def test_local_ydb_comparison_projects_empty_holdout_repetitions(self):
+        run_root = self.root / "empty-holdout"
+        self._local_ydb_result(run_root, 1000, verified=True)
+        profile_path = run_root / "local-ydb" / "capacity" / "run.json"
+        profile = json.loads(profile_path.read_text(encoding="utf-8"))
+        profile["result"]["holdout_accepted"] = False
+        profile["result"]["verified_metrics"].update(
+            {"empty_repetitions": 1, "p99_ms": 0, "throughput": 0, "errors": 10}
+        )
+        profile["verification"].update(
+            {"accepted": False, "decision": "invalid measurement: zero successful operations"}
+        )
+        profile_path.write_text(json.dumps(profile), encoding="utf-8")
+
+        service = RunService(self.root)
+        try:
+            comparison = service.local_ydb_comparison(["empty-holdout"])
+        finally:
+            service.shutdown()
+        result = comparison["entries"][0]["result"]
+        self.assertEqual(result["verified_metrics"]["empty_repetitions"], 1)
+        self.assertEqual(result["verified_metrics"]["p99_ms"], 0)
+        self.assertFalse(result["holdout_accepted"])
 
     def test_local_ydb_profile_projection_preserves_terminal_state_without_nested_manifest(self):
         run_root = self.root / "terminal-local-ydb-run"
@@ -5814,15 +7243,42 @@ class WebTest(unittest.TestCase):
         self.assertEqual(value["series"][1]["cpus"], [0, 1, 2, 4])
         self.assertIn("dimension_metadata", value)
 
+    def test_chart_data_bounds_total_rows_across_selected_runs(self):
+        for run_id in ("first", "second"):
+            self._manifest(self.root / run_id)
+            summary = self.root / run_id / "ping-bench" / "baseline" / "summary.csv"
+            summary.parent.mkdir(parents=True)
+            summary.write_text(
+                "affinity_mode,threads,median_msgs_per_sec\n" "none,1,10\n" "none,2,20\n",
+                encoding="utf-8",
+            )
+
+        with mock.patch.object(web, "_CHART_DATA_ROW_LIMIT", 3), self.assertRaisesRegex(
+            BenchmarkError, "selected chart data has too many rows"
+        ):
+            chart_data(self.root, ["first", "second"])
+
     def test_local_ydb_summary_is_available_to_comparison_charts(self):
         self._manifest(self.root / "complete")
         summary = self.root / "complete" / "local-ydb" / "capacity" / "summary.csv"
         summary.parent.mkdir(parents=True)
-        row = {"load": 10, "dynamic_nodes": 2}
-        row.update({metric.name: index + 1 for index, metric in enumerate(LOCAL_YDB_BENCHMARK.metrics)})
-        summarized = LOCAL_YDB_BENCHMARK.summarize_metrics([row], LOCAL_YDB_BENCHMARK)
+        rows = []
+        for load, dynamic_nodes, scale in ((10, 1, 1), (20, 1, 2), (10, 2, 3)):
+            row = {"load": load, "dynamic_nodes": dynamic_nodes}
+            row.update({metric.name: (index + 1) * scale for index, metric in enumerate(LOCAL_YDB_BENCHMARK.metrics)})
+            rows.append(row)
+        aggregations = {"errors": "sum"}
+        summarized = LOCAL_YDB_BENCHMARK.summarize_metrics(
+            rows,
+            LOCAL_YDB_BENCHMARK,
+            metric_aggregations=aggregations,
+        )
         summary.write_text(
-            LOCAL_YDB_BENCHMARK.render_summary(summarized, LOCAL_YDB_BENCHMARK),
+            LOCAL_YDB_BENCHMARK.render_summary(
+                summarized,
+                LOCAL_YDB_BENCHMARK,
+                metric_aggregations=aggregations,
+            ),
             encoding="utf-8",
         )
 
@@ -5831,6 +7287,94 @@ class WebTest(unittest.TestCase):
         self.assertEqual(value["series"][0]["benchmark"], "local-ydb")
         self.assertEqual(value["series"][0]["affinity"], "roles")
         self.assertEqual(value["series"][0]["rows"][0]["load"], 10)
+        self.assertEqual(
+            {(row["load"], row["dynamic_nodes"]) for row in value["series"][0]["rows"]},
+            {(10, 1), (20, 1), (10, 2)},
+        )
+        self.assertIn("median_throughput", value["metrics"])
+        self.assertIn("median_p99_ms", value["metrics"])
+        self.assertIn("median_dynamic_cpu_mean", value["metrics"])
+        self.assertIn("max_errors", value["metrics"])
+        self.assertIn("sum_errors", value["metrics"])
+        unrelated = self.root / "complete" / "ping-bench" / "broken" / "summary.csv"
+        unrelated.parent.mkdir(parents=True)
+        with unrelated.open("wb") as stream:
+            stream.truncate(16 * 1024 * 1024 + 1)
+        with self.assertRaisesRegex(BenchmarkError, "summary CSV is too large"):
+            chart_data(self.root, ["complete"])
+        filtered = chart_data(self.root, ["complete"], "local-ydb")
+        self.assertEqual(len(filtered["series"]), 1)
+        with self.assertRaisesRegex(BenchmarkError, "unknown chart benchmark"):
+            chart_data(self.root, ["complete"], "missing")
+
+    def test_local_ydb_chart_data_uses_persisted_custom_metric_metadata(self):
+        for run_id, queue_unit in (("custom-one", "messages"), ("custom-two", "bytes")):
+            self._manifest(self.root / run_id)
+            profile_root = self.root / run_id / "local-ydb" / "capacity"
+            profile_root.mkdir(parents=True)
+            profile_root.joinpath("summary.csv").write_text(
+                "affinity_mode,load,dynamic_nodes,samples,median_throughput,min_throughput,max_throughput,"
+                "median_latency_ms,min_latency_ms,max_latency_ms,median_queue_depth,min_queue_depth,max_queue_depth\n"
+                "roles,10,1,1,100,90,110,4,3,5,17,16,18\n",
+                encoding="utf-8",
+            )
+            profile_root.joinpath("run.json").write_text(
+                json.dumps(
+                    {
+                        "parameters": {"workload": {"type": "fake"}},
+                        "workload_result_schema": self._custom_local_ydb_result_schema(queue_unit=queue_unit),
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+        value = chart_data(self.root, ["custom-one"], "local-ydb")
+        self.assertIn("median_queue_depth", value["metrics"])
+        self.assertEqual(value["metric_metadata"]["median_throughput"]["unit"], "widgets/s")
+        self.assertEqual(value["metric_metadata"]["median_latency_ms"]["unit"], "ms")
+        self.assertEqual(value["metric_metadata"]["median_queue_depth"]["unit"], "messages")
+        self.assertEqual(value["metric_metadata"]["median_queue_depth"]["description"], "queued widgets")
+        self.assertEqual(value["series"][0]["result_schema_id"], "fake-json-v1")
+
+        conflicting = chart_data(self.root, ["custom-one", "custom-two"], "local-ydb")
+        self.assertEqual(conflicting["metric_metadata"]["median_queue_depth"]["unit"], "varies")
+        self.assertTrue(conflicting["metric_metadata"]["median_queue_depth"]["conflict"])
+
+    def test_local_ydb_chart_data_normalizes_historical_stock_throughput_unit(self):
+        current_schema = web._legacy_local_ydb_result_schema("stock")
+        historical_schema = {
+            **current_schema,
+            "throughput_unit": "transactions/s",
+            "metrics": [
+                {**metric, "unit": "transactions/s"} if metric["name"] == "throughput" else metric
+                for metric in current_schema["metrics"]
+            ],
+        }
+        for run_id, schema in (("stock-old", historical_schema), ("stock-new", current_schema)):
+            self._manifest(self.root / run_id)
+            profile_root = self.root / run_id / "local-ydb" / "capacity"
+            profile_root.mkdir(parents=True)
+            profile_root.joinpath("summary.csv").write_text(
+                "affinity_mode,load,dynamic_nodes,samples,median_throughput,min_throughput,max_throughput\n"
+                "roles,10,1,1,100,90,110\n",
+                encoding="utf-8",
+            )
+            profile_root.joinpath("run.json").write_text(
+                json.dumps(
+                    {
+                        "parameters": {"workload": {"type": "stock"}},
+                        "workload_result_schema": schema,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+        historical = chart_data(self.root, ["stock-old"], "local-ydb")
+        self.assertEqual(historical["metric_metadata"]["median_throughput"]["unit"], "query operations/s")
+        combined = chart_data(self.root, ["stock-old", "stock-new"], "local-ydb")
+        throughput = combined["metric_metadata"]["median_throughput"]
+        self.assertEqual(throughput["unit"], "query operations/s")
+        self.assertNotIn("conflict", throughput)
 
     def test_memory_fairness_is_derived_per_repeat_before_aggregation(self):
         dimensions = ["threads", "random_percent", "scope", "worker_aggregation"]
@@ -5920,11 +7464,53 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"for(const points of segments)", script)
                 self.assertIn(b"function mountChartBuilder", script)
                 self.assertIn(b"function mountLocalYdbProfile", script)
+                self.assertIn(b"function loadLocalYdbActivity", script)
+                self.assertIn(b"/local-ydb-activity?", script)
+                self.assertIn(b"function localActivityLog", script)
+                self.assertIn(b"Recent activity", script)
+                self.assertIn(b"activityScrollTop", script)
+                self.assertIn(b"activityPinned", script)
+                self.assertIn(b"showLiveOutput=activeBenchmark!=='local-ydb'", script)
                 self.assertIn(b"local-load-allow-errors", script)
                 self.assertIn(b"allow-errors: ", script)
                 self.assertIn(b"Failed workload requests are allowed", script)
+                self.assertIn(b"editor.model?.local_ydb_workloads", script)
+                self.assertIn(b"definition.load_parameters", script)
+                self.assertIn(
+                    b"config.load=localYdbLoadForWorkload(config.load,parameters,nextDefinition,config.workload)",
+                    script,
+                )
+                self.assertIn(b"function localResultSchema", script)
+                self.assertIn(b"result_schema_id:schema.schema_id", script)
+                self.assertIn(b"const metricHeaders=metricColumns.map", script)
+                self.assertIn(b"if(option.choices.length)return localSelect", script)
+                self.assertIn(b"if(option.kind==='boolean')return localCheck", script)
+                self.assertIn(b"if(option.kind==='integer')", script)
+                self.assertIn(b"return localField(id,option.name,value,'','type=text')", script)
+                self.assertIn(b"function yamlScalar(value)", script)
+                self.assertIn(b"key+': '+yamlScalar(value)", script)
+                self.assertIn(b"!option.allow_empty&&!value.length", script)
+                self.assertNotIn(b"new RegExp(option.pattern)", script)
+                self.assertNotIn(b"const localYdbOperations=", script)
+                self.assertIn(b"Successful query operations", script)
+                self.assertIn(b"verification-repetitions:", script)
+                self.assertIn(b"local-measurement-verification-repetitions", script)
+                self.assertIn(b"localInteger('local-measurement-verification-repetitions',0,20)", script)
+                self.assertIn(b"function localVerificationSummary", script)
+                self.assertIn(b"metrics_source==='verification'", script)
+                self.assertIn(b"verification-measuring", script)
+                self.assertIn(b"'verification-evaluating':'Evaluating verification'", script)
+                self.assertIn(b"'restarting-verification-cluster':'Restarting verification cluster'", script)
+                self.assertIn(b"Reported metrics come from the independent holdout", script)
+                self.assertIn(b"Incompatible metric source", script)
                 self.assertIn(b"function localElapsed(started,finished=null)", script)
                 self.assertIn(b"Search process", script)
+                self.assertIn(b"Ternary search progress", script)
+                self.assertIn(b"Plateau candidate", script)
+                self.assertIn(b"Search low", script)
+                self.assertIn(b"Search high", script)
+                self.assertNotIn(b"Candidate and current best", script)
+                self.assertNotIn(b"label:'Passed'", script)
                 self.assertIn(b"function localSearchAxisLabel", script)
                 self.assertIn(b"data-local-chart-x", script)
                 self.assertIn(b"Attempts (search order)", script)
@@ -5949,6 +7535,29 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"local-ydb-profile?profile=", script)
                 self.assertIn(b"function defaultActorCharts", script)
                 self.assertIn(b"function defaultMemoryCharts", script)
+                self.assertIn(b"Local YDB baseline comparison", script)
+                self.assertIn(b"function mountLocalYdbComparison", script)
+                self.assertIn(b"function mountLocalYdbComparisonCurves", script)
+                self.assertIn(b"function localComparisonSemantic", script)
+                self.assertIn(b"sameMetricSource=metricView.source===baselineView.source", script)
+                self.assertIn(b"<th>Metric source</th>", script)
+                self.assertIn(b"function localComparisonKey", script)
+                self.assertIn(b"Incompatible", script)
+                self.assertIn(b"reference===0", script)
+                self.assertIn(b"value===null", script)
+                self.assertIn(b"Load values", script)
+                self.assertIn(b"...Object.keys(config)", script)
+                self.assertIn(b"series.benchmark!=='local-ydb'", script)
+                self.assertIn(b"const curveMetrics=localComparisonCurveMetrics", script)
+                self.assertIn(b"metric.repetition_aggregation==='sum'?'sum_':'median_'", script)
+                self.assertIn(b"['errors','sum_errors','Errors across repetitions']", script)
+                self.assertIn(b"localMetricLabel(schema,metric.name)", script)
+                self.assertIn(b"dynamicNodes", script)
+                self.assertIn(b"connectMeasuredPoints", script)
+                self.assertIn(b"item.rows.has(String(x))", script)
+                self.assertIn(b"no values are synthesized", script)
+                self.assertIn(b"loadChartData(value.selected,'local-ydb')", script)
+                self.assertIn(b"Promise.allSettled", script)
                 self.assertIn(b"function defaultChartScope", script)
                 self.assertIn(b"['actorPairs','in_flight']", script)
                 self.assertIn(b"['actorPairs','star_multiply']", script)
@@ -5977,6 +7586,14 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"class=modal-backdrop", script)
                 self.assertIn(b"role=dialog", script)
                 self.assertIn(b"function bindChartTooltips", script)
+                self.assertIn(b"const chartPointLimit=10000", script)
+                self.assertIn(b"function chartExtent", script)
+                self.assertIn(b"Chart omitted because it has more than", script)
+                self.assertIn(b"Search curves omitted because they have more than", script)
+                self.assertNotIn(b"Math.min(...values)", script)
+                self.assertNotIn(b"Math.max(...values)", script)
+                self.assertNotIn(b"Math.min(...numericX)", script)
+                self.assertNotIn(b"Math.max(...numericX)", script)
                 self.assertIn(b"function chartNumber", script)
                 self.assertIn(b"synchronize=false", script)
                 self.assertIn(b"targets=synchronize?panels:[active]", script)
@@ -5992,9 +7609,16 @@ class WebTest(unittest.TestCase):
                 stylesheet = response.read()
                 self.assertIn(b".local-attempts-scroll{max-width:100%;overflow-x:auto}", stylesheet)
                 self.assertIn(b".local-attempts{width:max-content;min-width:100%}", stylesheet)
+                self.assertIn(b".local-activity-log{max-height:20rem;overflow:auto", stylesheet)
                 self.assertNotIn(b".local-attempts{display:block", stylesheet)
             with urllib.request.urlopen(base + "/api/runs") as response:
                 self.assertEqual(json.loads(response.read())[0]["id"], "complete")
+            with urllib.request.urlopen(base + "/api/local-ydb-comparison?run=complete") as response:
+                self.assertEqual(json.loads(response.read()), {"entries": []})
+            with self.assertRaises(HTTPError) as context:
+                urllib.request.urlopen(base + "/api/local-ydb-comparison?run=missing")
+            self.assertEqual(context.exception.code, 400)
+            self.assertIn("run not found", json.loads(context.exception.read())["error"])
             request = urllib.request.Request(base + "/api/import", data=self._portable_archive(), method="POST")
             with urllib.request.urlopen(request) as response:
                 self.assertEqual(json.loads(response.read())["source"], "imported")
@@ -6396,3 +8020,7 @@ class WebTest(unittest.TestCase):
         self.assertTrue(service._runs[passed["id"]]["finished"].wait(2))
         self.assertEqual(service.detail(failed["id"])["state"], "failed")
         self.assertEqual(service.detail(passed["id"])["state"], "passed")
+
+
+if __name__ == "__main__":
+    unittest.main()

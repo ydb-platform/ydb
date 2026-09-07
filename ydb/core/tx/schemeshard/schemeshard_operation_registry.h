@@ -64,6 +64,8 @@ constexpr ESchemeOperationSupport GetSchemeOperationSupport(NKikimrSchemeOp::EOp
     return ESchemeOperationSupport::Unknown;
 }
 
+#include <ydb/core/tx/schemeshard/generated/operation_registry_checks.inc>
+
 template <NKikimrSchemeOp::EOperationType Type>
 [[noreturn]] void AbortUnimplementedSchemeOperation() {
     static_assert(GetSchemeOperationSupport(Type) == ESchemeOperationSupport::Unsupported

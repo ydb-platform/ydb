@@ -171,12 +171,15 @@ ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& resul
                 , "unexpected name %s", implName.c_str());
 
             TPath implPath = child.Child(implName);
+            if (implPath.IsDeleted()) {
+                continue;
+            }
+
             {
                 TPath::TChecker checks = implPath.Check();
                 checks
                     .NotEmpty()
                     .IsResolved()
-                    .NotDeleted()
                     .NotUnderDeleting()
                     .NotUnderOperation();
 

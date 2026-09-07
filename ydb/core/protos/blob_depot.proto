@@ -254,6 +254,7 @@ message TEvResolveResult {
 message TEvPushMetrics {
     optional uint64 BytesRead = 1; // since last update
     optional uint64 BytesWritten = 2; // since last update
+    optional uint32 NodeId = 3;
 }
 
 message TEvPrepareWriteS3 {

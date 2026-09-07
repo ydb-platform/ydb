@@ -28,7 +28,8 @@ TKqpQueryState::TQueryTxId& TKqpQueryState::TQueryTxId::operator=(const TQueryTx
 }
 
 void TKqpQueryState::TQueryTxId::SetValue(const TTxId& id) {
-    YQL_ENSURE(!Id);
+    YQL_ENSURE(!Id, "user tx id is already set to '" << Id->HumanStr
+        << "', attempt to overwrite it with '" << id.HumanStr << "'");
     Id = id.Id;
 }
 
@@ -37,7 +38,7 @@ TTxId TKqpQueryState::TQueryTxId::GetValue() {
 }
 
 void TKqpQueryState::TQueryTxId::Reset() {
-    Id = TTxId();
+    Id.Clear();
 }
 
 bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigateKeySetResult& response) {

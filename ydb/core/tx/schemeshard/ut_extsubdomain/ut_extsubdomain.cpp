@@ -1,5 +1,6 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/testlib/actors/wait_events.h>  // for TWaitForFirstEvent
+#include <ydb/core/testlib/actors/block_events.h>  // for TBlockEvents
 
 #include <ydb/public/lib/value/value.h>
 
@@ -1693,6 +1694,88 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
             UNIT_ASSERT(bool(entry.ListNodeEntry));
             UNIT_ASSERT_VALUES_EQUAL_C(entry.ListNodeEntry->Children.size(), 1, "extsubdomain exist: " << entry.ListNodeEntry->Children.at(0).Name);
         }
+    }
+
+    // Regression test for a bug where dropping a tenant while AlterUserAttributes is
+    // in-flight (after Propose, before the coordinator plan is applied) left orphaned
+    // UserAttributesAlterData rows in the local database.
+    // On schemeshard restart, ReadEverything hit Y_VERIFY_S(PathsById.contains(pathId)) and crashed.
+    Y_UNIT_TEST_FLAG(DropWhileAlteringUserAttrs, ExternalHive) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // Prepare phase.
+        // Create extsubdomain
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(Name: "USER_0")"
+        );
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            Sprintf(R"(
+                    Name: "USER_0"
+                    ExternalSchemeShard: true
+                    PlanResolution: 50
+                    Coordinators: 1
+                    Mediators: 1
+                    TimeCastBucketsPerMediator: 2
+                    StoragePools {
+                        Name: "pool-1"
+                        Kind: "hdd"
+                    }
+
+                    ExternalHive: %s
+                )",
+                ToString(ExternalHive).c_str()
+            )
+        );
+        env.TestWaitNotification(runtime, {txId, txId - 1});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
+            NLs::PathExist,
+            NLs::IsExternalSubDomain("USER_0")
+        });
+
+        // Alter user attrs but hang it at the right moment.
+        // Intercept TEvTxProcessing::TEvPlanStep for the upcoming AlterUserAttrs to keep it in
+        // Propose state (UserAttributesAlterData written to DB, but not yet applied).
+        const ui64 alterTxId = ++txId;
+        TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan(runtime, [alterTxId](const auto& ev) {
+            const auto& record = ev->Get()->Record;
+            for (const auto& tx : record.GetTransactions()) {
+                if (tx.GetTxId() == alterTxId) {
+                    return true;
+                }
+            }
+            return false;
+        });
+
+        // Send AlterUserAttrs — this writes UserAttributesAlterData rows to the DB.
+        TestUserAttrs(runtime, alterTxId, "/MyRoot", "USER_0", AlterUserAttrs({{"key", "value"}}));
+
+        // Wait until the plan is blocked (alter is in Propose, AlterData is persisted).
+        runtime.WaitFor("blocked plan", [&] { return !blockedPlan.empty(); });
+
+        // Test body.
+        // Drop extsubdomain while alter user attrs is still in progress
+
+        TestForceDropExtSubDomain(runtime, ++txId, "/MyRoot", "USER_0");
+
+        // Unblock the intercepted plan so the runtime does not stall
+        blockedPlan.Unblock().Stop();
+
+        env.TestWaitNotification(runtime, {alterTxId, txId});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {NLs::PathNotExist});
+
+        // Reboot root schemeshard.
+        // Without the fix, ReadEverything crashes here with Y_VERIFY_S(PathsById.contains(pathId))
+        // on the orphaned AlterData rows
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // Verify schemeshard is alive after restart
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"), {NLs::PathExist});
     }
 
     Y_UNIT_TEST_FLAGS(CreateAndAlterThenDropChangesParent, AlterDatabaseCreateHiveFirst, ExternalHive) {

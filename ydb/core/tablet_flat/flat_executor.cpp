@@ -40,6 +40,7 @@
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/monotonic_provider.h>
+#include <ydb/library/actors/prof/tag.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
@@ -135,6 +136,13 @@ private:
     bool Active = false;
 };
 
+static TActorActivityType DetectOwnerActivityType(NFlatExecutorSetup::ITablet* owner) {
+    if (auto* actor = dynamic_cast<IActor*>(owner)) {
+        return actor->GetActivityType();
+    }
+    return TActorActivityType();
+}
+
 TExecutor::TExecutor(
         NFlatExecutorSetup::ITablet* owner,
         const TActorId& ownerActorId)
@@ -142,6 +150,7 @@ TExecutor::TExecutor(
     , Time(TAppData::TimeProvider)
     , Owner(owner)
     , OwnerActorId(ownerActorId)
+    , OwnerActivityType(DetectOwnerActivityType(owner))
     , Emitter(new TIdEmitter)
     , CounterEventsInFlight(new TEvTabletCounters::TInFlightCookie)
     , Stats(new TExecutorStatsImpl())
@@ -2027,6 +2036,11 @@ bool TExecutor::CancelTransaction(ui64 id) {
 
 void TExecutor::ExecuteTransaction(TSeat* seat) {
     TActiveTransactionZone activeTransaction(this);
+    // Attribute allocations to the owner tablet's activity type when known.
+    std::optional<NProfiling::TMemoryTagScope> ownerScope;
+    if (OwnerActivityType != TActorActivityType()) {
+        ownerScope.emplace(OwnerActivityType.GetIndex());
+    }
     ++seat->Retries;
 
     THPTimer cpuTimer;

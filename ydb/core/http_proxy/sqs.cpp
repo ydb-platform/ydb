@@ -109,6 +109,9 @@ namespace NKikimr::NHttpProxy {
                     {NYmq::V1::REQUEST_ID, HttpContext.RequestId},
                     {NYmq::V1::SOURCE_ADDRESS, HttpContext.SourceAddress},
                 };
+                if (TString requestEndpoint = MakeSqsRequestEndpoint(HttpContext)) {
+                    peerMetadata[TString{NSqsTopic::REQUEST_ENDPOINT_METADATA_KEY}] = std::move(requestEndpoint);
+                }
 
                 RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(
                     std::move(Request),

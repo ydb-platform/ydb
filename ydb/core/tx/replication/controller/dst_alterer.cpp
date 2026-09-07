@@ -9,6 +9,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 using namespace NSchemeShard;
@@ -20,6 +22,8 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     }
 
     STATEFN(StateAllocateTxId) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState","StateAllocateTxId"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
         default:
@@ -28,7 +32,8 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     }
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         TxId = ev->Get()->TxId;
         PipeCache = ev->Get()->Services.LeaderPipeCache;
@@ -57,6 +62,8 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     }
 
     STATEFN(StateAlterDst) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateAlterDst"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
             hFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
@@ -67,7 +74,8 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     }
 
     void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
         const auto& record = ev->Get()->Record;
 
         switch (record.GetStatus()) {
@@ -82,18 +90,20 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     }
 
     void SubscribeTx(ui64 txId) {
-        LOG_D("Subscribe tx"
-            << ": txId# " << txId);
+        YDB_LOG_DEBUG("Subscribe tx",
+            {"txId", txId});
         Send(PipeCache, new TEvPipeCache::TEvForward(new TEvSchemeShard::TEvNotifyTxCompletion(txId), SchemeShardId));
     }
 
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
         Success();
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         if (SchemeShardId == ev->Get()->TabletId) {
             return;
@@ -103,28 +113,29 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
         Retry();
     }
 
     void Success() {
-        LOG_I("Success");
+        YDB_LOG_INFO("Success");
 
         Send(Parent, new TEvPrivate::TEvAlterDstResult(ReplicationId, TargetId));
         PassAway();
     }
 
     void Error(NKikimrScheme::EStatus status, const TString& error) {
-        LOG_E("Error"
-            << ": status# " << status
-            << ", reason# " << error);
+        YDB_LOG_ERROR("Error",
+            {"status", status},
+            {"reason", error});
 
         Send(Parent, new TEvPrivate::TEvAlterDstResult(ReplicationId, TargetId, status, error));
         PassAway();
     }
 
     void Retry() {
-        LOG_D("Retry");
+        YDB_LOG_DEBUG("Retry");
         Schedule(RetryInterval, new TEvents::TEvWakeup);
     }
 
@@ -148,11 +159,12 @@ public:
         , Kind(kind)
         , DstPathId(dstPathId)
         , DesiredState(desiredState)
-        , LogPrefix("DstAlterer", ReplicationId, TargetId)
+        , LogPrefix(CreateActorLogPrefix("DstAlterer", ReplicationId, TargetId))
     {
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix);
         switch (DesiredState) {
         case TReplication::EState::Done:
             if (!DstPathId) {
@@ -175,6 +187,8 @@ public:
     }
 
     STATEFN(StateBase) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateBase"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
@@ -190,7 +204,7 @@ private:
     const TReplication::ETargetKind Kind;
     const TPathId DstPathId;
     const TReplication::EState DesiredState;
-    const TActorLogPrefix LogPrefix;
+    NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     ui64 TxId = 0;
     TActorId PipeCache;

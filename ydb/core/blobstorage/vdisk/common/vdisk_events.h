@@ -743,8 +743,13 @@ namespace NKikimr {
         static TString ToString(const TEvBlobStorage::TEvVPut& ev) {
             const auto& record = ev.Record;
             TStringStream str;
-            TLogoBlobID id = LogoBlobIDFromLogoBlobID(record.GetBlobID());
-            str << "{ID# " << id.ToString() << " FDS# " << record.GetFullDataSize();
+            str << "{ID# ";
+            if (record.HasBlobID()) {
+                str << LogoBlobIDFromLogoBlobID(record.GetBlobID()).ToString();
+            } else {
+                str << "<missing>";
+            }
+            str << " FDS# " << record.GetFullDataSize();
             if (record.GetIgnoreBlock()) {
                 str << " IgnoreBlock";
             }
@@ -757,11 +762,13 @@ namespace NKikimr {
             }
             const size_t size = ev.GetBufferBytes();
             str << " DataSize# " << size << " Data# ";
-            if (size > 16) {
+            if (ev.GetPayloadCount() != 1) {
+                str << "<invalid payload count# " << ev.GetPayloadCount() << ">";
+            } else if (size > 16) {
                 str << "<too_large>";
             } else {
                 TString encoded;
-                Base64Encode(ev.GetBuffer().ConvertToString(), encoded);
+                Base64Encode(ev.GetPayload(0).ConvertToString(), encoded);
                 str << encoded;
             }
             str << "}";
@@ -957,25 +964,41 @@ namespace NKikimr {
             for (ui64 itemIdx = 0; itemIdx < size; ++itemIdx) {
                 const NKikimrBlobStorage::TVMultiPutItem &item = Record.GetItems(itemIdx);
                 str << " Item# {VMultiPutItem";
-                TLogoBlobID id = LogoBlobIDFromLogoBlobID(item.GetBlobID());
-                str << " ID# " << id.ToString();
-                str << " FullDataSize# " << item.GetFullDataSize();
-                const size_t size = GetBufferBytes(itemIdx);
-                str << " DataSize# " << size << " Data# ";
-                if (size > 16) {
-                    str << "<too_large>";
+                str << " ID# ";
+                if (item.HasBlobID()) {
+                    str << LogoBlobIDFromLogoBlobID(item.GetBlobID()).ToString();
                 } else {
-                    TString encoded;
-                    Base64Encode(GetItemBuffer(itemIdx).ConvertToString(), encoded);
-                    str << encoded;
+                    str << "<missing>";
+                }
+                str << " FullDataSize# " << item.GetFullDataSize();
+                if (itemIdx < GetPayloadCount()) {
+                    const size_t size = GetPayload(itemIdx).GetSize();
+                    str << " DataSize# " << size << " Data# ";
+                    if (size > 16) {
+                        str << "<too_large>";
+                    } else {
+                        TString encoded;
+                        Base64Encode(GetPayload(itemIdx).ConvertToString(), encoded);
+                        str << encoded;
+                    }
+                } else {
+                    str << " Data# <missing payload>";
                 }
                 if (item.HasCookie()) {
                     str << " Cookie# " << item.GetCookie();
                 }
                 str << "}";
             }
+            if (GetPayloadCount() > size) {
+                str << " ExtraPayloadCount# " << GetPayloadCount() - size;
+            }
 
-            str << " VDiskId# " << VDiskIDFromVDiskID(Record.GetVDiskID());
+            str << " VDiskId# ";
+            if (Record.HasVDiskID()) {
+                str << VDiskIDFromVDiskID(Record.GetVDiskID());
+            } else {
+                str << "<missing>";
+            }
 
             if (Record.GetIgnoreBlock()) {
                 str << " IgnoreBlock";
@@ -1250,11 +1273,17 @@ namespace NKikimr {
             if (record.HasRangeQuery()) {
                 const NKikimrBlobStorage::TRangeQuery &query = record.GetRangeQuery();
                 str << "{RangeQuery# ";
-                TLogoBlobID from = LogoBlobIDFromLogoBlobID(query.GetFrom());
-                TLogoBlobID to = LogoBlobIDFromLogoBlobID(query.GetTo());
-                str << from.ToString();
+                if (query.HasFrom()) {
+                    str << LogoBlobIDFromLogoBlobID(query.GetFrom()).ToString();
+                } else {
+                    str << "<missing>";
+                }
                 str << " ";
-                str << to.ToString();
+                if (query.HasTo()) {
+                    str << LogoBlobIDFromLogoBlobID(query.GetTo()).ToString();
+                } else {
+                    str << "<missing>";
+                }
                 if (query.HasMaxResults()) {
                     str << " MaxResults# " << query.GetMaxResults();
                 }
@@ -1267,8 +1296,11 @@ namespace NKikimr {
             for (unsigned i = 0; i < size; i++) {
                 const NKikimrBlobStorage::TExtremeQuery &query = record.GetExtremeQueries(i);
                 str << "{ExtrQuery# ";
-                TLogoBlobID id = LogoBlobIDFromLogoBlobID(query.GetId());
-                str << id.ToString();
+                if (query.HasId()) {
+                    str << LogoBlobIDFromLogoBlobID(query.GetId()).ToString();
+                } else {
+                    str << "<missing>";
+                }
                 str << " sh# " << query.GetShift() << " sz# " << query.GetSize();
                 if (query.HasCookie()) {
                     str << " c# " << query.GetCookie();

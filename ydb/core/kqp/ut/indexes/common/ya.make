@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    kqp_indexes_compact_common.cpp
     kqp_indexes_ttl_ut_common.cpp
 )
 

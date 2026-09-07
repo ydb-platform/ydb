@@ -38,7 +38,8 @@ protected:
         for (auto&& r : rawData.rows()) {
             TObject object;
             if (!object.DeserializeFromRecord(decoder, r)) {
-                ALS_WARN(NKikimrServices::METADATA_PROVIDER) << "cannot parse object: " << TypeName<TObject>();
+                YDB_LOG_WARN_COMP(NKikimrServices::METADATA_PROVIDER, "Cannot parse",
+                    {"object", TypeName<TObject>()});
                 if (stopOnIncorrectDeserialization) {
                     return false;
                 } else {

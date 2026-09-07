@@ -704,6 +704,9 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             case Ydb::Table::FulltextIndexSettings_Tokenizer_KEYWORD:
                 Stream << "keyword";
                 break;
+            case Ydb::Table::FulltextIndexSettings_Tokenizer_ALPHANUMERIC:
+                Stream << "alphanumeric";
+                break;
             default:
                 ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::FulltextIndexSettings::Tokenizer");
         }
@@ -736,6 +739,9 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         }
         if (analyzers.has_filter_length_max()) {
             Stream << ", filter_length_max=" << analyzers.filter_length_max();
+        }
+        if (analyzers.has_use_filter_snowball()) {
+            Stream << ", use_filter_snowball=" << (analyzers.use_filter_snowball() ? "true" : "false");
         }
 
         Stream << ")";

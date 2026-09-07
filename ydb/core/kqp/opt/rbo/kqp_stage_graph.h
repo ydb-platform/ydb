@@ -31,6 +31,9 @@ struct TConnection: TSimpleRefCount<TConnection> {
     virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) = 0;
     template <typename T>
     NYql::TExprNode::TPtr BuildConnectionImpl(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+    virtual TVector<TInfoUnit> GetUsedIUs() const {
+        return {};
+    }
     ui32 GetOutputIndex() const {
         return OutputIndex;
     }
@@ -76,6 +79,7 @@ struct TShuffleConnection: public TConnection {
     }
 
     virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
+    virtual TVector<TInfoUnit> GetUsedIUs() const override;
     virtual NJson::TJsonValue ToJson() const override;
 
     TVector<TInfoUnit> Keys;
@@ -90,6 +94,7 @@ struct TMergeConnection: public TConnection {
     }
 
     virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
+    virtual TVector<TInfoUnit> GetUsedIUs() const override;
     virtual NJson::TJsonValue ToJson() const override;
 
     TVector<TSortElement> Order;

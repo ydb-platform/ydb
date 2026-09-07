@@ -130,9 +130,11 @@ TString RowIdSrcTablePath(const TString& indexPath) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(JsonIndexBuildTest) {
-    Y_UNIT_TEST(Basic) {
+    Y_UNIT_TEST_FLAG(Basic, Compact) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(Compact);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -160,7 +162,9 @@ Y_UNIT_TEST_SUITE(JsonIndexBuildTest) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/table/json_idx"), {
             NLs::PathExist,
-            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalJson),
+            NLs::IndexType(runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()
+                ? NKikimrSchemeOp::EIndexTypeGlobalJsonCompact
+                : NKikimrSchemeOp::EIndexTypeGlobalJson),
             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
             NLs::IndexKeys({"data"}),
             NLs::ChildrenCount(1),
@@ -177,9 +181,11 @@ Y_UNIT_TEST_SUITE(JsonIndexBuildTest) {
         }
     }
 
-    Y_UNIT_TEST(Drop) {
+    Y_UNIT_TEST_FLAG(Drop, Compact) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(Compact);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -201,7 +207,9 @@ Y_UNIT_TEST_SUITE(JsonIndexBuildTest) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/table/json_idx"), {
             NLs::PathExist,
-            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalJson),
+            NLs::IndexType(runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()
+                ? NKikimrSchemeOp::EIndexTypeGlobalJsonCompact
+                : NKikimrSchemeOp::EIndexTypeGlobalJson),
             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
             NLs::IndexKeys({"data"}),
             NLs::ChildrenCount(1),
@@ -218,9 +226,11 @@ Y_UNIT_TEST_SUITE(JsonIndexBuildTest) {
         });
     }
 
-    Y_UNIT_TEST(DropTableWithJsonIndex) {
+    Y_UNIT_TEST_FLAG(DropTableWithJsonIndex, Compact) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(Compact);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -234,7 +244,9 @@ Y_UNIT_TEST_SUITE(JsonIndexBuildTest) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/table/json_idx"), {
             NLs::PathExist,
-            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalJson),
+            NLs::IndexType(runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()
+                ? NKikimrSchemeOp::EIndexTypeGlobalJsonCompact
+                : NKikimrSchemeOp::EIndexTypeGlobalJson),
             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
             NLs::IndexKeys({"data"}),
             NLs::ChildrenCount(1),
@@ -248,9 +260,11 @@ Y_UNIT_TEST_SUITE(JsonIndexBuildTest) {
         });
     }
 
-    Y_UNIT_TEST(Limit) {
+    Y_UNIT_TEST_FLAG(Limit, Compact) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(Compact);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         ui64 txId = 100;
 
         DoCreateJsonTable(runtime, env, txId);
@@ -259,28 +273,30 @@ Y_UNIT_TEST_SUITE(JsonIndexBuildTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), NKikimrScheme::StatusSuccess, describe.GetStatus());
         auto curShards = describe.GetPathDescription().GetDomainDescription().GetShardsInside();
 
-        // JSON index creates 2 new paths (index + indexImplTable) and 1 new shard
+        // JSON index creates 2 or 3 new paths (index + indexImplTable + __ydb_generation sequence) and 1 or 2 new shards
+        const ui32 requiredPaths = runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex() ? 3 : 2;
+        const ui32 requiredShards = runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex() ? 2 : 1;
         Ydb::Table::TableIndex index = JsonIndexConfig();
 
         TSchemeLimits lowLimits;
 
         // Not enough paths: /MyRoot/table is 1 path inside domain; need 2 more (index + implTable) = 3 total
-        lowLimits.MaxPaths = 2;
-        lowLimits.MaxShards = curShards + 1;
+        lowLimits.MaxPaths = requiredPaths;
+        lowLimits.MaxShards = curShards + requiredShards;
         SetSchemeshardSchemaLimits(runtime, lowLimits);
         TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/table", index, Ydb::StatusIds::PRECONDITION_FAILED);
         env.TestWaitNotification(runtime, txId);
 
         // Not enough shards
-        lowLimits.MaxPaths = 3;
-        lowLimits.MaxShards = curShards;
+        lowLimits.MaxPaths = 1 + requiredPaths;
+        lowLimits.MaxShards = curShards + requiredShards - 1;
         SetSchemeshardSchemaLimits(runtime, lowLimits);
         TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/table", index, Ydb::StatusIds::PRECONDITION_FAILED);
         env.TestWaitNotification(runtime, txId);
 
         // Enough paths and shards
-        lowLimits.MaxPaths = 3;
-        lowLimits.MaxShards = curShards + 1;
+        lowLimits.MaxPaths = 1 + requiredPaths;
+        lowLimits.MaxShards = curShards + requiredShards;
         SetSchemeshardSchemaLimits(runtime, lowLimits);
         TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/table", index, Ydb::StatusIds::SUCCESS);
         env.TestWaitNotification(runtime, txId);

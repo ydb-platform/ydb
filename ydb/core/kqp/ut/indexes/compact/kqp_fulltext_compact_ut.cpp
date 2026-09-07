@@ -114,17 +114,6 @@ Y_UNIT_TEST_TWIN(AddIndexCompactRelevance, Covered) {
         ])", NYdb::FormatResultSetYson(index));
     }
 
-    index = ReadIndex(db, NTableIndex::NFulltext::DictTable);
-    CompareYson(R"([
-        [1u;"animals"];
-        [3u;"cats"];
-        [2u;"chase"];
-        [2u;"dogs"];
-        [1u;"foxes"];
-        [2u;"love"];
-        [2u;"small"]
-    ])", NYdb::FormatResultSetYson(index));
-
     index = ReadIndex(db, NTableIndex::NFulltext::StatsTable);
     CompareYson(R"([
         [4u;0u;14u]
@@ -163,10 +152,8 @@ Y_UNIT_TEST_TWIN(InsertRow, WithRelevance) {
     Cerr << "indexImplTable: " << index << Endl;
     if (WithRelevance) {
         auto docs = NYdb::FormatResultSetYson(ReadIndex(db, NTableIndex::NFulltext::DocsTable));
-        auto dict = NYdb::FormatResultSetYson(ReadIndex(db, NTableIndex::NFulltext::DictTable));
         auto stats = NYdb::FormatResultSetYson(ReadIndex(db, NTableIndex::NFulltext::StatsTable));
         Cerr << "indexImplDocsTable: " << docs << Endl;
-        Cerr << "indexImplDictTable: " << dict << Endl;
         Cerr << "indexImplStatsTable: " << stats << Endl;
         CompareYson(R"([
             [%true;18446744073709551615u;100u;"\xE4\1\2";"cats"];
@@ -178,12 +165,6 @@ Y_UNIT_TEST_TWIN(InsertRow, WithRelevance) {
             [[100u];3u];
             [[200u];3u]
         ])", docs);
-        CompareYson(R"([
-            [1u;"cats"];
-            [1u;"dogs"];
-            [1u;"foxes"];
-            [2u;"love"]
-        ])", dict);
         CompareYson(R"([
             [2u;0u;6u]
         ])", stats);
@@ -209,10 +190,8 @@ Y_UNIT_TEST_TWIN(InsertRow, WithRelevance) {
     Cerr << "indexImplTable: " << index << Endl;
     if (WithRelevance) {
         auto docs = NYdb::FormatResultSetYson(ReadIndex(db, NTableIndex::NFulltext::DocsTable));
-        auto dict = NYdb::FormatResultSetYson(ReadIndex(db, NTableIndex::NFulltext::DictTable));
         auto stats = NYdb::FormatResultSetYson(ReadIndex(db, NTableIndex::NFulltext::StatsTable));
         Cerr << "indexImplDocsTable: " << docs << Endl;
-        Cerr << "indexImplDictTable: " << dict << Endl;
         Cerr << "indexImplStatsTable: " << stats << Endl;
         CompareYson(R"([
             [%true;18446744073709551614u;150u;"\x96\2";"cats"];
@@ -228,12 +207,6 @@ Y_UNIT_TEST_TWIN(InsertRow, WithRelevance) {
             [[150u];3u];
             [[200u];3u]
         ])", docs);
-        CompareYson(R"([
-            [2u;"cats"];
-            [1u;"dogs"];
-            [2u;"foxes"];
-            [3u;"love"]
-        ])", dict);
         CompareYson(R"([
             [3u;0u;9u]
         ])", stats);
@@ -358,14 +331,6 @@ Y_UNIT_TEST(UpsertNewRowRelevance) {
         [[100u];["Cats love cats."];["cats data"]];
         [[150u];["Foxes love cats."];["foxes data"]]
     ])", FulltextSearch(db, "cats"));
-
-    auto dict = NYdb::FormatResultSetYson(ReadIndex(db, NTableIndex::NFulltext::DictTable));
-    CompareYson(R"([
-        [2u;"cats"];
-        [1u;"dogs"];
-        [2u;"foxes"];
-        [3u;"love"]
-    ])", dict);
 
     auto stats = NYdb::FormatResultSetYson(ReadIndex(db, NTableIndex::NFulltext::StatsTable));
     CompareYson(R"([[3u;0u;9u]])", stats);

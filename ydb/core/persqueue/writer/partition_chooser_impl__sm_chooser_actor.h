@@ -6,19 +6,15 @@
 
 namespace NKikimr::NPQ::NPartitionChooser {
 
-#if defined(LOG_PREFIX) || defined(TRACE) || defined(DEBUG) || defined(INFO) || defined(ERROR)
-#error "Already defined LOG_PREFIX or TRACE or DEBUG or INFO or ERROR"
+#if defined(LOG_PREFIX)
+#error "Already defined LOG_PREFIX"
 #endif
 
 
-#define LOG_PREFIX "TPartitionChooser " << SelfId()                         \
+#define LOG_PREFIX TStringBuilder() << "TPartitionChooser " << SelfId()                         \
                     << " (SourceId=" << TThis::SourceId                     \
                     << ", PreferedPartition=" << TThis::PreferedPartition   \
                     << ") "
-#define TRACE(message) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
-#define DEBUG(message) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
-#define INFO(message)  LOG_INFO_S (*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
-#define ERROR(message) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
 
 template<typename TPipeCreator>
 class TSMPartitionChooserActor: public TAbstractPartitionChooserActor<TSMPartitionChooserActor<TPipeCreator>, TPipeCreator> {
@@ -113,7 +109,10 @@ private:
             return TThis::ReplyError(TThis::PreferedPartition ? ErrorCode::WRITE_ERROR_PARTITION_INACTIVE : ErrorCode::INITIALIZING, "A partition not choosed", ctx);
         }
 
-        DEBUG("GetOwnershipFast Partition=" << BoundaryPartition->PartitionId << " TabletId=" << BoundaryPartition->TabletId);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "GetOwnershipFast",
+            {"logPrefix", LOG_PREFIX},
+            {"partition", BoundaryPartition->PartitionId},
+            {"tabletId", BoundaryPartition->TabletId});
 
         TThis::PartitionHelper.Open(BoundaryPartition->TabletId, ctx);
         TThis::PartitionHelper.SendCheckPartitionStatusRequest(BoundaryPartition->PartitionId, TThis::SourceId, ctx);
@@ -148,7 +147,8 @@ private:
 
 private:
     void GetOldSeqNo(const TActorContext &ctx) {
-        DEBUG("GetOldSeqNo");
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "GetOldSeqNo",
+            {"logPrefix", LOG_PREFIX});
         TThis::Become(&TThis::StateGetMaxSeqNo);
 
         const auto* oldNode = Graph->GetPartition(TThis::TableHelper.PartitionId().value());
@@ -210,7 +210,8 @@ private:
 
 private:
     void OnPartitionChosen(const TActorContext& ctx) {
-        TRACE("OnPartitionChosen");
+        YDB_LOG_TRACE_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "OnPartitionChosen",
+            {"logPrefix", LOG_PREFIX});
 
         if (!TThis::Partition && TThis::PreferedPartition) {
             return TThis::ReplyError(ErrorCode::BAD_REQUEST,
@@ -252,9 +253,5 @@ private:
 };
 
 #undef LOG_PREFIX
-#undef TRACE
-#undef DEBUG
-#undef INFO
-#undef ERROR
 
 } // namespace NKikimr::NPQ::NPartitionChooser

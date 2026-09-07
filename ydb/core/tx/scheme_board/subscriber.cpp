@@ -26,18 +26,13 @@
 #include <util/string/cast.h>
 #include <util/generic/xrange.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SCHEME_BOARD_SUBSCRIBER
+
 namespace NKikimr {
 
 using EDeletionPolicy = ESchemeBoardSubscriberDeletionPolicy;
 
 namespace NSchemeBoard {
-
-#define SBS_LOG_T(stream) SB_LOG_T(SCHEME_BOARD_SUBSCRIBER, "[" << LogPrefix() << "]" << this->SelfId() << "[" << Path << "] " << stream)
-#define SBS_LOG_D(stream) SB_LOG_D(SCHEME_BOARD_SUBSCRIBER, "[" << LogPrefix() << "]" << this->SelfId() << "[" << Path << "] " << stream)
-#define SBS_LOG_I(stream) SB_LOG_I(SCHEME_BOARD_SUBSCRIBER, "[" << LogPrefix() << "]" << this->SelfId() << "[" << Path << "] " << stream)
-#define SBS_LOG_N(stream) SB_LOG_N(SCHEME_BOARD_SUBSCRIBER, "[" << LogPrefix() << "]" << this->SelfId() << "[" << Path << "] " << stream)
-#define SBS_LOG_W(stream) SB_LOG_W(SCHEME_BOARD_SUBSCRIBER, "[" << LogPrefix() << "]" << this->SelfId() << "[" << Path << "] " << stream)
-#define SBS_LOG_E(stream) SB_LOG_E(SCHEME_BOARD_SUBSCRIBER, "[" << LogPrefix() << "]" << this->SelfId() << "[" << Path << "] " << stream)
 
 namespace {
 
@@ -355,14 +350,18 @@ class TReplicaSubscriber: public TMonitorableActor<TDerived> {
     void Handle(NInternalEvents::TEvNotify::TPtr& ev) {
         auto& record = *ev->Get()->MutableRecord();
 
-        SBS_LOG_D("Handle " << ev->Get()->ToString()
-            << ": sender# " << ev->Sender);
+        YDB_LOG_DEBUG("Handle",
+            {"path", Path},
+            {"ev", ev->Get()->ToString()},
+            {"sender", ev->Sender});
 
         this->Send(ev->Sender, new NInternalEvents::TEvNotifyAck(record.GetVersion()));
 
         if (!IsValidNotification(Path, record)) {
-            SBS_LOG_E("Suspicious " << ev->Get()->ToString()
-                << ": sender# " << ev->Sender);
+            YDB_LOG_ERROR("Suspicious",
+                {"path", Path},
+                {"ev", ev->Get()->ToString()},
+                {"sender", ev->Sender});
             return;
         }
 
@@ -370,18 +369,20 @@ class TReplicaSubscriber: public TMonitorableActor<TDerived> {
     }
 
     void Handle(NInternalEvents::TEvSyncVersionRequest::TPtr& ev) {
-        SBS_LOG_D("Handle " << ev->Get()->ToString()
-            << ": sender# " << ev->Sender
-            << ", cookie# " << ev->Cookie);
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()},
+            {"sender", ev->Sender},
+            {"cookie", ev->Cookie});
 
         CurrentSyncRequest = ev->Cookie;
         this->Send(Replica, ev->Release().Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
     }
 
     void Handle(NInternalEvents::TEvSyncVersionResponse::TPtr& ev) {
-        SBS_LOG_D("Handle " << ev->Get()->ToString()
-            << ": sender# " << ev->Sender
-            << ", cookie# " << ev->Cookie);
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()},
+            {"sender", ev->Sender},
+            {"cookie", ev->Cookie});
 
         if (ev->Cookie != CurrentSyncRequest) {
             return;
@@ -412,6 +413,7 @@ class TReplicaSubscriber: public TMonitorableActor<TDerived> {
     }
 
     void PassAway() override {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         if (Replica.NodeId() != this->SelfId().NodeId()) {
             this->Send(MakeInterconnectProxyId(Replica.NodeId()), new TEvents::TEvUnsubscribe());
         }
@@ -435,8 +437,12 @@ public:
         return NKikimrServices::TActivity::SCHEME_BOARD_REPLICA_SUBSCRIBER_ACTOR;
     }
 
-    static constexpr TStringBuf LogPrefix() {
-        return "replica"sv;
+    NStructuredLog::TStructuredMessage LogPrefix() {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TReplicaSubscriber"},
+            {"actorActivityType", ActorActivityType()},
+            {"selfId", this->SelfId()},
+            {"path", Path});
     }
 
     explicit TReplicaSubscriber(
@@ -453,6 +459,7 @@ public:
     }
 
     void Bootstrap(const TActorContext&) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         TMonitorableActor<TDerived>::Bootstrap();
 
         this->Send(Replica, new NInternalEvents::TEvSubscribe(Path, DomainOwnerId),
@@ -461,6 +468,9 @@ public:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorStateFn", "StateWork"});
+
         switch (ev->GetTypeRewrite()) {
             hFunc(NInternalEvents::TEvNotify, Handle);
             hFunc(NInternalEvents::TEvSyncVersionRequest, Handle);
@@ -499,8 +509,8 @@ public:
 template <typename TPath, typename TDerived, typename TReplicaDerived>
 class TSubscriberProxy: public TMonitorableActor<TDerived> {
     void Sleep() {
-        SBS_LOG_T("Sleep"
-            << ": delay# " << Delay);
+        YDB_LOG_TRACE("Sleep",
+            {"delay", Delay});
 
         ReplicaSubscriber = TActorId();
         this->Send(Parent, new NInternalEvents::TEvNotifyBuilder(Path, true));
@@ -513,11 +523,10 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
             return;
         }
         if (const auto& record = ev->Get()->GetRecord(); !ClusterStatesMatch(ClusterState, record)) {
-            SBS_LOG_D("Cluster state mismatch in replica notification"
-                << ": sender# " << ev->Sender
-                << ", subscriber cluster state# " << ClusterState
-                << ", replica cluster state# {" << record.GetClusterState().ShortDebugString() << "}"
-            );
+            YDB_LOG_DEBUG("Cluster state mismatch in replica notification",
+                {"sender", ev->Sender},
+                {"clusterState", ClusterState},
+                {"state", record.GetClusterState().ShortDebugString()});
             this->Send(ReplicaSubscriber, new TEvents::TEvPoisonPill());
             return Sleep();
         }
@@ -532,18 +541,20 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
     }
 
     void HandleSleep(NInternalEvents::TEvSyncVersionRequest::TPtr& ev) {
-        SBS_LOG_T("HandleSleep " << ev->Get()->ToString()
-            << ": sender# " << ev->Sender
-            << ", cookie# " << ev->Cookie);
+        YDB_LOG_TRACE("HandleSleep",
+            {"ev", ev->Get()->ToString()},
+            {"sender", ev->Sender},
+            {"cookie", ev->Cookie});
 
         this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0), 0, ev->Cookie);
     }
 
     void Handle(NInternalEvents::TEvSyncVersionResponse::TPtr& ev) {
-        SBS_LOG_T("Handle " << ev->Get()->ToString()
-            << ": sender# " << ev->Sender
-            << ", cookie# " << ev->Cookie
-            << ", current sync request# " << CurrentSyncRequest);
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()},
+            {"sender", ev->Sender},
+            {"cookie", ev->Cookie},
+            {"request", CurrentSyncRequest});
 
         if (ev->Sender != ReplicaSubscriber || ev->Cookie != CurrentSyncRequest) {
             return;
@@ -588,6 +599,7 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
     }
 
     void PassAway() override {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         if (ReplicaSubscriber) {
             this->Send(ReplicaSubscriber, new TEvents::TEvPoisonPill());
         }
@@ -608,8 +620,12 @@ public:
         return NKikimrServices::TActivity::SCHEME_BOARD_SUBSCRIBER_PROXY_ACTOR;
     }
 
-    static constexpr TStringBuf LogPrefix() {
-        return "proxy"sv;
+    NStructuredLog::TStructuredMessage LogPrefix() {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TSubscriberProxy"},
+            {"actorActivityType", ActorActivityType()},
+            {"selfId", this->SelfId()},
+            {"path", Path});
     }
 
     explicit TSubscriberProxy(
@@ -633,6 +649,7 @@ public:
     }
 
     void Bootstrap(const TActorContext&) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         TMonitorableActor<TDerived>::Bootstrap();
 
         ReplicaSubscriber = this->RegisterWithSameMailbox(new TReplicaDerived(this->SelfId(), Replica, Path, DomainOwnerId));
@@ -640,6 +657,8 @@ public:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorStateFn", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(NInternalEvents::TEvNotify, Handle);
             hFunc(NInternalEvents::TEvSyncVersionRequest, Handle);
@@ -653,6 +672,8 @@ public:
     }
 
     STFUNC(StateSleep) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorStateFn", "StateSleep"});
         switch (ev->GetTypeRewrite()) {
             hFunc(NInternalEvents::TEvSyncVersionRequest, HandleSleep);
 
@@ -772,8 +793,8 @@ class TSubscriber: public TMonitorableActor<TDerived> {
             if (const auto* groupIdx = ProxyToGroupMap.FindPtr(proxy)) {
                 responsesByGroup[*groupIdx]++;
             } else {
-                SBS_LOG_N("Previously received response sender is currently unknown"
-                    << ": sender# " << proxy);
+                YDB_LOG_NOTICE("Previously received response sender is currently unknown",
+                    {"sender", proxy});
             }
         }
         for (size_t groupIdx : xrange(ProxyGroups.size())) {
@@ -789,8 +810,8 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     }
 
     bool MaybeRunVersionSync() {
-        SBS_LOG_T("MaybeRunVersionSync"
-            << ": delayed sync request# " << DelayedSyncRequest);
+        YDB_LOG_TRACE("MaybeRunVersionSync",
+            {"request", DelayedSyncRequest});
         if (!DelayedSyncRequest) {
             return false;
         }
@@ -810,18 +831,21 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     }
 
     void Handle(NInternalEvents::TEvNotify::TPtr& ev) {
-        SBS_LOG_D("Handle " << ev->Get()->ToString()
-            << ": sender# " << ev->Sender);
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()},
+            {"sender", ev->Sender});
 
         if (!IsValidNotification(Path, ev->Get()->GetRecord())) {
-            SBS_LOG_E("Suspicious " << ev->Get()->ToString()
-                << ": sender# " << ev->Sender);
+            YDB_LOG_ERROR("Suspicious",
+                {"ev", ev->Get()->ToString()},
+                {"sender", ev->Sender});
             return;
         }
 
         if (!ProxyToGroupMap.contains(ev->Sender)) {
-            SBS_LOG_E("Unknown " << ev->Get()->ToString()
-                << ": sender# " << ev->Sender);
+            YDB_LOG_ERROR("Unknown",
+                {"ev", ev->Get()->ToString()},
+                {"sender", ev->Sender});
             return;
         }
 
@@ -844,27 +868,29 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         TString reason;
 
         if (!State) {
-            SBS_LOG_N("Set up state"
-                << ": owner# " << Owner
-                << ", state# " << newestState);
+            YDB_LOG_NOTICE("Set up state",
+                {"owner", Owner},
+                {"state", newestState});
             State = newestState;
         } else if (State->LessThan(newestState, reason)) {
-            SBS_LOG_N("" << reason
-                << ": owner# " << Owner
-                << ", state# " << *State
-                << ", new state# " << newestState);
+            YDB_LOG_NOTICE("New",
+                {"reason", reason},
+                {"owner", Owner},
+                {"state", *State},
+                {"newestState", newestState});
             State = newestState;
         } else if (!State->Deleted && newestState.Deleted && newestState.Strong) {
-            SBS_LOG_N("Path was deleted"
-                << ": owner# " << Owner
-                << ", state# " << *State
-                << ", new state# " << newestState);
+            YDB_LOG_NOTICE("Path was deleted new",
+                {"owner", Owner},
+                {"state", *State},
+                {"newestState", newestState});
             State = newestState;
         } else {
-            SBS_LOG_I("" << reason
-                << ": owner# " << Owner
-                << ", state# " << *State
-                << ", other state# " << newestState);
+            YDB_LOG_INFO("Other",
+                {"reason", reason},
+                {"owner", Owner},
+                {"state", *State},
+                {"newestState", newestState});
             return;
         }
 
@@ -872,37 +898,39 @@ class TSubscriber: public TMonitorableActor<TDerived> {
 
         if (!record.GetIsDeletion()) {
             NKikimrScheme::TEvDescribeSchemeResult proto = selectedNotify->GetDescribeSchemeResult();
-            SBS_LOG_T("Send notification to the owner"
-                << ": owner# " << Owner
-                << ", proto# " << proto.ShortDebugString());
+            YDB_LOG_TRACE("Send notification to the owner",
+                {"owner", Owner},
+                {"proto", proto.ShortDebugString()});
             this->Send(Owner, BuildNotify<TSchemeBoardEvents::TEvNotifyUpdate>(record, std::move(proto)));
         } else {
-            SBS_LOG_T("Send deletion notification to the owner"
-                << ": owner# " << Owner);
+            YDB_LOG_TRACE("Send deletion notification to the owner",
+                {"owner", Owner});
             this->Send(Owner, BuildNotify<TSchemeBoardEvents::TEvNotifyDelete>(record, record.GetStrong()));
         }
     }
 
     void Handle(NInternalEvents::TEvSyncRequest::TPtr& ev) {
-        SBS_LOG_D("Handle " << ev->Get()->ToString()
-            << ": sender# " << ev->Sender
-            << ", cookie# " << ev->Cookie);
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()},
+            {"sender", ev->Sender},
+            {"cookie", ev->Cookie});
 
         if (ev->Sender != Owner) {
-            SBS_LOG_W("Suspicious " << ev->Get()->ToString()
-                << ": sender# " << ev->Sender
-                << ", owner# " << Owner);
+            YDB_LOG_WARN("Suspicious",
+                {"ev", ev->Get()->ToString()},
+                {"sender", ev->Sender},
+                {"owner", Owner});
             return;
         }
 
         EnqueueSyncRequest(ev);
 
         if (PendingSync) {
-            SBS_LOG_T("Pending sync");
+            YDB_LOG_TRACE("Pending sync");
             return;
         }
         if (!IsMajorityReached()) {
-            SBS_LOG_T("Haven't reached the majority");
+            YDB_LOG_TRACE("Haven't reached the majority");
             return;
         }
 
@@ -914,42 +942,42 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     }
 
     void Handle(NInternalEvents::TEvSyncVersionResponse::TPtr& ev) {
-        SBS_LOG_D("Handle " << ev->Get()->ToString()
-            << ": sender# " << ev->Sender
-            << ", cookie# " << ev->Cookie);
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()},
+            {"sender", ev->Sender},
+            {"cookie", ev->Cookie});
 
         if (ev->Cookie != CurrentSyncRequest) {
-            SBS_LOG_D("Sync cookie mismatch"
-                << ": sender# " << ev->Sender
-                << ", cookie# " << ev->Cookie
-                << ", current cookie# " << CurrentSyncRequest);
+            YDB_LOG_DEBUG("Sync cookie mismatch",
+                {"sender", ev->Sender},
+                {"cookie", ev->Cookie},
+                {"currentCookie", CurrentSyncRequest});
             return;
         }
 
         auto it = PendingSync.find(ev->Sender);
         if (it == PendingSync.end()) {
-            SBS_LOG_D("Unexpected sync response"
-                << ": sender# " << ev->Sender
-                << ", cookie# " << ev->Cookie);
+            YDB_LOG_DEBUG("Unexpected sync response",
+                {"sender", ev->Sender},
+                {"cookie", ev->Cookie});
             return;
         }
 
         if (!ProxyToGroupMap.contains(ev->Sender)) {
-            SBS_LOG_E("Sync sender is unknown"
-                << ": sender# " << ev->Sender
-                << ", cookie# " << ev->Cookie);
+            YDB_LOG_ERROR("Sync sender is unknown",
+                {"sender", ev->Sender},
+                {"cookie", ev->Cookie});
             return;
         }
 
         const auto& record = ev->Get()->Record;
         const bool clusterStatesMatch = ClusterStatesMatch(ClusterState, record);
         if (!clusterStatesMatch) {
-            SBS_LOG_I("Cluster State mismatch in sync version response"
-                << ": sender# " << ev->Sender
-                << ", cookie# " << ev->Cookie
-                << ", subscriber cluster state# " << ClusterState
-                << ", replica cluster state# {" << record.GetClusterState().ShortDebugString() << "}"
-            );
+            YDB_LOG_INFO("Cluster State mismatch in sync version response",
+                {"sender", ev->Sender},
+                {"cookie", ev->Cookie},
+                {"clusterState", ClusterState},
+                {"state", record.GetClusterState().ShortDebugString()});
         }
 
         PendingSync.erase(it);
@@ -962,8 +990,8 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         for (const auto& [proxy, partial] : ReceivedSync) {
             const auto* groupIdx = ProxyToGroupMap.FindPtr(proxy);
             if (!groupIdx) {
-                SBS_LOG_N("Previously received sync sender is currently unknown"
-                    << ": sender# " << proxy);
+                YDB_LOG_NOTICE("Previously received sync sender is currently unknown",
+                    {"sender", proxy});
                 continue;
             }
             if (!partial) {
@@ -977,13 +1005,13 @@ class TSubscriber: public TMonitorableActor<TDerived> {
             const ui32 size = ProxyGroups[groupIdx].Proxies.size();
             const ui32 half = size / 2;
             if (!IsSyncFinished(successesByGroup[groupIdx], failuresByGroup[groupIdx], size, half)) {
-                SBS_LOG_D("Sync is in progress"
-                    << ": cookie# " << ev->Cookie
-                    << ", ring group# " << groupIdx
-                    << ", size# " << size
-                    << ", half# " << half
-                    << ", successes# " << successesByGroup[groupIdx]
-                    << ", failures# " << failuresByGroup[groupIdx]);
+                YDB_LOG_DEBUG("Sync is in progress",
+                    {"cookie", ev->Cookie},
+                    {"group", groupIdx},
+                    {"size", size},
+                    {"half", half},
+                    {"successes", successesByGroup[groupIdx]},
+                    {"failures", failuresByGroup[groupIdx]});
                 return;
             }
             syncIsComplete &= successesByGroup[groupIdx] > half;
@@ -996,14 +1024,16 @@ class TSubscriber: public TMonitorableActor<TDerived> {
                 << ", failures# " << failuresByGroup[groupIdx]
                 << ", partial# " << !syncIsComplete;
             if (syncIsComplete) {
-                SBS_LOG_D(finalMessage);
+                YDB_LOG_DEBUG("Dump logPrefix, SelfId, path, finalMessage",
+                    {"finalMessage", finalMessage});
             } else {
-                SBS_LOG_N(finalMessage);
+                YDB_LOG_NOTICE("Dump logPrefix, SelfId, path, finalMessage",
+                    {"finalMessage", finalMessage});
             }
         }
         if (!syncIsComplete) {
-            SBS_LOG_W("Sync is incomplete in one of the ring groups"
-                << ": cookie# " << ev->Cookie);
+            YDB_LOG_WARN("Sync is incomplete in one of the ring groups",
+                {"cookie", ev->Cookie});
         }
 
         this->Send(Owner, new NInternalEvents::TEvSyncResponse(Path, !syncIsComplete), 0, ev->Cookie);
@@ -1020,13 +1050,14 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     }
 
     void Handle(TEvStateStorage::TEvResolveReplicasList::TPtr& ev) {
-        SBS_LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
 
         const auto& replicaGroups = ev->Get()->ReplicaGroups;
 
         if (replicaGroups.empty()) {
             Y_ABORT_UNLESS(ProxyGroups.empty());
-            SBS_LOG_E("Subscribe on unconfigured SchemeBoard");
+            YDB_LOG_ERROR("Subscribe on unconfigured SchemeBoard");
             this->Become(&TDerived::StateCalm);
             return;
         }
@@ -1038,7 +1069,8 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         }
 
         if (CurrentSyncRequest) {
-            SBS_LOG_I("Delay current sync request: " << CurrentSyncRequest);
+            YDB_LOG_INFO("Delay current sync",
+                {"request", CurrentSyncRequest});
             DelayedSyncRequest = Max(DelayedSyncRequest, CurrentSyncRequest);
             CurrentSyncRequest = 0;
         }
@@ -1130,7 +1162,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     }
 
     void HandleUndelivered() {
-        SBS_LOG_E("Subscribe on unavailable SchemeBoard");
+        YDB_LOG_ERROR("Subscribe on unavailable SchemeBoard");
         this->Become(&TDerived::StateCalm);
     }
 
@@ -1158,8 +1190,13 @@ public:
         return NKikimrServices::TActivity::SCHEME_BOARD_SUBSCRIBER_ACTOR;
     }
 
-    static constexpr TStringBuf LogPrefix() {
-        return "main"sv;
+    ::NActors::NStructuredLog::TStructuredMessage GetLogContext() {
+        using namespace NActors::NStructuredLog;
+        return YDB_LOG_CREATE_MESSAGE(
+            {"selfId", this->SelfId()},
+            {"actorName", "TSubscriber"},
+            {"path", Path}
+        );;
     }
 
     explicit TSubscriber(
@@ -1175,6 +1212,10 @@ public:
     }
 
     void Bootstrap(const TActorContext&) {
+        YDB_LOG_CREATE_CONTEXT(
+            GetLogContext(),
+            {"actorAction", "bootstrap"},
+        );
         TMonitorableActor<TDerived>::Bootstrap();
 
         const TActorId proxy = MakeStateStorageProxyID();
@@ -1183,6 +1224,10 @@ public:
     }
 
     STATEFN(StateResolve) {
+        YDB_LOG_CREATE_CONTEXT(
+            GetLogContext(),
+            {"actorAction", "StateResolve"},
+        );
         switch (ev->GetTypeRewrite()) {
             hFunc(NInternalEvents::TEvSyncRequest, EnqueueSyncRequest); // from owner (cache)
 
@@ -1196,6 +1241,10 @@ public:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(
+            GetLogContext(),
+            {"actorAction", "StateWork"},
+        );
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvResolveReplicasList, Handle);
 
@@ -1210,6 +1259,10 @@ public:
     }
 
     STATEFN(StateCalm) {
+        YDB_LOG_CREATE_CONTEXT(
+            GetLogContext(),
+            {"actorAction", "StateCalm"},
+        );
         switch (ev->GetTypeRewrite()) {
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
 

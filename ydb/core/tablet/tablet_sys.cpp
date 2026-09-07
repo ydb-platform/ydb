@@ -1,5 +1,5 @@
-
 #include "tablet_sys.h"
+#include "tablet_tracing_signals.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
@@ -321,6 +321,7 @@ void TTablet::HandleStateStorageLeaderResolve(TEvStateStorage::TEvInfo::TPtr &ev
     StateStorageInfo.KnownStep = msg->CurrentStep;
 
     if (msg->Status == NKikimrProto::OK && msg->CurrentLeader) {
+        ActualGeneration = msg->CurrentGeneration;
         SendFollowerAttach(msg->CurrentLeader);
 
         Become(&TThis::StateFollowerSubscribe);
@@ -2574,7 +2575,7 @@ void TTablet::BootstrapFollower() {
     }
 
     Become(&TThis::StateResolveLeader);
-    ReportTabletStateChange(TTabletStateInfo::ResolveLeader, SuggestedGeneration);
+    ReportTabletStateChange(TTabletStateInfo::ResolveLeader, Max(ActualGeneration, SuggestedGeneration));
 }
 
 void TTablet::Bootstrap() {

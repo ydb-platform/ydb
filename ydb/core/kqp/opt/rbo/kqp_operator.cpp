@@ -1562,12 +1562,16 @@ TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx) {
 
     TString mode;
     
-    if (EffectType == EEffectType::InsertRows || EffectType == EEffectType::InsertRowsIndex) {
+    if (EffectType == EEffectType::InsertRows) {
         mode = "insert";
-    } else if (EffectType == EEffectType::UpdateRows || EffectType == EEffectType::UpdateRowsIndex) {
+    } else if (EffectType == EEffectType::UpdateRows) {
         mode = "update";
-    } else if (EffectType == EEffectType::DeleteRows || EffectType == EEffectType::DeleteRowsIndex) {
+    } else if (EffectType == EEffectType::UpsertRows) {
+        mode = "upsert";
+    } else if (EffectType == EEffectType::DeleteRows) {
         mode = "delete";
+    } else {
+        Y_ENSURE(false, "Unsupported DML in new optimizer");
     }
 
     TString isBatch = "false";

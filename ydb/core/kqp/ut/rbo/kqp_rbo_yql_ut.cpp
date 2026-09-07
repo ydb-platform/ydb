@@ -654,7 +654,15 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             SELECT id, v
             FROM src;
         )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
         UNIT_ASSERT(insertSelectRes.IsSuccess());
+
+        auto selectRes = dbSession2.ExecuteQuery(R"(
+            SELECT id, v
+            FROM dst;
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(selectRes.GetResultSet(0)), R"([[1u;[10]];[2u;[20]]])");
 
         auto updateSelectRes = dbSession2.ExecuteQuery(R"(
             --PRAGMA YqlSelect = "disable";
@@ -662,7 +670,32 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             SELECT id, v
             FROM src;
         )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
         UNIT_ASSERT(updateSelectRes.IsSuccess());
+
+        selectRes = dbSession2.ExecuteQuery(R"(
+            SELECT id, v
+            FROM dst;
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(selectRes.GetResultSet(0)), R"([[1u;[10]];[2u;[20]]])");
+
+        auto deleteRes = dbSession2.ExecuteQuery(R"(
+            --PRAGMA YqlSelect = "disable";
+            DELETE FROM dst ON
+            SELECT id, v
+            FROM src;
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+        UNIT_ASSERT(deleteRes.IsSuccess());
+
+        selectRes = dbSession2.ExecuteQuery(R"(
+            SELECT id, v
+            FROM dst;
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(selectRes.GetResultSet(0)), R"([])");
+
     }
 
     NKikimrConfig::TAppConfig CreateExplainPlanTestAppConfig(bool inlineJoinFiltersAfterCBO = true) {

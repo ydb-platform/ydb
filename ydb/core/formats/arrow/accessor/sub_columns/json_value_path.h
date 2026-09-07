@@ -66,6 +66,14 @@ public:
         return ChunkedArrayAccessor != nullptr || Cookie.has_value();
     }
 
+    static std::shared_ptr<TJsonPathAccessor> SelectBestMatch(
+        const std::shared_ptr<TJsonPathAccessor>& first, const std::shared_ptr<TJsonPathAccessor>& second) {
+        if (!second || !second->IsValid() || (first->IsValid() && first->RemainingPath.size() <= second->RemainingPath.size())) {
+            return first;
+        }
+        return second;
+    }
+
     ui64 GetRecordsCount() const {
         return ChunkedArrayAccessor ? ChunkedArrayAccessor->GetRecordsCount() : 0;
     }

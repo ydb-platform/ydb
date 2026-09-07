@@ -102,12 +102,13 @@ public:
         AFL_VERIFY(!HeaderRange);
         if (!!PartialArray) {
             for (auto&& subColumnName : subColumns) {
-                if (auto colIndex = PartialArray->GetHeader().GetColumnStats().GetKeyIndexOptional(subColumnName)) {
-                    auto colBlobRange = PartialArray->GetColumnReadRange(*colIndex);
+                const auto source = PartialArray->GetBestPathSource(subColumnName);
+                if (source.ColumnIndex) {
+                    auto colBlobRange = PartialArray->GetColumnReadRange(*source.ColumnIndex);
                     const TBlobRange subRange = FullChunkRange.BuildSubset(colBlobRange.GetOffset(), colBlobRange.GetSize());
                     reading->AddRange(subRange);
-                    AddFetchData(subColumnName, subRange, *colIndex);
-                } else if (!PartialArray->HasOthers() && !OthersReadData && PartialArray->IsOtherColumn(subColumnName)) {
+                    AddFetchData(subColumnName, subRange, *source.ColumnIndex);
+                } else if (!PartialArray->HasOthers() && !OthersReadData && source.IsOther) {
                     auto readRange = PartialArray->GetHeader().GetOthersReadRange();
                     OthersReadData = FullChunkRange.BuildSubset(readRange.GetOffset(), readRange.GetSize());
                     reading->AddRange(*OthersReadData);

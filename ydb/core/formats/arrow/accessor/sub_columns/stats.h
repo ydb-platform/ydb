@@ -69,12 +69,15 @@ public:
         CachedJsonPathAccessorTrie = GenerateJsonPathAccessorTrie();
     }
 
-    std::optional<ui32> GetKeyIndexOptional(const std::string_view keyName) const {
+    std::shared_ptr<TJsonPathAccessor> GetPathAccessor(const std::string_view keyName) const {
         auto accessorResult = CachedJsonPathAccessorTrie ? CachedJsonPathAccessorTrie->GetAccessor(ToJsonPath(keyName))
                                                          : GenerateJsonPathAccessorTrie()->GetAccessor(ToJsonPath(keyName));
         AFL_VERIFY(accessorResult.IsSuccess())("keyName", keyName)("jsonPath", ToJsonPath(keyName))("error", accessorResult.GetErrorMessage());
+        return accessorResult.DetachResult();
+    }
 
-        auto accessor = accessorResult.DetachResult();
+    std::optional<ui32> GetKeyIndexOptional(const std::string_view keyName) const {
+        auto accessor = GetPathAccessor(keyName);
         if (!accessor) {
             return std::nullopt;
         }

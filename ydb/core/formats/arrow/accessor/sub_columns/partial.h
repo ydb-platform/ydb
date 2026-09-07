@@ -97,6 +97,11 @@ protected:
     }
 
 public:
+    struct TPathSource {
+        std::optional<ui32> ColumnIndex;
+        bool IsOther = false;
+    };
+
     TSubColumnsPartialArray(TSubColumnsHeader&& header, const ui32 recordsCount, const std::shared_ptr<arrow::DataType>& dataType,
         const NSubColumns::TSettings& settings)
         : TBase(recordsCount, EType::SubColumnsPartialArray, dataType)
@@ -131,13 +136,21 @@ public:
 
     TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const;
 
-    bool NeedFetch(const std::string_view colName) const {
-        if (auto idx = Header.GetColumnStats().GetKeyIndexOptional(colName)) {
-            return !PartialColumnsData.HasColumn(*idx);
-        } else if (auto idx = Header.GetOtherStats().GetKeyIndexOptional(colName)) {
-            return !OthersData;
+    TPathSource GetBestPathSource(const std::string_view colName) const {
+        const auto columnsAccessor = Header.GetColumnStats().GetPathAccessor(colName);
+        const auto othersAccessor = Header.GetOtherStats().GetPathAccessor(colName);
+        if (NSubColumns::TJsonPathAccessor::SelectBestMatch(columnsAccessor, othersAccessor) == columnsAccessor) {
+            return { columnsAccessor->GetCookie(), false };
         }
-        return false;
+        return { std::nullopt, true };
+    }
+
+    bool NeedFetch(const std::string_view colName) const {
+        const auto source = GetBestPathSource(colName);
+        if (source.ColumnIndex) {
+            return !PartialColumnsData.HasColumn(*source.ColumnIndex);
+        }
+        return source.IsOther && !OthersData;
     }
 
     void AddColumn(const TString& columnName, const std::shared_ptr<IChunkedArray>& arr) {
@@ -150,10 +163,6 @@ public:
 
     void InitOthers(const TString& blob, const TChunkConstructionData& externalInfo, const std::shared_ptr<NArrow::TColumnFilter>& applyFilter,
         const bool deserialize);
-
-    bool IsOtherColumn(const TString& colName) const {
-        return !!Header.GetOtherStats().GetKeyIndexOptional(std::string_view(colName.data(), colName.size()));
-    }
 
     NSubColumns::TReadRange GetColumnReadRange(const ui32 colIndex) const {
         return Header.GetColumnReadRange(colIndex);

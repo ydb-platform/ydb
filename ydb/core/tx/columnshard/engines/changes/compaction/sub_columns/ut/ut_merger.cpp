@@ -86,6 +86,17 @@ Y_UNIT_TEST_SUITE(SubColumnsCompaction) {
         return out;
     }
 
+    TString RenderPathValues(const std::shared_ptr<TSubColumnsArray>& arr, const std::string_view path) {
+        auto accessorResult = arr->GetPathAccessor(path, arr->GetRecordsCount());
+        UNIT_ASSERT_C(accessorResult.IsSuccess(), accessorResult.GetErrorMessage());
+        auto accessor = accessorResult.DetachResult();
+        TStringBuilder out;
+        accessor->VisitValues([&](const std::optional<TStringBuf>& value) {
+            out << (value ? *value : TStringBuf("<null>")) << ';';
+        });
+        return out;
+    }
+
     std::shared_ptr<TSubColumnsArray> MergeChunks(const std::vector<std::shared_ptr<TSubColumnsArray>>& chunks, const TSettings& settings) {
         NArrow::NAccessor::TCompositeChunkedArray::TBuilder cb(chunks.front()->GetDataType());
         ui32 total = 0;
@@ -198,6 +209,7 @@ Y_UNIT_TEST_SUITE(SubColumnsCompaction) {
             UNIT_ASSERT_VALUES_EQUAL(stats.GetColumnNameString(0), R"("a")");
             UNIT_ASSERT_VALUES_EQUAL(
                 RenderDocs(merged), R"({"a":["xxxxxxxxxxxxxxxx"]};{"a":["yyyyyyyyyyyyyyyy"]};{"a":{"b":1}};{"a":{"b":2}};)");
+            UNIT_ASSERT_VALUES_EQUAL(RenderPathValues(merged, "$.a.b"), "<null>;<null>;1;2;");
         }
 
         const std::vector<TString> scalarAncestorDocs = {
@@ -215,6 +227,7 @@ Y_UNIT_TEST_SUITE(SubColumnsCompaction) {
             UNIT_ASSERT_VALUES_EQUAL(stats.GetColumnsCount(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetColumnNameString(0), R"("a"."b")");
             UNIT_ASSERT_VALUES_EQUAL(RenderDocs(merged), R"({"a":1};{"a":2};{"a":{"b":"xxxxxxxxxxxxxxxx"}};{"a":{"b":"yyyyyyyyyyyyyyyy"}};)");
+            UNIT_ASSERT_VALUES_EQUAL(RenderPathValues(merged, "$.a"), "1;2;<null>;<null>;");
         }
     }
 }

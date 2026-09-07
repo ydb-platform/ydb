@@ -113,11 +113,15 @@ public:
     }
 
     TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const {
-        auto accResult = ColumnsData.GetPathAccessor(svPath);
-        if (accResult.IsFail() || accResult.GetResult()->IsValid()) {
-            return accResult;
+        auto columnsResult = ColumnsData.GetPathAccessor(svPath);
+        if (columnsResult.IsFail()) {
+            return columnsResult;
         }
-        return OthersData.GetPathAccessor(svPath, recordsCount);
+        auto othersResult = OthersData.GetPathAccessor(svPath, recordsCount);
+        if (othersResult.IsFail()) {
+            return othersResult;
+        }
+        return NSubColumns::TJsonPathAccessor::SelectBestMatch(columnsResult.DetachResult(), othersResult.DetachResult());
     }
 };
 

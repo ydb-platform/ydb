@@ -1,10 +1,6 @@
 #include "constructor.h"
 #include "partial.h"
 
-#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
-
-#include <ydb/library/formats/arrow/simple_arrays_cache.h>
-
 namespace NKikimr::NArrow::NAccessor {
 
 void TSubColumnsPartialArray::InitOthers(const TString& blob, const TChunkConstructionData& externalInfo,
@@ -29,19 +25,21 @@ TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> TSubColumnsPartialA
         }
     }
 
-    auto accessorResult = jsonPathAccessorTrie->GetAccessor(svPath);
-    if (accessorResult.IsSuccess() && accessorResult.GetResult()->IsValid()) {
-        return accessorResult;
+    auto columnsResult = jsonPathAccessorTrie->GetAccessor(svPath);
+    if (columnsResult.IsFail()) {
+        return columnsResult;
     }
 
-    if (OthersData) {
-        return OthersData->GetPathAccessor(svPath, recordsCount);
+    if (!OthersData) {
+        // The fetch stage must have loaded Others if it has the best match.
+        AFL_VERIFY(!GetBestPathSource(NSubColumns::ToSubcolumnName(svPath)).IsOther);
+        return columnsResult;
     }
-
-    AFL_VERIFY(!Header.GetOtherStats().GetKeyIndexOptional(svPath));
-    return std::make_shared<NSubColumns::TJsonPathAccessor>(
-        std::make_shared<TTrivialArray>(TThreadSimpleArraysCache::GetNull(arrow::binary(), recordsCount)), TString{},
-        NSubColumns::EValueType::BinaryJson);
+    auto othersResult = OthersData->GetPathAccessor(svPath, recordsCount);
+    if (othersResult.IsFail()) {
+        return othersResult;
+    }
+    return NSubColumns::TJsonPathAccessor::SelectBestMatch(columnsResult.DetachResult(), othersResult.DetachResult());
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

@@ -4,6 +4,7 @@
 #include <ydb/core/formats/arrow/accessor/sub_columns/constructor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/data_extractor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/partial.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 
@@ -533,6 +534,18 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         CheckValueByPath(jsonPathAccessorTrie, "$.k.m[1]", "4");
     }
 
+    Y_UNIT_TEST(JsonPathAccessorSelectBestMatch) {
+        const auto invalid = std::make_shared<NSubColumns::TJsonPathAccessor>(nullptr, TString{}, NSubColumns::EValueType::BinaryJson);
+        const auto shallow = std::make_shared<NSubColumns::TJsonPathAccessor>(nullptr, "strict $.a.b", NSubColumns::EValueType::BinaryJson, 1);
+        const auto deep = std::make_shared<NSubColumns::TJsonPathAccessor>(nullptr, "strict $.b", NSubColumns::EValueType::BinaryJson, 2);
+        const auto equallyDeep = std::make_shared<NSubColumns::TJsonPathAccessor>(nullptr, "strict $.c", NSubColumns::EValueType::BinaryJson, 3);
+
+        UNIT_ASSERT_EQUAL(NSubColumns::TJsonPathAccessor::SelectBestMatch(invalid, deep), deep);
+        UNIT_ASSERT_EQUAL(NSubColumns::TJsonPathAccessor::SelectBestMatch(deep, invalid), deep);
+        UNIT_ASSERT_EQUAL(NSubColumns::TJsonPathAccessor::SelectBestMatch(shallow, deep), deep);
+        UNIT_ASSERT_EQUAL(NSubColumns::TJsonPathAccessor::SelectBestMatch(deep, equallyDeep), deep);
+    }
+
     Y_UNIT_TEST(SubColumnNameFromDifferentPaths) {
         UNIT_ASSERT_VALUES_EQUAL(R"("a")", NSubColumns::ToSubcolumnName("a"));
         UNIT_ASSERT_VALUES_EQUAL(R"("a")", NSubColumns::ToSubcolumnName("$.a"));
@@ -551,6 +564,36 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
             expected[str] = 1;
             UNIT_ASSERT_VALUES_EQUAL(expected, restorer.GetResult());
         }
+    }
+
+    // Checks that a weaker, unfetched Others match does not prevent using a loaded separated match.
+    Y_UNIT_TEST(PartialArrayUsesLoadedBestMatch) {
+        auto columnsBuilder = NSubColumns::TDictStats::MakeBuilder();
+        columnsBuilder.Add(TString(R"("a"."b")"), 2, 2, IChunkedArray::EType::Array, NSubColumns::EValueType::BinaryJson);
+        auto othersBuilder = NSubColumns::TDictStats::MakeBuilder();
+        othersBuilder.Add(TString(R"("a")"), 2, 2, IChunkedArray::EType::Array, NSubColumns::EValueType::BinaryJson);
+
+        NKikimrArrowAccessorProto::TSubColumnsAccessor proto;
+        auto header = NSubColumns::TSubColumnsHeader(columnsBuilder.Finish(), othersBuilder.Finish(), std::move(proto), 0);
+        auto partial = std::make_shared<TSubColumnsPartialArray>(std::move(header), 2, arrow::binary(), NSubColumns::TSettings());
+
+        TTrivialArray::TPlainBuilder<arrow::BinaryType> valuesBuilder;
+        for (ui32 i = 0; i < 2; ++i) {
+            const auto binaryJson = NBinaryJson::SerializeToBinaryJson(ToString(i + 1));
+            const auto* value = std::get_if<NBinaryJson::TBinaryJson>(&binaryJson);
+            UNIT_ASSERT(value);
+            valuesBuilder.AddRecord(i, std::string_view(value->data(), value->size()));
+        }
+        partial->AddColumn(R"("a"."b")", valuesBuilder.Finish(2));
+
+        UNIT_ASSERT(partial->HasSubColumnData(R"("a"."b")"));
+        auto accessorResult = partial->GetPathAccessor("$.a.b", 2);
+        UNIT_ASSERT_C(accessorResult.IsSuccess(), accessorResult.GetErrorMessage());
+        TStringBuilder values;
+        accessorResult.DetachResult()->VisitValues([&](const std::optional<TStringBuf>& value) {
+            values << (value ? *value : TStringBuf("<null>")) << ';';
+        });
+        UNIT_ASSERT_VALUES_EQUAL(values, "1;2;");
     }
 };
 

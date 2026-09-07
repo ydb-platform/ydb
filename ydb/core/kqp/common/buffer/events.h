@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ydb/core/kqp/common/kqp_runtime_diagnostics.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
@@ -22,8 +21,6 @@ struct TEvKqpBuffer {
 struct TEvCommit : public TEventLocal<TEvCommit, TKqpBufferWriterEvents::EvCommit> {
     TActorId ExecuterActorId;
     ui64 TxId;
-    bool CollectTimeline = false;
-    bool CollectShards = false;
 };
 
 struct TEvRollback : public TEventLocal<TEvRollback, TKqpBufferWriterEvents::EvRollback> {
@@ -48,20 +45,17 @@ struct TEvResult : public TEventLocal<TEvResult, TKqpBufferWriterEvents::EvResul
 
     std::optional<NYql::NDqProto::TDqTaskStats> Stats;
     std::optional<TCommitTimestamp> CommitTimestamp;
-    TCommitDiagnostics CommitDiagnostics;
 };
 
 struct TEvError : public TEventLocal<TEvError, TKqpBufferWriterEvents::EvError> {
     NYql::NDqProto::StatusIds::StatusCode StatusCode;
     NYql::TIssues Issues;
     std::optional<NYql::NDqProto::TDqTaskStats> Stats;
-    TCommitDiagnostics CommitDiagnostics;
 
     TEvError(
         NYql::NDqProto::StatusIds::StatusCode statusCode,
         NYql::TIssues&& issues,
-        std::optional<NYql::NDqProto::TDqTaskStats>&& stats,
-        TCommitDiagnostics&& commitDiagnostics = {});
+        std::optional<NYql::NDqProto::TDqTaskStats>&& stats);
 };
 
 };

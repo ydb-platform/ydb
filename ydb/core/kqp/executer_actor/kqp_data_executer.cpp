@@ -206,6 +206,7 @@ public:
 
     void Finalize() {
         Y_ABORT_UNLESS(!AlreadyReplied);
+        EndQueryTraceSpan(ExecuterStateSpan, Ydb::StatusIds::SUCCESS);
 
         FillLocksFromExtraData();
         TxManager->SetHasSnapshot(GetSnapshot().IsValid());
@@ -228,11 +229,6 @@ public:
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
             event->ExecuterActorId = SelfId();
             event->TxId = TxId;
-            if (Y_UNLIKELY(ExecutionDiagnostics)) {
-                ExecutionDiagnostics->OnPhaseStarted(EExecutionPhase::Commit);
-                event->CollectTimeline = Request.DiagnosticsPolicy->CollectCommitTimeline;
-                event->CollectShards = Request.DiagnosticsPolicy->CollectShardSamples;
-            }
             Send<ESendingType::Tail>(
                 BufferActorId,
                 event.release(),
@@ -250,9 +246,6 @@ public:
                 {"bufferActorId", BufferActorId},
                 {"traceId", TraceId()});
 
-            if (Y_UNLIKELY(ExecutionDiagnostics)) {
-                ExecutionDiagnostics->OnPhaseStarted(EExecutionPhase::Rollback);
-            }
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvRollback>();
             event->ExecuterActorId = SelfId();
             Send<ESendingType::Tail>(
@@ -272,9 +265,6 @@ public:
                 {"bufferActorId", BufferActorId},
                 {"traceId", TraceId()});
 
-            if (Y_UNLIKELY(ExecutionDiagnostics)) {
-                ExecutionDiagnostics->OnPhaseStarted(EExecutionPhase::FlushEffects);
-            }
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
             event->ExecuterActorId = SelfId();
             Send<ESendingType::Tail>(
@@ -335,9 +325,6 @@ public:
     void HandleFinalize(TEvKqpBuffer::TEvResult::TPtr& ev) {
         if (ev->Get()->Stats && Stats) {
             Stats->AddBufferStats(std::move(*ev->Get()->Stats));
-        }
-        if (Y_UNLIKELY(ExecutionDiagnostics)) {
-            ExecutionDiagnostics->SetCommitDiagnostics(std::move(ev->Get()->CommitDiagnostics));
         }
         ResponseEv->CommitTimestamp = std::move(ev->Get()->CommitTimestamp);
         MakeResponseAndPassAway();
@@ -402,7 +389,6 @@ public:
 
         LWTRACK(KqpDataExecuterFinalize, ResponseEv->Orbit, TxId, ResponseEv->ResultsSize(), ResponseEv->GetByteSize());
 
-        ExecuterSpan.EndOk();
 
         AlreadyReplied = true;
         PassAway();
@@ -507,9 +493,6 @@ private:
         auto& msg = *ev->Get();
         if (msg.Stats && Stats) {
             Stats->AddBufferStats(std::move(*msg.Stats));
-        }
-        if (Y_UNLIKELY(ExecutionDiagnostics)) {
-            ExecutionDiagnostics->SetCommitDiagnostics(std::move(msg.CommitDiagnostics));
         }
         TBase::HandleAbortExecution(msg.StatusCode, msg.Issues, false);
     }
@@ -940,10 +923,8 @@ private:
 
     void OnShardsResolve() {
         if (ForceAcquireSnapshot()) {
-            // Start before sending so nested snapshot work inherits the phase trace id.
-            ExecuterStateSpan = this->StartExecutionPhase(EExecutionPhase::Snapshot,
-                TWilsonKqp::DataExecuterAcquireSnapshot, "WaitForSnapshot", NWilson::EFlags::NONE);
-
+            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterAcquireSnapshot,
+                ExecuterSpan.GetTraceId(), "Acquire snapshot");
             auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
             Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, TableIdsForSnapshot),
                 0, 0, ExecuterStateSpan.GetTraceId());
@@ -1013,9 +994,9 @@ private:
 
         StartStreamingQueriesActors();
         StartCheckpointCoordinator();
-        if (Y_UNLIKELY(ExecutionDiagnostics)) {
-            ExecutionDiagnostics->OnPhaseStarted(EExecutionPhase::RunTasks);
-        }
+        ExecuterStateSpan = ExecuterSpan.CreateChild(TWilsonKqp::DataExecuterRunTasks,
+            "Run", NWilson::EFlags::AUTO_END);
+
         if (!ExecuteTasks()) {
             return;
         }
@@ -1024,7 +1005,6 @@ private:
             return;
         }
 
-        ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
         YDB_LOG_DEBUG("Become ExecuteState",
             {"marker", "KQPDATA"},
             {"actorId", SelfId()},

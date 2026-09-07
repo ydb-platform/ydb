@@ -15,10 +15,8 @@
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/event_local.h>
-#include <ydb/library/actors/core/monotonic.h>
 
 #include <memory>
-#include <optional>
 
 namespace NKikimr::NWorkloadManager {
 class ISessionUpdater;
@@ -78,11 +76,6 @@ struct TQueryRequestSettings {
 
 struct TEvQueryRequest: public NActors::TEventLocal<TEvQueryRequest, TKqpEvents::EvQueryRequest> {
 public:
-    struct TProxyTraceSeed {
-        TInstant StartTime;
-        NActors::TMonotonic StartedAt;
-    };
-
     TEvQueryRequest(
         NKikimrKqp::EQueryAction queryAction,
         NKikimrKqp::EQueryType queryType,
@@ -202,12 +195,6 @@ public:
         return RequestCtx ? YqlText : Record.GetRequest().GetQuery();
     }
 
-    TString ExtractQuery() {
-        return RequestCtx
-            ? std::move(YqlText)
-            : std::move(*Record.MutableRequest()->MutableQuery());
-    }
-
     const ::Ydb::Table::TransactionControl& GetTxControl() const {
         return RequestCtx ? *TxControl : Record.GetRequest().GetTxControl();
     }
@@ -254,27 +241,6 @@ public:
             return RequestCtx->GetWilsonTraceId();
         }
         return {};
-    }
-
-    NWilson::TTraceId GetUserFacingWilsonTraceId() const {
-        if (Record.HasUserFacingTrace() && Record.GetUserFacingTrace().HasTraceId()) {
-            return NWilson::TTraceId(Record.GetUserFacingTrace().GetTraceId());
-        }
-        return {};
-    }
-
-    void EnsureProxyTraceSeed() {
-        if (Record.HasUserFacingTrace() && Record.GetUserFacingTrace().HasTraceId()
-                && !ProxyTraceSeed) {
-            ProxyTraceSeed.emplace(TProxyTraceSeed{
-                .StartTime = TInstant::Now(),
-                .StartedAt = NActors::TMonotonic::Now(),
-            });
-        }
-    }
-
-    const std::optional<TProxyTraceSeed>& GetProxyTraceSeed() const {
-        return ProxyTraceSeed;
     }
 
     const TString& GetRequestType() const {
@@ -552,7 +518,6 @@ private:
     bool DisableDefaultTimeout = false;
     std::shared_ptr<NWorkloadManager::ISessionUpdater> WmSessionUpdater;
     std::shared_ptr<NWorkloadManager::IQueryClassifier> WmQueryClassifier;
-    std::optional<TProxyTraceSeed> ProxyTraceSeed;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,
@@ -578,6 +543,5 @@ struct TEvQueryResponse: public TEventPBWithArena<TEvQueryResponse, NKikimrKqp::
         : TEventPBBase(arena ? std::move(arena) : MakeIntrusive<NActors::TProtoArenaHolder>())
     {}
 };
-
 
 } // namespace NKikimr::NKqp

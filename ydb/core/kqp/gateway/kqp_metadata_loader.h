@@ -1,7 +1,8 @@
 #pragma once
 
+#include <ydb/library/actors/wilson/wilson_trace.h>
+
 #include <ydb/core/kqp/common/simple/temp_tables.h>
-#include <ydb/core/kqp/common/compilation/kqp_compile_diagnostics.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
@@ -11,10 +12,6 @@
 #include <library/cpp/threading/future/core/future.h>
 
 #include <util/system/mutex.h>
-
-#include <memory>
-#include <utility>
-#include <vector>
 
 namespace NKikimr::NKqp {
 
@@ -32,14 +29,14 @@ public:
         bool needCollectSchemeData = false,
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
         const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup = std::nullopt,
-        std::shared_ptr<ICompileDependencyDiagnostics> compileDiagnostics = {})
+        NWilson::TTraceId traceId = {})
         : Cluster(cluster)
         , NeedCollectSchemeData(needCollectSchemeData)
         , ActorSystem(actorSystem)
         , Config(config)
         , TempTablesState(std::move(tempTablesState))
         , FederatedQuerySetup(federatedQuerySetup)
-        , CompileDiagnostics(std::move(compileDiagnostics))
+        , TraceId(std::move(traceId))
     {}
 
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadTableMetadata(
@@ -58,16 +55,13 @@ protected:
 
 private:
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadTableMetadataImpl(
-        const TString& cluster, const TString& table,
-        const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings, const TString& database,
-        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-        ECompileDependencyPurpose purpose);
+        const TString& cluster, const TString& table, const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings,
+        const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const char* purpose);
 
     template<typename TPath>
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadTableMetadataCache(
         const TString& cluster, const TPath& id, NYql::IKikimrGateway::TLoadTableMetadataSettings settings, const TString& database,
-        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-        ECompileDependencyPurpose purpose = ECompileDependencyPurpose::QueryTable);
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const char* purpose);
 
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadIndexMetadataByPathId(
         const TString& cluster, const NKikimr::TIndexId& indexId, const TString& tableName, const TString& database,
@@ -90,7 +84,7 @@ private:
     NYql::TKikimrConfiguration::TPtr Config;
     TKqpTempTablesState::TConstPtr TempTablesState;
     std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
-    std::shared_ptr<ICompileDependencyDiagnostics> CompileDiagnostics;
+    NWilson::TTraceId TraceId;
 };
 
 } // namespace NKikimr::NKqp

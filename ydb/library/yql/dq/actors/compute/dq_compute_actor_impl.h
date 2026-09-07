@@ -5,6 +5,7 @@
 #include "dq_compute_actor_checkpoints.h"
 #include "dq_compute_actor_metrics.h"
 #include "dq_compute_actor.h"
+#include "dq_compute_actor_tracing.h"
 #include "dq_compute_issues_buffer.h"
 #include "dq_compute_memory_quota.h"
 
@@ -249,6 +250,8 @@ protected:
         if (ComputeActorSpan) {
             ComputeActorSpan.Attribute("stageLevel", static_cast<int>(Task.GetProgram().GetSettings().GetStageLevel()));
             ComputeActorSpan.Attribute("stageId", static_cast<int>(Task.GetStageId()));
+            ComputeActorSpan.Attribute("ydb.stage_id", static_cast<i64>(Task.GetStageId()));
+            ComputeActorSpan.Attribute("ydb.task_id", static_cast<i64>(Task.GetId()));
         }
 
         Alloc->SetGUCSettings(GUCSettings);
@@ -768,7 +771,12 @@ protected:
         IssuesToMessage(issues, record.MutableIssues());
 
         if (ComputeActorSpan) {
-            ComputeActorSpan.End();
+            ComputeActorSpan.Attribute("ydb.status_code", NYql::NDqProto::StatusIds::StatusCode_Name(statusCode));
+            if (statusCode == NYql::NDqProto::StatusIds::SUCCESS) {
+                ComputeActorSpan.EndOk();
+            } else {
+                ComputeActorSpan.EndError(issues.ToOneLineString());
+            }
         }
 
         this->Send(ExecuterId, execEv.Release());
@@ -1290,14 +1298,6 @@ protected:
                     }
                 }
 
-                if (ComputeActorSpan) {
-                    ComputeActorSpan.EndError(
-                        TStringBuilder()
-                            << "Timeout event from compute actor " << this->SelfId()
-                            << ", TxId: " << TxId << ", task: " << Task.GetId()
-                    );
-                }
-
                 TStringBuilder reason = TStringBuilder() << "Task execution timeout ";
                 if (RuntimeSettings.Timeout) {
                     reason << RuntimeSettings.Timeout->MilliSeconds() << "ms ";
@@ -1401,15 +1401,12 @@ protected:
             State = NDqProto::COMPUTE_STATE_FAILURE;
         }
 
+        const auto statusCode = ev->Get()->Record.GetStatusCode();
         if (ev->Sender != ExecuterId) {
-            if (ComputeActorSpan) {
-                ComputeActorSpan.End();
-            }
-
             NActors::TActivationContext::Send(ev->Forward(ExecuterId));
         }
 
-        ReportStateAndMaybeDie(ev->Get()->Record.GetStatusCode(), issues, true);
+        ReportStateAndMaybeDie(statusCode, issues, true);
     }
 
     void HandleExecuteBase(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
@@ -2580,6 +2577,9 @@ public:
             }
 
             FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, RuntimeSettings.GetCollectStatsLevel());
+            if (last && ComputeActorSpan.GetTraceId()) {
+                FillComputeTraceStats(*taskStats, *protoTask);
+            }
             // when TR finished, use channels to detect output back pressure
             if (taskStats->FinishTs && State != NDqProto::COMPUTE_STATE_FINISHED && Channels) {
                 auto lastOutputTime = Channels->GetLastOutputMessageTime();
@@ -2792,6 +2792,9 @@ public:
         }
 
         static_cast<TDerived*>(this)->FillExtraStats(dst, RuntimeSettings.WithProgressStats || last);
+        if (last) {
+            AddComputeTraceAttributes(ComputeActorSpan, *dst);
+        }
 
         if (last && MemoryQuota) {
             MemoryQuota->ResetProfileStats();
@@ -2824,10 +2827,6 @@ protected:
 
         CA_LOG_D("Send stats to executor actor " << ExecuterId << " TaskId: " << Task.GetId()
             << " Stats: " << dbgPrintStats());
-
-        if (ComputeActorSpan) {
-            ComputeActorSpan.End();
-        }
 
         this->Send(ExecuterId, evState.release(), NActors::IEventHandle::FlagTrackDelivery);
 

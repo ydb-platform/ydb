@@ -6,12 +6,10 @@ namespace NKqp {
 TEvKqpBuffer::TEvError::TEvError(
     NYql::NDqProto::StatusIds::StatusCode statusCode,
     NYql::TIssues&& issues,
-    std::optional<NYql::NDqProto::TDqTaskStats>&& stats,
-    TCommitDiagnostics&& commitDiagnostics)
+    std::optional<NYql::NDqProto::TDqTaskStats>&& stats)
     : StatusCode(statusCode)
     , Issues(std::move(issues))
-    , Stats(std::move(stats))
-    , CommitDiagnostics(std::move(commitDiagnostics)) {
+    , Stats(std::move(stats)) {
 }
 
 }

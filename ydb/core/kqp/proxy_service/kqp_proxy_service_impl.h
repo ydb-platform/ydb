@@ -1,9 +1,10 @@
 #pragma once
 
+#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/kqp/tracing/kqp_user_facing.h>
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/services/workload_manager/query_classifier.h>
@@ -21,9 +22,6 @@
 #include <util/datetime/base.h>
 #include <limits>
 
-#include <memory>
-#include <optional>
-
 #include <util/generic/overloaded.h>
 
 namespace NKikimr::NKqp {
@@ -37,7 +35,7 @@ struct TKqpProxyRequest {
     ui32 EventType;
     TString SessionId;
     TKqpDbCountersPtr DbCounters;
-    std::unique_ptr<TProxyUserFacingTraceContext> UserFacingTrace;
+    NWilson::TSpan Span;
 
     TKqpProxyRequest(const TActorId& sender, ui64 senderCookie, const TString& traceId,
         ui32 eventType)
@@ -51,20 +49,6 @@ struct TKqpProxyRequest {
     void SetSessionId(const TString& sessionId, TKqpDbCountersPtr dbCounters) {
         SessionId = sessionId;
         DbCounters = dbCounters;
-    }
-
-    void SetUserFacingTrace(NPrivateEvents::TEvQueryRequest& request) {
-        if (request.Record.HasUserFacingTrace()
-                && request.Record.GetUserFacingTrace().HasTraceId()) {
-            UserFacingTrace = std::make_unique<TProxyUserFacingTraceContext>(request);
-        }
-    }
-
-    void MarkUserFacingTraceSent(ui32 sourceNodeId, ui32 targetNodeId,
-            NPrivateEvents::TEvQueryRequest& request) {
-        if (UserFacingTrace) {
-            UserFacingTrace->MarkSent(sourceNodeId, targetNodeId, request);
-        }
     }
 };
 
@@ -92,22 +76,9 @@ public:
         return PendingRequests.FindPtr(requestId);
     }
 
-    void SetUserFacingTrace(ui64 requestId, NPrivateEvents::TEvQueryRequest& request) {
-        if (auto* ptr = PendingRequests.FindPtr(requestId)) {
-            ptr->SetUserFacingTrace(request);
-        }
-    }
-
     void SetSessionId(ui64 requestId, const TString& sessionId, TKqpDbCountersPtr dbCounters) {
         TKqpProxyRequest* ptr = PendingRequests.FindPtr(requestId);
         ptr->SetSessionId(sessionId, dbCounters);
-    }
-
-    void MarkUserFacingTraceSent(ui64 requestId, ui32 sourceNodeId, ui32 targetNodeId,
-            NPrivateEvents::TEvQueryRequest& request) {
-        if (auto* ptr = PendingRequests.FindPtr(requestId)) {
-            ptr->MarkUserFacingTraceSent(sourceNodeId, targetNodeId, request);
-        }
     }
 
     void Erase(ui64 requestId) {

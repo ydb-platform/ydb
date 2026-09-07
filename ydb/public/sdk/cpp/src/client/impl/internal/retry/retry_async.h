@@ -20,47 +20,38 @@ namespace NYdb::inline Dev::NRetry::Async {
 
 template <typename TStatusType>
 class TRetryCompletion {
-    enum class EState {
-        Running,
-        Finished,
-        Cancelled,
-    };
-
 public:
     TRetryCompletion(std::stop_token token, NThreading::TPromise<TStatusType> promise)
         : Promise_(std::move(promise))
-        , StopCallback_(token, [this]() noexcept { Cancel(); })
+        , StopCallback_(token, [this]() noexcept {
+            auto promise = Promise_;
+            if (!TryFinish()) {
+                return;
+            }
+            try {
+                promise.TrySetValue(MakeRetryCancelledResult<TStatusType>());
+            } catch (...) {
+                promise.TrySetException(std::current_exception());
+            }
+        })
     {}
 
     bool IsFinished() const noexcept {
-        return State_.load() != EState::Running;
+        return Finished_.load();
     }
 
     bool IsCancelled() const noexcept {
-        return State_.load() == EState::Cancelled;
+        return Promise_.HasValue() && GetRetryStatusCode(Promise_.GetValue()) == EStatus::CLIENT_CANCELLED;
     }
 
     bool TryFinish() noexcept {
-        auto expected = EState::Running;
-        return State_.compare_exchange_strong(expected, EState::Finished);
+        bool expected = false;
+        return Finished_.compare_exchange_strong(expected, true);
     }
 
 private:
-    void Cancel() noexcept {
-        auto promise = Promise_;
-        auto expected = EState::Running;
-        if (!State_.compare_exchange_strong(expected, EState::Cancelled)) {
-            return;
-        }
-        try {
-            promise.TrySetValue(MakeRetryCancelledResult<TStatusType>());
-        } catch (...) {
-            promise.TrySetException(std::current_exception());
-        }
-    }
-
     NThreading::TPromise<TStatusType> Promise_;
-    std::atomic<EState> State_ = EState::Running;
+    std::atomic_bool Finished_ = false;
     std::stop_callback<std::function<void()>> StopCallback_;
 };
 
@@ -257,7 +248,7 @@ public:
     explicit TRetryWithoutSession(
         const TClient& client, TOperation&& operation, const TRetryOperationSettings& settings)
         : TRetryContext(client, settings)
-        , Operation_(operation)
+        , Operation_(std::move(operation))
     {}
 
     void Retry() override {

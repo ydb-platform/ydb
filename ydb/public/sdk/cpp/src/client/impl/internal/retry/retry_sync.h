@@ -177,17 +177,10 @@ protected:
                 .ClientTimeout(this->Settings_.GetSessionClientTimeout_)
                 .Deadline(Deadline_);
 
-            auto sessionFuture = this->Client_.GetSession(settings);
-            if (this->Settings_.CancellationToken_.stop_possible()) {
-                auto ready = NThreading::NewPromise<void>();
-                std::stop_callback stopCallback(this->Settings_.CancellationToken_, [&ready] { ready.TrySetValue(); });
-                sessionFuture.Subscribe([ready](const auto&) mutable { ready.TrySetValue(); });
-                ready.GetFuture().Wait();
-                if (this->IsCancellationRequested()) {
-                    return MakeRetryCancelledResult<TStatusType>();
-                }
+            auto sessionResult = this->Client_.GetSession(settings).GetValueSync();
+            if (this->IsCancellationRequested()) {
+                return MakeRetryCancelledResult<TStatusType>();
             }
-            auto sessionResult = sessionFuture.GetValueSync();
             if (sessionResult.IsSuccess()) {
                 Session_ = sessionResult.GetSession();
                 TRetryDeadlineHelper<TClient>::SetDeadline(*Session_, Deadline_);

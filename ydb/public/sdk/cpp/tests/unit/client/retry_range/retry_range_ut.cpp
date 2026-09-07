@@ -293,6 +293,32 @@ Y_UNIT_TEST_SUITE(TTableRangeErrorRetryTest) {
         UNIT_ASSERT(status.IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(attempts, 2u);
     }
+
+    Y_UNIT_TEST(AsyncCancellationCompletesBeforeLateResult) {
+        TTableClientFixture fixture;
+        std::stop_source stopSource;
+        auto attemptResult = NThreading::NewPromise<TStatus>();
+        auto result = fixture.Client->RetryOperation(
+            [&](NTable::TTableClient&) -> TAsyncStatus {
+                return attemptResult.GetFuture();
+            },
+            FastRetrySettings().CancellationToken(stopSource.get_token()));
+        stopSource.request_stop();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetValue(TDuration::Seconds(1)).GetStatus(), EStatus::CLIENT_CANCELLED);
+        attemptResult.SetValue(OkStatus());
+    }
+
+    Y_UNIT_TEST(SyncCancellationStopsAfterAttempt) {
+        TTableClientFixture fixture;
+        std::stop_source stopSource;
+
+        auto result = fixture.Client->RetryOperationSync(
+            [&](NTable::TSession) {
+                stopSource.request_stop();
+                return OkStatus();
+            }, FastRetrySettings().CancellationToken(stopSource.get_token()));
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CLIENT_CANCELLED);
+    }
 }
 
 Y_UNIT_TEST_SUITE(TQueryRangeErrorRetryTest) {
@@ -369,22 +395,5 @@ Y_UNIT_TEST_SUITE(TQueryRangeErrorRetryTest) {
                 },
                 FastRetrySettings()).GetValueSync(),
             TYdbErrorException);
-    }
-}
-
-Y_UNIT_TEST_SUITE(TRetryCancellationTest) {
-    Y_UNIT_TEST(AsyncCancellationCompletesBeforeLateResult) {
-        TTableClientFixture fixture;
-        std::stop_source stopSource;
-        auto attemptResult = NThreading::NewPromise<TStatus>();
-        auto result = fixture.Client->RetryOperation(
-            [&](NTable::TTableClient&) -> TAsyncStatus {
-                return attemptResult.GetFuture();
-            },
-            FastRetrySettings().CancellationToken(stopSource.get_token()));
-        stopSource.request_stop();
-        UNIT_ASSERT(result.Wait(TDuration::Seconds(1)));
-        UNIT_ASSERT_VALUES_EQUAL(result.GetValueSync().GetStatus(), EStatus::CLIENT_CANCELLED);
-        attemptResult.SetValue(OkStatus());
     }
 }

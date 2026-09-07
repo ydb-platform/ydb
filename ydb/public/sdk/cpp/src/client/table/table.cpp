@@ -1710,19 +1710,19 @@ TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, TValue
         settings.ClientTimeout_,
         NRetry::ERetryIdempotentDefault::True);
     const bool retryEnabled = NRetry::IsRetryEnabled(retrySettings) && !GetInRetryOperationContext();
-    if (!retryEnabled && !retrySettings.CancellationToken_.stop_possible()) {
+    if (!NRetry::ShouldUseUnaryRetryContext(*this, retrySettings)) {
         return Impl_->BulkUpsert(table, std::move(rows), settings);
     }
 
     auto state = std::make_shared<NRetry::TBulkUpsertRetryState>(retrySettings);
     auto opSettings = settings;
-    opSettings.RetryRowsState_ = state;
+    opSettings.RetryRowsState_ = retryEnabled ? state : nullptr;
     const auto startedAt = TInstant::Now();
 
     auto firstAttemptSettings = retrySettings;
     firstAttemptSettings.MaxRetries(0);
     return NRetry::RunUnaryWithRetry(*this, firstAttemptSettings,
-        [this, table, rows = std::move(rows), opSettings](TDuration) mutable {
+        [this, table, rows = std::move(rows), opSettings = std::move(opSettings)](TDuration) mutable {
             return Impl_->BulkUpsert(table, std::move(rows), opSettings);
         }).Apply(
         [this, table, settings, retrySettings, retryEnabled, state, startedAt](const TAsyncBulkUpsertResult& f) {
@@ -1764,8 +1764,7 @@ TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, EDataF
         settings.RetrySettings_,
         settings.ClientTimeout_,
         NRetry::ERetryIdempotentDefault::True);
-    if ((!NRetry::IsRetryEnabled(retrySettings) || GetInRetryOperationContext())
-        && !retrySettings.CancellationToken_.stop_possible()) {
+    if (!NRetry::ShouldUseUnaryRetryContext(*this, retrySettings)) {
         return Impl_->BulkUpsert(table, format, data, schema, settings);
     }
 
@@ -1787,8 +1786,7 @@ TAsyncReadRowsResult TTableClient::ReadRows(const std::string& table, TValue&& r
         settings.RetrySettings_,
         settings.ClientTimeout_,
         NRetry::ERetryIdempotentDefault::True);
-    if ((!NRetry::IsRetryEnabled(retrySettings) || GetInRetryOperationContext())
-        && !retrySettings.CancellationToken_.stop_possible()) {
+    if (!NRetry::ShouldUseUnaryRetryContext(*this, retrySettings)) {
         return Impl_->ReadRows(table, std::move(rows), columns, settings);
     }
     TValue keysCopy = std::move(rows);

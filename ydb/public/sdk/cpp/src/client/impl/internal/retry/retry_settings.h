@@ -52,16 +52,19 @@ inline TRetryOperationSettings ResolveRetrySettings(
         clientDefault, operationOverride, std::nullopt, operationClientTimeout, idempotentDefault);
 }
 
+template <typename TClient>
+bool ShouldUseUnaryRetryContext(TClient& client, const TRetryOperationSettings& settings) {
+    return settings.CancellationToken_.stop_possible()
+        || (IsRetryEnabled(settings) && !client.GetInRetryOperationContext());
+}
+
 template <typename TClient, typename TRunOnce>
 auto RunUnaryWithRetry(TClient& client, TRetryOperationSettings settings, TRunOnce&& runOnce)
     -> decltype(runOnce(TDuration::Max()))
 {
     const bool nested = client.GetInRetryOperationContext();
-    if (nested && !settings.CancellationToken_.stop_possible()) {
-        return runOnce(TDuration::Max());
-    }
-    if (!IsRetryEnabled(settings) && !settings.CancellationToken_.stop_possible()) {
-        return runOnce(settings.MaxTimeout_);
+    if (!ShouldUseUnaryRetryContext(client, settings)) {
+        return runOnce(nested ? TDuration::Max() : settings.MaxTimeout_);
     }
     if (nested) {
         settings.MaxRetries(0);

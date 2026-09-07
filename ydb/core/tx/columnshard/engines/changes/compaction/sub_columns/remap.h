@@ -53,8 +53,9 @@ private:
     };
 
     std::vector<std::vector<std::vector<std::optional<TRemapInfo>>>> RemapInfo;
-    THashMap<std::string_view, ui32> ResultColumnKeyIndex;
+    THashMap<TString, ui32> ResultColumnKeyIndex;
     std::map<TString, ui32> TemporaryKeyIndex;
+    bool ColumnStatsRegistered = false;
 
     ui32 RegisterNewOtherIndex(const TString& keyName) {
         return TemporaryKeyIndex.emplace(keyName, TemporaryKeyIndex.size()).first->second;
@@ -71,6 +72,8 @@ public:
         const std::vector<TDictStats::TRTStatsValue>& statsByKeyIndex, const TSettings& settings, const ui32 recordsCount) const;
 
     void RegisterColumnStats(const TDictStats& resultColumnStats) {
+        AFL_VERIFY(!ColumnStatsRegistered);
+        ColumnStatsRegistered = true;
         for (ui32 i = 0; i < resultColumnStats.GetColumnsCount(); ++i) {
             AFL_VERIFY(ResultColumnKeyIndex.emplace(resultColumnStats.GetColumnName(i), i).second);
         }

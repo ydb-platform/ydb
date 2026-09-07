@@ -611,10 +611,6 @@
   <rect x='368' y='77%' width='30' height='23%' stroke-width='0' fill='var(--input-light, #7CA3A5)'/>
 </g>
 <path d='M619,47c6,0,13,-2,20,-2c7,0,14,-1,21,-1c6,0,13,-1,20,-1c7,0,14,4,21,4c7,0,14,-8,21,-8c6,0,13,5,20,5c7,0,14,-2,21,-2c6,0,13,4,20,4c7,0,14,1,21,1c7,0,14,-13,21,-13c6,0,13,11,20,11c7,0,14,-2,21,-2c6,0,13,3,20,3c7,0,14,1,21,1c7,0,14,0,21,0c6,0,13,-5,20,-5c7,0,14,-1,21,-1c7,0,14,5,21,5c6,0,13,1,20,1c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,-1,21,-1c7,0,14,1,21,1c6,0,13,0,20,0c7,0,14,-1,21,-1c6,0,13,1,20,1c7,0,14,0,21,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c6,0,13,0,20,0c7,0,14,0,21,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-medium, #5A8183)' fill='var(--input-light, #7CA3A5)' />
-<g><title>Wait input with peer stage(s) 0 wait output</title>
-  <circle cx='383' cy='74' r='7' stroke='none' fill='var(--stage-texthl, #FC2824)' />
-  <text text-anchor='middle' font-family='Verdana' font-size='8px' fill='var(--text-light, #FFFFFF)' x='383' y='78'>W</text>
-</g>
 <g><title>Wait Output Time 0%, ∑1m 30s, 0.31s | 0.35s | 0.55s</title>
   <rect x='368' y='0%' width='30' height='0%' stroke-width='0' fill='var(--output-light, #6F93C3)'/>
 </g>
@@ -670,6 +666,10 @@
   <line x1='964' y1='73' x2='964' y2='80' stroke-width='3' stroke='var(--minmax-line, #FFDB4D)' />
 <path d='M619,79c3,0,6,-4,10,-4c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,-1,11,-1c3,0,6,3,10,3c3,0,7,2,11,2c3,0,7,-13,11,-13c3,0,7,9,11,9c3,0,7,0,11,0c3,0,6,0,10,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,6,3,10,3c3,0,7,-6,11,-6c3,0,7,6,11,6c3,0,7,-6,11,-6c3,0,7,3,11,3c3,0,6,0,10,0c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,2,11,2c3,0,7,2,11,2c3,0,6,-8,10,-8c3,0,7,7,11,7c3,0,7,0,11,0c3,0,7,0,11,0c3,0,7,1,11,1c3,0,6,-1,10,-1c3,0,7,1,11,1c3,0,7,0,11,0c0,0,0,0,0,0z' stroke-width='1' stroke='var(--input-dark, #466364)' fill='none' />
 </g>
+</g>
+<g><title>Wait input with peer stage(s) 0 wait output</title>
+  <circle cx='383' cy='74' r='7' stroke='none' fill='var(--stage-texthl, #FC2824)' />
+  <text text-anchor='middle' font-family='Verdana' font-size='8px' fill='var(--text-light, #FFFFFF)' x='383' y='78'>W</text>
 </g>
 </svg>
 <svg data-stage='outer 0' data-height='122' width='1280' height='122' x='0' y='85'>

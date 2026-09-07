@@ -768,10 +768,11 @@ void TPlan::PrintCpuStrip(const std::shared_ptr<TStage>& s, ui32& y0, ui64 px, u
                     }
                 }
                 if (waitOutputPeers) {
-                    // The stage draws into its own nested svg, so the badge is placed
-                    // relative to that stage box, not to its offset in the whole plan.
-                    PrintWarningBadge(s->Svg, Config.TaskLeft + Config.TaskWidth / 2, s->Height,
-                        TStringBuilder() << "Wait input with peer stage(s) " << waitOutputPeers << " wait output", "W");
+                    // Only remembered here: the badge sits at the bottom of the stage,
+                    // in the task column that later strips keep painting over, so it is
+                    // emitted last by PrepareStageSvg.
+                    s->WaitInputWarning = TStringBuilder()
+                        << "Wait input with peer stage(s) " << waitOutputPeers << " wait output";
                 }
             }
         }
@@ -1072,6 +1073,14 @@ void TPlan::PrepareStageSvg(const std::shared_ptr<TStage>& s, ui64 maxTime, ui32
 
     PrintIngressStrip(s, y0, px, pw);
     s->Svg << "</g>" << Endl;
+
+    // Last, so that nothing drawn for the stage can hide it: the badge shares the
+    // task column with the throughput overlay, which spans the whole stage box.
+    // The stage draws into its own nested svg, so the badge is placed relative to
+    // that stage box, not to its offset in the whole plan.
+    if (s->WaitInputWarning) {
+        PrintWarningBadge(s->Svg, Config.TaskLeft + Config.TaskWidth / 2, s->Height, s->WaitInputWarning, "W");
+    }
 }
 
 void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {

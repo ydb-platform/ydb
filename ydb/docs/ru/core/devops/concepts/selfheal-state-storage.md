@@ -1,4 +1,4 @@
-# Self Heal State Storage
+# SelfHeal State Storage
 
 {% note warning %}
 
@@ -8,13 +8,13 @@
 
 В процессе работы кластеров узлы {{ ydb-short-name }} могут выходить из строя целиком.
 
-Self Heal State Storage обнаруживает неисправности и, если их нельзя быстро восстановить, переносит реплики [State Storage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), [SchemeBoard](../../concepts/glossary.md#scheme-board) на другие узлы. Кроме того, при добавлении новых узлов в кластер механизм автоматически увеличивает число реплик этих подсистем.
+SelfHeal State Storage обнаруживает неисправности и, если их нельзя быстро восстановить, переносит реплики [State Storage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), [SchemeBoard](../../concepts/glossary.md#scheme-board) на другие узлы. Кроме того, при добавлении новых узлов в кластер механизм автоматически увеличивает число реплик этих подсистем.
 
-Компонент Self Heal State Storage, является частью системы управления кластером [CMS Sentinel](../../concepts/glossary.md#cms).
+Компонент SelfHeal State Storage, является частью системы управления кластером [CMS Sentinel](../../concepts/glossary.md#cms).
 
-## Включение и выключение Self Heal State Storage {#on-off}
+## Включение и выключение SelfHeal State Storage {#on-off}
 
-Вы можете включать и выключать Self Heal State Storage с помощью изменения конфигурации:
+Вы можете включать и выключать SelfHeal State Storage с помощью изменения конфигурации:
 
 1. Получите текущую конфигурацию кластера с помощью команды [ydb admin cluster config fetch](../../reference/ydb-cli/commands/configuration/cluster/fetch.md):
 
@@ -22,7 +22,7 @@ Self Heal State Storage обнаруживает неисправности и, 
     ydb [global options...] admin cluster config fetch > config.yaml
     ```
 
-2. Измените конфигурационный файл `config.yaml`. Для этого поменйте значение параметра `state_storage_self_heal_config.enable` на `true` или на `false`:
+2. Измените конфигурационный файл `config.yaml`. Для этого поменяйте значение параметра `state_storage_self_heal_config.enable` на `true` или на `false`:
 
     ```yaml
     config:
@@ -32,7 +32,7 @@ Self Heal State Storage обнаруживает неисправности и, 
             sentinel_config:
                 enable: true # Включение Sentinel
                 state_storage_self_heal_config:
-                    enable: true # Включение self heal state storage
+                    enable: true # Включение selfheal state storage
     ```
 
     {% note info %}
@@ -53,7 +53,7 @@ Self Heal State Storage обнаруживает неисправности и, 
 
 ## Управление автоматическим изменением конфигурации {#automatic-management}
 
-Помимо общего [включения/выключения]((#on-off)) Self Heal State Storage (параметр `state_storage_self_heal_config.enable`), в секции `self_management_config` конфигурационного файла `config.yaml` вы можете по отдельности управлять автоматическим изменением конфигурации каждой из подсистем распространения метаданных, а также ограничивать множество узлов, на которые Self Heal может переносить реплики.
+Помимо общего [включения/выключения]((#on-off)) SelfHeal State Storage (параметр `state_storage_self_heal_config.enable`), в секции `self_management_config` конфигурационного файла `config.yaml` вы можете по отдельности управлять автоматическим изменением конфигурации каждой из подсистем распространения метаданных, а также ограничивать множество узлов, на которые SelfHeal может переносить реплики.
 
 ```yaml
 config:
@@ -69,16 +69,16 @@ config:
 
 | Параметр | Значение по умолчанию | Описание |
 |---|---|---|
-| `automatic_state_storage_management` | `true` | Разрешает Self Heal автоматически изменять конфигурацию [State Storage](../../concepts/glossary.md#state-storage). При значении `false` Self Heal не изменяет текущую конфигурацию State Storage. |
-| `automatic_state_storage_board_management` | `true` | То же самое для [Board](../../concepts/glossary.md#board): разрешает или запрещает Self Heal автоматически изменять его конфигурацию. |
-| `automatic_scheme_board_management` | `true` | То же самое для [SchemeBoard](../../concepts/glossary.md#scheme-board): разрешает или запрещает Self Heal автоматически изменять его конфигурацию. |
-| `state_storage_self_heal_allowed_nodes` | `[]` (без ограничений) | Список идентификаторов узлов, на которые Self Heal может переносить или на которых может добавлять реплики [State Storage](../../concepts/glossary.md#state-storage). Пустой список означает, что ограничений нет и могут быть использованы любые узлы кластера. |
+| `automatic_state_storage_management` | `true` | Разрешает SelfHeal автоматически изменять конфигурацию [State Storage](../../concepts/glossary.md#state-storage). При значении `false` SelfHeal не изменяет текущую конфигурацию State Storage. |
+| `automatic_state_storage_board_management` | `true` | То же самое для [Board](../../concepts/glossary.md#board): разрешает или запрещает SelfHeal автоматически изменять его конфигурацию. |
+| `automatic_scheme_board_management` | `true` | То же самое для [SchemeBoard](../../concepts/glossary.md#scheme-board): разрешает или запрещает SelfHeal автоматически изменять его конфигурацию. |
+| `state_storage_self_heal_allowed_nodes` | `[]` (без ограничений) | Список идентификаторов узлов, на которые SelfHeal может переносить или на которых может добавлять реплики [State Storage](../../concepts/glossary.md#state-storage). Пустой список означает, что ограничений нет и могут быть использованы любые узлы кластера. |
 | `state_storage_board_self_heal_allowed_nodes` | `[]` (без ограничений) | То же самое для реплик [Board](../../concepts/glossary.md#board). |
 | `scheme_board_self_heal_allowed_nodes` | `[]` (без ограничений) | То же самое для реплик [SchemeBoard](../../concepts/glossary.md#scheme-board). |
 
-## Дополнительные параметры Self Heal State Storage {#self-heal-config-parameters}
+## Дополнительные параметры SelfHeal State Storage {#self-heal-config-parameters}
 
-В секции `cms_config.sentinel_config.state_storage_self_heal_config` конфигурационного файла `config.yaml` вы можете настроить дополнительные параметры работы механизма Self Heal State Storage. Они влияют на то, как быстро реагирует механизм на изменения и сколько реплик подсистем распространения метаданных создаётся. В примере ниже все параметры показаны со значениями по умолчанию:
+В секции `cms_config.sentinel_config.state_storage_self_heal_config` конфигурационного файла `config.yaml` вы можете настроить дополнительные параметры работы механизма SelfHeal State Storage. Они влияют на то, как быстро реагирует механизм на изменения и сколько реплик подсистем распространения метаданных создаётся. В примере ниже все параметры показаны со значениями по умолчанию:
 
 ```yaml
 config:
@@ -98,12 +98,12 @@ config:
 | Параметр | Значение по умолчанию | Описание |
 |---|---|---|
 | `wait_for_config_step` | `60000000` (микросекунды, 60 секунд) | Время ожидания между промежуточными шагами применения новой конфигурации подсистем распространения метаданных (добавление/удаление групп колец, снятие флага `WriteOnly`, см. [Конфигурирование State Storage](../configuration-management/configuration-v2/state-storage-reconfiguration.md#metadata-subsystems-reconfig-rules)). Значение задаётся в микросекундах. |
-| `relax_time` | `600000000` (микросекунды, 600 секунд) | Минимальный интервал между двумя последовательными срабатываниями Self Heal State Storage. Пока не прошло указанное время с момента предыдущего срабатывания, повторное изменение конфигурации не запускается, даже если обнаружены неисправные узлы. Значение задаётся в микросекундах. |
-| `pileup_replicas` | `false` | Разрешает размещать реплики разных подсистем (State Storage, Board, SchemeBoard) на одном и том же наборе узлов. При значении `false` Self Heal старается использовать разные узлы для реплик разных подсистем там, где это возможно; при значении `true` узлы, уже занятые под одну подсистему, могут повторно использоваться для остальных. |
+| `relax_time` | `600000000` (микросекунды, 600 секунд) | Минимальный интервал между двумя последовательными срабатываниями SelfHeal State Storage. Пока не прошло указанное время с момента предыдущего срабатывания, повторное изменение конфигурации не запускается, даже если обнаружены неисправные узлы. Значение задаётся в микросекундах. |
+| `pileup_replicas` | `false` | Разрешает размещать реплики разных подсистем (State Storage, Board, SchemeBoard) на одном и том же наборе узлов. При значении `false` SelfHeal старается использовать разные узлы для реплик разных подсистем там, где это возможно; при значении `true` узлы, уже занятые под одну подсистему, могут повторно использоваться для остальных. |
 | `override_replicas_in_ring_count` | `0` (рассчитывается автоматически) | Принудительно задаёт количество реплик в одном кольце. Если значение `0`, количество реплик в кольце вычисляется автоматически на основе `replicas_specific_volume` и числа доступных узлов. |
 | `override_rings_count` | `0` (рассчитывается автоматически) | Принудительно задаёт количество колец в конфигурации. Если значение `0`, количество колец вычисляется автоматически на основе числа доступных узлов и топологии кластера. |
 | `replicas_specific_volume` | `200` | Определяет, сколько узлов кластера должно приходиться на одну дополнительную реплику в кольце: одна дополнительная реплика добавляется на каждые `replicas_specific_volume` узлов в кластере. Используется при автоматическом расчёте количества реплик, если `override_replicas_in_ring_count` не задан (равен `0`). |
 
 ## Проверка результата {#verify-result}
 
-Проверить, что изменения применились, можно  в разделе `CMS` в [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md) кластера (доступен на порту 8765): перейдите на вкладку `Sentinel` для просмотра статуса Sentinel и Self Heal State Storage.
+Проверить, что изменения применились, можно  в разделе `CMS` в [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md) кластера (доступен на порту 8765): перейдите на вкладку `Sentinel` для просмотра статуса Sentinel и SelfHeal State Storage.

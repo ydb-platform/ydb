@@ -1,7 +1,6 @@
 # Storage SelfHeal
 
-Storage SelfHeal is a mechanism for automatically restoring
-{{ ydb-short-name }} storage fault tolerance.
+Storage SelfHeal is a mechanism for automatically restoring {{ ydb-short-name }} storage fault tolerance.
 
 ## How storage SelfHeal works {#how-it-works}
 

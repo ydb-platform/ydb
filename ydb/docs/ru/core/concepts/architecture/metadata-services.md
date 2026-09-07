@@ -51,7 +51,7 @@
 
 - [Подсистемы распространения метаданных](../../contributor/metadata-distribution.md) — подробное описание для контрибьюторов ядра.
 - [Конфигурирование подсистем распространения метаданных](../../devops/configuration-management/configuration-v2/state-storage-reconfiguration.md).
-- [Self Heal State Storage](../../devops/concepts/selfheal-state-storage.md).
+- [SelfHeal State Storage](../../devops/concepts/selfheal-state-storage.md).
 - [Режим bridge](../bridge.md).
 - [Топология кластера](../topology.md).
 - [Глоссарий](../glossary.md).

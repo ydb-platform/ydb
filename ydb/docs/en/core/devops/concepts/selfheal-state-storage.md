@@ -1,4 +1,4 @@
-# Self Heal State Storage
+# SelfHeal State Storage
 
 {% note warning %}
 
@@ -8,13 +8,13 @@ These instructions apply only to {{ ydb-short-name }} clusters with **V2 configu
 
 During cluster operation, nodes running {{ ydb-short-name }} may fail entirely.
 
-Self Heal State Storage detects faults and, if they cannot be restored quickly, relocates [State Storage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), and [SchemeBoard](../../concepts/glossary.md#scheme-board) replicas to other nodes. In addition, when new nodes are added to the cluster, the mechanism automatically increases the number of replicas of these subsystems.
+SelfHeal State Storage detects faults and, if they cannot be restored quickly, relocates [State Storage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), and [SchemeBoard](../../concepts/glossary.md#scheme-board) replicas to other nodes. In addition, when new nodes are added to the cluster, the mechanism automatically increases the number of replicas of these subsystems.
 
-The Self Heal State Storage component is part of the cluster management system [CMS Sentinel](../../concepts/glossary.md#cms).
+The SelfHeal State Storage component is part of the cluster management system [CMS Sentinel](../../concepts/glossary.md#cms).
 
-## Enabling and disabling Self Heal State Storage {#on-off}
+## Enabling and disabling SelfHeal State Storage {#on-off}
 
-You can enable and disable Self Heal State Storage by changing the configuration:
+You can enable and disable SelfHeal State Storage by changing the configuration:
 
 1. Get the current cluster configuration using the [ydb admin cluster config fetch](../../reference/ydb-cli/commands/configuration/cluster/fetch.md) command:
 
@@ -32,7 +32,7 @@ You can enable and disable Self Heal State Storage by changing the configuration
             sentinel_config:
                 enable: true # Enabling Sentinel
                 state_storage_self_heal_config:
-                    enable: true # Enabling self heal state storage
+                    enable: true # Enabling selfheal state storage
     ```
 
     {% note info %}
@@ -53,7 +53,7 @@ You can enable and disable Self Heal State Storage by changing the configuration
 
 ## Managing automatic configuration changes {#automatic-management}
 
-In addition to the general enable/disable of Self Heal State Storage (parameter `state_storage_self_heal_config.enable`, see [above](#on-off)), in the `self_management_config` section of the `config.yaml` configuration file, you can individually manage automatic configuration changes for each of the metadata distribution subsystems, as well as limit the set of nodes to which Self Heal can move replicas.
+In addition to the general enable/disable of SelfHeal State Storage (parameter `state_storage_self_heal_config.enable`, see [above](#on-off)), in the `self_management_config` section of the `config.yaml` configuration file, you can individually manage automatic configuration changes for each of the metadata distribution subsystems, as well as limit the set of nodes to which SelfHeal can move replicas.
 
 
 ```yaml
@@ -71,16 +71,16 @@ config:
 
 | Parameter | Default value | Description |
 | --- | --- | --- |
-| `automatic_state_storage_management` | `true` | Allows Self Heal to automatically change the [State Storage](../../concepts/glossary.md#state-storage) configuration. When set to `false`, Self Heal does not change the current State Storage configuration. |
-| `automatic_state_storage_board_management` | `true` | Same for [Board](../../concepts/glossary.md#board): allows or disallows Self Heal to automatically change its configuration. |
-| `automatic_scheme_board_management` | `true` | Same for [SchemeBoard](../../concepts/glossary.md#scheme-board): allows or disallows Self Heal to automatically change its configuration. |
-| `state_storage_self_heal_allowed_nodes` | `[]` (no restrictions) | List of node IDs to which Self Heal can move or on which it can add [State Storage](../../concepts/glossary.md#state-storage) replicas. An empty list means there are no restrictions and any cluster nodes can be used. |
+| `automatic_state_storage_management` | `true` | Allows SelfHeal to automatically change the [State Storage](../../concepts/glossary.md#state-storage) configuration. When set to `false`, SelfHeal does not change the current State Storage configuration. |
+| `automatic_state_storage_board_management` | `true` | Same for [Board](../../concepts/glossary.md#board): allows or disallows SelfHeal to automatically change its configuration. |
+| `automatic_scheme_board_management` | `true` | Same for [SchemeBoard](../../concepts/glossary.md#scheme-board): allows or disallows SelfHeal to automatically change its configuration. |
+| `state_storage_self_heal_allowed_nodes` | `[]` (no restrictions) | List of node IDs to which SelfHeal can move or on which it can add [State Storage](../../concepts/glossary.md#state-storage) replicas. An empty list means there are no restrictions and any cluster nodes can be used. |
 | `state_storage_board_self_heal_allowed_nodes` | `[]` (no restrictions) | Same for [Board](../../concepts/glossary.md#board) replicas. |
 | `scheme_board_self_heal_allowed_nodes` | `[]` (no restrictions) | Same for [SchemeBoard](../../concepts/glossary.md#scheme-board) replicas. |
 
-## Additional Self Heal State Storage parameters {#self-heal-config-parameters}
+## Additional SelfHeal State Storage parameters {#self-heal-config-parameters}
 
-In the `cms_config.sentinel_config.state_storage_self_heal_config` section of the `config.yaml` configuration file, you can configure additional parameters of the Self Heal State Storage mechanism that affect how quickly the mechanism responds to changes and how many replicas of the metadata distribution subsystems are created. In the example below, all parameters are shown with default values:
+In the `cms_config.sentinel_config.state_storage_self_heal_config` section of the `config.yaml` configuration file, you can configure additional parameters of the SelfHeal State Storage mechanism that affect how quickly the mechanism responds to changes and how many replicas of the metadata distribution subsystems are created. In the example below, all parameters are shown with default values:
 
 
 ```yaml
@@ -102,12 +102,12 @@ config:
 | Parameter | Default value | Description |
 | --- | --- | --- |
 | `wait_for_config_step` | `60000000` (microseconds, 60 seconds) | Wait time between intermediate steps of applying a new configuration of the metadata distribution subsystems (adding/removing ring groups, clearing the `WriteOnly` flag, see [Configuring State Storage](../configuration-management/configuration-v2/state-storage-reconfiguration.md#metadata-subsystems-reconfig-rules)). The value is specified in microseconds. |
-| `relax_time` | `600000000` (microseconds, 600 seconds) | Minimum interval between two consecutive Self Heal State Storage activations. Until the specified time has elapsed since the previous activation, a repeated configuration change is not started, even if faulty nodes are detected. The value is specified in microseconds. |
-| `pileup_replicas` | `false` | Allows placing replicas of different subsystems (State Storage, Board, SchemeBoard) on the same set of nodes. When set to `false`, Self Heal tries to use different nodes for replicas of different subsystems where possible; when set to `true`, nodes already occupied by one subsystem can be reused for the others. |
+| `relax_time` | `600000000` (microseconds, 600 seconds) | Minimum interval between two consecutive SelfHeal State Storage activations. Until the specified time has elapsed since the previous activation, a repeated configuration change is not started, even if faulty nodes are detected. The value is specified in microseconds. |
+| `pileup_replicas` | `false` | Allows placing replicas of different subsystems (State Storage, Board, SchemeBoard) on the same set of nodes. When set to `false`, SelfHeal tries to use different nodes for replicas of different subsystems where possible; when set to `true`, nodes already occupied by one subsystem can be reused for the others. |
 | `override_replicas_in_ring_count` | `0` (calculated automatically) | Forcibly sets the number of replicas in one ring. If the value is `0`, the number of replicas in the ring is calculated automatically based on `replicas_specific_volume` and the number of available nodes. |
 | `override_rings_count` | `0` (calculated automatically) | Forcibly sets the number of rings in the configuration. If the value is `0`, the number of rings is calculated automatically based on the number of available nodes and the cluster topology. |
 | `replicas_specific_volume` | `200` | Determines how many cluster nodes should correspond to one additional replica in the ring: one additional replica is added for every `replicas_specific_volume` nodes in the cluster. Used in automatic calculation of the number of replicas if `override_replicas_in_ring_count` is not set (equals `0`). |
 
 ## Checking the result {#verify-result}
 
-You can check that the changes have been applied in the `CMS` section of the cluster [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md) (available on port 8765): go to the `Sentinel` tab to view the status of Sentinel and Self Heal State Storage.
+You can check that the changes have been applied in the `CMS` section of the cluster [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md) (available on port 8765): go to the `Sentinel` tab to view the status of Sentinel and SelfHeal State Storage.

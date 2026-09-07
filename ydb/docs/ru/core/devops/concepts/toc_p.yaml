@@ -14,7 +14,7 @@ items:
   items:
   - name: SelfHeal хранилища
     href: selfheal-storage.md
-  - name: Self Heal State Storage
+  - name: SelfHeal State Storage
     href: selfheal-state-storage.md
 - name: Аутентификация и авторизация узлов баз данных
   href: node-authorization.md

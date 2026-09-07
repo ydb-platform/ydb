@@ -3,13 +3,13 @@
 В {{ ydb-short-name }} есть два механизма автоматического восстановления — SelfHeal:
 
 1. **SelfHeal хранилища** — для дисков и [групп хранения](../../concepts/glossary.md#storage-group) с данными.
-2. **Self Heal State Storage** — для реплик [State Storage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board) и [SchemeBoard](../../concepts/glossary.md#scheme-board).
+2. **SelfHeal State Storage** — для реплик [State Storage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board) и [SchemeBoard](../../concepts/glossary.md#scheme-board).
 
 Оба механизма восстанавливают отказоустойчивость кластера после длительных отказов. Если неисправный узел или диск восстановлен до истечения таймаута (для дисков по умолчанию около часа), SelfHeal не начинает перенос.
 
 {% note info %}
 
-Self Heal State Storage доступен только при [конфигурации V2](../configuration-management/configuration-v2/config-overview.md).
+SelfHeal State Storage доступен только при [конфигурации V2](../configuration-management/configuration-v2/config-overview.md).
 
 SelfHeal хранилища от версии конфигурации не зависит.
 
@@ -18,4 +18,4 @@ SelfHeal хранилища от версии конфигурации не за
 Подробнее о механизмах:
 
 - [SelfHeal хранилища](selfheal-storage.md)
-- [Self Heal State Storage](selfheal-state-storage.md)
+- [SelfHeal State Storage](selfheal-state-storage.md)

@@ -1073,8 +1073,93 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
             .Build()
             .ColumnOrder(insert.ReturningColumns())
             .Done().Ptr();
+    } else if (TKqlUpdateRows::Match(node.Get())){
+        TKqlUpdateRows update(node);
 
-    } else {
+        return Build<TKqpOpRoot>(ctx, node->Pos())
+            .Input<TKqpOpTableEffect>()
+                .Input(root.Input())
+                .Table(tableEffect.Table())
+                .EffectType().Value(effectType).Build()
+                .Columns(update.Columns())
+                .ReturningColumns(update.ReturningColumns())
+                .IsBatch().Build()
+                .DefaultColumns().Build()
+                .Settings().Build()
+                .OnConflict().Build()
+            .Build()
+            .ColumnOrder(update.ReturningColumns())
+            .Done().Ptr();
+    } else if (TKqlUpdateRowsIndex::Match(node.Get())){
+        TKqlUpdateRowsIndex update(node);
+
+        return Build<TKqpOpRoot>(ctx, node->Pos())
+            .Input<TKqpOpTableEffect>()
+                .Input(root.Input())
+                .Table(tableEffect.Table())
+                .EffectType().Value(effectType).Build()
+                .Columns(update.Columns())
+                .ReturningColumns(update.ReturningColumns())
+                .IsBatch(update.IsBatch())
+                .DefaultColumns().Build()
+                .Settings(update.Settings())
+                .OnConflict()
+            .Build()
+            .ColumnOrder(update.ReturningColumns())
+            .Done().Ptr();
+    } else if (TKqlUpsertRows::Match(node.Get())){
+        TKqlUpsertRows upsert(node);
+
+        return Build<TKqpOpRoot>(ctx, node->Pos())
+            .Input<TKqpOpTableEffect>()
+                .Input(root.Input())
+                .Table(tableEffect.Table())
+                .EffectType().Value(effectType).Build()
+                .Columns(upsert.Columns())
+                .ReturningColumns(upsert.ReturningColumns())
+                .IsBatch(upsert.IsBatch()).Build()
+                .DefaultColumns().Build()
+                .Settings(upsert.Settings())
+                .OnConflict()
+            .Build()
+            .ColumnOrder(upsert.ReturningColumns())
+            .Done().Ptr();
+    } else if (TKqlDeleteRows::Match(node.Get())) {
+        TKqlDeleteRows deleteRows(node);
+
+        return Build<TKqpOpRoot>(ctx, node->Pos())
+            .Input<TKqpOpTableEffect>()
+                .Input(root.Input())
+                .Table(tableEffect.Table())
+                .EffectType().Value(effectType).Build()
+                .Columns().Build()
+                .ReturningColumns(deleteRows.ReturningColumns())
+                .IsBatch(deleteRows.IsBatch()).Build()
+                .DefaultColumns().Build()
+                .Settings(deleteRows.Settings())
+                .OnConflict().Build()
+            .Build()
+            .ColumnOrder(deleteRows.ReturningColumns())
+            .Done().Ptr();
+    } else if (TKqlDeleteRowsIndex::Match(node.Get())) {
+        TKqlDeleteRowsIndex deleteRows(node);
+
+        return Build<TKqpOpRoot>(ctx, node->Pos())
+            .Input<TKqpOpTableEffect>()
+                .Input(root.Input())
+                .Table(tableEffect.Table())
+                .EffectType().Value(effectType).Build()
+                .Columns().Build()
+                .ReturningColumns(deleteRows.ReturningColumns())
+                .IsBatch(deleteRows.IsBatch()).Build()
+                .DefaultColumns().Build()
+                .Settings(deleteRows.Settings())
+                .OnConflict().Build()
+            .Build()
+            .ColumnOrder(deleteRows.ReturningColumns())
+            .Done().Ptr();
+    }
+    else {
         Y_ENSURE(false, "Unsupported table effects operation");
     }
 }

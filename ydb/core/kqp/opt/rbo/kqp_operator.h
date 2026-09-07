@@ -962,6 +962,8 @@ enum class EEffectType : ui32 {
     InsertRowsIndex,
     UpdateRows,
     UpdateRowsIndex,
+    UpsertRows,
+    UpsertRowsIndex,
     DeleteRows,
     DeleteRowsIndex
 };
@@ -969,6 +971,7 @@ enum class EEffectType : ui32 {
 struct TEffectOptions {
     std::optional<TVector<TString>> Columns;
     std::optional<TVector<TString>> ReturningColumns;
+    std::optional<TVector<TString>> DefaultColumns;
     std::optional<TString> OnConflict;
     std::optional<bool> IsBatch;
     std::optional<TVector<TExprNode::TPtr>> Settings;

@@ -711,9 +711,9 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpReplaceColumns(TExprNode::T
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr node) {
     const auto opTableEffect = TKqpOpTableEffect(node);
     const auto input = ExprNodeToOperator(opTableEffect.Input().Ptr());
-
-    PlanProps.WithEffects = true;
     
+    PlanProps.WithEffects = true;
+
     EEffectType type = EEffectType::InsertRows;
     TEffectOptions options;
 
@@ -740,6 +740,8 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr
     auto returningColumns = opTableEffect.ReturningColumns().Maybe<TCoAtomList>();
     auto settings = opTableEffect.Settings().Maybe<TCoNameValueTupleList>();
     auto isBatch = opTableEffect.IsBatch().Maybe<TCoAtom>();
+
+    PlanProps.WithReturning = (bool)returningColumns;
 
     if (effectType == "TKqlInsertRows") {
         type = EEffectType::InsertRows;

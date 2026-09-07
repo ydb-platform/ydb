@@ -1556,21 +1556,53 @@ TString TOpTableEffect::ToString(TExprContext& ctx) {
 }
 
 TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx) {
-    if (EffectType == EEffectType::InsertRows || EffectType == EEffectType::InsertRowsIndex) {
-        return Build<TKqpTableSinkSettings>(ctx, Pos)
-                .Table(Table)
-                .InconsistentWrite().Build("false")
-                .Mode().Build("insert")
-                .Priority().Build("0")
-                .StreamWrite().Build("false")
-                .IsBatch().Build("false")
-                .IsIndexImplTable().Build("false")
-                .DefaultColumns().Build()
-                .ReturningColumns().Build()
-                .Settings().Build()
-                .Done().Ptr();
+    if (Options.ReturningColumns.has_value() && Options.ReturningColumns->size()) {
+        Y_ENSURE(false, "Returning columns not supported in new optimizer");
     }
-    Y_ENSURE(false, "Unsupported table effect");
+
+    TString mode;
+    
+    if (EffectType == EEffectType::InsertRows || EffectType == EEffectType::InsertRowsIndex) {
+        mode = "insert";
+    } else if (EffectType == EEffectType::UpdateRows || EffectType == EEffectType::UpdateRowsIndex) {
+        mode = "update";
+    } else if (EffectType == EEffectType::DeleteRows || EffectType == EEffectType::DeleteRowsIndex) {
+        mode = "delete";
+    }
+
+    TString isBatch = "false";
+    if (Options.IsBatch.has_value() && Options.IsBatch.value()){
+        isBatch = "true";
+    }
+
+    TVector<TExprNode::TPtr> defaultColumns;
+    if (Options.DefaultColumns.has_value()) {
+        for (auto c : Options.DefaultColumns.value()) {
+            defaultColumns.push_back(ctx.NewAtom(Pos, c));
+        }
+    }
+
+    TVector<TExprNode::TPtr> settings;
+    if (Options.Settings.has_value()) {
+        settings = Options.Settings.value();
+    }
+
+    return Build<TKqpTableSinkSettings>(ctx, Pos)
+            .Table(Table)
+            .InconsistentWrite().Build("false")
+            .Mode().Build(mode)
+            .Priority().Build("0")
+            .StreamWrite().Build("false")
+            .IsBatch().Build(isBatch)
+            .IsIndexImplTable().Build("false")
+            .DefaultColumns()
+                .Add(defaultColumns)
+            .Build()
+            .ReturningColumns().Build()
+            .Settings()
+                .Add(settings)
+            .Build()
+            .Done().Ptr();
 }
 
 /**

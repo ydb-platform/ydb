@@ -176,6 +176,7 @@ struct TPlanProps {
     bool PgSyntax = false;
     std::optional<TPinnedNames> PinnedNames;
     bool WithEffects = false;
+    bool WithReturning = false;
 };
 
 }

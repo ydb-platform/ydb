@@ -59,7 +59,6 @@ public:
     NOpt::TKqpProviderContext CBOCtx;
     std::optional<NJson::TJsonValue> ExecutionJson;
     std::optional<NJson::TJsonValue> ExplainJson;
-    bool WithEffects = false;
 
     TRBOTraceLog TraceLog;
 };

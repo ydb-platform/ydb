@@ -547,7 +547,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPt
     YQL_CLOG(TRACE, CoreDq) << "Inferred final type: " << *dqResult->GetTypeAnn();
 
     auto phyTxSettings = GetPhysicalTxSettings();
-    if (Root.PlanProps.WithEffects) {
+    if (Root.PlanProps.WithEffects && !Root.PlanProps.WithReturning) {
         // clang-format off
         // Build PhysicalTx
         mainTx = Build<TKqpPhysicalTx>(ctx, Root.Pos)
@@ -593,7 +593,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPt
 
     auto phyQuerySettings = GetPhysicalQuerySettings();
     // Build Physical query
-    if (Root.PlanProps.WithEffects) {
+    if (Root.PlanProps.WithEffects && !Root.PlanProps.WithReturning) {
         // clang-format off
         return Build<TKqpPhysicalQuery>(ctx, Root.Pos)
             .Transactions()

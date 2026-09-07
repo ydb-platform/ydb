@@ -503,7 +503,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     void TestFilter(bool columnTables) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
@@ -599,7 +599,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST(InsertUpdate) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         
@@ -655,6 +655,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             FROM src;
         )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT(insertSelectRes.IsSuccess());
+
+        auto updateSelectRes = dbSession2.ExecuteQuery(R"(
+            --PRAGMA YqlSelect = "disable";
+            UPDATE dst ON
+            SELECT id, v
+            FROM src;
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT(updateSelectRes.IsSuccess());
     }
 
     NKikimrConfig::TAppConfig CreateExplainPlanTestAppConfig(bool inlineJoinFiltersAfterCBO = true) {

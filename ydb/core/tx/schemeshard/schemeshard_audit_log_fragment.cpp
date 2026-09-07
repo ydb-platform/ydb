@@ -14,7 +14,6 @@ namespace {
 TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
     NKikimrSchemeOp::EOperationType type = tx.GetOperationType();
     switch (type) {
-    // common
     case NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL:
         return "MODIFY ACL";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes:
@@ -25,8 +24,6 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "CREATE LOCK";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropLock:
         return "DROP LOCK";
-    // specify ESchemeOpAlterLogin with each separate case
-    // it looks a bit out of the scheme, but improve reading of audit logs
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin:
         switch (tx.GetAlterLogin().GetAlterCase()) {
             case NKikimrSchemeOp::TAlterLogin::kCreateUser:
@@ -50,12 +47,12 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         }
     case NKikimrSchemeOp::EOperationType::ESchemeOp_DEPRECATED_35:
         return "ESchemeOp_DEPRECATED_35";
-    // dir
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpMkDir:
         return "CREATE DIRECTORY";
     case NKikimrSchemeOp::EOperationType::ESchemeOpRmDir:
         return "DROP DIRECTORY";
-    // table
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
         return "CREATE TABLE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable:
@@ -70,14 +67,14 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "BACKUP TABLE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestore:
         return "RESTORE TABLE";
-    // topic
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
         return "CREATE PERSISTENT QUEUE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup:
         return "ALTER PERSISTENT QUEUE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup:
         return "DROP PERSISTENT QUEUE";
-    // database
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain:
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain:
         return "CREATE DATABASE";
@@ -93,10 +90,10 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "ALTER DATABASE MIGRATE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomainDecision:
         return "ALTER DATABASE MIGRATE DECISION";
-    // rtmr
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateRtmrVolume:
         return "CREATE RTMR VOLUME";
-    // blockstore
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlockStoreVolume:
         return "CREATE BLOCK STORE VOLUME";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBlockStoreVolume:
@@ -105,21 +102,21 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "ALTER BLOCK STORE VOLUME ASSIGN";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropBlockStoreVolume:
         return "DROP BLOCK STORE VOLUME";
-    // kesus
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateKesus:
         return "CREATE KESUS";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterKesus:
         return "ALTER KESUS";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropKesus:
         return "DROP KESUS";
-    // solomon
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSolomonVolume:
         return "CREATE SOLOMON VOLUME";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSolomonVolume:
         return "ALTER SOLOMON VOLUME";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSolomonVolume:
         return "DROP SOLOMON VOLUME";
-    // index
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable:
         return "CREATE TABLE WITH INDEXES";
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex:
@@ -148,7 +145,7 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "ALTER TABLE DROP INDEX";
     case NKikimrSchemeOp::EOperationType::ESchemeOpCancelIndexBuild:
         return "ALTER TABLE BUILD INDEX CANCEL";
-    // rename
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveTable:
         return "ALTER TABLE RENAME";
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex:
@@ -156,28 +153,28 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "ALTER TABLE INDEX RENAME";
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveSequence:
         return "ALTER SEQUENCE RENAME";
-    // filestore
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore:
         return "CREATE FILE STORE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterFileStore:
         return "ALTER FILE STORE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropFileStore:
         return "DROP FILE STORE";
-    // columnstore
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore:
         return "CREATE COLUMN STORE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnStore:
         return "ALTER COLUMN STORE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnStore:
         return "DROP COLUMN STORE";
-    // columntable
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable:
         return "CREATE COLUMN TABLE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable:
         return "ALTER COLUMN TABLE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable:
         return "DROP COLUMN TABLE";
-    // changefeed
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream:
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamImpl:
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamAtTable:
@@ -194,14 +191,14 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamImpl:
     case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamAtTable:
         return "ALTER TABLE ROTATE CHANGEFEED";
-    // sequence
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence:
         return "CREATE SEQUENCE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSequence:
         return "ALTER SEQUENCE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence:
         return "DROP SEQUENCE";
-    // replication
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication:
         return "CREATE REPLICATION";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterReplication:
@@ -210,7 +207,7 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "DROP REPLICATION";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade:
         return "DROP REPLICATION CASCADE";
-    // replication
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer:
         return "CREATE TRANSFER";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTransfer:
@@ -219,7 +216,7 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "DROP TRANSFER";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropTransferCascade:
         return "DROP TRANSFER CASCADE";
-    // blob depot
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlobDepot:
         return "CREATE BLOB DEPOT";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBlobDepot:
@@ -248,25 +245,25 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "ALTER VIEW";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropView:
         return "DROP VIEW";
-    // continuous backup
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackup:
         return "ALTER TABLE ADD CONTINUOUS BACKUP";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackup:
         return "ALTER TABLE ALTER CONTINUOUS BACKUP";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackup:
         return "ALTER TABLE DROP CONTINUOUS BACKUP";
-    // resource pool
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
         return "CREATE RESOURCE POOL";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool:
         return "DROP RESOURCE POOL";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
         return "ALTER RESOURCE POOL";
-    // incremental backup
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreMultipleIncrementalBackups:
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
         return "RESTORE";
-    // backup collection
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection:
         return "CREATE BACKUP COLLECTION";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBackupCollection:
@@ -282,10 +279,10 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "BACKUP INCREMENTAL";
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         return "RESTORE";
-    // long incremental restore
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalRestoreOp:
         return "RESTORE INCREMENTAL";
-    // system view
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView:
         return "CREATE SYSTEM VIEW";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView:
@@ -298,14 +295,14 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "INCREMENTAL RESTORE UNLOCK TARGETS";
     case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
         return "RESTORE INCREMENTAL FINALIZE";
-    // secret
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret:
         return "CREATE SECRET";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSecret:
         return "ALTER SECRET";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret:
         return "DROP SECRET";
-    // streaming query
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateStreamingQuery:
         return "CREATE STREAMING QUERY";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery:
@@ -314,7 +311,7 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "ALTER STREAMING QUERY";
     case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
         return "TRUNCATE TABLE";
-    // test shard set
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShardSet:
         return "CREATE TEST SHARD SET";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShardSet:
@@ -323,39 +320,17 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
     Y_ABORT("switch should cover all operation types");
 }
 
-// The paths an audit record shows for one request.
-//
-// ExtractPathRefs (schemeshard_path_footprint.h) already knows which protobuf
-// field of every operation type carries a path and how Propose() resolves it;
-// JoinPathRef turns one such ref into a string using nothing but the request.
-// This is the same knowledge the 136-arm switch that used to live here
-// duplicated by hand, which is why several operations logged a wrong path or
-// none at all.
-//
-// Only Target and Source refs are reported: "changing paths" means the paths
-// the operation changes, plus the ones it reads to produce them. A Parent ref
-// (the table a cdc stream hangs off) and a Dependency ref (a replication
-// destination, an external data source) are not what the record is about.
-//
-// A by-id ref and an Implicit ref produce no entry: resolving a path id, or
-// enumerating the children a cascade will touch, needs schemeshard state that
-// a pure function over TModifyScheme does not have. That is deliberate -- the
-// old code logged the bare working dir for an id-addressed request, a path
-// that has nothing to do with the target -- and an empty result makes the
-// audit line omit the "paths" field entirely.
+// Report target and source paths. ID and implicit references are omitted
+// because resolving them requires SchemeShard state.
 TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) {
     using namespace NKikimr::NSchemeShard;
 
-    // ESchemeOpAlterLogin resolves no TPath at all: it only checks that the
-    // working dir names the login audience, so the extractor emits nothing for
-    // it. The audit record has always shown the working dir, and for a login
-    // operation that is the whole of what it touches.
+    // The working directory identifies the login audience.
     if (tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin) {
         return {tx.GetWorkingDir()};
     }
 
-    // One string per ref, in extraction order, including the ones left out of
-    // the result: a sibling leaf whose base is another ref reads it from here.
+    // Keep all refs in order: sibling paths can refer to earlier entries.
     TVector<TString> joined;
     TVector<TString> result;
     for (const auto& ref : ExtractPathRefs(tx)) {

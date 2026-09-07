@@ -55,7 +55,7 @@ void TFakeActor::InitAsyncInput(IDqComputeActorAsyncInput* dqAsyncInput, IActor*
     DqAsyncInputAsActor = dqAsyncInputAsActor;
 }
 
-void TFakeActor::Terminate(std::shared_ptr<std::atomic<bool>> done) {
+void TFakeActor::Terminate() {
     if (DqAsyncInputActorId) {
         DqAsyncInput->PassAway();
 
@@ -71,7 +71,6 @@ void TFakeActor::Terminate(std::shared_ptr<std::atomic<bool>> done) {
         DqAsyncOutput = nullptr;
         DqAsyncOutputAsActor = nullptr;
     }
-    done->store(true);
 }
 
 TFakeActor::TAsyncOutputCallbacks& TFakeActor::GetAsyncOutputCallbacks() {
@@ -115,14 +114,11 @@ void TFakeCASetup::Terminate() {
     }
     Terminated = true;
 
-    auto shouldStop = std::make_shared<std::atomic<bool>>();
-    Execute([shouldStop](TFakeActor& actor) {
-        actor.Terminate(shouldStop);
+    // Execute() is a blocking round trip: the fake actor runs the callback and only then
+    // sets the promise Execute() waits on. So the actors are passed away by the time it returns.
+    Execute([](TFakeActor& actor) {
+        actor.Terminate();
     });
-
-    while (!*shouldStop) {
-        Sleep(TDuration::MilliSeconds(200));
-    }
 }
 
 void TFakeCASetup::AsyncOutputWrite(const TWriteValueProducer valueProducer, TMaybe<NDqProto::TCheckpoint> checkpoint, bool finish) {

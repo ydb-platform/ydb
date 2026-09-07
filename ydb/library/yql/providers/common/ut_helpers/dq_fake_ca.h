@@ -126,7 +126,7 @@ public:
 
     void InitAsyncOutput(IDqComputeActorAsyncOutput* dqAsyncOutput, IActor* dqAsyncOutputAsActor);
     void InitAsyncInput(IDqComputeActorAsyncInput* dqAsyncInput, IActor* dqAsyncInputAsActor);
-    void Terminate(std::shared_ptr<std::atomic<bool>> done);
+    void Terminate();
 
     TAsyncOutputCallbacks& GetAsyncOutputCallbacks();
     NKikimr::NMiniKQL::THolderFactory& GetHolderFactory();

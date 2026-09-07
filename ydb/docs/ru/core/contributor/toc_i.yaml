@@ -16,6 +16,9 @@ items:
     href: general-schema.md
   - name: Распределённое хранилище
     href: distributed-storage.md
+    items:
+    - name: Отчёт об использовании места VDisk
+      href: vdisk-space-report.md
   - name: Подсистемы распространения метаданных
     href: metadata-distribution.md
   - name: LocalDB

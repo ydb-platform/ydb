@@ -16,6 +16,9 @@ items:
     href: general-schema.md
   - name: Distributed storage
     href: distributed-storage.md
+    items:
+    - name: VDisk space usage report
+      href: vdisk-space-report.md
   - name: Metadata Distribution Subsystems
     href: metadata-distribution.md
   - name: LocalDB

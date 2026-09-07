@@ -56,17 +56,22 @@ template <typename TClient, typename TRunOnce>
 auto RunUnaryWithRetry(TClient& client, TRetryOperationSettings settings, TRunOnce&& runOnce)
     -> decltype(runOnce(TDuration::Max()))
 {
-    if (client.GetInRetryOperationContext()) {
+    const bool nested = client.GetInRetryOperationContext();
+    if (nested && !settings.CancellationToken_.stop_possible()) {
         return runOnce(TDuration::Max());
     }
-    if (!IsRetryEnabled(settings)) {
+    if (!IsRetryEnabled(settings) && !settings.CancellationToken_.stop_possible()) {
         return runOnce(settings.MaxTimeout_);
+    }
+    if (nested) {
+        settings.MaxRetries(0);
     }
 
     using TResult = decltype(runOnce(TDuration::Max()));
 
-    auto operation = [runOnce = std::forward<TRunOnce>(runOnce)](TClient& /*clientRef*/, TDuration remainingTimeout) -> TResult {
-        return runOnce(remainingTimeout);
+    auto operation = [runOnce = std::forward<TRunOnce>(runOnce), nested]
+        (TClient& /*clientRef*/, TDuration remainingTimeout) mutable -> TResult {
+        return runOnce(nested ? TDuration::Max() : remainingTimeout);
     };
 
     using TRetryAsync = Async::TRetryWithoutSession<TClient, decltype(operation), TResult>;

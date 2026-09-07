@@ -47,6 +47,8 @@ inline bool ShouldRetryStatus(EStatus status, const TRetryOperationSettings& set
         case EStatus::UNDETERMINED:
         case EStatus::TRANSPORT_UNAVAILABLE:
             return settings.Idempotent_;
+        case EStatus::CLIENT_CANCELLED:
+            return false;
         default:
             return settings.RetryUndefined_;
     }
@@ -67,6 +69,10 @@ protected:
 
     virtual void Reset() {}
 
+    bool IsCancellationRequested() const noexcept {
+        return Settings_.CancellationToken_.stop_requested();
+    }
+
     void LogRetry(const TStatus& status) {
         if (Settings_.Verbose_) {
             std::cerr << "Previous query attempt was finished with unsuccessful status "
@@ -76,7 +82,7 @@ protected:
     }
 
     NextStep GetNextStep(const TStatus& status) {
-        if (status.IsSuccess()) {
+        if (status.IsSuccess() || status.GetStatus() == EStatus::CLIENT_CANCELLED) {
             return NextStep::Finish;
         }
         if (RetryNumber_ >= Settings_.MaxRetries_) {
@@ -139,6 +145,12 @@ protected:
 template <typename TStatusType>
 TStatusType MakeRetryResultFromStatus(TStatus&& status) {
     return TStatusType(TStatus(std::move(status)));
+}
+
+template <typename TStatusType>
+TStatusType MakeRetryCancelledResult() {
+    return MakeRetryResultFromStatus<TStatusType>(
+        TStatus(EStatus::CLIENT_CANCELLED, NIssue::TIssues{NIssue::TIssue("Retry operation was cancelled")}));
 }
 
 template <typename TStatusType, typename F>

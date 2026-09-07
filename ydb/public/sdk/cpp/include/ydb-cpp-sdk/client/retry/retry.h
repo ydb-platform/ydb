@@ -3,6 +3,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 #include <util/datetime/base.h>
 
+#include <stop_token>
+
 namespace NYdb::inline Dev::NRetry {
 
 struct TBackoffSettings {
@@ -31,6 +33,8 @@ struct TRetryOperationSettings {
     }
     FLUENT_SETTING_FLAG(Verbose);
     FLUENT_SETTING_FLAG(RetryUndefined);
+    // Stops retry orchestration without cancelling an already running RPC.
+    FLUENT_SETTING_DEFAULT(std::stop_token, CancellationToken, std::stop_token{});
 
     static TBackoffSettings DefaultFastBackoffSettings() {
         return TBackoffSettings()

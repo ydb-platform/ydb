@@ -371,3 +371,20 @@ Y_UNIT_TEST_SUITE(TQueryRangeErrorRetryTest) {
             TYdbErrorException);
     }
 }
+
+Y_UNIT_TEST_SUITE(TRetryCancellationTest) {
+    Y_UNIT_TEST(AsyncCancellationCompletesBeforeLateResult) {
+        TTableClientFixture fixture;
+        std::stop_source stopSource;
+        auto attemptResult = NThreading::NewPromise<TStatus>();
+        auto result = fixture.Client->RetryOperation(
+            [&](NTable::TTableClient&) -> TAsyncStatus {
+                return attemptResult.GetFuture();
+            },
+            FastRetrySettings().CancellationToken(stopSource.get_token()));
+        stopSource.request_stop();
+        UNIT_ASSERT(result.Wait(TDuration::Seconds(1)));
+        UNIT_ASSERT_VALUES_EQUAL(result.GetValueSync().GetStatus(), EStatus::CLIENT_CANCELLED);
+        attemptResult.SetValue(OkStatus());
+    }
+}

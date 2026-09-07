@@ -8,13 +8,61 @@
 #include <util/generic/function.h>
 #include <util/system/type_name.h>
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <exception>
+#include <functional>
 #include <memory>
 #include <typeinfo>
 
 namespace NYdb::inline Dev::NRetry::Async {
+
+template <typename TStatusType>
+class TRetryCompletion {
+    enum class EState {
+        Running,
+        Finished,
+        Cancelled,
+    };
+
+public:
+    TRetryCompletion(std::stop_token token, NThreading::TPromise<TStatusType> promise)
+        : Promise_(std::move(promise))
+        , StopCallback_(token, [this]() noexcept { Cancel(); })
+    {}
+
+    bool IsFinished() const noexcept {
+        return State_.load() != EState::Running;
+    }
+
+    bool IsCancelled() const noexcept {
+        return State_.load() == EState::Cancelled;
+    }
+
+    bool TryFinish() noexcept {
+        auto expected = EState::Running;
+        return State_.compare_exchange_strong(expected, EState::Finished);
+    }
+
+private:
+    void Cancel() noexcept {
+        auto promise = Promise_;
+        auto expected = EState::Running;
+        if (!State_.compare_exchange_strong(expected, EState::Cancelled)) {
+            return;
+        }
+        try {
+            promise.TrySetValue(MakeRetryCancelledResult<TStatusType>());
+        } catch (...) {
+            promise.TrySetException(std::current_exception());
+        }
+    }
+
+    NThreading::TPromise<TStatusType> Promise_;
+    std::atomic<EState> State_ = EState::Running;
+    std::stop_callback<std::function<void()>> StopCallback_;
+};
 
 template <typename TClient, typename TAsyncStatusType>
 class TRetryContext : public TThrRefBase, public TRetryContextBase {
@@ -25,6 +73,7 @@ public:
 protected:
     TClient Client_;
     NThreading::TPromise<TStatusType> Promise_;
+    TRetryCompletion<TStatusType> Completion_;
 
 public:
     TAsyncStatusType Execute() {
@@ -38,13 +87,13 @@ public:
             [self](const auto& f) mutable {
                 try {
                     auto value = f.GetValue();
-                    if (self->ParentSpan_) {
+                    if (!self->Completion_.IsCancelled() && self->ParentSpan_) {
                         self->ParentSpan_->SetRetryCount(self->RetryNumber_);
                         self->ParentSpan_->End(GetRetryStatusCode(value));
                     }
                     return value;
                 } catch (...) {
-                    if (self->ParentSpan_) {
+                    if (!self->Completion_.IsCancelled() && self->ParentSpan_) {
                         self->ParentSpan_->SetRetryCount(self->RetryNumber_);
                         try {
                             std::rethrow_exception(std::current_exception());
@@ -60,11 +109,22 @@ public:
         );
     }
 
+    ~TRetryContext() {
+        if (Completion_.IsCancelled()) {
+            EndAttemptSpan(EStatus::CLIENT_CANCELLED);
+            if (ParentSpan_) {
+                ParentSpan_->SetRetryCount(this->RetryNumber_);
+                ParentSpan_->End(EStatus::CLIENT_CANCELLED);
+            }
+        }
+    }
+
 protected:
     explicit TRetryContext(const TClient& client, const TRetryOperationSettings& settings)
         : TRetryContextBase(settings)
         , Client_(client)
         , Promise_(NThreading::NewPromise<TStatusType>())
+        , Completion_(settings.CancellationToken_, Promise_)
     {}
 
     virtual void Retry() = 0;
@@ -72,12 +132,19 @@ protected:
     virtual TAsyncStatusType RunOperation() = 0;
 
     static void DoRetry(TPtr self) {
-        [[maybe_unused]] auto parentScope = self->ParentSpan_ ? self->ParentSpan_->Activate() : nullptr;
+        if (self->Completion_.IsFinished()) {
+            return;
+        }
+        try {
+            [[maybe_unused]] auto parentScope = self->ParentSpan_ ? self->ParentSpan_->Activate() : nullptr;
 
-        self->StartAttemptSpan();
+            self->StartAttemptSpan();
 
-        [[maybe_unused]] auto attemptScope = self->AttemptSpan_ ? self->AttemptSpan_->Activate() : nullptr;
-        self->Retry();
+            [[maybe_unused]] auto attemptScope = self->AttemptSpan_ ? self->AttemptSpan_->Activate() : nullptr;
+            self->Retry();
+        } catch (...) {
+            HandleExceptionAsync(self, std::current_exception());
+        }
     }
 
     static void DoBackoff(TPtr self, bool fast) {
@@ -92,11 +159,17 @@ protected:
     }
 
     static void HandleExceptionAsync(TPtr self, std::exception_ptr e) {
+        if (!self->Completion_.TryFinish()) {
+            return;
+        }
         self->EndAttemptSpan(EStatus::CLIENT_INTERNAL_ERROR);
-        self->Promise_.SetException(e);
+        self->Promise_.TrySetException(e);
     }
 
     static void HandleStatusAsync(TPtr self, const TStatusType& status) {
+        if (self->Completion_.IsFinished()) {
+            return;
+        }
         const TStatus& retryStatus = GetRetryStatus(status);
         self->EndAttemptSpan(retryStatus.GetStatus());
         auto nextStep = self->GetNextStep(retryStatus);
@@ -114,11 +187,21 @@ protected:
             case NextStep::RetrySlowBackoff:
                 return DoBackoff(self, false);
             case NextStep::Finish:
-                return self->Promise_.SetValue(status);
+                if (self->Completion_.TryFinish()) {
+                    try {
+                        self->Promise_.TrySetValue(status);
+                    } catch (...) {
+                        self->Promise_.TrySetException(std::current_exception());
+                    }
+                }
+                return;
         }
     }
 
     static void DoRunOperation(TPtr self) {
+        if (self->Completion_.IsFinished()) {
+            return;
+        }
         try {
             self->RunOperation().Subscribe(
                 [self](const TAsyncStatusType& result) {
@@ -216,6 +299,9 @@ public:
 
     void Retry() override {
         TIntrusivePtr<TRetryWithSession> self(this);
+        if (self->Completion_.IsFinished()) {
+            return;
+        }
         if (!Session_) {
             auto settings = TCreateSessionSettings()
                 .ClientTimeout(this->Settings_.GetSessionClientTimeout_)
@@ -224,6 +310,9 @@ public:
             this->Client_.GetSession(settings).Subscribe(
                 [self](const TAsyncCreateSessionResult& resultFuture) {
                     [[maybe_unused]] auto attemptScope = self->ActivateAttemptSpan();
+                    if (self->Completion_.IsFinished()) {
+                        return;
+                    }
                     try {
                         auto& result = resultFuture.GetValue();
                         if (!result.IsSuccess()) {

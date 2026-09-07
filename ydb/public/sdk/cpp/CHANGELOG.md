@@ -1,5 +1,7 @@
 * Added `EQ_HEIGHT_HISTOGRAM` to `EMultiColumnStatisticsType`.
 
+* Added `std::stop_token` cancellation to C++ SDK retry operations through `TRetryOperationSettings::CancellationToken`.
+
 # v3.22.0
 
 * Added `IWriteSession::Flush` to asynchronously wait until all previously accepted topic writes are acknowledged.

@@ -86,6 +86,9 @@ private:
                 case NextStep::Finish:
                     return status;
             }
+            if (this->IsCancellationRequested()) {
+                return MakeRetryCancelledResult<TStatusType>();
+            }
             this->RetryNumber_++;
             this->LogRetry(status);
             this->Client_.Impl_->CollectRetryStatSync(status.GetStatus());
@@ -96,6 +99,9 @@ private:
     }
 
     TStatusType RunAttempt(std::int64_t backoffMs) {
+        if (this->IsCancellationRequested()) {
+            return MakeRetryCancelledResult<TStatusType>();
+        }
         auto attemptSpan = Client_.Impl_->CreateRetryAttemptSpan(this->RetryNumber_, backoffMs, ParentSpan_);
         [[maybe_unused]] std::unique_ptr<NTrace::IScope> scope;
         if (attemptSpan) {
@@ -103,6 +109,10 @@ private:
         }
 
         TStatusType status = Retry();
+
+        if (this->IsCancellationRequested()) {
+            status = MakeRetryCancelledResult<TStatusType>();
+        }
 
         if (attemptSpan) {
             attemptSpan->End(status.GetStatus());
@@ -167,7 +177,17 @@ protected:
                 .ClientTimeout(this->Settings_.GetSessionClientTimeout_)
                 .Deadline(Deadline_);
 
-            auto sessionResult = this->Client_.GetSession(settings).GetValueSync();
+            auto sessionFuture = this->Client_.GetSession(settings);
+            if (this->Settings_.CancellationToken_.stop_possible()) {
+                auto ready = NThreading::NewPromise<void>();
+                std::stop_callback stopCallback(this->Settings_.CancellationToken_, [&ready] { ready.TrySetValue(); });
+                sessionFuture.Subscribe([ready](const auto&) mutable { ready.TrySetValue(); });
+                ready.GetFuture().Wait();
+                if (this->IsCancellationRequested()) {
+                    return MakeRetryCancelledResult<TStatusType>();
+                }
+            }
+            auto sessionResult = sessionFuture.GetValueSync();
             if (sessionResult.IsSuccess()) {
                 Session_ = sessionResult.GetSession();
                 TRetryDeadlineHelper<TClient>::SetDeadline(*Session_, Deadline_);
@@ -176,6 +196,9 @@ protected:
         }
 
         if (Session_) {
+            if (this->IsCancellationRequested()) {
+                return MakeRetryCancelledResult<TStatusType>();
+            }
             status = RunOperation();
         }
 

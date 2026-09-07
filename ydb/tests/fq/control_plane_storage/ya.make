@@ -16,7 +16,6 @@ PEERDIR(
     library/cpp/testing/unittest
     ydb/core/base
     ydb/core/external_sources
-    ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/init
     ydb/core/fq/libs/quota_manager/events
     ydb/core/fq/libs/rate_limiter/control_plane_service

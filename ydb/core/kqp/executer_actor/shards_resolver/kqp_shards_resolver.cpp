@@ -9,6 +9,8 @@
 
 #include <util/generic/set.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
+
 
 namespace NKikimr::NKqp {
 
@@ -16,15 +18,6 @@ using namespace NActors;
 using namespace NYql;
 
 namespace {
-
-#define LOG__(prio, stream) LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::KQP_EXECUTER, \
-    "[ShardsResolver] TxId: " << TxId << ". " << stream)
-
-#define LOG_T(stream) LOG__(NActors::NLog::PRI_TRACE, stream)
-#define LOG_D(stream) LOG__(NActors::NLog::PRI_DEBUG, stream)
-#define LOG_W(stream) LOG__(NActors::NLog::PRI_WARN, stream)
-#define LOG_E(stream) LOG__(NActors::NLog::PRI_ERROR, stream)
-#define LOG_C(stream) LOG__(NActors::NLog::PRI_CRIT, stream)
 
 constexpr ui32 MAX_RETRIES_COUNT = 3;
 
@@ -46,7 +39,9 @@ public:
         Y_ASSERT(ShardIds.size() > 0);
 
         for (ui64 tabletId : ShardIds) {
-            LOG_T("Send request about tabletId: " << tabletId);
+            YDB_LOG_TRACE("[ShardsResolver] Send request about",
+                {"txId", TxId},
+                {"tabletId", tabletId});
             bool sent = Send(TabletResolver, new TEvPipeCache::TEvGetTabletNode(tabletId));
             Y_DEBUG_ABORT_UNLESS(sent);
         }
@@ -60,7 +55,9 @@ private:
             hFunc(TEvPipeCache::TEvGetTabletNodeResult, HandleResolve);
             cFunc(TEvents::TSystem::Poison, PassAway);
             default: {
-                LOG_C("Unexpected event: " << ev->GetTypeRewrite());
+                YDB_LOG_CRIT("[ShardsResolver] Unexpected",
+                    {"txId", TxId},
+                    {"event", ev->GetTypeRewrite()});
                 ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected event while resolving shards");
             }
         }
@@ -68,11 +65,16 @@ private:
 
     void HandleResolve(TEvPipeCache::TEvGetTabletNodeResult::TPtr& ev) {
         auto* msg = ev->Get();
-        LOG_T("Got resolve event for tabletId: " << msg->TabletId << ", nodeId: " << msg->NodeId);
+        YDB_LOG_TRACE("[ShardsResolver] Got resolve event",
+            {"txId", TxId},
+            {"tabletId", msg->TabletId},
+            {"nodeId", msg->NodeId});
         if (msg->NodeId != 0) {
             Result[msg->TabletId] = msg->NodeId;
             if (Result.size() == ShardIds.size()) {
-                LOG_D("Shard resolve complete, resolved shards: " << Result.size());
+                YDB_LOG_DEBUG("[ShardsResolver] Shard resolve complete, resolved",
+                    {"txId", TxId},
+                    {"shards", Result.size()});
                 return ReplyAndDie();
             }
 
@@ -82,7 +84,9 @@ private:
         ui32& retryCount = RetryCount[msg->TabletId];
         if (retryCount > MAX_RETRIES_COUNT) {
             TString reply = TStringBuilder() << "Failed to resolve tablet: " << msg->TabletId << " after several retries.";
-            LOG_W(reply);
+            YDB_LOG_WARN("[ShardsResolver]",
+                {"txId", TxId},
+                {"reply", reply});
             ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, std::move(reply));
             return;
         }

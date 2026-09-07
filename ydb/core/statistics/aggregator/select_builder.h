@@ -53,7 +53,11 @@ public:
     ui32 AddUDAFAggregationTuple(std::vector<TString> columnNames, ETupleEncoding encoding,
                                  const TStringBuf& udafName, TArgs&&... params);
 
-    TString Build(const TStringBuf& table, std::optional<ui64> tabletId) const;
+    TString Build(
+        const TStringBuf& table,
+        std::optional<ui64> tabletId = {},
+        const TStringBuf& where = {},
+        const TStringBuf& declares = {}) const;
 
     size_t ColumnCount() const {
         return Columns.size();

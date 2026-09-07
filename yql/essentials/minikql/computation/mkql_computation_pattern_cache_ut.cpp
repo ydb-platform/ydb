@@ -60,6 +60,12 @@ private:
     bool Compiled_ = false;
 };
 
+/// The cache only queues a pattern for compilation once it has proven it stays around, so a test that wants the
+/// compilation to happen has to backdate the entry instead of waiting for the residency threshold to pass.
+void MakeEntryOldEnoughToCompile(TPatternCacheEntry& entry) {
+    entry.CachedAt = TInstant::Now() - TDuration::Hours(1);
+}
+
 TPatternCacheEntryPtr MakeMockEntry(size_t codeSize = 1) {
     auto entry = std::make_shared<TPatternCacheEntry>();
     entry->Pattern = MakeIntrusive<TMockComputationPattern>(codeSize);
@@ -1135,6 +1141,7 @@ Y_UNIT_TEST(EvictedCompiledCodeIsNotCompiledAgain) {
     const TProgramKey key{NYql::UnknownLangVersion, {}, "program"};
     auto entry = MakeMockEntry(patternSize);
     cache.EmplacePattern(key, entry);
+    MakeEntryOldEnoughToCompile(*entry);
 
     // Accessing the pattern often enough queues it for compilation ...
     for (size_t i = 0; i < accessTimesBeforeCompile; ++i) {
@@ -1229,6 +1236,83 @@ Y_UNIT_TEST(EvictedEntryIsMarkedAsNotCached) {
     // Nobody ever got the evicted entry out of the cache, so building it was work done for nothing.
     UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*evictions), 1);
     UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*evictedUnused), 1);
+}
+
+Y_UNIT_TEST(YoungPatternIsNotQueuedForCompilation) {
+    constexpr size_t accessTimesBeforeCompile = 2;
+    constexpr size_t maxBytes = 1'000'000;
+
+    auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    auto postponed = counters->GetCounter("PatternCache/CompilationsPostponed", /*derivative=*/true);
+
+    TComputationPatternLRUCache cache({maxBytes, maxBytes, accessTimesBeforeCompile}, counters);
+
+    const TProgramKey key{NYql::UnknownLangVersion, {}, "program"};
+    auto entry = MakeMockEntry();
+    cache.EmplacePattern(key, entry);
+
+    // A pattern that has just entered the cache is not queued no matter how often it is accessed: under a thrashing
+    // cache such an entry is likely to be evicted long before the compilation pays off.
+    for (size_t i = 0; i < 10 * accessTimesBeforeCompile; ++i) {
+        cache.FindOrSubscribe(key);
+    }
+
+    THashMap<TProgramKey, TPatternCacheEntryPtr> toCompile;
+    cache.GetPatternsToCompile(toCompile);
+    UNIT_ASSERT(toCompile.empty());
+    UNIT_ASSERT(static_cast<size_t>(*postponed) > 0);
+
+    // Once it has stayed around long enough, the very next access queues it - the chance is not lost.
+    MakeEntryOldEnoughToCompile(*entry);
+    cache.FindOrSubscribe(key);
+
+    THashMap<TProgramKey, TPatternCacheEntryPtr> toCompileNow;
+    cache.GetPatternsToCompile(toCompileNow);
+    UNIT_ASSERT_VALUES_EQUAL(toCompileNow.size(), 1);
+}
+
+Y_UNIT_TEST(RaisingCompiledLimitBringsDemotedPatternBack) {
+    constexpr size_t patternSize = 100;
+    constexpr size_t accessTimesBeforeCompile = 2;
+
+    // The compiled code budget only fits a single pattern.
+    TComputationPatternLRUCache cache({10 * patternSize, patternSize, accessTimesBeforeCompile});
+
+    const TProgramKey key{NYql::UnknownLangVersion, {}, "program"};
+    auto entry = MakeMockEntry(patternSize);
+    cache.EmplacePattern(key, entry);
+    MakeEntryOldEnoughToCompile(*entry);
+
+    for (size_t i = 0; i < accessTimesBeforeCompile; ++i) {
+        cache.FindOrSubscribe(key);
+    }
+    THashMap<TProgramKey, TPatternCacheEntryPtr> toCompile;
+    cache.GetPatternsToCompile(toCompile);
+    UNIT_ASSERT_VALUES_EQUAL(toCompile.size(), 1);
+
+    entry->Pattern->Compile("", /*stats=*/nullptr);
+    cache.NotifyPatternCompiled(key);
+
+    // Another pattern takes the whole budget, and this one has its code taken away.
+    auto otherEntry = MakeMockEntry(patternSize);
+    otherEntry->Pattern->Compile("", /*stats=*/nullptr);
+    cache.EmplacePattern(TProgramKey{NYql::UnknownLangVersion, {}, "other"}, otherEntry);
+    UNIT_ASSERT(!entry->Pattern->IsCompiled());
+
+    // While the budget stays tight, it is not compiled again ...
+    cache.FindOrSubscribe(key);
+    THashMap<TProgramKey, TPatternCacheEntryPtr> whileTight;
+    cache.GetPatternsToCompile(whileTight);
+    UNIT_ASSERT(whileTight.empty());
+
+    // ... but raising the limit lets the budget go from tight to roomy, and the next access queues it back.
+    cache.UpdateConfiguration({10 * patternSize, 100 * patternSize, accessTimesBeforeCompile});
+    cache.FindOrSubscribe(key);
+
+    THashMap<TProgramKey, TPatternCacheEntryPtr> afterRaise;
+    cache.GetPatternsToCompile(afterRaise);
+    UNIT_ASSERT_VALUES_EQUAL(afterRaise.size(), 1);
+    UNIT_ASSERT(afterRaise.contains(key));
 }
 
 Y_UNIT_TEST(WastedCompilationsAreCounted) {

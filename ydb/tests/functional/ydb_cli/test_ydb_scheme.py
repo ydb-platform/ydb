@@ -4,6 +4,7 @@ import pytest
 import yatest
 
 from ydb.tests.functional.ydb_cli.ydb_cli_helpers import ydb_bin, set_ydb_cli_test_canondata_root
+from ydb.tests.library.fixtures import ydb_database_ctx
 
 CLUSTER_CONFIG = dict(
     extra_feature_flags=["enable_views", "enable_external_data_sources"],
@@ -82,24 +83,30 @@ def alter_secret(session, secret_name, value):
     )
 
 
-def test_relative_database(ydb_cluster, ydb_database):
+@pytest.fixture(params=["mydb", "folder/mydb"], ids=["root", "nested"])
+def relative_database_paths(ydb_cluster, ydb_root, request):
+    with ydb_database_ctx(ydb_cluster, f"{ydb_root}/{request.param}") as database:
+        yield database, request.param
+
+
+def test_relative_database(ydb_cluster, relative_database_paths):
     tenant_node = next(iter(ydb_cluster.slots.values()))
-    relative_database = ydb_database.rsplit("/", 1)[1]
+    _, relative_database = relative_database_paths
 
     execute_ydb_cli_command(tenant_node, relative_database, ["sql", "-s", "SELECT 1;"])
 
 
-def test_relative_database_select_from_table(ydb_cluster, ydb_database):
+def test_relative_database_select_from_table(ydb_cluster, relative_database_paths):
     tenant_node = next(iter(ydb_cluster.slots.values()))
-    relative_database = ydb_database.rsplit("/", 1)[1]
-    table_path = f"{ydb_database}/relative_database_table"
+    database, relative_database = relative_database_paths
+    table_path = f"{database}/relative_database_table"
 
     # Set up the table with absolute paths; only the SELECT relies on relative database resolution.
     for query in (
         f"CREATE TABLE `{table_path}` (key Uint32, value Utf8, PRIMARY KEY (key));",
         f'UPSERT INTO `{table_path}` (key, value) VALUES (1, "from-tenant-root");',
     ):
-        execute_ydb_cli_command(tenant_node, ydb_database, ["sql", "-s", query])
+        execute_ydb_cli_command(tenant_node, database, ["sql", "-s", query])
 
     output = execute_ydb_cli_command(
         tenant_node,

@@ -120,32 +120,32 @@ namespace NKikimr::NDDisk {
                 return;
             }
 
-            // Validate before chunk allocation or data/integrity I/O. Parked events pass through this
-            // check again when re-dispatched; the redundant validation is harmless.
             Y_ABORT_UNLESS(instr.PayloadId, "TEvWrite without a payload, but with checksums");
 
-            const TRope& payload = ev->Get()->GetPayload(*instr.PayloadId);
-            if (const auto result = ValidatePayloadChecksums(record, payload)) {
-                const bool isCorrupted = result->Status == NKikimrBlobStorage::NDDisk::TReplyStatus::CORRUPTED;
-                Counters.Interface.Write.Request(selector.Size);
-                Counters.Interface.Write.Reply(false, selector.Size);
-                if (isCorrupted) {
-                    Counters.Checksums.ChecksumMismatch->Inc();
+            if (Config.CheckChecksumBeforeWrite) {
+                const TRope& payload = ev->Get()->GetPayload(*instr.PayloadId);
+                if (const auto result = ValidatePayloadChecksums(record, payload)) {
+                    const bool isCorrupted = result->Status == NKikimrBlobStorage::NDDisk::TReplyStatus::CORRUPTED;
+                    Counters.Interface.Write.Request(selector.Size);
+                    Counters.Interface.Write.Reply(false, selector.Size);
+                    if (isCorrupted) {
+                        Counters.Checksums.ChecksumMismatch->Inc();
+                    }
+                    YDB_LOG_ERROR_COMP(NKikimrServices::BS_DDISK,
+                        (isCorrupted
+                            ? "TDDiskActor::Handle(TEvWrite) checksum mismatch"
+                            : "TDDiskActor::Handle(TEvWrite) checksum count mismatch"),
+                        {"marker", "BSDD52"},
+                        {"DDiskId", DDiskId},
+                        {"tabletId", creds.TabletId},
+                        {"vChunkIndex", selector.VChunkIndex},
+                        {"offsetInBytes", selector.OffsetInBytes},
+                        {"checksumCount", result->ChecksumCount},
+                        {"selectorSize", selector.Size},
+                        {"blockIdx", result->MismatchedBlockIdx ? static_cast<i64>(*result->MismatchedBlockIdx) : -1});
+                    SendReply(*ev, std::make_unique<TEvWriteResult>(result->Status, result->ErrorReason));
+                    return;
                 }
-                YDB_LOG_ERROR_COMP(NKikimrServices::BS_DDISK,
-                    (isCorrupted
-                        ? "TDDiskActor::Handle(TEvWrite) checksum mismatch"
-                        : "TDDiskActor::Handle(TEvWrite) checksum count mismatch"),
-                    {"marker", "BSDD52"},
-                    {"DDiskId", DDiskId},
-                    {"tabletId", creds.TabletId},
-                    {"vChunkIndex", selector.VChunkIndex},
-                    {"offsetInBytes", selector.OffsetInBytes},
-                    {"checksumCount", result->ChecksumCount},
-                    {"selectorSize", selector.Size},
-                    {"blockIdx", result->MismatchedBlockIdx ? static_cast<i64>(*result->MismatchedBlockIdx) : -1});
-                SendReply(*ev, std::make_unique<TEvWriteResult>(result->Status, result->ErrorReason));
-                return;
             }
         }
 
@@ -447,6 +447,33 @@ namespace NKikimr::NDDisk {
                     .VChunkIndex = msg.VChunkIndex,
                 });
                 return;
+            }
+        }
+
+        const bool isOkBeforeReadCheck = status == NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
+        if (msg.OperationType == NPDisk::TUringOperationBase::EREAD
+                && isOkBeforeReadCheck
+                && Config.EnableChecksums
+                && Config.CheckChecksumWhenRead
+                && !msg.Checksums.empty())
+        {
+            if (const auto result = ValidatePayloadChecksums(msg.Checksums, msg.Data)) {
+                status = result->Status;
+                errorMessage = result->ErrorReason;
+                if (result->Status == NKikimrBlobStorage::NDDisk::TReplyStatus::CORRUPTED) {
+                    Counters.Checksums.ChecksumMismatch->Inc();
+                }
+                YDB_LOG_ERROR_COMP(NKikimrServices::BS_DDISK,
+                    (result->Status == NKikimrBlobStorage::NDDisk::TReplyStatus::CORRUPTED
+                        ? "TDDiskActor::Handle(TEvDDiskIoResult) checksum mismatch"
+                        : "TDDiskActor::Handle(TEvDDiskIoResult) checksum count mismatch"),
+                    {"marker", "BSDD53"},
+                    {"DDiskId", DDiskId},
+                    {"tabletId", msg.TabletId},
+                    {"vChunkIndex", msg.VChunkIndex},
+                    {"checksumCount", result->ChecksumCount},
+                    {"payloadSize", msg.Data.size()},
+                    {"blockIdx", result->MismatchedBlockIdx ? static_cast<i64>(*result->MismatchedBlockIdx) : -1});
             }
         }
 

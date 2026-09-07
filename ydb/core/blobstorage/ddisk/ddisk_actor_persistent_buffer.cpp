@@ -783,7 +783,34 @@ namespace NKikimr::NDDisk {
                         inflight.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD;
                         ReplyReadPersistentBuffer(pr, inflight.Status, inflight.ErrorMessage);
                     } else {
-                        pr.Data = std::move(inflightRecord.JoinData(SectorSize));
+                        TRope reconstructed = std::move(inflightRecord.JoinData(SectorSize));
+                        if (Config.EnableChecksums && Config.CheckChecksumWhenRead
+                                && !pr.PayloadChecksums.empty())
+                        {
+                            if (const auto result = ValidatePayloadChecksums(pr.PayloadChecksums, reconstructed)) {
+                                inflight.Status = result->Status;
+                                inflight.ErrorMessage = result->ErrorReason;
+                                if (result->Status == NKikimrBlobStorage::NDDisk::TReplyStatus::CORRUPTED) {
+                                    Counters.Checksums.ChecksumMismatch->Inc();
+                                }
+                                YDB_LOG_ERROR_COMP(NKikimrServices::BS_PERSISTENT_BUFFER,
+                                    (result->Status == NKikimrBlobStorage::NDDisk::TReplyStatus::CORRUPTED
+                                        ? "TDDiskActor::Handle(TEvReadPersistentBufferPart) checksum mismatch"
+                                        : "TDDiskActor::Handle(TEvReadPersistentBufferPart) checksum count mismatch"),
+                                    {"marker", "BSPB"},
+                                    {"PBufferId", SelfId()},
+                                    {"tabletId", inflightRecord.TabletId},
+                                    {"generation", inflightRecord.Generation},
+                                    {"lsn", inflightRecord.Lsn},
+                                    {"checksumCount", result->ChecksumCount},
+                                    {"payloadSize", reconstructed.size()},
+                                    {"blockIdx", result->MismatchedBlockIdx
+                                        ? static_cast<i64>(*result->MismatchedBlockIdx) : -1});
+                                ReplyReadPersistentBuffer(pr, inflight.Status, inflight.ErrorMessage);
+                                return;
+                            }
+                        }
+                        pr.Data = std::move(reconstructed);
                         PersistentBufferInMemoryCacheSize += pr.Size;
                         *Counters.PersistentBuffer.InMemoryCacheSize = PersistentBufferInMemoryCacheSize;
 
@@ -1389,7 +1416,7 @@ namespace NKikimr::NDDisk {
             return;
         }
 
-        if (Config.EnableChecksums) {
+        if (Config.EnableChecksums && Config.CheckChecksumBeforeWrite) {
             // Checksums are validated here, before any sector allocation or disk I/O.
             const TWriteInstruction instr(record.GetInstruction());
             Y_ABORT_UNLESS(instr.PayloadId, "TEvWritePersistentBuffer without a payload, but with checksums");

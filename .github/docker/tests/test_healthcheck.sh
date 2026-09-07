@@ -6,7 +6,8 @@ set -Eeuo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 TEST_ROOT=$(mktemp -d "${RUNNER_TEMP:-/tmp}/local-ydb-healthcheck.XXXXXX")
-ARTIFACTS_DIR=${ACCEPTANCE_ARTIFACTS:-"${TEST_ROOT}/artifacts"}
+# cleanup owns only this suite's subdirectory, not the outer runner's artifacts.
+ARTIFACTS_DIR=${ACCEPTANCE_ARTIFACTS:-"${TEST_ROOT}/artifacts"}/healthcheck
 NAME_PREFIX="local-ydb-healthcheck-$$"
 CONTAINERS=()
 VOLUMES=()

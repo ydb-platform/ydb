@@ -11,6 +11,7 @@
 #include <ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections/grpc_connections.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/library/actors/core/interconnect.h>
 namespace NKikimr {
 namespace NKqp {
 
@@ -1361,6 +1362,80 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         }
 
         Y_FAIL("Timeout waiting for from partition_stats");
+    }
+
+    Y_UNIT_TEST_TWIN(CompileCachePeerScanWarnings, Disconnect) {
+        TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false));
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        runtime.GetAppData().FeatureFlags.SetEnableCompileCacheView(true);
+        const ui32 liveNodeId = runtime.GetNodeId(0);
+        const ui32 deadNodeId = liveNodeId + 1;
+        auto warnings = runtime.GetAppData().Counters->GetSubgroup("counters", "kqp")
+            ->GetCounter("CompileCacheView/PeerScanWarnings", true);
+
+        auto client = kikimr.GetTableClient();
+        auto session = kikimr.RunCall([&] {
+            return client.CreateSession().GetValueSync();
+        });
+        UNIT_ASSERT_C(session.IsSuccess(), session.GetIssues().ToString());
+        const TString probe = "SELECT 42 AS peer_warning_probe";
+        auto populated = kikimr.RunCall([&] {
+            return session.GetSession().ExecuteDataQuery(probe,
+                TTxControl::BeginTx().CommitTx(), TExecDataQuerySettings().KeepInQueryCache(true)).GetValueSync();
+        });
+        UNIT_ASSERT_C(populated.IsSuccess(), populated.GetIssues().ToString());
+
+        bool includeDeadPeer = false;
+        ui32 failedRequests = 0;
+        // Keep discovery deterministic: a real stopped node may disappear before
+        // the scan, in which case no warning is expected at all.
+        const auto nodesObserver = runtime.AddObserver<TEvKqp::TEvListProxyNodesResponse>(
+            [&](TEvKqp::TEvListProxyNodesResponse::TPtr& ev) {
+                ev->Get()->ProxyNodes = {liveNodeId};
+                if (includeDeadPeer) {
+                    ev->Get()->ProxyNodes.push_back(deadNodeId);
+                }
+            });
+        const auto requestObserver = runtime.AddObserver<IEventHandle>(
+            [&](IEventHandle::TPtr& ev) {
+                // Remote requests may be rewritten to TEvInterconnect::EvForward.
+                if (ev->Type != TEvKqp::TEvListQueryCacheQueriesRequest::EventType
+                    || ev->Cookie != deadNodeId) {
+                    return;
+                }
+                ++failedRequests;
+                if constexpr (Disconnect) {
+                    runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                        new TEvInterconnect::TEvNodeDisconnected(deadNodeId), 0, ev->Cookie));
+                } else {
+                    runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                        new TEvents::TEvUndelivered(TEvKqp::TEvListQueryCacheQueriesRequest::EventType,
+                            TEvents::TEvUndelivered::Disconnected), 0, ev->Cookie));
+                }
+                ev.Reset();
+            });
+
+        const i64 baseline = warnings->Val();
+        // A healthy scan, repeated partial scans, and recovery. The live peer's
+        // real cache must remain readable even when the other peer fails.
+        for (bool failPeer : {false, true, true, false}) {
+            includeDeadPeer = failPeer;
+            const ui32 requestsBefore = failedRequests;
+            auto result = kikimr.RunCall([&] {
+                return session.GetSession().ExecuteDataQuery(
+                    TStringBuilder() << "SELECT NodeId, Query FROM `/Root/.sys/compile_cache_queries`"
+                        << " WHERE Query = '" << probe << "'",
+                    TTxControl::BeginTx().CommitTx()).GetValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            TResultSetParser parser(result.GetResultSet(0));
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("NodeId").GetOptionalUint32().value(), liveNodeId);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Query").GetOptionalUtf8().value(), probe);
+            UNIT_ASSERT(!parser.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(failedRequests - requestsBefore, failPeer ? 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(warnings->Val() - baseline, failedRequests);
+        }
     }
 
     Y_UNIT_TEST_TWIN(CompileCacheBasic, EnableCompileCacheView) {

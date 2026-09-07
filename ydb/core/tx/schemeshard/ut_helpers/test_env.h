@@ -42,6 +42,7 @@ namespace NSchemeShardUT_Private {
         OPTION(bool, InitYdbDriver, false);
         OPTION(bool, EnableFulltextIndexPrefix, true);
         OPTION(bool, EnableFulltextIndexRowId, true);
+        OPTION(std::optional<bool>, EnableCompactFulltextIndex, std::nullopt);
         OPTION(std::optional<bool>, EnablePersistentQueryStats, std::nullopt);
         OPTION(std::optional<bool>, EnablePersistentPartitionStats, std::nullopt);
         OPTION(std::optional<bool>, AllowUpdateChannelsBindingOfSolomonPartitions, std::nullopt);

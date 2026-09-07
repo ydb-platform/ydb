@@ -46,6 +46,7 @@ struct TSettings {
         MinMax = 1 << 27,
         NonDeterministic = 1 << 28,
         PredicateAsExpression = ui64{1} << 31, // Predicates can be used in expressions (e.g. (a = b) = (c = d))
+        StructOperators = ui64{1} << 33, // Struct operators can be used
     };
 
     explicit TSettings(NLog::EComponent logComponent)

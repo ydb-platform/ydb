@@ -5,6 +5,7 @@ SUBSCRIBER(g:ymake)
 TEST_SRCS(
     test_cmake_export.py
     test_common.py
+    test_gobuild.py
     test_requirements.py
     test_res.py
 )

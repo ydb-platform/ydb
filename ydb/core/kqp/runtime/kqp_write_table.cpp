@@ -733,7 +733,7 @@ public:
 
 private:
     std::shared_ptr<NSharding::IShardingBase> Sharding;
-    std::optional<THashSet<ui64>> TargetShardIds; //TODO avoid unnecessary sharding
+    std::optional<THashSet<ui64>> TargetShardIds;
     THashSet<ui64> ActualShardIds;
 
 

@@ -19,7 +19,6 @@ namespace NKqp {
  *   - 3 stages without affinity
  */
 static void VerifyCtasPlanWithAffinity(const NJson::TJsonValue& plan, TString planStr, bool enableCsWriteAffinity, ui32 expectedStagesWithAffinity = 4, ui32 expectedStagesWithoutAffinity = 3) {
-    Cerr << "QQQ_:" << NJson::WriteJson(&plan, false) << Endl;
     const ui32 expectedStages = enableCsWriteAffinity ? expectedStagesWithAffinity : expectedStagesWithoutAffinity;
     const auto stages = FindPlanStages(plan);
     UNIT_ASSERT_VALUES_EQUAL_C(stages.size(), expectedStages,
@@ -237,14 +236,6 @@ static TVector<NKikimrKqp::TKqpSetting> BuildKqpSettingsWithCsWriteAffinity(bool
     return {setting};
 }
 
-#ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK
-const bool CHECK_MODE_ON = true;
-#else
-const bool CHECK_MODE_ON = false;
-#endif
-
-#define SKIP_EXPECTED_FAILURE() if (CHECK_MODE_ON && !EnableCsWriteAffinity) { return; }
-
 // Number of rows inserted into source tables. Must be > shard count (8) to ensure data
 // is distributed across multiple shards and write affinity is meaningful.
 static const int kRowCount = 80;
@@ -257,7 +248,6 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      * Verifies stage count, plan structure, KeyColumns, and exact YSON data comparison.
      */
     Y_UNIT_TEST_TWIN(CtasTableSourcePkMatchesPartitionBy, EnableCsWriteAffinity) {
-        SKIP_EXPECTED_FAILURE()
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
@@ -325,7 +315,6 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      * - Multiple sharding columns: PARTITION BY HASH(Col1, Col2)
      */
     Y_UNIT_TEST_TWIN(CtasTableSourceMultipleShardingColumns, EnableCsWriteAffinity) {
-        SKIP_EXPECTED_FAILURE()
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
@@ -454,7 +443,6 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      * Without explicit PartitionBy, sharding columns fall back to PRIMARY KEY.
      */
     Y_UNIT_TEST_TWIN(CtasTableSourceNoPartitionByUsesPrimaryKey, EnableCsWriteAffinity) {
-        SKIP_EXPECTED_FAILURE()
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
@@ -523,7 +511,6 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      * PK=(Col1, Col2) but PARTITION BY HASH(Col2) → KeyColumns should be ["Col2"].
      */
     Y_UNIT_TEST_TWIN(CtasTableSourcePartitionBySubsetOfPrimaryKey, EnableCsWriteAffinity) {
-        SKIP_EXPECTED_FAILURE()
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
@@ -597,7 +584,6 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      * Verifies stage count, plan structure, KeyColumns, and exact YSON data comparison.
      */
     Y_UNIT_TEST_TWIN(CtasGeneratedDataWithPartitionBy, EnableCsWriteAffinity) {
-        SKIP_EXPECTED_FAILURE()
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
@@ -644,7 +630,6 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      * Verifies stage count, plan structure, KeyColumns, and exact YSON data comparison.
      */
     Y_UNIT_TEST_TWIN(CtasPureLiteralWithPartitionBy, EnableCsWriteAffinity) {
-        SKIP_EXPECTED_FAILURE()
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
@@ -685,7 +670,6 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      * Verifies stage count, plan structure, KeyColumns, and exact YSON data comparison.
      */
     Y_UNIT_TEST_TWIN(CtasGeneratedDataWithoutPartitionBy, EnableCsWriteAffinity) {
-        SKIP_EXPECTED_FAILURE()
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
@@ -731,7 +715,6 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      * Note: AS_TABLE($data) goes through EnsureDqUnion path, so no HashShuffle.
      */
     Y_UNIT_TEST_TWIN(CtasGeneratedDataPartitionBySubsetOfPrimaryKey, EnableCsWriteAffinity) {
-        SKIP_EXPECTED_FAILURE()
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
@@ -782,7 +765,6 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      * KeyColumns should match aliased name "A", not source name "Col1".
      */
     Y_UNIT_TEST_TWIN(CtasTableSourceSelectWithAliases, EnableCsWriteAffinity) {
-        SKIP_EXPECTED_FAILURE()
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
@@ -853,7 +835,6 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      * With affinity disabled: No HashShuffle.
      */
     Y_UNIT_TEST_TWIN(CtasTableSourceVerifyAffinityFlagTogglesHashShuffle, EnableCsWriteAffinity) {
-        SKIP_EXPECTED_FAILURE()
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
@@ -922,7 +903,6 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      * Note: Pure literals go through EnsureDqUnion path.
      */
     Y_UNIT_TEST_TWIN(CtasPureLiteralVerifyAffinityFlagTogglesHashShuffle, EnableCsWriteAffinity) {
-        SKIP_EXPECTED_FAILURE()
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
@@ -966,7 +946,6 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      * Source has 80 rows, WHERE Col1 > 40 filters to 40 rows.
      */
     Y_UNIT_TEST_TWIN(CtasTableSourceWithWhereFilter, EnableCsWriteAffinity) {
-        SKIP_EXPECTED_FAILURE()
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));

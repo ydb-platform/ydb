@@ -42,7 +42,7 @@ std::pair<const TTypeAnnotationNode*, TCoAtomList> BuildReturningType(const TCoA
 }
 
 // Builds a TDqSink that writes into a Kikimr table.
-TDqSink BuildTableSink(TExprContext& ctx, TPositionHandle pos, const TKqpTable& table,
+static TDqSink BuildTableSink(TExprContext& ctx, TPositionHandle pos, const TKqpTable& table,
         const bool allowInconsistentWrites, const bool enableStreamWrite, bool isBatch,
         const TStringBuf mode, const bool isIndexImplTable, const TCoAtomList& defaultColumns,
         const TCoNameValueTupleList& settingsNode, const i64 order) {

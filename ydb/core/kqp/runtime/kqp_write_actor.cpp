@@ -2589,6 +2589,10 @@ private:
 
     void FlushFulltextRelevanceAuxTables(TPathWriteInfo& actorInfo,
             IFulltextTokenizeProjection* ft, bool isDelete) {
+        // Only called for FulltextCompactRelevance (see FlushProjectionToActor),
+        // where DictTableId is always set by the query compiler.
+        YQL_ENSURE(actorInfo.FulltextDictTableId != TPathId(),
+            "FlushFulltextRelevanceAuxTables: FulltextDictTableId is not set");
         auto& docs = PathWriteInfo.at(actorInfo.FulltextDocsTableId);
         auto& dict = PathWriteInfo.at(actorInfo.FulltextDictTableId);
         auto& stats = PathWriteInfo.at(actorInfo.FulltextStatsTableId);
@@ -3068,6 +3072,11 @@ private:
     virtual ~TKqpDirectWriteActor() {
     }
 
+    // Direct-write actors do not persist any DQ state: all data is written
+    // directly to the table via the write controller, and there is no
+    // intermediate buffer to checkpoint. The checkpoint is a no-op, but we
+    // must still notify the DQ framework that the (empty) state has been
+    // committed so that checkpoint completion tracking can proceed.
     void CommitState(const NYql::NDqProto::TCheckpoint& checkpoint) final {
         Callbacks->OnAsyncOutputStateCommitted(OutputIndex, checkpoint);
     }

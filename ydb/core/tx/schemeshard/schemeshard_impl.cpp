@@ -10,7 +10,6 @@
 #include "schemeshard__root_shred_manager.h"
 #include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard_svp_migration.h"
-#include "schemeshard_operation_registry.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tx_processing.h>

@@ -2195,6 +2195,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         auto TopicStubP_ = Ydb::Topic::V1::TopicService::NewStub(Channel_);
 
         grpc::ClientContext readContext;
+        readContext.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
         auto readStream = TopicStubP_ -> StreamRead(&readContext);
         UNIT_ASSERT(readStream);
 
@@ -2272,19 +2273,14 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             req.mutable_read_request()->set_bytes_size(10000);
 
-            // auto commit = req.mutable_commit_offset_request()->add_commit_offsets();
-            // commit->set_partition_session_id(assignId);
-
-            // auto offsets = commit->add_offsets();
-            // offsets->set_start(0);
-            // offsets->set_end(7);
-
-            if (!readStream->Write(req)) {
-                ythrow yexception() << "write fail";
-            }
-
-            UNIT_ASSERT(readStream->Read(&resp));
-            Cerr << "=== Got response (expect session expired): " << resp.ShortDebugString() << Endl;
+            // Strict CommitOffset kills the read session. The proxy may already
+            // have closed the stream with SESSION_EXPIRED (HasData invalidation),
+            // in which case Write fails; that is a valid race, not a product error.
+            const bool wrote = readStream->Write(req);
+            UNIT_ASSERT_C(readStream->Read(&resp),
+                TStringBuilder() << "expected a stream response after CommitOffset, wrote=" << wrote);
+            Cerr << "=== Got response (expect session expired, wrote=" << wrote << "): "
+                 << resp.ShortDebugString() << Endl;
             UNIT_ASSERT_VALUES_EQUAL(resp.status(), Ydb::StatusIds::SESSION_EXPIRED);
         }
     }

@@ -746,6 +746,10 @@ void TConsumerActor::ScheduleProcessing() {
 }
 
 void TConsumerActor::ProcessEventQueue() {
+    // Must not apply queued ops while a KV persist is in flight (StateWrite):
+    // callers are gated by InStateWork(); Persist() switches to StateWrite only after this turn starts.
+    AFL_ENSURE(InStateWork());
+
     YDB_LOG_DEBUG("ProcessEventQueue",
         {"logPrefix", NPQ_LOG_PREFIX});
 

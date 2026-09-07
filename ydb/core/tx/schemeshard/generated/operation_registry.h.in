@@ -1,70 +1,32 @@
-// Generated from operation_registry_data.h; do not edit.
+// Generated from EOperationType; do not edit.
 #pragma once
 
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 
-#include <util/system/yassert.h>
-
+#include <cstddef>
 #include <type_traits>
 
 namespace NKikimr::NSchemeShard {
 
-enum class ESchemeOperationSupport {
-    Implemented,
-    Internal,
-    Unsupported,
-    Deprecated,
-    Stub,
-    Retired,
-    Unknown,
-};
+inline constexpr size_t SchemeOperationCount = {{ opTypes | length }};
 
-struct TSchemeOperationInfo {
-    NKikimrSchemeOp::EOperationType Type;
-    ESchemeOperationSupport Support;
-};
-
-inline constexpr TSchemeOperationInfo SchemeOperations[] = {
-{% for op in operations %}
-    {NKikimrSchemeOp::{{ op.name }}, ESchemeOperationSupport::{{ op.support }}},
+template <auto CountEntries>
+consteval bool CheckSchemeOperationRegistry() {
+{% for opType in opTypes %}
+    static_assert(CountEntries({{ opType }}) == 1,
+        "Missing or duplicate operation registry entry: {{ opType }}");
 {% endfor %}
-};
-
-constexpr ESchemeOperationSupport GetSchemeOperationSupport(NKikimrSchemeOp::EOperationType type) {
-    switch (type) {
-{% for op in operations %}
-    case NKikimrSchemeOp::{{ op.name }}: return ESchemeOperationSupport::{{ op.support }};
-{% endfor %}
-    }
-    return ESchemeOperationSupport::Unknown;
-}
-
-template <NKikimrSchemeOp::EOperationType Type>
-[[noreturn]] void AbortUnimplementedSchemeOperation() {
-    static_assert(GetSchemeOperationSupport(Type) == ESchemeOperationSupport::Unsupported
-            || GetSchemeOperationSupport(Type) == ESchemeOperationSupport::Stub,
-        "Replace the unsupported dispatch when implementing an operation");
-    Y_ABORT("Scheme operation %d is not implemented", static_cast<int>(Type));
+    return true;
 }
 
 template <typename TFn>
 void DispatchSchemeOperation(NKikimrSchemeOp::EOperationType type, TFn&& fn) {
     switch (type) {
-{% for op in operations %}
-    case NKikimrSchemeOp::{{ op.name }}:
-        return fn(std::integral_constant<NKikimrSchemeOp::EOperationType, NKikimrSchemeOp::{{ op.name }}>{});
+{% for opType in opTypes %}
+    case {{ opType }}:
+        return fn(std::integral_constant<NKikimrSchemeOp::EOperationType, {{ opType }}>{});
 {% endfor %}
     }
 }
 
 } // namespace NKikimr::NSchemeShard
-
-#define SCHEME_OPERATION_FACTORY_CASES(op, tx, context) \
-{% for op in operations -%}
-    case NKikimrSchemeOp::{{ op.name }}: { {{ op.factory }} }{% if not loop.last %} \{% endif %}
-{% endfor %}
-
-#define SCHEME_OPERATION_RECOVERY_CASES \
-{% for tx in recovery -%}
-    case TTxState::{{ tx.type }}: {% if tx.operation %}AbortUnimplementedSchemeOperation<NKikimrSchemeOp::{{ tx.operation }}>();{% else %}Y_ABORT("Transient operation has no persisted transaction");{% endif %}{% if not loop.last %} \{% endif %}
-{% endfor %}

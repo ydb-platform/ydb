@@ -540,6 +540,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         const auto deep = std::make_shared<NSubColumns::TJsonPathAccessor>(nullptr, "strict $.b", NSubColumns::EValueType::BinaryJson, 2);
         const auto equallyDeep = std::make_shared<NSubColumns::TJsonPathAccessor>(nullptr, "strict $.c", NSubColumns::EValueType::BinaryJson, 3);
 
+        UNIT_ASSERT_EQUAL(NSubColumns::TJsonPathAccessor::SelectBestMatch(nullptr, deep), deep);
         UNIT_ASSERT_EQUAL(NSubColumns::TJsonPathAccessor::SelectBestMatch(invalid, deep), deep);
         UNIT_ASSERT_EQUAL(NSubColumns::TJsonPathAccessor::SelectBestMatch(deep, invalid), deep);
         UNIT_ASSERT_EQUAL(NSubColumns::TJsonPathAccessor::SelectBestMatch(shallow, deep), deep);

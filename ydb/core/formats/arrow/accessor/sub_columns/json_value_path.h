@@ -68,6 +68,9 @@ public:
 
     static std::shared_ptr<TJsonPathAccessor> SelectBestMatch(
         const std::shared_ptr<TJsonPathAccessor>& first, const std::shared_ptr<TJsonPathAccessor>& second) {
+        if (!first) {
+            return second;
+        }
         if (!second || !second->IsValid() || (first->IsValid() && first->RemainingPath.size() <= second->RemainingPath.size())) {
             return first;
         }

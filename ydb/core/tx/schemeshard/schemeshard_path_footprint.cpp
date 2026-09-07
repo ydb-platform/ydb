@@ -188,10 +188,8 @@ const TVector<TStringBuf>& KnownPathFieldNames() {
 
 namespace {
 
-// Where a ref sits inside a repeated field or a map, rendered into the field
-// path through the "{i}", "{j}" and "{key}" placeholders. Kept outside TRefSink
-// because a nested class's default member initializers are not usable in the
-// enclosing class's default arguments.
+// Kept outside TRefSink so its default member initializers can be used
+// in default arguments.
 struct TRefAt {
     ui32 Index = Max<ui32>();
     ui32 SubIndex = Max<ui32>();
@@ -206,32 +204,26 @@ public:
         : Out(out)
     {}
 
-    // The ordinary case: kind and role are the field's table defaults.
     void Add(EPathField field, TStringBuf value, TAt at = {}) {
         Emit(field, value, PathFieldDefaultKind(field), PathFieldDefaultRole(field), {}, at);
     }
 
-    // The same protobuf field resolved differently because of the operation
-    // type carrying it: the CDC-stream AtTable/Impl parts, DropIndex.TableName
-    // under DropTableIndexAtMainTable, and an absolute DefaultFromSequence.
+    // Override defaults when an operation resolves the field differently.
     void AddAs(EPathField field, TStringBuf value, EKind kind, ERole role, TAt at = {}) {
         Emit(field, value, kind, role, {}, at);
     }
 
-    // Shape 4/5: a leaf name under another field of the same request.
+    // A leaf under a path from another request field.
     void Sibling(EPathField field, TStringBuf value, TStringBuf base, TAt at = {}) {
         Emit(field, value, PathFieldDefaultKind(field), PathFieldDefaultRole(field), base, at);
     }
 
-    // Shape 4/5 when the base cannot be written as a raw string: a leaf under
-    // the path of an already-emitted ref. Needed when the base field may be
-    // addressed by path id, or is itself resolved with TSplitChildTag.
+    // Anchor to an earlier ref when the base needs ID or split-path resolution.
     void SiblingOf(EPathField field, TStringBuf value, int anchorIndex, TAt at = {}) {
         Emit(field, value, PathFieldDefaultKind(field), PathFieldDefaultRole(field), {}, at)
             .AnchorIndex = anchorIndex;
     }
 
-    // Shape 2: numeric-id addressing, bypasses WorkingDir/Name.
     void ById(EPathField field, ui64 ownerId, ui64 localPathId, TAt at = {}) {
         TPathRef& ref = Emit(field, {}, PathFieldDefaultKind(field),
             PathFieldDefaultRole(field), {}, at);
@@ -239,21 +231,17 @@ public:
         ref.LocalPathId = localPathId;
     }
 
-    // Shape 8/9: touched paths that the request does not name at all. The set
-    // is enumerated at Propose/Execute time from the children of the anchor.
+    // Paths discovered or generated during execution.
     void Implicit(EPathField field, int anchorIndex, TAt at = {}) {
         Emit(field, {}, PathFieldDefaultKind(field), PathFieldDefaultRole(field), {}, at)
             .AnchorIndex = anchorIndex;
     }
 
-    // Index of the most recently added ref; use as an anchor.
     int Last() const {
         return static_cast<int>(Out.Refs.size()) - 1;
     }
 
-    // Stable storage for a base path that has to be computed rather than read
-    // straight out of the request. The only such case is an index impl table
-    // under a copied table's source path.
+    // Keep computed base paths alive alongside the refs.
     TStringBuf Own(TString value) {
         Out.Owned.push_back(std::move(value));
         return Out.Owned.back();
@@ -322,21 +310,17 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
     TPathRefs result;
     TRefSink out(result);
 
-    // Shape 2: the generic TDrop submessage, shared by ~22 op types.
     const auto genericDrop = [&]() {
         const auto& drop = tx.GetDrop();
         if (drop.HasId()) {
-            // Propose() resolves TPath::Init(MakeLocalId(Id)) and ignores Name.
+            // An ID takes precedence over Name.
             out.ById(F::Drop_Id, 0, drop.GetId());
         } else {
             out.Add(F::Drop_Name, drop.GetName());
         }
     };
 
-    // Every TTL tier that evicts to external storage names an external data
-    // source by absolute path; Propose resolves each one and persists a
-    // reference (olap/operations/create_table.cpp:820). The proto field is
-    // "Storage", which no name heuristic would guess is a path.
+    // TTL Storage fields name external data sources by absolute path.
     const auto emitTierStorages = [&](F field, const NKikimrSchemeOp::TColumnDataLifeCycle& ttl) {
         if (!ttl.HasEnabled()) {
             return;
@@ -350,17 +334,12 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
         }
     };
 
-    // Local paths carried by a replication/transfer description. SrcPath is a
-    // path on the *remote* cluster and is deliberately never emitted. The four
-    // field ids differ between Replication and AlterReplication, which is the
-    // only thing the two call sites disagree about.
+    // SrcPath belongs to the remote cluster; extract only local paths.
     const auto replicationPaths = [&](F transferDstPath, F transferDirectoryPath,
             F specificTargetDstPath, F alterTransferDirectoryPath,
             const NKikimrSchemeOp::TReplicationDescription& desc) {
         const auto& config = desc.GetConfig();
         if (config.HasTransferSpecific()) {
-            // TTransferStrategy::Validate resolves both of these absolutely
-            // (schemeshard__operation_create_replication.cpp:80,91).
             const auto& target = config.GetTransferSpecific().GetTarget();
             if (target.HasDstPath()) {
                 out.Add(transferDstPath, target.GetDstPath());
@@ -369,10 +348,7 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
                 out.Add(transferDirectoryPath, target.GetDirectoryPath());
             }
         }
-        // Plain (non-transfer) replication targets are NOT resolved by
-        // Propose -- TReplicationStrategy::Validate touches no TPath and the
-        // replication controller creates the destination later -- but DstPath
-        // is an absolute local path this operation intends to write to.
+        // The replication controller creates these absolute destinations later.
         const auto& specific = config.GetSpecific();
         for (size_t i = 0; i < specific.TargetsSize(); ++i) {
             const auto& target = specific.GetTargets(i);
@@ -381,7 +357,6 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
             }
         }
         if (desc.HasAlterTransfer() && desc.GetAlterTransfer().HasDirectoryPath()) {
-            // schemeshard__operation_alter_replication.cpp:57, absolute.
             out.Add(alterTransferDirectoryPath, desc.GetAlterTransfer().GetDirectoryPath());
         }
     };
@@ -392,10 +367,7 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
         break;
     case NKikimrSchemeOp::ESchemeOpCreateTable:
         out.Add(F::CreateTable_Name, tx.GetCreateTable().GetName());
-        // A CreateTable that carries CopyFromTable is dispatched to the
-        // copy-table factory (schemeshard__operation.cpp), whose Propose
-        // resolves the source absolutely, without WorkingDir
-        // (schemeshard__operation_copy_table.cpp:568,978).
+        // Copy sources are resolved absolutely.
         if (tx.GetCreateTable().HasCopyFromTable()) {
             out.Add(F::CreateTable_CopyFromTable, tx.GetCreateTable().GetCopyFromTable());
         }
@@ -421,9 +393,7 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
             out.Add(F::AlterTable_Name, alter.GetName());
         }
         const int alterTableIndex = out.Last();
-        // schemeshard__operation_alter_table.cpp:665: absolute when the value
-        // starts with a slash, otherwise a leaf under the altered table. The
-        // table may be addressed by id, so the base is that entry, not a name.
+        // Relative sequence names use the table ref as their base, even for ID-addressed tables.
         for (size_t i = 0; i < alter.ColumnsSize(); ++i) {
             const auto& column = alter.GetColumns(i);
             if (!column.HasDefaultFromSequence()) {
@@ -448,8 +418,7 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
         } else {
             out.Add(F::AlterPersQueueGroup_Name, alter.GetName());
         }
-        // schemeshard__operation_alter_pq.cpp:328 resolves the incremental
-        // backup destination absolutely while building the alter data.
+        // Incremental-backup destinations are absolute.
         const auto& offload = alter.GetPQTabletConfig().GetOffloadConfig();
         if (offload.HasIncrementalBackup()) {
             out.Add(F::AlterPersQueueGroup_IncrementalBackup_DstPath,
@@ -469,7 +438,7 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
             out.ById(F::SplitMergeTablePartitions_TableLocalId,
                 info.GetTableOwnerId(), info.GetTableLocalId());
         } else {
-            // Propose() resolves TablePath directly, WITHOUT joining WorkingDir.
+            // TablePath is resolved without WorkingDir.
             out.Add(F::SplitMergeTablePartitions_TablePath, info.GetTablePath());
         }
         break;
@@ -659,11 +628,8 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
         break;
     }
     case NKikimrSchemeOp::ESchemeOpDropTableIndexAtMainTable: {
-        // index/operation_drop_index.cpp:278,311 resolves WorkingDir/TableName
-        // and then tablePath.Child(IndexName).
         const auto& cfg = tx.GetDropIndex();
-        // Plain Dive, no split, and the table is the target here rather than
-        // the parent of one: not the DropIndex_TableName table defaults.
+        // The table is a target resolved as one child of WorkingDir.
         out.AddAs(F::DropIndex_TableName, cfg.GetTableName(),
             EKind::LeafUnderWorkingDir, ERole::Target);
         out.Sibling(F::DropIndex_IndexName, cfg.GetIndexName(), cfg.GetTableName());
@@ -699,13 +665,8 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
         out.Implicit(F::Implicit_DropColumnStore_ColumnTables, out.Last());
         break;
     case NKikimrSchemeOp::ESchemeOpCreateColumnTable:
-        // CreateColumnTable is a *separate* TModifyScheme field from
-        // AlterColumnTable; olap/operations/create_table.cpp:570,643 resolves
-        // WorkingDir.Child(CreateColumnTable.Name).
         out.Add(F::CreateColumnTable_Name, tx.GetCreateColumnTable().GetName());
-        // With CopyFromTable set the op is dispatched to TReadOnlyCopyColumnTable
-        // (schemeshard__operation.cpp:1433), whose Propose resolves the source
-        // absolutely (olap/operations/read_only_copy_table.cpp:401,425).
+        // Column-table copy sources are resolved absolutely.
         if (tx.GetCreateColumnTable().HasCopyFromTable()) {
             out.Add(F::CreateColumnTable_CopyFromTable,
                 tx.GetCreateColumnTable().GetCopyFromTable());
@@ -714,8 +675,7 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
             tx.GetCreateColumnTable().GetTtlSettings());
         break;
     case NKikimrSchemeOp::ESchemeOpAlterColumnTable:
-        // olap/operations/alter_table.cpp:278 falls back to AlterTable.Name
-        // when the AlterColumnTable submessage is absent.
+        // Fall back to AlterTable.Name when AlterColumnTable is absent.
         if (tx.HasAlterColumnTable()) {
             out.Add(F::AlterColumnTable_Name, tx.GetAlterColumnTable().GetName());
             const int alterColumnTableIndex = out.Last();
@@ -730,18 +690,13 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
         genericDrop();
         break;
     case NKikimrSchemeOp::ESchemeOpAlterLogin:
-        // Validates WorkingDir == LoginProvider.Audience and otherwise touches
-        // no named path. Removing a sid is the exception: CanRemoveSid walks
-        // ListSubTree(RootPathId()) looking for a path that sid owns or holds
-        // an ACL record on, and resolves the first hit to name it in the error.
-        // WorkingDir is that root, so the scan is its subtree.
+        // Removing a user or group scans the audience subtree for ownership and ACL references.
         if (tx.GetAlterLogin().HasRemoveUser() || tx.GetAlterLogin().HasRemoveGroup()) {
             out.Add(F::WorkingDirItself, {});
             out.Implicit(F::Implicit_AlterLogin_AclScan, out.Last());
         }
         break;
     case NKikimrSchemeOp::ESchemeOpCreateCdcStream: {
-        // WorkingDir + TableName (parent) + stream leaf.
         const auto& op = tx.GetCreateCdcStream();
         out.Add(F::CreateCdcStream_TableName, op.GetTableName());
         out.Sibling(F::CreateCdcStream_StreamDescription_Name,
@@ -755,12 +710,9 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
             EKind::LeafUnderWorkingDir, ERole::Target);
         break;
     case NKikimrSchemeOp::ESchemeOpCreateCdcStreamAtTable: {
-        // The AtTable half alters the table, and also resolves the stream leaf
-        // to fill txState.CdcPathId
-        // (schemeshard__operation_create_cdc_stream.cpp:541,596).
+        // The table is the target; resolving the stream supplies its path ID.
         const auto& op = tx.GetCreateCdcStream();
-        // :541 is a *plain* workingDirPath.Child(tableName) -- no
-        // TSplitChildTag, unlike the Alter and Rotate AtTable parts below.
+        // Create resolves TableName as one child, without TSplitChildTag.
         out.AddAs(F::CreateCdcStream_TableName, op.GetTableName(),
             EKind::LeafUnderWorkingDir, ERole::Target);
         out.Sibling(F::CreateCdcStream_StreamDescription_Name,
@@ -778,9 +730,7 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
             EKind::LeafUnderWorkingDir, ERole::Target);
         break;
     case NKikimrSchemeOp::ESchemeOpAlterCdcStreamAtTable: {
-        // :375 resolves the table with Child(TableName, TSplitChildTag{}), so a
-        // multi-segment TableName is dived segment by segment under WorkingDir;
-        // :404 then takes a plain tablePath.Child(StreamName).
+        // TableName is split into segments under WorkingDir; StreamName is one child.
         const auto& op = tx.GetAlterCdcStream();
         out.AddAs(F::AlterCdcStream_TableName, op.GetTableName(),
             EKind::PathUnderWorkingDirSplit, ERole::Target);
@@ -800,9 +750,7 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
         genericDrop();
         break;
     case NKikimrSchemeOp::ESchemeOpDropCdcStreamAtTable: {
-        // schemeshard__operation_drop_cdc_stream.cpp:361,388 resolves the table
-        // with a plain Dive(tableName) -- no TSplitChildTag -- and then one
-        // tablePath.Child(name) per StreamName entry.
+        // TableName and each StreamName are resolved as single children.
         const auto& op = tx.GetDropCdcStream();
         out.AddAs(F::DropCdcStream_TableName, op.GetTableName(),
             EKind::LeafUnderWorkingDir, ERole::Target);
@@ -830,8 +778,7 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
         break;
     }
     case NKikimrSchemeOp::ESchemeOpRotateCdcStreamAtTable: {
-        // :543 resolves the table with Child(TableName, TSplitChildTag{}); :572
-        // and :591 then take plain tablePath.Child() for the old and new stream.
+        // TableName is split under WorkingDir; both stream names are single children.
         const auto& op = tx.GetRotateCdcStream();
         out.AddAs(F::RotateCdcStream_TableName, op.GetTableName(),
             EKind::PathUnderWorkingDirSplit, ERole::Target);
@@ -844,7 +791,7 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
         out.Add(F::MoveTable_SrcPath, tx.GetMoveTable().GetSrcPath());
         const int moveSrcIndex = out.Last();
         out.Add(F::MoveTable_DstPath, tx.GetMoveTable().GetDstPath());
-        // The cascade is enumerated from the children of the *source*.
+        // Cascade children belong to the source.
         out.Implicit(F::Implicit_MoveTable_Children, moveSrcIndex);
         break;
     }
@@ -852,9 +799,7 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
         out.Add(F::MoveTableIndex_SrcPath, tx.GetMoveTableIndex().GetSrcPath());
         const int moveTableIndexSrcIndex = out.Last();
         out.Add(F::MoveTableIndex_DstPath, tx.GetMoveTableIndex().GetDstPath());
-        // Impl tables and sequences are enumerated from the children of the
-        // *source* (schemeshard__operation_move_tables.cpp:110), exactly as for
-        // MoveTable and MoveIndex.
+        // Implementation tables and sequences belong to the source.
         out.Implicit(F::Implicit_MoveTableIndex_Children, moveTableIndexSrcIndex);
         break;
     }
@@ -864,11 +809,8 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
         break;
     case NKikimrSchemeOp::ESchemeOpCreateSequence:
     case NKikimrSchemeOp::ESchemeOpAlterSequence:
-        // Both resolve WorkingDir/Sequence.Name.
         out.Add(F::Sequence_Name, tx.GetSequence().GetName());
-        // A CreateSequence part emitted by CreateConsistentCopyTables carries
-        // the source sequence here; TCopySequence::Propose resolves it
-        // absolutely (schemeshard__operation_copy_sequence.cpp:579).
+        // Sequence copy sources are resolved absolutely.
         if (tx.HasCopySequence()) {
             out.Add(F::CopySequence_CopyFrom, tx.GetCopySequence().GetCopyFrom());
         }
@@ -912,7 +854,7 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
         break;
     case NKikimrSchemeOp::ESchemeOpAlterBlobDepot:
     case NKikimrSchemeOp::ESchemeOpDropBlobDepot:
-        // Propose() for these two is a no-op stub; no TPath is touched.
+        // These operations are stubs and touch no paths.
         break;
     case NKikimrSchemeOp::ESchemeOpMoveIndex: {
         const auto& op = tx.GetMoveIndex();
@@ -959,16 +901,13 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
         genericDrop();
         break;
     case NKikimrSchemeOp::ESchemeOpAlterView:
-        // Unimplemented in the tree; no Propose() exists.
+        // Unimplemented; no paths are resolved.
         break;
     case NKikimrSchemeOp::ESchemeOpCreateContinuousBackup: {
         const auto& op = tx.GetCreateContinuousBackup();
         out.Add(F::CreateContinuousBackup_TableName, op.GetTableName());
         const int cbTableIndex = out.Last();
-        // NCdc::DoNewStreamPathChecks resolves tablePath.Child(streamName)
-        // (schemeshard__operation_create_continuous_backup.cpp:35). When the
-        // field is absent the name is generated from the current time, so
-        // there is nothing to report and the Implicit marker below stands in.
+        // Absent stream names are generated during execution.
         if (op.GetContinuousBackupDescription().HasStreamName()) {
             out.SiblingOf(F::CreateContinuousBackup_StreamName,
                 op.GetContinuousBackupDescription().GetStreamName(), cbTableIndex);
@@ -978,18 +917,14 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
     }
     case NKikimrSchemeOp::ESchemeOpAlterContinuousBackup: {
         const auto& op = tx.GetAlterContinuousBackup();
-        // :86 resolves the table with Child(TableName, TSplitChildTag{}), so a
-        // leading slash does not escape the working dir.
+        // TSplitChildTag keeps even leading-slash paths under WorkingDir.
         out.Add(F::AlterContinuousBackup_TableName, op.GetTableName());
         const int cbTableIndex = out.Last();
         if (op.HasTakeIncrementalBackup()) {
             const auto& take = op.GetTakeIncrementalBackup();
-            // :128 workingDirPath.Child(DstPath, TSplitChildTag{}).
             out.Add(F::AlterContinuousBackup_TakeIncrementalBackup_DstPath, take.GetDstPath());
             if (take.HasDstStreamPath()) {
-                // :161 the new stream is a leaf under the table. When the field
-                // is absent the name is generated from the current time, so
-                // there is nothing to report.
+                // Absent stream names are generated during execution.
                 out.SiblingOf(F::AlterContinuousBackup_TakeIncrementalBackup_DstStreamPath,
                     take.GetDstStreamPath(), cbTableIndex);
             }
@@ -1009,7 +944,7 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
         break;
     case NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups:
     case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable: {
-        // Retired: the factory always rejects. Kept for completeness.
+        // Retired; the factory rejects these operations.
         const auto& op = tx.GetRestoreMultipleIncrementalBackups();
         for (size_t i = 0; i < op.SrcTablePathsSize(); ++i) {
             out.Add(F::RestoreMultipleIncrementalBackups_SrcTablePaths,
@@ -1021,9 +956,7 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
     case NKikimrSchemeOp::ESchemeOpCreateBackupCollection: {
         const auto& op = tx.GetCreateBackupCollection();
         out.Add(F::CreateBackupCollection_Name, op.GetName());
-        // Propose() -> RegisterBackupCollectionTables() resolves every entry
-        // with TPath::Resolve(entry.GetPath()) — absolute, no WorkingDir join
-        // (schemeshard_impl.cpp:3920).
+        // Backup collection entries are resolved absolutely.
         const auto& entryList = op.GetExplicitEntryList();
         for (size_t i = 0; i < entryList.EntriesSize(); ++i) {
             out.Add(F::CreateBackupCollection_Entry_Path, entryList.GetEntries(i).GetPath(),
@@ -1110,9 +1043,7 @@ TPathRefs ExtractPathRefs(const NKikimrSchemeOp::TModifyScheme& tx) {
         break;
     }
 
-    // Preconditions are read by every operation type: TSchemeShard::CheckApplyIf
-    // resolves each ApplyIf[i].PathId on this schemeshard before Propose() gets
-    // to the operation itself.
+    // Every operation resolves ApplyIf IDs on this SchemeShard before proposing.
     for (size_t i = 0; i < size_t(tx.ApplyIfSize()); ++i) {
         const auto& item = tx.GetApplyIf(i);
         if (item.HasPathId()) {

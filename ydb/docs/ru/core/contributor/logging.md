@@ -16,8 +16,7 @@
 
 {% note info %}
 
-Логирование предполагает, что {{ydb-short-name}} состоит из большого количества компонентов, для каждого из которых может быть
-[настроен](../reference/configuration/log_config.md#entry-objects) уровень логирования.
+Логирование предполагает, что {{ydb-short-name}} состоит из большого количества компонентов, для каждого из которых может быть [настроен](../reference/configuration/log_config.md#entry-objects) уровень логирования.
 
 {% endnote %}
 
@@ -140,12 +139,12 @@ YDB_LOG_CTX_COMP(ctx, PRI_INFO, EXAMPLE_COMP_CODE, "Module started");
 2. Сообщение с параметрами:
 
 ```cpp
-YDB_LOG_CTX_COMP(env, PRI_ERROR, EXAMPLE_COMP_CODE, "Unable to open file",
+YDB_LOG_CTX_COMP(ctx, PRI_ERROR, EXAMPLE_COMP_CODE, "Unable to open file",
     {"sourceFilePath", filename},
     {"errorCode", err});
 ```
 
-В данном примере происходит запись сообщения с текстом `Unable to open file` и двумя параметрами: `sourceFilePath` (значение берётся из переменной `filename`) и `errorCode` (значение берётся из переменной `err`). Для передачи сообщения актору логирования используется контекст исполнения `env`, а в качестве кода компонента передаётся `EXAMPLE_COMP_CODE`.
+В данном примере происходит запись сообщения с текстом `Unable to open file` и двумя параметрами: `sourceFilePath` (значение берётся из переменной `filename`) и `errorCode` (значение берётся из переменной `err`). Для передачи сообщения актору логирования используется контекст исполнения `ctx`, а в качестве кода компонента передаётся `EXAMPLE_COMP_CODE`.
 
 {% endcut %}
 
@@ -170,7 +169,7 @@ YDB_LOG_CTX_COMP(env, PRI_ERROR, EXAMPLE_COMP_CODE, "Unable to open file",
 Пример:
 
 ```cpp
-YDB_LOG_ERROR_CTX_COMP(env, EXAMPLE_COMP_CODE, "Unable to open file",
+YDB_LOG_ERROR_CTX_COMP(ctx, EXAMPLE_COMP_CODE, "Unable to open file",
     {"sourceFilePath", filename},
     {"errorCode", err});
 ```
@@ -251,7 +250,7 @@ YDB_LOG_ERROR_COMP(EXAMPLE_COMP_CODE, "Unable to open file",
 ```cpp
 #define YDB_LOG_THIS_FILE_COMPONENT EXAMPLE_COMP_CODE
 ...
-YDB_LOG_CTX(env, PRI_ERROR, "Unable to open file",
+YDB_LOG_CTX(ctx, PRI_ERROR, "Unable to open file",
     {"sourceFilePath", filename},
     {"errorCode", err});
 ```
@@ -275,7 +274,7 @@ YDB_LOG_CTX(env, PRI_ERROR, "Unable to open file",
 ```cpp
 #define YDB_LOG_THIS_FILE_COMPONENT EXAMPLE_COMP_CODE
 ...
-YDB_LOG_ERROR_CTX(env, "Unable to open file",
+YDB_LOG_ERROR_CTX(ctx, "Unable to open file",
     {"sourceFilePath", filename},
     {"errorCode", err});
 ```
@@ -317,7 +316,7 @@ void MyFunction(const std::string& filename) {
     auto context = YDB_LOG_CREATE_MESSAGE(
         {"sourceFilePath", filename});
     ...
-    if (err != 0 ) {
+    if (err != 0) {
         YDB_LOG_ERROR("MyFunction failed",
             context,                            // Use message parameters
             {"errorCode", err});
@@ -377,7 +376,7 @@ void MyFunction() {
         {"operationName", "read"},
         {"sourceFilePath", filename});
     ...
-    if (err != 0 ) {
+    if (err != 0) {
         YDB_LOG_ERROR("MyFunction failed",
             {"details", context},                            // Use message parameters
             {"errorCode", err});
@@ -409,7 +408,7 @@ void MyFunction() {
     YDB_LOG_CREATE_CONTEXT(
         {"sourceFilePath", filename});
     ...
-    if (errorCode != 0 ) {
+    if (errorCode != 0) {
         YDB_LOG_ERROR("MyFunction failed",     // К сообщению будут прикреплены параметры sourceFilePath и errorCode
             {"errorCode", errorCode});
         return;
@@ -419,7 +418,7 @@ void MyFunction() {
 }
 ```
 
-Параметр `sourceFilePath` будет прикрепляться ко всем сообщениям, логируемым в данном потоке исполнения в функции `MyFunction` и вызываемых ею вложенных функциях вплоть до выхода из функции `MyFunction`.
+Параметр `sourceFilePath` будет прикрепляться ко всем сообщениям, логируемым в данном потоке исполнения в функции `MyFunction` и вызываемых ею функциях вплоть до выхода из функции `MyFunction`.
 
 {% endcut %}
 
@@ -471,7 +470,7 @@ void MyFunction() {
 {% cut "Пример согласованных текста сообщения и названий параметров" %}
 
 ```cpp
-YDB_LOG_ERROR_CTX(env, "Unable to open file",
+YDB_LOG_ERROR_CTX(ctx, "Unable to open file",
     {"sourceFilePath", filename},
     {"errorCode", err});
 ```
@@ -769,7 +768,7 @@ TStructuredMessage GetLogContext() const {
 STATEFN(StateWork) {
     YDB_LOG_CREATE_CONTEXT(GetLogContext());
     switch (ev->GetTypeRewrite()) {
-        ....
+        ...
     }
 }
 ```

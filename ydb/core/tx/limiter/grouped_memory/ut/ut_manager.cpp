@@ -1,4 +1,5 @@
-#include <ydb/core/tx/limiter/grouped_memory/service/counters.h>
+#include <ydb/core/tx/limiter/grouped_memory/usage/counters.h>
+#include <ydb/core/tx/limiter/grouped_memory/service/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/service/manager.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/config.h>
@@ -44,7 +45,7 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
             UNIT_ASSERT(config.DeserializeFromProto(protoConfig));
         }
         std::unique_ptr<NActors::IActor> actor(
-            NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(config, MakeIntrusive<NMonitoring::TDynamicCounters>()));
+            NOlap::NGroupedMemoryManager::CreateService<NOlap::NGroupedMemoryManager::TScanMemoryLimiterPolicy>(config, MakeIntrusive<NMonitoring::TDynamicCounters>()));
         auto groupedMemoryLimiterCounters = std::make_shared<NKikimr::NOlap::NGroupedMemoryManager::TCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>(), "Scan");
         auto stage = std::make_shared<NKikimr::NOlap::NGroupedMemoryManager::TStageFeatures>("GLOBAL", config.GetMemoryLimit(), config.GetHardMemoryLimit(), nullptr, groupedMemoryLimiterCounters->BuildStageCounters("general"));
         auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(NActors::TActorId(), config, "test", counters, stage);
@@ -87,7 +88,7 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
             protoConfig.SetMemoryLimit(100);
             UNIT_ASSERT(config.DeserializeFromProto(protoConfig));
         }
-        std::unique_ptr<NActors::IActor> actor(NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(config, MakeIntrusive<NMonitoring::TDynamicCounters>()));
+        std::unique_ptr<NActors::IActor> actor(NOlap::NGroupedMemoryManager::CreateService<NOlap::NGroupedMemoryManager::TScanMemoryLimiterPolicy>(config, MakeIntrusive<NMonitoring::TDynamicCounters>()));
         auto groupedMemoryLimiterCounters = std::make_shared<NKikimr::NOlap::NGroupedMemoryManager::TCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>(), "Scan");
         auto stage = std::make_shared<NKikimr::NOlap::NGroupedMemoryManager::TStageFeatures>("GLOBAL", config.GetMemoryLimit(), config.GetHardMemoryLimit(), nullptr, groupedMemoryLimiterCounters->BuildStageCounters("general"));
         auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(NActors::TActorId(), config, "test", counters, stage);
@@ -142,7 +143,7 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
             UNIT_ASSERT(config.DeserializeFromProto(protoConfig));
         }
         std::unique_ptr<NActors::IActor> actor(
-            NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(config, MakeIntrusive<NMonitoring::TDynamicCounters>()));
+            NOlap::NGroupedMemoryManager::CreateService<NOlap::NGroupedMemoryManager::TScanMemoryLimiterPolicy>(config, MakeIntrusive<NMonitoring::TDynamicCounters>()));
         auto groupedMemoryLimiterCounters = std::make_shared<NKikimr::NOlap::NGroupedMemoryManager::TCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>(), "Scan");
         auto stage = std::make_shared<NKikimr::NOlap::NGroupedMemoryManager::TStageFeatures>("GLOBAL", config.GetMemoryLimit(), config.GetHardMemoryLimit(), nullptr, groupedMemoryLimiterCounters->BuildStageCounters("general"));
         auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(NActors::TActorId(), config, "test", counters, stage);
@@ -203,7 +204,7 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
             UNIT_ASSERT(config.DeserializeFromProto(protoConfig));
         }
         std::unique_ptr<NActors::IActor> actor(
-            NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(config, MakeIntrusive<NMonitoring::TDynamicCounters>()));
+            NOlap::NGroupedMemoryManager::CreateService<NOlap::NGroupedMemoryManager::TScanMemoryLimiterPolicy>(config, MakeIntrusive<NMonitoring::TDynamicCounters>()));
         auto groupedMemoryLimiterCounters = std::make_shared<NKikimr::NOlap::NGroupedMemoryManager::TCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>(), "Scan");
         auto stage = std::make_shared<NKikimr::NOlap::NGroupedMemoryManager::TStageFeatures>("GLOBAL", config.GetMemoryLimit(), config.GetHardMemoryLimit(), nullptr, groupedMemoryLimiterCounters->BuildStageCounters("general"));
         auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(NActors::TActorId(), config, "test", counters, stage);

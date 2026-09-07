@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/memory_controller_iface.h>
-#include <ydb/core/tx/limiter/grouped_memory/service/counters.h>
+#include "counters.h"
 
 #include <ydb/library/accessor/positive_integer.h>
 #include <ydb/library/conclusion/status.h>

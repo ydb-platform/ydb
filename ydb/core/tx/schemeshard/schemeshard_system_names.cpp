@@ -48,7 +48,14 @@ const TVector<TString> ReservedNamesExceptions = {
     ".STD",
 };
 
-bool CheckReservedNameImpl(const TString& name, bool isSystemUser, bool isAdministrator, TString& explain) {
+// Special prefix for backup service metadata
+const TString BackupServicePrefix = "__ydb_backup_";
+
+bool IsBackupServiceReservedName(const TString& name) {
+    return name.StartsWith(BackupServicePrefix);
+}
+
+bool CheckReservedNameImpl(const TString& name, const TPathCreationContext& context, TString& explain) {
     // System reserved names can't be created by ordinary users.
     // They can only be created:
     // - by the system itself
@@ -57,10 +64,10 @@ bool CheckReservedNameImpl(const TString& name, bool isSystemUser, bool isAdmini
         auto it = std::find(ReservedNames.begin(), ReservedNames.end(), name);
         return (it != ReservedNames.end());
     }();
-    if (nameIsReserved && !(isSystemUser || isAdministrator)) {
+    if (nameIsReserved && !(context.IsSystemUser || context.IsAdministrator)) {
         explain += TStringBuilder()
             << "path part '" << name << "', name is reserved by the system: '" << name << "'"
-            << "(subject: system user " << isSystemUser << ", cluster admin " << isAdministrator << ")";
+            << "(subject: system user " << context.IsSystemUser << ", cluster admin " << context.IsAdministrator << ")";
         return false;
     }
 
@@ -71,6 +78,20 @@ bool CheckReservedNameImpl(const TString& name, bool isSystemUser, bool isAdmini
     }();
     if (nameIsException) {
         return true;
+    }
+
+    // Special handling for backup service reserved names
+    // These names have a dedicated prefix and are only allowed inside backup collections
+    if (IsBackupServiceReservedName(name)) {
+        if (context.IsInsideBackupCollection) {
+            // Allowed: backup service metadata inside backup collections
+            return true;
+        }
+        
+        explain += TStringBuilder()
+            << "path part '" << name << "' uses backup service reserved prefix '" << BackupServicePrefix << "'. "
+            << "These names are reserved for backup metadata and can only be created inside backup collections";
+        return false;
     }
 
     // Names that aren't reserved but start with a reserved prefix can't be created at all,
@@ -93,11 +114,21 @@ bool IsSystemUser(const NACLib::TUserToken* userToken) {
 }
 
 bool CheckReservedName(const TString& name, const NACLib::TUserToken* userToken, const TVector<TString>& allowedSids, TString& explain) {
-    return CheckReservedNameImpl(name, IsSystemUser(userToken), IsTokenAllowed(userToken, allowedSids), explain);
+    TPathCreationContext context;
+    context.IsSystemUser = IsSystemUser(userToken);
+    context.IsAdministrator = IsTokenAllowed(userToken, allowedSids);
+    return CheckReservedNameImpl(name, context, explain);
 }
 
 bool CheckReservedName(const TString& name, const TAppData* appData, const NACLib::TUserToken* userToken, TString& explain) {
-    return CheckReservedNameImpl(name, IsSystemUser(userToken), IsAdministrator(appData, userToken), explain);
+    TPathCreationContext context;
+    context.IsSystemUser = IsSystemUser(userToken);
+    context.IsAdministrator = NKikimr::IsAdministrator(appData, userToken);
+    return CheckReservedNameImpl(name, context, explain);
+}
+
+bool CheckReservedName(const TString& name, const TPathCreationContext& context, TString& explain) {
+    return CheckReservedNameImpl(name, context, explain);
 }
 
 }  // namespace NKikimr::NSchemeShard

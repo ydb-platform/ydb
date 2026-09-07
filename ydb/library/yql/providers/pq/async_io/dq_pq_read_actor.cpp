@@ -980,7 +980,6 @@ private:
             auto key = MakePartitionKey(TString(cluster), partitionSession);
             auto& partitionInfo = Partitions[key];
             partitionInfo.Offset = ranges.back().second;
-            partitionInfo.ValidateOffsetAgainstEnd = true;
             partitionInfo.LastMessageWriteTime = readyBatch.LastWriteTime;
             if (SourceParams.GetStopAtCurrentEndOffsets() && partitionInfo.IsFinishedInTableMode()) {
                 FinishedPartitions.insert(key);
@@ -1189,7 +1188,7 @@ private:
             partitionInfo.EndWriteTime = Self.EndWriteTime;
 
             if (!Self.SourceParams.GetStopAtCurrentEndOffsets()
-                && partitionInfo.ValidateOffsetAgainstEnd
+                && partitionInfo.Offset
                 && *partitionInfo.Offset > event.GetEndOffset()) {
                 TStringBuilder message;
                 message << "Requested offsets do not exist in the topic \"" << Self.SourceParams.GetTopicPath()

@@ -125,7 +125,6 @@ void TDqPqReadActorBase::LoadState(const TSourceState& state) {
             } else {
                 offset = partitionProto.GetOffset();
             }
-            partitionInfo.ValidateOffsetAgainstEnd = true;
         }
 
         minStartingMessageTs = Min(minStartingMessageTs, TInstant::MilliSeconds(stateProto.GetStartingMessageTimestampMs()));

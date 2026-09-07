@@ -75,7 +75,7 @@ namespace {
     constexpr TDuration MaxRetryDelay = TDuration::Seconds(30);
     // = retry for at most 6 minutes
     constexpr ui64 ChannelBufferSize = 1_MB;
-    constexpr ui64 SessionPoolLimit = 5; // arbitrary
+    constexpr ui64 SessionPoolLimit = 100; // arbitrary
 
     const NKikimr::NMiniKQL::TStructType* MergeStructTypes(const NKikimr::NMiniKQL::TTypeEnvironment& env, const NKikimr::NMiniKQL::TStructType* t1, const NKikimr::NMiniKQL::TStructType* t2) {
         Y_ABORT_UNLESS(t1);

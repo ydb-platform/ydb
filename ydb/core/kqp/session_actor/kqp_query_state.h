@@ -199,6 +199,7 @@ public:
     NLWTrace::TOrbit Orbit;
     NWilson::TSpan KqpSessionSpan;
     NWilson::TSpan AdmissionSpan;
+    NWilson::TSpan AcquireSnapshotSpan;
     TQueryTraceDescription TraceDescription;
     ETableReadType MaxReadType = ETableReadType::Other;
 

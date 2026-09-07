@@ -695,6 +695,7 @@ public:
             .TableName = "olapTable",
             .StoreName = "olapStore"
         }, {
+            std::make_shared<TDBLogMessageIdColumn>(),
             std::make_shared<TDBLogMessageTimeColumn>(),
             std::make_shared<TDBLogMessagePrioColumn>(),
             std::make_shared<TDBLogMessageTextColumn>(),
@@ -793,10 +794,11 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
         class TEmitTestLog : public NActors::TActorBootstrapped<TEmitTestLog> {
         public:
             void Bootstrap() {
-                YDB_LOG_ERROR_COMP(NActorsServices::TEST, "Test message via logger actor");
+                YDB_LOG_ERROR_COMP(NActorsServices::TEST, "Test message via logger actor",
+                    {"value", 3});
                 Sleep(TDuration::MilliSeconds(1));
-                YDB_LOG_ERROR_COMP(NActorsServices::TEST, "Test message 2 via logger actor");
-
+                YDB_LOG_ERROR_COMP(NActorsServices::TEST, "Test message 2 via logger actor",
+                    {"value", "ace"});
                 PassAway();
             }
         };

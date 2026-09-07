@@ -126,6 +126,21 @@ using TDBLogColumnDouble = TTypedDBLogColumn<double>;
 using TDBLogColumnString = TTypedDBLogColumn<TString>;
 using TDBLogColumnInstant = TTypedDBLogColumn<TInstant>;
 
+// Write message unique id to column
+class TDBLogMessageIdColumn : public TTypedDBLogColumn<ui64> {
+public:
+    using TBase = TTypedDBLogColumn<ui64>;
+
+    ui64 CurrentValue;
+    TDBLogMessageIdColumn() : TBase("id", TDatabaseSettings::PKShardingKey())  {
+        CurrentValue = Now().MilliSeconds(); // @todo Достаточно ли уникальности?
+    }
+
+    bool Write(const NActors::NStructuredLog::TLogMessage& ) override {
+        return AppendValue(CurrentValue++);
+    }
+};
+
 // Write message time to column
 class TDBLogMessageTimeColumn : public TTypedDBLogColumn<TInstant> {
 public:
@@ -181,5 +196,24 @@ public:
         return AppendValue(location);
     }
 };
+
+// Write message structured value to column
+/* class TDBLogMessageValueColumn : public TTypedDBLogColumn<TString> {
+public:
+    using TBase = TTypedDBLogColumn<TString>;
+
+    const std::vector<TKeyName> KeyName;
+    TDBLogMessageValueColumn(const TString& columnName, const std::vector<TKeyName>& keyName) :
+        TBase(columnName, TDatabaseSettings()),
+        ValueName(valueName) {
+    }
+
+    bool Write(const NActors::NStructuredLog::TLogMessage& message) override {
+        // @todo Поддержка NULL
+        auto value = message.StructuredMessage.GetValue();
+
+        return AppendValue(value);
+    }
+}; */
 
 }

@@ -1,4 +1,5 @@
 #include "schemeshard_impl.h"
+#include "schemeshard_operation_registry.h"
 #include "schemeshard__local_index_migration.h"
 #include "schemeshard_svp_migration.h"
 
@@ -6598,7 +6599,7 @@ void TSchemeShard::DropNode(TPathElement::TPtr node, TStepId step, TTxId txId, N
             // and all operations have been completed.
             break;
         case TPathElement::EPathType::EPathTypeBlobDepot:
-            Y_ABORT("not implemented");
+            AbortUnimplementedSchemeOperation<NKikimrSchemeOp::ESchemeOpDropBlobDepot>();
         case TPathElement::EPathType::EPathTypeTestShardSet:
             PersistRemoveTestShardSet(db, node->PathId);
             break;

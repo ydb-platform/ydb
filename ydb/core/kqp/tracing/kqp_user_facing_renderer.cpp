@@ -702,7 +702,6 @@ void RenderExecution(const NWilson::TTraceId& rootId, const TExecutionTraceSnaps
 
 void BuildPhases(NWilson::TSpan& userSpan, const NWilson::TTraceId& parentId,
         const TUserFacingQuerySnapshot& state, TSpanBudget& budget) {
-    // Metrics and trace totals are accumulated before bounded diagnostics retention.
     userSpan.Attribute("ydb.consumed_ru", static_cast<i64>(state.Metrics.ConsumedRu));
     userSpan.Attribute("ydb.rows_read", static_cast<i64>(state.Metrics.RowsRead));
     userSpan.Attribute("ydb.rows_written", static_cast<i64>(state.Metrics.RowsWritten));

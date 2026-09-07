@@ -66,9 +66,6 @@ void FinishPhase(TPhaseDiagnostic& phase, TInstant at, Ydb::StatusIds::StatusCod
     }
 }
 
-// Online shard collection, compile dependency collection, and final query-wide top-N intentionally
-// stay separate: they update entries differently, protect different in-flight state, and apply
-// distinct eviction rules; one generic container would obscure these invariants.
 template <class T, class TBetter>
 void RetainBest(std::vector<T>& items, size_t limit, TBetter better) {
     if (items.size() <= limit) {

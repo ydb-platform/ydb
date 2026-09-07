@@ -169,7 +169,6 @@ void AccumulateExecutionTraceTotals(TExecutionTraceTotals& totals,
 void AccumulateExecutionTraceTotals(TExecutionTraceTotals& totals,
     const TExecutionTraceTotals& source);
 
-// Owns optional execution-phase timing and assembles the terminal diagnostics snapshot.
 class TExecutionDiagnosticsCapture {
 public:
     TExecutionDiagnosticsCapture(TString executerActorType, TString computeActorType);
@@ -191,7 +190,6 @@ private:
     EExecutionPhase CurrentPhase = EExecutionPhase::Count;
 };
 
-// Captures SchemeCache request envelopes without exposing timestamp bookkeeping to the resolver.
 struct TTableResolverDiagnostics {
     TTimeWindow Navigate;
     TTimeWindow ResolveKeys;
@@ -210,7 +208,6 @@ private:
     TTableResolverDiagnostics Snapshot;
 };
 
-// Owns commit phase transitions and bounded shard acknowledgements for one commit attempt.
 class TCommitDiagnosticsCapture {
 public:
     TCommitDiagnosticsCapture(bool collectTimeline, bool collectShards);

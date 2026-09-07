@@ -32,6 +32,7 @@ struct TTestEnvSettings {
     bool EnableOlapCompression = false;
     bool EnableTableCacheModes = false;
     bool EnableFulltextIndex = false;
+    bool EnableSuperLemmer = false;
     bool EnableCsDictionaryEncoding = false;
     bool EnableLocalBloomFilterIndex = false;
     bool EnableLocalBloomNgramFilterIndex = false;

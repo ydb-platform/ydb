@@ -350,4 +350,5 @@ message TFeatureFlags {
     optional bool EnableMoveWithColumnTableReplace = 305 [default = false];
     optional bool DisableOldSecrets = 306 [default = false];
     optional bool EnableDqSourceStreamLookupJoinShuffleMode = 311 [default = false];
+    optional bool EnableSuperLemmer = 319 [default = false];
 }

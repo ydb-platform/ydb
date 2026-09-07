@@ -14,10 +14,6 @@ TSqlMatchRecognizeClause::TSqlMatchRecognizeClause(class TSqlTranslation& that)
 
 TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Generated::TRule_row_pattern_recognition_clause& node) {
     auto pos = GetPos(node.GetToken1());
-    if (!Ctx_.FeatureR010) {
-        Ctx_.Error(pos, TIssuesIds::CORE) << "Unexpected MATCH_RECOGNIZE";
-        return {};
-    }
 
     auto [partitionKeySelector, partitionColumns] = ParsePartitionBy(
         pos,

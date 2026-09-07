@@ -6,6 +6,7 @@
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 
 #include <map>
+#include <optional>
 #include <tuple>
 #include <vector>
 
@@ -14,10 +15,12 @@ namespace NKikimr::NKqp {
 // Consumes terminal task reports once; the executer's planner deduplicates them.
 class TExecutionTraceStats {
 public:
+    explicit TExecutionTraceStats(ui8 verbosity);
+
     void OnTaskFinished(std::pair<ui64, ui32> stageId, const NKqpProto::TKqpPhyStage& stage,
         ui64 taskCount, const NYql::NDqProto::TEvComputeActorState& state, ui32 nodeId);
     void AddTask(ui64 txIndex, const NKqpProto::TKqpPhyStage& stage, ui64 taskCount,
-        const NYql::NDqProto::TDqTaskStats& task, ui64 durationUs, ui32 nodeId, bool failed);
+        const NYql::NDqProto::TDqTaskStats& task, std::optional<ui64> durationUs, ui32 nodeId, bool failed);
     void Finish(NWilson::TSpan& span, NYql::NDqProto::TDqExecutionStats& stats,
         Ydb::StatusIds::StatusCode status) const;
 
@@ -61,6 +64,7 @@ private:
         std::vector<TTask> Tasks;
     };
 
+    const bool CollectDetails;
     std::map<std::pair<ui64, ui32>, TStage> Stages;
     ui64 WaitUs = 0;
     ui64 SpilledBytes = 0;

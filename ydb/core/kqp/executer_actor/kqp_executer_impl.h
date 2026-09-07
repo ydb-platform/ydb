@@ -160,7 +160,7 @@ public:
 
         ExecuterSpan.Attribute("ydb.actor.type", spanName);
         if (ExecuterSpan) {
-            TraceStats.emplace();
+            TraceStats.emplace(ExecuterSpan.GetTraceId().GetVerbosity());
         }
         TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
         TasksGraph.GetMeta().RequestIsolationLevel = Request.IsolationLevel;

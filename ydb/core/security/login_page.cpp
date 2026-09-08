@@ -281,7 +281,7 @@ public:
         TString requestId(headers["x-request-id"]);
         if (requestId.empty()) {
             requestId = CreateGuidAsString();
-            YDB_LOG_WARN("x-request-id is missing in Web UI logout request, generated a new one",
+            YDB_LOG_NOTICE("x-request-id is missing in Web UI logout request, generated a new one",
                 {"requestId", requestId},
                 {"address", Request->Address},
                 {"method", Request->Method},

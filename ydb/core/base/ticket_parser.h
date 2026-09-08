@@ -25,8 +25,8 @@ namespace NKikimr {
 
         struct TEvAuthorizeTicket : TEventLocal<TEvAuthorizeTicket, EvAuthorizeTicket> {
             struct TTraceContext {
-                const TString PeerName;
-                const TString RequestId;
+                TString PeerName;
+                TString RequestId;
 
                 TTraceContext(TString peerName, TString requestId)
                     : PeerName(std::move(peerName))

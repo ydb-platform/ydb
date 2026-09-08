@@ -197,6 +197,10 @@ IEventHandle* GetRequestAuthAndCheckHandle(
 {
     if (requestId.empty()) {
         requestId = CreateGuidAsString();
+        YDB_LOG_NOTICE("Monitoring request has no request id, generated a new one",
+            {"requestId", requestId},
+            {"peerName", peerName},
+            {"database", database});
     }
 
     return new NActors::IEventHandle(

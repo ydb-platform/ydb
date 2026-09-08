@@ -449,13 +449,11 @@ private:
         }
 
         request->RequestId = record.TraceContext.RequestId;
+        request->PeerName = record.TraceContext.PeerName;
 
         auto& headers = request->Headers;
         if (record.IsLowRequestPriority) {
             headers["x-ya-priority"] = "low";
-        }
-        if (!record.TraceContext.PeerName.empty()) {
-            headers["x-user-ip"] = record.TraceContext.PeerName;
         }
 
         return request;
@@ -573,9 +571,7 @@ private:
     void NebiusAccessServiceAuthorize(const TString& key, TTokenRecord& record) const {
         auto request = MakeHolder<TEvNebiusAccessServiceAuthorizeRequest>(key);
         request->RequestId = record.TraceContext.RequestId;
-        if (!record.TraceContext.PeerName.empty()) {
-            request->Headers["x-user-ip"] = record.TraceContext.PeerName;
-        }
+        request->PeerName = record.TraceContext.PeerName;
         TStringBuilder requestForPermissions;
         i64 i = 0;
         for (const auto& [permissionName, permissionRecord] : record.Permissions) {
@@ -626,10 +622,8 @@ private:
     void NebiusAccessServiceAuthenticate(const TString& key, TTokenRecord& record) const {
         auto request = MakeHolder<TEvNebiusAccessServiceAuthenticateRequest>(key);
         request->RequestId = record.TraceContext.RequestId;
+        request->PeerName = record.TraceContext.PeerName;
         request->Request.set_iam_token(record.Ticket);
-        if (!record.TraceContext.PeerName.empty()) {
-            request->Headers["x-user-ip"] = record.TraceContext.PeerName;
-        }
         Send(NebiusAccessServiceValidator, request.Release());
     }
 
@@ -1103,7 +1097,7 @@ private:
         }
 
         if (ev->Get()->TraceContext.RequestId.empty()) {
-            YDB_LOG_WARN_COMP(NKikimrServices::TICKET_PARSER, "TEvAuthorizeTicket has empty request id",
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TICKET_PARSER, "TEvAuthorizeTicket has empty request id",
                 {"token", MaskTicket(ev->Get()->Ticket)},
                 {"peerName", ev->Get()->TraceContext.PeerName},
                 {"database", ev->Get()->Database});
@@ -1152,6 +1146,7 @@ private:
         auto it = userTokens.find(key);
         if (it != userTokens.end()) {
             auto& record = it->second;
+            record.TraceContext = ev->Get()->TraceContext;
             TInstant now = TlsActivationContext->Now();
             // we know about token
             if (record.IsTokenReady()) {

@@ -1220,6 +1220,80 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         AccessServiceAuthenticationOk<NKikimr::TNebiusAccessServiceMock>();
     }
 
+    Y_UNIT_TEST(CacheHitTraceContextIsUsedForAccessServiceRefresh) {
+        using namespace Tests;
+
+        TPortManager tp;
+        const ui16 port = tp.GetPort(2134);
+        const ui16 grpcPort = tp.GetPort(2135);
+        const ui16 servicePort = tp.GetPort(4284);
+        const TString accessServiceEndpoint = "localhost:" + ToString(servicePort);
+
+        NKikimrProto::TAuthConfig authConfig;
+        authConfig.SetUseBlackBox(false);
+        SetUseAccessService<NKikimr::TAccessServiceMock>(authConfig);
+        authConfig.SetUseAccessServiceTLS(false);
+        authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
+        authConfig.SetUseStaff(false);
+        authConfig.SetRefreshPeriod("1h");
+        authConfig.SetRefreshTime("1h");
+
+        auto settings = TServerSettings(port, authConfig);
+        settings.SetEnableAccessServiceV2Interface(false);
+        settings.SetDomainName("Root");
+        settings.CreateTicketParser = NKikimr::CreateTicketParser;
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        NClient::TKikimr kikimr(client.GetClientConfig());
+        client.InitRootScheme();
+
+        NKikimr::TAccessServiceMock accessServiceMock;
+        grpc::ServerBuilder builder;
+        builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
+        std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
+
+        TTestActorRuntime* runtime = server.GetRuntime();
+        const TActorId sender = runtime->AllocateEdgeActor();
+        const TString ticket = "Bearer user1";
+
+        const auto authorize = [&](const TString& peerName, const TString& requestId) {
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = ticket,
+                .TraceContext = {peerName, requestId},
+            })), 0);
+
+            TAutoPtr<IEventHandle> handle;
+            auto* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+            UNIT_ASSERT_C(!result->HasError(), result->Error);
+        };
+
+        authorize("192.168.0.1", "initial-request-id");
+        UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthenticateCount.load(), 1);
+
+        const TString latestPeerName = "192.168.0.2";
+        const TString latestRequestId = "latest-request-id";
+        authorize(latestPeerName, latestRequestId);
+        UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthenticateCount.load(), 1);
+
+        runtime->Send(new IEventHandle(
+            MakeTicketParserID(),
+            sender,
+            new TEvTicketParser::TEvRefreshTicket(ticket + ":")), 0);
+
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(5);
+        while (accessServiceMock.AuthenticateCount.load() < 2 && TInstant::Now() < deadline) {
+            Sleep(TDuration::MilliSeconds(20));
+        }
+        UNIT_ASSERT_C(accessServiceMock.AuthenticateCount.load() >= 2, "AccessService refresh request did not arrive");
+
+        with_lock (accessServiceMock.MetadataMutex) {
+            UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.CapturedXUserIP, latestPeerName);
+            UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.CapturedRequestId, latestRequestId);
+        }
+    }
+
     template <typename TAccessServiceMock>
     void AccessServiceAuthenticationApiKeyOk() {
         using namespace Tests;

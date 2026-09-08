@@ -140,7 +140,9 @@ public:
 
     std::optional<ui32> GetKeyOrPrefixIndexOptional(const std::string_view keyName) const {
         auto pathInfoResult = ResolvePath(ToJsonPath(keyName));
-        AFL_VERIFY(pathInfoResult.IsSuccess())("keyName", keyName)("jsonPath", ToJsonPath(keyName))("error", pathInfoResult.GetErrorMessage());
+        if (pathInfoResult.IsFail()) {
+            return std::nullopt;
+        }
         auto pathInfo = pathInfoResult.DetachResult();
         if (!pathInfo) {
             return std::nullopt;

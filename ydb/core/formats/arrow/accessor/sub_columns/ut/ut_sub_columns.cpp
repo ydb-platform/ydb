@@ -296,6 +296,9 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         const auto invalidResult = NSubColumns::ValidateJsonPath(R"("deployment.environment")");
         UNIT_ASSERT(invalidResult.IsFail());
         UNIT_ASSERT(invalidResult.GetErrorMessage().Contains("Unsupported path"));
+
+        const auto stats = BuildStats({ { R"("a")", NSubColumns::EValueType::BinaryJson } });
+        UNIT_ASSERT(!stats.GetKeyOrPrefixIndexOptional("\""));
     }
 
     Y_UNIT_TEST(ParseJsonPath) {

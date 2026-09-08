@@ -7,6 +7,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/string.h>
+
 #include <chrono>
 #include <memory>
 #include <mutex>
@@ -36,7 +38,7 @@ namespace NYdb::inline Dev::NTopic::NTests {
 
             explicit TLostWriteAckProxy(const std::string& upstreamEndpoint)
                 : Stub_(Ydb::Topic::V1::TopicService::NewStub(
-                      grpc::CreateChannel(upstreamEndpoint, grpc::InsecureChannelCredentials())))
+                      grpc::CreateChannel(TString(upstreamEndpoint), grpc::InsecureChannelCredentials())))
             {
                 grpc::ServerBuilder builder;
                 int port = 0;
@@ -67,9 +69,9 @@ namespace NYdb::inline Dev::NTopic::NTests {
                 auto upstreamContext = grpc::ClientContext::FromServerContext(*context);
                 upstreamContext->set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
                 for (const auto& [key, value] : context->client_metadata()) {
-                    const std::string name(key.data(), key.size());
+                    const TString name(key.data(), key.size());
                     if (name == "x-ydb-database" || name == "x-ydb-auth-ticket") {
-                        upstreamContext->AddMetadata(name, std::string(value.data(), value.size()));
+                        upstreamContext->AddMetadata(name, TString(value.data(), value.size()));
                     }
                 }
                 auto upstream = Stub_->StreamWrite(upstreamContext.get());

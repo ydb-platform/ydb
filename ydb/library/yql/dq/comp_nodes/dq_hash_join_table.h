@@ -119,12 +119,23 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
     }
 
     void Lookup(TSingleTuple row, std::invocable<TSingleTuple> auto consume) {
-        if (Empty()){
-            return;
+        size_t resumeIndex = 0;
+        Lookup(row, resumeIndex, consume, [] { return false; });
+    }
+
+    // Stops when isFull() after a match. resumeIndex is the next directory slot for this
+    // probe and is reset to 0 when every match has been consumed
+    bool Lookup(TSingleTuple row, size_t& resumeIndex, std::invocable<TSingleTuple> auto consume,
+                std::predicate auto isFull) {
+        if (Empty()) {
+            resumeIndex = 0;
+            return true;
         }
-        Table_.Apply(row.PackedData, row.OverflowBegin, [consume, this](const ui8* tuplePackedData) {
-            consume(TSingleTuple{tuplePackedData, BuildData_.Overflow.data()});
-        });
+        return Table_.Apply(row.PackedData, row.OverflowBegin, resumeIndex,
+                            [consume, this](const ui8* tuplePackedData) {
+                                consume(TSingleTuple{tuplePackedData, BuildData_.Overflow.data()});
+                            },
+                            isFull);
     }
 
     // Stops on the first accepted match. Semi/only joins only need existence, so

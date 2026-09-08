@@ -456,6 +456,14 @@ class TNeumannHashTable {
 
     void Apply(const ui8 *const row, const ui8 *const overflow,
                std::invocable<const ui8*> auto onMatch) const {
+        size_t resumeIndex = 0;
+        Apply(row, overflow, resumeIndex, onMatch, [] { return false; });
+    }
+
+    // resumeIndex is the next directory slot to visit for this probe. Returns false when
+    // isFull() after a match; the next call continues from resumeIndex
+    bool Apply(const ui8 *const row, const ui8 *const overflow, size_t& resumeIndex,
+               std::invocable<const ui8*> auto onMatch, std::predicate auto isFull) const {
         MKQL_ENSURE(Layout_ != nullptr, "sanity check");
         MKQL_ENSURE(!Directories_.empty() && Tuples_ != nullptr, "lookup to empty table?");
 
@@ -467,7 +475,8 @@ class TNeumannHashTable {
         const TBloom dirBloomFilter = dir.BloomFilter;
 
         if (hashBloomTag & dirBloomFilter) {
-            return;
+            resumeIndex = 0;
+            return true;
         }
 
         const ui8 *const begin =
@@ -479,25 +488,43 @@ class TNeumannHashTable {
         const ui8 *matchedRow;
 
         if constexpr (!ConsecutiveDuplicates) {
-            for (auto it = begin; it != end; it += BufferSlotSize_) {
+            const size_t nSlots = (end - begin) / BufferSlotSize_;
+            for (; resumeIndex < nSlots; ++resumeIndex) {
+                const ui8* it = begin + resumeIndex * BufferSlotSize_;
                 if (GetRowMatch(it, row, overflow, &matchedRow)) {
                     onMatch(matchedRow);
+                    if (isFull()) {
+                        ++resumeIndex;
+                        return false;
+                    }
                 }
             }
         } else {
             ui32 size = 0;
-            for (auto it = begin; it != end; it += size * BufferSlotSize_) {
+            size_t slot = 0;
+            for (auto it = begin; it != end; ) {
                 size = ReadUnaligned<ui32>(it + RowIndexSize_);
                 if (!GetRowMatch(it, row, overflow, &matchedRow)) {
+                    it += size * BufferSlotSize_;
+                    slot += size;
                     continue;
                 }
 
-                for (; size; --size, it += BufferSlotSize_) {
+                for (; size; --size, it += BufferSlotSize_, ++slot) {
+                    if (slot < resumeIndex) {
+                        continue;
+                    }
                     onMatch(it);
+                    if (isFull()) {
+                        resumeIndex = slot + 1;
+                        return false;
+                    }
                 }
                 break;
             }
         }
+        resumeIndex = 0;
+        return true;
     }
 
     size_t IndexOfPackedRow(const ui8* packedRow) const {

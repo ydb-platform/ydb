@@ -1042,6 +1042,70 @@ TJoinTestData BigStringsTestData() {
     return td;
 }
 
+constexpr int HighFanoutBuildRows = 25000;
+constexpr int HighFanoutValueSize = 512;
+
+// One probe key matches far more than MaxOutputRows build rows, so Lookup must
+// resume mid-key instead of buffering the whole fanout
+TJoinTestData HighFanoutInnerJoinTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftKeys = {1};
+    TVector<TString> leftValues = {TString(HighFanoutValueSize, 'P')};
+    TVector<ui64> rightKeys(HighFanoutBuildRows, 1);
+    TVector<TString> rightValues(HighFanoutBuildRows);
+    for (int i = 0; i < HighFanoutBuildRows; ++i) {
+        rightValues[i] = TString(HighFanoutValueSize, 'a' + (i % 26));
+    }
+
+    TVector<ui64> expectedKeysLeft(HighFanoutBuildRows, 1);
+    TVector<TString> expectedValuesLeft(HighFanoutBuildRows, leftValues[0]);
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, rightKeys, rightValues);
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+TJoinTestData HighFanoutLeftJoinTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftKeys = {1, 2};
+    TVector<ui64> leftValues = {10, 20};
+    constexpr int matchCount = HighFanoutBuildRows;
+    TVector<ui64> rightKeys(matchCount, 1);
+    TVector<ui64> rightValues(matchCount);
+    for (int i = 0; i < matchCount; ++i) {
+        rightValues[i] = i;
+    }
+
+    TVector<ui64> expectedKeysLeft(matchCount + 1);
+    TVector<ui64> expectedValuesLeft(matchCount + 1);
+    TVector<std::optional<ui64>> expectedKeysRight(matchCount + 1);
+    TVector<std::optional<ui64>> expectedValuesRight(matchCount + 1);
+    for (int i = 0; i < matchCount; ++i) {
+        expectedKeysLeft[i] = 1;
+        expectedValuesLeft[i] = 10;
+        expectedKeysRight[i] = 1;
+        expectedValuesRight[i] = i;
+    }
+    expectedKeysLeft[matchCount] = 2;
+    expectedValuesLeft[matchCount] = 20;
+    expectedKeysRight[matchCount] = std::nullopt;
+    expectedValuesRight[matchCount] = std::nullopt;
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result = ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight,
+                                       expectedValuesRight);
+    td.Kind = EJoinKind::Left;
+    return td;
+}
+
 TJoinTestData OutputBufferBoundedTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -1142,6 +1206,36 @@ TDqProgramBuilder::TJoinFilterLambda LessThanConstFilter(TDqSetup<false, true>* 
         auto& pb = setup->GetDqProgramBuilder();
         return pb.Coalesce(pb.Less(row[column], pb.NewDataLiteral<ui64>(value)), pb.NewDataLiteral<bool>(false));
     };
+}
+
+TJoinTestData HighFanoutInnerJoinFilterTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    constexpr ui64 keepBefore = 15000;
+    TVector<ui64> leftKeys = {1};
+    TVector<ui64> leftValues = {10};
+    TVector<ui64> rightKeys(HighFanoutBuildRows, 1);
+    TVector<ui64> rightValues(HighFanoutBuildRows);
+    for (int i = 0; i < HighFanoutBuildRows; ++i) {
+        rightValues[i] = i;
+    }
+
+    TVector<ui64> expectedKeysLeft(keepBefore, 1);
+    TVector<ui64> expectedValuesLeft(keepBefore, 10);
+    TVector<ui64> expectedKeysRight(keepBefore, 1);
+    TVector<ui64> expectedValuesRight(keepBefore);
+    for (int i = 0; i < static_cast<int>(keepBefore); ++i) {
+        expectedValuesRight[i] = i;
+    }
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result = ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight,
+                                       expectedValuesRight);
+    td.Kind = EJoinKind::Inner;
+    td.RightFilter = LessThanConstFilter(td.Setup.get(), 1, keepBefore);
+    return td;
 }
 
 // right[column] > left[column]
@@ -2384,6 +2478,33 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     Y_UNIT_TEST(TestOutputBufferBounded) {
         auto td = OutputBufferBoundedTestData();
         AssertOutputBufferBounded(MeasureOutputBlocks(td), 200 * 200);
+    }
+
+    Y_UNIT_TEST(TestHighFanoutInnerJoin) {
+        Test(HighFanoutInnerJoinTestData(), true);
+    }
+
+    Y_UNIT_TEST(TestOutputBufferBoundedHighFanout) {
+        auto td = HighFanoutInnerJoinTestData();
+        AssertOutputBufferBounded(MeasureOutputBlocks(td), HighFanoutBuildRows);
+    }
+
+    Y_UNIT_TEST(TestHighFanoutLeftJoin) {
+        Test(HighFanoutLeftJoinTestData(), true);
+    }
+
+    Y_UNIT_TEST(TestOutputBufferBoundedHighFanoutLeft) {
+        auto td = HighFanoutLeftJoinTestData();
+        AssertOutputBufferBounded(MeasureOutputBlocks(td), HighFanoutBuildRows + 1);
+    }
+
+    Y_UNIT_TEST(TestHighFanoutInnerJoinFilter) {
+        Test(HighFanoutInnerJoinFilterTestData(), true);
+    }
+
+    Y_UNIT_TEST(TestOutputBufferBoundedHighFanoutFilter) {
+        auto td = HighFanoutInnerJoinFilterTestData();
+        AssertOutputBufferBounded(MeasureOutputBlocks(td), 15000);
     }
 
     Y_UNIT_TEST(TestOutputBufferBoundedLeftSemiLeftIsBuild) {

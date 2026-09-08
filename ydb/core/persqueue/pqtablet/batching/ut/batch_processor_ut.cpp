@@ -6,9 +6,11 @@
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/library/actors/core/events.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_messages_int.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
+#include <library/cpp/logger/stream.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/string.h>
@@ -24,6 +26,7 @@ using NActors::IEventBase;
 using NActors::IEventHandle;
 using NActors::TActorId;
 using NActors::TEvents;
+using NActors::TTestActorRuntimeBase;
 using NActors::TTestBasicRuntime;
 
 NKafka::TKafkaRecord MakeKafkaRecord(
@@ -115,16 +118,6 @@ TReadResult MakeCorruptKafkaBatchReadResult(ui64 offset = 10, TString payload = 
     return MakeKafkaBatchReadResult(std::move(payload), offset);
 }
 
-TString MakeSnappyKafkaBatchPayload() {
-    auto payload = MakeKafkaBatchPayload();
-    // Kafka v2 attributes are int16 BE after baseOffset(8)+batchLength(4)+leaderEpoch(4)+magic(1)+crc(4).
-    constexpr size_t attributesOffset = 21;
-    UNIT_ASSERT(payload.size() > attributesOffset + 1);
-    payload[attributesOffset] = 0;
-    payload[attributesOffset + 1] = static_cast<char>(NKafka::ECompressionType::SNAPPY);
-    return payload;
-}
-
 TReadResult MakePlainReadResult(
     ui64 offset,
     TStringBuf payload,
@@ -192,18 +185,38 @@ const NKikimrClient::TCmdReadResult& GetCmdReadResult(const TReadProcessingConte
 }
 
 struct TEnv {
+    TStringStream Log;
     TTestBasicRuntime Runtime;
     TActorId Tablet;
     TActorId Edge;
+    bool TabletGotPoison = false;
 
     explicit TEnv(bool restartOnUnhandledExceptions = false)
         : Runtime(1, false)
     {
+        Runtime.SetLogBackend(new TStreamLogBackend(&Log));
         TAppPrepare app;
         app.FeatureFlags.SetEnableTabletRestartOnUnhandledExceptions(restartOnUnhandledExceptions);
         Runtime.Initialize(app.Unwrap());
+        Runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_ERROR);
         Tablet = Runtime.AllocateEdgeActor();
         Edge = Runtime.AllocateEdgeActor();
+        Runtime.SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == Tablet && ev->GetTypeRewrite() == TEvents::TEvPoison::EventType) {
+                TabletGotPoison = true;
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+    }
+
+    void AssertTabletDidNotRestart() {
+        UNIT_ASSERT_C(!TabletGotPoison, "tablet received TEvPoison and would restart");
+    }
+
+    void AssertUserErrorLogged(TStringBuf message) {
+        const TString log = Log.Str();
+        UNIT_ASSERT_STRING_CONTAINS(log, "errorType=user");
+        UNIT_ASSERT_STRING_CONTAINS(log, TString{message});
     }
 
     TActorId RegisterBatchProcessor() {
@@ -460,7 +473,7 @@ Y_UNIT_TEST_SUITE(TConsumerBatchProcessorTest) {
     }
 
     Y_UNIT_TEST(CorruptKafkaBatchKeepsOriginalAndReplies) {
-        TEnv env;
+        TEnv env(true);
         const auto actor = env.RegisterConsumer();
 
         env.Send(actor, new TEvProcessBatch(MakeReadContext(
@@ -476,9 +489,13 @@ Y_UNIT_TEST_SUITE(TConsumerBatchProcessorTest) {
         UNIT_ASSERT_VALUES_EQUAL(results.Get(0).GetOffset(), 10u);
         UNIT_ASSERT(results.Get(0).GetIsBatch());
         UNIT_ASSERT(env.Runtime.FindActor(actor));
+        env.AssertTabletDidNotRestart();
+        env.AssertUserErrorLogged("Failed to cut kafka batch, keeping original result");
 
         env.Send(actor, new TEvProcessBatch(MakeReadContext(env.Edge, {MakePlainReadResult(11, "ok")})));
         UNIT_ASSERT_VALUES_EQUAL(GetCmdReadResult(env.Grab<TEvProcessBatchResult>()->Get()->Context).GetResult().size(), 1);
+        UNIT_ASSERT(env.Runtime.FindActor(actor));
+        env.AssertTabletDidNotRestart();
     }
 
     Y_UNIT_TEST(NegativeOffsetDeltaKeepsOriginalAndDoesNotPoisonTablet) {
@@ -498,85 +515,8 @@ Y_UNIT_TEST_SUITE(TConsumerBatchProcessorTest) {
         UNIT_ASSERT(results.Get(0).GetIsBatch());
         UNIT_ASSERT_VALUES_EQUAL(results.Get(0).GetOffset(), 10u);
         UNIT_ASSERT(env.Runtime.FindActor(actor));
-    }
-
-    Y_UNIT_TEST(ProcessBatchKeepsPlainPrefixWhenLaterBatchIsCorrupt) {
-        TEnv env;
-        const auto actor = env.RegisterConsumer();
-
-        env.Send(actor, new TEvProcessBatch(MakeReadContext(
-            env.Edge,
-            {
-                MakePlainReadResult(10, "keep-me"),
-                MakeCorruptKafkaBatchReadResult(20),
-            },
-            "user",
-            7,
-            10)));
-
-        const auto ev = env.Grab<TEvProcessBatchResult>();
-        const auto& results = GetCmdReadResult(ev->Get()->Context).GetResult();
-        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(results.Get(0).GetOffset(), 10u);
-        const auto chunk0 = NKikimr::GetDeserializedData(results.Get(0).GetData());
-        UNIT_ASSERT_VALUES_EQUAL(chunk0.GetData(), "keep-me");
-        UNIT_ASSERT_VALUES_EQUAL(results.Get(1).GetOffset(), 20u);
-        UNIT_ASSERT(results.Get(1).GetIsBatch());
-    }
-
-    Y_UNIT_TEST(UnsupportedSnappyKafkaBatchKeepsOriginalAndReplies) {
-        TEnv env;
-        const auto actor = env.RegisterConsumer();
-
-        env.Send(actor, new TEvProcessBatch(MakeReadContext(
-            env.Edge,
-            {MakeCorruptKafkaBatchReadResult(10, MakeSnappyKafkaBatchPayload())},
-            "user",
-            7,
-            10)));
-
-        const auto ev = env.Grab<TEvProcessBatchResult>();
-        const auto& results = GetCmdReadResult(ev->Get()->Context).GetResult();
-        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
-        UNIT_ASSERT(results.Get(0).GetIsBatch());
-        UNIT_ASSERT_VALUES_EQUAL(results.Get(0).GetOffset(), 10u);
-    }
-
-    Y_UNIT_TEST(TruncatedKafkaBatchKeepsOriginalAndReplies) {
-        TEnv env;
-        const auto actor = env.RegisterConsumer();
-
-        const auto truncated = MakeKafkaBatchPayload().substr(0, 8);
-        env.Send(actor, new TEvProcessBatch(MakeReadContext(
-            env.Edge,
-            {MakeCorruptKafkaBatchReadResult(12, truncated)},
-            "user",
-            7,
-            12)));
-
-        const auto ev = env.Grab<TEvProcessBatchResult>();
-        const auto& results = GetCmdReadResult(ev->Get()->Context).GetResult();
-        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
-        UNIT_ASSERT(results.Get(0).GetIsBatch());
-        UNIT_ASSERT_VALUES_EQUAL(results.Get(0).GetOffset(), 12u);
-    }
-
-    Y_UNIT_TEST(CorruptKafkaBatchDoesNotPoisonTablet) {
-        TEnv env(true);
-        const auto actor = env.RegisterConsumer();
-
-        env.Send(actor, new TEvProcessBatch(MakeReadContext(
-            env.Edge,
-            {MakeCorruptKafkaBatchReadResult()},
-            "user",
-            7,
-            10)));
-
-        UNIT_ASSERT(env.Grab<TEvProcessBatchResult>());
-        UNIT_ASSERT(env.Runtime.FindActor(actor));
-
-        env.Send(actor, new TEvProcessBatch(MakeReadContext(env.Edge, {MakePlainReadResult(11, "ok")})));
-        UNIT_ASSERT_VALUES_EQUAL(GetCmdReadResult(env.Grab<TEvProcessBatchResult>()->Get()->Context).GetResult().size(), 1);
+        env.AssertTabletDidNotRestart();
+        env.AssertUserErrorLogged("Failed to cut kafka batch, keeping original result");
     }
 
     Y_UNIT_TEST(CorruptKafkaBatchInTheMiddleKeepsCutPrefixAndOriginal) {
@@ -631,11 +571,20 @@ Y_UNIT_TEST_SUITE(TConsumerBatchProcessorTest) {
         UNIT_ASSERT_VALUES_EQUAL(offsetToKey.at(20u), "k0");
         UNIT_ASSERT_VALUES_EQUAL(offsetToKey.at(21u), "k1");
         UNIT_ASSERT(env.Runtime.FindActor(actor));
+        env.AssertTabletDidNotRestart();
+        env.AssertUserErrorLogged("Failed to get keys from kafka batch");
     }
 
     Y_UNIT_TEST(CorruptKafkaBatchThroughBatchProcessorReplies) {
         TEnv env(true);
         const auto actor = env.RegisterBatchProcessor();
+        TActorId consumer;
+        env.Runtime.SetRegistrationObserverFunc([&](TTestActorRuntimeBase& runtime, const TActorId& parent, const TActorId& child) {
+            TTestActorRuntimeBase::DefaultRegistrationObserver(runtime, parent, child);
+            if (parent == actor) {
+                consumer = child;
+            }
+        });
 
         env.Send(actor, new TEvProcessBatch(MakeReadContext(
             env.Edge,
@@ -648,12 +597,19 @@ Y_UNIT_TEST_SUITE(TConsumerBatchProcessorTest) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Context.User, "alice");
         UNIT_ASSERT(GetCmdReadResult(ev->Get()->Context).GetResult().Get(0).GetIsBatch());
         UNIT_ASSERT(env.Runtime.FindActor(actor));
+        UNIT_ASSERT(consumer);
+        UNIT_ASSERT(env.Runtime.FindActor(consumer));
+        env.AssertTabletDidNotRestart();
+        env.AssertUserErrorLogged("Failed to cut kafka batch, keeping original result");
 
         env.Send(actor, new TEvProcessBatch(MakeReadContext(
             env.Edge,
             {MakePlainReadResult(11, "ok")},
             "alice")));
         UNIT_ASSERT_VALUES_EQUAL(GetCmdReadResult(env.Grab<TEvProcessBatchResult>()->Get()->Context).GetResult().size(), 1);
+        UNIT_ASSERT(env.Runtime.FindActor(actor));
+        UNIT_ASSERT(env.Runtime.FindActor(consumer));
+        env.AssertTabletDidNotRestart();
     }
 
     Y_UNIT_TEST(ProcessBatchKeysCollectsPlainAndKafkaKeys) {

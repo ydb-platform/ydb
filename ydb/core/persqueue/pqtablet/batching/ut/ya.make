@@ -10,6 +10,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/logger
     library/cpp/streams/zstd
     library/cpp/testing/unittest
     ydb/core/base

@@ -5,7 +5,6 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
 
-#include <exception>
 #include <utility>
 
 #include <util/generic/strbuf.h>
@@ -36,22 +35,13 @@ namespace {
         const TString& error,
         TStringBuf user = {})
     {
-        if (!user.empty()) {
-            YDB_LOG_ERROR_COMP(PERSQUEUE, message,
-                {"logPrefix", logPrefix},
-                {"errorType", "user"},
-                {"user", user},
-                {"partition", partition},
-                {"offset", offset},
-                {"error", error});
-        } else {
-            YDB_LOG_ERROR_COMP(PERSQUEUE, message,
-                {"logPrefix", logPrefix},
-                {"errorType", "user"},
-                {"partition", partition},
-                {"offset", offset},
-                {"error", error});
-        }
+        YDB_LOG_ERROR_COMP(PERSQUEUE, message,
+            {"logPrefix", logPrefix},
+            {"errorType", "user"},
+            {"user", user},
+            {"partition", partition},
+            {"offset", offset},
+            {"error", error});
     }
 
     TVector<TReadResult> CutOrKeepOriginal(
@@ -142,78 +132,53 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::T
     }
     results->Clear();
 
-    TVector<TReadResult> expanded;
-    expanded.reserve(originalResults.size());
+    ui32 resultsCount = 0;
+    auto addResult = [&](TReadResult& result) {
+        if (result.GetOffset() < context.Offset) {
+            return false;
+        }
+        if (context.LastOffset != 0 && result.GetOffset() >= context.LastOffset) {
+            return false;
+        }
 
-    ui64 batchOffset = context.Offset;
-    try {
-        ui32 resultsCount = 0;
-        // Copy, do not Swap: if expansion throws later, originalResults must still
-        // hold the unmodified messages for the user-error fallback.
-        auto addResult = [&](const TReadResult& result) {
-            if (result.GetOffset() < context.Offset) {
-                return false;
+        resultsCount += result.GetLogicalMessageCount();
+        readResult->AddResult()->Swap(&result);
+        return resultsCount >= context.Count && context.Count > 0;
+    };
+
+    for (auto& originalResult : originalResults) {
+        auto dataChunk = NKikimr::GetDeserializedData(originalResult.GetData());
+
+        if (!originalResult.GetIsBatch()) {
+            if (addResult(originalResult)) {
+                break;
             }
-            if (context.LastOffset != 0 && result.GetOffset() >= context.LastOffset) {
-                return false;
+            continue;
+        }
+
+        auto it = BatchCutters.find(dataChunk.GetCodec());
+        if (it == BatchCutters.end()) {
+            if (addResult(originalResult)) {
+                break;
             }
+            continue;
+        }
 
-            resultsCount += result.GetLogicalMessageCount();
-            expanded.push_back(result);
-            return resultsCount >= context.Count && context.Count > 0;
-        };
-
-        for (const auto& originalResult : originalResults) {
-            batchOffset = originalResult.GetOffset();
-            auto dataChunk = NKikimr::GetDeserializedData(originalResult.GetData());
-
-            if (!originalResult.GetIsBatch()) {
-                if (addResult(originalResult)) {
-                    break;
-                }
-                continue;
-            }
-
-            auto it = BatchCutters.find(dataChunk.GetCodec());
-            if (it == BatchCutters.end()) {
-                if (addResult(originalResult)) {
-                    break;
-                }
-                continue;
-            }
-
-            TBatchCutterData data(originalResult, std::move(dataChunk));
-            auto cutResults = CutOrKeepOriginal(
-                *it->second,
-                data,
-                context.Offset,
-                GetLogPrefix(),
-                User,
-                context.PartitionId);
-            for (auto& cutResult : cutResults) {
-                if (addResult(cutResult)) {
-                    break;
-                }
-            }
-            if (resultsCount >= context.Count) {
+        TBatchCutterData data(originalResult, std::move(dataChunk));
+        auto cutResults = CutOrKeepOriginal(
+            *it->second,
+            data,
+            context.Offset,
+            GetLogPrefix(),
+            User,
+            context.PartitionId);
+        for (auto& cutResult : cutResults) {
+            if (addResult(cutResult)) {
                 break;
             }
         }
-
-        for (auto& result : expanded) {
-            readResult->AddResult()->Swap(&result);
-        }
-    } catch (const std::exception& e) {
-        LogKafkaBatchUserError(
-            "Failed to process read batch, returning original results",
-            GetLogPrefix(),
-            context.PartitionId,
-            batchOffset,
-            TString(e.what()),
-            User);
-        results->Clear();
-        for (auto& result : originalResults) {
-            readResult->AddResult()->Swap(&result);
+        if (resultsCount >= context.Count) {
+            break;
         }
     }
 
@@ -226,47 +191,36 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatchKeys::TPtr& ev, const NActor
     HasCurrentCPUUsagePartitionId = true;
 
     THashMap<ui64, TString> offsetToKey;
-    ui64 batchOffset = 0;
 
-    try {
-        for (const auto& result : context.Results) {
-            batchOffset = result.GetOffset();
-            if (result.GetData().empty()) {
-                continue;
-            }
+    for (const auto& result : context.Results) {
+        if (result.GetData().empty()) {
+            continue;
+        }
 
-            auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
-            if (dataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
-                continue;
-            }
+        auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
+        if (dataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
+            continue;
+        }
 
-            if (!result.GetIsBatch()) {
-                auto key = GetCompactionKey(dataChunk);
-                offsetToKey[result.GetOffset()] = std::move(key);
-                continue;
-            }
+        if (!result.GetIsBatch()) {
+            auto key = GetCompactionKey(dataChunk);
+            offsetToKey[result.GetOffset()] = std::move(key);
+            continue;
+        }
 
-            auto it = BatchCutters.find(dataChunk.GetCodec());
-            if (it != BatchCutters.end()) {
-                TBatchCutterData data(result, std::move(dataChunk));
-                auto batchKeys = GetKeysOrEmpty(
-                    *it->second,
-                    data,
-                    result.GetOffset(),
-                    GetLogPrefix(),
-                    context.PartitionId);
-                for (auto& [key, offset] : batchKeys) {
-                    offsetToKey[offset] = std::move(key);
-                }
+        auto it = BatchCutters.find(dataChunk.GetCodec());
+        if (it != BatchCutters.end()) {
+            TBatchCutterData data(result, std::move(dataChunk));
+            auto batchKeys = GetKeysOrEmpty(
+                *it->second,
+                data,
+                result.GetOffset(),
+                GetLogPrefix(),
+                context.PartitionId);
+            for (auto& [key, offset] : batchKeys) {
+                offsetToKey[offset] = std::move(key);
             }
         }
-    } catch (const std::exception& e) {
-        LogKafkaBatchUserError(
-            "Failed to process batch keys, returning collected keys",
-            GetLogPrefix(),
-            context.PartitionId,
-            batchOffset,
-            TString(e.what()));
     }
 
     ctx.Send(context.ResponseActor, new TEvProcessBatchKeysResult(std::move(offsetToKey)));

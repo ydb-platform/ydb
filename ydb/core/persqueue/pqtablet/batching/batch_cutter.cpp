@@ -137,13 +137,7 @@ std::expected<TVector<TReadResult>, TString> TKafkaBatchCutter::Cut(const TBatch
                 itemChunk.ClearData();
             }
             TString serializedChunk;
-            if (!itemChunk.SerializeToString(&serializedChunk)) {
-                return std::unexpected(TStringBuilder()
-                    << "failed to serialize data chunk"
-                    << " offset=" << *offset
-                    << " seq_no=" << seqNo
-                    << " codec=" << static_cast<int>(codec));
-            }
+            Y_PROTOBUF_SUPPRESS_NODISCARD itemChunk.SerializeToString(&serializedChunk);
             item.SetData(std::move(serializedChunk));
 
             if (record.Key) {

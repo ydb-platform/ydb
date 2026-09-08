@@ -106,9 +106,11 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::T
 
     TVector<TReadResult> originalResults;
     originalResults.reserve(results->size());
-    for (const auto& result : *results) {
-        originalResults.push_back(result);
+    for (int i = 0; i < results->size(); ++i) {
+        originalResults.emplace_back();
+        originalResults.back().Swap(results->Mutable(i));
     }
+    results->Clear();
 
     TVector<TReadResult> expanded;
     expanded.reserve(originalResults.size());
@@ -168,7 +170,6 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::T
             }
         }
 
-        results->Clear();
         for (auto& result : expanded) {
             readResult->AddResult()->Swap(&result);
         }
@@ -178,6 +179,10 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::T
             {"user", User},
             {"partitionId", context.PartitionId},
             {"error", TString(e.what())});
+        results->Clear();
+        for (auto& result : originalResults) {
+            readResult->AddResult()->Swap(&result);
+        }
     }
 
     ctx.Send(context.ResponseActor, new TEvProcessBatchResult(std::move(context)));

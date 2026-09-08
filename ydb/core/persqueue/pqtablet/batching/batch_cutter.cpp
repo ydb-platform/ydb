@@ -82,6 +82,16 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TBatchCutterData& data, const 
     TVector<TReadResult> result;
     result.reserve(batch.Records.size());
 
+    TReadResult itemTemplate(data.ReadResult);
+    itemTemplate.ClearData();
+    itemTemplate.SetLogicalMessageCount(1);
+    itemTemplate.SetIsBatch(false);
+    itemTemplate.ClearUncompressedSize();
+
+    NKikimrPQClient::TDataChunk itemChunk(dataChunk);
+    itemChunk.ClearData();
+    itemChunk.SetCodec(codec);
+
     const ui64 baseOffset = data.ReadResult.GetOffset();
     for (size_t i = 0; i < batch.Records.size(); ++i) {
         const auto offset = baseOffset + batch.Records[i].OffsetDelta;
@@ -91,16 +101,12 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TBatchCutterData& data, const 
 
         const auto& record = batch.Records[i];
         const ui64 seqNo = NKafka::GetRecordSeqNo(batch, i, record);
-        TReadResult item = data.ReadResult;
+
+        TReadResult item(itemTemplate);
         item.SetOffset(offset);
         item.SetSeqNo(seqNo);
-        item.SetLogicalMessageCount(1);
-        item.SetIsBatch(false);
-        item.ClearUncompressedSize();
 
-        NKikimrPQClient::TDataChunk itemChunk = dataChunk;
         itemChunk.SetSeqNo(seqNo);
-        itemChunk.SetCodec(codec);
         if (record.Value) {
             itemChunk.SetData(CompressPayload(TStringBuf(record.Value->data(), record.Value->size()), codec));
         } else {

@@ -265,6 +265,21 @@ Y_UNIT_TEST_SUITE(TBatchCutterTest) {
         AssertKafkaBatchCut(TKafkaBatchCutter().Cut(TBatchCutterData(readResult, NKikimr::GetDeserializedData(readResult.GetData())), 10));
     }
 
+    Y_UNIT_TEST(CutRecordsDoNotKeepOriginalBatchPayload) {
+        const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayload());
+        const auto originalData = readResult.GetData();
+        const auto cut = TKafkaBatchCutter().Cut(
+            TBatchCutterData(readResult, NKikimr::GetDeserializedData(readResult.GetData())), 10);
+
+        UNIT_ASSERT_VALUES_EQUAL(readResult.GetData(), originalData);
+        UNIT_ASSERT_VALUES_EQUAL(cut.size(), 2u);
+        for (const auto& item : cut) {
+            UNIT_ASSERT(item.GetData().size() < originalData.size());
+            UNIT_ASSERT(item.GetData() != originalData);
+            UNIT_ASSERT(!item.GetIsBatch());
+        }
+    }
+
     Y_UNIT_TEST(CutSkipsRecordsBeforeReadStartOffset) {
         const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayload());
         const auto cut = TKafkaBatchCutter().Cut(TBatchCutterData(readResult, NKikimr::GetDeserializedData(readResult.GetData())), 11);

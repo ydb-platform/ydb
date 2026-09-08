@@ -59,6 +59,7 @@ ydb/core/kqp/ut/indexes/prefixed_vector unittest.[*/*] chunk
 ydb/core/kqp/ut/opt KqpNamedExpressions.NamedExpressionRandomUpsertRevert+UseDataQuery+EnableIndexStreamWrite
 ydb/core/kqp/ut/opt unittest.[*/*] chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
+ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
@@ -79,6 +80,7 @@ ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsSql+En
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsSql-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme unittest.[*/*] chunk
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
+ydb/core/kqp/ut/service KqpQueryService.TableSink_ReplaceFromSelectLargeOlap
 ydb/core/kqp/ut/service KqpQueryServiceScripts.ExplainScript
 ydb/core/kqp/ut/service unittest.[*/*] chunk
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.ConflictWrite+IsOlap+FillTables
@@ -92,6 +94,7 @@ ydb/core/nbs/cloud/blockstore/libs/vhost/ut TServerTest.ShouldCancelRequestsInFl
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicInDatabaseWithSlashInName
 ydb/core/persqueue/public/describer/ut unittest.sole chunk
 ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.TopicWithManyPartitionAndData
+ydb/core/persqueue/public/mlp/ut TMLPReaderTests.TopicNotExists
 ydb/core/persqueue/public/mlp/ut unittest.sole chunk
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerFailsWhenDlqIsACdcStream
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerFailsWhenDlqIsATable
@@ -140,9 +143,11 @@ ydb/core/tx/tx_proxy/ut_base_tenant TSubDomainTest.CoordinatorRunAtSubdomainNode
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-LocalUser-CreateUser-24
 ydb/core/tx/tx_proxy/ut_schemereq unittest.[*/*] chunk
 ydb/library/actors/http/ut HttpProxy.RequestAfter307
+ydb/library/actors/http/ut THttpProxyWithMTls.RequiredNoClientCertificate
 ydb/library/actors/http/ut unittest.sole chunk
 ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]
 ydb/library/nmslib/test/run_test_integr exectest.sole chunk
+ydb/services/config/ut ConfigGRPCService.ReplaceConfig
 ydb/services/config/ut unittest.sole chunk
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestDiscoverClusters
 ydb/tests/datashard/truncate/concurrency py3test.[test_truncate_table_concurrency.py */*] chunk
@@ -159,6 +164,7 @@ ydb/tests/functional/dstool test_canonical_requests.py.Test.test_capacity_metric
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_cluster_get_set
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_essential
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_add
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_list_fallback_to_legacy_api
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_list_legacy_api
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_resize
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_populate
@@ -617,12 +623,17 @@ ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpcdsDiffProcessing.
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpcdsDiffProcessing.test_tpcds[CheckCanonicalPolicy.NO]
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpcdsDiffProcessing.test_tpcds[CheckCanonicalPolicy.WARNING]
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpchDiffProcessing.test_tpch[CheckCanonicalPolicy.ERROR]
+ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpchDiffProcessing.test_tpch[CheckCanonicalPolicy.WARNING]
 ydb/tests/functional/tpc/medium test_external.py.TestExternalE1.test[first_query_set.2.yql]
+ydb/tests/functional/tpc/medium test_import_csv.py.TestExternalImportCsvArrow.test
 ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW10T4SdkCompaction.test
 ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW5T4LegacyCompaction.test
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[10]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[11]
+ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[12]
+ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[13]
+ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[14]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[8]
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestClickbenchWM.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestClickbenchWMComputeSchedulerP1T1.test

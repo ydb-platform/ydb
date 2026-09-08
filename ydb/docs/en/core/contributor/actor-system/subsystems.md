@@ -118,13 +118,17 @@ NActors::TSubSystemDependencies GetDependencies() const override {
 
 `OnDependenciesResolved` receives the selected alternative's type IDs and borrowed instance pointers in declaration order. Only selected dependencies establish lifecycle ordering; a different registered alternative may exist without being ordered before the consumer. Independent subsystems have no application-level ordering guarantee.
 
+Startup follows the resolved dependency order. Both stop-hook passes traverse that same order in reverse, like unwinding a stack: consumers stop before the subsystems they use. This order comes from dependencies, not registration time. In the example below, `A` depends on `B`, and `B` depends on `C`.
+
 | Phase | Order and runtime state |
 |---|---|
-| `OnDependenciesResolved` | Dependencies first, before any start hook. All selected instances exist but have not run start hooks. |
-| `OnBeforeStart` | Dependencies first, before executor and scheduler preparation. Prepare synchronous state here. |
-| `OnAfterStart` | Dependencies first, after executor and scheduler startup. Subsystems can register their internal actors here. |
-| `OnBeforeStop` | Dependents first, while executor threads still run; before deferred pre-stop callbacks. Stop accepting work and initiate cleanup. |
-| `OnAfterStop` | Dependents first, after scheduler stop and executor shutdown. Release resources that no longer require actor execution. |
+| `OnDependenciesResolved` | `C → B → A`, before any start hook. All selected instances exist but have not run start hooks. |
+| `OnBeforeStart` | `C → B → A`: dependencies before consumers, before executor and scheduler preparation. Prepare synchronous state here. |
+| `OnAfterStart` | `C → B → A`, after executor and scheduler startup. Subsystems can register their internal actors here. |
+| `OnBeforeStop` | `A → B → C`: consumers before dependencies, while executor threads still run; before deferred pre-stop callbacks. Stop accepting work and initiate cleanup. |
+| `OnAfterStop` | `A → B → C`, after scheduler stop and executor shutdown. Release resources that no longer require actor execution. |
+
+Each hook is a separate pass over all subsystems. First, `OnBeforeStop` runs for `A`, then `B`, then `C`; next, deferred pre-stop callbacks run and the scheduler and executors shut down; finally, `OnAfterStop` runs for `A`, then `B`, then `C`. Thus, `A` can use `B` during its `OnBeforeStop` before `B` begins its own stop hook. This hook order does not guarantee C++ object destruction order.
 
 Hooks run synchronously in the thread calling `Start()` or `Stop()`, without a provided actor activation context. Use the supplied `TActorSystem` for actor operations. Executor threads can process actors before all `OnAfterStart` callbacks finish. If early actors need a subsystem, provide an explicit readiness protocol. External callers can wait for `Start()` to return.
 

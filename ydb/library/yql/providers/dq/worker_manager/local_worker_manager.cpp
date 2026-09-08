@@ -63,7 +63,8 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
     }
 
     i64 GetExtraMemoryAvailability() const override {
-        // TResourceQuoter::Allocate treats Limit == 0 as unlimited, but GetFreeTotal() returns 0 then
+        // a lock-free snapshot of the node quoter. TResourceQuoter::Allocate treats Limit == 0 as unlimited,
+        // but GetFreeTotal() returns 0 then
         const ui64 limit = NodeQuoter->GetLimit();
         return limit ? static_cast<i64>(NodeQuoter->GetFreeTotal()) : std::numeric_limits<i64>::max();
     }

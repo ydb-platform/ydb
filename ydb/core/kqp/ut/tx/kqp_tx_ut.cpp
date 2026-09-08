@@ -1323,9 +1323,21 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Strict Serializable mode is disabled");
     }
 
-    // Runs `read`, then the scheme `Operation` from another session, then `read` again,
-    // all inside one SerializableRW transaction, and checks how the second read fails.
-    struct TSchemeChangeInTxTester {
+    enum class ESchemeOp {
+        AddColumn,
+        DropReadColumn,
+        DropUnreadColumn,
+        TruncateTable,
+        AddIndex,
+        DropIndex,
+        DropIndexWithIndexRead,
+        AddChangefeed,
+        DropChangefeed,
+        SetFamily,
+        SetDefault,
+    };
+
+    struct TSchemeOpSpec {
         TString Create = R"(
             CREATE TABLE `/Root/SchemeOpsTable` (
                 Key Uint64,
@@ -1341,16 +1353,108 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
         TString Read = "SELECT Key, Value FROM `/Root/SchemeOpsTable` ORDER BY Key;";
 
-        EStatus ExpectedStatus = EStatus::ABORTED;
-        TString ExpectedIssue = "Scheme changed for table";
+        // Status of the second read, in a transaction that promises repeatable reads and in
+        // one that does not. They differ only where the schema version check is what fails:
+        // a statement that no longer compiles against the new schema fails either way.
+        EStatus RepeatableReadStatus = EStatus::ABORTED;
+        EStatus RelaxedStatus = EStatus::SUCCESS;
+    };
+
+    TSchemeOpSpec MakeSchemeOpSpec(ESchemeOp op) {
+        TSchemeOpSpec spec;
+        switch (op) {
+            case ESchemeOp::AddColumn:
+                spec.Operation = "ALTER TABLE `/Root/SchemeOpsTable` ADD COLUMN Extra Uint64;";
+                spec.Read = "SELECT * FROM `/Root/SchemeOpsTable` ORDER BY Key;";
+                break;
+
+            case ESchemeOp::DropReadColumn:
+                // The dropped column is the one being read, so the statement cannot be
+                // recompiled against the new schema.
+                spec.Operation = "ALTER TABLE `/Root/SchemeOpsTable` DROP COLUMN Value;";
+                spec.RepeatableReadStatus = EStatus::GENERIC_ERROR;
+                spec.RelaxedStatus = EStatus::GENERIC_ERROR;
+                break;
+
+            case ESchemeOp::DropUnreadColumn:
+                // The dropped column is irrelevant to the read, yet the transaction still
+                // aborts: the schema version check is unconditional for now.
+                spec.Setup = "ALTER TABLE `/Root/SchemeOpsTable` ADD COLUMN Spare Uint64;";
+                spec.Operation = "ALTER TABLE `/Root/SchemeOpsTable` DROP COLUMN Spare;";
+                break;
+
+            case ESchemeOp::TruncateTable:
+                spec.Operation = "TRUNCATE TABLE `/Root/SchemeOpsTable`;";
+                break;
+
+            case ESchemeOp::AddIndex:
+                spec.Operation = "ALTER TABLE `/Root/SchemeOpsTable` ADD INDEX ValueIndex GLOBAL SYNC ON (`Value`);";
+                break;
+
+            case ESchemeOp::DropIndex:
+                spec.Setup = "ALTER TABLE `/Root/SchemeOpsTable` ADD INDEX ValueIndex GLOBAL SYNC ON (`Value`);";
+                spec.Operation = "ALTER TABLE `/Root/SchemeOpsTable` DROP INDEX ValueIndex;";
+                break;
+
+            case ESchemeOp::DropIndexWithIndexRead:
+                // The transaction reads through the index being dropped, so it fails to
+                // resolve the index rather than to match the schema version.
+                spec.Setup = "ALTER TABLE `/Root/SchemeOpsTable` ADD INDEX ValueIndex GLOBAL SYNC ON (`Value`);";
+                spec.Operation = "ALTER TABLE `/Root/SchemeOpsTable` DROP INDEX ValueIndex;";
+                spec.Read = R"(SELECT Key, Value FROM `/Root/SchemeOpsTable` VIEW ValueIndex WHERE Value = "One";)";
+                spec.RepeatableReadStatus = EStatus::SCHEME_ERROR;
+                spec.RelaxedStatus = EStatus::SCHEME_ERROR;
+                break;
+
+            case ESchemeOp::AddChangefeed:
+                spec.Operation = R"(
+                    ALTER TABLE `/Root/SchemeOpsTable` ADD CHANGEFEED Feed WITH (FORMAT = 'JSON', MODE = 'UPDATES');
+                )";
+                break;
+
+            case ESchemeOp::DropChangefeed:
+                spec.Setup = R"(
+                    ALTER TABLE `/Root/SchemeOpsTable` ADD CHANGEFEED Feed WITH (FORMAT = 'JSON', MODE = 'UPDATES');
+                )";
+                spec.Operation = "ALTER TABLE `/Root/SchemeOpsTable` DROP CHANGEFEED Feed;";
+                break;
+
+            case ESchemeOp::SetFamily:
+                spec.Create = R"(
+                    CREATE TABLE `/Root/SchemeOpsTable` (
+                        Key Uint64,
+                        Value String,
+                        PRIMARY KEY (Key),
+                        FAMILY Family1 (
+                            DATA = "test",
+                            COMPRESSION = "off"
+                        )
+                    );
+                )";
+                spec.Operation = "ALTER TABLE `/Root/SchemeOpsTable` ALTER COLUMN Value SET FAMILY Family1;";
+                break;
+
+            case ESchemeOp::SetDefault:
+                spec.Operation = R"(ALTER TABLE `/Root/SchemeOpsTable` ALTER COLUMN Value SET DEFAULT "def"u;)";
+                break;
+        }
+        return spec;
+    }
+
+    // Runs the read, then the scheme operation from another session, then the read again, all
+    // inside one SerializableRW transaction of the table service.
+    struct TSchemeChangeInTxTester {
+        ESchemeOp Operation = ESchemeOp::AddColumn;
 
         void Execute() const {
+            const auto spec = MakeSchemeOpSpec(Operation);
+
             TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
             auto db = kikimr.GetTableClient();
             auto schemeSession = db.CreateSession().GetValueSync().GetSession();
             auto session = db.CreateSession().GetValueSync().GetSession();
 
-            auto schemeResult = schemeSession.ExecuteSchemeQuery(Create).ExtractValueSync();
+            auto schemeResult = schemeSession.ExecuteSchemeQuery(spec.Create).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(schemeResult.GetStatus(), EStatus::SUCCESS,
                 schemeResult.GetIssues().ToString());
 
@@ -1359,30 +1463,31 @@ Y_UNIT_TEST_SUITE(KqpTx) {
             )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-            if (Setup) {
-                schemeResult = schemeSession.ExecuteSchemeQuery(Setup).ExtractValueSync();
+            if (spec.Setup) {
+                schemeResult = schemeSession.ExecuteSchemeQuery(spec.Setup).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(schemeResult.GetStatus(), EStatus::SUCCESS,
                     schemeResult.GetIssues().ToString());
             }
 
-            result = session.ExecuteDataQuery(Q_(Read),
+            result = session.ExecuteDataQuery(Q_(spec.Read),
                 TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             auto tx = result.GetTransaction();
             UNIT_ASSERT(tx);
 
-            schemeResult = schemeSession.ExecuteSchemeQuery(Operation).ExtractValueSync();
+            schemeResult = schemeSession.ExecuteSchemeQuery(spec.Operation).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(schemeResult.GetStatus(), EStatus::SUCCESS,
                 schemeResult.GetIssues().ToString());
 
-            result = session.ExecuteDataQuery(Q_(Read), TTxControl::Tx(*tx)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), ExpectedStatus, result.GetIssues().ToString());
-            if (ExpectedIssue) {
-                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), ExpectedIssue);
+            result = session.ExecuteDataQuery(Q_(spec.Read), TTxControl::Tx(*tx)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), spec.RepeatableReadStatus,
+                result.GetIssues().ToString());
+            if (spec.RepeatableReadStatus == EStatus::ABORTED) {
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Scheme changed for table");
             }
 
-            // The transaction is released on abort, so the client cannot commit it anymore.
+            // The transaction is released on failure, so the client cannot commit it anymore.
             auto commitResult = tx->Commit().ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::NOT_FOUND,
                 commitResult.GetIssues().ToString());
@@ -1391,98 +1496,280 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
     Y_UNIT_TEST(SchemeChangeAddColumn) {
         TSchemeChangeInTxTester tester;
-        tester.Operation = "ALTER TABLE `/Root/SchemeOpsTable` ADD COLUMN Extra Uint64;";
-        tester.Read = "SELECT * FROM `/Root/SchemeOpsTable` ORDER BY Key;";
+        tester.Operation = ESchemeOp::AddColumn;
         tester.Execute();
     }
 
-    // The dropped column is the one being read, so the statement cannot even be
-    // recompiled against the new schema.
     Y_UNIT_TEST(SchemeChangeDropReadColumn) {
         TSchemeChangeInTxTester tester;
-        tester.Operation = "ALTER TABLE `/Root/SchemeOpsTable` DROP COLUMN Value;";
-        tester.ExpectedStatus = EStatus::GENERIC_ERROR;
-        tester.ExpectedIssue = "";
+        tester.Operation = ESchemeOp::DropReadColumn;
         tester.Execute();
     }
 
-    // The dropped column is irrelevant to the read, yet the transaction still aborts:
-    // the schema version check is unconditional for now.
     Y_UNIT_TEST(SchemeChangeDropUnreadColumn) {
         TSchemeChangeInTxTester tester;
-        tester.Setup = "ALTER TABLE `/Root/SchemeOpsTable` ADD COLUMN Spare Uint64;";
-        tester.Operation = "ALTER TABLE `/Root/SchemeOpsTable` DROP COLUMN Spare;";
+        tester.Operation = ESchemeOp::DropUnreadColumn;
         tester.Execute();
     }
 
     Y_UNIT_TEST(SchemeChangeTruncateTable) {
         TSchemeChangeInTxTester tester;
-        tester.Operation = "TRUNCATE TABLE `/Root/SchemeOpsTable`;";
+        tester.Operation = ESchemeOp::TruncateTable;
         tester.Execute();
     }
 
     Y_UNIT_TEST(SchemeChangeAddIndex) {
         TSchemeChangeInTxTester tester;
-        tester.Operation = "ALTER TABLE `/Root/SchemeOpsTable` ADD INDEX ValueIndex GLOBAL SYNC ON (`Value`);";
+        tester.Operation = ESchemeOp::AddIndex;
         tester.Execute();
     }
 
     Y_UNIT_TEST(SchemeChangeDropIndex) {
         TSchemeChangeInTxTester tester;
-        tester.Setup = "ALTER TABLE `/Root/SchemeOpsTable` ADD INDEX ValueIndex GLOBAL SYNC ON (`Value`);";
-        tester.Operation = "ALTER TABLE `/Root/SchemeOpsTable` DROP INDEX ValueIndex;";
+        tester.Operation = ESchemeOp::DropIndex;
         tester.Execute();
     }
 
-    // Same operation, but the transaction reads through the index being dropped, so it
-    // fails to resolve the index rather than to match the schema version.
     Y_UNIT_TEST(SchemeChangeDropIndexWithIndexRead) {
         TSchemeChangeInTxTester tester;
-        tester.Setup = "ALTER TABLE `/Root/SchemeOpsTable` ADD INDEX ValueIndex GLOBAL SYNC ON (`Value`);";
-        tester.Operation = "ALTER TABLE `/Root/SchemeOpsTable` DROP INDEX ValueIndex;";
-        tester.Read = R"(SELECT Key, Value FROM `/Root/SchemeOpsTable` VIEW ValueIndex WHERE Value = "One";)";
-        tester.ExpectedStatus = EStatus::SCHEME_ERROR;
-        tester.ExpectedIssue = "";
+        tester.Operation = ESchemeOp::DropIndexWithIndexRead;
         tester.Execute();
     }
 
     Y_UNIT_TEST(SchemeChangeAddChangefeed) {
         TSchemeChangeInTxTester tester;
-        tester.Operation = R"(
-            ALTER TABLE `/Root/SchemeOpsTable` ADD CHANGEFEED Feed WITH (FORMAT = 'JSON', MODE = 'UPDATES');
-        )";
+        tester.Operation = ESchemeOp::AddChangefeed;
         tester.Execute();
     }
 
     Y_UNIT_TEST(SchemeChangeDropChangefeed) {
         TSchemeChangeInTxTester tester;
-        tester.Setup = R"(
-            ALTER TABLE `/Root/SchemeOpsTable` ADD CHANGEFEED Feed WITH (FORMAT = 'JSON', MODE = 'UPDATES');
-        )";
-        tester.Operation = "ALTER TABLE `/Root/SchemeOpsTable` DROP CHANGEFEED Feed;";
+        tester.Operation = ESchemeOp::DropChangefeed;
         tester.Execute();
     }
 
     Y_UNIT_TEST(SchemeChangeSetFamily) {
         TSchemeChangeInTxTester tester;
-        tester.Create = R"(
-            CREATE TABLE `/Root/SchemeOpsTable` (
-                Key Uint64,
-                Value String,
-                PRIMARY KEY (Key),
-                FAMILY Family1 (
-                    DATA = "test",
-                    COMPRESSION = "off"
-                )
-            );
-        )";
-        tester.Operation = "ALTER TABLE `/Root/SchemeOpsTable` ALTER COLUMN Value SET FAMILY Family1;";
+        tester.Operation = ESchemeOp::SetFamily;
         tester.Execute();
     }
 
     Y_UNIT_TEST(SchemeChangeSetDefault) {
         TSchemeChangeInTxTester tester;
-        tester.Operation = R"(ALTER TABLE `/Root/SchemeOpsTable` ALTER COLUMN Value SET DEFAULT "def"u;)";
+        tester.Operation = ESchemeOp::SetDefault;
+        tester.Execute();
+    }
+
+    // Same scenario over the query service, where every isolation mode is reachable.
+    // PromisesRepeatableReads mirrors HasRepeatableReads() in kqp_tx.cpp and picks which of
+    // the two statuses of the operation is expected.
+    struct TSchemeChangeIsolationTester {
+        ESchemeOp Operation = ESchemeOp::AddColumn;
+        NYdb::NQuery::TTxSettings TxSettings = NYdb::NQuery::TTxSettings::SerializableRW();
+        bool PromisesRepeatableReads = true;
+        bool EnableReadCommitted = false;
+        bool EnableStrictSerializable = false;
+
+        void Execute() const {
+            const auto spec = MakeSchemeOpSpec(Operation);
+
+            TKikimrSettings settings;
+            settings.SetWithSampleTables(false);
+            settings.SetEnableStrictSerializableIsolation(EnableStrictSerializable);
+            settings.AppConfig.MutableTableServiceConfig()->SetEnableReadCommittedIsolation(EnableReadCommitted);
+            TKikimrRunner kikimr(settings);
+
+            auto db = kikimr.GetQueryClient();
+            auto session = db.GetSession().GetValueSync().GetSession();
+            auto schemeSession = db.GetSession().GetValueSync().GetSession();
+
+            auto schemeResult = schemeSession.ExecuteQuery(spec.Create,
+                NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(schemeResult.GetStatus(), EStatus::SUCCESS,
+                schemeResult.GetIssues().ToString());
+
+            auto result = session.ExecuteQuery(R"(
+                REPLACE INTO `/Root/SchemeOpsTable` (Key, Value) VALUES (1u, "One"), (2u, "Two");
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            if (spec.Setup) {
+                schemeResult = schemeSession.ExecuteQuery(spec.Setup,
+                    NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(schemeResult.GetStatus(), EStatus::SUCCESS,
+                    schemeResult.GetIssues().ToString());
+            }
+
+            result = session.ExecuteQuery(spec.Read,
+                NYdb::NQuery::TTxControl::BeginTx(TxSettings)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto tx = result.GetTransaction();
+            UNIT_ASSERT(tx);
+
+            schemeResult = schemeSession.ExecuteQuery(spec.Operation,
+                NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(schemeResult.GetStatus(), EStatus::SUCCESS,
+                schemeResult.GetIssues().ToString());
+
+            const EStatus expectedStatus = PromisesRepeatableReads
+                ? spec.RepeatableReadStatus
+                : spec.RelaxedStatus;
+
+            result = session.ExecuteQuery(spec.Read, NYdb::NQuery::TTxControl::Tx(*tx)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToString());
+            if (expectedStatus == EStatus::ABORTED) {
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Scheme changed for table");
+            }
+        }
+    };
+
+    Y_UNIT_TEST(SchemeChangeIsolationSerializableRW) {
+        TSchemeChangeIsolationTester tester;
+        tester.TxSettings = NYdb::NQuery::TTxSettings::SerializableRW();
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeIsolationSnapshotRO) {
+        TSchemeChangeIsolationTester tester;
+        tester.TxSettings = NYdb::NQuery::TTxSettings::SnapshotRO();
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeIsolationSnapshotRW) {
+        TSchemeChangeIsolationTester tester;
+        tester.TxSettings = NYdb::NQuery::TTxSettings::SnapshotRW();
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeIsolationStrictSerializableRW) {
+        TSchemeChangeIsolationTester tester;
+        tester.TxSettings = NYdb::NQuery::TTxSettings::StrictSerializableRW();
+        tester.EnableStrictSerializable = true;
+        tester.Execute();
+    }
+
+    // Read Committed is meant to see the latest committed data on every statement, and the
+    // Online and Stale modes promise no consistency between statements at all.
+    Y_UNIT_TEST(SchemeChangeIsolationReadCommittedRW) {
+        TSchemeChangeIsolationTester tester;
+        tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
+        tester.EnableReadCommitted = true;
+        tester.PromisesRepeatableReads = false;
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeIsolationStaleRO) {
+        TSchemeChangeIsolationTester tester;
+        tester.TxSettings = NYdb::NQuery::TTxSettings::StaleRO();
+        tester.PromisesRepeatableReads = false;
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeIsolationOnlineRO) {
+        TSchemeChangeIsolationTester tester;
+        tester.TxSettings = NYdb::NQuery::TTxSettings::OnlineRO();
+        tester.PromisesRepeatableReads = false;
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeReadCommittedAddColumn) {
+        TSchemeChangeIsolationTester tester;
+        tester.Operation = ESchemeOp::AddColumn;
+        tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
+        tester.EnableReadCommitted = true;
+        tester.PromisesRepeatableReads = false;
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeReadCommittedDropReadColumn) {
+        TSchemeChangeIsolationTester tester;
+        tester.Operation = ESchemeOp::DropReadColumn;
+        tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
+        tester.EnableReadCommitted = true;
+        tester.PromisesRepeatableReads = false;
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeReadCommittedDropUnreadColumn) {
+        TSchemeChangeIsolationTester tester;
+        tester.Operation = ESchemeOp::DropUnreadColumn;
+        tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
+        tester.EnableReadCommitted = true;
+        tester.PromisesRepeatableReads = false;
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeReadCommittedTruncateTable) {
+        TSchemeChangeIsolationTester tester;
+        tester.Operation = ESchemeOp::TruncateTable;
+        tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
+        tester.EnableReadCommitted = true;
+        tester.PromisesRepeatableReads = false;
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeReadCommittedAddIndex) {
+        TSchemeChangeIsolationTester tester;
+        tester.Operation = ESchemeOp::AddIndex;
+        tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
+        tester.EnableReadCommitted = true;
+        tester.PromisesRepeatableReads = false;
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeReadCommittedDropIndex) {
+        TSchemeChangeIsolationTester tester;
+        tester.Operation = ESchemeOp::DropIndex;
+        tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
+        tester.EnableReadCommitted = true;
+        tester.PromisesRepeatableReads = false;
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeReadCommittedDropIndexWithIndexRead) {
+        TSchemeChangeIsolationTester tester;
+        tester.Operation = ESchemeOp::DropIndexWithIndexRead;
+        tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
+        tester.EnableReadCommitted = true;
+        tester.PromisesRepeatableReads = false;
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeReadCommittedAddChangefeed) {
+        TSchemeChangeIsolationTester tester;
+        tester.Operation = ESchemeOp::AddChangefeed;
+        tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
+        tester.EnableReadCommitted = true;
+        tester.PromisesRepeatableReads = false;
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeReadCommittedDropChangefeed) {
+        TSchemeChangeIsolationTester tester;
+        tester.Operation = ESchemeOp::DropChangefeed;
+        tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
+        tester.EnableReadCommitted = true;
+        tester.PromisesRepeatableReads = false;
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeReadCommittedSetFamily) {
+        TSchemeChangeIsolationTester tester;
+        tester.Operation = ESchemeOp::SetFamily;
+        tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
+        tester.EnableReadCommitted = true;
+        tester.PromisesRepeatableReads = false;
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeReadCommittedSetDefault) {
+        TSchemeChangeIsolationTester tester;
+        tester.Operation = ESchemeOp::SetDefault;
+        tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
+        tester.EnableReadCommitted = true;
+        tester.PromisesRepeatableReads = false;
         tester.Execute();
     }
 }

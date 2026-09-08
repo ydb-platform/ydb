@@ -491,6 +491,9 @@ public:
 bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfiguration& config, bool rollbackTx,
     bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery);
 
+// Whether the mode promises that all reads of a transaction observe the same state.
+bool HasRepeatableReads(NKqpProto::EIsolationLevel isolationLevel);
+
 bool HasOlapTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOlapTableWriteInStage(const NKqpProto::TKqpPhyStage& stage);
 bool HasOlapTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);

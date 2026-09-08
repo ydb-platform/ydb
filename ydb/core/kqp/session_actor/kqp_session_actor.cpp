@@ -1572,21 +1572,26 @@ public:
             AFL_ENSURE(checkSchemeTx());
         }
 
-        for (const auto& tableInfo : phyQuery.GetTableInfos()) {
-            const ui64 schemaVersion = tableInfo.GetSchemaVersion();
-            if (!schemaVersion) {
-                continue;
-            }
+        // Only modes that promise repeatable reads are aborted: the rest are documented to
+        // observe newer data between statements.
+        if (QueryState->TxCtx->EffectiveIsolationLevel
+                && HasRepeatableReads(*QueryState->TxCtx->EffectiveIsolationLevel)) {
+            for (const auto& tableInfo : phyQuery.GetTableInfos()) {
+                const ui64 schemaVersion = tableInfo.GetSchemaVersion();
+                if (!schemaVersion) {
+                    continue;
+                }
 
-            const NYql::TKikimrPathId pathId(
-                tableInfo.GetTableId().GetOwnerId(), tableInfo.GetTableId().GetTableId());
-            const auto [it, inserted] = QueryState->TxCtx->TableSchemaVersions.emplace(pathId, schemaVersion);
-            if (!inserted && it->second != schemaVersion) {
-                ReplyQueryError(Ydb::StatusIds::ABORTED, TStringBuilder()
-                    << "Scheme changed for table '" << tableInfo.GetTableName()
-                    << "' during transaction execution, schema version "
-                    << it->second << " -> " << schemaVersion << ".");
-                return false;
+                const NYql::TKikimrPathId pathId(
+                    tableInfo.GetTableId().GetOwnerId(), tableInfo.GetTableId().GetTableId());
+                const auto [it, inserted] = QueryState->TxCtx->TableSchemaVersions.emplace(pathId, schemaVersion);
+                if (!inserted && it->second != schemaVersion) {
+                    ReplyQueryError(Ydb::StatusIds::ABORTED, TStringBuilder()
+                        << "Scheme changed for table '" << tableInfo.GetTableName()
+                        << "' during transaction execution, schema version "
+                        << it->second << " -> " << schemaVersion << ".");
+                    return false;
+                }
             }
         }
 

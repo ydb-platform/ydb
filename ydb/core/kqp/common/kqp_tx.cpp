@@ -44,6 +44,33 @@ TKqpTransactionInfo TKqpTransactionContext::GetInfo() const {
     return txInfo;
 }
 
+bool HasRepeatableReads(NKqpProto::EIsolationLevel isolationLevel) {
+    switch (isolationLevel) {
+        case NKqpProto::ISOLATION_LEVEL_SERIALIZABLE:
+        case NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE:
+        case NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO:
+        case NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW:
+            // These run on a single snapshot reused by every statement of the transaction.
+            return true;
+
+        case NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW:
+            // Every statement is meant to see the latest committed data.
+            return false;
+
+        case NKqpProto::ISOLATION_LEVEL_ONLINE_RO:
+        case NKqpProto::ISOLATION_LEVEL_INCONSISTENT_ONLINE_RO:
+        case NKqpProto::ISOLATION_LEVEL_READ_STALE:
+            // No snapshot at all, and consistency between statements is not promised.
+            return false;
+
+        case NKqpProto::ISOLATION_LEVEL_UNDEFINED:
+            return false;
+
+        default:
+            return false;
+    }
+}
+
 bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfiguration& config, bool rollbackTx,
     bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery)
 {

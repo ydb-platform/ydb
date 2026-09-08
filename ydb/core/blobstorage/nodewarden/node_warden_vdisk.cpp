@@ -212,12 +212,6 @@ namespace NKikimr::NStorage {
             NDDisk::TDDiskConfig ddiskConfig{};
             NDDisk::TPersistentBufferFormat pbufferFormat{};
             if (Cfg->DDiskConfig) {
-                if (Cfg->DDiskConfig->HasUseSQPoll()) {
-                    ddiskConfig.UseSQPoll = Cfg->DDiskConfig->GetUseSQPoll();
-                }
-                if (Cfg->DDiskConfig->HasUseIOPoll()) {
-                    ddiskConfig.UseIOPoll = Cfg->DDiskConfig->GetUseIOPoll();
-                }
                 if (Cfg->DDiskConfig->HasForcePDiskFallback()) {
                     ddiskConfig.ForcePDiskFallback = Cfg->DDiskConfig->GetForcePDiskFallback();
                 }
@@ -229,6 +223,9 @@ namespace NKikimr::NStorage {
                 }
                 if (Cfg->DDiskConfig->HasCheckChecksumWhenRead()) {
                     ddiskConfig.CheckChecksumWhenRead = Cfg->DDiskConfig->GetCheckChecksumWhenRead();
+                }
+                if (Cfg->DDiskConfig->HasIdleSpinUs()) {
+                    ddiskConfig.IdleSpinUs = Cfg->DDiskConfig->GetIdleSpinUs();
                 }
             }
             if (Cfg->PBufferConfig) {

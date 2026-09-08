@@ -5,8 +5,6 @@
 namespace NKikimr::NDDisk {
 
 struct TDDiskConfig {
-    bool UseSQPoll = false;
-    bool UseIOPoll = false;
     bool ForcePDiskFallback = false;
     bool EnableChecksums = true;
 
@@ -19,6 +17,9 @@ struct TDDiskConfig {
     // disk and reject with CORRUPTED on mismatch. In-memory PersistentBuffer hits
     // and synthetic DDisk zeros are not checked.
     bool CheckChecksumWhenRead = false;
+
+    // How long the io_uring thread busy-polls before parking when idle.
+    ui32 IdleSpinUs = 10;
 
     // Bounds the memory TIntegrityManager spends on cached data block checksums / digests
     // (see the memory note in integrity_manager.h). Must match

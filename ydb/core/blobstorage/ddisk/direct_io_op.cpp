@@ -153,8 +153,8 @@ void TDDiskActor::TDirectIoOpBase::OnComplete(NActors::TActorSystem* actorSystem
         Y_ABORT("Unknown OperationType");
     }
 
-    // We can't initiate operation here, because ring is 1-to-1 between DDisk actor and the kernel,
-    // while this is executed by the completion thread.
+    // Defer the retry through the actor so ownership and DDisk accounting stay
+    // on the normal submission path.
     auto ddiskId = DDiskId;
     auto ev = std::make_unique<TDDiskActor::TEvPrivate::TEvShortIO>(std::move(guard));
     actorSystem->Send(new IEventHandle(ddiskId, {}, ev.release()));
@@ -324,7 +324,7 @@ void TDDiskActor::TPersistentBufferPartIoOp::Reply(NActors::TActorSystem* actorS
     const i32 result = GetResult();
     if (status == TReplyStatus::OVERLOADED) {
         if (!reason) {
-            reason = "io_uring SQ ring full (short I/O retry)";
+            reason = "io_uring request temporarily overloaded (short I/O retry)";
         }
     } else if (status != TReplyStatus::OK) {
         if (!reason) {
@@ -444,7 +444,7 @@ void TDDiskActor::TInternalSyncWriteOp::Reply(NActors::TActorSystem* actorSystem
 
     if (status == TReplyStatus::OVERLOADED) {
         if (!reason) {
-            reason = "io_uring SQ ring full (short I/O retry)";
+            reason = "io_uring request temporarily overloaded (short I/O retry)";
         }
     } else if (status != TReplyStatus::OK) {
         if (!reason) {

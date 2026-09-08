@@ -16,8 +16,10 @@
 namespace NKikimr::NUdfStore::NWasm {
 
 //! Cap on bytes the bridge keeps resident in compartment linear memory.
-//! Exceeding it evicts pins untouched by the current Run; a single value
-//! larger than the budget is still pinned (the guest has to see it).
+//! Exceeding it evicts pins untouched by the current Run, and fails the call
+//! when that frees too little -- pins the current Run holds are not evictable,
+//! so the cap has to hold within one Run too. A single value larger than the
+//! budget is still pinned (the guest has to see it).
 //! Guest AllocResident and per-Run scratch share the same budget so a guest
 //! cannot grow the arena without bound by looping BridgeAllocResident.
 inline constexpr ui64 DefaultResidentBudgetBytes = 64ull << 20;

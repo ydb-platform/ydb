@@ -12,6 +12,8 @@
 #include <util/generic/vector.h>
 #include <util/system/types.h>
 
+#include <optional>
+
 namespace NKikimr::NUdfStore::NWasm {
 
 //! Stable identity of a value for cross-row reuse: boxed object pointer, or
@@ -48,6 +50,12 @@ public:
         ui32 Refs = 1;
         //! For iterators: parent list/dict type (item / key+payload).
         const NYql::NUdf::TType* AuxType = nullptr;
+        //! For an Optional node the guest built: kind of the value inside it.
+        //! An Optional handle says nothing about its payload on its own, and
+        //! MiniKQL reads what is inside, so a declared container result has to
+        //! be able to tell an Optional over a list from one over a scalar.
+        //! Empty when the node was not built from a known inner node.
+        std::optional<EBridgeValueKind> InnerValueKind;
         //! This node owns the Identity_ entry for its value and must erase it
         //! when destroyed. Aliasing nodes (e.g. Optional over the same pod)
         //! leave the entry to its owner.

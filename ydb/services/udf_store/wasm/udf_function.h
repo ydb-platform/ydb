@@ -48,7 +48,14 @@ struct TDeclaredResultShape {
     //! Declared type accepts a null, so the guest may return one.
     bool Optional = false;
 
-    bool Accepts(EBridgeValueKind kind) const;
+    //! `kind` is the kind of the returned node, `payload` the kind of the
+    //! value inside it when that node is an Optional the guest built. An
+    //! Optional over an unknown payload passes: MiniKQL represents an
+    //! Optional container as the container itself, so there is nothing left
+    //! to compare.
+    bool Accepts(
+        EBridgeValueKind kind,
+        std::optional<EBridgeValueKind> payload = std::nullopt) const;
 };
 
 TDeclaredResultShape DeclaredResultShape(const TType* type, const ITypeInfoHelper* helper);
@@ -100,7 +107,7 @@ private:
     //! a handle of the wrong shape hands MiniKQL a value it will read as the
     //! declared one. Compare what can be compared cheaply: the family of the
     //! returned node against the payload family of ResultType_.
-    void EnsureResultFamily(EBridgeValueKind kind) const;
+    void EnsureResultFamily(const TWasmBridgeNodeTable::TNode& node) const;
 
     TWasmCompartmentStatePtr State_;
     TWasmUdfDescriptor Descriptor_;

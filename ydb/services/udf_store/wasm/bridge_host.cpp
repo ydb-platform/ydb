@@ -18,6 +18,7 @@
 #include <yql/essentials/minikql/mkql_terminator.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
+#include <util/generic/array_ref.h>
 #include <util/generic/scope.h>
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
@@ -254,6 +255,66 @@ void EnsureStringKind(const TWasmBridgeNodeTable::TNode& node, const char* what)
             << "Bridge: " << what << " expected a string-like kind, got "
             << static_cast<int>(node.ValueKind);
     }
+}
+
+//! What the pod itself can be read as, whatever kind its node carries. The
+//! last word for nodes whose kind is not the declared truth: an Optional keeps
+//! the representation of what it wraps, and an untyped node only ever guessed
+//! its kind from the representation in the first place.
+bool ValueFitsFamily(const TUnboxedValuePod& value, EBridgeKindFamily family) {
+    switch (family) {
+        case EBridgeKindFamily::Null:
+            return true;
+        case EBridgeKindFamily::Number:
+            return !value.IsBoxed() && !value.IsString();
+        case EBridgeKindFamily::String:
+            return value.IsString() || value.IsEmbedded();
+        default:
+            return value.IsBoxed();
+    }
+}
+
+//! Guard for a guest handle the host is about to hand to MiniKQL as a value of
+//! `expected`. MiniKQL reads it as the declared type without re-checking, and
+//! the mismatch does not surface as an exception but as a Y_ABORT inside the
+//! value accessors (hashing a boxed pod as a string key, say), which takes the
+//! whole node down. Compare families -- the same grouping BridgeGetKind shows
+//! the guest -- and throw the way EnsureKind does.
+void EnsureNodeMatchesType(
+    const TWasmBridgeNodeTable::TNode& node,
+    const TType* expected,
+    const char* what)
+{
+    const auto* helper = CurrentTypeHelper();
+    if (!expected || !helper) {
+        // Untyped slot: nothing declared to check against.
+        return;
+    }
+    const auto expectedFamily = BridgeKindFamily(BridgeKindsFromType(expected, helper).Value);
+    if (expectedFamily == EBridgeKindFamily::Null) {
+        return;
+    }
+    if (!node.Value) {
+        // A null: MiniKQL stores an absent value the same way whatever the
+        // payload type is, and the hashers answer for it without looking in.
+        return;
+    }
+    const auto family = BridgeKindFamily(node.ValueKind);
+    if (family == expectedFamily) {
+        return;
+    }
+    // An Optional node is a wrapper around a payload the host cannot see, and
+    // an untyped node took its kind from the representation (every boxed value
+    // reads as Callable there). Neither says what the value really is, so fall
+    // back to what MiniKQL will be able to read out of the pod.
+    const bool kindFollowsADeclaredType =
+        node.Type != nullptr && family != EBridgeKindFamily::Optional;
+    if (!kindFollowsADeclaredType && ValueFitsFamily(node.Value, expectedFamily)) {
+        return;
+    }
+    ythrow yexception()
+        << "Bridge: " << what << " expected a " << BridgeKindFamilyAsStr(expectedFamily)
+        << " value, got " << BridgeKindFamilyAsStr(family);
 }
 
 //! Integral getters widen: the guest asks for i64/ui64 whatever the declared
@@ -565,6 +626,7 @@ i32 BridgeDictContainsHost(ui64 dictHandle, ui64 keyHandle) {
     const auto& dict = CurrentBridgeTable().Resolve(dictHandle);
     EnsureKind(dict, EBridgeValueKind::Dict, "BridgeDictContains");
     const auto& key = CurrentBridgeTable().Resolve(keyHandle);
+    EnsureNodeMatchesType(key, DictKeyTypeOf(dict.Type), "BridgeDictContains key");
     return dict.Value.Contains(key.Value) ? 1 : 0;
 }
 
@@ -572,6 +634,7 @@ ui64 BridgeDictLookupHost(ui64 dictHandle, ui64 keyHandle) {
     const auto& dict = CurrentBridgeTable().Resolve(dictHandle);
     EnsureKind(dict, EBridgeValueKind::Dict, "BridgeDictLookup");
     const auto& key = CurrentBridgeTable().Resolve(keyHandle);
+    EnsureNodeMatchesType(key, DictKeyTypeOf(dict.Type), "BridgeDictLookup key");
     auto payload = dict.Value.Lookup(key.Value);
     if (!payload) {
         return NullBridgeHandle;
@@ -721,6 +784,7 @@ ui64 BridgeMakeOptionalHost(ui64 innerHandle) {
     auto& table = CurrentBridgeTable();
     const auto& inner = table.Resolve(innerHandle);
     const TType* innerType = inner.Type;
+    const EBridgeValueKind innerKind = inner.ValueKind;
     const TUnboxedValuePod optional = inner.Value.MakeOptional();
     // MiniKQL represents Optional over a boxed value or a refcounted string as
     // the payload itself, so MakeOptional gives back the identity it was
@@ -728,18 +792,32 @@ ui64 BridgeMakeOptionalHost(ui64 innerHandle) {
     // instead of a second node, keeping one node per identity and the resident
     // cache keyed once. The reused node keeps its original kind: the guest may
     // still be reading it as the list or dict it was registered as.
-    return table.RegisterOrReuse(
+    const ui64 handle = table.RegisterOrReuse(
         EBridgeNodeKind::Optional,
         EBridgeValueKind::Optional,
         /*type*/ nullptr,
         optional,
         innerType);
+    if (auto& node = table.Resolve(handle); node.ValueKind == EBridgeValueKind::Optional) {
+        // A reused node keeps its own kind and needs nothing; a node that
+        // really is an Optional has to remember what the guest wrapped, since
+        // the pod alone cannot tell a Just(list) from a Just(scalar).
+        node.InnerValueKind = innerKind;
+    }
+    return handle;
 }
 
 //! Read `n` handles from linear memory into their values. `n` is wider than
 //! the i32 the intrinsics take so a caller may scale it (dict pairs) without
-//! wrapping first.
-TVector<TUnboxedValue> ResolveHandleArray(ui64 handlesOff, i64 n, const char* what) {
+//! wrapping first. `expectedTypes`, when given, is the declared type of every
+//! slot repeated over the array (key, payload, key, ... for dict pairs), and
+//! each handle is checked against the slot it lands in.
+TVector<TUnboxedValue> ResolveHandleArray(
+    ui64 handlesOff,
+    i64 n,
+    const char* what,
+    TArrayRef<const TType* const> expectedTypes = {})
+{
     if (n < 0) {
         ythrow yexception() << "Bridge: " << what << " negative count";
     }
@@ -752,9 +830,17 @@ TVector<TUnboxedValue> ResolveHandleArray(ui64 handlesOff, i64 n, const char* wh
             sizeof(ui64) * static_cast<size_t>(n));
     TVector<TUnboxedValue> values(static_cast<size_t>(n));
     for (i64 i = 0; i < n; ++i) {
-        if (handles[i] != NullBridgeHandle) {
-            values[i] = CurrentBridgeTable().Resolve(handles[i]).Value;
+        if (handles[i] == NullBridgeHandle) {
+            continue;
         }
+        const auto& node = CurrentBridgeTable().Resolve(handles[i]);
+        if (!expectedTypes.empty()) {
+            EnsureNodeMatchesType(
+                node,
+                expectedTypes[static_cast<size_t>(i) % expectedTypes.size()],
+                what);
+        }
+        values[i] = node.Value;
     }
     return values;
 }
@@ -870,7 +956,9 @@ ui64 BridgeMakeDictHost(ui64 typeHandle, ui64 pairsOff, i32 n) {
         ythrow yexception() << "Bridge: BridgeMakeDict negative count";
     }
 
-    auto values = ResolveHandleArray(pairsOff, static_cast<i64>(n) * 2, "BridgeMakeDict");
+    // Keys reach the dict hasher, which reads them as the declared key type.
+    const TType* const pairTypes[] = {DictKeyTypeOf(dictType), DictPayloadTypeOf(dictType)};
+    auto values = ResolveHandleArray(pairsOff, static_cast<i64>(n) * 2, "BridgeMakeDict", pairTypes);
     auto* builder = CurrentValueBuilderOrThrow();
     auto dictBuilder = builder->NewDict(dictType, /*flags*/ 0);
     for (i32 i = 0; i < n; ++i) {
@@ -927,7 +1015,12 @@ ui64 BridgeRunHost(ui64 callableHandle, ui64 argsOff, i32 n) {
     for (i32 i = 0; i < n; ++i) {
         const ui64 h = handles[i];
         if (h != NullBridgeHandle) {
-            argsStorage[i] = CurrentBridgeTable().Resolve(h).Value;
+            const auto& argNode = CurrentBridgeTable().Resolve(h);
+            EnsureNodeMatchesType(
+                argNode,
+                inspector.GetArgType(static_cast<ui32>(i)),
+                "BridgeRun argument");
+            argsStorage[i] = argNode.Value;
         }
         argsPod[i] = argsStorage[i];
     }

@@ -196,18 +196,27 @@ TType* BuildTypeFromWasmTypeNode(
     return builder.Null();
 }
 
-bool TDeclaredResultShape::Accepts(EBridgeValueKind kind) const {
+bool TDeclaredResultShape::Accepts(
+    EBridgeValueKind kind,
+    std::optional<EBridgeValueKind> payload) const
+{
     if (Family == EBridgeKindFamily::Null) {
         // The declared type told us nothing to check against.
         return true;
     }
-    const auto family = BridgeKindFamily(kind);
+    auto family = BridgeKindFamily(kind);
+    // BridgeMakeOptional registers an Optional node whenever the payload has
+    // no identity of its own to reuse. Such a node is a wrapper: MiniKQL reads
+    // what is inside it, so that is what has to match the declared family --
+    // a Just(scalar) is not a list, however optional the declaration is.
+    if (family == EBridgeKindFamily::Optional && payload) {
+        family = BridgeKindFamily(*payload);
+    }
     if (family == Family) {
         return true;
     }
-    // BridgeMakeOptional registers an Optional node whenever the payload has
-    // no identity of its own to reuse, and the node carries no cheap way to
-    // look inside, so an Optional handle fits any declared payload.
+    // An Optional the host registered for a declared Optional<container>: the
+    // value is the container itself, and there is nothing cheap to look at.
     if (family == EBridgeKindFamily::Optional) {
         return true;
     }
@@ -665,13 +674,19 @@ TWasmBridgeFunction::TWasmBridgeFunction(
 {
 }
 
-void TWasmBridgeFunction::EnsureResultFamily(EBridgeValueKind kind) const {
-    if (ResultShape_.Accepts(kind)) {
+void TWasmBridgeFunction::EnsureResultFamily(const TWasmBridgeNodeTable::TNode& node) const {
+    // An empty value is a null whatever kind the node it came in carries.
+    const auto kind = node.Value ? node.ValueKind : EBridgeValueKind::Null;
+    const auto payload = node.Value ? node.InnerValueKind : std::nullopt;
+    if (ResultShape_.Accepts(kind, payload)) {
         return;
     }
+    const auto family = (kind == EBridgeValueKind::Optional && payload)
+        ? BridgeKindFamily(*payload)
+        : BridgeKindFamily(kind);
     ythrow yexception()
         << "Wasm UDF '" << Descriptor_.Name << "' returned a "
-        << BridgeKindFamilyAsStr(BridgeKindFamily(kind))
+        << BridgeKindFamilyAsStr(family)
         << " value, but its result type is "
         << (ResultShape_.Optional ? "optional " : "")
         << BridgeKindFamilyAsStr(ResultShape_.Family);
@@ -759,7 +774,7 @@ TUnboxedValue TWasmBridgeFunction::Run(
             // Copying the value out takes a MiniKQL ref of its own, so the
             // node behind the result handle may die with the scope.
             const auto& resultNode = table.Resolve(resultHandle);
-            EnsureResultFamily(resultNode.ValueKind);
+            EnsureResultFamily(resultNode);
             result = resultNode.Value;
         }
 

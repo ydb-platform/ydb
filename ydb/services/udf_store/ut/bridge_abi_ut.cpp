@@ -1121,6 +1121,54 @@ Y_UNIT_TEST(ResidentCacheEvictsBeyondBudget) {
     UNIT_ASSERT(resident.ArenaBytes() <= 2 * kBudget);
 }
 
+Y_UNIT_TEST(ResidentBudgetHoldsWithinOneRun) {
+    // Eviction skips every pin the current Run touched, so a row that pins one
+    // value after another (walking a List<String> argument, say) has nothing
+    // evictable and used to grow linear memory past the budget unchecked.
+    TMiniKqlEnv mkql;
+
+    auto compartment = CreateEmptyImage();
+    compartment->AddSdk(MakeNamedLibrary("sdk", SdkStubWast).Bytecode);
+
+    constexpr ui64 kBudget = 4ull << 20;
+    constexpr size_t kBlob = 1024 * 1024;
+    TCompartmentResidentCache resident(compartment.get(), kBudget);
+
+    TVector<TUnboxedValue> blobs;
+    for (int i = 0; i < 8; ++i) {
+        TString payload(kBlob, static_cast<char>('a' + i));
+        blobs.push_back(mkql.ValueBuilder.NewString(TStringRef(payload.data(), payload.size())));
+    }
+
+    resident.BeginRun();
+    size_t pinned = 0;
+    bool refused = false;
+    for (const auto& blob : blobs) {
+        const TBridgeIdentity key = BridgeIdentityKey(blob);
+        UNIT_ASSERT(key);
+        try {
+            UNIT_ASSERT(resident.Pin(key, blob, blob.AsStringRef()) != 0);
+            ++pinned;
+        } catch (const yexception&) {
+            refused = true;
+            break;
+        }
+    }
+
+    UNIT_ASSERT_C(refused, "the budget must stop a Run that keeps pinning");
+    UNIT_ASSERT(pinned > 0);
+    UNIT_ASSERT_VALUES_EQUAL(resident.EvictionCount(), 0u);
+    UNIT_ASSERT(resident.PinnedBytes() <= kBudget);
+
+    // The documented exception: one value the budget could never hold is
+    // pinned anyway, because the guest has no other way to see it.
+    const TString huge(2 * kBudget, 'H');
+    auto hugeValue = mkql.ValueBuilder.NewString(TStringRef(huge.data(), huge.size()));
+    const TBridgeIdentity hugeKey = BridgeIdentityKey(hugeValue);
+    UNIT_ASSERT(hugeKey);
+    UNIT_ASSERT(resident.Pin(hugeKey, hugeValue, hugeValue.AsStringRef()) != 0);
+}
+
 Y_UNIT_TEST(EvictedPinHandsBackItsUserData) {
     TMiniKqlEnv mkql;
 
@@ -1346,6 +1394,16 @@ Y_UNIT_TEST(DeclaredResultShapeLooksUnderOptional) {
     UNIT_ASSERT(optionalList.Accepts(EBridgeValueKind::Optional));
     UNIT_ASSERT(optionalList.Accepts(EBridgeValueKind::Null));
 
+    // An Optional the guest built carries the kind of what it wrapped, and
+    // that is what MiniKQL reads: BridgeMakeOptional over a scalar is still a
+    // scalar and may not pass for a declared list.
+    UNIT_ASSERT(!optionalList.Accepts(EBridgeValueKind::Optional, EBridgeValueKind::Int64));
+    UNIT_ASSERT(!optionalList.Accepts(EBridgeValueKind::Optional, EBridgeValueKind::String));
+    UNIT_ASSERT(optionalList.Accepts(EBridgeValueKind::Optional, EBridgeValueKind::List));
+    // Just(null) is a legal value of a doubly optional declaration, and the
+    // shape peels every layer, so a known null payload stays acceptable.
+    UNIT_ASSERT(optionalList.Accepts(EBridgeValueKind::Optional, EBridgeValueKind::Null));
+
     // Without the Optional wrapper a null is not a legal result either.
     const auto plainList = shapeOf(listType);
     UNIT_ASSERT(plainList.Family == EBridgeKindFamily::List);
@@ -1370,6 +1428,8 @@ Y_UNIT_TEST(DeclaredResultShapeLooksUnderOptional) {
     UNIT_ASSERT(optionalScalar.Family == EBridgeKindFamily::Number);
     UNIT_ASSERT(optionalScalar.Accepts(EBridgeValueKind::Uint32));
     UNIT_ASSERT(!optionalScalar.Accepts(EBridgeValueKind::String));
+    UNIT_ASSERT(optionalScalar.Accepts(EBridgeValueKind::Optional, EBridgeValueKind::Uint32));
+    UNIT_ASSERT(!optionalScalar.Accepts(EBridgeValueKind::Optional, EBridgeValueKind::List));
 }
 
 Y_UNIT_TEST(UserDataSurvivesNodeDeath) {

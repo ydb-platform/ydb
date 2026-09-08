@@ -12,6 +12,7 @@
 #include <yql/essentials/minikql/computation/mkql_value_builder.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -258,6 +259,9 @@ Y_UNIT_TEST(DictLookupViaIntrinsics) {
     UNIT_ASSERT(resultNode.ValueKind == EBridgeValueKind::Optional);
     UNIT_ASSERT(static_cast<bool>(resultNode.Value));
     UNIT_ASSERT_VALUES_EQUAL(resultNode.Value.GetOptionalValue().Get<i64>(), 1);
+    // The value is an inline scalar: the node has to remember what the guest
+    // wrapped, or a declared container result would take it for a container.
+    UNIT_ASSERT(resultNode.InnerValueKind == EBridgeValueKind::Int64);
 
     table.Unref(keyHandle);
     table.Unref(resultHandle);
@@ -328,6 +332,78 @@ Y_UNIT_TEST(DictLookupSeparatesAMissingKeyFromANullPayload) {
 
     UNIT_ASSERT_VALUES_EQUAL(lookup("zzz"), NullBridgeHandle);
 
+    table.Unref(dictHandle);
+    UNIT_ASSERT_VALUES_EQUAL(table.DebugSize(), 0u);
+}
+
+Y_UNIT_TEST(DictLookupRejectsAKeyOfTheWrongKind) {
+    // A boxed handle passed where the dict declares a String key used to reach
+    // the MiniKQL hasher, which reads the pod as a string and aborts the whole
+    // process instead of failing the query.
+    EnsureUdfHostIntrinsicsRegistered();
+    TMiniKqlEnv mkql;
+
+    auto dict = MakeStringIntDict(mkql, "a", 1);
+
+    auto compartment = CreateEmptyImage();
+    compartment->AddSdk(MakeNamedLibrary("sdk", SdkStubWast).Bytecode);
+
+    auto handle = std::make_unique<TQueryCompartmentHandle>();
+    handle->Generation = 33;
+    handle->BridgeNodes = std::make_unique<TWasmBridgeNodeTable>(handle->Generation);
+    handle->Compartment = std::move(compartment);
+
+    TCurrentQueryCompartmentGuard queryGuard(handle.get());
+    TCurrentCompartmentGuard compartmentGuard(handle->Compartment.get());
+    TWasmUdfInvocationContext context(handle->Compartment.get());
+    TCurrentInvocationContextGuard invocationGuard(&context);
+    TBridgeValueBuilderGuard vbGuard(*handle->BridgeNodes, &mkql.ValueBuilder);
+
+    const auto moduleObjectCode = CompileModuleObjectCode(
+        BridgeDictLookupWast,
+        EBytecodeFormat::HumanReadable);
+    AddPrecompiledModule(
+        handle->Compartment.get(),
+        MakeModuleBytecode(BridgeDictLookupWast, moduleObjectCode, EBytecodeFormat::HumanReadable),
+        "DictUdf");
+
+    auto& table = *handle->BridgeNodes;
+    NYql::NUdf::ITypeInfoHelper::TPtr helper = new NKikimr::NMiniKQL::TTypeInfoHelper();
+    table.SetTypeInfoHelper(helper);
+
+    auto* stringType = NKikimr::NMiniKQL::TDataType::Create(
+        NYql::NUdf::TDataType<char*>::Id, mkql.Env);
+    auto* i64Type = NKikimr::NMiniKQL::TDataType::Create(
+        NYql::NUdf::TDataType<i64>::Id, mkql.Env);
+    auto* dictType = NKikimr::NMiniKQL::TDictType::Create(stringType, i64Type, mkql.Env);
+
+    const ui64 dictHandle = table.Register(
+        EBridgeNodeKind::Dict,
+        EBridgeValueKind::Dict,
+        static_cast<const NYql::NUdf::TType*>(dictType),
+        TUnboxedValue(dict));
+
+    TUnboxedValue items[] = {TUnboxedValuePod(i64{7})};
+    const ui64 keyHandle = table.Register(
+        EBridgeNodeKind::List,
+        EBridgeValueKind::List,
+        nullptr,
+        mkql.ValueBuilder.NewList(items, 1));
+
+    const auto resultOffset = handle->Compartment->AllocateBytes(sizeof(ui64));
+    *PtrFromVM(handle->Compartment.get(), std::bit_cast<ui64*>(resultOffset)) = 0;
+
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        InvokeUdfExport(
+            handle->Compartment.get(),
+            "lookup_raw",
+            std::bit_cast<uintptr_t>(&context),
+            resultOffset,
+            {dictHandle, keyHandle}),
+        yexception,
+        "BridgeDictLookup key");
+
+    table.Unref(keyHandle);
     table.Unref(dictHandle);
     UNIT_ASSERT_VALUES_EQUAL(table.DebugSize(), 0u);
 }

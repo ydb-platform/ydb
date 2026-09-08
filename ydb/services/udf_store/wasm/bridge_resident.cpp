@@ -227,6 +227,17 @@ ui64 TCompartmentResidentCache::Pin(
     const ui64 blockSize = BlockSizeFor(bytes.Size());
     // Budget is tracked in BlockSize units, so compare like with like.
     EvictFor(blockSize);
+    // Eviction leaves alone every pin the current Run touched -- their offsets
+    // are live -- so a Run that keeps pinning finds nothing to give back and
+    // has to be refused here, or the budget would not hold within a row.
+    // A value larger than the whole budget is still pinned: the guest has no
+    // other way to see it.
+    if (blockSize <= Budget_ && ResidentBytes() + blockSize > Budget_) {
+        ythrow yexception()
+            << "Bridge: pin of " << bytes.Size()
+            << " bytes would exceed the resident budget ("
+            << ResidentBytes() << " + " << blockSize << " > " << Budget_ << ")";
+    }
 
     TPin pin;
     pin.Owner = owner;

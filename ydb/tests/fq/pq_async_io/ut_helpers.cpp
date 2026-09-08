@@ -173,7 +173,7 @@ std::vector<TString> PQReadUntil(
                 result.emplace_back(message.GetData());
             }
             if (result.size() >= size) {
-                promise.SetValue();
+                promise.TrySetValue();
             }
         }, false, false);
 

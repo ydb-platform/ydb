@@ -186,7 +186,8 @@ NNodes::TExprBase DqPushWatermarkGeneratorToStage(
     NNodes::TExprBase node,
     TExprContext& ctx,
     IOptimizationContext& optCtx,
-    const TParentsMap& parentsMap
+    const TParentsMap& parentsMap,
+    bool allowStageMultiUsage = true
 );
 
 } // namespace NYql::NDq

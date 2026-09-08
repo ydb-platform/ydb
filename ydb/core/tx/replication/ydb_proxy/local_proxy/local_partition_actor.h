@@ -21,7 +21,7 @@ protected:
     virtual void OnError(const TString& error) = 0;
     virtual void OnFatalError(const TString& error) = 0;
     virtual STATEFN(OnInitEvent) = 0;
-    virtual TString MakeLogPrefix() = 0;
+    virtual NActors::NStructuredLog::TStructuredMessage MakeLogPrefix() = 0;
 };
 
 class TBaseLocalTopicPartitionActor
@@ -71,7 +71,7 @@ protected:
     TActorId PartitionPipeClient;
 
     size_t Attempt = 0;
-    TString LogPrefix;
+    NActors::NStructuredLog::TStructuredMessage LogPrefix;
 };
 
 }

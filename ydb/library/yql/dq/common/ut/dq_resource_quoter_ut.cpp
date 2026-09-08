@@ -3,6 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <atomic>
+#include <limits>
 #include <thread>
 #include <vector>
 
@@ -23,6 +24,7 @@ Y_UNIT_TEST_SUITE(TDqResourceQuoterTest) {
 
         UNIT_ASSERT(!quoter.Allocate(TTxId{ui64(1)}, 1, 701)); // over the limit, nothing changes
         UNIT_ASSERT_VALUES_EQUAL(quoter.GetFreeTotal(), 700);
+        UNIT_ASSERT_VALUES_EQUAL(quoter.GetMemoryAvailability(), 700);
         UNIT_ASSERT(quoter.Allocate(TTxId{ui64(2)}, 7, 700));
         UNIT_ASSERT_VALUES_EQUAL(quoter.GetFreeTotal(), 0);
 
@@ -33,12 +35,13 @@ Y_UNIT_TEST_SUITE(TDqResourceQuoterTest) {
         UNIT_ASSERT_VALUES_EQUAL(quoter.GetFreeTotal(), 1000);
     }
 
-    // Limit == 0 never refuses; the free total reads as 0 then and the callers treat that limit as unlimited
+    // Limit == 0 never refuses and reports an unlimited availability (the raw free total reads as 0 then)
     Y_UNIT_TEST(UnlimitedQuoter) {
         TResourceQuoter quoter(0);
         UNIT_ASSERT(quoter.Allocate(TTxId{ui64(1)}, 1, ui64(1) << 40));
         UNIT_ASSERT_VALUES_EQUAL(quoter.GetAllocatedTotal(), ui64(1) << 40);
         UNIT_ASSERT_VALUES_EQUAL(quoter.GetFreeTotal(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(quoter.GetMemoryAvailability(), std::numeric_limits<i64>::max());
     }
 
     // The totals are read without the lock: concurrent allocations and releases must never make them

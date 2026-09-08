@@ -23,7 +23,6 @@
 #include <util/random/random.h>
 #include <util/system/rusage.h>
 
-#include <limits>
 
 using namespace NActors;
 
@@ -63,10 +62,7 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
     }
 
     i64 GetExtraMemoryAvailability() const override {
-        // a lock-free snapshot of the node quoter. TResourceQuoter::Allocate treats Limit == 0 as unlimited,
-        // but GetFreeTotal() returns 0 then
-        const ui64 limit = NodeQuoter->GetLimit();
-        return limit ? static_cast<i64>(NodeQuoter->GetFreeTotal()) : std::numeric_limits<i64>::max();
+        return NodeQuoter->GetMemoryAvailability(); // a lock-free snapshot, unlimited for a quoter without a limit
     }
 
     std::shared_ptr<NDq::TResourceQuoter> NodeQuoter;

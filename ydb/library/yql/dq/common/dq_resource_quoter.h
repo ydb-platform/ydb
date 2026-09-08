@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <functional>
+#include <limits>
 
 namespace NYql::NDq {
 
@@ -40,6 +41,15 @@ public:
     ui64 GetFreeTotal() const {
         const ui64 allocated = Allocated.load(std::memory_order_relaxed);
         return Limit > allocated ? Limit - allocated : 0;
+    }
+
+    // Bytes that may still be allocated, in the signed convention of the memory quota managers: i64 max for a
+    // quoter without a limit (Limit == 0, which Allocate() never refuses), otherwise Limit - allocated.
+    i64 GetMemoryAvailability() const {
+        if (!Limit) {
+            return std::numeric_limits<i64>::max();
+        }
+        return static_cast<i64>(Limit) - static_cast<i64>(GetAllocatedTotal());
     }
 
     bool Allocate(const NDq::TTxId& txId, ui64 taskId, ui64 size) {

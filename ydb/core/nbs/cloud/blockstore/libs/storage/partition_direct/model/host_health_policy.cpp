@@ -107,6 +107,7 @@ bool TDefaultHostHealthPolicy::IsDownByStats(
         stats.ConsecutiveErrorCount >= Config->GetErrorsCountForGoingOffline();
 
     const bool hardDowntimeByErrorsTotalSize =
+        stats.ConsecutiveErrorCount > 0 &&
         errorsTotalSize >= Config->GetErrorsTotalSizeForGoingOffline();
 
     return hardDowntimeByErrorsTotalSize || hardDowntimeByErrors ||

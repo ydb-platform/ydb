@@ -316,6 +316,24 @@ Y_UNIT_TEST_SUITE(TDefaultHostHealthPolicyTest)
                 DefaultErrorsTotalSizeForGoingOffline));
     }
 
+    Y_UNIT_TEST(DoesntGoToTemporaryOfflineOnTotalSizeExceededWithoutErrors)
+    {
+        auto policy = CreatePolicyTest();
+
+        THostErrorsInfo stats{
+            .FromFirstSuccess = TDuration::Seconds(1),
+            .FromLastSuccess = TDuration::Seconds(0),
+            .ConsecutiveSuccessCount = 1,
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostHealth::Online,
+            policy.Policy->GetNewHealth(
+                EHostHealth::Online,
+                stats,
+                DefaultErrorsTotalSizeForGoingOffline));
+    }
+
     // Online/Sufferer/TemporaryOffline->Offline
 
     Y_UNIT_TEST(GoesToOfflineOnTooManyErrorsAfterOfflineDelay)

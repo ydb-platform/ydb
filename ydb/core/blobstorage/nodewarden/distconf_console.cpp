@@ -74,7 +74,7 @@ namespace NKikimr::NStorage {
 
         auto& q = ConsoleConfigValidationQ;
         auto pred = [&](const auto& item) {
-            const auto& [actorId, yaml, cookie] = item;
+            const auto& [actorId, yaml, allowUnknownFields, cookie] = item;
             const bool match = cookie == ev->Cookie;
             if (match) {
                 TActivationContext::Send(ev->Forward(actorId));
@@ -183,11 +183,11 @@ namespace NKikimr::NStorage {
                 Y_ABORT_UNLESS(!ConsoleConnected);
                 ConsoleConnected = true;
                 SendConfigProposeRequest();
-                for (auto& [actorId, yaml, cookie] : ConsoleConfigValidationQ) {
+                for (auto& [actorId, yaml, allowUnknownFields, cookie] : ConsoleConfigValidationQ) {
                     Y_ABORT_UNLESS(!cookie);
                     cookie = ++ValidateRequestCookie;
-                    NTabletPipe::SendData(SelfId(), ConsolePipeId, new TEvBlobStorage::TEvControllerValidateConfigRequest(
-                        yaml), cookie);
+                    NTabletPipe::SendData(SelfId(), ConsolePipeId,
+                                          new TEvBlobStorage::TEvControllerValidateConfigRequest(yaml, allowUnknownFields), cookie);
                 }
             } else {
                 OnConsolePipeError();
@@ -215,7 +215,7 @@ namespace NKikimr::NStorage {
         ++CommitRequestCookie; // to prevent processing any messages
 
         // cancel any pending requests
-        for (const auto& [actorId, yaml, cookie] : ConsoleConfigValidationQ) {
+        for (const auto& [actorId, yaml, allowUnknownFields, cookie] : ConsoleConfigValidationQ) {
             auto ev = std::make_unique<TEvBlobStorage::TEvControllerValidateConfigResponse>();
             ev->InternalError = "pipe disconnected";
             Send(actorId, ev.release());
@@ -254,7 +254,8 @@ namespace NKikimr::NStorage {
         return {};
     }
 
-    bool TDistributedConfigKeeper::EnqueueConsoleConfigValidation(TActorId actorId, bool enablingDistconf, TString yaml) {
+    bool TDistributedConfigKeeper::EnqueueConsoleConfigValidation(TActorId actorId, bool enablingDistconf, TString yaml,
+                                                                  bool allowUnknownFields) {
         if (!ConsolePipeId) {
             ConnectToConsole(enablingDistconf);
             if (!ConsolePipeId) {
@@ -262,12 +263,13 @@ namespace NKikimr::NStorage {
             }
         }
 
-        auto& [qActorId, qYaml, qCookie] = ConsoleConfigValidationQ.emplace_back(actorId, std::move(yaml), 0);
+        auto& [qActorId, qYaml, qAllowUnknownFields, qCookie] =
+            ConsoleConfigValidationQ.emplace_back(actorId, std::move(yaml), allowUnknownFields, 0);
 
         if (ConsoleConnected) {
             qCookie = ++ValidateRequestCookie;
-            NTabletPipe::SendData(SelfId(), ConsolePipeId, new TEvBlobStorage::TEvControllerValidateConfigRequest(qYaml),
-                qCookie);
+            NTabletPipe::SendData(SelfId(), ConsolePipeId,
+                                  new TEvBlobStorage::TEvControllerValidateConfigRequest(qYaml, qAllowUnknownFields), qCookie);
         }
 
         return true;

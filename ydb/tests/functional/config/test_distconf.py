@@ -21,6 +21,8 @@ from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.harness.util import LogLevels
 
+from test_config_with_metadata import check_replace_config_unknown_fields, fetch_config
+
 import ydb.public.api.protos.ydb_config_pb2 as config
 from ydb.tests.oss.ydb_sdk_import import ydb
 
@@ -30,15 +32,6 @@ logger = logging.getLogger(__name__)
 def value_for(key, tablet_id):
     return "Value: <key = {key}, tablet_id = {tablet_id}>".format(
         key=key, tablet_id=tablet_id)
-
-
-def fetch_config(config_client):
-    fetch_config_response = config_client.fetch_all_configs()
-    assert_that(fetch_config_response.operation.status == StatusIds.SUCCESS)
-
-    result = config.FetchConfigResult()
-    fetch_config_response.operation.result.Unpack(result)
-    return result.config[0].config
 
 
 def bump_config_version(config_dict):
@@ -631,6 +624,10 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
             )
         finally:
             self.cluster.remove_database(database_path)
+
+    @pytest.mark.parametrize('location', ['root', 'nested', 'selector'])
+    def test_replace_config_unknown_fields(self, location):
+        check_replace_config_unknown_fields(self.cluster, self.cluster.config_client, location)
 
     def test_dry_run_valid_config_not_applied(self):
         fetched_config = fetch_config(self.cluster.config_client)

@@ -281,6 +281,7 @@ message TEvNodeConfigInvokeOnRoot {
         optional bytes UserToken = 6 [(Ydb.sensitive) = true];
         optional string PeerName = 7;
         bool DryRun = 8;
+        bool AllowUnknownFields = 9;
     }
 
     message TBootstrapCluster {

@@ -11,6 +11,15 @@
 
 namespace NKikimr::NBsController {
 
+    namespace {
+        NKikimrConfig::TAppConfig ParseStoredConfig(const TString& yaml) {
+            const auto json = NYaml::Yaml2Json(YAML::Load(yaml), true);
+            NKikimrConfig::TAppConfig appConfig;
+            NYaml::Parse(json, NYaml::GetJsonToProtoConfig(true), appConfig, true);
+            return appConfig;
+        }
+    }
+
     void TBlobStorageController::StartConsoleInteraction() {
         ConsoleInteraction = std::make_unique<TConsoleInteraction>(*this);
         YDB_LOG_DEBUG("Console interaction started",
@@ -78,7 +87,7 @@ namespace NKikimr::NBsController {
         if (Self.YamlConfig) {
             try {
                 const auto& [yaml, configVersion, yamlReturnedByFetch] = *Self.YamlConfig;
-                NKikimrConfig::TAppConfig appConfig = NYaml::Parse(yamlReturnedByFetch);
+                NKikimrConfig::TAppConfig appConfig = ParseStoredConfig(yamlReturnedByFetch);
                 switchToConfigV2 = appConfig.GetFeatureFlags().GetSwitchToConfigV2();
             } catch (const std::exception& ex) {
                 YDB_LOG_ERROR("Failed to parse YAML config for V2 migration check",
@@ -130,7 +139,7 @@ namespace NKikimr::NBsController {
                 return; // no yaml config stored in Console
             }
             try {
-                NKikimrConfig::TAppConfig appConfig = NYaml::Parse(yamlReturnedByFetch);
+                NKikimrConfig::TAppConfig appConfig = ParseStoredConfig(yamlReturnedByFetch);
                 NKikimrBlobStorage::TStorageConfig storageConfig;
                 TString temp;
                 if (!NKikimr::NStorage::DeriveStorageConfig(appConfig, &storageConfig, &temp)) {
@@ -478,10 +487,8 @@ namespace NKikimr::NBsController {
                 Self.SelfId(), TActorId(), nullptr, ExpectedValidationTimeoutCookie));
         }
 
-        auto validateConfigEv = std::make_unique<TEvBlobStorage::TEvControllerValidateConfigRequest>();
-        validateConfigEv->Record.SetYAML(record.GetClusterYaml());
-        validateConfigEv->Record.SetAllowUnknownFields(record.GetAllowUnknownFields());
-        validateConfigEv->Record.SetBypassMetadataChecks(record.GetBypassMetadataChecks());
+        auto validateConfigEv = std::make_unique<TEvBlobStorage::TEvControllerValidateConfigRequest>(
+            record.GetClusterYaml(), record.GetAllowUnknownFields(), record.GetBypassMetadataChecks());
         YDB_LOG_DEBUG("Sending TEvControllerValidateConfigRequest to console",
             {"marker", "BSC36"},
             {"consolePipe", ConsolePipe});

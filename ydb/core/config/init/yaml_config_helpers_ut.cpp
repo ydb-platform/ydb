@@ -94,4 +94,24 @@ config:
         UNIT_ASSERT(config.HasLogConfig());
         UNIT_ASSERT_VALUES_EQUAL(config.GetLogConfig().GetDefaultLevel(), 3);
     }
+
+    Y_UNIT_TEST(ParseJsonConfig_AllowUnknownFields) {
+        auto json = LoadYamlAsJsonOrThrow(minimalValidConfig, "test.yaml");
+        json["config"]["fake_field"] = 123;
+        json["config"]["log_config"]["fake_field"] = 456;
+        json["config"]["log_config"]["default_level"] = 3;
+
+        NKikimrConfig::TAppConfig config;
+        UNIT_ASSERT_NO_EXCEPTION(ParseJsonConfigOrThrow(json, "test.yaml", config, true));
+        UNIT_ASSERT_VALUES_EQUAL(config.GetLogConfig().GetDefaultLevel(), 3);
+    }
+
+    Y_UNIT_TEST(ParseJsonConfig_AllowUnknownFieldsRejectsInvalidKnownField) {
+        auto json = LoadYamlAsJsonOrThrow(minimalValidConfig, "test.yaml");
+        json["config"]["fake_field"] = 123;
+        json["config"]["log_config"]["default_level"] = "not-a-number";
+
+        NKikimrConfig::TAppConfig config;
+        UNIT_ASSERT_EXCEPTION(ParseJsonConfigOrThrow(json, "test.yaml", config, true), TInitializationException);
+    }
 }

@@ -347,6 +347,7 @@ public:
         cmd->SetUserToken(Request_->GetSerializedToken());
         cmd->SetPeerName(Request_->GetPeerName());
         cmd->SetDryRun(protoRequest->dry_run());
+        cmd->SetAllowUnknownFields(protoRequest->allow_unknown_fields() || protoRequest->bypass_checks());
     }
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& /*record*/,

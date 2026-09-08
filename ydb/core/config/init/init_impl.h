@@ -117,6 +117,7 @@ struct TYamlConfigs {
     TString MainSource;
     std::optional<TString> StorageSource;
     bool LoadedFromStore = false;
+    bool AllowUnknownFields = false;
 };
 
 inline TString DescribeFetchConfigFailure(TStringBuf context, const IStorageConfigResult& result) {
@@ -1241,6 +1242,7 @@ public:
                     csk->VerifyMainConfig(*yamlConfigs.Main);
                 }
                 yamlConfigs.LoadedFromStore = true;
+                yamlConfigs.AllowUnknownFields = true;
             } else {
                 yamlConfigs.Storage.reset();
                 yamlConfigs.StorageSource.reset();
@@ -1264,6 +1266,7 @@ public:
                 InitConfigFromSeedNodes(yamlConfigs.Main.emplace(), yamlConfigs.Storage);
                 Y_ABORT_UNLESS(yamlConfigs.Main);
                 yamlConfigs.MainSource = "main YAML config fetched from seed nodes";
+                yamlConfigs.AllowUnknownFields = true;
                 if (yamlConfigs.Storage) {
                     yamlConfigs.StorageSource = "storage YAML config fetched from seed nodes";
                 }

@@ -116,7 +116,8 @@ NJson::TJsonValue LoadYamlAsJsonOrThrow(const TString& config, TStringBuf source
     }
 }
 
-void ParseJsonConfigOrThrow(const NJson::TJsonValue& json, TStringBuf source, NKikimrConfig::TAppConfig& config) {
+void ParseJsonConfigOrThrow(const NJson::TJsonValue& json, TStringBuf source, NKikimrConfig::TAppConfig& config,
+                            bool allowUnknownFields) {
     const bool hasMetadataConfig = json.Has("metadata") && json.Has("config") && json["config"].IsMap();
     TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> collector =
         new NYamlConfig::TBasicUnknownFieldsCollector(hasMetadataConfig ? "config" : "");
@@ -132,7 +133,7 @@ void ParseJsonConfigOrThrow(const NJson::TJsonValue& json, TStringBuf source, NK
         }
     }
 
-    if (!collector->GetUnknownKeys().empty()) {
+    if (!allowUnknownFields && !collector->GetUnknownKeys().empty()) {
         ThrowUnknownYamlFieldsError(source, *collector);
     }
 }

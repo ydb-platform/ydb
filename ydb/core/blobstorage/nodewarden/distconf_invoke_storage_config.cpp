@@ -377,7 +377,7 @@ namespace NKikimr::NStorage {
                 state = "parsing final config";
 
                 NKikimrConfig::TAppConfig appConfig;
-                NYaml::Parse(*effective, NYaml::GetJsonToProtoConfig(), appConfig, true);
+                NYaml::Parse(*effective, NYaml::GetJsonToProtoConfig(request.GetAllowUnknownFields()), appConfig, true);
 
                 if (TString errorReason; !DeriveStorageConfig(appConfig, &config, &errorReason)) {
                     throw TExError() << "Error while deriving StorageConfig: " << errorReason;
@@ -483,7 +483,7 @@ namespace NKikimr::NStorage {
         EnablingDistconf = enablingDistconf;
         if (request.GetSkipConsoleValidation() || !NewYaml) {
             ReplaceStorageConfigExecute();
-        } else if (!Self->EnqueueConsoleConfigValidation(SelfId(), enablingDistconf, *NewYaml)) {
+        } else if (!Self->EnqueueConsoleConfigValidation(SelfId(), enablingDistconf, *NewYaml, request.GetAllowUnknownFields())) {
             throw TExRace() << "Console pipe is not available";
         }
     }

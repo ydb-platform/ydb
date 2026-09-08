@@ -139,7 +139,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev) {
         const auto& msg = *ev->Get();
 
-        YDB_LOG_DEBUG("[Export]",
+        YDB_LOG_DEBUG("[Export] Handle TEvHttpIncomingResponse",
             {"self", this->SelfId()},
             {"status", (msg.Response ? msg.Response->Status : "null")},
             {"body", (msg.Response ? msg.Response->Body : "null")});

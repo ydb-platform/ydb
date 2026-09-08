@@ -276,7 +276,7 @@ namespace NActors {
                 }
 
                 const int err = errno;
-                YDB_LOG_WARN_CTX_COMP(*TlsActivationContext, NActorsServices::INTERCONNECT, "ICH40 Kernel liveness disabled for due to setsockopt( failure",
+                YDB_LOG_WARN_CTX_COMP(*TlsActivationContext, NActorsServices::INTERCONNECT, "ICH40 Kernel liveness disabled for due to setsockopt failure",
                     {"logPrefix", Actor->LogPrefix.data()},
                     {"socket", int(*Socket)},
                     {"name", name},
@@ -1553,7 +1553,7 @@ namespace NActors {
                         {"address", std::get<0>(sockname)});
                 }
             } else if (int* err = get_if<int>(&sockname)) {
-                YDB_LOG_ERROR_COMP(::NActorsServices::INTERCONNECT, "Unable to get local address for Rdma will not be used",
+                YDB_LOG_ERROR_COMP(::NActorsServices::INTERCONNECT, "Unable to get local address for socket. Rdma will not be used",
                     {"marker", "ICRDMA"},
                     {"socket", (int)(*MainChannel.GetSocketRef())},
                     {"err", *err});

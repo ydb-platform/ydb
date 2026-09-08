@@ -356,7 +356,7 @@ private:
     void ProcessRlNoResource(const TActorContext& ctx) {
         const NYql::TIssue& issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_RESOURCE_USAGE_LIMITED,
             "Throughput limit exceeded for read table request");
-        YDB_LOG_NOTICE_CTX(ctx, "Throughput limit exceeded, we got stream will be terminated",
+        YDB_LOG_NOTICE_CTX(ctx, "Throughput limit exceeded, stream will be terminated",
             {"selfId", SelfId()},
             {"sendBufferSize", SendBuffer_.size()},
             {"success", HasPendingSuccess});

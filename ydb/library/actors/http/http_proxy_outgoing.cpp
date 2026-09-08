@@ -168,7 +168,7 @@ public:
 
     void ReplyErrorAndPassAway(const TString& error) {
         if (error) {
-            YDB_LOG_ERROR("Connection closed with",
+            YDB_LOG_ERROR("Connection closed with error",
                 {"socketName", GetSocketName()},
                 {"error", error});
         } else {

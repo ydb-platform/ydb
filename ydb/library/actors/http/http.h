@@ -775,7 +775,7 @@ public:
             } else {
                 Y_DEBUG_ABORT_UNLESS(HeaderType::ContentEncoding == contentEncoding);
                 if (HeaderType::ContentEncoding != contentEncoding) {
-                    YDB_LOG_ERROR_COMP(HttpLog, "Content-Encoding already set to cannot set",
+                    YDB_LOG_ERROR_COMP(HttpLog, "Content-Encoding already set, cannot change",
                         {"oldContentEncoding", HeaderType::ContentEncoding},
                         {"newContentEncoding", contentEncoding});
                 }

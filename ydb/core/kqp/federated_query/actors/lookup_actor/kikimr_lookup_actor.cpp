@@ -320,15 +320,15 @@ namespace {
                     {"senderId", sender},
                     {"sessionId", sessionId},
                     {"database", session->Database});
-            TSessionInfo::TPtr sessionInfo(new TSessionInfo {
-                    .Database = session->Database,
-                    .SessionId = sessionId,
-                    });
+            ;
             auto& databaseState = DatabaseStates[session->Database];
             databaseState.ExpireTime = TInstant::Now() + DatabaseStatesCleanupPeriod;
             auto [_, inserted] = databaseState.BusySessions.emplace(sessionId, std::move(session));
             Y_VALIDATE(inserted, "BusySession already contains session " << sessionId);
-            Send(sender, new TEvSessionAcquired(std::move(sessionInfo)));
+            Send(sender, new TEvSessionAcquired(TSessionInfo::TPtr(new TSessionInfo {
+                .Database = session->Database,
+                .SessionId = sessionId,
+            })));
         }
 
         void Handle(TEvReleaseSession::TPtr ev) {
@@ -346,11 +346,10 @@ namespace {
                         {"senderId", sender},
                         {"sessionId", session->SessionId},
                         {"database", session->Database});
-                Send(sender, new TEvSessionAcquired(
-                            TSessionInfo::TPtr(new TSessionInfo {
-                                .Database = session->Database,
-                                .SessionId = session->SessionId,
-                            })));
+                Send(sender, new TEvSessionAcquired(TSessionInfo::TPtr(new TSessionInfo {
+                    .Database = session->Database,
+                    .SessionId = session->SessionId,
+                })));
                 return;
             }
             if (sessionInfo.Invalidate) {

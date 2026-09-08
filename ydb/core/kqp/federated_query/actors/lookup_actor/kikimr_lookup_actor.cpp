@@ -342,15 +342,15 @@ namespace {
                 // fastpath: reuse/serve session and keep in BusySession
                 auto sender = std::move(databaseState.WaitingQueue.front());
                 databaseState.WaitingQueue.pop_front();
-                TSessionInfo::TPtr sessionInfo(new TSessionInfo {
-                    .Database = session->Database,
-                    .SessionId = session->SessionId,
-                });
                 YDB_LOG_TRACE("Transfer ready session to waiting",
                         {"senderId", sender},
                         {"sessionId", session->SessionId},
                         {"database", session->Database});
-                Send(sender, new TEvSessionAcquired(std::move(sessionInfo)));
+                Send(sender, new TEvSessionAcquired(
+                            TSessionInfo::TPtr(new TSessionInfo {
+                                .Database = session->Database,
+                                .SessionId = session->SessionId,
+                            })));
                 return;
             }
             if (sessionInfo.Invalidate) {
@@ -366,7 +366,7 @@ namespace {
                 databaseState.ReadySessions.push_back(std::move(session));
             }
             databaseState.BusySessions.erase(it);
-            TryEnqueueWaiting(databaseState, session->Database);
+            TryEnqueueWaiting(databaseState, sessionInfo.Database);
         }
 
         void Handle(TEvQueryCreateSessionResponse::TPtr ev) {

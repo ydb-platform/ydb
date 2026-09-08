@@ -1448,17 +1448,32 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         AssertStatus(writeResult, TReplyStatus::INCORRECT_REQUEST);
     }
 
-    Y_UNIT_TEST(WritePayloadMustBeContiguousAndAligned) {
+    Y_UNIT_TEST(WritePayloadMayBeUnalignedOrFragmented) {
         TTestContext ctx;
         const TDiskHandle disk = ctx.CreateDDisk(4, 1);
         NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 20, 1);
+        const auto unalignedPayloads = ctx.Counters
+            ->GetSubgroup("counters", "ddisks")
+            ->GetSubgroup("ddiskPool", "ddisk_pool")
+            ->GetSubgroup("group", Sprintf("%09u", 0u))
+            ->GetSubgroup("orderNumber", Sprintf("%02u", 0u))
+            ->GetSubgroup("pdisk", Sprintf("%09u", disk.PDiskId))
+            ->GetSubgroup("media", "nvme")
+            ->GetSubgroup("subsystem", "interface")
+            ->FindCounter("UnalignedWritePayloads");
+        UNIT_ASSERT(unalignedPayloads);
+        UNIT_ASSERT_VALUES_EQUAL(unalignedPayloads->Val(), 0);
 
         {
+            const TString payload = MakeData('U', BlockSize);
             auto write = std::make_unique<NDDisk::TEvWrite>(creds, NDDisk::TBlockSelector(0, 0, BlockSize),
                 NDDisk::TWriteInstruction(0));
-            write->AddPayloadThenChecksum(MakeMisalignedRope(MakeData('U', BlockSize)));
-            auto writeResult = SendToDDiskAndWait<NDDisk::TEvWriteResult>(ctx, disk.ServiceId, write.release());
-            AssertStatus(writeResult, TReplyStatus::INCORRECT_REQUEST);
+            write->AddPayloadThenChecksum(MakeMisalignedRope(payload));
+            auto initial = DoWriteWithChunkAllocation(ctx, disk, std::move(write),
+                disk.FirstChunkId + PersistentBufferInitChunks, 0, payload, true, true);
+            AssertStatus(initial.WriteResult, TReplyStatus::OK);
+            // Resuming after allocation must not count the same payload twice.
+            UNIT_ASSERT_VALUES_EQUAL(unalignedPayloads->Val(), 1);
         }
 
         {
@@ -1472,8 +1487,23 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             auto write = std::make_unique<NDDisk::TEvWrite>(creds, NDDisk::TBlockSelector(0, 0, BlockSize),
                 NDDisk::TWriteInstruction(0));
             write->AddPayloadThenChecksum(std::move(nonContiguous));
-            auto writeResult = SendToDDiskAndWait<NDDisk::TEvWriteResult>(ctx, disk.ServiceId, write.release());
-            AssertStatus(writeResult, TReplyStatus::INCORRECT_REQUEST);
+            SendToDDisk(ctx, disk.ServiceId, write.release());
+            auto writeRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+            UNIT_ASSERT_VALUES_EQUAL(writeRaw->Get()->Data.ConvertToString(), part1 + part2);
+            UNIT_ASSERT_VALUES_EQUAL(writeRaw->Get()->Data.Begin().ContiguousSize(), BlockSize);
+            UNIT_ASSERT_VALUES_EQUAL(
+                reinterpret_cast<uintptr_t>(writeRaw->Get()->Data.Begin().ContiguousData()) % BlockSize, 0u);
+            ctx.SendPDiskResponse(disk, *writeRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+            AssertStatus(WaitFromDDisk<NDDisk::TEvWriteResult>(ctx), TReplyStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(unalignedPayloads->Val(), 2);
+        }
+
+        {
+            auto write = std::make_unique<NDDisk::TEvWrite>(creds, NDDisk::TBlockSelector(0, 0, BlockSize),
+                NDDisk::TWriteInstruction(0));
+            write->AddPayloadThenChecksum(MakeAlignedRope(MakeData('A', BlockSize)));
+            AssertStatus(DoWrite(ctx, disk, std::move(write)), TReplyStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(unalignedPayloads->Val(), 2);
         }
     }
 

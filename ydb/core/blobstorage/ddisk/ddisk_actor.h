@@ -185,6 +185,7 @@ namespace NKikimr::NDDisk {
                 LIST_COUNTERS_INTERFACE_OPS(DECLARE_COUNTERS_INTERFACE)
 
 #undef DECLARE_COUNTERS_INTERFACE
+                NMonitoring::TDynamicCounters::TCounterPtr UnalignedWritePayloads;
             } Interface;
 
             struct {

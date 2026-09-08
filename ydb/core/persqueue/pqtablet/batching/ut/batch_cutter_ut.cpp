@@ -242,6 +242,18 @@ void AssertKafkaBatchCut(
 } // namespace
 
 Y_UNIT_TEST_SUITE(TBatchCutterTest) {
+    Y_UNIT_TEST(BatchCutterDataMovesChunkAndKeepsReadResultReference) {
+        const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayload());
+        auto chunk = NKikimr::GetDeserializedData(readResult.GetData());
+        const TString payload = chunk.GetData();
+        UNIT_ASSERT(!payload.empty());
+
+        TBatchCutterData data(readResult, std::move(chunk));
+        UNIT_ASSERT_VALUES_EQUAL(data.DataChunk.GetData(), payload);
+        UNIT_ASSERT(chunk.GetData().empty());
+        UNIT_ASSERT_EQUAL(&data.ReadResult, &readResult);
+    }
+
     Y_UNIT_TEST(CutUncompressedKafkaBatchInDataChunk) {
         const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayload());
         AssertKafkaBatchCut(TKafkaBatchCutter().Cut(TBatchCutterData(readResult, NKikimr::GetDeserializedData(readResult.GetData())), 10));

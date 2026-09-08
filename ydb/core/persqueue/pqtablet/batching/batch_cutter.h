@@ -14,7 +14,13 @@ struct TBatchCutterData {
     NKikimrPQClient::TDataChunk DataChunk;
     const TReadResult& ReadResult;
 
-    TBatchCutterData(const TReadResult& readResult, NKikimrPQClient::TDataChunk&& dataChunk) : DataChunk(dataChunk), ReadResult(readResult) {}
+    TBatchCutterData(const TReadResult& readResult, NKikimrPQClient::TDataChunk&& dataChunk)
+        : ReadResult(readResult)
+    {
+        DataChunk.Swap(&dataChunk);
+    }
+
+    TBatchCutterData(TReadResult&&, NKikimrPQClient::TDataChunk&&) = delete;
 };
 
 class IBatchCutter {

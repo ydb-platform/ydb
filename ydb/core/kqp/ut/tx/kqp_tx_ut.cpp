@@ -1323,36 +1323,167 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Strict Serializable mode is disabled");
     }
 
-    Y_UNIT_TEST(SchemeChangeAbortsTx) {
-        auto kikimr = DefaultKikimrRunner();
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        auto schemeSession = db.CreateSession().GetValueSync().GetSession();
+    // Runs `read`, then the scheme `Operation` from another session, then `read` again,
+    // all inside one SerializableRW transaction, and checks how the second read fails.
+    struct TSchemeChangeInTxTester {
+        TString Create = R"(
+            CREATE TABLE `/Root/SchemeOpsTable` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )";
 
-        auto result = session.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM `/Root/KeyValue` ORDER BY Key;
-        )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        // Applied after the table is filled, before the transaction starts.
+        TString Setup;
 
-        auto tx = result.GetTransaction();
-        UNIT_ASSERT(tx);
-        CompareYson(R"([[[1u];["One"]];[[2u];["Two"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        TString Operation;
 
-        auto alterResult = schemeSession.ExecuteSchemeQuery(R"(
-            ALTER TABLE `/Root/KeyValue` ADD COLUMN Value2 Uint64;
-        )").ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        TString Read = "SELECT Key, Value FROM `/Root/SchemeOpsTable` ORDER BY Key;";
 
-        result = session.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM `/Root/KeyValue` ORDER BY Key;
-        )"), TTxControl::Tx(*tx)).ExtractValueSync();
+        EStatus ExpectedStatus = EStatus::ABORTED;
+        TString ExpectedIssue = "Scheme changed for table";
 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Scheme changed for table");
+        void Execute() const {
+            TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+            auto db = kikimr.GetTableClient();
+            auto schemeSession = db.CreateSession().GetValueSync().GetSession();
+            auto session = db.CreateSession().GetValueSync().GetSession();
 
-        // The aborted transaction is released, so the client cannot commit it anymore.
-        auto commitResult = tx->Commit().ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::NOT_FOUND, commitResult.GetIssues().ToString());
+            auto schemeResult = schemeSession.ExecuteSchemeQuery(Create).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(schemeResult.GetStatus(), EStatus::SUCCESS,
+                schemeResult.GetIssues().ToString());
+
+            auto result = session.ExecuteDataQuery(Q_(R"(
+                REPLACE INTO `/Root/SchemeOpsTable` (Key, Value) VALUES (1u, "One"), (2u, "Two");
+            )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            if (Setup) {
+                schemeResult = schemeSession.ExecuteSchemeQuery(Setup).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(schemeResult.GetStatus(), EStatus::SUCCESS,
+                    schemeResult.GetIssues().ToString());
+            }
+
+            result = session.ExecuteDataQuery(Q_(Read),
+                TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto tx = result.GetTransaction();
+            UNIT_ASSERT(tx);
+
+            schemeResult = schemeSession.ExecuteSchemeQuery(Operation).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(schemeResult.GetStatus(), EStatus::SUCCESS,
+                schemeResult.GetIssues().ToString());
+
+            result = session.ExecuteDataQuery(Q_(Read), TTxControl::Tx(*tx)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), ExpectedStatus, result.GetIssues().ToString());
+            if (ExpectedIssue) {
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), ExpectedIssue);
+            }
+
+            // The transaction is released on abort, so the client cannot commit it anymore.
+            auto commitResult = tx->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::NOT_FOUND,
+                commitResult.GetIssues().ToString());
+        }
+    };
+
+    Y_UNIT_TEST(SchemeChangeAddColumn) {
+        TSchemeChangeInTxTester tester;
+        tester.Operation = "ALTER TABLE `/Root/SchemeOpsTable` ADD COLUMN Extra Uint64;";
+        tester.Read = "SELECT * FROM `/Root/SchemeOpsTable` ORDER BY Key;";
+        tester.Execute();
+    }
+
+    // The dropped column is the one being read, so the statement cannot even be
+    // recompiled against the new schema.
+    Y_UNIT_TEST(SchemeChangeDropReadColumn) {
+        TSchemeChangeInTxTester tester;
+        tester.Operation = "ALTER TABLE `/Root/SchemeOpsTable` DROP COLUMN Value;";
+        tester.ExpectedStatus = EStatus::GENERIC_ERROR;
+        tester.ExpectedIssue = "";
+        tester.Execute();
+    }
+
+    // The dropped column is irrelevant to the read, yet the transaction still aborts:
+    // the schema version check is unconditional for now.
+    Y_UNIT_TEST(SchemeChangeDropUnreadColumn) {
+        TSchemeChangeInTxTester tester;
+        tester.Setup = "ALTER TABLE `/Root/SchemeOpsTable` ADD COLUMN Spare Uint64;";
+        tester.Operation = "ALTER TABLE `/Root/SchemeOpsTable` DROP COLUMN Spare;";
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeTruncateTable) {
+        TSchemeChangeInTxTester tester;
+        tester.Operation = "TRUNCATE TABLE `/Root/SchemeOpsTable`;";
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeAddIndex) {
+        TSchemeChangeInTxTester tester;
+        tester.Operation = "ALTER TABLE `/Root/SchemeOpsTable` ADD INDEX ValueIndex GLOBAL SYNC ON (`Value`);";
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeDropIndex) {
+        TSchemeChangeInTxTester tester;
+        tester.Setup = "ALTER TABLE `/Root/SchemeOpsTable` ADD INDEX ValueIndex GLOBAL SYNC ON (`Value`);";
+        tester.Operation = "ALTER TABLE `/Root/SchemeOpsTable` DROP INDEX ValueIndex;";
+        tester.Execute();
+    }
+
+    // Same operation, but the transaction reads through the index being dropped, so it
+    // fails to resolve the index rather than to match the schema version.
+    Y_UNIT_TEST(SchemeChangeDropIndexWithIndexRead) {
+        TSchemeChangeInTxTester tester;
+        tester.Setup = "ALTER TABLE `/Root/SchemeOpsTable` ADD INDEX ValueIndex GLOBAL SYNC ON (`Value`);";
+        tester.Operation = "ALTER TABLE `/Root/SchemeOpsTable` DROP INDEX ValueIndex;";
+        tester.Read = R"(SELECT Key, Value FROM `/Root/SchemeOpsTable` VIEW ValueIndex WHERE Value = "One";)";
+        tester.ExpectedStatus = EStatus::SCHEME_ERROR;
+        tester.ExpectedIssue = "";
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeAddChangefeed) {
+        TSchemeChangeInTxTester tester;
+        tester.Operation = R"(
+            ALTER TABLE `/Root/SchemeOpsTable` ADD CHANGEFEED Feed WITH (FORMAT = 'JSON', MODE = 'UPDATES');
+        )";
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeDropChangefeed) {
+        TSchemeChangeInTxTester tester;
+        tester.Setup = R"(
+            ALTER TABLE `/Root/SchemeOpsTable` ADD CHANGEFEED Feed WITH (FORMAT = 'JSON', MODE = 'UPDATES');
+        )";
+        tester.Operation = "ALTER TABLE `/Root/SchemeOpsTable` DROP CHANGEFEED Feed;";
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeSetFamily) {
+        TSchemeChangeInTxTester tester;
+        tester.Create = R"(
+            CREATE TABLE `/Root/SchemeOpsTable` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key),
+                FAMILY Family1 (
+                    DATA = "test",
+                    COMPRESSION = "off"
+                )
+            );
+        )";
+        tester.Operation = "ALTER TABLE `/Root/SchemeOpsTable` ALTER COLUMN Value SET FAMILY Family1;";
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeSetDefault) {
+        TSchemeChangeInTxTester tester;
+        tester.Operation = R"(ALTER TABLE `/Root/SchemeOpsTable` ALTER COLUMN Value SET DEFAULT "def"u;)";
+        tester.Execute();
     }
 }
 

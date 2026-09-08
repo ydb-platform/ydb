@@ -177,6 +177,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueExistin
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueSetsContentBasedDeduplicationMessageRateLimit
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueSetsDefaultTopicMessageRateLimit
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueUsesRequestHost
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueWithAttributes
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueWithBadQueueName
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueWithBadSecurityToken
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueueWithCustomConsumer
@@ -246,6 +247,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageBatchEm
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageBatchLong
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageBatchWithAtSignInConsumerNameInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageTooBig
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSendMessageWithLeadingSlashInConsumerNameInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesBasic
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesInvalidValues
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestSetQueueAttributesNonExistentQueue
@@ -289,6 +291,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueAttribu
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueAttributesStdWithConsumersRetentionExtended
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueAttributesStdWithConsumersRetentionShrinked
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueUrl
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueUrlOfNotExistingQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueUrlWithConsumer
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestListQueues
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestNoAuthCreateQueue
@@ -342,6 +345,7 @@ ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion
 ydb/core/kqp/ut/olap/types KqpOlapJson.BloomCategoryIndexesVariants[false,false,0,10,1000,0,CATEGORY_BLOOM_FILTER]
 ydb/core/kqp/ut/rbo KqpRboOlap.DisableBlockExecutionPerQuery
 ydb/core/kqp/ut/rbo KqpRboOlap.DisableBlocksOnColumnsLimit
+ydb/core/kqp/ut/rbo KqpRboOlap.DoubleOutOfRangeInJson
 ydb/core/kqp/ut/rbo KqpRboOlap.PredicatePushdownCastErrors
 ydb/core/kqp/ut/rbo KqpRboYql.AggregateKeyColumnsNotLeakedToInputMap
 ydb/core/kqp/ut/rbo KqpRboYql.AliasesRenames
@@ -361,6 +365,7 @@ ydb/core/kqp/ut/tli KqpTli.BreakerAndVictimInSameTransaction
 ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect
 ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect2Node
 ydb/core/kqp/ut/tli KqpTli.CrossTables
+ydb/core/kqp/ut/tli KqpTli.DifferentKeys
 ydb/core/kqp/ut/tli KqpTli.IgnoredTableRegexes
 ydb/core/kqp/ut/tli KqpTli.LogDisabled
 ydb/core/kqp/ut/tli KqpTli.ManyUpserts2Node

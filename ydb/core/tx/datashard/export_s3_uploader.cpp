@@ -152,7 +152,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         }
 
         if (msg.Response->Body.find('<') != TStringBuf::npos) {
-            YDB_LOG_ERROR("[Export] body",
+            YDB_LOG_ERROR("[Export] Error at 'GetProxy': invalid body",
                 {"self", this->SelfId()},
                 {"body", msg.Response->Body},
                 {"error", "invalid"});

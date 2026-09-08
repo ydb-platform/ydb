@@ -582,7 +582,7 @@ private:
             requestForPermissions << " " << permissionName;
             ++i;
         }
-        YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket asking for AccessServiceAuthorizationV1(",
+        YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket asking for AccessServiceAuthorizationV1",
             {"ticket", record.GetMaskedTicket()},
             {"requestForPermissions", requestForPermissions}
         );

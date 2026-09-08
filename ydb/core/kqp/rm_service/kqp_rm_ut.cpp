@@ -693,8 +693,10 @@ void KqpRm::PoolMemoryAvailability() {
 }
 
 // The quota managers refuse optional requests in advance when the tx availability cannot cover the aligned
-// step (no resource manager round trip), their availability follows the sign of the tx value, and an optional
-// request that fits the availability goes to the resource manager as usual
+// step: no resource manager round trip, even when the resource manager itself would have granted the request.
+// The resource manager records every refusal it handles in TxFailedAllocationSize, so a zero there proves it
+// was not asked. Their availability follows the sign of the tx value, and an optional request that fits goes
+// to the resource manager as usual
 void KqpRm::TaskQuotaManagerOptional() {
     StartRms();
     NKikimr::TActorSystemStub stub;
@@ -709,14 +711,16 @@ void KqpRm::TaskQuotaManagerOptional() {
         UNIT_ASSERT(rm->AllocateResources(*tx, taskId, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = initialLimit}));
         UNIT_ASSERT(rm->AllocateResources(*tx, taskId, NRm::TKqpResourcesRequest{.Memory = 100}));
         UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 700);
+        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 0);
         const auto statsBefore = rm->GetLocalResources();
 
-        // task level manager: 1 MB allocation step, the test resource broker cannot grant that much
+        // task level manager: 1 MB allocation step, more than the tx availability
         auto qm = CreateTaskQuotaManager(rm, tx, taskId, initialLimit);
         UNIT_ASSERT(qm->AllocateQuota(50, /* isOptional = */ true)); // fits in the prepaid limit
         UNIT_ASSERT_VALUES_EQUAL(qm->GetMemoryAvailability(), 700 + 50); // tx value plus the local leftover
-        UNIT_ASSERT(!qm->AllocateQuota(1500, /* isOptional = */ true)); // refused in advance
-        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsBefore.Memory); // no round trip
+        UNIT_ASSERT(!qm->AllocateQuota(1500, /* isOptional = */ true)); // 1 MB step > 700: refused in advance
+        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsBefore.Memory);
+        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 0); // the resource manager was not asked
         // a negative tx value dominates the local leftover
         tx->TotalMemoryCookie->MemoryAvailability.store(-7);
         UNIT_ASSERT_VALUES_EQUAL(qm->GetMemoryAvailability(), -7);
@@ -724,17 +728,24 @@ void KqpRm::TaskQuotaManagerOptional() {
         qm->FreeQuota(50);
         qm.reset();
 
-        // channel level manager: 16 byte allocation step, the granted path is observable
+        // channel level manager: 16 byte allocation step. The tx reports less than the aligned request although
+        // the resource manager has 700 bytes and would grant it: refused in advance, the resource manager not asked
         auto cm = CreateChannelQuotaManager(rm, tx, 0, 16);
-        tx->TotalMemoryCookie->MemoryAvailability.store(500);
-        UNIT_ASSERT(!cm->AllocateQuota(1500, /* isOptional = */ true)); // 1504 > 500: refused in advance
+        tx->TotalMemoryCookie->MemoryAvailability.store(100);
+        UNIT_ASSERT(!cm->AllocateQuota(200, /* isOptional = */ true)); // 208 > 100: refused in advance
         UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsBefore.Memory);
-        UNIT_ASSERT_VALUES_EQUAL(cm->GetMemoryAvailability(), 500); // nothing prepaid here
+        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cm->GetMemoryAvailability(), 100); // nothing prepaid here
         tx->TotalMemoryCookie->MemoryAvailability.store(700);
-        UNIT_ASSERT(cm->AllocateQuota(200, /* isOptional = */ true)); // 208 <= 700: granted by the resource manager
+        UNIT_ASSERT(cm->AllocateQuota(200, /* isOptional = */ true)); // 208 <= 700: the same request is granted by the resource manager
         UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsBefore.Memory - 208);
         UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 700 - 208); // the cookie follows the allocation
-        cm->FreeQuota(200);
+        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 0);
+        cm->FreeQuota(200); // the 208 stay prepaid in the channel manager until it dies
+        // a mandatory request beyond the node memory does reach the resource manager and is refused there:
+        // 1500 - 208 prepaid = 1292, aligned to 1296 > 692 left on the node
+        UNIT_ASSERT(!cm->AllocateQuota(1500, /* isOptional = */ false));
+        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 1296);
         cm.reset();
         UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsBefore.Memory);
 

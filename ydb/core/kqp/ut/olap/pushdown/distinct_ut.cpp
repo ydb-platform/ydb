@@ -216,6 +216,75 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
         // SSA/projection distinct keys use numeric field names in the stage batch (same as ToGeneralContainer).
     }
 
+    // JSON_VALUE alias DISTINCT together with a pushed WHERE on another JSON path of the same column:
+    // KqpOlapDistinct, KqpOlapFilter and a KqpOlapProjection named by the SELECT alias must coexist in the read.
+    Y_UNIT_TEST(JsonValueDistinct_JsonFilterSameColumn_PushesFilterProjectionAndDistinct) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NYdb::NStatusHelpers::ThrowOnError(result);
+        auto querySession = result.GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/foo_json_distinct_filter` (
+                a Int64 NOT NULL,
+                b Int32,
+                payload JsonDocument,
+                primary key(a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        auto insertRes = querySession.ExecuteQuery(R"(
+            INSERT INTO `/Root/foo_json_distinct_filter` (a, b, payload)
+            VALUES (1, 1, JsonDocument('{"a.b.c" : "a1", "queue" : "q1"}'));
+            INSERT INTO `/Root/foo_json_distinct_filter` (a, b, payload)
+            VALUES (2, 11, JsonDocument('{"a.b.c" : "a2", "queue" : "q2"}'));
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(insertRes.IsSuccess(), insertRes.GetIssues().ToString());
+
+        const TString query = R"(
+            --!syntax_v1
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinct = "jsonDoc";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = "10";
+
+            SELECT DISTINCT JSON_VALUE(payload, "$.\"a.b.c\"") AS jsonDoc
+            FROM `/Root/foo_json_distinct_filter`
+            WHERE b = 11 AND JSON_VALUE(payload, "$.queue") = "q2"
+            LIMIT 10
+        )";
+
+        auto explainRes = StreamExplainQuery(query, tableClient);
+        UNIT_ASSERT_C(explainRes.IsSuccess(), explainRes.GetIssues().ToString());
+        const auto planRes = CollectStreamResult(explainRes);
+
+        const TString ast = TString(planRes.QueryStats->Getquery_ast());
+        UNIT_ASSERT_C(ast.find("KqpOlapDistinct") != TString::npos, ast);
+        UNIT_ASSERT_C(ast.find("KqpOlapFilter") != TString::npos, ast);
+        UNIT_ASSERT_C(ast.find("KqpOlapProjection") != TString::npos, ast);
+        // Projection is named by the SELECT alias, not by the source column `payload`:
+        // (KqpOlapProjection (KqpOlapJsonValue ...) '"jsonDoc")
+        const size_t projPos = ast.find("(KqpOlapProjection ");
+        UNIT_ASSERT_C(projPos != TString::npos, ast);
+        const TString projTail = ast.substr(projPos, 400);
+        UNIT_ASSERT_C(projTail.find("jsonDoc") != TString::npos, projTail);
+        UNIT_ASSERT_C(ast.find("__kqp_olap_projection_") == TString::npos, ast);
+
+        // The query must also execute (no "bool interpretation" failure in the SSA program).
+        auto execRes = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(execRes.IsSuccess(), execRes.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(execRes.GetResultSets().size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(execRes.GetResultSet(0).RowsCount(), 1u);
+    }
+
     Y_UNIT_TEST(ForceDistinctPragmas_DoNotBreak_SumDistinctWithAggPushdown) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);

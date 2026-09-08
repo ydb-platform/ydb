@@ -267,7 +267,10 @@ enum class EProcessorType {
     CheckIndexData,
     CheckHeaderData,
     StreamLogic,
-    ReserveMemory
+    ReserveMemory,
+    // Stateless DISTINCT marker (see distinct_marker.h). Must not be treated as a real Filter:
+    // TGraph::Collapse() AND-merges all Filter nodes, and the marker input is the (non-bool) key column.
+    DistinctMarker
 };
 
 class TFetchingInfo {

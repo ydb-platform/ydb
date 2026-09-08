@@ -101,7 +101,8 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
         for (auto&& i : Nodes) {
             i.second->SortInputs();
             if (!i.second->GetOutputEdges().size()) {
-                if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::Filter) {
+                if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::Filter ||
+                    i.second->GetProcessor()->GetProcessorType() == EProcessorType::DistinctMarker) {
                     AFL_VERIFY(!IsFilterRoot(i.second->GetIdentifier()));
                     FilterRoot.emplace_back(i.second);
                 } else if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::Projection) {

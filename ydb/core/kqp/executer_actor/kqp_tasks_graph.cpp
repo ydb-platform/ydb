@@ -2,6 +2,7 @@
 #include "max_tasks_graph.h"
 
 #include "kqp_partition_helper.h"
+#include <ydb/core/kqp/tracing/kqp_execution_tracing.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/json_index/json_index.h>
@@ -1890,12 +1891,16 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
     }
 }
 
-void TKqpTasksGraph::PrepareTaskTracing(const NWilson::TSpan& span) {
-    if (!span || span.GetTraceId().GetVerbosity() < TComponentTracingLevels::TQueryProcessor::Detailed) {
-        return;
-    }
+void TKqpTasksGraph::PrepareTaskTracing(const NWilson::TSpan& span, TExecutionTrace* trace) {
     for (auto& [id, stage] : GetStagesInfo()) {
+        stage.Meta.TraceSpanId = 0;
+        stage.Meta.TraceDescription = {};
+        if (!trace || !span || span.GetTraceId().GetVerbosity() < TComponentTracingLevels::TQueryProcessor::Detailed) {
+            continue;
+        }
         stage.Meta.TraceDescription = TTaskTraceDescription::FromStage(stage.Meta.GetStage(id));
+        stage.Meta.TraceSpanId = trace->StartStage(span, {id.TxId, id.StageId},
+            stage.Meta.TraceDescription, stage.Tasks.size());
     }
 }
 
@@ -1916,6 +1921,7 @@ void TKqpTasksGraph::SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDq
     }
 
     stageInfo.Meta.TraceDescription.Save(*result);
+    SaveTaskTraceParent(*result, stageInfo.Meta.TraceSpanId);
 
     for (const auto& readRange : task.Meta.ReadRanges) {
         result->AddReadRanges(readRange);

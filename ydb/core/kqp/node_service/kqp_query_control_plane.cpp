@@ -445,7 +445,7 @@ public:
             for (auto&& m : i.second.MutableMetaInfo()) {
                 Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
                     m.GetMeta(), NYql::NDq::TComputeRuntimeSettings(), msg.GetDatabase(), txId, lockTxId, lockNodeId, lockMode,
-                    CaFactory_->GetShardsScanningPolicy(), Counters_, NWilson::TTraceId(ev->TraceId), cpuLimits,
+                    CaFactory_->GetShardsScanningPolicy(), Counters_, NWilson::TTraceId(m.TraceId), cpuLimits,
                     msg.GetUseBatchPool()));
             }
         }

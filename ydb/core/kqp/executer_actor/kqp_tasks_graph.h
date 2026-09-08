@@ -22,6 +22,7 @@ namespace NKikimrKqp {
 namespace NKikimr::NKqp {
 
 class TMaxTasksGraph;
+class TExecutionTrace;
 struct TQueryExecutionStats;
 
 struct TPlacementParams {
@@ -87,6 +88,7 @@ struct TStageInfoMeta {
     };
     ETasksType TasksType = UNKNOWN_TASKS;
     TTaskTraceDescription TraceDescription;
+    ui64 TraceSpanId = 0;
 
     TTableId TableId;
     TString TablePath;
@@ -407,7 +409,7 @@ public:
 
     size_t BuildAllTasks(std::optional<TLlvmSettings> llvmSettings, const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, TQueryExecutionStats* stats, const TPlacementParams& placementParams = {});
     void BuildLiteralTasks();
-    void PrepareTaskTracing(const NWilson::TSpan& span);
+    void PrepareTaskTracing(const NWilson::TSpan& span, TExecutionTrace* trace);
 
     NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(const TTask& task, bool serializeAsyncIoSettings);
     void PersistTasksGraphInfo(NKikimrKqp::TQueryPhysicalGraph& result) const;

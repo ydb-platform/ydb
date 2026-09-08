@@ -2964,6 +2964,15 @@ message TColumnShardConfig {
     // Bound IsDrained() queue scans per tablet — the cost that scales with ColumnShards per node.
     optional uint32 CutHistoryNominateCadenceSeconds = 77 [default = 60];
     optional uint32 CutHistoryMaxDrainChecksPerNomination = 78 [default = 8];
+
+    // Where a candidate range is proven empty: the portion index, a BlobStorage range read, or both compared.
+    enum ECutHistoryProofSource {
+        CUT_HISTORY_PROOF_PORTIONS = 0;
+        CUT_HISTORY_PROOF_BS_RANGE = 1;
+        // Cuts on the portion verdict and only counts disagreement, so the range read carries no risk.
+        CUT_HISTORY_PROOF_COMPARE = 2;
+    }
+    optional ECutHistoryProofSource CutHistoryProofSource = 79 [default = CUT_HISTORY_PROOF_PORTIONS];
     optional uint64 NodePortionsCountLimit = 73;
 
     message TFlowControlConfig {

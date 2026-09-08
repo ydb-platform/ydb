@@ -54,6 +54,10 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr SweepCandidates;
     NMonitoring::TDynamicCounters::TCounterPtr ChannelsPoisoned;
     NMonitoring::TDynamicCounters::TCounterPtr EntriesDisproved;
+    NMonitoring::TDynamicCounters::TCounterPtr RangeProbesCompleted;
+    NMonitoring::TDynamicCounters::TCounterPtr RangeProbeFailures;
+    NMonitoring::TDynamicCounters::TCounterPtr RangeOnlyDisproved;
+    NMonitoring::TDynamicCounters::TCounterPtr PortionsOnlyDisproved;
 
 public:
     THistoryCutterCounters(const TCommonCountersOwner& sameAs, const TString& componentName);
@@ -79,6 +83,17 @@ public:
         SweepCandidates->Add(sweepCandidates);
         ChannelsPoisoned->Add(channelsPoisoned);
         EntriesDisproved->Add(entriesDisproved);
+    }
+
+    void OnRangeProbeCompleted(const ui64 failures) const {
+        RangeProbesCompleted->Add(1);
+        RangeProbeFailures->Add(failures);
+    }
+
+    // PortionsOnly is the dangerous direction: BlobStorage called a range empty that the index still pins.
+    void OnRangeProbeDisagreement(const ui64 rangeOnly, const ui64 portionsOnly) const {
+        RangeOnlyDisproved->Add(rangeOnly);
+        PortionsOnlyDisproved->Add(portionsOnly);
     }
 };
 

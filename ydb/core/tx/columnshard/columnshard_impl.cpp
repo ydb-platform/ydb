@@ -1954,6 +1954,7 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvPrivate::TEvStartCutHistorySweep, Handle);
         HFunc(TEvPrivate::TEvCutHistoryBarrierDone, Handle);
         HFunc(TEvPrivate::TEvCutHistorySweepBatchDone, Handle);
+        HFunc(TEvPrivate::TEvCutHistoryRangeProbeDone, Handle);
 
         HFunc(NActors::TEvents::TEvUndelivered, Handle);
 

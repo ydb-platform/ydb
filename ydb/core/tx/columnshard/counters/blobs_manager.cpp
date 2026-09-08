@@ -29,6 +29,10 @@ THistoryCutterCounters::THistoryCutterCounters(const TCommonCountersOwner& sameA
     , SweepCandidates(TBase::GetValue("Sweep/Candidates"))
     , ChannelsPoisoned(TBase::GetValue("Channels/Poisoned"))
     , EntriesDisproved(TBase::GetValue("Entries/Disproved"))
+    , RangeProbesCompleted(TBase::GetDeriviative("RangeProbe/Completed/Count"))
+    , RangeProbeFailures(TBase::GetDeriviative("RangeProbe/Failures/Count"))
+    , RangeOnlyDisproved(TBase::GetDeriviative("RangeProbe/Disagreement/RangeOnly/Count"))
+    , PortionsOnlyDisproved(TBase::GetDeriviative("RangeProbe/Disagreement/PortionsOnly/Count"))
 {
 }
 

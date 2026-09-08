@@ -618,6 +618,8 @@ private:
     void Handle(TEvPrivate::TEvCutHistoryBarrierDone::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCutHistorySweepBatchDone::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(TEvPrivate::TEvCutHistoryRangeProbeDone::TPtr& ev, const TActorContext& ctx);
+
     void UpdateIndexCounters();
     void UpdateResourceMetrics(const TActorContext& ctx, const TUsage& usage);
     ui64 MemoryUsage() const;

@@ -149,6 +149,105 @@ public:
     }
 };
 
+TEvBlobStorage::TEvRangeResult::TResponse MakeResponse(const TLogoBlobID& id, const bool keep = false, const bool doNotKeep = false) {
+    return TEvBlobStorage::TEvRangeResult::TResponse(id, /*buffer=*/TString(), keep, doNotKeep);
+}
+
+// One candidate entry probed against one group, with an edge actor standing in for the BS proxy.
+struct TRangeProbeEnv {
+    static constexpr ui64 TabletId = 5150;
+    static constexpr ui32 DataChannel = 2;
+    static constexpr ui32 OldFromGen = 0;
+    static constexpr ui32 OldGroup = 100;
+    static constexpr ui32 NextFromGen = 5;
+
+    TTestBasicRuntime Runtime;
+    TAppPrepare App;
+    NYDBTest::TControllers::TGuard<TCutHistoryController> Guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+    TCutterEnv Env;
+    std::optional<TTestableHistoryCutter> CutterHolder;
+    TActorId EdgeTablet;
+    TActorId EdgeBs;
+    TActorId Runner;
+    TEntryKey Key{ DataChannel, OldFromGen };
+    TEvBlobStorage::TEvRange::TPtr RequestHandle;
+
+    TRangeProbeEnv()
+        : Env(MakeCutterEnv(TabletId, NextFromGen, /*nChannels=*/3, { { OldFromGen, OldGroup }, { NextFromGen, 200 } }))
+    {
+        Runtime.Initialize(App.Unwrap());
+        // The runtime drops scheduled events by default, and the probe deadline is one.
+        Runtime.SetScheduledEventFilter([](auto&, auto&, auto, auto&) {
+            return false;
+        });
+        EdgeTablet = Runtime.AllocateEdgeActor();
+        EdgeBs = Runtime.AllocateEdgeActor();
+        Runtime.RegisterService(MakeBlobStorageProxyID(OldGroup), EdgeBs);
+        Runner = Runtime.Register(new TRunnerActor());
+        CutterHolder.emplace(Env.Info, NextFromGen, Env.Bm, Env.Shared, EdgeTablet, TestSignals());
+    }
+
+    TTestableHistoryCutter& Cutter() {
+        return *CutterHolder;
+    }
+
+    void RunInActor(std::function<void(const NActors::TActorContext&)> fn) {
+        Runtime.Send(new IEventHandle(Runner, EdgeTablet, new TEvRunInActor(std::move(fn))));
+        Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    }
+
+    void Start() {
+        RunInActor([&](const NActors::TActorContext& ctx) {
+            TVector<NOlap::NBlobOperations::NBlobStorage::TRangeProbe> probes{ { DataChannel, OldFromGen, NextFromGen, OldGroup } };
+            ctx.Register(
+                NOlap::NBlobOperations::NBlobStorage::CreateCutHistoryRangeProbeActor(EdgeTablet, TabletId, std::move(probes), /*round=*/0));
+        });
+    }
+
+    const TEvBlobStorage::TEvRange* GrabRequest() {
+        if (!RequestHandle) {
+            RequestHandle = Runtime.GrabEdgeEvent<TEvBlobStorage::TEvRange>(EdgeBs, TDuration::Seconds(5));
+        }
+        return RequestHandle ? RequestHandle->Get() : nullptr;
+    }
+
+    void Run(const TVector<TEvBlobStorage::TEvRangeResult::TResponse>& responses, const NKikimrProto::EReplyStatus status = NKikimrProto::OK) {
+        Start();
+        const auto* request = GrabRequest();
+        UNIT_ASSERT(request);
+        auto result = std::make_unique<TEvBlobStorage::TEvRangeResult>(status, request->From, request->To, OldGroup);
+        result->Responses.assign(responses.begin(), responses.end());
+        Runtime.Send(new IEventHandle(RequestHandle->Sender, EdgeBs, result.release(), 0, RequestHandle->Cookie));
+    }
+
+    THashSet<TEntryKey> GrabVerdict(ui64& failures) {
+        auto done = Runtime.GrabEdgeEvent<NColumnShard::TEvPrivate::TEvCutHistoryRangeProbeDone>(EdgeTablet, TDuration::Seconds(10));
+        UNIT_ASSERT_C(done, "the probe must always answer, so a missing verdict is a stuck sweep");
+        failures = done->Get()->Failures;
+        THashSet<TEntryKey> disproved;
+        for (const auto& [ch, fromGen] : done->Get()->Disproved) {
+            disproved.insert(TEntryKey{ ch, fromGen });
+        }
+        return disproved;
+    }
+
+    THashSet<TEntryKey> AssertDisproved(const ui64 expectedFailures) {
+        ui64 failures = 0;
+        auto disproved = GrabVerdict(failures);
+        UNIT_ASSERT_VALUES_EQUAL(disproved.size(), 1);
+        UNIT_ASSERT(disproved.contains(Key));
+        UNIT_ASSERT_VALUES_EQUAL(failures, expectedFailures);
+        return disproved;
+    }
+
+    void AssertNotDisproved() {
+        ui64 failures = 0;
+        const auto disproved = GrabVerdict(failures);
+        UNIT_ASSERT_C(disproved.empty(), "the range held nothing of ours in the window");
+        UNIT_ASSERT_VALUES_EQUAL(failures, 0);
+    }
+};
+
 Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
     // Channels 0-2, history {fromGen=0, group=100} and active {fromGen=5, group=200}; only ch >= 2 is tracked.
 
@@ -751,6 +850,72 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         cutter.OnPortionRemoved(PortionId);
         UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(key), 0);
         UNIT_ASSERT(!cutter.IsChannelPoisonedForTest(DataChannel));
+    }
+
+    // The range probe reports our own live blob in the window, and the bounds cover every channel of it.
+    Y_UNIT_TEST(RangeProbeOurBlobDisproves) {
+        TRangeProbeEnv env;
+        env.Run({ MakeResponse(MakeBlob(TRangeProbeEnv::TabletId, TRangeProbeEnv::DataChannel, 3)) });
+
+        const auto request = env.GrabRequest();
+        // The bounds span every channel of the window, so the channel filter lives in the response check.
+        const ui32 maxChannel = TLogoBlobID::MaxChannel;
+        UNIT_ASSERT_VALUES_EQUAL(request->From.Generation(), TRangeProbeEnv::OldFromGen);
+        UNIT_ASSERT_VALUES_EQUAL(request->To.Generation(), TRangeProbeEnv::NextFromGen - 1);
+        UNIT_ASSERT_VALUES_EQUAL(request->From.Channel(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(request->To.Channel(), maxChannel);
+        UNIT_ASSERT(request->IsIndexOnly);
+        UNIT_ASSERT(!request->MustRestoreFirst);
+
+        env.AssertDisproved(/*failures=*/0);
+    }
+
+    // Blobs of another tablet, or of another channel sharing the group, say nothing about this entry.
+    Y_UNIT_TEST(RangeProbeIgnoresForeignAndOtherChannel) {
+        TRangeProbeEnv env;
+        env.Run({ MakeResponse(MakeBlob(/*foreign*/ 999999, TRangeProbeEnv::DataChannel, 3)),
+            MakeResponse(MakeBlob(TRangeProbeEnv::TabletId, /*otherChannel*/ 1, 3)) });
+        env.AssertNotDisproved();
+    }
+
+    // A blob already released by GC is not evidence that the range is still occupied.
+    Y_UNIT_TEST(RangeProbeIgnoresCollectedGarbage) {
+        TRangeProbeEnv env;
+        env.Run({ MakeResponse(MakeBlob(TRangeProbeEnv::TabletId, TRangeProbeEnv::DataChannel, 3), /*keep=*/false, /*doNotKeep=*/true) });
+        env.AssertNotDisproved();
+    }
+
+    // An error answer is ambiguous, and ambiguity must never authorise an irreversible hard barrier.
+    Y_UNIT_TEST(RangeProbeErrorFailsClosed) {
+        TRangeProbeEnv env;
+        env.Run({}, NKikimrProto::ERROR);
+        env.AssertDisproved(/*failures=*/1);
+    }
+
+    // Silence is ambiguous too: the probe deadline disproves whatever never answered.
+    Y_UNIT_TEST(RangeProbeTimeoutFailsClosed) {
+        TRangeProbeEnv env;
+        env.Start();
+        UNIT_ASSERT(env.GrabRequest());
+        // Simulated sleep, not AdvanceCurrentTime: the probe deadline arrives as a scheduled event.
+        env.Runtime.SimulateSleep(TDuration::Minutes(2));
+        env.AssertDisproved(/*failures=*/1);
+    }
+
+    // The verdict feeds the ordinary sweep completion, so a disproved entry gets no barrier and stays uncut.
+    Y_UNIT_TEST(RangeProbeVerdictLeavesEntryUncut) {
+        TRangeProbeEnv env;
+        env.Run({ MakeResponse(MakeBlob(TRangeProbeEnv::TabletId, TRangeProbeEnv::DataChannel, 3)) });
+        const auto disproved = env.AssertDisproved(/*failures=*/0);
+
+        env.Cutter().StartSweepForTest({ env.Key });
+        env.RunInActor([&](const NActors::TActorContext& ctx) {
+            env.Cutter().OnBatchComplete(disproved, /*exhausted=*/true, ctx);
+        });
+
+        UNIT_ASSERT(env.Cutter().GetCutStateForTest(env.Key) == ECutState::None);
+        UNIT_ASSERT_C(!env.Runtime.GrabEdgeEvent<TEvBlobStorage::TEvCollectGarbage>(env.EdgeBs, TDuration::Seconds(1)),
+            "a disproved entry must not reach the barrier");
     }
 
 }   // TCutHistoryCutterCounters

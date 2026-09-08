@@ -122,6 +122,17 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, con
         return;
     }
 
+    using EProofSource = NOlap::NBlobOperations::NBlobStorage::EProofSource;
+    const auto proofSource = THistoryCutterWrapper::GetProofSource();
+    if (proofSource != EProofSource::Portions && CutHistoryCutter->TryIssueRangeProbe()) {
+        auto probes = CutHistoryCutter->BuildRangeProbes();
+        ctx.Register(NOlap::NBlobOperations::NBlobStorage::CreateCutHistoryRangeProbeActor(
+            SelfId(), TabletID(), std::move(probes), CutHistoryCutter->GetSweepRound()));
+    }
+    if (proofSource == EProofSource::BsRange) {
+        return;
+    }
+
     if (!CutHistoryCutter->HasPortionSnapshot()) {
         TVector<std::pair<NOlap::TInternalPathId, ui64>> ids;
         if (HasIndex()) {
@@ -190,6 +201,21 @@ void TColumnShard::Handle(TEvPrivate::TEvCutHistorySweepBatchDone::TPtr& ev, con
     }
 
     CutHistoryCutter->OnBatchComplete(disproved, msg->Exhausted, ctx);
+}
+
+void TColumnShard::Handle(TEvPrivate::TEvCutHistoryRangeProbeDone::TPtr& ev, const TActorContext& ctx) {
+    if (!CutHistoryCutter) {
+        return;
+    }
+    auto* msg = ev->Get();
+
+    THashSet<TEntryKey> disproved;
+    disproved.reserve(msg->Disproved.size());
+    for (const auto& [ch, fromGen] : msg->Disproved) {
+        disproved.insert(TEntryKey{ ch, fromGen });
+    }
+
+    CutHistoryCutter->OnRangeProbeComplete(msg->Round, std::move(disproved), msg->Failures, ctx);
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvCutHistoryBarrierDone::TPtr& ev, const TActorContext& ctx) {

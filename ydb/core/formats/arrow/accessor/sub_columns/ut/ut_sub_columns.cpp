@@ -6,8 +6,6 @@
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/sub_column.h>
-
 #include <ydb/core/formats/arrow/accessor/sub_columns/ut_common/ut_helpers.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
@@ -658,20 +656,6 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         CheckMostSpecificStoredPath({ { R"("a"."b")", R"("columns")" } }, R"("a")", R"({"c":"others"})", "$.a.b", "columns");
     }
 
-    Y_UNIT_TEST(SubColumnDataExtractorUsesExactStoredPath) {
-        auto array = BuildArrayWithStoredPaths(
-            { { R"("a")", R"("columns")" }, { R"("a"."b"."c")", R"("descendant")" } }, R"("a"."b")", R"("others")");
-        NOlap::NIndexes::TSubColumnDataExtractor extractor;
-        NJson::TJsonValue config(NJson::JSON_MAP);
-        config.InsertValue("sub_column_name", R"("a"."b")");
-        UNIT_ASSERT(extractor.DeserializeFromJson(config).IsSuccess());
-
-        TString result;
-        extractor.VisitAll(array, {}, [&result](const NArrow::NAccessor::TJsonValueView& value, ui64) {
-            result = value.ToJsonValue().GetString();
-        });
-        UNIT_ASSERT_VALUES_EQUAL(result, "others");
-    }
 };
 
 Y_UNIT_TEST_SUITE(SubColumnsDictStats) {

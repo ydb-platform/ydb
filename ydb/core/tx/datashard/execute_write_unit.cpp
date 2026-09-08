@@ -157,7 +157,7 @@ public:
     {
         const auto& operations = writeOp->GetWriteTx()->GetOperations();
 
-        // Determine the writer index from the first operation that has a WriteSeqNum
+        // Determine the writer index from the first operation that has a WriteSeqNum.
         ui64 writerIndex = 0;
         bool hasWriteSeqNum = false;
         for (const auto& op : operations) {
@@ -176,7 +176,6 @@ public:
 
         if (lock) {
             if (auto other = lock->FindOtherWriter(writerIndex)) {
-                // DataShard tracks a single writer per lock.
                 writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
                     << "Multiple writers per lock are not supported: lock already has writer "
                     << *other << ", got " << writerIndex);
@@ -184,42 +183,118 @@ public:
             }
         }
 
-        // No lock means nothing applied yet, so current is 0.
-        const ui64 current = lock ? lock->GetWriteSeqNum(writerIndex) : 0;
-
-        // WriteSeqNums form a single contiguous chain per (writer, shard): no gaps
-        // within one EvWrite and no gaps between EvWrites. KQP allocates them
-        // sequentially for the batch, in operation order, and the next batch must
-        // continue exactly where the previous one left off.
-        ui64 minRequested = 0;
-        ui64 maxRequested = 0;
+        // Group operations by DataShard: per-group min/max requested seqnum.
+        // A DataShard of 0 in the operation means the current shard; treat non-zero as ancestor.
+        // We normalize: treat 0 and tabletId as the same (current shard).
+        struct TGroupState {
+            ui64 MinRequested = 0;
+            ui64 MaxRequested = 0;
+        };
+        THashMap<ui64, TGroupState> groups; // dataShard -> group
         for (const auto& op : operations) {
             const ui64 requested = op.GetWriteSeqNum().WriteSeqNum;
-            if (!requested) {
-                continue;
+            if (!requested) continue;
+            const ui64 ds = op.GetWriteSeqNum().DataShard;
+            const ui64 key = (ds == 0 || ds == tabletId) ? 0 : ds;
+            auto& g = groups[key];
+            if (!g.MinRequested) {
+                g.MinRequested = requested;
             }
-            if (!minRequested) {
-                minRequested = requested;
-            }
-            if (maxRequested && requested != maxRequested + 1) {
+            if (g.MaxRequested && requested != g.MaxRequested + 1) {
                 writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
                     << "Uncommitted write seq nums must be ascending and contiguous within one request, got "
-                    << writerIndex << ":" << maxRequested << " followed by "
-                    << writerIndex << ":" << requested);
+                    << writerIndex << ":" << g.MaxRequested << " followed by "
+                    << writerIndex << ":" << requested
+                    << " for DataShard " << key);
                 return EExecutionStatus::Executed;
             }
-            maxRequested = requested;
+            g.MaxRequested = requested;
         }
 
-        // A duplicate of the entire batch: the max seq num matches the last applied.
-        if (maxRequested == current) {
+        // For each group, determine current seqnum and classify as duplicate/stale/continuation.
+        // All groups must agree (all duplicates or all continuations; no mix or stale).
+        bool anyDuplicate = false;
+        bool anyContinuation = false;
+        bool hasCurrentShardDuplicate = false;
+        ui64 duplicateDataShard = 0; // the group to use for the duplicate response (current shard preferred)
+
+        for (const auto& [ds, g] : groups) {
+            ui64 current = 0;
+            if (ds == 0) {
+                // Current shard
+                current = lock ? lock->GetWriteSeqNum(writerIndex) : 0;
+            } else {
+                // Ancestor shard
+                if (!lock) {
+                    writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
+                        << "Ancestor shard " << ds << " write " << writerIndex << ":" << g.MaxRequested
+                        << " but no lock exists yet");
+                    return EExecutionStatus::Executed;
+                }
+                if (lock->GetWriteSeqNum(writerIndex) != 0) {
+                    writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
+                        << "Ancestor shard " << ds << " write " << writerIndex << ":" << g.MaxRequested
+                        << " not allowed after current shard writes");
+                    return EExecutionStatus::Executed;
+                }
+                const auto& ancestors = lock->GetAncestorLocks();
+                if (ancestors.find(ds) == ancestors.end()) {
+                    writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
+                        << "Ancestor shard " << ds << " not found in lock " << guardLocks.LockTxId);
+                    return EExecutionStatus::Executed;
+                }
+                current = lock->GetAncestorWriteSeqNum(ds, writerIndex);
+            }
+
+            if (g.MaxRequested == current) {
+                // Duplicate
+                anyDuplicate = true;
+                if (ds == 0) {
+                    duplicateDataShard = 0; // prefer current shard
+                    hasCurrentShardDuplicate = true;
+                } else if (!hasCurrentShardDuplicate) {
+                    duplicateDataShard = ds;
+                }
+            } else if (g.MaxRequested < current) {
+                // Stale
+                writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
+                    << "Uncommitted write " << writerIndex << ":" << g.MaxRequested
+                    << " for DataShard " << ds << " is already applied, writer is at " << current);
+                return EExecutionStatus::Executed;
+            } else {
+                // Continuation: verify no gap
+                if (g.MinRequested != current + 1) {
+                    writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
+                        << "Uncommitted write " << writerIndex << ":" << g.MinRequested
+                        << " for DataShard " << ds
+                        << " must continue the writer chain at " << (current + 1)
+                        << ", writer is at " << current);
+                    return EExecutionStatus::Executed;
+                }
+                anyContinuation = true;
+            }
+        }
+
+        if (anyDuplicate && anyContinuation) {
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
+                << "Uncommitted write " << writerIndex
+                << " has mixed duplicate/continuation groups across DataShards");
+            return EExecutionStatus::Executed;
+        }
+
+        if (anyDuplicate) {
             Y_ENSURE(lock, "A non-zero write seq num implies the lock that carries it");
             auto res = std::make_unique<NEvents::TDataEvents::TEvWriteResult>();
             res->Record.SetOrigin(tabletId);
             res->Record.SetTxId(writeOp->GetTxId());
             res->Record.SetIsDuplicate(true);
 
-            auto* stored = lock->FindWriteSeqNumState(writerIndex);
+            const TWriteSeqNumState* stored = nullptr;
+            if (duplicateDataShard == 0) {
+                stored = lock->FindWriteSeqNumState(writerIndex);
+            } else {
+                stored = lock->FindAncestorWriteSeqNumState(duplicateDataShard, writerIndex);
+            }
             Y_ENSURE(stored);
             FillDuplicateWriteResult(*stored, res->Record);
 
@@ -236,27 +311,10 @@ public:
             return EExecutionStatus::Executed;
         }
 
-        // The entire batch is stale: already applied and superseded.
-        if (maxRequested < current) {
-            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
-                << "Uncommitted write " << writerIndex << ":" << maxRequested
-                << " is already applied, writer is at " << current);
-            return EExecutionStatus::Executed;
+        // All continuations: track max per group for ApplyLocks to persist.
+        for (const auto& [ds, g] : groups) {
+            guardLocks.SetWriteSeqNums.push_back(TLockWriteSeqNum{writerIndex, g.MaxRequested, ds});
         }
-
-        // maxRequested > current: the batch must continue the chain exactly.
-        // A gap (minRequested > current + 1) or partial overlap (minRequested <= current)
-        // both violate the no-gap invariant.
-        if (minRequested != current + 1) {
-            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
-                << "Uncommitted write " << writerIndex << ":" << minRequested
-                << " must continue the writer chain at " << (current + 1)
-                << ", writer is at " << current);
-            return EExecutionStatus::Executed;
-        }
-
-        // All operations are new: track the max for ApplyLocks to persist.
-        guardLocks.SetWriteSeqNum = TLockWriteSeqNum{writerIndex, maxRequested};
         return std::nullopt;
     }
 
@@ -287,38 +345,56 @@ public:
         }
         DataShard.SubscribeNewLocks(ctx);
 
-        // The max WriteSeqNum across all operations is what the lock should carry
-        ui64 maxRequested = 0;
+        // If all seqnums target the current shard (DataShard == 0), validate the lock's seqnum.
+        // For ancestor-shard-only batches, the current-shard seqnum on the lock is 0 (not set).
+        ui64 maxCurrentShardRequested = 0;
         ui64 writerIndex = 0;
-        bool hasWriteSeqNum = false;
+        bool hasCurrentShardSeqNum = false;
+        bool hasAncestorShardSeqNum = false;
+        const ui64 tabletId = DataShard.TabletID();
         for (const auto& op : writeOp->GetWriteTx()->GetOperations()) {
             const ui64 requested = op.GetWriteSeqNum().WriteSeqNum;
             if (requested) {
-                if (requested > maxRequested) {
-                    maxRequested = requested;
-                }
                 writerIndex = op.GetWriteSeqNum().WriterIndex;
-                hasWriteSeqNum = true;
+                const ui64 ds = op.GetWriteSeqNum().DataShard;
+                if (ds == 0 || ds == tabletId) {
+                    hasCurrentShardSeqNum = true;
+                    if (requested > maxCurrentShardRequested) {
+                        maxCurrentShardRequested = requested;
+                    }
+                } else {
+                    hasAncestorShardSeqNum = true;
+                }
             }
         }
-        if (hasWriteSeqNum) {
+        if (hasCurrentShardSeqNum && !hasAncestorShardSeqNum) {
             for (const auto& lock : locks) {
                 Y_ENSURE(lock.IsError()
-                             || (lock.WriterIndex == writerIndex && lock.WriteSeqNum == maxRequested),
-                         "Uncommitted write " << writerIndex << ":" << maxRequested
+                             || (lock.WriterIndex == writerIndex && lock.WriteSeqNum == maxCurrentShardRequested),
+                         "Uncommitted write " << writerIndex << ":" << maxCurrentShardRequested
                          << " reported lock with " << lock.WriterIndex << ":" << lock.WriteSeqNum);
             }
         }
     }
 
     void StoreWriteSeqNumResult(TWriteOperation* writeOp, TSetupSysLocks& guardLocks, ILocksDb* db) {
-        if (!guardLocks.SetWriteSeqNum) {
+        if (guardLocks.SetWriteSeqNums.empty()) {
             return;
         }
         auto lock = DataShard.SysLocksTable().GetRawLock(guardLocks.LockTxId);
-        if (lock && lock->GetWriteSeqNum(guardLocks.SetWriteSeqNum->WriterIndex) == guardLocks.SetWriteSeqNum->WriteSeqNum) {
-            lock->SetWriteSeqNumResult(guardLocks.SetWriteSeqNum->WriterIndex,
-                SerializeWriteSeqNumResult(writeOp->GetWriteResult()->Record), db);
+        if (!lock) return;
+        auto serialized = SerializeWriteSeqNumResult(writeOp->GetWriteResult()->Record);
+        for (const auto& seqNum : guardLocks.SetWriteSeqNums) {
+            if (seqNum.DataShard == 0) {
+                if (lock->GetWriteSeqNum(seqNum.WriterIndex) == seqNum.WriteSeqNum) {
+                    lock->SetWriteSeqNumResult(seqNum.WriterIndex, serialized, db);
+                }
+            } else {
+                auto* state = lock->FindAncestorWriteSeqNumState(seqNum.DataShard, seqNum.WriterIndex);
+                if (state && state->WriteSeqNum == seqNum.WriteSeqNum) {
+                    lock->SetAncestorWriteSeqNumResult(seqNum.DataShard, seqNum.WriterIndex, serialized, db);
+                }
+            }
         }
     }
 
@@ -904,7 +980,7 @@ public:
             KqpUpdateDataShardStatCounters(DataShard, counters);
             KqpFillTxStats(DataShard, counters, *writeResult->Record.MutableTxStats());
 
-            if (guardLocks.SetWriteSeqNum) {
+            if (!guardLocks.SetWriteSeqNums.empty()) {
                 StoreWriteSeqNumResult(writeOp, guardLocks, &locksDb);
             }
 
@@ -937,7 +1013,7 @@ public:
                 txc.DB.RollbackChanges();
             }
 
-            guardLocks.SetWriteSeqNum.reset();
+            guardLocks.SetWriteSeqNums.clear();
 
             if (auto status = ensureAbortOutReadSets()) {
                 return *status;
@@ -955,7 +1031,7 @@ public:
             KqpUpdateDataShardStatCounters(DataShard, counters);
             KqpFillTxStats(DataShard, counters, *writeOp->GetWriteResult()->Record.MutableTxStats());
 
-            guardLocks.SetWriteSeqNum.reset();
+            guardLocks.SetWriteSeqNums.clear();
 
             if (auto status = ensureAbortOutReadSets()) {
                 return *status;
@@ -981,7 +1057,7 @@ public:
             }
 
             ResetChanges(userDb, txc);
-            guardLocks.SetWriteSeqNum.reset();
+            guardLocks.SetWriteSeqNums.clear();
 
             if (auto status = ensureAbortOutReadSets()) {
                 return *status;
@@ -995,7 +1071,7 @@ public:
                 {"operation", *writeOp},
                 {"tabletId", DataShard.TabletID()});
 
-            guardLocks.SetWriteSeqNum.reset();
+            guardLocks.SetWriteSeqNums.clear();
 
             if (auto status = ensureAbortOutReadSets()) {
                 return *status;

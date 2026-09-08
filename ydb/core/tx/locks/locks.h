@@ -28,6 +28,7 @@ namespace NDataShard {
 struct TLockWriteSeqNum {
     ui64 WriterIndex = 0;
     ui64 WriteSeqNum = 0;
+    ui64 DataShard = 0;  // 0 = current shard; non-zero = ancestor shard
 };
 
 // Last uncommitted write for one WriterIndex.
@@ -520,6 +521,11 @@ public:
 
     const THashMap<ui64, TAncestorLock>& GetAncestorLocks() const { return AncestorLocks; }
     void AddAncestorLock(TAncestorLock lock);
+
+    ui64 GetAncestorWriteSeqNum(ui64 dataShard, ui64 writerIndex) const;
+    const TWriteSeqNumState* FindAncestorWriteSeqNumState(ui64 dataShard, ui64 writerIndex) const;
+    bool SetAncestorWriteSeqNum(ui64 dataShard, ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db);
+    void SetAncestorWriteSeqNumResult(ui64 dataShard, ui64 writerIndex, TString serializedResult, ILocksDb* db);
 
 private:
     void MakeShardLock();
@@ -1014,8 +1020,9 @@ struct TLocksUpdate {
     ui64 ConflictBreakerQuerySpanId = 0;
     TLockInfo::TPtr Lock;
 
-    // This uncommitted write's position in its writer's chain; ApplyLocks persists it on the lock.
-    std::optional<TLockWriteSeqNum> SetWriteSeqNum;
+    // These uncommitted writes' positions in their writers' chains; ApplyLocks persists them on the lock.
+    // Each entry may target the current shard (DataShard == 0) or an ancestor shard (DataShard != 0).
+    TVector<TLockWriteSeqNum> SetWriteSeqNums;
 
     // Returns effective BreakerQuerySpanId: explicit override (commit path) if set,
     // then conflict-derived SpanId (from AddBreakLock), then falls back to QuerySpanId.

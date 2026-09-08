@@ -154,6 +154,45 @@ void TLockInfo::AddAncestorLock(TAncestorLock lock) {
     AncestorLocks[tabletId] = std::move(lock);
 }
 
+ui64 TLockInfo::GetAncestorWriteSeqNum(ui64 dataShard, ui64 writerIndex) const {
+    auto it = AncestorLocks.find(dataShard);
+    if (it == AncestorLocks.end()) return 0;
+    auto jt = it->second.WriteSeqNumStates.find(writerIndex);
+    return jt != it->second.WriteSeqNumStates.end() ? jt->second.WriteSeqNum : 0;
+}
+
+const TWriteSeqNumState* TLockInfo::FindAncestorWriteSeqNumState(ui64 dataShard, ui64 writerIndex) const {
+    auto it = AncestorLocks.find(dataShard);
+    if (it == AncestorLocks.end()) return nullptr;
+    auto jt = it->second.WriteSeqNumStates.find(writerIndex);
+    return jt != it->second.WriteSeqNumStates.end() ? &jt->second : nullptr;
+}
+
+bool TLockInfo::SetAncestorWriteSeqNum(ui64 dataShard, ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db) {
+    auto it = AncestorLocks.find(dataShard);
+    Y_ENSURE(it != AncestorLocks.end());
+    auto& state = it->second.WriteSeqNumStates[writerIndex];
+    state.WriterIndex = writerIndex;
+    state.WriteSeqNum = writeSeqNum;
+    state.SerializedResult.clear();
+    if (db && IsPersistent()) {
+        db->PersistAncestorLockWriteSeqNum(LockId, dataShard, writerIndex, writeSeqNum, {});
+        return true;
+    }
+    return false;
+}
+
+void TLockInfo::SetAncestorWriteSeqNumResult(ui64 dataShard, ui64 writerIndex, TString serializedResult, ILocksDb* db) {
+    auto it = AncestorLocks.find(dataShard);
+    Y_ENSURE(it != AncestorLocks.end());
+    auto jt = it->second.WriteSeqNumStates.find(writerIndex);
+    Y_ENSURE(jt != it->second.WriteSeqNumStates.end() && jt->second.WriteSeqNum);
+    jt->second.SerializedResult = std::move(serializedResult);
+    if (db && IsPersistent()) {
+        db->PersistAncestorLockWriteSeqNum(LockId, dataShard, writerIndex, jt->second.WriteSeqNum, jt->second.SerializedResult);
+    }
+}
+
 void TLockInfo::MakeShardLock() {
     Flags |= ELockFlags::WholeShard;
     Points.clear();
@@ -1294,7 +1333,7 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
         // Adding read/write conflicts implies locking
         Y_ENSURE(!Update->ReadConflictLocks);
         Y_ENSURE(!Update->WriteConflictLocks);
-        if (!Update->SetWriteSeqNum) {
+        if (Update->SetWriteSeqNums.empty()) {
             return {TVector<TLock>(), brokenLocks};
         }
         // Seq num is still consumed when no ranges were taken (e.g. INCREMENT of a missing row).
@@ -1370,7 +1409,7 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
                 }
             }
 
-            if (!lock->IsPersistent() && (lock->GetWriteTables() || Update->SetWriteSeqNum)) {
+            if (!lock->IsPersistent() && (lock->GetWriteTables() || !Update->SetWriteSeqNums.empty())) {
                 lock->PersistLock(Db);
                 // Persistent locks cannot expire
                 Locker.ExpireQueue.Remove(lock.Get());
@@ -1378,10 +1417,16 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
                 waitPersistent = true;
             }
 
-            if (Update->SetWriteSeqNum) {
+            for (const auto& seqNum : Update->SetWriteSeqNums) {
                 // Advance even if no rows were applied (e.g. UPDATE of a missing row).
-                if (lock->SetWriteSeqNum(Update->SetWriteSeqNum->WriterIndex, Update->SetWriteSeqNum->WriteSeqNum, Db)) {
-                    waitPersistent = true;
+                if (seqNum.DataShard == 0) {
+                    if (lock->SetWriteSeqNum(seqNum.WriterIndex, seqNum.WriteSeqNum, Db)) {
+                        waitPersistent = true;
+                    }
+                } else {
+                    if (lock->SetAncestorWriteSeqNum(seqNum.DataShard, seqNum.WriterIndex, seqNum.WriteSeqNum, Db)) {
+                        waitPersistent = true;
+                    }
                 }
             }
 

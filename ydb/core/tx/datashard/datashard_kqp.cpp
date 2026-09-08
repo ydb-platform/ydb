@@ -175,8 +175,32 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLoc
                 continue;
             }
 
+            // Validate WriteSeqNums for this ancestor lock.
+            // The proto's WriteSeqNums entries tagged with lockProto.GetDataShard() must exactly
+            // match what the ancestor lock has stored.
+            ui32 ancestorSeqNumCount = 0;
+            bool ancestorSeqNumMismatch = false;
+            for (const auto& wsn : lockProto.GetWriteSeqNums()) {
+                if (wsn.GetDataShard() != lockProto.GetDataShard()) continue;
+                ++ancestorSeqNumCount;
+                auto jt = it->second.WriteSeqNumStates.find(wsn.GetWriterIndex());
+                if (jt == it->second.WriteSeqNumStates.end()
+                    || jt->second.WriteSeqNum != wsn.GetWriteSeqNum()) {
+                    ancestorSeqNumMismatch = true;
+                    break;
+                }
+            }
+            if (!ancestorSeqNumMismatch) {
+                ui32 storedCount = 0;
+                for (const auto& [idx, state] : it->second.WriteSeqNumStates) {
+                    if (state.WriteSeqNum) ++storedCount;
+                }
+                if (storedCount != ancestorSeqNumCount) ancestorSeqNumMismatch = true;
+            }
+
             if (it->second.Generation != lockProto.GetGeneration() ||
-                it->second.Counter != lockProto.GetCounter())
+                it->second.Counter != lockProto.GetCounter() ||
+                ancestorSeqNumMismatch)
             {
                 YDB_LOG_TRACE("ValidateLocks: broken ancestor lock (mismatch)",
                     {"lockId", lockProto.GetLockId()},

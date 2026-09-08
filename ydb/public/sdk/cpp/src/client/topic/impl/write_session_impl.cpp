@@ -906,20 +906,16 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
 
         ++ConnectionGeneration;
 
-        if (!ClientContext) {
-            ClientContext = Client->CreateContext();
-            if (!ClientContext) {
-                AbortImpl();
-                // Grpc and WriteSession is closing right now.
-                return;
-            }
-        } else if (ClientContext->IsCancelled()) {
+        // Always probe the root, like persqueue DoConnect. Reusing a live
+        // ClientContext and checking only IsCancelled() races with
+        // TDriverScope::Cancel(): RootContext_ is already gone (CreateContext
+        // is null) while this session's context is not cancelled yet.
+        auto clientContext = Client->CreateContext();
+        if (!clientContext) {
             AbortImpl();
-            // Driver is stopping. Children of a cancelled ClientContext can
-            // still be created, which leaves CQ Contexts_ non-empty and
-            // deadlocks TDriver::Stop(true).
             return;
         }
+        auto prevClientContext = std::exchange(ClientContext, clientContext);
 
         ServerMessage = std::make_shared<TServerMessage>();
 
@@ -931,8 +927,6 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
             connectDelayContext = ClientContext->CreateContext();
         connectTimeoutContext = ClientContext->CreateContext();
 
-        // A missing child used to Y_ASSERT. After driver stop, Connect aborts
-        // earlier on a cancelled ClientContext.
         const bool missingDelayContext = delay && !connectDelayContext;
         if (!connectContext || !connectTimeoutContext || missingDelayContext) {
             // Drop children before AbortImpl resets ClientContext; otherwise a
@@ -960,6 +954,7 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
             Cancel(prevConnectDelayContext);
         }
         Cancel(prevConnectTimeoutContext);
+        Cancel(prevClientContext);
 
         if (Processor) {
             Processor->Cancel();

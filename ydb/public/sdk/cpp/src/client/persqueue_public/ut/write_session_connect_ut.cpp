@@ -1,9 +1,25 @@
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/threading/future/future.h>
+
+#include <thread>
 
 namespace NYdb::NPersQueue::NTests {
 namespace {
+
+void StopDriverOrFail(NYdb::TDriver& driver, TDuration timeout = TDuration::Seconds(15)) {
+    auto done = NThreading::NewPromise();
+    std::thread stopper([&driver, done]() mutable {
+        driver.Stop(true);
+        done.SetValue();
+    });
+    if (!done.GetFuture().Wait(timeout)) {
+        stopper.detach();
+        UNIT_FAIL("TDriver::Stop(true) did not return in " << timeout);
+    }
+    stopper.join();
+}
 
 TContinuationToken WaitForWriteToken(IWriteSession& session) {
     while (true) {
@@ -42,7 +58,31 @@ Y_UNIT_TEST_SUITE(WriteSessionConnect) {
         auto session = client.CreateWriteSession(settings);
         Y_UNUSED(WaitForWriteToken(*session));
 
-        driver.Stop(true);
+        StopDriverOrFail(driver);
+        session.reset();
+    }
+
+    // Same hang as topic: CreateProcessor delay cancelled with ok=false used
+    // to skip OnConnect, so DoConnect never ran again to AbortImpl.
+    Y_UNIT_TEST(StopDuringReconnectDelayDoesNotDeadlock) {
+        TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
+        auto& driver = setup.GetDriver();
+        auto& client = setup.GetPersQueueClient();
+
+        auto settings = setup.GetWriteSessionSettings();
+        settings
+            .ClusterDiscoveryMode(EClusterDiscoveryMode::Off)
+            .RetryPolicy(IRetryPolicy::GetFixedIntervalPolicy(
+                TDuration::Seconds(10),
+                TDuration::Seconds(10)));
+
+        auto session = client.CreateWriteSession(settings);
+        Y_UNUSED(WaitForWriteToken(*session));
+
+        setup.GetServer().ShutdownGRpc();
+        Sleep(TDuration::MilliSeconds(500));
+
+        StopDriverOrFail(driver);
         session.reset();
     }
 }

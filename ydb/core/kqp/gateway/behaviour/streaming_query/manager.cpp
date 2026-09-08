@@ -168,19 +168,6 @@ TYqlConclusion<std::optional<TString>> ParseWatermarkLateEventsPolicy(NYql::TFea
     return TYqlConclusionStatus::Success();
 }
 
-TYqlConclusion<std::pair<TString, TString>> SplitPath(const TString& queryName, const TString& database, bool createDir) {
-    if (!queryName) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "Streaming query name should not be empty");
-    }
-
-    std::pair<TString, TString> pathPair;
-    TString error;
-    if (!NSchemeHelpers::SplitTablePath(queryName, database, pathPair, error, createDir)) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid streaming query path: " << error);
-    }
-    return pathPair;
-}
-
 class TObjectOperationController : public IStreamingQueryOperationController {
 public:
     explicit TObjectOperationController(NThreading::TPromise<TYqlConclusionStatus> promise)
@@ -240,6 +227,19 @@ private:
 };
 
 }  // anonymous namespace
+
+TYqlConclusion<std::pair<TString, TString>> TStreamingQueryManager::SplitPath(const TString& queryName, const TString& database, const bool createDir) {
+    if (!queryName) {
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "Streaming query name should not be empty");
+    }
+
+    std::pair<TString, TString> pathPair;
+    TString error;
+    if (!NSchemeHelpers::SplitTablePath(queryName, database, pathPair, error, createDir)) {
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid streaming query path: " << error);
+    }
+    return pathPair;
+}
 
 TAsyncStatus TStreamingQueryManager::DoModify(const NYql::TObjectSettingsImpl& settings, ui32 nodeId, const NMetadata::IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const {
     NKqpProto::TKqpSchemeOperation schemeOperation;
@@ -341,11 +341,17 @@ TAsyncStatus TStreamingQueryManager::ExecutePrepared(const NKqpProto::TKqpScheme
 
     return ChainFeatures(validationFeature, [schemeOperation, nodeId, manager, context]() {
         auto promise = NThreading::NewPromise<TYqlConclusionStatus>();
-        context.GetActorSystem()->Send(NMetadata::NProvider::MakeServiceId(nodeId),  new NMetadata::NProvider::TEvObjectsOperation(
+        context.GetActorSystem()->Send(NMetadata::NProvider::MakeServiceId(nodeId), new NMetadata::NProvider::TEvObjectsOperation(
             std::make_shared<TObjectOperationCommand>(schemeOperation, manager, std::make_shared<TObjectOperationController>(promise), context)
         ));
         return promise.GetFuture();
     });
+}
+
+TAsyncStatus TStreamingQueryManager::TrackObjectOperation(const TString& objectId, const TOperationTrackContext& context) const {
+    auto promise = NThreading::NewPromise<TYqlConclusionStatus>();
+    DoTrackStreamingQueryOperation(objectId, std::make_shared<TObjectOperationController>(promise), context);
+    return promise.GetFuture();
 }
 
 }  // namespace NKikimr::NKqp

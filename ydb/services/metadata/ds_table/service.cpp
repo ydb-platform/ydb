@@ -9,13 +9,85 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/services/metadata/service.h>
 #include <ydb/services/metadata/initializer/behaviour.h>
+#include <ydb/services/metadata/manager/abstract.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
 
 namespace NKikimr::NMetadata::NProvider {
 
+namespace {
+
+class TObjectTrackCommand final : public NModifications::IObjectModificationCommand {
+    using TBase = NModifications::IObjectModificationCommand;
+
+public:
+    class TController final : public NModifications::IAlterController {
+    public:
+        TController(const TString& typeId, const TString& objectId, NModifications::IOperationsManager::TOperationTrackContext context)
+            : TypeId(typeId)
+            , ObjectId(objectId)
+            , Context(std::move(context))
+        {}
+
+    private:
+        void OnAlteringProblem(const TString& errorMessage) final {
+            Y_UNUSED(errorMessage);
+            OnAlteringFinished();
+        }
+
+        void OnAlteringFinished() final {
+            const auto& externalContext = Context.GetExternalData();
+            const auto* actorSystem = externalContext.GetActorSystem();
+            Y_VALIDATE(actorSystem, "Missing actor system");
+
+            auto ev = std::make_unique<TEvTrackOperationFinished>();
+            ev->SetDatabaseId(externalContext.GetDatabaseId());
+            ev->SetTypeId(TypeId);
+            ev->SetObjectId(ObjectId);
+            ev->SetRequestGeneration(Context.GetRequestGeneration());
+            actorSystem->Send(MakeServiceId(actorSystem->NodeId), ev.release());
+        }
+
+        const TString TypeId;
+        const TString ObjectId;
+        const NModifications::IOperationsManager::TOperationTrackContext Context;
+    };
+
+    TObjectTrackCommand(const TString& objectId, IClassBehaviour::TPtr behaviour, TController::TPtr controller, const NModifications::IOperationsManager::TOperationTrackContext& context)
+        : TBase(std::vector<NInternal::TTableRecord>{}, std::move(behaviour), controller, NModifications::IOperationsManager::TInternalModificationContext(context.GetExternalData()))
+        , ObjectId(objectId)
+        , Context(context)
+    {}
+
+private:
+    void DoExecute() const final {
+        GetBehaviour()->GetOperationsManager()->TrackObjectOperation(ObjectId, Context).Subscribe([controller = Controller](const auto&) {
+            controller->OnAlteringFinished();
+        });
+    }
+
+    const TString ObjectId;
+    const NModifications::IOperationsManager::TOperationTrackContext Context;
+    const TController::TPtr Controller;
+};
+
+} // anonymous namespace
+
 IActor* CreateService(const TConfig& config) {
     return new TService(config);
+}
+
+ui64 TService::TTrackOperationId::THash::operator()(const TTrackOperationId& id) const {
+    ui64 result = 0;
+    result = CombineHashes<ui64>(result, std::hash<TString>()(id.DatabaseId));
+    result = CombineHashes<ui64>(result, std::hash<TString>()(id.TypeId));
+    result = CombineHashes<ui64>(result, std::hash<TString>()(id.ObjectId));
+    result = CombineHashes<ui64>(result, std::hash<ui64>()(id.RequestGeneration));
+    return result;
+}
+
+bool TService::TTrackOperationId::operator==(const TTrackOperationId& other) const {
+    return DatabaseId == other.DatabaseId && TypeId == other.TypeId && ObjectId == other.ObjectId && RequestGeneration == other.RequestGeneration;
 }
 
 void TService::PrepareManagers(std::vector<IClassBehaviour::TPtr> managers, TAutoPtr<IEventBase> ev, const NActors::TActorId& sender) {
@@ -103,6 +175,49 @@ void TService::Handle(TEvResetManagerRegistration::TPtr& ev) {
     } else if (const auto it = RegistrationData->InRegistration.find(typeId); it != RegistrationData->InRegistration.end()) {
         PrepareManagers({manager}, ev->ReleaseBase(), ev->Sender);
     }
+}
+
+void TService::Handle(TEvTrackOperationCompletion::TPtr& ev) {
+    const auto id = TTrackOperationId{
+        .DatabaseId = ev->Get()->GetDatabaseId(),
+        .TypeId = ev->Get()->GetTypeId(),
+        .ObjectId = ev->Get()->GetObjectId(),
+        .RequestGeneration = ev->Get()->GetRequestGeneration(),
+    };
+    if (!InflightTrackOperations.emplace(id).second) {
+        return;
+    }
+
+    // We should start initialization for this object before operation tracing begins
+    IClassBehaviour::TPtr cBehaviour(IClassBehaviour::TFactory::Construct(id.TypeId));
+    Y_VALIDATE(cBehaviour, "Unsupported object type: \"" << id.TypeId << "\"");
+
+    NModifications::IOperationsManager::TExternalModificationContext externalData;
+    externalData.SetUserToken(ev->Get()->GetUserToken());
+    externalData.SetDatabase(ev->Get()->GetDatabase());
+    externalData.SetDatabaseId(id.DatabaseId);
+    externalData.SetActorSystem(TActivationContext::ActorSystem());
+
+    NModifications::IOperationsManager::TOperationTrackContext context(std::move(externalData));
+    context.SetPathId(ev->Get()->GetPathId());
+    context.SetRequestGeneration(id.RequestGeneration);
+    context.SetObjectGeneration(ev->Get()->GetObjectGeneration());
+    context.SetOperationOwner(ev->Get()->GetOperationOwner());
+
+    auto controller = std::make_shared<TObjectTrackCommand::TController>(id.TypeId, id.ObjectId, context);
+    auto command = std::make_shared<TObjectTrackCommand>(id.ObjectId, cBehaviour, std::move(controller), std::move(context));
+
+    Send(SelfId(), new NProvider::TEvObjectsOperation(std::move(command)));
+}
+
+void TService::Handle(TEvTrackOperationFinished::TPtr& ev) {
+    const auto id = TTrackOperationId{
+        .DatabaseId = ev->Get()->GetDatabaseId(),
+        .TypeId = ev->Get()->GetTypeId(),
+        .ObjectId = ev->Get()->GetObjectId(),
+        .RequestGeneration = ev->Get()->GetRequestGeneration(),
+    };
+    Y_VALIDATE(InflightTrackOperations.erase(id) == 1, "Unexpected track operation finish");
 }
 
 void TService::Bootstrap(const NActors::TActorContext& /*ctx*/) {

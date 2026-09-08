@@ -4,10 +4,6 @@
 
 namespace NKikimr::NMetadata::NProvider {
 
-NActors::TActorId MakeServiceId(const ui32 nodeId) {
-    return NActors::TActorId(nodeId, "SrvcMetaData");
-}
-
 void TServiceOperator::Register(const TConfig& config) {
     auto* service = Singleton<TServiceOperator>();
     std::unique_lock<std::shared_mutex> lock(service->Lock);
@@ -27,4 +23,4 @@ TString TServiceOperator::GetPath() {
     return service->Path;
 }
 
-}
+} // namespace NKikimr::NMetadata::NProvider

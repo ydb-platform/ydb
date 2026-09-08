@@ -33,14 +33,35 @@ NActors::TActorId TBatchProcessor::GetOrCreateConsumerProcessor(const TString& u
     return it->second;
 }
 
+void TBatchProcessor::SendToConsumerProcessor(
+    const NActors::TActorId& actorId,
+    NActors::IEventBase* ev,
+    const NActors::TActorContext& ctx)
+{
+    const auto self = ctx.SelfID;
+    ctx.Send(new NActors::IEventHandle(
+        actorId,
+        ctx.SelfID,
+        ev,
+        NActors::IEventHandle::FlagForwardOnNondelivery,
+        0,
+        &self));
+}
+
 void TBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::TActorContext& ctx) {
+    if (ev->Sender == ctx.SelfID) {
+        ConsumerProcessors.erase(ev->Get()->Context.User);
+    }
     const auto actorId = GetOrCreateConsumerProcessor(ev->Get()->Context.User);
-    ctx.Send(actorId, new TEvProcessBatch(std::move(ev->Get()->Context)));
+    SendToConsumerProcessor(actorId, new TEvProcessBatch(std::move(ev->Get()->Context)), ctx);
 }
 
 void TBatchProcessor::Handle(TEvProcessBatchKeys::TPtr& ev, const NActors::TActorContext& ctx) {
+    if (ev->Sender == ctx.SelfID) {
+        ConsumerProcessors.erase(TString{COMPACTIFICATION_WORKER});
+    }
     const auto actorId = GetOrCreateConsumerProcessor(TString{COMPACTIFICATION_WORKER});
-    ctx.Send(actorId, new TEvProcessBatchKeys(std::move(ev->Get()->Context)));
+    SendToConsumerProcessor(actorId, new TEvProcessBatchKeys(std::move(ev->Get()->Context)), ctx);
 }
 
 void TBatchProcessor::HandleConsumerRemoved(TEvPQ::TEvConsumerRemoved::TPtr& ev, const NActors::TActorContext&) {

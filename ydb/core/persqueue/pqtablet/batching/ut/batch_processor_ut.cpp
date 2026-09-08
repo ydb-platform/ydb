@@ -1,11 +1,14 @@
 #include <ydb/core/persqueue/pqtablet/batching/batch_processor.h>
 #include <ydb/core/persqueue/pqtablet/batching/consumer_batch_processor.h>
+#include <ydb/core/persqueue/pqtablet/readproxy/readproxy.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/codecs/kafka.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/library/actors/core/events.h>
+#include <ydb/public/lib/base/msgbus_status.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_messages_int.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
@@ -787,6 +790,59 @@ Y_UNIT_TEST_SUITE(TBatchProcessorTest) {
         env.Send(actor, new TEvents::TEvPoisonPill());
         env.DispatchQuiet();
         UNIT_ASSERT(!env.Runtime.FindActor(actor));
+    }
+
+    Y_UNIT_TEST(ProcessBatchBouncedFromDeadChildStillReplies) {
+        TEnv env;
+        const auto actor = env.RegisterBatchProcessor();
+
+        env.Send(actor, new TEvProcessBatch(MakeReadContext(
+            env.Edge,
+            {MakePlainReadResult(1, "warmup")},
+            "alice")));
+        env.Grab<TEvProcessBatchResult>();
+
+        env.Send(actor, new TEvPQ::TEvConsumerRemoved("alice"));
+        env.DispatchQuiet();
+
+        auto context = MakeReadContext(
+            env.Edge,
+            {MakePlainReadResult(2, "bounced")},
+            "alice");
+        env.Runtime.Send(new IEventHandle(actor, actor, new TEvProcessBatch(std::move(context))), 0, true);
+
+        const auto ev = env.Grab<TEvProcessBatchResult>();
+        UNIT_ASSERT_VALUES_EQUAL(GetCmdReadResult(ev->Get()->Context).GetResult().Get(0).GetOffset(), 2u);
+    }
+
+    Y_UNIT_TEST(ReadProxyRepliesWhenBatchProcessorDied) {
+        TEnv env;
+        const auto batchProcessor = env.RegisterBatchProcessor();
+        env.Send(batchProcessor, new TEvents::TEvPoisonPill());
+        env.DispatchQuiet();
+        UNIT_ASSERT(!env.Runtime.FindActor(batchProcessor));
+
+        NKikimrClient::TPersQueueRequest request;
+        auto* cmdRead = request.MutablePartitionRequest()->MutableCmdRead();
+        cmdRead->SetClientId("alice");
+        cmdRead->SetOffset(10);
+        cmdRead->SetPartNo(0);
+        cmdRead->SetCanReadBatches(false);
+
+        const auto proxy = env.Runtime.Register(CreateReadProxy(
+            env.Edge, 42, env.Tablet, 1, TDirectReadKey{}, request, batchProcessor));
+
+        auto response = MakeHolder<TEvPersQueue::TEvResponse>();
+        response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+        response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
+        response->Record.MutablePartitionResponse()->MutableCmdReadResult()->AddResult()->CopyFrom(
+            MakeKafkaBatchReadResult(MakeKafkaBatchPayload()));
+
+        env.Send(proxy, response.Release());
+        const auto ev = env.Runtime.GrabEdgeEvent<TEvPersQueue::TEvResponse>(env.Edge, TDuration::Seconds(10));
+        UNIT_ASSERT(ev);
+        UNIT_ASSERT_EQUAL(ev->Get()->Record.GetStatus(), NMsgBusProxy::MSTATUS_ERROR);
+        UNIT_ASSERT_EQUAL(ev->Get()->Record.GetErrorCode(), NPersQueue::NErrorCode::READ_NOT_DONE);
     }
 }
 

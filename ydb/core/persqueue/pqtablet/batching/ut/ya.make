@@ -14,6 +14,7 @@ PEERDIR(
     library/cpp/testing/unittest
     ydb/core/base
     ydb/core/persqueue/events
+    ydb/core/persqueue/pqtablet/readproxy
     ydb/core/persqueue/public/write_meta
     ydb/core/protos
     ydb/core/testlib/basics

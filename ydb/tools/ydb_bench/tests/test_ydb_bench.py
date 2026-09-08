@@ -1103,6 +1103,7 @@ class YdbBenchTest(unittest.TestCase):
             local-ydb:
               geometry-best:
                 workload: {type: kv, operation: upsert}
+                actor-system: {use-shared-threads: true, use-united-pool: true}
                 geometry: {preset: storage, static-nodes: 1, dynamic-nodes: 1, max-dynamic-nodes: 2}
                 load: {parameter: threads, values: [1]}
                 measurement: {warmup: 0, duration: 1, repetitions: 1, verification-repetitions: 2}
@@ -1136,6 +1137,9 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(manifest["verification"]["cluster"], "fresh")
         self.assertEqual(manifest["verification"]["dynamic_nodes"], 1)
         self.assertEqual(self.last_local_ydb_cluster_constructor.call_count, 2)
+        for call in self.last_local_ydb_cluster_constructor.call_args_list:
+            self.assertEqual(call.kwargs["actor_system"], {"use_shared_threads": True, "use_united_pool": True})
+        self.assertEqual(manifest["parameters"]["actor_system"], {"use_shared_threads": True, "use_united_pool": True})
         verification_cluster = self.last_local_ydb_cluster_constructor.call_args_list[1]
         self.assertEqual(verification_cluster.args[3], self.root / "geometry-best" / "verification-cluster")
         self.assertEqual(verification_cluster.args[4]["dynamic_nodes"], 1)
@@ -2169,6 +2173,80 @@ class YdbBenchTest(unittest.TestCase):
                     )
                 )
 
+    def test_local_ydb_actor_system_flags_default_and_validate(self):
+        profile = {"workload": {"type": "kv", "operation": "upsert"}, "load": {"parameter": "threads", "values": [1]}}
+
+        def load():
+            return load_config(self._config(yaml.safe_dump({"local-ydb": {"flags": profile}}))).runs[0]
+
+        self.assertEqual(
+            load().parameters["local_ydb"]["actor_system"],
+            {
+                "use_shared_threads": False,
+                "use_united_pool": False,
+            },
+        )
+        for shared in (False, True):
+            for united in (False, True):
+                with self.subTest(shared=shared, united=united):
+                    profile["actor-system"] = {"use-shared-threads": shared, "use-united-pool": united}
+                    flags = load().parameters["local_ydb"]["actor_system"]
+                    self.assertEqual(flags, {"use_shared_threads": shared, "use_united_pool": united})
+                    cluster = local_ydb._cluster_config([{"ic_port": 19001}], 64, "host", flags)
+                    self.assertEqual(cluster["config"]["actor_system_config"], {"use_auto_config": True, **flags})
+        for key in ("use-shared-threads", "use-united-pool"):
+            for value in (0, 1, "true", "false", None, [], {}):
+                with self.subTest(key=key, value=value):
+                    profile["actor-system"] = {key: value}
+                    with self.assertRaisesRegex(BenchmarkError, "actor-system.*must be a boolean"):
+                        load()
+        profile["actor-system"] = {"unknown": True}
+        with self.assertRaisesRegex(BenchmarkError, "unknown fields"):
+            load()
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for browser logic checks")
+    def test_local_ydb_actor_system_builder_round_trip_and_comparison(self):
+        loaded = load_config(self._config("""
+            local-ydb:
+              flags:
+                workload: {type: stock, operation: put-rand-order}
+                load: {parameter: threads, values: [1]}
+                actor-system: {use-shared-threads: true, use-united-pool: false}
+        """))
+        model = web.editor_model(loaded, self.root / "results")
+        script = "const editor={model:" + json.dumps(model) + "};\n"
+        script += web._JS[web._JS.index("function yamlArray") : web._JS.index("async function syncEditor")]
+        script += web._JS[
+            web._JS.index("function localComparisonConfig") : web._JS.index("function localComparisonSemantic")
+        ]
+        script += """
+            const profile=editor.model.profiles[0], yaml=[];
+            serializeLocalYdb(yaml,profile);
+            const old={parameters:{}},current={parameters:profile.local_ydb};
+            process.stdout.write(JSON.stringify({
+              yaml:'local-ydb:\\n  flags:\\n'+yaml.join('\\n'),
+              defaults:defaultLocalYdb().actor_system,
+              old:localComparisonConfig(old),current:localComparisonConfig(current)
+            }));
+        """
+        result = json.loads(
+            subprocess.run(
+                [shutil.which("node"), "-e", script],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            ).stdout
+        )
+        flags = loaded.runs[0].parameters["local_ydb"]["actor_system"]
+        self.assertEqual(
+            load_config(self._config(result["yaml"])).runs[0].parameters["local_ydb"]["actor_system"], flags
+        )
+        self.assertEqual(result["defaults"], {"use_shared_threads": False, "use_united_pool": False})
+        self.assertFalse(result["old"]["use_shared_threads"])
+        self.assertTrue(result["current"]["use_shared_threads"])
+        self.assertFalse(result["current"]["use_united_pool"])
+
     def test_local_ydb_profile_is_editable_by_web_builder(self):
         loaded = load_config(self._config("""
             local-ydb:
@@ -2915,6 +2993,7 @@ class YdbBenchTest(unittest.TestCase):
             const esc=value=>String(value??'');
             const localYdbGeometryKeys={static_nodes:'static-nodes',dynamic_nodes:'dynamic-nodes',max_dynamic_nodes:'max-dynamic-nodes',disk_size_gb:'disk-size-gb',storage_groups:'storage-groups'};
             const localYdbAffinityKeys={ydb_cli:'ydb-cli',static_nodes:'static-nodes',dynamic_nodes:'dynamic-nodes'};
+            const localYdbActorSystemKeys={use_shared_threads:'use-shared-threads',use_united_pool:'use-united-pool'};
             const definition={type:'fake',operations:['run'],load_parameters:['rate'],options:[],
               slo_metrics:{p90:'latency_ms'},reports_errors:false,minimum_duration_seconds:1,
               maximum_total_seconds:3600};
@@ -4311,6 +4390,41 @@ class YdbBenchTest(unittest.TestCase):
         config = yaml.safe_load((cluster_directory / "cluster.yaml").read_text(encoding="utf-8"))
         self.assertEqual(config["config"]["host_configs"][0]["ssd"], ["SectorMap:map_0:64:NONE"])
         self.assertEqual(start_process.call_args.kwargs["parent_death_wrapper"], self.root / "process_guard")
+
+    def test_local_ydb_actor_system_config_is_used_by_static_dynamic_and_scaled_nodes(self):
+        flags = {"use_shared_threads": True, "use_united_pool": True}
+        cluster = local_ydb.LocalYdbCluster(
+            self.root / "ydbd",
+            self.root / "ydb",
+            self.root / "process_guard",
+            self.root / "flags-cluster",
+            {"static_nodes": 1, "dynamic_nodes": 1, "disk_size_gb": 64},
+            {"ydb_cli": None, "static_nodes": None, "dynamic_nodes": None},
+            30,
+            actor_system=flags,
+        )
+        nodes = [{"grpc_port": 2135 + i, "ic_port": 19001 + i, "mon_port": 8765 + i} for i in range(3)]
+        with mock.patch.object(cluster, "_node_ports", side_effect=nodes), mock.patch.object(
+            cluster, "_wait_for_port"
+        ), mock.patch.object(cluster, "_bootstrap_cluster"), mock.patch.object(
+            cluster, "_create_tenant"
+        ), mock.patch.object(
+            cluster, "_wait_database_ready"
+        ), mock.patch.object(
+            cluster, "_wait_tenant_ready"
+        ), mock.patch.object(
+            cluster, "_wait_client_endpoints"
+        ), mock.patch.object(
+            local_ydb, "start_managed_process", return_value=mock.Mock(pid=1)
+        ) as start_process:
+            cluster.start()
+            cluster.add_dynamic_nodes(1)
+        self.assertEqual(start_process.call_count, 3)
+        for call in start_process.call_args_list:
+            command = call.args[0]
+            self.assertEqual(command[command.index("--yaml-config") + 1], cluster.config_path)
+        config = yaml.safe_load(cluster.config_path.read_text(encoding="utf-8"))
+        self.assertEqual(config["config"]["actor_system_config"], {"use_auto_config": True, **flags})
 
     def test_local_ydb_scaling_waits_for_database_and_every_new_node(self):
         cluster_directory = self.root / "scaling-cluster"
@@ -6934,6 +7048,14 @@ class WebTest(unittest.TestCase):
     def test_local_ydb_comparison_returns_bounded_profile_results(self):
         self._local_ydb_result(self.root / "baseline", 1000, verified=True)
         self._local_ydb_result(self.root / "candidate", 1100, operation="mixed")
+        manifest_path = self.root / "candidate" / "local-ydb" / "capacity" / "run.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["parameters"]["actor_system"] = {
+            "use_shared_threads": True,
+            "use_united_pool": False,
+            "private": "not projected",
+        }
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
         service = RunService(self.root)
         try:
             comparison = service.local_ydb_comparison(["baseline", "candidate"])
@@ -6957,6 +7079,13 @@ class WebTest(unittest.TestCase):
             self.assertEqual(comparison["entries"][0]["verification"]["cluster"], "search")
             self.assertNotIn("samples", comparison["entries"][0]["verification"])
             self.assertEqual(comparison["entries"][1]["parameters"]["workload"]["operation"], "mixed")
+            self.assertEqual(
+                comparison["entries"][1]["parameters"]["actor_system"],
+                {
+                    "use_shared_threads": True,
+                    "use_united_pool": False,
+                },
+            )
             with self.assertRaisesRegex(BenchmarkError, "between 1 and 20"):
                 service.local_ydb_comparison([])
             with self.assertRaisesRegex(BenchmarkError, "between 1 and 20"):

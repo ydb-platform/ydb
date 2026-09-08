@@ -102,8 +102,8 @@ public:
         AFL_VERIFY(!HeaderRange);
         if (!!PartialArray) {
             for (auto&& subColumnName : subColumns) {
-                auto pathResult = NSubColumns::ResolveBestPath(PartialArray->GetHeader().GetColumnStats(),
-                    PartialArray->GetHeader().GetOtherStats(), NSubColumns::ToJsonPath(subColumnName));
+                auto pathResult = NArrow::NAccessor::NSubColumns::ResolveBestPath(PartialArray->GetHeader().GetColumnStats(),
+                    PartialArray->GetHeader().GetOtherStats(), NArrow::NAccessor::NSubColumns::ToJsonPath(subColumnName));
                 AFL_VERIFY(pathResult.IsSuccess())("subColumnName", subColumnName)("error", pathResult.GetErrorMessage());
                 const auto path = pathResult.DetachResult();
                 if (path && path->IsColumn) {

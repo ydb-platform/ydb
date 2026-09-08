@@ -52,6 +52,7 @@ TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> TSubColumnsPartialA
         return TConclusionStatus::Fail(headerOthersResult.GetErrorMessage());
     }
     // A matching path must be loaded before accessor creation.
+    // Fetch planning and lookup use the same canonical path resolution.
     AFL_VERIFY(!headerColumnsResult.DetachResult());
     AFL_VERIFY(!headerOthersResult.DetachResult());
     return NSubColumns::TOthersData::BuildEmptyPathAccessor(recordsCount);

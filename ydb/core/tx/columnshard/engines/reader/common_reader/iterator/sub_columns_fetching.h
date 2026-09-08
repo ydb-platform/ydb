@@ -178,7 +178,8 @@ public:
     }
 
     void AddFetchData(const TBlobRange& subRange, const ui32 colIndex) {
-        Chunks.try_emplace(colIndex, subRange, colIndex);
+        const auto insertResult = Chunks.try_emplace(colIndex, subRange, colIndex);
+        AFL_VERIFY(insertResult.second);
     }
 };
 

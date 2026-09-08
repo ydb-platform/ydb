@@ -1,6 +1,7 @@
 #pragma once
 
 #include "shard_key_ranges.h"
+#include <ydb/core/kqp/tracing/kqp_task_tracing.h>
 
 #include <memory>
 
@@ -85,6 +86,7 @@ struct TStageInfoMeta {
         SCAN_TASKS,
     };
     ETasksType TasksType = UNKNOWN_TASKS;
+    TTaskTraceDescription TraceDescription;
 
     TTableId TableId;
     TString TablePath;
@@ -405,6 +407,7 @@ public:
 
     size_t BuildAllTasks(std::optional<TLlvmSettings> llvmSettings, const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, TQueryExecutionStats* stats, const TPlacementParams& placementParams = {});
     void BuildLiteralTasks();
+    void PrepareTaskTracing(const NWilson::TSpan& span);
 
     NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(const TTask& task, bool serializeAsyncIoSettings);
     void PersistTasksGraphInfo(NKikimrKqp::TQueryPhysicalGraph& result) const;

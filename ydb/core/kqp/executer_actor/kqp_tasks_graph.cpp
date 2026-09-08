@@ -28,6 +28,8 @@
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
 #include <ydb/services/udf_store/wasm/query_compartment_scope.h>
 
+#include <ydb/library/wilson_ids/wilson.h>
+
 #include <algorithm>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
@@ -1888,6 +1890,15 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
     }
 }
 
+void TKqpTasksGraph::PrepareTaskTracing(const NWilson::TSpan& span) {
+    if (!span || span.GetTraceId().GetVerbosity() < TComponentTracingLevels::TQueryProcessor::Detailed) {
+        return;
+    }
+    for (auto& [id, stage] : GetStagesInfo()) {
+        stage.Meta.TraceDescription = TTaskTraceDescription::FromStage(stage.Meta.GetStage(id));
+    }
+}
+
 void TKqpTasksGraph::SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDqTask* result, bool serializeAsyncIoSettings) const {
     const auto& stageInfo = GetStageInfo(task.StageId);
     ActorIdToProto(task.Meta.ExecuterId, result->MutableExecuter()->MutableActorId());
@@ -1903,6 +1914,8 @@ void TKqpTasksGraph::SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDq
     for (const auto& [paramName, paramValue] : task.Meta.TaskParams) {
         (*result->MutableTaskParams())[paramName] = paramValue;
     }
+
+    stageInfo.Meta.TraceDescription.Save(*result);
 
     for (const auto& readRange : task.Meta.ReadRanges) {
         result->AddReadRanges(readRange);

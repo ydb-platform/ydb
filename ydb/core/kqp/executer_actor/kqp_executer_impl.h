@@ -141,7 +141,7 @@ public:
         , UserToken(userToken)
         , FormatsSettings(std::move(formatsSettings))
         , Counters(counters)
-        , ExecuterSpan(spanVerbosity, std::move(Request.TraceId), "Execute")
+        , ExecuterSpan(spanVerbosity, std::move(Request.TraceId), "Execute plan")
         , Planner(nullptr)
         , ExecuterRetriesConfig(executerConfig.TableServiceConfig.GetExecuterRetriesConfig())
         , AggregationSettings(executerConfig.TableServiceConfig.GetAggregationConfig())
@@ -159,6 +159,7 @@ public:
         BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();
 
         ExecuterSpan.Attribute("ydb.actor.type", spanName);
+        TasksGraph.PrepareTaskTracing(ExecuterSpan);
         if (ExecuterSpan) {
             TraceStats.emplace(ExecuterSpan.GetTraceId().GetVerbosity());
         }
@@ -957,7 +958,7 @@ protected:
                         const auto& task = TasksGraph.GetTask(taskId);
                         const auto& stage = TasksGraph.GetStageInfo(task.StageId);
                         TraceStats->OnTaskFinished({stage.Id.TxId, stage.Id.StageId},
-                            stage.Meta.GetStage(stage.Id), stage.Tasks.size(), state, computeActor.NodeId());
+                            stage.Meta.TraceDescription, stage.Tasks.size(), state, computeActor.NodeId());
                     }
                     ui64 cycleCount = GetCycleCountFast();
 

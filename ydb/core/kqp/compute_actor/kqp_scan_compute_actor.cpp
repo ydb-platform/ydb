@@ -1,3 +1,4 @@
+#include <ydb/core/kqp/tracing/kqp_task_tracing.h>
 #include "kqp_scan_compute_actor.h"
 
 #include "kqp_scan_common.h"
@@ -266,7 +267,7 @@ void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
 }
 
 void TKqpScanComputeActor::DoBootstrap() {
-    ComputeActorSpan.Name("Compute task");
+    TTaskTraceDescription::Annotate(ComputeActorSpan, *GetTask().GetTask());
     ComputeActorSpan.Attribute("ydb.actor.type", TString("TKqpScanComputeActor"));
     YDB_LOG_DEBUG("Starting KQP scan compute actor bootstrap",
         {"logPrefix", this->LogPrefix});

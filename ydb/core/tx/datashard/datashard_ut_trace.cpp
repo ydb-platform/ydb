@@ -1,4 +1,5 @@
 #include "defs.h"
+#include "execution_unit_kind.h"
 #include "datashard_ut_common_kqp.h"
 #include "datashard_ut_read_table.h"
 
@@ -187,8 +188,15 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         return Conditional(condition, ExpectedSpanVec(std::forward<TArgs>(args)...));
     }
 
+    bool IsDatashardUnit(TStringBuf name) {
+        constexpr TStringBuf prefix = "Datashard.";
+        NDataShard::EExecutionUnitKind kind;
+        return name.StartsWith(prefix) && TryFromString(name.SubStr(prefix.size()), kind);
+    }
+
     TExpectedSpan DescribeSpan(const TFakeWilsonUploader::Span& actual) {
-        TExpectedSpan span(std::string_view(actual.Name.data(), actual.Name.size()));
+        TExpectedSpan span(IsDatashardUnit(actual.Name) ? "Datashard.Unit"
+            : std::string_view(actual.Name.data(), actual.Name.size()));
         for (const auto& child : actual.Children) {
             span.AddChild(DescribeSpan(child.get()));
         }
@@ -205,13 +213,13 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
     void CheckTxHasDatashardUnits(std::reference_wrapper<TFakeWilsonUploader::Span> txSpan, ui8 count) {
         auto executeSpan = txSpan.get().FindOne("Tablet.Transaction.Execute");
         UNIT_ASSERT(executeSpan);
-        auto unitSpans = executeSpan->get().FindAll("Datashard.Unit");
-        UNIT_ASSERT_VALUES_EQUAL(count, unitSpans.size());
+        UNIT_ASSERT_VALUES_EQUAL(count, std::count_if(executeSpan->get().Children.begin(), executeSpan->get().Children.end(),
+            [](const auto& child) { return IsDatashardUnit(child.get().Name); }));
     }
 
     void CheckExecuteHasDatashardUnits(std::reference_wrapper<TFakeWilsonUploader::Span> executeSpan, ui8 count) {
-        auto unitSpans = executeSpan.get().FindAll("Datashard.Unit");
-        UNIT_ASSERT_VALUES_EQUAL(count, unitSpans.size());
+        UNIT_ASSERT_VALUES_EQUAL(count, std::count_if(executeSpan.get().Children.begin(), executeSpan.get().Children.end(),
+            [](const auto& child) { return IsDatashardUnit(child.get().Name); }));
     }
 
     Y_UNIT_TEST(TestTraceDistributedUpsert) {
@@ -479,7 +487,8 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
             "Datashard.SendImmediateWriteResult")
             .ToString();
 
-        UNIT_ASSERT_VALUES_EQUAL(trace.ToString(), canon);
+        UNIT_ASSERT_VALUES_EQUAL(trace.Root.Children.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(DescribeSpan(wtSpan->get()).ToString(), canon);
     }
 }
 

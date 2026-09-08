@@ -115,14 +115,9 @@ private:
             ctx.Send(BatchProcessorActor, new NBatching::TEvProcessBatch(NBatching::TReadProcessingContext{
                 .User = cmdRead.GetClientId(),
                 .PartitionId = static_cast<ui32>(Request.GetPartitionRequest().GetPartition()),
-                .Destination = 0,
                 .Offset = InitialReadOffset,
                 .Count = cmdRead.HasCount() ? static_cast<ui32>(cmdRead.GetCount()) : std::numeric_limits<ui32>::max(),
                 .LastOffset = cmdRead.GetLastOffset() > 0 ? static_cast<ui64>(cmdRead.GetLastOffset()) : 0,
-                .PartNo = 0,
-                .Size = static_cast<ui64>(proxyEvent->Response->ByteSize()),
-                .IsInternal = false,
-                .ReplyTo = TActorId{},
                 .ResponseActor = SelfId(),
                 .Event = std::move(proxyEvent)}));
             return;

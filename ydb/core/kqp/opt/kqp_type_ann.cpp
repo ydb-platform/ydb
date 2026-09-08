@@ -3407,7 +3407,7 @@ public:
         AddHandler({TKqpOpRead::CallableName()}, HndlInt(&AnnotateOpRead));
         AddHandler({TKqpOpEmptySource::CallableName()}, Hndl(&AnnotateOpEmptySource));
         AddHandler({TKqpOpMapElementLambda::CallableName()}, Hndl(&AnnotateOpMapElementLambda));
-        AddHandler({TKqpOpMapElementRename::CallableName()}, Hndl(&AnnotateOpMapElementRename)); 
+        AddHandler({TKqpOpMapElementRename::CallableName()}, Hndl(&AnnotateOpMapElementRename));
         AddHandler({TKqpOpMap::CallableName()}, Hndl(&AnnotateOpMap));
         AddHandler({TKqpOpProject::CallableName()}, Hndl(&AnnotateOpProject));
         AddHandler({TKqpOpFilter::CallableName()}, Hndl(&AnnotateOpFilter));

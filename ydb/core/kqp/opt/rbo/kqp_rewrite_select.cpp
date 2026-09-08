@@ -541,6 +541,7 @@ bool IsJoinKeys(TExprNode::TPtr node, TExprNode::TPtr lambdaArg) {
 }
 
 void ExtractJoinKeysAndPredicates(TExprNode::TPtr node, TVector<TInfoUnit>& joinKeys, TVector<TExprNode::TPtr>& joinPredicates) {
+    Y_ENSURE(node->IsLambda());
     auto lambda = TCoLambda(node);
 
     // YQL select contains a bunch of these for some reason

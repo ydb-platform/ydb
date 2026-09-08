@@ -14,6 +14,12 @@ IDqOperatorMemoryQuota* GetDqOperatorMemoryQuota() {
     return TlsOperatorMemoryQuota;
 }
 
+void UnbindDqOperatorMemoryQuota(const IDqOperatorMemoryQuota* quota) {
+    if (TlsOperatorMemoryQuota == quota) {
+        TlsOperatorMemoryQuota = nullptr;
+    }
+}
+
 TDqOperatorMemoryQuotaScope::TDqOperatorMemoryQuotaScope(IDqOperatorMemoryQuota* quota)
     : Previous(TlsOperatorMemoryQuota)
 {

@@ -382,6 +382,38 @@ Y_UNIT_TEST_SUITE(TDqMemoryQuotaTest) {
         UNIT_ASSERT_VALUES_EQUAL(CombineMemoryAvailability(100, std::numeric_limits<i64>::max()), std::numeric_limits<i64>::max());
     }
 
+    // The owner may tear the quota down while the execution scope is still bound (termination from inside the
+    // execution): the binding must never outlive the quota, and another quota's teardown must leave it alone
+    Y_UNIT_TEST(TeardownUnbindsOperatorQuota) {
+        TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), /* supportsSizedAllocators = */ true);
+        auto manager = std::make_shared<TStubQuotaManager>();
+        ::NMonitoring::TDynamicCounters::TCounterPtr counter;
+        auto makeQuota = [&](ui64 taskId) {
+            auto quota = MakeHolder<TDqMemoryQuota>(counter, 40_MB, MakeLimits(manager), TTxId{ui64(1)}, taskId, /* profileStats = */ false, /* actorSystem = */ nullptr);
+            quota->BindScopedAlloc(&alloc);
+            return quota;
+        };
+        auto quota = makeQuota(1);
+        auto other = makeQuota(2);
+        UNIT_ASSERT(GetDqOperatorMemoryQuota() == nullptr);
+        {
+            TDqOperatorMemoryQuotaScope scope(quota->GetOperatorQuota());
+            UNIT_ASSERT(GetDqOperatorMemoryQuota() == quota.Get());
+            other->UnbindOperatorQuota(); // not the bound one
+            UNIT_ASSERT(GetDqOperatorMemoryQuota() == quota.Get());
+            quota->UnbindOperatorQuota(); // explicit, before the graph is torn down
+            UNIT_ASSERT(GetDqOperatorMemoryQuota() == nullptr);
+        }
+        UNIT_ASSERT(GetDqOperatorMemoryQuota() == nullptr);
+        {
+            TDqOperatorMemoryQuotaScope scope(quota->GetOperatorQuota());
+            UNIT_ASSERT(GetDqOperatorMemoryQuota() == quota.Get());
+            quota.Destroy(); // the destructor does it on its own
+            UNIT_ASSERT(GetDqOperatorMemoryQuota() == nullptr);
+        }
+        UNIT_ASSERT(GetDqOperatorMemoryQuota() == nullptr); // the scope restored what was bound before it
+    }
+
     Y_UNIT_TEST(GuaranteeManagerNegativeParentDominates) {
         struct TParentedManager : public TGuaranteeQuotaManager {
             TParentedManager()

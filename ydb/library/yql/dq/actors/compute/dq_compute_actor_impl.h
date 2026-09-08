@@ -640,6 +640,8 @@ protected:
 
         try {
             if (MemoryQuota) {
+                // everything below dies without an operator quota, maybe under the scope of the current execution
+                MemoryQuota->UnbindOperatorQuota();
                 MemoryQuota->TryReleaseQuota();
             }
 

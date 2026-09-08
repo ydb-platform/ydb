@@ -127,6 +127,7 @@ private:
 
     void PassAway() override {
         if (MemoryQuota) {
+            MemoryQuota->UnbindOperatorQuota(); // the graph dies without a quota, maybe under the execution scope
             MemoryQuota->TryReleaseQuota();
         }
         TaskRunner.Reset();

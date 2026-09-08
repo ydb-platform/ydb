@@ -60,13 +60,22 @@ namespace NYql::NDq {
             }
         }
 
-        // The bound allocator holds a callback into this object: detach before dying. Every owner keeps the
-        // allocator alive longer than the quota (a shared_ptr declared before it, see the compute actor and the
-        // task runner actor), so the allocator is still there to be detached from.
+        // The bound allocator holds a callback into this object and the executing thread may hold the operator
+        // binding: detach from both before dying. Every owner keeps the allocator alive longer than the quota
+        // (a shared_ptr declared before it, see the compute actor and the task runner actor), so the allocator
+        // is still there to be detached from.
         ~TDqMemoryQuota() {
+            UnbindOperatorQuota();
             if (Alloc) {
                 Alloc->Ref().SetIncreaseMemoryLimitCallback({});
             }
+        }
+
+        // Take the operator binding of the executing thread away before the graph is torn down, so that the
+        // operators see no quota while they die (see IDqOperatorMemoryQuota): the owner may terminate from
+        // inside an execution, i.e. under the scope it bound for that execution.
+        void UnbindOperatorQuota() {
+            UnbindDqOperatorMemoryQuota(this);
         }
 
         ui64 GetMkqlMemoryLimit() const {

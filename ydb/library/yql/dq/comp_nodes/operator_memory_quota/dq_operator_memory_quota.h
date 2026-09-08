@@ -32,6 +32,11 @@ public:
 // (TlsAllocState->IsMemoryYellowZoneEnabled() / GetMaximumLimitValueReached()).
 IDqOperatorMemoryQuota* GetDqOperatorMemoryQuota();
 
+// For the owner tearing a quota down while a scope is still active (termination from inside an execution):
+// clears the binding if it points at `quota`, a no-op otherwise. The active scope restores its own previous
+// value on exit as usual, so do not nest scopes of a quota that may die inside the inner scope.
+void UnbindDqOperatorMemoryQuota(const IDqOperatorMemoryQuota* quota);
+
 // RAII binding, nestable: the destructor restores the previously bound quota. `quota` may be nullptr.
 class TDqOperatorMemoryQuotaScope {
 public:

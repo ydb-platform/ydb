@@ -283,14 +283,14 @@ public:
         return cookies;
     }
 
-    // Must be called under Lock. The pool resource is created on its first use and its limit follows the
-    // latest tx of the pool afterwards.
+    // Must be called under Lock. The pool resource is created on its first use with the percent of that tx.
+    // The limit of an existing pool is not touched here: it follows the txs that allocate from the pool
+    // (see AllocateResources), a tx that merely gets constructed must not move the threshold under the
+    // running ones.
     TIntrusivePtr<TMemoryResource> GetOrCreatePoolMemoryResource(const std::pair<TString, TString>& poolKey, double memoryPoolPercent) {
         auto [it, success] = MemoryNamedPools.emplace(poolKey, nullptr);
         if (success) {
             it->second = MakeIntrusive<TMemoryResource>(TotalMemoryResource->GetLimit(), memoryPoolPercent, SpillingPercent.load());
-        } else {
-            it->second->SetNewLimit(TotalMemoryResource->GetLimit(), memoryPoolPercent, SpillingPercent.load());
         }
         return it->second;
     }
@@ -345,6 +345,8 @@ public:
 
             if (hasScanQueryMemory && tx.HasMemoryPoolLimit()) {
                 auto poolMemory = GetOrCreatePoolMemoryResource(tx.MakePoolId(), tx.MemoryPoolPercent);
+                // the pool limit follows the latest tx that allocates from the pool
+                poolMemory->SetNewLimit(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, SpillingPercent.load());
                 if (!poolMemory->AcquireIfAvailable(resources.Memory)) {
                     hasScanQueryMemory = false;
                     TotalMemoryResource->Release(resources.Memory);

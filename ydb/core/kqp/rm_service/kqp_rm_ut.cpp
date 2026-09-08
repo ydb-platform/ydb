@@ -307,6 +307,7 @@ public:
         UNIT_TEST(MemoryAvailability);
         UNIT_TEST(PoolMemoryAvailability);
         UNIT_TEST(PoolMemoryAvailabilityAfterRelease);
+        UNIT_TEST(PoolLimitFollowsAllocatingTx);
         UNIT_TEST(SpillingPercentReconfigure);
         UNIT_TEST(TaskQuotaManagerOptional);
         UNIT_TEST(SnapshotSharingByExchanger);
@@ -334,6 +335,7 @@ public:
     void MemoryAvailability();
     void PoolMemoryAvailability();
     void PoolMemoryAvailabilityAfterRelease();
+    void PoolLimitFollowsAllocatingTx();
     void SpillingPercentReconfigure();
     void TaskQuotaManagerOptional();
     void SnapshotSharing();
@@ -733,6 +735,35 @@ void KqpRm::PoolMemoryAvailabilityAfterRelease() {
         rm->FreeResources(*tx2, 1, NRm::TKqpResourcesRequest{.Memory = 10});
         rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 450});
         UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 400);
+    }
+
+    AssertResourceManagerStats(rm, 1000, 100);
+}
+
+// Constructing a tx of a pool with another percent must not move the pool threshold under the running txs:
+// the pool limit follows the txs that allocate from the pool, not the ones that merely appear
+void KqpRm::PoolLimitFollowsAllocatingTx() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    {
+        auto tx = MakePoolTx(1, rm, /* memoryPoolPercent = */ 50); // pool limit 500, threshold at 400 used
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 450}));
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), -50); // over the pool threshold
+
+        auto other = MakePoolTx(2, rm, /* memoryPoolPercent = */ 90); // the same pool, another percent: nothing moves
+        UNIT_ASSERT(other->PoolMemoryCookie == tx->PoolMemoryCookie);
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), -50);
+        UNIT_ASSERT_VALUES_EQUAL(other->GetMemoryAvailability(), -50);
+
+        // an allocation of the other tx does refresh the pool limit with its percent: limit 900, threshold 720
+        UNIT_ASSERT(rm->AllocateResources(*other, 1, NRm::TKqpResourcesRequest{.Memory = 10}));
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 260); // 900 - 460 - 180, below the node total's 340
+
+        rm->FreeResources(*other, 1, NRm::TKqpResourcesRequest{.Memory = 10});
+        rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 450});
     }
 
     AssertResourceManagerStats(rm, 1000, 100);

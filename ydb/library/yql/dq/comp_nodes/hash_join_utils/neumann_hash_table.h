@@ -9,6 +9,8 @@
 
 #include <util/generic/buffer.h>
 
+#include <bit>
+
 #include "tuple.h"
 #include "join_defs.h"
 namespace NKikimr {
@@ -177,7 +179,11 @@ class TNeumannHashTable {
     TNeumannHashTable &operator=(TNeumannHashTable &&) = default;
 
     static ui32 EstimateLogSize(int nItems) {
-        int estimated = 32 - std::countl_zero<ui32>(nItems);
+        if (nItems <= 0) {
+            return 1;
+        }
+        const ui64 want = (static_cast<ui64>(nItems) * 9 + 7) / 8;
+        const int estimated = std::bit_width(want - 1);
         return std::max(1, std::min(24, estimated));
     }
 

@@ -1,5 +1,9 @@
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_streaming_query_common.h"
 #include "schemeshard_impl.h"
+
+#include <ydb/library/actors/core/event_pb.h>
+#include <ydb/services/metadata/abstract/service.h>
 
 #define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -63,6 +67,33 @@ private:
     const i64 RunDelta;
 };
 
+class TDone : public NKikimr::NSchemeShard::TDone {
+    using TBase = NKikimr::NSchemeShard::TDone;
+
+public:
+    TDone(TOperationId id, bool trackOperation)
+        : TBase(std::move(id))
+        , TrackOperation(trackOperation)
+    {}
+
+private:
+    bool ProgressState(TOperationContext& context) override {
+        if (TrackOperation) {
+            const auto* txState = context.SS->FindTx(OperationId);
+            Y_ABORT_UNLESS(txState);
+            const auto& query = context.SS->StreamingQueries.at(txState->TargetPathId);
+            context.OnComplete.Send(
+                NMetadata::NProvider::MakeServiceId(context.Ctx.SelfID.NodeId()),
+                MakeStreamingOperationTrackerRequest(TPath::Init(txState->TargetPathId, context.SS), context.SS->Generation(), *query)
+            );
+        }
+
+        return TBase::ProgressState(context);
+    }
+
+    const bool TrackOperation;
+};
+
 class TAlterStreamingQuery : public TSubOperation {
     static constexpr ui64 MAX_PROTOBUF_SIZE = 2_MB;
 
@@ -87,7 +118,7 @@ class TAlterStreamingQuery : public TSubOperation {
             // RunDelta is 0 on restart (init already loaded the updated state from DB)
             return MakeHolder<TPropose>(OperationId, RunDelta);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return MakeHolder<TDone>(OperationId, Transaction.GetCreateStreamingQuery().HasOperationOwnerActorId());
         default:
             return nullptr;
         }
@@ -141,9 +172,13 @@ class TAlterStreamingQuery : public TSubOperation {
     TStreamingQueryInfo::TPtr GetAlteredQueryInfo(const TPath& dstPath, const TOperationContext& context) const {
         const auto& oldStreamingQueryInfo = context.SS->StreamingQueries.Value(dstPath->PathId, nullptr);
         Y_ABORT_UNLESS(oldStreamingQueryInfo);
+
+        const auto& info = Transaction.GetCreateStreamingQuery();
         auto streamingQueryInfo = MakeIntrusive<TStreamingQueryInfo>(TStreamingQueryInfo{
             .AlterVersion = oldStreamingQueryInfo->AlterVersion + 1,
-            .Properties = Transaction.GetCreateStreamingQuery().GetProperties(),
+            .Properties = info.GetProperties(),
+            .OperationOwnerActorId = info.HasOperationOwnerActorId() ? ActorIdFromProto(info.GetOperationOwnerActorId()) : TActorId(),
+            .OperationOwnerUserToken = info.HasOperationOwnerActorId() && context.UserToken ? std::make_optional<NACLib::TUserToken>(context.UserToken->GetUserSID(), context.UserToken->GetGroupSIDs()) : std::nullopt,
         });
 
         if (!Transaction.GetReplaceIfExists()) {
@@ -156,9 +191,20 @@ class TAlterStreamingQuery : public TSubOperation {
         return streamingQueryInfo;
     }
 
-    bool IsDescriptionValid(const THolder<TProposeResponse>& result, TStreamingQueryInfo::TPtr queryInfo) const {
-        if (const ui64 propertiesSize = queryInfo->Properties.ByteSizeLong(); propertiesSize > MAX_PROTOBUF_SIZE) {
+    bool IsDescriptionValid(const THolder<TProposeResponse>& result, TStreamingQueryInfo::TPtr oldQueryInfo, TStreamingQueryInfo::TPtr newQueryInfo) const {
+        const auto& info = Transaction.GetCreateStreamingQuery();
+        if (info.HasOperationOwnerActorId() && !newQueryInfo->OperationOwnerActorId) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Operation owner actor id must not be empty");
+            return false;
+        }
+
+        if (const ui64 propertiesSize = newQueryInfo->Properties.ByteSizeLong(); propertiesSize > MAX_PROTOBUF_SIZE) {
             result->SetError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Maximum size of properties must be less or equal equal to " << MAX_PROTOBUF_SIZE << " but got " << propertiesSize << " after alter");
+            return false;
+        }
+
+        if (oldQueryInfo->OperationOwnerActorId && Transaction.GetCreateStreamingQuery().HasOperationOwnerActorId()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Streaming query already under operation");
             return false;
         }
 
@@ -226,12 +272,15 @@ public:
         const TPath& dstPath = parentPath.Child(name);
         RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath));
         RETURN_RESULT_UNLESS(IsApplyIfChecksPassed(result, context));
+
+        const auto oldInfo = context.SS->StreamingQueries.Value(dstPath->PathId, nullptr);
+        Y_ABORT_UNLESS(oldInfo);
         const auto queryInfo = GetAlteredQueryInfo(dstPath, context);
-        RETURN_RESULT_UNLESS(IsDescriptionValid(result, queryInfo));
+        RETURN_RESULT_UNLESS(IsDescriptionValid(result, oldInfo, queryInfo));
 
         // Compute delta for COUNTER_RUNNING_STREAMING_QUERY_COUNT before persisting the alter
         {
-            const auto& oldProps = context.SS->StreamingQueries.Value(dstPath->PathId, nullptr)->Properties.GetProperties();
+            const auto& oldProps = oldInfo->Properties.GetProperties();
             const auto& newProps = queryInfo->Properties.GetProperties();
             const bool wasRun = oldProps.contains("run") && oldProps.at("run") == "true";
             const bool willRun = newProps.contains("run") && newProps.at("run") == "true";

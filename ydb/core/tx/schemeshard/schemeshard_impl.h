@@ -1050,6 +1050,7 @@ public:
     // StreamingQuery
     void PersistStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId);
     void PersistRemoveStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId);
+    void ResumeStreamingQueriesOperations(const TVector<TPathId>& ids);
 
     // TestShardSet
     void PersistTestShardSet(NIceDb::TNiceDb& db, TPathId pathId);
@@ -1108,6 +1109,7 @@ public:
         TVector<TPathId> RestoreTablesToUnmark;
         TVector<ui64> IncrementalBackupIds;
         TVector<ui64> FullBackupIds;
+        TVector<TPathId> StreamingQueriesOperations;
     };
 
     void SubscribeToTempTableOwners();

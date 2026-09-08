@@ -169,6 +169,11 @@ public:
         SetNewLimit(BaseLimit, MemoryPoolPercent, overPercent);
     }
 
+    // A new base (the node total of a pool): the limit follows, the share and the threshold percent stay
+    void SetBaseLimit(ui64 baseLimit) {
+        SetNewLimit(baseLimit, MemoryPoolPercent, OverPercent);
+    }
+
     // The configured spilling percent, the node total is its one holder (see TKqpResourceManager::SetConfigValues)
     double GetOverPercent() const {
         return OverPercent;
@@ -555,6 +560,16 @@ public:
         }, tasksCount);
     }
 
+    // A new node total (the resource broker queue limit): every pool is a share of it, so the pools follow
+    void SetTotalMemoryLimit(ui64 limit) {
+        with_lock (Lock) {
+            TotalMemoryResource->SetNewLimit(limit, (double)100, TotalMemoryResource->GetOverPercent());
+            for (auto& [poolKey, poolMemory] : MemoryNamedPools) {
+                poolMemory->SetBaseLimit(TotalMemoryResource->GetLimit());
+            }
+        }
+    }
+
     // Called under Lock from the config notification handler; the constructor calls it before anything else
     // can see the resource manager
     void SetConfigValues(const NKikimrConfig::TTableServiceConfig::TResourceManager& config) {
@@ -834,10 +849,7 @@ private:
         auto& queueConfig = *ev->Get()->QueueConfig;
 
         if (queueConfig.GetLimit().GetMemory() > 0) {
-            with_lock (ResourceManager->Lock) {
-                auto& total = *ResourceManager->TotalMemoryResource;
-                total.SetNewLimit(queueConfig.GetLimit().GetMemory(), (double)100, total.GetOverPercent());
-            }
+            ResourceManager->SetTotalMemoryLimit(queueConfig.GetLimit().GetMemory());
             YDB_LOG_INFO("Total node memory for scan bytes",
                 {"queries", queueConfig.GetLimit().GetMemory()});
         }

@@ -310,6 +310,7 @@ public:
         UNIT_TEST(PoolLimitFollowsAllocatingTx);
         UNIT_TEST(PoolReleaseMirrorsAcquire);
         UNIT_TEST(SpillingPercentReconfigure);
+        UNIT_TEST(TotalLimitReconfigure);
         UNIT_TEST(TaskQuotaManagerOptional);
         UNIT_TEST(SnapshotSharingByExchanger);
         UNIT_TEST(NodesMembershipByExchanger);
@@ -339,6 +340,7 @@ public:
     void PoolLimitFollowsAllocatingTx();
     void PoolReleaseMirrorsAcquire();
     void SpillingPercentReconfigure();
+    void TotalLimitReconfigure();
     void TaskQuotaManagerOptional();
     void SnapshotSharing();
     void SnapshotSharingByExchanger();
@@ -844,6 +846,44 @@ void KqpRm::SpillingPercentReconfigure() {
         UNIT_ASSERT_VALUES_EQUAL(poolTx->GetMemoryAvailability(), -100); // the pool reads 500 - 0 - 500 = 0, the node total wins
 
         rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 100});
+    }
+
+    AssertResourceManagerStats(rm, 1000, 100);
+}
+
+// A new node total from the resource broker queue config reaches every pool: a pool is a share of the total,
+// so its limit and threshold move with it, and the running txs of the pool see it through their cookies
+void KqpRm::TotalLimitReconfigure() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    // the resource broker queue config as the resource manager receives it; the handler does not reply, so
+    // dispatch in short slices until the node total shows the new limit
+    auto setTotal = [&](ui64 memory, ui64 expectedFree) {
+        auto response = MakeHolder<TEvResourceBroker::TEvConfigResponse>();
+        response->QueueConfig.ConstructInPlace();
+        response->QueueConfig->MutableLimit()->SetMemory(memory);
+        Runtime->Send(new IEventHandle(ResourceManagers.front(), Runtime->AllocateEdgeActor(), response.Release()));
+        for (int i = 0; i < 100 && rm->GetLocalResources().Memory != expectedFree; ++i) {
+            Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, expectedFree);
+    };
+
+    {
+        auto poolTx = MakePoolTx(1, rm, /* memoryPoolPercent = */ 50); // pool limit 500, threshold at 400 used
+        UNIT_ASSERT(rm->AllocateResources(*poolTx, 1, NRm::TKqpResourcesRequest{.Memory = 450}));
+        UNIT_ASSERT_VALUES_EQUAL(poolTx->GetMemoryAvailability(), -50); // over the pool threshold
+
+        setTotal(2000, /* expectedFree = */ 2000 - 450); // pool limit 1000, threshold at 800; node threshold at 1600
+        UNIT_ASSERT_VALUES_EQUAL(poolTx->GetMemoryAvailability(), 350); // 1000 - 450 - 200, the pool followed
+
+        setTotal(1000, /* expectedFree = */ 1000 - 450); // and back
+        UNIT_ASSERT_VALUES_EQUAL(poolTx->GetMemoryAvailability(), -50);
+
+        rm->FreeResources(*poolTx, 1, NRm::TKqpResourcesRequest{.Memory = 450});
     }
 
     AssertResourceManagerStats(rm, 1000, 100);

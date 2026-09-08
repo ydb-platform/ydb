@@ -107,6 +107,9 @@ public:
                 AFL_VERIFY(pathResult.IsSuccess())("subColumnName", subColumnName)("error", pathResult.GetErrorMessage());
                 const auto path = pathResult.DetachResult();
                 if (path && path->IsColumn) {
+                    if (Chunks.contains(path->Path.ColumnIndex)) {
+                        continue;
+                    }
                     auto colBlobRange = PartialArray->GetColumnReadRange(path->Path.ColumnIndex);
                     const TBlobRange subRange = FullChunkRange.BuildSubset(colBlobRange.GetOffset(), colBlobRange.GetSize());
                     reading->AddRange(subRange);

@@ -127,11 +127,10 @@ public:
     };
 
     template<class... TOps>
-    TWritePromise SendWrite(const TTableId& tableId, ui64 shardId, TOps&&... ops) {
-        auto sender = Runtime.AllocateEdgeActor();
-        ui32 nodeIndex = sender.NodeId() - Runtime.GetNodeId(0);
-
-        auto* req = new NEvents::TDataEvents::TEvWrite(0, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+    std::unique_ptr<NEvents::TDataEvents::TEvWrite> CreateWrite(
+            const TTableId& tableId, ui64 origShardId, ui64 destShardId, TOps&&... ops) {
+        auto req = std::make_unique<NEvents::TDataEvents::TEvWrite>(
+            0, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
         req->Record.SetLockTxId(LockTxId);
         req->Record.SetLockNodeId(LockNodeId);
         req->Record.SetLockMode(LockMode);
@@ -140,15 +139,53 @@ public:
             req->Record.MutableMvccSnapshot()->SetTxId(Snapshot->TxId);
         }
 
-        (..., ops.ApplyTo(tableId, req));
+        (..., ops.ApplyTo(tableId, req.get()));
 
-        Runtime.SendToPipe(shardId, sender, req, nodeIndex);
+        if (WriterIndex) {
+            ui64 seqNum = Shard2SeqNum[origShardId] + 1;
+            for (auto& op : *req->Record.MutableOperations()) {
+                op.MutableWriteSeqNum()->SetWriterIndex(*WriterIndex);
+                op.MutableWriteSeqNum()->SetWriteSeqNum(seqNum);
+                if (destShardId != origShardId) {
+                    op.MutableWriteSeqNum()->SetDataShard(origShardId);
+                }
+                ++seqNum;
+            }
+        }
+        return req;
+    }
+
+    template<class... TOps>
+    TWritePromise SendWrite(const TTableId& tableId, ui64 shardId, TOps&&... ops) {
+        auto sender = Runtime.AllocateEdgeActor();
+        ui32 nodeIndex = sender.NodeId() - Runtime.GetNodeId(0);
+        auto req = CreateWrite(tableId, shardId, shardId, ops...);
+        Runtime.SendToPipe(shardId, sender, req.release(), nodeIndex);
+        return { *this, sender };
+    }
+
+    template<class... TOps>
+    TWritePromise SendWriteToAnotherShard(
+            const TTableId& tableId, ui64 origShardId, ui64 destShardId, TOps&&... ops) {
+        Y_ENSURE(WriterIndex);
+        auto sender = Runtime.AllocateEdgeActor();
+        ui32 nodeIndex = sender.NodeId() - Runtime.GetNodeId(0);
+        auto req = CreateWrite(tableId, origShardId, destShardId, ops...);
+        Runtime.SendToPipe(destShardId, sender, req.release(), nodeIndex);
         return { *this, sender };
     }
 
     template<class... TOps>
     TString Write(const TTableId& tableId, ui64 shardId, TOps&&... ops) {
         auto promise = SendWrite(tableId, shardId, std::forward<TOps>(ops)...);
+        return promise.NextString();
+    }
+
+    template<class... TOps>
+    TString RetryWriteToAnotherShard(
+            const TTableId& tableId, ui64 origShardId, ui64 newShardId, TOps&&... ops) {
+        auto promise = SendWriteToAnotherShard(
+            tableId, origShardId, newShardId, std::forward<TOps>(ops)...);
         return promise.NextString();
     }
 
@@ -171,7 +208,7 @@ public:
                 req->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
                 req->Record.MutableLocks()->AddSendingShards(shardId);
                 req->Record.MutableLocks()->AddReceivingShards(shardId);
-                for (const auto& lock : locks) {
+                for (auto& lock : locks) {
                     *req->Record.MutableLocks()->AddLocks() = lock;
                 }
             }
@@ -208,7 +245,7 @@ public:
             req->Record.MutableLocks()->AddSendingShards(participant);
             req->Record.MutableLocks()->AddReceivingShards(participant);
         }
-        for (const auto& lock : GetLocksForShard(shardId)) {
+        for (auto& lock : GetLocksForShard(shardId)) {
             *req->Record.MutableLocks()->AddLocks() = lock;
         }
 
@@ -235,6 +272,10 @@ public:
 
     TString Rollback(ui64 shardId);
 
+    void AckWriteSeqNum(ui64 shardId, size_t numOps) {
+        Shard2SeqNum[shardId] += numOps;
+    }
+
 private:
     THashMap<ui64, THashSet<ui64>> AncestorMappings;
 
@@ -244,6 +285,8 @@ public:
     TActorId Sender;
     ui64 LockTxId = 0;
     ui32 LockNodeId = 0;
+    std::optional<ui64> WriterIndex;
+    THashMap<ui64, ui64> Shard2SeqNum;
     NLongTxService::TLockHandle LockHandle;
     std::optional<TRowVersion> Snapshot;
     std::vector<NKikimrDataEvents::TLock> Locks;

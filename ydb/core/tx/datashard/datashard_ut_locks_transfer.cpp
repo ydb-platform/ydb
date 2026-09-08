@@ -79,28 +79,6 @@ struct TTestEnv {
         WaitTxNotification(Server, Sender, txId);
         Shards = GetTableShards(Server, Sender, "/Root/table");
     }
-
-    void PrintPartitioning() {
-        auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
-        request->Record.MutableDescribePath()->SetPath("/Root/table");
-        GetRuntime().Send(new IEventHandle(MakeTxProxyID(), Sender, request.Release()));
-        auto reply = GetRuntime().GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(Sender);
-        const auto& partitions = reply->Get()->GetRecord().GetPathDescription().GetTablePartitions();
-        Cerr << "Partitioning (" << partitions.size() << " shards):" << Endl;
-        for (const auto& partition : partitions) {
-            Cerr << "  shard " << partition.GetDatashardId() << ": end=";
-            TSerializedCellVec cellVec;
-            if (partition.HasEndOfRangeKeyPrefix() &&
-                TSerializedCellVec::TryParse(partition.GetEndOfRangeKeyPrefix(), cellVec) &&
-                !cellVec.GetCells().empty())
-            {
-                Cerr << cellVec.GetCells()[0].AsValue<ui32>();
-            } else {
-                Cerr << "+inf";
-            }
-            Cerr << Endl;
-        }
-    }
 };
 
 Y_UNIT_TEST(LocksTransferSimple) {
@@ -118,7 +96,6 @@ Y_UNIT_TEST(LocksTransferSimple) {
     auto oldShards = shards;
     env.Split(1, 15);
     env.Merge(0, 1);
-    env.PrintPartitioning();
 
     tx.MapAncestorShard(shards.at(0), oldShards.at(0));
     tx.MapAncestorShard(shards.at(0), oldShards.at(1));
@@ -146,6 +123,89 @@ Y_UNIT_TEST(LocksTransferSimple) {
         )"),
         "{ items { uint32_value: 1 } items { int32_value: 100 } }, "
         "{ items { uint32_value: 15 } items { int32_value: 1500 } }");
+}
+
+Y_UNIT_TEST(WriteSeqNums) {
+    TTestEnv env({});
+    auto [server, runtime, sender, tableId, shards] = env.GetAll();
+
+    env.Split(0, 10);
+
+    TTransactionState tx(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+    tx.WriterIndex = 123;
+
+    tx.LockRows(tableId, shards.at(0), {1});
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx.Write(tableId, shards.at(0), TWriteOperation::Upsert(1, 100)),
+        "OK");
+
+    auto shard1Actor = ResolveTablet(runtime, shards.at(1));
+    TBlockEvents<NEvents::TDataEvents::TEvWrite> blockWritesToShard1(runtime, [&](auto& ev) {
+        return ev->GetRecipientRewrite() == shard1Actor;
+    });
+
+    tx.LockRows(tableId, shards.at(1), {15});
+    auto write2Fut = tx.SendWrite(tableId, shards.at(1), TWriteOperation::Upsert(15, 1500));
+    UNIT_ASSERT_VALUES_EQUAL(
+        write2Fut.NextString(TDuration::Seconds(1)),
+        "<timeout>");
+    runtime.WaitFor("Blocked writes", [&] {
+        return !blockWritesToShard1.empty();
+    });
+    blockWritesToShard1.Stop();
+
+    auto oldShards = shards;
+    env.Merge(0, 1);
+
+    tx.MapAncestorShard(shards.at(0), oldShards.at(0));
+    tx.MapAncestorShard(shards.at(0), oldShards.at(1));
+
+    // duplicate
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx.RetryWriteToAnotherShard(
+            tableId, oldShards.at(0), shards.at(0), TWriteOperation::Upsert(1, 100)),
+        "OK");
+    tx.AckWriteSeqNum(oldShards.at(0), 1);
+    // not duplicate
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx.RetryWriteToAnotherShard(
+            tableId, oldShards.at(1), shards.at(0), TWriteOperation::Upsert(15, 1500)),
+        "OK");
+    tx.AckWriteSeqNum(oldShards.at(1), 1);
+
+    // stale request is an error now that the old shard is merged
+    blockWritesToShard1.Unblock();
+    UNIT_ASSERT_VALUES_EQUAL(
+        write2Fut.NextString(TDuration::Seconds(1)),
+        "ERROR: STATUS_WRONG_SHARD_STATE");
+
+    UNIT_ASSERT_VALUES_EQUAL(tx.LockRows(tableId, shards.at(0), {20}), "OK");
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx.Write(tableId, shards.at(0), TWriteOperation::Upsert(20, 2000)),
+        "OK");
+    tx.AckWriteSeqNum(shards.at(0), 1);
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx.ReadKey(tableId, shards.at(0), 1),
+        "1, 100\n");
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx.ReadKey(tableId, shards.at(0), 15),
+        "15, 1500\n");
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx.ReadKey(tableId, shards.at(0), 20),
+        "20, 2000\n");
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx.WriteCommit(tableId, shards.at(0)),
+        "OK");
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        KqpSimpleExec(runtime, R"(
+            SELECT key, value FROM `/Root/table` ORDER BY key;
+        )"),
+        "{ items { uint32_value: 1 } items { int32_value: 100 } }, "
+        "{ items { uint32_value: 15 } items { int32_value: 1500 } }, "
+        "{ items { uint32_value: 20 } items { int32_value: 2000 } }");
 }
 
 } // Y_UNIT_TEST_SUITE(DataShardLocksTransfer)

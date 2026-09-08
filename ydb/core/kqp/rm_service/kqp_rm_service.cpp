@@ -23,6 +23,7 @@
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
 
+#include <algorithm>
 #include <cmath>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_RESOURCE_MANAGER
@@ -78,12 +79,19 @@ namespace {
 
 static constexpr double MYEPS = 1e-9;
 
+// Percents come from the config and the resource pool settings unchecked: anything outside [0, 100] would turn
+// into a negative double and wrap on the conversion to ui64, so they are clamped here, the one place they are
+// applied. Above 100 behaves as 100 (the spilling threshold at the limit itself), below 0 as 0.
+double ClampPercent(double percent) {
+    return std::clamp(percent, 0.0, 100.0);
+}
+
 ui64 OverPercentage(ui64 limit, double percent) {
-    return static_cast<double>(limit) / 100 * (100 - percent) + MYEPS;
+    return static_cast<double>(limit) / 100 * (100 - ClampPercent(percent)) + MYEPS;
 }
 
 ui64 Percentage(ui64 limit, double percent) {
-    return static_cast<double>(limit) / 100 * percent + MYEPS;
+    return static_cast<double>(limit) / 100 * ClampPercent(percent) + MYEPS;
 }
 
 class TMemoryResource : public TAtomicRefCount<TMemoryResource> {

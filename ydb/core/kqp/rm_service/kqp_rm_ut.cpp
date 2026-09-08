@@ -835,6 +835,14 @@ void KqpRm::SpillingPercentReconfigure() {
         UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 400);
         UNIT_ASSERT_VALUES_EQUAL(poolTx->GetMemoryAvailability(), 250);
 
+        // out of range values are clamped: above 100 behaves as 100, below 0 as 0 (pressure at any usage)
+        reconfigure(120);
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 900);
+        UNIT_ASSERT_VALUES_EQUAL(poolTx->GetMemoryAvailability(), 500);
+        reconfigure(-20);
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), -100); // 1000 - 100 - 1000
+        UNIT_ASSERT_VALUES_EQUAL(poolTx->GetMemoryAvailability(), -100); // the pool reads 500 - 0 - 500 = 0, the node total wins
+
         rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 100});
     }
 

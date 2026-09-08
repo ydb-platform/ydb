@@ -115,7 +115,7 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
     }
 
     ui64 RequiredMemoryForBuild(int nTuples) const {
-        return Table_.RequiredMemoryForBuild(nTuples);
+        return Table_.RequiredMemoryForBuild(nTuples) + (TrackUsed_ ? static_cast<ui64>(nTuples) : 0);
     }
 
     void Lookup(TSingleTuple row, std::invocable<TSingleTuple> auto consume) {

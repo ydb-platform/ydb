@@ -55,8 +55,8 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
         ResourceManager->FreeResources(*Tx, TaskId, NRm::TKqpResourcesRequest{.Memory = extraSize});
     }
 
-    bool IsReasonableToUseSpilling() const override {
-        return Tx->IsReasonableToStartSpilling();
+    i64 GetExtraMemoryAvailability() const override {
+        return Tx->GetMemoryAvailability();
     }
 
     TString MemoryConsumptionDetails() const override {
@@ -95,13 +95,19 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
         });
     }
 
-    bool AllocateQuota(ui64 memorySize) override {
+    bool AllocateQuota(ui64 memorySize, bool isOptional) override {
         i64 quota = AvailableQuota.fetch_sub(memorySize);
 
         if (static_cast<i64>(memorySize) > quota) {
             ui64 memoryRequired = memorySize - quota;
             memoryRequired += AllocationStep - 1;
             memoryRequired &= ~(AllocationStep - 1);
+
+            if (isOptional && Tx->GetMemoryAvailability() < static_cast<i64>(memoryRequired)) {
+                // refuse optional requests in advance, no resource manager round trip
+                AvailableQuota.fetch_add(memorySize);
+                return false;
+            }
 
             auto result = ResourceManager->AllocateResources(*Tx, 0, NRm::TKqpResourcesRequest{.Memory = memoryRequired});
             if (result) {
@@ -124,10 +130,12 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
         return true;
     }
 
-    // Node level memory pressure signal, see NRm::TTxState::IsReasonableToStartSpilling.
-    // Channels do not spill on it, but propagate it as back pressure, see TInputDescriptor::MemoryPressure
-    bool IsReasonableToUseSpilling() const override {
-        return Tx->IsReasonableToStartSpilling();
+    // Node level memory availability of the tx (see NRm::TTxState::GetMemoryAvailability) plus the locally
+    // prepaid quota. Channels do not spill on a negative value, but propagate it as back pressure,
+    // see TInputDescriptor::MemoryPressure. A negative node value is never masked by the prepaid quota.
+    i64 GetMemoryAvailability() const override {
+        const i64 tx = Tx->GetMemoryAvailability();
+        return tx < 0 ? tx : NYql::NDq::AddMemoryAvailability(AvailableQuota.load(), tx);
     }
 
     void FreeQuota(ui64 memorySize) override {

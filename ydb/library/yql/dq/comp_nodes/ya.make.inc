@@ -3,6 +3,7 @@ INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/computation/header.ya.make.inc)
 PEERDIR(
     ydb/library/actors/core
     ydb/library/yql/dq/comp_nodes/hash_join_utils
+    ydb/library/yql/dq/comp_nodes/operator_memory_quota
     ydb/library/yql/dq/runtime/streaming
     yql/essentials/minikql/comp_nodes
     yql/essentials/minikql/computation

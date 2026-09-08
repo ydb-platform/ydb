@@ -289,11 +289,16 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
         MaxMemorySize = Limit;
     }
 
-    bool AllocateQuota(ui64 memorySize) override {
+    bool AllocateQuota(ui64 memorySize, bool isOptional) override {
         if (Quota + memorySize > Limit) {
             ui64 delta = Quota + memorySize - Limit;
             ui64 alignMask = Step - 1;
             delta = (delta + alignMask) & ~alignMask;
+
+            // optional growth must not push the parent over its target: refuse in advance, do not ask
+            if (isOptional && GetExtraMemoryAvailability() < static_cast<i64>(delta)) {
+                return false;
+            }
 
             if (!AllocateExtraQuota(delta)) {
                 return false;
@@ -309,8 +314,10 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
         return true;
     }
 
-    bool IsReasonableToUseSpilling() const override {
-        return false;
+    i64 GetMemoryAvailability() const override {
+        // a negative parent value (over target) must not be masked by the locally prepaid leftover
+        const i64 extra = GetExtraMemoryAvailability();
+        return extra < 0 ? extra : AddMemoryAvailability(static_cast<i64>(Limit - Quota), extra);
     }
 
     void FreeQuota(ui64 memorySize) override {
@@ -344,29 +351,17 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
     virtual void FreeExtraQuota(ui64) {
     }
 
+    // How much more the parent could grant (same sign semantics as GetMemoryAvailability).
+    // Default 0 mirrors AllocateExtraQuota() == false: never over target, nothing beyond Limit.
+    virtual i64 GetExtraMemoryAvailability() const {
+        return 0;
+    }
+
     ui64 Limit;     // current consumption (Quota + leftover from allocation chunk)
     ui64 Guarantee; // do not free memory below this value even if Quota == 0
     ui64 Step;      // allocation chunk size
     ui64 Quota;     // current value
     ui64 MaxMemorySize; // usage peak for statistics
-};
-
-struct TChainedQuotaManager : public TGuaranteeQuotaManager {
-
-    TChainedQuotaManager(IMemoryQuotaManager::TPtr extraQuotaManager, ui64 limit, ui64 guarantee, ui64 step = 1_MB, ui64 quota = 0)
-    : TGuaranteeQuotaManager(limit, guarantee, step, quota)
-    , ExtraQuotaManager(extraQuotaManager) {
-    }
-
-    bool AllocateExtraQuota(ui64 memorySize) override {
-        return ExtraQuotaManager->AllocateQuota(memorySize);
-    }
-
-    void FreeExtraQuota(ui64 memorySize) override {
-        ExtraQuotaManager->FreeQuota(memorySize);
-    }
-
-    IMemoryQuotaManager::TPtr ExtraQuotaManager;
 };
 
 struct TComputeMemoryLimits {
@@ -384,6 +379,10 @@ struct TComputeMemoryLimits {
 
     IMemoryQuotaManager::TPtr MemoryQuotaManager;
     IMemoryQuotaManager::TPtr ChannelQuotaManager;
+
+    // Bind the compute actor memory quota to the memory hungry operators (DqHashCombine, DqHashAggregate,
+    // DqBlockHashJoin), see IDqOperatorMemoryQuota. Off: operators use the allocator heuristics only.
+    bool EnableOperatorMemoryQuota = false;
 };
 
 using TTaskRunnerFactory = std::function<

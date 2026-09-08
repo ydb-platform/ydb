@@ -58,7 +58,7 @@ struct TEvTestPrivate {
 // TChannelQuotaManager does with VERIFY) and to leave anything allocated at the end of the test.
 struct TTestQuotaManager : public IMemoryQuotaManager {
 
-    bool AllocateQuota(ui64 memorySize) override {
+    bool AllocateQuota(ui64 memorySize, bool /* isOptional */) override {
         if (Quota.load() + static_cast<i64>(memorySize) > static_cast<i64>(Limit)) {
             return false;
         }
@@ -82,9 +82,10 @@ struct TTestQuotaManager : public IMemoryQuotaManager {
         return Limit;
     }
 
-    // stands for the node level memory pressure signal, see NRm::TTxState::IsReasonableToStartSpilling
-    bool IsReasonableToUseSpilling() const override {
-        return MemoryPressure.load();
+    // stands for the node level memory availability, see NRm::TTxState::GetMemoryAvailability:
+    // negative under memory pressure, otherwise what is left of the limit
+    i64 GetMemoryAvailability() const override {
+        return MemoryPressure.load() ? -1 : static_cast<i64>(Limit) - Quota.load();
     }
 
     TString MemoryConsumptionDetails() const override {

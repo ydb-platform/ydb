@@ -12,6 +12,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/local_executor/local_executor.h>
+#include <util/generic/size_literals.h>
 
 #ifndef NDEBUG
 const bool DETAILED_LOG = false;
@@ -197,6 +198,10 @@ public:
         return MakeIntrusive<NRm::TTxState>(rm, txId, TInstant::Now(), "", (double)100, "", false);
     }
 
+    TIntrusivePtr<NRm::TTxState> MakePoolTx(ui64 txId, std::shared_ptr<NRm::IKqpResourceManager> rm, double memoryPoolPercent) {
+        return MakeIntrusive<NRm::TTxState>(rm, txId, TInstant::Now(), "pool", memoryPoolPercent, "db", false);
+    }
+
     void AssertResourceManagerStats(
             std::shared_ptr<NRm::IKqpResourceManager> rm, ui64 scanQueryMemory, ui32 executionUnits) {
         Y_UNUSED(executionUnits);
@@ -279,6 +284,9 @@ public:
         UNIT_TEST(Reduce);
         UNIT_TEST(ConcurrentTasks);
         UNIT_TEST(ConcurrentChannels);
+        UNIT_TEST(MemoryAvailability);
+        UNIT_TEST(PoolMemoryAvailability);
+        UNIT_TEST(TaskQuotaManagerOptional);
         UNIT_TEST(SnapshotSharingByExchanger);
         UNIT_TEST(NodesMembershipByExchanger);
         UNIT_TEST(DisonnectNodes);
@@ -294,6 +302,9 @@ public:
     void Reduce();
     void ConcurrentTasks();
     void ConcurrentChannels();
+    void MemoryAvailability();
+    void PoolMemoryAvailability();
+    void TaskQuotaManagerOptional();
     void SnapshotSharing();
     void SnapshotSharingByExchanger();
     void NodesMembership();
@@ -547,7 +558,7 @@ void KqpRm::ConcurrentChannels() {
                 auto count = 0u;
                 for (auto n = 0u; n < 20u; n++) {
                     for (auto j = 0u; j < 20u; j++) {
-                        if (!qm->AllocateQuota(j * 10u)) {
+                        if (!qm->AllocateQuota(j * 10u, /* isOptional = */ false)) {
                             failedAllocations++;
                             Sleep(TDuration::MilliSeconds(j * 10));
                             break;
@@ -567,16 +578,22 @@ void KqpRm::ConcurrentChannels() {
 
             UNIT_ASSERT_GT(failedAllocations.load(), 0);
 
-            // the channel quota manager exposes the node level memory pressure signal of its tx,
-            // DQ channels 2.0 propagate it to the senders as back pressure. The load above drives
-            // allocations to failure, so the cookie may well be set already - toggle it explicitly.
+            // the channel quota manager exposes the node level memory availability of its tx,
+            // DQ channels 2.0 propagate a negative value to the senders as back pressure. The load above
+            // drives allocations to failure, so the cookie may well be negative already - set it explicitly.
             UNIT_ASSERT(tx->TotalMemoryCookie);
-            const bool reached = tx->TotalMemoryCookie->SpillingPercentReached.load();
-            tx->TotalMemoryCookie->SpillingPercentReached.store(true);
-            UNIT_ASSERT(qm->IsReasonableToUseSpilling());
-            tx->TotalMemoryCookie->SpillingPercentReached.store(false);
-            UNIT_ASSERT_VALUES_EQUAL(qm->IsReasonableToUseSpilling(), tx->IsReasonableToStartSpilling());
-            tx->TotalMemoryCookie->SpillingPercentReached.store(reached);
+            const i64 saved = tx->TotalMemoryCookie->MemoryAvailability.load();
+            tx->TotalMemoryCookie->MemoryAvailability.store(0);
+            const i64 base = qm->GetMemoryAvailability(); // the locally prepaid channel quota
+            tx->TotalMemoryCookie->MemoryAvailability.store(500);
+            UNIT_ASSERT_VALUES_EQUAL(qm->GetMemoryAvailability(), base + 500);
+            UNIT_ASSERT(!tx->IsReasonableToStartSpilling());
+            // a negative node value dominates: prepaid quota must not mask node level memory pressure
+            tx->TotalMemoryCookie->MemoryAvailability.store(-1000000);
+            UNIT_ASSERT_VALUES_EQUAL(qm->GetMemoryAvailability(), -1000000);
+            UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), -1000000);
+            UNIT_ASSERT(tx->IsReasonableToStartSpilling());
+            tx->TotalMemoryCookie->MemoryAvailability.store(saved);
         }
 
         AssertResourceManagerStats(rm, 1000, 100);
@@ -584,6 +601,122 @@ void KqpRm::ConcurrentChannels() {
     }
 
     AssertResourceBrokerSensors(0, 0, 0, std::nullopt, 0);
+}
+
+// QueryMemoryLimit = 1000 with the default SpillingPercent = 80: the spilling threshold is at 800 used,
+// the availability is 800 - used and turns negative past it (the old SpillingPercentReached signal)
+void KqpRm::MemoryAvailability() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    {
+        auto tx = MakeTx(1, rm);
+        // nothing allocated yet: no cookie, nothing is known about the node
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), std::numeric_limits<i64>::max());
+        UNIT_ASSERT(!tx->IsReasonableToStartSpilling());
+
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 100}));
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 700);
+        UNIT_ASSERT(!tx->IsReasonableToStartSpilling());
+
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 700}));
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 0); // at the threshold: not pressure yet
+        UNIT_ASSERT(!tx->IsReasonableToStartSpilling());
+
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 1}));
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), -1);
+        UNIT_ASSERT(tx->IsReasonableToStartSpilling());
+
+        rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 801});
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 800);
+        UNIT_ASSERT(!tx->IsReasonableToStartSpilling());
+    }
+
+    AssertResourceManagerStats(rm, 1000, 100);
+}
+
+// A tx with a resource pool sees the minimum over the node total and its pool: the pool limit is
+// MemoryPoolPercent of the node limit, the spilling threshold applies to each of them
+void KqpRm::PoolMemoryAvailability() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    {
+        auto tx = MakePoolTx(1, rm, /* memoryPoolPercent = */ 50);
+        // pool limit 500, pool threshold at 400 used; node threshold at 800 used
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 100}));
+        UNIT_ASSERT(tx->PoolMemoryCookie);
+        UNIT_ASSERT_VALUES_EQUAL(tx->TotalMemoryCookie->MemoryAvailability.load(), 700);
+        UNIT_ASSERT_VALUES_EQUAL(tx->PoolMemoryCookie->MemoryAvailability.load(), 300);
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 300);
+
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 350}));
+        UNIT_ASSERT_VALUES_EQUAL(tx->TotalMemoryCookie->MemoryAvailability.load(), 350);
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), -50); // the pool is over its threshold
+        UNIT_ASSERT(tx->IsReasonableToStartSpilling());
+
+        rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 350});
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 300);
+        UNIT_ASSERT(!tx->IsReasonableToStartSpilling());
+    }
+
+    AssertResourceManagerStats(rm, 1000, 100);
+}
+
+// The quota managers refuse optional requests in advance when the tx availability cannot cover the aligned
+// step (no resource manager round trip), their availability follows the sign of the tx value, and an optional
+// request that fits the availability goes to the resource manager as usual
+void KqpRm::TaskQuotaManagerOptional() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    {
+        auto tx = MakeTx(1, rm);
+        const ui64 taskId = 1;
+        const ui64 initialLimit = 100;
+        // the node service prepays the initial limit as external memory before the task starts
+        UNIT_ASSERT(rm->AllocateResources(*tx, taskId, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = initialLimit}));
+        UNIT_ASSERT(rm->AllocateResources(*tx, taskId, NRm::TKqpResourcesRequest{.Memory = 100}));
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 700);
+        const auto statsBefore = rm->GetLocalResources();
+
+        // task level manager: 1 MB allocation step, the test resource broker cannot grant that much
+        auto qm = CreateTaskQuotaManager(rm, tx, taskId, initialLimit);
+        UNIT_ASSERT(qm->AllocateQuota(50, /* isOptional = */ true)); // fits in the prepaid limit
+        UNIT_ASSERT_VALUES_EQUAL(qm->GetMemoryAvailability(), 700 + 50); // tx value plus the local leftover
+        UNIT_ASSERT(!qm->AllocateQuota(1500, /* isOptional = */ true)); // refused in advance
+        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsBefore.Memory); // no round trip
+        // a negative tx value dominates the local leftover
+        tx->TotalMemoryCookie->MemoryAvailability.store(-7);
+        UNIT_ASSERT_VALUES_EQUAL(qm->GetMemoryAvailability(), -7);
+        tx->TotalMemoryCookie->MemoryAvailability.store(700);
+        qm->FreeQuota(50);
+        qm.reset();
+
+        // channel level manager: 16 byte allocation step, the granted path is observable
+        auto cm = CreateChannelQuotaManager(rm, tx, 0, 16);
+        tx->TotalMemoryCookie->MemoryAvailability.store(500);
+        UNIT_ASSERT(!cm->AllocateQuota(1500, /* isOptional = */ true)); // 1504 > 500: refused in advance
+        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsBefore.Memory);
+        UNIT_ASSERT_VALUES_EQUAL(cm->GetMemoryAvailability(), 500); // nothing prepaid here
+        tx->TotalMemoryCookie->MemoryAvailability.store(700);
+        UNIT_ASSERT(cm->AllocateQuota(200, /* isOptional = */ true)); // 208 <= 700: granted by the resource manager
+        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsBefore.Memory - 208);
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 700 - 208); // the cookie follows the allocation
+        cm->FreeQuota(200);
+        cm.reset();
+        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsBefore.Memory);
+
+        rm->FreeResources(*tx, taskId, NRm::TKqpResourcesRequest{.Memory = 100});
+    }
+
+    AssertResourceManagerStats(rm, 1000, 100);
 }
 
 void KqpRm::SnapshotSharing() {

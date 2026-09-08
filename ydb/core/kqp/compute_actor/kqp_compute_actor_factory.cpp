@@ -31,6 +31,7 @@ class TKqpCaFactory : public IKqpNodeComputeActorFactory {
     std::atomic<ui64> MinMemAllocSize = 1_MB;
     std::atomic<ui64> MinMemFreeSize = 32_MB;
     std::atomic<ui64> ChannelChunkSizeLimit = 48_MB;
+    std::atomic<bool> EnableOperatorMemoryQuota = false;
 
 public:
     TKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
@@ -65,6 +66,7 @@ public:
         ChannelChunkSizeLimit.store(config.GetChannelChunkSizeLimit());
         MinMemAllocSize.store(config.GetMinMemAllocSize());
         MinMemFreeSize.store(config.GetMinMemFreeSize());
+        EnableOperatorMemoryQuota.store(config.GetEnableOperatorMemoryQuota());
     }
 
     bool GetVerboseMemoryLimitException() override {
@@ -83,6 +85,7 @@ public:
         memoryLimits.MkqlHeavyProgramMemoryLimit = MkqlHeavyProgramMemoryLimit.load();
         memoryLimits.MinMemAllocSize = MinMemAllocSize.load();
         memoryLimits.MinMemFreeSize = MinMemFreeSize.load();
+        memoryLimits.EnableOperatorMemoryQuota = EnableOperatorMemoryQuota.load();
         memoryLimits.ArrayBufferMinFillPercentage = args.Task->GetArrayBufferMinFillPercentage();
         if (args.Task->HasBufferPageAllocSize()) {
             memoryLimits.BufferPageAllocSize = args.Task->GetBufferPageAllocSize();

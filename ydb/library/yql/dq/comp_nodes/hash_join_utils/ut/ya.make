@@ -21,6 +21,7 @@ SRCS(
     hash_table_ut.cpp
     packed_tuple_ut.cpp
     deep_copy_ut.cpp
+    offloaded_memory_guard_ut.cpp
 )
 
 PEERDIR(

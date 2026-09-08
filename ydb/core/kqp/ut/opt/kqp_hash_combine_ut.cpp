@@ -1,5 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
+#include <util/folder/dirut.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -7,6 +9,99 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 namespace {
+    // Low compute memory limits + spilling, the resource manager spilling threshold and the operator
+    // memory quota (RFC dq_memory_quota_20) set as requested
+    TKikimrSettings CreateSpillingSettings(double spillingPercent, bool enableOperatorMemoryQuota)
+    {
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+
+        auto* ts = settings.AppConfig.MutableTableServiceConfig();
+        ts->SetEnableOlapSink(true);
+        ts->SetEnableQueryServiceSpilling(true);
+
+        auto* rm = ts->MutableResourceManager();
+        rm->SetMkqlLightProgramMemoryLimit(100);
+        rm->SetMkqlHeavyProgramMemoryLimit(300);
+        rm->SetSpillingPercent(spillingPercent);
+        rm->SetEnableOperatorMemoryQuota(enableOperatorMemoryQuota);
+
+        auto* spilling = ts->MutableSpillingServiceConfig()->MutableLocalFileConfig();
+        spilling->SetRoot("./spilling/");
+        MakeDirIfNotExist("./spilling");
+
+        return settings;
+    }
+
+    void RunAggregateSpillingCase(double spillingPercent, bool expectSpilling, bool enableOperatorMemoryQuota)
+    {
+        // the planner spreads the final aggregation over many tasks (96 on a large dev box, fewer on CI); every
+        // task needs a hash table of more than 1024 keys (LowerFixedRowCount) before the operator considers
+        // spilling, so the group count is sized for the largest task count
+        constexpr i64 rowCount = 600000;
+        constexpr i64 groupCount = 200000;
+        constexpr i64 rowsPerBatch = 30000;
+
+        TKikimrRunner kikimr(CreateSpillingSettings(spillingPercent, enableOperatorMemoryQuota));
+        auto queryClient = kikimr.GetQueryClient();
+
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    CREATE TABLE `/Root/aggregatable` (
+                        id Int64 NOT NULL,
+                        group_key Int64 NOT NULL,
+                        data Int64 NOT NULL,
+                        PRIMARY KEY (id)
+                    )
+                    WITH (STORE = COLUMN);
+                )",  NYdb::NQuery::TTxControl::NoTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+        for (i64 start = 0; start < rowCount; start += rowsPerBatch) {
+            auto status = queryClient.ExecuteQuery(Sprintf(R"(
+                UPSERT INTO `/Root/aggregatable`
+                SELECT id, Unwrap(id %% %ld) AS group_key, id AS data
+                FROM AS_TABLE(ListMap(ListFromRange(%ldL, %ldL), ($i) -> (<|id: $i|>)));
+            )", groupCount, start, start + rowsPerBatch), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        TString groupQuery = R"(
+            PRAGMA TablePathPrefix = "/Root";
+            PRAGMA ydb.UseDqHashCombine = "true";
+            PRAGMA ydb.UseDqHashAggregate = "true";
+            PRAGMA ydb.OptUseFinalizeByKey = "true";
+            PRAGMA ydb.OptEnableOlapPushdown = "false";
+
+            SELECT T.group_key AS group_key, SUM(T.data) AS data_sum
+            FROM `aggregatable` AS T
+            GROUP BY group_key
+        )";
+
+        auto status = queryClient.ExecuteQuery(groupQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        auto resultSet = status.GetResultSets()[0];
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), groupCount);
+
+        // group g holds ids g, g + groupCount, ... : rowCount / groupCount values
+        constexpr i64 valuesPerGroup = rowCount / groupCount;
+        TResultSetParser rp(resultSet);
+        while (rp.TryNextRow()) {
+            const i64 groupKey = rp.ColumnParser("group_key").GetInt64();
+            const i64 dataSum = rp.ColumnParser("data_sum").GetInt64();
+            UNIT_ASSERT_VALUES_EQUAL(dataSum, valuesPerGroup * groupKey + groupCount * valuesPerGroup * (valuesPerGroup - 1) / 2);
+        }
+
+        TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+        if (expectSpilling) {
+            UNIT_ASSERT(counters.ComputeSpilling.WriteBlobs->Val() > 0);
+            UNIT_ASSERT(counters.ComputeSpilling.ReadBlobs->Val() > 0);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(counters.ComputeSpilling.WriteBlobs->Val(), 0);
+        }
+    }
+
     TKikimrSettings CreateSettings()
     {
         TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
@@ -123,6 +218,19 @@ Y_UNIT_TEST_SUITE(KqpHashCombineReplacement) {
             UNIT_ASSERT_C(hashCombinesExpected == CountDqCombines(ast),
                 TStringBuilder() << "AST should contain " << hashCombinesExpected << " DqPhyHashCombine instances; actual AST: " << groupQuery << Endl << ast);
         }
+    }
+
+    Y_UNIT_TEST(DqHashAggregateSpillingUnderLowLimits) {
+        RunAggregateSpillingCase(0.01, /* expectSpilling = */ true, /* enableOperatorMemoryQuota = */ false);
+    }
+
+    Y_UNIT_TEST(DqHashAggregateSpillingUnderLowLimitsWithOperatorMemoryQuota) {
+        // the negative memory availability of the resource manager drives the aggregation to spill
+        RunAggregateSpillingCase(0.01, /* expectSpilling = */ true, /* enableOperatorMemoryQuota = */ true);
+    }
+
+    Y_UNIT_TEST(DqHashAggregateNoSpillingAtHighPercentWithOperatorMemoryQuota) {
+        RunAggregateSpillingCase(100, /* expectSpilling = */ false, /* enableOperatorMemoryQuota = */ true);
     }
 
     Y_UNIT_TEST(DqHashCombineBlockTest) {

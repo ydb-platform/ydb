@@ -64,9 +64,11 @@ message TTableServiceConfig {
         optional uint64 KqpLevelCacheMaxSizeBytes = 32 [default = 0];
         optional uint64 KqpLevelCacheIncreaseBatchSizeBytes = 33 [default = 33554432];
 
-        // Bind the compute actor memory quota to DqHashCombine / DqHashAggregate / DqBlockHashJoin
-        // (RFC dq_memory_quota_20): optional memory requests before growth, numeric memory availability
-        // instead of the allocator yellow zone, explicit give-back. Off: allocator heuristics only.
+        // Bind the compute actor memory quota to the memory hungry operators (RFC dq_memory_quota_20), so that
+        // DqHashCombine / DqHashAggregate / DqBlockHashJoin can request memory before growing, read a numeric
+        // memory availability instead of the allocator yellow zone and give memory back explicitly.
+        // Off: the operators use the allocator heuristics only. Takes effect once the operators consult the
+        // bound quota (the operator side of the RFC); until then the flag only binds the quota.
         optional bool EnableOperatorMemoryQuota = 34 [default = false];
     }
 

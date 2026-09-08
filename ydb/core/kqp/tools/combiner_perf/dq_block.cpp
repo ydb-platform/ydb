@@ -447,25 +447,6 @@ TDqBlockData ReadDqBlockDataFromParquet(const TRunParams& params)
     return data;
 }
 
-ui64 ResolveShuffleSeed(TRunParams& params)
-{
-    constexpr TStringBuf name = "shuffle";
-    constexpr TStringBuf prefix = "shuffle:";
-    const TStringBuf specification = params.DqBlockGenerator;
-    ui64 seed;
-    if (specification == name) {
-        seed = params.RandomSeed.value_or(0);
-    } else {
-        Y_ENSURE(specification.StartsWith(prefix),
-            "Unsupported dq-block generator: " << specification);
-        const auto seedText = specification.SubStr(prefix.size());
-        Y_ENSURE(!seedText.empty() && TryFromString(seedText, seed),
-            "Invalid shuffle generator seed: " << seedText);
-    }
-    params.DqBlockGenerator = TStringBuilder() << name << ':' << seed;
-    return seed;
-}
-
 TDqBlockData GenerateShuffledUint32Data(TRunParams& params)
 {
     Y_ENSURE(params.DqBlockRowLimit <= std::numeric_limits<ui32>::max(),
@@ -473,11 +454,11 @@ TDqBlockData GenerateShuffledUint32Data(TRunParams& params)
 
     std::vector<ui32> numbers(params.DqBlockRowLimit);
     std::iota(numbers.begin(), numbers.end(), 0);
-    const ui64 seed = ResolveShuffleSeed(params);
+    const ui64 seed = params.RandomSeed.value_or(0);
     std::mt19937_64 random(seed);
     std::shuffle(numbers.begin(), numbers.end(), random);
 
-    constexpr size_t maxBlockRows = 30'000;
+    constexpr size_t maxBlockRows = 10'000;
     const size_t blockRows = std::min(params.BlockSize, maxBlockRows);
     TDqBlockData data;
     data.Columns.push_back({"i", EDataSlot::Uint32, false});

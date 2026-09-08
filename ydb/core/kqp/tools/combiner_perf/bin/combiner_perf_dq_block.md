@@ -22,11 +22,7 @@ Requirements were:
 
 ## Commits
 
-- `3723137c0b2e8457efeb3cbbfb41605d40699f5b` (`3723137c0b2`) — `Implement the -t parquet mode in combiner_perf for running perf tests over static datasets`
-- `f5357d6d96ac24a891acf29c4020907cf48c260b` (`f5357d6d96a`) — `explicit ast for combiner_perf lambdas in parquet mode`
-- Current branch: `combiner-perf-ast`
-
-These are the commit hashes after rebasing onto `e0b13ea3ee69b9496ecbdade5d3aa24a1d7a8fc9` (`e0b13ea3ee6`, `origin/main`).
+Relevant commits are tagged with the `[combiner-perf-dq-blocks]` string in the commit message and only affect the `ydb/core/kqp/tools/combiner_perf` path
 
 ## Implemented changes
 
@@ -40,7 +36,7 @@ These are the commit hashes after rebasing onto `e0b13ea3ee69b9496ecbdade5d3aa24
 New CLI options:
 
 - `--dq-block-file PATH` — input file, currently in Parquet format; mutually exclusive with `--dq-block-generator`.
-- `--dq-block-generator shuffle[:SEED]` — generate a shuffled `Uint32` column named `i`; the optional numeric seed makes the shuffle reproducible. Without it, the existing `--rand-seed` value is used (and defaults to the current time).
+- `--dq-block-generator shuffle` — generate a shuffled `Uint32` column named `i`; the existing `--rand-seed` value is used to make the shuffle reproducible (and defaults to the current time).
 - `--dq-block-row-limit ROWS` — maximum rows to preload from a file; required generated row count for the shuffle source.
 - `--dq-block-columns NAME,...` — selected file columns, preserving input order. This is required for file input and defaults to `i` for the generator.
 - `--dq-block-keys NAME,...` — key columns for synthesized aggregation; every key must be in `--dq-block-columns`.

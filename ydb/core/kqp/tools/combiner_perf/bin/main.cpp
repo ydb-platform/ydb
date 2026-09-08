@@ -478,7 +478,7 @@ int main(int argc, const char* argv[])
         .StoreResult(&runParams.DqBlockFile)
         .Help("Input file for the dq-block test (currently Parquet)");
     options.AddLongOption("dq-block-generator")
-        .RequiredArgument("shuffle[:SEED]")
+        .RequiredArgument("shuffle")
         .StoreResult(&runParams.DqBlockGenerator)
         .Help("Generated dq-block input; shuffle produces a shuffled Uint32 column named i");
     options.AddLongOption("dq-block-row-limit")

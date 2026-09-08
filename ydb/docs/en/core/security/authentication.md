@@ -27,7 +27,7 @@ Anonymous authentication should only be used for evaluation purposes for local d
 
 {% endnote %}
 
-The `enforce_user_token_requirement` flag in the [authentication mode settings](../reference/configuration/auth_config.md#security-auth) of {{ ydb-short-name }} is responsible for disabling anonymous authentication.
+The `enforce_user_token_requirement` flag in the [authentication mode settings](../reference/configuration/security_config.md#security-auth) of {{ ydb-short-name }} is responsible for disabling anonymous authentication.
 
 Depending on the authentication mode settings, the actual authentication may not be anonymous:
 

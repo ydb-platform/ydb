@@ -1,3 +1,4 @@
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/tablet/resource_broker_impl.h>
@@ -306,6 +307,7 @@ public:
         UNIT_TEST(MemoryAvailability);
         UNIT_TEST(PoolMemoryAvailability);
         UNIT_TEST(PoolMemoryAvailabilityAfterRelease);
+        UNIT_TEST(SpillingPercentReconfigure);
         UNIT_TEST(TaskQuotaManagerOptional);
         UNIT_TEST(SnapshotSharingByExchanger);
         UNIT_TEST(NodesMembershipByExchanger);
@@ -332,6 +334,7 @@ public:
     void MemoryAvailability();
     void PoolMemoryAvailability();
     void PoolMemoryAvailabilityAfterRelease();
+    void SpillingPercentReconfigure();
     void TaskQuotaManagerOptional();
     void SnapshotSharing();
     void SnapshotSharingByExchanger();
@@ -730,6 +733,45 @@ void KqpRm::PoolMemoryAvailabilityAfterRelease() {
         rm->FreeResources(*tx2, 1, NRm::TKqpResourcesRequest{.Memory = 10});
         rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 450});
         UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 400);
+    }
+
+    AssertResourceManagerStats(rm, 1000, 100);
+}
+
+// A runtime SpillingPercent change moves the spilling threshold of the node total and of every pool at once,
+// the limits stay as they are, and the running transactions see it through their cookies
+void KqpRm::SpillingPercentReconfigure() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    auto reconfigure = [&](double spillingPercent) {
+        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto* config = request->Record.MutableConfig()->MutableTableServiceConfig()->MutableResourceManager();
+        config->CopyFrom(MakeKqpResourceManagerConfig());
+        config->SetSpillingPercent(spillingPercent);
+        const TActorId edge = Runtime->AllocateEdgeActor();
+        Runtime->Send(new IEventHandle(ResourceManagers.front(), edge, request.Release()));
+        Runtime->GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edge);
+    };
+
+    {
+        auto tx = MakeTx(1, rm); // node limit 1000, threshold at 800 used
+        auto poolTx = MakePoolTx(2, rm, /* memoryPoolPercent = */ 50); // pool limit 500, threshold at 400 used
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 100}));
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 700);
+        UNIT_ASSERT_VALUES_EQUAL(poolTx->GetMemoryAvailability(), 400);
+
+        reconfigure(100); // the thresholds move up to the limits
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 900);
+        UNIT_ASSERT_VALUES_EQUAL(poolTx->GetMemoryAvailability(), 500);
+
+        reconfigure(50); // and down to half of them
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 400);
+        UNIT_ASSERT_VALUES_EQUAL(poolTx->GetMemoryAvailability(), 250);
+
+        rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 100});
     }
 
     AssertResourceManagerStats(rm, 1000, 100);

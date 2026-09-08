@@ -143,8 +143,9 @@ public:
     }
 
     void SetNewLimit(ui64 baseLimit, double memoryPoolPercent, double overPercent) {
-        if (abs(memoryPoolPercent - MemoryPoolPercent) < MYEPS && baseLimit == BaseLimit)
+        if (baseLimit == BaseLimit && abs(memoryPoolPercent - MemoryPoolPercent) < MYEPS && abs(overPercent - OverPercent) < MYEPS) {
             return;
+        }
 
         BaseLimit = baseLimit;
         MemoryPoolPercent = memoryPoolPercent;
@@ -152,7 +153,12 @@ public:
         SetActualLimits();
     }
 
+    // A runtime SpillingPercent change: the spilling threshold moves, the limit stays
     void SetOverPercent(double overPercent) {
+        if (abs(overPercent - OverPercent) < MYEPS) {
+            return;
+        }
+
         OverPercent = overPercent;
         SetActualLimits();
     }
@@ -537,6 +543,8 @@ public:
         }, tasksCount);
     }
 
+    // Called under Lock from the config notification handler; the constructor calls it before anything else
+    // can see the resource manager
     void SetConfigValues(const NKikimrConfig::TTableServiceConfig::TResourceManager& config) {
         MkqlHeavyProgramMemoryLimit.store(config.GetMkqlHeavyProgramMemoryLimit());
         MkqlLightProgramMemoryLimit.store(config.GetMkqlLightProgramMemoryLimit());
@@ -545,7 +553,12 @@ public:
         MaxTotalChannelBuffersSize.store(config.GetMaxTotalChannelBuffersSize());
         QueryMemoryLimit.store(config.GetQueryMemoryLimit());
         SpillingPercent.store(config.GetSpillingPercent());
+        // the spilling thresholds of the node total and of every pool follow the new percent right away,
+        // the cookies of the running transactions with them
         TotalMemoryResource->SetOverPercent(config.GetSpillingPercent());
+        for (auto& [poolKey, poolMemory] : MemoryNamedPools) {
+            poolMemory->SetOverPercent(config.GetSpillingPercent());
+        }
         MaxNonParallelTopStageExecutionLimit.store(config.GetMaxNonParallelTopStageExecutionLimit());
         MaxNonParallelTasksExecutionLimit.store(config.GetMaxNonParallelTasksExecutionLimit());
         PreferLocalDatacenterExecution.store(config.GetPreferLocalDatacenterExecution());

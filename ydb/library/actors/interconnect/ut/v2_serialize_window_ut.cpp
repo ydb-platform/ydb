@@ -111,6 +111,26 @@ Y_UNIT_TEST_SUITE(InterconnectV2SerializeWindow) {
         UNIT_ASSERT_VALUES_EQUAL(window.GetSize(), MaxWindow);
     }
 
+    Y_UNIT_TEST(EndpointBatchWaitsForBothStreams) {
+        TSerializeWindow window(MinWindow);
+        window.BeginBatch(MinWindow, 100, 200);
+
+        window.CompleteWrite(100, 100, 100, 0, MinWindow, MaxWindow);
+        UNIT_ASSERT_VALUES_EQUAL(window.GetSize(), MinWindow);
+
+        window.CompleteWrite(200, 200, 100, 200, MinWindow, MaxWindow);
+        UNIT_ASSERT_VALUES_EQUAL(window.GetSize(), 2 * MinWindow);
+    }
+
+    Y_UNIT_TEST(EndpointBatchRemembersShortWrite) {
+        TSerializeWindow window(MinWindow);
+        window.BeginBatch(MinWindow, 100, 200);
+
+        window.CompleteWrite(40, 100, 40, 0, MinWindow, MaxWindow);
+        window.CompleteWrite(60, 60, 100, 200, MinWindow, MaxWindow);
+        UNIT_ASSERT_VALUES_EQUAL(window.GetSize(), MinWindow);
+    }
+
     Y_UNIT_TEST(FourKiBPayloadsUseGrowingBatches) {
         for (bool preserialize : {false, true}) {
             for (bool xdcFirst : {false, true}) {

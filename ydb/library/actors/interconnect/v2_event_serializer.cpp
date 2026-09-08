@@ -188,6 +188,7 @@ namespace NActors {
         CumulativeCommittedXdc += numXdcBytes;
         Y_ABORT_UNLESS(CumulativeCommittedMain <= CumulativeProducedMain);
         Y_ABORT_UNLESS(CumulativeCommittedXdc <= CumulativeProducedXdc);
+
         const ui64 timestamp = GetCycleCountFast();
         while (!RefcountItems.empty()
                 && RefcountItems.front().MainEndOffset <= CumulativeCommittedMain
@@ -204,6 +205,13 @@ namespace NActors {
                 buffers->push_back(std::move(front.Buffer));
             }
             RefcountItems.pop_front();
+        }
+    }
+
+    void TEventSerializer::IssueMainBytes(ui64 mainEndOffset) {
+        while (!MainXdcCheckpoints.empty() && MainXdcCheckpoints.front().MainEndOffset <= mainEndOffset) {
+            XdcAllowedToSend = MainXdcCheckpoints.front().XdcEndOffset;
+            MainXdcCheckpoints.pop_front();
         }
     }
 
@@ -588,6 +596,14 @@ namespace NActors {
                     }
                     break;
                 }
+            }
+
+            if (header && header->GetType() == TChunkHeader::kXdcPush) {
+                Y_ABORT_UNLESS(CumulativeProducedMain);
+                Y_ABORT_UNLESS(CumulativeProducedXdc);
+                Y_ABORT_UNLESS(MainXdcCheckpoints.empty()
+                    || MainXdcCheckpoints.back().MainEndOffset < CumulativeProducedMain);
+                MainXdcCheckpoints.emplace_back(CumulativeProducedMain, CumulativeProducedXdc);
             }
 
             if (numBytesProduced == producedOnEntry && queue.SerializeStage == stageOnEntry) {

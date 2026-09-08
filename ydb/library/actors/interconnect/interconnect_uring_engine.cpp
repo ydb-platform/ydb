@@ -174,6 +174,10 @@ namespace NActors {
             size_t XdcUnsentBytes = 0;
             size_t BytesToWriteLastTime = 0;
             size_t XdcBytesToWriteLastTime = 0;
+            // Absolute end of the main byte range in the currently submitted writev. This is a
+            // speculative frontier: XDC may be issued through its corresponding PUSH checkpoints
+            // before the main CQE arrives.
+            ui64 MainWriteEnd = 0;
             int ReadPendingRingIdx = -1;
             int XdcReadPendingRingIdx = -1;
             ui32 PreferredRingIdx = 0;
@@ -349,28 +353,36 @@ namespace NActors {
             }
 
             static bool PrepareIovecFromSpans(std::vector<TContiguousSpan>& spans, iovec *iov, size_t *iovLen,
-                    size_t *bytesToWrite) {
+                    size_t *bytesToWrite, size_t maxBytes = Max<size_t>()) {
                 *iovLen = 0;
                 *bytesToWrite = 0;
                 for (const TContiguousSpan& span : spans) {
-                    if (*iovLen >= MaxSpansPerWrite) {
+                    if (*iovLen >= MaxSpansPerWrite || *bytesToWrite >= maxBytes) {
+                        break;
+                    }
+                    const size_t size = Min(span.size(), maxBytes - *bytesToWrite);
+                    if (!size) {
                         break;
                     }
                     iov[(*iovLen)++] = {
                         .iov_base = const_cast<char*>(span.data()),
-                        .iov_len = span.size(),
+                        .iov_len = size,
                     };
-                    *bytesToWrite += span.size();
+                    *bytesToWrite += size;
                 }
                 return *iovLen != 0;
             }
 
             bool PrepareIovec() {
-                return PrepareIovecFromSpans(OutgoingSpans, Iov, &IovLen, &BytesToWriteLastTime);
+                const bool res = PrepareIovecFromSpans(OutgoingSpans, Iov, &IovLen, &BytesToWriteLastTime);
+                MainWriteEnd = BytesSent + BytesToWriteLastTime;
+                Serializer.IssueMainBytes(MainWriteEnd);
+                return res;
             }
 
-            bool PrepareXdcIovec() {
-                return PrepareIovecFromSpans(XdcOutgoingSpans, XdcIov, &XdcIovLen, &XdcBytesToWriteLastTime);
+            bool PrepareXdcIovec(size_t maxBytes = Max<size_t>()) {
+                return PrepareIovecFromSpans(XdcOutgoingSpans, XdcIov, &XdcIovLen, &XdcBytesToWriteLastTime,
+                    maxBytes);
             }
 
             static void DropFrontSpans(std::vector<TContiguousSpan>& spans, size_t num) {
@@ -404,13 +416,13 @@ namespace NActors {
 
                 Y_ABORT_UNLESS(num <= unsent, "num# %zu unsent# %zu xdc# %d", num, unsent, int(xdc));
                 unsent -= num;
-                SerializeWindow.CompleteWrite(num, bytesToWrite, !WritePending && !XdcWritePending,
-                    minSerializeWindowSize, maxSerializeWindowSize);
-
                 size_t numEvents = events->size();
                 size_t numBuffers = buffers->size();
                 size_t bytes = 0;
                 Serializer.CommitProducedBytes(xdc ? 0 : num, xdc ? num : 0, eventToWireTime, events, buffers);
+                SerializeWindow.CompleteWrite(num, bytesToWrite,
+                    Serializer.GetCumulativeCommittedMain(), Serializer.GetCumulativeCommittedXdc(),
+                    minSerializeWindowSize, maxSerializeWindowSize);
                 for (size_t i = numEvents, count = events->size(); i < count; ++i) {
                     bytes += (*events)[i]->CalculateSerializedSizeCached();
                 }
@@ -1804,14 +1816,17 @@ namespace NActors {
                 if (session.Terminated || session.MigrateTargetShard != ShardIdx) {
                     return;
                 }
-                // Produce only when neither socket has a write in flight. Producing XDC payload while
-                // the corresponding PUSH commands are stuck behind an in-flight main write fills the
-                // XDC TCP buffer with bytes the receiver cannot place (no destinations yet) and stalls
-                // under small socket buffers. Out-of-band system traffic is exempt: pings are what keep
-                // dead-peer detection quiet, so they must never queue behind payload on either socket.
+                // Serialization is bounded by the aggregate window, so it can continue while either
+                // socket has a write in flight. XDC submission below is separately limited by the main
+                // write's speculative coverage frontier. Out-of-band system traffic is exempt from the
+                // window: pings are what keep dead-peer detection quiet.
                 const bool xdcWriteBusy = session.XdcSocket && session.XdcWritePending;
                 const bool idle = !session.WritePending && !xdcWriteBusy;
-                if (session.Serializer.IsTrafficPending() && (idle || session.Serializer.HasOutOfBandTraffic())) {
+                const bool windowHasRoom = session.UnsentBytes + session.XdcUnsentBytes
+                    < session.SerializeWindow.GetSize();
+                if (session.Serializer.IsTrafficPending()
+                        && (!session.XdcSocket ? (idle || session.Serializer.HasOutOfBandTraffic())
+                            : (windowHasRoom || session.Serializer.HasOutOfBandTraffic()))) {
                     ACTIVITY(&SerializeTotalTime) {
                         session.Serialize(MinWriteBufferSize, MaxWriteBufferSize);
                         const ui64 serializeEventTime = session.Serializer.GetSerializeEventTime();
@@ -1821,8 +1836,11 @@ namespace NActors {
                         *BytesAliased += session.Serializer.GetBytesAliased();
                     }
                 }
-                if (idle) {
-                    session.SerializeWindow.BeginBatch(session.UnsentBytes + session.XdcUnsentBytes);
+                if (!session.SerializeWindow.IsBatchActive()
+                        && session.UnsentBytes + session.XdcUnsentBytes) {
+                    session.SerializeWindow.BeginBatch(session.UnsentBytes + session.XdcUnsentBytes,
+                        session.Serializer.GetCumulativeProducedMain(),
+                        session.Serializer.GetCumulativeProducedXdc());
                 }
                 if (!session.WritePending && session.PrepareIovec()) {
                     io_uring_sqe *sqe = GetSQE(&session, kOpWrite, session.PreferredRingIdx);
@@ -1836,7 +1854,11 @@ namespace NActors {
                     }
                     session.WritePending = true;
                 }
-                if (!session.XdcWritePending && session.XdcSocket && session.PrepareXdcIovec()) {
+                const ui64 xdcLimit = session.Serializer.GetXdcAllowedToSend();
+                const size_t xdcBytesAllowed = xdcLimit > session.BytesSentXdc
+                    ? static_cast<size_t>(xdcLimit - session.BytesSentXdc)
+                    : 0;
+                if (!session.XdcWritePending && session.XdcSocket && session.PrepareXdcIovec(xdcBytesAllowed)) {
                     io_uring_sqe *sqe = GetSQE(&session, kOpXdcWrite, session.PreferredRingIdx);
                     Y_ABORT_UNLESS(sqe);
                     const int fdOrIndex = session.XdcFixedFileIndex >= 0

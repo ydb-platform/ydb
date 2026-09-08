@@ -52,6 +52,7 @@ namespace NKikimr::NBlobDepot {
             } else if (raw) {
                 if (hasBlock && !block.CanSetNewBlock(BlockedGeneration, IssuerGuid)) {
                     response.SetStatus(NKikimrProto::ALREADY);
+                    response.SetActualGeneration(block.BlockedGeneration);
                 } else {
                     block.BlockedGeneration = BlockedGeneration;
                     block.IssuerGuid = IssuerGuid;

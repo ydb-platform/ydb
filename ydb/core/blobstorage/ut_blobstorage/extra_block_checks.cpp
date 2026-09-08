@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(ExtraBlockChecks) {
         result = block(10, 2);
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
         UNIT_ASSERT(!result->Get()->IsTabletStorageInfoVersionObsolete);
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->ActualGeneration, 10);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->ActualGeneration, 11);
 
         // The rejected version bump must not mutate either record.
         result = block(12, 1);

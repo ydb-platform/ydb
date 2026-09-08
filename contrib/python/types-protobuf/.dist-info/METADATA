@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: types-protobuf
-Version: 7.35.1.20260823
+Version: 7.35.1.20260824
 Summary: Typing stubs for protobuf
 License-Expression: Apache-2.0
 Project-URL: Homepage, https://github.com/python/typeshed

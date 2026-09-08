@@ -19,7 +19,8 @@ namespace NYql::NDq {
                 args.TypeEnv,
                 args.HolderFactory,
                 args.MaxKeysInRequest,
-                args.IsMultiMatches
+                args.IsMultiMatches,
+                args.StatsLevel
             );
         };
 

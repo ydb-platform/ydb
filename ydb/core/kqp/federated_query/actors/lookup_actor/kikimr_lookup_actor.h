@@ -17,7 +17,8 @@ namespace NYql::NDq {
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         const size_t maxKeysInRequest,
-        const bool isMultiMatches
+        const bool isMultiMatches,
+        TCollectStatsLevel statsLevel
     );
 
 } // namespace NYql::NDq

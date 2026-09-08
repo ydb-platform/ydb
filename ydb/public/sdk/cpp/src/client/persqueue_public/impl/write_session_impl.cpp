@@ -428,7 +428,9 @@ void TWriteSessionImpl::DoConnect(const TDuration& delay, const std::string& end
         auto clientContext = subclient->CreateContext();
         if (!clientContext) {
             AbortImpl();
-            // Grpc and WriteSession is closing right now.
+            // Driver is stopping. Do not keep ClientContext: children of an
+            // existing context can still be created after TDriver::Stop, which
+            // leaves CQ Contexts_ non-empty and deadlocks Stop(true).
             return;
         }
         auto prevClientContext = std::exchange(ClientContext, clientContext);
@@ -443,14 +445,24 @@ void TWriteSessionImpl::DoConnect(const TDuration& delay, const std::string& end
             connectDelayContext = ClientContext->CreateContext();
         connectTimeoutContext = ClientContext->CreateContext();
 
+        const bool missingDelayContext = delay && !connectDelayContext;
+        if (!connectContext || !connectTimeoutContext || missingDelayContext) {
+            Cancel(connectContext);
+            Cancel(connectDelayContext);
+            Cancel(connectTimeoutContext);
+            connectContext.reset();
+            connectDelayContext.reset();
+            connectTimeoutContext.reset();
+            AbortImpl();
+            return;
+        }
+
         // Previous operations contexts.
 
         // Set new context
         prevConnectContext = std::exchange(ConnectContext, connectContext);
         prevConnectTimeoutContext = std::exchange(ConnectTimeoutContext, connectTimeoutContext);
         prevConnectDelayContext = std::exchange(ConnectDelayContext, connectDelayContext);
-        Y_ASSERT(ConnectContext);
-        Y_ASSERT(ConnectTimeoutContext);
 
         if (Processor) {
             Processor->Cancel();
@@ -1438,7 +1450,9 @@ void TWriteSessionImpl::AbortImpl() {
         Cancel(ConnectDelayContext);
         if (Processor)
             Processor->Cancel();
-
+        ConnectContext.reset();
+        ConnectTimeoutContext.reset();
+        ConnectDelayContext.reset();
         Cancel(ClientContext);
         ClientContext.reset(); // removes context from contexts set from underlying gRPC-client.
     }

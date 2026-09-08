@@ -112,6 +112,7 @@ struct TPartitionFamily {
 
     bool IsCommon() const;
     bool IsLonely() const;
+    bool HasSpecialSession() const;
     bool HasActivePartitions() const;
 
     // Releases all partitions of the family.
@@ -164,6 +165,7 @@ private:
     std::unique_ptr<TEvPersQueue::TEvReleasePartition> MakeEvReleasePartition(ui32 partitionId) const;
     std::unique_ptr<TEvPersQueue::TEvLockPartition> MakeEvLockPartition(ui32 partitionId, ui32 step) const;
     TString LogPrefix() const;
+    void AssertInvariants() const;
 };
 
 struct TPartitionFamilyComparator {

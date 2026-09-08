@@ -252,7 +252,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 if (auto rlContext = this->ExtractRlContext(ev)) {
                     SetRlContext(*rlContext);
                     if (IsQuotaRequired()) {
-                        const ui64 ru = NBilling::CalcRu(0, NBilling::DELETE_BASE_COST, 0, false, false);
+                        const ui64 ru = NBilling::CalcRu(0, NBilling::DELETE_BASE_COST, 0);
                         Y_ABORT_UNLESS(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, TlsActivationContext->AsActorContext()));
                         return;
                     }

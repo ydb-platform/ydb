@@ -149,6 +149,9 @@ public:
         std::function<void(const NProto::TError& error)>;
     using TTakeCopyRangeBudgetHandler =
         std::function<TDuration(ui64 byteCount)>;
+    using TGatherSafeBarrierForEraseHandler =
+        std::function<std::optional<TPBufferKey>()>;
+    using TBarrierEraseFromPBufferHandler = std::function<void(ui64 lsn)>;
 
     TExecutorPtr Executor;
     TOracleMock Oracle;
@@ -166,6 +169,9 @@ public:
     TOnAddHostSucceededHandler OnAddHostSucceededHandler;
     TOnAddHostFailedHandler OnAddHostFailedHandler;
     TTakeCopyRangeBudgetHandler TakeCopyRangeBudgetHandler;
+    // Optional: unset means "no constraint" / no-op, as before.
+    TGatherSafeBarrierForEraseHandler GatherSafeBarrierForEraseHandler;
+    TBarrierEraseFromPBufferHandler BarrierEraseFromPBufferHandler;
 
     TVector<TVChunkWeakPtr> VChunks;
 

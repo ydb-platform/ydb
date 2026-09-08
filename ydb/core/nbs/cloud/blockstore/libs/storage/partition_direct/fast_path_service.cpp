@@ -741,6 +741,14 @@ void TFastPathService::FinishPBufferCleanup()
         return;
     }
 
+    // The PBuffer-side barrier drops every record of a previous generation
+    // regardless of the lsn bound. Records restored from the previous life
+    // stay live until flushed and erased, so no barrier goes out while any
+    // of them is still inflight.
+    if (globalMin->Generation != DiskDescription.Generation) {
+        return;
+    }
+
     LastSafeBarrier.store(globalMin->Lsn);
 
     const ui64 cleanupBound = globalMin->Lsn - 1;

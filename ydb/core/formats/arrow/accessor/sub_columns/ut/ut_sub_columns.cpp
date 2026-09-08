@@ -18,6 +18,9 @@
 #include <regex>
 #include <utility>
 
+using NKikimr::NArrow::NAccessor::NSubColumns::NTesting::BuildArrayWithStoredPaths;
+using NKikimr::NArrow::NAccessor::NSubColumns::NTesting::BuildStats;
+using NKikimr::NArrow::NAccessor::NSubColumns::NTesting::CreateTrivialArrayAccessor;
 using NKikimr::NArrow::NAccessor::NSubColumns::NTesting::PrintBinaryJsons;
 
 Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
@@ -46,14 +49,6 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         UNIT_ASSERT_C(pathInfoResult.IsSuccess(), pathInfoResult.GetErrorMessage());
         UNIT_ASSERT_C(!pathInfoResult.DetachResult(), path);
         UNIT_ASSERT_C(!stats.GetKeyOrPrefixIndexOptional(NSubColumns::ToSubcolumnName(path)), path);
-    }
-
-    NSubColumns::TDictStats BuildStats(const std::initializer_list<std::pair<TStringBuf, NSubColumns::EValueType>>& columns) {
-        auto builder = NSubColumns::TDictStats::MakeBuilder();
-        for (const auto& [name, valueType] : columns) {
-            builder.Add(TString(name), 1, 1, IChunkedArray::EType::Array, valueType);
-        }
-        return builder.Finish();
     }
 
     Y_UNIT_TEST(EmptyOthers){
@@ -380,40 +375,6 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         for (const auto& path : { "$.a.b.[2]", "$.b.", "$.c[]" }) {
             UNIT_ASSERT(stats.ResolvePath(path).IsFail());
         }
-    }
-
-    std::shared_ptr<TTrivialArray> CreateTrivialArrayAccessor(TStringBuf data) {
-        auto binaryJsonResult = NBinaryJson::SerializeToBinaryJson(data);
-        UNIT_ASSERT(std::holds_alternative<NBinaryJson::TBinaryJson>(binaryJsonResult));
-
-        auto binaryJson = std::get<NBinaryJson::TBinaryJson>(binaryJsonResult);
-        return std::make_shared<TTrivialArray>(NKikimr::NArrow::NAccessor::TTrivialArray::BuildArrayFromScalar(
-            std::make_shared<arrow::BinaryScalar>(std::make_shared<arrow::Buffer>((const ui8*)binaryJson.data(), binaryJson.size()), arrow::binary())));
-    }
-
-    std::shared_ptr<TSubColumnsArray> BuildArrayWithStoredPaths(const std::initializer_list<std::pair<TStringBuf, TStringBuf>>& columns,
-        const TStringBuf otherName, const TStringBuf otherValue) {
-        auto columnsBuilder = NSubColumns::TDictStats::MakeBuilder();
-        for (const auto& [name, _] : columns) {
-            columnsBuilder.Add(TString(name), 1, 1, IChunkedArray::EType::Array, NSubColumns::EValueType::BinaryJson);
-        }
-        auto columnsStats = columnsBuilder.Finish();
-        auto columnsRecords = std::make_shared<TGeneralContainer>(1);
-        ui32 index = 0;
-        for (const auto& [_, value] : columns) {
-            columnsRecords->AddField(columnsStats.GetField(index++), CreateTrivialArrayAccessor(value)).Validate();
-        }
-
-        auto othersStats = BuildStats({ { otherName, NSubColumns::EValueType::BinaryJson } });
-        const auto binaryJsonResult = NBinaryJson::SerializeToBinaryJson(otherValue);
-        UNIT_ASSERT(std::holds_alternative<NBinaryJson::TBinaryJson>(binaryJsonResult));
-        const auto& binaryJson = std::get<NBinaryJson::TBinaryJson>(binaryJsonResult);
-        auto othersBuilder = NSubColumns::TOthersData::MakeMergedBuilder();
-        othersBuilder->Add(0, 0, std::string_view(binaryJson.data(), binaryJson.size()));
-        auto others = othersBuilder->Finish(NSubColumns::TOthersData::TFinishContext(othersStats));
-
-        return std::make_shared<TSubColumnsArray>(
-            NSubColumns::TColumnsData(columnsStats, columnsRecords), std::move(others), arrow::binary(), 1, NSubColumns::TSettings());
     }
 
     void CheckMostSpecificStoredPath(const std::initializer_list<std::pair<TStringBuf, TStringBuf>>& columns, const TStringBuf otherName,

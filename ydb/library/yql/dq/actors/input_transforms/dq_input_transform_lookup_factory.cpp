@@ -5,10 +5,13 @@
 
 namespace NYql::NDq {
 
-void RegisterDqInputTransformLookupActorFactory(NDq::TDqAsyncIoFactory& factory) {
+void RegisterDqInputTransformLookupActorFactory(NDq::TDqAsyncIoFactory& factory, NMonitoring::TDynamicCounterPtr counters) {
     factory.RegisterInputTransform<NYql::NDqProto::TDqInputTransformLookupSettings>(
         "StreamLookupInputTransform",
-        [factory = &factory](NDqProto::TDqInputTransformLookupSettings&& settings, IDqAsyncIoFactory::TInputTransformArguments&& args) {
+        [factory = &factory, counters](NDqProto::TDqInputTransformLookupSettings&& settings, IDqAsyncIoFactory::TInputTransformArguments&& args) {
+            if (counters) {
+                args.TaskCounters = counters->GetSubgroup("tx_id", TStringBuilder() << args.TxId);
+            }
             return CreateInputTransformStreamLookup(
                 factory,
                 std::move(settings),

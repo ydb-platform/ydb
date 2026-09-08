@@ -1,4 +1,5 @@
 #pragma once
+#include "viewer_events.h"
 #include "json_pipe_req.h"
 #include "log.h"
 #include "viewer.h"

@@ -1,11 +1,14 @@
 #pragma once
 #include "json_handlers.h"
+#include <ydb/core/viewer/protos/viewer_events.pb.h>
 #include "json_pipe_req.h"
 #include "log.h"
 #include "query_autocomplete_helper.h"
 #include "viewer_request.h"
 
 #include <library/cpp/json/json_reader.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 namespace NKikimr::NViewer {
 
@@ -192,7 +195,7 @@ public:
     void ParseCacheResult() {
         NSchemeCache::TSchemeCacheNavigate& navigate = *CacheResult->Get()->Request;
         for (auto& entry : navigate.ResultSet) {
-            if (entry.Status == TSchemeCacheNavigate::EStatus::Ok) {
+            if (entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
                 if (entry.Path.size() >= DatabasePath.size()) {
                     entry.Path.erase(entry.Path.begin(), entry.Path.begin() + DatabasePath.size());
                 }

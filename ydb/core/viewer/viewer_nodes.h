@@ -1,9 +1,13 @@
 #pragma once
+#include "viewer_events.h"
+#include "viewer_flags.h"
 #include "json_pipe_req.h"
 #include "log.h"
 #include "viewer.h"
 #include "viewer_helper.h"
 #include "wb_group.h"
+#include <ydb/core/base/hive.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 namespace NKikimr::NViewer {
 
@@ -1889,7 +1893,7 @@ public:
         return TString(db);
     }
 
-    void CheckAndFillStoragePoolFilter(const TSchemeCacheNavigate::TEntry& entry) {
+    void CheckAndFillStoragePoolFilter(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) {
         if ((Type == EType::Storage || Type == EType::Static) && FilterStorageStage == EFilterStorageStage::Pools && FilterStoragePools.empty()) {
             auto domainDescription = entry.DomainDescription;
             if (domainDescription) {
@@ -1979,7 +1983,7 @@ public:
         if (DatabaseNavigateResponse && DatabaseNavigateResponse->IsDone() && !DatabaseNavigateProcessed) { // database hive and subdomain key
             if (DatabaseNavigateResponse->IsOk()) {
                 auto* ev = DatabaseNavigateResponse->Get();
-                TSchemeCacheNavigate::TEntry& entry(ev->Request->ResultSet.front());
+                NSchemeCache::TSchemeCacheNavigate::TEntry& entry(ev->Request->ResultSet.front());
                 if (entry.DomainInfo) {
                     if (entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
                         TPathId resourceDomainKey(entry.DomainInfo->ResourcesDomainKey);
@@ -2013,7 +2017,7 @@ public:
             if (ResourceNavigateResponse->IsOk()) {
                 auto* ev = ResourceNavigateResponse->Get();
                 if (ev->Request->ResultSet.size() == 1 && ev->Request->ResultSet.begin()->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-                    TSchemeCacheNavigate::TEntry& entry(ev->Request->ResultSet.front());
+                    NSchemeCache::TSchemeCacheNavigate::TEntry& entry(ev->Request->ResultSet.front());
                     auto path = CanonizePath(entry.Path);
                     SharedDatabase = path;
                     CheckAndFillStoragePoolFilter(entry);
@@ -2047,7 +2051,7 @@ public:
             if (PathNavigateResponse->IsOk()) {
                 auto* ev = PathNavigateResponse->Get();
                 if (ev->Request->ResultSet.size() == 1 && ev->Request->ResultSet.begin()->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-                    TSchemeCacheNavigate::TEntry& entry(ev->Request->ResultSet.front());
+                    NSchemeCache::TSchemeCacheNavigate::TEntry& entry(ev->Request->ResultSet.front());
                     if (entry.Self) {
                         FilterPathId = TPathId(entry.Self->Info.GetSchemeshardId(), entry.Self->Info.GetPathId());
                         AskHiveAboutPaths = true;

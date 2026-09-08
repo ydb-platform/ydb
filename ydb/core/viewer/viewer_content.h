@@ -1,4 +1,5 @@
 #include "browse.h"
+#include <ydb/core/viewer/protos/viewer.pb.h>
 #include "json_handlers.h"
 #include "viewer.h"
 

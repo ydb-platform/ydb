@@ -1,7 +1,9 @@
 #pragma once
 #include "json_handlers.h"
+#include <ydb/core/viewer/protos/viewer.pb.h>
 #include "json_pipe_req.h"
 #include "wb_aggregate.h"
+#include <ydb/core/cms/console/console.h>
 
 namespace NKikimr::NViewer {
 

@@ -3,8 +3,12 @@
 #include "json_pipe_req.h"
 #include "log.h"
 #include "viewer.h"
+#include <ydb/core/base/hive.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 
 namespace NKikimr::NViewer {
 
@@ -187,7 +191,7 @@ public:
         }
         if (DatabaseNavigateResponse && DatabaseNavigateResponse->IsOk()) {
             CollectStoragePoolsAllowed(DatabaseNavigateResponse->GetRef());
-            TSchemeCacheNavigate::TEntry& entry(DatabaseNavigateResponse->Get()->Request->ResultSet.front());
+            NSchemeCache::TSchemeCacheNavigate::TEntry& entry(DatabaseNavigateResponse->Get()->Request->ResultSet.front());
             if (entry.Self && entry.DomainInfo) {
                 const auto ownerId = entry.DomainInfo->DomainKey.OwnerId;
                 const auto localPathId = entry.DomainInfo->DomainKey.LocalPathId;

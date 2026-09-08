@@ -1,9 +1,14 @@
 #pragma once
+#include "viewer_events.h"
+#include "viewer_flags.h"
 #include "json_handlers.h"
 #include "json_pipe_req.h"
 #include "viewer.h"
 #include "viewer_helper.h"
 #include "viewer_tabletinfo.h"
+#include <ydb/core/base/hive.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/grpc_services/db_metadata_cache.h>
 #include <ydb/core/util/proto_duration.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/public/api/protos/ydb_bridge_common.pb.h>

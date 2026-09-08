@@ -1,4 +1,5 @@
 #include "ut/ut_utils.h"
+#include "viewer_events.h"
 #include <ydb/core/mon/ut_utils/ut_utils.h>
 
 #include <library/cpp/testing/unittest/registar.h>

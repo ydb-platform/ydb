@@ -1,0 +1,125 @@
+syntax = "proto3";
+
+import "ydb/core/graph/protos/graph.proto";
+import "ydb/core/protos/node_whiteboard.proto";
+import "ydb/core/protos/kqp.proto";
+
+package NKikimrViewer;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TNodeLocation {
+    repeated uint32 NodeId = 1;
+}
+
+message THttpProxyRequest {
+    string Uri = 1;
+    bytes Content = 2;
+    bytes UserToken = 3;
+}
+
+message TSchemeCacheRequest {
+    string Database = 1;
+    repeated string Tables = 2;
+    string Prefix = 3;
+    uint32 Limit = 4;
+}
+
+message TEvViewerRequest {
+    TNodeLocation Location = 1;
+    uint32 Timeout = 2; // ms
+    string MergeFields = 3;
+    oneof Request {
+        NKikimrWhiteboard.TEvTabletStateRequest TabletRequest = 11;
+        NKikimrWhiteboard.TEvSystemStateRequest SystemRequest = 12;
+        NKikimrWhiteboard.TEvVDiskStateRequest VDiskRequest = 16;
+        NKikimrWhiteboard.TEvPDiskStateRequest PDiskRequest = 17;
+        NKikimrWhiteboard.TEvBSGroupStateRequest BSGroupRequest = 18;
+        NKikimrWhiteboard.TEvNodeStateRequest NodeRequest = 19;
+        THttpProxyRequest QueryRequest = 13;
+        THttpProxyRequest RenderRequest = 14;
+        TSchemeCacheRequest AutocompleteRequest = 15;
+        bytes Reserved20 = 20;
+        bytes Reserved21 = 21;
+        bytes Reserved22 = 22;
+        bytes Reserved23 = 23;
+    }
+}
+
+message TEvViewerResponse {
+    TNodeLocation LocationResponded = 2;
+    oneof Response {
+        NKikimrWhiteboard.TEvTabletStateResponse TabletResponse = 11;
+        NKikimrWhiteboard.TEvSystemStateResponse SystemResponse = 12;
+        NKikimrWhiteboard.TEvVDiskStateResponse VDiskResponse = 16;
+        NKikimrWhiteboard.TEvPDiskStateResponse PDiskResponse = 17;
+        NKikimrWhiteboard.TEvBSGroupStateResponse BSGroupResponse = 18;
+        NKikimrWhiteboard.TEvNodeStateResponse NodeResponse = 19;
+        NKikimrKqp.TEvQueryResponse QueryResponse = 13;
+        NKikimrGraph.TEvMetricsResult RenderResponse = 14;
+        TQueryAutocomplete AutocompleteResponse = 15;
+        bytes Reserved20 = 20;
+        bytes Reserved21 = 21;
+        bytes Reserved22 = 22;
+        bytes Reserved23 = 23;
+    }
+}
+
+enum EAutocompleteType {
+    unknown = 0;
+    dir = 1;
+    table = 2;
+    pers_queue_group = 3;
+    sub_domain = 4;
+    rtmr_volume = 5;
+    block_store_volume = 6;
+    kesus = 7;
+    solomon_volume = 8;
+    table_index = 9;
+    ext_sub_domain = 10;
+    file_store = 11;
+    column_store = 12;
+    column_table = 13;
+    cdc_stream = 14;
+    sequence = 15;
+    replication = 16;
+    blob_depot = 17;
+    external_table = 18;
+    external_data_source = 19;
+    view = 20;
+    column = 21;
+    index = 22;
+    sys_view = 23;
+    streaming_query = 27;
+}
+
+message TQueryAutocomplete {
+    enum EDefaultKind {
+        None = 0;
+        Sequence = 1;
+        Literal = 2;
+        Reserved3 = 3;
+        Reserved4 = 4;
+        Reserved5 = 5;
+        Reserved6 = 6;
+        Reserved7 = 7;
+        Reserved8 = 8;
+        Reserved9 = 9;
+    }
+    message TResult {
+        message TEntity {
+            string Name = 1;
+            EAutocompleteType Type = 2;
+            string Parent = 3;
+            optional uint32 PKIndex = 4;
+            optional bool NotNull = 5;
+            EDefaultKind Default = 6;
+        }
+        optional uint32 Total = 1;
+        repeated TEntity Entities = 2;
+    }
+
+    bool Success = 1;
+    TResult Result = 2;
+    repeated string Error = 3;
+    uint32 Version = 4;
+}

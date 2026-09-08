@@ -1,15 +1,25 @@
 #pragma once
-#include <ydb/core/driver_lib/run/config.h>
+
 #include <ydb/core/tablet/defs.h>
 #include <ydb/core/viewer/json/json.h>
-#include <ydb/core/viewer/protos/viewer.pb.h>
-#include <ydb/core/sys_view/common/events.h>
+#include <ydb/core/viewer/protos/viewer_base.pb.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/defs.h>
-#include <ydb/library/actors/core/event.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 #include <util/string/strip.h>
+
+namespace NKikimr {
+
+struct TKikimrRunConfig;
+
+}
+
+namespace NKikimrBlobStorage {
+
+class TConfigResponse;
+
+}
 
 namespace NKikimr::NViewer {
 
@@ -19,66 +29,6 @@ inline TActorId MakeViewerID(ui32 node) {
     char x[12] = {'v','i','e','w','e','r'};
     return TActorId(node, TStringBuf(x, 12));
 }
-
-struct TEvViewer {
-    enum EEv {
-        // requests
-        EvViewerRequest = EventSpaceBegin(TKikimrEvents::ES_VIEWER),
-        EvViewerResponse,
-        EvUpdateSharedCacheTabletRequest,
-        EvUpdateSharedCacheTabletResponse,
-        EvEnd
-    };
-
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_VIEWER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_VIEWER)");
-
-    struct TEvViewerRequest : TEventPB<TEvViewerRequest, NKikimrViewer::TEvViewerRequest, EvViewerRequest> {
-        TEvViewerRequest() = default;
-    };
-
-    struct TEvViewerResponse : TEventPB<TEvViewerResponse, NKikimrViewer::TEvViewerResponse, EvViewerResponse> {
-        TEvViewerResponse() = default;
-    };
-
-    struct TEvUpdateSharedCacheTabletRequest : TEventLocal<TEvUpdateSharedCacheTabletRequest, EvUpdateSharedCacheTabletRequest> {
-        TTabletId TabletId;
-        std::unique_ptr<IEventBase> Request;
-
-        TEvUpdateSharedCacheTabletRequest(TTabletId tabletId, std::unique_ptr<IEventBase> request)
-            : TabletId(tabletId)
-            , Request(std::move(request))
-        {}
-    };
-
-    struct TEvUpdateSharedCacheTabletResponse : TEventLocal<TEvUpdateSharedCacheTabletResponse, EvUpdateSharedCacheTabletResponse> {
-        std::variant<
-            std::shared_ptr<NSysView::TEvSysView::TEvGetGroupsResponse>,
-            std::shared_ptr<NSysView::TEvSysView::TEvGetStoragePoolsResponse>,
-            std::shared_ptr<NSysView::TEvSysView::TEvGetVSlotsResponse>,
-            std::shared_ptr<NSysView::TEvSysView::TEvGetPDisksResponse>,
-            std::shared_ptr<NSysView::TEvSysView::TEvGetStorageStatsResponse>> Response;
-
-        TEvUpdateSharedCacheTabletResponse(std::shared_ptr<NSysView::TEvSysView::TEvGetGroupsResponse> response)
-            : Response(std::move(response))
-        {}
-
-        TEvUpdateSharedCacheTabletResponse(std::shared_ptr<NSysView::TEvSysView::TEvGetStoragePoolsResponse> response)
-            : Response(std::move(response))
-        {}
-
-        TEvUpdateSharedCacheTabletResponse(std::shared_ptr<NSysView::TEvSysView::TEvGetVSlotsResponse> response)
-            : Response(std::move(response))
-        {}
-
-        TEvUpdateSharedCacheTabletResponse(std::shared_ptr<NSysView::TEvSysView::TEvGetPDisksResponse> response)
-            : Response(std::move(response))
-        {}
-
-        TEvUpdateSharedCacheTabletResponse(std::shared_ptr<NSysView::TEvSysView::TEvGetStorageStatsResponse> response)
-            : Response(std::move(response))
-        {}
-    };
-};
 
 struct TRequestSettings {
     ui64 ChangedSince = 0;
@@ -332,7 +282,6 @@ public:
     virtual NJson::TJsonValue GetCapabilities() = 0;
     virtual int GetCapabilityVersion(const TString& name) = 0;
 
-    void UpdateSharedCacheData(std::unique_ptr<TEvViewer::TEvUpdateSharedCacheTabletResponse> ev);
     void DeleteOldSharedCacheData();
     std::shared_ptr<TViewerSharedCacheState> CreateSharedCacheState();
     std::shared_ptr<TViewerSharedCacheState> SharedCacheState = CreateSharedCacheState();
@@ -367,36 +316,5 @@ void SplitIds(TStringBuf source, char delim, std::unordered_set<ValueType>& valu
 
 TString GetHTTPOKJSON();
 TString GetHTTPGATEWAYTIMEOUT();
-NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrWhiteboard::TTabletStateInfo::ETabletState state);
-NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrHive::ETabletVolatileState state);
-NKikimrViewer::EFlag GetPDiskStateFlag(const NKikimrWhiteboard::TPDiskStateInfo& info);
-NKikimrViewer::EFlag GetPDiskOverallFlag(const NKikimrWhiteboard::TPDiskStateInfo& info);
-NKikimrViewer::EFlag GetVDiskOverallFlag(const NKikimrWhiteboard::TVDiskStateInfo& info);
-
-struct TBSGroupState {
-    NKikimrViewer::EFlag Overall;
-    ui32 MissingDisks = 0;
-    ui32 SpaceProblems = 0;
-};
-
-NKikimrViewer::EFlag GetBSGroupOverallFlagWithoutLatency(
-        const NKikimrWhiteboard::TBSGroupStateInfo& info,
-        const TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&>& vDisksIndex,
-        const TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&>& pDisksIndex);
-TBSGroupState GetBSGroupOverallStateWithoutLatency(
-        const NKikimrWhiteboard::TBSGroupStateInfo& info,
-        const TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&>& vDisksIndex,
-        const TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&>& pDisksIndex);
-NKikimrViewer::EFlag GetBSGroupOverallFlag(
-        const NKikimrWhiteboard::TBSGroupStateInfo& info,
-        const TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&>& vDisksIndex,
-        const TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&>& pDisksIndex);
-TBSGroupState GetBSGroupOverallState(
-        const NKikimrWhiteboard::TBSGroupStateInfo& info,
-        const TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&>& vDisksIndex,
-        const TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&>& pDisksIndex);
-
-NKikimrWhiteboard::EFlag GetWhiteboardFlag(NKikimrViewer::EFlag flag);
-NKikimrViewer::EFlag GetViewerFlag(NKikimrWhiteboard::EFlag flag);
 
 }

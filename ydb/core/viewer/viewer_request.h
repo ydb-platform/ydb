@@ -1,5 +1,5 @@
 #pragma once
-#include "viewer.h"
+#include "viewer_events.h"
 
 namespace NKikimr::NViewer {
 

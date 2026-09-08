@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package NKikimrViewer;
+option java_package = "ru.yandex.kikimr.proto";
+
+enum EObjectType {
+    Unknown = 0;
+    Root = 1;
+    Directory = 2;
+    Table = 3;
+    Topic = 4;
+    Consumers = 5;
+    Operations = 6;
+    Consumer = 7;
+    RtmrTables = 8;
+    RtmrOperations = 9; // flat list of operations
+    RtmrTable = 10;
+    RtmrOperation = 11;
+    RtmrTasks = 12; // flat list of tasks
+    RtmrTask = 13; // task is the group of operations, associated tables and some metadata
+    RtmrVolume = 14;
+    BlockStoreVolume = 15;
+    Kesus = 16;
+    SolomonVolume = 17;
+    SubDomain = 18;
+    FileStore = 19;
+    CdcStream = 20;
+    Sequence = 21;
+    Replication = 22;
+    BlobDepot = 23;
+    ExternalTable = 24;
+    ExternalDataSource = 25;
+    View = 26;
+    ResourcePool = 27;
+    SysView = 28;
+    Secret = 29;
+    StreamingQuery = 30;
+    TestShardSet = 31;
+}
+
+enum EFlag {
+    Grey = 0;
+    Green = 1;
+    Blue = 2;
+    Yellow = 3;
+    Orange = 4;
+    Red = 5;
+}

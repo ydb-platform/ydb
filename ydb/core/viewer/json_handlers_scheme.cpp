@@ -1,14 +1,9 @@
-#include "json_handlers.h"
-#include "scheme_directory.h"
+#include "json_local_rpc_handlers.h"
 
 namespace NKikimr::NViewer {
 
-void InitSchemeDirectoryHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/scheme/directory", new TJsonSchemeDirectoryHandler(), 2);
-}
-
 void InitSchemeJsonHandlers(TJsonHandlers& jsonHandlers) {
-    InitSchemeDirectoryHandler(jsonHandlers);
+    InitSchemeLocalRpcJsonHandlers(jsonHandlers);
 }
 
 }

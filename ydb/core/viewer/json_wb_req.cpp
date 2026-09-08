@@ -8,6 +8,15 @@
 
 namespace NKikimr::NViewer {
 
+const TWhiteboardMergerBase::TRegistrator TWhiteboardInfo<NKikimrWhiteboard::TEvBSGroupStateResponse>::Registrator({
+    {NKikimrWhiteboard::TBSGroupStateInfo::descriptor()->FindFieldByName("Latency"), &TWhiteboardMergerBase::ProtoMaximizeEnumField}
+});
+
+const TWhiteboardMergerBase::TRegistrator TWhiteboardInfo<NKikimrWhiteboard::TEvNodeStateResponse>::Registrator({
+    {NKikimrWhiteboard::TNodeStateInfo::descriptor()->FindFieldByName("ConnectStatus"), &TWhiteboardMergerBase::ProtoMaximizeEnumField},
+    {NKikimrWhiteboard::TNodeStateInfo::descriptor()->FindFieldByName("Connected"), &TWhiteboardMergerBase::ProtoMaximizeBoolField}
+});
+
 YAML::Node GetWhiteboardRequestParameters() {
     return YAML::Load(R"___(
             - name: node_id

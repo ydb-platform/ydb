@@ -2,6 +2,7 @@
 #include "json_handlers.h"
 #include "json_pipe_req.h"
 #include "viewer.h"
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 
 namespace NKikimr::NViewer {
 

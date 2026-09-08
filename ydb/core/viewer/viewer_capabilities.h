@@ -1,6 +1,8 @@
 #pragma once
 #include "json_pipe_req.h"
+#include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 namespace NKikimr::NViewer {
 
@@ -33,7 +35,7 @@ public:
         if (DatabaseNavigateResponse && DatabaseNavigateResponse->IsOk()) {
             if (DatabaseNavigateResponse->Get()->Request && !DatabaseNavigateResponse->Get()->Request->ResultSet.empty()) {
                 NJson::TJsonValue& database(json["Database"]);
-                TSchemeCacheNavigate::TEntry& entry = DatabaseNavigateResponse->Get()->Request->ResultSet.front();
+                NSchemeCache::TSchemeCacheNavigate::TEntry& entry = DatabaseNavigateResponse->Get()->Request->ResultSet.front();
                 if (entry.DomainInfo) {
                     database["GraphShardExists"] = entry.DomainInfo->Params.GetGraphShard() != 0;
                 }

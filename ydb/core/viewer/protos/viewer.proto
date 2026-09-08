@@ -1,54 +1,18 @@
 syntax = "proto3";
 
-import "ydb/core/graph/protos/graph.proto";
+import "ydb/core/viewer/protos/viewer_base.proto";
 import "ydb/core/protos/tablet_counters.proto";
 import "ydb/core/protos/memory_stats.proto";
 import "ydb/core/protos/node_whiteboard.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/hive.proto";
-import "ydb/core/protos/kqp.proto";
 import "ydb/public/api/protos/ydb_cms.proto";
 import "ydb/public/api/protos/ydb_bridge_common.proto";
 import "ydb/core/protos/sys_view.proto";
 
 package NKikimrViewer;
 option java_package = "ru.yandex.kikimr.proto";
-
-enum EObjectType {
-    Unknown = 0;
-    Root = 1;
-    Directory = 2;
-    Table = 3;
-    Topic = 4;
-    Consumers = 5;
-    Operations = 6;
-    Consumer = 7;
-    RtmrTables = 8;
-    RtmrOperations = 9; // flat list of operations
-    RtmrTable = 10;
-    RtmrOperation = 11;
-    RtmrTasks = 12; // flat list of tasks
-    RtmrTask = 13; // task is the group of operations, associated tables and some metadata
-    RtmrVolume = 14;
-    BlockStoreVolume = 15;
-    Kesus = 16;
-    SolomonVolume = 17;
-    SubDomain = 18;
-    FileStore = 19;
-    CdcStream = 20;
-    Sequence = 21;
-    Replication = 22;
-    BlobDepot = 23;
-    ExternalTable = 24;
-    ExternalDataSource = 25;
-    View = 26;
-    ResourcePool = 27;
-    SysView = 28;
-    Secret = 29;
-    StreamingQuery = 30;
-    TestShardSet = 31;
-}
 
 message TBrowseInfo {
     EObjectType Type = 1;
@@ -308,15 +272,6 @@ message TTenantResource {
 message TTenantResources {
     repeated TTenantResource Required = 1;
     repeated TTenantResource Allocated = 2;
-}
-
-enum EFlag {
-    Grey = 0;
-    Green = 1;
-    Blue = 2;
-    Yellow = 3;
-    Orange = 4;
-    Red = 5;
 }
 
 message TBridgePileInfo {
@@ -735,63 +690,6 @@ message TComputeInfo {
     repeated TComputeNodeInfo Nodes = 6;
 }
 
-message TNodeLocation {
-    repeated uint32 NodeId = 1;
-}
-
-message THttpProxyRequest {
-    string Uri = 1;
-    bytes Content = 2;
-    bytes UserToken = 3;
-}
-
-message TSchemeCacheRequest {
-    string Database = 1;
-    repeated string Tables = 2;
-    string Prefix = 3;
-    uint32 Limit = 4;
-}
-
-message TEvViewerRequest {
-    TNodeLocation Location = 1;
-    uint32 Timeout = 2; // ms
-    string MergeFields = 3;
-    oneof Request {
-        NKikimrWhiteboard.TEvTabletStateRequest TabletRequest = 11;
-        NKikimrWhiteboard.TEvSystemStateRequest SystemRequest = 12;
-        NKikimrWhiteboard.TEvVDiskStateRequest VDiskRequest = 16;
-        NKikimrWhiteboard.TEvPDiskStateRequest PDiskRequest = 17;
-        NKikimrWhiteboard.TEvBSGroupStateRequest BSGroupRequest = 18;
-        NKikimrWhiteboard.TEvNodeStateRequest NodeRequest = 19;
-        THttpProxyRequest QueryRequest = 13;
-        THttpProxyRequest RenderRequest = 14;
-        TSchemeCacheRequest AutocompleteRequest = 15;
-        bytes Reserved20 = 20;
-        bytes Reserved21 = 21;
-        bytes Reserved22 = 22;
-        bytes Reserved23 = 23;
-    }
-}
-
-message TEvViewerResponse {
-    TNodeLocation LocationResponded = 2;
-    oneof Response {
-        NKikimrWhiteboard.TEvTabletStateResponse TabletResponse = 11;
-        NKikimrWhiteboard.TEvSystemStateResponse SystemResponse = 12;
-        NKikimrWhiteboard.TEvVDiskStateResponse VDiskResponse = 16;
-        NKikimrWhiteboard.TEvPDiskStateResponse PDiskResponse = 17;
-        NKikimrWhiteboard.TEvBSGroupStateResponse BSGroupResponse = 18;
-        NKikimrWhiteboard.TEvNodeStateResponse NodeResponse = 19;
-        NKikimrKqp.TEvQueryResponse QueryResponse = 13;
-        NKikimrGraph.TEvMetricsResult RenderResponse = 14;
-        TQueryAutocomplete AutocompleteResponse = 15;
-        bytes Reserved20 = 20;
-        bytes Reserved21 = 21;
-        bytes Reserved22 = 22;
-        bytes Reserved23 = 23;
-    }
-}
-
 message TEvDescribeSchemeInfo {
     enum ESource {
         None = 0;
@@ -810,66 +708,6 @@ message TEvDescribeSchemeInfo {
     NKikimrSchemeOp.TPathDescription LastExistedPrefixDescription = 9;
     fixed64 PathOwnerId = 10;
     ESource Source = 11;
-}
-
-enum EAutocompleteType {
-    unknown = 0;
-    dir = 1;
-    table = 2;
-    pers_queue_group = 3;
-    sub_domain = 4;
-    rtmr_volume = 5;
-    block_store_volume = 6;
-    kesus = 7;
-    solomon_volume = 8;
-    table_index = 9;
-    ext_sub_domain = 10;
-    file_store = 11;
-    column_store = 12;
-    column_table = 13;
-    cdc_stream = 14;
-    sequence = 15;
-    replication = 16;
-    blob_depot = 17;
-    external_table = 18;
-    external_data_source = 19;
-    view = 20;
-    column = 21;
-    index = 22;
-    sys_view = 23;
-    streaming_query = 27;
-}
-
-message TQueryAutocomplete {
-    enum EDefaultKind {
-        None = 0;
-        Sequence = 1;
-        Literal = 2;
-        Reserved3 = 3;
-        Reserved4 = 4;
-        Reserved5 = 5;
-        Reserved6 = 6;
-        Reserved7 = 7;
-        Reserved8 = 8;
-        Reserved9 = 9;
-    }
-    message TResult {
-        message TEntity {
-            string Name = 1;
-            EAutocompleteType Type = 2;
-            string Parent = 3;
-            optional uint32 PKIndex = 4;
-            optional bool NotNull = 5;
-            EDefaultKind Default = 6;
-        }
-        optional uint32 Total = 1;
-        repeated TEntity Entities = 2;
-    }
-
-    bool Success = 1;
-    TResult Result = 2;
-    repeated string Error = 3;
-    uint32 Version = 4;
 }
 
 message TPDiskInfoWhiteboard {

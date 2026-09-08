@@ -2,6 +2,7 @@
 #include "json_pipe_req.h"
 #include "viewer.h"
 
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/grpc_services/service_replication.h>
 #include <ydb/services/replication/grpc_service.h>

@@ -1,8 +1,13 @@
+#include "viewer_flags.h"
+#include <ydb/core/viewer/protos/viewer.pb.h>
 #include "json_handlers.h"
 #include "json_pipe_req.h"
 #include "viewer.h"
 #include "wb_aggregate.h"
 #include "wb_merge.h"
+#include <ydb/core/base/hive.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr::NViewer {

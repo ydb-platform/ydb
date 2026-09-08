@@ -1,6 +1,9 @@
 #pragma once
 #include "json_pipe_req.h"
+#include <ydb/core/viewer/protos/viewer.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 
 namespace NKikimr::NViewer {
 

@@ -1,4 +1,6 @@
 #include "json_handlers.h"
+#include "json_local_rpc_handlers.h"
+#include "viewer_flags.h"
 #include "viewer_acl.h"
 #include "viewer_autocomplete.h"
 #include "viewer_bscontrollerinfo.h"
@@ -8,12 +10,7 @@
 #include "viewer_compute.h"
 #include "viewer_config.h"
 #include "viewer_counters.h"
-#include "viewer_describe_consumer.h"
 #include "viewer_describe.h"
-#include "viewer_describe_replication.h"
-#include "viewer_describe_topic.h"
-#include "viewer_describe_transfer.h"
-#include "viewer_commit_offset.h"
 #include "viewer_computation_graph.h"
 #include "viewer_feature_flags.h"
 #include "viewer_topic_data.h"
@@ -171,26 +168,6 @@ void InitViewerDescribeJsonHandler(TJsonHandlers& jsonHandlers) {
     jsonHandlers.AddHandler("/viewer/describe", new THttpHandler<TJsonDescribe>(TJsonDescribe::GetSwagger()));
 }
 
-void InitViewerDescribeReplicationJsonHandler(TJsonHandlers& jsonHandlers) {
-    jsonHandlers.AddHandler("/viewer/describe_replication", new TJsonHandler<TJsonDescribeReplication>(TJsonDescribeReplication::GetSwagger()));
-}
-
-void InitViewerDescribeTransferJsonHandler(TJsonHandlers& jsonHandlers) {
-    jsonHandlers.AddHandler("/viewer/describe_transfer", new TJsonHandler<TJsonDescribeTransfer>(TJsonDescribeTransfer::GetSwagger()));
-}
-
-void InitViewerDescribeTopicJsonHandler(TJsonHandlers& jsonHandlers) {
-    jsonHandlers.AddHandler("/viewer/describe_topic", new TJsonHandler<TJsonDescribeTopic>(TJsonDescribeTopic::GetSwagger()));
-}
-
-void InitViewerDescribeConsumerJsonHandler(TJsonHandlers& jsonHandlers) {
-    jsonHandlers.AddHandler("/viewer/describe_consumer", new TJsonHandler<TJsonDescribeConsumer>(TJsonDescribeConsumer::GetSwagger()));
-}
-
-void InitViewerCommitOffsetJsonHandler(TJsonHandlers& jsonHandlers) {
-    jsonHandlers.AddHandler("/viewer/commit_offset", new TJsonHandler<TJsonCommitOffset>(TJsonCommitOffset::GetSwagger()));
-}
-
 void InitViewerHotkeysJsonHandler(TJsonHandlers& jsonHandlers) {
     jsonHandlers.AddHandler("/viewer/hotkeys", new TJsonHandler<TJsonHotkeys>(TJsonHotkeys::GetSwagger()), 2);
 }
@@ -343,11 +320,7 @@ void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     InitViewerPDiskInfoJsonHandler(jsonHandlers);
     InitViewerTabletInfoJsonHandler(jsonHandlers);
     InitViewerDescribeJsonHandler(jsonHandlers);
-    InitViewerDescribeReplicationJsonHandler(jsonHandlers);
-    InitViewerDescribeTopicJsonHandler(jsonHandlers);
-    InitViewerDescribeTransferJsonHandler(jsonHandlers);
-    InitViewerDescribeConsumerJsonHandler(jsonHandlers);
-    InitViewerCommitOffsetJsonHandler(jsonHandlers);
+    InitViewerLocalRpcJsonHandlers(jsonHandlers);
     InitViewerHotkeysJsonHandler(jsonHandlers);
     InitViewerHiveInfoJsonHandler(jsonHandlers);
     InitViewerBSGroupInfoJsonHandler(jsonHandlers);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/base/events.h>
+#include "scheme_cache_events.h"
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/subdomain.h>
@@ -532,132 +532,105 @@ public:
 
 } // NSchemeCache
 
-struct TEvTxProxySchemeCache {
-    enum EEv {
-        EvResolveKeySet = EventSpaceBegin(TKikimrEvents::ES_SCHEME_CACHE),
-        EvInvalidateDistEntry, // unused
-        EvResolveKeySetResult,
-        EvNavigateKeySet,
-        EvNavigateKeySetResult,
-        EvInvalidateTable,
-        EvInvalidateTableResult,
-        EvWatchPathId,
-        EvWatchRemove,
-        EvWatchNotifyUpdated,
-        EvWatchNotifyDeleted,
-        EvWatchNotifyUnavailable,
+template <typename TDerived, ui32 EventType, typename TRequest>
+struct TEvTxProxySchemeCache::TEvBasic : public TEventLocal<TDerived, EventType> {
+    TAutoPtr<TRequest> Request;
 
-        EvEnd,
-    };
-
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_SCHEME_CACHE), "expect EvEnd < EventSpaceEnd(ES_SCHEME_CACHE)");
-
-private:
-    template <typename TDerived, ui32 EventType, typename TRequest>
-    struct TEvBasic : public TEventLocal<TDerived, EventType> {
-        TAutoPtr<TRequest> Request;
-
-        TEvBasic(TAutoPtr<TRequest> request)
-            : Request(request)
-        {}
-    };
-
-public:
-    struct TEvResolveKeySet : public TEvBasic<TEvResolveKeySet, EvResolveKeySet, NSchemeCache::TSchemeCacheRequest> {
-        using TEvBasic::TEvBasic;
-    };
-
-    struct TEvResolveKeySetResult : public TEvBasic<TEvResolveKeySetResult, EvResolveKeySetResult, NSchemeCache::TSchemeCacheRequest> {
-        using TEvBasic::TEvBasic;
-    };
-
-    struct TEvNavigateKeySet : public TEvBasic<TEvNavigateKeySet, EvNavigateKeySet, NSchemeCache::TSchemeCacheNavigate> {
-        using TEvBasic::TEvBasic;
-    };
-
-    struct TEvNavigateKeySetResult : public TEvBasic<TEvNavigateKeySetResult, EvNavigateKeySetResult, NSchemeCache::TSchemeCacheNavigate> {
-        using TEvBasic::TEvBasic;
-    };
-
-    struct TEvInvalidateTable : public TEventLocal<TEvInvalidateTable, EvInvalidateTable> {
-        const TTableId TableId;
-        const TActorId Sender;
-
-        TEvInvalidateTable(const TTableId& tableId, const TActorId& sender)
-            : TableId(tableId)
-            , Sender(sender)
-        {}
-    };
-
-    struct TEvInvalidateTableResult : public TEventLocal<TEvInvalidateTableResult, EvInvalidateTableResult> {
-        const TActorId Sender;
-
-        TEvInvalidateTableResult(const TActorId& sender)
-            : Sender(sender)
-        {}
-    };
-
-    struct TEvWatchPathId : public TEventLocal<TEvWatchPathId, EvWatchPathId> {
-        const TPathId PathId;
-        const ui64 Key;
-
-        explicit TEvWatchPathId(const TPathId& pathId, ui64 key = 0)
-            : PathId(pathId)
-            , Key(key)
-        {}
-    };
-
-    struct TEvWatchRemove : public TEventLocal<TEvWatchRemove, EvWatchRemove> {
-        const ui64 Key;
-
-        explicit TEvWatchRemove(ui64 key = 0)
-            : Key(key)
-        {}
-    };
-
-    struct TEvWatchNotifyUpdated : public TEventLocal<TEvWatchNotifyUpdated, EvWatchNotifyUpdated> {
-        using TDescribeResult = NSchemeCache::TDescribeResult;
-
-        const ui64 Key;
-        const TString Path;
-        const TPathId PathId;
-        TDescribeResult::TCPtr Result;
-
-        TEvWatchNotifyUpdated(ui64 key, const TString& path, const TPathId& pathId, TDescribeResult::TCPtr result)
-            : Key(key)
-            , Path(path)
-            , PathId(pathId)
-            , Result(std::move(result))
-        {}
-    };
-
-    struct TEvWatchNotifyDeleted : public TEventLocal<TEvWatchNotifyDeleted, EvWatchNotifyDeleted> {
-        const ui64 Key;
-        const TString Path;
-        const TPathId PathId;
-
-        TEvWatchNotifyDeleted(ui64 key, const TString& path, const TPathId& pathId)
-            : Key(key)
-            , Path(path)
-            , PathId(pathId)
-        {}
-    };
-
-    struct TEvWatchNotifyUnavailable : public TEventLocal<TEvWatchNotifyUnavailable, EvWatchNotifyUnavailable> {
-        const ui64 Key;
-        const TString Path;
-        const TPathId PathId;
-
-        TEvWatchNotifyUnavailable(ui64 key, const TString& path, const TPathId& pathId)
-            : Key(key)
-            , Path(path)
-            , PathId(pathId)
-        {}
-    };
+    TEvBasic(TAutoPtr<TRequest> request)
+        : Request(request)
+    {}
 };
 
-inline TActorId MakeSchemeCacheID() {
-    return TActorId(0, TStringBuf("SchmCcheSrv"));
-}
+struct TEvTxProxySchemeCache::TEvResolveKeySet : public TEvBasic<TEvResolveKeySet, EvResolveKeySet, NSchemeCache::TSchemeCacheRequest> {
+    using TEvBasic::TEvBasic;
+};
+
+struct TEvTxProxySchemeCache::TEvResolveKeySetResult : public TEvBasic<TEvResolveKeySetResult, EvResolveKeySetResult, NSchemeCache::TSchemeCacheRequest> {
+    using TEvBasic::TEvBasic;
+};
+
+struct TEvTxProxySchemeCache::TEvNavigateKeySet : public TEvBasic<TEvNavigateKeySet, EvNavigateKeySet, NSchemeCache::TSchemeCacheNavigate> {
+    using TEvBasic::TEvBasic;
+};
+
+struct TEvTxProxySchemeCache::TEvNavigateKeySetResult : public TEvBasic<TEvNavigateKeySetResult, EvNavigateKeySetResult, NSchemeCache::TSchemeCacheNavigate> {
+    using TEvBasic::TEvBasic;
+};
+
+struct TEvTxProxySchemeCache::TEvInvalidateTable : public TEventLocal<TEvInvalidateTable, EvInvalidateTable> {
+    const TTableId TableId;
+    const TActorId Sender;
+
+    TEvInvalidateTable(const TTableId& tableId, const TActorId& sender)
+        : TableId(tableId)
+        , Sender(sender)
+    {}
+};
+
+struct TEvTxProxySchemeCache::TEvInvalidateTableResult : public TEventLocal<TEvInvalidateTableResult, EvInvalidateTableResult> {
+    const TActorId Sender;
+
+    TEvInvalidateTableResult(const TActorId& sender)
+        : Sender(sender)
+    {}
+};
+
+struct TEvTxProxySchemeCache::TEvWatchPathId : public TEventLocal<TEvWatchPathId, EvWatchPathId> {
+    const TPathId PathId;
+    const ui64 Key;
+
+    explicit TEvWatchPathId(const TPathId& pathId, ui64 key = 0)
+        : PathId(pathId)
+        , Key(key)
+    {}
+};
+
+struct TEvTxProxySchemeCache::TEvWatchRemove : public TEventLocal<TEvWatchRemove, EvWatchRemove> {
+    const ui64 Key;
+
+    explicit TEvWatchRemove(ui64 key = 0)
+        : Key(key)
+    {}
+};
+
+struct TEvTxProxySchemeCache::TEvWatchNotifyUpdated : public TEventLocal<TEvWatchNotifyUpdated, EvWatchNotifyUpdated> {
+    using TDescribeResult = NSchemeCache::TDescribeResult;
+
+    const ui64 Key;
+    const TString Path;
+    const TPathId PathId;
+    TDescribeResult::TCPtr Result;
+
+    TEvWatchNotifyUpdated(ui64 key, const TString& path, const TPathId& pathId, TDescribeResult::TCPtr result)
+        : Key(key)
+        , Path(path)
+        , PathId(pathId)
+        , Result(std::move(result))
+    {}
+};
+
+struct TEvTxProxySchemeCache::TEvWatchNotifyDeleted : public TEventLocal<TEvWatchNotifyDeleted, EvWatchNotifyDeleted> {
+    const ui64 Key;
+    const TString Path;
+    const TPathId PathId;
+
+    TEvWatchNotifyDeleted(ui64 key, const TString& path, const TPathId& pathId)
+        : Key(key)
+        , Path(path)
+        , PathId(pathId)
+    {}
+};
+
+struct TEvTxProxySchemeCache::TEvWatchNotifyUnavailable : public TEventLocal<TEvWatchNotifyUnavailable, EvWatchNotifyUnavailable> {
+    const ui64 Key;
+    const TString Path;
+    const TPathId PathId;
+
+    TEvWatchNotifyUnavailable(ui64 key, const TString& path, const TPathId& pathId)
+        : Key(key)
+        , Path(path)
+        , PathId(pathId)
+    {}
+};
 
 } // NKikimr

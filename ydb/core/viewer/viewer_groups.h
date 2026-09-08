@@ -1,7 +1,11 @@
 #pragma once
+#include "viewer_flags.h"
+#include <ydb/core/viewer/protos/viewer.pb.h>
 #include "json_pipe_req.h"
 #include "log.h"
 #include "viewer_helper.h"
+#include <ydb/core/base/hive.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr::NViewer {
@@ -1809,7 +1813,7 @@ public:
     void ProcessNavigate(TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& navigateResult, bool firstNavigate) {
         if (navigateResult.IsOk()) {
             TString path = CanonizePath(navigateResult->Request->ResultSet.begin()->Path);
-            TIntrusiveConstPtr<TSchemeCacheNavigate::TDomainDescription> domainDescription = navigateResult->Request->ResultSet.begin()->DomainDescription;
+            TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TDomainDescription> domainDescription = navigateResult->Request->ResultSet.begin()->DomainDescription;
             TIntrusiveConstPtr<NSchemeCache::TDomainInfo> domainInfo = navigateResult->Request->ResultSet.begin()->DomainInfo;
             if (domainInfo != nullptr && domainDescription != nullptr) {
                 if (FieldsNeeded(FieldsHive)) {

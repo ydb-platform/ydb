@@ -4,6 +4,8 @@
 #include "json_pipe_req.h"
 #include "viewer.h"
 #include <library/cpp/monlib/encode/prometheus/prometheus.h>
+#include <ydb/core/driver_lib/run/config.h>
+#include <ydb/core/grpc_services/db_metadata_cache.h>
 #include <ydb/core/util/proto_duration.h>
 
 namespace NKikimr::NViewer {

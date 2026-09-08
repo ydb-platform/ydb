@@ -3,6 +3,8 @@ PROTOC_FATAL_WARNINGS()
 
 SRCS(
     viewer.proto
+    viewer_base.proto
+    viewer_events.proto
 )
 
 PEERDIR(

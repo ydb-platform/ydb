@@ -2,6 +2,7 @@
 #include "json_handlers.h"
 #include "json_pipe_req.h"
 #include "log.h"
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 namespace NKikimr::NViewer {

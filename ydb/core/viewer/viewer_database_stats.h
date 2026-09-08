@@ -1,7 +1,9 @@
 #pragma once
 #include "json_handlers.h"
+#include <ydb/core/viewer/protos/viewer.pb.h>
 #include "json_pipe_req.h"
 #include "viewer.h"
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <algorithm>
 #include <deque>

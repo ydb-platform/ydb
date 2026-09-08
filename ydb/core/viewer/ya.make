@@ -31,14 +31,13 @@ SRCS(
     json_handlers_pdisk.cpp
     json_handlers_scheme.cpp
     json_handlers_vdisk.cpp
-    json_handlers_viewer.cpp
     json_handlers_pq.cpp
     json_local_rpc.h
-    json_pipe_req.cpp
+    json_local_rpc_handlers.cpp
+    json_local_rpc_handlers.h
     json_pipe_req.h
     json_storage_base.h
     json_vdisk_req.h
-    json_wb_req.cpp
     json_wb_req.h
     log.h
     operation_cancel.h
@@ -58,7 +57,6 @@ SRCS(
     viewer_autocomplete.h
     viewer_browse.h
     viewer_bscontrollerinfo.h
-    viewer_bsgroupinfo.cpp
     viewer_capabilities.h
     viewer_check_access.h
     viewer_cluster.h
@@ -73,7 +71,10 @@ SRCS(
     viewer_describe_consumer.h
     viewer_describe.h
     viewer_describe_topic.h
+    viewer_events.h
+    viewer_events_fwd.h
     viewer_feature_flags.h
+    viewer_flags.h
     viewer_topic_data.cpp
     viewer_graph.h
     viewer_groups.h
@@ -85,7 +86,6 @@ SRCS(
     viewer_labeled_counters.h
     viewer_metainfo.h
     viewer_netinfo.h
-    viewer_nodeinfo.cpp
     viewer_nodelist.h
     viewer_nodes.h
     viewer_pdiskinfo.h
@@ -108,7 +108,6 @@ SRCS(
     viewer_vdiskinfo.h
     viewer_whoami.h
     viewer.h
-    viewer.cpp
     wb_aggregate.cpp
     wb_aggregate.h
     wb_filter.cpp
@@ -117,6 +116,14 @@ SRCS(
     wb_merge.cpp
     wb_merge.h
     wb_req.h
+)
+
+JOIN_SRCS(
+    viewer_joined.cpp
+    viewer.cpp
+    json_handlers_viewer.cpp
+    json_wb_req.cpp
+    json_pipe_req.cpp
 )
 
 IF (NOT EXPORT_CMAKE)
@@ -876,6 +883,7 @@ PEERDIR(
     ydb/library/persqueue/topic_parser
     ydb/library/yaml_config
     ydb/public/api/protos
+    ydb/public/lib/base
     ydb/public/lib/deprecated/kicli
     ydb/public/lib/json_value
     ydb/public/lib/ydb_cli/common

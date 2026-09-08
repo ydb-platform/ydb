@@ -1,10 +1,13 @@
 #include "viewer.h"
+#include "viewer_events.h"
+#include "viewer_flags.h"
 #include <ydb/core/base/http_database_param.h>
 #include "counters_hosts.h"
 #include "viewer_healthcheck.h"
 #include "json_handlers.h"
 #include "log.h"
 #include "viewer_request.h"
+#include <ydb/core/driver_lib/run/config.h>
 #include <library/cpp/mime/types/mime.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/protobuf/json/proto2json.h>
@@ -761,12 +764,12 @@ private:
     }
 
     void Handle(TEvViewer::TEvUpdateSharedCacheTabletResponse::TPtr& ev) {
-        UpdateSharedCacheData(std::unique_ptr<TEvViewer::TEvUpdateSharedCacheTabletResponse>(ev->Release().Release()));
+        UpdateSharedCacheData(*this, std::unique_ptr<TEvViewer::TEvUpdateSharedCacheTabletResponse>(ev->Release().Release()));
     }
 
     template<typename TEvent>
     void HandleForUpdateSharedCacheData(TAutoPtr<TEventHandle<TEvent>>& ev) {
-        UpdateSharedCacheData(std::make_unique<TEvViewer::TEvUpdateSharedCacheTabletResponse>(std::shared_ptr<TEvent>(ev->Release().Release())));
+        UpdateSharedCacheData(*this, std::make_unique<TEvViewer::TEvUpdateSharedCacheTabletResponse>(std::shared_ptr<TEvent>(ev->Release().Release())));
     }
 
     void PassAway() override {

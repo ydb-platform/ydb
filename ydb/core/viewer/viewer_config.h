@@ -1,6 +1,7 @@
 #pragma once
 #include "json_handlers.h"
 #include "viewer.h"
+#include <ydb/core/driver_lib/run/config.h>
 #include <ydb/core/viewer/yaml/yaml.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 

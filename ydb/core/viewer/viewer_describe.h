@@ -1,9 +1,12 @@
 #pragma once
 #include "json_handlers.h"
+#include <ydb/core/viewer/protos/viewer.pb.h>
 #include "json_pipe_req.h"
 #include "log.h"
 #include "viewer.h"
 #include <ydb/core/external_sources/external_source_factory.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 
 namespace NKikimr::NViewer {
 

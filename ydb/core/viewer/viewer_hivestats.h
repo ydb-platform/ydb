@@ -1,6 +1,7 @@
 #pragma once
 #include "json_handlers.h"
 #include "json_pipe_req.h"
+#include <ydb/core/base/hive.h>
 
 namespace NKikimr::NViewer {
 

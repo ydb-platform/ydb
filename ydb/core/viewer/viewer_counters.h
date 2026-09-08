@@ -1,4 +1,6 @@
 #pragma once
+#include "viewer_flags.h"
+#include <ydb/core/viewer/protos/viewer.pb.h>
 #include "json_handlers.h"
 #include "viewer.h"
 #include "viewer_bsgroupinfo.h"

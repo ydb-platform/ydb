@@ -12,6 +12,7 @@
 #include <util/string/join.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include "viewer_tabletinfo.h"
 #include "viewer_vdiskinfo.h"
 #include "viewer_pdiskinfo.h"
@@ -956,26 +957,26 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
     void ChangeNavigateKeySetResultServerless(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr* ev,
                                               TTestActorRuntime& runtime) {
-        TSchemeCacheNavigate::TEntry& entry((*ev)->Get()->Request->ResultSet.front());
+        NSchemeCache::TSchemeCacheNavigate::TEntry& entry((*ev)->Get()->Request->ResultSet.front());
         TString path = CanonizePath(entry.Path);
         if (path == "/Root/serverless" || entry.TableId.PathId == SERVERLESS_DOMAIN_KEY) {
-            entry.Status = TSchemeCacheNavigate::EStatus::Ok;
-            entry.Kind = TSchemeCacheNavigate::EKind::KindExtSubdomain;
-            entry.DomainInfo = MakeIntrusive<TDomainInfo>(SERVERLESS_DOMAIN_KEY, SHARED_DOMAIN_KEY);
+            entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
+            entry.Kind = NSchemeCache::TSchemeCacheNavigate::EKind::KindExtSubdomain;
+            entry.DomainInfo = MakeIntrusive<NSchemeCache::TDomainInfo>(SERVERLESS_DOMAIN_KEY, SHARED_DOMAIN_KEY);
             entry.Path = {"Root", "serverless"};
         } else if (path == "/Root/shared" || entry.TableId.PathId == SHARED_DOMAIN_KEY) {
-            entry.Status = TSchemeCacheNavigate::EStatus::Ok;
-            entry.Kind = TSchemeCacheNavigate::EKind::KindExtSubdomain;
-            entry.DomainInfo = MakeIntrusive<TDomainInfo>(SHARED_DOMAIN_KEY, SHARED_DOMAIN_KEY);
+            entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
+            entry.Kind = NSchemeCache::TSchemeCacheNavigate::EKind::KindExtSubdomain;
+            entry.DomainInfo = MakeIntrusive<NSchemeCache::TDomainInfo>(SHARED_DOMAIN_KEY, SHARED_DOMAIN_KEY);
             entry.Path = {"Root", "shared"};
             auto domains = runtime.GetAppData().DomainsInfo;
             entry.DomainInfo->Params.SetHive(domains->GetHive());
         } else if (path == "/Root/serverless/users" || entry.TableId.PathId == SERVERLESS_TABLE) {
-            entry.Status = TSchemeCacheNavigate::EStatus::Ok;
-            entry.Kind = TSchemeCacheNavigate::EKind::KindTable;
-            entry.DomainInfo = MakeIntrusive<TDomainInfo>(SERVERLESS_DOMAIN_KEY, SHARED_DOMAIN_KEY);
+            entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
+            entry.Kind = NSchemeCache::TSchemeCacheNavigate::EKind::KindTable;
+            entry.DomainInfo = MakeIntrusive<NSchemeCache::TDomainInfo>(SERVERLESS_DOMAIN_KEY, SHARED_DOMAIN_KEY);
             entry.Path = {"Root", "serverless", "users"};
-            auto dirEntryInfo = MakeIntrusive<TSchemeCacheNavigate::TDirEntryInfo>();
+            auto dirEntryInfo = MakeIntrusive<NSchemeCache::TSchemeCacheNavigate::TDirEntryInfo>();
             dirEntryInfo->Info.SetSchemeshardId(SERVERLESS_TABLE.OwnerId);
             dirEntryInfo->Info.SetPathId(SERVERLESS_TABLE.LocalPathId);
             entry.Self = dirEntryInfo;

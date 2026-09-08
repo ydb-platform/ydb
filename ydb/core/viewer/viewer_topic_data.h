@@ -1,9 +1,11 @@
 #pragma once
 #include "json_pipe_req.h"
+#include <ydb/core/viewer/protos/viewer.pb.h>
 #include "viewer.h"
 #include <ydb/core/viewer/yaml/yaml.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 namespace NKikimr::NViewer {
 
@@ -155,4 +157,3 @@ public:
 };
 
 } // namespace NKikimr::NViewer
-

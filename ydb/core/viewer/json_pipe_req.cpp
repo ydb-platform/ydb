@@ -1,6 +1,15 @@
 #include "json_pipe_req.h"
 #include "log.h"
+#include "viewer_events.h"
 #include <ydb/core/base/auth.h>
+#include <ydb/core/base/hive.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/grpc_services/db_metadata_cache.h>
+#include <ydb/core/kqp/common/events/script_executions.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/generic/overloaded.h>
@@ -8,6 +17,33 @@
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::VIEWER
 
 namespace NKikimr::NViewer {
+
+template <typename T>
+void UpdateViewerSharedCacheImpl(const std::shared_ptr<T>& response) {
+    TActivationContext::Send(
+        MakeViewerID(TActivationContext::ActorSystem()->NodeId),
+        std::make_unique<TEvViewer::TEvUpdateSharedCacheTabletResponse>(response));
+}
+
+void UpdateViewerSharedCache(const std::shared_ptr<NSysView::TEvSysView::TEvGetGroupsResponse>& response) {
+    UpdateViewerSharedCacheImpl(response);
+}
+
+void UpdateViewerSharedCache(const std::shared_ptr<NSysView::TEvSysView::TEvGetStoragePoolsResponse>& response) {
+    UpdateViewerSharedCacheImpl(response);
+}
+
+void UpdateViewerSharedCache(const std::shared_ptr<NSysView::TEvSysView::TEvGetVSlotsResponse>& response) {
+    UpdateViewerSharedCacheImpl(response);
+}
+
+void UpdateViewerSharedCache(const std::shared_ptr<NSysView::TEvSysView::TEvGetPDisksResponse>& response) {
+    UpdateViewerSharedCacheImpl(response);
+}
+
+void UpdateViewerSharedCache(const std::shared_ptr<NSysView::TEvSysView::TEvGetStorageStatsResponse>& response) {
+    UpdateViewerSharedCacheImpl(response);
+}
 
 template<typename T>
 class TCachedResponseState {
@@ -102,13 +138,13 @@ void IViewer::DeleteOldSharedCacheData() {
     SharedCacheState->ClearOld();
 }
 
-void IViewer::UpdateSharedCacheData(std::unique_ptr<TEvViewer::TEvUpdateSharedCacheTabletResponse> ev) {
+void UpdateSharedCacheData(IViewer& viewer, std::unique_ptr<TEvViewer::TEvUpdateSharedCacheTabletResponse> ev) {
     std::visit(TOverloaded{
-        [&](const std::shared_ptr<NSysView::TEvSysView::TEvGetGroupsResponse>& r) { SharedCacheState->StorageGroups.UpdateCache(r); },
-        [&](const std::shared_ptr<NSysView::TEvSysView::TEvGetStoragePoolsResponse>& r) { SharedCacheState->StoragePools.UpdateCache(r); },
-        [&](const std::shared_ptr<NSysView::TEvSysView::TEvGetVSlotsResponse>& r) { SharedCacheState->StorageVSlots.UpdateCache(r); },
-        [&](const std::shared_ptr<NSysView::TEvSysView::TEvGetPDisksResponse>& r) { SharedCacheState->StoragePDisks.UpdateCache(r); },
-        [&](const std::shared_ptr<NSysView::TEvSysView::TEvGetStorageStatsResponse>& r) { SharedCacheState->StorageStats.UpdateCache(r); },
+        [&](const std::shared_ptr<NSysView::TEvSysView::TEvGetGroupsResponse>& r) { viewer.SharedCacheState->StorageGroups.UpdateCache(r); },
+        [&](const std::shared_ptr<NSysView::TEvSysView::TEvGetStoragePoolsResponse>& r) { viewer.SharedCacheState->StoragePools.UpdateCache(r); },
+        [&](const std::shared_ptr<NSysView::TEvSysView::TEvGetVSlotsResponse>& r) { viewer.SharedCacheState->StorageVSlots.UpdateCache(r); },
+        [&](const std::shared_ptr<NSysView::TEvSysView::TEvGetPDisksResponse>& r) { viewer.SharedCacheState->StoragePDisks.UpdateCache(r); },
+        [&](const std::shared_ptr<NSysView::TEvSysView::TEvGetStorageStatsResponse>& r) { viewer.SharedCacheState->StorageStats.UpdateCache(r); },
     }, ev->Response);
 }
 
@@ -821,9 +857,7 @@ TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse>
     return MakeRequestToTablet<TEvBlobStorage::TEvControllerConfigResponse>(GetBSControllerId(), request.Release());
 }
 
-THolder<NSchemeCache::TSchemeCacheNavigate> TViewerPipeClient::SchemeCacheNavigateRequestBuilder (
-        NSchemeCache::TSchemeCacheNavigate::TEntry&& entry
-) {
+THolder<NSchemeCache::TSchemeCacheNavigate> SchemeCacheNavigateRequestBuilder(NSchemeCache::TSchemeCacheNavigate::TEntry&& entry) {
     THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
     entry.RedirectRequired = false;
     entry.ShowPrivatePath = true;
@@ -1291,7 +1325,7 @@ void TViewerPipeClient::HandleResolveResource(TEvTxProxySchemeCache::TEvNavigate
     if (ResourceNavigateResponse) {
         ResourceNavigateResponse->Set(std::move(ev));
         if (ResourceNavigateResponse->IsOk()) {
-            TSchemeCacheNavigate::TEntry& entry(ResourceNavigateResponse->Get()->Request->ResultSet.front());
+            NSchemeCache::TSchemeCacheNavigate::TEntry& entry(ResourceNavigateResponse->Get()->Request->ResultSet.front());
             SharedDatabase = CanonizePath(entry.Path);
             Direct |= (SharedDatabase == AppData()->TenantName);
             ResourceBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(SharedDatabase);
@@ -1316,7 +1350,7 @@ void TViewerPipeClient::HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigate
     if (DatabaseNavigateResponse) {
         DatabaseNavigateResponse->Set(std::move(ev));
         if (DatabaseNavigateResponse->IsOk()) {
-            TSchemeCacheNavigate::TEntry& entry(DatabaseNavigateResponse->Get()->Request->ResultSet.front());
+            NSchemeCache::TSchemeCacheNavigate::TEntry& entry(DatabaseNavigateResponse->Get()->Request->ResultSet.front());
             if (entry.DomainInfo && entry.DomainInfo->ResourcesDomainKey && entry.DomainInfo->DomainKey != entry.DomainInfo->ResourcesDomainKey) {
                 // we successfully resolved serverless database using user's token, now resolve shared database without token
                 // because users of serverless databases don't have direct access to shared database

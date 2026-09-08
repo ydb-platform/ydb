@@ -1,5 +1,6 @@
 #pragma once
 #include "json_pipe_req.h"
+#include <ydb/core/viewer/protos/viewer.pb.h>
 #include "viewer.h"
 #include <ydb/library/yaml_config/yaml_config.h>
 

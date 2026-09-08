@@ -1,4 +1,6 @@
 #pragma once
+#include "viewer_events.h"
+#include "viewer_flags.h"
 #include "json_handlers.h"
 #include "json_pipe_req.h"
 #include "log.h"
@@ -7,7 +9,12 @@
 #include "viewer_tabletinfo.h"
 #include "wb_aggregate.h"
 #include "wb_merge.h"
+#include <ydb/core/base/hive.h>
 #include <ydb/core/base/memory_stats.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/grpc_services/db_metadata_cache.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 
 namespace NKikimr::NViewer {
 

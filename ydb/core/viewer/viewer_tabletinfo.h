@@ -1,6 +1,9 @@
 #pragma once
+#include "viewer_flags.h"
 #include "json_wb_req.h"
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/util/wildcard.h>
 
 namespace NKikimr::NViewer {

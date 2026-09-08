@@ -2,6 +2,7 @@
 #include "json_handlers.h"
 #include "json_pipe_req.h"
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 
 namespace NKikimr::NViewer {
 

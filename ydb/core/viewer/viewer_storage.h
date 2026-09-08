@@ -1,8 +1,10 @@
 #pragma once
 #include "json_handlers.h"
+#include <ydb/core/viewer/protos/viewer.pb.h>
 #include "json_storage_base.h"
 #include "viewer_pdiskinfo.h"
 #include "viewer_vdiskinfo.h"
+#include <ydb/core/base/hive.h>
 
 namespace NKikimr::NViewer {
 

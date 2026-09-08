@@ -1,16 +1,12 @@
 #pragma once
-#include "viewer.h"
-#include <ydb/core/base/hive.h>
+#include "viewer_events_fwd.h"
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/tablet_pipe.h>
-#include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/cms/console/console.h>
-#include <ydb/core/grpc_services/db_metadata_cache.h>
-#include <ydb/core/kqp/common/events/script_executions.h>
+#include <ydb/core/base/blobstorage.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/sys_view/common/events.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache_events.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -20,13 +16,54 @@
 #include <span>
 #include <unordered_set>
 
+namespace NKikimrBlobStorage {
+
+class TUpdateDriveStatus;
+
+}
+
+namespace NKikimr {
+
+namespace NKqp {
+struct TEvGetScriptExecutionOperationResponse;
+}
+
+namespace NConsole::TEvConsole {
+struct TEvGetAllConfigsResponse;
+struct TEvGetNodeConfigResponse;
+struct TEvGetTenantStatusResponse;
+struct TEvListTenantsResponse;
+}
+
+namespace NSchemeShard::TEvSchemeShard {
+struct TEvDescribeSchemeResult;
+}
+
+namespace TEvHive {
+struct TEvRequestHiveNodeStats;
+struct TEvResponseHiveDomainStats;
+struct TEvResponseHiveNodeStats;
+struct TEvResponseHiveStorageStats;
+}
+
+}
+
 namespace NKikimr::NViewer {
 
 using namespace NKikimr;
-using namespace NSchemeCache;
 using namespace NProtobufJson;
 using NNodeWhiteboard::TNodeId;
 using NNodeWhiteboard::TTabletId;
+
+void UpdateViewerSharedCache(const std::shared_ptr<NSysView::TEvSysView::TEvGetGroupsResponse>& response);
+void UpdateViewerSharedCache(const std::shared_ptr<NSysView::TEvSysView::TEvGetStoragePoolsResponse>& response);
+void UpdateViewerSharedCache(const std::shared_ptr<NSysView::TEvSysView::TEvGetVSlotsResponse>& response);
+void UpdateViewerSharedCache(const std::shared_ptr<NSysView::TEvSysView::TEvGetPDisksResponse>& response);
+void UpdateViewerSharedCache(const std::shared_ptr<NSysView::TEvSysView::TEvGetStorageStatsResponse>& response);
+
+template <typename T>
+void UpdateViewerSharedCache(const std::shared_ptr<T>&) {
+}
 
 class TViewerPipeClient : public TActorBootstrapped<TViewerPipeClient> {
     using TBase = TActorBootstrapped<TViewerPipeClient>;
@@ -105,7 +142,6 @@ protected:
 
         bool Set(std::shared_ptr<T>&& response) {
             constexpr bool hasErrorCheck = requires(const T& r) {TViewerPipeClient::IsSuccess(r);};
-            constexpr bool hasUpdateCache = requires(std::shared_ptr<T>&& r) {TEvViewer::TEvUpdateSharedCacheTabletResponse(r);};
             if constexpr (hasErrorCheck) {
                 if (!TViewerPipeClient::IsSuccess(*response)) {
                     return Error(TViewerPipeClient::GetError(*response));
@@ -114,9 +150,7 @@ protected:
             if (Span) {
                 Span.EndOk();
             }
-            if constexpr (hasUpdateCache) {
-                TActivationContext::Send(MakeViewerID(TActivationContext::ActorSystem()->NodeId), std::make_unique<TEvViewer::TEvUpdateSharedCacheTabletResponse>(response));
-            }
+            UpdateViewerSharedCache(response);
             if (IsDone()) {
                 return false;
             }
@@ -272,8 +306,8 @@ protected:
     static TPathId GetPathId(const TEvTxProxySchemeCache::TEvNavigateKeySetResult& ev);
     static TString GetPath(const TEvTxProxySchemeCache::TEvNavigateKeySetResult& ev);
 
-    static TPathId GetPathId(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
-    static TString GetPath(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
+    static TPathId GetPathId(TAutoPtr<TEventHandle<TEvTxProxySchemeCache::TEvNavigateKeySetResult>>& ev);
+    static TString GetPath(TAutoPtr<TEventHandle<TEvTxProxySchemeCache::TEvNavigateKeySetResult>>& ev);
 
     static bool IsSuccess(const TEvTxProxySchemeCache::TEvNavigateKeySetResult& ev);
     static TString GetError(const TEvTxProxySchemeCache::TEvNavigateKeySetResult& ev);
@@ -322,8 +356,6 @@ protected:
     [[nodiscard]] TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> MakeCachedRequestBSControllerPDisks();
     [[nodiscard]] TRequestResponse<NSysView::TEvSysView::TEvGetStorageStatsResponse> MakeCachedRequestBSControllerStorageStats();
     [[nodiscard]] TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> RequestBSControllerPDiskUpdateStatus(const NKikimrBlobStorage::TUpdateDriveStatus& driveStatus, bool force = false);
-
-    THolder<NSchemeCache::TSchemeCacheNavigate> SchemeCacheNavigateRequestBuilder(NSchemeCache::TSchemeCacheNavigate::TEntry&& entry);
 
     void RequestSchemeCacheNavigate(const TString& path);
     void RequestSchemeCacheNavigate(const TPathId& pathId);
@@ -411,8 +443,8 @@ protected:
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev);
     void Undelivered(TEvents::TEvUndelivered::TPtr& ev);
-    void HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
-    void HandleResolveResource(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
+    void HandleResolveDatabase(TAutoPtr<TEventHandle<TEvTxProxySchemeCache::TEvNavigateKeySetResult>>& ev);
+    void HandleResolveResource(TAutoPtr<TEventHandle<TEvTxProxySchemeCache::TEvNavigateKeySetResult>>& ev);
     void HandleResolve(TEvStateStorage::TEvBoardInfo::TPtr& ev);
     STATEFN(StateResolveDatabase);
     STATEFN(StateResolveResource);

@@ -1,4 +1,6 @@
 #pragma once
+#include "viewer_flags.h"
+#include <ydb/core/viewer/protos/viewer.pb.h>
 #include "json_pipe_req.h"
 #include "viewer.h"
 #include "viewer_bsgroupinfo.h"
@@ -6,6 +8,11 @@
 #include "viewer_pdiskinfo.h"
 #include "viewer_helper.h"
 #include "wb_merge.h"
+#include <ydb/core/base/hive.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 
 template<>
 struct std::hash<NKikimrBlobStorage::TVSlotId> {
@@ -270,7 +277,7 @@ public:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, bool requestHiveStorageStats = true) {
         if (ev->Get()->Request->ResultSet.size() == 1 && ev->Get()->Request->ResultSet.begin()->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
             TString path = CanonizePath(ev->Get()->Request->ResultSet.begin()->Path);
-            TIntrusiveConstPtr<TSchemeCacheNavigate::TDomainDescription> domainDescription = ev->Get()->Request->ResultSet.begin()->DomainDescription;
+            TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TDomainDescription> domainDescription = ev->Get()->Request->ResultSet.begin()->DomainDescription;
             TIntrusiveConstPtr<NSchemeCache::TDomainInfo> domainInfo = ev->Get()->Request->ResultSet.begin()->DomainInfo;
 
             if (domainInfo != nullptr && domainDescription != nullptr) {

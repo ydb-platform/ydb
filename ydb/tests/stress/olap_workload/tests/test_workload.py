@@ -30,8 +30,7 @@ class TestYdbWorkload(StressFixture):
                 "allow_nullable_columns_in_pk": True,
                 "generate_internal_path_id": True,
             },
-            # Hive's gate needs the type off the deny list AND on the allow list;
-            # either half missing and Hive refuses the cut this test waits for.
+            # Hive's gate needs the type off the deny list and on the allow list, or it refuses the cut.
             hive_config={
                 "cut_history_deny_list": "KeyValue,PersQueue,BlobDepot",
                 "cut_history_allow_list": "DataShard,ColumnShard",
@@ -111,9 +110,7 @@ class TestYdbWorkload(StressFixture):
         shards = ((((described.get("PathDescription") or {}).get("ColumnTableDescription") or {})
                    .get("Sharding") or {}).get("ColumnShards") or [])
         assert shards, f"no ColumnShards behind {path}: {described}"
-        # Tenant databases expose their Hive via describe (ProcessingParams.Hive);
-        # the root domain used here does not, so resolve the Hive tablet directly
-        # and keep the well-known root Hive id as the fallback.
+        # The root domain does not expose its Hive via describe, so resolve it directly with a well-known fallback.
         tablets = self._mon_json("/viewer/json/tabletinfo?filter=(Type=Hive)")
         hives = [t.get("TabletId") for t in tablets.get("TabletStateInfo", []) if t.get("TabletId")]
         hive_id = hives[0] if hives else 72057594037968897
@@ -131,8 +128,7 @@ class TestYdbWorkload(StressFixture):
         assert history, f"no channel 2 history in Hive TabletInfo for tablet {shards[0]}"
         force_group = history[-1]["GroupID"]
         history_before = len(history)
-        # Manual reassign excludes the current group from selection, so only a forced
-        # same-group reassign appends a history entry here.
+        # Manual reassign excludes the current group, so only a forced same-group reassign appends an entry.
         err, body = self._mon_post(
             f"/tablets/app?TabletID={hive_id}&page=ReassignTablet"
             f"&tablet={shards[0]}&channel=2&forcedGroup={force_group}&wait=0"
@@ -155,9 +151,7 @@ class TestYdbWorkload(StressFixture):
             "--database", self.database,
             "--duration", self.base_duration,
         ])
-        # Manufacture a guaranteed-cuttable entry and require the full pipeline:
-        # Entries/Cut must grow, not merely "no errors". Window: one nomination
-        # cadence plus barrier round-trip; SIZE(MEDIUM) budget holds under asan.
+        # Require the full pipeline: Entries/Cut must grow within one nomination cadence plus a barrier round-trip.
         pool = ydb.QuerySessionPool(self.driver)
         try:
             probe = self._prepare_cut_history_candidate(pool)
@@ -165,8 +159,7 @@ class TestYdbWorkload(StressFixture):
             sensors = {}
             row = 0
             while time.time() < deadline:
-                # Writes feed GC completions (the only TryNominate trigger); their
-                # own failures are not the subject — tolerate and keep polling.
+                # Writes feed GC completions, the only TryNominate trigger; their own failures are not the subject.
                 try:
                     pool.execute_with_retries(f"UPSERT INTO `{probe}` (k, v) VALUES ({row}, {row})")
                     row += 1

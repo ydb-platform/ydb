@@ -95,14 +95,12 @@ class TestCutHistory(RollingUpgradeAndDowngradeFixture):
             pytest.skip("CutHistory is available starting from 26.4")
 
         yield from self.setup_cluster(
-            # Both legs are needed for the pool to converge: the platform flag drives the
-            # channel-0/1 cutters, the decommission flag drives ColumnShard's data channels.
+            # Both legs are needed: the platform flag drives channels 0/1, the decommission flag the data channels.
             extra_feature_flags=["enable_cut_history", "enable_columnshard_group_decommission"],
             column_shard_config={
                 "alter_object_enabled": True,
             },
-            # The deny list is Hive's, not ColumnShard's, and ColumnShard is on it by
-            # default — which would disable the cutter for the tablets under test.
+            # Hive's deny list carries ColumnShard by default, which would disable the cutter for these tablets.
             hive_config={
                 "cut_history_deny_list": "KeyValue,PersQueue,BlobDepot",
             },
@@ -206,13 +204,11 @@ class TestCutHistory(RollingUpgradeAndDowngradeFixture):
             self._assert_readable(table_name, expected)
             sensors = self._cut_history_sensors()
             logger.info("cut_history sensors: %s", sensors)
-            # A poisoned channel means the cutter saw a refcount underflow, which is
-            # a real defect rather than an environmental hiccup.
+            # A poisoned channel means a refcount underflow — a real defect, not an environmental hiccup.
             assert sensors.get("Channels/Poisoned", 0) == 0, f"cutter poisoned a channel: {sensors}"
             assert sensors.get("Barriers/Failed/Count", 0) == 0, f"barrier send failed: {sensors}"
 
-        # Give the cutter a nomination cadence to act on the post-roll state, then
-        # confirm it is still healthy and the data survived.
+        # Give the cutter one nomination cadence on the post-roll state, then check health and data.
         time.sleep(90)
         sensors = self._cut_history_sensors()
         logger.info("cut_history sensors after settle: %s", sensors)

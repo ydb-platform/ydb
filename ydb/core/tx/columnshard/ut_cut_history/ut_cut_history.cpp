@@ -92,8 +92,7 @@ using TEntryKey = NOlap::NBlobOperations::NBlobStorage::TEntryKey;
 using THistoryCutterWrapper = NOlap::NBlobOperations::NBlobStorage::THistoryCutterWrapper;
 using ECutState = NOlap::NBlobOperations::NBlobStorage::ECutState;
 
-// The suite only needs a live sensor instance to write into; values are asserted
-// through the cutter's own state, not through monitoring.
+// Only a live sensor instance is needed: values are asserted through the cutter's own state.
 static const NColumnShard::THistoryCutterCounters& TestSignals() {
     static const NColumnShard::TBlobsManagerCounters counters("UT_BlobsManager");
     return counters.HistoryCutterCounters;
@@ -117,8 +116,7 @@ struct TCutterEnv {
     std::shared_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager> Shared;
 };
 
-// The cutter keeps weak_ptrs to both managers, so they have to outlive it: keep the
-// returned object in the test's own scope, ahead of the cutter.
+// The cutter holds weak_ptrs to both managers, so keep this object in scope ahead of the cutter.
 TCutterEnv MakeCutterEnv(
     const ui64 tabletId, const ui32 gen, const ui32 nChannels = 3, const TVector<std::pair<ui32, ui32>>& history = { { 0, 100 }, { 5, 200 } }) {
     auto info = MakeTabletInfo(tabletId, nChannels, history);
@@ -152,14 +150,7 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
-    /*
-     * With 3 channels (0, 1, 2) and two history entries per channel:
-     *   History[0]: fromGen=0, group=100
-     *   History[1]: fromGen=5, group=200  <-- active
-     *
-     * Generation=5 => blobs written at gen=0..4 are in history[0], gen>=5 in history[1].
-     * Only data channels (ch >= 2) are tracked.
-     */
+    // Channels 0-2, history {fromGen=0, group=100} and active {fromGen=5, group=200}; only ch >= 2 is tracked.
 
     Y_UNIT_TEST(DecrementToZeroOnPortionRemoved) {
         auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
@@ -238,12 +229,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
     }
 
     Y_UNIT_TEST(SeenGroupsCheck) {
-        // History: [{fromGen=0, group=100}, {fromGen=5, group=100}, {fromGen=10, group=200}]
-        //   entry {fromGen=0, group=100}: no earlier entries → passes
-        //   entry {fromGen=5, group=100}: earlier entry {0,100} already has group 100 → blocked
-        //   entry {fromGen=10, group=200}: earlier entries have groups {100,100}; 200 not seen → passes
-        //   entry {fromGen=10, group=200} is the active (last) entry — TryNominate skips it via loop
-        //   bound, but SeenGroupsCheckPasses itself does not exclude it.
+        // History [{0,100}, {5,100}, {10,200}]: {5,100} is blocked by the earlier {0,100}, the others pass.
         using TEntry = TTabletChannelInfo::THistoryEntry;
         std::vector<TEntry> hist;
         auto addEntry = [&](ui32 fromGen, ui32 group) {
@@ -261,21 +247,18 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT(THistoryCutterWrapper::SeenGroupsCheckPasses(hist, /*fromGen=*/10));
         UNIT_ASSERT(!THistoryCutterWrapper::SeenGroupsCheckPasses(hist, /*fromGen=*/99));
 
-        // Entry {5,100} is blocked by {0,100} — unless {0,100} was already cut:
-        // cut entries are transparent for the same-group walk.
+        // {5,100} is blocked by {0,100} unless that one was cut: cut entries are transparent.
         UNIT_ASSERT(THistoryCutterWrapper::SeenGroupsCheckPasses(hist, /*fromGen=*/5, /*cutFromGenerations=*/{ 0 }));
         UNIT_ASSERT(!THistoryCutterWrapper::SeenGroupsCheckPasses(hist, /*fromGen=*/5, /*cutFromGenerations=*/{ 10 }));
     }
 
-    // Sweep disproval path: disproved candidates return to None (with retry cooldown),
-    // and no barrier is attempted for survivors that fail the final re-check.
+    // Disproved candidates return to None, and survivors failing the final re-check get no barrier.
     Y_UNIT_TEST(SweepDisprovalPath) {
         TActorSystemStub actorSystemStub;
         actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         // 3 channels; history: {fromGen=0, group=100}, {fromGen=5, group=200}, {fromGen=10, group=300 (active)}.
         auto info = MakeTabletInfo(/*tabletId=*/777, /*nChannels=*/3, { { 0, 100 }, { 5, 200 }, { 10, 300 } });
-        // Standalone wrapper: expired manager weak_ptr makes IsDrained() false, so the
-        // final re-check can never reach the barrier-send branch in this test.
+        // An expired manager weak_ptr keeps IsDrained() false, so the re-check never reaches barrier-send.
         TTestableHistoryCutter cutter(info, /*currentGen=*/20, std::weak_ptr<NOlap::TBlobManager>(),
             std::weak_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager>(), TActorId(), TestSignals());
 
@@ -295,9 +278,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT(cutter.GetCutStateForTest(keyB) == ECutState::None);
     }
 
-    // The drain gate must treat our blobs shared out to other tablets as pinning
-    // the entry: while shared they are in no GC queue, but a hard barrier would
-    // collect them under the borrower.
+    // Shared-out blobs must pin the entry: they are in no GC queue, but a barrier collects them anyway.
     Y_UNIT_TEST(SharedBlobsPinDrainGate) {
         TActorSystemStub actorSystemStub;
         actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
@@ -317,9 +298,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT_C(!cutter.IsDrained(key), "shared-out blob in the old range must pin the entry");
     }
 
-    // The blob-manager arm of the drain gate: an entry whose range still holds queued
-    // blobs must not be nominated. Remove HasNoBlobsInRange() from IsDrained() and this
-    // test must fail.
+    // An entry whose range still holds queued blobs must not be nominated (HasNoBlobsInRange arm).
     Y_UNIT_TEST(QueuedBlobsPinDrainGate) {
         TActorSystemStub actorSystemStub;
         actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
@@ -335,8 +314,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         const TVector<std::pair<ui32, ui32>> history{ { OldFromGen, OldGroup }, { ActiveFromGen, ActiveGroup } };
         const TEntryKey key{ DataChannel, OldFromGen };
 
-        // Both owners must outlive the cutter: it keeps weak_ptrs to them, and IsDrained()
-        // answers false for an expired pointer, which would look exactly like "not drained".
+        // Both owners must outlive the cutter: an expired weak_ptr looks exactly like "not drained".
         auto makeCutter = [&](std::shared_ptr<NOlap::TBlobManager>& bmOut,
                               std::shared_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager>& sharedOut) {
             auto info = MakeTabletInfo(TabletId, ChannelCount, history);
@@ -391,8 +369,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         cutter.DecrementCounter(key);
         UNIT_ASSERT(cutter.IsChannelPoisonedForTest(DataChannel));
 
-        // The poisoned channel yields no candidates (the stub context is safe here:
-        // an empty batch means TryNominate returns before any actor-system send).
+        // The poisoned channel yields no candidates, so TryNominate returns before any actor-system send.
         const auto ctx = NActors::TActivationContext::AsActorContext();
         UNIT_ASSERT(!cutter.TryNominate(ctx));
         UNIT_ASSERT(guard->GetNominated().empty());
@@ -414,8 +391,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         const TEntryKey keyMid{ /*channel=*/2, /*fromGeneration=*/5 };
         static constexpr ui32 PoisonChannel = 3;
 
-        // Dirty everything reachable: counters, disproval backoff, poison, and an
-        // in-flight sweep with Verifying state and a portion cursor.
+        // Dirty everything reachable: counters, backoff, poison, and an in-flight sweep with a cursor.
         THashMap<ui64, std::vector<NOlap::TUnifiedBlobId>> oldPortions;
         oldPortions[1].push_back(MakeUnifiedBlob(MakeBlob(TabletId, 2, 1)));
         cutter.OnBootComplete(oldPortions);
@@ -536,8 +512,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT(cutter.GetCutStateForTest(key) == ECutState::Cut);
         UNIT_ASSERT_VALUES_EQUAL(guard->GetCut().size(), 1);
 
-        // Converged: a cut entry is never nominated again, so Hive gets one request per
-        // entry instead of a nominate/cut loop that would never let the group go.
+        // A cut entry is never nominated again: Hive gets one request per entry, not a nominate/cut loop.
         const auto nominationsAfterCut = guard->GetNominated().size();
         runInActor([&](const NActors::TActorContext& ctx) {
             nominated = cutter.TryNominate(ctx);
@@ -592,8 +567,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         disproveSweep();
         UNIT_ASSERT_VALUES_EQUAL(cutter.GetDisprovalAttemptsForTest(key), 1);
 
-        // After one disproval Attempts=1, so renomination waits cooldown(1)=10m
-        // measured from that disproval: 2m and 6m stay blocked, 11m passes.
+        // Attempts=1 after one disproval, so cooldown(1)=10m: 2m and 6m stay blocked, 11m passes.
         runtime.AdvanceCurrentTime(TDuration::Minutes(2));
         tryNominate(false);
         runtime.AdvanceCurrentTime(TDuration::Minutes(4));
@@ -609,8 +583,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         runtime.AdvanceCurrentTime(TDuration::Minutes(9));
         tryNominate(true);
 
-        // This time nothing disproves the entry: the sweep survives to the barrier
-        // and the backoff record is erased before SentBarrier.
+        // Nothing disproves the entry now: the sweep reaches the barrier and the backoff record is erased.
         UNIT_ASSERT(runtime.GrabEdgeEvent<NColumnShard::TEvPrivate::TEvStartCutHistorySweep>(edgeTablet));
         cutter.SetPortionSnapshot({});
         runInActor([&](const NActors::TActorContext& ctx) {
@@ -621,14 +594,8 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT_VALUES_EQUAL(cutter.GetDisprovalAttemptsForTest(key), 0);
     }
 
-    // Open item 4: a failed barrier must enter the disproval cooldown (~10m), not
-    // retry the whole sweep + barrier every nomination cadence against the same
-    // obstacle. Observable contract: TryNominate returns false within the window
-    // and true once it lapses. Repeated barrier failures plateau at the same ~10m
-    // window (they do not escalate the way sweep disprovals do, because the
-    // pre-barrier Attempts erase resets the counter back to 0 before each new
-    // OnBarrierResult raises it to 1 again). Assertions are purely behavioral:
-    // TryNominate return value and TEvCollectGarbage reaching the proxy.
+    // A failed barrier enters the ~10m disproval cooldown instead of retrying every cadence, and repeated
+    // failures plateau there because the pre-barrier erase resets Attempts before each OnBarrierResult.
     Y_UNIT_TEST(BarrierFailureEntersDisprovalCooldown) {
         TTestBasicRuntime runtime;
         TAppPrepare app;
@@ -661,9 +628,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
             });
             UNIT_ASSERT_VALUES_EQUAL(result, expected);
         };
-        // Drives a clean sweep all the way to the barrier message (empty portion
-        // snapshot, no disprovals). The observable outcome is TEvCollectGarbage
-        // going out to the proxy — that is the only assertion inside this lambda.
+        // Drives a clean sweep to the barrier; the only assertion here is TEvCollectGarbage reaching the proxy.
         auto sweepCleanToBarrier = [&]() {
             UNIT_ASSERT(runtime.GrabEdgeEvent<NColumnShard::TEvPrivate::TEvStartCutHistorySweep>(edgeTablet));
             cutter.SetPortionSnapshot({});
@@ -678,8 +643,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         sweepCleanToBarrier();
         cutter.OnBarrierResult(key, /*ok=*/false, runtime.GetCurrentTime());
 
-        // cooldown(1) ≈ 10m from the failure: 2m and 7m are still inside the
-        // window; 11m clears it.
+        // cooldown(1) is about 10m from the failure: 2m and 7m stay inside the window, 11m clears it.
         runtime.AdvanceCurrentTime(TDuration::Minutes(2));
         tryNominate(false);
         runtime.AdvanceCurrentTime(TDuration::Minutes(5));
@@ -687,14 +651,11 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         runtime.AdvanceCurrentTime(TDuration::Minutes(4));
         tryNominate(true);
 
-        // Second sweep → barrier → second failure. The window must stay at ~10m
-        // (not escalate to ~20m), proving that repeated barrier failures plateau
-        // at the same cooldown level.
+        // A second failure must keep the window at ~10m rather than escalating to ~20m.
         sweepCleanToBarrier();
         cutter.OnBarrierResult(key, /*ok=*/false, runtime.GetCurrentTime());
 
-        // Second cooldown window: 2m blocked, then another 9m (total 11m from
-        // the second failure) clears it — same ~10m as the first window.
+        // Second window: 2m blocked, 11m total from the failure clears it — same ~10m as the first.
         runtime.AdvanceCurrentTime(TDuration::Minutes(2));
         tryNominate(false);
         runtime.AdvanceCurrentTime(TDuration::Minutes(9));
@@ -761,8 +722,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT_C(bm->HasNoBlobsInRange(DataChannel, 0, 5), "the orphaned mark left the delete queue with the task");
     }
 
-    // A live portion in the entry's range blocks nomination; MoveData's rewrite reaches
-    // the cutter as the portion erase, and that is what opens the gate.
+    // A live portion in the range blocks nomination; the portion erase from MoveData opens the gate.
     Y_UNIT_TEST(LivePortionBlocksNomination) {
         TActorSystemStub actorSystemStub;
         actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();

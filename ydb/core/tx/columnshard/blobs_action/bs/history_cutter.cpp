@@ -165,10 +165,7 @@ ui32 THistoryCutterWrapper::GetNextFromGeneration(const TEntryKey& key) const {
         return 0;
     }
     const auto& hist = TabletInfo->Channels[key.Channel].History;
-    // History is ascending by FromGeneration, so the successor is one past the entry
-    // itself; TCmp is the comparator TTabletChannelInfo::GroupForGeneration uses for
-    // the same search. `next == end()` means the entry is the active one, which has no
-    // successor and is therefore never a cut candidate.
+    // History ascends by FromGeneration; end() means the active entry, never a cut candidate.
     const auto next = UpperBound(hist.begin(), hist.end(), key.FromGeneration, TTabletChannelInfo::THistoryEntry::TCmp());
     if (next == hist.begin() || next == hist.end() || (next - 1)->FromGeneration != key.FromGeneration) {
         return 0;
@@ -188,8 +185,7 @@ bool THistoryCutterWrapper::IsDrained(const TEntryKey& key) const {
     if (!manager->HasNoBlobsInRange(key.Channel, key.FromGeneration, nextGen)) {
         return false;
     }
-    // Our blobs shared out to other tablets sit in no GC queue while shared; a hard
-    // barrier would collect them under the borrower, so they pin the entry too.
+    // Shared-out blobs sit in no GC queue, but a hard barrier would collect them under the borrower.
     const auto sharedBlobs = SharedBlobs.lock();
     if (!sharedBlobs) {
         return false;
@@ -209,8 +205,7 @@ bool THistoryCutterWrapper::GetEntryKey(const TLogoBlobID& blobId, TEntryKey& ou
         return false;
     }
     const auto& hist = TabletInfo->Channels[ch].History;
-    // UpperBound lands one past the owning entry: begin() means no entry covers the
-    // generation, end() means the owner is the active entry, never a cut candidate.
+    // UpperBound lands one past the owner: begin() means uncovered, end() means the active entry.
     const auto entry = UpperBound(hist.begin(), hist.end(), blobId.Generation(), TTabletChannelInfo::THistoryEntry::TCmp());
     if (entry == hist.begin() || entry == hist.end()) {
         return false;
@@ -236,11 +231,7 @@ void THistoryCutterWrapper::IncrementCounter(const TEntryKey& key) {
 
 void THistoryCutterWrapper::DecrementCounter(const TEntryKey& key) {
     auto it = Counters.find(key);
-    // Unreachable by design: OnPortionRemoved is fenced by PortionKeys, and PortionKeys and
-    // Counters are written and cleared together, so a portion that was never counted is never
-    // decremented. Poisoning guards against a future divergence between the two maps rather
-    // than any known scenario - if this warning ever fires in production, that divergence is
-    // the bug, not the channel.
+    // Unreachable while PortionKeys fences OnPortionRemoved; poisoning guards a future divergence of the two maps.
     if (it == Counters.end() || it->second == 0) {
         if (PoisonedChannels.insert(key.Channel).second) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "cut_history_channel_poisoned")("channel", key.Channel)(
@@ -324,8 +315,7 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
     if (SweepInFlight) {
         return false;
     }
-    // Evaluating candidates scans the GC queues, and background enqueues fire every few
-    // seconds: rate-limit rather than scan per enqueue.
+    // Candidate evaluation scans the GC queues, so rate-limit rather than scan per enqueue.
     if (LastNominateAt && ctx.Now() - LastNominateAt < GetNominateCadence()) {
         return false;
     }
@@ -452,8 +442,7 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
             CutState[key] = ECutState::None;
             continue;
         }
-        // The history may have changed between nomination and this point — the
-        // same-group safety gate must hold at barrier-send time, not only at nomination.
+        // History may have changed since nomination: the same-group gate must hold at barrier-send time.
         if (!SeenGroupsCheckPasses(key)) {
             CutState[key] = ECutState::None;
             continue;
@@ -467,9 +456,7 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
 
         std::optional<ui32> groupId;
         if (key.Channel < static_cast<ui32>(TabletInfo->Channels.size())) {
-            // Exact match rather than GroupForGeneration: once the entry has been cut
-            // away, the entry that covers its generation belongs to a different, live
-            // group, and barriering that one would collect blobs still in use.
+            // Exact match, not GroupForGeneration: once cut, that generation resolves to a different live group.
             if (const auto* entry =
                     FindIfPtr(TabletInfo->Channels[key.Channel].History, [&key](const TTabletChannelInfo::THistoryEntry& historyEntry) {
                         return historyEntry.FromGeneration == key.FromGeneration;
@@ -490,8 +477,7 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
     }
     SweepSurvivors.clear();
 
-    // Safety net: the disproved loop settled those already, so anything still Verifying
-    // is unexpected — reset it without counting an attempt.
+    // Safety net: the disproved loop settled these already, so reset without counting an attempt.
     for (auto& [key, state] : CutState) {
         if (state == ECutState::Verifying) {
             state = ECutState::None;
@@ -510,11 +496,8 @@ void THistoryCutterWrapper::OnBarrierResult(const TEntryKey& key, bool ok, TInst
         NYDBTest::TControllers::GetColumnShardController()->OnHistoryEntryCut(key.Channel, key.FromGeneration);
     } else {
         *state = ECutState::None;
-        // Without this a failed barrier retried every nomination cadence against the
-        // same obstacle: ~190 wasted sweep+barrier rounds/min measured on a drained
-        // pool. A failure re-enters the disproval cooldown instead. Attempts restarts
-        // at 1 because nomination erased the record right before SentBarrier, so
-        // consecutive failures plateau at cooldown(1) rather than escalating.
+        // A failure enters the disproval cooldown instead of retrying every cadence; Attempts restarts
+        // at 1 because nomination erased the record, so repeated failures plateau at cooldown(1).
         auto& disproval = DisprovedAt[key];
         disproval.At = now;
         ++disproval.Attempts;

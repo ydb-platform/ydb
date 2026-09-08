@@ -42,8 +42,7 @@ class WorkloadRunner:
             WorkloadRenameTables(self.client, self.name, stop, 10),
             WorkloadEncodings(self.client, self.name, stop),
         ]
-        # Tablet restarts go through the message-bus client, so this one is only
-        # enabled when the caller supplied an endpoint.
+        # Tablet restarts go through the message-bus client, so this needs a caller-supplied endpoint.
         if self.endpoint:
             workloads.append(WorkloadCutHistory(self.client, self.name, stop, self.endpoint))
         for w in workloads:

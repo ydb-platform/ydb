@@ -110,9 +110,7 @@ void TColumnShard::SetupCutHistory() {
     }
     cutter->SetLauncherActorId(LauncherID());
     CutHistoryCutter = cutter;
-    // Boot feed starts with EMPTY counters: boot-loaded portions are not counted, so the
-    // tier-1 counter can only undercount. Undercount causes a spurious nomination that the
-    // tier-2 sweep disproves, or poisons the channel — both fail-safe, never an unsafe cut.
+    // Boot starts with empty counters, so tier-1 can only undercount: the sweep disproves or the channel poisons.
     cutter->OnBootComplete({});
 }
 

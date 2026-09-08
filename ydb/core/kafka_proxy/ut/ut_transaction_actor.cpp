@@ -4,6 +4,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/fwd.h>
+#include <util/generic/hash_set.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/kqp/common/events/events.h>
@@ -688,6 +689,58 @@ namespace {
             UNIT_ASSERT(first->CorrelationId != second->CorrelationId);
             UNIT_ASSERT(first->CorrelationId == 1 || second->CorrelationId == 1);
             UNIT_ASSERT(first->CorrelationId == 2 || second->CorrelationId == 2);
+        }
+
+        Y_UNIT_TEST(OnEndTxnCommitRetriesOverCap_shouldRejectExtraWithCoordinatorNotAvailable) {
+            Ctx->Runtime->SetScheduledLimit(50'000);
+            ui32 endTxnSeen = 0;
+            auto observer = [&endTxnSeen](TAutoPtr<IEventHandle>& input) {
+                if (input->CastAsLocal<NKafka::TEvKafka::TEvEndTxnRequest>()) {
+                    ++endTxnSeen;
+                }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            };
+            Ctx->Runtime->SetObserverFunc(observer);
+            DummyKqpActor->SetHoldCommit(true);
+            SendAddPartitionsToTxnRequest({{"topic1", {0}}});
+
+            const ui64 queuedCount = NKafka::TTransactionActor::MaxPendingEndTxnRequests;
+            SendEndTxnRequestAsync(true, 1);
+            TDispatchOptions waitHeld;
+            waitHeld.CustomFinalCondition = [this]() {
+                return DummyKqpActor->HasHeldCommit();
+            };
+            UNIT_ASSERT(Ctx->Runtime->DispatchEvents(waitHeld, TDuration::Seconds(5)));
+            UNIT_ASSERT(DummyKqpActor->HasHeldCommit());
+
+            for (ui64 correlationId = 2; correlationId <= queuedCount; ++correlationId) {
+                SendEndTxnRequestAsync(true, correlationId);
+            }
+            TDispatchOptions waitQueued;
+            waitQueued.CustomFinalCondition = [&endTxnSeen]() {
+                return endTxnSeen >= NKafka::TTransactionActor::MaxPendingEndTxnRequests;
+            };
+            UNIT_ASSERT(Ctx->Runtime->DispatchEvents(waitQueued, TDuration::Seconds(5)));
+
+            const ui64 rejectedCorrelationId = queuedCount + 1;
+            SendEndTxnRequestAsync(true, rejectedCorrelationId);
+            auto rejected = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+            UNIT_ASSERT(rejected != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(rejected->CorrelationId, rejectedCorrelationId);
+            UNIT_ASSERT_VALUES_EQUAL(rejected->ErrorCode, NKafka::EKafkaErrors::COORDINATOR_NOT_AVAILABLE);
+            UNIT_ASSERT_EQUAL(rejected->Response->ApiKey(), NKafka::EApiKey::END_TXN);
+
+            DummyKqpActor->ReleaseHeldCommit(*Ctx->Runtime);
+            THashSet<ui64> okCorrelationIds;
+            for (ui64 i = 0; i < queuedCount; ++i) {
+                auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+                UNIT_ASSERT(response != nullptr);
+                UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+                UNIT_ASSERT_EQUAL(response->Response->ApiKey(), NKafka::EApiKey::END_TXN);
+                okCorrelationIds.insert(response->CorrelationId);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(okCorrelationIds.size(), queuedCount);
+            UNIT_ASSERT(!okCorrelationIds.contains(rejectedCorrelationId));
         }
 
         Y_UNIT_TEST(OnEndTxnWithCommitAndAbortFromTxn_shouldReturnCOORDINATOR_NOT_AVAILABLE) {

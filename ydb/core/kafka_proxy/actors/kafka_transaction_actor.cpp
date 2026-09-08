@@ -126,6 +126,15 @@ namespace NKafka {
                     "Commit already in progress");
                 return;
             }
+            if (PendingEndTxnRequests.size() >= MaxPendingEndTxnRequests) {
+                YDB_LOG_WARN("EndTxn retry queue is full; rejecting extra retry",
+                    {LogPrefix()},
+                    {"correlationId", ev->Get()->CorrelationId},
+                    {"pending", PendingEndTxnRequests.size()});
+                SendFailResponse<TEndTxnResponseData>(ev, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
+                    "Too many EndTxn retries while commit is in progress");
+                return;
+            }
             YDB_LOG_DEBUG("EndTxn commit already in progress; attaching retry",
                 {LogPrefix()},
                 {"correlationId", ev->Get()->CorrelationId},

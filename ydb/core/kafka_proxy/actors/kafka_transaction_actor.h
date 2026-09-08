@@ -41,6 +41,8 @@ namespace NKafka {
                 COMMIT
             };
 
+            static constexpr size_t MaxPendingEndTxnRequests = 8;
+
             // we need to exlplicitly specify kqpActorId and txnCoordinatorActorId for unit tests
             TTransactionActor(const TString& transactionalId, const TProducerInstanceId& producerInstanceId, const TString& databasePath, ui64 txnTimeoutMs, const TString& resourceDatabasePath) :
                 TBase(&TTransactionActor::StateFunc),

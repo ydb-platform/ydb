@@ -280,17 +280,20 @@ class Workload(unittest.TestCase):
             )
             source_count = self.count_messages(messages_info_test)
             print(f"Source topic has {source_count} readable messages")
-            self.dump_topic_end_offsets(self.test_topic_path)
             print(f"Waiting up to {self.duration} sec for readable target topic messages")
-            messages_info_targets = self.read_messages_from_topics(
-                [
-                    (f"{self.target_topic_path}-{i}", f"{checkerConsumer}-{i}")
-                    for i in range(len(testOptions))
-                ],
-                expected_count=source_count,
-                timeout=self.duration,
-                processes=processes,
-            )
+            try:
+                messages_info_targets = self.read_messages_from_topics(
+                    [
+                        (f"{self.target_topic_path}-{i}", f"{checkerConsumer}-{i}")
+                        for i in range(len(testOptions))
+                    ],
+                    expected_count=source_count,
+                    timeout=self.duration,
+                    processes=processes,
+                )
+            except AssertionError:
+                self.dump_topic_end_offsets(self.test_topic_path)
+                raise
         finally:
             print("Killing processes")
             if source_process is not None:

@@ -32,6 +32,54 @@ static constexpr ui32 MaxRawLsns = TPersistentBufferFastErases::ErasesBufferSize
 
 Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
 
+    Y_UNIT_TEST(RestoreKeepsBarriersWithoutRecords) {
+        auto mgr = MakeManager();
+        auto alloc = MakeAllocator();
+        TPersistentBufferBarriers header{};
+        header.Header.Flags = TPersistentBufferHeader::IS_BARRIER;
+        header.Header.RecordLsn = 1;
+        header.Barriers[0] = {100, 0, 0, 1};
+        header.Barriers[1] = {100, 3, 42, 2};
+        header.Barriers[2] = {100, Max<ui32>(), Max<ui64>(), 3};
+        UNIT_ASSERT(mgr.AddBarrier(&header.Header, 0, 1));
+        std::map<TPersistentBufferId, TPersistentBuffer> buffers;
+        mgr.RestoreBarriers(buffers, alloc);
+
+        UNIT_ASSERT_VALUES_EQUAL(mgr.PersistentBufferBarriersLocation.size(), 3);
+        UNIT_ASSERT(mgr.PersistentBufferBarriersLocation.contains({100, 1}));
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(100, 2).Generation, 3);
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(100, 2).Lsn, 42);
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(100, 3).Generation, Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(100, 3).Lsn, Max<ui64>());
+        UNIT_ASSERT(mgr.PersistentBufferBarrierHoles.empty());
+
+        // Allocating another namespace must not overwrite a recovered empty namespace.
+        mgr.MoveBarrier(200, 1, 1, MakeSector(0, 2));
+        UNIT_ASSERT_VALUES_EQUAL(mgr.PersistentBufferBarriersLocation.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(100, 2).Lsn, 42);
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(100, 3).Lsn, Max<ui64>());
+    }
+
+    Y_UNIT_TEST(RestoreKeepsBarrierAcrossRestartsAfterLastRecordErased) {
+        TPersistentBufferBarriers header{};
+        header.Header.Flags = TPersistentBufferHeader::IS_BARRIER;
+        header.Header.RecordLsn = 1;
+        header.Barriers[0] = {100, 2, 10, 0};
+        std::map<TPersistentBufferId, TPersistentBuffer> buffers;
+        buffers[{100, 2}].Records[5] = {};
+
+        for (ui32 restart = 0; restart != 2; ++restart) {
+            auto mgr = MakeManager();
+            auto alloc = MakeAllocator();
+            UNIT_ASSERT(mgr.AddBarrier(&header.Header, 0, 1));
+            mgr.RestoreBarriers(buffers, alloc);
+            UNIT_ASSERT(buffers.empty());
+            UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(100).Generation, 2);
+            UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(100).Lsn, 10);
+            UNIT_ASSERT(mgr.PersistentBufferBarrierHoles.empty());
+        }
+    }
+
     Y_UNIT_TEST(CompactDoesNotSetFlagWhenFitsRaw) {
         auto mgr = MakeManager();
 

@@ -176,14 +176,12 @@ namespace NKikimr::NDDisk {
                 // across the map (ordering is TabletId, then Generation, then
                 // DirectBlockGroupIndex), so we scan every entry with a matching TabletId and
                 // filter by DirectBlockGroupIndex rather than relying on a contiguous range.
-                bool found = false;
                 for (auto it = persistentBuffers.lower_bound({barrier.TabletId, 0});
                         it != persistentBuffers.end() && it->first.TabletId == barrier.TabletId; ) {
                     if (it->first.DirectBlockGroupIndex != barrier.DirectBlockGroupIndex) {
                         ++it;
                         continue;
                     }
-                    found = true;
                     if (it->first.Generation < barrier.Generation) {
                         it = persistentBuffers.erase(it);
                         continue;
@@ -200,14 +198,8 @@ namespace NKikimr::NDDisk {
                         ++it;
                     }
                 }
-                if (!found) {
-                    YDB_LOG_DEBUG("TPersistentBufferBarriersManager::RestoreBarriers tablet records not found, erase barrier marked as free",
-                        {"marker", "BSDD30"},
-                        {"tabletId", barrier.TabletId},
-                        {"directBlockGroupIndex", barrier.DirectBlockGroupIndex},
-                        {"lsn", barrier.Lsn});
-                    PersistentBufferBarrierHoles.push_back({pos, FreeBarrierPosition});
-                } else {
+                // Barriers are durable state even when this namespace has no live records.
+                {
                     auto locationIt = PersistentBufferBarriersLocation.find(key);
                     if (locationIt == PersistentBufferBarriersLocation.end()) {
                         PersistentBufferBarriersLocation[key] = {pos, FreeBarrierPosition};

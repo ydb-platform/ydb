@@ -196,6 +196,9 @@ class IBalancingStrategy:
     def filter_must_first_vslots(self, candidate_vslots):
         return candidate_vslots
 
+    def partition_candidate_vslots(self, candidate_vslots):
+        return [candidate_vslots]
+
     def order_candidate_vslots(self, candidate_vslots):
         return [candidate_vslots]
 
@@ -207,7 +210,7 @@ class BalancingStrategy(IBalancingStrategy):
     def __init__(self, args, cluster_info, groups_info):
         super().__init__(args, cluster_info, groups_info)
         self.histo = None
-        self.healthy_vslots_from_overpopulated_pdisks = None
+        self.overpopulated_pdisks = set()
 
     def verify_cluster_state(self):
         existing_storage_pools = set(self.cluster_info.group_id_to_storage_pool_name_map.values())
@@ -234,18 +237,32 @@ class BalancingStrategy(IBalancingStrategy):
 
     def calculate_extra_info(self):
         self.histo = Counter(self.cluster_info.pdisk_usage.values())
-        candidate_vslots = self.cluster_info.base_config.VSlot
-        candidate_vslots = filter_vslots_by_group_ids(candidate_vslots, self.args.group_ids)
-        candidate_vslots = self.filter_must_first_vslots(candidate_vslots)
-        self.healthy_vslots_from_overpopulated_pdisks = candidate_vslots
+        self.overpopulated_pdisks = list_overpopulated_pdisks(self.cluster_info)
         common.print_if_verbose(self.args, 'Number of used slots -> number pdisks: ' + ' '.join('%d=>%d' % (k, self.histo[k]) for k in sorted(self.histo)), file=sys.stdout)
         return False
 
     def filter_must_first_vslots(self, candidate_vslots):
+        """Restrict candidates to healthy VSlots on overpopulated PDisks when requested.
+
+        In normal mode, retain all candidates so regular balancing remains possible
+        after overpopulated sources are exhausted. Prioritization is handled by
+        partition_candidate_vslots.
+        """
         if self.args.only_from_overpopulated_pdisks:
-            overpopulated_pdisks = list_overpopulated_pdisks(self.cluster_info)
-            return filter_vslots_by_pdisks(candidate_vslots, overpopulated_pdisks)
+            return self.groups_info.filter_healthy_vslots(
+                filter_vslots_by_pdisks(candidate_vslots, self.overpopulated_pdisks))
         return candidate_vslots
+
+    def partition_candidate_vslots(self, candidate_vslots):
+        # Exhaust overpopulated sources before trying regular balancing candidates.
+        overpopulated = []
+        regular = []
+        for vslot in candidate_vslots:
+            if common.get_pdisk_id(vslot.VSlotId) in self.overpopulated_pdisks:
+                overpopulated.append(vslot)
+            else:
+                regular.append(vslot)
+        return [overpopulated, regular]
 
     def list_candidate_vslots(self):
         candidate_vslots = self.cluster_info.base_config.VSlot
@@ -291,7 +308,8 @@ class BalancingStrategy(IBalancingStrategy):
                                 (vslot_id, pdisk_id, pdisk_usage[pdisk_id], try_blocking), file=sys.stdout)
 
         current_usage = pdisk_usage[pdisk_id]
-        if not self.args.only_from_overpopulated_pdisks:
+        is_from_overpopulated_pdisk = pdisk_id in self.overpopulated_pdisks
+        if not is_from_overpopulated_pdisk:
             for i in range(0, current_usage - weight_from):
                 if histo[i]:
                     break
@@ -308,14 +326,15 @@ class BalancingStrategy(IBalancingStrategy):
         pdisk_from = item.From.NodeId, item.From.PDiskId
         pdisk_to = item.To.NodeId, item.To.PDiskId
         weight_to = self.cluster_info.get_vslot_weight_on_pdisk(vslot.GroupId, pdisk_to)
-        if pdisk_usage_w_donors[pdisk_to] + weight_to > expected_slot_count_map.get(pdisk_to, 0):
+        expected_slot_count = expected_slot_count_map.get(pdisk_to, 0)
+        if expected_slot_count and pdisk_usage_w_donors[pdisk_to] + weight_to > expected_slot_count:
             common.print_if_not_quiet(
                 self.args,
                 'NOTICE: Attempted to reassign vdisk from pdisk [%d:%d] to pdisk [%d:%d] with slot usage %d and slot limit %d on the latter' %
-                (*pdisk_from, *pdisk_to, pdisk_usage_w_donors[pdisk_to], expected_slot_count_map.get(pdisk_to, 0)), file=sys.stdout)
+                (*pdisk_from, *pdisk_to, pdisk_usage_w_donors[pdisk_to], expected_slot_count), file=sys.stdout)
             return False
 
-        if not self.args.only_from_overpopulated_pdisks and pdisk_usage[pdisk_to] + weight_to > pdisk_usage[pdisk_from] - weight_from:
+        if not is_from_overpopulated_pdisk and pdisk_usage[pdisk_to] + weight_to > pdisk_usage[pdisk_from] - weight_from:
             if not try_blocking:
                 return False
             request = common.kikimr_bsconfig.TConfigRequest(Rollback=True)
@@ -323,8 +342,9 @@ class BalancingStrategy(IBalancingStrategy):
             for pdisk in self.cluster_info.base_config.PDisk:
                 check_pdisk_id = common.get_pdisk_id(pdisk)
                 check_weight = self.cluster_info.get_vslot_weight_on_pdisk(vslot.GroupId, check_pdisk_id)
-                disk_is_better = pdisk_usage_w_donors[check_pdisk_id] + check_weight <= expected_slot_count_map.get(check_pdisk_id, 0)
-                if disk_is_better and not self.args.only_from_overpopulated_pdisks:
+                expected_slot_count = expected_slot_count_map.get(check_pdisk_id, 0)
+                disk_is_better = not expected_slot_count or pdisk_usage_w_donors[check_pdisk_id] + check_weight <= expected_slot_count
+                if disk_is_better:
                     if pdisk_usage[check_pdisk_id] + check_weight > pdisk_usage[pdisk_id] - weight_from:
                         disk_is_better = False
 
@@ -606,21 +626,18 @@ def balance_iteration(args, strategy, iteration_number):
         time.sleep(Constants.WAITING_TIME)
         return None
 
-    mismatching_vslots = []
-    matching_vslots = []
-    for v in candidate_vslots:
-        if is_vslot_size_mismatch(v, strategy.cluster_info):
-            mismatching_vslots.append(v)
-        else:
-            matching_vslots.append(v)
-
-    if mismatching_vslots:
-        vslots_ordered_groups_to_reassign = (
-            strategy.order_candidate_vslots(mismatching_vslots) +
-            strategy.order_candidate_vslots(matching_vslots)
-        )
-    else:
-        vslots_ordered_groups_to_reassign = strategy.order_candidate_vslots(candidate_vslots)
+    vslots_ordered_groups_to_reassign = []
+    for candidates in strategy.partition_candidate_vslots(candidate_vslots):
+        mismatching_vslots = []
+        matching_vslots = []
+        for vslot in candidates:
+            if is_vslot_size_mismatch(vslot, strategy.cluster_info):
+                mismatching_vslots.append(vslot)
+            else:
+                matching_vslots.append(vslot)
+        for vslots in (mismatching_vslots, matching_vslots):
+            if vslots:
+                vslots_ordered_groups_to_reassign.extend(strategy.order_candidate_vslots(vslots))
     common.print_if_verbose(args, f"Found {len(candidate_vslots)} candidate vslots, {len(vslots_ordered_groups_to_reassign)} groups to reassign", file=sys.stdout)
     was_sent = False
     for vslots in vslots_ordered_groups_to_reassign:

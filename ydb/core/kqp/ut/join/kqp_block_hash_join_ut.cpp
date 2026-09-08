@@ -38,11 +38,14 @@ NKikimrConfig::TAppConfig AppCfgLowComputeLimits(double reasonableTreshold, bool
 
 
 // Runs the spilling join under the given resource manager spilling threshold and checks whether the compute
-// spilling counters moved.
-void RunSpillingCase(double spillingPercent, bool expectSpilling) {
+// spilling counters moved. With enableOperatorMemoryQuota the compute actors bind the operator memory quota
+// (RFC dq_memory_quota_20) for the graph; nothing consumes it until the operator side lands, so the outcome
+// must be the same.
+void RunSpillingCase(double spillingPercent, bool expectSpilling, bool enableOperatorMemoryQuota = false) {
         TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig = AppCfgLowComputeLimits(spillingPercent);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetEnableOperatorMemoryQuota(enableOperatorMemoryQuota);
         TKikimrRunner kikimr(settings);
 
         auto queryClient = kikimr.GetQueryClient();
@@ -143,6 +146,12 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
     Y_UNIT_TEST(NoSpillingAtHighPercent) {
         // the availability never turns negative below the spilling threshold: no spilling
         RunSpillingCase(100, /* expectSpilling = */ false);
+    }
+
+    Y_UNIT_TEST(SpillingWithOperatorMemoryQuota) {
+        // smoke test of the flag plumbing: config -> compute actor factory -> memory limits -> the quota bound
+        // around every execution; the join still spills exactly as without the flag
+        RunSpillingCase(0.01, /* expectSpilling = */ true, /* enableOperatorMemoryQuota = */ true);
     }
     Y_UNIT_TEST_TWIN(BlockHashJoinTest, UseBlockHashJoin) {
         TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);

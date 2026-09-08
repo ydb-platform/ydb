@@ -1,3 +1,6 @@
+#include "schemeshard_info_types_table.h"
+#include "schemeshard_info_types_objects_misc.h"
+#include "schemeshard_info_types_objects_storage.h"
 #include "schemeshard__backup_collection_common.h"
 #include "schemeshard__operation_alter_cdc_stream.h"
 #include "schemeshard__operation_common.h"
@@ -120,7 +123,7 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
     }
 
     const auto [_, streamPath] = std::get<NCdc::TStreamPaths>(checksResult);
-    TTableInfo::TPtr table = context.SS->Tables.at(tablePath.Base()->PathId);
+    TIntrusivePtr<TTableInfo> table = context.SS->Tables.at(tablePath.Base()->PathId);
 
     const auto topicPath = streamPath.Child("streamImpl");
     TTopicInfo::TPtr topic = context.SS->Topics.at(topicPath.Base()->PathId);

@@ -2,6 +2,7 @@
 
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/testlib/actors/block_events.h>
 

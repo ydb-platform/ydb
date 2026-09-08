@@ -1,46 +1,101 @@
+#include "schemeshard_info_types_objects_misc.h"
+#include "schemeshard_info_types_objects_transfer.h"
+#include "schemeshard_info_types_topic.h"
+#include "schemeshard_info_types_subdomain.h"
 #include "schemeshard__operation_side_effects.h"
+#include "schemeshard__operation_part.h"
 
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_domain_links.h"
 
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/tablet/pipe_tracker.h>
 #include <ydb/core/tx/tx_processing.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
 
+struct TSideEffects::TImpl {
+    THashSet<TTxId> ActivationOps;
+    THashSet<TOperationId> ActivationParts;
+
+    TDeque<TCoordinatorAck> CoordinatorAcks;
+    TDeque<TMediatorAck> MediatorAcks;
+    TDeque<TSendRec> Messages;
+    TDeque<TBindMsgRec> BindedMessages;
+    TDeque<TBindMsgAck> BindedMessageAcks;
+    TPublications PublishPaths;
+    TPublications RePublishPaths;
+    TDeque<TProposeRec> CoordinatorProposes;
+    TDeque<TProposeShards> CoordinatorProposesShards;
+    TPendingPipeTrackerCommands PendingPipeTrackerCommands;
+    TDeque<TOperationId> RelationsByTabletsFromOperation;
+    TDeque<TRelationByTabletId> RelationsByTabletId;
+    TDeque<TRelationByShardIdx> RelationsByShardIdx;
+    THashSet<TOperationId> ReadyToNotifyOperations;
+    THashSet<TOperationId> DoneOperations;
+    THashSet<TTxId> DoneTransactions;
+    THashSet<TShardIdx> ToDeleteShards;
+    THashSet<TShardIdx> ToDeleteSystemShards;
+    TDeque<TDependence> Dependencies;
+    TDeque<TPathStateRec> ReleasePathStateRecs;
+    THashSet<TPathId> TenantsToUpdate;
+    TDeque<TIndexBuildId> IndexToProgress;
+    TVector<TWaitShardCreated> PendingWaitShardCreated;
+    TVector<TActivateShardCreated> PendingActivateShardCreated;
+    TDeque<TWaitPublication> WaitPublications;
+    TDeque<TBarrierRec> Barriers;
+    THashMap<TActorId, TVector<TPathId>> TempDirsToMakeState;
+    THashMap<TActorId, TVector<TPathId>> TempDirsToRemoveState;
+    TVector<TFullBackupItemDoneRec> PendingFullBackupItemDone;
+};
+
+TSideEffects::TSideEffects()
+    : Impl(std::make_unique<TImpl>())
+{}
+
+TSideEffects::TSideEffects(TSideEffects&&) noexcept = default;
+TSideEffects& TSideEffects::operator=(TSideEffects&&) noexcept = default;
+TSideEffects::~TSideEffects() = default;
+
+void TSideEffects::ProposeShardToCoordinator(TOperationId opId, TTabletId shard) {
+    Impl->CoordinatorProposesShards.emplace_back(opId, shard);
+}
+
 void TSideEffects::ProposeToCoordinator(TOperationId opId, TPathId pathId, TStepId minStep) {
-    CoordinatorProposes.push_back(TProposeRec(opId, pathId, minStep));
+    Impl->CoordinatorProposes.push_back(TProposeRec(opId, pathId, minStep));
 }
 
 void TSideEffects::CoordinatorAck(TActorId coordinator, TStepId stepId, TTxId txId) {
     if (coordinator) {
-        CoordinatorAcks.push_back(TCoordinatorAck(coordinator, stepId, txId));
+        Impl->CoordinatorAcks.push_back(TCoordinatorAck(coordinator, stepId, txId));
     }
 }
 
 void TSideEffects::MediatorAck(TActorId mediator, TStepId stepId) {
-    MediatorAcks.push_back(TMediatorAck(mediator, stepId));
+    Impl->MediatorAcks.push_back(TMediatorAck(mediator, stepId));
 }
 
 void TSideEffects::UpdateTenant(TPathId pathId) {
-    TenantsToUpdate.insert(pathId);
+    Impl->TenantsToUpdate.insert(pathId);
 }
 
 void TSideEffects::UpdateTenants(THashSet<TPathId>&& pathIds) {
-    if (TenantsToUpdate.empty()) {
-        TenantsToUpdate = std::move(pathIds);
+    if (Impl->TenantsToUpdate.empty()) {
+        Impl->TenantsToUpdate = std::move(pathIds);
     } else {
-        TenantsToUpdate.insert(pathIds.begin(), pathIds.end());
+        Impl->TenantsToUpdate.insert(pathIds.begin(), pathIds.end());
     }
 }
 
 void TSideEffects::Send(TActorId dst, IEventBase* message, ui64 cookie, ui32 flags) {
-    Messages.push_back(TSendRec(dst, message, cookie, flags));
+    Impl->Messages.push_back(TSendRec(dst, message, cookie, flags));
 }
 
 void TSideEffects::BindMsgToPipe(TOperationId opId, TTabletId dst, TPipeMessageId cookie, TAutoPtr<IEventBase> message) {
-    BindedMessages.push_back(TBindMsgRec(opId, dst, cookie, message));
+    Impl->BindedMessages.push_back(TBindMsgRec(opId, dst, cookie, message));
     AttachOperationToPipe(opId, dst);
 }
 
@@ -53,29 +108,29 @@ void TSideEffects::BindMsgToPipe(TOperationId opId, TTabletId dst, TPathId pathI
 }
 
 void TSideEffects::UnbindMsgFromPipe(TOperationId opId, TTabletId dst, TPipeMessageId cookie) {
-    BindedMessageAcks.push_back(TBindMsgAck(opId, dst, cookie));
+    Impl->BindedMessageAcks.push_back(TBindMsgAck(opId, dst, cookie));
 }
 
 void  TSideEffects::UpdateTempDirsToMakeState(const TActorId& ownerActorId, const TPathId& pathId) {
-    auto it = TempDirsToMakeState.find(ownerActorId);
-    if (it == TempDirsToMakeState.end()) {
-        TempDirsToMakeState[ownerActorId] = { pathId };
+    auto it = Impl->TempDirsToMakeState.find(ownerActorId);
+    if (it == Impl->TempDirsToMakeState.end()) {
+        Impl->TempDirsToMakeState[ownerActorId] = { pathId };
     } else {
         it->second.push_back(pathId);
     }
 }
 
 void  TSideEffects::UpdateTempDirsToRemoveState(const TActorId& ownerActorId, const TPathId& pathId) {
-    auto it = TempDirsToRemoveState.find(ownerActorId);
-    if (it == TempDirsToRemoveState.end()) {
-        TempDirsToRemoveState[ownerActorId] = { pathId };
+    auto it = Impl->TempDirsToRemoveState.find(ownerActorId);
+    if (it == Impl->TempDirsToRemoveState.end()) {
+        Impl->TempDirsToRemoveState[ownerActorId] = { pathId };
     } else {
         it->second.push_back(pathId);
     }
 }
 
 void TSideEffects::RouteByTabletsFromOperation(TOperationId opId) {
-    RelationsByTabletsFromOperation.push_back(opId);
+    Impl->RelationsByTabletsFromOperation.push_back(opId);
 }
 
 void TSideEffects::UnbindMsgFromPipe(TOperationId opId, TTabletId dst, TPathId pathId) {
@@ -87,49 +142,49 @@ void TSideEffects::UnbindMsgFromPipe(TOperationId opId, TTabletId dst, TShardIdx
 }
 
 void TSideEffects::AttachOperationToPipe(TOperationId opId, TTabletId dst) {
-    PendingPipeTrackerCommands.AttachTablet(ui64(opId.GetTxId()), ui64(dst), opId.GetSubTxId());
+    Impl->PendingPipeTrackerCommands.AttachTablet(ui64(opId.GetTxId()), ui64(dst), opId.GetSubTxId());
     RouteByTablet(opId, dst);
 }
 
 void TSideEffects::RouteByShardIdx(TOperationId opId, TShardIdx shardIdx) {
-    RelationsByShardIdx.push_back(TRelationByShardIdx(opId, shardIdx));
+    Impl->RelationsByShardIdx.push_back(TRelationByShardIdx(opId, shardIdx));
 }
 
 void TSideEffects::ReleasePathState(TOperationId opId, TPathId pathId, NKikimrSchemeOp::EPathState state) {
-    ReleasePathStateRecs.push_back(TPathStateRec(opId, pathId, state));
+    Impl->ReleasePathStateRecs.push_back(TPathStateRec(opId, pathId, state));
 }
 
 void TSideEffects::RouteByTablet(TOperationId opId, TTabletId tabletId) {
-    RelationsByTabletId.push_back(TRelationByTabletId(opId, tabletId));
+    Impl->RelationsByTabletId.push_back(TRelationByTabletId(opId, tabletId));
 }
 
 void TSideEffects::DetachOperationFromPipe(TOperationId opId, TTabletId dst) {
-    PendingPipeTrackerCommands.DetachTablet(ui64(opId.GetTxId()), ui64(dst), opId.GetSubTxId());
+    Impl->PendingPipeTrackerCommands.DetachTablet(ui64(opId.GetTxId()), ui64(dst), opId.GetSubTxId());
 }
 
 void TSideEffects::ActivateTx(TOperationId opId) {
-    ActivationParts.insert(opId);
+    Impl->ActivationParts.insert(opId);
 }
 
 void TSideEffects::ActivateOperation(TTxId txId) {
-    ActivationOps.insert(txId);
+    Impl->ActivationOps.insert(txId);
 }
 
 void TSideEffects::WaitShardCreated(TShardIdx idx, TOperationId opId) {
-    PendingWaitShardCreated.emplace_back(idx, opId);
+    Impl->PendingWaitShardCreated.emplace_back(idx, opId);
 }
 
 void TSideEffects::ActivateShardCreated(TShardIdx idx, TTxId txId) {
-    PendingActivateShardCreated.emplace_back(idx, txId);
+    Impl->PendingActivateShardCreated.emplace_back(idx, txId);
 }
 
 void TSideEffects::PublishAndWaitPublication(TOperationId opId, TPathId pathId) {
     PublishToSchemeBoard(opId, pathId);
-    WaitPublications.emplace_back(opId, pathId);
+    Impl->WaitPublications.emplace_back(opId, pathId);
 }
 
 void TSideEffects::DoneOperation(TOperationId opId) {
-    DoneOperations.insert(opId);
+    Impl->DoneOperations.insert(opId);
     ReadyToNotify(opId);
 }
 
@@ -137,34 +192,34 @@ void TSideEffects::DeleteShard(TShardIdx idx) {
     if (!idx) {
         return; //KIKIMR-8507
     }
-    ToDeleteShards.insert(idx);
+    Impl->ToDeleteShards.insert(idx);
 }
 
 void TSideEffects::DeleteSystemShard(TShardIdx idx) {
     if (!idx) {
         return; //KIKIMR-8507
     }
-    ToDeleteSystemShards.insert(idx);
+    Impl->ToDeleteSystemShards.insert(idx);
 }
 
 void TSideEffects::ToProgress(TIndexBuildId id) {
-    IndexToProgress.push_back(id);
+    Impl->IndexToProgress.push_back(id);
 }
 
 void TSideEffects::PublishToSchemeBoard(TOperationId opId, TPathId pathId) {
-    PublishPaths[opId.GetTxId()].push_back(pathId);
+    Impl->PublishPaths[opId.GetTxId()].push_back(pathId);
 }
 
 void TSideEffects::RePublishToSchemeBoard(TOperationId opId, TPathId pathId) {
-    RePublishPaths[opId.GetTxId()].push_back(pathId);
+    Impl->RePublishPaths[opId.GetTxId()].push_back(pathId);
 }
 
 void TSideEffects::ReadyToNotify(TOperationId opId) {
-    ReadyToNotifyOperations.insert(opId);
+    Impl->ReadyToNotifyOperations.insert(opId);
 }
 
 void TSideEffects::Dependence(TTxId parent, TTxId child) {
-    Dependencies.push_back(TDependence(parent, child));
+    Impl->Dependencies.push_back(TDependence(parent, child));
 }
 
 void TSideEffects::ApplyOnExecute(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
@@ -201,12 +256,12 @@ void TSideEffects::ApplyOnExecute(TSchemeShard* ss, NTabletFlatExecutor::TTransa
 
 TSideEffects::TPublications TSideEffects::ExtractPublicationsToSchemeBoard() {
     TPublications tmp;
-    tmp.swap(PublishPaths);
+    tmp.swap(Impl->PublishPaths);
     return tmp;
 }
 
 void TSideEffects::Barrier(TOperationId opId, TString barrierName) {
-    Barriers.emplace_back(opId, barrierName);
+    Impl->Barriers.emplace_back(opId, barrierName);
 }
 
 
@@ -230,7 +285,7 @@ void TSideEffects::ApplyOnComplete(TSchemeShard* ss, const TActorContext& ctx) {
     DoBindMsg(ss, ctx);
 
     //attach/detach tablets
-    PendingPipeTrackerCommands.Apply(ss->PipeTracker, ctx);  //it's better to decompose attach and detach, detach should be applied at ApplyOnExecute
+    Impl->PendingPipeTrackerCommands.Apply(ss->PipeTracker, ctx);  //it's better to decompose attach and detach, detach should be applied at ApplyOnExecute
     DoRegisterRelations(ss, ctx);
 
     DoTriggerDeleteShards(ss, ctx);
@@ -242,7 +297,7 @@ void TSideEffects::ApplyOnComplete(TSchemeShard* ss, const TActorContext& ctx) {
 }
 
 void TSideEffects::DoActivateOps(TSchemeShard* ss, const TActorContext& ctx) {
-    for (auto txId: ActivationOps) {
+    for (auto txId: Impl->ActivationOps) {
         if (!ss->Operations.contains(txId)) {
             LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "Unable to activate " << txId);
@@ -266,7 +321,7 @@ void TSideEffects::DoActivateOps(TSchemeShard* ss, const TActorContext& ctx) {
         }
     }
 
-    for (auto& opPart: ActivationParts) {
+    for (auto& opPart: Impl->ActivationParts) {
         if (!ss->Operations.contains(opPart.GetTxId())) {
             LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "Unable to activate " << opPart);
@@ -291,7 +346,7 @@ void TSideEffects::DoActivateOps(TSchemeShard* ss, const TActorContext& ctx) {
 
 bool TSideEffects::CheckDecouplingProposes(const TSchemeShard* ss, TString& errExpl) const {
     THashMap<TTabletId, TOperationId> checkDecoupling;
-    for (auto& rec: CoordinatorProposesShards) {
+    for (auto& rec: Impl->CoordinatorProposesShards) {
         TOperationId opId;
         TTabletId shard;
         std::tie(opId, shard) = rec;
@@ -329,7 +384,7 @@ void TSideEffects::ExpandCoordinatorProposes(TSchemeShard* ss, const TActorConte
     Y_ABORT_UNLESS(CheckDecouplingProposes(ss, errExpl), "check decoupling: %s", errExpl.c_str());
 
     TSet<TTxId> touchedTxIds;
-    for (auto& rec: CoordinatorProposes) {
+    for (auto& rec: Impl->CoordinatorProposes) {
         TOperationId opId;
         TPathId pathId;
         TStepId minStep;
@@ -339,7 +394,7 @@ void TSideEffects::ExpandCoordinatorProposes(TSchemeShard* ss, const TActorConte
         touchedTxIds.insert(opId.GetTxId());
     }
 
-    for (auto& rec: CoordinatorProposesShards) {
+    for (auto& rec: Impl->CoordinatorProposesShards) {
         TOperationId opId;
         TTabletId shard;
         std::tie(opId, shard) = rec;
@@ -357,7 +412,7 @@ void TSideEffects::ExpandCoordinatorProposes(TSchemeShard* ss, const TActorConte
 }
 
 void TSideEffects::DoReadyToNotify(TSchemeShard* ss, const TActorContext& ctx) {
-    for (auto& opId: ReadyToNotifyOperations) {
+    for (auto& opId: Impl->ReadyToNotifyOperations) {
         TOperation::TPtr operation = ss->Operations.at(opId.GetTxId());
         operation->ReadyToNotifyPart(opId.GetSubTxId());
 
@@ -368,7 +423,7 @@ void TSideEffects::DoReadyToNotify(TSchemeShard* ss, const TActorContext& ctx) {
 }
 
 void TSideEffects::DoMediatorsAck(TSchemeShard* ss, const TActorContext& ctx) {
-    for (auto& rec: MediatorAcks) {
+    for (auto& rec: Impl->MediatorAcks) {
         TActorId mediator;
         TStepId step;
         std::tie(mediator, step) = rec;
@@ -386,7 +441,7 @@ void TSideEffects::DoMediatorsAck(TSchemeShard* ss, const TActorContext& ctx) {
 void TSideEffects::DoCoordinatorAck(TSchemeShard* ss, const TActorContext& ctx) {
     //aggregate
     TMap<TActorId, TMap<TStepId, TSet<TTxId>>> toCoordinatorAck;
-    for (auto& rec: CoordinatorAcks) {
+    for (auto& rec: Impl->CoordinatorAcks) {
         TActorId coordinator;
         TStepId step;
         TTxId txId;
@@ -416,7 +471,7 @@ void TSideEffects::DoCoordinatorAck(TSchemeShard* ss, const TActorContext& ctx) 
 }
 
 void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext& ctx) {
-    for (const TPathId pathId : TenantsToUpdate) {
+    for (const TPathId pathId : Impl->TenantsToUpdate) {
         Y_ABORT_UNLESS(ss->PathsById.contains(pathId));
 
         if (!ss->PathsById.at(pathId)->IsExternalSubDomainRoot()) {
@@ -609,7 +664,7 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
 void TSideEffects::DoPersistPublishPaths(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
     NIceDb::TNiceDb db(txc.DB);
 
-    for (const auto& kv : PublishPaths) {
+    for (const auto& kv : Impl->PublishPaths) {
         const TTxId txId = kv.first;
         if (!ss->Operations.contains(txId)) {
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -633,17 +688,17 @@ void TSideEffects::DoPersistPublishPaths(TSchemeShard* ss, NTabletFlatExecutor::
 
 
 void TSideEffects::DoPublishToSchemeBoard(TSchemeShard* ss, const TActorContext& ctx) {
-    for (auto& kv : PublishPaths) {
+    for (auto& kv : Impl->PublishPaths) {
         ss->PublishToSchemeBoard(kv.first, std::move(kv.second), ctx);
     }
 
-    for (auto& kv : RePublishPaths) {
+    for (auto& kv : Impl->RePublishPaths) {
         ss->PublishToSchemeBoard(kv.first, std::move(kv.second), ctx);
     }
 }
 
 void TSideEffects::DoSend(TSchemeShard* ss, const TActorContext& ctx) {
-    for (auto& rec: Messages) {
+    for (auto& rec: Impl->Messages) {
         TActorId actor;
         THolder<::NActors::IEventBase> message;
         ui64 cookie;
@@ -662,7 +717,7 @@ void TSideEffects::DoSend(TSchemeShard* ss, const TActorContext& ctx) {
 }
 
 void TSideEffects::DoBindMsg(TSchemeShard *ss, const TActorContext &ctx) {
-    for (auto& rec: BindedMessages) {
+    for (auto& rec: Impl->BindedMessages) {
         TOperationId opId;
         TTabletId tablet;
         TPipeMessageId cookie;
@@ -707,7 +762,7 @@ void TSideEffects::DoBindMsg(TSchemeShard *ss, const TActorContext &ctx) {
 }
 
 void TSideEffects::DoBindMsgAcks(TSchemeShard *ss, const TActorContext &ctx) {
-    for (auto& ack: BindedMessageAcks) {
+    for (auto& ack: Impl->BindedMessageAcks) {
         TOperationId opId;
         TTabletId tablet;
         TPipeMessageId cookie;
@@ -740,7 +795,7 @@ void TSideEffects::DoBindMsgAcks(TSchemeShard *ss, const TActorContext &ctx) {
 }
 
 void TSideEffects::DoRegisterRelations(TSchemeShard *ss, const TActorContext &ctx) {
-    for (auto& opId: RelationsByTabletsFromOperation) {
+    for (auto& opId: Impl->RelationsByTabletsFromOperation) {
         TTxState* txState = ss->FindTx(opId);
         if (!txState) {
             continue;
@@ -756,7 +811,7 @@ void TSideEffects::DoRegisterRelations(TSchemeShard *ss, const TActorContext &ct
         }
     }
 
-    for (auto& rec: RelationsByTabletId) {
+    for (auto& rec: Impl->RelationsByTabletId) {
         TOperationId opId = InvalidOperationId;
         TTabletId tablet = InvalidTabletId;
         std::tie(opId, tablet) = rec;
@@ -766,7 +821,7 @@ void TSideEffects::DoRegisterRelations(TSchemeShard *ss, const TActorContext &ct
         }
     }
 
-    for (auto& rec: RelationsByShardIdx) {
+    for (auto& rec: Impl->RelationsByShardIdx) {
         TOperationId opId = InvalidOperationId;
         TShardIdx shardIdx = InvalidShardIdx;
         std::tie(opId, shardIdx) = rec;
@@ -778,15 +833,15 @@ void TSideEffects::DoRegisterRelations(TSchemeShard *ss, const TActorContext &ct
 }
 
 void TSideEffects::DoTriggerDeleteShards(TSchemeShard *ss, const TActorContext &ctx) {
-    ss->DoShardsDeletion(ToDeleteShards, ctx);
+    ss->DoShardsDeletion(Impl->ToDeleteShards, ctx);
 }
 
 void TSideEffects::DoTriggerDeleteSystemShards(TSchemeShard *ss, const TActorContext &ctx) {
-    ss->DoDeleteSystemShards(ToDeleteSystemShards, ctx);
+    ss->DoDeleteSystemShards(Impl->ToDeleteSystemShards, ctx);
 }
 
 void TSideEffects::DoReleasePathState(TSchemeShard *ss, const TActorContext &) {
-    for (auto& rec: ReleasePathStateRecs) {
+    for (auto& rec: Impl->ReleasePathStateRecs) {
         TOperationId opId = InvalidOperationId;
         TPathId pathId = InvalidPathId;
         NKikimrSchemeOp::EPathState state = NKikimrSchemeOp::EPathStateNotExist;
@@ -808,16 +863,16 @@ void TSideEffects::DoReleasePathState(TSchemeShard *ss, const TActorContext &) {
 
 void TSideEffects::DoPersistDeleteShards(TSchemeShard *ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &) {
     NIceDb::TNiceDb db(txc.DB);
-    ss->PersistShardsToDelete(db, ToDeleteShards);
+    ss->PersistShardsToDelete(db, Impl->ToDeleteShards);
 }
 
 void TSideEffects::DoPersistDeleteSystemShards(TSchemeShard *ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &) {
     NIceDb::TNiceDb db(txc.DB);
-    ss->PersistSystemShardsToDelete(db, ToDeleteSystemShards);
+    ss->PersistSystemShardsToDelete(db, Impl->ToDeleteSystemShards);
 }
 
 void TSideEffects::DoUpdateTempDirsToMakeState(TSchemeShard* ss, const TActorContext &ctx) {
-    for (auto& [ownerActorId, tempDirs]: TempDirsToMakeState) {
+    for (auto& [ownerActorId, tempDirs]: Impl->TempDirsToMakeState) {
 
         auto& tempDirsByOwner = ss->TempDirsState.TempDirsByOwner;
         auto& nodeStates = ss->TempDirsState.NodeStates;
@@ -856,7 +911,7 @@ void TSideEffects::DoUpdateTempDirsToMakeState(TSchemeShard* ss, const TActorCon
 }
 
 void TSideEffects::DoUpdateTempDirsToRemoveState(TSchemeShard* ss, const TActorContext& ctx) {
-    for (auto& [ownerActorId, tempDirs]: TempDirsToRemoveState) {
+    for (auto& [ownerActorId, tempDirs]: Impl->TempDirsToRemoveState) {
         auto& tempDirsByOwner = ss->TempDirsState.TempDirsByOwner;
         const auto it = tempDirsByOwner.find(ownerActorId);
         if (it == tempDirsByOwner.end()) {
@@ -896,16 +951,16 @@ void TSideEffects::DoUpdateTempDirsToRemoveState(TSchemeShard* ss, const TActorC
 }
 
 void TSideEffects::ResumeLongOps(TSchemeShard *ss, const TActorContext &ctx) {
-    ss->Resume(IndexToProgress, ctx);
+    ss->Resume(Impl->IndexToProgress, ctx);
 }
 
 void TSideEffects::SetupRoutingLongOps(TSchemeShard *ss, const TActorContext &ctx) {
-    ss->SetupRouting(IndexToProgress, ctx);
+    ss->SetupRouting(Impl->IndexToProgress, ctx);
 }
 
 void TSideEffects::DoPersistDependencies(TSchemeShard *ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &) {
     NIceDb::TNiceDb db(txc.DB);
-    for (auto& item: Dependencies) {
+    for (auto& item: Impl->Dependencies) {
         TTxId parent = InvalidTxId;
         TTxId child = InvalidTxId;
         std::tie(parent, child) = item;
@@ -926,7 +981,7 @@ void TSideEffects::DoPersistDependencies(TSchemeShard *ss, NTabletFlatExecutor::
 }
 
 void TSideEffects::DoDoneParts(TSchemeShard *ss, const TActorContext &ctx) {
-    for (auto& opId: DoneOperations) {
+    for (auto& opId: Impl->DoneOperations) {
         TTxId txId = opId.GetTxId();
 
         if (!ss->Operations.contains(txId)) {
@@ -951,7 +1006,7 @@ void TSideEffects::DoDoneParts(TSchemeShard *ss, const TActorContext &ctx) {
                 if (auto* path = ss->PathsById.FindPtr(txState->TargetPathId)) {
                     aborted = ((*path)->PathState == NKikimrSchemeOp::EPathState::EPathStateDrop);
                 }
-                PendingFullBackupItemDone.emplace_back(
+                Impl->PendingFullBackupItemDone.emplace_back(
                     ui64(opId.GetTxId()),
                     txState->TargetPathId,
                     /*success=*/!aborted);
@@ -967,12 +1022,12 @@ void TSideEffects::DoDoneParts(TSchemeShard *ss, const TActorContext &ctx) {
             continue;
         }
 
-        DoneTransactions.insert(opId.GetTxId());
+        Impl->DoneTransactions.insert(opId.GetTxId());
     }
 }
 
 void TSideEffects::DoFireFullBackupItemDone(TSchemeShard* ss, const TActorContext& ctx) {
-    for (auto& [id, dstPathId, success] : PendingFullBackupItemDone) {
+    for (auto& [id, dstPathId, success] : Impl->PendingFullBackupItemDone) {
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "Fire TEvFullBackupItemDone"
                         << " fullBackupId#" << id
@@ -981,11 +1036,11 @@ void TSideEffects::DoFireFullBackupItemDone(TSchemeShard* ss, const TActorContex
         ctx.Send(ss->SelfId(),
             new TEvPrivate::TEvFullBackupItemDone(id, dstPathId, success));
     }
-    PendingFullBackupItemDone.clear();
+    Impl->PendingFullBackupItemDone.clear();
 }
 
 void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) {
-    for (auto& txId: DoneTransactions) {
+    for (auto& txId: Impl->DoneTransactions) {
 
         if (!ss->Operations.contains(txId)) {
             continue;
@@ -1077,7 +1132,7 @@ void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTr
 }
 
 void TSideEffects::DoWaitShardCreated(TSchemeShard* ss, const TActorContext&) {
-    for (auto& entry : PendingWaitShardCreated) {
+    for (auto& entry : Impl->PendingWaitShardCreated) {
         TShardIdx shardIdx;
         TOperationId opId;
         std::tie(shardIdx, opId) = entry;
@@ -1089,7 +1144,7 @@ void TSideEffects::DoWaitShardCreated(TSchemeShard* ss, const TActorContext&) {
 }
 
 void TSideEffects::DoActivateShardCreated(TSchemeShard* ss, const TActorContext&) {
-    for (auto& entry : PendingActivateShardCreated) {
+    for (auto& entry : Impl->PendingActivateShardCreated) {
         TShardIdx shardIdx;
         TTxId txId;
         std::tie(shardIdx, txId) = entry;
@@ -1103,7 +1158,7 @@ void TSideEffects::DoActivateShardCreated(TSchemeShard* ss, const TActorContext&
 }
 
 void TSideEffects::DoWaitPublication(TSchemeShard *ss, const TActorContext &/*ctx*/) {
-    for (auto& entry : WaitPublications) {
+    for (auto& entry : Impl->WaitPublications) {
         TOperationId opId;
         TPathId pathId;
         std::tie(opId, pathId) = entry;
@@ -1117,7 +1172,7 @@ void TSideEffects::DoWaitPublication(TSchemeShard *ss, const TActorContext &/*ct
 }
 
 void TSideEffects::DoSetBarriers(TSchemeShard *ss, const TActorContext &ctx) {
-    for (auto& entry : Barriers) {
+    for (auto& entry : Impl->Barriers) {
         TOperationId opId;
         TString name;
         std::tie(opId, name) = entry;
@@ -1141,7 +1196,7 @@ void TSideEffects::DoSetBarriers(TSchemeShard *ss, const TActorContext &ctx) {
 void TSideEffects::DoCheckBarriers(TSchemeShard *ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) {
     TSet<TTxId> touchedOperations;
 
-    for (auto& entry : Barriers) {
+    for (auto& entry : Impl->Barriers) {
         TOperationId opId;
         TString name;
         std::tie(opId, name) = entry;
@@ -1149,7 +1204,7 @@ void TSideEffects::DoCheckBarriers(TSchemeShard *ss, NTabletFlatExecutor::TTrans
         touchedOperations.insert(opId.GetTxId());
     }
 
-    for (auto& opId : DoneOperations) {
+    for (auto& opId : Impl->DoneOperations) {
         touchedOperations.insert(opId.GetTxId());
     }
 

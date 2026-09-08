@@ -1,3 +1,5 @@
+#include "schemeshard_schema.h"
+#include "schemeshard_info_types_subdomain.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/auth.h>

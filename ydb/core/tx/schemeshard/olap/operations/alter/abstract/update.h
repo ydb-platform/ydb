@@ -1,5 +1,6 @@
 #pragma once
 #include "object.h"
+#include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 

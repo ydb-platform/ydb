@@ -1,3 +1,5 @@
+#include "schemeshard_schema.h"
+#include "schemeshard_info_types_objects_misc.h"
 #include "schemeshard_backup.h"
 #include "schemeshard_impl.h"
 

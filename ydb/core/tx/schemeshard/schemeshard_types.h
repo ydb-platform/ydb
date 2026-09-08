@@ -4,13 +4,14 @@
 
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/base/tablet_types.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/protos/table_metrics_settings.pb.h>
-#include <ydb/core/tablet_flat/flat_cxx_database.h>
 
 #include <util/generic/fwd.h>
+
+namespace NKikimrSchemeOp {
+enum TTableDetailedMetricsSettings_EMetricsLevel : int;
+}
 
 namespace NKikimr::NSchemeShard {
 
@@ -144,7 +145,7 @@ enum class EAttachChildResult : ui32 {
 
 using EServerlessComputeResourcesMode = NKikimrSubDomains::EServerlessComputeResourcesMode;
 
-using ETablesMetricsLevel = NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel;
+using ETablesMetricsLevel = NKikimrSchemeOp::TTableDetailedMetricsSettings_EMetricsLevel;
 
 struct TTempDirsState {
 

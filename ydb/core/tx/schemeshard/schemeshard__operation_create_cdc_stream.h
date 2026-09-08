@@ -46,7 +46,7 @@ void DoCreatePqPart(
     const TOperationId& opId,
     const TPath& streamPath,
     const TString& streamName,
-    TTableInfo::TCPtr table,
+    TIntrusiveConstPtr<TTableInfo> table,
     const TVector<TString>& boundaries,
     const bool acceptExisted);
 

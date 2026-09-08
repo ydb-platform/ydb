@@ -1,7 +1,13 @@
+#include "schemeshard_info_types_table.h"
+#include "schemeshard_schema.h"
+#include "schemeshard_info_types_objects_storage.h"
+#include "schemeshard_info_types_subdomain.h"
 #include "schemeshard_billing_helpers.h"
 #include "schemeshard_impl.h"
+#include "dedicated_pipe_pool.h"
 
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 #include <util/generic/deque.h>

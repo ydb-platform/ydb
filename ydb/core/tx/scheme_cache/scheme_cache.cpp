@@ -179,4 +179,18 @@ TString TSchemeCacheRequest::ToString(const NScheme::TTypeRegistry& typeRegistry
 }
 
 } // NSchemeCache
+
+TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TEvWatchNotifyUpdated(
+        ui64 key,
+        const TString& path,
+        const TPathId& pathId,
+        TIntrusiveConstPtr<TDescribeResult> result)
+    : Key(key)
+    , Path(path)
+    , PathId(pathId)
+    , Result(std::move(result))
+{}
+
+TEvTxProxySchemeCache::TEvWatchNotifyUpdated::~TEvWatchNotifyUpdated() = default;
+
 } // NKikimr

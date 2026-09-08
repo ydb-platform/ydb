@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/datashard/datashard.h>

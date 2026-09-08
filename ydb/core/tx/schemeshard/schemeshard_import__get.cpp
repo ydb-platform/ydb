@@ -1,3 +1,4 @@
+#include "schemeshard_info_types_objects_transfer.h"
 #include "schemeshard_import.h"
 #include "schemeshard_xxport__get.h"
 

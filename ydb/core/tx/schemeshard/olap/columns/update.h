@@ -33,7 +33,7 @@ private:
     YDB_READONLY_DEF(TString, StorageId);
     YDB_FLAG_ACCESSOR(NotNull, false);
     YDB_ACCESSOR_DEF(NArrow::NSerialization::TSerializerContainer, Serializer);
-    YDB_READONLY_DEF(NOlap::TColumnDefaultScalarValue, DefaultValue);
+    YDB_READONLY_DEF(NKikimr::NOlap::TColumnDefaultScalarValue, DefaultValue);
     YDB_READONLY_DEF(NArrow::NAccessor::TConstructorContainer, AccessorConstructor);
 
 public:

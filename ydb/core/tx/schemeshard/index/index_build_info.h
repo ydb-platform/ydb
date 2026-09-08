@@ -1,6 +1,11 @@
 #pragma once
 
+#include <ydb/core/base/table_index.h>
+#include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/kmeans_clusters.h>
+#include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard_schema.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

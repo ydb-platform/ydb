@@ -1,13 +1,19 @@
 #pragma once
+#include "olap/manager/tables_storage.h"
+#include "schemeshard_schema.h"
+#include "olap/table/table.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_billing_helpers.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_info_types_subdomain.h"
 #include "schemeshard_types.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
 
 #include <util/generic/utility.h>
 
@@ -685,7 +691,7 @@ public:
 
     void PrepareTableChanges(TPathElement::TPtr path, TOperationContext& context) {
         Y_ABORT_UNLESS(context.SS->Tables.contains(path->PathId));
-        TTableInfo::TPtr& table = context.SS->Tables.at(path->PathId);
+        TIntrusivePtr<TTableInfo>& table = context.SS->Tables.at(path->PathId);
 
         path->LastTxId = OperationId.GetTxId();
         path->PathState = Lock;
@@ -771,7 +777,7 @@ public:
         }
 
         if (TxType == TTxState::TxBackup && context.SS->Tables.contains(path.Base()->PathId)) {
-            TTableInfo::TPtr table = context.SS->Tables.at(path.Base()->PathId);
+            TIntrusivePtr<TTableInfo> table = context.SS->Tables.at(path.Base()->PathId);
             for (const auto& [_, column] : table->Columns) {
                 if (column.DefaultKind == ETableColumnDefaultKind::FromExpression && !column.IsDropped()) {
                     result->SetError(NKikimrScheme::StatusPreconditionFailed,

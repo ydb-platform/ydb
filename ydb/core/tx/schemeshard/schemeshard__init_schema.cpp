@@ -1,4 +1,5 @@
 #include "schemeshard_impl.h"
+#include "schemeshard_schema.h"
 
 namespace NKikimr {
 namespace NSchemeShard {

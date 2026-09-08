@@ -1,16 +1,19 @@
 #pragma once
 #include "schemeshard_identificators.h"
 
+#include <ydb/core/base/events.h>
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
-
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/tx/datashard/datashard.h>
 
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 
 #include <util/datetime/base.h>
+
+namespace NKikimr::TEvDataShard {
+struct TEvPeriodicTableStats;
+using TEvPeriodicTableStats__HandlePtr = TAutoPtr<NActors::TEventHandle<TEvPeriodicTableStats>>;
+}
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -62,6 +65,11 @@ namespace TEvPrivate {
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
+
+    struct TEvImportSchemeQueryResult;
+    using TEvImportSchemeQueryResult__HandlePtr = TAutoPtr<NActors::TEventHandle<TEvImportSchemeQueryResult>>;
+    struct TEvPeriodicTableStatsParsed;
+    using TEvPeriodicTableStatsParsed__HandlePtr = TAutoPtr<NActors::TEventHandle<TEvPeriodicTableStatsParsed>>;
 
     // This event is sent by a schemeshard to itself to signal that some tx state has changed
     // and it should run all the actions associated with this state
@@ -139,29 +147,6 @@ namespace TEvPrivate {
             : ImportId(id)
             , Success(success)
             , Error(error)
-        {}
-    };
-
-    struct TEvImportSchemeQueryResult: public TEventLocal<TEvImportSchemeQueryResult, EvImportSchemeQueryResult> {
-        const ui64 ImportId;
-        const ui32 ItemIdx;
-        const Ydb::StatusIds::StatusCode Status;
-        const std::variant<TString, NKikimrSchemeOp::TModifyScheme> Result;
-
-        // failed query
-        TEvImportSchemeQueryResult(ui64 id, ui32 itemIdx, Ydb::StatusIds::StatusCode status, TString&& error)
-            : ImportId(id)
-            , ItemIdx(itemIdx)
-            , Status(status)
-            , Result(error)
-        {}
-
-        // successful query
-        TEvImportSchemeQueryResult(ui64 id, ui32 itemIdx, Ydb::StatusIds::StatusCode status, NKikimrSchemeOp::TModifyScheme&& preparedQuery)
-            : ImportId(id)
-            , ItemIdx(itemIdx)
-            , Status(status)
-            , Result(preparedQuery)
         {}
     };
 
@@ -378,18 +363,6 @@ namespace TEvPrivate {
             , NewBindings(std::move(newBindings))
             , HttpSender(httpSender)
             , HiveReply(std::move(hiveReply))
-        {}
-    };
-
-    // Sent by TStatsParserActor back to the schemeshard after it parsed a raw
-    // TEvDataShard::TEvPeriodicTableStats. Carries the same handle (not just the record) so the
-    // original datashard Sender survives for VerifySplitAndRequestStats, and the schemeshard's
-    // Get() is a cache hit rather than a second parse.
-    struct TEvPeriodicTableStatsParsed : public TEventLocal<TEvPeriodicTableStatsParsed, EvPeriodicTableStatsParsed> {
-        TEvDataShard::TEvPeriodicTableStats::TPtr Ev;
-
-        explicit TEvPeriodicTableStatsParsed(TEvDataShard::TEvPeriodicTableStats::TPtr&& ev)
-            : Ev(std::move(ev))
         {}
     };
 

@@ -1,37 +1,16 @@
 #pragma once
 
-#include "defs.h"
+#include "schemeshard_export_fwd.h"
 
 #include <ydb/core/protos/export.pb.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
 
-struct TEvExport {
-    enum EEv {
-        EvCreateExportRequest = EventSpaceBegin(TKikimrEvents::ES_EXPORT_SERVICE),
-        EvCreateExportResponse,
-        EvGetExportRequest,
-        EvGetExportResponse,
-        EvCancelExportRequest,
-        EvCancelExportResponse,
-        EvForgetExportRequest,
-        EvForgetExportResponse,
-        EvListExportsRequest,
-        EvListExportsResponse,
-
-        EvEnd
-    };
-
-    static_assert(
-        EvEnd < EventSpaceEnd(TKikimrEvents::ES_EXPORT_SERVICE),
-        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_EXPORT_SERVICE)"
-    );
-
 #ifdef DECLARE_EVENT_CLASS
 #error DECLARE_EVENT_CLASS macro redefinition
 #else
-#define DECLARE_EVENT_CLASS(NAME) struct T##NAME: public TEventPB<T##NAME, NKikimrExport::T##NAME, NAME>
+#define DECLARE_EVENT_CLASS(NAME) struct TEvExport::T##NAME: public TEventPB<T##NAME, NKikimrExport::T##NAME, TEvExport::NAME>
 #endif
 
     DECLARE_EVENT_CLASS(EvCreateExportRequest) {
@@ -164,8 +143,6 @@ struct TEvExport {
     };
 
 #undef DECLARE_EVENT_CLASS
-
-}; // TEvExport
 
 } // NSchemeShard
 } // NKikimr

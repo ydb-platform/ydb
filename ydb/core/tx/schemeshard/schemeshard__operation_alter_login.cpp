@@ -1,3 +1,5 @@
+#include "schemeshard_schema.h"
+#include "schemeshard_info_types_subdomain.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_audit_log.h"
@@ -6,7 +8,9 @@
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/local_user_token.h>
 #include <ydb/core/protos/auth.pb.h>
+#include <ydb/core/protos/config.pb.h>
 
+#include <ydb/library/login/login.h>
 #include <ydb/library/security/util.h>
 
 namespace {

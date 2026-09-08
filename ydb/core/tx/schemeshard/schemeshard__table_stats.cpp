@@ -1,10 +1,20 @@
-#include "schemeshard__stats_impl.h"
+#include "schemeshard_info_types_table.h"
+#include "olap/manager/tables_storage.h"
+#include "schemeshard_info_types_objects_storage.h"
+#include "schemeshard_info_types_subdomain.h"
+#include "schemeshard__operation_db_changes.h"
+#include "schemeshard__operation_memory_changes.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__stats_impl.h"
+#include "schemeshard_private_stats.h"
+#include "olap/store/store.h"
+#include "olap/table/table.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/protos/sys_view.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/tx/datashard/datashard.h>
 
 
 namespace NKikimr {
@@ -336,7 +346,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
     NIceDb::TNiceDb db(txc.DB);
 
-    TTableInfo::TPtr table;
+    TIntrusivePtr<TTableInfo> table;
     bool updateSubdomainInfo = false;
 
     TMaybe<ui32> nodeId;

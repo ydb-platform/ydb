@@ -1,3 +1,7 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_storage.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_subdomain.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard__op_traits.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>

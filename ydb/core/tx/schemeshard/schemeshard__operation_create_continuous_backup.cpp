@@ -1,3 +1,4 @@
+#include "schemeshard_info_types_core.h"
 #include "schemeshard__backup_collection_common.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_create_cdc_stream.h"

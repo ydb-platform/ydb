@@ -1,3 +1,5 @@
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/schemeshard_schema.h>
 #include <ydb/core/tx/schemeshard/index/build_index.h>
 
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>

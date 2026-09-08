@@ -8,8 +8,8 @@ namespace NKikimrSchemeOp {
     class TExportMetadata;
 }
 
-namespace NBackup {
-    class TEncryptionIV;
+namespace NKikimr::NBackup {
+    struct TEncryptionIV;
 }
 
 namespace NKikimr::NSchemeShard {
@@ -17,7 +17,7 @@ namespace NKikimr::NSchemeShard {
 template <typename TSettings>
 NActors::IActor* CreateSchemeUploader(NActors::TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
     const TSettings& settings, const TString& databaseRoot, const TString& metadata,
-    bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
+    bool enablePermissions, bool enableChecksums, const TMaybe<NKikimr::NBackup::TEncryptionIV>& iv
 );
 
 template <typename TSettings>

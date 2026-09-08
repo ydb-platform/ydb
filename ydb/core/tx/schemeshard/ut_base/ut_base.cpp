@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_objects_storage.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>

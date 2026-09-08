@@ -1,6 +1,11 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
-#include "schemeshard_info_types.h"
+#include "schemeshard_impl.h"
+#include "schemeshard_info_types_objects_storage.h"
+#include "schemeshard_info_types_subdomain.h"
+#include "schemeshard_info_types_table.h"
+#include "olap/manager/tables_storage.h"
+#include "olap/table/table.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -238,7 +243,7 @@ bool CreateConsistentCopyTables(
 
         // Log table info if available
         if (context.SS->Tables.contains(srcPath.Base()->PathId)) {
-            TTableInfo::TPtr tableInfo = context.SS->Tables.at(srcPath.Base()->PathId);
+            TIntrusivePtr<TTableInfo> tableInfo = context.SS->Tables.at(srcPath.Base()->PathId);
             const auto& tableDesc = tableInfo->TableDescription;
             LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "CreateConsistentCopyTables: Table info"

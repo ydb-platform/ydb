@@ -1,3 +1,4 @@
+#include "schemeshard_info_types_objects_export.h"
 #include "schemeshard_export.h"
 #include "schemeshard_export_flow_proposals.h"
 #include "schemeshard_export_helpers.h"

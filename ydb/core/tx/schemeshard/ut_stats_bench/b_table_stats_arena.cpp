@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 // Benchmarks the arena block sizes chosen for TEvDataShard::TEvPeriodicTableStats and
 // TEvGetTableStatsResult (see ydb/core/tx/datashard/datashard.h) against a non-arena baseline
 // over the same protobuf messages. Both sides go through the real TEventPBBase::Load() path

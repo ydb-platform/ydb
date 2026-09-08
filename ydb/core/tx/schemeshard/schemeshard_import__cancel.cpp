@@ -1,6 +1,8 @@
+#include "schemeshard_info_types_objects_transfer.h"
 #include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_import.h"
+#include "index/build_index.h"
 #include "schemeshard_import_flow_proposals.h"
 #include "schemeshard_xxport__tx_base.h"
 

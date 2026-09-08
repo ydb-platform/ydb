@@ -17,6 +17,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <util/generic/xrange.h>
 #include <util/digest/city.h>
 
 #include <util/generic/hash.h>

@@ -1,5 +1,12 @@
+#include "schemeshard_info_types_table.h"
+#include "schemeshard_info_types_objects_storage.h"
+#include "olap/manager/tables_storage.h"
+#include "schemeshard_info_types_objects_misc.h"
+#include "schemeshard_info_types_subdomain.h"
 #include "schemeshard_path_describer.h"
 
+#include "olap/store/store.h"
+#include "olap/table/table.h"
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/public/api/protos/annotations/sensitive.pb.h>
 

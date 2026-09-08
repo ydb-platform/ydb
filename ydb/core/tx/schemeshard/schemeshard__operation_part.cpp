@@ -2,6 +2,7 @@
 
 #include "schemeshard_impl.h"
 #include "schemeshard_path.h"
+#include "schemeshard_schema.h"
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/blob_depot/events.h>
@@ -17,6 +18,28 @@
 #include <ydb/core/tx/tx_processing.h>
 
 namespace NKikimr::NSchemeShard {
+
+NTable::TDatabase& TOperationContext::GetDB(const NKikimr::NCompat::TSourceLocation& location) {
+    Y_VERIFY_S(!ProtectDB,
+        "there is attempt to write to the DB when it is protected,"
+        " in that case all writes should be done over TStorageChanges"
+        " in order to maintain revert the changes");
+
+    if (!DirectAccessGranted) {
+        FirstGetDbLocation = location;
+    }
+
+    DirectAccessGranted = true;
+    return Txc.DB;
+}
+
+NTabletFlatExecutor::TTransactionContext& TOperationContext::GetTxc() const {
+    return Txc;
+}
+
+TTabletId TOperationContext::SchemeShardTabletId() const {
+    return SS->SelfTabletId();
+}
 
 template <typename T>
 struct TDebugEvent {

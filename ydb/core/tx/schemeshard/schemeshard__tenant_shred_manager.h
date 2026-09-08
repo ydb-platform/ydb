@@ -8,6 +8,10 @@
 
 #include <util/generic/ptr.h>
 
+namespace NKikimr::NIceDb {
+class TNiceDb;
+}
+
 namespace NKikimrConfig {
 
 class TDataErasureConfig;

@@ -1,3 +1,6 @@
+#include "schemeshard_info_types_table.h"
+#include "schemeshard_info_types_objects_storage.h"
+#include "schemeshard_info_types_subdomain.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
@@ -5,13 +8,14 @@
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/tx/datashard/datashard.h>
 
 namespace {
 
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-bool CheckFreezeStateAlreadySet(const TTableInfo::TPtr table, const NKikimrSchemeOp::TTableDescription& alter) {
+bool CheckFreezeStateAlreadySet(const TIntrusivePtr<TTableInfo> table, const NKikimrSchemeOp::TTableDescription& alter) {
     if (!alter.HasPartitionConfig())
         return false;
     if (alter.GetPartitionConfig().HasFreezeState()) {
@@ -56,7 +60,7 @@ bool CheckDefaultColumnFamilies(const NKikimrSchemeOp::TPartitionConfig& partiti
     return true;
 }
 
-TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table, const NKikimrSchemeOp::TTableDescription& alter,
+TIntrusivePtr<TTableAlterInfo> ParseParams(const TPath& path, TIntrusivePtr<TTableInfo> table, const NKikimrSchemeOp::TTableDescription& alter,
                                       const bool shadowDataAllowed, const THashSet<TString>& localSequences,
                                       TString& errStr, NKikimrScheme::EStatus& status, TOperationContext& context,
                                       bool isInternal = false) {
@@ -260,7 +264,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     };
 
 
-    TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
+    TIntrusivePtr<TTableAlterInfo> alterData = TTableInfo::CreateAlterData(
         table, copyAlter, *appData->TypeRegistry, limits, subDomain,
         featureFlags, errStr, localSequences);
     if (!alterData) {
@@ -271,7 +275,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     return alterData;
 }
 
-void PrepareChanges(TOperationId opId, TPathElement::TPtr path, TTableInfo::TPtr table, const TBindingsRoomsChanges& bindingChanges, TOperationContext& context) {
+void PrepareChanges(TOperationId opId, TPathElement::TPtr path, TIntrusivePtr<TTableInfo> table, const TBindingsRoomsChanges& bindingChanges, TOperationContext& context) {
 
     path->LastTxId = opId.GetTxId();
     path->PathState = TPathElement::EPathState::EPathStateAlter;
@@ -475,7 +479,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+        TIntrusivePtr<TTableInfo> table = context.SS->Tables.at(pathId);
         table->FinishAlter();
 
         if (!table->IsAsyncReplica()) {
@@ -701,7 +705,7 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(path.Base()->PathId));
-        TTableInfo::TPtr table = context.SS->Tables.at(path.Base()->PathId);
+        TIntrusivePtr<TTableInfo> table = context.SS->Tables.at(path.Base()->PathId);
 
         if (context.SS->IsTableInBackupCollection(path.Base()->PathId)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed,
@@ -737,7 +741,7 @@ public:
         }
 
         NKikimrScheme::EStatus status;
-        TTableInfo::TAlterDataPtr alterData = ParseParams(
+        TIntrusivePtr<TTableAlterInfo> alterData = ParseParams(
             path, table, alter, IsShadowDataAllowed(), localSequences, errStr, status, context,
             Transaction.GetInternal());
         if (!alterData) {
@@ -836,12 +840,12 @@ static void AppendOwnedSequenceDrops(TVector<ISubOperation::TPtr>& result, TOper
     }
 
     Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
-    TTableInfo::TPtr tableInfo = context.SS->Tables.at(tablePath.Base()->PathId);
+    TIntrusivePtr<TTableInfo> tableInfo = context.SS->Tables.at(tablePath.Base()->PathId);
 
     for (const auto& dropColumn : alter.GetDropColumns()) {
         const TString& colName = dropColumn.GetName();
 
-        const TTableInfo::TColumn* column = nullptr;
+        const TTableColumn* column = nullptr;
         for (const auto& [_, col] : tableInfo->Columns) {
             if (col.Name == colName && !col.IsDropped()) {
                 column = &col;

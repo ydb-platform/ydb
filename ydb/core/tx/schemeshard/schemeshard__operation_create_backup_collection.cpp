@@ -1,4 +1,8 @@
+#include "schemeshard_info_types_objects_misc.h"
+#include "schemeshard_info_types_subdomain.h"
 #include "schemeshard__backup_collection_common.h"
+#include "schemeshard__operation_db_changes.h"
+#include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"

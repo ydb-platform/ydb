@@ -1,39 +1,16 @@
 #pragma once
 
-#include "defs.h"
+#include "schemeshard_import_fwd.h"
 
 #include <ydb/core/protos/import.pb.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
 
-struct TEvImport {
-    enum EEv {
-        EvCreateImportRequest = EventSpaceBegin(TKikimrEvents::ES_IMPORT_SERVICE),
-        EvCreateImportResponse,
-        EvGetImportRequest,
-        EvGetImportResponse,
-        EvCancelImportRequest,
-        EvCancelImportResponse,
-        EvForgetImportRequest,
-        EvForgetImportResponse,
-        EvListImportsRequest,
-        EvListImportsResponse,
-        EvListObjectsInS3ExportRequest,
-        EvListObjectsInS3ExportResponse,
-
-        EvEnd
-    };
-
-    static_assert(
-        EvEnd < EventSpaceEnd(TKikimrEvents::ES_IMPORT_SERVICE),
-        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_IMPORT_SERVICE)"
-    );
-
 #ifdef DECLARE_EVENT_CLASS
 #error DECLARE_EVENT_CLASS macro redefinition
 #else
-#define DECLARE_EVENT_CLASS(NAME) struct T##NAME: public TEventPB<T##NAME, NKikimrImport::T##NAME, NAME>
+#define DECLARE_EVENT_CLASS(NAME) struct TEvImport::T##NAME: public TEventPB<T##NAME, NKikimrImport::T##NAME, TEvImport::NAME>
 #endif
 
     DECLARE_EVENT_CLASS(EvCreateImportRequest) {
@@ -172,8 +149,6 @@ struct TEvImport {
     };
 
 #undef DECLARE_EVENT_CLASS
-
-}; // TEvImport
 
 } // NSchemeShard
 } // NKikimr

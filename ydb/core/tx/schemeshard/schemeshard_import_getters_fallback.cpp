@@ -1,3 +1,4 @@
+#include "schemeshard_info_types_objects_transfer.h"
 #include "schemeshard_import_getters.h"
 #include "schemeshard_private.h"
 

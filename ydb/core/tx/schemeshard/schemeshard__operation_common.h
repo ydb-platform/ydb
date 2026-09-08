@@ -1,7 +1,9 @@
 #pragma once
 
+namespace NKikimr::NIceDb {
+class TNiceDb;
+}
 #include "schemeshard__operation_part.h"
-#include "schemeshard_impl.h"
 
 #include "schemeshard_private.h"
 
@@ -11,43 +13,34 @@ namespace NKikimr::TEvHive {
     struct TEvAdoptTablet;
 }
 
+namespace NKikimrTxDataShard {
+class TFlatSchemeTransaction;
+}
+
 namespace NKikimr::NSchemeShard {
 
 class TSchemeShard;
+struct TShardInfo;
+struct TTableInfo;
+struct TTableShardInfo;
 
 template<typename T>
 struct TEvSchemaChangedTraits;
 
 template<>
-struct TEvSchemaChangedTraits<TEvDataShard::TEvSchemaChanged::TPtr> {
-    static TActorId GetSource(const TEvDataShard::TEvSchemaChanged::TPtr& ev) {
-        return TActorId{ev->Get()->GetSource()};
-    }
-    static std::optional<ui32> GetGeneration(const TEvDataShard::TEvSchemaChanged::TPtr& ev) {
-        return {ev->Get()->GetGeneration()};
-    }
-    static bool HasOpResult(const TEvDataShard::TEvSchemaChanged::TPtr& ev) {
-        return ev->Get()->Record.HasOpResult();
-    }
-    static TString GetName() {
-        return "TEvDataShard::TEvSchemaChanged";
-    }
+struct TEvSchemaChangedTraits<TEvDataShard::TEvSchemaChanged__HandlePtr> {
+    static TActorId GetSource(const TEvDataShard::TEvSchemaChanged__HandlePtr& ev);
+    static std::optional<ui32> GetGeneration(const TEvDataShard::TEvSchemaChanged__HandlePtr& ev);
+    static bool HasOpResult(const TEvDataShard::TEvSchemaChanged__HandlePtr& ev);
+    static TString GetName();
 };
 
 template<>
-struct TEvSchemaChangedTraits<TEvColumnShard::TEvNotifyTxCompletionResult::TPtr> {
-    static TActorId GetSource(const TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev) {
-        return TActorId{ev->Sender};
-    }
-    static std::optional<ui32> GetGeneration(const TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& /* ev */) {
-        return std::nullopt; //TODO consider to add generation to TEvColumnShard::TEvNotifyTxCompletionResult
-    }
-    static bool HasOpResult(const TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& /* ev */) {
-        return false;
-    }
-    static TString GetName() {
-        return "TEvColumnShard::TEvNotifyTxCompletionResult";
-    }
+struct TEvSchemaChangedTraits<TEvColumnShard::TEvNotifyTxCompletionResult__HandlePtr> {
+    static TActorId GetSource(const TEvColumnShard::TEvNotifyTxCompletionResult__HandlePtr& ev);
+    static std::optional<ui32> GetGeneration(const TEvColumnShard::TEvNotifyTxCompletionResult__HandlePtr& ev);
+    static bool HasOpResult(const TEvColumnShard::TEvNotifyTxCompletionResult__HandlePtr& ev);
+    static TString GetName();
 };
 
 TSet<ui32> AllIncomingEvents();
@@ -83,7 +76,7 @@ void AckAllSchemaChanges(const TOperationId& operationId, TTxState& txState, TOp
 bool CheckPartitioningChangedForTableModification(TTxState& txState, TOperationContext& context);
 void UpdatePartitioningForTableModification(TOperationId txId, TTxState& txState, TOperationContext& context);
 
-TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo& templateDatashardInfo, TTableInfo::TPtr srcTableInfo, TTxState& txState, TSchemeShard* ss);
+TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo& templateDatashardInfo, TIntrusivePtr<TTableInfo> srcTableInfo, TTxState& txState, TSchemeShard* ss);
 
 bool SourceTablePartitioningChangedForCopyTable(const TTxState& txState, TOperationContext& context);
 void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState& txState, TOperationContext& context);
@@ -346,7 +339,7 @@ namespace NKikimr::NSchemeShard::NTableIndexVersion {
 // Returns: vector of index PathIds that were published
 TVector<TPathId> SyncChildIndexVersions(
     TPathElement::TPtr path,
-    TTableInfo::TPtr table,
+    TIntrusivePtr<TTableInfo> table,
     ui64 targetVersion,
     TOperationId operationId,
     TOperationContext& context,

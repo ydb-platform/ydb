@@ -1,7 +1,7 @@
 #pragma once
 
 #include "schemeshard_identificators.h"
-#include "schemeshard_info_types.h"
+#include "schemeshard_info_types_fwd.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
@@ -120,15 +120,7 @@ struct TShardCompactionInfo {
         : ShardIdx(id)
     {}
 
-    TShardCompactionInfo(const TShardIdx& id, const TPartitionStats& stats)
-        : ShardIdx(id)
-        , SearchHeight(stats.SearchHeight)
-        , LastFullCompactionTs(stats.FullCompactionTs)
-        , RowCount(stats.RowCount)
-        , RowDeletes(stats.RowDeletes)
-        , PartCount(stats.PartCount)
-        , HasSchemaChanges(stats.HasSchemaChanges)
-    {}
+    TShardCompactionInfo(const TShardIdx& id, const TPartitionStats& stats);
 
     TShardCompactionInfo(const TShardCompactionInfo&) = default;
 

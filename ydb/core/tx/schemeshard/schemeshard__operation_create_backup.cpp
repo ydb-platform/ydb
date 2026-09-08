@@ -1,5 +1,10 @@
+#include "schemeshard_info_types_core.h"
+#include "olap/manager/tables_storage.h"
 #include "schemeshard__operation_backup_restore_common.h"
+#include "olap/table/table.h"
 #include "schemeshard_billing_helpers.h"
+
+#include <ydb/core/tx/datashard/datashard.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -65,7 +70,7 @@ struct TBackup {
     static void ProposeTableTx(const TOperationId& opId, TTxState& txState, TOperationContext& context, TVirtualTimestamp snapshotTime) {
         const auto& pathId = txState.TargetPathId;
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+        TIntrusivePtr<TTableInfo> table = context.SS->Tables.at(pathId);
         NKikimrSchemeOp::TBackupTask backup = table->BackupSettings;
         backup.SetSnapshotStep(snapshotTime.Step);
         backup.SetSnapshotTxId(snapshotTime.TxId);
@@ -140,7 +145,7 @@ struct TBackup {
         const ui64 ts = TAppData::TimeProvider->Now().Seconds();
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(txState.TargetPathId));
-        TTableInfo::TPtr table = context.SS->Tables[txState.TargetPathId];
+        TIntrusivePtr<TTableInfo> table = context.SS->Tables[txState.TargetPathId];
 
         auto& backupInfo = table->BackupHistory[opId.GetTxId()];
 
@@ -178,7 +183,7 @@ struct TBackup {
 
     static void PersistTableTask(const TPathId& pathId, const TTxTransaction& tx, TOperationContext& context) {
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+        TIntrusivePtr<TTableInfo> table = context.SS->Tables.at(pathId);
 
         table->BackupSettings = tx.GetBackup();
 

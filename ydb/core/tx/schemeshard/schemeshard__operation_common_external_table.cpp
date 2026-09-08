@@ -1,5 +1,8 @@
+#include "schemeshard_info_types_table.h"
+#include "schemeshard_info_types_objects_misc.h"
 #include "schemeshard__operation_common_external_table.h"
 
+#include <ydb/core/scheme_types/scheme_type_registry.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
@@ -115,8 +118,8 @@ std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
 
         nextColumnId = colId + 1 > nextColumnId ? colId + 1 : nextColumnId;
 
-        TTableInfo::TColumn& column = externalTableInfo->Columns[colId];
-        column = TTableInfo::TColumn(colName, colId, typeInfo, typeInfo.GetPgTypeMod(typeName), col.GetNotNull());
+        TTableColumn& column = externalTableInfo->Columns[colId];
+        column = TTableColumn(colName, colId, typeInfo, typeInfo.GetPgTypeMod(typeName), col.GetNotNull());
 
         auto& schemaColumn= *schema.add_column();
         schemaColumn.set_name(colName);

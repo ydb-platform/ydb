@@ -1,4 +1,10 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_subdomain.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/scheme/protos/type_info.pb.h>
+#include <ydb/core/tx/schemeshard/olap/manager/tables_storage.h>
+#include <ydb/core/tx/schemeshard/olap/store/store.h>
+#include <ydb/core/tx/schemeshard/olap/table/table.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
 #include <ydb/core/tx/schemeshard/olap/operations/checks.h>
 #include <ydb/core/tx/schemeshard/olap/statistics/schema.h>
 #include <ydb/core/tx/schemeshard/olap/statistics/update.h>

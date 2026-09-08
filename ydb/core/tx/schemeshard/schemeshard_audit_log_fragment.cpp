@@ -1,3 +1,4 @@
+#include "schemeshard_info_types_table.h"
 #include "schemeshard_audit_log_fragment.h"
 
 #include <ydb/core/base/path.h>

@@ -1,5 +1,6 @@
 #include "update.h"
 #include <ydb/core/tx/schemeshard/olap/operations/alter/in_store/object.h>
+#include <ydb/core/tx/schemeshard/olap/table/table.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {

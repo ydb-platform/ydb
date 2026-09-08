@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/protos/counters_schemeshard.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers_flags_n.h>

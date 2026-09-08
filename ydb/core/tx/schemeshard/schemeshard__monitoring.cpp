@@ -1,3 +1,7 @@
+#include "schemeshard_info_types_table.h"
+#include "schemeshard_schema.h"
+#include "schemeshard_info_types_objects.h"
+#include "schemeshard_info_types_subdomain.h"
 #include "schemeshard_impl.h"
 #include "schemeshard__operation_common.h"
 
@@ -1896,7 +1900,7 @@ private:
                                 if (path->Dropped() || !path->IsTable() || !Self->Tables.contains(pathId)) {
                                     str << "path is dropped or is not a table";
                                 } else {
-                                    const TTableInfo::TPtr table = Self->Tables.at(pathId);
+                                    const TIntrusivePtr<TTableInfo> table = Self->Tables.at(pathId);
                                     str << (table->GetPartitionStore().contains(shardIdx) ? "Active" : "Inactive");
                                 }
                             }

@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/olap/common/common.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/schemeshard/olap/operations/local_index_helpers.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 

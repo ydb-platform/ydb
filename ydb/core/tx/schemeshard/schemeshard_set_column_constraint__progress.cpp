@@ -1,8 +1,11 @@
+#include <ydb/core/tx/schemeshard/dedicated_pipe_pool.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/tx/schemeshard/index/build_index_helpers.h>
 #include <ydb/core/tx/schemeshard/index/build_index_tx_base.h>
 #include <ydb/core/tx/schemeshard/index/common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
 #include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/schemeshard/schemeshard_xxport__helpers.h>
 
@@ -625,7 +628,7 @@ private:
         }
         Y_ENSURE(path.LockedBy() == operationInfo.LockTxId);
 
-        TTableInfo::TPtr table = Self->Tables.at(path->PathId);
+        TIntrusivePtr<TTableInfo> table = Self->Tables.at(path->PathId);
 
         for (const auto* partition : table->GetPartitions()) {
             // We can initate shards after schemeshard's reboot.
@@ -875,4 +878,3 @@ ITransaction* TSchemeShard::CreateTxReplyValidateRowCondition(
 
 } // namespace NSchemeShard
 } // namespace NKikimr
-

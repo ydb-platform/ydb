@@ -1,6 +1,6 @@
 #pragma once
 #include "schemeshard_identificators.h"  // for TShardIdx
-#include "schemeshard_info_types.h"  // for TShardInfo
+#include "schemeshard_info_types_fwd.h"  // for TShardInfo
 
 #include <ydb/core/base/tablet_pipe.h>
 

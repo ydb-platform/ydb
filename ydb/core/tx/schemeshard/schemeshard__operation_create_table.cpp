@@ -2,12 +2,15 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_info_types_subdomain.h"
+#include "schemeshard_info_types_table.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>  // for IsAllowedKeyType
+#include <ydb/core/tx/datashard/datashard.h>
 
 namespace {
 
@@ -104,7 +107,7 @@ bool InitPartitioning(const NKikimrSchemeOp::TTableDescription& op,
     return true;
 }
 
-bool DoInitPartitioning(TTableInfo::TPtr tableInfo,
+bool DoInitPartitioning(TIntrusivePtr<TTableInfo> tableInfo,
                         const NKikimrSchemeOp::TTableDescription& op,
                         const NScheme::TTypeRegistry* typeRegistry,
                         TString& errStr,
@@ -138,7 +141,7 @@ bool DoInitPartitioning(TTableInfo::TPtr tableInfo,
 
 void ApplyPartitioning(TTxId txId,
                        const TPathId& pathId,
-                       TTableInfo::TPtr tableInfo,
+                       TIntrusivePtr<TTableInfo> tableInfo,
                        TTxState& txState,
                        const TChannelsBindings& bindedChannels,
                        TSchemeShard* ss,
@@ -315,7 +318,7 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        TTableInfo::TPtr table = context.SS->Tables[pathId];
+        TIntrusivePtr<TTableInfo> table = context.SS->Tables[pathId];
         Y_ABORT_UNLESS(table);
         table->AlterVersion = NEW_TABLE_ALTER_VERSION;
 
@@ -641,7 +644,7 @@ public:
             .EnableGeneratedStored = AppData()->FeatureFlags.GetEnableGeneratedStored(),
             .EnableGeneratedVirtual = AppData()->FeatureFlags.GetEnableGeneratedVirtual(),
         };
-        TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
+        TIntrusivePtr<TTableAlterInfo> alterData = TTableInfo::CreateAlterData(
             nullptr,
             schema,
             *typeRegistry,
@@ -656,7 +659,7 @@ public:
             return result;
         }
 
-        TTableInfo::TPtr tableInfo = new TTableInfo(std::move(*alterData));
+        TIntrusivePtr<TTableInfo> tableInfo = new TTableInfo(std::move(*alterData));
         alterData.Reset();
 
         if (AppData()->FeatureFlags.GetEnableTablePartitionsFormatShardIdx() && AppData()->FeatureFlags.GetEnableTablePartitionsFormatShardIdxByDefault()) {

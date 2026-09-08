@@ -1,5 +1,11 @@
+#include "schemeshard_schema.h"
+#include "olap/manager/tables_storage.h"
+#include "schemeshard_info_types_core.h"
 #include "schemeshard__operation_backup_restore_common.h"
+#include "olap/table/table.h"
 #include "schemeshard_billing_helpers.h"
+
+#include <ydb/core/tx/datashard/datashard.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -26,7 +32,7 @@ struct TRestore {
         const TPath sourcePath = TPath::Init(pathId, context.SS);
         if (sourcePath->IsTable()) {
             Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-            TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+            TIntrusivePtr<TTableInfo> table = context.SS->Tables.at(pathId);
             return ProposeTableTx(table->RestoreSettings, opId, txState, context);
         } else {
             Y_ABORT_UNLESS(context.SS->ColumnTables.contains(pathId));
@@ -81,7 +87,7 @@ struct TRestore {
         const TPath sourcePath = TPath::Init(pathId, context.SS);
         if (sourcePath->IsTable()) {
             Y_ABORT_UNLESS(context.SS->Tables.contains(txState.TargetPathId));
-            TTableInfo::TPtr table = context.SS->Tables[txState.TargetPathId];
+            TIntrusivePtr<TTableInfo> table = context.SS->Tables[txState.TargetPathId];
             return TableFinish(table, opId, txState, context);
         } else {
             Y_ABORT_UNLESS(context.SS->ColumnTables.contains(txState.TargetPathId));
@@ -121,7 +127,7 @@ struct TRestore {
         const TPath sourcePath = TPath::Init(pathId, context.SS);
         if (sourcePath->IsTable()) {
             Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-            TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+            TIntrusivePtr<TTableInfo> table = context.SS->Tables.at(pathId);
             return PersistTableTask(table, pathId, tx, context);
         } else {
             Y_ABORT_UNLESS(context.SS->ColumnTables.contains(pathId));

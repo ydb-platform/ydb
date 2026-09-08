@@ -1,4 +1,7 @@
+#include "schemeshard_info_types_objects_misc.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_db_changes.h"
+#include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__operation_common_resource_pool.h"
 #include "schemeshard_impl.h"
 

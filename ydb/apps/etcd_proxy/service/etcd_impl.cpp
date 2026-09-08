@@ -5,6 +5,7 @@
 #include <ydb/apps/etcd_proxy/proto/rpc.grpc.pb.h>
 
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
+#include <ydb/core/util/tuples.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/tx.h>
 

@@ -1,7 +1,10 @@
+#include "schemeshard_schema.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_set_column_constraint.h"
-#include <util/string/split.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
+#include <util/string/split.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

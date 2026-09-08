@@ -1,3 +1,5 @@
+#include "schemeshard_info_types_table.h"
+#include "schemeshard_info_types_subdomain.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/metering/metering.h>

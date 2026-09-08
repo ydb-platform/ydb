@@ -1,5 +1,7 @@
 #include "schemeshard_impl.h"
+#include "schemeshard_impl_queues.h"
 
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 namespace NKikimr::NSchemeShard {

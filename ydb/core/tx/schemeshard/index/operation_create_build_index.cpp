@@ -1,5 +1,10 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_subdomain.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard_path.h>
 #include <ydb/core/tx/schemeshard/index/index_utils.h>
 
 #include <ydb/core/base/table_index.h>

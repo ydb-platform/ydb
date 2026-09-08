@@ -1,3 +1,5 @@
+#include "schemeshard_info_types_objects_misc.h"
+#include "schemeshard_info_types_objects_storage.h"
 #include "schemeshard__backup_collection_common.h"
 
 namespace NKikimr::NSchemeShard {

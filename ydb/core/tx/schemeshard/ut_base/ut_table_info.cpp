@@ -1,4 +1,4 @@
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -17,8 +17,8 @@ TVector<TTableShardInfo> MakeShards(ui32 n, ui64 ownerId = 1) {
     return v;
 }
 
-TTableInfo::TPtr MakeTable() {
-    return TTableInfo::TPtr(new TTableInfo());
+TIntrusivePtr<TTableInfo> MakeTable() {
+    return TIntrusivePtr<TTableInfo>(new TTableInfo());
 }
 
 void EnableTTL(TTableInfo& info) {

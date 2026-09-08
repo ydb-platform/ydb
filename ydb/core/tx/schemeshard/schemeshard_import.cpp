@@ -3,8 +3,13 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_import_getters.h"
 #include "schemeshard_import_helpers.h"
+#include "schemeshard_info_types_objects_transfer.h"
+#include "schemeshard_info_types_table.h"
+#include "schemeshard_private_import.h"
+#include "schemeshard_schema.h"
 
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
+#include <ydb/core/ydb_convert/table_profiles.h>
 
 #include <util/generic/xrange.h>
 

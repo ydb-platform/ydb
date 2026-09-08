@@ -1,7 +1,10 @@
+#include "schemeshard_schema.h"
+#include "schemeshard_info_types_objects_misc.h"
 #include "schemeshard_backup.h"
-
 #include "schemeshard_impl.h"
 #include "schemeshard_continuous_backup_cleaner.h"
+
+#include <ydb/core/persqueue/events/global.h>
 
 namespace NKikimr::NSchemeShard {
 

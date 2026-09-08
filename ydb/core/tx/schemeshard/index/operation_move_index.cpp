@@ -1,4 +1,9 @@
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_core.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_db_changes.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_memory_changes.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_cdc_stream_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -76,7 +81,7 @@ public:
             Y_ABORT_UNLESS(path);
 
             Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-            TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+            TIntrusivePtr<TTableInfo> table = context.SS->Tables.at(pathId);
             Y_ABORT_UNLESS(table);
 
             auto seqNo = context.SS->StartRound(*txState);
@@ -277,7 +282,7 @@ public:
 
 
         TPath path = TPath::Init(txState->TargetPathId, context.SS);
-        TTableInfo::TPtr table = context.SS->Tables.at(txState->TargetPathId);
+        TIntrusivePtr<TTableInfo> table = context.SS->Tables.at(txState->TargetPathId);
 
         Y_ABORT_UNLESS(txState->PlanStep);
 
@@ -407,7 +412,7 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
-        TTableInfo::TPtr table = context.SS->Tables.at(tablePath.Base()->PathId);
+        TIntrusivePtr<TTableInfo> table = context.SS->Tables.at(tablePath.Base()->PathId);
 
         Y_ABORT_UNLESS(table->AlterVersion != 0);
 

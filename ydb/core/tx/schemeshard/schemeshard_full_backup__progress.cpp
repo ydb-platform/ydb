@@ -1,3 +1,4 @@
+#include "schemeshard_info_types_objects_misc.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/appdata.h>

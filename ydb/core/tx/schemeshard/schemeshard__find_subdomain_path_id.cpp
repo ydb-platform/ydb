@@ -1,4 +1,7 @@
+#include "schemeshard_info_types_core.h"
 #include "schemeshard_impl.h"
+
+#include <ydb/core/actorlib_impl/long_timer.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

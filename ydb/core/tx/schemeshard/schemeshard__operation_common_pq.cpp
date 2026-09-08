@@ -1,9 +1,12 @@
+#include "schemeshard_info_types_core.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard_impl.h"
 #include "schemeshard_private.h"
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/protos/pqdata_transaction.pb.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <library/cpp/iterator/iterate_keys.h>
 

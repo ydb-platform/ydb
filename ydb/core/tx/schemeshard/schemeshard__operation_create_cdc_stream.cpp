@@ -1,4 +1,9 @@
+#include "schemeshard_info_types_table.h"
+#include "schemeshard_info_types_objects_storage.h"
+#include "schemeshard_info_types_subdomain.h"
 #include "schemeshard__operation_create_cdc_stream.h"
+#include "schemeshard__operation_db_changes.h"
+#include "schemeshard__operation_memory_changes.h"
 
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
@@ -6,7 +11,10 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+
+#include <library/cpp/json/json_reader.h>
 
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -677,7 +685,7 @@ void DoCreatePqPart(
         const TOperationId& opId,
         const TPath& streamPath,
         const TString& streamName,
-        TTableInfo::TCPtr table,
+        TIntrusiveConstPtr<TTableInfo> table,
         const TVector<TString>& boundaries,
         const bool acceptExisted)
 {

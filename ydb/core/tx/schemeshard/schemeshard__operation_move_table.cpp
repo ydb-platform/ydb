@@ -1,8 +1,16 @@
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_db_changes.h"
+#include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_info_types_subdomain.h"
+#include "schemeshard_info_types_table.h"
+#include "olap/manager/tables_storage.h"
+#include "olap/table/table.h"
 
 #include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/datashard/datashard.h>
 
 namespace {
 
@@ -112,7 +120,7 @@ public:
 
         TString txBody;
         if (srcPath->IsTable()) {
-            TTableInfo::TPtr srcTable = context.SS->Tables.at(srcPath->PathId);
+            TIntrusivePtr<TTableInfo> srcTable = context.SS->Tables.at(srcPath->PathId);
 
             NKikimrTxDataShard::TFlatSchemeTransaction tx;
             context.SS->FillSeqNo(tx, seqNo);
@@ -274,7 +282,7 @@ public:
         if (srcPath->IsTable()) {
             Y_ABORT_UNLESS(context.SS->Tables.contains(srcPath.Base()->PathId));
 
-            TTableInfo::TPtr tableInfo = TTableInfo::DeepCopy(*context.SS->Tables.at(srcPath.Base()->PathId));
+            TIntrusivePtr<TTableInfo> tableInfo = TTableInfo::DeepCopy(*context.SS->Tables.at(srcPath.Base()->PathId));
             // report TTableInfo::VerifyConsistency() time
             context.SS->TabletCounters->Cumulative()[COUNTER_TABLE_PARTITIONS_CONSISTENCY_CHECK_TIME_NS].Increment(tableInfo->LastVerifyConsistencyTime);
 
@@ -994,7 +1002,7 @@ public:
 
         // wait splits
         if (srcPath->IsTable()) {
-            TTableInfo::TPtr tableSrc = context.SS->Tables.at(srcPath.Base()->PathId);
+            TIntrusivePtr<TTableInfo> tableSrc = context.SS->Tables.at(srcPath.Base()->PathId);
             for (auto splitTx: tableSrc->GetSplitOpsInFlight()) {
                 context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
             }

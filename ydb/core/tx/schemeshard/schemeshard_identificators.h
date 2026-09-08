@@ -6,6 +6,7 @@
 #include <ydb/library/conclusion/result.h>
 
 #include <util/generic/utility.h>
+#include <util/string/cast.h>
 #include <util/stream/output.h>
 
 namespace NKikimrSchemeOp {

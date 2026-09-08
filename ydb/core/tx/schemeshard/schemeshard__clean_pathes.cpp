@@ -1,3 +1,4 @@
+#include "schemeshard_info_types_subdomain.h"
 #include "schemeshard_impl.h"
 
 namespace NKikimr {

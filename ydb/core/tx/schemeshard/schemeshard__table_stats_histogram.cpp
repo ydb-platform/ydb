@@ -1,9 +1,13 @@
+#include "schemeshard_info_types_core.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__operation_db_changes.h"
+#include "schemeshard__operation_memory_changes.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tablet_flat/flat_stat_table.h>
 #include <ydb/core/split/split.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 namespace NKikimr {
@@ -295,7 +299,7 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
             << ", key access buckets " << rec.GetTableStats().GetKeyAccessSample().GetBuckets().size()
     );
 
-    const TTableInfo::TPtr tableInfo = Self->Tables.Value(tableId, nullptr);
+    const TIntrusivePtr<TTableInfo> tableInfo = Self->Tables.Value(tableId, nullptr);
 
     if (!tableInfo) {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

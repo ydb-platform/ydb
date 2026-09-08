@@ -1,4 +1,7 @@
 #include "schemeshard_impl.h"
+#include "schemeshard_info_types_objects_export.h"
+#include "schemeshard_info_types_objects_misc.h"
+#include "schemeshard_info_types_objects_transfer.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>

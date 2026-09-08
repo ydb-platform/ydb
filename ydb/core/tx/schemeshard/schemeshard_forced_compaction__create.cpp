@@ -1,4 +1,8 @@
+#include "schemeshard_info_types_table.h"
+#include "schemeshard_info_types_objects_misc.h"
+#include "olap/manager/tables_storage.h"
 #include "schemeshard_forced_compaction.h"
+#include "olap/table/table.h"
 #include "schemeshard_impl.h"
 
 #define LOG_D(stream) LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << Self->SelfTabletId() << "][ForcedCompaction] " << stream)

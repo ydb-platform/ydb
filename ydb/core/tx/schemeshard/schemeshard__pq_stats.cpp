@@ -1,8 +1,10 @@
 #include "schemeshard__stats_impl.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_info_types_subdomain.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/protos/sys_view.pb.h>
 
 namespace NKikimr {

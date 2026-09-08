@@ -1,4 +1,7 @@
+#include "schemeshard_info_types_core.h"
+#include "olap/manager/tables_storage.h"
 #include "schemeshard_impl.h"
+#include "olap/table/table.h"
 
 namespace NKikimr::NSchemeShard {
 
@@ -65,4 +68,3 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxUnmarkRestoreTables(TVe
 }
 
 } // NKikimr::NSchemeShard
-

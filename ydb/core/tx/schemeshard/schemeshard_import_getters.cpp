@@ -1,9 +1,11 @@
+#include "schemeshard_info_types_objects_transfer.h"
 #include "schemeshard_import_getters.h"
-
 #include "schemeshard_import_helpers.h"
 #include "schemeshard_private.h"
 #include "schemeshard_xxport__helpers.h"
 
+#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/fields_wrappers.h>

@@ -8,8 +8,10 @@
 #include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/protos/tx.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/util/ui64id_nicedb.h>
 
 #include <ydb/library/login/protos/login.pb.h>
 

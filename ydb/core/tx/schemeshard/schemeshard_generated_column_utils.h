@@ -1,10 +1,10 @@
 #pragma once
 
-#include "schemeshard_info_types.h"
+#include "schemeshard_info_types_core.h"
 
 namespace NKikimr::NSchemeShard {
 
-inline bool IsVirtualGeneratedColumn(const TTableInfo::TColumn& column) {
+inline bool IsVirtualGeneratedColumn(const TTableColumn& column) {
     if (column.DefaultKind != ETableColumnDefaultKind::FromExpression) {
         return false;
     }

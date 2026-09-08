@@ -1,3 +1,7 @@
+#include "schemeshard_info_types_table.h"
+#include "schemeshard_schema.h"
+#include "schemeshard_info_types_objects_storage.h"
+#include "schemeshard_info_types_subdomain.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
@@ -6,6 +10,7 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/datashard/datashard.h>
 
 namespace {
 
@@ -204,7 +209,7 @@ public:
     NKikimrScheme::TMigrateTable DescribeTable(TOperationContext& context, TPathId pathId) {
         NKikimrScheme::TMigrateTable descr;
 
-        TTableInfo::TPtr tableInfo = context.SS->Tables.at(pathId);
+        TIntrusivePtr<TTableInfo> tableInfo = context.SS->Tables.at(pathId);
         descr.SetNextColId(tableInfo->NextColumnId);
 
         TString partitionConfig;
@@ -216,7 +221,7 @@ public:
 
         for (auto& item: tableInfo->Columns) {
             ui32 columnId = item.first;
-            const TTableInfo::TColumn& column = item.second;
+            const TTableColumn& column = item.second;
 
             auto colDescr = descr.AddColumns();
             colDescr->SetId(columnId);
@@ -326,7 +331,7 @@ public:
 
                 *event->Record.MutableTable() = DescribeTable(context, pathId);
 
-                TTableInfo::TPtr tableInfo = context.SS->Tables.at(pathId);
+                TIntrusivePtr<TTableInfo> tableInfo = context.SS->Tables.at(pathId);
                 for (const auto* part: tableInfo->GetPartitions()) {
                     TShardIdx shardIdx = part->ShardIdx;
                     *migrateShards->Add() = DescribeShard(context, shardIdx);
@@ -856,7 +861,7 @@ public:
                 case NKikimrSchemeOp::EPathType::EPathTypeTable:
                 {
                     Y_ABORT_UNLESS(context.SS->Tables.contains(pId));
-                    TTableInfo::TPtr table = context.SS->Tables.at(pId);
+                    TIntrusivePtr<TTableInfo> table = context.SS->Tables.at(pId);
                     for (const auto* item: table->GetPartitions()) {
                         auto shardIdx = item->ShardIdx;
                         const auto& shardInfo = context.SS->ShardInfos.at(shardIdx);

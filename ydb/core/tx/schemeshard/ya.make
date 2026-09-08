@@ -340,7 +340,15 @@ SRCS(
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_subop_state_types.h)
 
-GENERATE_ENUM_SERIALIZATION(schemeshard_info_types.h)
+GENERATE_ENUM_SERIALIZATION(schemeshard_info_types_fwd.h)
+
+GENERATE_ENUM_SERIALIZATION(schemeshard_info_types_objects_export.h)
+
+GENERATE_ENUM_SERIALIZATION(schemeshard_info_types_objects_misc.h)
+
+GENERATE_ENUM_SERIALIZATION(schemeshard_info_types_objects_transfer.h)
+
+GENERATE_ENUM_SERIALIZATION(schemeshard_info_types_subdomain.h)
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_types.h)
 

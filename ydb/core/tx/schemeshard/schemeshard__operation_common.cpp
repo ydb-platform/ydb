@@ -1,7 +1,16 @@
 #include "schemeshard__operation_common.h"
-
+#include "schemeshard__operation_db_changes.h"
+#include "schemeshard__operation_helpers.h"
+#include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__tenant_shred_manager.h"
-
+#include "schemeshard_impl.h"
+#include "schemeshard_info_types_objects.h"
+#include "schemeshard_info_types_subdomain.h"
+#include "schemeshard_info_types_table.h"
+#include "olap/manager/tables_storage.h"
+#include "olap/store/store.h"
+#include "olap/table/table.h"
+#include <ydb/core/base/path.h>
 #include <ydb/core/blob_depot/events.h>
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/filestore/core/filestore.h>
@@ -13,10 +22,112 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/sequenceshard/public/events.h>
+#include <ydb/library/login/login.h>
 
 
 namespace NKikimr {
 namespace NSchemeShard {
+
+TActorId TEvSchemaChangedTraits<TEvDataShard::TEvSchemaChanged__HandlePtr>::GetSource(
+        const TEvDataShard::TEvSchemaChanged__HandlePtr& ev)
+{
+    return TActorId{ev->Get()->GetSource()};
+}
+
+std::optional<ui32> TEvSchemaChangedTraits<TEvDataShard::TEvSchemaChanged__HandlePtr>::GetGeneration(
+        const TEvDataShard::TEvSchemaChanged__HandlePtr& ev)
+{
+    return {ev->Get()->GetGeneration()};
+}
+
+bool TEvSchemaChangedTraits<TEvDataShard::TEvSchemaChanged__HandlePtr>::HasOpResult(
+        const TEvDataShard::TEvSchemaChanged__HandlePtr& ev)
+{
+    return ev->Get()->Record.HasOpResult();
+}
+
+TString TEvSchemaChangedTraits<TEvDataShard::TEvSchemaChanged__HandlePtr>::GetName() {
+    return "TEvDataShard::TEvSchemaChanged";
+}
+
+TActorId TEvSchemaChangedTraits<TEvColumnShard::TEvNotifyTxCompletionResult__HandlePtr>::GetSource(
+        const TEvColumnShard::TEvNotifyTxCompletionResult__HandlePtr& ev)
+{
+    return TActorId{ev->Sender};
+}
+
+std::optional<ui32> TEvSchemaChangedTraits<TEvColumnShard::TEvNotifyTxCompletionResult__HandlePtr>::GetGeneration(
+        const TEvColumnShard::TEvNotifyTxCompletionResult__HandlePtr& /* ev */)
+{
+    return std::nullopt;
+}
+
+bool TEvSchemaChangedTraits<TEvColumnShard::TEvNotifyTxCompletionResult__HandlePtr>::HasOpResult(
+        const TEvColumnShard::TEvNotifyTxCompletionResult__HandlePtr& /* ev */)
+{
+    return false;
+}
+
+TString TEvSchemaChangedTraits<TEvColumnShard::TEvNotifyTxCompletionResult__HandlePtr>::GetName() {
+    return "TEvColumnShard::TEvNotifyTxCompletionResult";
+}
+
+namespace NOperationHelpers {
+
+TTabletId GetTabletId(const TSchemeShard& ss) {
+    return ss.SelfTabletId();
+}
+
+TString GetRootPath(const TSchemeShard& ss) {
+    return CanonizePath(ss.RootPathElements);
+}
+
+bool CheckApplyIf(
+        TSchemeShard& ss,
+        const TTxTransaction& transaction,
+        TString& error,
+        TPathElement::EPathType pathType)
+{
+    return ss.CheckApplyIf(transaction, error, pathType);
+}
+
+bool IsStrictAclCheckEnabled() {
+    return AppData()->FeatureFlags.GetEnableStrictAclCheck();
+}
+
+bool SidExists(const TSchemeShard& ss, const TString& sid) {
+    return ss.LoginProvider.Sids.contains(sid);
+}
+
+THashSet<TPathId> ListSubTree(TSchemeShard& ss, TPathId pathId, const TActorContext& ctx) {
+    return ss.ListSubTree(pathId, ctx);
+}
+
+TPathElement::TPtr FindPathElement(const TSchemeShard& ss, TPathId pathId) {
+    const auto it = ss.PathsById.find(pathId);
+    return it != ss.PathsById.end() ? it->second : nullptr;
+}
+
+void PersistACL(TSchemeShard& ss, NTable::TDatabase& database, const TPathElement::TPtr& path) {
+    NIceDb::TNiceDb db(database);
+    ss.PersistACL(db, path);
+}
+
+void PersistOwner(TSchemeShard& ss, NTable::TDatabase& database, const TPathElement::TPtr& path) {
+    NIceDb::TNiceDb db(database);
+    ss.PersistOwner(db, path);
+}
+
+void PersistPathDirAlterVersion(TSchemeShard& ss, NTable::TDatabase& database, const TPathElement::TPtr& path) {
+    NIceDb::TNiceDb db(database);
+    ss.PersistPathDirAlterVersion(db, path);
+}
+
+void ClearDescribePathCaches(TSchemeShard& ss, const TPathElement::TPtr& path) {
+    ss.ClearDescribePathCaches(path);
+}
+
+} // namespace NOperationHelpers
 
 THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TSchemeShard* ss)
 {
@@ -740,7 +851,7 @@ void AckAllSchemaChanges(const TOperationId &operationId, TTxState &txState, TOp
 
 bool CheckPartitioningChangedForTableModificationImpl(TTxState &txState, TOperationContext &context) {
     Y_ABORT_UNLESS(context.SS->Tables.contains(txState.TargetPathId));
-    TTableInfo::TPtr table = context.SS->Tables.at(txState.TargetPathId);
+    TIntrusivePtr<TTableInfo> table = context.SS->Tables.at(txState.TargetPathId);
 
     THashSet<TShardIdx> shardIdxsLeft;
     for (const auto* shard : table->GetPartitions()) {
@@ -804,7 +915,7 @@ void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &
     Y_ABORT_UNLESS(txState.ShardsInProgress.empty());
 
     Y_ABORT_UNLESS(context.SS->Tables.contains(txState.TargetPathId));
-    TTableInfo::TPtr table = context.SS->Tables.at(txState.TargetPathId);
+    TIntrusivePtr<TTableInfo> table = context.SS->Tables.at(txState.TargetPathId);
     TTxState::ETxState commonShardOp = TTxState::CreateParts;
 
     if (txState.TxType == TTxState::TxAlterTable) {
@@ -913,7 +1024,7 @@ void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &
 bool SourceTablePartitioningChangedForCopyTable(const TTxState &txState, TOperationContext &context) {
     Y_ABORT_UNLESS(txState.SourcePathId != InvalidPathId);
     Y_ABORT_UNLESS(txState.TargetPathId != InvalidPathId);
-    const TTableInfo::TPtr srcTableInfo = *context.SS->Tables.FindPtr(txState.SourcePathId);
+    const TIntrusivePtr<TTableInfo> srcTableInfo = *context.SS->Tables.FindPtr(txState.SourcePathId);
 
     THashSet<TShardIdx> srcShardIdxsLeft;
     for (const auto* p : srcTableInfo->GetPartitions()) {
@@ -1044,7 +1155,7 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
     txState.TxShardsListFinalized = true;
 }
 
-TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo &templateDatashardInfo, TTableInfo::TPtr srcTableInfo, TTxState &txState, TSchemeShard *ss) {
+TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo &templateDatashardInfo, TIntrusivePtr<TTableInfo> srcTableInfo, TTxState &txState, TSchemeShard *ss) {
     // Build a mutable copy of src partitions for the dst table.
     TVector<TTableShardInfo> dstPartitions;
     {
@@ -1431,7 +1542,7 @@ namespace NKikimr::NSchemeShard::NTableIndexVersion {
 
 TVector<TPathId> SyncChildIndexVersions(
     TPathElement::TPtr path,
-    TTableInfo::TPtr table,
+    TIntrusivePtr<TTableInfo> table,
     ui64 targetVersion,
     TOperationId operationId,
     TOperationContext& context,

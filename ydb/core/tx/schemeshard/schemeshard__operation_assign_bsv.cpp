@@ -1,3 +1,4 @@
+#include "schemeshard_info_types_objects_storage.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 

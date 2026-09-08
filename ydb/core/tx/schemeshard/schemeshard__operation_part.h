@@ -1,8 +1,8 @@
 #pragma once
 
-#include "schemeshard__operation_db_changes.h"
-#include "schemeshard__operation_memory_changes.h"
+#include "schemeshard_modify_scheme.h"
 #include "schemeshard__operation_side_effects.h"
+#include "schemeshard_path_element.h"
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_types.h"
 
@@ -12,12 +12,11 @@
 #include <ydb/core/util/source_location.h>
 
 #include <ydb/library/actors/core/event.h>  // for TEventHandler
+#include <ydb/library/aclib/aclib.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/set.h>
 #include <util/generic/string.h>
-
-
 #define SCHEMESHARD_INCOMING_EVENTS(action) \
     action(TEvHive, TEvCreateTabletReply,        NSchemeShard::TXTYPE_CREATE_TABLET_REPLY)               \
     action(TEvHive, TEvAdoptTabletReply,         NSchemeShard::TXTYPE_CREATE_TABLET_REPLY)               \
@@ -87,10 +86,20 @@
 
 
 namespace NKikimr {
+namespace NTable {
+class TDatabase;
+}
+
+namespace NIceDb {
+class TNiceDb;
+}
+
 namespace NSchemeShard {
 
 class TSchemeShard;
 class TPath;
+class TMemoryChanges;
+class TStorageChanges;
 
 struct TOperationContext {
 public:
@@ -131,24 +140,11 @@ public:
         : TOperationContext(ss, txc, ctx, onComplete, memChanges, dbChange, Nothing())
     {}
 
-    NTable::TDatabase& GetDB(const NKikimr::NCompat::TSourceLocation& location = NKikimr::NCompat::TSourceLocation::current()) {
-        Y_VERIFY_S(ProtectDB == false,
-                 "there is attempt to write to the DB when it is protected,"
-                 " in that case all writes should be done over TStorageChanges"
-                 " in order to maintain revert the changes");
+    TTabletId SchemeShardTabletId() const;
 
-        // Store the location of first GetDB call for better error reporting
-        if (!DirectAccessGranted) {
-            FirstGetDbLocation = location;
-        }
+    NTable::TDatabase& GetDB(const NKikimr::NCompat::TSourceLocation& location = NKikimr::NCompat::TSourceLocation::current());
 
-        DirectAccessGranted = true;
-        return GetTxc().DB;
-    }
-
-    NTabletFlatExecutor::TTransactionContext& GetTxc() const {
-        return Txc;
-    }
+    NTabletFlatExecutor::TTransactionContext& GetTxc() const;
 
     bool IsUndoChangesSafe() const {
         return !DirectAccessGranted;

@@ -1,3 +1,5 @@
+#include "schemeshard_info_types_objects_transfer.h"
+#include "schemeshard_info_types_objects_export.h"
 #include "schemeshard_audit_log.h"
 
 #include "schemeshard_audit_log_fragment.h"

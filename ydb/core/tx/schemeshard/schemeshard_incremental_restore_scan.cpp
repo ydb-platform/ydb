@@ -1,4 +1,9 @@
+#include "schemeshard_info_types_table.h"
+#include "schemeshard_schema.h"
+#include "schemeshard_info_types_objects_misc.h"
+#include "schemeshard_info_types_objects_storage.h"
 #include "schemeshard_impl.h"
+#include "dedicated_pipe_pool.h"
 #include "schemeshard__backup_collection_common.h"
 #include "schemeshard_incremental_restore_classify.h"
 

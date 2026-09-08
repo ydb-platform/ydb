@@ -503,6 +503,7 @@ class TestStreamingRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgradeA
             input = [f'{{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-{i}"}}']
             expected_data = [f'{{"host":"host-{i}","level":"error","time":"2025-01-01T00:15:00.000000Z"}}{suffix}']
             self.do_write_read(input, expected_data)
+            wait_completed_checkpoints(self.cluster, f"/Root/{self.query_name}")
             time.sleep(0.5)
 
     @link_test_case("#46772")
@@ -520,6 +521,7 @@ class TestStreamingRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgradeA
             input = [f'{{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-{i}"}}']
             expected_data = [f'{{"host":"host-{i}","level":"error","time":"2025-01-01T00:15:00.000000Z"}}{suffix}']
             self.do_write_read(input, expected_data)
+            wait_completed_checkpoints(self.cluster, f"/Root/{self.query_name}")
             time.sleep(0.5)
 
     @link_test_case("#48465")

@@ -19,8 +19,6 @@ items:
     items:
     - name: Actor Lifecycle
       href: actor-system/actor-lifecycle.md
-    - name: Actor System Subsystems
-      href: actor-system/subsystems.md
     - name: Events and Messaging
       href: actor-system/events-and-messaging.md
     - name: Failure and Shutdown

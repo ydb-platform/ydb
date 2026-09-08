@@ -7,7 +7,6 @@ Read the pages needed for your change:
 | Task | Reference |
 |---|---|
 | Construct, register, and dispatch an actor; choose a pool | [Actor Lifecycle](actor-lifecycle.md) |
-| Register or mock a subsystem; define dependencies and lifecycle hooks | [Actor System Subsystems](subsystems.md) |
 | Send, forward, schedule, or exchange remote messages | [Events and Messaging](events-and-messaging.md) |
 | Handle nondelivery, cancellation, and actor death | [Failure and Shutdown](failure-and-shutdown.md) |
 | Write a stackless actor handler | [Coroutine Actors](coroutine-actors.md) |
@@ -26,7 +25,6 @@ Read the pages needed for your change:
 | Executor pool | Scheduling and CPU capacity used to run mailbox activations. |
 | Activation | A request for a worker to drain some work from a mailbox. |
 | ServiceId | A stable local name mapped to a current ActorId. |
-| Subsystem | A system-owned ISubSystem object with a typed C++ API and startup/shutdown hooks. |
 | Interconnect session | One incarnation of communication between two nodes. |
 
 The basic turn is:
@@ -121,7 +119,6 @@ The contracts above describe application behavior. For runtime changes, inspect 
 | Bootstrap and dispatch | [core/actor_bootstrapped.h](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/actor_bootstrapped.h), [core/hfunc.h](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/hfunc.h) |
 | Envelopes and wire payloads | [core/event.h](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/event.h), [core/event_pb.h](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/event_pb.h) |
 | Registration, services, routing | [core/actorsystem.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/actorsystem.cpp), [core/executor_pool_base.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/executor_pool_base.cpp) |
-| Subsystem interfaces, dependency resolution, implementations | [core/subsystem.h](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/subsystem.h), [core/subsystem.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/subsystem.cpp), [core/subsystems/stats.h](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/subsystems/stats.h), [subsystems/](https://github.com/ydb-platform/ydb/tree/main/ydb/library/actors/subsystems) |
 | Mailbox scheduling | [core/executor_thread.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/executor_thread.cpp), [core/mailbox_lockfree.h](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/mailbox_lockfree.h) |
 | Blocking I/O offload | [core/io_dispatcher.h](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/io_dispatcher.h), [core/invoke.h](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/invoke.h) |
 | Remote transport | [interconnect/](https://github.com/ydb-platform/ydb/tree/main/ydb/library/actors/interconnect) |

@@ -7,8 +7,6 @@
 | Изменение | Тестовая цель или окружение |
 |---|---|
 | Ядро акторов, диспетчеризация, регистрация, завершение работы | `ydb/library/actors/core/ut` |
-| Регистрация подсистем, моки, зависимости, жизненный цикл | `ydb/library/actors/core/ut` (`TSubSystemTest`); см. [Подсистемы](subsystems.md) |
-| Поставщики cgroup и OOM, включая интеграцию с моками | `ydb/library/actors/subsystems/ut` (`TCGroupStatsSubSystemTest`) |
 | Кадры корутин без собственного стека, объекты ожидания, отмена | `ydb/library/actors/async/ut` |
 | Поведение Interconnect | `ydb/library/actors/interconnect/ut` |
 | Общее тестовое окружение акторов | [testlib/test_runtime.h](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/testlib/test_runtime.h) |

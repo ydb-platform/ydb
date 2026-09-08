@@ -7,8 +7,6 @@ Actor tests control message delivery and lifecycle transitions to check protocol
 | Change | Test target or fixture |
 |---|---|
 | Actor core, dispatch, registration, death | `ydb/library/actors/core/ut` |
-| Subsystem registration, mocks, dependencies, lifecycle | `ydb/library/actors/core/ut` (`TSubSystemTest`); see [Subsystems](subsystems.md) |
-| Cgroup providers and OOM, including mock integration | `ydb/library/actors/subsystems/ut` (`TCGroupStatsSubSystemTest`) |
 | Stackless frames, waiters, cancellation | `ydb/library/actors/async/ut` |
 | Interconnect behavior | `ydb/library/actors/interconnect/ut` |
 | Generic actor test runtime | [testlib/test_runtime.h](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/testlib/test_runtime.h) |

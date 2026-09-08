@@ -220,6 +220,9 @@ public:
             domainPtr->IncSecurityStateVersion();
             context.SS->PersistSubDomainSecurityStateVersion(db, subDomainPathId, *domainPtr);
             context.OnComplete.PublishToSchemeBoard(OperationId, subDomainPathId);
+
+            // Wait until the updated security state is observable through SchemeCache.
+            result->SetStatus(NKikimrScheme::StatusAccepted);
         }
 
         context.OnComplete.DoneOperation(OperationId);

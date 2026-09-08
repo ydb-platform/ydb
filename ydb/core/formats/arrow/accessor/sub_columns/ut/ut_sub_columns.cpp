@@ -383,6 +383,36 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
             std::make_shared<arrow::BinaryScalar>(std::make_shared<arrow::Buffer>((const ui8*)binaryJson.data(), binaryJson.size()), arrow::binary())));
     }
 
+    void CheckMostSpecificStoredPath(const std::initializer_list<std::pair<TStringBuf, TStringBuf>>& columns, const TStringBuf otherName,
+        const TStringBuf otherValue, const TStringBuf path, const TStringBuf expected) {
+        auto columnsBuilder = NSubColumns::TDictStats::MakeBuilder();
+        for (const auto& [name, _] : columns) {
+            columnsBuilder.Add(TString(name), 1, 1, IChunkedArray::EType::Array, NSubColumns::EValueType::BinaryJson);
+        }
+        auto columnsStats = columnsBuilder.Finish();
+        auto columnsRecords = std::make_shared<TGeneralContainer>(1);
+        ui32 index = 0;
+        for (const auto& [_, value] : columns) {
+            columnsRecords->AddField(columnsStats.GetField(index++), CreateTrivialArrayAccessor(value)).Validate();
+        }
+
+        auto othersStats = BuildStats({ { otherName, NSubColumns::EValueType::BinaryJson } });
+        const auto binaryJsonResult = NBinaryJson::SerializeToBinaryJson(otherValue);
+        UNIT_ASSERT(std::holds_alternative<NBinaryJson::TBinaryJson>(binaryJsonResult));
+        const auto& binaryJson = std::get<NBinaryJson::TBinaryJson>(binaryJsonResult);
+        auto othersBuilder = NSubColumns::TOthersData::MakeMergedBuilder();
+        othersBuilder->Add(0, 0, std::string_view(binaryJson.data(), binaryJson.size()));
+        auto others = othersBuilder->Finish(NSubColumns::TOthersData::TFinishContext(othersStats));
+
+        TSubColumnsArray array(
+            NSubColumns::TColumnsData(columnsStats, columnsRecords), std::move(others), arrow::binary(), 1, NSubColumns::TSettings());
+        auto accessorResult = array.GetPathAccessor(path, 1);
+        UNIT_ASSERT_C(accessorResult.IsSuccess(), accessorResult.GetErrorMessage());
+        accessorResult.DetachResult()->VisitValues([expected](const std::optional<TStringBuf>& value) {
+            UNIT_ASSERT_VALUES_EQUAL(value, expected);
+        });
+    }
+
     void CheckValueByPath(const std::shared_ptr<IChunkedArray>& accessor, TStringBuf path, std::optional<TStringBuf> expected) {
         static const auto stats = BuildStats({ { R"("a")", NSubColumns::EValueType::BinaryJson } });
         auto pathInfo = ResolvePathVerified(stats, path);
@@ -591,6 +621,17 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         accessorResult.DetachResult()->VisitValues([](const std::optional<TStringBuf>& value) {
             UNIT_ASSERT_VALUES_EQUAL(value, "value");
         });
+    }
+
+    Y_UNIT_TEST(JsonPathAccessorPreferBestMatchOthers) {
+        // Others have an exact match while separated only a prefix
+        CheckMostSpecificStoredPath({ { R"("a")", R"({"b":"columns"})" }, { R"("a"."b"."c")", R"("descendant")" } }, R"("a"."b")",
+            R"("others")", "$.a.b", "others");
+    }
+
+    // Others have an exact match while separated only a prefix
+    Y_UNIT_TEST(JsonPathAccessorPreferBestMatchSeparated) {
+        CheckMostSpecificStoredPath({ { R"("a"."b")", R"("columns")" } }, R"("a")", R"({"c":"others"})", "$.a.b", "columns");
     }
 };
 

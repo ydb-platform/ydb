@@ -1,10 +1,6 @@
 #include "constructor.h"
 #include "partial.h"
 
-#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
-
-#include <ydb/library/formats/arrow/simple_arrays_cache.h>
-
 namespace NKikimr::NArrow::NAccessor {
 
 void TSubColumnsPartialArray::InitOthers(const TString& blob, const TChunkConstructionData& externalInfo,
@@ -28,19 +24,19 @@ TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> TSubColumnsPartialA
         return TConclusionStatus::Fail(pathInfoResult.GetErrorMessage());
     }
     auto pathInfo = pathInfoResult.DetachResult();
-    if (pathInfo && PartialColumnsData.HasColumn(pathInfo->ColumnIndex)) {
-        return std::make_shared<NSubColumns::TJsonPathAccessor>(PartialColumnsData.GetAccessorVerified(pathInfo->ColumnIndex),
-            std::move(pathInfo->RemainingPath), pathInfo->ValueType);
+    const auto columnsAccessor = pathInfo
+        ? std::make_shared<NSubColumns::TJsonPathAccessor>(PartialColumnsData.GetAccessorVerified(pathInfo->ColumnIndex),
+              std::move(pathInfo->RemainingPath), pathInfo->ValueType)
+        : std::make_shared<NSubColumns::TJsonPathAccessor>(nullptr, TString{}, NSubColumns::EValueType::BinaryJson);
+    if (!OthersData) {
+        AFL_VERIFY(!GetBestPathSource(svPath).IsOther);
+        return columnsAccessor;
     }
-
-    if (OthersData) {
-        return OthersData->GetPathAccessor(svPath, recordsCount);
+    auto othersResult = OthersData->GetPathAccessor(svPath, recordsCount);
+    if (othersResult.IsFail()) {
+        return TConclusionStatus::Fail(othersResult.GetErrorMessage());
     }
-
-    AFL_VERIFY(!Header.GetOtherStats().GetKeyIndexOptional(svPath));
-    return std::make_shared<NSubColumns::TJsonPathAccessor>(
-        std::make_shared<TTrivialArray>(TThreadSimpleArraysCache::GetNull(arrow::binary(), recordsCount)), TString{},
-        NSubColumns::EValueType::BinaryJson);
+    return NSubColumns::TJsonPathAccessor::SelectBestMatch(columnsAccessor, othersResult.DetachResult());
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

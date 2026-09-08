@@ -102,8 +102,14 @@ private:
         const TString& database, bool collectBacktrace, TMemoryResourceCookies cookies);
 
 public:
+    // The key of a resource pool in the resource manager, the one rule for the tx and for the cookie hand-out
+    // that runs before the tx exists (IKqpResourceManager::GetMemoryResourceCookies)
+    static std::pair<TString, TString> MakePoolId(const TString& database, const TString& poolId) {
+        return std::make_pair(database, poolId);
+    }
+
     std::pair<TString, TString> MakePoolId() const {
-        return std::make_pair(Database, PoolId);
+        return MakePoolId(Database, PoolId);
     }
 
     bool HasMemoryPoolLimit() const {

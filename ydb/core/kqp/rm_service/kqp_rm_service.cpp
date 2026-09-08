@@ -284,7 +284,7 @@ public:
         with_lock (Lock) {
             cookies.Total = TotalMemoryResource->GetSpillingCookie();
             if (IsMemoryPoolLimited(poolId, memoryPoolPercent)) {
-                cookies.Pool = GetOrCreatePoolMemoryResource(std::make_pair(database, poolId), memoryPoolPercent)->GetSpillingCookie();
+                cookies.Pool = GetOrCreatePoolMemoryResource(TTxState::MakePoolId(database, poolId), memoryPoolPercent)->GetSpillingCookie();
             }
         }
         return cookies;

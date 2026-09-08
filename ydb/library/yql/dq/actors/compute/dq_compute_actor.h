@@ -15,6 +15,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <util/generic/bitops.h>
 
 namespace NYql {
 namespace NDq {
@@ -285,7 +286,7 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
         : Limit(limit), Guarantee(guarantee), Step(step), Quota(quota) {
         Y_ABORT_UNLESS(Limit >= Guarantee);
         Y_ABORT_UNLESS(Limit >= Quota);
-        Y_ABORT_UNLESS(Step != 0 && (Step & (Step - 1)) == 0, "the allocation step must be a power of two"); // it is used as an alignment mask
+        Y_ABORT_UNLESS(IsPowerOf2(Step), "the allocation step must be a power of two"); // it is used as an alignment mask
         MaxMemorySize = Limit;
     }
 

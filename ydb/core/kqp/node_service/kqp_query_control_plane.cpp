@@ -11,6 +11,7 @@
 #include <contrib/libs/tcmalloc/tcmalloc/malloc_extension.h>
 
 #include <atomic>
+#include <util/generic/bitops.h>
 
 namespace NKikimr::NKqp {
 
@@ -89,7 +90,7 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
     , DataMemoryLimit(limit)
     , AllocationStep(step)
     {
-        Y_ABORT_UNLESS(AllocationStep != 0 && (AllocationStep & (AllocationStep - 1)) == 0, "the allocation step must be a power of two"); // it is used as an alignment mask
+        Y_ABORT_UNLESS(IsPowerOf2(AllocationStep), "the allocation step must be a power of two"); // it is used as an alignment mask
     }
 
     ~TChannelQuotaManager() {

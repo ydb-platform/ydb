@@ -61,41 +61,41 @@ TString UnexpectedCodecError(const TBatchCutterData& data) {
         << " offset=" << data.ReadResult.GetOffset();
 }
 
-TString TryRecordOffset(ui64 baseOffset, i64 offsetDelta, ui64 parentOffset, ui64& offset) {
+std::expected<ui64, TString> TryRecordOffset(ui64 baseOffset, i64 offsetDelta, ui64 parentOffset) {
     // Kafka encodes offsetDelta as a signed varint, but a valid RecordBatch uses
     // non-negative deltas (0, 1, ...). A negative or overflowing value is corrupt client data.
     if (offsetDelta < 0) {
-        return TStringBuilder() << "negative kafka record offset delta"
+        return std::unexpected(TStringBuilder() << "negative kafka record offset delta"
             << " offset_delta=" << offsetDelta
             << " base_offset=" << baseOffset
-            << " offset=" << parentOffset;
+            << " offset=" << parentOffset);
     }
-    offset = baseOffset + static_cast<ui64>(offsetDelta);
+    const ui64 offset = baseOffset + static_cast<ui64>(offsetDelta);
     if (offset < baseOffset) {
-        return TStringBuilder() << "kafka record offset overflow"
+        return std::unexpected(TStringBuilder() << "kafka record offset overflow"
             << " offset_delta=" << offsetDelta
             << " base_offset=" << baseOffset
-            << " offset=" << parentOffset;
+            << " offset=" << parentOffset);
     }
-    return {};
+    return offset;
 }
 
 } // namespace
 
-TCutOutcome TKafkaBatchCutter::Cut(const TBatchCutterData& data, const ui64 readStartOffset) const {
+std::expected<TVector<TReadResult>, TString> TKafkaBatchCutter::Cut(const TBatchCutterData& data, const ui64 readStartOffset) const {
     const auto& dataChunk = data.DataChunk;
     if (dataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
-        return TCutOutcome{.Records = {data.ReadResult}};
+        return TVector<TReadResult>{data.ReadResult};
     }
 
     if (TString error = UnexpectedCodecError(data); !error.empty()) {
-        return TCutOutcome{.Error = std::move(error)};
+        return std::unexpected(std::move(error));
     }
 
     try {
         const auto batch = NKafka::ReadKafkaRecordBatch(dataChunk.GetData());
         if (batch.Records.empty()) {
-            return TCutOutcome{.Records = {data.ReadResult}};
+            return TVector<TReadResult>{data.ReadResult};
         }
 
         const auto codec = ToDataChunkCodec(batch.CompressionType());
@@ -115,11 +115,11 @@ TCutOutcome TKafkaBatchCutter::Cut(const TBatchCutterData& data, const ui64 read
 
         const ui64 baseOffset = data.ReadResult.GetOffset();
         for (size_t i = 0; i < batch.Records.size(); ++i) {
-            ui64 offset = 0;
-            if (TString error = TryRecordOffset(baseOffset, batch.Records[i].OffsetDelta, data.ReadResult.GetOffset(), offset); !error.empty()) {
-                return TCutOutcome{.Error = std::move(error)};
+            auto offset = TryRecordOffset(baseOffset, batch.Records[i].OffsetDelta, data.ReadResult.GetOffset());
+            if (!offset) {
+                return std::unexpected(std::move(offset).error());
             }
-            if (offset < readStartOffset) {
+            if (*offset < readStartOffset) {
                 continue;
             }
 
@@ -127,7 +127,7 @@ TCutOutcome TKafkaBatchCutter::Cut(const TBatchCutterData& data, const ui64 read
             const ui64 seqNo = NKafka::GetRecordSeqNo(batch, i, record);
 
             TReadResult item(itemTemplate);
-            item.SetOffset(offset);
+            item.SetOffset(*offset);
             item.SetSeqNo(seqNo);
 
             itemChunk.SetSeqNo(seqNo);
@@ -138,11 +138,11 @@ TCutOutcome TKafkaBatchCutter::Cut(const TBatchCutterData& data, const ui64 read
             }
             TString serializedChunk;
             if (!itemChunk.SerializeToString(&serializedChunk)) {
-                return TCutOutcome{.Error = TStringBuilder()
+                return std::unexpected(TStringBuilder()
                     << "failed to serialize data chunk"
-                    << " offset=" << offset
+                    << " offset=" << *offset
                     << " seq_no=" << seqNo
-                    << " codec=" << static_cast<int>(codec)};
+                    << " codec=" << static_cast<int>(codec));
             }
             item.SetData(std::move(serializedChunk));
 
@@ -156,20 +156,20 @@ TCutOutcome TKafkaBatchCutter::Cut(const TBatchCutterData& data, const ui64 read
             result.push_back(std::move(item));
         }
 
-        return TCutOutcome{.Records = std::move(result)};
+        return result;
     } catch (const std::exception& e) {
-        return TCutOutcome{.Error = TString(e.what())};
+        return std::unexpected(TString(e.what()));
     }
 }
 
-TKeysOutcome TKafkaBatchCutter::GetKeys(const TBatchCutterData& data, const ui64 readStartOffset) const {
+std::expected<THashMap<TString, ui64>, TString> TKafkaBatchCutter::GetKeys(const TBatchCutterData& data, const ui64 readStartOffset) const {
     const auto& dataChunk = data.DataChunk;
     if (dataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
-        return {};
+        return THashMap<TString, ui64>{};
     }
 
     if (TString error = UnexpectedCodecError(data); !error.empty()) {
-        return TKeysOutcome{.Error = std::move(error)};
+        return std::unexpected(std::move(error));
     }
 
     try {
@@ -177,11 +177,11 @@ TKeysOutcome TKafkaBatchCutter::GetKeys(const TBatchCutterData& data, const ui64
         const ui64 baseOffset = data.ReadResult.GetOffset();
         THashMap<TString, ui64> result;
         for (const auto& record : batch.Records) {
-            ui64 offset = 0;
-            if (TString error = TryRecordOffset(baseOffset, record.OffsetDelta, data.ReadResult.GetOffset(), offset); !error.empty()) {
-                return TKeysOutcome{.Error = std::move(error)};
+            auto offset = TryRecordOffset(baseOffset, record.OffsetDelta, data.ReadResult.GetOffset());
+            if (!offset) {
+                return std::unexpected(std::move(offset).error());
             }
-            if (offset < readStartOffset) {
+            if (*offset < readStartOffset) {
                 continue;
             }
 
@@ -191,12 +191,12 @@ TKeysOutcome TKafkaBatchCutter::GetKeys(const TBatchCutterData& data, const ui64
 
             TString key;
             key.assign(record.Key->data(), record.Key->size());
-            result[key] = offset;
+            result[key] = *offset;
         }
 
-        return TKeysOutcome{.Keys = std::move(result)};
+        return result;
     } catch (const std::exception& e) {
-        return TKeysOutcome{.Error = TString(e.what())};
+        return std::unexpected(TString(e.what()));
     }
 }
 

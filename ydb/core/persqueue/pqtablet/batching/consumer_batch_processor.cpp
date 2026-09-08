@@ -63,17 +63,17 @@ namespace {
         ui32 partition)
     {
         auto outcome = cutter.Cut(data, readStartOffset);
-        if (!outcome.Ok()) {
+        if (!outcome) {
             LogKafkaBatchUserError(
                 "Failed to cut kafka batch, keeping original result",
                 logPrefix,
                 partition,
                 data.ReadResult.GetOffset(),
-                outcome.Error,
+                outcome.error(),
                 user);
             return {data.ReadResult};
         }
-        return std::move(outcome.Records);
+        return *std::move(outcome);
     }
 
     THashMap<TString, ui64> GetKeysOrEmpty(
@@ -84,16 +84,16 @@ namespace {
         ui32 partition)
     {
         auto outcome = cutter.GetKeys(data, readStartOffset);
-        if (!outcome.Ok()) {
+        if (!outcome) {
             LogKafkaBatchUserError(
                 "Failed to get keys from kafka batch",
                 logPrefix,
                 partition,
                 data.ReadResult.GetOffset(),
-                outcome.Error);
+                outcome.error());
             return {};
         }
-        return std::move(outcome.Keys);
+        return *std::move(outcome);
     }
 }
 

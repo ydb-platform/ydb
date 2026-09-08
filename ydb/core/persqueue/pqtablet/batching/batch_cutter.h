@@ -7,6 +7,8 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
+#include <expected>
+
 namespace NKikimr::NPQ::NBatching {
 
 using TReadResult = NKikimrClient::TCmdReadResult::TResult;
@@ -24,36 +26,18 @@ struct TBatchCutterData {
     TBatchCutterData(TReadResult&&, NKikimrPQClient::TDataChunk&&) = delete;
 };
 
-struct TCutOutcome {
-    TVector<TReadResult> Records;
-    TString Error;
-
-    bool Ok() const {
-        return Error.empty();
-    }
-};
-
-struct TKeysOutcome {
-    THashMap<TString, ui64> Keys;
-    TString Error;
-
-    bool Ok() const {
-        return Error.empty();
-    }
-};
-
 class IBatchCutter {
 public:
     virtual ~IBatchCutter() = default;
 
-    virtual TCutOutcome Cut(const TBatchCutterData& data, ui64 readStartOffset) const = 0;
-    virtual TKeysOutcome GetKeys(const TBatchCutterData& data, ui64 readStartOffset) const = 0;
+    virtual std::expected<TVector<TReadResult>, TString> Cut(const TBatchCutterData& data, ui64 readStartOffset) const = 0;
+    virtual std::expected<THashMap<TString, ui64>, TString> GetKeys(const TBatchCutterData& data, ui64 readStartOffset) const = 0;
 };
 
 class TKafkaBatchCutter : public IBatchCutter {
 public:
-    TCutOutcome Cut(const TBatchCutterData& data, ui64 readStartOffset) const override final;
-    TKeysOutcome GetKeys(const TBatchCutterData& data, ui64 readStartOffset) const override final;
+    std::expected<TVector<TReadResult>, TString> Cut(const TBatchCutterData& data, ui64 readStartOffset) const override final;
+    std::expected<THashMap<TString, ui64>, TString> GetKeys(const TBatchCutterData& data, ui64 readStartOffset) const override final;
 };
 
 } // namespace NKikimr::NPQ::NBatching

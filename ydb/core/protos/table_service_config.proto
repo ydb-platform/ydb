@@ -575,7 +575,7 @@ message TTableServiceConfig {
     // DQ channels 2.0: when the receiver node reports the resource manager spilling signal
     // (NRm::TTxState::IsReasonableToStartSpilling), shrink the sender inflight window down to
     // the cold inflight value instead of letting channels soak the full per channel limit.
-    optional bool EnableSpillingChannelBackpressure = 146 [default = false];
+    optional bool EnableSpillingChannelBackpressure = 146 [default = true];
 
     // Selects physical-stage post-processing after new RBO conversion. True rebuilds wide inputs and runs
     // the full YQL peephole; false uses focused KQP compatibility lowering and prunes unused aggregation

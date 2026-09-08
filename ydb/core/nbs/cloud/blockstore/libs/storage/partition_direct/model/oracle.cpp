@@ -2,10 +2,10 @@
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle_config.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/format.h>
 
-#include <util/generic/size_literals.h>
 #include <util/random/random.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
@@ -21,21 +21,6 @@ constexpr TDuration MaxReconnectDelay = TDuration::Seconds(10);
 constexpr TDuration FlushRequestCooldownPenalty = TDuration::MilliSeconds(10);
 
 ////////////////////////////////////////////////////////////////////////////////
-
-TDuration GetFromConfig(ui64 milliseconds, TDuration defaultValue)
-{
-    return milliseconds ? TDuration::MilliSeconds(milliseconds) : defaultValue;
-}
-
-ui32 GetFromConfig(ui32 value, ui32 defaultValue)
-{
-    return value ? value : defaultValue;
-}
-
-ui64 GetFromConfig(ui64 value, ui64 defaultValue)
-{
-    return value ? value : defaultValue;
-}
 
 EHostState HealthToState(EHostHealth health)
 {
@@ -70,71 +55,6 @@ size_t GetAliveHostCount(const TVector<THostState>& hostStates)
 }
 
 }   // namespace
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TOracleConfig
-{
-public:
-    explicit TOracleConfig(TStorageConfigPtr storageConfig)
-        : StorageConfig(std::move(storageConfig))
-    {}
-
-    [[nodiscard]] TDuration GetMaxDurationBeforeGoingTemporaryOffline() const
-    {
-        return GetFromConfig(
-            StorageConfig->GetOracleConfig()
-                .GetMaxDurationBeforeGoingTemporaryOffline(),
-            TDuration::Seconds(10));
-    }
-
-    [[nodiscard]] TDuration GetMaxDurationBeforeGoingOffline() const
-    {
-        return GetFromConfig(
-            StorageConfig->GetOracleConfig().GetMaxDurationBeforeGoingOffline(),
-            TDuration::Seconds(10));
-    }
-
-    [[nodiscard]] ui32 GetMinErrorsCountBeforeGoingOffline() const
-    {
-        return GetFromConfig(
-            StorageConfig->GetOracleConfig()
-                .GetMinErrorsCountBeforeGoingOffline(),
-            10);
-    }
-
-    [[nodiscard]] ui32 GetErrorsCountForGoingOffline() const
-    {
-        return GetFromConfig(
-            StorageConfig->GetOracleConfig().GetErrorsCountForGoingOffline(),
-            1000);
-    }
-
-    [[nodiscard]] ui64 GetErrorsTotalSizeForGoingOffline() const
-    {
-        return GetFromConfig(
-            StorageConfig->GetOracleConfig()
-                .GetErrorsTotalSizeForGoingOffline(),
-            100_MB);
-    }
-
-    [[nodiscard]] ui32 GetTimePredictionHistorySize() const
-    {
-        return GetFromConfig(
-            StorageConfig->GetOracleConfig().GetTimePredictionHistorySize(),
-            0);
-    }
-
-    [[nodiscard]] ui32 GetTimePredictionNthFromEnd() const
-    {
-        return GetFromConfig(
-            StorageConfig->GetOracleConfig().GetTimePredictionNthFromEnd(),
-            0);
-    }
-
-private:
-    TStorageConfigPtr StorageConfig;
-};
 
 ////////////////////////////////////////////////////////////////////////////////
 

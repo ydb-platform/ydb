@@ -227,7 +227,18 @@ static TString BuildExpectedYson_Uint64_Uint64_Int32_Const(int rowCount, int con
 }
 
 /*
+ * Build PRAGMA prefix for EnableCsWriteAffinity.
+ * Returns the PRAGMA line to prepend to CTAS queries.
+ */
+static TString BuildCsWriteAffinityPragma(bool enableCsWriteAffinity) {
+    return fmt::format(R"(PRAGMA ydb.EnableCsWriteAffinity = "{}";
+)", enableCsWriteAffinity ? "true" : "false");
+}
+
+/*
  * Build KQP settings with EnableCsWriteAffinity enabled or disabled.
+ * Used for pure literal CTAS tests where PRAGMA doesn't propagate correctly
+ * because pure literals go through the EnsureDqUnion path.
  */
 static TVector<NKikimrKqp::TKqpSetting> BuildKqpSettingsWithCsWriteAffinity(bool enableCsWriteAffinity) {
     NKikimrKqp::TKqpSetting setting;
@@ -250,7 +261,6 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
     Y_UNIT_TEST_TWIN(CtasTableSourcePkMatchesPartitionBy, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
-        settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
@@ -282,15 +292,14 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
-        const TString ctasQuery =
-            R"(
-                CREATE TABLE `/Root/Destination` (
-                    PRIMARY KEY (Col1)
-                )
-                PARTITION BY HASH(Col1)
-                WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2)
-                AS SELECT * FROM `/Root/Source`;
-            )";
+        const TString ctasQuery = BuildCsWriteAffinityPragma(EnableCsWriteAffinity) + R"(
+            CREATE TABLE `/Root/Destination` (
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2)
+            AS SELECT * FROM `/Root/Source`;
+        )";
 
         // Execute CTAS and verify plan structure from the same execution
         {
@@ -317,7 +326,6 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
     Y_UNIT_TEST_TWIN(CtasTableSourceMultipleShardingColumns, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
-        settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
@@ -352,7 +360,7 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             }
 
-            const TString ctasQuery = R"(
+            const TString ctasQuery = BuildCsWriteAffinityPragma(EnableCsWriteAffinity) + R"(
                 CREATE TABLE `/Root/Dest1` (
                     PRIMARY KEY (Col1)
                 )
@@ -411,7 +419,7 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             }
 
-            const TString ctasQuery = R"(
+            const TString ctasQuery = BuildCsWriteAffinityPragma(EnableCsWriteAffinity) + R"(
                 CREATE TABLE `/Root/DestMulti` (
                     PRIMARY KEY (Col1, Col2)
                 )
@@ -445,7 +453,6 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
     Y_UNIT_TEST_TWIN(CtasTableSourceNoPartitionByUsesPrimaryKey, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
-        settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
@@ -480,7 +487,7 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
 
         // CTAS without explicit PARTITION BY — should use PRIMARY KEY as sharding columns
         {
-            const TString ctasQuery = R"(
+            const TString ctasQuery = BuildCsWriteAffinityPragma(EnableCsWriteAffinity) + R"(
                 CREATE TABLE `/Root/DestImplicit` (
                     PRIMARY KEY (Col1)
                 )
@@ -513,7 +520,6 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
     Y_UNIT_TEST_TWIN(CtasTableSourcePartitionBySubsetOfPrimaryKey, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
-        settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
@@ -551,7 +557,7 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
 
         // PRIMARY KEY (Col1, Col2) but PARTITION BY HASH(Col2)
         {
-            const TString ctasQuery = R"(
+            const TString ctasQuery = BuildCsWriteAffinityPragma(EnableCsWriteAffinity) + R"(
                 CREATE TABLE `/Root/DestDiffKey` (
                     PRIMARY KEY (Col1, Col2)
                 )
@@ -586,6 +592,8 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
     Y_UNIT_TEST_TWIN(CtasGeneratedDataWithPartitionBy, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        // NOTE: AS_TABLE($data) doesn't go through a real table read, so PRAGMA
+        // ydb.EnableCsWriteAffinity doesn't propagate. Use SetKqpSettings instead.
         settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
         TKikimrRunner kikimr(settings);
 
@@ -632,6 +640,8 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
     Y_UNIT_TEST_TWIN(CtasPureLiteralWithPartitionBy, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        // NOTE: Pure literals go through EnsureDqUnion path. PRAGMA ydb.EnableCsWriteAffinity
+        // doesn't propagate for that path, so we must use SetKqpSettings here.
         settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
         TKikimrRunner kikimr(settings);
 
@@ -672,6 +682,8 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
     Y_UNIT_TEST_TWIN(CtasGeneratedDataWithoutPartitionBy, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        // NOTE: AS_TABLE($data) doesn't go through a real table read, so PRAGMA
+        // ydb.EnableCsWriteAffinity doesn't propagate. Use SetKqpSettings instead.
         settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
         TKikimrRunner kikimr(settings);
 
@@ -717,6 +729,8 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
     Y_UNIT_TEST_TWIN(CtasGeneratedDataPartitionBySubsetOfPrimaryKey, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        // NOTE: AS_TABLE($data) doesn't go through a real table read, so PRAGMA
+        // ydb.EnableCsWriteAffinity doesn't propagate. Use SetKqpSettings instead.
         settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
         TKikimrRunner kikimr(settings);
 
@@ -767,7 +781,6 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
     Y_UNIT_TEST_TWIN(CtasTableSourceSelectWithAliases, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
-        settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
@@ -802,7 +815,7 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
 
         // SELECT with aliases: Col1 AS A, Col2 AS B; PartitionBy uses aliased name 'A'
         {
-            const TString ctasQuery = R"(
+            const TString ctasQuery = BuildCsWriteAffinityPragma(EnableCsWriteAffinity) + R"(
                 CREATE TABLE `/Root/DestAliased` (
                     PRIMARY KEY (A)
                 )
@@ -837,7 +850,6 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
     Y_UNIT_TEST_TWIN(CtasTableSourceVerifyAffinityFlagTogglesHashShuffle, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
-        settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
@@ -871,7 +883,7 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
         }
 
         {
-            const TString ctasQuery = R"(
+            const TString ctasQuery = BuildCsWriteAffinityPragma(EnableCsWriteAffinity) + R"(
                 CREATE TABLE `/Root/DestNoAffinity` (
                     PRIMARY KEY (Col1)
                 )
@@ -905,6 +917,8 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
     Y_UNIT_TEST_TWIN(CtasPureLiteralVerifyAffinityFlagTogglesHashShuffle, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        // NOTE: Pure literals go through EnsureDqUnion path. PRAGMA ydb.EnableCsWriteAffinity
+        // doesn't propagate for that path, so we must use SetKqpSettings here.
         settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
         TKikimrRunner kikimr(settings);
 
@@ -948,7 +962,6 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
     Y_UNIT_TEST_TWIN(CtasTableSourceWithWhereFilter, EnableCsWriteAffinity) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
-        settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
@@ -983,7 +996,7 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
 
         // CTAS with WHERE filter: Col1 > 40 → 40 rows (Col1=41..80-1=79)
         {
-            const TString ctasQuery = R"(
+            const TString ctasQuery = BuildCsWriteAffinityPragma(EnableCsWriteAffinity) + R"(
                 CREATE TABLE `/Root/DestWhere` (
                     PRIMARY KEY (Col1)
                 )

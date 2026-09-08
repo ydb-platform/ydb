@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    storagepool_counters.cpp
     storagepool_counters.h
 )
 
@@ -8,6 +9,7 @@ PEERDIR(
     library/cpp/monlib/dynamic_counters
     ydb/core/base
     ydb/core/blobstorage/base
+    ydb/core/mon
 )
 
 END()

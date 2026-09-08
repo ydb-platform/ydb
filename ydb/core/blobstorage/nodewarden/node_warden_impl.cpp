@@ -340,6 +340,7 @@ void TNodeWarden::PassAway() {
     NTabletPipe::CloseClient(SelfId(), PipeClientId);
     StopInvalidGroupProxy();
     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, DsProxyNodeMonActor, {}, nullptr, 0));
+    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, DsProxyInFlightLatencyAggregator, {}, nullptr, 0));
     return TActorBootstrapped::PassAway();
 }
 
@@ -373,6 +374,7 @@ void TNodeWarden::Bootstrap() {
     DsProxyNodeMon = new TDsProxyNodeMon(AppData()->Counters, true);
     DsProxyNodeMonActor = Register(CreateDsProxyNodeMon(DsProxyNodeMon));
     DsProxyPerPoolCounters = new TDsProxyPerPoolCounters(AppData()->Counters);
+    DsProxyInFlightLatencyAggregator = Register(CreateDsProxyInFlightLatencyAggregator());
 
     Schedule(TDuration::Seconds(1), new TEvPrivate::TEvUpdateStats);
 

@@ -31,6 +31,13 @@ using namespace NThreading;
 
 namespace {
 
+ui32 CheckedVChunkBlockSize(ui32 blockSize, ui64 vChunkSize)
+{
+    Y_ABORT_UNLESS(IsSupportedBlockSize(blockSize));
+    Y_ABORT_UNLESS(vChunkSize % blockSize == 0);
+    return blockSize;
+}
+
 NProto::TError MakeVChunkDestroyedError()
 {
     return MakeError(E_REJECTED, "VChunk destroyed");
@@ -54,6 +61,7 @@ TVChunk::TVChunk(
     const TDirtyMapStateProto& dirtyMapState,
     IDirectBlockGroupPtr directBlockGroup,
     ui32 syncRequestsBatchSize,
+    ui32 blockSize,
     ui64 vChunkSize)
     : ActorSystem(actorSystem)
     , TraceService(traceService)
@@ -61,7 +69,7 @@ TVChunk::TVChunk(
     , DiskDescription(diskDescription)
     , Executor(directBlockGroup->GetExecutor())
     , DirectBlockGroup(std::move(directBlockGroup))
-    , BlockSize(DefaultBlockSize)
+    , BlockSize(CheckedVChunkBlockSize(blockSize, vChunkSize))
     , BlocksCount(vChunkSize / BlockSize)
     , SyncRequestsBatchSize(syncRequestsBatchSize)
     , LogTitle{GetCycleCount(), TLogTitle::TVChunk{
@@ -74,7 +82,6 @@ TVChunk::TVChunk(
     , VChunkConfig(vChunkConfig)
     , BlocksDirtyMap(std::make_shared<TBlocksDirtyMap>(VChunkConfig, BlockSize, BlocksCount))
 {
-    Y_ABORT_UNLESS(vChunkSize % BlockSize == 0);
     // ActorSystem thread
 
     LOG_INFO(

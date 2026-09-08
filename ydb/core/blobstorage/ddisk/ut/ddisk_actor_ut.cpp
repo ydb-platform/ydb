@@ -2606,7 +2606,9 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
     Y_UNIT_TEST(SyncRejectsCorruptedSourcePayloadBeforeWrite) {
         TTestContext ctx;
-        const TDiskHandle disk = ctx.CreateDDisk(10, 2);
+        NDDisk::TDDiskConfig config;
+        config.CheckChecksumBeforeWrite = true;
+        const TDiskHandle disk = ctx.CreateDDisk(10, 2, std::nullopt, config);
         NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 51, 1);
         const ui32 srcPDiskId = 97;
         const ui32 srcSlotId = 1;
@@ -5759,8 +5761,8 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             true, true);
         AssertStatus(initial.WriteResult, TReplyStatus::OK);
 
-        // Hold the I/O callback before it reaches the DDisk actor. No client
-        // reply is emitted directly from the I/O thread.
+        // Hold the completion-thread callback before it reaches the DDisk actor. No client reply
+        // is emitted directly from the completion thread.
         std::unique_ptr<IEventHandle> heldCompletion;
         ctx.Runtime.FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
             if (!heldCompletion && ev->GetTypeRewrite()

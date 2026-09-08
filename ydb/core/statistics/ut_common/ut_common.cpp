@@ -54,7 +54,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, bool useRealThreads,
     Settings->AddStoragePoolType("hdd2");
     Settings->SetColumnShardAlterObjectEnabled(true);
     auto* stats = Settings->AppConfig->MutableStatisticsConfig();
-    stats->SetBaseStatsSendInitialDelaySeconds(3);
+    stats->SetBaseStatsSendInitialDelaySeconds(1);
     stats->SetBaseStatsSendIntervalSecondsDedicated(1);
     stats->SetBaseStatsSendIntervalSecondsServerless(1);
     stats->SetBaseStatsPropagateIntervalSecondsDedicated(1);
@@ -509,7 +509,6 @@ void InsertDataIntoTable(
     UNIT_ASSERT_VALUES_EQUAL_C(
         response.operation().status(), Ydb::StatusIds::SUCCESS,
         GetIssuesString(response.operation()));
-    env.GetController()->WaitActualization(TDuration::Seconds(1));
 }
 
 TTableInfo PrepareColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName,
@@ -548,8 +547,6 @@ TTableInfo PrepareColumnTableWithIndexes(TTestEnv& env, const TString& databaseN
     runtime.SimulateSleep(TDuration::MilliSeconds(200));
 
     InsertDataIntoTable(env, databaseName, tableName, ColumnTableRowsNumber);
-
-    env.GetController()->WaitActualization(TDuration::Seconds(1));
 
     return info;
 }

@@ -141,12 +141,11 @@ def _init_stress_utils():
                      "--path", "result_set_format_{node_host}_iter_{iteration_num}_{uuid}"],
             'local_path': 'ydb/tests/stress/result_set_format/result_set_format'
         },
-        # Disabled due to https://st.yandex-team.ru/YDBBUGS-765
-        # 'SystemTabletBackup': {
-        #     'args': ["--endpoint", "grpc://{node_host}:2135",
-        #              "--mon-endpoint", "http://{node_host}:8765"],
-        #     'local_path': 'ydb/tests/stress/system_tablet_backup/system_tablet_backup'
-        # },
+        'SystemTabletBackup': {
+            'args': ["--endpoint", "grpc://{node_host}:2135",
+                     "--mon-endpoint", "http://{node_host}:8765"],
+            'local_path': 'ydb/tests/stress/system_tablet_backup/system_tablet_backup'
+        },
         'Tpcc': {
             'pre_nemesis_args': [
                 "--endpoint", "grpc://{node_host}:2135",

@@ -23,12 +23,12 @@ namespace {
 
 class TS3DecompressorCoroImpl : public TActorCoroImpl {
 public:
-    TS3DecompressorCoroImpl(const TActorId& parent, const TString& compression, IDqSchedulerContextPtr schedulerContext)
+    TS3DecompressorCoroImpl(const TActorId& parent, const TString& compression, IDqSchedulableWorkFactoryPtr workFactory)
         : TActorCoroImpl(256_KB)
         , Compression(compression)
         , Parent(parent)
-        , SchedulerContext(std::move(schedulerContext))
-        , Work(SchedulerContext ? SchedulerContext->CreateSchedulableWork() : nullptr)
+        , WorkFactory(std::move(workFactory))
+        , Work(WorkFactory ? WorkFactory->CreateSchedulableWork() : nullptr)
     {}
 
 private:
@@ -97,14 +97,20 @@ private:
             if (!delay) {
                 break;
             }
-            (void)WaitForSpecificEvent<NActors::TEvents::TEvWakeup>(
-                &TS3DecompressorCoroImpl::ProcessUnexpectedEvent,
+            // A delivered event means the scheduler woke us up.
+            const auto resumeEv = WaitForSpecificEvent<NActors::TEvents::TEvWakeup>(
+                &TS3DecompressorCoroImpl::ProcessEventWhileAcquiringSlot,
                 now + *delay);
+            Work->NotifyResumed(/* byScheduler = */ static_cast<bool>(resumeEv));
         }
         Working = true;
     }
 
-    void ProcessUnexpectedEvent(TAutoPtr<::NActors::IEventHandle> ev) {
+    // Process events while waiting for a slot to start a unit of work.
+    // The event processing MUST NOT re-enter StartUnit / ReconcileWorking —
+    // that would double-acquire the slot. No such handler exists today,
+    // but keep this invariant in mind when adding new ones.
+    void ProcessEventWhileAcquiringSlot(TAutoPtr<::NActors::IEventHandle> ev) {
         StateFunc(ev);
     }
 
@@ -194,7 +200,7 @@ private:
     TActorId Parent;
     bool InputFinished = false;
     std::queue<THolder<TEvS3Provider::TEvDecompressDataRequest>> Requests;
-    const IDqSchedulerContextPtr SchedulerContext;
+    const IDqSchedulableWorkFactoryPtr WorkFactory;
     std::unique_ptr<IDqSchedulableWork> Work;
     bool Working = false;            // holds HDRF slot — allowed to consume CPU
     bool UpstreamPaused = false;     // waiting on decompress input / HDRF admission — stop consuming
@@ -214,8 +220,8 @@ private:
 
 } // anonymous namespace
 
-NActors::IActor* CreateS3DecompressorActor(const NActors::TActorId& parent, const TString& compression, IDqSchedulerContextPtr schedulerContext) {
-    return new TS3DecompressorCoroActor(MakeHolder<TS3DecompressorCoroImpl>(parent, compression, std::move(schedulerContext)));
+NActors::IActor* CreateS3DecompressorActor(const NActors::TActorId& parent, const TString& compression, IDqSchedulableWorkFactoryPtr workFactory) {
+    return new TS3DecompressorCoroActor(MakeHolder<TS3DecompressorCoroImpl>(parent, compression, std::move(workFactory)));
 }
 
 } // namespace NYql::NDq

@@ -56,6 +56,7 @@ static const std::array<TBlobStorageErasureParameters, TErasureType::ErasureSpec
     ,{2} // 16 = ErasureSpicies::Erasure2Plus2Block
     ,{2} // 17 = ErasureSpicies::Erasure2Plus2Stripe
     ,{5} // 18 = ErasureSpicies::ErasureMirror3of4
+    ,{2} // 19 = ErasureSpicies::Erasure8Plus2Block
 }};
 
 

@@ -641,6 +641,19 @@ namespace NKikimr::NBsController {
                 } else {
                     Y_DEBUG_ABORT_UNLESS(overlay->second->IsReady || overlay->second->IsInVSlotReadyTimestampQ());
                 }
+
+                // Keep node->group subscription in commit path: dynamic groups may appear
+                // after initial RegisterNode, and cleanup for the same index is done below.
+                if (overlay->second && !overlay->second->IsBeingDeleted()) {
+                    const TGroupId groupId = overlay->second->GroupId;
+                    if (NKikimr::IsDynamicGroup(groupId)) {
+                        const TNodeId nodeId = overlay->second->VSlotId.NodeId;
+                        auto& node = GetNode(nodeId);
+                        if (node.GroupsRequested.insert(groupId).second) {
+                            GroupToNode.emplace(groupId, nodeId);
+                        }
+                    }
+                }
             }
 
             for (auto&& [base, overlay] : state.Groups.Diff()) {

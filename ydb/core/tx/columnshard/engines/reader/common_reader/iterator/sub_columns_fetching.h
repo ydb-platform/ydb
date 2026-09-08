@@ -294,7 +294,7 @@ private:
                             auto columnLoader = source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId());
                             TString columnName = columnLoader->GetField() ? TString(columnLoader->GetField()->name()) : TString("unknown");
                             const ui64 blobBytes = chunkData.GetBlobDataVerified().size();
-                            const ui32 colIndex = i.GetPartialArray()->GetHeader().GetColumnStats().GetKeyIndexVerified(subColName);
+                            const ui32 colIndex = i.GetPartialArray()->GetHeader().GetColumnStats().GetExactKeyIndexVerified(subColName);
                             const ui64 rawBytes = i.GetPartialArray()->GetHeader().GetColumnStats().GetColumnSize(colIndex);
                             LWTRACK(SubColumnsDataRead, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
                                 source->GetTxId(), source->GetDeprecatedPortionId(), GetEntityId(), columnName, dataDuration, subColName,

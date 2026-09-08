@@ -6,6 +6,7 @@
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/sub_column.h>
 
 #include <ydb/core/formats/arrow/accessor/sub_columns/ut_common/ut_helpers.h>
 
@@ -36,7 +37,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         UNIT_ASSERT_C(pathInfoResult.IsSuccess(), pathInfoResult.GetErrorMessage());
         const auto pathInfo = pathInfoResult.DetachResult();
         UNIT_ASSERT_C(pathInfo, path);
-        const auto keyIndex = stats.GetKeyIndexOptional(NSubColumns::ToSubcolumnName(path));
+        const auto keyIndex = stats.GetKeyOrPrefixIndexOptional(NSubColumns::ToSubcolumnName(path));
         UNIT_ASSERT_C(keyIndex, path);
         UNIT_ASSERT_VALUES_EQUAL(*keyIndex, pathInfo->ColumnIndex);
         return *pathInfo;
@@ -46,7 +47,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         auto pathInfoResult = stats.ResolvePath(path);
         UNIT_ASSERT_C(pathInfoResult.IsSuccess(), pathInfoResult.GetErrorMessage());
         UNIT_ASSERT_C(!pathInfoResult.DetachResult(), path);
-        UNIT_ASSERT_C(!stats.GetKeyIndexOptional(NSubColumns::ToSubcolumnName(path)), path);
+        UNIT_ASSERT_C(!stats.GetKeyOrPrefixIndexOptional(NSubColumns::ToSubcolumnName(path)), path);
     }
 
     NSubColumns::TDictStats BuildStats(const std::initializer_list<std::pair<TStringBuf, NSubColumns::EValueType>>& columns) {
@@ -389,8 +390,8 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
             std::make_shared<arrow::BinaryScalar>(std::make_shared<arrow::Buffer>((const ui8*)binaryJson.data(), binaryJson.size()), arrow::binary())));
     }
 
-    void CheckMostSpecificStoredPath(const std::initializer_list<std::pair<TStringBuf, TStringBuf>>& columns, const TStringBuf otherName,
-        const TStringBuf otherValue, const TStringBuf path, const TStringBuf expected) {
+    std::shared_ptr<TSubColumnsArray> BuildArrayWithStoredPaths(const std::initializer_list<std::pair<TStringBuf, TStringBuf>>& columns,
+        const TStringBuf otherName, const TStringBuf otherValue) {
         auto columnsBuilder = NSubColumns::TDictStats::MakeBuilder();
         for (const auto& [name, _] : columns) {
             columnsBuilder.Add(TString(name), 1, 1, IChunkedArray::EType::Array, NSubColumns::EValueType::BinaryJson);
@@ -410,9 +411,14 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         othersBuilder->Add(0, 0, std::string_view(binaryJson.data(), binaryJson.size()));
         auto others = othersBuilder->Finish(NSubColumns::TOthersData::TFinishContext(othersStats));
 
-        TSubColumnsArray array(
+        return std::make_shared<TSubColumnsArray>(
             NSubColumns::TColumnsData(columnsStats, columnsRecords), std::move(others), arrow::binary(), 1, NSubColumns::TSettings());
-        auto accessorResult = array.GetPathAccessor(path, 1);
+    }
+
+    void CheckMostSpecificStoredPath(const std::initializer_list<std::pair<TStringBuf, TStringBuf>>& columns, const TStringBuf otherName,
+        const TStringBuf otherValue, const TStringBuf path, const TStringBuf expected) {
+        auto array = BuildArrayWithStoredPaths(columns, otherName, otherValue);
+        auto accessorResult = array->GetPathAccessor(path, 1);
         UNIT_ASSERT_C(accessorResult.IsSuccess(), accessorResult.GetErrorMessage());
         accessorResult.DetachResult()->VisitValues([expected](const std::optional<TStringBuf>& value) {
             UNIT_ASSERT_VALUES_EQUAL(value, expected);
@@ -629,6 +635,16 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         });
     }
 
+    Y_UNIT_TEST(PartialArrayFetchesMoreSpecificOthersPath) {
+        auto header = NSubColumns::TSubColumnsHeader(
+            BuildStats({ { R"("a")", NSubColumns::EValueType::BinaryJson }, { R"("a"."b"."c")", NSubColumns::EValueType::BinaryJson } }),
+            BuildStats({ { R"("a"."b")", NSubColumns::EValueType::BinaryJson } }), NKikimrArrowAccessorProto::TSubColumnsAccessor(), 0);
+        TSubColumnsPartialArray partial(std::move(header), 1, arrow::binary(), NSubColumns::TSettings());
+        partial.AddColumn(R"("a")", CreateTrivialArrayAccessor(R"({"b":"columns"})"));
+
+        UNIT_ASSERT(!partial.HasSubColumnData(R"("a"."b")"));
+    }
+
     Y_UNIT_TEST(JsonPathAccessorPreferBestMatchOthers) {
         // Others have an exact match while separated only a prefix
         CheckMostSpecificStoredPath({ { R"("a")", R"({"b":"columns"})" }, { R"("a"."b"."c")", R"("descendant")" } }, R"("a"."b")",
@@ -638,6 +654,21 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
     // Others have an exact match while separated only a prefix
     Y_UNIT_TEST(JsonPathAccessorPreferBestMatchSeparated) {
         CheckMostSpecificStoredPath({ { R"("a"."b")", R"("columns")" } }, R"("a")", R"({"c":"others"})", "$.a.b", "columns");
+    }
+
+    Y_UNIT_TEST(SubColumnDataExtractorUsesExactStoredPath) {
+        auto array = BuildArrayWithStoredPaths(
+            { { R"("a")", R"("columns")" }, { R"("a"."b"."c")", R"("descendant")" } }, R"("a"."b")", R"("others")");
+        NOlap::NIndexes::TSubColumnDataExtractor extractor;
+        NJson::TJsonValue config(NJson::JSON_MAP);
+        config.InsertValue("sub_column_name", R"("a"."b")");
+        UNIT_ASSERT(extractor.DeserializeFromJson(config).IsSuccess());
+
+        TString result;
+        extractor.VisitAll(array, {}, [&result](const NArrow::NAccessor::TJsonValueView& value, ui64) {
+            result = value.ToJsonValue().GetString();
+        });
+        UNIT_ASSERT_VALUES_EQUAL(result, "others");
     }
 };
 

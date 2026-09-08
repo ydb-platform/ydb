@@ -8,12 +8,12 @@ void TSubColumnDataExtractor::DoVisitAll(const std::shared_ptr<NArrow::NAccessor
     const TChunkVisitor& /*chunkVisitor*/, const TRecordVisitor& recordVisitor) const {
     AFL_VERIFY(dataArray->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray);
     const auto subColumns = std::static_pointer_cast<NArrow::NAccessor::TSubColumnsArray>(dataArray);
-    if (auto idxColumn = subColumns->GetColumnsData().GetStats().GetKeyIndexOptional(SubColumnName)) {
+    if (auto idxColumn = subColumns->GetColumnsData().GetStats().GetExactKeyIndexOptional(SubColumnName)) {
         auto iterator = subColumns->GetColumnsData().BuildIterator(*idxColumn);
         for (; iterator.IsValid(); iterator.Next()) {
             recordVisitor(iterator.GetValue(), 0);
         }
-    } else if (auto idxColumn = subColumns->GetOthersData().GetStats().GetKeyIndexOptional(SubColumnName)) {
+    } else if (auto idxColumn = subColumns->GetOthersData().GetStats().GetExactKeyIndexOptional(SubColumnName)) {
         auto iterator = subColumns->GetOthersData().BuildIterator();
         for (; iterator.IsValid(); iterator.Next()) {
             if (iterator.GetKeyIndex() != *idxColumn) {
@@ -28,10 +28,10 @@ THashMap<ui64, ui32> TSubColumnDataExtractor::DoGetIndexHitsCount(const std::sha
     AFL_VERIFY(dataArray->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray);
     const auto subColumns = std::static_pointer_cast<NArrow::NAccessor::TSubColumnsArray>(dataArray);
     THashMap<ui64, ui32> result;
-    if (auto idxColumn = subColumns->GetColumnsData().GetStats().GetKeyIndexOptional(SubColumnName)) {
+    if (auto idxColumn = subColumns->GetColumnsData().GetStats().GetExactKeyIndexOptional(SubColumnName)) {
         result.emplace(NRequest::TOriginalDataAddress::CalcSubColumnHash(SubColumnName),
             subColumns->GetColumnsData().GetStats().GetColumnRecordsCount(*idxColumn));
-    } else if (auto idxColumn = subColumns->GetOthersData().GetStats().GetKeyIndexOptional(SubColumnName)) {
+    } else if (auto idxColumn = subColumns->GetOthersData().GetStats().GetExactKeyIndexOptional(SubColumnName)) {
         result.emplace(NRequest::TOriginalDataAddress::CalcSubColumnHash(SubColumnName),
             subColumns->GetOthersData().GetStats().GetColumnRecordsCount(*idxColumn));
     }

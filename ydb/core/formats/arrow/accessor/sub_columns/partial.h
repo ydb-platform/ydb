@@ -158,7 +158,7 @@ public:
     }
 
     void AddColumn(const TString& columnName, const std::shared_ptr<IChunkedArray>& arr) {
-        PartialColumnsData.AddColumn(Header.GetColumnStats().GetKeyIndexVerified(std::string_view(columnName.data(), columnName.size())), arr);
+        PartialColumnsData.AddColumn(Header.GetColumnStats().GetExactKeyIndexVerified(std::string_view(columnName.data(), columnName.size())), arr);
     }
 
     bool HasOthers() const {

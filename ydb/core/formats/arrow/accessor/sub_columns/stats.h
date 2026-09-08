@@ -42,7 +42,8 @@ private:
     // keys are references to DataNames array values
     absl::flat_hash_map<std::string_view, ui32> ColumnIndexes;
 
-    std::optional<ui32> GetColumnIndexOptional(const std::string_view name) const {
+public:
+    std::optional<ui32> GetExactKeyIndexOptional(const std::string_view name) const {
         const auto it = ColumnIndexes.find(name);
         if (it != ColumnIndexes.end()) {
             return it->second;
@@ -50,7 +51,12 @@ private:
         return std::nullopt;
     }
 
-public:
+    ui32 GetExactKeyIndexVerified(const std::string_view keyName) const {
+        const auto idx = GetExactKeyIndexOptional(keyName);
+        AFL_VERIFY(idx.has_value());
+        return *idx;
+    }
+
     ui32 GetFilledValuesCount() const {
         ui32 result = 0;
         for (ui32 i = 0; i < (ui32)DataRecordsCount->length(); ++i) {
@@ -94,7 +100,7 @@ public:
                 break;
             }
             AppendSubcolumnName(columnName, pathItems[i]);
-            if (auto index = GetColumnIndexOptional(columnName); index && isColumnAvailable(*index)) {
+            if (auto index = GetExactKeyIndexOptional(columnName); index && isColumnAvailable(*index)) {
                 columnIndex = index;
                 matchedItemsCount = i + 1;
             }
@@ -117,7 +123,7 @@ public:
         });
     }
 
-    std::optional<ui32> GetKeyIndexOptional(const std::string_view keyName) const {
+    std::optional<ui32> GetKeyOrPrefixIndexOptional(const std::string_view keyName) const {
         auto pathInfoResult = ResolvePath(ToJsonPath(keyName));
         AFL_VERIFY(pathInfoResult.IsSuccess())("keyName", keyName)("jsonPath", ToJsonPath(keyName))("error", pathInfoResult.GetErrorMessage());
         auto pathInfo = pathInfoResult.DetachResult();
@@ -125,13 +131,6 @@ public:
             return std::nullopt;
         }
         return pathInfo->ColumnIndex;
-    }
-
-    ui32 GetKeyIndexVerified(const std::string_view keyName) const {
-        auto idx = GetKeyIndexOptional(keyName);
-        AFL_VERIFY(idx.has_value());
-
-        return idx.value();
     }
 
     class TRTStatsValue {

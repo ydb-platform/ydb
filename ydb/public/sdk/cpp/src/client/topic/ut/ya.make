@@ -12,7 +12,10 @@ ENDIF()
 FORK_SUBTESTS()
 
 PEERDIR(
+    contrib/libs/grpc
     ydb/library/persqueue
+    ydb/public/api/grpc
+    ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
 )
 
@@ -31,6 +34,7 @@ SRCS(
     topic_tx_skip_conflict_ut.cpp
     write_session_connect_ut.cpp
     write_session_flush_ut.cpp
+    write_session_retry_ut.cpp
     write_session_size_ut.cpp
 )
 

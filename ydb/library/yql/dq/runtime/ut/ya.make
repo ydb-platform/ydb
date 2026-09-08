@@ -7,6 +7,7 @@ REQUIREMENTS(cpu:2)
 
 SRCS(
     dq_arrow_helpers_ut.cpp
+    dq_input_producer_ut.cpp
     dq_output_channel_ut.cpp
     ut_helper.cpp
 )

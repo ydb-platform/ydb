@@ -71,30 +71,13 @@ namespace NKikimr::NDDisk {
             return;
         }
 
-        if (instr.PayloadId) {
+        if (!ev->Get()->PayloadAlignmentChecked && instr.PayloadId) {
+            ev->Get()->PayloadAlignmentChecked = true;
             const TRope& data = ev->Get()->GetPayload(*instr.PayloadId);
-            auto dataIter = data.Begin();
+            const auto dataIter = data.Begin();
             if (dataIter.ContiguousSize() != data.size() ||
                     reinterpret_cast<uintptr_t>(dataIter.ContiguousData()) % DiskFormat->SectorSize != 0) {
-                TStringStream ss;
-                ss << "payload must be contiguous and aligned to " << DiskFormat->SectorSize << " bytes"
-                    << ", contiguousSize# " << dataIter.ContiguousSize()
-                    << " dataSize# " << data.size()
-                    << " aligned# " << (reinterpret_cast<uintptr_t>(dataIter.ContiguousData()) % DiskFormat->SectorSize == 0);
-
-                YDB_LOG_DEBUG_CTX_COMP(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK, "Dump DDiskId: payload must be contiguous and aligned",
-                    {"sectorSize", DiskFormat->SectorSize},
-                    {"contiguousSize", dataIter.ContiguousSize()},
-                    {"dataSize", data.size()},
-                    {"aligned", (reinterpret_cast<uintptr_t>(dataIter.ContiguousData()) % DiskFormat->SectorSize == 0)},
-                    {"DDiskId", DDiskId});
-
-                SendReply(*ev, std::make_unique<TEvWriteResult>(
-                    NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
-                    ss.Str()));
-                Counters.Interface.Write.Request(selector.Size);
-                Counters.Interface.Write.Reply(false, selector.Size);
-                return;
+                Counters.Interface.UnalignedWritePayloads->Inc();
             }
         }
 

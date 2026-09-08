@@ -3796,7 +3796,7 @@ void UpdateFulltextPrefixFlag(TKikimrRunner& kikimr, bool enabled) {
 
 }
 
-Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixed, Compact) {
+Y_UNIT_TEST_QUAD(SelectWithFulltextMatchPrefixed, Compact, KeyPart) {
     auto kikimr = KikimrPrefix(Compact);
     auto db = kikimr.GetQueryClient();
 

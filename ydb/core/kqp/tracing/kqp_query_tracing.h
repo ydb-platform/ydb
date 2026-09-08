@@ -41,8 +41,6 @@ void MarkJoinedCompilation(NWilson::TSpan& waiter, const NWilson::TSpan& compila
 
 class TShardTraceEvents {
 public:
-    void ReadResult(NWilson::TSpan& span, ui64 shardId, ui32 nodeId, ui64 readId,
-        ui64 rows, Ydb::StatusIds::StatusCode status, bool finished);
     void Acknowledge(NWilson::TSpan& span, ui64 shardId, bool last);
     void Finish(NWilson::TSpan& span);
 

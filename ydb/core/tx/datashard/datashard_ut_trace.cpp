@@ -355,7 +355,11 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         auto readActorSpan = trace.Root.BFSFindOne("Read table");
         UNIT_ASSERT(readActorSpan);
 
-        auto dsReads = readActorSpan->get().FindAll("Datashard.Read"); // Read actor sends EvRead to each shard.
+        std::vector<std::reference_wrapper<TFakeWilsonUploader::Span>> dsReads;
+        for (const auto& read : readActorSpan->get().FindAll("Read shard")) {
+            auto spans = read.get().FindAll("Datashard.Read");
+            dsReads.insert(dsReads.end(), spans.begin(), spans.end());
+        } // Read actor sends EvRead to each shard.
         UNIT_ASSERT_VALUES_EQUAL(dsReads.size(), 2);
 
         const auto canon = ExpectedSpan("Datashard.Read",
@@ -427,7 +431,11 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         auto readActorSpan = trace.Root.BFSFindOne("Read table");
         UNIT_ASSERT(readActorSpan);
 
-        auto dsReads = readActorSpan->get().FindAll("Datashard.Read"); // Read actor sends EvRead to each shard.
+        std::vector<std::reference_wrapper<TFakeWilsonUploader::Span>> dsReads;
+        for (const auto& read : readActorSpan->get().FindAll("Read shard")) {
+            auto spans = read.get().FindAll("Datashard.Read");
+            dsReads.insert(dsReads.end(), spans.begin(), spans.end());
+        } // Read actor sends EvRead to each shard.
         UNIT_ASSERT_VALUES_EQUAL(dsReads.size(), 2);
 
         const auto canon = ExpectedSpan("Datashard.Read",

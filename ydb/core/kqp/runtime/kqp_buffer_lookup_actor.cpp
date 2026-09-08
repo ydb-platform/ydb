@@ -1,4 +1,4 @@
-#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
+#include <ydb/core/kqp/tracing/kqp_shard_tracing.h>
 #include "kqp_buffer_lookup_actor.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
@@ -97,7 +97,7 @@ public:
     static constexpr char ActorName[] = "KQP_BUFFER_LOOKUP_ACTOR";
 
     void PassAway() final {
-        ShardTraceEvents.Finish(LookupActorSpan);
+        ShardReadTrace.Finish(LookupActorSpan);
         EndQueryTraceSpan(LookupActorSpan, Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
         Settings.Counters->StreamLookupActorsCount->Dec();
 
@@ -122,7 +122,7 @@ public:
 
     void Unlink() override {
         AFL_ENSURE(ReadIdToState.empty());
-        ShardTraceEvents.Finish(LookupActorSpan);
+        ShardReadTrace.Finish(LookupActorSpan);
         EndQueryTraceSpan(LookupActorSpan, Ydb::StatusIds::SUCCESS);
 
         for (auto& [_, state] : ShardToState) {
@@ -414,7 +414,7 @@ public:
                 }),
             IEventHandle::FlagTrackDelivery,
             0,
-            LookupActorSpan.GetTraceId());
+            ShardReadTrace.Start(LookupActorSpan, shardId, readId));
 
         shardState.HasPipe = true;
 
@@ -444,7 +444,7 @@ public:
         Settings.TxManager->AddParticipantNode(ev->Sender.NodeId());
 
         auto& read = readIt->second;
-        ShardTraceEvents.ReadResult(LookupActorSpan, read.ShardId, ev->Sender.NodeId(),
+        ShardReadTrace.ReadResult(LookupActorSpan, read.ShardId, ev->Sender.NodeId(),
             record.GetReadId(), record.GetRowCount(), record.GetStatus().GetCode(), record.GetFinished());
         const auto shardId = read.ShardId;
         const auto cookie = read.LookupCookie;
@@ -715,6 +715,7 @@ public:
 
     void DoRetryTableRead(const ui64 failedReadId, TLookupState& lookupState, TReadState& failedRead) {
         AFL_ENSURE(failedRead.Blocked);
+        ShardReadTrace.Retry(LookupActorSpan, failedRead.ShardId, failedReadId);
         --lookupState.ReadsInflight;
         const auto guard = Settings.TypeEnv.BindAllocator();
         lookupState.Worker->RebuildRequest(failedRead.ShardId, failedReadId, ReadId);
@@ -733,6 +734,7 @@ public:
     }
 
     bool HandleReadRetryExceeded(ui64 failedReadId, TLookupState& lookupState) {
+        ShardReadTrace.Retry(LookupActorSpan, ReadIdToState.at(failedReadId).ShardId, failedReadId);
         --lookupState.ReadsInflight;
         const auto guard = Settings.TypeEnv.BindAllocator();
         lookupState.Worker->ResetRowsProcessing(failedReadId);
@@ -820,7 +822,7 @@ public:
             NYql::EYqlIssueCode id,
             const TString& message,
             const NYql::TIssues& subIssues = {}) {
-        ShardTraceEvents.Finish(LookupActorSpan);
+        ShardReadTrace.Finish(LookupActorSpan);
         if (LookupActorSpan) {
             LookupActorSpan.EndError(message);
         }
@@ -892,7 +894,7 @@ private:
     ui64 ReadBytesCount = 0;
     ui64 BrokenLocksCount = 0;
 
-    TShardTraceEvents ShardTraceEvents;
+    TShardReadTrace ShardReadTrace;
     NWilson::TSpan LookupActorSpan;
 };
 

@@ -3,11 +3,13 @@ LIBRARY()
 SRCS(
     kqp_execution_tracing.cpp
     kqp_scan_tracing.cpp
+    kqp_shard_tracing.cpp
     kqp_query_tracing.cpp
     kqp_task_tracing.cpp
 )
 
 PEERDIR(
+    library/cpp/time_provider
     ydb/core/kqp/common/simple
     ydb/core/protos
     ydb/library/actors/wilson

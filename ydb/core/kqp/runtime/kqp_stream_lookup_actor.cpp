@@ -1,4 +1,4 @@
-#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
+#include <ydb/core/kqp/tracing/kqp_shard_tracing.h>
 #include "kqp_stream_lookup_actor.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -447,7 +447,7 @@ private:
     }
 
     void PassAway() final {
-        ShardTraceEvents.Finish(LookupActorSpan);
+        ShardReadTrace.Finish(LookupActorSpan);
         Counters->StreamLookupActorsCount->Dec();
 
         if (!LockSendTime.empty()) {
@@ -667,7 +667,7 @@ private:
         }
 
         auto& read = readIt->second;
-        ShardTraceEvents.ReadResult(LookupActorSpan, read.ShardId, ev->Sender.NodeId(),
+        ShardReadTrace.ReadResult(LookupActorSpan, read.ShardId, ev->Sender.NodeId(),
             record.GetReadId(), record.GetRowCount(), record.GetStatus().GetCode(), record.GetFinished());
         ui64 shardId = read.ShardId;
 
@@ -745,6 +745,7 @@ private:
                     {"logPrefix", this->LogPrefix},
                     {"tablet", read.ShardId},
                     {"issues", getIssues().ToOneLineString()});
+                ShardReadTrace.Retry(LookupActorSpan, read.ShardId, read.Id);
                 Reads.eraseRead(read);
                 return ResolveTableShards();
             }
@@ -904,6 +905,7 @@ private:
             if (ev->Get()->InstantStart) {
                 auto guard = BindAllocator();
                 StreamLookupWorker->RebuildRequest(read.ShardId, read.Id, OperationId);
+                ShardReadTrace.Retry(LookupActorSpan, read.ShardId, read.Id);
                 Reads.eraseRead(read);
                 ScheduleNextReads();
             } else {
@@ -1269,7 +1271,7 @@ private:
                 }),
             IEventHandle::FlagTrackDelivery,
             0,
-            LookupActorSpan.GetTraceId());
+            ShardReadTrace.Start(LookupActorSpan, shardId, read.Id));
 
         Reads.SetPipeCreated(read.ShardId);
 
@@ -1308,6 +1310,7 @@ private:
 
             if (Reads.CheckShardRetriesExceeded(failedRead)) {
                 StreamLookupWorker->ResetRowsProcessing(failedRead.Id);
+                ShardReadTrace.Retry(LookupActorSpan, failedRead.ShardId, failedRead.Id);
                 Reads.eraseRead(failedRead);
                 return ResolveTableShards();
             }
@@ -1321,6 +1324,7 @@ private:
         if (delay == TDuration::Zero()) {
             auto guard = BindAllocator();
             StreamLookupWorker->RebuildRequest(failedRead.ShardId, failedRead.Id, OperationId);
+            ShardReadTrace.Retry(LookupActorSpan, failedRead.ShardId, failedRead.Id);
             Reads.eraseRead(failedRead);
             ScheduleNextReads();
         } else {
@@ -1429,7 +1433,7 @@ private:
         NYql::TIssues issues;
         issues.AddIssue(std::move(issue));
 
-        ShardTraceEvents.Finish(LookupActorSpan);
+        ShardReadTrace.Finish(LookupActorSpan);
         if (LookupActorSpan) {
             LookupActorSpan.EndError(issues.ToOneLineString());
         }
@@ -1493,7 +1497,7 @@ private:
     TIntrusivePtr<TKqpCounters> Counters;
     TIntrusivePtr<TVectorIndexLevelsCache> VectorIndexLevelsCache;
 
-    TShardTraceEvents ShardTraceEvents;
+    TShardReadTrace ShardReadTrace;
     NWilson::TSpan LookupActorSpan;
     NWilson::TSpan LookupActorStateSpan;
 

@@ -613,6 +613,9 @@ public:
     std::shared_ptr<TResourceSnapshotState> ResourceSnapshotState;
     TActorId ResourceInfoExchanger = TActorId();
 
+    // Pool resources are never erased, not even when their usage drops to zero: the transactions of a pool keep
+    // the spilling cookie they got on their first allocation (TTxState::PoolMemoryCookie, read lock-free), so the
+    // resource that updates it has to stay the same one for as long as the pool is in use.
     absl::flat_hash_map<std::pair<TString, TString>, TIntrusivePtr<TMemoryResource>, THash<std::pair<TString, TString>>> MemoryNamedPools;
 };
 

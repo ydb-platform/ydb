@@ -305,6 +305,7 @@ public:
         UNIT_TEST(ConcurrentChannels);
         UNIT_TEST(MemoryAvailability);
         UNIT_TEST(PoolMemoryAvailability);
+        UNIT_TEST(PoolMemoryAvailabilityAfterRelease);
         UNIT_TEST(TaskQuotaManagerOptional);
         UNIT_TEST(SnapshotSharingByExchanger);
         UNIT_TEST(NodesMembershipByExchanger);
@@ -330,6 +331,7 @@ public:
     void ConcurrentChannels();
     void MemoryAvailability();
     void PoolMemoryAvailability();
+    void PoolMemoryAvailabilityAfterRelease();
     void TaskQuotaManagerOptional();
     void SnapshotSharing();
     void SnapshotSharingByExchanger();
@@ -687,6 +689,43 @@ void KqpRm::PoolMemoryAvailability() {
 
         rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 350});
         UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 300);
+    }
+
+    AssertResourceManagerStats(rm, 1000, 100);
+}
+
+// The pool resource survives a release down to zero: a tx keeps the pool cookie it got on its first allocation,
+// so that cookie must still be the live one after the pool memory was released and acquired again, and a later
+// tx of the same pool must get the very same cookie
+void KqpRm::PoolMemoryAvailabilityAfterRelease() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    {
+        auto tx = MakePoolTx(1, rm, /* memoryPoolPercent = */ 50); // pool limit 500, pool threshold at 400 used
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 100}));
+        const auto cookie = tx->PoolMemoryCookie;
+        UNIT_ASSERT(cookie);
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 300);
+
+        rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 100}); // the pool is empty now
+        UNIT_ASSERT_VALUES_EQUAL(cookie->MemoryAvailability.load(), 400);
+
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 450})); // over the pool threshold
+        UNIT_ASSERT(tx->PoolMemoryCookie == cookie);
+        UNIT_ASSERT_VALUES_EQUAL(cookie->MemoryAvailability.load(), -50); // the cookie is still the live one
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), -50);
+
+        auto tx2 = MakePoolTx(2, rm, /* memoryPoolPercent = */ 50);
+        UNIT_ASSERT(rm->AllocateResources(*tx2, 1, NRm::TKqpResourcesRequest{.Memory = 10}));
+        UNIT_ASSERT(tx2->PoolMemoryCookie == cookie); // the same resource, the same cookie
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), -60);
+
+        rm->FreeResources(*tx2, 1, NRm::TKqpResourcesRequest{.Memory = 10});
+        rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 450});
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 400);
     }
 
     AssertResourceManagerStats(rm, 1000, 100);

@@ -36,7 +36,17 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         UNIT_ASSERT_C(pathInfoResult.IsSuccess(), pathInfoResult.GetErrorMessage());
         const auto pathInfo = pathInfoResult.DetachResult();
         UNIT_ASSERT_C(pathInfo, path);
+        const auto keyIndex = stats.GetKeyIndexOptional(NSubColumns::ToSubcolumnName(path));
+        UNIT_ASSERT_C(keyIndex, path);
+        UNIT_ASSERT_VALUES_EQUAL(*keyIndex, pathInfo->ColumnIndex);
         return *pathInfo;
+    }
+
+    void CheckPathHasNoMatch(const NSubColumns::TDictStats& stats, TStringBuf path) {
+        auto pathInfoResult = stats.ResolvePath(path);
+        UNIT_ASSERT_C(pathInfoResult.IsSuccess(), pathInfoResult.GetErrorMessage());
+        UNIT_ASSERT_C(!pathInfoResult.DetachResult(), path);
+        UNIT_ASSERT_C(!stats.GetKeyIndexOptional(NSubColumns::ToSubcolumnName(path)), path);
     }
 
     NSubColumns::TDictStats BuildStats(const std::initializer_list<std::pair<TStringBuf, NSubColumns::EValueType>>& columns) {
@@ -319,9 +329,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         UNIT_ASSERT_VALUES_EQUAL(ResolvePathVerified(stats, "$.c.d[54]"), (TResolvedPath{2, NSubColumns::EValueType::BinaryJson, "strict $[54]"}));
 
         for (const auto& path : { "$.a", "$.\"\"", "$.c" }) {
-            auto pathInfoResult = stats.ResolvePath(path);
-            UNIT_ASSERT_C(pathInfoResult.IsSuccess(), pathInfoResult.GetErrorMessage());
-            UNIT_ASSERT_C(!pathInfoResult.DetachResult(), path);
+            CheckPathHasNoMatch(stats, path);
         }
     }
 
@@ -342,9 +350,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
     Y_UNIT_TEST(JsonPathResolutionReturnsNoMatch) {
         auto stats = BuildStats({ { R"("a")", NSubColumns::EValueType::BinaryJson } });
 
-        auto pathInfoResult = stats.ResolvePath("$.b");
-        UNIT_ASSERT_C(pathInfoResult.IsSuccess(), pathInfoResult.GetErrorMessage());
-        UNIT_ASSERT(!pathInfoResult.DetachResult());
+        CheckPathHasNoMatch(stats, "$.b");
     }
 
     Y_UNIT_TEST(JsonPathResolutionMatchesQuotedMember) {

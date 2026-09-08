@@ -6,6 +6,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/public/lib/ydb_cli/dump/util/view_query_dummy
     ydb/core/ymq/base
     ydb/core/ymq/http
     ydb/library/http_proxy/error

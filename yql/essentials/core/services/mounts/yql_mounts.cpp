@@ -2,7 +2,7 @@
 
 #include <yql/essentials/core/yql_library_compiler.h>
 #include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/translator_iface/translator.h>
 #include <yql/essentials/utils/log/profile.h>
 
 #include <library/cpp/resource/resource.h>

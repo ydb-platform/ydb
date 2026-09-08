@@ -53,7 +53,7 @@ PEERDIR(
     yql/essentials/providers/result/expr_nodes
     yql/essentials/providers/result/provider
     yql/essentials/sql
-    yql/essentials/sql/v1
+    yql/essentials/sql/v1/translator_iface
     ydb/library/ydb_issue/proto
     yql/essentials/public/issue
     yql/essentials/utils/log

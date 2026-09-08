@@ -1514,6 +1514,9 @@ public:
                 if (family.CompressionLevel) {
                     familyDesc = L(familyDesc, Q(Y(Q("compression_level"), family.CompressionLevel)));
                 }
+                if (family.ExternalThreshold) {
+                    familyDesc = L(familyDesc, Q(Y(Q("external_threshold"), family.ExternalThreshold)));
+                }
                 columnFamilies = L(columnFamilies, Q(familyDesc));
             }
             actions = L(actions, Q(Y(Q("alterColumnFamilies"), Q(columnFamilies))));

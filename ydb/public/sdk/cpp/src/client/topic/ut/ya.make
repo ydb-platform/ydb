@@ -28,6 +28,7 @@ PEERDIR(
 
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/persqueue/ut/common
+    yql/essentials/sql/v1
 )
 
 YQL_LAST_ABI_VERSION()

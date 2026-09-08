@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/tx/columnshard/splitter)
 SIZE(SMALL)
 
 PEERDIR(
+    ydb/public/lib/ydb_cli/dump/util/view_query_dummy
     contrib/libs/apache/arrow
     ydb/library/arrow_kernels
 

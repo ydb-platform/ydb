@@ -401,4 +401,8 @@ namespace NActors {
         CpuManager->GetExecutorPoolStates(states);
     }
 
+    std::optional<TCpuMask> TActorSystem::GetExecutorPoolAffinity(ui32 poolId) const {
+        return CpuManager->GetExecutorPoolAffinity(poolId);
+    }
+
 }

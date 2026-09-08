@@ -213,6 +213,7 @@ namespace {
                 }(),
                 LIST_COUNTERS_INTERFACE_OPS(XX)
 #undef XX
+                COUNTER(Interface, UnalignedWritePayloads, true)
             },
             .RecoveryLog = {
                 COUNTER(RecoveryLog, ReadLogChunks, false)

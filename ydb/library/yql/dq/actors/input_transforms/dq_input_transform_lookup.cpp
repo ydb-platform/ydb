@@ -48,7 +48,7 @@ public:
         , HolderFactory(args.HolderFactory)
         , TypeEnv(args.TypeEnv)
         , InputIndex(args.InputIndex)
-        , InputFlow(args.InputFlow)
+        , InputFlow(args.TransformInput)
         , ComputeActorId(args.ComputeActorId)
         , StatsLevel(args.StatsLevel)
         , TaskCounters(taskCounters)

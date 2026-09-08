@@ -317,11 +317,13 @@ namespace {
                     {"senderId", sender},
                     {"sessionId", sessionId},
                     {"database", session->Database});
-            ;
             auto& databaseState = DatabaseStates[session->Database];
             databaseState.ExpireTime = TInstant::Now() + DatabaseStatesCleanupPeriod;
             auto [_, inserted] = databaseState.BusySessions.emplace(sessionId, std::move(session));
-            Y_VALIDATE(inserted, "BusySession already contains session " << sessionId);
+            if (!inserted) {
+                Send(sender, new TEvSessionError(Ydb::StatusIds::INTERNAL_ERROR, TIssues()));
+                Y_VALIDATE(inserted, "BusySession already contains session " << sessionId);
+            }
             Send(sender, new TEvSessionAcquired(TSessionInfo::TPtr(new TSessionInfo {
                 .Database = session->Database,
                 .SessionId = sessionId,
@@ -330,10 +332,12 @@ namespace {
 
         void Handle(TEvReleaseSession::TPtr ev) {
             auto& sessionInfo = ev->Get()->SessionInfo;
-            auto& databaseState = DatabaseStates[sessionInfo.Database];
+            auto dbIt = DatabaseStates.find(sessionInfo.Database);
+            Y_VALIDATE(dbIt != DatabaseStates.end(), "Releasing session " << sessionInfo.SessionId << " from unknown database " << sessionInfo.Database);
+            auto& databaseState = dbIt->second;
             databaseState.ExpireTime = TInstant::Now() + DatabaseStatesCleanupPeriod;
             auto it = databaseState.BusySessions.find(sessionInfo.SessionId);
-            Y_VALIDATE(it != databaseState.BusySessions.end(), "Releasing unexisting session");
+            Y_VALIDATE(it != databaseState.BusySessions.end(), "Releasing unknown session " << sessionInfo.SessionId);
             auto& session = it->second;
             if (!databaseState.WaitingQueue.empty() && !sessionInfo.Invalidate && !session->SessionId.empty()) {
                 // fastpath: reuse/serve session and keep in BusySession

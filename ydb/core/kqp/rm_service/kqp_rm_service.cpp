@@ -102,7 +102,10 @@ public:
         return Limit > Used ? Limit - Used : 0;
     }
 
-    // bytes left before the spilling threshold, negative when the threshold is exceeded
+    // Bytes left before the spilling threshold, negative when the threshold is exceeded. Negative whenever Used
+    // is past Limit - OverLimit, including a threshold equal to the limit (SpillingPercent = 100, OverLimit = 0)
+    // with Used above Limit after the limit was lowered under live usage; the former SpillingPercentReached flag
+    // compared the clamped Available() with OverLimit and stayed silent there.
     i64 GetMemoryAvailability() const {
         return static_cast<i64>(Limit) - static_cast<i64>(Used) - static_cast<i64>(OverLimit);
     }

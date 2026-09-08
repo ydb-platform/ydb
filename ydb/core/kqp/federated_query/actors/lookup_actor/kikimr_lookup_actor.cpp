@@ -620,7 +620,7 @@ namespace {
             ::NMonitoring::TDynamicCounterPtr taskCounters,
             std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
             std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
-            NKqpProto::TKikimrLookupSource&& lookupSource,
+            NKqpProto::TDqSourceKikimrLookupSource&& lookupSource,
             const NKikimr::NMiniKQL::TStructType* keyType,
             const NKikimr::NMiniKQL::TStructType* payloadType,
             const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
@@ -1291,5 +1291,4 @@ namespace {
     NActors::TActorId QuerySessionPoolServiceActorId() {
         return NActors::TActorId(0, "kqp_fq_qspsa");
     }
-
 } // namespace NYql::NDq::NDqSourceLookup

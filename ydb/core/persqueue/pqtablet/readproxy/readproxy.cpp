@@ -112,22 +112,19 @@ private:
             proxyEvent->Response->CopyFrom(responseRecord);
 
             const auto& cmdRead = Request.GetPartitionRequest().GetCmdRead();
-            ctx.Send(
-                BatchProcessorActor,
-                new NBatching::TEvProcessBatch(NBatching::TReadProcessingContext{
-                    .User = cmdRead.GetClientId(),
-                    .PartitionId = static_cast<ui32>(Request.GetPartitionRequest().GetPartition()),
-                    .Destination = 0,
-                    .Offset = InitialReadOffset,
-                    .Count = cmdRead.HasCount() ? static_cast<ui32>(cmdRead.GetCount()) : std::numeric_limits<ui32>::max(),
-                    .LastOffset = cmdRead.GetLastOffset() > 0 ? static_cast<ui64>(cmdRead.GetLastOffset()) : 0,
-                    .PartNo = 0,
-                    .Size = static_cast<ui64>(proxyEvent->Response->ByteSize()),
-                    .IsInternal = false,
-                    .ReplyTo = TActorId{},
-                    .ResponseActor = SelfId(),
-                    .Event = std::move(proxyEvent)}),
-                IEventHandle::FlagTrackDelivery);
+            ctx.Send(BatchProcessorActor, new NBatching::TEvProcessBatch(NBatching::TReadProcessingContext{
+                .User = cmdRead.GetClientId(),
+                .PartitionId = static_cast<ui32>(Request.GetPartitionRequest().GetPartition()),
+                .Destination = 0,
+                .Offset = InitialReadOffset,
+                .Count = cmdRead.HasCount() ? static_cast<ui32>(cmdRead.GetCount()) : std::numeric_limits<ui32>::max(),
+                .LastOffset = cmdRead.GetLastOffset() > 0 ? static_cast<ui64>(cmdRead.GetLastOffset()) : 0,
+                .PartNo = 0,
+                .Size = static_cast<ui64>(proxyEvent->Response->ByteSize()),
+                .IsInternal = false,
+                .ReplyTo = TActorId{},
+                .ResponseActor = SelfId(),
+                .Event = std::move(proxyEvent)}));
             return;
         }
 
@@ -381,23 +378,10 @@ private:
         PassAway();
     }
 
-    void Handle(TEvents::TEvUndelivered::TPtr&, const TActorContext& ctx)
-    {
-        YDB_LOG_ERROR("Batch processor is unavailable",
-            {"logPrefix", NPQ_LOG_PREFIX});
-        AFL_ENSURE(Response);
-        Response->Record.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
-        Response->Record.SetErrorCode(NPersQueue::NErrorCode::READ_NOT_DONE);
-        Response->Record.SetErrorReason("batch processor is unavailable");
-        ctx.Send(Sender, Response.Release());
-        PassAway();
-    }
-
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPersQueue::TEvResponse, Handle);
             HFunc(NBatching::TEvProcessBatchResult, Handle);
-            HFunc(TEvents::TEvUndelivered, Handle);
         default:
             break;
         };

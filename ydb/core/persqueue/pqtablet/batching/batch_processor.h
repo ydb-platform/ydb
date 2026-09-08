@@ -85,10 +85,6 @@ private:
     STFUNC(StateWork);
 
     NActors::TActorId GetOrCreateConsumerProcessor(const TString& user);
-    void SendToConsumerProcessor(
-        const NActors::TActorId& actorId,
-        NActors::IEventBase* ev,
-        const NActors::TActorContext& ctx);
 
 private:
     THashMap<TString, NActors::TActorId> ConsumerProcessors;

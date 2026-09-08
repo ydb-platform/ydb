@@ -67,6 +67,7 @@ void TRunCommandConfigParser::SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& 
     opts.AddLongOption("memorylog-file", "set buffer size for memory log").OptionalArgument("PATH");
     opts.AddLongOption("grpc-file", "gRPC config file").OptionalArgument("PATH");
     opts.AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT");
+    opts.AddLongOption("ignore-root", "resolve old absolute database roots against this cluster (does not rewrite resource paths)").NoArgument();
     opts.AddLongOption("grpcs-port", "enable gRPC SSL server on port").RequiredArgument("PORT");
     opts.AddLongOption("kafka-port", "enable kafka proxy server on port").OptionalArgument("PORT");
     opts.AddLongOption("kafka-address", "set kafka proxy listen address").RequiredArgument("ADDR");
@@ -139,6 +140,10 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
 
     if (res.Has("grpc-file")) {
         Y_ABORT_UNLESS(ParsePBFromFile(res.Get("grpc-file"), Config.AppConfig.MutableGRpcConfig()));
+    }
+
+    if (res.Has("ignore-root")) {
+        Config.AppConfig.MutableGRpcConfig()->SetIgnoreRoot(true);
     }
 
     if (res.Has("feature-flags-file")) {

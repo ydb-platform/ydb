@@ -7,6 +7,28 @@
 
 namespace NKikimr {
 
+TString ResolveDatabasePath(const TString& database, const TString& root) {
+    if (database.empty() || database[0] != '/') {
+        return database;
+    }
+
+    const TString path = CanonizePath(database);
+    const TString rootPath = CanonizePath(root);
+    if (path.empty() || rootPath.empty()) {
+        return database;
+    }
+
+    const auto separator = path.find('/', 1);
+    if (path.substr(0, separator) == rootPath) {
+        return path;
+    }
+    // A former root database becomes a tenant without losing its name.
+    if (separator == TString::npos) {
+        return rootPath + path;
+    }
+    return rootPath + path.substr(separator);
+}
+
 TVector<TString> SplitPath(TString path) {
     TVector<TString> res;
     if (path.empty())

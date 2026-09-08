@@ -28,6 +28,7 @@ SRCS(
     ydb_olapstore_ut.cpp
     ydb_monitoring_ut.cpp
     ydb_query_ut.cpp
+    ydb_ignore_root_ut.cpp
     ydb_read_rows_ut.cpp
     ydb_ldap_login_ut.cpp
     ydb_login_ut.cpp

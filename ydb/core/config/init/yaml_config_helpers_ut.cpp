@@ -94,4 +94,13 @@ config:
         UNIT_ASSERT(config.HasLogConfig());
         UNIT_ASSERT_VALUES_EQUAL(config.GetLogConfig().GetDefaultLevel(), 3);
     }
+
+    Y_UNIT_TEST(IgnoreRoot) {
+        for (const TString value : {"false", "true"}) {
+            auto json = LoadYamlAsJsonOrThrow(minimalValidConfig + "  grpc_config:\n    ignore_root: " + value + "\n", "test.yaml");
+            NKikimrConfig::TAppConfig config;
+            ParseJsonConfigOrThrow(json, "test.yaml", config);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetGRpcConfig().GetIgnoreRoot(), value == "true");
+        }
+    }
 }

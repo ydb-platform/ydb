@@ -923,6 +923,9 @@ message TGRpcConfig {
 
     optional YdbGrpcCompressionLevel DefaultCompressionLevel = 31 [default = YDB_GRPC_COMPRESS_LEVEL_NONE];
     optional TXdsBootstrap XdsBootstrap = 32;
+    // Startup option: resolve old absolute database roots against this cluster.
+    // Does not rewrite SQL text or resource paths.
+    optional bool IgnoreRoot = 33 [default = false];
 
     // server socket options
     optional bool   KeepAliveEnable = 100 [default = true]; // SO_KEEPALIVE

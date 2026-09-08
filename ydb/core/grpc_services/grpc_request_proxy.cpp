@@ -61,6 +61,7 @@ class TGRpcRequestProxyImpl
 public:
     explicit TGRpcRequestProxyImpl(const NKikimrConfig::TAppConfig& appConfig)
         : ChannelBufferSize(appConfig.GetTableServiceConfig().GetResourceManager().GetChannelBufferSize())
+        , IgnoreRoot(appConfig.GetGRpcConfig().GetIgnoreRoot())
     { }
 
     void Bootstrap(const TActorContext& ctx);
@@ -135,6 +136,32 @@ private:
     template<typename TEvent>
     static constexpr bool IsBootstrapClusterEvent(TAutoPtr<TEventHandle<TEvent>>& event);
 
+    template <typename TEvent>
+    bool ResolveRequestDatabase(TEvent* request) {
+        if (!IgnoreRoot || request->IsInternalCall()) {
+            return true;
+        }
+
+        const auto database = request->GetDatabaseName();
+        if constexpr (std::is_same_v<TEvent, TEvListEndpointsRequest>) {
+            const auto& discoveryDatabase = request->GetProtoRequest()->database();
+            if (discoveryDatabase.empty() || discoveryDatabase[0] != '/' || CanonizePath(discoveryDatabase).empty()) {
+                return true;
+            }
+            TString resolved = ResolveDatabasePath(discoveryDatabase, RootDatabase);
+            if (database && !database->empty()
+                && CanonizePath(ResolveDatabasePath(*database, RootDatabase)) != resolved) {
+                request->RaiseIssue(NYql::TIssue("ListEndpoints database and x-ydb-database resolve to different databases"));
+                static_cast<IRequestProxyCtx*>(request)->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+                return false;
+            }
+            request->SetResolvedDatabaseName(std::move(resolved));
+        } else if (database) {
+            request->SetResolvedDatabaseName(ResolveDatabasePath(*database, RootDatabase));
+        }
+        return true;
+    }
+
     template<class TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         LogRequest(event);
@@ -146,6 +173,10 @@ private:
             const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, error);
             requestBaseCtx->RaiseIssue(issue);
             requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+            return;
+        }
+
+        if (!ResolveRequestDatabase(event->Get())) {
             return;
         }
 
@@ -344,6 +375,7 @@ private:
     THashSet<TSubDomainKey> SubDomainKeys;
     bool AllowYdbRequestsWithoutDatabase = true;
     std::atomic<ui64> ChannelBufferSize;
+    const bool IgnoreRoot;
     TActorId SchemeCache;
     bool DynamicNode = false;
     TString RootDatabase;

@@ -223,12 +223,11 @@ message JobStopRequest {
     repeated TAttribute Attribute = 4;
     bool Force = 5;
     bool NegativeRevision = 6;
-    // Absolute ISO-8601 deadline for a non-forced stop filter,
-    // e.g. "2026-09-02T14:30:00Z". Ignored when Force = true.
-    // Malformed values are rejected; values beyond 10 minutes from server
-    // processing time are clamped. A past deadline is already expired.
-    // Empty keeps the legacy TTL: 600 seconds since the filter's last match.
-    string Deadline = 7;
+    // Lifetime of a non-forced stop filter in milliseconds, e.g. 30000 for
+    // 30 seconds. Ignored when Force = true. Values above 600000 are clamped
+    // to 600000. Zero keeps the legacy TTL: 600000 milliseconds since the
+    // filter's last match. Negative values are rejected.
+    int64 DeadlineMs = 7;
 }
 
 message JobStopResponse {

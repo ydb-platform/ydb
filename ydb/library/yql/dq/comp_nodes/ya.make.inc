@@ -1,5 +1,9 @@
 INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/computation/header.ya.make.inc)
 
+IF (YDB_DQ_HASH_COMBINE_RECORD_ALIGNMENT)
+    CFLAGS(-DYDB_DQ_HASH_COMBINE_RECORD_ALIGNMENT=$YDB_DQ_HASH_COMBINE_RECORD_ALIGNMENT)
+ENDIF()
+
 PEERDIR(
     ydb/library/actors/core
     ydb/library/yql/dq/comp_nodes/hash_join_utils
@@ -15,6 +19,7 @@ SET(ORIG_SRC_DIR ${ARCADIA_ROOT}/ydb/library/yql/dq/comp_nodes)
 SET(ORIG_SOURCES
     yql_common_dq_factory.cpp
     dq_hash_combine.cpp
+    dq_hash_combine_layout.cpp
     dq_hash_operator_common.cpp
     dq_hash_operator_serdes.cpp
     dq_program_builder.cpp

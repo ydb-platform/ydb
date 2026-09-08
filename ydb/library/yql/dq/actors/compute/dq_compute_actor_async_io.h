@@ -13,6 +13,7 @@
 
 #include <util/generic/ptr.h>
 
+#include <limits>
 #include <memory>
 #include <utility>
 
@@ -41,13 +42,31 @@ struct IMemoryQuotaManager {
     using TPtr = std::shared_ptr<IMemoryQuotaManager>;
     using TWeakPtr = std::weak_ptr<IMemoryQuotaManager>;
     virtual ~IMemoryQuotaManager() = default;
-    virtual bool AllocateQuota(ui64 memorySize) = 0;
+    // isOptional == true: the caller can continue without the memory (e.g. hash table growth that can be
+    // replaced by spilling), the manager MAY refuse in advance even if it has free quota.
+    // isOptional == false: the caller fails without the memory.
+    virtual bool AllocateQuota(ui64 memorySize, bool isOptional) = 0;
     virtual void FreeQuota(ui64 memorySize) = 0;
     virtual ui64 GetCurrentQuota() const = 0;
     virtual ui64 GetMaxMemorySize() const = 0;
-    virtual bool IsReasonableToUseSpilling() const = 0;
+    // > 0: bytes that may still be requested, mandatory or optional;
+    //   0: do not request optional quota, it will most likely be refused;
+    // < 0: total consumption is over target, |value| is the overuse, consumers should give memory back.
+    // The old IsReasonableToUseSpilling() signal is (GetMemoryAvailability() < 0).
+    virtual i64 GetMemoryAvailability() const = 0;
     virtual TString MemoryConsumptionDetails() const = 0;
 };
+
+// Saturating add for availability values: std::numeric_limits<i64>::max() is the "unlimited" sentinel.
+inline i64 AddMemoryAvailability(i64 a, i64 b) {
+    if (b > 0 && a > std::numeric_limits<i64>::max() - b) {
+        return std::numeric_limits<i64>::max();
+    }
+    if (b < 0 && a < std::numeric_limits<i64>::min() - b) {
+        return std::numeric_limits<i64>::min();
+    }
+    return a + b;
+}
 
 // Source/transform.
 // Must be IActor.

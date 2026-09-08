@@ -318,6 +318,8 @@ message TDqComputeActorStats {
     uint64 MkqlMaxMemoryUsage = 102;       // MKQL allocations stats
     uint64 MkqlExtraMemoryBytes = 103;
     uint32 MkqlExtraMemoryRequests = 104;
+    uint32 MkqlOptionalMemoryRequests = 105;
+    uint32 MkqlOptionalMemoryRefusals = 106;
 
     google.protobuf.Any Extra = 200;
 }

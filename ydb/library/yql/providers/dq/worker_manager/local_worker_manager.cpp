@@ -23,6 +23,8 @@
 #include <util/random/random.h>
 #include <util/system/rusage.h>
 
+#include <limits>
+
 using namespace NActors;
 
 namespace NYql::NDqs {
@@ -58,6 +60,12 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
 
     void FreeExtraQuota(ui64 extraSize) override {
         NodeQuoter->Free(TxId, 0, extraSize);
+    }
+
+    i64 GetExtraMemoryAvailability() const override {
+        // TResourceQuoter::Allocate treats Limit == 0 as unlimited, but GetFreeTotal() returns 0 then
+        const ui64 limit = NodeQuoter->GetLimit();
+        return limit ? static_cast<i64>(NodeQuoter->GetFreeTotal()) : std::numeric_limits<i64>::max();
     }
 
     std::shared_ptr<NDq::TResourceQuoter> NodeQuoter;

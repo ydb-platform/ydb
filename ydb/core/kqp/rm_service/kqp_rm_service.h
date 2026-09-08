@@ -14,9 +14,12 @@
 
 #include "kqp_resource_estimation.h"
 
+#include <algorithm>
 #include <array>
+#include <atomic>
 #include <bitset>
 #include <functional>
+#include <limits>
 #include <utility>
 
 
@@ -41,7 +44,10 @@ struct TKqpResourcesRequest {
 
 class TMemoryResourceCookie : public TAtomicRefCount<TMemoryResourceCookie> {
 public:
-    std::atomic<bool> SpillingPercentReached{false};
+    // Limit - Used - OverLimit of the owning TMemoryResource, i.e. the bytes left before the spilling
+    // threshold (negative = over the threshold, |value| is the overuse). Written under the resource
+    // manager lock, read lock-free by compute actors, see TTxState::GetMemoryAvailability.
+    std::atomic<i64> MemoryAvailability{std::numeric_limits<i64>::max()};
 };
 
 class IKqpResourceManager;
@@ -90,9 +96,17 @@ public:
         return MemoryPoolLimited;
     }
 
-    bool IsReasonableToStartSpilling() {
-        return (PoolMemoryCookie && PoolMemoryCookie->SpillingPercentReached.load())
-            || (TotalMemoryCookie && TotalMemoryCookie->SpillingPercentReached.load());
+    // Node level memory availability of this tx: the minimum over the node total and the pool resource,
+    // see TMemoryResourceCookie. Unlimited until the first successful allocation assigns the cookies.
+    i64 GetMemoryAvailability() const {
+        i64 result = std::numeric_limits<i64>::max();
+        if (TotalMemoryCookie) {
+            result = std::min(result, TotalMemoryCookie->MemoryAvailability.load());
+        }
+        if (PoolMemoryCookie) {
+            result = std::min(result, PoolMemoryCookie->MemoryAvailability.load());
+        }
+        return result;
     }
 
     TKqpResourcesRequest FreeResourcesRequest() const {

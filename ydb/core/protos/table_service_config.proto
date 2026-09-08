@@ -63,6 +63,11 @@ message TTableServiceConfig {
 
         optional uint64 KqpLevelCacheMaxSizeBytes = 32 [default = 0];
         optional uint64 KqpLevelCacheIncreaseBatchSizeBytes = 33 [default = 33554432];
+
+        // Bind the compute actor memory quota to DqHashCombine / DqHashAggregate / DqBlockHashJoin
+        // (RFC dq_memory_quota_20): optional memory requests before growth, numeric memory availability
+        // instead of the allocator yellow zone, explicit give-back. Off: allocator heuristics only.
+        optional bool EnableOperatorMemoryQuota = 34 [default = false];
     }
 
     message TSpillingServiceConfig {
@@ -572,8 +577,8 @@ message TTableServiceConfig {
 
     optional bool UseBlockHashJoinForCross = 145 [default = false, (InvalidateCompileCache) = true];
 
-    // DQ channels 2.0: when the receiver node reports the resource manager spilling signal
-    // (NRm::TTxState::IsReasonableToStartSpilling), shrink the sender inflight window down to
+    // DQ channels 2.0: when the receiver node reports the resource manager memory pressure signal
+    // (NRm::TTxState::GetMemoryAvailability() < 0), shrink the sender inflight window down to
     // the cold inflight value instead of letting channels soak the full per channel limit.
     optional bool EnableSpillingChannelBackpressure = 146 [default = false];
 

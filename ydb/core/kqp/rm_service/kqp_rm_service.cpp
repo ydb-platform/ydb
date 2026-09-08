@@ -88,6 +88,11 @@ public:
         return Limit > Used ? Limit - Used : 0;
     }
 
+    // bytes left before the spilling threshold, negative when the threshold is exceeded
+    i64 GetMemoryAvailability() const {
+        return static_cast<i64>(Limit) - static_cast<i64>(Used) - static_cast<i64>(OverLimit);
+    }
+
     bool Has(ui64 amount) const {
         return Available() >= amount;
     }
@@ -106,7 +111,7 @@ public:
     }
 
     void UpdateCookie() {
-        SpillingCookie->SpillingPercentReached.store(Available() < OverLimit);
+        SpillingCookie->MemoryAvailability.store(GetMemoryAvailability());
     }
 
     ui64 GetUsed() const {

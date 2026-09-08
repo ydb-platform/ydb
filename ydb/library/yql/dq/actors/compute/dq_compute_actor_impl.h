@@ -26,6 +26,7 @@
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/dq/actors/compute/dq_request_context.h>
 #include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
+#include <ydb/library/yql/dq/comp_nodes/operator_memory_quota/dq_operator_memory_quota.h>
 
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -394,6 +395,8 @@ protected:
 
         auto guard = BindAllocator();
         auto* alloc = guard.GetMutex();
+        // memory hungry operators reach the task memory quota through this thread-local binding
+        TDqOperatorMemoryQuotaScope operatorQuotaScope(MemoryQuota ? MemoryQuota->GetOperatorQuota() : nullptr);
 
         if (State == NDqProto::COMPUTE_STATE_FINISHED) {
             if (!DoHandleChannelsAfterFinishImpl()) {
@@ -2555,6 +2558,8 @@ public:
             dst->SetMkqlMaxMemoryUsage(memProfileStats->MkqlMaxUsedMemory);
             dst->SetMkqlExtraMemoryBytes(memProfileStats->MkqlExtraMemoryBytes);
             dst->SetMkqlExtraMemoryRequests(memProfileStats->MkqlExtraMemoryRequests);
+            dst->SetMkqlOptionalMemoryRequests(memProfileStats->MkqlOptionalMemoryRequests);
+            dst->SetMkqlOptionalMemoryRefusals(memProfileStats->MkqlOptionalMemoryRefusals);
         }
 
         if (Stat) { // for task_runner_actor

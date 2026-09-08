@@ -1,9 +1,12 @@
+#include <ydb/services/sqs_topic/billing.h>
+#include <ydb/services/sqs_topic/statuses.h>
 #include <ydb/services/sqs_topic/utils.h>
 #include <ydb/services/sqs_topic/queue_url/utils.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/event_local.h>
 
@@ -269,5 +272,107 @@ Y_UNIT_TEST_SUITE(SqsTopicMakeQueueUrl) {
             url,
             TStringBuilder() << "https://" << FQDNHostName() << "/v1/5//Root/5/topic/8/consumer");
         UNIT_ASSERT(!url.Contains(":0"));
+    }
+}
+
+Y_UNIT_TEST_SUITE(SqsTopicBilling) {
+    Y_UNIT_TEST(DefaultRequestCostIsTwoRu) {
+        using namespace NKikimr::NSqsTopic::V1::NBilling;
+
+        UNIT_ASSERT_VALUES_EQUAL(RoundRu(DEFAULT_REQUEST_COST), 2);
+        UNIT_ASSERT_VALUES_EQUAL(RoundRu(WRITE_BASE_COST), RoundRu(DEFAULT_REQUEST_COST));
+        UNIT_ASSERT_VALUES_EQUAL(RoundRu(READ_BASE_COST), RoundRu(DEFAULT_REQUEST_COST));
+        UNIT_ASSERT_VALUES_EQUAL(RoundRu(DELETE_BASE_COST), RoundRu(DEFAULT_REQUEST_COST));
+    }
+
+    Y_UNIT_TEST(CalcRuAddsFifoAdjunct) {
+        using namespace NKikimr::NSqsTopic::V1::NBilling;
+
+        UNIT_ASSERT_VALUES_EQUAL(CalcRu(0, WRITE_BASE_COST, WRITE_COST_PER_BLOCK, false), 2);
+        UNIT_ASSERT_VALUES_EQUAL(CalcRu(0, WRITE_BASE_COST, WRITE_COST_PER_BLOCK, true), 3);
+        UNIT_ASSERT_VALUES_EQUAL(CalcRu(5, WRITE_BASE_COST, WRITE_COST_PER_BLOCK, false), 7);
+        UNIT_ASSERT_VALUES_EQUAL(CalcRu(5, WRITE_BASE_COST, WRITE_COST_PER_BLOCK, true), 8);
+    }
+
+    Y_UNIT_TEST(PayloadBlocksMatchesOneShotCalculator) {
+        using namespace NKikimr::NSqsTopic::V1::NBilling;
+
+        UNIT_ASSERT_VALUES_EQUAL(PayloadBlocks(0, WRITE_BLOCK_SIZE), 0);
+        UNIT_ASSERT_VALUES_EQUAL(PayloadBlocks(WRITE_BLOCK_SIZE, WRITE_BLOCK_SIZE), 0);
+        UNIT_ASSERT_VALUES_EQUAL(PayloadBlocks(3 * READ_BLOCK_SIZE, WRITE_BLOCK_SIZE), 5);
+        UNIT_ASSERT_VALUES_EQUAL(
+            CalcRu(PayloadBlocks(3 * READ_BLOCK_SIZE, WRITE_BLOCK_SIZE), WRITE_BASE_COST, WRITE_COST_PER_BLOCK, false),
+            7);
+    }
+}
+
+Y_UNIT_TEST_SUITE(SqsTopicDescribeStatus) {
+    Y_UNIT_TEST(MapTopicInfoCreateVsSendPolicies) {
+        using namespace NKikimr::NSqsTopic::V1;
+        using NKikimr::NPQ::NDescriber::TTopicInfo;
+        using NKikimr::NPQ::NDescriber::EStatus;
+
+        TTopicInfo notTopic;
+        notTopic.Status = EStatus::NOT_TOPIC;
+        {
+            auto error = MapTopicInfoToSqsError("/Root/q", notTopic, ExistingQueuePolicy());
+            UNIT_ASSERT(error.Defined());
+            UNIT_ASSERT_VALUES_EQUAL(error->GetErrorCode(), "AWS.SimpleQueueService.NonExistentQueue");
+            UNIT_ASSERT_VALUES_EQUAL(error->GetMessage(), QUEUE_USED_BY_ANOTHER_SCHEME_OBJECT);
+        }
+        {
+            auto error = MapTopicInfoToSqsError("/Root/q", notTopic, CreateQueueDescribePolicy());
+            UNIT_ASSERT(error.Defined());
+            UNIT_ASSERT_VALUES_EQUAL(error->GetErrorCode(), "InvalidParameterValue");
+            UNIT_ASSERT_VALUES_EQUAL(error->GetMessage(), QUEUE_USED_BY_ANOTHER_SCHEME_OBJECT);
+        }
+
+        TTopicInfo missing;
+        missing.Status = EStatus::NOT_FOUND;
+        UNIT_ASSERT(MapTopicInfoToSqsError("/Root/q", missing, ExistingQueuePolicy()).Defined());
+        UNIT_ASSERT(!MapTopicInfoToSqsError("/Root/q", missing, CreateQueueDescribePolicy()).Defined());
+
+        TTopicInfo cdc;
+        cdc.Status = EStatus::SUCCESS;
+        cdc.CdcStream = true;
+        cdc.Info = new NKikimr::NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo();
+        {
+            auto error = MapTopicInfoToSqsError(
+                "/Root/q", cdc, ExistingQueuePolicy(TString("Writing to the Changefeed is not supported")));
+            UNIT_ASSERT(error.Defined());
+            UNIT_ASSERT_VALUES_EQUAL(error->GetErrorCode(), "AWS.SimpleQueueService.UnsupportedOperation");
+        }
+        UNIT_ASSERT(!MapTopicInfoToSqsError("/Root/q", cdc, ExistingQueuePolicy()).Defined());
+    }
+
+    Y_UNIT_TEST(UnauthorizedHidesExistenceAndDescribeAccessIsDenied) {
+        using namespace NKikimr::NSqsTopic::V1;
+        using NKikimr::NPQ::NDescriber::TTopicInfo;
+        using NKikimr::NPQ::NDescriber::EStatus;
+
+        TTopicInfo unauthorized;
+        unauthorized.Status = EStatus::UNAUTHORIZED;
+        for (const auto& policy : {
+                 ExistingQueuePolicy(),
+                 CreateQueueDescribePolicy(),
+                 DeleteQueueDescribePolicy(),
+                 SetQueueAttributesDescribePolicy(),
+                 GetQueueAttributesDescribePolicy(),
+             })
+        {
+            auto error = MapTopicInfoToSqsError("/Root/q", unauthorized, policy);
+            UNIT_ASSERT(error.Defined());
+            UNIT_ASSERT_VALUES_EQUAL(error->GetErrorCode(), "AWS.SimpleQueueService.NonExistentQueue");
+            UNIT_ASSERT_VALUES_EQUAL(error->GetMessage(), SPECIFIED_QUEUE_DOES_NOT_EXIST);
+        }
+
+        TTopicInfo describeDenied;
+        describeDenied.Status = EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS;
+        {
+            auto error = MapTopicInfoToSqsError("/Root/q", describeDenied, ExistingQueuePolicy());
+            UNIT_ASSERT(error.Defined());
+            UNIT_ASSERT_VALUES_EQUAL(error->GetErrorCode(), "AccessDeniedException");
+            UNIT_ASSERT_VALUES_EQUAL(error->GetMessage(), "Access denied");
+        }
     }
 }

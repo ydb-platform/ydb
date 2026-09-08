@@ -104,50 +104,25 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
                 hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
                 default:
                     TBase::StateWork(ev);
             }
         }
 
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&) {
-            // TODO remove it
+        TTopicDescribePolicy GetTopicDescribePolicy() const {
+            return CreateQueueDescribePolicy();
         }
 
-        void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-            const auto* result = ev->Get();
-            AFL_ENSURE(result->Topics.size() == 1)("topics_size", result->Topics.size())("path", TopicPath);
-            const auto& topicInfo = result->Topics.begin()->second;
-
-            switch(topicInfo.Status) {
-                case NDescriber::EStatus::SUCCESS: {
-                    if (topicInfo.CdcStream) {
-                        return ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION,
-                            "Creating the changefeed is not supported"));
-                    }
-
-                    PQGroup = topicInfo.Info->Description;
-                    SelfInfo = topicInfo.Self->Info;
-
-                    return HandleExistingTopic(ActorContext());
-                }
-                case NDescriber::EStatus::NOT_TOPIC:
-                    return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE,
-                        TStringBuilder() << "Queue name used by another scheme object"));
-                case NDescriber::EStatus::NOT_FOUND:
-                    return CreateTopic();
-                case NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
-                    return ReplyWithError(MakeError(NSQS::NErrors::ACCESS_DENIED,
-                        "Access denied"));
-                case NDescriber::EStatus::BAD_REQUEST:
-                    return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE,
-                        NDescriber::Description(TopicPath, topicInfo.Status)));
-                case NDescriber::EStatus::UNAUTHORIZED:
-                case NDescriber::EStatus::UNKNOWN_ERROR:
-                    return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
-                        NDescriber::Description(topicInfo.RealPath, topicInfo.Status)));
+        void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo& topicInfo) {
+            if (topicInfo.Status == NPQ::NDescriber::EStatus::NOT_FOUND) {
+                PendingAction_ = EPendingAction::CreateNewTopic;
+                this->ChargeRequestUnits(ActorContext());
+                return;
             }
+            PQGroup = topicInfo.Info->Description;
+            SelfInfo = topicInfo.Self->Info;
+            return HandleExistingTopic(ActorContext());
         }
 
         void CreateTopic() {
@@ -236,7 +211,9 @@ namespace NKikimr::NSqsTopic::V1 {
             const auto& pqConfig = PQGroup.GetPQTabletConfig();
             const NKikimrPQ::TPQTabletConfig::TConsumer* foundConsumer = FindIfPtr(pqConfig.GetConsumers(), [this](const auto& c) { return c.GetName() == ConsumerName; });
             if (!foundConsumer) {
-                return AddConsumer();
+                PendingAction_ = EPendingAction::AddConsumer;
+                this->ChargeRequestUnits(ctx);
+                return;
             }
 
             if (foundConsumer->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
@@ -251,13 +228,13 @@ namespace NKikimr::NSqsTopic::V1 {
                                                 TStringBuilder() << "Queue attributes mismatch: " << comparison.error()));
             }
 
-            return ReplyAndDie(ctx);
+            PendingAction_ = EPendingAction::ReplyExisting;
+            this->ChargeRequestUnits(ctx);
         }
 
 
         void ReplyAndDie(const TActorContext& ctx) {
-            Ydb::Ymq::V1::CreateQueueResult result;
-
+            Result_.Clear();
             const TRichQueueUrl queueUrl{
                 .Database = this->Database,
                 .TopicPath = this->TopicPath,
@@ -266,9 +243,25 @@ namespace NKikimr::NSqsTopic::V1 {
             };
 
             TString url = MakeQueueUrl(queueUrl, Request_.get());
-            result.set_queue_url(std::move(url));
+            Result_.set_queue_url(std::move(url));
+            return ReplyWithResult(Ydb::StatusIds::SUCCESS, Result_, ctx);
+        }
 
-            return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
+        ui64 GetRUCost() override {
+            return NBilling::RoundRu(NBilling::DEFAULT_REQUEST_COST);
+        }
+
+        void OnRequestUnitsCharged(const TActorContext& ctx) {
+            switch (PendingAction_) {
+                case EPendingAction::CreateNewTopic:
+                    return CreateTopic();
+                case EPendingAction::AddConsumer:
+                    return AddConsumer();
+                case EPendingAction::ReplyExisting:
+                    return ReplyAndDie(ctx);
+                case EPendingAction::None:
+                    return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, "Failed to charge request units"));
+            }
         }
 
     protected:
@@ -277,11 +270,20 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
     private:
+        enum class EPendingAction {
+            None,
+            CreateNewTopic,
+            AddConsumer,
+            ReplyExisting,
+        };
+
         TString QueueName;
         TString ConsumerName;
         TQueueAttributes QueueAttributes;
+        Ydb::Ymq::V1::CreateQueueResult Result_;
         NKikimrSchemeOp::TDirEntry SelfInfo;
         NKikimrSchemeOp::TPersQueueGroupDescription PQGroup;
+        EPendingAction PendingAction_ = EPendingAction::None;
     };
 
     std::unique_ptr<NActors::IActor> CreateCreateQueueActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {

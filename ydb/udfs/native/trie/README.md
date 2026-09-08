@@ -2,9 +2,7 @@
 
 Native YQL UDF module with the same two free functions as the WASM `Trie`
 module ([../wasm/trie/main.cpp](../wasm/trie/main.cpp)). Use it as an
-in-process benchmark point next to resident / host-copy WASM.
-
-`LookupCached` (WASM TypeConfig / object framework) is **not** mirrored here.
+in-process benchmark point next to bridge WASM.
 
 | Function | Signature | Semantics |
 |---|---|---|
@@ -50,12 +48,8 @@ Expected: `hit=48`, `miss=-1`, `label='ok'`, `nores=NULL`.
 
 ```bash
 cd ydb/udfs/wasm/trie/demo
-python3 gen_queries.py --module TrieNative --suffix _native
-DICT_FROM=1 DICT_TO=1 NATIVE=1 CONST=1 ./run_demo.sh
+python3 run_demo.py --native --dict-from 1 --dict-to 1
 ```
-
-PreferWasm / `ResidentConstArgs` do not apply to native: there is no WASM
-compartment.
 
 ## Alternative: UDF Store `NATIVE_UNSAFE`
 

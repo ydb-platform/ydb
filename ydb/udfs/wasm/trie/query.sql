@@ -21,7 +21,3 @@ SELECT
     Trie::Lookup($hit, $dict) AS hit,
     Trie::Lookup($miss, $dict) AS miss,
     Trie::Lookup(NULL, $dict) AS nores;
-
--- Bonus LookupCached (fixed dict via TypeConfig):
--- $fn = YQL::Udf(AsAtom("Trie.LookupCached"), Void(), Void(), AsAtom(<dict-as-atom>));
--- SELECT $fn($hit);

@@ -1,6 +1,6 @@
 {
   "module_name": "Md5",
-  "calling_convention": "unversioned_value",
+  "calling_convention": "bridge",
   "module_extension": "wasm",
   "required_libraries": ["sdk"],
   "functions": [

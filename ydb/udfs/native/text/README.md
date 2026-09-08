@@ -54,16 +54,12 @@ Expected: `letters=3, digits=3, upper=1, len=7, b0=65, b1=98`.
 
 ## Demo integration
 
-Generate native load queries and run the three-way benchmark:
-
 ```bash
 cd ydb/udfs/wasm/text/demo
-python3 gen_queries.py --module TextNative --suffix _native
-NATIVE=1 TABLES=text_1mb SHAPES="probes length" RUNS=3 ./run_demo.sh
+python3 run_demo.py --native --tables text_1mb --shapes "probes length" --runs 3
 ```
 
-Columns: `res_*` (PreferWasm on), `host_*` (PreferWasm off), `nat_*`
-(TextNative, no WASM resident path).
+Columns: `wasm_*` (bridge Text) and `nat_*` (TextNative).
 
 ## Alternative: UDF Store `NATIVE_UNSAFE`
 

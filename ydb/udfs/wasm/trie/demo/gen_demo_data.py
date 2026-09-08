@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Load demo tables: 10k IPv4 keys and 10 Trie dictionaries (1..10 MiB).
+"""Load demo tables: 10k IPv4 keys and 3 Trie dictionaries (1..3 MiB).
 
   ip_addr  (id, ip, addr)     — addresses to look up
   ip_dict  (id, size_mb, acl) — one Trie0001 blob per row, padded to N MiB
@@ -134,7 +134,7 @@ def main() -> int:
     parser.add_argument("--addr-table", default="ip_addr")
     parser.add_argument("--dict-table", default="ip_dict")
     parser.add_argument("--addresses", type=int, default=10_000)
-    parser.add_argument("--dicts", type=int, default=10, help="dictionaries of 1..N MiB")
+    parser.add_argument("--dicts", type=int, default=3, help="dictionaries of 1..N MiB")
     parser.add_argument("--batch", type=int, default=500)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()

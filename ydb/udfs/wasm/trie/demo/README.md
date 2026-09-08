@@ -2,119 +2,62 @@
 
 Shows **WASM Bridge** reuse of a precomputed dictionary blob:
 
-- `Trie::LookupPinned` / `LookupWithStringPinned` use `calling_convention: "bridge"`.
-- Host `RegisterOrReuse` keeps a stable handle for the same `$dict` across rows —
-  boxed values by object pointer, strings by refcounted buffer.
-- `BridgeEnsureString` lazily copies `$dict` into the compartment resident cache
-  **once**; later rows get the same offset back (no per-row `CopyIntoCompartment`).
-  The cache outlives the node, so `BridgeRef` is not needed for this to hold.
-- `Trie::LookupCachedBlob` shows the general form: guest state (here a parsed
-  header) built once and kept in the per-node user-data slot, freed by the guest
-  when the host reports the node as released.
-
-Legacy `Trie::Lookup` / `LookupWithString` (`unversioned_value`) still copy the
-blob on every row — use them only for ABI smoke tests.
+- `Trie::Lookup` / `LookupWithString` use `calling_convention: "bridge"`.
+- Host `RegisterOrReuse` + `BridgeEnsureString` pin `$dict` once per distinct
+  value (`BridgeRef` not required).
+- `Trie::LookupCachedBlob` — guest state via `BridgeGetOrBuild`.
+- `Trie::LookupDict` — host `Dict` behind the bridge.
 
 Two tables:
 
 | Table | Rows | Content |
 |---|---|---|
-| `ip_addr` | 10 000 | IPv4 keys only (`id`, `ip`, 4-byte `addr`) |
-| `ip_dict` | 10 | Trie0001 blobs of **1, 2, …, 10 MiB** (`id`, `size_mb`, `acl`) |
+| `ip_addr` | 10 000 | IPv4 keys (`id`, `ip`, `addr`) |
+| `ip_dict` | 3 | Trie0001 blobs of **1, 2, 3 MiB** |
 
-Load query shape:
+Load shape (built in `run_demo.py`):
 
 ```sql
 $dict = SELECT Unwrap(MIN(acl)) FROM ip_dict WHERE id = N;
-SELECT SUM(Trie::LookupPinned(addr, $dict)) AS checksum FROM ip_addr;
+SELECT SUM(Trie::Lookup(addr, $dict)) AS checksum FROM ip_addr;
 ```
-
-## Cluster (from `ydbd/start.sh`)
-
-After `/home/kulaad/ydbd/start.sh disk` the script prints:
-
-```
--e grpc://localhost:2146 -d /Root/test
-```
-
-That is what every command below uses (`ENDPOINT` / `DB` defaults match it).
-The tenant process itself listens on grpc 31011; the CLI goes to the storage
-node on 2146. Logs:
-
-| File | Process |
-|---|---|
-| `/home/kulaad/ydbd/logs/storage_start.log` / `_err.log` | storage, grpc 2146 |
-| `/home/kulaad/ydbd/logs/db_start.log` / `_err.log` | tenant `/Root/test`, grpc 31011 |
 
 ## Layout
 
 | File | Role |
 |---|---|
-| `trie_blob.py` | Trie0001 builder + Python lookup (mirrors `binary_trie.h`) |
-| `gen_demo_data.py` | `CREATE TABLE ip_addr` / `ip_dict`, `bulk_upsert` |
-| `gen_queries.py` | Readable, evidence, and `demo_load_01.sql` … `demo_load_10.sql` |
-| `run_demo.sh` | timed `LookupPinned` load queries; `EVIDENCE=1` for the 1-row check |
-| `demo_readable.sql` | First 10 addresses × dictionary 1 (`LookupWithStringPinned`) |
-| `demo_load_NN.sql` | Full `ip_addr` scan against dictionary `NN` via `LookupPinned` |
+| `trie_blob.py` | Trie0001 builder + Python lookup |
+| `gen_demo_data.py` | `CREATE TABLE` + `bulk_upsert` |
+| `run_demo.py` | build SQL with substitutions and run |
 
-## 1. SDK library and Trie module
-
-Trie `required_libraries` is `["sdk"]`. Build both for Emscripten and upload
-them (once per cluster):
+## Setup
 
 ```bash
 cd /path/to/ydb
 ./ya make --target-platform=clang20-emscripten-wasm64 ydb/udfs/wasm/sdk ydb/udfs/wasm/trie
-./ya make --build relwithdebinfo ydb/tests/functional/udf_store/upload_udf
+# upload sdk + Trie, restart both nodes
 
-UPLOAD=ydb/tests/functional/udf_store/upload_udf/upload_udf
-$UPLOAD --endpoint grpc://localhost:2146 --database /Root/test \
-    --kind library --library-name sdk --type WASM \
-    --udf-file ydb/udfs/wasm/sdk/libudfs-wasm-sdk.so
-$UPLOAD --endpoint grpc://localhost:2146 --database /Root/test \
-    --type WASM --manifest ydb/udfs/wasm/trie/manifest.json \
-    --udf-file ydb/udfs/wasm/trie/libudfs-wasm-trie.so
+ydb -e grpc://localhost:2146 -d /Root/test sql -f ydb/udfs/wasm/trie/query.sql
 ```
 
-Exact `.so` names follow `ya make` output (`ls ydb/udfs/wasm/{sdk,trie}/*.so`).
-After upload, restart **both** nodes together so `TUdfStoreInitializer` picks
-the new modules up (`/home/kulaad/ydbd/restart_cluster.sh`).
-
-Smoke (unversioned fixture from `query.sql`, expected `hit = 10`):
-
-```bash
-ydb -e grpc://localhost:2146 -d /Root/test sql -s \
-  'SELECT Trie::Lookup(String::HexDecode("80000000000000000000000000000000"),
-         String::HexDecode("5472696530303031200000000100000000000000100000000000000000000080000000000a00000000000000")) AS hit;'
-```
-
-## 2. Data
+## Data
 
 ```bash
 cd ydb/udfs/wasm/trie/demo
 python3 trie_blob.py --self-test
 python3 gen_demo_data.py --dry-run
-python3 gen_demo_data.py \
-  --endpoint grpc://localhost:2146 --database /Root/test
-python3 gen_queries.py --dicts 10
+python3 gen_demo_data.py --endpoint grpc://localhost:2146 --database /Root/test
 ```
 
-## 3. Timing
+## Run
 
 ```bash
-./run_demo.sh
-# optional: EVIDENCE=1 ./run_demo.sh
-# native baseline: NATIVE=1 ./run_demo.sh  (TrieNative via --udfs-dir)
+python3 run_demo.py --readable
+python3 run_demo.py --evidence
+python3 run_demo.py --dict-from 1 --dict-to 3
+python3 run_demo.py --native --dict-from 1 --dict-to 1
 ```
 
-Expect WASM `LookupPinned` wall time much closer to native than the old
-per-row `Lookup` copy path (especially as dictionary MiB grows).
-
-Measured on the local `ydbd` cluster (10 000 addresses per query, warmup excluded):
-
-| dict MiB | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
-|---|---|---|---|---|---|---|---|---|---|---|
-| wall ms | 263 | 396 | 438 | 466 | 496 | 461 | 470 | 478 | 471 | 412 |
-
-Median 463 ms wall / 216 ms server CPU. Wall time stays flat in dictionary size
-because the blob is copied into the compartment once, not once per row.
+Defaults: `-e grpc://localhost:2146 -d /Root/test`. Env overrides:
+`ENDPOINT`, `DB`, `ADDR_TABLE`, `DICT_TABLE`, `DICT_FROM`, `DICT_TO`,
+`WARMUP`, `NATIVE=1`, `YDB`.

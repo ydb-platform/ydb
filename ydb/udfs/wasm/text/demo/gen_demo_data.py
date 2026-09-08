@@ -2,13 +2,13 @@
 # -*- coding: utf-8 -*-
 """Load demo tables of ASCII text for the Text WASM UDF.
 
-  text_200kb / text_1mb / text_2mb
+  text_200kb / text_1mb
       (id Uint64, size_bytes Uint64, txt String)  — 1000 rows each
 
-The measured queries scan `txt` in the same stage as Text::* so PreferWasm
-marks the column. One tiled ASCII buffer is built once; each row is a
-byte-shifted slice so the counters differ without generating 3 GB of unique
-payload in RAM.
+Measured queries scan `txt` with bridge Text::* so RegisterOrReuse +
+BridgeEnsureString pin the column value. One tiled ASCII buffer is built once;
+each row is a byte-shifted slice so the counters differ without generating
+~1.2 GB of unique payload in RAM.
 """
 
 from __future__ import annotations
@@ -25,7 +25,6 @@ MIB = 1024 * 1024
 TABLES = (
     ("text_200kb", 200 * KIB),
     ("text_1mb", 1 * MIB),
-    ("text_2mb", 2 * MIB),
 )
 
 UPPER = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ"

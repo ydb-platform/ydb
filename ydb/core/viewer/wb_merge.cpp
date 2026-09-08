@@ -9,17 +9,13 @@ using namespace ::google::protobuf;
 
 namespace {
 
-TWhiteboardMergerBase::TMergeFieldsMap& GetFieldMerger() {
-    static TWhiteboardMergerBase::TMergeFieldsMap fieldMerger;
-    return fieldMerger;
-}
+TWhiteboardMergerBase::TMergeFieldsMap FieldMerger;
 
 } // anonymous namespace
 
 TWhiteboardMergerBase::TRegistrator::TRegistrator(TWhiteboardMergerBase::TMergeFieldsMap&& fields) {
-    auto& fieldMerger = GetFieldMerger();
     for (auto& [key, value] : fields) {
-        fieldMerger[key] = std::move(value);
+        FieldMerger[key] = std::move(value);
     }
 }
 
@@ -51,15 +47,14 @@ void TWhiteboardMergerBase::ProtoMaximizeBoolField(
 
 void TWhiteboardMergerBase::ProtoMerge(google::protobuf::Message& protoTo, const google::protobuf::Message& protoFrom) {
     using namespace ::google::protobuf;
-    const auto& fieldMerger = GetFieldMerger();
     const Descriptor& descriptor = *protoTo.GetDescriptor();
     const Reflection& reflectionTo = *protoTo.GetReflection();
     const Reflection& reflectionFrom = *protoFrom.GetReflection();
     int fieldCount = descriptor.field_count();
     for (int index = 0; index < fieldCount; ++index) {
         const FieldDescriptor* field = descriptor.field(index);
-        auto it = fieldMerger.find(field);
-        if (it != fieldMerger.end()) {
+        auto it = FieldMerger.find(field);
+        if (it != FieldMerger.end()) {
             it->second(reflectionTo, reflectionFrom, protoTo, protoFrom, field);
             continue;
         }

@@ -31,13 +31,16 @@ SRCS(
     json_handlers_pdisk.cpp
     json_handlers_scheme.cpp
     json_handlers_vdisk.cpp
+    json_handlers_viewer.cpp
     json_handlers_pq.cpp
     json_local_rpc.h
     json_local_rpc_handlers.cpp
     json_local_rpc_handlers.h
+    json_pipe_req.cpp
     json_pipe_req.h
     json_storage_base.h
     json_vdisk_req.h
+    json_wb_req.cpp
     json_wb_req.h
     log.h
     operation_cancel.h
@@ -108,6 +111,7 @@ SRCS(
     viewer_vdiskinfo.h
     viewer_whoami.h
     viewer.h
+    viewer.cpp
     wb_aggregate.cpp
     wb_aggregate.h
     wb_filter.cpp
@@ -116,14 +120,6 @@ SRCS(
     wb_merge.cpp
     wb_merge.h
     wb_req.h
-)
-
-JOIN_SRCS(
-    viewer_joined.cpp
-    viewer.cpp
-    json_handlers_viewer.cpp
-    json_wb_req.cpp
-    json_pipe_req.cpp
 )
 
 IF (NOT EXPORT_CMAKE)

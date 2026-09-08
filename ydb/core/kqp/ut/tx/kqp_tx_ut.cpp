@@ -1323,7 +1323,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Strict Serializable mode is disabled");
     }
 
-    Y_UNIT_TEST(SchemeChangeBreaksRepeatableRead) {
+    Y_UNIT_TEST(SchemeChangeAbortsTx) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1336,7 +1336,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
         auto tx = result.GetTransaction();
         UNIT_ASSERT(tx);
-        const TString firstRead = FormatResultSetYson(result.GetResultSet(0));
+        CompareYson(R"([[[1u];["One"]];[[2u];["Two"]]])", FormatResultSetYson(result.GetResultSet(0)));
 
         auto alterResult = schemeSession.ExecuteSchemeQuery(R"(
             ALTER TABLE `/Root/KeyValue` ADD COLUMN Value2 Uint64;
@@ -1347,14 +1347,12 @@ Y_UNIT_TEST_SUITE(KqpTx) {
             SELECT * FROM `/Root/KeyValue` ORDER BY Key;
         )"), TTxControl::Tx(*tx)).ExtractValueSync();
 
-        // Buggy behaviour, fixed by the next commit: the second read succeeds and
-        // observes the new schema, so the transaction is not repeatable.
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        const TString secondRead = FormatResultSetYson(result.GetResultSet(0));
-        UNIT_ASSERT_STRINGS_UNEQUAL(firstRead, secondRead);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Scheme changed for table");
 
+        // The aborted transaction is released, so the client cannot commit it anymore.
         auto commitResult = tx->Commit().ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::NOT_FOUND, commitResult.GetIssues().ToString());
     }
 }
 

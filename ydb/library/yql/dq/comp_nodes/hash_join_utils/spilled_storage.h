@@ -27,18 +27,14 @@ struct TSpillerSettings {
     int BucketSizeBytes;
     int SpillingPagesAtTime;
 
-    constexpr ui32 BucketMask() const {
-        return static_cast<ui32>(Buckets) - 1;
-    }
-
     int BucketIndex(TSingleTuple tuple) const {
-        return NPackedTuple::Hash(tuple.PackedData) & BucketMask();
+        return NPackedTuple::Hash(tuple.PackedData) & (static_cast<ui32>(Buckets) - 1);
     }
 };
 
 // constexpr TSpillerSettings RuntimeStorageSettings{.Buckets = 128, .BucketSizeBytes = (1<<19), .SpillingPagesAtTime =
 // 3};
-constexpr TSpillerSettings TestStorageSettings{.Buckets = 64, .BucketSizeBytes = (1 << 16), .SpillingPagesAtTime = 8};
+constexpr TSpillerSettings TestStorageSettings{.Buckets = 1 << kBucketHashBits, .BucketSizeBytes = (1 << 16), .SpillingPagesAtTime = 8};
 
 enum class EBucketAssign {
     Hash,
@@ -59,8 +55,7 @@ inline ESpillResult Wait() {
 NThreading::TFuture<ISpiller::TKey> SpillPage(ISpiller& spiller, TPackResult&& page);
 
 template <TSpillerSettings Settings> class TBucketsSpiller {
-    static_assert(Settings.Buckets == (1 << kBucketHashBits),
-                  "bucket count changed: update kBucketHashBits in join_defs.h");
+    static_assert(Settings.Buckets > 0 && (Settings.Buckets & (Settings.Buckets - 1)) == 0);
 
     std::optional<int> FindInMemoryBucketWithMostPages() const {
         std::optional<int> resIndex;

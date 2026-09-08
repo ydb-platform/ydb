@@ -74,7 +74,6 @@ class TNeumannHashTable {
 
     static constexpr unsigned kBloomBits = 16;
     static constexpr unsigned kBloomMaskBits = 4;
-    static constexpr unsigned kHashBits = sizeof(Hash) * 8;
 
     alignas(64) static constexpr auto kBloomTags =
         TBloomFilterMasks<TBloom>::template Gen<kBloomBits, kBloomMaskBits>();
@@ -84,8 +83,6 @@ class TNeumannHashTable {
     static_assert(kBloomBits != 0 && kBloomMaskBits != 0 &&
                   kBloomMaskBits < kBloomBits &&
                   kBloomBits <= sizeof(TBloom) * 8);
-    static_assert(kBucketHashBits + kBloomHashBits < kHashBits,
-                  "bucket routing and the bloom tag must leave room for a directory");
 
     struct TDirectory {
         using T = ui64;
@@ -110,16 +107,12 @@ class TNeumannHashTable {
             return reinterpret_cast<const T &>(*this);
         }
 
-        T BloomTagSlot : kBloomHashBits;
         T DirSlotHash : sizeof(T) * 8 - kBloomHashBits;
+        T BloomTagSlot : kBloomHashBits;
     };
     static_assert(sizeof(THash) == sizeof(typename THash::T));
 
-    Y_FORCE_INLINE static ui32 BloomTagIndex(THash thash) {
-        return *thash >> (kHashBits - kBloomHashBits);
-    }
-
-    Y_FORCE_INLINE Hash getDirectorySlot(THash thash) const {
+    Hash getDirectorySlot(THash thash) const {
         return (*thash >> kBucketHashBits) & DirectoryHashMask_;
     }
 
@@ -194,6 +187,9 @@ class TNeumannHashTable {
         return std::max(1, std::min(24, estimated));
     }
 
+
+
+
     ui64 RequiredMemoryForBuild(int nItems) const {
         const ui32 directoryHashBits = EstimateLogSize(nItems);
         return sizeof(TDirectory) * ((ui64{1} << directoryHashBits) + 1)
@@ -215,10 +211,10 @@ class TNeumannHashTable {
         Tuples_ = tuples;
         Overflow_ = overflow;
 
-        const unsigned directoryHashBits = *estimatedLogSize;
-        DirectoryHashMask_ = (1ul << directoryHashBits) - 1;
+        DirectoryHashBits_ = *  estimatedLogSize;
+        DirectoryHashMask_ = (1ul << DirectoryHashBits_) - 1;
 
-        const ui32 dirsSize = (1ul << directoryHashBits) + 1;
+        const ui32 dirsSize = (1ul << DirectoryHashBits_) + 1;
         Directories_.resize(dirsSize, TDirectory{});
         for (auto& directory : Directories_) {
             directory = {};
@@ -229,7 +225,7 @@ class TNeumannHashTable {
                 ReadUnaligned<THash>(tuples + static_cast<size_t>(Layout_->TotalRowSize) * ind);
             auto &dir = *Directories_[getDirectorySlot(thash)];
             dir += 1ul << TDirectory::kBufferSlotShift;
-            dir |= kBloomTags[BloomTagIndex(thash)];
+            dir |= kBloomTags[thash.BloomTagSlot];
         }
 
         {
@@ -385,7 +381,7 @@ class TNeumannHashTable {
         TIterator iter;
 
         const THash thash = ReadUnaligned<THash>(row);
-        const TBloom hashBloomTag = kBloomTags[BloomTagIndex(thash)];
+        const TBloom hashBloomTag = kBloomTags[thash.BloomTagSlot];
 
         const Hash dirSlot = getDirectorySlot(thash);
         const TDirectory dir = Directories_[dirSlot];
@@ -469,7 +465,7 @@ class TNeumannHashTable {
         MKQL_ENSURE(!Directories_.empty() && Tuples_ != nullptr, "lookup to empty table?");
 
         const THash thash = ReadUnaligned<THash>(row);
-        const TBloom hashBloomTag = kBloomTags[BloomTagIndex(thash)];
+        const TBloom hashBloomTag = kBloomTags[thash.BloomTagSlot];
 
         const Hash dirSlot = getDirectorySlot(thash);
         const TDirectory dir = Directories_[dirSlot];
@@ -578,6 +574,7 @@ class TNeumannHashTable {
     ui32 BufferSlotSize_;
     ui32 RowIndexSize_;
 
+    unsigned DirectoryHashBits_;
     Hash DirectoryHashMask_;
 
     TMKQLVector<TDirectory> Directories_;

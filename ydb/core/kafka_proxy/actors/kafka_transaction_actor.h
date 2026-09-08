@@ -8,6 +8,7 @@
 #include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/kafka_proxy/kqp_helper.h>
+#include <util/generic/vector.h>
 
 namespace NKafka {
     /*
@@ -77,9 +78,7 @@ namespace NKafka {
                     YDB_LOG_CRIT_COMP(NKikimrServices::KAFKA_PROXY, "Critical error happened",
                         {LogPrefix()},
                         {"reason", y.what()});
-                    if (EndTxnRequestPtr) {
-                        SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::UNKNOWN_SERVER_ERROR, y.what());
-                    }
+                    ReplyPendingEndTxn(EKafkaErrors::UNKNOWN_SERVER_ERROR, y.what());
                     Die(ActorContext());
                 }
             }
@@ -120,6 +119,7 @@ namespace NKafka {
             void HandleSelectResponse(const NKqp::TEvKqp::TEvQueryResponse& response, const TActorContext& ctx);
             void HandleAddKafkaOperationsResponse(const TString& kqpTransactionId, const TActorContext& ctx);
             void HandleCommitResponse(const TActorContext& ctx);
+            void ReplyPendingEndTxn(EKafkaErrors errorCode, const TString& errorMessage = {});
             // Kafka Java treats BROKER_NOT_AVAILABLE / INVALID_TXN_STATE as fatal on EndTxn.
             // COORDINATOR_NOT_AVAILABLE is retryable; keep the actor so a retry still sees partitions/offsets.
             void FailEndTxnRetryable(const TActorContext& ctx, const TString& errorMessage);
@@ -139,9 +139,9 @@ namespace NKafka {
             // helper fields
             const TString DatabasePath;
             const TString ResourceDatabasePath;
-            // This field need to preserve request details between several requests to KQP
-            // In case something goes off road, we can always send error back to client
-            TAutoPtr<TEventHandle<TEvKafka::TEvEndTxnRequest>> EndTxnRequestPtr;
+            // EndTxn is idempotent: Kafka clients retry with a new correlation id while KQP is still
+            // committing. Dropping those retries left the producer hanging until request timeout.
+            TVector<TAutoPtr<TEventHandle<TEvKafka::TEvEndTxnRequest>>> PendingEndTxnRequests;
             bool CommitStarted = false;
             ui64 TxnTimeoutMs;
             TInstant CreatedAt;

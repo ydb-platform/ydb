@@ -30,6 +30,28 @@ namespace {
                 ReturnSuccessOnCreateSession = success;
             }
 
+            void SetHoldCommit(bool hold) {
+                HoldCommit = hold;
+            }
+
+            bool HasHeldCommit() const {
+                return HeldCommitSender.Defined();
+            }
+
+            void ReleaseHeldCommit(TTestActorRuntime& runtime) {
+                Y_ABORT_UNLESS(HeldCommitSender.Defined());
+                auto response = MakeStatusResponse(ReturnSuccessOnCommit ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::ABORTED);
+                runtime.Send(new IEventHandle(
+                    *HeldCommitSender,
+                    SelfId(),
+                    response.Release(),
+                    0,
+                    HeldCommitCookie
+                ), 0, true);
+                HeldCommitSender.Clear();
+                HoldCommit = false;
+            }
+
         private:
             STFUNC(StateFunc) {
                 switch (ev->GetTypeRewrite()) {
@@ -49,6 +71,12 @@ namespace {
 
             void Handle(NKqp::TEvKqp::TEvQueryRequest::TPtr& ev, const TActorContext& ctx) {
                 Cout << "Handling query request" << Endl;
+                if (HoldCommit && ev->Get()->Record.GetRequest().GetTxControl().commit_tx() && !HeldCommitSender.Defined()) {
+                    Cout << "Holding commit request from dummy kqp" << Endl;
+                    HeldCommitSender = ev->Sender;
+                    HeldCommitCookie = ev->Cookie;
+                    return;
+                }
                 THolder<NKqp::TEvKqp::TEvQueryResponse> response;
                 if (ev->Get()->Record.GetRequest().GetTxControl().commit_tx()) {
                     Cout << "Sending response on commit from dummy kqp" << Endl;
@@ -165,6 +193,9 @@ namespace {
             TMaybe<std::unordered_map<TString, i32>> ConsumerGenerationsToReturn = Nothing();
             bool ReturnSuccessOnCommit = true;
             bool ReturnSuccessOnCreateSession = true;
+            bool HoldCommit = false;
+            TMaybe<TActorId> HeldCommitSender;
+            ui64 HeldCommitCookie = 0;
         };
 
     class TTransactionActorFixture : public NUnitTest::TBaseFixture {
@@ -277,7 +308,7 @@ namespace {
                 return Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
             }
 
-            THolder<NKafka::TEvKafka::TEvResponse> SendEndTxnRequest(bool commit = false, ui64 correlationId = 0) {
+            void SendEndTxnRequestAsync(bool commit = false, ui64 correlationId = 0) {
                 auto message = std::make_shared<NKafka::TEndTxnRequestData>();
                 message->TransactionalId = TransactionalId;
                 message->ProducerId = ProducerId;
@@ -286,7 +317,10 @@ namespace {
                 auto event = MakeHolder<NKafka::TEvKafka::TEvEndTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TEndTxnRequestData>({}, message), Ctx->Edge, Database, Database);
 
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+            }
 
+            THolder<NKafka::TEvKafka::TEvResponse> SendEndTxnRequest(bool commit = false, ui64 correlationId = 0) {
+                SendEndTxnRequestAsync(commit, correlationId);
                 return Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
             }
 
@@ -611,6 +645,49 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(txnActorDiedEvent->TransactionalId, TransactionalId);
             UNIT_ASSERT_VALUES_EQUAL(txnActorDiedEvent->ProducerState.Id, ProducerId);
             UNIT_ASSERT_VALUES_EQUAL(txnActorDiedEvent->ProducerState.Epoch, ProducerEpoch);
+        }
+
+        Y_UNIT_TEST(OnDuplicateEndTxnCommitWhileInFlight_shouldReplyToBoth) {
+            Ctx->Runtime->SetScheduledLimit(50'000);
+            ui32 endTxnSeen = 0;
+            auto observer = [&endTxnSeen](TAutoPtr<IEventHandle>& input) {
+                if (input->CastAsLocal<NKafka::TEvKafka::TEvEndTxnRequest>()) {
+                    ++endTxnSeen;
+                }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            };
+            Ctx->Runtime->SetObserverFunc(observer);
+            DummyKqpActor->SetHoldCommit(true);
+            SendAddPartitionsToTxnRequest({{"topic1", {0}}});
+
+            SendEndTxnRequestAsync(true, 1);
+            TDispatchOptions waitHeld;
+            waitHeld.CustomFinalCondition = [this]() {
+                return DummyKqpActor->HasHeldCommit();
+            };
+            UNIT_ASSERT(Ctx->Runtime->DispatchEvents(waitHeld, TDuration::Seconds(5)));
+            UNIT_ASSERT(DummyKqpActor->HasHeldCommit());
+
+            SendEndTxnRequestAsync(true, 2);
+            TDispatchOptions waitSecond;
+            waitSecond.CustomFinalCondition = [&endTxnSeen]() {
+                return endTxnSeen >= 2;
+            };
+            UNIT_ASSERT(Ctx->Runtime->DispatchEvents(waitSecond, TDuration::Seconds(5)));
+
+            DummyKqpActor->ReleaseHeldCommit(*Ctx->Runtime);
+            auto first = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+            auto second = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+
+            UNIT_ASSERT(first != nullptr);
+            UNIT_ASSERT(second != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(first->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(second->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_EQUAL(first->Response->ApiKey(), NKafka::EApiKey::END_TXN);
+            UNIT_ASSERT_EQUAL(second->Response->ApiKey(), NKafka::EApiKey::END_TXN);
+            UNIT_ASSERT(first->CorrelationId != second->CorrelationId);
+            UNIT_ASSERT(first->CorrelationId == 1 || second->CorrelationId == 1);
+            UNIT_ASSERT(first->CorrelationId == 2 || second->CorrelationId == 2);
         }
 
         Y_UNIT_TEST(OnEndTxnWithCommitAndAbortFromTxn_shouldReturnCOORDINATOR_NOT_AVAILABLE) {

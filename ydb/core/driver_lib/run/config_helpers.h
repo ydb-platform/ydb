@@ -16,6 +16,11 @@ void AddExecutorPools(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfi
 void AddExecutorPools(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig::TActorSystemConfig& systemConfig,
     NMonitoring::TDynamicCounterPtr counters, const TCpuTopology& cpuTopology);
 
+// Returns the pool ids referenced by BlobStorageExecutor, validated against the executor
+// list. Aborts on an out-of-range or duplicate id, or when the (non-empty) list is
+// combined with UseSharedThreads.
+TVector<ui32> GetBlobStorageExecutorPoolIds(const NKikimrConfig::TActorSystemConfig& systemConfig);
+
 // Returns the pool ids referenced by InterconnectSessionExecutor.
 TVector<ui32> GetInterconnectSessionExecutorPoolIds(const NKikimrConfig::TActorSystemConfig& systemConfig);
 

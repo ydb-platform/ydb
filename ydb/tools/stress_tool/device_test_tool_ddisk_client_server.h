@@ -143,7 +143,7 @@ struct TDDiskServer : public TPDiskTest<ChunkSize> {
 
             auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone);
             const NDDisk::TDDiskConfig ddiskConfig =
-                MakeDDiskConfig(!TBase::Cfg.DisableDDiskChecksums,
+                MakeDDiskConfig(DDiskTestProto, !TBase::Cfg.DisableDDiskChecksums,
                     TBase::Cfg.ForcePDiskFallback);
 
             for (ui32 i = 0; i < TBase::Cfg.NumDevices(); ++i) {

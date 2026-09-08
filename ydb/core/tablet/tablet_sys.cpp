@@ -56,12 +56,12 @@ void TTablet::SendFollowerAttach(const TActorId& leader) {
     }
 }
 
-void TTablet::ReportTabletStateChange(ETabletState state) {
+void TTablet::ReportTabletStateChange(ETabletState state, ui32 generation) {
     const TActorId tabletStateServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
     if (state == TTabletStateInfo::Created || state == TTabletStateInfo::ResolveLeader) {
-        Send(tabletStateServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate(TabletID(), FollowerId, state, Info, StateStorageInfo.KnownGeneration, Leader));
+        Send(tabletStateServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate(TabletID(), FollowerId, state, Info, generation, Leader));
     } else {
-        Send(tabletStateServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate(TabletID(), FollowerId, state, StateStorageInfo.KnownGeneration));
+        Send(tabletStateServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate(TabletID(), FollowerId, state, generation));
     }
 }
 
@@ -87,7 +87,7 @@ void TTablet::PromoteToCandidate(ui32 gen) {
     Send(StateStorageInfo.ProxyID, new TEvStateStorage::TEvUpdate(TabletID(), 0, SelfId(), UserTablet, StateStorageInfo.KnownGeneration, 0, StateStorageInfo.Signature, TEvStateStorage::TProxyOptions::SigAsync));
 
     Become(&TThis::StateBecomeCandidate);
-    ReportTabletStateChange(TTabletStateInfo::Candidate);
+    ReportTabletStateChange(TTabletStateInfo::Candidate, StateStorageInfo.KnownGeneration);
 }
 
 void TTablet::TabletBlockBlobStorage() {
@@ -101,7 +101,7 @@ void TTablet::TabletBlockBlobStorage() {
     }
 
     Become(&TThis::StateBlockBlobStorage);
-    ReportTabletStateChange(TTabletStateInfo::BlockBlobStorage);
+    ReportTabletStateChange(TTabletStateInfo::BlockBlobStorage, StateStorageInfo.KnownGeneration);
 }
 
 void TTablet::TabletRebuildGraph() {
@@ -121,7 +121,7 @@ void TTablet::TabletRebuildGraph() {
     }
 
     Become(&TThis::StateRebuildGraph);
-    ReportTabletStateChange(TTabletStateInfo::RebuildGraph);
+    ReportTabletStateChange(TTabletStateInfo::RebuildGraph, StateStorageInfo.KnownGeneration);
 }
 
 void TTablet::WriteZeroEntry(TEvTablet::TDependencyGraph *graph) {
@@ -232,7 +232,7 @@ void TTablet::WriteZeroEntry(TEvTablet::TDependencyGraph *graph) {
         {"marker", "TSYS01"});
 
     Become(&TThis::StateWriteZeroEntry);
-    ReportTabletStateChange(TTabletStateInfo::WriteZeroEntry);
+    ReportTabletStateChange(TTabletStateInfo::WriteZeroEntry, StateStorageInfo.KnownGeneration);
 }
 
 void TTablet::StartActivePhase() {
@@ -243,7 +243,7 @@ void TTablet::StartActivePhase() {
     Send(UserTablet, new TEvTablet::TEvRestored(TabletID(), StateStorageInfo.KnownGeneration, UserTablet, false));
 
     Become(&TThis::StateActivePhase);
-    ReportTabletStateChange(TTabletStateInfo::Restored);
+    ReportTabletStateChange(TTabletStateInfo::Restored, StateStorageInfo.KnownGeneration);
 
     StateStorageGuardian = Register(CreateStateStorageTabletGuardian(TabletID(), SelfId(), UserTablet, StateStorageInfo.KnownGeneration));
 
@@ -321,6 +321,7 @@ void TTablet::HandleStateStorageLeaderResolve(TEvStateStorage::TEvInfo::TPtr &ev
     StateStorageInfo.KnownStep = msg->CurrentStep;
 
     if (msg->Status == NKikimrProto::OK && msg->CurrentLeader) {
+        ActualGeneration = msg->CurrentGeneration;
         SendFollowerAttach(msg->CurrentLeader);
 
         Become(&TThis::StateFollowerSubscribe);
@@ -952,7 +953,7 @@ void TTablet::HandleStateStorageInfoLock(TEvStateStorage::TEvInfo::TPtr &ev) {
 
             Register(CreateTabletFindLastEntry(SelfId(), false, Info.Get(), 0, Leader));
             Become(&TThis::StateDiscover);
-            ReportTabletStateChange(TTabletStateInfo::Discover);
+            ReportTabletStateChange(TTabletStateInfo::Discover, StateStorageInfo.KnownGeneration);
         }
         return;
     case NKikimrProto::ERROR:
@@ -976,6 +977,7 @@ void TTablet::HandleStateStorageInfoUpgrade(TEvStateStorage::TEvInfo::TPtr &ev) 
         { // ok, we marked ourselves as generation owner
             NeedCleanupOnLockedPath = false;
             StateStorageInfo.Update(msg);
+            ActualGeneration = StateStorageInfo.KnownGeneration;
             for (const auto& followerInfo : msg->Followers) {
                 if (followerInfo.Follower == SelfId())
                     continue;
@@ -1138,7 +1140,7 @@ void TTablet::Handle(TEvTablet::TEvPing::TPtr &ev) {
 void TTablet::HandleByLeader(TEvTablet::TEvTabletActive::TPtr &ev) {
     auto *msg = ev->Get();
     TabletVersionInfo = std::move(msg->VersionInfo);
-    ReportTabletStateChange(TTabletStateInfo::Active);
+    ReportTabletStateChange(TTabletStateInfo::Active, StateStorageInfo.KnownGeneration);
     Send(Launcher, new TEvTablet::TEvReady(TabletID(), StateStorageInfo.KnownGeneration, UserTablet));
     ActivateTime = AppData()->TimeProvider->Now();
     YDB_LOG_INFO("TTablet::Activate: tablet became active",
@@ -1162,7 +1164,7 @@ void TTablet::HandleByFollower(TEvTablet::TEvTabletActive::TPtr &ev) {
     PipeConnectAcceptor->Activate(SelfId(), UserTablet, false, StateStorageInfo.KnownGeneration, TabletVersionInfo);
 
     Send(FollowerStStGuardian, new TEvTablet::TEvFollowerUpdateState(false, SelfId(), UserTablet));
-    ReportTabletStateChange(TTabletStateInfo::Active);
+    ReportTabletStateChange(TTabletStateInfo::Active, StateStorageInfo.KnownGeneration);
     SendTabletStateUpdates(NKikimrTabletBase::TEvTabletStateUpdate::StateActive);
 }
 
@@ -2104,7 +2106,8 @@ bool TTablet::StopTablet(
                 FollowerStStGuardian = { };
             }
 
-            ReportTabletStateChange(TTabletStateInfo::Terminating);
+            const ui32 reportGeneration = ActualGeneration ? ActualGeneration : SuggestedGeneration;
+            ReportTabletStateChange(TTabletStateInfo::Terminating, reportGeneration);
             SendTabletStateUpdates(NKikimrTabletBase::TEvTabletStateUpdate::StateTerminating);
         }
 
@@ -2210,7 +2213,7 @@ void TTablet::CancelTablet(TEvTablet::TEvTabletDead::EReason reason, const TStri
     if (NeedCleanupOnLockedPath)
         Send(StateStorageInfo.ProxyID, new TEvStateStorage::TEvCleanup(TabletID(), SelfId()));
 
-    ReportTabletStateChange(TTabletStateInfo::Dead);
+    ReportTabletStateChange(TTabletStateInfo::Dead, reportedGeneration);
     SendTabletStateUpdates(NKikimrTabletBase::TEvTabletStateUpdate::StateDead);
     TabletStateSubscribers.clear();
 
@@ -2405,14 +2408,14 @@ void TTablet::LockedInitializationPath() {
 
     NeedCleanupOnLockedPath = true;
     Become(&TThis::StateLock);
-    ReportTabletStateChange(TTabletStateInfo::Lock);
+    ReportTabletStateChange(TTabletStateInfo::Lock, StateStorageInfo.KnownGeneration);
 }
 
 void TTablet::StartRecovery() {
     Become(&TThis::StateRecovery);
     PipeConnectAcceptor->Activate(SelfId(), UserTablet, true, StateStorageInfo.KnownGeneration, TabletVersionInfo);
 
-    ReportTabletStateChange(TTabletStateInfo::Active);
+    ReportTabletStateChange(TTabletStateInfo::Active, StateStorageInfo.KnownGeneration);
     SendTabletStateUpdates(NKikimrTabletBase::TEvTabletStateUpdate::StateActive);
 }
 
@@ -2435,7 +2438,7 @@ void TTablet::Handle(TEvTablet::TEvCompleteRecoveryBoot::TPtr& ev) {
         Register(CreateTabletReqWriteLog(SelfId(), logid, entry.Release(), refs, TEvBlobStorage::TEvPut::TacticMinLatency,
             Info.Get(), Relevance, /*isZeroEntry=*/ false));
 
-        ReportTabletStateChange(TTabletStateInfo::WriteZeroEntry);
+        ReportTabletStateChange(TTabletStateInfo::WriteZeroEntry, StateStorageInfo.KnownGeneration);
 
         // Boot tablet with empty graph
         auto graph = MakeIntrusive<TEvTablet::TDependencyGraph>(std::pair<ui32, ui32>(0, 0));
@@ -2504,6 +2507,7 @@ TTablet::TTablet(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetu
     , Info(info)
     , SetupInfo(setupInfo)
     , SuggestedGeneration(suggestedGeneration)
+    , ActualGeneration(0)
     , NeedCleanupOnLockedPath(false)
     , GcCounter(0)
     , PipeConnectAcceptor(NTabletPipe::CreateConnectAcceptor(info->TabletID))
@@ -2537,7 +2541,7 @@ TAutoPtr<IEventHandle> TTablet::AfterRegister(const TActorId &self, const TActor
 
 void TTablet::RetryFollowerBootstrapOrWait() {
     if (FollowerInfo.RetryRound) {
-        ReportTabletStateChange(TTabletStateInfo::ResolveLeader);
+        ReportTabletStateChange(TTabletStateInfo::ResolveLeader, Max(SuggestedGeneration, StateStorageInfo.KnownGeneration));
 
         TActivationContext::Schedule(TDuration::MilliSeconds(2000), new IEventHandle(
             SelfId(), SelfId(),
@@ -2571,7 +2575,7 @@ void TTablet::BootstrapFollower() {
     }
 
     Become(&TThis::StateResolveLeader);
-    ReportTabletStateChange(TTabletStateInfo::ResolveLeader);
+    ReportTabletStateChange(TTabletStateInfo::ResolveLeader, Max(ActualGeneration, SuggestedGeneration));
 }
 
 void TTablet::Bootstrap() {
@@ -2582,7 +2586,7 @@ void TTablet::Bootstrap() {
     if (enInt) {
         IntrospectionTrace.Reset(NTracing::CreateTrace(NTracing::ITrace::TypeSysTabletBootstrap));
     }
-    ReportTabletStateChange(TTabletStateInfo::Created); // useless?
+    ReportTabletStateChange(TTabletStateInfo::Created, SuggestedGeneration); // useless?
     StateStorageInfo.ProxyID = MakeStateStorageProxyID();
     Send(StateStorageInfo.ProxyID, new TEvStateStorage::TEvLookup(TabletID(), 0, TEvStateStorage::TProxyOptions(TEvStateStorage::TProxyOptions::SigAsync)));
     if (IntrospectionTrace) {
@@ -2592,7 +2596,7 @@ void TTablet::Bootstrap() {
     PipeConnectAcceptor->Detach(SelfId());
     SendTabletStateUpdates(NKikimrTabletBase::TEvTabletStateUpdate::StateBooting);
     Become(&TThis::StateResolveStateStorage);
-    ReportTabletStateChange(TTabletStateInfo::ResolveStateStorage);
+    ReportTabletStateChange(TTabletStateInfo::ResolveStateStorage, SuggestedGeneration);
 }
 
 void TTablet::ExternalWriteZeroEntry(TTabletStorageInfo *info, ui32 gen, TActorIdentity owner, TMessageRelevanceWatcher relevance) {

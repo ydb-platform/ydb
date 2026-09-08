@@ -40,7 +40,7 @@ namespace NKikimr {
     public:
         TBufferedChunkWriter(TMemoryConsumer&& consumer, ui8 owner, ui64 ownerRound, ui8 priority, ui32 chunkSize,
                              ui32 appendBlockSize, ui32 writeBlockSize, ui32 chunkIdx,
-                             TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue)
+                             TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue, ui32 baseOffset = 0)
             : Consumer(std::move(consumer))
             , Owner(owner)
             , OwnerRound(ownerRound)
@@ -53,6 +53,7 @@ namespace NKikimr {
             , Buffer(TMemoryConsumer(Consumer))
             , MsgQueue(msgQueue)
             , DiskPartOffset(0)
+            , BaseOffset(baseOffset)
             , Finished(false)
             , HasBuffer(false)
         {
@@ -109,7 +110,7 @@ namespace NKikimr {
         }
 
         TDiskPart GetDiskPartForBookmark() const {
-            return {ChunkIdx, DiskPartOffset, Offset - DiskPartOffset};
+            return {ChunkIdx, BaseOffset + DiskPartOffset, Offset - DiskPartOffset};
         }
 
         ui32 GetBlockSize() const {
@@ -119,7 +120,7 @@ namespace NKikimr {
     private:
         void CreateChunkWriteMsg() {
             if (Buffer.Size()) {
-                ui32 offsetInChunk = Offset - Buffer.Size();
+                ui32 offsetInChunk = BaseOffset + Offset - Buffer.Size();
                 Y_ABORT_UNLESS(offsetInChunk % AppendBlockSize == 0);
                 Y_ABORT_UNLESS(ChunkIdx);
                 NPDisk::TEvChunkWrite::TPartsPtr parts(new NPDisk::TEvChunkWrite::TBufBackedUpParts(std::move(Buffer)));
@@ -143,6 +144,7 @@ namespace NKikimr {
         TTrackableBuffer Buffer;
         TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& MsgQueue;
         ui32 DiskPartOffset;
+        const ui32 BaseOffset;
         bool Finished;
         bool HasBuffer;
     };
@@ -156,7 +158,7 @@ namespace NKikimr {
     public:
         TBaseWriter(TMemoryConsumer&& consumer, ui8 owner, ui64 ownerRound, ui8 priority, ui32 chunkSize,
                     ui32 appendBlockSize, ui32 writeBlockSize, TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue,
-                    TDeque<TChunkIdx>& rchunks)
+                    TDeque<TChunkIdx>& rchunks, ui32 baseOffset = 0)
             : Consumer(std::move(consumer))
             , Owner(owner)
             , OwnerRound(ownerRound)
@@ -166,6 +168,7 @@ namespace NKikimr {
             , WriteBlockSize(writeBlockSize)
             , MsgQueue(msgQueue)
             , RChunks(rchunks)
+            , BaseOffset(baseOffset)
             , UsedChunks()
         {}
 
@@ -181,7 +184,7 @@ namespace NKikimr {
                 RChunks.pop_front();
 
                 ChunkWriter = std::make_unique<TBufferedChunkWriter>(TMemoryConsumer(Consumer), Owner, OwnerRound,
-                    Priority, ChunkSize, AppendBlockSize, WriteBlockSize, chunkIdx, MsgQueue);
+                    Priority, ChunkSize, AppendBlockSize, WriteBlockSize, chunkIdx, MsgQueue, BaseOffset);
 
                 UsedChunks.push_back(chunkIdx);
             }
@@ -256,6 +259,7 @@ namespace NKikimr {
         const ui32 WriteBlockSize;
         TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& MsgQueue;
         TDeque<ui32>& RChunks;
+        const ui32 BaseOffset;
         TVector<ui32> UsedChunks;
         std::unique_ptr<TBufferedChunkWriter> ChunkWriter;
     };
@@ -315,7 +319,7 @@ namespace NKikimr {
     public:
         TDataWriter(TVDiskContextPtr vctx, EWriterDataType type, ui8 owner, ui64 ownerRound, ui32 chunkSize,
                     ui32 appendBlockSize, ui32 writeBlockSize, TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue,
-                    TDeque<TChunkIdx>& rchunks)
+                    TDeque<TChunkIdx>& rchunks, ui32 baseOffset = 0)
             : TBase(TMemoryConsumer(WriterDataTypeToMemConsumer(vctx, type, true)),
                     owner,
                     ownerRound,
@@ -324,7 +328,8 @@ namespace NKikimr {
                     appendBlockSize,
                     writeBlockSize,
                     msgQueue,
-                    rchunks)
+                    rchunks,
+                    baseOffset)
             , Finished(false)
             , RChunksIndex(0)
             , Offset(0)
@@ -340,7 +345,7 @@ namespace NKikimr {
 
             const TChunkIdx chunkIdx = RChunksIndex < UsedChunks.size() ? UsedChunks[RChunksIndex]
                 : RChunks[RChunksIndex - UsedChunks.size()];
-            TDiskPart location(chunkIdx, Offset, size);
+            TDiskPart location(chunkIdx, TBase::BaseOffset + Offset, size);
             Offset += alignedSize;
             return location;
         }
@@ -418,7 +423,8 @@ namespace NKikimr {
     public:
         TIndexBuilder(TVDiskContextPtr vctx, EWriterDataType type, ui8 owner, ui64 ownerRound, ui32 chunkSize,
                       ui32 appendBlockSize, ui32 writeBlockSize, ui64 sstId, bool createdByRepl,
-                      TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue, TDeque<TChunkIdx>& rchunks)
+                      TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& msgQueue, TDeque<TChunkIdx>& rchunks,
+                      ui32 baseOffset = 0)
             : Consumer(TMemoryConsumer(WriterDataTypeToMemConsumer(vctx, type, false)))
             , Owner(owner)
             , OwnerRound(ownerRound)
@@ -428,6 +434,7 @@ namespace NKikimr {
             , WriteBlockSize(writeBlockSize)
             , MsgQueue(msgQueue)
             , RChunks(rchunks)
+            , BaseOffset(baseOffset)
             , RecsPos(0)
             , OutboundPos(0)
             , InplaceDataTotalSize(0)
@@ -608,6 +615,7 @@ namespace NKikimr {
         const ui32 WriteBlockSize;
         TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>>& MsgQueue;
         TDeque<TChunkIdx>& RChunks;
+        const ui32 BaseOffset;
         ui32 RecsPos;
         ui32 OutboundPos;
         ui64 InplaceDataTotalSize;
@@ -725,7 +733,7 @@ namespace NKikimr {
 
             // create new writer
             Writer = std::make_unique<TBufferedChunkWriter>(TMemoryConsumer(Consumer), Owner, OwnerRound, Priority,
-                ChunkSize, AppendBlockSize, WriteBlockSize, chunkIdx, MsgQueue);
+                ChunkSize, AppendBlockSize, WriteBlockSize, chunkIdx, MsgQueue, BaseOffset);
 
             // bookmark start of index data
             Writer->SetBookmark();
@@ -824,10 +832,11 @@ namespace NKikimr {
     public:
         TWriter(TVDiskContextPtr vctx, EWriterDataType type, ui32 chunksToUse, ui8 owner, ui64 ownerRound,
                 ui32 chunkSize, ui32 appendBlockSize, ui32 writeBlockSize, ui64 sstId, bool createdByRepl,
-                TDeque<TChunkIdx>& rchunks, TRopeArena& arena, EBlobHeaderMode blobHeaderMode)
-            : DataWriter(vctx, type, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize, MsgQueue, rchunks)
+                TDeque<TChunkIdx>& rchunks, TRopeArena& arena, EBlobHeaderMode blobHeaderMode, ui32 baseOffset = 0)
+            : DataWriter(vctx, type, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize, MsgQueue, rchunks,
+                    baseOffset)
             , IndexBuilder(vctx, type, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize, sstId,
-                    createdByRepl, MsgQueue, rchunks)
+                    createdByRepl, MsgQueue, rchunks, baseOffset)
             , ChunksToUse(chunksToUse)
             , ChunkSize(chunkSize)
             , Arena(arena)

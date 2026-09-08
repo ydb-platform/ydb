@@ -230,6 +230,11 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
     }
     TableId = TTableId(tableIdRecord.GetOwnerId(), tableIdRecord.GetTableId(), tableIdRecord.GetSchemaVersion());
 
+    if (recordOperation.HasWriteSeqNum()) {
+        WriteSeqNum.WriterIndex = recordOperation.GetWriteSeqNum().GetWriterIndex();
+        WriteSeqNum.WriteSeqNum = recordOperation.GetWriteSeqNum().GetWriteSeqNum();
+    }
+
     SetTxKeys(tableInfo, tabletId, keyValidator);
     UserCtx = NACLib::TUserContextBuilder()
         .DeserializeFromEvent(ev, traceId)

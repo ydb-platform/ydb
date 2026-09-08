@@ -85,12 +85,20 @@ void DumpToFile(
     }
 }
 
+ui32 CheckedBlockSize(ui32 blockSize, const TStorageConfig& storageConfig)
+{
+    Y_ABORT_UNLESS(IsSupportedBlockSize(blockSize));
+    Y_ABORT_UNLESS(storageConfig.GetStripeSize() % blockSize == 0);
+    return blockSize;
+}
+
 TRegionPtr CreateRegion(
     NActors::TActorSystem* actorSystem,
     ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
     const TDiskDescription& diskDescription,
     ui32 regionIndex,
+    ui32 blockSize,
     const TVector<IDirectBlockGroupPtr>& directBlockGroups,
     const TVChunkConfigs& vChunkConfigs,
     const TDirtyMapStateProtos& dirtyMapStates,
@@ -106,6 +114,7 @@ TRegionPtr CreateRegion(
         vChunkConfigs,
         dirtyMapStates,
         storageConfig.GetSyncRequestsBatchSize(),
+        blockSize,
         storageConfig.GetVChunkSize());
 }
 
@@ -121,6 +130,7 @@ TVector<TRegionPtr> CreateRegions(
     const TDirtyMapStateProtos& dirtyMapStates,
     const TStorageConfig& storageConfig)
 {
+    blockSize = CheckedBlockSize(blockSize, storageConfig);
     const size_t regionCount = CalcRegionCount(blockCount, blockSize);
     TVector<TRegionPtr> regions(regionCount);
     for (size_t i = 0; i < regionCount; i++) {
@@ -130,6 +140,7 @@ TVector<TRegionPtr> CreateRegions(
             partitionDirectService,
             diskDescription,
             i,
+            blockSize,
             directBlockGroups,
             vChunkConfigs,
             dirtyMapStates,
@@ -344,6 +355,7 @@ NThreading::TFuture<void> TFastPathService::Grow(ui64 newBlockCount)
             this,
             DiskDescription,
             i,
+            blockSize,
             DirectBlockGroups,
             TVChunkConfigs{},
             TDirtyMapStateProtos{},
@@ -577,11 +589,11 @@ TPersistResultFuture TFastPathService::UpdateDirtyMapState(
 
 void TFastPathService::QueryAddHost(
     size_t directBlockGroupId,
-    size_t newHostIndex)
+    ui32 dbgConnectionsConfigGeneration)
 {
     auto event = std::make_unique<TEvPartitionDirectPrivate::TEvAddHostToDBG>(
         directBlockGroupId,
-        newHostIndex);
+        dbgConnectionsConfigGeneration);
     ActorSystem->Send(PartitionActorId, event.release());
 }
 

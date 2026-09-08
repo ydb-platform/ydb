@@ -372,9 +372,11 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
             nbsService->StorageConfig,
             executors[dbgIndex],
             DiskDescription,
+            VolumeConfig.GetBlockSize(),
             dbgIndex,
             std::move(ddiskIds),
             std::move(persistentBufferDDiskIds),
+            conn.GetDBGConnectionsConfigGeneration(),
             std::move(transport),
             dbgCountersRoot);
 
@@ -429,14 +431,7 @@ bool TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
 
     CreateBSControllerPipeClient(ctx);
 
-    auto request = std::make_unique<
-        TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
-    request->Record.SetDDiskPoolName(StorageConfig->GetDDiskPoolName());
-    request->Record.SetPersistentBufferDDiskPoolName(
-        StorageConfig->GetPersistentBufferDDiskPoolName());
-
-    request->Record.SetTabletId(TabletID());
-
+    auto request = MakeAllocateDDiskBlockGroupRequest();
     const auto& config = EffectiveVolumeConfig();
     const ui64 blockCount = config.GetPartitions(0).GetBlockCount();
     const ui64 regionsCount =
@@ -479,6 +474,18 @@ void TPartitionActor::FailBSControllerPipe(
         InflightBscAllocateRequestCookie);
     NTabletPipe::CloseAndForgetClient(SelfId(), BSControllerPipeClient);
     AbortPendingGrow(ctx, NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS);
+}
+
+std::unique_ptr<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>
+TPartitionActor::MakeAllocateDDiskBlockGroupRequest() const
+{
+    auto request = std::make_unique<
+        TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+    request->Record.SetDDiskPoolName(StorageConfig->GetDDiskPoolName());
+    request->Record.SetPersistentBufferDDiskPoolName(
+        StorageConfig->GetPersistentBufferDDiskPoolName());
+    request->Record.SetTabletId(TabletID());
+    return request;
 }
 
 TString TPartitionActor::GetSocketPath() const
@@ -860,6 +867,27 @@ void TPartitionActor::HandleGetLoadActorAdapterActorId(
 
 ///////////////////////////////////////////////////////////////////////////////
 
+void TPartitionActor::ReplyUpdateVolumeConfig(
+    const NActors::TActorContext& ctx,
+    const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
+    NKikimrBlockStore::EStatus status)
+{
+    auto response = std::make_unique<
+        NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>();
+    response->Record.SetTxId(ev->Get()->Record.GetTxId());
+    response->Record.SetOrigin(TabletID());
+    response->Record.SetStatus(status);
+
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Sending UpdateVolumeConfig response %s",
+        LogTitle.GetWithTime().c_str(),
+        NKikimrBlockStore::EStatus_Name(status).c_str());
+
+    ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+}
+
 void TPartitionActor::HandleUpdateVolumeConfig(
     const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
     const NActors::TActorContext& ctx)
@@ -874,16 +902,6 @@ void TPartitionActor::HandleUpdateVolumeConfig(
         LogTitle.GetWithTime().c_str(),
         volumeConfig.GetVersion());
 
-    auto sendStatus = [&](NKikimrBlockStore::EStatus status)
-    {
-        auto response = std::make_unique<
-            NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>();
-        response->Record.SetTxId(msg->Record.GetTxId());
-        response->Record.SetOrigin(TabletID());
-        response->Record.SetStatus(status);
-        ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
-    };
-
     if (volumeConfig.PartitionsSize() != 1) {
         LOG_CRIT(
             ctx,
@@ -892,7 +910,19 @@ void TPartitionActor::HandleUpdateVolumeConfig(
             "replying OK so SchemeShard does not abort",
             LogTitle.GetWithTime().c_str(),
             volumeConfig.PartitionsSize());
-        sendStatus(NKikimrBlockStore::OK);
+        ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::OK);
+        return;
+    }
+
+    if (!IsSupportedBlockSize(volumeConfig.GetBlockSize())) {
+        LOG_ERROR(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Unsupported block size: %u",
+            LogTitle.GetWithTime().c_str(),
+            volumeConfig.GetBlockSize());
+
+        ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::ERROR);
         return;
     }
 
@@ -912,7 +942,7 @@ void TPartitionActor::HandleUpdateVolumeConfig(
                 "%s Initial DDisk allocation not sent, pipe already open",
                 LogTitle.GetWithTime().c_str());
         }
-        sendStatus(NKikimrBlockStore::OK);
+        ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::OK);
         return;
     }
 
@@ -935,17 +965,20 @@ void TPartitionActor::HandleUpdateVolumeConfig(
             LogTitle.GetWithTime().c_str(),
             newVersion,
             currentVersion);
-        sendStatus(NKikimrBlockStore::OK);
+        ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::OK);
         return;
     }
 
     if (newVersion == currentVersion && newBlockCount == currentBlockCount) {
-        sendStatus(NKikimrBlockStore::OK);
+        ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::OK);
         return;
     }
 
     if (InflightBscAllocateRequestCookie || AddHostInFlight) {
-        sendStatus(NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS);
+        ReplyUpdateVolumeConfig(
+            ctx,
+            ev,
+            NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS);
         return;
     }
 
@@ -963,7 +996,7 @@ void TPartitionActor::HandleUpdateVolumeConfig(
             currentBlockCount,
             newBlockCount,
             static_cast<int>(blockSizeUnchanged));
-        sendStatus(NKikimrBlockStore::OK);
+        ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::OK);
         return;
     }
 
@@ -984,7 +1017,10 @@ void TPartitionActor::HandleUpdateVolumeConfig(
     if (!AllocateDDiskBlockGroup(ctx)) {
         PendingGrowVolumeConfig.reset();
         PendingGrowReply.reset();
-        sendStatus(NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS);
+        ReplyUpdateVolumeConfig(
+            ctx,
+            ev,
+            NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS);
     }
 }
 
@@ -1130,5 +1166,56 @@ STFUNC(TPartitionActor::StateWork)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+TAllocationResponse ValidateAllocationResponse(
+    const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult& msg,
+    size_t dbgId,
+    size_t expectedHostCount)
+{
+    const auto& record = msg.Record;
+
+    if (record.GetStatus() != NKikimrProto::EReplyStatus::OK) {
+        return {
+            .Error = MakeError(
+                E_REJECTED,
+                TStringBuilder()
+                    << "BSController error: " << record.GetErrorReason())};
+    }
+    if (record.DirectBlockGroupsSize() != 1) {
+        return {
+            .Error = MakeError(
+                E_REJECTED,
+                TStringBuilder() << "BSController returned "
+                                 << record.DirectBlockGroupsSize()
+                                 << " DirectBlockGroups, expected 1")};
+    }
+
+    const auto& allocated = record.GetDirectBlockGroups(0);
+    if (allocated.GetDirectBlockGroupId() != dbgId) {
+        return {
+            .Error = MakeError(
+                E_REJECTED,
+                "BSController response is for a different DirectBlockGroup")};
+    }
+    if (allocated.GetError()) {
+        return {
+            .Error = MakeError(
+                E_REJECTED,
+                "BSController reported an error for this DirectBlockGroup")};
+    }
+    if (allocated.DDiskIdSize() != expectedHostCount ||
+        allocated.PersistentBufferDDiskIdSize() != expectedHostCount)
+    {
+        return {
+            .Error = MakeError(
+                E_REJECTED,
+                TStringBuilder()
+                    << "BSController returned " << allocated.DDiskIdSize()
+                    << " ddisks / " << allocated.PersistentBufferDDiskIdSize()
+                    << " pbuffers, expected " << expectedHostCount)};
+    }
+
+    return {.Group = &allocated};
+}
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

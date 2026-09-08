@@ -11,6 +11,8 @@
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
+
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 TDictStats TDictStats::SelectSeparatedColumns(const TSettings& settings, const ui32 recordsCount) const {
@@ -97,7 +99,7 @@ TDictStats::TDictStats(const std::shared_ptr<arrow::RecordBatch>& original)
 
 TConstructorContainer TDictStats::GetAccessorConstructor(const ui32 columnIndex, const TEncodingParams& encodingParams) const {
     const auto type = GetAccessorType(columnIndex);
-    const bool useDenseEncoder = encodingParams.IsEnabled() && GetField(columnIndex)->type()->id() == arrow::Type::BINARY;
+    const bool useDenseEncoder = encodingParams.IsEnabled() && arrow::is_binary_like(GetField(columnIndex)->type()->id());
     switch (type) {
         case IChunkedArray::EType::Array:
             if (useDenseEncoder) {

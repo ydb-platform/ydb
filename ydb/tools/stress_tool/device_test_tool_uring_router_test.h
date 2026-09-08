@@ -101,17 +101,15 @@ class TUringRouterTest : public TPerfTest {
                 ++WriteEventsDone;
             }
 
+            ReturnFreeSlot(op.Slot);
+            InFlight.fetch_sub(1, std::memory_order_release);
             const i32 result = op.GetResult();
             Y_VERIFY_S(result == (i32)BuffSize, "TUringRouter write failed, res# " << result);
-            InFlight.fetch_sub(1, std::memory_order_release);
-            // Publish the reusable slot only after the callback has finished
-            // accessing the operation.
-            ReturnFreeSlot(op.Slot);
         }
 
         void OnIoDrop(TOp& op) {
-            InFlight.fetch_sub(1, std::memory_order_release);
             ReturnFreeSlot(op.Slot);
+            InFlight.fetch_sub(1, std::memory_order_release);
         }
 
         static NHPTimer::STime GetNow() {
@@ -127,6 +125,7 @@ class TUringRouterTest : public TPerfTest {
     const bool UseAlignedData;
     const ui32 NumberOfRandomRefills;
     const bool UseWriteFixed;
+    const bool UseSharedSQPoll;
 
     TVector<THolder<TDeviceState>> DeviceStates;
 
@@ -135,6 +134,15 @@ class TUringRouterTest : public TPerfTest {
     std::atomic<bool> GoSignal{false};
 
 public:
+    template <class TProto>
+    static bool GetUseSharedSQPollValue(const TProto& testProto) {
+        if constexpr (requires { testProto.GetUseSharedSQPoll(); }) {
+            return testProto.GetUseSharedSQPoll();
+        } else {
+            return false;
+        }
+    }
+
     TUringRouterTest(const TPerfTestConfig& cfg, const NDevicePerfTest::TUringRouterTest& testProto)
         : TPerfTest(cfg)
         , QueueDepth(testProto.GetQueueDepth() != 0 ? FastClp2(testProto.GetQueueDepth()) : 128)
@@ -143,6 +151,7 @@ public:
         , UseAlignedData(testProto.GetUseAlignedData())
         , NumberOfRandomRefills(testProto.GetNumberOfRandomRefills())
         , UseWriteFixed(testProto.GetUseWriteFixed())
+        , UseSharedSQPoll(GetUseSharedSQPollValue(testProto))
     {
     }
 
@@ -261,9 +270,12 @@ private:
         dev.File = MakeHolder<TFileHandle>(path.c_str(), openFlags);
 
         NPDisk::TUringRouterConfig cfg;
-        cfg.QueueDepth = QueueDepth;
+        cfg.QueueDepth = QueueDepth * 2; // sq + cq
+        cfg.UseSQPoll = true;
+        cfg.UseIOPoll = false;
+        cfg.UseSharedSQPoll = UseSharedSQPoll;
         dev.Router = MakeHolder<NPDisk::TUringRouter>(static_cast<FHANDLE>(*dev.File), nullptr, cfg);
-        dev.Router->RegisterFile();
+        Y_VERIFY_S(dev.Router->RegisterFile(), "TUringRouter::RegisterFile failed for device " << deviceIdx);
 
         dev.Ops.resize(QueueDepth);
         dev.Buffers.resize(QueueDepth);
@@ -297,18 +309,10 @@ private:
                 iovs[i].iov_base = dev.Buffers[i];
                 iovs[i].iov_len = BuffSize;
             }
-            // Registration runs on the I/O thread during Start(), so iovs must
-            // remain alive until Start() returns.
-            dev.Router->RegisterBuffers(iovs.data(), iovs.size());
-            dev.Router->Start();
-            Y_VERIFY_S(dev.Router->AreBuffersRegistered(), "TUringRouter::RegisterBuffers failed");
-        } else {
-            dev.Router->Start();
+            Y_VERIFY_S(dev.Router->RegisterBuffers(iovs.data(), iovs.size()), "TUringRouter::RegisterBuffers failed");
         }
 
-        Y_VERIFY_S(dev.Router->IsFileRegistered(),
-            "TUringRouter::RegisterFile failed for device " << deviceIdx
-            << " errno# " << dev.Router->GetRegisterFileErrno());
+        dev.Router->Start();
     }
 
     void RunDevice(TDeviceState& dev) {
@@ -333,11 +337,6 @@ private:
             TOp& op = dev.Ops[slot];
             op.Start = TDeviceState::GetNow();
 
-            // Publish the local in-flight accounting before handing the
-            // operation to the router: the dedicated I/O thread may complete
-            // even before Write()/WriteFixed() returns.
-            dev.InFlight.fetch_add(1, std::memory_order_relaxed);
-
             ui64 offset = RandomOffset(dev);
             bool ok = false;
             if (UseWriteFixed) {
@@ -349,6 +348,7 @@ private:
             }
             Y_ABORT_UNLESS(ok, "Failed to start write");
 
+            dev.InFlight.fetch_add(1, std::memory_order_relaxed);
             dev.Router->Flush();
         }
 
@@ -401,6 +401,7 @@ private:
         Printer->AddResult("QueueDepth", QueueDepth);
         Printer->AddResult("AlignedData", UseAlignedData ? "true" : "false");
         Printer->AddResult("WriteFixed", UseWriteFixed ? "true" : "false");
+        Printer->AddResult("SharedSQPoll", UseSharedSQPoll ? "true" : "false");
         Printer->AddResult("Speed", Sprintf("%.1f MB/s", speedMBps));
         Printer->AddResult("IOPS", ui64(iops));
         Printer->AddSpeedAndIops(TSpeedAndIops(speedMBps, iops));
@@ -435,6 +436,7 @@ private:
         Printer->AddResult("QueueDepth", QueueDepth);
         Printer->AddResult("AlignedData", UseAlignedData ? "true" : "false");
         Printer->AddResult("WriteFixed", UseWriteFixed ? "true" : "false");
+        Printer->AddResult("SharedSQPoll", UseSharedSQPoll ? "true" : "false");
         Printer->AddResult("Speed", Sprintf("%.1f MB/s", totalSpeed));
         Printer->AddResult("IOPS", ui64(totalIops));
         Printer->AddSpeedAndIops(TSpeedAndIops(totalSpeed, totalIops));

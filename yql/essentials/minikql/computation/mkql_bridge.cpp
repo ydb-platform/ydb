@@ -10,6 +10,7 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 #include <util/generic/yexception.h>
+#include <util/string/builder.h>
 #include <util/stream/output.h>
 
 namespace NKikimr::NMiniKQL {
@@ -253,6 +254,9 @@ TBridgeChannel::TBridgeChannel(IInputStream& in, IOutputStream& out, const THold
 TBridgeChannel::~TBridgeChannel() = default;
 
 NUdf::TUnboxedValue TBridgeChannel::ResolveFunction(const TBridgeUdfSpec& spec, const TCallableType* funcType) {
+    if (ModuleName_.empty()) {
+        ModuleName_ = TString(ModuleName(spec.FunctionName));
+    }
     WriteRequestHeader(Out_, EBridgeCommand::ResolveFunction);
     WriteBytes(Out_, spec.FunctionName);
     WriteBytes(Out_, spec.TypeConfig);
@@ -262,6 +266,13 @@ NUdf::TUnboxedValue TBridgeChannel::ResolveFunction(const TBridgeUdfSpec& spec, 
     WaitForResponse();
     const auto nodeId = ReadNodeId(In_);
     return NUdf::TUnboxedValuePod(new TBridgeProxyCallable(&HolderFactory_.GetMemInfo(), this, PeerNamespace_, nodeId, funcType));
+}
+
+TString TBridgeChannel::WithModule(TStringBuf message) const {
+    if (ModuleName_.empty()) {
+        return TString(message);
+    }
+    return TStringBuilder() << message << " (module: " << ModuleName_ << ")";
 }
 
 void TBridgeChannel::ServeForever() {
@@ -287,7 +298,7 @@ void TBridgeChannel::WaitForResponse() {
         try {
             kind = ReadFrameHeader(In_);
         } catch (...) {
-            MKQLTerminate("Bridge: worker process died unexpectedly");
+            MKQLTerminate(WithModule("Bridge: worker process died unexpectedly").c_str());
         }
         if (kind == EBridgeFrameKind::Response) {
             return;
@@ -309,11 +320,11 @@ void TBridgeChannel::ServeOneRequest() {
         Dispatch(command);
     } catch (const TTerminateException& e) {
         WriteFrameHeader(Out_, EBridgeFrameKind::TerminateError);
-        WriteErrorMessage(Out_, TString(e.what()));
+        WriteErrorMessage(Out_, e.what());
         Out_.Flush();
-    } catch (const std::exception& e) {
+    } catch (...) {
         WriteFrameHeader(Out_, EBridgeFrameKind::Error);
-        WriteErrorMessage(Out_, TString(e.what()));
+        WriteErrorMessage(Out_, WithModule(CurrentExceptionMessage()));
         Out_.Flush();
     }
 }
@@ -490,6 +501,9 @@ void TBridgeChannel::Dispatch(EBridgeCommand command) {
             MKQL_ENSURE(WorkerFunctionRegistry_ && WorkerEnv_ && WorkerRuntimeSettings_, "Bridge: this channel cannot resolve functions (not a worker-side channel)");
             TBridgeUdfSpec spec;
             spec.FunctionName = ReadBytes(In_);
+            if (ModuleName_.empty()) {
+                ModuleName_ = TString(ModuleName(spec.FunctionName));
+            }
             spec.TypeConfig = ReadBytes(In_);
             spec.SerializedUserType = ReadBytes(In_);
             spec.LangVer = ReadUi32(In_);

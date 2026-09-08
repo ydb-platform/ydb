@@ -355,7 +355,11 @@ bool TPartitionActor::OnRenderAppHtmlPage(
                 LogTitle.GetWithTime().c_str(),
                 *data.SelectedDbg);
 
-            FastPathService->QueryAddHost(*data.SelectedDbg, 0);
+            FastPathService->QueryAddHost(
+                *data.SelectedDbg,
+                DirectBlockGroupsConnections
+                    .GetDirectBlockGroupConnections(*data.SelectedDbg)
+                    .GetDBGConnectionsConfigGeneration());
             reply << "<p>Add host requested for "
                   << PrintDbgId(*data.SelectedDbg) << ".</p>";
         } else {

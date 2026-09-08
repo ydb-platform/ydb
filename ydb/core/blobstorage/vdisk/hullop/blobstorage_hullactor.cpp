@@ -437,7 +437,8 @@ namespace NKikimr {
                     Y_VERIFY_S(CompactionTask->GetSstsToAdd().Empty() && !CompactionTask->GetSstsToDelete().Empty(),
                         HullDs->HullCtx->VCtx->VDiskLogPrefix);
                     CancelOrReleaseCompactionTokenIfNeeded(ctx);
-                    if (CompactionTask->GetHugeBlobsToDelete().Empty() && CompactionTask->GetHugeBlobsAllocated().Empty()) {
+                    if (CompactionTask->GetHugeBlobsToDelete().Empty() && CompactionTask->GetHugeBlobsAllocated().Empty()
+                            && CompactionTask->GetHugeBlobsAllocatedStripe().Empty()) {
                         AccountSelectedStrategy();
                         ApplyCompactionResult(ctx, {}, {}, 0);
                     } else {
@@ -666,10 +667,20 @@ namespace NKikimr {
 
             // run level committer
             TDiskPartVec removedHugeBlobs(CompactionTask->ExtractHugeBlobsToDelete());
+            if (CompactionTask->CollectDeletedSsts()) {
+                TLeveledSstsIterator delIt(&CompactionTask->GetSstsToDelete());
+                for (delIt.SeekToFirst(); delIt.Valid(); delIt.Next()) {
+                    const TLevelSegment& seg = *delIt.Get().SstPtr;
+                    if (!seg.HeapStripe.Empty()) {
+                        removedHugeBlobs.PushBack(seg.HeapStripe);
+                    }
+                }
+            }
             TDiskPartVec allocatedHugeBlobs(CompactionTask->GetHugeBlobsAllocated());
+            TDiskPartVec allocatedStripeBlobs(CompactionTask->GetHugeBlobsAllocatedStripe());
             auto committer = std::make_unique<TAsyncLevelCommitter>(HullLogCtx, HullDbCommitterCtx, RTCtx->LevelIndex,
                 ctx.SelfID, std::move(chunksAdded), std::move(deleteChunks), std::move(removedHugeBlobs),
-                std::move(allocatedHugeBlobs), wId);
+                std::move(allocatedHugeBlobs), wId, std::move(allocatedStripeBlobs));
             TActorId committerID = ctx.RegisterWithSameMailbox(committer.release());
             ActiveActors.Insert(committerID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
 
@@ -689,7 +700,8 @@ namespace NKikimr {
             }
             THullChange *msg = ev->Get();
 
-            if ((!msg->FreedHugeBlobs.Empty() || !msg->AllocatedHugeBlobs.Empty()) && !wId && !msg->Aborted) {
+            if ((!msg->FreedHugeBlobs.Empty() || !msg->AllocatedHugeBlobs.Empty() ||
+                    !msg->AllocatedStripeBlobs.Empty()) && !wId && !msg->Aborted) {
                 const ui64 cookie = NextPreCompactCookie++;
                 YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, "Requesting PreCompact for THullChange",
                     {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix});
@@ -742,7 +754,8 @@ namespace NKikimr {
                     // run fresh committer
                     auto committer = std::make_unique<TAsyncFreshCommitter>(HullLogCtx, HullDbCommitterCtx, RTCtx->LevelIndex,
                             ctx.SelfID, std::move(msg->CommitChunks), std::move(msg->ReservedChunks),
-                            std::move(msg->FreedHugeBlobs), std::move(msg->AllocatedHugeBlobs), dbg.Str(), wId);
+                            std::move(msg->FreedHugeBlobs), std::move(msg->AllocatedHugeBlobs), dbg.Str(), wId,
+                            std::move(msg->AllocatedStripeBlobs));
                     auto aid = ctx.RegisterWithSameMailbox(committer.release());
                     ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 }
@@ -761,7 +774,8 @@ namespace NKikimr {
                 }
 
                 CompactionTask->CompactSsts.CompactionFinished(std::move(msg->SegVec),
-                    std::move(msg->FreedHugeBlobs), std::move(msg->AllocatedHugeBlobs), msg->Aborted);
+                    std::move(msg->FreedHugeBlobs), std::move(msg->AllocatedHugeBlobs), msg->Aborted,
+                    std::move(msg->AllocatedStripeBlobs));
 
                 if (msg->Aborted) { // if the compaction was aborted, ensure there was no index change
                     Y_VERIFY_S(CompactionTask->GetSstsToAdd().Empty(), HullDs->HullCtx->VCtx->VDiskLogPrefix);

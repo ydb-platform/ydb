@@ -91,6 +91,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptForceOlapPushdownDistinctLimit);
     REGISTER_SETTING(*this, OptEnableOlapPushdownProjections);
     REGISTER_SETTING(*this, OptEnableOlapPushdownRegexp);
+    REGISTER_SETTING(*this, OptEnableOlapFastAsciiIgnoreCase);
     REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
     REGISTER_SETTING(*this, OptOverrideStatistics);
     REGISTER_SETTING(*this, OptimizerHints).Parser([](const TString& v) { return NKikimr::NKqp::TOptimizerHints::Parse(v); });
@@ -168,8 +169,10 @@ TKikimrConfiguration::TKikimrConfiguration() {
                 return NKqpProto::ISOLATION_LEVEL_READ_STALE;
             } else if (mode == "ReadCommittedRW") {
                 return NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW;
+            } else if (mode == "StrictSerializableRW") {
+                return NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE;
             } else {
-                throw yexception() << "Unknown DefaultTxMode, available: [SerializableRW, SnapshotRW, SnapshotRO, StaleRO]";
+                throw yexception() << "Unknown DefaultTxMode, available: [SerializableRW, SnapshotRW, SnapshotRO, StaleRO, ReadCommittedRW, StrictSerializableRW]";
             }
         });
     REGISTER_SETTING(*this, UseKqpTasksGraphV2);
@@ -324,6 +327,10 @@ bool TKikimrConfiguration::GetEnableOlapPushdownAggregate() const {
 bool TKikimrConfiguration::GetEnableOlapPushdownRegexp() const {
     return ((GetOptionalFlagValue(OptEnableOlapPushdownRegexp.Get()) == EOptionalFlag::Enabled) ||
         TTableServiceConfig::GetEnableOlapPushdownRegexp());
+}
+
+bool TKikimrConfiguration::GetEnableOlapFastAsciiIgnoreCase() const {
+    return GetOptionalFlagValue(OptEnableOlapFastAsciiIgnoreCase.Get()) == EOptionalFlag::Enabled;
 }
 
 bool TKikimrConfiguration::GetUseDqHashCombine() const {

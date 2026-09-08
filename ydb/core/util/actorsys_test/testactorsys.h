@@ -140,6 +140,12 @@ class TTestActorSystem {
     TActorId CurrentRecipient;
     ui32 CurrentNodeId = 0;
     ui64 EventsProcessed = 0;
+    struct TMailboxProcessingBatch {
+        ui32 ExecutedEvents = 0;
+        ui64 ElapsedCycles = 0;
+        std::vector<TActorId> Actors;
+    };
+    std::map<TMailboxId, TMailboxProcessingBatch> MailboxProcessingBatches;
     TSingleThreadInterconnectMock InterconnectMock;
     std::unordered_map<ui32, TPerNodeInfo> PerNodeInfo;
     std::set<TActorId> LoggerActorIds;
@@ -682,6 +688,9 @@ public:
             if (FilterFunction && !FilterFunction(item->NodeId, event)) { // event is dropped by the filter function
                 continue;
             }
+            std::optional<TMailboxProcessingBatch> finishedBatch;
+            std::optional<TMailboxId> processedMailbox;
+            auto finishReason = TEvents::TEvMailboxProcessingFinished::EReason::QueueEmpty;
             const bool success = WrapInActorContext(TransformEvent(event.get(), item->NodeId), [&](IActor *actor, bool alias) {
                 TAutoPtr<IEventHandle> ev(event.release());
 
@@ -692,8 +701,10 @@ public:
                 const ui32 type = ev->GetTypeRewrite();
 
                 THPTimer timer;
+                const ui64 activationStart = GetCycleCountFast();
                 actor->Receive(ev);
                 const TDuration timing = TDuration::Seconds(timer.Passed());
+                const ui64 elapsedCycles = GetCycleCountFast() - activationStart;
 
                 const auto it = ActorName.find(actor);
                 Y_ABORT_UNLESS(it != ActorName.end(), "%p", actor);
@@ -703,10 +714,72 @@ public:
                 stats.TotalTime += timing;
 
                 ++EventsProcessed;
+
+                const TMailboxId mailboxId(actor->SelfId());
+                processedMailbox.emplace(mailboxId);
+                auto& batch = MailboxProcessingBatches[mailboxId];
+                ++batch.ExecutedEvents;
+                batch.ElapsedCycles += elapsedCycles;
+
+                bool actorPassedAway = false;
+                for (const auto& unregisteredActor : GetNode(CurrentNodeId)->ExecutorThread->GetUnregistered()) {
+                    if (unregisteredActor.Get() == actor) {
+                        actorPassedAway = true;
+                        break;
+                    }
+                }
+                if (!actorPassedAway && NActors::NDetail::TActorSystemFlagAccessor::HasSystemFlag(
+                        *actor, IActor::ESystemFlag::MailboxProcessingFinished)) {
+                    if (std::find(batch.Actors.begin(), batch.Actors.end(), actor->SelfId()) == batch.Actors.end()) {
+                        batch.Actors.push_back(actor->SelfId());
+                    }
+                }
+
             });
             if (!success) { // can't find the actor
                 event = IEventHandle::ForwardOnNondelivery(std::move(event), TEvents::TEvUndelivered::ReasonActorUnknown);
                 SendImpl(event.release(), item->NodeId);
+            }
+            if (processedMailbox) {
+                auto batchIt = MailboxProcessingBatches.find(*processedMailbox);
+                Y_ABORT_UNLESS(batchIt != MailboxProcessingBatches.end());
+
+                bool hasMoreEvents = false;
+                if (const auto scheduleIt = ScheduleQ.find(Clock); scheduleIt != ScheduleQ.end()) {
+                    for (const TScheduleItem& scheduled : scheduleIt->second) {
+                        if (TMailboxId(TransformEvent(scheduled.Event.get(), scheduled.NodeId)) == *processedMailbox) {
+                            hasMoreEvents = true;
+                            break;
+                        }
+                    }
+                }
+
+                static constexpr ui32 TestEventsPerMailbox = 8;
+                if (batchIt->second.ExecutedEvents == TestEventsPerMailbox || !hasMoreEvents) {
+                    finishReason = batchIt->second.ExecutedEvents == TestEventsPerMailbox
+                        ? TEvents::TEvMailboxProcessingFinished::EReason::EventCountLimitReached
+                        : TEvents::TEvMailboxProcessingFinished::EReason::QueueEmpty;
+                    finishedBatch.emplace(std::move(batchIt->second));
+                    MailboxProcessingBatches.erase(batchIt);
+                }
+            }
+            if (finishedBatch) {
+                for (const TActorId& actorId : finishedBatch->Actors) {
+                    WrapInActorContext(actorId, [&](IActor* actor) {
+                        if (NActors::NDetail::TActorSystemFlagAccessor::HasSystemFlag(
+                                *actor, IActor::ESystemFlag::MailboxProcessingFinished)) {
+                            TAutoPtr<IEventHandle> finishedEv = new IEventHandle(
+                                actor->SelfId(),
+                                TActorId(),
+                                new TEvents::TEvMailboxProcessingFinished(
+                                    finishReason,
+                                    finishedBatch->ExecutedEvents,
+                                    finishedBatch->ElapsedCycles));
+                            actor->Receive(finishedEv);
+                            ++EventsProcessed;
+                        }
+                    });
+                }
             }
         }
     }

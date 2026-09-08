@@ -303,10 +303,6 @@ namespace NKikimr {
             }
             Become(&TThis::StateEjected);
         } else {
-            StopPutBatchingEvent = static_cast<TEventHandle<TEvStopBatchingPutRequests>*>(
-                    new IEventHandle(SelfId(), SelfId(), new TEvStopBatchingPutRequests));
-            StopGetBatchingEvent = static_cast<TEventHandle<TEvStopBatchingGetRequests>*>(
-                    new IEventHandle(SelfId(), SelfId(), new TEvStopBatchingGetRequests));
             ApplyGroupInfo(std::exchange(Info, {}), std::exchange(NodeLayoutInfo, {}), std::exchange(StoragePoolCounters, {}));
             CheckDeadlines();
         }

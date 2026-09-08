@@ -142,7 +142,7 @@ private:
 
     virtual ESourceAction OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) override {
         LWTRACK(SyncAggrSyncPoint, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
-            source->GetDeprecatedPortionId(), GetPointName(), source->GetFilteredRowsCount(), source->GetReservedMemory(),
+            source->GetSourceId(), GetPointName(), source->GetFilteredRowsCount(), source->GetReservedMemory(),
             source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead(), DebugString());
         --InFlightControl;
         if (InFlightControl.Val() == 0) {
@@ -198,7 +198,7 @@ private:
             {"activity", AggregationActivity});
         reader.OnIntervalResult(
             std::make_unique<TPartialReadResult>(source->ExtractResourceGuards(), source->MutableAs<IDataSource>()->ExtractGroupGuard(),
-                resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), std::nullopt, source->GetDeprecatedPortionId()));
+                resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), std::nullopt, source->GetSourceId()));
         source->MutableAs<IDataSource>()->ClearResult();
         return ESourceAction::Finish;
     }

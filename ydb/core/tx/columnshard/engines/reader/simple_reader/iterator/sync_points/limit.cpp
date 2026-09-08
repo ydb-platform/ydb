@@ -52,7 +52,7 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
     const NActors::TLogContextGuard verifyContext =
         NActors::TLogContextBuilder::Build()("source_schema", source->GetSourceSchema()->DebugString());
     LWTRACK(LimitSyncPoint, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
-        source->GetDeprecatedPortionId(), GetPointName(), source->GetFilteredRowsCount(), source->GetReservedMemory(),
+        source->GetSourceId(), GetPointName(), source->GetFilteredRowsCount(), source->GetReservedMemory(),
         source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead(), DebugString());
     if (FetchedCount >= Limit) {
         return ESourceAction::Finish;

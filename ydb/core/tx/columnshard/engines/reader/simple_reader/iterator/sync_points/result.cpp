@@ -25,7 +25,7 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
     const ui32 resultChunkRowsCount =
         (source->HasStageResult() && !source->GetStageResult().IsEmpty()) ? source->GetStageResult().GetResultChunkRowsCount() : 0;
     LWTRACK(ResultSyncPoint, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
-        source->GetDeprecatedPortionId(), GetPointName(), source->GetFilteredRowsCount(), resultChunkRowsCount, source->GetReservedMemory(),
+        source->GetSourceId(), GetPointName(), source->GetFilteredRowsCount(), resultChunkRowsCount, source->GetReservedMemory(),
         source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead(), DebugString());
     if (Next) {
         if (source->HasStageResult() && source->GetStageResult().IsEmpty()) {
@@ -54,9 +54,9 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
                 {"isFinished", isFinished});
             auto cursor = Collection->BuildCursor(source, resultChunk->GetStartIndex() + resultChunk->GetRecordsCount(),
                 Context->GetCommonContext()->GetReadMetadata()->GetTabletId());
-            reader.OnIntervalResult(std::make_unique<TPartialReadResult>(source->GetResourceGuards(),
-                source->MutableAs<IDataSource>()->GetGroupGuard(), resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(),
-                partialSourceAddress, source->GetDeprecatedPortionId()));
+            reader.OnIntervalResult(
+                std::make_unique<TPartialReadResult>(source->GetResourceGuards(), source->MutableAs<IDataSource>()->GetGroupGuard(),
+                    resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), partialSourceAddress, source->GetSourceId()));
         } else if (!isFinished) {
             YDB_LOG_DEBUG("",
                 {"event", "continue_source"},

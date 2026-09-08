@@ -142,22 +142,22 @@ public:
 class ICursorEntity {
 private:
     virtual ui64 DoGetEntityId() const = 0;
-    virtual ui64 DoGetDeprecatedPortionId() const = 0;
-    virtual ui64 DoGetEntityRecordsCount() const = 0;
+    virtual ui64 DoGetSourceId() const = 0;
+    virtual ui64 DoGetSourceRecordsCount() const = 0;
 
 public:
     virtual ~ICursorEntity() = default;
 
-    ui64 GetDeprecatedPortionId() const {
-        return DoGetDeprecatedPortionId();
+    ui64 GetSourceId() const {
+        return DoGetSourceId();
     }
 
     ui64 GetEntityId() const {
         return DoGetEntityId();
     }
 
-    ui64 GetEntityRecordsCount() const {
-        return DoGetEntityRecordsCount();
+    ui64 GetSourceRecordsCount() const {
+        return DoGetSourceRecordsCount();
     }
 };
 
@@ -213,11 +213,11 @@ protected:
     }
 
     static bool CheckRecordIndexIsBorder(const ICursorEntity& entity, const ui32 recordIndex, bool& usage) {
-        if (!entity.GetEntityRecordsCount()) {
+        if (!entity.GetSourceRecordsCount()) {
             usage = false;
         } else {
-            AFL_VERIFY(recordIndex <= entity.GetEntityRecordsCount())("index", recordIndex)("count", entity.GetEntityRecordsCount());
-            usage = recordIndex < entity.GetEntityRecordsCount();
+            AFL_VERIFY(recordIndex <= entity.GetSourceRecordsCount())("index", recordIndex)("count", entity.GetSourceRecordsCount());
+            usage = recordIndex < entity.GetSourceRecordsCount();
         }
         return true;
     }
@@ -343,8 +343,8 @@ private:
         }
         // Identity before position: a slot number only names this source while the sources set is the one
         // the cursor was taken on, and comparing a record index against another source explains nothing.
-        AFL_VERIFY(!PortionId || *PortionId == entity.GetDeprecatedPortionId())("source_idx", *SourceIdx)("cursor_portion", *PortionId)(
-                                               "found_portion", entity.GetDeprecatedPortionId());
+        AFL_VERIFY(!PortionId || *PortionId == entity.GetSourceId())("source_idx", *SourceIdx)("cursor_portion_id", *PortionId)(
+                                               "found_source_id", entity.GetSourceId());
         return CheckRecordIndexIsBorder(entity, RecordIndex, usage);
     }
 
@@ -427,7 +427,7 @@ private:
 
     virtual bool DoCheckEntityIsBorder(const ICursorEntity& entity, bool& usage) const override {
         AFL_VERIFY(SourceId);
-        if (*SourceId != entity.GetDeprecatedPortionId()) {
+        if (*SourceId != entity.GetSourceId()) {
             return false;
         }
         return CheckRecordIndexIsBorder(entity, RecordIndex, usage);

@@ -19,11 +19,11 @@ private:
     ui32 RecordsCount = 0;
     bool IsStartedByCursorFlag = false;
 
-    virtual ui64 DoGetEntityRecordsCount() const override {
+    virtual ui64 DoGetSourceRecordsCount() const override {
         return RecordsCount;
     }
 
-    virtual ui64 DoGetDeprecatedPortionId() const override {
+    virtual ui64 DoGetSourceId() const override {
         return Portion->GetPortionId();
     }
 

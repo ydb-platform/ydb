@@ -620,7 +620,7 @@ public:
     TAggregationDataSource(
         std::vector<std::shared_ptr<NCommon::IDataSource>>&& sources, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
         : TBase(EType::SimpleAggregation, sources.back()->GetSourceIdx(), context, false, TSnapshot::Zero(), TSnapshot::Zero(),
-              CalcInputRecordsCount(sources), std::nullopt, false, sources.back()->GetDeprecatedPortionId())
+              CalcInputRecordsCount(sources), std::nullopt, false, sources.back()->GetSourceId())
         , Sources(std::move(sources))
         , LastSourceIdx(Sources.back()->GetSourceIdx())
         , LastSourceRecordsCount(Sources.back()->GetRecordsCount())

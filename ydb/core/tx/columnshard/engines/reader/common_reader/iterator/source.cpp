@@ -89,7 +89,7 @@ const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>& TExe
     return ExecutionVisitor;
 }
 
-ui64 IDataSource::DoGetEntityRecordsCount() const {
+ui64 IDataSource::DoGetSourceRecordsCount() const {
     if (RecordsCountImpl) {
         return *RecordsCountImpl;
     } else {
@@ -171,11 +171,10 @@ void IDataSource::OnStartProcessing() {
     TString maxPk = HasPortionAccessor() ? GetPortionAccessor().GetPortionInfo().IndexKeyEnd().DebugString() : TString{};
     const TString minSnapshot = TStringBuilder() << GetRecordSnapshotMin();
     const TString maxSnapshot = TStringBuilder() << GetRecordSnapshotMax();
-    LWTRACK(StartSourceProcessing, DataSourceOrbit, GetRawPathId(), GetTabletId(), GetTxId(), GetDeprecatedPortionId(), portionBlobBytes,
-        portionRawBytes, GetReservedMemory(), minPk, maxPk, minSnapshot, maxSnapshot);
+    LWTRACK(StartSourceProcessing, DataSourceOrbit, GetRawPathId(), GetTabletId(), GetTxId(), GetSourceId(), portionBlobBytes, portionRawBytes,
+        GetReservedMemory(), minPk, maxPk, minSnapshot, maxSnapshot);
     LWTRACK(ScanStartSource, *GetContext()->GetCommonContext()->GetScanOrbit(), GetRawPathId(), GetTabletId(), GetTxId(),
-        GetContext()->GetCommonContext()->GetScanId(), GetDeprecatedPortionId(), portionBlobBytes, portionRawBytes, minPk, maxPk, minSnapshot,
-        maxSnapshot);
+        GetContext()->GetCommonContext()->GetScanId(), GetSourceId(), portionBlobBytes, portionRawBytes, minPk, maxPk, minSnapshot, maxSnapshot);
 }
 
 void IDataSource::StartAsyncSection() {
@@ -224,7 +223,7 @@ IDataSource::IDataSource(const EType type, const ui32 sourceIdx, const std::shar
     const std::optional<ui64> shardingVersion, const bool hasDeletions, const ui64 deprecatedPortionId)
     : Type(type)
     , SourceIdx(sourceIdx)
-    , DeprecatedPortionId(deprecatedPortionId)
+    , SourceId(deprecatedPortionId)
     , RecordSnapshotMin(recordSnapshotMin)
     , RecordSnapshotMax(recordSnapshotMax)
     , Context(context)
@@ -302,7 +301,7 @@ void IDataSource::OnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& 
     AFL_VERIFY(!StageData);
 
     const TDuration durationMs = GetAndResetWaitDuration();
-    LWTRACK(SourceFinished, DataSourceOrbit, GetRawPathId(), GetTabletId(), GetTxId(), GetDeprecatedPortionId(), 0,
+    LWTRACK(SourceFinished, DataSourceOrbit, GetRawPathId(), GetTabletId(), GetTxId(), GetSourceId(), 0,
         ExecutionContext.GetPrevCategoryName() + " - " + "SourceFinished(Empty)", durationMs, GetTotalDuration(), GetTotalBytesRead(),
         GetTotalExecutionDuration(), GetReservedMemory());
 }
@@ -318,7 +317,7 @@ void IDataSource::BuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr
     AFL_VERIFY(!StageData);
 
     const TDuration durationMs = GetAndResetWaitDuration();
-    LWTRACK(SourceFinished, DataSourceOrbit, GetRawPathId(), GetTabletId(), GetTxId(), GetDeprecatedPortionId(), 0,
+    LWTRACK(SourceFinished, DataSourceOrbit, GetRawPathId(), GetTabletId(), GetTxId(), GetSourceId(), 0,
         ExecutionContext.GetPrevCategoryName() + " - " + "SourceFinished", durationMs, GetTotalDuration(), GetTotalBytesRead(),
         GetTotalExecutionDuration(), GetReservedMemory());
 }

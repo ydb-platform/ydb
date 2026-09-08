@@ -158,7 +158,7 @@ private:
     TAtomic SyncSectionFlag = 1;
     YDB_READONLY(EType, Type, EType::Undefined);
     YDB_READONLY(ui32, SourceIdx, 0);
-    YDB_READONLY_DEF(ui64, DeprecatedPortionId);
+    YDB_READONLY_DEF(ui64, SourceId);
     static inline TAtomicCounter MemoryGroupCounter = 0;
     YDB_READONLY(ui64, SequentialMemoryGroupIdx, MemoryGroupCounter.Inc());
     YDB_READONLY(TSnapshot, RecordSnapshotMin, TSnapshot::Zero());
@@ -178,11 +178,11 @@ private:
         return SourceIdx;
     }
 
-    virtual ui64 DoGetDeprecatedPortionId() const override {
-        return DeprecatedPortionId;
+    virtual ui64 DoGetSourceId() const override {
+        return SourceId;
     }
 
-    virtual ui64 DoGetEntityRecordsCount() const override;
+    virtual ui64 DoGetSourceRecordsCount() const override;
 
     std::optional<bool> IsSourceInMemoryFlag;
     bool InFlightReleasedFlag = false;

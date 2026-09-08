@@ -191,6 +191,24 @@ _CSS = (
 .verification-badge.bad{border-color:#fecdca;background:#fff0f0;color:var(--bad)}
 .verification-summary{margin:.7rem 0;padding:.65rem .8rem;border:1px solid #d0d5dd;border-radius:7px;background:var(--panel);color:var(--text)}
 .verification-summary.bad{border-color:#fecdca;background:#fff0f0;color:var(--bad)}
+.profile-error{border-left:4px solid var(--bad);padding:.8rem 1rem;margin:.8rem 0;background:#fff0f0}
+.profile-error h3{color:var(--bad);margin:0 0 .4rem}.profile-error pre{white-space:pre-wrap;overflow-wrap:anywhere}
+.actor-flags{display:flex;flex-wrap:wrap;gap:.4rem 1rem;margin-bottom:1rem}
+.actor-flag{position:relative;display:inline-flex;gap:.35rem;align-items:center;font-size:.85rem;cursor:pointer}
+.actor-flag input{margin:0;width:auto}.actor-flag .flag-help{display:none;position:absolute;z-index:20;top:100%;left:0;
+width:15rem;max-width:70vw;padding:.6rem;background:#fff;border:1px solid #d0d5dd;border-radius:5px;color:var(--text)}
+.actor-flag:hover .flag-help,.actor-flag:focus-within .flag-help{display:block}
+.view-tabs{display:flex;gap:.4rem;flex-wrap:wrap;margin:.8rem 0}.view-tabs button[aria-pressed=true]{background:var(--accent);color:#fff}
+.dense-run{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:.6rem;padding:.65rem 0;border-bottom:1px solid #d0d5dd}
+.dense-run-meta{display:flex;flex-wrap:wrap;gap:.2rem .8rem;font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.dense-run-profiles{font-size:.9rem;margin:.2rem 0;overflow-wrap:anywhere}.dense-run-id{font-size:.8rem;overflow-wrap:anywhere}
+.dense-run-actions{position:relative}.dense-run-actions .actions{position:absolute;right:0;z-index:10;background:#fff;
+padding:.6rem;border:1px solid #d0d5dd;min-width:8rem;flex-direction:column}.dense-run-select{padding-top:.15rem}
+.dense-run summary{cursor:pointer}.runs-toolbar{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin:.8rem 0}
+.dense-run{position:relative}.dense-run:hover{background:#f5f7fb}
+.dense-run-id::after{content:"";position:absolute;inset:0}
+.dense-run-id:focus-visible::after{outline:2px solid var(--accent);outline-offset:2px}
+.dense-run-select,.dense-run-actions{position:relative;z-index:1}
 @media(max-width:900px){.local-live{grid-template-columns:1fr 1fr}.local-charts{grid-template-columns:1fr}}
 """
     '.status.queued{color:var(--warn)}\n'
@@ -231,7 +249,7 @@ _JS = (
     "tep.duration_seconds)))return secondsLabel(step.duration_seconds);if(step.state==='running'&&step.started_at)return seco"
     "ndsLabel((Date.now()-Date.parse(step.started_at))/1000);return '—'}\n"
     'function status(value){return \'<span class="status \'+esc(value||\'unknown\')+\'">\'+esc(value||\'unknown\')+\'</span>\'}\n'
-    "function shell(current,body,breadcrumb=''){const navigation=[['runs','Runs'],['new','New run'],['topology','System topol"
+    "function shell(current,body,breadcrumb=''){queueMicrotask(refreshActiveBanner);const navigation=[['runs','Runs'],['new','New run'],['topology','System topol"
     "ogy'],['comparisons','Comparisons']];return '<div class=shell><aside class=sidebar><div class=brand>YDB benchmark</div>'"
     '+navigation.map(([id,label])=>\'<a class="\'+(current===id?\'active\':\'\')+\'" href="#\'+id+\'">\'+label+\'</a>\').join(\'\')+\'</asid'
     "e><div class=content><header class=topbar><strong>'+esc(current==='new'?'New run':current==='topology'?'System topology'"
@@ -446,6 +464,14 @@ function localSelect(id,label,value,choices,help=''){
 function localCheck(id,label,checked,help=''){
   return '<div class=field><label><input id="'+id+'" type=checkbox '+(checked?'checked':'')+'> '+esc(label)+'</label><small class=muted>'+esc(help)+'</small></div>'
 }
+function actorSystemFlag(key,checked){
+  const help={use_shared_threads:'Allow executor pools to share worker threads. Default: off.',
+    use_united_pool:'Enable the united executor pool implementation. Default: off.',
+    use_ring_queue:'Use ring queues in the actor system. Default: on.'};
+  return '<label class=actor-flag><input id="local-actor-system-'+key+'" type=checkbox '+(checked?'checked':'')+
+    ' aria-describedby="flag-help-'+key+'">'+esc(key)+'<span class=flag-help role=tooltip id="flag-help-'+key+'">'+
+    esc(help[key]||key)+'</span></label>'
+}
 function localYdbOptionField(option,value){
   const id='local-option-'+option.name;
   if(option.choices.length)return localSelect(id,option.name,value,option.choices);
@@ -495,7 +521,7 @@ function localYdbProfileEditor(profile){
   const geometryFields=Object.entries(localYdbGeometryKeys)
     .map(([key,label])=>localField('local-geometry-'+key,label,geometry[key],'','type=number min=1')).join('');
   const actorSystemFields=Object.keys(localYdbActorSystemKeys)
-    .map(key=>localCheck('local-actor-system-'+key,key,Boolean(config.actor_system?.[key]),'')).join('');
+    .map(key=>actorSystemFlag(key,Boolean(config.actor_system?.[key]))).join('');
   const loadCommon=
     localSelect('local-load-mode','Objective',loadMode,objectiveChoices)+
     localSelect('local-load-parameter','Parameter',load.parameter,definition.load_parameters)+
@@ -559,7 +585,7 @@ function localYdbProfileEditor(profile){
       'local-workload-operation','Operation',workload.operation,definition.operations
     )+options+'</div><h3>Cluster geometry</h3><div class=form-grid>'+
     localSelect('local-geometry-preset','Preset',geometry.preset,['single','storage','custom'])+geometryFields+
-    '</div><h3>Actor system (static and dynamic nodes)</h3><div class=form-grid>'+actorSystemFields+
+    '</div><h3>Actor system (static and dynamic nodes)</h3><div class=actor-flags>'+actorSystemFields+
     '</div><h3>Client and load</h3><div class=form-grid>'+
     localField('local-client-threads','YDB CLI threads',config.client.threads,clientThreadsHelp,'type=number min=1')+
     loadCommon+loadFields+'</div>'+slo+'<h3>Measurement</h3><div class=form-grid>'+
@@ -917,27 +943,119 @@ function addProfile(){
     'l</option><option value=imported>Imported</option></select></div><div class=field><label>From</label><input id=f-since t'
     "ype=date></div><div class=field><label>To</label><input id=f-until type=date></div></div>'}\n"
     "function runHref(id,kind){return '/api/runs/'+enc(id)+'/'+kind}\n"
-    "async function renderRuns(){clearRefresh();let content='<h1 class=page-title>Runs</h1><p class=muted>Local and imported "
-    "benchmark results. Filters apply without leaving this page.</p>'+runFilters()+'<div class=toolbar><input id=import-file "
-    'type=file accept=.zip><button id=import-run>Import results</button><button id=apply-filters>Apply filters</button></div>'
-    "<div id=runs-table></div>';app.innerHTML=shell('runs',content);async function load(){const query=new URLSearchParams();f"
-    "or(const [name,id] of Object.entries({status:'f-status',benchmark:'f-benchmark',profile:'f-profile',source:'f-source',si"
-    "nce:'f-since',until:'f-until'})){const value=document.querySelector('#'+id).value.trim();if(value)query.set(name,value)}"
-    "try{const runs=await api('/api/runs?'+query);document.querySelector('#runs-table').innerHTML=runs.length?'<table><thead>"
-    '<tr><th>Run</th><th>Status</th><th>Source</th><th>Started / duration</th><th>Profiles / repeats</th><th>perf</th><th>Act'
-    'ions</th></tr></thead><tbody>\'+runs.map(run=>\'<tr><td><a href="#run/\'+enc(run.id)+\'">\'+esc(run.id)+\'</a><br><small class'
-    "=muted>'+esc(run.config_path||'config snapshot')+'</small></td><td>'+status(run.status)+'</td><td>'+esc(run.source)+'</t"
-    "d><td><time title=\"'+esc(run.started_at||'')+'\">'+esc(humanTime(run.started_at))+'</time><br><small>'+duration(run)+"
-    "'</small></td><td>'+run.profiles+' / '+run.repetitions+'</t"
-    'd><td>\'+ (run.perf?\'yes\':\'no\')+\'</td><td><div class=actions><a href="#run/\'+enc(run.id)+\'">Open</a><a data-repeat="\'+esc'
-    '(run.id)+\'">Repeat</a><a href="\'+runHref(run.id,\'config\')+\'">YAML</a><a href="\'+runHref(run.id,\'manifest\')+\'">run.json</'
-    'a><a href="\'+runHref(run.id,\'archive\')+\'">Archive</a></div></td></tr>\').join(\'\')+\'</tbody></table>\':\'<div class=empty>No'
-    " runs match these filters.</div>';for(const item of document.querySelectorAll('[data-repeat]'))item.onclick=event=>{even"
-    "t.preventDefault();reuseRun(item.dataset.repeat)}}catch(error){document.querySelector('#runs-table').innerHTML=displayEr"
-    "ror(error)}}document.querySelector('#apply-filters').onclick=load;document.querySelector('#import-run').onclick=async()="
-    ">{try{const file=document.querySelector('#import-file').files[0];if(!file)throw Error('Choose a portable ZIP archive fir"
-    "st.');await api('/api/import',{method:'POST',body:await file.arrayBuffer()});await load()}catch(error){document.querySel"
-    "ector('#runs-table').innerHTML=displayError(error)}};await load()}\n"
+    """
+function sectionTabs(name,items){
+  return '<div class=view-tabs aria-label="'+esc(name)+' views">'+items.map(([key,label],index)=>
+    '<button type=button data-section-tab="'+esc(name+':'+key)+'" aria-pressed="'+(index===0)+'">'+
+    esc(label)+'</button>').join('')+'</div>'
+}
+function bindSectionTabs(container,name){
+  const buttons=[...container.querySelectorAll('[data-section-tab]')].filter(item=>item.dataset.sectionTab.startsWith(name+':'));
+  const panels=[...container.querySelectorAll('[data-section-panel]')].filter(item=>item.dataset.sectionPanel.startsWith(name+':'));
+  const storageKey='ydb-bench-view-'+name;
+  function select(value){
+    for(const button of buttons)button.setAttribute('aria-pressed',String(button.dataset.sectionTab===value));
+    for(const panel of panels)panel.hidden=panel.dataset.sectionPanel!==value;
+    container.dataset[name+'View']=value;
+    sessionStorage.setItem(storageKey,value)
+  }
+  const previous=container.dataset[name+'View']||sessionStorage.getItem(storageKey);
+  select(buttons.some(button=>button.dataset.sectionTab===previous)?previous:buttons[0].dataset.sectionTab);
+  for(const button of buttons)button.onclick=()=>select(button.dataset.sectionTab)
+}
+let activeBannerLoading=false;
+async function refreshActiveBanner(){
+  if(activeBannerLoading||document.hidden)return;
+  activeBannerLoading=true;
+  try{
+    const value=await api('/api/activity-status');
+    activeRun=value.active_run_id||'';
+    sessionStorage.setItem('ydb-bench-active-run',activeRun);
+    const banner=document.querySelector('.active-run');
+    if(banner)banner.innerHTML=(activeRun?'<a href="#run/'+enc(activeRun)+'">Running: '+esc(activeRun)+'</a>':'No active run')+
+      (value.queued?' · Queue: '+esc(value.queued):'');
+  }catch(error){
+    const banner=document.querySelector('.active-run');
+    if(banner)banner.textContent='Run status unavailable';
+  }finally{activeBannerLoading=false}
+}
+const selectedComparisonRuns=new Set;
+let runsSort='newest';
+function sortRuns(items,order){
+  const timestamp=run=>Date.parse(run.started_at||run.queued_at||'')||0;
+  const elapsed=run=>Number.isFinite(run.duration_seconds)?run.duration_seconds:-1;
+  return [...items].sort((a,b)=>{
+    const difference=order==='longest'?elapsed(b)-elapsed(a):order==='oldest'?timestamp(a)-timestamp(b):timestamp(b)-timestamp(a);
+    return difference||String(b.id).localeCompare(String(a.id))
+  })
+}
+function compactRun(run){
+  const profiles=Array.isArray(run.profile_names)?run.profile_names:[],benchmarks=Array.isArray(run.benchmarks)?run.benchmarks:[];
+  return '<article class=dense-run><label class=dense-run-select><input type=checkbox class=run-compare value="'+esc(run.id)+
+    '" aria-label="Select '+esc(run.id)+' for comparison" '+(selectedComparisonRuns.has(run.id)?'checked':'')+'></label>'+
+    '<div><div class=dense-run-meta>'+status(run.status)+'<time title="'+esc(run.started_at||run.queued_at||'')+'">'+
+    esc(humanTime(run.started_at||run.queued_at))+'</time><span>'+duration(run)+'</span><span>'+
+    esc(run.profiles)+' profiles · '+esc(run.repetitions)+' steps</span><span>perf '+(run.perf?'on':'off')+
+    '</span><span>'+esc(run.source)+'</span></div><div class=dense-run-profiles>'+
+    profiles.map(name=>'<span>'+esc(name)+'</span>').join(' · ')+
+    '</div><div class=dense-run-meta><span>'+esc(benchmarks.join(' · '))+'</span><a class=dense-run-id href="#run/'+
+    enc(run.id)+'">'+esc(run.id)+'</a><span>'+esc(run.config_path||'config snapshot')+'</span></div></div>'+
+    '<details class=dense-run-actions><summary>Actions</summary><div class=actions>'+
+    '<a href="#run/'+enc(run.id)+'">Open</a><a href="#new" data-repeat="'+esc(run.id)+'">Repeat</a>'+
+    '<a href="'+runHref(run.id,'config')+'">YAML</a><a href="'+runHref(run.id,'manifest')+'">run.json</a>'+
+    '<a href="'+runHref(run.id,'archive')+'">Archive</a></div></details></article>'
+}
+async function renderRuns(){
+  clearRefresh();
+  app.innerHTML=shell('runs','<h1 class=page-title>Runs</h1>'+runFilters()+
+    '<div class=toolbar><input id=import-file type=file accept=.zip><button id=import-run>Import results</button>'+
+    '<button id=apply-filters>Apply filters</button></div><div class=runs-toolbar><label>Sort <select id=runs-sort>'+
+    '<option value=newest>Newest first</option><option value=oldest>Oldest first</option>'+
+    '<option value=longest>Longest first</option></select></label><button id=compare-selected>Compare selected</button>'+
+    '<button id=clear-selected>Clear selection</button><span id=selection-count aria-live=polite></span></div><div id=runs-table></div>');
+  const target=document.querySelector('#runs-table'),sort=document.querySelector('#runs-sort');
+  let records=[],request=0;
+  sort.value=runsSort;
+  function selection(){
+    document.querySelector('#selection-count').textContent=selectedComparisonRuns.size+' selected';
+    document.querySelector('#compare-selected').disabled=!selectedComparisonRuns.size;
+  }
+  function draw(){
+    target.innerHTML=records.length?sortRuns(records,runsSort).map(compactRun).join(''):
+      '<div class=empty>No runs match these filters.</div>';
+    for(const input of target.querySelectorAll('.run-compare'))input.onchange=()=>{
+      if(input.checked&&selectedComparisonRuns.size>=20){input.checked=false;alert('Select at most 20 runs.');return}
+      if(input.checked)selectedComparisonRuns.add(input.value);else selectedComparisonRuns.delete(input.value);
+      selection();
+    };
+    for(const item of target.querySelectorAll('[data-repeat]'))item.onclick=event=>{
+      event.preventDefault();reuseRun(item.dataset.repeat)
+    };
+    selection()
+  }
+  async function load(){
+    const current=++request,query=new URLSearchParams();
+    for(const [name,id] of Object.entries({status:'f-status',benchmark:'f-benchmark',profile:'f-profile',source:'f-source',since:'f-since',until:'f-until'})){
+      const value=document.querySelector('#'+id).value.trim();if(value)query.set(name,value)
+    }
+    try{const value=await api('/api/runs?'+query);if(current!==request||!target.isConnected)return;records=value;draw()}
+    catch(error){if(current===request&&target.isConnected)target.innerHTML=displayError(error)}
+  }
+  sort.onchange=()=>{runsSort=sort.value;draw()};
+  document.querySelector('#apply-filters').onclick=load;
+  document.querySelector('#clear-selected').onclick=()=>{selectedComparisonRuns.clear();draw()};
+  document.querySelector('#compare-selected').onclick=async()=>{
+    try{await api('/api/comparisons/selection',jsonOptions([...selectedComparisonRuns]));setRoute('comparisons')}
+    catch(error){alert(error.message)}
+  };
+  document.querySelector('#import-run').onclick=async()=>{
+    try{const file=document.querySelector('#import-file').files[0];if(!file)throw Error('Choose a portable ZIP archive first.');
+      await api('/api/import',{method:'POST',body:await file.arrayBuffer()});await load()}
+    catch(error){target.innerHTML=displayError(error)}
+  };
+  await load()
+}
+    """
     "async function reuseRun(id){try{const value=await api('/api/runs/'+enc(id)+'/config.json');editor.yaml=value.yaml;editor"
     ".perf=Boolean(value.perf);editor.continueOnError=Boolean(value.continue_on_error);saveDraft();setRoute('new')}catch(erro"
     'r){alert(error.message)}}\n'
@@ -963,8 +1081,8 @@ function addProfile(){
     'const value=valueFor(item,row);if(Number.isFinite(value))values.push(value);if(values.length>chartPointLimit)return '
     "'<div class=notice>Chart omitted because it has more than '+chartPointLimit+' numeric points. Select fewer runs or lines.</div>'}\n"
     "  if(!values.length)return '<div class=empty>No numeric values for '+esc(metric)+'.</div>';\n"
-    '  let [yMin,yMax]=chartExtent(values);if(yMin===yMax){const pad=Math.abs(yMin)*.05||1;yMin-=pad;yMax+='
-    'pad}else{const pad=(yMax-yMin)*.08;yMin-=pad;yMax+=pad}\n'
+    '  let [yMin,yMax]=chartExtent(values);const nonnegative=yMin>=0;if(yMin===yMax){const pad=Math.abs(yMin)*.05||1;yMin-=pad;yMax+='
+    'pad}else{const pad=(yMax-yMin)*.08;yMin-=pad;yMax+=pad}if(nonnegative)yMin=0;\n'
     '  const [xMin,xMax]=chartExtent(xValues),xPos=value=>left+(xMax===xMin'
     '?plotWidth/2:(Number(value)-xMin)/(xMax-xMin)*plotWidth),yPos=value=>top+(yMax-Number(value))/(yMax-yMin)*plotHeight;\n'
     '  let svg=\'<svg viewBox="0 0 \'+width+\' \'+height+\'" role=img aria-label="\'+esc(metric)+\' by \'+esc(xName)+\'">\';\n'
@@ -1384,7 +1502,7 @@ function mountLocalYdbComparisonCurves(container,comparisonData,chartData,baseli
   );
   const legend='<div class=chart-legend>'+groups.map(group=>'<span><i class="legend-swatch chart-bg-'+
     group.colorIndex%chartColors.length+'"></i>'+esc(group.label)+'</span>').join('')+'</div>';
-  container.innerHTML='<h3>Search curves</h3><p class=muted>Lines connect each profile&apos;s own measured loads; '+
+  container.innerHTML='<h3>Search measurements</h3><p class=muted>Only search measurements; holdout is not included. Lines connect each profile&apos;s own measured loads; '+
     'no values are synthesized at loads measured only by another profile.</p>'+legend+'<div class=local-charts>'+
     specifications.map(([alias,,title])=>localChart(title,alias,xName,xValues,seriesByMetric[alias])).join('')+'</div>';
   bindChartTooltips(
@@ -1452,16 +1570,18 @@ function mountLocalYdbComparison(container,data,chartData=null){
   container.innerHTML='<div class=run-section-title><h2>Local YDB baseline comparison</h2><label>Baseline '+
     '<select id=local-comparison-baseline>'+entries.map(item=>'<option value="'+esc(localComparisonKey(item))+'" '+
     (item===baseline?'selected':'')+'>'+esc(localComparisonId(item))+'</option>').join('')+'</select></label></div>'+
-    '<p class=muted>Deltas compare metrics only when both rows use the same result schema and source: search or '+
+    sectionTabs('comparison',[['final','Final results'],['search','Search measurements']])+
+    '<div data-section-panel="comparison:final"><p class=muted>Deltas compare metrics only when both rows use the same result schema and source: search or '+
     'independent holdout. Expand configuration differences before interpreting a regression.</p>'+
     '<div class=local-attempts-scroll><table class=local-attempts><thead><tr><th>Run / profile</th><th>State</th>'+
     '<th>Metric source</th><th>ydbd</th><th>Selected load</th>'+metricHeaders+
     '<th>Static CPU</th><th>Dynamic CPU</th><th>CLI CPU</th><th>Dynamic nodes</th>'+
     '<th>Compatibility</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
-    '<div id=local-comparison-curves></div>';
+    '</div><div data-section-panel="comparison:search" hidden><div id=local-comparison-curves></div></div>';
   mountLocalYdbComparisonCurves(
     container.querySelector('#local-comparison-curves'),data,chartData,baseline
   );
+  bindSectionTabs(container,'comparison');
   container.querySelector('#local-comparison-baseline').onchange=event=>{
     container.dataset.baseline=event.target.value;mountLocalYdbComparison(container,data,chartData)
   }
@@ -1955,6 +2075,10 @@ function localRestoreYdbViewFocus(container,view){
   if(tab&&typeof tab.focus==='function')tab.focus({preventScroll:true})
 }
 function renderLocalYdbProfile(container,data){
+  const failure=['failed','cancelled'].includes(data.state)?'<section class=profile-error role=alert><h3>'+
+    (data.state==='failed'?'Profile failed':'Profile cancelled')+'</h3><div>'+
+    esc(String(data.error||'No diagnostic was recorded.').split(String.fromCharCode(10))[0].slice(0,240))+'</div>'+
+    (data.error?'<details><summary>Error details</summary><pre>'+esc(data.error)+'</pre></details>':'')+'</section>':'';
   const focusedView=typeof document!=='undefined'&&container.contains?.(document.activeElement)?
     document.activeElement.dataset.localYdbView||'':'';
   const previousActivity=container.querySelector('[data-local-activity]');
@@ -2007,14 +2131,15 @@ function renderLocalYdbProfile(container,data){
     progress.repetition?'repetition '+progress.repetition+'/'+progress.repetitions:null,
     Number.isFinite(remaining)?elapsedLabel(remaining)+' remaining':null
   ].filter(Boolean).join(' · ');
-  const phaseProgress=Number.isFinite(phaseDuration)?
+  const profileActive=['running','preparing'].includes(data.state);
+  const phaseProgress=profileActive&&Number.isFinite(phaseDuration)?
     '<progress class=local-phase-progress max="'+phaseDuration+'" value="'+
       Math.min(phaseDuration,phaseElapsed)+'"></progress>':'';
   let html=loadConfig.allow_errors?
     '<div class=notice>Failed workload requests are allowed for this profile and remain visible in metrics.</div>':'';
   html+='<div class=local-live><div><span class=muted>Current phase</span><div class=local-phase>'+
-    esc(localPhaseLabel(progress.phase||data.state))+'</div><div class=muted>'+
-    esc(phaseHelp||'Waiting for the next milestone')+'</div>'+phaseProgress+'</div>';
+    esc(localPhaseLabel(profileActive?progress.phase||data.state:data.state))+'</div><div class=muted>'+
+    esc(['running','preparing'].includes(data.state)?phaseHelp||'Waiting for the next milestone':'')+'</div>'+phaseProgress+'</div>';
   const dynamicNodes=
     progress.dynamic_nodes??result?.dynamic_nodes??parameters.geometry?.dynamic_nodes??'—';
   const candidate=progress.load===undefined?
@@ -2189,8 +2314,10 @@ function renderLocalYdbProfile(container,data){
         '</td><td>'+esc(elapsedLabel(item.duration_seconds))+'</td><td class=local-command-cell>'+
         localCommandDetails(item,openCommandAttempts.has(String(item.attempt)))+'</td></tr>'
       ).join('')+'</tbody></table></div>';
-  }else html+='<div class=empty>No completed search attempts yet. The timeline will appear after the first measurement.</div>';
-  container.innerHTML=localYdbViewTabs(container,data,selectedView)+
+  }else html+='<div class=empty>'+(profileActive?
+    'No completed search attempts yet. The timeline will appear after the first measurement.':
+    'No completed measurements were recorded.')+'</div>';
+  container.innerHTML=failure+localYdbViewTabs(container,data,selectedView)+
     '<section class=local-profile-view data-local-ydb-panel=result'+
     (selectedView==='result'?'':' hidden')+'>'+localResultPanel(data)+'</section>'+
     '<section class=local-profile-view data-local-ydb-panel=discovery'+
@@ -2370,12 +2497,14 @@ function parseLocalYdbProfileSelection(groups,selected){
     "    let content='<h1 class=page-title>System topology</h1><p class=muted>Only CPUs allowed by this process cpuset are sh"
     'own. Unsupported modes are never silently substituted.</p><section class="card topology-summary"><div><div class=metric>'
     "'+topology.allowed_cpus.length+' allowed CPUs</div><div class=muted>Compressed CPU ranges</div></div><div class=cpu-rang"
-    "es>'+esc(cpuRanges(topology.allowed_cpus))+'</div></section><section class=card><h2>NUMA, cache and cores</h2><p cla"
+    "es>'+esc(cpuRanges(topology.allowed_cpus))+'</div></section>'+sectionTabs('topology',[['layout','Topology'],"
+    "['affinity','Affinity availability']])+'<div data-section-panel=\"topology:layout\"><section class=card><h2>NUMA, cache and cores</h2><p cla"
     "ss=muted>Physical cores include their visible SMT thread count.</p><div class=topology-map>'+numaBlocks+'</div></section"
-    "><section class=card><h2>Affinity availability</h2>'+affinityTree(value.affinity)+'</section>'+(topology.hierarchy"
+    "></div><div data-section-panel=\"topology:affinity\" hidden><section class=card><h2>Affinity availability</h2>'+affinityTree(value.affinity)+'</section></div>'+(topology.hierarchy"
     "_reasons.length?'<section class=card><h2>Topology notes</h2><ul>'+topology.hierarchy_reasons.map(item=>'<li><strong>'+es"
     "c(item.level)+':</strong> '+esc(item.reason)+'</li>').join('')+'</ul></section>':'');\n"
     "    app.innerHTML=shell('topology',content);\n"
+    "    bindSectionTabs(app,'topology');\n"
     "  }catch(error){app.innerHTML=shell('topology',displayError(error))}\n"
     '}\n'
     'async function renderComparisons(){\n'
@@ -2384,10 +2513,11 @@ function parseLocalYdbProfileSelection(groups,selected){
     "    const value=await api('/api/comparisons');\n"
     "    let content='<h1 class=page-title>Comparisons</h1><p class=muted>Select runs, then choose a benchmark, profile, axes"
     ' and exact affinity lines. Charts use the common X intersection and report incomplete coverage.</p><section class=card><'
-    "h2>Runs</h2>'+ (value.runs.length?'<div class=series-picker>'+value.runs.map(run=>'<label><input class=compare type=chec"
+    "h2>Selected runs: '+value.selected.length+'</h2><a href=\"#runs\">Choose runs in Runs</a><details><summary>Change selection here</summary>'+ "
+    "(value.runs.length?'<div class=series-picker>'+value.runs.map(run=>'<label><input class=compare type=chec"
     'kbox value="\'+esc(run.id)+\'" \'+(value.selected.includes(run.id)?\'checked\':\'\')+\'> \'+esc(run.id)+\' <span class=muted>(\'+es'
     "c(run.source)+')</span></label>').join('')+'</div>':'<div class=empty>No runs are available.</div>')+'<div class=toolbar"
-    "><button class=primary id=save-comparisons>Update comparison</button></div></section><section class=card><div id=local-ydb-comparison>'+"
+    "><button class=primary id=save-comparisons>Update comparison</button></div></details></section><section class=card><div id=local-ydb-comparison>'+"
     "(value.selected.length?'Loading local YDB results…':'Select one or more runs.')+'</div></section><section class=card><h2>Comparison "
     "charts</h2><div id=comparison-chart>'+(value.selected.length?'Loading summary data…':'Select one or more runs.')+'</div><"
     "/section>';\n"
@@ -2413,7 +2543,7 @@ function parseLocalYdbProfileSelection(groups,selected){
     "t==='comparisons')return renderComparisons();if(pieces[0]==='run'){if(pieces[2]"
     "==='profile')return renderRun(pieces[1],pieces.slice(3).join('/'));return renderRun(pieces.slice(1).join('/'))}setRoute("
     "'runs')}\n"
-    "addEventListener('hashchange',compose);compose();\n"
+    "addEventListener('hashchange',compose);setInterval(refreshActiveBanner,3000);compose();\n"
 )
 
 
@@ -3507,6 +3637,13 @@ class RunService:
     def settings(self):
         return {"output": str(self.output), "perf_available": self.perf_available}
 
+    def activity_status(self):
+        with self._lock:
+            return {
+                "active_run_id": self._active_run_id,
+                "queued": sum(run["store"].manifest["state"] == "queued" for run in self._queue),
+            }
+
     def topology(self):
         topology = discover_topology()
         return {
@@ -4429,6 +4566,8 @@ def _handler(service):
                 return self._send(200, "application/javascript; charset=utf-8", _JS.encode())
             if path == "/api/settings":
                 return self._json(200, service.settings())
+            if path == "/api/activity-status":
+                return self._json(200, service.activity_status())
             if path == "/api/benchmarks":
                 return self._json(200, benchmark_catalog())
             if path == "/api/system-topology":

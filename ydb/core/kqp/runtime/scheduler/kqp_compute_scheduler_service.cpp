@@ -41,8 +41,9 @@ void ValidateAttributes(const NHdrf::TStaticAttributes& attrs, const TDynamicEle
         Y_ENSURE(guarantee <= attrs.GetCpuLimit(),
             "CpuGuarantee (" << guarantee << ") should not exceed CpuLimit (" << attrs.GetCpuLimit() << ")");
 
-        if (parent) {
-            Y_ENSURE(parent->CpuGuarantee, "Child cannot set CpuGuarantee until the parent's guarantee is not set");
+        // A zero guarantee reserves nothing from the parent - resetting is always allowed
+        if (parent && guarantee > 0) {
+            Y_ENSURE(parent->CpuGuarantee, "Child cannot set CpuGuarantee until the parent's guarantee is set");
 
             // Calculate unreserved parent guarantee excluding `element`
             ui64 unreserved = *parent->CpuGuarantee;
@@ -257,7 +258,9 @@ private:
 
     // Update limit and guarantee - they are applied together,
     // since lowering the limit of a pool has to lower its guarantee as well.
-    // A percent of -1 means that the setting is not configured, so the previous value is kept.
+    // A limit percent of -1 means that the setting is not configured, so the previous value is kept.
+    // The guarantee is different: the config always carries the whole pool description, so -1 means
+    // that the pool has no guarantee anymore and the reservation it holds has to be released.
     void SetCpuAttributes(const NResourcePool::TPoolSettings& config, NHdrf::TStaticAttributes& attrs) const {
         const auto totalCpuLimit = Scheduler->GetTotalCpuLimit();
 
@@ -271,9 +274,8 @@ private:
             }
         }
 
-        if (const auto& cpuGuaranteePercent = config.TotalCpuGuaranteePercentPerNode; cpuGuaranteePercent >= 0) {
-            attrs.CpuGuarantee = cpuGuaranteePercent * totalCpuLimit / 100;
-        }
+        const auto cpuGuaranteePercent = std::max(config.TotalCpuGuaranteePercentPerNode, 0.0);
+        attrs.CpuGuarantee = cpuGuaranteePercent * totalCpuLimit / 100;
     }
 
     // TODO: handle invalid configuration on DDL level.

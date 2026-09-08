@@ -875,6 +875,54 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         scheduler.AddOrUpdatePool(unguaranteedDatabaseId, "pool1", {});
     }
 
+    Y_UNIT_TEST(ResetPoolGuarantee) {
+        /*
+            Scenario:
+            - A zero guarantee releases the part of the database's guarantee the pool used to reserve
+            - Resetting is allowed even when the database is not guaranteed anything itself
+            - The database cannot be reset while its pools still reserve a part of its guarantee
+        */
+        constexpr ui64 kCpuLimit = 10;
+
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        const TOptions options{
+            .DelayParams = kDefaultDelayParams,
+        };
+        TComputeScheduler scheduler(counters, options);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
+
+        const TString databaseId = "db1";
+        scheduler.AddOrUpdateDatabase(databaseId, {.CpuGuarantee = kCpuLimit});
+
+        scheduler.AddOrUpdatePool(databaseId, "pool1", {.CpuGuarantee = 6});
+
+        // Only 4 of the database's guarantee is left, so the second pool doesn't fit
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(databaseId, "pool2", {.CpuGuarantee = 5}), yexception);
+
+        // The database cannot be reset while the first pool still reserves a part of its guarantee
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateDatabase(databaseId, {.CpuGuarantee = 0}), yexception);
+
+        // Resetting the first pool releases its reservation for the second one
+        scheduler.AddOrUpdatePool(databaseId, "pool1", {.CpuGuarantee = 0});
+        scheduler.AddOrUpdatePool(databaseId, "pool2", {.CpuGuarantee = 5});
+
+        // The released guarantee is reserved by the second pool now, so only 5 is left
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(databaseId, "pool1", {.CpuGuarantee = 6}), yexception);
+        scheduler.AddOrUpdatePool(databaseId, "pool1", {.CpuGuarantee = 5});
+
+        // Now the whole database's guarantee is reserved and may be released back
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateDatabase(databaseId, {.CpuGuarantee = kCpuLimit - 1}), yexception);
+        scheduler.AddOrUpdatePool(databaseId, "pool1", {.CpuGuarantee = 0});
+        scheduler.AddOrUpdatePool(databaseId, "pool2", {.CpuGuarantee = 0});
+        scheduler.AddOrUpdateDatabase(databaseId, {.CpuGuarantee = 0});
+
+        // A pool of a database without a guarantee may not reserve anything, but may still be reset
+        const TString unguaranteedDatabaseId = "db2";
+        scheduler.AddOrUpdateDatabase(unguaranteedDatabaseId, {});
+        scheduler.AddOrUpdatePool(unguaranteedDatabaseId, "pool1", {.CpuGuarantee = 0});
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(unguaranteedDatabaseId, "pool1", {.CpuGuarantee = 1}), yexception);
+    }
+
     Y_UNIT_TEST_TWIN(AddUpdateQueries, DefaultFairShareMode) {
         /*
             Scenario:

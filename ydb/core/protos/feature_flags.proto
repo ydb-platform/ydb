@@ -383,4 +383,5 @@ message TFeatureFlags {
     optional bool EnableVDiskHeapAllocator = 324 [default = false, (RequireRestart) = true];
     optional bool EnableCheckpointsCompression = 325 [default = false];
     optional bool EnableDataShardLocksTransferOnSplit = 326 [default = false];
+    optional bool EnableDqSourceStreamLookupJoinLocalLookups = 327 [default = false];
 }

@@ -335,11 +335,7 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
         ctx.Schedule(PeriodicWakeupActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
     }
 
-    // Retry the completion gate while a move is active — at most once per cadence, since
-    // the gate scans the GC queues. Deliberately not conditioned on VacuumCompleted: that
-    // flag is set only by the executor's vacuum callback, so gating the retry on it made
-    // the fallback depend on the very signal it exists to survive. A tablet whose vacuum
-    // callback never arrived then sat at Active=1 forever without evaluating the gate once.
+    // Not conditioned on VacuumCompleted: this retry is the fallback for a lost vacuum callback.
     if (MoveDataState.Active && ctx.Now() - MoveDataState.LastGateCheckAt >= MoveDataGateCheckCadence) {
         MoveDataState.LastGateCheckAt = ctx.Now();
         CheckMoveDataGate(ctx);
@@ -677,8 +673,7 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
         LOG_S_INFO("TColumnShard::Handle TEvMoveData: merge resend, newGroups="
                    << newGroupsAdded << " totalGroups=" << MoveDataState.TargetGroups.size() << " at tablet " << TabletID());
         if (newGroupsAdded && HasIndex()) {
-            // Restart actualization with the extended group set. The vacuum leg is not restarted:
-            // its scope is local-DB cleanup, independent of which data groups are targeted.
+            // The vacuum leg is not restarted: local-DB cleanup is independent of the target groups.
             auto& index = MutableIndexAs<NOlap::TColumnEngineForLogs>();
             index.StopMoveData();
             index.StartMoveData(MoveDataState.TargetGroups);
@@ -708,8 +703,7 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
     if (HasIndex()) {
         MutableIndexAs<NOlap::TColumnEngineForLogs>().StartMoveData(MoveDataState.TargetGroups);
     }
-    // Start vacuum in parallel with rewriting (F5). TEvMoveDataResponse is gated by
-    // ClassifyMoveDataGate.
+    // Vacuum runs in parallel with rewriting; the response waits on ClassifyMoveDataGate.
     Executor()->StartMoveDataVacuumFromOwner();
 }
 
@@ -735,10 +729,7 @@ void TColumnShard::CheckMoveDataGate(const TActorContext& ctx) {
         Counters.GetCSCounters().OnMoveDataPortionsRejected(queues.Rejected - MoveDataState.ReportedRejections);
         MoveDataState.ReportedRejections = queues.Rejected;
     }
-    // HasBlobsForGroups walks BlobsToKeep, BlobsToDelete, BlobsToDeleteDelayed and the
-    // shared/borrowed registries; as a plain argument it ran on every wakeup even when the
-    // vacuum or the queues already blocked the gate. Short-circuit so the scan is paid for
-    // only once the cheap gates pass - the classifier returns before reading it anyway.
+    // HasBlobsForGroups scans the GC queues, so short-circuit it behind the cheap gates.
     const bool cheapGatesPass = MoveDataState.VacuumCompleted && queues.GetTotal() == 0;
     switch (NOlap::NActualizer::ClassifyMoveDataGate(MoveDataState.VacuumCompleted, queues,
         cheapGatesPass && GetStoragesManager()->GetDefaultOperator()->HasBlobsForGroups(MoveDataState.TargetGroups))) {

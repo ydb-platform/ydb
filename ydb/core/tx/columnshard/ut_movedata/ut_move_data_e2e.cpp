@@ -27,14 +27,12 @@ TActorId BootTablet(TTestBasicRuntime& runtime, const TIntrusivePtr<TTabletStora
     TDispatchOptions options;
     options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
     runtime.DispatchEvents(options);
-    // EvBoot only marks the start of boot; the shard stays in StateInit until its normalizers
-    // finish, so drain the runtime before talking to it.
+    // EvBoot only starts boot: the shard stays in StateInit until its normalizers finish.
     runtime.DispatchEvents({}, TDuration::Seconds(1));
     return actorId;
 }
 
-// Portion data lives on channels 2+; channels 0 and 1 are the tablet log and the local database,
-// which the executor's own vacuum leg moves.
+// Portion data lives on channels 2+; the executor's vacuum leg moves the log and local DB.
 std::vector<TLogoBlobID> LivePortionBlobs(const NFake::TProxyDS& proxy, const ui64 tabletId) {
     std::vector<TLogoBlobID> result;
     for (const auto& [id, blob] : proxy.AllMyBlobs()) {
@@ -75,8 +73,7 @@ void RunMoveDataToCompletion(const bool ttlBackgroundDisabled, const bool moveDa
     const std::vector<TLogoBlobID> before = LivePortionBlobs(*oldGroupProxy, tabletId);
     UNIT_ASSERT_C(before.size(), "nothing was written into OldGroup - the test would pass vacuously");
 
-    // Reassign the tablet one generation past everything written so far: those portions stay behind
-    // in OldGroup, and from here the tablet writes to NewGroup.
+    // Reassign past everything written so far: those portions stay behind in OldGroup.
     ui32 reassignedFrom = 0;
     for (const auto& id : before) {
         reassignedFrom = Max(reassignedFrom, id.Generation() + 1);
@@ -87,8 +84,7 @@ void RunMoveDataToCompletion(const bool ttlBackgroundDisabled, const bool moveDa
 
     runtime.SendToPipe(tabletId, sender, new TEvTablet::TEvMoveData(std::vector<ui32>{ OldGroup }), 0, GetPipeConfigWithRetries());
 
-    // The completion gate is re-evaluated on the periodic wakeup, which this runtime does not
-    // deliver on its own; drive it until the tablet answers.
+    // This runtime delivers no periodic wakeup, so drive the gate until the tablet answers.
     TEvTablet::TEvMoveDataResponse::TPtr response;
     for (ui32 i = 0; i < 100 && !response; ++i) {
         Wakeup(runtime, sender, tabletId);
@@ -100,9 +96,7 @@ void RunMoveDataToCompletion(const bool ttlBackgroundDisabled, const bool moveDa
     UNIT_ASSERT_C(response, "no TEvMoveDataResponse: the move never drained OldGroup");
     UNIT_ASSERT_VALUES_EQUAL((int)response->Get()->Record.GetStatus(), (int)NKikimrTabletBase::TEvMoveDataResponse::Success);
 
-    // Success has to mean the portions were rewritten, not just that the queues happened to be
-    // empty: the only way data reaches the new group here is the move itself. With the flag off
-    // the executor answers for its own legs alone, and the portions must be left untouched.
+    // Success must mean rewritten, not merely empty queues: only the move puts data in NewGroup.
     const size_t movedBlobs = LivePortionBlobs(*newGroupProxy, tabletId).size();
     if (moveDataEnabled) {
         UNIT_ASSERT_C(movedBlobs, "answered Success without rewriting any of the " << before.size() << " portion blobs out of the old group");
@@ -114,22 +108,18 @@ void RunMoveDataToCompletion(const bool ttlBackgroundDisabled, const bool moveDa
 
 }   // namespace
 
-// The other tests in this suite each drive one piece - the group predicate, the completion-gate
-// classifier, the request batcher - so nothing asserted that anything ever *calls* them. These run
-// the whole chain: TEvMoveData -> selection -> accessor metadata -> rewrite -> response.
+// Whole chain: TEvMoveData -> selection -> accessor metadata -> rewrite -> response.
 Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
     Y_UNIT_TEST(MoveDataRewritesPortionsAndAnswersHive) {
         RunMoveDataToCompletion(/*ttlBackgroundDisabled=*/false);
     }
 
-    // Rewrite tasks are extracted by the same loop TTL uses. Turning TTL off must not take
-    // decommission down with it - the tablet would select portions and never move one.
+    // Rewrites come from the loop TTL uses: TTL off must not stop the move.
     Y_UNIT_TEST(MoveDataCompletesWithTtlDisabled) {
         RunMoveDataToCompletion(/*ttlBackgroundDisabled=*/true);
     }
 
-    // The kill switch: TColumnShard hands TEvMoveData straight to the executor, which answers
-    // for the log and the local database and leaves the portions where they are.
+    // Flag off: TEvMoveData goes straight to the executor, which leaves the portions alone.
     Y_UNIT_TEST(MoveDataDisabledLeavesPortionsInPlace) {
         RunMoveDataToCompletion(/*ttlBackgroundDisabled=*/false, /*moveDataEnabled=*/false);
     }

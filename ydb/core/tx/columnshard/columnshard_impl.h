@@ -346,8 +346,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext& ctx);
     virtual void MoveDataCompleted(const TActorContext& ctx) override;
-    // Evaluates the response gate. Split out of MoveDataCompleted so the periodic wakeup
-    // can drive it without claiming the executor's vacuum has finished.
+    // Split out of MoveDataCompleted so the wakeup can drive it without claiming vacuum finished.
     void CheckMoveDataGate(const TActorContext& ctx);
 
     void Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx);
@@ -522,9 +521,7 @@ private:
     std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
     NOlap::NResourceBroker::NSubscribe::TTaskContext CompactTaskSubscription;
     NOlap::NResourceBroker::NSubscribe::TTaskContext TTLTaskSubscription;
-    // The move's accessor requests are scheduled like TTL's but must not be *counted* as
-    // TTL's: one string drives both the broker queue and the ResourceType label, so sharing
-    // it made a stalled move indistinguishable from idle tiering in the sensors.
+    // Own type: this string drives both the broker queue and the ResourceType sensor label.
     NOlap::NResourceBroker::NSubscribe::TTaskContext MoveDataTaskSubscription;
 
     ui64 InProgressTxId = 0;
@@ -549,18 +546,11 @@ private:
         TActorId HiveSender;
         THashSet<ui32> TargetGroups;
         bool Active = false;
-        // Set to true when the executor calls MoveDataCompleted(); signals that
-        // vacuum is done and only the HasBlobsForGroups gate remains.
+        // Set by the executor's MoveDataCompleted(): vacuum done, the blob gates still pending.
         bool VacuumCompleted = false;
-        // The completion gate scans the GC queues; cap its cadence instead of
-        // paying the scans on every periodic wakeup tick. Default-initialized to the
-        // epoch so the first check fires immediately. The effective interval is
-        // max(MoveDataGateCheckCadence, PeriodicWakeupActivationPeriod) — the cadence
-        // is a lower bound; wakeup granularity is acceptable for an hours-scale
-        // decommission operation.
+        // Epoch-initialized so the first check fires; the cadence is a lower bound, not a period.
         TInstant LastGateCheckAt;
-        // The actualizer's rejection count is cumulative per session; remember what was
-        // already reported so the sensor stays a rate rather than a repeated total.
+        // The actualizer count is cumulative; track what was reported to keep the sensor a rate.
         ui64 ReportedRejections = 0;
     };
 

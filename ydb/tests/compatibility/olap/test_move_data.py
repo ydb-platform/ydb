@@ -155,8 +155,7 @@ class TestMoveData(RollingUpgradeAndDowngradeFixture):
             assert result[0].rows[0]["cnt"] == expected_rows, (
                 f"`{table_name}` returned {result[0].rows[0]['cnt']} rows, expected {expected_rows}"
             )
-            # Reading a real column proves the portions themselves are readable, not
-            # just that the shard answers a metadata-only count.
+            # Read a real column: a metadata-only count would not prove the portions readable.
             result = session_pool.execute_with_retries(
                 f"SELECT payload FROM `{table_name}` ORDER BY ts, id LIMIT 1;",
                 retry_settings=ydb.RetrySettings(idempotent=True),
@@ -179,8 +178,7 @@ class TestMoveData(RollingUpgradeAndDowngradeFixture):
             assert self._wait_units(2), "pool did not grow to 2 units before the test"
             initial_count = 2
 
-        # Start the decommission and deliberately do NOT wait for it: the roll below
-        # should happen while portions are still being rewritten.
+        # Do not wait: the roll below must happen while portions are still being rewritten.
         self._alter_units(unit_kind, -1)
 
         for _ in self.roll():

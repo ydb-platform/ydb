@@ -52,9 +52,7 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(TMoveDataTest) {
-    // The BlobsToDelete leg of the operator gate: a queued blob whose TUnifiedBlobId carries
-    // the group directly. The BlobsToKeep leg, which resolves the group through channel
-    // history instead, is TestMoveDataKeepQueue.
+    // BlobsToDelete leg: the group comes straight off TUnifiedBlobId (keep leg: TestMoveDataKeepQueue).
     Y_UNIT_TEST(TestMoveDataDeleteQueue) {
         TActorSystemStub actorSystemStub;
         actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
@@ -78,9 +76,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT_C(mgr.HasBlobsForGroups({ OldGroup }), "repeated query must give the same answer");
     }
 
-    // TestMoveDataF1Invariant: pinning the F1 fix — after task submission (RemoveFromActiveQueue),
-    // InitialPortionIds is preserved so the portion can re-enter PendingPortionIds on failure.
-    // Uses test helpers that bypass the full TTieringProcessContext.
+    // After submission InitialPortionIds is preserved, so a failed change can re-enter Pending.
     Y_UNIT_TEST(TestMoveDataF1Invariant) {
         static constexpr ui64 PortionId = 7;
         static constexpr ui32 Group = 50;
@@ -102,26 +98,21 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT(actualizer.IsInPortionsToMove(PortionId));
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataPortionsCount(), 1);
 
-        // Step 3: simulate successful task submission (DoExtractTasks SUCCESS path).
-        // Must NOT remove from InitialPortionIds.
+        // DoExtractTasks SUCCESS path: must not remove from InitialPortionIds.
         actualizer.SimulateTaskSubmissionForTest(PortionId);
         UNIT_ASSERT_C(actualizer.IsInInitialPortionIds(PortionId), "F1: InitialPortionIds must survive task submission");
         UNIT_ASSERT_C(!actualizer.IsInPortionsToMove(PortionId), "F1: PortionsToMove must be cleared after submission");
-        // The submitted portion is in flight: it must still count towards the response
-        // gate until the change commits (old blobs enter delete queues only then).
+        // In flight still counts: old blobs enter the delete queues only on commit.
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataPortionsCount(), 1);
 
-        // Step 4: simulate change failure → ReturnToIndexes → AddPortion.
-        // Since InitialPortionIds still contains PortionId and it's no longer in
-        // PortionAddress or PendingPortionIds, it must re-enter PendingPortionIds.
+        // Change failure → AddPortion: still in InitialPortionIds, so it re-enters Pending.
         actualizer.AddToInitialAndPendingForTest(PortionId);
         UNIT_ASSERT_C(actualizer.IsInPendingPortionIds(PortionId), "F1: after failure return, portion must be back in PendingPortionIds");
         // Re-added portion moved from in-flight back to pending — counted once, not twice.
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataPortionsCount(), 1);
     }
 
-    // TestMoveDataKeepQueue: HasBlobsForGroups must see blobs resident in BlobsToKeep,
-    // resolved through TabletInfo->GroupFor(channel, generation).
+    // Keep leg: the group is resolved through TabletInfo->GroupFor(channel, generation).
     Y_UNIT_TEST(TestMoveDataKeepQueue) {
         TActorSystemStub actorSystemStub;
         actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
@@ -151,9 +142,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT_C(!mgrNew.HasBlobsForGroups({ OldGroup }), "BlobsToKeep: old group must not match after reassign");
     }
 
-    // TestMoveDataSharedBlobs: the shared/borrowed registry leg of the operator gate.
-    // Borrowed blobs are foreign-tablet blobs whose group comes from the persisted
-    // DS:<group>:<logoblobid> form (GetDsGroup), not from our channel history.
+    // Shared/borrowed leg: the group comes from the persisted DS:<group>:<id> form, not our history.
     Y_UNIT_TEST(TestMoveDataSharedBlobs) {
         static constexpr ui64 TabletId = 46;
         static constexpr ui64 ForeignTabletId = 99;
@@ -170,9 +159,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT_C(!shared.HasBlobsForGroups({ NewGroup }), "unrelated group must not match");
     }
 
-    // The selection rule that decides whether a portion is rewritten at all. Exercised
-    // directly: a TPortionDataAccessor needs arrow-backed portion metadata to build, and
-    // ActualizePortionInfo's remaining work is bookkeeping the other cases already cover.
+    // Exercised directly: a TPortionDataAccessor needs arrow-backed metadata to build.
     Y_UNIT_TEST(HasBlobInGroupsSelectsOnlyTargetGroups) {
         static constexpr ui64 TabletId = 46;
         static constexpr ui32 TargetGroup = 100;
@@ -215,16 +202,13 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, TMoveDataQueueSizes{ 1, 0, 0 }, HasBlobs) == EMoveDataGate::BlockedByPortions);
         UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, empty, HasBlobs) == EMoveDataGate::BlockedByGC);
 
-        // Each queue component alone must block: InFlight in particular, or a submitted
-        // rewrite whose old blobs are not yet in the delete queues slips past the gate.
+        // Each component alone must block, InFlight included, or a submitted rewrite slips past.
         UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, TMoveDataQueueSizes{ 1, 0, 0 }, !HasBlobs) == EMoveDataGate::BlockedByPortions);
         UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, TMoveDataQueueSizes{ 0, 1, 0 }, !HasBlobs) == EMoveDataGate::BlockedByPortions);
         UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, TMoveDataQueueSizes{ 0, 0, 1 }, !HasBlobs) == EMoveDataGate::BlockedByPortions);
     }
 
-    // Hive rebinds our channels only after we answer, so portions created during the session
-    // still land in the doomed group. They are adopted until the admission deadline, and
-    // ignored after it - the deadline is what stops a busy tablet feeding itself forever.
+    // Portions created mid-session still land in the doomed group; the deadline bounds adoption.
     Y_UNIT_TEST(AdoptsPortionsCreatedDuringTheSessionUntilTheDeadline) {
         const auto pathId = NOlap::TInternalPathId::FromRawValue(1);
         auto cache = std::make_shared<NOlap::TSchemaObjectsCache>();

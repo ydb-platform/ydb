@@ -104,8 +104,7 @@ private:
 
     NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataLimitBytes;
 
-    // Aggregation clients, not plain gauges: every tablet owns a TCSCounters but
-    // they share one module_id=CS subgroup, so Set() would be last-tablet-wins.
+    // Aggregation clients, not gauges: tablets share one module_id=CS subgroup, Set() would race.
     std::shared_ptr<TValueAggregationClient> MoveDataActive;
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsPending;
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsConfirmedToMove;

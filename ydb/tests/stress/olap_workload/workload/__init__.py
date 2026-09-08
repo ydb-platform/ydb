@@ -30,8 +30,7 @@ class WorkloadRunner:
 
     def _cleanup(self):
         print(f"Cleaning up {self.tables_prefix}...")
-        # move_data and cut_history can still have tablet restarts landing when the run
-        # ends, and a plain remove then dies on transient Unavailable.
+        # Tablet restarts can still land at end of run, and a plain remove dies on Unavailable.
         deadline = time.time() + 120
         while True:
             try:
@@ -40,8 +39,7 @@ class WorkloadRunner:
             except (ydb.issues.Unavailable, ydb.issues.BadSession, ydb.issues.ConnectionError) as e:
                 if time.time() >= deadline:
                     raise
-                # e.__class__, not type(e): importing workload.type.* binds `type` as an
-                # attribute of this package, shadowing the builtin inside __init__.py.
+                # e.__class__: importing workload.type.* shadows the `type` builtin in this package.
                 print(f"Cleaning up {self.tables_prefix}: transient {e.__class__.__name__}, retrying...")
                 time.sleep(3)
         print(f"Cleaning up {self.tables_prefix}... done, {deleted} tables deleted")
@@ -55,8 +53,7 @@ class WorkloadRunner:
             WorkloadRenameTables(self.client, self.name, stop, 10),
             WorkloadEncodings(self.client, self.name, stop),
         ]
-        # Pool shrink/grow needs the console endpoint, so it is only enabled when
-        # the caller supplied one.
+        # Pool shrink/grow needs the console endpoint, so it is enabled only when supplied.
         if self.endpoint:
             workloads.append(WorkloadMoveData(self.client, self.name, stop, self.endpoint, self.client.database))
         for w in workloads:

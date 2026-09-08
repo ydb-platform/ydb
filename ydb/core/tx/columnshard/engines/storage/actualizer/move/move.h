@@ -15,17 +15,12 @@ class TPortionDataAccessor;
 
 namespace NKikimr::NOlap::NActualizer {
 
-// Actualizer that rewrites blob portions residing in specified BS groups into
-// currently-active groups.  The group filter is applied asynchronously once
-// the portion accessor (with real BlobIds) has been loaded.
+// Rewrites portions out of the given BS groups; the filter needs a loaded accessor for BlobIds.
 class TMoveDataActualizer: public IActualizer {
 private:
     const THashSet<ui32> TargetGroups;
     const TVersionedIndex& VersionedIndex;
-    // Portions the session owes work for. Seeded by Refresh() and extended by DoAddPortion
-    // until AdmissionDeadline: Hive rebinds our channels only after we answer, so portions
-    // created meanwhile still land in the doomed group. The deadline is what bounds it -
-    // without one a tablet under continuous write feeds itself and never converges.
+    // Extended until AdmissionDeadline: new portions still land in the doomed group; unbounded, it never converges.
     THashSet<ui64> InitialPortionIds;
     TInstant AdmissionDeadline;
     // Portions waiting for accessor-load so we can check their DsGroup.
@@ -33,13 +28,11 @@ private:
     // Portions confirmed to have blobs in TargetGroups; ready to be rewritten.
     THashMap<TRWAddress, THashSet<ui64>> PortionsToMove;
     THashMap<ui64, TRWAddress> PortionAddress;
-    // Submitted but not yet committed. Still counted: the old blobs reach the delete queues
-    // only on commit, so uncounting at submission would open a premature-response window.
+    // Still counted: old blobs reach the delete queues only on commit, so the gate must wait.
     THashSet<ui64> InFlightPortionIds;
     ui64 RejectedPortions = 0;
 
-    // Remove from PortionsToMove/PortionAddress only; keeps InitialPortionIds intact
-    // so the portion can re-enter PendingPortionIds if the change is aborted.
+    // Keeps InitialPortionIds intact so an aborted change can re-enter PendingPortionIds.
     void RemoveFromActiveQueue(ui64 portionId);
 
 protected:
@@ -49,16 +42,13 @@ protected:
         TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& internalContext) override;
 
 public:
-    // Pure selection rule: a portion is moved only if at least one of its blobs lives in
-    // a group being decommissioned. Split out so it is testable without a portion
-    // accessor, which needs arrow-backed metadata to construct.
+    // Split out to be testable without a TPortionDataAccessor, which needs arrow-backed metadata.
     static bool HasBlobInGroups(const std::vector<TUnifiedBlobId>& blobIds, const THashSet<ui32>& groups);
 
     void ActualizePortionInfo(const TPortionDataAccessor& accessor);
 
 protected:
-    // Test helpers — exercise internal state without a full TTieringProcessContext.
-    // Protected: unit tests subclass the actualizer to reach them; production code cannot.
+    // Protected test helpers: unit tests subclass to reach them, production code cannot.
     void SimulateTaskSubmissionForTest(ui64 portionId) {
         RemoveFromActiveQueue(portionId);
         InFlightPortionIds.emplace(portionId);

@@ -831,8 +831,7 @@ private:
     NActors::TActorId TabletActorId;
     const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor> Processor;
     const ui64 Generation;
-    // Per-tablet on purpose: TObjectCounter counts process-wide, so on a node with several
-    // ColumnShards one tablet's request closed every other tablet's gate permanently.
+    // Per-tablet: TObjectCounter is process-wide, so one tablet's request closed every other's gate.
     const std::shared_ptr<TAtomicCounter> InFlight;
 
     virtual void DoOnRequestsFinished(
@@ -919,9 +918,7 @@ void TColumnShard::SetupMoveDataMetadata() {
 bool TColumnShard::SetupTtl() {
     const bool ttlEnabled = AppDataVerified().ColumnShardConfig.GetTTLEnabled() &&
                             NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::TTL);
-    // The move actualizer extracts its rewrite tasks from this same loop, so turning TTL off
-    // must not turn decommission off with it. It must not turn TTL back ON either: with TTL
-    // disabled the extraction is narrowed to the move, leaving tiering eviction stopped.
+    // The move extracts tasks from this loop: TTL off must not stop the move, nor resume tiering.
     if (!ttlEnabled && !MoveDataState.Active) {
         YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
             {"event", "skip_ttl"},
@@ -1282,9 +1279,7 @@ void TColumnShard::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const 
     AFL_VERIFY(ev->Get()->GetGeneration() == Generation())("ev", ev->Get()->GetGeneration())("tablet", Generation());
     ev->Get()->GetProcessor()->ApplyResult(
         ev->Get()->ExtractResult(), TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>());
-    // Move only: the generic SetupMetadata() is gated on having no request in flight, and the
-    // subscriber that just delivered this result may still hold that gate. Everything else
-    // re-arms on the periodic wakeup.
+    // Move only: SetupMetadata() may still be gated by the subscriber that just delivered this.
     SetupMoveDataMetadata();
 }
 

@@ -4,16 +4,12 @@
 
 namespace NKikimr::NOlap::NActualizer {
 
-// Per-queue breakdown of the portions MoveData still owes work for. The response
-// gate only needs the total; the split tells a stalled move apart: stuck in
-// Pending means accessors are not loading, in ConfirmedToMove means no rewrite
-// task slot, in InFlight means tasks run but do not commit.
+// The gate needs only the total; the split says where a stalled move is stuck.
 struct TMoveDataQueueSizes {
     ui64 Pending = 0;
     ui64 ConfirmedToMove = 0;
     ui64 InFlight = 0;
-    // Portions whose accessor came back with no blob in a target group. Not a queue -
-    // deliberately outside GetTotal(), it only explains where a drained queue went.
+    // Not a queue: deliberately outside GetTotal(), it explains where a drained queue went.
     ui64 Rejected = 0;
 
     ui64 GetTotal() const {

@@ -198,8 +198,7 @@ public:
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
     virtual std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(
         const THashSet<TInternalPathId>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
-    // moveDataOnly restricts extraction to the group-decommission actualizer, so a move can
-    // keep running while TTL is switched off without also resuming tiering eviction.
+    // moveDataOnly narrows extraction to the move, so TTL can stay off without resuming tiering.
     virtual std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<TInternalPathId, TTiering>& pathEviction,
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit,
         const bool moveDataOnly = false) noexcept = 0;

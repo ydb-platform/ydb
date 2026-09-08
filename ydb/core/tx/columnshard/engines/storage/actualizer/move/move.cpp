@@ -25,8 +25,7 @@ private:
             return;
         }
         if (result.GetValue().HasErrors()) {
-            // Affected portions stay in PendingPortionIds and are re-requested on the
-            // next BuildMoveDataMetadataRequests cycle; surface the failure for operators.
+            // Affected portions stay in PendingPortionIds and are re-requested next cycle.
             YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
                 {"error", "move data accessor result with errors " + result.GetValue().GetErrorMessage()});
         }
@@ -132,8 +131,7 @@ void TMoveDataActualizer::DoExtractTasks(
 }
 
 namespace {
-// The groups a portion's blobs actually resolve into, for the rejection log: knowing
-// that a portion was dropped is only useful next to what it was dropped for.
+// Groups the blobs resolve into, so the rejection log says what the portion was dropped for.
 std::vector<ui32> GetBlobGroupsForLog(const std::vector<TUnifiedBlobId>& blobIds) {
     std::vector<ui32> result;
     for (const auto& blobId : blobIds) {

@@ -21,15 +21,13 @@ class WorkloadMoveData(WorkloadBase):
     other workloads in this runner supply the data that has to be moved.
     """
 
-    # settle_time: a decommission is not instant, so the pool stays small for a
-    # while before growing back, or the move is cancelled before doing any work.
+    # settle_time: a decommission is not instant; grow back too early and it is cancelled.
     def __init__(self, client, prefix, stop, endpoint, database, settle_time=30, converge_timeout=300):
         super().__init__(client, prefix, "move_data", stop)
         self.database = database
         self.settle_time = settle_time
         self.converge_timeout = converge_timeout
-        # kikimr_client_factory speaks plaintext message bus, so grpcs:// cannot work
-        # here: reject it instead of stripping the scheme and failing to connect.
+        # kikimr_client_factory speaks plaintext message bus, so grpcs:// cannot work here.
         scheme, sep, address = endpoint.rpartition("://")
         if sep and scheme != "grpc":
             raise ValueError(f"move_data needs a grpc:// endpoint, got {endpoint}")
@@ -72,8 +70,7 @@ class WorkloadMoveData(WorkloadBase):
         return False
 
     def _pre_start(self):
-        # A domain path such as /Root reports no storage units, and CMS alters do not
-        # apply to it; disable the workload instead of failing the whole runner.
+        # A domain path like /Root has no storage units and takes no CMS alter: disable instead.
         try:
             units = self._storage_units()
         except Exception as e:
@@ -84,8 +81,7 @@ class WorkloadMoveData(WorkloadBase):
             return False
         self.unit_kind = units.unit_kind
         self.unit_count = units.count
-        # Removing a unit must leave at least one behind, so a single-unit pool is
-        # grown once up front rather than skipping the workload entirely.
+        # Removal must leave one unit behind, so grow a single-unit pool once up front.
         if self.unit_count < 2:
             logger.info("move_data: pool has %s unit(s), growing to 2 before starting", self.unit_count)
             self._alter_units(2 - self.unit_count)
@@ -113,8 +109,7 @@ class WorkloadMoveData(WorkloadBase):
         target = self.unit_count + 1
         self._alter_units(1)
         if not self._wait_units(target):
-            # _wait_units also returns False when the workload is asked to stop, and a
-            # decommission outlives a short run: that is a shutdown, not a failure.
+            # _wait_units also returns False on stop, and a decommission outlives a short run.
             if self.is_stop_requested():
                 return
             raise RuntimeError(f"pool did not grow back to {target} units within {self.converge_timeout}s")
@@ -125,17 +120,14 @@ class WorkloadMoveData(WorkloadBase):
             try:
                 self._cycle()
             except Exception as e:
-                # A rejected alter (e.g. BSC busy) is expected under load; only an
-                # unrecoverable state should stop the workload.
+                # A rejected alter (BSC busy) is expected under load; only a fatal state stops us.
                 self.errors += 1
                 logger.warning("move_data: cycle failed: %s", e)
                 time.sleep(5)
         self._settle_on_stop()
 
     def _settle_on_stop(self):
-        # A stop can land mid-cycle with a decommission in flight, and the runner's cleanup
-        # then races the tablet restarts it causes. Best-effort restore; the cleanup retry
-        # is the real backstop.
+        # Best-effort: a stop can land mid-cycle; the cleanup retry is the real backstop.
         try:
             units = self._storage_units()
             if units is not None and units.count < 2:

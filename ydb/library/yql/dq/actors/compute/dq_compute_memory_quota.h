@@ -119,17 +119,9 @@ namespace NYql::NDq {
             alloc->SetMaximumLimitValueReached(MemoryLimits.MemoryQuotaManager->GetMemoryAvailability() < 0);
 
             if (Y_UNLIKELY(ProfileStats)) {
-                if (isOptional) {
-                    ProfileStats->MkqlOptionalMemoryRequests++;
-                    if (granted) {
-                        ProfileStats->MkqlExtraMemoryBytes += memory;
-                    } else {
-                        ProfileStats->MkqlOptionalMemoryRefusals++;
-                    }
-                } else {
-                    ProfileStats->MkqlExtraMemoryBytes += memory;
-                    ProfileStats->MkqlExtraMemoryRequests++;
-                }
+                // every request counts, mandatory or optional, granted or not
+                ProfileStats->MkqlExtraMemoryBytes += memory;
+                ProfileStats->MkqlExtraMemoryRequests++;
             }
             return granted;
         }
@@ -201,8 +193,6 @@ namespace NYql::NDq {
             ui64 MkqlMaxUsedMemory = 0;
             ui64 MkqlExtraMemoryBytes = 0;
             ui32 MkqlExtraMemoryRequests = 0;
-            ui32 MkqlOptionalMemoryRequests = 0;
-            ui32 MkqlOptionalMemoryRefusals = 0;
         };
 
         const TProfileStats* GetProfileStats() const {

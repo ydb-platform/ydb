@@ -196,11 +196,11 @@ Y_UNIT_TEST_SUITE(TDqMemoryQuotaTest) {
         UNIT_ASSERT(!env.Quota.RequestExtraMemory(10_MB, /* isOptional = */ false, &env.Alloc));
         UNIT_ASSERT_VALUES_EQUAL(env.Quota.GetMkqlMemoryLimit(), 50_MB);
 
+        // every request counts, granted or not: two optional and one mandatory, 10 MB each
         const auto* stats = env.Quota.GetProfileStats();
         UNIT_ASSERT(stats);
-        UNIT_ASSERT_VALUES_EQUAL(stats->MkqlOptionalMemoryRequests, 2);
-        UNIT_ASSERT_VALUES_EQUAL(stats->MkqlOptionalMemoryRefusals, 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats->MkqlExtraMemoryRequests, 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats->MkqlExtraMemoryRequests, 3);
+        UNIT_ASSERT_VALUES_EQUAL(stats->MkqlExtraMemoryBytes, 30_MB);
     }
 
     Y_UNIT_TEST(HardLimit) {

@@ -2558,8 +2558,6 @@ public:
             dst->SetMkqlMaxMemoryUsage(memProfileStats->MkqlMaxUsedMemory);
             dst->SetMkqlExtraMemoryBytes(memProfileStats->MkqlExtraMemoryBytes);
             dst->SetMkqlExtraMemoryRequests(memProfileStats->MkqlExtraMemoryRequests);
-            dst->SetMkqlOptionalMemoryRequests(memProfileStats->MkqlOptionalMemoryRequests);
-            dst->SetMkqlOptionalMemoryRefusals(memProfileStats->MkqlOptionalMemoryRefusals);
         }
 
         if (Stat) { // for task_runner_actor

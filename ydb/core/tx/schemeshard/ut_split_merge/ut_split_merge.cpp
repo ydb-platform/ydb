@@ -1299,6 +1299,10 @@ struct TLoadAndSplitSimulator {
                 TableStatsPatchByFollowerIdStats[followerId].SetCPUWithoutKeys(0);
             } else {
                 MetricsPatchByFollowerIdStats[followerId].ClearCPU();
+                // Ensure a matching (empty) entry exists so that TableStatsPatchByFollowerIdStats.find()
+                // below succeeds instead of pointing at end().
+                TableStatsPatchByFollowerIdStats[followerId].ClearCPUWithKeys();
+                TableStatsPatchByFollowerIdStats[followerId].ClearCPUWithoutKeys();
             }
         }
 
@@ -1538,6 +1542,13 @@ struct TLoadAndSplitSimulator {
                                 << Endl;
                         } else {
                             msg->Record.MutableTabletMetrics()->ClearCPU();
+
+                            // MergeFrom() above only copies fields that are set on the source,
+                            // so it cannot remove CPUWithKeys/CPUWithoutKeys already filled in
+                            // by the real datashard code. Clear them explicitly to fully simulate
+                            // a stats response without any CPU usage information.
+                            msg->Record.MutableTableStats()->ClearCPUWithKeys();
+                            msg->Record.MutableTableStats()->ClearCPUWithoutKeys();
 
                             Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
                                 << ", intercept EvGetTableStatsResult, from datashard " << msg->Record.GetDatashardId()

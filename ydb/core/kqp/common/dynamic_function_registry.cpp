@@ -546,9 +546,15 @@ private:
         }
     }
 
+    //! Erase only if no in-flight LoadUdfs still holds the shared_ptr; otherwise a
+    //! concurrent Acquire would insert a second mutex for the same path and break
+    //! per-path serialization.
     void ReleaseNativePathLoadMutex(const TString& libraryPath) {
         with_lock (PathLoadMutexesLock_) {
-            PathLoadMutexes_.erase(libraryPath);
+            auto it = PathLoadMutexes_.find(libraryPath);
+            if (it != PathLoadMutexes_.end() && it->second.use_count() == 1) {
+                PathLoadMutexes_.erase(it);
+            }
         }
     }
 

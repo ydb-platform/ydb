@@ -199,28 +199,26 @@ namespace NKikimr::NDDisk {
                     }
                 }
                 // Barriers are durable state even when this namespace has no live records.
-                {
-                    auto locationIt = PersistentBufferBarriersLocation.find(key);
-                    if (locationIt == PersistentBufferBarriersLocation.end()) {
-                        PersistentBufferBarriersLocation[key] = {pos, FreeBarrierPosition};
+                auto locationIt = PersistentBufferBarriersLocation.find(key);
+                if (locationIt == PersistentBufferBarriersLocation.end()) {
+                    PersistentBufferBarriersLocation[key] = {pos, FreeBarrierPosition};
+                } else {
+                    auto oldBarrierLocation = PersistentBufferBarriersLocation[key];
+                    auto oldBarrier = PersistentBufferBarriers[oldBarrierLocation.BarrierIdx].Header.Barriers[oldBarrierLocation.Position];
+                    YDB_LOG_DEBUG("TPersistentBufferBarriersManager::RestoreBarriers duplicated barrier erase record found, bigger lsn used",
+                        {"marker", "BSDD38"},
+                        {"tabletId", barrier.TabletId},
+                        {"directBlockGroupIndex", barrier.DirectBlockGroupIndex},
+                        {"barrierGeneration", barrier.Generation},
+                        {"oldBarrierGeneration", oldBarrier.Generation},
+                        {"barrierLsn", barrier.Lsn},
+                        {"oldBarrier.Lsn", oldBarrier.Lsn});
+                    if (barrier.Generation > oldBarrier.Generation
+                        || (barrier.Generation == oldBarrier.Generation && barrier.Lsn > oldBarrier.Lsn)) {
+                        PersistentBufferBarrierHoles.push_back(locationIt->second);
+                        locationIt->second = {pos, FreeBarrierPosition};
                     } else {
-                        auto oldBarrierLocation = PersistentBufferBarriersLocation[key];
-                        auto oldBarrier = PersistentBufferBarriers[oldBarrierLocation.BarrierIdx].Header.Barriers[oldBarrierLocation.Position];
-                        YDB_LOG_DEBUG("TPersistentBufferBarriersManager::RestoreBarriers duplicated barrier erase record found, bigger lsn used",
-                            {"marker", "BSDD38"},
-                            {"tabletId", barrier.TabletId},
-                            {"directBlockGroupIndex", barrier.DirectBlockGroupIndex},
-                            {"barrierGeneration", barrier.Generation},
-                            {"oldBarrierGeneration", oldBarrier.Generation},
-                            {"barrierLsn", barrier.Lsn},
-                            {"oldBarrier.Lsn", oldBarrier.Lsn});
-                        if (barrier.Generation > oldBarrier.Generation
-                            || (barrier.Generation == oldBarrier.Generation && barrier.Lsn > oldBarrier.Lsn)) {
-                            PersistentBufferBarrierHoles.push_back(locationIt->second);
-                            locationIt->second = {pos, FreeBarrierPosition};
-                        } else {
-                            PersistentBufferBarrierHoles.push_back({pos, FreeBarrierPosition});
-                        }
+                        PersistentBufferBarrierHoles.push_back({pos, FreeBarrierPosition});
                     }
                 }
             }

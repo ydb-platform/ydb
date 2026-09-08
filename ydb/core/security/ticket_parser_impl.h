@@ -522,7 +522,9 @@ private:
         for (const auto& [permissionName, permissionRecord] : record.Permissions) {
             YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket asking for AccessServiceAuthorization" << (useV2 ? "V2" : "V1"),
                 {"ticket", record.GetMaskedTicket()},
-                {"permission", permissionName}
+                {"permission", permissionName},
+                {"peerName", record.TraceContext.PeerName},
+                {"requestId", record.TraceContext.RequestId}
             );
 
             record.ResponsesLeft++;
@@ -547,7 +549,9 @@ private:
             if (it != ServiceTokens.end()) {
                 request->Token = it->second;
                 YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Create BulkAuthorizeV2 request",
-                    {"token", MaskTicket(request->Token)}
+                    {"token", MaskTicket(request->Token)},
+                    {"peerName", record.TraceContext.PeerName},
+                    {"requestId", record.TraceContext.RequestId}
                 );
             }
         }
@@ -561,7 +565,9 @@ private:
         request->Request.set_result_filter(yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest::ALL_FAILED);
         YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket asking for AccessServiceBulkAuthorizationV2",
             {"ticket", record.GetMaskedTicket()},
-            {"requestForPermissions", requestForPermissions}
+            {"requestForPermissions", requestForPermissions},
+            {"peerName", record.TraceContext.PeerName},
+            {"requestId", record.TraceContext.RequestId}
         );
         record.ResponsesLeft++;
         Send(AccessServiceValidatorV2, request.Release());
@@ -584,7 +590,9 @@ private:
         }
         YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket asking for AccessServiceAuthorizationV1(",
             {"ticket", record.GetMaskedTicket()},
-            {"requestForPermissions", requestForPermissions}
+            {"requestForPermissions", requestForPermissions},
+            {"peerName", record.TraceContext.PeerName},
+            {"requestId", record.TraceContext.RequestId}
         );
         record.ResponsesLeft++;
         Send(NebiusAccessServiceValidator, request.Release());
@@ -606,7 +614,9 @@ private:
         const bool useV2 = AppData()->FeatureFlags.GetEnableAccessServiceV2Interface();
 
         YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket asking for AccessServiceAuthentication" << (useV2 ? "V2" : "V1"),
-            {"ticket", record.GetMaskedTicket()}
+            {"ticket", record.GetMaskedTicket()},
+            {"peerName", record.TraceContext.PeerName},
+            {"requestId", record.TraceContext.RequestId}
         );
 
         if (useV2) {
@@ -633,7 +643,9 @@ private:
         const bool useV2 = !useNebius && AppData()->FeatureFlags.GetEnableAccessServiceV2Interface();
 
         YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket asking for AccessServiceAuthentication" << (useNebius ? "V1(Nebius)" : (useV2 ? "V2" : "V1")),
-            {"ticket", record.GetMaskedTicket()}
+            {"ticket", record.GetMaskedTicket()},
+            {"peerName", record.TraceContext.PeerName},
+            {"requestId", record.TraceContext.RequestId}
         );
 
         record.ResponsesLeft++;
@@ -862,7 +874,9 @@ private:
         CounterTicketsExternalIdp->Inc();
 
         YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "CanInitTokenFromExternalIdp, ticket forwarded to ExternalIdpProvider",
-            {"maskedTicket", MaskTicket(record.Ticket)}
+            {"ticket", record.GetMaskedTicket()},
+            {"peerName", record.TraceContext.PeerName},
+            {"requestId", record.TraceContext.RequestId}
         );
         ++record.ResponsesLeft;
         Send(ExternalIdpProvider, new TEvExternalIdpProvider::TEvAuthenticateRequest(key, record.Ticket));
@@ -903,7 +917,9 @@ private:
                 {"rootDatabase", DomainName},
                 {"requestDatabase", record.Database},
                 {"tokenDatabase", database},
-                {"domainLoginOnly", Config.GetDomainLoginOnly()}
+                {"domainLoginOnly", Config.GetDomainLoginOnly()},
+                {"peerName", record.TraceContext.PeerName},
+                {"requestId", record.TraceContext.RequestId}
             );
             if (database.empty()) {
                 database = DomainName;
@@ -911,12 +927,17 @@ private:
             const auto& lookupDatabases = GetLookupDatabases(record);
             YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "CanInitLoginToken, target database candidates",
                 {"lookupDatabasesCount", lookupDatabases.size()},
-                {"lookupDatabases", JoinSeq(", ", lookupDatabases)}
+                {"lookupDatabases", JoinSeq(", ", lookupDatabases)},
+                {"peerName", record.TraceContext.PeerName},
+                {"requestId", record.TraceContext.RequestId}
             );
             if (std::find(lookupDatabases.begin(), lookupDatabases.end(), database) == lookupDatabases.end()) {
                 SetError(key, record, {.Message = "Wrong audience"});
                 CounterTicketsLogin->Inc();
-                YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "CanInitLoginToken, A1 error Wrong audience");
+                YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "CanInitLoginToken, A1 error Wrong audience",
+                    {"peerName", record.TraceContext.PeerName},
+                    {"requestId", record.TraceContext.RequestId}
+                );
                 return true;
             }
             auto itLoginProvider = LoginProviders.find(database);
@@ -930,12 +951,16 @@ private:
                         CounterTicketsLogin->Inc();
                         YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "CanInitLoginToken, A2 error",
                             {"database", database},
-                            {"error", response.Error}
+                            {"error", response.Error},
+                            {"peerName", record.TraceContext.PeerName},
+                            {"requestId", record.TraceContext.RequestId}
                         );
                         return true;
                     }
                     YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "CanInitLoginToken, A3 error",
-                        {"database", database}
+                        {"database", database},
+                        {"peerName", record.TraceContext.PeerName},
+                        {"requestId", record.TraceContext.RequestId}
                     );
                 } else {
                     record.TokenType = TDerived::ETokenType::Login;
@@ -961,7 +986,9 @@ private:
                         .AuthType = record.GetAuthType()
                     }));
                     YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "CanInitLoginToken, A4 success",
-                        {"database", database}
+                        {"database", database},
+                        {"peerName", record.TraceContext.PeerName},
+                        {"requestId", record.TraceContext.RequestId}
                     );
                     return true;
                 }
@@ -978,7 +1005,9 @@ private:
                             CounterTicketsLogin->Inc();
                             YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "CanInitLoginToken, login state is not available yet, cannot defer token",
                                 {"database", database},
-                                {"token", MaskTicket(record.Ticket)}
+                                {"token", record.GetMaskedTicket()},
+                                {"peerName", record.TraceContext.PeerName},
+                                {"requestId", record.TraceContext.RequestId}
                             );
                             return true;
                         }
@@ -988,12 +1017,16 @@ private:
                     }
                     YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "CanInitLoginToken, login state is not available yet, defer token",
                         {"database", database},
-                        {"token", MaskTicket(record.Ticket)}
+                        {"token", record.GetMaskedTicket()},
+                        {"peerName", record.TraceContext.PeerName},
+                        {"requestId", record.TraceContext.RequestId}
                     );
                     return true;
                 }
                 YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "CanInitLoginToken, A6 error",
-                    {"database", database}
+                    {"database", database},
+                    {"peerName", record.TraceContext.PeerName},
+                    {"requestId", record.TraceContext.RequestId}
                 );
             }
         }
@@ -1083,8 +1116,9 @@ private:
             CounterWrongPeernameFormat->Inc();
             YDB_LOG_WARN_COMP(NKikimrServices::TICKET_PARSER, "Ticket has invalid peer name format",
                 {"token", MaskTicket(ev->Get()->Ticket)},
+                {"database", ev->Get()->Database},
                 {"peerName", ev->Get()->TraceContext.PeerName},
-                {"database", ev->Get()->Database}
+                {"requestId", ev->Get()->TraceContext.RequestId}
             );
 
             if (AppData()->FeatureFlags.GetEnableTicketParserErrorBasedOnPeernameFormat()) {
@@ -1125,7 +1159,9 @@ private:
             YDB_LOG_ERROR_COMP(NKikimrServices::TICKET_PARSER, error.Message,
                 {"accessKeyId", MaskTicket(signature.AccessKeyId)},
                 {"error", error.LogMessage},
-                {"retryable", error.Retryable}
+                {"retryable", error.Retryable},
+                {"peerName", ev->Get()->TraceContext.PeerName},
+                {"requestId", ev->Get()->TraceContext.RequestId}
             );
             Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, error), 0, cookie);
             return;
@@ -1137,7 +1173,9 @@ private:
             YDB_LOG_ERROR_COMP(NKikimrServices::TICKET_PARSER, error.Message,
                 {"token", MaskTicket(ticket)},
                 {"error", error.LogMessage},
-                {"retryable", error.Retryable}
+                {"retryable", error.Retryable},
+                {"peerName", ev->Get()->TraceContext.PeerName},
+                {"requestId", ev->Get()->TraceContext.RequestId}
             );
             Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, error), 0, cookie);
             return;
@@ -1191,7 +1229,9 @@ private:
         if (record.Error) {
             YDB_LOG_ERROR_COMP(NKikimrServices::TICKET_PARSER, "Ticket error",
                 {"ticket", record.GetMaskedTicket()},
-                {"error", record.Error}
+                {"error", record.Error},
+                {"peerName", record.TraceContext.PeerName},
+                {"requestId", record.TraceContext.RequestId}
             );
             Send(sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, record.Error), 0, cookie);
             return;
@@ -1235,7 +1275,9 @@ private:
             if (UserAccountService) {
                 YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket asking for UserAccount",
                     {"ticket", record.GetMaskedTicket()},
-                    {"subject", record.Subject}
+                    {"subject", record.Subject},
+                    {"peerName", record.TraceContext.PeerName},
+                    {"requestId", record.TraceContext.RequestId}
                 );
                 THolder<TEvAccessServiceGetUserAccountRequest> request = MakeHolder<TEvAccessServiceGetUserAccountRequest>(key);
                 request->Token = record.Ticket;
@@ -1249,7 +1291,9 @@ private:
             if (ServiceAccountService) {
                 YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket asking for ServiceAccount",
                     {"ticket", record.GetMaskedTicket()},
-                    {"subject", record.Subject}
+                    {"subject", record.Subject},
+                    {"peerName", record.TraceContext.PeerName},
+                    {"requestId", record.TraceContext.RequestId}
                 );
                 THolder<TEvAccessServiceGetServiceAccountRequest> request = MakeHolder<TEvAccessServiceGetServiceAccountRequest>(key);
                 request->Token = record.Ticket;
@@ -1348,7 +1392,9 @@ private:
             YDB_LOG_DEBUG_COMP(NKikimrServices::TICKET_PARSER, "Ticket authenticated by ExternalIdp",
                 {"ticket", record.GetMaskedTicket()},
                 {"sid", response->User + domain},
-                {"groupCount", groups.size()}
+                {"groupCount", groups.size()},
+                {"peerName", record.TraceContext.PeerName},
+                {"requestId", record.TraceContext.RequestId}
             );
             SetToken(key, record, new NACLib::TUserToken({
                 .OriginalUserToken = record.Ticket,
@@ -1361,7 +1407,9 @@ private:
                 {"ticket", record.GetMaskedTicket()},
                 {"status", response->Status},
                 {"retryable", response->Error.Retryable},
-                {"error", response->Error.Message}
+                {"error", response->Error.Message},
+                {"peerName", record.TraceContext.PeerName},
+                {"requestId", record.TraceContext.RequestId}
             );
             SetError(key, record, response->Error);
         }
@@ -1437,7 +1485,9 @@ private:
                 {"ticket", record.GetMaskedTicket()},
                 {"permission", permissionName},
                 {"error", errorMessage},
-                {"retryable", isRetryableError}
+                {"retryable", isRetryableError},
+                {"peerName", record.TraceContext.PeerName},
+                {"requestId", record.TraceContext.RequestId}
             );
         }
         SetError(key, record, {.Message = errorMessage, .Retryable = isRetryableError});
@@ -1490,7 +1540,9 @@ private:
                             SetAccessServiceBulkAuthorizeError(key, record, TStringBuilder() << "Internal error: unknown result key: " << resultKey, false);
                             YDB_LOG_WARN_COMP(NKikimrServices::TICKET_PARSER, "Internal error: unknown result key for ticket",
                                 {"key", resultKey},
-                                {"ticket", record.GetMaskedTicket()}
+                                {"ticket", record.GetMaskedTicket()},
+                                {"peerName", record.TraceContext.PeerName},
+                                {"requestId", record.TraceContext.RequestId}
                             );
                             processingError = true;
                             break;
@@ -1526,7 +1578,9 @@ private:
                                 YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket access denied for subject",
                                     {"ticket", record.GetMaskedTicket()},
                                     {"permissionName", permissionName},
-                                    {"subject", (record.Subject ? record.Subject : "<not resolved>")}
+                                    {"subject", (record.Subject ? record.Subject : "<not resolved>")},
+                                    {"peerName", record.TraceContext.PeerName},
+                                    {"requestId", record.TraceContext.RequestId}
                                 );
                                 TStringBuilder errorMessage;
                                 if (permissionRecord.IsRequired()) {
@@ -1547,7 +1601,9 @@ private:
                         } else {
                             YDB_LOG_WARN_COMP(NKikimrServices::TICKET_PARSER, "Received response for unknown permission for ticket",
                                 {"permissionName", permissionName},
-                                {"ticket", record.GetMaskedTicket()}
+                                {"ticket", record.GetMaskedTicket()},
+                                {"peerName", record.TraceContext.PeerName},
+                                {"requestId", record.TraceContext.RequestId}
                             );
                         }
                     }
@@ -1568,7 +1624,9 @@ private:
                                 return std::move(b);
                             };
                             YDB_LOG_WARN_COMP(NKikimrServices::TICKET_PARSER, "Received response with absent permissions",
-                                {"permissions", printAbsentPermissions()}
+                                {"permissions", printAbsentPermissions()},
+                                {"peerName", record.TraceContext.PeerName},
+                                {"requestId", record.TraceContext.RequestId}
                             );
                             SetAccessServiceBulkAuthorizeError(key, record, TStringBuilder() << "Internal error: not all permissions in authorize response", false);
                         } else if (permissionDeniedCount < examinedPermissions.size() && !hasRequiredPermissionFailed) {
@@ -1639,7 +1697,9 @@ private:
                             YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket access denied for subject",
                                 {"ticket", record.GetMaskedTicket()},
                                 {"permission", result.permission()},
-                                {"subject", record.Subject}
+                                {"subject", record.Subject},
+                                {"peerName", record.TraceContext.PeerName},
+                                {"requestId", record.TraceContext.RequestId}
                             );
                             TStringBuilder errorMessage;
                             if (permissionDeniedRecord.IsRequired()) {
@@ -1657,7 +1717,9 @@ private:
                         } else {
                             YDB_LOG_WARN_COMP(NKikimrServices::TICKET_PARSER, "Received response for unknown permission for ticket",
                                 {"permission", result.permission()},
-                                {"ticket", record.GetMaskedTicket()}
+                                {"ticket", record.GetMaskedTicket()},
+                                {"peerName", record.TraceContext.PeerName},
+                                {"requestId", record.TraceContext.RequestId}
                             );
                         }
                     }
@@ -1710,7 +1772,9 @@ private:
                         YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket now has a valid subject",
                             {"ticket", record.GetMaskedTicket()},
                             {"permission", permission},
-                            {"subject", record.Subject}
+                            {"subject", record.Subject},
+                            {"peerName", record.TraceContext.PeerName},
+                            {"requestId", record.TraceContext.RequestId}
                         );
                     }
                 } else {
@@ -1722,20 +1786,26 @@ private:
                             {"ticket", record.GetMaskedTicket()},
                             {"permission", permission},
                             {"permissionError", itPermission->second.Error},
-                            {"retryable", retryable}
+                            {"retryable", retryable},
+                            {"peerName", record.TraceContext.PeerName},
+                            {"requestId", record.TraceContext.RequestId}
                         );
                     } else if (retryable) {
                         YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Ticket now has a retryable error",
                             {"ticket", record.GetMaskedTicket()},
                             {"permission", permission},
-                            {"statusMessage", response->Status.Msg}
+                            {"statusMessage", response->Status.Msg},
+                            {"peerName", record.TraceContext.PeerName},
+                            {"requestId", record.TraceContext.RequestId}
                         );
                     }
                 }
             } else {
                 YDB_LOG_WARN_COMP(NKikimrServices::TICKET_PARSER, "Received response for unknown permission for ticket",
                     {"permission", permission},
-                    {"ticket", record.GetMaskedTicket()}
+                    {"ticket", record.GetMaskedTicket()},
+                    {"peerName", record.TraceContext.PeerName},
+                    {"requestId", record.TraceContext.RequestId}
                 );
             }
             if (--record.ResponsesLeft == 0) {
@@ -1853,14 +1923,18 @@ private:
             auto& record = it->second;
             if ((record.ExpireTime > now) && (record.AccessTime + GetLifeTime() > now)) {
                 YDB_LOG_DEBUG_COMP(NKikimrServices::TICKET_PARSER, "Refreshing ticket",
-                    {"ticket", record.GetMaskedTicket()}
+                    {"ticket", record.GetMaskedTicket()},
+                    {"peerName", record.TraceContext.PeerName},
+                    {"requestId", record.TraceContext.RequestId}
                 );
                 if (!RefreshTicket(key, record)) {
                     RefreshQueue.push({key, record.RefreshTime});
                 }
             } else {
                 YDB_LOG_DEBUG_COMP(NKikimrServices::TICKET_PARSER, "Expired ticket",
-                    {"ticket", record.GetMaskedTicket()}
+                    {"ticket", record.GetMaskedTicket()},
+                    {"peerName", record.TraceContext.PeerName},
+                    {"requestId", record.TraceContext.RequestId}
                 );
                 if (!record.AuthorizeRequests.empty()) {
                     record.Error = {.Message = "Timed out", .Retryable = true};
@@ -2156,8 +2230,9 @@ protected:
         }
         YDB_LOG_DEBUG_COMP(NKikimrServices::TICKET_PARSER, "Ticket has now valid token for subject",
             {"ticket", record.GetMaskedTicket()},
+            {"subject", record.Subject},
             {"peerName", record.TraceContext.PeerName},
-            {"subject", record.Subject}
+            {"requestId", record.TraceContext.RequestId}
         );
         record.IsLowRequestPriority = true;
         RefreshQueue.push({.Key = key, .RefreshTime = record.RefreshTime});
@@ -2177,9 +2252,10 @@ protected:
             CounterTicketsErrorsRetryable->Inc();
             YDB_LOG_WARN_COMP(NKikimrServices::TICKET_PARSER, "Failed to process ticket",
                 {"ticket", record.GetMaskedTicket()},
-                {"peerName", record.TraceContext.PeerName},
                 {"error", error.Message + errorLogMessage},
-                {"retryable", true}
+                {"retryable", true},
+                {"peerName", record.TraceContext.PeerName},
+                {"requestId", record.TraceContext.RequestId}
             );
             if (record.RefreshRetryableErrorImmediately) {
                 record.RefreshRetryableErrorImmediately = false;
@@ -2194,9 +2270,10 @@ protected:
             CounterTicketsErrorsPermanent->Inc();
             YDB_LOG_WARN_COMP(NKikimrServices::TICKET_PARSER, "Failed to process ticket",
                 {"ticket", record.GetMaskedTicket()},
-                {"peerName", record.TraceContext.PeerName},
                 {"error", error.Message + errorLogMessage},
-                {"retryable", false}
+                {"retryable", false},
+                {"peerName", record.TraceContext.PeerName},
+                {"requestId", record.TraceContext.RequestId}
             );
         }
         CounterTicketsErrors->Inc();

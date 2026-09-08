@@ -5,6 +5,7 @@
 
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/actors/core/events.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -40,15 +41,34 @@ void InjectLookupFailure(TTestActorRuntime& runtime, TActorId target) {
 void InjectTaskStates(
     TTestActorRuntime& runtime,
     TActorId target,
-    const TVector<ui32>& nodeIds)
+    const TVector<ui32>& nodeIds,
+    ui64 firstTaskId = 0)
 {
-    for (ui64 taskId = 0; taskId < nodeIds.size(); ++taskId) {
+    for (ui64 offset = 0; offset < nodeIds.size(); ++offset) {
         auto state = MakeHolder<NYql::NDq::TEvDqCompute::TEvState>();
-        state->Record.SetTaskId(taskId);
+        state->Record.SetTaskId(firstTaskId + offset);
         state->Record.SetState(NYql::NDqProto::COMPUTE_STATE_EXECUTING);
         runtime.Send(new IEventHandle(
-            target, TActorId(nodeIds[taskId], "compute"), state.Release()));
+            target, TActorId(nodeIds[offset], "compute"), state.Release()));
     }
+}
+
+NProto::TGraphParams MakeTopicSourceGraph(ui64 taskCount) {
+    NProto::TGraphParams graphParams;
+    for (ui64 taskId = 0; taskId < taskCount; ++taskId) {
+        auto* task = graphParams.AddTasks();
+        task->SetId(taskId);
+        task->AddInputs()->MutableSource()->SetType(TString(NYql::NDq::PqSource));
+    }
+    return graphParams;
+}
+
+NProto::TGraphParams MakeGraphWithTopicAndNonTopicTasks(ui64 topicTaskCount, ui64 nonTopicTaskCount) {
+    auto graphParams = MakeTopicSourceGraph(topicTaskCount);
+    for (ui64 taskId = topicTaskCount; taskId < topicTaskCount + nonTopicTaskCount; ++taskId) {
+        graphParams.AddTasks()->SetId(taskId);
+    }
+    return graphParams;
 }
 
 } // anonymous namespace
@@ -70,9 +90,8 @@ Y_UNIT_TEST(NoAbortWhenRatioSufficient) {
         CreateStreamingQueryNodesManager(
             edgeActor,
             "/Root/test",
-            /* taskCount */ 4,
             "query-1",
-            NProto::TGraphParams{},
+            MakeTopicSourceGraph(4),
             TDuration::Hours(1), // use large period so wakeup doesn't auto-fire
             TDuration::Zero()
         ));
@@ -114,9 +133,8 @@ Y_UNIT_TEST(AbortWhenRatioBelowThreshold) {
         CreateStreamingQueryNodesManager(
             edgeActor,
             "/Root/test",
-            /* taskCount */ 1,
             "query-2",
-            NProto::TGraphParams{},
+            MakeTopicSourceGraph(1),
             TDuration::Hours(1), TDuration::Zero()));
 
     runtime.EnableScheduleForActor(manager, true);
@@ -153,9 +171,8 @@ Y_UNIT_TEST(ComputeStatesDetermineQueryNodes) {
         CreateStreamingQueryNodesManager(
             edgeActor,
             "/Root/test",
-            /* taskCount */ 10,
             "query-3",
-            NProto::TGraphParams{},
+            MakeTopicSourceGraph(10),
             TDuration::Hours(1), TDuration::Zero()));
 
     runtime.EnableScheduleForActor(manager, true);
@@ -193,9 +210,8 @@ Y_UNIT_TEST(AbortSentOnlyOnce) {
         CreateStreamingQueryNodesManager(
             edgeActor,
             "/Root/test",
-            /* taskCount */ 1,
             "query-4",
-            NProto::TGraphParams{},
+            MakeTopicSourceGraph(1),
             TDuration::Hours(1), TDuration::Zero()));
 
     runtime.EnableScheduleForActor(manager, true);
@@ -241,9 +257,8 @@ Y_UNIT_TEST(FailedLookupDoesNotAbort) {
         CreateStreamingQueryNodesManager(
             edgeActor,
             "/Root/test",
-            /* taskCount */ 1,
             "query-5",
-            NProto::TGraphParams{},
+            MakeTopicSourceGraph(1),
             TDuration::Hours(1), TDuration::Zero()));
 
     runtime.EnableScheduleForActor(manager, true);
@@ -277,9 +292,8 @@ Y_UNIT_TEST(NoAbortAtExactlyHalf) {
         CreateStreamingQueryNodesManager(
             edgeActor,
             "/Root/test",
-            /* taskCount */ 5,
             "query-6",
-            NProto::TGraphParams{},
+            MakeTopicSourceGraph(5),
             TDuration::Hours(1), TDuration::Zero()));
 
     runtime.EnableScheduleForActor(manager, true);
@@ -315,9 +329,8 @@ Y_UNIT_TEST(NoAbortWhenManyTasksOnFewNodesButRatioOk) {
         CreateStreamingQueryNodesManager(
             edgeActor,
             "/Root/test",
-            /* taskCount */ 100,
             "query-7",
-            NProto::TGraphParams{},
+            MakeTopicSourceGraph(100),
             TDuration::Hours(1), TDuration::Zero()));
 
     runtime.EnableScheduleForActor(manager, true);
@@ -335,6 +348,40 @@ Y_UNIT_TEST(NoAbortWhenManyTasksOnFewNodesButRatioOk) {
     auto* ev = runtime.GrabEdgeEventRethrow<TEvStreamingQueryNodesManager::TEvAbortQuery>(
         handle, TDuration::MilliSeconds(100));
     UNIT_ASSERT_C(ev == nullptr, "Should not abort: ratio is ok even if tasks > 2*nodes");
+}
+
+// ---------------------------------------------------------------------------
+// 8. Non-topic tasks do not participate in the node coverage check.
+// ---------------------------------------------------------------------------
+Y_UNIT_TEST(NonTopicTasksAreIgnored) {
+    TTestActorRuntime runtime(1, false);
+    runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+
+    TActorId edgeActor = runtime.AllocateEdgeActor();
+    TActorId manager = runtime.Register(
+        CreateStreamingQueryNodesManager(
+            edgeActor,
+            "/Root/test",
+            "query-8",
+            MakeGraphWithTopicAndNonTopicTasks(5, 100),
+            TDuration::Hours(1), TDuration::Zero()));
+
+    runtime.EnableScheduleForActor(manager, true);
+    runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+
+    // Topic readers cover half of the tenant nodes. Non-topic tasks are all on
+    // one node and must not change the result.
+    InjectTaskStates(runtime, manager, {1, 2, 3, 4, 5});
+    InjectTaskStates(runtime, manager, TVector<ui32>(100, 1), 5);
+    runtime.Send(new IEventHandle(manager, edgeActor, new TEvents::TEvWakeup(/* tag */ 1)));
+    runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+    InjectLookupResult(runtime, manager, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
+    runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+
+    TAutoPtr<IEventHandle> handle;
+    auto* ev = runtime.GrabEdgeEventRethrow<TEvStreamingQueryNodesManager::TEvAbortQuery>(
+        handle, TDuration::MilliSeconds(100));
+    UNIT_ASSERT_C(ev == nullptr, "Non-topic tasks must be ignored");
 }
 
 } // Y_UNIT_TEST_SUITE

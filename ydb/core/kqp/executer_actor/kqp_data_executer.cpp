@@ -1307,11 +1307,10 @@ private:
             NFq::CreateStreamingQueryNodesManager(
                 SelfId(),
                 Database,
-                static_cast<ui64>(graphParams.GetTasks().size()),
                 ToString(TxId),
                 graphParams,
-                TDuration::Minutes(1),
-                TDuration::Minutes(1)));
+                TDuration::Seconds(10),
+                TDuration::Seconds(10)));
         YDB_LOG_DEBUG("Created new StreamingQueryNodesManager",
             {"marker", "KQPDATA"},
             {"actorId", SelfId()},

@@ -32,18 +32,17 @@ struct TEvStreamingQueryNodesManager {
 // Creates a StreamingQueryNodesManager actor that:
 //   - periodically (every checkPeriod) fetches the list of tenant nodes via
 //     CreateTenantNodeEnumerationLookup;
-//   - waits for startDelay to collect TEvDqCompute::TEvState events, which
-//     identify the nodes running the query's compute actors;
+//   - waits for startDelay to collect TEvDqCompute::TEvState events from
+//     tasks that read from topics, which identify the nodes running readers;
 //   - checks:
-//       (a) ratio = nodesWithQuery / totalTenantNodes >= 0.5  (else abort)
-//       (b) totalTasks <= 2 * nodesWithQuery                  (else no action)
+//       (a) ratio = nodesWithTopicReaders / totalTenantNodes >= 0.5  (else abort)
+//       (b) topicReaderTasks <= 2 * nodesWithTopicReaders             (else no action)
 //   - sends TEvStreamingQueryNodesManager::TEvAbortQuery to runActorId when
 //     the health check fails.
 //
 // Parameters:
 //   runActorId   – actor that receives TEvAbortQuery
 //   tenantName   – tenant path used for TenantNodeEnumeration lookup
-//   taskCount    – number of DQ tasks in the current graph
 //   queryId      – used for logging
 //   graphParams  – serialized DQ task graph snapshot
 //   checkPeriod  – how often to repeat the check (default 1 minute)
@@ -51,7 +50,6 @@ struct TEvStreamingQueryNodesManager {
 NActors::IActor* CreateStreamingQueryNodesManager(
     NActors::TActorId runActorId,
     TString tenantName,
-    ui64 taskCount,
     TString queryId,
     const NProto::TGraphParams& graphParams,
     TDuration checkPeriod = TDuration::Minutes(1),

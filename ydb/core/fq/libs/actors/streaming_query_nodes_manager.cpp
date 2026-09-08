@@ -5,6 +5,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -25,6 +26,17 @@ namespace {
 // Tag for periodic wakeup timer.
 constexpr ui64 WakeupTag = 1;
 
+bool IsTopicSourceTask(const NYql::NDqProto::TDqTask& task) {
+    for (const auto& input : task.GetInputs()) {
+        if (input.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource
+            && input.GetSource().GetType() == NYql::NDq::PqSource)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 class TStreamingQueryNodesManager
     : public TActorBootstrapped<TStreamingQueryNodesManager>
 {
@@ -32,29 +44,37 @@ public:
     TStreamingQueryNodesManager(
         TActorId runActorId,
         TString tenantName,
-        ui64 taskCount,
         TString queryId,
         const NProto::TGraphParams& graphParams,
         TDuration checkPeriod,
         TDuration startDelay)
         : RunActorId(runActorId)
         , TenantName(std::move(tenantName))
-        , TaskCount(taskCount)
         , QueryId(std::move(queryId))
         , GraphParams(graphParams)
         , CheckPeriod(checkPeriod)
         , StartDelay(startDelay)
-    {}
+    {
+        for (const auto& task : GraphParams.GetTasks()) {
+            if (IsTopicSourceTask(task)) {
+                TopicSourceTaskNodes.emplace(task.GetId(), Nothing());
+            }
+        }
+    }
 
     static constexpr char ActorName[] = "STREAMING_QUERY_NODES_MANAGER";
 
     void Bootstrap() {
         LOG_D("StreamingQueryNodesManager started",
             {"tenant", TenantName},
-            {"taskCount", TaskCount},
+            {"taskCount", TopicSourceTaskNodes.size()},
             {"checkPeriod", CheckPeriod},
             {"startDelay", StartDelay});
 
+        if (TopicSourceTaskNodes.empty()) {
+            PassAway();
+            return;
+        }
         // Give all compute actors time to report their initial state first.
         Schedule(StartDelay, new TEvents::TEvWakeup(WakeupTag));
         Become(&TThis::StateWork);
@@ -73,9 +93,14 @@ private:
     // -------------------------------------------------------------------------
 
     void Handle(NYql::NDq::TEvDqCompute::TEvState::TPtr& ev) {
-        TaskNodes[ev->Get()->Record.GetTaskId()] = ev->Sender.NodeId();
+        const ui64 taskId = ev->Get()->Record.GetTaskId();
+        auto topicSourceTask = TopicSourceTaskNodes.find(taskId);
+        if (topicSourceTask == TopicSourceTaskNodes.end()) {
+            return;
+        }
+        topicSourceTask->second = ev->Sender.NodeId();
         LOG_D("Task node updated",
-            {"taskId", ev->Get()->Record.GetTaskId()},
+            {"taskId", taskId},
             {"nodeId", ev->Sender.NodeId()});
     }
 
@@ -108,11 +133,15 @@ private:
     // -------------------------------------------------------------------------
 
     void CheckNodes(const TVector<ui32>& nodes) {
+        if (TopicSourceTaskNodes.empty()) {
+            return;
+        }
+
         const ui64 totalNodes = nodes.size();
 
         LOG_D("Received tenant node list",
             {"totalNodes", totalNodes},
-            {"tasksWithState", TaskNodes.size()});
+            {"topicSourceTasks", TopicSourceTaskNodes.size()});
 
         if (totalNodes == 0) {
             LOG_W("Tenant has no nodes, skipping check");
@@ -124,17 +153,19 @@ private:
         }
 
         THashSet<ui32> queryNodes;
-        for (const auto& [_, nodeId] : TaskNodes) {
-            queryNodes.insert(nodeId);
+        for (const auto& [_, nodeId] : TopicSourceTaskNodes) {
+            if (nodeId) {
+                queryNodes.insert(*nodeId);
+            }
         }
         const ui64 nodesWithQuery = queryNodes.size();
 
-        // Check 1: fraction of nodes hosting the query must be >= 0.5.
+        // Check 1: fraction of nodes hosting topic readers must be >= 0.5.
         // nodesWithQuery / totalNodes < 0.5  ⟺  nodesWithQuery * 2 < totalNodes
         if (nodesWithQuery * 2 < totalNodes) {
             const TString reason = TStringBuilder()
                 << "StreamingQuery health check failed: "
-                << "nodes with query tasks (" << nodesWithQuery << ") "
+                << "nodes with topic reader tasks (" << nodesWithQuery << ") "
                 << "is less than half of total tenant nodes (" << totalNodes << "). "
                 << "Query will be aborted.";
             LOG_W(reason);
@@ -144,16 +175,16 @@ private:
 
         // Check 2: if taskCount <= 2 * nodesWithQuery – do nothing extra.
         // This is already the healthy case; we just log for visibility.
-        if (TaskCount <= 2 * nodesWithQuery) {
+        if (TopicSourceTaskNodes.size() <= 2 * nodesWithQuery) {
             LOG_D("Health check passed",
                 {"nodesWithQuery", nodesWithQuery},
                 {"totalNodes", totalNodes},
-                {"taskCount", TaskCount});
+                {"taskCount", TopicSourceTaskNodes.size()});
         } else {
             // Tasks are piling up on fewer nodes than expected – log a warning
             // but do NOT abort here per the spec.
             LOG_W("Task concentration warning: taskCount > 2 * nodesWithQuery",
-                {"taskCount", TaskCount},
+                {"taskCount", TopicSourceTaskNodes.size()},
                 {"nodesWithQuery", nodesWithQuery});
         }
     }
@@ -173,14 +204,13 @@ private:
 
     const TActorId RunActorId;
     const TString TenantName;
-    const ui64 TaskCount;
     const TString QueryId;
     const NProto::TGraphParams GraphParams;
     const TDuration CheckPeriod;
     const TDuration StartDelay;
 
-    // Updated from compute actor state events; maps a task to its latest node.
-    THashMap<ui64, ui32> TaskNodes;
+    // Contains topic-source tasks and their latest known node, when reported.
+    THashMap<ui64, TMaybe<ui32>> TopicSourceTaskNodes;
 
     bool LookupInFlight = false;
     bool AlreadyAborted = false;
@@ -195,7 +225,6 @@ private:
 IActor* CreateStreamingQueryNodesManager(
     TActorId runActorId,
     TString tenantName,
-    ui64 taskCount,
     TString queryId,
     const NProto::TGraphParams& graphParams,
     TDuration checkPeriod,
@@ -204,7 +233,6 @@ IActor* CreateStreamingQueryNodesManager(
     return new TStreamingQueryNodesManager(
         runActorId,
         std::move(tenantName),
-        taskCount,
         std::move(queryId),
         graphParams,
         checkPeriod,

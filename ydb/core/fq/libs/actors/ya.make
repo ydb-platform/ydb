@@ -55,6 +55,7 @@ PEERDIR(
     ydb/library/actors/interconnect
     ydb/library/mkql_proto
     ydb/library/security
+    ydb/library/yql/dq/common
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/yql/providers/common/token_accessor/client

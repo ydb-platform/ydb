@@ -21,6 +21,10 @@ void TBatchProcessor::Bootstrap(const NActors::TActorContext&) {
     Become(&TThis::StateWork);
 }
 
+TString TBatchProcessor::BuildLogPrefix() const {
+    return TStringBuilder() << "[BatchProcessor][" << SelfId() << "] ";
+}
+
 NActors::TActorId TBatchProcessor::GetOrCreateConsumerProcessor(const TString& user) {
     auto [it, inserted] = ConsumerProcessors.emplace(user, NActors::TActorId{});
     if (inserted) {

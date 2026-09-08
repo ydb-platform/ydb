@@ -224,6 +224,9 @@ namespace NKikimr::NStorage {
                 if (Cfg->DDiskConfig->HasCheckChecksumWhenRead()) {
                     ddiskConfig.CheckChecksumWhenRead = Cfg->DDiskConfig->GetCheckChecksumWhenRead();
                 }
+                if (Cfg->DDiskConfig->HasIdleSpinUs()) {
+                    ddiskConfig.IdleSpinUs = Cfg->DDiskConfig->GetIdleSpinUs();
+                }
             }
             if (Cfg->PBufferConfig) {
                 if (Cfg->PBufferConfig->HasInitChunks()) {

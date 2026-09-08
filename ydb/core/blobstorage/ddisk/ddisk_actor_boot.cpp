@@ -258,6 +258,7 @@ namespace NKikimr::NDDisk {
 #if defined(__linux__)
         NPDisk::TUringRouterConfig config;
         config.QueueDepth = MaxInFlight;
+        config.IdleSpinUs = Config.IdleSpinUs;
         if (!UringRouter) {
             if (!Config.ForcePDiskFallback && DiskFd != INVALID_FHANDLE && DiskFormat && NPDisk::TUringRouter::Probe(config)) {
                 UringRouter = std::make_unique<NPDisk::TUringRouter>(

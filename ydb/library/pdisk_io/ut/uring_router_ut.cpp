@@ -1457,6 +1457,10 @@ Y_UNIT_TEST_SUITE(TUringOperationBaseTest) {
 
 Y_UNIT_TEST_SUITE(TUringRouterTest) {
 
+    Y_UNIT_TEST(DefaultIdleSpinIs10Microseconds) {
+        UNIT_ASSERT_VALUES_EQUAL(10u, TUringRouterConfig{}.IdleSpinUs);
+    }
+
     Y_UNIT_TEST(CreateAndDestroy) {
         DoCreateAndDestroy(DefaultConfig());
     }

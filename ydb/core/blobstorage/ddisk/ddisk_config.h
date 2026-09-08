@@ -18,6 +18,9 @@ struct TDDiskConfig {
     // and synthetic DDisk zeros are not checked.
     bool CheckChecksumWhenRead = false;
 
+    // How long the io_uring thread busy-polls before parking when idle.
+    ui32 IdleSpinUs = 10;
+
     // Bounds the memory TIntegrityManager spends on cached data block checksums / digests
     // (see the memory note in integrity_manager.h). Must match
     // TIntegrityManager::DefaultChecksumCacheBytes by default.

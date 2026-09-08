@@ -1,9 +1,19 @@
+#include "mlp.h"
 #include "mlp_storage.h"
 
+#include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/keyvalue/keyvalue_events.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/mlp/ut/common/common.h>
+#include <ydb/core/protos/msgbus.pb.h>
+#include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/mon.h>
+
+#include <atomic>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -1287,6 +1297,247 @@ Y_UNIT_TEST(LongPollDuringPQTabletReload) {
         Sleep(TDuration::Seconds(1));
     }
     UNIT_FAIL("message not readable after tablet reload during long-poll");
+}
+
+// ---------------------------------------------------------------------------
+// Tests for PQConfig.MLPTargetUnlockedFIFOGroupsReadAhead: FIFO (KeepMessageOrder)
+// read-ahead behavior in TConsumerActor::RequiredToFetchMessageCount().
+//
+// Scenario: 100000 messages spread over 10 groups + 5 messages in 5 new unique
+// groups (15 groups total). With read-ahead disabled (== 0, legacy behavior) the
+// consumer fetches in small MinMessages-sized chunks, so a single read cannot see
+// the tail groups. With read-ahead enabled (> 0) the consumer fetches up to
+// MaxMessages, pulling in the heads of all groups.
+// ---------------------------------------------------------------------------
+
+static constexpr size_t kReadAheadBaseGroups = 10;
+static constexpr size_t kReadAheadBaseMessages = 100000;
+static constexpr size_t kReadAheadUniqueGroups = 5;
+
+static void WriteReadAheadDataset(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topic) {
+    // 100000 messages over 10 groups (round-robin).
+    WriteManyGroups(setup, topic, /*messageSize=*/1, kReadAheadBaseMessages, kReadAheadBaseGroups);
+
+    // 5 messages, each in its own brand-new unique group (groups 100..104).
+    auto& runtime = setup->GetRuntime();
+    std::vector<TWriterSettings::TMessage> messages;
+    for (size_t i = 0; i < kReadAheadUniqueGroups; ++i) {
+        messages.push_back({
+            .Index = i,
+            .MessageBody = NUnitTest::RandomString(1),
+            .MessageGroupId = TStringBuilder() << "unique_message_group_id_" << (100 + i),
+        });
+    }
+    CreateWriterActor(runtime, TWriterSettings{
+        .DatabasePath = "/Root",
+        .TopicName = topic,
+        .Messages = std::move(messages),
+    });
+    auto response = GetWriteResponse(runtime);
+    UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), kReadAheadUniqueGroups);
+}
+
+// ---------------------------------------------------------------------------
+// Test type 1 (deterministic, single-threaded actor harness): boot a consumer
+// with a pre-built snapshot of 100000 messages over 10 groups and inspect the
+// Count in the CmdRead request it emits to the PQ tablet.
+//
+// The TTopicSdkTestSetup runtime uses real threads, where the consumer -> tablet
+// local Send() is not intercepted by runtime observers. Here we register the
+// consumer directly against edge actors and grab the read request.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+constexpr ui64 kReadAheadTabletId = 100;
+constexpr const char* kReadAheadConsumer = "mlp-consumer";
+
+NKikimrPQ::TPQTabletConfig MakeReadAheadTopicConfig() {
+    NKikimrPQ::TPQTabletConfig config;
+    config.SetTopicName("topic");
+    config.SetTopicPath("/Root/topic");
+
+    auto* partition = config.AddAllPartitions();
+    partition->SetPartitionId(0);
+    partition->SetTabletId(kReadAheadTabletId);
+    partition->SetStatus(NKikimrPQ::ETopicPartitionStatus::Active);
+
+    auto* consumer = config.AddConsumers();
+    consumer->SetName(kReadAheadConsumer);
+    consumer->SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
+    consumer->SetKeepMessageOrder(true);
+    consumer->SetGeneration(1);
+    return config;
+}
+
+NKikimrPQ::TPQTabletConfig::TConsumer MakeReadAheadConsumerConfig() {
+    NKikimrPQ::TPQTabletConfig::TConsumer consumer;
+    consumer.SetName(kReadAheadConsumer);
+    consumer.SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
+    consumer.SetKeepMessageOrder(true);
+    consumer.SetGeneration(1);
+    return consumer;
+}
+
+// Builds a serialized snapshot with `messageCount` messages spread round-robin
+// across `groupCount` groups.
+TString BuildSnapshotBytes(size_t messageCount, size_t groupCount) {
+    auto timeProvider = CreateDefaultTimeProvider();
+    TStorage storage(timeProvider, TStorage::TStorageSettings{.KeepMessageOrder = true});
+    const TInstant now = timeProvider->Now();
+    for (size_t offset = 0; offset < messageCount; ++offset) {
+        storage.AddMessage(offset, /*hasMessagegroup=*/true, /*messageGroupIdHash=*/offset % groupCount, now);
+    }
+    // Drop the accumulated batch so serialization reflects the full state.
+    auto batch = storage.ExtractBatch();
+    Y_UNUSED(batch);
+
+    NKikimrPQ::TMLPStorageSnapshot snapshot;
+    auto* configuration = snapshot.MutableConfiguration();
+    configuration->SetConsumerName(kReadAheadConsumer);
+    configuration->SetGeneration(1);
+    storage.SerializeTo(snapshot);
+    return snapshot.SerializeAsString();
+}
+
+THolder<TEvKeyValue::TEvResponse> MakeSnapshotKvResponse(ui64 cookie, const TString& snapshotBytes) {
+    auto response = MakeHolder<TEvKeyValue::TEvResponse>();
+    response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+    response->Record.SetCookie(cookie);
+    auto* readResult = response->Record.AddReadResult();
+    readResult->SetStatus(NKikimrProto::OK);
+    readResult->SetValue(snapshotBytes);
+    response->Record.AddReadRangeResult()->SetStatus(NKikimrProto::NODATA);
+    return response;
+}
+
+class TIgnorePipeCacheActor : public TActorBootstrapped<TIgnorePipeCacheActor> {
+public:
+    void Bootstrap() {
+        Become(&TThis::StateWork);
+    }
+
+    STRICT_STFUNC(StateWork,
+        IgnoreFunc(TEvPipeCache::TEvForward);
+        IgnoreFunc(TEvPipeCache::TEvUnlink);
+    )
+};
+
+// Boots a consumer with the given read-ahead flag and pre-built snapshot, then
+// returns the Count of the first CmdRead request it emits.
+ui64 GrabFirstFetchCount(float readAhead, size_t messageCount, size_t groupCount) {
+    TTestBasicRuntime runtime(1, false);
+    runtime.Initialize(TAppPrepare().Unwrap());
+    runtime.SetScheduledLimit(10000);
+    runtime.GetAppData().PQConfig.SetMLPTargetUnlockedFIFOGroupsReadAhead(readAhead);
+
+    auto pipeCache = runtime.Register(new TIgnorePipeCacheActor());
+    runtime.EnableScheduleForActor(pipeCache);
+    runtime.RegisterService(MakePipePerNodeCacheID(false), pipeCache);
+
+    auto tablet = runtime.AllocateEdgeActor();
+    auto partition = runtime.AllocateEdgeActor();
+
+    ::NMonitoring::TDynamicCounterPtr counters(new ::NMonitoring::TDynamicCounters());
+    auto consumer = runtime.Register(CreateConsumerActor(
+        "/Root",
+        kReadAheadTabletId,
+        tablet,
+        /*partitionId=*/0,
+        partition,
+        /*partitionGeneration=*/1,
+        MakeReadAheadTopicConfig(),
+        MakeReadAheadConsumerConfig(),
+        TDuration::Hours(1),
+        /*partitionEndOffset=*/messageCount + 1000,
+        counters));
+    runtime.EnableScheduleForActor(consumer);
+
+    const TString snapshotBytes = BuildSnapshotBytes(messageCount, groupCount);
+
+    // Answer the initial snapshot KV read with the preloaded state.
+    auto kvReq = runtime.GrabEdgeEvent<TEvKeyValue::TEvRequest>(TDuration::Seconds(10));
+    UNIT_ASSERT(kvReq);
+    runtime.Send(new IEventHandle(consumer, tablet,
+        MakeSnapshotKvResponse(kvReq->Record.GetCookie(), snapshotBytes).Release()));
+
+    // After init the consumer runs FetchMessagesIfNeeded and sends a read request.
+    auto readReq = runtime.GrabEdgeEvent<TEvPersQueue::TEvRequest>(TDuration::Seconds(10));
+    UNIT_ASSERT(readReq);
+    UNIT_ASSERT(readReq->Record.HasPartitionRequest());
+    UNIT_ASSERT(readReq->Record.GetPartitionRequest().HasCmdRead());
+    const auto& read = readReq->Record.GetPartitionRequest().GetCmdRead();
+    UNIT_ASSERT(read.HasCount());
+    return static_cast<ui64>(read.GetCount());
+}
+
+} // namespace
+
+Y_UNIT_TEST(FifoReadAheadDisabledFetchesSmallBatches) {
+    // Legacy behavior: with 100000 unprocessed messages already in flight the
+    // consumer only tops up by MinMessages (100), never jumping to MaxMessages.
+    const ui64 count = GrabFirstFetchCount(/*readAhead=*/0.0f, kReadAheadBaseMessages, kReadAheadBaseGroups);
+    Cerr << ">>>>> first CmdRead count (disabled): " << count << Endl;
+    UNIT_ASSERT_VALUES_EQUAL(count, 100);
+}
+
+Y_UNIT_TEST(FifoReadAheadEnabledFetchesMaxBatches) {
+    // Read-ahead enabled: the consumer targets MaxMessages (120000), bounded by
+    // the free in-flight capacity (MaxMessages - 100000 already loaded = 20000).
+    const ui64 count = GrabFirstFetchCount(/*readAhead=*/1.0f, kReadAheadBaseMessages, kReadAheadBaseGroups);
+    Cerr << ">>>>> first CmdRead count (enabled): " << count << Endl;
+    UNIT_ASSERT_VALUES_EQUAL(count, 20000);
+    // The essential contract: enabled read-ahead fetches far more than the legacy
+    // MinMessages ceiling, even though LockedMessageCount is 0.
+    UNIT_ASSERT_C(count > 100,
+        TStringBuilder() << "expected read-ahead to exceed legacy MinMessages, got " << count);
+}
+
+// Test type 2: verify that with read-ahead enabled the consumer keeps fetching
+// until it reaches the 5 unique tail groups, so all 15 group heads become
+// readable.
+void FifoReadAheadReadAllGroupsImpl(float readAhead) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+
+    runtime.GetAppData().PQConfig.SetMLPTargetUnlockedFIFOGroupsReadAhead(readAhead);
+
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer", 1, /*keepMessagesOrder=*/true);
+    WriteReadAheadDataset(setup, "/Root/topic1");
+
+    const size_t expectedGroups = kReadAheadBaseGroups + kReadAheadUniqueGroups; // 15
+
+    // Give the consumer time to fetch all messages, then read. Retry with a short
+    // processing timeout so locks from earlier attempts expire between reads.
+    for (size_t i = 0; i < 30; ++i) {
+        Sleep(TDuration::Seconds(1));
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(2),
+            .ProcessingTimeout = TDuration::Seconds(1),
+            .MaxNumberOfMessage = static_cast<ui32>(expectedGroups),
+        });
+        auto response = GetReadResponse(runtime, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
+        if (response->Messages.size() == expectedGroups) {
+            return;
+        }
+        Cerr << ">>>>> attempt " << i << ": read " << response->Messages.size()
+             << " of " << expectedGroups << " groups" << Endl;
+    }
+    UNIT_FAIL("consumer did not read heads of all " << expectedGroups
+        << " groups with read-ahead == " << readAhead);
+}
+
+Y_UNIT_TEST(FifoReadAheadEnabledReadsAllGroups) {
+    FifoReadAheadReadAllGroupsImpl(1.0f);
+}
+
+Y_UNIT_TEST(FifoReadAheadRatioReadsAllGroups) {
+    FifoReadAheadReadAllGroupsImpl(0.5f);
 }
 
 }

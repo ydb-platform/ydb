@@ -1008,16 +1008,25 @@ size_t TConsumerActor::RequiredToFetchMessageCount() const {
     // unprocessed count (messages whose group head is in flight are Unprocessed but not readable). When
     // most in-flight groups are locked, few groups are available to hand out in parallel, so fetch
     // aggressively toward MaxMessages to pull in heads of new groups and maximize group diversity.
+    //
+    // The behavior is controlled by PQConfig.MLPTargetUnlockedFIFOGroupsReadAhead:
+    //   0        - legacy behavior (no group-based forced fetch);
+    //   >= 1     - always fetch up to MaxMessages;
+    //   (0..1)   - fetch up to MaxMessages when locked groups dominate the readable ones, i.e. when
+    //              lockedGroups > ratio * readableGroups (ratio == 0.5 reproduces the previous hardcoded
+    //              logic of readableGroups < lockedGroups * 2).
     if (Config.GetKeepMessageOrder()) {
-        const size_t inflightGroups = metrics.InflightMessageGroupCount;
-        const size_t lockedGroups = metrics.LockedMessageGroupCount;
-        const size_t readableGroups = inflightGroups > lockedGroups ? inflightGroups - lockedGroups : 0;
-        // Target number of readable groups we want available for parallel processing.
-        const size_t targetReadableGroups = std::max<size_t>(Storage->MinMessages, lockedGroups * 2);
-        if (readableGroups < targetReadableGroups) {
+        const float targetReadAhead = AppData()->PQConfig.GetMLPTargetUnlockedFIFOGroupsReadAhead();
+        if (targetReadAhead >= 1.0f) {
             maxMessages = Storage->MaxMessages;
+        } else if (targetReadAhead > 0.0f) {
+            const size_t inflightGroups = metrics.InflightMessageGroupCount;
+            const size_t lockedGroups = metrics.LockedMessageGroupCount;
+            const size_t readableGroups = inflightGroups > lockedGroups ? inflightGroups - lockedGroups : 0;
+            if (lockedGroups > targetReadAhead * readableGroups) {
+                maxMessages = Storage->MaxMessages;
+            }
         }
-        maxMessages = Storage->MaxMessages;
     }
 
     return std::min(maxMessages, Storage->MaxMessages - metrics.InflightMessageCount);

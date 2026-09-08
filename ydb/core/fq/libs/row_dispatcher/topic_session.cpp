@@ -134,6 +134,7 @@ private:
             , StartingMessageTimestampMs(ev->Get()->Record.GetStartingMessageTimestampMs())
             , Predicate(ev->Get()->Record.GetSource().GetPredicate())
             , WatermarkExpr(ev->Get()->Record.GetSource().GetWatermarkExpr())
+            , WatermarkGranularityUs(ev->Get()->Record.GetSource().GetWatermarks().GetGranularityUs())
             , Columns(GetColumns(ev->Get()->Record.GetSource()))
             , ConsumerName(ev->Get()->Record.GetSource().GetConsumerName())
             , UseSsl(ev->Get()->Record.GetSource().GetUseSsl())
@@ -189,6 +190,10 @@ private:
 
         [[nodiscard]] const TString& GetWatermarkExpr() const override {
             return WatermarkExpr;
+        }
+
+        [[nodiscard]] ui64 GetWatermarkGranularityUs() const override {
+            return WatermarkGranularityUs;
         }
 
         [[nodiscard]] const TString& GetFilterExpr() const override {
@@ -252,6 +257,7 @@ private:
         const ui64 StartingMessageTimestampMs;
         const TString Predicate;
         const TString WatermarkExpr;
+        const ui64 WatermarkGranularityUs;
         const TVector<TSchemaColumn> Columns;
         const TString ConsumerName;
         const bool UseSsl;
@@ -928,11 +934,11 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     const auto& source = ev->Get()->Record.GetSource();
     YDB_LOG_INFO("New client",
         {"logPrefix", LogPrefix},
-        {"sender", ev->Sender},
+        {"readActorId", ev->Sender},
         {"predicate", source.GetPredicate()},
         {"watermarkExpr", source.GetWatermarkExpr()},
+        {"watermarkGranularity", source.GetWatermarks().GetGranularityUs()},
         {"offset", offset});
-
     if (!CheckNewClient(ev)) {
         return;
     }

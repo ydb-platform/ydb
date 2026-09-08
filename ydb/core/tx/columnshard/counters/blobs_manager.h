@@ -43,8 +43,7 @@ public:
     }
 };
 
-// A stalled cut has several externally indistinguishable causes; these separate them.
-// Aggregate labels: the channel is already in the poison warning.
+// A stalled cut has several indistinguishable causes; these separate them.
 class THistoryCutterCounters: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
@@ -75,8 +74,7 @@ public:
         }
     }
 
-    // Deltas, not absolute values: tablets share one module_id=BlobsManager subgroup,
-    // so Set() would be last-tablet-wins.
+    // Deltas, not absolute values: tablets share one subgroup, so Set() would be last-tablet-wins.
     void OnLevelsDelta(const i64 sweepCandidates, const i64 channelsPoisoned, const i64 entriesDisproved) const {
         SweepCandidates->Add(sweepCandidates);
         ChannelsPoisoned->Add(channelsPoisoned);

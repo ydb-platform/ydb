@@ -84,8 +84,7 @@ public:
         return TGenStep(*Blobs.begin());
     }
 
-    // Ordered by (generation, step), so only that slice is scanned: a sentinel with all other
-    // fields zeroed is the smallest id of its generation, so lower_bound lands on each bound.
+    // Ordered by (generation, step): a zeroed sentinel is the smallest id of its generation.
     bool HasNoBlobsInRange(const ui32 channel, const ui32 fromGen, const ui32 nextFromGen) const {
         const auto rangeBegin = Blobs.lower_bound(TLogoBlobID(0, fromGen, 0, 0, 0, 0));
         const auto rangeEnd = Blobs.lower_bound(TLogoBlobID(0, nextFromGen, 0, 0, 0, 0));

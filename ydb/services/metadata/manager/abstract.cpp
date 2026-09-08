@@ -16,7 +16,7 @@ bool IsOldSecretType(const TString& typeId) {
     return to_lower(typeId) == "secret";
 }
 
-} // namespace
+} // anonymous namespace
 
 const TString& GetOldSecretCreationDisabledMessage() {
     static const TString message("Old secrets creation syntax is disabled now. Please use the new one");
@@ -144,6 +144,11 @@ IOperationsManager::TYqlConclusionStatus IOperationsManager::PrepareDropObjectSc
     TInternalModificationContext internalContext(context);
     internalContext.SetActivityType(EActivityType::Drop);
     return DoPrepare(schemeOperation, settings, manager, internalContext);
+}
+
+NThreading::TFuture<IOperationsManager::TYqlConclusionStatus> IOperationsManager::TrackObjectOperation(const TString& objectId, const TOperationTrackContext& context) const {
+    Y_UNUSED(objectId, context);
+    return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("Object operation tracking is not supported"));
 }
 
 TTableSchema IOperationsManager::GetSchema() const {

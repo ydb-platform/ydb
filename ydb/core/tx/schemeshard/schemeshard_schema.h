@@ -2389,9 +2389,11 @@ struct Schema : NIceDb::Schema {
         struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion : Column<3, NScheme::NTypeIds::Uint64> {};
         struct Properties : Column<4, NScheme::NTypeIds::String> {};
+        struct OperationOwnerActorId : Column<5, NScheme::NTypeIds::ActorId> {};
+        struct OperationOwnerUserToken : Column<6, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
-        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Properties>;
+        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Properties, OperationOwnerActorId, OperationOwnerUserToken>;
     };
 
     struct ForcedCompactions : Table<130> {

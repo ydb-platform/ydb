@@ -228,6 +228,7 @@ SRCS(
     schemeshard__operation_side_effects.cpp
     schemeshard__operation_side_effects.h
     schemeshard__operation_split_merge.cpp
+    schemeshard__operation_streaming_query_common.cpp
     schemeshard__operation_truncate_table.cpp
     schemeshard__operation_upgrade_subdomain.cpp
     schemeshard__pq_stats.cpp
@@ -392,12 +393,14 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/test_tablet
     ydb/core/tx
+    ydb/core/tx/columnshard/bg_tasks/manager
     ydb/core/tx/datashard
     ydb/core/tx/schemeshard/common
     ydb/core/tx/schemeshard/generated
     ydb/core/tx/schemeshard/index
     ydb/core/tx/schemeshard/olap
     ydb/core/tx/scheme_board
+    ydb/core/tx/tiering/tier
     ydb/core/tx/tx_allocator_client
     ydb/core/util
     ydb/core/wrappers
@@ -407,13 +410,14 @@ PEERDIR(
     ydb/library/login
     ydb/library/login/protos
     ydb/library/protobuf_printer
+    ydb/library/yverify_stream
     ydb/public/lib/ydb_cli/dump/files
     ydb/public/lib/ydb_cli/dump/util
+    ydb/services/bg_tasks
+    ydb/services/metadata/abstract
+    ydb/services/workload_manager/common
     yql/essentials/minikql
     yql/essentials/providers/common/proto
-    ydb/services/bg_tasks
-    ydb/core/tx/columnshard/bg_tasks/manager
-    ydb/core/tx/tiering/tier
 )
 
 YQL_LAST_ABI_VERSION()

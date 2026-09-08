@@ -7,6 +7,7 @@
 #include "olap/bg_tasks/events/global.h"
 #include "olap/operations/local_index_helpers.h"
 #include "schemeshard.h"
+#include "schemeshard__operation_streaming_query_common.h"
 #include "schemeshard__root_shred_manager.h"
 #include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard_svp_migration.h"
@@ -40,6 +41,7 @@
 
 #include <ydb/library/login/account_lockout/account_lockout.h>
 #include <ydb/library/login/password_checker/password_checker.h>
+#include <ydb/services/metadata/abstract/service.h>
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
@@ -387,6 +389,7 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
     ResumeCdcStreamScans(opts.CdcStreamScans, ctx);
     ResumeIncrementalBackups(opts.IncrementalBackupIds, ctx);
     ResumeFullBackups(opts.FullBackupIds, ctx);
+    ResumeStreamingQueriesOperations(opts.StreamingQueriesOperations);
 
     ParentDomainLink.SendSync(ctx);
 
@@ -4026,7 +4029,9 @@ void TSchemeShard::PersistStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId) {
 
     db.Table<Schema::StreamingQueryState>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
         NIceDb::TUpdate<Schema::StreamingQueryState::AlterVersion>{streamingQuery->AlterVersion},
-        NIceDb::TUpdate<Schema::StreamingQueryState::Properties>{streamingQuery->Properties.SerializeAsString()}
+        NIceDb::TUpdate<Schema::StreamingQueryState::Properties>{streamingQuery->Properties.SerializeAsString()},
+        NIceDb::TUpdate<Schema::StreamingQueryState::OperationOwnerActorId>{streamingQuery->OperationOwnerActorId},
+        NIceDb::TUpdate<Schema::StreamingQueryState::OperationOwnerUserToken>{streamingQuery->OperationOwnerUserToken ? streamingQuery->OperationOwnerUserToken->SerializeAsString() : ""}
     );
 }
 
@@ -4038,6 +4043,21 @@ void TSchemeShard::PersistRemoveStreamingQuery(NIceDb::TNiceDb& db, TPathId path
     }
 
     db.Table<Schema::StreamingQueryState>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+}
+
+void TSchemeShard::ResumeStreamingQueriesOperations(const TVector<TPathId>& ids) {
+    for (const auto& id : ids) {
+        const auto streamingQueryIt = StreamingQueries.find(id);
+        Y_ABORT_UNLESS(streamingQueryIt != StreamingQueries.end());
+        const auto streamingQuery = streamingQueryIt->second;
+        Y_ABORT_UNLESS(streamingQuery);
+        Y_ABORT_UNLESS(streamingQuery->OperationOwnerActorId);
+
+        Send(
+            NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
+            NStreamingQuery::MakeStreamingOperationTrackerRequest(TPath::Init(id, this), Generation(), *streamingQuery)
+        );
+    }
 }
 
 void TSchemeShard::PersistTestShardSet(NIceDb::TNiceDb& db, TPathId pathId) {

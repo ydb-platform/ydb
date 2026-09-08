@@ -247,9 +247,6 @@ namespace {
             , ExceptionFunc(std::exception, HandleException)
         )
 
-        // TODO consider periodic check / forcibly terminate stuck sessions
-        // (then again, there are dev ui handle to terminate sessions)
-
         void HandleException(const std::exception& ex) {
             YDB_LOG_ERROR("Got unexpected exception",
                     {"exception", ex.what()});

@@ -37,6 +37,7 @@ void AddReadTraceStats(NWilson::TSpan& span, NYql::NDqProto::TDqTaskStats& stats
 void AddKqpTaskTraceAttributes(NWilson::TSpan& span, const NYql::NDqProto::TDqComputeActorStats& stats);
 NWilson::TSpan MakeMetadataTraceSpan(const NWilson::TTraceId& parent, NActors::TActorSystem* actorSystem,
     const TString& name, const TString& table, const char* purpose);
+void MarkJoinedCompilation(NWilson::TSpan& waiter, const NWilson::TSpan& compilation);
 
 class TShardTraceEvents {
 public:

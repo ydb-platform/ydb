@@ -651,6 +651,7 @@ private:
                 auto requests = RequestsQueue.ExtractByQuery(*compileResult->Query);
                 for (auto& request : requests) {
                     LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, request.Query.UserSid, compileActorId.ToString());
+                    MarkJoinedCompilation(request.CompileServiceSpan, compileRequest.CompileServiceSpan);
                     Reply(request.Sender, compileResult, compileStats, ctx,
                         request.Cookie, std::move(request.Orbit), std::move(request.CompileServiceSpan));
                 }

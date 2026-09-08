@@ -354,6 +354,103 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         UNIT_ASSERT(!FindSpan(*uploader, "Compile query"));
     }
 
+    Y_UNIT_TEST(SharedCompilationKeepsWaiterCoverageAndLink) {
+        for (const auto type : {NKikimrKqp::QUERY_TYPE_SQL_DML, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY}) {
+            for (const bool traceFirst : {false, true}) {
+                auto [runtime, server, sender] = CreateServer();
+                CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
+                auto* uploader = RegisterUploader(runtime);
+                const auto waiter = runtime.AllocateEdgeActor();
+                TAutoPtr<IEventHandle> metadata;
+                size_t compileRequests = 0;
+                size_t metadataRequests = 0;
+                const auto observer = runtime.AddObserver<NKqp::TEvKqp::TEvCompileRequest>(
+                    [&](NKqp::TEvKqp::TEvCompileRequest::TPtr&) { ++compileRequests; });
+                auto previous = runtime.SetEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+                    if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType) {
+                        const auto& result = static_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult*>(ev->GetBase())->Request->ResultSet;
+                        if (std::ranges::any_of(result, [](const auto& entry) {
+                                return CanonizePath(entry.Path) == "/Root/table-1";
+                            })) {
+                            ++metadataRequests;
+                            if (!metadata) {
+                                metadata = ev.Release();
+                                return true;
+                            }
+                        }
+                    }
+                    return false;
+                });
+                auto send = [&](TActorId replyTo, bool traced) {
+                    auto request = MakeSQLRequest("SELECT * FROM `/Root/table-1` WHERE key = 123u;", true);
+                    ActorIdToProto(replyTo, request->Record.MutableRequestActorId());
+                    request->Record.MutableRequest()->SetType(type);
+                    NWilson::TTraceId traceId;
+                    if (traced) {
+                        traceId = NWilson::TTraceId::NewTraceId(15, 4095);
+                    }
+                    runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), replyTo,
+                        request.Release(), 0, 0, nullptr, std::move(traceId)));
+                };
+                send(sender, traceFirst);
+                TDispatchOptions blocked;
+                blocked.FinalEvents.emplace_back([&](IEventHandle&) { return bool(metadata); });
+                runtime.DispatchEvents(blocked);
+                const size_t beforeWaiter = compileRequests;
+                send(waiter, true);
+                TDispatchOptions joined;
+                joined.FinalEvents.emplace_back([&](IEventHandle&) { return compileRequests > beforeWaiter; });
+                runtime.DispatchEvents(joined);
+                runtime.SimulateSleep(TDuration::MilliSeconds(1));
+                runtime.SetEventFilter(std::move(previous));
+                runtime.Send(metadata.Release());
+                size_t responses = 0;
+                while (responses < 2) {
+                    TAutoPtr<IEventHandle> handle;
+                    auto replies = runtime.GrabEdgeEventsRethrow<NKqp::TEvKqp::TEvQueryResponse,
+                        NKqp::TEvKqpExecuter::TEvStreamData>(handle);
+                    if (auto* response = std::get<NKqp::TEvKqp::TEvQueryResponse*>(replies)) {
+                        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+                        ++responses;
+                        continue;
+                    }
+                    const auto& data = std::get<NKqp::TEvKqpExecuter::TEvStreamData*>(replies)->Record;
+                    auto ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(data.GetSeqNo(), data.GetChannelId());
+                    ack->Record.SetFreeSpace(1 << 20);
+                    runtime.Send(new IEventHandle(handle->Sender, handle->Recipient, ack.Release()));
+                }
+                runtime.SimulateSleep(TDuration::Seconds(1));
+                UNIT_ASSERT_VALUES_EQUAL(metadataRequests, 1u);
+                UNIT_ASSERT(uploader->BuildTraceTrees());
+                const TFakeWilsonUploader::TOtelSpan* shared = nullptr;
+                const TFakeWilsonUploader::TOtelSpan* owner = nullptr;
+                for (const auto& span : uploader->Spans) {
+                    if (span.name() != "Compile") {
+                        continue;
+                    }
+                    if (const auto* coverage = FindAttribute(span, "ydb.trace.coverage")) {
+                        UNIT_ASSERT_VALUES_EQUAL(coverage->value().string_value(), "joined_in_progress");
+                        shared = &span;
+                    } else {
+                        owner = &span;
+                    }
+                }
+                UNIT_ASSERT(shared);
+                UNIT_ASSERT_VALUES_EQUAL(shared->links_size(), traceFirst ? 1 : 0);
+                if (traceFirst) {
+                    UNIT_ASSERT(owner);
+                    UNIT_ASSERT_VALUES_EQUAL(shared->links(0).trace_id(), owner->trace_id());
+                    UNIT_ASSERT_VALUES_EQUAL(shared->links(0).span_id(), owner->span_id());
+                }
+                for (const auto& span : uploader->Spans) {
+                    if (span.trace_id() == shared->trace_id()) {
+                        UNIT_ASSERT(span.name() != "Compile query" && span.name() != "Load metadata");
+                    }
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(ForwardingAndEarlyRejection) {
         auto [runtime, server, sender] = CreateServer(2);
         auto* uploader = RegisterUploader(runtime);

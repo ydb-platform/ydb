@@ -98,6 +98,16 @@ NWilson::TSpan MakeMetadataTraceSpan(const NWilson::TTraceId& parent, NActors::T
     return span;
 }
 
+void MarkJoinedCompilation(NWilson::TSpan& waiter, const NWilson::TSpan& compilation) {
+    if (!waiter) {
+        return;
+    }
+    waiter.Attribute("ydb.trace.coverage", TString("joined_in_progress"));
+    if (compilation) {
+        waiter.Link(compilation.GetTraceId());
+    }
+}
+
 bool TShardTraceEvents::Retain(const NWilson::TSpan& span, bool last) {
     if (!span || span.GetTraceId().GetVerbosity() < TComponentTracingLevels::TQueryProcessor::Diagnostic) {
         return false;

@@ -19,6 +19,8 @@ items:
     items:
     - name: Жизненный цикл актора
       href: actor-system/actor-lifecycle.md
+    - name: Подсистемы акторной системы
+      href: actor-system/subsystems.md
     - name: События и обмен сообщениями
       href: actor-system/events-and-messaging.md
     - name: Сбои и завершение работы

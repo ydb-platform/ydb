@@ -69,9 +69,9 @@ void THostStat::OnCancelled(TInstant now, EOperation operation)
     }
 }
 
-THostStat::TErrorsInfo THostStat::GetErrorsInfo(TInstant now) const
+THostErrorsInfo THostStat::GetErrorsInfo(TInstant now) const
 {
-    TErrorsInfo result;
+    THostErrorsInfo result;
     if (FirstErrorAt) {
         result.FromFirstError = now - FirstErrorAt;
     }

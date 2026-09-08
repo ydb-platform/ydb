@@ -38,7 +38,6 @@ void THostStat::OnSuccess(
 
     LastSuccessAt = now;
     FirstErrorAt = TInstant();
-    LastErrorAt = TInstant();
     ConsecutiveErrorCount = 0;
     ++ConsecutiveSuccessCount;
 }

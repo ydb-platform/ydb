@@ -475,8 +475,10 @@ void TComputationPatternLRUCache::AccessPattern(const TProgramKey& key, TPattern
         return;
     }
 
+    const size_t accessTimesBeforeTryToCompile = *Configuration_.PatternAccessTimesBeforeTryToCompile;
+
     const size_t accessTimes = entry->AccessTimes.fetch_add(1) + 1;
-    if (accessTimes < Max<size_t>(*Configuration_.PatternAccessTimesBeforeTryToCompile, 1)) {
+    if (accessTimes < Max<size_t>(accessTimesBeforeTryToCompile, 1)) {
         return;
     }
 
@@ -491,7 +493,8 @@ void TComputationPatternLRUCache::AccessPattern(const TProgramKey& key, TPattern
         return;
     }
 
-    if (TInstant::Now() - entry->CachedAt < MinResidencyBeforeCompile) {
+    // A zero threshold is an explicit "compile it as soon as you see it"
+    if (accessTimesBeforeTryToCompile && TInstant::Now() - entry->CachedAt < MinResidencyBeforeCompile) {
         // Too young to tell whether it is going to live long enough for the compilation to pay off. Note this is not
         // a lost chance: the pattern is looked at again on every next access, and gets queued once it is old enough.
         ++*CompilationsPostponed_;

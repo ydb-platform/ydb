@@ -1271,6 +1271,22 @@ Y_UNIT_TEST(YoungPatternIsNotQueuedForCompilation) {
     UNIT_ASSERT_VALUES_EQUAL(toCompileNow.size(), 1);
 }
 
+Y_UNIT_TEST(ZeroAccessThresholdSkipsResidencyRequirement) {
+    constexpr size_t maxBytes = 1'000'000;
+    TComputationPatternLRUCache cache({maxBytes, maxBytes, /*patternAccessTimesBeforeTryToCompile=*/0});
+
+    const TProgramKey key{NYql::UnknownLangVersion, {}, "program"};
+    cache.EmplacePattern(key, MakeMockEntry());
+
+    // Asking for the compilation on the very first access means exactly that: a freshly cached pattern is queued
+    // right away, without being asked to prove it stays around first.
+    cache.FindOrSubscribe(key);
+
+    THashMap<TProgramKey, TPatternCacheEntryPtr> toCompile;
+    cache.GetPatternsToCompile(toCompile);
+    UNIT_ASSERT_VALUES_EQUAL(toCompile.size(), 1);
+}
+
 Y_UNIT_TEST(RaisingCompiledLimitBringsDemotedPatternBack) {
     constexpr size_t patternSize = 100;
     constexpr size_t accessTimesBeforeCompile = 2;

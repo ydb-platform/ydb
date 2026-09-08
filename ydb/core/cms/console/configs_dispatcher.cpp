@@ -1106,6 +1106,9 @@ try {
             break;
     }
 
+    // Trace only this replay. Reusing the tracer accumulates update history
+    // (including source file names) for the lifetime of the dispatcher.
+    RecordedInitialConfiguratorDeps->ConfigUpdateTracer = MakeDefaultConfigUpdateTracer();
     auto deps = RecordedInitialConfiguratorDeps->GetDeps();
     NConfig::TInitialConfigurator initCfg(deps);
 

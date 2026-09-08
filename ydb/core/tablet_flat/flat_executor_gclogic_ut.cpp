@@ -423,8 +423,7 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
     }
 
     Y_UNIT_TEST(HistoryCuttingUnsoundForExternalBlobWriters) {
-        // Observed live: entries cut under externally-written blobs left GroupFor()
-        // resolving to Max<ui32> and GC retrying an invalid group forever.
+        // Cutting under externally-written blobs leaves GroupFor() at Max<ui32> and GC retrying forever.
         struct TExternalWriter: public NFlatExecutorSetup::ITablet {
             explicit TExternalWriter(TTabletStorageInfo* info)
                 : ITablet(info, TActorId())

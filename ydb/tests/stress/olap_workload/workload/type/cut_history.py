@@ -22,8 +22,7 @@ class WorkloadCutHistory(WorkloadBase):
 
     def __init__(self, client, prefix, stop, endpoint, period=30):
         super().__init__(client, prefix, "cut_history", stop)
-        # kikimr_client_factory speaks plaintext message bus, so grpcs:// cannot work
-        # here: reject it instead of stripping the scheme and failing to connect.
+        # kikimr_client_factory speaks plaintext message bus, so reject grpcs:// instead of failing to connect.
         scheme, sep, address = endpoint.rpartition("://")
         if sep and scheme != "grpc":
             raise ValueError(f"cut_history needs a grpc:// endpoint, got {endpoint}")
@@ -57,8 +56,7 @@ class WorkloadCutHistory(WorkloadBase):
             except Exception as e:
                 self.errors += 1
                 logger.warning("cut_history: restart round failed: %s", e)
-            # Wait longer than the cutter's nomination cadence so a sweep can finish
-            # between rounds instead of every entry being reopened by a new generation.
+            # Wait past the nomination cadence so a sweep finishes instead of every entry being reopened.
             waited = 0
             while waited < self.period and not self.is_stop_requested():
                 time.sleep(1)

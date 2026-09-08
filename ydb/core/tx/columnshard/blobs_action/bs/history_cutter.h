@@ -76,8 +76,7 @@ public:
         return SweepCandidates ? SweepCandidates : empty;
     }
 
-    // Excludes entries disproved by earlier batches, so later batches neither re-examine
-    // nor re-disprove them.
+    // Excludes entries disproved by earlier batches, so later ones neither re-examine nor re-disprove them.
     std::shared_ptr<const TVector<TEntryKey>> GetActiveSweepCandidates() const {
         return std::make_shared<const TVector<TEntryKey>>(SweepSurvivors);
     }
@@ -91,8 +90,7 @@ public:
         return Min(cooldown, DisprovedRetryMaxCooldown);
     }
 
-    // Defaults for TColumnShardConfig.CutHistory*; together they bound IsDrained() queue
-    // scans per tablet, which is the cost that scales with ColumnShards per node.
+    // Defaults for TColumnShardConfig.CutHistory*: they bound IsDrained() queue scans per tablet.
     static constexpr TDuration DefaultNominateCadence = TDuration::Minutes(1);
     static constexpr ui32 DefaultMaxDrainChecksPerNomination = 8;
 
@@ -147,13 +145,11 @@ public:
     }
 
     bool HasPortionSnapshot() const {
-        // Non-empty vector covers the not-yet-started case; a positive offset covers the
-        // tail where GetNextBatch already handed out every id.
+        // Non-empty covers the not-yet-started case; a positive offset covers the fully handed-out tail.
         return SweepPortionOffset > 0 || !SweepPortionIds.empty();
     }
 
-    // True when no earlier entry shares the target's GroupID. Already-cut entries are
-    // transparent: they survive in the boot-time TTabletStorageInfo.
+    // True when no earlier entry shares the target's GroupID; already-cut entries are transparent.
     static bool SeenGroupsCheckPasses(
         const std::vector<TTabletChannelInfo::THistoryEntry>& hist, ui32 fromGeneration, const THashSet<ui32>& cutFromGenerations = {});
 
@@ -169,8 +165,7 @@ private:
 
     void IncrementCounter(const TEntryKey& key);
 
-    // Call after any change to PoisonedChannels or DisprovedAt; an omitted
-    // sweepCandidates leaves that level unchanged.
+    // Call after any change to PoisonedChannels or DisprovedAt; omitted sweepCandidates leaves it unchanged.
     void PublishLevels(std::optional<ui64> sweepCandidates = {});
 
     struct TPublishedLevels {
@@ -186,8 +181,7 @@ private:
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
     ui32 CurrentGen;
     std::weak_ptr<NOlap::TBlobManager> Manager;
-    // Our blobs shared out to other tablets are in no GC queue while shared; the
-    // drain gate consults this registry before a hard barrier.
+    // Shared-out blobs are in no GC queue, so the drain gate consults this registry before a hard barrier.
     std::weak_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager> SharedBlobs;
     TActorId TabletActorId;
     TActorId LauncherActorId;
@@ -204,8 +198,7 @@ private:
     // Shared with per-batch sweep callbacks — one allocation per sweep, not per batch.
     std::shared_ptr<const TVector<TEntryKey>> SweepCandidates;
 
-    // Sweep-disproved entries, suppressed with exponential backoff: an entry pinned by
-    // long-lived portions converges to one sweep per DisprovedRetryMaxCooldown.
+    // Sweep-disproved entries with exponential backoff, converging to one sweep per DisprovedRetryMaxCooldown.
     struct TDisprovalState {
         TInstant At;
         ui32 Attempts = 0;

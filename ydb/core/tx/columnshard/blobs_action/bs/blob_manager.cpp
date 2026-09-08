@@ -15,9 +15,7 @@
 namespace NKikimr::NOlap {
 
 namespace {
-// Shared monotonic counter for ALL TEvCollectGarbage requests issued by this process
-// (both regular GC batches and CutHistory hard barriers). BS enforces monotonicity per
-// (tablet, generation) space; using one counter ensures no collisions.
+// One counter for every TEvCollectGarbage of this process: BS demands monotonicity per (tablet, generation).
 static TAtomicCounter SharedGCPerGenerationCounter = 1;
 }   // anonymous namespace
 

@@ -497,8 +497,7 @@ void TColumnShard::RunAlterStore(
     ApplyColumnShardConfig();
 }
 
-// Portions go through TBlobManager, past the executor; channels 0 and 1 (log, local DB)
-// stay with the executor's cutter.
+// Portions bypass the executor; channels 0 and 1 stay with the executor's cutter.
 bool TColumnShard::HasExternallyWrittenBlobs(ui32 channel) const {
     return channel >= NOlap::NBlobOperations::TGlobal::FirstDataChannel;
 }
@@ -1636,8 +1635,7 @@ public:
         YDB_LOG_CREATE_CONTEXT(
             {"event", "TTxAskPortionChunks::Execute"});
         for (auto&& i : PortionsByPath) {
-            // The cut-history sweep iterates a portion snapshot without a read snapshot, so
-            // the path may have been dropped since the request: skip rather than abort.
+            // The sweep iterates a portion snapshot without a read snapshot: the path may be gone, so skip.
             const auto granulePtr = Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranuleOptional(i.first);
             if (!granulePtr) {
                 continue;
@@ -1662,8 +1660,7 @@ public:
                         if (!rowset.IsReady()) {
                             reask = true;
                         } else if (rowset.EndOfSet()) {
-                            // Rows erased by cleanup while the in-memory object lingers.
-                            // Only remove-marked portions may legitimately lack rows.
+                            // Cleanup erased the rows while the object lingers: only remove-marked portions may lack them.
                             AFL_VERIFY(itPortionConstructor->second.GetPortionInfo()->HasRemoveSnapshot())("path_id", i.first)("portion_id", p)(
                                 "debug", itPortionConstructor->second.GetPortionInfo()->DebugString(true));
                             Constructors.erase(itPortionConstructor);

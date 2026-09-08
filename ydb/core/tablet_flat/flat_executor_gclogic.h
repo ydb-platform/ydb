@@ -43,9 +43,7 @@ struct TGCLogEntry {
 
 class TExecutorGCLogic {
 public:
-    // False for channels the tablet writes past the executor (ITablet::
-    // HasExternallyWrittenBlobs): cutting those strands their blobs below the surviving
-    // history, where GroupFor() resolves them to the Max<ui32> sentinel forever.
+    // False for externally written channels: cutting those strands their blobs under a Max<ui32> group.
     bool IsHistoryCuttingSound(ui32 channel) const;
 
     TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo>, TAutoPtr<NPageCollection::TSteppedCookieAllocator>);
@@ -102,8 +100,7 @@ public:
     TIntrospection IntrospectStateSize() const;
 protected:
     const TIntrusiveConstPtr<TTabletStorageInfo> TabletStorageInfo;
-    // Not owned; set by the executor once it adopts this logic. Null during boot and
-    // in unit tests, where no channel is externally written.
+    // Not owned; null during boot and in unit tests, where no channel is externally written.
     NFlatExecutorSetup::ITablet* Owner = nullptr;
     const TAutoPtr<NPageCollection::TSteppedCookieAllocator> Cookies;
     const ui32 Generation;

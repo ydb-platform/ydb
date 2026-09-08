@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import json
 import sys
 import os
 import logging
@@ -10,12 +11,15 @@ import urllib.parse
 import random
 
 from io import StringIO
+from types import SimpleNamespace
 from unittest.mock import patch
 from google.protobuf import text_format
 from ydb.tests.oss.canonical import set_canondata_root
 
 from ydb.apps.dstool.main import main as dstool_main
 from ydb.apps.dstool.lib import common
+from ydb.apps.dstool.lib import dstool_cmd_group_list
+from ydb.apps.dstool.lib import dstool_cmd_vdisk_evict
 from ydb.apps.dstool.lib import table
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.common.wait_for import retry_assertions
@@ -25,6 +29,7 @@ from ydb.tests.library.clients.kikimr_dynconfig_client import DynConfigClient
 from ydb.core.protos.whiteboard_disk_states_pb2 import EVDiskState
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 import ydb.public.api.protos.draft.ydb_dynamic_config_pb2 as dynconfig
+import ydb.public.api.protos.draft.ydb_distributed_storage_pb2 as ydb_distributed_storage
 from .conftest import BaseConfigBuilder, FakePopulatePDiskHandler, FakeReassignGroupDiskHandler
 
 logger = logging.getLogger(__name__)
@@ -40,11 +45,78 @@ CLUSTER_CONFIG = dict(
     static_pdisk_config={'expected_slot_count': 9},
     dynamic_pdisks_config={'expected_slot_count': 9},
     dynamic_storage_pools=[dict(name="dynamic_storage_pool:1", kind="hdd", pdisk_user_kind=0, num_groups=1)],
+    extra_grpc_services=['distributed_storage'],
     additional_log_configs={
         'BS_NODE': LogLevels.DEBUG,
         'BS_CONTROLLER': LogLevels.DEBUG,
     },
 )
+
+
+def test_group_list_formats_unknown_enum_value():
+    assert dstool_cmd_group_list._enum_name(
+        ydb_distributed_storage.GroupStatus,
+        100500,
+        'GROUP_STATUS_',
+    ) == 'UNKNOWN(100500)'
+
+
+@pytest.mark.parametrize(
+    'dry_run, expected_generations',
+    [
+        (False, [7, 8, 3]),
+        (True, [7, 7, 3]),
+    ],
+)
+def test_vdisk_evict_uses_single_state_snapshot(dry_run, expected_generations, capsys):
+    storage = ydb_distributed_storage.StorageStateResult()
+
+    def add_vdisk(group_id, group_generation, fail_domain_idx):
+        vdisk = storage.vdisks.add()
+        vdisk.id.group_id = group_id
+        vdisk.id.group_generation = group_generation
+        vdisk.id.fail_domain_idx = fail_domain_idx
+
+    add_vdisk(0x80000001, 7, 0)
+    add_vdisk(0x80000001, 7, 1)
+    add_vdisk(0x80000002, 3, 0)
+
+    args = SimpleNamespace(
+        vdisk_ids=[
+            '[80000001:7:0:0:0]',
+            '[80000001:7:0:1:0]',
+            '[80000002:3:0:0:0]',
+        ],
+        dry_run=dry_run,
+        suppress_donor_mode=False,
+        allow_unusable_pdisks=False,
+        move_only_to_operational_pdisks=False,
+        ignore_vslot_quotas=False,
+        ignore_degraded_group_check=False,
+        ignore_failure_model_group_check=False,
+        format='json',
+        quiet=False,
+    )
+    response = ydb_distributed_storage.ReassignVDiskResponse()
+    response.operation.ready = True
+    response.operation.status = StatusIds.SUCCESS
+
+    with (
+        patch.object(common, 'fetch_storage_state', return_value=storage) as fetch_storage_state,
+        patch.object(dstool_cmd_vdisk_evict, 'perform_request', return_value=response) as perform_request,
+    ):
+        dstool_cmd_vdisk_evict._do_distributed_storage(args)
+
+    captured = capsys.readouterr()
+    fetch_storage_state.assert_called_once_with(vdisks=True)
+    assert json.loads(captured.out) == {'status': 'success'}
+    assert [
+        call.args[0].vdisk_id.group_generation for call in perform_request.call_args_list
+    ] == expected_generations
+    if dry_run:
+        assert 'dry-run for multiple VDisks is approximate' in captured.err
+    else:
+        assert not captured.err
 
 
 @pytest.fixture(scope='function')
@@ -74,6 +146,7 @@ class TestBase:
         self.grpc_port = ydb_cluster.nodes[1].grpc_port
         self.mon_port = ydb_cluster.nodes[1].mon_port
         self.endpoint = 'grpc://%s:%s' % (self.host, self.grpc_port)
+        self.http_endpoint = 'http://%s:%s' % (self.host, self.mon_port)
 
     def _canonical_file(self, filename, content):
         path = os.path.join(yatest.common.output_path(), filename)
@@ -87,6 +160,16 @@ class TestBase:
                 cmd = command.UpdateDriveStatus
                 if cmd.HasField('HostKey'):
                     cmd.HostKey.IcPort = 999999
+
+    def _canonical_grpc_param(self, param):
+        canonical_param = type(param)()
+        canonical_param.CopyFrom(param)
+        if hasattr(canonical_param, 'Request'):
+            self._canonize_request(canonical_param.Request)
+        descriptor = getattr(canonical_param, 'DESCRIPTOR', None)
+        if descriptor is not None and 'SecurityToken' in descriptor.fields_by_name:
+            canonical_param.ClearField('SecurityToken')
+        return canonical_param
 
     def _canonize_table_output(self, rows, canonize_columns=None):
         for row in rows:
@@ -113,28 +196,43 @@ class TestBase:
             assert vslot.VDiskMetrics.State == EVDiskState.OK
 
     def _trace(self, *args, with_grpc_calls=False, with_response=False, canonize_columns=None,
-               mock_base_config=None, allow_http_fetch=False, fake_grpc_handler=None, suppress_table_dump=False):
+               mock_base_config=None, allow_http_fetch=False, fake_grpc_handler=None, suppress_table_dump=False,
+               endpoint=None, expected_storage_api=None, unimplemented_grpc_methods=(),
+               expected_grpc_methods=None, expected_exit_status=None):
         random.seed(42)
         common.cache.clear()
         common.name_cache.clear()
         results = []
         results.append(' '.join(['dstool -e <endpoint> --mon-port <mon_port>', *args]))
-        args = ['-e', self.endpoint, '--mon-port', self.mon_port, *args]
+        args = ['-e', endpoint or self.endpoint, '--mon-port', self.mon_port, *args]
 
         grpc_calls = []
+        grpc_method_calls = []
         http_calls = []
+        storage_api_calls = []
         original_invoke_grpc = common.invoke_grpc
 
         def mock_invoke_grpc(func, *params, **kwargs):
+            grpc_method_calls.append(func)
+            if func in ('StreamStorageState', 'ReassignVDisk'):
+                storage_api_calls.append('distributed_storage')
+            elif func == 'BlobStorageConfig':
+                storage_api_calls.append('blob_storage_config')
+
+            grpc_calls.append(f'=== Invoke {func} ===')
+            for param in params:
+                canonical_param = self._canonical_grpc_param(param)
+                grpc_calls.append(text_format.MessageToString(canonical_param, as_one_line=False))
+
+            if func in unimplemented_grpc_methods:
+                grpc_calls.extend(['--- Error ---', 'UNIMPLEMENTED'])
+                raise common.DistributedStorageUnavailable(
+                    'gRPC method %s is unavailable (mocked UNIMPLEMENTED)' % func)
+
             if fake_grpc_handler is not None:
                 response = fake_grpc_handler.handle(func, *params)
             else:
                 response = original_invoke_grpc(func, *params, **kwargs)
-
-            grpc_calls.append(f'=== Invoke {func} ===')
-            for param in params:
-                self._canonize_request(param.Request)
-                grpc_calls.append(text_format.MessageToString(param, as_one_line=False))
 
             if with_response:
                 grpc_calls.append('--- Response ---')
@@ -195,6 +293,8 @@ class TestBase:
                 params['sessionId'] = 'SESSION_ID'
             query_string = urllib.parse.urlencode(params, doseq=True)
             http_calls.append(f'{method} {path}?{query_string}')
+            if method == 'POST' and path == 'tablets/app':
+                storage_api_calls.append('blob_storage_config')
 
             return response
 
@@ -222,6 +322,19 @@ class TestBase:
                 dstool_main(args)
             except SystemExit as e:
                 exit_status = e.code
+
+        if expected_storage_api is not None:
+            assert storage_api_calls, 'Expected %s API call, got none' % expected_storage_api
+            assert set(storage_api_calls) == {expected_storage_api}, (
+                'Expected only %s API calls, got %s' % (expected_storage_api, storage_api_calls)
+            )
+        if expected_grpc_methods is not None:
+            assert grpc_method_calls == expected_grpc_methods, (
+                'Expected gRPC methods %s, got %s' % (expected_grpc_methods, grpc_method_calls)
+            )
+        if expected_exit_status is not None:
+            assert exit_status == expected_exit_status, 'Expected exit status %s, got %s' % (
+                expected_exit_status, exit_status)
 
         results.append(f'Exit Status: {exit_status}')
 
@@ -255,13 +368,32 @@ class Test(TestBase):
             self._trace('--unknown-arg'),
             self._trace('device', 'list', '-AH'),
             self._trace('vdisk', 'list', '-AH', canonize_columns=['NodeId:PDiskId', 'NodeId']),
-            self._trace('group', 'list', '-AH'),
+            self._trace('group', 'list', '-AH', expected_storage_api='distributed_storage'),
             self._trace('pdisk', 'list', '-AH'),
             self._trace('pool', 'list', '-AH'),
             self._trace('box', 'list', '-AH'),
             self._trace('node', 'list', '-A'),
             self._trace('cluster', 'list', '-A'),
         ]
+
+    def test_group_list_legacy_api(self):
+        retry_assertions(self.check_pdisk_metrics_collected)
+        retry_assertions(self.check_vdisks_state_ok)
+        return self._trace('group', 'list', '-AH', endpoint=self.http_endpoint, allow_http_fetch=True,
+                           expected_storage_api='blob_storage_config')
+
+    def test_group_list_fallback_to_legacy_api(self):
+        retry_assertions(self.check_pdisk_metrics_collected)
+        retry_assertions(self.check_vdisks_state_ok)
+        return self._trace(
+            'group',
+            'list',
+            '-AH',
+            with_grpc_calls=True,
+            unimplemented_grpc_methods={'StreamStorageState'},
+            expected_grpc_methods=['StreamStorageState', 'BlobStorageConfig'],
+            expected_exit_status=0,
+        )
 
     def test_pdisk_set_status_inactive(self):
         return [
@@ -481,14 +613,14 @@ class Test(TestBase):
 
         return [trace1, trace2]
 
-    def test_pdisk_check_leaked_slots(self):
+    def _run_pdisk_check_leaked_slots(self, endpoint, storage_api):
         retry_assertions(self.check_pdisk_metrics_collected)
 
         # Initialize dstool connection params to allow common.fetch_json_info
         import argparse
         p = argparse.ArgumentParser()
         common.add_host_access_options(p)
-        common.apply_args(p.parse_args(['-e', self.endpoint, '--mon-port', str(self.mon_port), '-q']))
+        common.apply_args(p.parse_args(['-e', endpoint, '--mon-port', str(self.mon_port), '-q']))
 
         base_config = self.cluster.client.query_base_config().BaseConfig
         pdisk_node_ids = sorted({pdisk.NodeId for pdisk in base_config.PDisk})
@@ -523,14 +655,42 @@ class Test(TestBase):
             'NodeId:PDiskId',
             'LeakedSlots',
         ]
+        use_http = storage_api == 'blob_storage_config'
 
         return [
-            self._trace(*vdisk_evict_cmd, '--vdisk-ids', '[82000000:_:0:0:0]', with_grpc_calls=True),
-            self._trace(*vdisk_evict_cmd, '--vdisk-ids', '[82000000:_:0:1:0]', '--suppress-donor-mode', with_grpc_calls=True),
+            self._trace(*vdisk_evict_cmd, '--vdisk-ids', '[82000000:_:0:0:0]', endpoint=endpoint,
+                        with_grpc_calls=not use_http, allow_http_fetch=use_http,
+                        expected_storage_api=storage_api),
+            self._trace(*vdisk_evict_cmd, '--vdisk-ids', '[82000000:_:0:1:0]', '--suppress-donor-mode',
+                        endpoint=endpoint, with_grpc_calls=not use_http, allow_http_fetch=use_http,
+                        expected_storage_api=storage_api),
             retry_assertions(check_donors_dropped),
             retry_assertions(check_no_leaked_slots),
-            self._trace('--quiet', 'pdisk', 'list', '--check-leaked-slots', '--columns', *pdisk_columns, allow_http_fetch=True),
+            self._trace('--quiet', 'pdisk', 'list', '--check-leaked-slots', '--columns', *pdisk_columns,
+                        endpoint=endpoint, allow_http_fetch=True),
         ]
+
+    def test_pdisk_check_leaked_slots(self):
+        return self._run_pdisk_check_leaked_slots(self.endpoint, 'distributed_storage')
+
+    def test_pdisk_check_leaked_slots_legacy_api(self):
+        return self._run_pdisk_check_leaked_slots(self.http_endpoint, 'blob_storage_config')
+
+    def test_vdisk_evict_fallback_to_legacy_api(self):
+        retry_assertions(self.check_pdisk_metrics_collected)
+        retry_assertions(self.check_vdisks_state_ok)
+        return self._trace(
+            'vdisk',
+            'evict',
+            '--ignore-degraded-group-check',
+            '--ignore-failure-model-group-check',
+            '--vdisk-ids',
+            '[82000000:_:0:0:0]',
+            with_grpc_calls=True,
+            unimplemented_grpc_methods={'StreamStorageState'},
+            expected_grpc_methods=['StreamStorageState', 'BlobStorageConfig', 'BlobStorageConfig'],
+            expected_exit_status=0,
+        )
 
     def test_pool_estimated_usage(self):
         builder = (

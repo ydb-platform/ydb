@@ -28,6 +28,59 @@
 /yql @ydb-platform/synced-dirs
 /yt @ydb-platform/synced-dirs
 
+/ydb/core/kqp/ @ydb-platform/qp
+/ydb/core/kqp/ut/olap/ @ydb-platform/cs
+/ydb/core/kqp/ut/indexes/ @ydb-platform/qp
+/ydb/core/kqp/ut/indexes/vector @ydb-platform/datashard
+/ydb/core/kqp/ut/indexes/prefixed_vector @ydb-platform/datashard
+/ydb/core/kqp/ut/indexes/fulltext @ydb-platform/datashard
+/ydb/core/kqp/ut/knn/ @ydb-platform/datashard
+/ydb/core/kqp/ut/tli/ @ydb-platform/datashard
+
+/ydb/docs/ @ydb-platform/docs
+
+/ydb/library/yql/ @ydb-platform/qp
+/ydb/library/yql/dq @ydb-platform/qp @ydb-platform/yt
+/ydb/library/yql/providers/dq @ydb-platform/yt
+/ydb/library/yql/udfs/common/knn @ydb-platform/datashard
+
+/ydb/core/http_proxy @ydb-platform/Topics
+/ydb/core/kafka_proxy @ydb-platform/Topics
+/ydb/core/persqueue @ydb-platform/Topics
+/ydb/library/persqueue @ydb-platform/Topics
+/ydb/services/datastreams @ydb-platform/Topics
+/ydb/services/deprecated/persqueue_v0 @ydb-platform/Topics
+/ydb/services/persqueue_v1 @ydb-platform/Topics
+/ydb/core/transfer @ydb-platform/Topics
+
+/ydb/core/change_exchange @ydb-platform/core
+/ydb/core/cms @ydb-platform/core
+/ydb/core/config @ydb-platform/core
+/ydb/core/health_check @ydb-platform/core
+/ydb/core/kesus @ydb-platform/core
+/ydb/core/mind/hive @ydb-platform/core
+/ydb/core/mind/node_broker* @ydb-platform/core
+/ydb/core/protos/counters_replication.proto @ydb-platform/core
+/ydb/core/protos/replication.proto @ydb-platform/core
+/ydb/core/quoter @ydb-platform/core
+/ydb/core/tx/replication @ydb-platform/core
+/ydb/tests/functional/backup_collection @ydb-platform/core
+/ydb/tests/functional/serverless @ydb-platform/core
+
+/ydb/core/viewer @ydb-platform/ui-backend
+/ydb/core/protos/node_whiteboard.proto @ydb-platform/ui-backend
+
+/ydb/core/protos/flat_scheme_op.proto @ydb-platform/schemeshard
+/ydb/core/protos/flat_tx_scheme.proto @ydb-platform/schemeshard
+/ydb/core/protos/counters_schemeshard.proto @ydb-platform/schemeshard
+/ydb/core/protos/schemeshard @ydb-platform/schemeshard
+/ydb/core/tx/scheme_board @ydb-platform/schemeshard
+/ydb/core/tx/schemeshard @ydb-platform/schemeshard
+/ydb/tests/functional/limits @ydb-platform/schemeshard
+/ydb/tests/functional/scheme_shard @ydb-platform/schemeshard
+/ydb/tests/functional/tenants/test_dynamic_tenants.py @ydb-platform/schemeshard
+/ydb/core/tx/tx_proxy/schemereq.cpp @ydb-platform/schemeshard
+
 /ydb/core/external_sources/ @ydb-platform/fq
 /ydb/core/fq/ @ydb-platform/fq
 /ydb/core/grpc_services/local_grpc/ @ydb-platform/fq
@@ -123,59 +176,6 @@
 /ydb/tests/tools/s3_recipe/ @ydb-platform/fq
 /ydb/tests/tools/token_accessor_mock/ @ydb-platform/fq
 /ydb/tests/workload_manager/ @ydb-platform/fq
-
-/ydb/core/kqp/ @ydb-platform/qp
-/ydb/core/kqp/ut/olap/ @ydb-platform/cs
-/ydb/core/kqp/ut/indexes/ @ydb-platform/qp
-/ydb/core/kqp/ut/indexes/vector @ydb-platform/datashard
-/ydb/core/kqp/ut/indexes/prefixed_vector @ydb-platform/datashard
-/ydb/core/kqp/ut/indexes/fulltext @ydb-platform/datashard
-/ydb/core/kqp/ut/knn/ @ydb-platform/datashard
-/ydb/core/kqp/ut/tli/ @ydb-platform/datashard
-
-/ydb/docs/ @ydb-platform/docs
-
-/ydb/library/yql/ @ydb-platform/qp
-/ydb/library/yql/dq @ydb-platform/qp @ydb-platform/yt
-/ydb/library/yql/providers/dq @ydb-platform/yt
-/ydb/library/yql/udfs/common/knn @ydb-platform/datashard
-
-/ydb/core/http_proxy @ydb-platform/Topics
-/ydb/core/kafka_proxy @ydb-platform/Topics
-/ydb/core/persqueue @ydb-platform/Topics
-/ydb/library/persqueue @ydb-platform/Topics
-/ydb/services/datastreams @ydb-platform/Topics
-/ydb/services/deprecated/persqueue_v0 @ydb-platform/Topics
-/ydb/services/persqueue_v1 @ydb-platform/Topics
-/ydb/core/transfer @ydb-platform/Topics
-
-/ydb/core/change_exchange @ydb-platform/core
-/ydb/core/cms @ydb-platform/core
-/ydb/core/config @ydb-platform/core
-/ydb/core/health_check @ydb-platform/core
-/ydb/core/kesus @ydb-platform/core
-/ydb/core/mind/hive @ydb-platform/core
-/ydb/core/mind/node_broker* @ydb-platform/core
-/ydb/core/protos/counters_replication.proto @ydb-platform/core
-/ydb/core/protos/replication.proto @ydb-platform/core
-/ydb/core/quoter @ydb-platform/core
-/ydb/core/tx/replication @ydb-platform/core
-/ydb/tests/functional/backup_collection @ydb-platform/core
-/ydb/tests/functional/serverless @ydb-platform/core
-
-/ydb/core/viewer @ydb-platform/ui-backend
-/ydb/core/protos/node_whiteboard.proto @ydb-platform/ui-backend
-
-/ydb/core/protos/flat_scheme_op.proto @ydb-platform/schemeshard
-/ydb/core/protos/flat_tx_scheme.proto @ydb-platform/schemeshard
-/ydb/core/protos/counters_schemeshard.proto @ydb-platform/schemeshard
-/ydb/core/protos/schemeshard @ydb-platform/schemeshard
-/ydb/core/tx/scheme_board @ydb-platform/schemeshard
-/ydb/core/tx/schemeshard @ydb-platform/schemeshard
-/ydb/tests/functional/limits @ydb-platform/schemeshard
-/ydb/tests/functional/scheme_shard @ydb-platform/schemeshard
-/ydb/tests/functional/tenants/test_dynamic_tenants.py @ydb-platform/schemeshard
-/ydb/core/tx/tx_proxy/schemereq.cpp @ydb-platform/schemeshard
 
 /ydb/core/scheme @ydb-platform/datashard
 /ydb/core/statistics @ydb-platform/datashard

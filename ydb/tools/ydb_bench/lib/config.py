@@ -11,6 +11,22 @@ from yaml.constructor import ConstructorError
 from ydb.tools.ydb_bench.benchmarks import BENCHMARKS
 from ydb.tools.ydb_bench.lib.actors_core import RunConfiguration
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
+from ydb.tools.ydb_bench.lib.local_ydb_workloads import (
+    allowed_load_parameters,
+    allowed_slo_metrics,
+    all_load_parameters,
+    all_slo_percentiles,
+    normalize_workload,
+    validate_workload_profile,
+    workload_definition,
+    workload_effective_warmup_seconds,
+    workload_config_schema,
+)
+from ydb.tools.ydb_bench.lib.load_control import (
+    MAX_AUTOMATIC_SEARCH_ATTEMPTS,
+    MAX_LOAD_VALUE,
+    validate_search_attempt_bound,
+)
 from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES
 
 PROFILE_NAME_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
@@ -24,6 +40,7 @@ BACKGROUND_LOAD_MODES = (
     "coherence-all-numa",
 )
 _COMMON_OPTIONAL_FIELDS = ("timeout", "background-load")
+MAX_LOCAL_YDB_VERIFICATION_REPETITIONS = 20
 
 
 class _UniqueKeyLoader(yaml.SafeLoader):
@@ -102,44 +119,13 @@ def _profile_schema(benchmark):
             "additionalProperties": False,
             "required": ["workload", "load"],
             "properties": {
-                "workload": {
+                "workload": workload_config_schema(),
+                "actor-system": {
                     "type": "object",
                     "additionalProperties": False,
-                    "required": ["type", "operation"],
                     "properties": {
-                        "type": {"enum": ["kv", "stock"]},
-                        "operation": {
-                            "enum": [
-                                "upsert",
-                                "select",
-                                "read-rows",
-                                "mixed",
-                                "user-hist",
-                                "rand-user-hist",
-                                "add-rand-order",
-                                "put-rand-order",
-                                "put-same-order",
-                            ]
-                        },
-                        "options": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "properties": {
-                                "min-partitions": {"type": "integer", "minimum": 1},
-                                "max-partitions": {"type": "integer", "minimum": 1},
-                                "partition-size-mb": {"type": "integer", "minimum": 1},
-                                "init-upserts": {"type": "integer", "minimum": 0},
-                                "max-first-key": {"type": "integer", "minimum": 1},
-                                "value-size": {"type": "integer", "minimum": 1},
-                                "columns": {"type": "integer", "minimum": 2},
-                                "rows-per-query": {"type": "integer", "minimum": 1},
-                                "products": {"type": "integer", "minimum": 1, "maximum": 500000},
-                                "quantity": {"type": "integer", "minimum": 1},
-                                "orders": {"type": "integer", "minimum": 0},
-                                "auto-partition": {"enum": [0, 1]},
-                                "limit": {"type": "integer", "minimum": 1},
-                            },
-                        },
+                        "use-shared-threads": {"type": "boolean", "default": False},
+                        "use-united-pool": {"type": "boolean", "default": False},
                     },
                 },
                 "geometry": {
@@ -168,16 +154,16 @@ def _profile_schema(benchmark):
                         # compatibility with configs written before search and
                         # objective became separate concepts.
                         "mode": {"enum": ["points", "maximize-throughput", "latency-slo"]},
-                        "parameter": {"enum": ["rate", "threads"]},
+                        "parameter": {"enum": list(all_load_parameters())},
                         "allow-errors": {"type": "boolean"},
                         "values": {
                             "type": "array",
-                            "items": {"type": "integer", "minimum": 1},
+                            "items": {"type": "integer", "minimum": 1, "maximum": MAX_LOAD_VALUE},
                             "minItems": 1,
                             "uniqueItems": True,
                         },
-                        "start": {"type": "integer", "minimum": 1},
-                        "maximum": {"type": "integer", "minimum": 1},
+                        "start": {"type": "integer", "minimum": 1, "maximum": MAX_LOAD_VALUE},
+                        "maximum": {"type": "integer", "minimum": 1, "maximum": MAX_LOAD_VALUE},
                         "multiplier": {"type": "number", "exclusiveMinimum": 1},
                         "target-role": {"enum": ["static", "dynamic", "total"]},
                         "plateau-gain-percent": {"type": "number", "minimum": 0},
@@ -192,7 +178,7 @@ def _profile_schema(benchmark):
                             "type": "object",
                             "additionalProperties": False,
                             "properties": {
-                                "percentile": {"enum": ["p50", "p95", "p99", "pmax"]},
+                                "percentile": {"enum": list(all_slo_percentiles())},
                                 "max-ms": {"type": "number", "minimum": 0},
                                 "max-errors": {"type": "integer", "minimum": 0},
                                 "min-achieved-rate-ratio": {
@@ -207,8 +193,8 @@ def _profile_schema(benchmark):
                             "additionalProperties": False,
                             "required": ["start", "maximum"],
                             "properties": {
-                                "start": {"type": "integer", "minimum": 1},
-                                "maximum": {"type": "integer", "minimum": 1},
+                                "start": {"type": "integer", "minimum": 1, "maximum": MAX_LOAD_VALUE},
+                                "maximum": {"type": "integer", "minimum": 1, "maximum": MAX_LOAD_VALUE},
                                 "multiplier": {"type": "number", "exclusiveMinimum": 1},
                                 "resolution-percent": {
                                     "type": "number",
@@ -231,7 +217,7 @@ def _profile_schema(benchmark):
                                     "exclusiveMinimum": 0,
                                     "maximum": 100,
                                 },
-                                "percentile": {"enum": ["p50", "p95", "p99", "pmax"]},
+                                "percentile": {"enum": list(all_slo_percentiles())},
                                 "max-ms": {"type": "number", "minimum": 0},
                                 "max-errors": {"type": "integer", "minimum": 0},
                                 "min-achieved-rate-ratio": {
@@ -250,6 +236,11 @@ def _profile_schema(benchmark):
                         "warmup": {"type": "integer", "minimum": 0},
                         "duration": {"type": "integer", "minimum": 1},
                         "repetitions": {"type": "integer", "minimum": 1},
+                        "verification-repetitions": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": MAX_LOCAL_YDB_VERIFICATION_REPETITIONS,
+                        },
                     },
                 },
                 "affinity": {
@@ -420,6 +411,22 @@ def _positive_integer(value, location):
     return value
 
 
+def _load_value(value, location):
+    result = _positive_integer(value, location)
+    if result > MAX_LOAD_VALUE:
+        _config_error(location, "must be at most {}".format(MAX_LOAD_VALUE))
+    return result
+
+
+def _load_value_list(value, location):
+    if not isinstance(value, list) or not value:
+        _config_error(location, "must be a non-empty array of positive integers")
+    parsed = tuple(_load_value(item, "{}[{}]".format(location, index)) for index, item in enumerate(value))
+    if len(set(parsed)) != len(parsed):
+        _config_error(location, "must not contain duplicate values")
+    return parsed
+
+
 def _positive_integer_list(value, location):
     if not isinstance(value, list) or not value:
         _config_error(location, "must be a non-empty array of positive integers")
@@ -466,7 +473,10 @@ def _background_load_modes(value, location):
 def _timeout(value, location):
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         _config_error(location, "must be a finite positive number")
-    value = float(value)
+    try:
+        value = float(value)
+    except (TypeError, ValueError, OverflowError):
+        _config_error(location, "must be a finite positive number")
     if value <= 0 or not math.isfinite(value):
         _config_error(location, "must be a finite positive number")
     return value
@@ -502,9 +512,12 @@ def _nonnegative_integer(value, location):
 
 
 def _finite_number(value, location, minimum=None, maximum=None, exclusive_minimum=False):
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+    try:
+        result = float(value)
+    except (TypeError, ValueError, OverflowError):
         _config_error(location, "must be a finite number")
-    result = float(value)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(result):
+        _config_error(location, "must be a finite number")
     if minimum is not None and (result <= minimum if exclusive_minimum else result < minimum):
         _config_error(location, "must be {} {}".format("greater than" if exclusive_minimum else "at least", minimum))
     if maximum is not None and result > maximum:
@@ -529,57 +542,24 @@ def _local_role_affinity(value, location, default_mode, default_cpus=None):
 
 def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_frequency):
     location = "{}.{}".format(benchmark.name, profile_name)
-    value = _mapping(value, location, ("workload", "geometry", "client", "load", "measurement", "affinity", "timeout"))
+    value = _mapping(
+        value,
+        location,
+        ("workload", "geometry", "actor-system", "client", "load", "measurement", "affinity", "timeout"),
+    )
     if perf_enabled:
         _config_error(location, "does not support --perf; CPU utilization is collected per process role")
 
-    workload = _mapping(value.get("workload"), location + ".workload", ("type", "operation", "options"))
-    for required in ("type", "operation"):
-        if required not in workload:
-            _config_error(location + ".workload", "missing required field: {}".format(required))
-    workload_type = _choice(workload["type"], ("kv", "stock"), location + ".workload.type")
-    operations = {
-        "kv": ("upsert", "select", "read-rows", "mixed"),
-        "stock": ("user-hist", "rand-user-hist", "add-rand-order", "put-rand-order", "put-same-order"),
+    workload = normalize_workload(value.get("workload"), location + ".workload")
+    workload_metadata = workload_definition(workload["type"])
+
+    actor_system = _mapping(
+        value.get("actor-system"), location + ".actor-system", ("use-shared-threads", "use-united-pool")
+    )
+    actor_system_config = {
+        name.replace("-", "_"): _boolean(actor_system.get(name, False), location + ".actor-system." + name)
+        for name in ("use-shared-threads", "use-united-pool")
     }
-    operation = _choice(workload["operation"], operations[workload_type], location + ".workload.operation")
-    if workload_type == "kv":
-        option_defaults = {
-            "min-partitions": 40,
-            "max-partitions": 1000,
-            "partition-size-mb": 2000,
-            "init-upserts": 0 if operation == "upsert" else 1000,
-            "max-first-key": 65536,
-            "value-size": 64,
-            "columns": 2,
-            "rows-per-query": 1,
-        }
-    else:
-        option_defaults = {
-            "min-partitions": 40,
-            "products": 100,
-            "quantity": 1000,
-            "orders": 100,
-            "auto-partition": 1,
-            "limit": 10,
-        }
-    raw_options = _mapping(workload.get("options"), location + ".workload.options", tuple(option_defaults))
-    options = {}
-    for name, default in option_defaults.items():
-        raw = raw_options.get(name, default)
-        options[name] = (
-            _nonnegative_integer(raw, location + ".workload.options." + name)
-            if name in ("init-upserts", "orders", "auto-partition")
-            else _positive_integer(raw, location + ".workload.options." + name)
-        )
-    if workload_type == "kv" and options["max-partitions"] < options["min-partitions"]:
-        _config_error(location + ".workload.options.max-partitions", "must not be below min-partitions")
-    if workload_type == "kv" and options["columns"] < 2:
-        _config_error(location + ".workload.options.columns", "must be at least 2")
-    if workload_type == "stock" and options["products"] > 500000:
-        _config_error(location + ".workload.options.products", "must not exceed 500000")
-    if workload_type == "stock" and options["auto-partition"] not in (0, 1):
-        _config_error(location + ".workload.options.auto-partition", "must be 0 or 1")
 
     geometry = _mapping(
         value.get("geometry"),
@@ -621,7 +601,10 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
     }
 
     client = _mapping(value.get("client"), location + ".client", ("threads",))
-    client_threads = _positive_integer(client.get("threads", 64), location + ".client.threads")
+    client_threads = _positive_integer(
+        client.get("threads", workload_metadata.default_client_threads),
+        location + ".client.threads",
+    )
 
     load = _mapping(
         value.get("load"),
@@ -646,7 +629,11 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
     )
     if "parameter" not in load:
         _config_error(location + ".load", "missing required field: parameter")
-    parameter = _choice(load["parameter"], ("rate", "threads"), location + ".load.parameter")
+    parameter = _choice(
+        load["parameter"],
+        allowed_load_parameters(workload["type"]),
+        location + ".load.parameter",
+    )
     legacy_fields = {
         "mode",
         "start",
@@ -680,7 +667,7 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
         if load_mode == "points":
             if "values" not in load:
                 _config_error(location + ".load", "manual load requires values")
-            load_config["values"] = list(_positive_integer_list(load["values"], location + ".load.values"))
+            load_config["values"] = list(_load_value_list(load["values"], location + ".load.values"))
         else:
             for required in ("start", "maximum"):
                 if required not in load:
@@ -716,8 +703,8 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
         for required in ("start", "maximum"):
             if required not in search:
                 _config_error(location + ".load.search", "missing required field: {}".format(required))
-        start = _positive_integer(search["start"], location + ".load.search.start")
-        maximum = _positive_integer(search["maximum"], location + ".load.search.maximum")
+        start = _load_value(search["start"], location + ".load.search.start")
+        maximum = _load_value(search["maximum"], location + ".load.search.maximum")
         if maximum < start:
             _config_error(location + ".load.search.maximum", "must not be below start")
         load_config["search"] = {
@@ -790,13 +777,16 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
         else:
             if "max-ms" not in objective:
                 _config_error(location + ".load.objective", "latency-slo requires max-ms")
+            slo_metrics = allowed_slo_metrics(workload["type"])
+            percentile = _choice(
+                objective.get("percentile", "p99"),
+                tuple(slo_metrics),
+                location + ".load.objective.percentile",
+            )
             parsed_objective.update(
                 {
-                    "percentile": _choice(
-                        objective.get("percentile", "p99"),
-                        ("p50", "p95", "p99", "pmax"),
-                        location + ".load.objective.percentile",
-                    ),
+                    "percentile": percentile,
+                    "latency_metric": slo_metrics[percentile],
                     "max_ms": _finite_number(objective["max-ms"], location + ".load.objective.max-ms", 0),
                     "max_errors": _nonnegative_integer(
                         objective.get("max-errors", 0), location + ".load.objective.max-errors"
@@ -811,13 +801,38 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
                 }
             )
         load_config["objective"] = parsed_objective
+        try:
+            validate_search_attempt_bound(load_config)
+        except BenchmarkError as error:
+            _config_error(location + ".load.search", str(error))
 
-    measurement = _mapping(value.get("measurement"), location + ".measurement", ("warmup", "duration", "repetitions"))
+    measurement = _mapping(
+        value.get("measurement"),
+        location + ".measurement",
+        ("warmup", "duration", "repetitions", "verification-repetitions"),
+    )
+    verification_location = location + ".measurement.verification-repetitions"
+    verification_repetitions = _nonnegative_integer(
+        measurement.get("verification-repetitions", 0),
+        verification_location,
+    )
+    if verification_repetitions > MAX_LOCAL_YDB_VERIFICATION_REPETITIONS:
+        _config_error(
+            verification_location,
+            "must be at most {}".format(MAX_LOCAL_YDB_VERIFICATION_REPETITIONS),
+        )
+    configured_warmup = (
+        _nonnegative_integer(measurement["warmup"], location + ".measurement.warmup")
+        if "warmup" in measurement
+        else workload_metadata.default_warmup_seconds
+    )
     measurement_config = {
-        "warmup": _nonnegative_integer(measurement.get("warmup", 10), location + ".measurement.warmup"),
+        "warmup": configured_warmup,
         "duration": _positive_integer(measurement.get("duration", 30), location + ".measurement.duration"),
         "repetitions": _positive_integer(measurement.get("repetitions", 3), location + ".measurement.repetitions"),
+        "verification_repetitions": verification_repetitions,
     }
+    validate_workload_profile(workload, load_config, measurement_config, location)
 
     affinity = _mapping(value.get("affinity"), location + ".affinity", ("ydb-cli", "static-nodes", "dynamic-nodes"))
     affinity_config = {
@@ -833,10 +848,10 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
         ),
     }
 
-    attempts = len(load_config.get("values", ())) or 64
-    computed_timeout = 300 + attempts * measurement_config["repetitions"] * (
-        measurement_config["warmup"] + measurement_config["duration"] + 10
-    )
+    attempts = len(load_config.get("values", ())) or MAX_AUTOMATIC_SEARCH_ATTEMPTS
+    measurement_runs = attempts * measurement_config["repetitions"] + measurement_config["verification_repetitions"]
+    effective_warmup = workload_effective_warmup_seconds(workload, measurement_config["warmup"])
+    computed_timeout = 300 + measurement_runs * (effective_warmup + measurement_config["duration"] + 10)
     timeout_explicit = "timeout" in value
     timeout = _timeout(value.get("timeout", computed_timeout), location + ".timeout")
     return RunConfiguration(
@@ -845,8 +860,9 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
         threads=(client_threads,),
         parameters={
             "local_ydb": {
-                "workload": {"type": workload_type, "operation": operation, "options": options},
+                "workload": workload,
                 "geometry": geometry_config,
+                "actor_system": actor_system_config,
                 "client": {"threads": client_threads},
                 "load": load_config,
                 "measurement": measurement_config,

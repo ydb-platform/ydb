@@ -159,7 +159,7 @@ public:
                                             State_->Types->LangVer,
                                             State_->Types->RuntimeSettings,
                                             State_->Types->BridgeMode,
-                                            State_->Types->BridgeBinaryPath);
+                                            State_->Types->UdfBridgeBinaryPath);
 
         auto pattern = MakeComputationPattern(explorer, root, {}, patternOpts);
 
@@ -175,7 +175,7 @@ public:
                                                State_->Types->LangVer,
                                                State_->Types->RuntimeSettings,
                                                State_->Types->BridgeMode,
-                                               State_->Types->BridgeBinaryPath);
+                                               State_->Types->UdfBridgeBinaryPath);
         auto graph = pattern->Clone(computeOpts);
         const TBindTerminator bind(graph->GetTerminator());
         graph->Prepare();

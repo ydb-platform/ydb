@@ -619,6 +619,24 @@ private:
 
             for (auto &entry : res.Columns) {
                 auto& col = entry.second;
+                const bool selected = !projection || colNameToPos.contains(col.Name);
+                const bool isVirtualGenerated = col.IsDefaultFromExpression()
+                    && col.DefaultExpression && !col.DefaultExpression->Stored;
+
+                if (selected && isVirtualGenerated) {
+                    TxProxyMon->ResolveKeySetWrongRequest->Inc();
+                    TString error = TStringBuilder()
+                        << "Reading VIRTUAL generated column '" << col.Name
+                        << "' through ReadTable is not supported";
+                    IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, error));
+                    UnresolvedKeys.emplace_back(error);
+                    return ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError,
+                        NKikimrIssues::TStatusIds::SCHEME_ERROR, ctx);
+                }
+
+                if (isVirtualGenerated) {
+                    continue;
+                }
 
                 if (col.KeyOrder != -1) {
                     keyTypes[col.KeyOrder] = col.PType;
@@ -642,6 +660,7 @@ private:
                 }
             }
 
+            columns.resize(no);
             keyTypes.resize(keys);
             keyConversionTypesInfos.resize(keys);
         }

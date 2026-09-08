@@ -1279,6 +1279,7 @@ private:
         const auto generation = context->CurrentExecutionGeneration;
         Y_VALIDATE(generation, "Missing current execution generation");
 
+        TasksGraph.GetMeta().AllowCheckpoints = true;
         CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
             ::NFq::TCoordinatorId(checkpointId, generation),
             NYql::NDq::MakeCheckpointStorageID(),

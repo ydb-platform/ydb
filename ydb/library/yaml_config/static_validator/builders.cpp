@@ -256,6 +256,11 @@ TMapBuilder ActorSystemConfigBuilder() {
         });
       });
     })
+    .Array("blob_storage_executor", [](auto& blobStorageExecutor){
+      blobStorageExecutor
+      .Optional()
+      .Int64Item(nonNegative());
+    })
     .Int64("sys_executor", [](auto& sysExecutor){
       sysExecutor
       .Optional()
@@ -302,6 +307,11 @@ TMapBuilder ActorSystemConfigBuilder() {
     .AddCheck("Executor references", [](auto& actorSystemContext){
       auto node = actorSystemContext.Node();
       if (!node["executor"].Exists()) {
+        for (const TString& field : {TString("blob_storage_executor"), TString("interconnect_session_executor")}) {
+          if (node[field].Exists()) {
+            actorSystemContext.Expect(false, field + " requires executor");
+          }
+        }
         return;
       }
 
@@ -330,17 +340,23 @@ TMapBuilder ActorSystemConfigBuilder() {
         }
       }
 
-      if (node["interconnect_session_executor"].Exists()) {
-        auto interconnectSessionExecutors = node["interconnect_session_executor"].Array();
-        THashSet<i64> seenExecutorIds;
-        for (int i = 0; i < interconnectSessionExecutors.Length(); ++i) {
-          const i64 executorId = interconnectSessionExecutors[i].Int64();
-          validateReference(interconnectSessionExecutors[i],
-            ::TStringBuilder() << "interconnect_session_executor[" << i << "]");
-          actorSystemContext.Expect(seenExecutorIds.insert(executorId).second,
-            "interconnect_session_executor contains duplicate executor ids");
+      auto validateReferenceList = [&](const TString& field) {
+        if (!node[field].Exists()) {
+          return;
         }
-      }
+
+        auto executorIds = node[field].Array();
+        THashSet<i64> seenExecutorIds;
+        for (int i = 0; i < executorIds.Length(); ++i) {
+          const i64 executorId = executorIds[i].Int64();
+          validateReference(executorIds[i], ::TStringBuilder() << field << "[" << i << "]");
+          actorSystemContext.Expect(seenExecutorIds.insert(executorId).second,
+            field + " contains duplicate executor ids");
+        }
+      };
+
+      validateReferenceList("blob_storage_executor");
+      validateReferenceList("interconnect_session_executor");
     })
     .AddCheck("Must either be auto config or manual config", [](auto& actorSystemContext){
       bool autoConfig = false;
@@ -353,6 +369,7 @@ TMapBuilder ActorSystemConfigBuilder() {
         actorSystemContext.Expect(node["cpu_count"].Exists(), "cpu_count must exist when using auto config");
 
         actorSystemContext.Expect(!node["executor"].Exists(), "executor must not exist when using auto config");
+        actorSystemContext.Expect(!node["blob_storage_executor"].Exists(), "blob_storage_executor must not exist when using auto config");
         actorSystemContext.Expect(!node["interconnect_session_executor"].Exists(), "interconnect_session_executor must not exist when using auto config");
         actorSystemContext.Expect(!node["scheduler"].Exists(), "scheduler must not exist when using auto config");
       } else {

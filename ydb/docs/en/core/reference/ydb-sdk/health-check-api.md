@@ -17,7 +17,7 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
   Calling `SelfCheck` method:
 
   ```cpp
-  auto settings = TSelfCheckSettings();
+  auto settings = NYdb::NMonitoring::TSelfCheckSettings();
   settings.ReturnVerboseStatus(true);
   auto result = client.SelfCheck(settings).GetValueSync();
   ```
@@ -34,6 +34,10 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
 
   This functionality is not currently supported.
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   This functionality is not currently supported in the JavaScript SDK. You can create a monitoring client and call health-check APIs yourself:
@@ -48,6 +52,10 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#494](https://github.com/ydb-platform/ydb-rs-sdk/issues/494)
+
+- PHP
+
+  This functionality is not currently supported.
 
 {% endlist %}
 
@@ -103,15 +111,23 @@ The complete list of extra parameters is presented below:
 
   This functionality is not currently supported.
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  This functionality is not currently supported.
 
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#494](https://github.com/ydb-platform/ydb-rs-sdk/issues/494)
+
+- PHP
+
+  This functionality is not currently supported.
 
 {% endlist %}
 
@@ -387,7 +403,7 @@ The status (severity) of the current issue `issue_log.status`:
 
 #### LoadAverage above 100%
 
-**Description:** A physical host is overloaded, meaning the system is operating at or beyond its capacity, potentially due to a high number of processes waiting for I/O operations. For more information on load, see [Load (computing)](https://en.wikipedia.org/wiki/Load_(computing)).
+**Description:** A physical host is overloaded ([Load](https://en.wikipedia.org/wiki/Load_(computing))). This indicates that the system is operating at its limit, most likely due to a large number of processes waiting for I/O operations.
 
 **Logic of work:**
 

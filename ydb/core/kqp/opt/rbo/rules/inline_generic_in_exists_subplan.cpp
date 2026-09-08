@@ -26,6 +26,21 @@ void AddDomainColumn(TVector<TInfoUnit>& domain, const TInfoUnit& iu) {
 namespace NKikimr {
 namespace NKqp {
 
+bool TInlineGenericInExistsSubplanRule::QuickMatch(const TIntrusivePtr<IOperator>& input, const TPlanProps& props) const {
+    if (input->Kind != EOperator::Filter || props.Subplans.Empty()) {
+        return false;
+    }
+
+    for (const auto& iu : input->GetSubplanIUs(props.Subplans)) {
+        const auto type = props.Subplans.At(iu).Type;
+        if (type == ESubplanType::IN_SUBPLAN || type == ESubplanType::EXISTS) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 bool TInlineGenericInExistsSubplanRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
     return input->Kind == EOperator::Filter;
 }

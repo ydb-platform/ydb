@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/operations/write_data.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
 #include <ydb/core/tx/columnshard/tracing/probes.h>
+#include <ydb/core/tx/columnshard/tracing/write_orbit.h>
 #include <ydb/core/tx/data_events/write_data.h>
 
 namespace NKikimr::NColumnShard {
@@ -59,6 +60,9 @@ bool IsCompactionWaitStatus(const EOverloadStatus status) {
 
 bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) const {
     owner->Counters.GetCSCounters().WritingCounters->OnWritingTaskDequeue(ctx.Monotonic() - Created);
+    if (Orbit) {
+        LWTRACK(WriteDequeued, *Orbit, PathId.GetInternalPathId().GetRawValue(), owner->TabletID(), TxId, Cookie, ctx.Monotonic() - Created);
+    }
 
     if (const auto lock = owner->OperationsManager->GetLockOptional(LockId); lock) {
         if (lock->NeedsAborting()) {
@@ -87,13 +91,16 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) const {
         IsBulk);
     // We don't need to split here portions by the last level
     // ArrowData->SetSeparationPoints(owner->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(PathId.InternalPathId)->GetBucketPositions());
-    writeOperation->Start(*owner, ArrowData, SourceId, wContext);
+    writeOperation->Start(*owner, ArrowData, SourceId, wContext, Orbit, TxId, ReceivedAt);
     return true;
 }
 
 void TWriteTask::Abort(
     TColumnShard* owner, const TString& reason, const TActorContext& ctx, const NKikimrDataEvents::TEvWriteResult::EStatus& status) const {
-    LWPROBE(EvWriteResult, owner->TabletID(), SourceId.ToString(), TxId, Cookie, "write_queue", false, reason);
+    if (Orbit) {
+        TrackWriteFailed(*Orbit, PathId.GetInternalPathId().GetRawValue(), owner->TabletID(), TxId, Cookie, SourceId.ToString(), "write_queue",
+            ToString(status), reason);
+    }
     auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(owner->TabletID(), TxId, status, reason);
     owner->Counters.GetWritesMonitor()->OnFinishWrite(ArrowData->GetSize());
     if (status == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED && OverloadSubscribeSeqNo) {
@@ -113,7 +120,10 @@ void TWriteTask::FailByOverload(TColumnShard* owner, const EOverloadStatus overl
     AFL_VERIFY(overloadStatus != EOverloadStatus::None);
     const TString reason = TStringBuilder{} << "Column shard " << owner->TabletID()
                                             << " is overloaded. Reason: " << OverloadReason(overloadStatus);
-    LWPROBE(EvWriteResult, owner->TabletID(), SourceId.ToString(), TxId, Cookie, "write_queue", false, reason);
+    if (Orbit) {
+        TrackWriteFailed(*Orbit, PathId.GetInternalPathId().GetRawValue(), owner->TabletID(), TxId, Cookie, SourceId.ToString(), "write_queue",
+            ToString(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED), reason);
+    }
     auto result =
         NEvents::TDataEvents::TEvWriteResult::BuildError(owner->TabletID(), TxId, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, reason);
     owner->Counters.GetWritesMonitor()->OnFinishWrite(ArrowData->GetSize());

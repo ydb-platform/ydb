@@ -79,6 +79,18 @@ BELONGS ya.make
     Files with this license:
         include/boost/graph/vf2_sub_graph_iso.hpp [2:4]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 0650aa65f48484966880b8db3a4b9c6b
+BELONGS ya.make
+    License text:
+        // Copyright 2026 Becheler Code Labs for C++ Alliance
+        // Authors: Arnaud Becheler
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/louvain_quality_functions.hpp [2:3]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 09990d303a67b1a0c87b3ccf09c2097c
 BELONGS ya.make
     License text:
@@ -343,6 +355,17 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/graph/floyd_warshall_shortest.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 38ea04a9b2018347a62142967df105d9
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2026 Arnaud Becheler
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/graph/louvain_clustering.hpp [2:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 3e8210b2d067c6fa6eca9745ccdb03df
 BELONGS ya.make

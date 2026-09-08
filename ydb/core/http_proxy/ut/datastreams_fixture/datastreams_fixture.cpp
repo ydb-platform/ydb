@@ -32,13 +32,13 @@ void THttpProxyTestMock::InitAll(const TInitParameters initParameters) {
     InitHttpServer(initParameters.YandexCloudMode, initParameters.EnableSqsTopic, initParameters.EnableAccessServiceV2Interface);
 }
 
-TString THttpProxyTestMock::FormAuthorizationStr(const TString& region) const {
+TString THttpProxyTestMock::FormAuthorizationStr(const TString& region, const TString& service) const {
     if (!SendAuthorizationStr) {
         return "";
     }
     return TStringBuilder() <<
         "Authorization: AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/" << region <<
-        "/service/aws4_request, SignedHeaders=host;x-amz-date, Signature="
+        "/" << service << "/aws4_request, SignedHeaders=host;x-amz-date, Signature="
         "5da7c1a2acd57cee7505fc6676e4e544621c30862966e37dddb68e92efbe5d6b)__";
 }
 
@@ -956,6 +956,8 @@ void THttpProxyTestMock::InitAccessServiceService(bool enableAccessServiceV2Inte
     const auto setupAccessServiceMock = [&](auto& asMock) {
         asMock.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
         asMock.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
+        asMock.AuthenticateData["service"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+        asMock.AuthenticateData["service"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
         asMock.AuthenticateData["proxy_sa@builtin"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
         asMock.AuthenticateData["proxy_sa@builtin"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
         asMock.AuthenticateData["user@builtin"].Response.mutable_subject()->mutable_user_account()->set_id("user1_id");

@@ -41,6 +41,20 @@ std::pair<TIntrusivePtr<IOperator>, TInfoUnit> MakeAtMostOneRowPerGroup(const TI
 
 } // anonymous namespace
 
+bool TInlineScalarSubplanRule::QuickMatch(const TIntrusivePtr<IOperator>& input, const TPlanProps& props) const {
+    if (props.Subplans.Empty()) {
+        return false;
+    }
+
+    for (const auto& iu : input->GetSubplanIUs(props.Subplans)) {
+        if (props.Subplans.At(iu).Type == ESubplanType::EXPR) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // Rewrite a single scalar subplan into a cross-join for uncorrelated queries
 // or into a left join for correlated (assuming at most one tuple in the output of each subquery)
 // FIXME: Need to do correct general case decorellation in the future

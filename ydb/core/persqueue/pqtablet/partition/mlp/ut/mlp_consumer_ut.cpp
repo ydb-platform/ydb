@@ -1381,15 +1381,19 @@ NKikimrPQ::TPQTabletConfig::TConsumer MakeReadAheadConsumerConfig() {
 }
 
 // Builds a serialized snapshot with `messageCount` messages spread round-robin
-// across `groupCount` groups.
-TString BuildSnapshotBytes(size_t messageCount, size_t groupCount) {
+// across `groupCount` groups, locking the heads of `lockedGroups` distinct groups.
+TString BuildSnapshotBytes(size_t messageCount, size_t groupCount, size_t lockedGroups) {
     auto timeProvider = CreateDefaultTimeProvider();
     TStorage storage(timeProvider, TStorage::TStorageSettings{.KeepMessageOrder = true});
     const TInstant now = timeProvider->Now();
     for (size_t offset = 0; offset < messageCount; ++offset) {
         storage.AddMessage(offset, /*hasMessagegroup=*/true, /*messageGroupIdHash=*/offset % groupCount, now);
     }
-    // Drop the accumulated batch so serialization reflects the full state.
+    TStorage::TPosition position;
+    for (size_t i = 0; i < lockedGroups; ++i) {
+        auto locked = storage.Next(now + TDuration::Hours(1), position);
+        UNIT_ASSERT(locked.has_value());
+    }
     auto batch = storage.ExtractBatch();
     Y_UNUSED(batch);
 
@@ -1424,9 +1428,11 @@ public:
     )
 };
 
-// Boots a consumer with the given read-ahead flag and pre-built snapshot, then
-// returns the Count of the first CmdRead request it emits.
-ui64 GrabFirstFetchCount(float readAhead, size_t messageCount, size_t groupCount) {
+// Boots a consumer with the given read-ahead flag and a pre-built snapshot of
+// messageCount messages over groupCount groups with lockedGroups heads locked,
+// then returns the Count of the first CmdRead it emits, or nullopt if the fully
+// buffered consumer decides not to fetch at all.
+std::optional<ui64> GrabFirstFetchCount(float readAhead, size_t messageCount, size_t groupCount, size_t lockedGroups) {
     TTestBasicRuntime runtime(1, false);
     runtime.Initialize(TAppPrepare().Unwrap());
     runtime.SetScheduledLimit(10000);
@@ -1454,17 +1460,17 @@ ui64 GrabFirstFetchCount(float readAhead, size_t messageCount, size_t groupCount
         counters));
     runtime.EnableScheduleForActor(consumer);
 
-    const TString snapshotBytes = BuildSnapshotBytes(messageCount, groupCount);
+    const TString snapshotBytes = BuildSnapshotBytes(messageCount, groupCount, lockedGroups);
 
-    // Answer the initial snapshot KV read with the preloaded state.
     auto kvReq = runtime.GrabEdgeEvent<TEvKeyValue::TEvRequest>(TDuration::Seconds(10));
     UNIT_ASSERT(kvReq);
     runtime.Send(new IEventHandle(consumer, tablet,
         MakeSnapshotKvResponse(kvReq->Record.GetCookie(), snapshotBytes).Release()));
 
-    // After init the consumer runs FetchMessagesIfNeeded and sends a read request.
-    auto readReq = runtime.GrabEdgeEvent<TEvPersQueue::TEvRequest>(TDuration::Seconds(10));
-    UNIT_ASSERT(readReq);
+    auto readReq = runtime.GrabEdgeEvent<TEvPersQueue::TEvRequest>(TDuration::Seconds(3));
+    if (!readReq) {
+        return std::nullopt;
+    }
     UNIT_ASSERT(readReq->Record.HasPartitionRequest());
     UNIT_ASSERT(readReq->Record.GetPartitionRequest().HasCmdRead());
     const auto& read = readReq->Record.GetPartitionRequest().GetCmdRead();
@@ -1474,43 +1480,49 @@ ui64 GrabFirstFetchCount(float readAhead, size_t messageCount, size_t groupCount
 
 } // namespace
 
-Y_UNIT_TEST(FifoReadAheadDisabledFetchesSmallBatches) {
-    // Legacy behavior: with 100000 unprocessed messages already in flight the
-    // consumer only tops up by MinMessages (100), never jumping to MaxMessages.
-    const ui64 count = GrabFirstFetchCount(/*readAhead=*/0.0f, kReadAheadBaseMessages, kReadAheadBaseGroups);
-    Cerr << ">>>>> first CmdRead count (disabled): " << count << Endl;
-    UNIT_ASSERT_VALUES_EQUAL(count, 100);
+// EstimateFetchCountForNewGroups: exercised directly as a pure function.
+Y_UNIT_TEST(FifoReadAheadEstimateFetchCountForNewGroups) {
+    UNIT_ASSERT_VALUES_EQUAL(EstimateFetchCountForNewGroups(100000, 10, 1), 10000);
+    UNIT_ASSERT_VALUES_EQUAL(EstimateFetchCountForNewGroups(100000, 10, 3), 30000);
+    UNIT_ASSERT_VALUES_EQUAL(EstimateFetchCountForNewGroups(0, 0, 5), 5);
+    UNIT_ASSERT_VALUES_EQUAL(EstimateFetchCountForNewGroups(100000, 10, 0), 0);
+    UNIT_ASSERT_VALUES_EQUAL(EstimateFetchCountForNewGroups(5, 10, 2), 2);
+    UNIT_ASSERT_VALUES_EQUAL(EstimateFetchCountForNewGroups(95, 10, 1), 10);
 }
 
+// With read-ahead disabled the fully buffered FIFO consumer does not fetch ahead
+// at all, even with several groups locked.
+Y_UNIT_TEST(FifoReadAheadDisabledDoesNotFetch) {
+    const auto count = GrabFirstFetchCount(/*readAhead=*/0.0f, kReadAheadBaseMessages, kReadAheadBaseGroups, /*lockedGroups=*/6);
+    UNIT_ASSERT_C(!count, TStringBuilder() << "expected no fetch with read-ahead disabled, got " << *count);
+}
+
+// ratio 0.5: 10 groups, 6 locked -> readable 4 < target ceil(5)=5 -> 1 missing
+// group; density is 100000/10 = 10000 messages per group.
+Y_UNIT_TEST(FifoReadAheadRatioFetchesEstimatedBatch) {
+    const auto count = GrabFirstFetchCount(/*readAhead=*/0.5f, kReadAheadBaseMessages, kReadAheadBaseGroups, /*lockedGroups=*/6);
+    UNIT_ASSERT(count);
+    Cerr << ">>>>> first CmdRead count (ratio 0.5): " << *count << Endl;
+    UNIT_ASSERT_VALUES_EQUAL(*count, 10000);
+}
+
+// ratio 1.0: readable 4 < target 10 -> 6 missing groups -> estimate 60000, capped
+// by the free in-flight capacity (MaxMessages - 100000 = 20000).
 Y_UNIT_TEST(FifoReadAheadEnabledFetchesMaxBatches) {
-    // Read-ahead enabled: the consumer targets MaxMessages (120000), bounded by
-    // the free in-flight capacity (MaxMessages - 100000 already loaded = 20000).
-    const ui64 count = GrabFirstFetchCount(/*readAhead=*/1.0f, kReadAheadBaseMessages, kReadAheadBaseGroups);
-    Cerr << ">>>>> first CmdRead count (enabled): " << count << Endl;
-    UNIT_ASSERT_VALUES_EQUAL(count, 20000);
-    // The essential contract: enabled read-ahead fetches far more than the legacy
-    // MinMessages ceiling, even though LockedMessageCount is 0.
-    UNIT_ASSERT_C(count > 100,
-        TStringBuilder() << "expected read-ahead to exceed legacy MinMessages, got " << count);
+    const auto count = GrabFirstFetchCount(/*readAhead=*/1.0f, kReadAheadBaseMessages, kReadAheadBaseGroups, /*lockedGroups=*/6);
+    UNIT_ASSERT(count);
+    Cerr << ">>>>> first CmdRead count (enabled): " << *count << Endl;
+    UNIT_ASSERT_VALUES_EQUAL(*count, 20000);
 }
 
-// Test type 2: verify that with read-ahead enabled the consumer keeps fetching
-// until it reaches the 5 unique tail groups, so all 15 group heads become
-// readable.
-void FifoReadAheadReadAllGroupsImpl(float readAhead) {
-    auto setup = CreateSetup();
+// Test type 2: with read-ahead enabled the consumer keeps fetching past the
+// 100000 head messages until it reaches the 5 unique tail groups, so all 15 group
+// heads become readable in a single read.
+size_t ReadDistinctGroupHeads(std::shared_ptr<TTopicSdkTestSetup>& setup, size_t attempts) {
     auto& runtime = setup->GetRuntime();
-
-    runtime.GetAppData().PQConfig.SetMLPTargetUnlockedFIFOGroupsReadAhead(readAhead);
-
-    CreateTopic(setup, "/Root/topic1", "mlp-consumer", 1, /*keepMessagesOrder=*/true);
-    WriteReadAheadDataset(setup, "/Root/topic1");
-
     const size_t expectedGroups = kReadAheadBaseGroups + kReadAheadUniqueGroups; // 15
-
-    // Give the consumer time to fetch all messages, then read. Retry with a short
-    // processing timeout so locks from earlier attempts expire between reads.
-    for (size_t i = 0; i < 30; ++i) {
+    size_t best = 0;
+    for (size_t i = 0; i < attempts; ++i) {
         Sleep(TDuration::Seconds(1));
         CreateReaderActor(runtime, {
             .DatabasePath = "/Root",
@@ -1522,14 +1534,23 @@ void FifoReadAheadReadAllGroupsImpl(float readAhead) {
         });
         auto response = GetReadResponse(runtime, TDuration::Seconds(10));
         UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
-        if (response->Messages.size() == expectedGroups) {
-            return;
+        best = std::max(best, response->Messages.size());
+        if (best == expectedGroups) {
+            break;
         }
-        Cerr << ">>>>> attempt " << i << ": read " << response->Messages.size()
-             << " of " << expectedGroups << " groups" << Endl;
+        Cerr << ">>>>> attempt " << i << ": read " << response->Messages.size() << " groups" << Endl;
     }
-    UNIT_FAIL("consumer did not read heads of all " << expectedGroups
-        << " groups with read-ahead == " << readAhead);
+    return best;
+}
+
+void FifoReadAheadReadAllGroupsImpl(float readAhead) {
+    auto setup = CreateSetup();
+    setup->GetRuntime().GetAppData().PQConfig.SetMLPTargetUnlockedFIFOGroupsReadAhead(readAhead);
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer", 1, /*keepMessagesOrder=*/true);
+    WriteReadAheadDataset(setup, "/Root/topic1");
+
+    const size_t expectedGroups = kReadAheadBaseGroups + kReadAheadUniqueGroups;
+    UNIT_ASSERT_VALUES_EQUAL(ReadDistinctGroupHeads(setup, 30), expectedGroups);
 }
 
 Y_UNIT_TEST(FifoReadAheadEnabledReadsAllGroups) {
@@ -1538,6 +1559,18 @@ Y_UNIT_TEST(FifoReadAheadEnabledReadsAllGroups) {
 
 Y_UNIT_TEST(FifoReadAheadRatioReadsAllGroups) {
     FifoReadAheadReadAllGroupsImpl(0.5f);
+}
+
+// Negative: with read-ahead disabled the FIFO consumer keeps only a minimal
+// buffer and never fetches deep enough to surface the 5 unique tail groups, so
+// only the 10 head groups are ever readable.
+Y_UNIT_TEST(FifoReadAheadDisabledDoesNotReachTailGroups) {
+    auto setup = CreateSetup();
+    setup->GetRuntime().GetAppData().PQConfig.SetMLPTargetUnlockedFIFOGroupsReadAhead(0.0f);
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer", 1, /*keepMessagesOrder=*/true);
+    WriteReadAheadDataset(setup, "/Root/topic1");
+
+    UNIT_ASSERT_VALUES_EQUAL(ReadDistinctGroupHeads(setup, 8), kReadAheadBaseGroups);
 }
 
 }

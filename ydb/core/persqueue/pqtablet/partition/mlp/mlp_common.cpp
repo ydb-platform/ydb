@@ -2,7 +2,19 @@
 
 #include <ydb/public/lib/base/msgbus_status.h>
 
+#include <algorithm>
+
 namespace NKikimr::NPQ::NMLP {
+
+size_t EstimateFetchCountForNewGroups(size_t inflightMessageCount, size_t inflightGroupCount, size_t desiredNewGroups) {
+    if (desiredNewGroups == 0) {
+        return 0;
+    }
+    const size_t messagesPerGroup = inflightGroupCount == 0
+        ? 1
+        : std::max<size_t>(1, (inflightMessageCount + inflightGroupCount - 1) / inflightGroupCount);
+    return desiredNewGroups * messagesPerGroup;
+}
 
 std::unique_ptr<TEvPersQueue::TEvRequest> MakeEvPQRead(
     const TString& consumerName,

@@ -11,6 +11,7 @@
 #include <util/generic/serialized_enum.h>
 #include <util/stream/format.h>
 
+#include <cmath>
 #include <ranges>
 
 #define YDB_LOG_THIS_FILE_COMPONENT Service
@@ -1004,32 +1005,30 @@ size_t TConsumerActor::RequiredToFetchMessageCount() const {
     if (metrics.LockedMessageCount * 2 > metrics.UnprocessedMessageCount) {
         maxMessages = std::max<size_t>(maxMessages, metrics.LockedMessageCount * 2 - metrics.UnprocessedMessageCount);
     }
-    // FIFO: readability is bounded by the number of distinct unlocked message groups, not by the raw
-    // unprocessed count (messages whose group head is in flight are Unprocessed but not readable). When
-    // most in-flight groups are locked, few groups are available to hand out in parallel, so fetch
-    // aggressively toward MaxMessages to pull in heads of new groups and maximize group diversity.
-    //
-    // The behavior is controlled by PQConfig.MLPTargetUnlockedFIFOGroupsReadAhead:
-    //   0        - legacy behavior (no group-based forced fetch);
-    //   >= 1     - always fetch up to MaxMessages;
-    //   (0..1)   - fetch up to MaxMessages when locked groups dominate the readable ones, i.e. when
-    //              lockedGroups > ratio * readableGroups (ratio == 0.5 reproduces the previous hardcoded
-    //              logic of readableGroups < lockedGroups * 2).
-    if (Config.GetKeepMessageOrder()) {
-        const float targetReadAhead = AppData()->PQConfig.GetMLPTargetUnlockedFIFOGroupsReadAhead();
-        if (targetReadAhead >= 1.0f) {
-            maxMessages = Storage->MaxMessages;
-        } else if (targetReadAhead > 0.0f) {
-            const size_t inflightGroups = metrics.InflightMessageGroupCount;
-            const size_t lockedGroups = metrics.LockedMessageGroupCount;
-            const size_t readableGroups = inflightGroups > lockedGroups ? inflightGroups - lockedGroups : 0;
-            if (lockedGroups > targetReadAhead * readableGroups) {
-                maxMessages = Storage->MaxMessages;
-            }
-        }
+    if (const size_t missingGroups = FifoReadAheadGroupDeficit()) {
+        const size_t estimate = EstimateFetchCountForNewGroups(metrics.InflightMessageCount, metrics.InflightMessageGroupCount, missingGroups);
+        maxMessages = std::max(maxMessages, estimate);
     }
 
     return std::min(maxMessages, Storage->MaxMessages - metrics.InflightMessageCount);
+}
+
+// messages whose group head is already in flight are Unprocessed but not readable,
+// so check the number of groups
+size_t TConsumerActor::FifoReadAheadGroupDeficit() const {
+    if (!Config.GetKeepMessageOrder()) {
+        return 0;
+    }
+    const float targetReadAhead = AppData()->PQConfig.GetMLPTargetUnlockedFIFOGroupsReadAhead();
+    if (targetReadAhead <= 0.0f) {
+        return 0;
+    }
+    auto& metrics = Storage->GetMetrics();
+    const size_t inflightGroups = metrics.InflightMessageGroupCount;
+    const size_t lockedGroups = metrics.LockedMessageGroupCount;
+    const size_t readableGroups = inflightGroups > lockedGroups ? inflightGroups - lockedGroups : 0;
+    const size_t targetReadableGroups = static_cast<size_t>(std::ceil(targetReadAhead * inflightGroups));
+    return readableGroups < targetReadableGroups ? targetReadableGroups - readableGroups : 0;
 }
 
 bool TConsumerActor::FetchMessagesIfNeeded() {
@@ -1056,10 +1055,12 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
         LOG_D("Skip fetch: infly limit exceeded");
         return false;
     }
-    if (!Config.GetKeepMessageOrder()
-        && metrics.InflightMessageCount >= Storage->MinMessages
-        && metrics.UnprocessedMessageCount >= metrics.LockedMessageCount * 2
-        && metrics.UnprocessedMessageCount >= metrics.InflightMessageCount / 4
+    const bool enoughForFanout = Config.GetKeepMessageOrder()
+        ? FifoReadAheadGroupDeficit() == 0
+        : metrics.UnprocessedMessageCount >= metrics.LockedMessageCount * 2
+            && metrics.UnprocessedMessageCount >= metrics.InflightMessageCount / 4;
+    if (metrics.InflightMessageCount >= Storage->MinMessages
+        && enoughForFanout
         && !Storage->HasRetentionExpiredMessages()) {
         LOG_D(
             "Skip fetch: there are enough messages",

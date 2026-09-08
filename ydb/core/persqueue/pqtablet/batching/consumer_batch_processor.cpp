@@ -5,6 +5,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
 
+#include <exception>
 #include <utility>
 
 #define YDB_LOG_THIS_FILE_COMPONENT Service
@@ -23,6 +24,46 @@ namespace {
             }
         }
         return key;
+    }
+
+    TVector<TReadResult> CutOrKeepOriginal(
+        const IBatchCutter& cutter,
+        const TBatchCutterData& data,
+        ui64 readStartOffset,
+        const TString& logPrefix,
+        const TString& user,
+        ui32 partitionId)
+    {
+        try {
+            return cutter.Cut(data, readStartOffset);
+        } catch (const std::exception& e) {
+            YDB_LOG_ERROR_COMP(PERSQUEUE, "Failed to cut kafka batch, keeping original result",
+                {"logPrefix", logPrefix},
+                {"user", user},
+                {"partitionId", partitionId},
+                {"offset", data.ReadResult.GetOffset()},
+                {"error", TString(e.what())});
+            return {data.ReadResult};
+        }
+    }
+
+    THashMap<TString, ui64> GetKeysOrEmpty(
+        const IBatchCutter& cutter,
+        const TBatchCutterData& data,
+        ui64 readStartOffset,
+        const TString& logPrefix,
+        ui32 partitionId)
+    {
+        try {
+            return cutter.GetKeys(data, readStartOffset);
+        } catch (const std::exception& e) {
+            YDB_LOG_ERROR_COMP(PERSQUEUE, "Failed to get keys from kafka batch",
+                {"logPrefix", logPrefix},
+                {"partitionId", partitionId},
+                {"offset", data.ReadResult.GetOffset()},
+                {"error", TString(e.what())});
+            return {};
+        }
     }
 }
 
@@ -68,54 +109,75 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::T
     for (const auto& result : *results) {
         originalResults.push_back(result);
     }
-    results->Clear();
 
-    ui32 resultsCount = 0;
-    auto addResult = [&](TReadResult& result) {
-        if (result.GetOffset() < context.Offset) {
-            return false;
-        }
-        if (context.LastOffset != 0 && result.GetOffset() >= context.LastOffset) {
-            return false;
-        }
-        if (resultsCount >= context.Count && context.Count > 0) {
-            return true;
-        }
+    TVector<TReadResult> expanded;
+    expanded.reserve(originalResults.size());
 
-        resultsCount += result.GetLogicalMessageCount();
-        readResult->AddResult()->Swap(&result);
-        return resultsCount >= context.Count && context.Count > 0;
-    };
+    try {
+        ui32 resultsCount = 0;
+        auto addResult = [&](TReadResult& result) {
+            if (result.GetOffset() < context.Offset) {
+                return false;
+            }
+            if (context.LastOffset != 0 && result.GetOffset() >= context.LastOffset) {
+                return false;
+            }
+            if (resultsCount >= context.Count && context.Count > 0) {
+                return true;
+            }
 
-    for (auto& originalResult : originalResults) {
-        auto dataChunk = NKikimr::GetDeserializedData(originalResult.GetData());
+            resultsCount += result.GetLogicalMessageCount();
+            expanded.emplace_back();
+            expanded.back().Swap(&result);
+            return resultsCount >= context.Count && context.Count > 0;
+        };
 
-        if (!originalResult.GetIsBatch()) {
-            if (addResult(originalResult)) {
+        for (auto& originalResult : originalResults) {
+            auto dataChunk = NKikimr::GetDeserializedData(originalResult.GetData());
+
+            if (!originalResult.GetIsBatch()) {
+                if (addResult(originalResult)) {
+                    break;
+                }
+                continue;
+            }
+
+            auto it = BatchCutters.find(dataChunk.GetCodec());
+            if (it == BatchCutters.end()) {
+                if (addResult(originalResult)) {
+                    break;
+                }
+                continue;
+            }
+
+            TBatchCutterData data(originalResult, std::move(dataChunk));
+            auto cutResults = CutOrKeepOriginal(
+                *it->second,
+                data,
+                context.Offset,
+                GetLogPrefix(),
+                User,
+                context.PartitionId);
+            for (auto& cutResult : cutResults) {
+                if (addResult(cutResult)) {
+                    break;
+                }
+            }
+            if (resultsCount >= context.Count) {
                 break;
             }
-            continue;
         }
 
-        auto it = BatchCutters.find(dataChunk.GetCodec());
-        if (it == BatchCutters.end()) {
-            if (addResult(originalResult)) {
-                break;
-            }
-            continue;
+        results->Clear();
+        for (auto& result : expanded) {
+            readResult->AddResult()->Swap(&result);
         }
-
-        TBatchCutterData data(originalResult, std::move(dataChunk));
-
-        auto cutResults = it->second->Cut(data, context.Offset);
-        for (auto& cutResult : cutResults) {
-            if (addResult(cutResult)) {
-                break;
-            }
-        }
-        if (resultsCount >= context.Count) {
-            break;
-        }
+    } catch (const std::exception& e) {
+        YDB_LOG_ERROR("Failed to process read batch, returning original results",
+            {"logPrefix", GetLogPrefix()},
+            {"user", User},
+            {"partitionId", context.PartitionId},
+            {"error", TString(e.what())});
     }
 
     ctx.Send(context.ResponseActor, new TEvProcessBatchResult(std::move(context)));
@@ -128,30 +190,42 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatchKeys::TPtr& ev, const NActor
 
     THashMap<ui64, TString> offsetToKey;
 
-    for (const auto& result : context.Results) {
-        if (result.GetData().empty()) {
-            continue;
-        }
+    try {
+        for (const auto& result : context.Results) {
+            if (result.GetData().empty()) {
+                continue;
+            }
 
-        auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
-        if (dataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
-            continue;
-        }
+            auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
+            if (dataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
+                continue;
+            }
 
-        if (!result.GetIsBatch()) {
-            auto key = GetCompactionKey(dataChunk);
-            offsetToKey[result.GetOffset()] = std::move(key);
-            continue;
-        }
+            if (!result.GetIsBatch()) {
+                auto key = GetCompactionKey(dataChunk);
+                offsetToKey[result.GetOffset()] = std::move(key);
+                continue;
+            }
 
-        auto it = BatchCutters.find(dataChunk.GetCodec());
-        if (it != BatchCutters.end()) {
-            TBatchCutterData data(result, std::move(dataChunk));
-            auto batchKeys = it->second->GetKeys(data, result.GetOffset());
-            for (auto& [key, offset] : batchKeys) {
-                offsetToKey[offset] = std::move(key);
+            auto it = BatchCutters.find(dataChunk.GetCodec());
+            if (it != BatchCutters.end()) {
+                TBatchCutterData data(result, std::move(dataChunk));
+                auto batchKeys = GetKeysOrEmpty(
+                    *it->second,
+                    data,
+                    result.GetOffset(),
+                    GetLogPrefix(),
+                    context.PartitionId);
+                for (auto& [key, offset] : batchKeys) {
+                    offsetToKey[offset] = std::move(key);
+                }
             }
         }
+    } catch (const std::exception& e) {
+        YDB_LOG_ERROR("Failed to process batch keys, returning collected keys",
+            {"logPrefix", GetLogPrefix()},
+            {"partitionId", context.PartitionId},
+            {"error", TString(e.what())});
     }
 
     ctx.Send(context.ResponseActor, new TEvProcessBatchKeysResult(std::move(offsetToKey)));

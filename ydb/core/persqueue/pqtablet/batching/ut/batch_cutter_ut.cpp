@@ -365,6 +365,20 @@ Y_UNIT_TEST_SUITE(TBatchCutterTest) {
             yexception);
     }
 
+    Y_UNIT_TEST(CutFailsOnCorruptKafkaPayload) {
+        const auto readResult = MakeKafkaBatchReadResult("not-a-kafka-batch");
+        UNIT_ASSERT_EXCEPTION(
+            TKafkaBatchCutter().Cut(TBatchCutterData(readResult, NKikimr::GetDeserializedData(readResult.GetData())), 10),
+            yexception);
+    }
+
+    Y_UNIT_TEST(GetKeysFailsOnCorruptKafkaPayload) {
+        const auto readResult = MakeKafkaBatchReadResult("not-a-kafka-batch");
+        UNIT_ASSERT_EXCEPTION(
+            TKafkaBatchCutter().GetKeys(TBatchCutterData(readResult, NKikimr::GetDeserializedData(readResult.GetData())), 10),
+            yexception);
+    }
+
     Y_UNIT_TEST(GetKeysIgnoresNonRegularChunk) {
         NKikimrPQClient::TDataChunk chunk;
         chunk.SetChunkType(NKikimrPQClient::TDataChunk::GROW);

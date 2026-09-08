@@ -93,6 +93,20 @@ TReadResult MakeKafkaBatchReadResult(TString payload, ui64 offset = 10) {
     return readResult;
 }
 
+TReadResult MakeCorruptKafkaBatchReadResult(ui64 offset = 10, TString payload = "not-a-kafka-batch") {
+    return MakeKafkaBatchReadResult(std::move(payload), offset);
+}
+
+TString MakeSnappyKafkaBatchPayload() {
+    auto payload = MakeKafkaBatchPayload();
+    // Kafka v2 attributes are int16 BE after baseOffset(8)+batchLength(4)+leaderEpoch(4)+magic(1)+crc(4).
+    constexpr size_t attributesOffset = 21;
+    UNIT_ASSERT(payload.size() > attributesOffset + 1);
+    payload[attributesOffset] = 0;
+    payload[attributesOffset + 1] = static_cast<char>(NKafka::ECompressionType::SNAPPY);
+    return payload;
+}
+
 TReadResult MakePlainReadResult(
     ui64 offset,
     TStringBuf payload,
@@ -165,10 +179,11 @@ struct TEnv {
     TActorId Tablet;
     TActorId Edge;
 
-    TEnv()
+    explicit TEnv(bool restartOnUnhandledExceptions = false)
         : Runtime(1, false)
     {
         TAppPrepare app;
+        app.FeatureFlags.SetEnableTabletRestartOnUnhandledExceptions(restartOnUnhandledExceptions);
         Runtime.Initialize(app.Unwrap());
         Tablet = Runtime.AllocateEdgeActor();
         Edge = Runtime.AllocateEdgeActor();
@@ -426,6 +441,160 @@ Y_UNIT_TEST_SUITE(TConsumerBatchProcessorTest) {
         const auto& results = GetCmdReadResult(ev->Get()->Context).GetResult();
         UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(results.Get(0).GetOffset(), 11u);
+    }
+
+    Y_UNIT_TEST(CorruptKafkaBatchKeepsOriginalAndReplies) {
+        TEnv env;
+        const auto actor = env.RegisterConsumer();
+
+        env.Send(actor, new TEvProcessBatch(MakeReadContext(
+            env.Edge,
+            {MakeCorruptKafkaBatchReadResult(10)},
+            "user",
+            7,
+            10)));
+
+        const auto ev = env.Grab<TEvProcessBatchResult>();
+        const auto& results = GetCmdReadResult(ev->Get()->Context).GetResult();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(results.Get(0).GetOffset(), 10u);
+        UNIT_ASSERT(results.Get(0).GetIsBatch());
+        UNIT_ASSERT(env.Runtime.FindActor(actor));
+
+        env.Send(actor, new TEvProcessBatch(MakeReadContext(env.Edge, {MakePlainReadResult(11, "ok")})));
+        UNIT_ASSERT_VALUES_EQUAL(GetCmdReadResult(env.Grab<TEvProcessBatchResult>()->Get()->Context).GetResult().size(), 1);
+    }
+
+    Y_UNIT_TEST(UnsupportedSnappyKafkaBatchKeepsOriginalAndReplies) {
+        TEnv env;
+        const auto actor = env.RegisterConsumer();
+
+        env.Send(actor, new TEvProcessBatch(MakeReadContext(
+            env.Edge,
+            {MakeCorruptKafkaBatchReadResult(10, MakeSnappyKafkaBatchPayload())},
+            "user",
+            7,
+            10)));
+
+        const auto ev = env.Grab<TEvProcessBatchResult>();
+        const auto& results = GetCmdReadResult(ev->Get()->Context).GetResult();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
+        UNIT_ASSERT(results.Get(0).GetIsBatch());
+        UNIT_ASSERT_VALUES_EQUAL(results.Get(0).GetOffset(), 10u);
+    }
+
+    Y_UNIT_TEST(TruncatedKafkaBatchKeepsOriginalAndReplies) {
+        TEnv env;
+        const auto actor = env.RegisterConsumer();
+
+        const auto truncated = MakeKafkaBatchPayload().substr(0, 8);
+        env.Send(actor, new TEvProcessBatch(MakeReadContext(
+            env.Edge,
+            {MakeCorruptKafkaBatchReadResult(12, truncated)},
+            "user",
+            7,
+            12)));
+
+        const auto ev = env.Grab<TEvProcessBatchResult>();
+        const auto& results = GetCmdReadResult(ev->Get()->Context).GetResult();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
+        UNIT_ASSERT(results.Get(0).GetIsBatch());
+        UNIT_ASSERT_VALUES_EQUAL(results.Get(0).GetOffset(), 12u);
+    }
+
+    Y_UNIT_TEST(CorruptKafkaBatchDoesNotPoisonTablet) {
+        TEnv env(true);
+        const auto actor = env.RegisterConsumer();
+
+        env.Send(actor, new TEvProcessBatch(MakeReadContext(
+            env.Edge,
+            {MakeCorruptKafkaBatchReadResult()},
+            "user",
+            7,
+            10)));
+
+        UNIT_ASSERT(env.Grab<TEvProcessBatchResult>());
+        UNIT_ASSERT(env.Runtime.FindActor(actor));
+
+        env.Send(actor, new TEvProcessBatch(MakeReadContext(env.Edge, {MakePlainReadResult(11, "ok")})));
+        UNIT_ASSERT_VALUES_EQUAL(GetCmdReadResult(env.Grab<TEvProcessBatchResult>()->Get()->Context).GetResult().size(), 1);
+    }
+
+    Y_UNIT_TEST(CorruptKafkaBatchInTheMiddleKeepsCutPrefixAndOriginal) {
+        TEnv env;
+        const auto actor = env.RegisterConsumer();
+
+        env.Send(actor, new TEvProcessBatch(MakeReadContext(
+            env.Edge,
+            {
+                MakeKafkaBatchReadResult(MakeKafkaBatchPayload(), 10),
+                MakeCorruptKafkaBatchReadResult(20),
+                MakePlainReadResult(30, "tail"),
+            },
+            "user",
+            7,
+            10)));
+
+        const auto ev = env.Grab<TEvProcessBatchResult>();
+        const auto& results = GetCmdReadResult(ev->Get()->Context).GetResult();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(results.Get(0).GetOffset(), 10u);
+        UNIT_ASSERT(!results.Get(0).GetIsBatch());
+        UNIT_ASSERT_VALUES_EQUAL(results.Get(1).GetOffset(), 11u);
+        UNIT_ASSERT(!results.Get(1).GetIsBatch());
+        UNIT_ASSERT_VALUES_EQUAL(results.Get(2).GetOffset(), 20u);
+        UNIT_ASSERT(results.Get(2).GetIsBatch());
+        UNIT_ASSERT_VALUES_EQUAL(results.Get(3).GetOffset(), 30u);
+        UNIT_ASSERT(!results.Get(3).GetIsBatch());
+    }
+
+    Y_UNIT_TEST(CorruptKafkaBatchKeysStillReplies) {
+        TEnv env;
+        const auto actor = env.RegisterConsumer();
+
+        TBatchKeysProcessingContext keys;
+        keys.PartitionId = 3;
+        keys.ResponseActor = env.Edge;
+        keys.Results = {
+            MakePlainReadResult(3, "plain", false, NKikimrPQClient::TDataChunk::REGULAR, {
+                {TString{MESSAGE_ATTRIBUTE_KEY}, "plain-key"},
+            }),
+            MakeCorruptKafkaBatchReadResult(10),
+            MakeKafkaBatchReadResult(MakeKafkaBatchPayload(), 20),
+        };
+
+        env.Send(actor, new TEvProcessBatchKeys(std::move(keys)));
+
+        const auto ev = env.Grab<TEvProcessBatchKeysResult>();
+        const auto& offsetToKey = ev->Get()->OffsetToKey;
+        UNIT_ASSERT_VALUES_EQUAL(offsetToKey.at(3u), "plain-key");
+        UNIT_ASSERT(!offsetToKey.contains(10u));
+        UNIT_ASSERT_VALUES_EQUAL(offsetToKey.at(20u), "k0");
+        UNIT_ASSERT_VALUES_EQUAL(offsetToKey.at(21u), "k1");
+        UNIT_ASSERT(env.Runtime.FindActor(actor));
+    }
+
+    Y_UNIT_TEST(CorruptKafkaBatchThroughBatchProcessorReplies) {
+        TEnv env(true);
+        const auto actor = env.RegisterBatchProcessor();
+
+        env.Send(actor, new TEvProcessBatch(MakeReadContext(
+            env.Edge,
+            {MakeCorruptKafkaBatchReadResult()},
+            "alice",
+            7,
+            10)));
+
+        const auto ev = env.Grab<TEvProcessBatchResult>();
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Context.User, "alice");
+        UNIT_ASSERT(GetCmdReadResult(ev->Get()->Context).GetResult().Get(0).GetIsBatch());
+        UNIT_ASSERT(env.Runtime.FindActor(actor));
+
+        env.Send(actor, new TEvProcessBatch(MakeReadContext(
+            env.Edge,
+            {MakePlainReadResult(11, "ok")},
+            "alice")));
+        UNIT_ASSERT_VALUES_EQUAL(GetCmdReadResult(env.Grab<TEvProcessBatchResult>()->Get()->Context).GetResult().size(), 1);
     }
 
     Y_UNIT_TEST(ProcessBatchKeysCollectsPlainAndKafkaKeys) {

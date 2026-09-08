@@ -138,7 +138,9 @@ private:
     void EvictFor(ui64 length);
     //! Drop the guest state cached for `key` and queue its value for the guest
     //! to free. Returns false when there was nothing cached under that key.
-    bool ReleaseUserState(const TBridgeIdentity& key);
+    //! Takes the key by value: callers hand us LRU front()/iterators, and the
+    //! identity lives inside the list node that this method erases.
+    bool ReleaseUserState(TBridgeIdentity key);
     void Touch(const TBridgeIdentity& key, TPin& pin);
     void WriteBytes(ui64 offset, NYql::NUdf::TStringRef bytes);
 

@@ -204,8 +204,9 @@ void TCompartmentResidentCache::EvictFor(ui64 length) {
         // usually points into the block that just went away. Hand it back the
         // way the user-data LRU does instead of leaving the guest to read an
         // offset whose bytes now belong to another pin.
-        ReleaseUserState(*it);
-        Pins_.erase(*it);
+        const TBridgeIdentity key = *it;
+        ReleaseUserState(key);
+        Pins_.erase(key);
         it = Lru_.erase(it);
     }
 }
@@ -296,7 +297,7 @@ void TCompartmentResidentCache::SetUserData(
     UserStates_.emplace(key, std::move(state));
 }
 
-bool TCompartmentResidentCache::ReleaseUserState(const TBridgeIdentity& key) {
+bool TCompartmentResidentCache::ReleaseUserState(TBridgeIdentity key) {
     auto* state = UserStates_.FindPtr(key);
     if (!state) {
         return false;

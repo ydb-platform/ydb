@@ -157,7 +157,7 @@ public:
 private:
     TAtomic SyncSectionFlag = 1;
     YDB_READONLY(EType, Type, EType::Undefined);
-    YDB_READONLY(ui32, SourceIdx, 0);
+    ui32 SourceIdx = 0;
     YDB_READONLY_DEF(ui64, SourceId);
     static inline TAtomicCounter MemoryGroupCounter = 0;
     YDB_READONLY(ui64, SequentialMemoryGroupIdx, MemoryGroupCounter.Inc());
@@ -174,7 +174,7 @@ private:
     TExecutionContext ExecutionContext;
     virtual bool DoAddTxConflict() = 0;
 
-    virtual ui64 DoGetEntityId() const override {
+    virtual ui32 DoGetSourceIdx() const override {
         return SourceIdx;
     }
 

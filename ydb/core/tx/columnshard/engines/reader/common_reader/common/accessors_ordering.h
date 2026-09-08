@@ -18,8 +18,9 @@ private:
     ui32 SourceIdx = 0;
     bool SourceIdxInitialized = false;
 
-    virtual ui64 DoGetEntityId() const override {
-        return GetSourceIdx();
+    virtual ui32 DoGetSourceIdx() const override {
+        AFL_VERIFY(SourceIdxInitialized);
+        return SourceIdx;
     }
 
 public:
@@ -27,11 +28,6 @@ public:
         AFL_VERIFY(!SourceIdxInitialized);
         SourceIdxInitialized = true;
         SourceIdx = index;
-    }
-
-    ui32 GetSourceIdx() const {
-        AFL_VERIFY(SourceIdxInitialized);
-        return SourceIdx;
     }
 
     TReplaceKeyAdapter ExtractStart() {

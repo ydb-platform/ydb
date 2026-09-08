@@ -141,7 +141,7 @@ public:
 
 class ICursorEntity {
 private:
-    virtual ui64 DoGetEntityId() const = 0;
+    virtual ui32 DoGetSourceIdx() const = 0;
     virtual ui64 DoGetSourceId() const = 0;
     virtual ui64 DoGetSourceRecordsCount() const = 0;
 
@@ -152,8 +152,8 @@ public:
         return DoGetSourceId();
     }
 
-    ui64 GetEntityId() const {
-        return DoGetEntityId();
+    ui32 GetSourceIdx() const {
+        return DoGetSourceIdx();
     }
 
     ui64 GetSourceRecordsCount() const {
@@ -338,7 +338,7 @@ private:
 
     virtual bool DoCheckEntityIsBorder(const ICursorEntity& entity, bool& usage) const override {
         AFL_VERIFY(SourceIdx);
-        if (*SourceIdx != entity.GetEntityId()) {
+        if (*SourceIdx != entity.GetSourceIdx()) {
             return false;
         }
         // Identity before position: a slot number only names this source while the sources set is the one

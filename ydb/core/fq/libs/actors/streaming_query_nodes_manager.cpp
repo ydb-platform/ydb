@@ -34,12 +34,14 @@ public:
         TString tenantName,
         ui64 taskCount,
         TString queryId,
+        const NProto::TGraphParams& graphParams,
         TDuration checkPeriod,
         TDuration startDelay)
         : RunActorId(runActorId)
         , TenantName(std::move(tenantName))
         , TaskCount(taskCount)
         , QueryId(std::move(queryId))
+        , GraphParams(graphParams)
         , CheckPeriod(checkPeriod)
         , StartDelay(startDelay)
     {}
@@ -173,6 +175,7 @@ private:
     const TString TenantName;
     const ui64 TaskCount;
     const TString QueryId;
+    const NProto::TGraphParams GraphParams;
     const TDuration CheckPeriod;
     const TDuration StartDelay;
 
@@ -194,6 +197,7 @@ IActor* CreateStreamingQueryNodesManager(
     TString tenantName,
     ui64 taskCount,
     TString queryId,
+    const NProto::TGraphParams& graphParams,
     TDuration checkPeriod,
     TDuration startDelay)
 {
@@ -202,6 +206,7 @@ IActor* CreateStreamingQueryNodesManager(
         std::move(tenantName),
         taskCount,
         std::move(queryId),
+        graphParams,
         checkPeriod,
         startDelay);
 }

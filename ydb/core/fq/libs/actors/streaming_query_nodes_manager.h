@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/fq/libs/events/event_subspace.h>
+#include <ydb/core/fq/libs/graph_params/proto/graph_params.pb.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -44,6 +45,7 @@ struct TEvStreamingQueryNodesManager {
 //   tenantName   – tenant path used for TenantNodeEnumeration lookup
 //   taskCount    – number of DQ tasks in the current graph
 //   queryId      – used for logging
+//   graphParams  – serialized DQ task graph snapshot
 //   checkPeriod  – how often to repeat the check (default 1 minute)
 //   startDelay   – time to wait for initial compute states before first check
 NActors::IActor* CreateStreamingQueryNodesManager(
@@ -51,6 +53,7 @@ NActors::IActor* CreateStreamingQueryNodesManager(
     TString tenantName,
     ui64 taskCount,
     TString queryId,
+    const NProto::TGraphParams& graphParams,
     TDuration checkPeriod = TDuration::Minutes(1),
     TDuration startDelay = TDuration::Minutes(1));
 

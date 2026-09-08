@@ -72,6 +72,7 @@ Y_UNIT_TEST(NoAbortWhenRatioSufficient) {
             "/Root/test",
             /* taskCount */ 4,
             "query-1",
+            NProto::TGraphParams{},
             TDuration::Hours(1), // use large period so wakeup doesn't auto-fire
             TDuration::Zero()
         ));
@@ -115,6 +116,7 @@ Y_UNIT_TEST(AbortWhenRatioBelowThreshold) {
             "/Root/test",
             /* taskCount */ 1,
             "query-2",
+            NProto::TGraphParams{},
             TDuration::Hours(1), TDuration::Zero()));
 
     runtime.EnableScheduleForActor(manager, true);
@@ -153,6 +155,7 @@ Y_UNIT_TEST(ComputeStatesDetermineQueryNodes) {
             "/Root/test",
             /* taskCount */ 10,
             "query-3",
+            NProto::TGraphParams{},
             TDuration::Hours(1), TDuration::Zero()));
 
     runtime.EnableScheduleForActor(manager, true);
@@ -192,6 +195,7 @@ Y_UNIT_TEST(AbortSentOnlyOnce) {
             "/Root/test",
             /* taskCount */ 1,
             "query-4",
+            NProto::TGraphParams{},
             TDuration::Hours(1), TDuration::Zero()));
 
     runtime.EnableScheduleForActor(manager, true);
@@ -239,6 +243,7 @@ Y_UNIT_TEST(FailedLookupDoesNotAbort) {
             "/Root/test",
             /* taskCount */ 1,
             "query-5",
+            NProto::TGraphParams{},
             TDuration::Hours(1), TDuration::Zero()));
 
     runtime.EnableScheduleForActor(manager, true);
@@ -274,6 +279,7 @@ Y_UNIT_TEST(NoAbortAtExactlyHalf) {
             "/Root/test",
             /* taskCount */ 5,
             "query-6",
+            NProto::TGraphParams{},
             TDuration::Hours(1), TDuration::Zero()));
 
     runtime.EnableScheduleForActor(manager, true);
@@ -311,6 +317,7 @@ Y_UNIT_TEST(NoAbortWhenManyTasksOnFewNodesButRatioOk) {
             "/Root/test",
             /* taskCount */ 100,
             "query-7",
+            NProto::TGraphParams{},
             TDuration::Hours(1), TDuration::Zero()));
 
     runtime.EnableScheduleForActor(manager, true);

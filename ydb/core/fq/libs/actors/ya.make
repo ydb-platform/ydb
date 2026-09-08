@@ -40,6 +40,7 @@ PEERDIR(
     ydb/core/fq/libs/db_id_async_resolver_impl
     ydb/core/fq/libs/db_schema
     ydb/core/fq/libs/events
+    ydb/core/fq/libs/graph_params/proto
     ydb/core/fq/libs/grpc
     ydb/core/fq/libs/metrics
     ydb/core/fq/libs/private_client

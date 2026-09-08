@@ -99,7 +99,7 @@ namespace NYdb::inline Dev::NTopic::NTests {
     } // anonymous namespace
 
     Y_UNIT_TEST_SUITE(WriteSessionRetry) {
-        Y_UNIT_TEST(LostAckDuplicatesMessageInTransactionWithoutDeduplication) {
+        Y_UNIT_TEST(LostAckDoesNotDuplicateMessageInTransactionWithoutDeduplication) {
             TTopicSdkTestSetup setup(TEST_CASE_NAME);
             auto driver = setup.MakeDriver();
             NQuery::TQueryClient queryClient(driver);
@@ -123,17 +123,13 @@ namespace NYdb::inline Dev::NTopic::NTests {
             UNIT_ASSERT(writer->Close(TDuration::Seconds(30))); // Wait for the SDK to retry and receive the ACK.
             Await(tx.Commit());
 
-            size_t count = 0;
-            auto read = setup.Read(setup.GetTopicPath(), setup.GetConsumerName(), [&](TReadSessionEvent::TDataReceivedEvent& event) {
-                for (const auto& message : event.GetMessages()) {
-                    UNIT_ASSERT_VALUES_EQUAL(message.GetData(), "message");
-                    UNIT_ASSERT_VALUES_EQUAL(message.GetOffset(), count); // Two stored copies at offsets 0 and 1.
-                    ++count;
-                }
-                return count < 2;
-            }, 0, TDuration::Seconds(30));
-            UNIT_ASSERT_C(!read.Timeout, "Expected two copies after one Write");
-            UNIT_ASSERT_VALUES_EQUAL(count, 2);
+            TTopicClient topicClient(driver);
+            auto describe = Await(topicClient.DescribePartition(setup.GetTopicPath(), 0,
+                                                                TDescribePartitionSettings().IncludeStats(true)));
+            const auto& stats = describe.GetPartitionDescription().GetPartition().GetPartitionStats();
+            UNIT_ASSERT(stats);
+            UNIT_ASSERT_VALUES_EQUAL(stats->GetStartOffset(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats->GetEndOffset(), 1); // One Write must commit exactly one message.
         }
     } // Y_UNIT_TEST_SUITE(WriteSessionRetry)
 

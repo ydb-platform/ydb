@@ -126,6 +126,7 @@ def _profile_schema(benchmark):
                     "properties": {
                         "use-shared-threads": {"type": "boolean", "default": False},
                         "use-united-pool": {"type": "boolean", "default": False},
+                        "use-ring-queue": {"type": "boolean", "default": True},
                     },
                 },
                 "geometry": {
@@ -554,11 +555,13 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
     workload_metadata = workload_definition(workload["type"])
 
     actor_system = _mapping(
-        value.get("actor-system"), location + ".actor-system", ("use-shared-threads", "use-united-pool")
+        value.get("actor-system"),
+        location + ".actor-system",
+        ("use-shared-threads", "use-united-pool", "use-ring-queue"),
     )
     actor_system_config = {
-        name.replace("-", "_"): _boolean(actor_system.get(name, False), location + ".actor-system." + name)
-        for name in ("use-shared-threads", "use-united-pool")
+        name.replace("-", "_"): _boolean(actor_system.get(name, default), location + ".actor-system." + name)
+        for name, default in (("use-shared-threads", False), ("use-united-pool", False), ("use-ring-queue", True))
     }
 
     geometry = _mapping(

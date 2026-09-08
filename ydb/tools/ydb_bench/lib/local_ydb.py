@@ -275,6 +275,7 @@ def _cluster_config(static_nodes, disk_size_gb, hostname=None, actor_system=None
                 "use_auto_config": True,
                 "use_shared_threads": (actor_system or {}).get("use_shared_threads", False),
                 "use_united_pool": (actor_system or {}).get("use_united_pool", False),
+                "use_ring_queue": (actor_system or {}).get("use_ring_queue", True),
             },
         },
     }

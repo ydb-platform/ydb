@@ -26,17 +26,7 @@
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATESTORAGE
 ```
 
-{% note warning %}
-
-В процедуре сборки может использоваться `JOIN_SRCS`, поэтому настоятельно рекомендуется в конце файла отменять определение макроса:
-
-```cpp
-#undef YDB_LOG_THIS_FILE_COMPONENT
-```
-
-В противном случае, определение макроса `YDB_LOG_THIS_FILE_COMPONENT` может распространиться на несколько файлов исходного кода.
-
-{% endnote %}
+{% include [undef-ydb-log-this-file-component](./_includes/undef-ydb-log-this-file-component.md) %}
 
 3. Логирование происходит в ходе работы актора, и для работы с контекстом (в частности, отправки сообщений актору логирования) доступна переменная `NActors::TlsActivationContext`.
 
@@ -233,15 +223,7 @@ YDB_LOG_ERROR_COMP(EXAMPLE_COMP_CODE, "Unable to open file",
 
 1. В начале файла (но после всех директив `#include`) должен быть определён макрос `YDB_LOG_THIS_FILE_COMPONENT`. Он задаёт код компонента для всего файла.
 
-{% note warning %}
-
-В процедуре сборки может использоваться `JOIN_SRCS`, поэтому настоятельно рекомендуется в конце файла отменять определение макроса:
-
-```cpp
-#undef YDB_LOG_THIS_FILE_COMPONENT
-```
-
-{% endnote %}
+{% include [undef-ydb-log-this-file-component](./_includes/undef-ydb-log-this-file-component.md) %}
 
 2. Далее в файле должны использоваться макросы логирования, не требующие указания кода компонента. Они аналогичны уже рассмотренным ранее, но их имя не содержит в себе строку `_COMP`.
 

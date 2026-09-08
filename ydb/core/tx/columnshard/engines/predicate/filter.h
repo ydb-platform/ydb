@@ -172,6 +172,13 @@ inline ECursorTag LegacyCursorTag(const NKikimrKqp::TEvKqpScanCursor::ESourcesSo
     return sorting == NKikimrKqp::TEvKqpScanCursor::SOURCE_ID_ASC ? ECursorTag::SourceIdOrderedSources : ECursorTag::PkOrderedSources;
 }
 
+inline TString CursorImplementationName(const NKikimrKqp::TEvKqpScanCursor::ImplementationCase impl) {
+    if (const auto* field = NKikimrKqp::TEvKqpScanCursor::descriptor()->FindFieldByNumber((int)impl)) {
+        return field->name();
+    }
+    return "not_set";
+}
+
 // Nothing for a message that carries no position at all: no sources order can contradict it.
 inline std::optional<ECursorTag> LegacyCursorTagFromProto(const NKikimrKqp::TEvKqpScanCursor::ImplementationCase impl) {
     switch (impl) {
@@ -263,7 +270,7 @@ class TSourceIndexScanCursor: public IScanCursor {
 private:
     std::optional<ui32> SourceIdx;
     ui32 RecordIndex = 0;
-    YDB_READONLY_DEF(std::optional<ui64>, PortionId);
+    std::optional<ui64> PortionId;
     std::shared_ptr<NArrow::TSimpleRow> PrimaryKey;
 
     template <class TProto>
@@ -334,6 +341,10 @@ private:
         if (*SourceIdx != entity.GetEntityId()) {
             return false;
         }
+        // Identity before position: a slot number only names this source while the sources set is the one
+        // the cursor was taken on, and comparing a record index against another source explains nothing.
+        AFL_VERIFY(!PortionId || *PortionId == entity.GetDeprecatedPortionId())("source_idx", *SourceIdx)("cursor_portion", *PortionId)(
+                                               "found_portion", entity.GetDeprecatedPortionId());
         return CheckRecordIndexIsBorder(entity, RecordIndex, usage);
     }
 

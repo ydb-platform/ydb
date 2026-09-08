@@ -62,16 +62,17 @@ TConclusion<std::shared_ptr<TReadMetadataBase>> IScannerConstructor::BuildReadMe
 
 TConclusion<std::shared_ptr<NKikimr::NOlap::IScanCursor>> IScannerConstructor::BuildCursorFromProto(
     const NKikimrKqp::TEvKqpScanCursor& proto, const ESourcesSorting sourcesSorting) const {
+    const TString implName = CursorImplementationName(proto.GetImplementationCase());
     auto result = DoBuildCursor(proto.GetImplementationCase());
     if (!result) {
-        return TConclusionStatus::Fail(
-            TStringBuilder() << "scan cursor implementation " << (ui64)proto.GetImplementationCase() << " cannot be used by this reader");
+        return TConclusionStatus::Fail(TStringBuilder() << "scan cursor " << implName << " cannot be read by this reader");
     }
     const auto protoSorting = SourcesSortingToProto(sourcesSorting);
     const auto tag = LegacyCursorTagFromProto(proto.GetImplementationCase());
     if (tag && *tag != LegacyCursorTag(protoSorting)) {
-        return TConclusionStatus::Fail(TStringBuilder() << "scan cursor implementation " << (ui64)proto.GetImplementationCase()
-                                                        << " was taken under another sources order than " << (ui64)sourcesSorting);
+        return TConclusionStatus::Fail(TStringBuilder()
+                                       << "scan cursor " << implName << " was taken with the sources ordered another way than this scan orders "
+                                       << "them (" << sourcesSorting << "), so its source index names another source");
     }
     auto status = result->DeserializeFromProto(proto);
     if (status.IsFail()) {

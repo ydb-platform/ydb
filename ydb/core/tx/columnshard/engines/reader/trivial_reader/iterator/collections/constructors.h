@@ -50,11 +50,6 @@ public:
     virtual bool QueryAgnosticLess(const TDataSourceConstructor& rhs) const override {
         return Portion->GetPortionId() < VerifyDynamicCast<const TSourceConstructor*>(&rhs)->GetPortion()->GetPortionId();
     }
-
-    void ValidateCursor(const TSourceIndexScanCursor& cursor) const {
-        AFL_VERIFY(cursor.GetPortionId() && GetPortion()->GetPortionId() == *cursor.GetPortionId())("expected", GetPortion()->GetPortionId())(
-                                                                            "cursor", cursor.GetPortionId().value_or(0));
-    }
 };
 
 class TPortionsSources: public NCommon::TSourcesConstructorWithAccessors<TSourceConstructor> {

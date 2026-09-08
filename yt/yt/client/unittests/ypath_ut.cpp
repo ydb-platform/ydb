@@ -1120,7 +1120,7 @@ TEST(TConstraintRichYPathTest, ModifyAttributesAfterCopy)
 
 TEST(TConstraintRichYPathTest, HashRandom)
 {
-    std::vector<std::pair<TString, TString>> attributesPairs{};
+    std::vector<std::pair<TString, TString>> attributesPairs;
     for (int i = 0; i < 100; ++i) {
         attributesPairs.emplace_back(Format("%v", rand()), Format("%v", rand()));
     }
@@ -1145,7 +1145,7 @@ TEST(TConstraintRichYPathTest, HashAfterRemovedAttributes)
         {"my_attribute_1", "b"},
         {"my_attribute_2", "c"},
         {"hello", "world"},
-        {"cluster", "primary"}
+        {"cluster", "primary"},
     };
 
     TRichYPath path("//home/path");
@@ -1153,7 +1153,7 @@ TEST(TConstraintRichYPathTest, HashAfterRemovedAttributes)
         path.SetAttribute(key, value);
     }
 
-    std::vector<std::pair<TString, TString>> fakeAttributesPairs{};
+    std::vector<std::pair<TString, TString>> fakeAttributesPairs;
     for (int i = 0; i < 100; ++i) {
         fakeAttributesPairs.emplace_back(Format("%v", rand()), Format("%v", rand()));
     }

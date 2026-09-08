@@ -227,7 +227,7 @@ message JobStopRequest {
     // 30 seconds. Ignored when Force = true. Values above 600000 are clamped
     // to 600000. Zero keeps the legacy TTL: 600000 milliseconds since the
     // filter's last match. Negative values are rejected.
-    int64 DeadlineMs = 7;
+    int64 TtlMs = 7;
 }
 
 message JobStopResponse {

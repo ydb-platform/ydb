@@ -28,7 +28,7 @@ Streaming queries read data from [topics](../datamodel/topic.md) {{ ydb-short-na
 * **External applications** — via the [{{ ydb-short-name }} SDK](../../reference/ydb-sdk/index.md) or [Kafka API](../../reference/kafka-api/index.md). For example, a service sends telemetry events or logs to a {{ ydb-short-name }} topic, and the streaming query processes them.
 * **CDC (Change Data Capture)** — change streams from tables, implemented via built-in [topics](../datamodel/topic.md). They allow reacting to inserts, updates, and deletes of records in real time. For more information, see [{#T}](../cdc.md).
 
-When the number of partitions in a topic changes, the streaming query automatically restarts. After restarting, it reads from all partitions.
+When the number of partitions in a topic is changed manually, the streaming query automatically restarts. After restarting, it reads from all partitions. Reading from topics with autopartitioning is not supported.
 
 ### Sinks {#sinks}
 

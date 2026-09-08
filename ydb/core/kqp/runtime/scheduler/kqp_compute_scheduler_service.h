@@ -32,6 +32,9 @@ public:
 
     void UpdateFairShare();
 
+    // Returns per-leaf-pool FairShare / TotalCpu, normalized to [0..1].
+    THashMap<NHdrf::TFullPoolId, double> GetLeafPoolFairShares() const;
+
 private:
     static constexpr NHdrf::TQueryId READ_QUERY_ID = -1;
 
@@ -43,7 +46,7 @@ private:
 
     // Special virtual queries per each pool to create SchedulableRead upon them, used for datashards and columnshards.
     // TODO: get rid of read queries - just pass somehow the real query to datashards.
-    THashMap<std::pair<NHdrf::TDatabaseId, NHdrf::TPoolId>, NHdrf::NDynamic::TQueryPtr> ReadQueries; // protected by Mutex
+    THashMap<NHdrf::TFullPoolId, NHdrf::NDynamic::TQueryPtr> ReadQueries; // protected by Mutex
 
     const TDelayParams DelayParams;
     const NHdrf::NSnapshot::ELeafFairShare FairShareMode;

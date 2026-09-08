@@ -132,7 +132,7 @@ public:
             {"poolId", poolId},
             {"attrs", attrs});
 
-        if (PoolSubscribtions.insert({std::make_pair(databaseId, poolId), {.IsFirstRemoval=false, .ExternalWeight=resourceWeight}}).second) {
+        if (PoolSubscribtions.insert({NHdrf::TFullPoolId{databaseId, poolId}, {.IsFirstRemoval=false, .ExternalWeight=resourceWeight}}).second) {
             PoolExternalWeightSum += resourceWeight;
             Scheduler->AddOrUpdatePool(databaseId, poolId, attrs);
             Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvSubscribeOnPoolChanges(databaseId, poolId));
@@ -149,7 +149,7 @@ public:
     void Handle(NWorkloadManager::TEvUpdatePoolInfo::TPtr& ev) {
         const auto& databaseId = ev->Get()->DatabaseId;
         const auto& poolId = ev->Get()->PoolId;
-        auto poolIt = PoolSubscribtions.find(std::make_pair(databaseId, poolId));
+        auto poolIt = PoolSubscribtions.find(NHdrf::TFullPoolId{databaseId, poolId});
 
         if (ev->Get()->Config) {
             Y_ENSURE(poolIt != PoolSubscribtions.end());
@@ -246,12 +246,12 @@ private:
 
     void UpdatePoolsGuarantee() {
         if (PoolExternalWeightSum <= Epsilon) {
-            for (const auto& [key, _] : PoolSubscribtions) {
-                Scheduler->AddOrUpdatePool(key.first, key.second, {.CpuGuarantee = 0});
+            for (const auto& [fullPoolId, _] : PoolSubscribtions) {
+                Scheduler->AddOrUpdatePool(fullPoolId.DatabaseId, fullPoolId.PoolId, {.CpuGuarantee = 0});
             }
         } else {
-            for (const auto& [key, params] : PoolSubscribtions) {
-                Scheduler->AddOrUpdatePool(key.first, key.second,
+            for (const auto& [fullPoolId, params] : PoolSubscribtions) {
+                Scheduler->AddOrUpdatePool(fullPoolId.DatabaseId, fullPoolId.PoolId,
                     {.CpuGuarantee = params.ExternalWeight / PoolExternalWeightSum * Scheduler->GetTotalCpuLimit()});
             }
         }
@@ -265,7 +265,7 @@ private:
         bool IsFirstRemoval = false;
         double ExternalWeight = 0.0;
     };
-    THashMap<std::pair<TString /* databaseId */, TString /* poolId */>, TPoolParams> PoolSubscribtions;
+    THashMap<NHdrf::TFullPoolId, TPoolParams> PoolSubscribtions;
     double PoolExternalWeightSum = 0.0;
 };
 
@@ -329,7 +329,7 @@ void TComputeScheduler::AddOrUpdatePool(const TString& databaseId, const TString
         pool->AddQuery(query);
 
         // Add read query
-        ReadQueries.emplace(std::make_pair(databaseId, poolId), query);
+        ReadQueries.emplace(NHdrf::TFullPoolId{databaseId, poolId}, query);
     }
 }
 
@@ -366,8 +366,7 @@ NHdrf::NDynamic::TQueryPtr TComputeScheduler::GetReadQuery(const NHdrf::TDatabas
 
     TReadGuard lock(Mutex);
 
-    auto databaseAndPoolId = std::make_pair(databaseId, poolId);
-    if (auto queryIt = ReadQueries.find(databaseAndPoolId); queryIt != ReadQueries.end()) {
+    if (auto queryIt = ReadQueries.find(NHdrf::TFullPoolId{databaseId, poolId}); queryIt != ReadQueries.end()) {
         return queryIt->second;
     }
 
@@ -384,6 +383,37 @@ bool TComputeScheduler::RemoveQuery(const NHdrf::TQueryId& queryId) {
     }
 
     return false;
+}
+
+THashMap<NHdrf::TFullPoolId, double> TComputeScheduler::GetLeafPoolFairShares() const {
+    THashMap<NHdrf::TFullPoolId, double> result;
+    const auto totalCpu = GetTotalCpuLimit();
+    if (!totalCpu) {
+        return result;
+    }
+    auto snapshot = Root->GetSnapshot();
+    if (!snapshot) {
+        return result;
+    }
+
+    auto visitPool = [&](auto self, const NHdrf::TDatabaseId& databaseId, const auto* pool) -> void {
+        if (pool->IsLeaf()) {
+            NHdrf::TFullPoolId fullPoolId{databaseId, std::get<NHdrf::TPoolId>(pool->GetId())};
+            result[fullPoolId] = double(pool->FairShare) / totalCpu;
+        } else {
+            pool->template ForEachChild<NHdrf::NSnapshot::TPool>([&](auto* child, size_t) {
+                self(self, databaseId, child);
+            });
+        }
+    };
+
+    snapshot->ForEachChild<NHdrf::NSnapshot::TDatabase>([&](auto* database, size_t) {
+        const auto& databaseId = std::get<NHdrf::TDatabaseId>(database->GetId());
+        database->template ForEachChild<NHdrf::NSnapshot::TPool>([&](auto* pool, size_t) {
+            visitPool(visitPool, databaseId, pool);
+        });
+    });
+    return result;
 }
 
 void TComputeScheduler::UpdateFairShare() {

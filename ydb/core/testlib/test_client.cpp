@@ -1449,6 +1449,9 @@ namespace Tests {
                     .ChannelBufferSize = rmConfig.GetChannelBufferSize(),
                 });
 
+                auto s3ReadActorFactoryConfig = NYql::NDq::CreateReadActorFactoryConfig(queryServiceConfig.GetS3());
+                s3ReadActorFactoryConfig.EnableScheduling = Settings->AppConfig->GetFeatureFlags().GetEnableS3Scheduling();
+
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(
                     NKqp::MakeHttpGateway(queryServiceConfig.GetHttpGateway(), Runtime->GetAppData(nodeIdx).Counters),
                     connectorClient,
@@ -1460,7 +1463,7 @@ namespace Tests {
                     Settings->YtGateway ? Settings->YtGateway : NKqp::MakeYtGateway(GetFunctionRegistry(), queryServiceConfig),
                     queryServiceConfig.GetSolomon(),
                     Settings->ComputationFactory,
-                    NYql::NDq::CreateReadActorFactoryConfig(queryServiceConfig.GetS3()),
+                    s3ReadActorFactoryConfig,
                     Settings->DqTaskTransformFactory,
                     NYql::TPqGatewayConfig{},
                     Settings->PqGateway ? NYql::CreatePqFileGatewayFactory(Settings->PqGateway) : pqGatewayFactory,

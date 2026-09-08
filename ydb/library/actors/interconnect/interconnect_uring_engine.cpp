@@ -1287,7 +1287,6 @@ namespace NActors {
                         MaybeIssueReadForSession(*session);
                         MaybeIssueXdcReadForSession(*session);
                         MaybeIssueWriteForSession(*session);
-                        MaybeIssueXdcWriteForSession(*session);
                         if (MaybeFinishMigrate(*session)) {
                             continue;
                         }

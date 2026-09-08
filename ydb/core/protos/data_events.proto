@@ -10,6 +10,7 @@ option java_package = "ru.yandex.kikimr.proto";
 message TWriteSeqNum {
     optional uint64 WriterIndex = 1;
     optional uint64 WriteSeqNum = 2;
+    optional uint64 DataShard = 3;
 }
 
 message TLock {

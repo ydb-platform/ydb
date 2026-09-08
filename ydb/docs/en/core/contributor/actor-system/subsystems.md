@@ -1,6 +1,8 @@
 # Actor System Subsystems
 
-A subsystem is an `ISubSystem` object owned by one `TActorSystem`. It exposes a typed C++ API and participates in system startup and shutdown. Calling that API is a normal synchronous C++ call: the registry does not provide a mailbox, serialization, or an actor activation context. A subsystem can create actors to handle asynchronous work internally.
+A subsystem is an `ISubSystem` object owned by a `TActorSystem`. It acts as a singleton within that actor system: each registration type has at most one registered instance. All actors looking up that type in the same system obtain the same object. Different `TActorSystem` instances own separate subsystem instances, even within the same process.
+
+A subsystem exposes a typed C++ API and participates in system startup and shutdown. Calling that API is a normal synchronous C++ call: the registry does not provide a mailbox, serialization, or an actor activation context. Sharing an instance does not make its methods thread-safe. A subsystem can create actors to handle asynchronous work internally.
 
 ## Available implementations
 

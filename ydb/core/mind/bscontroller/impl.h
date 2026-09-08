@@ -14,6 +14,8 @@
 #include "self_heal.h"
 #include "storage_pool_stat.h"
 #include "yaml_config_helpers.h"
+#include "blob_checker_events.h"
+#include "blob_checker_planner.h"
 
 #include <ydb/core/base/bridge.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -105,6 +107,7 @@ public:
     class TTxCleanupStaleStorageEntries;
     class TTxListDDiskInfoTablets;
     class TTxGetDDiskInfoTablet;
+    class TTxBlobCheckerUpdateGroupStatus;
 
     class TVSlotInfo;
     class TPDiskInfo;
@@ -1768,6 +1771,11 @@ private:
         return *it->second;
     }
 
+    bool IsBlobCheckerGroupEligible(TGroupId groupId) const;
+
+    // Returns number of dynamic and static groups eligible for BlobChecker.
+    ui32 TotalGroupCount() const;
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // NODE ACCESS
 
@@ -1989,15 +1997,42 @@ private:
         void OnScrubPeriodicityChange();
         void OnMaxScrubbedDisksAtOnceChange();
         void UpdateVDiskState(const TVSlotInfo *vslot);
+        bool IsGroupScrubbed(TGroupId groupId) const;
+        bool IsBlobCheckerInProgress(TGroupId groupId) const;
+        void SetBlobCheckerInProgress(TGroupId groupId, bool inProgress);
     };
 
     TScrubState ScrubState;
 
+    void HandleScrubTimer();
     void Handle(TEvBlobStorage::TEvControllerScrubQueryStartQuantum::TPtr ev);
     void Handle(TEvBlobStorage::TEvControllerScrubQuantumFinished::TPtr ev);
     void Handle(TEvBlobStorage::TEvControllerScrubReportQuantumInProgress::TPtr ev);
 
     void IssueInitialGroupContent();
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // BlobChecker background process
+
+    TDuration BlobCheckerPeriodicity = TDuration::Zero();
+    TActorId BlobCheckerOrchestratorId;
+    std::unique_ptr<TBlobCheckerPlanner> BlobCheckerPlanner;
+    TMonotonic NextAllowedBlobCheckerTimestamp = TMonotonic::Zero();
+    THashSet<TGroupId> BlobCheckerCancellationsPending;
+    THashSet<TGroupId> BlobCheckerGroupDeletionsPending;
+
+    std::unordered_map<TGroupId, TString> BlobCheckerGroupRecords;
+
+    void Handle(const TEvBlobCheckerPlanCheck::TPtr& ev);
+    void Handle(const TEvBlobCheckerUpdateGroupStatus::TPtr& ev);
+
+    bool IsBlobCheckerEnabled() const;
+    void UpdateBlobCheckerState();
+    void UpdateBlobCheckerSettings(TDuration periodicity);
+    void DequeueCheckForGroup(TGroupId groupId, bool notifyOrchestrator);
+    void DeleteBlobCheckerGroup(TGroupId groupId);
+    void InitializeBlobCheckerOrchestratorActor();
+    void PersistBlobCheckerGroupStatus(TGroupId groupId);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Metric collection
@@ -2299,9 +2334,11 @@ public:
             hFunc(TEvBlobStorage::TEvControllerScrubQuantumFinished, Handle);
             hFunc(TEvBlobStorage::TEvControllerScrubReportQuantumInProgress, Handle);
             hFunc(TEvBlobStorage::TEvControllerGroupDecommittedNotify, Handle);
-            cFunc(TEvPrivate::EvScrub, ScrubState.HandleTimer);
+            cFunc(TEvPrivate::EvScrub, HandleScrubTimer);
             cFunc(TEvPrivate::EvVSlotReadyUpdate, VSlotReadyUpdate);
             hFunc(TEvBlobStorage::TEvControllerShredRequest, ShredState.Handle);
+            hFunc(TEvBlobCheckerPlanCheck, Handle);
+            hFunc(TEvBlobCheckerUpdateGroupStatus, Handle);
         }
 
         if (const TDuration time = TDuration::Seconds(timer.Passed()); time >= TDuration::MilliSeconds(100)) {

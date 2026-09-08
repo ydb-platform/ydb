@@ -191,6 +191,7 @@ public:
         HasTableRead = false;
         NeedUncommittedChangesFlush = false;
         QueryTextCollector.Clear();
+        TableSchemaVersions.clear();
     }
 
     TKqpTransactionInfo GetInfo() const;
@@ -335,6 +336,9 @@ public:
     IKqpTransactionManagerPtr TxManager = nullptr;
 
     TShardIdToTableInfoPtr ShardIdToTableInfo = std::make_shared<TShardIdToTableInfo>();
+
+    // Schema version of every table seen at compilation time of the queries in this tx.
+    THashMap<NYql::TKikimrPathId, ui64> TableSchemaVersions;
 
     NDataIntegrity::TQueryTextCollector QueryTextCollector;
 };

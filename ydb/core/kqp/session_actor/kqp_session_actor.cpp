@@ -1572,6 +1572,24 @@ public:
             AFL_ENSURE(checkSchemeTx());
         }
 
+        for (const auto& tableInfo : phyQuery.GetTableInfos()) {
+            const ui64 schemaVersion = tableInfo.GetSchemaVersion();
+            if (!schemaVersion) {
+                continue;
+            }
+
+            const NYql::TKikimrPathId pathId(
+                tableInfo.GetTableId().GetOwnerId(), tableInfo.GetTableId().GetTableId());
+            const auto [it, inserted] = QueryState->TxCtx->TableSchemaVersions.emplace(pathId, schemaVersion);
+            if (!inserted && it->second != schemaVersion) {
+                ReplyQueryError(Ydb::StatusIds::ABORTED, TStringBuilder()
+                    << "Scheme changed for table '" << tableInfo.GetTableName()
+                    << "' during transaction execution, schema version "
+                    << it->second << " -> " << schemaVersion << ".");
+                return false;
+            }
+        }
+
         const bool hasOlapWrite = ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery);
         const bool hasOltpWrite = ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery);
         const bool hasOlapRead = ::NKikimr::NKqp::HasOlapTableReadInTx(phyQuery);

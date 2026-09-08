@@ -4312,7 +4312,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     PAIRED_TABLE_ELEM(
         "AnsiLike",
         AnsiLike,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/true),
     PAIRED_TABLE_ELEM(
         "UnorderedResult",
         UnorderedResult,
@@ -4357,7 +4357,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     PAIRED_TABLE_ELEM(
         "OptimizeSimpleILIKE",
         OptimizeSimpleIlike,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/true),
 };
 
 #undef PAIRED_TABLE_ELEM

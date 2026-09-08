@@ -5221,6 +5221,12 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         }
     }
 
+    if (MoveDataGroups && VacuumLogic->IsCompacting(table)) {
+        // This is the forced compaction a MoveData vacuum is waiting for, so it
+        // also has to rewrite external blobs left in the decommissioned groups
+        comp->MoveDataGroups = MoveDataGroups;
+    }
+
     if (const auto& ranges = Database->GetRemovedRowVersions(table)) {
         // Make a copy of removed versions for compacted table
         // Version removal cannot be undone, so it's still valid at commit time
@@ -5574,16 +5580,63 @@ void TExecutor::Handle(NBackup::TEvChangelogStats::TPtr& ev) {
     Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_BACKUP_CHANGELOG_LAG].IncrementFor(msg->Lag.MicroSeconds());
 }
 
+bool TExecutor::ValidateMoveDataGroups(const THashSet<ui32>& groups, const TActorId& sender) {
+    for (const auto& channel : Owner->Info()->Channels) {
+        const auto* latest = channel.LatestEntry();
+        if (latest && groups.contains(latest->GroupID)) {
+            TString errorReason = TStringBuilder()
+                << "Group " << latest->GroupID
+                << " is in latest history entry in channel " << channel.Channel
+                << " for tablet " << TabletId();
+            Send(sender, new TEvTablet::TEvMoveDataResponse(
+                TabletId(),
+                NKikimrTabletBase::TEvMoveDataResponse::ErrorGroupIdMismatch,
+                errorReason));
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void TExecutor::StartMoveDataVacuum(const THashSet<ui32>& groups) {
+    /* Requests may pile up while a vacuum is already running, the next one is
+        scheduled by TVacuumLogic and has to cover all of them at once.
+     */
+
+    auto merged = std::make_shared<THashSet<ui32>>(groups);
+    if (MoveDataGroups) {
+        merged->insert(MoveDataGroups->begin(), MoveDataGroups->end());
+    }
+    MoveDataGroups = std::move(merged);
+
+    if (auto logl = Logger->Log(ELnLev::Info)) {
+        logl
+            << NFmt::Do(*this) << " starting MoveData vacuum"
+            << ", groups " << JoinSeq(", ", *MoveDataGroups);
+    }
+
+    StartVacuum(TNoTag());
+}
+
 void TExecutor::MoveData(TEvTablet::TEvMoveData::TPtr& ev) {
     if (!Stats->IsFollower()) {
+        THashSet<ui32> groups(ev->Get()->Record.GetGroups().begin(), ev->Get()->Record.GetGroups().end());
+
+        if (!ValidateMoveDataGroups(groups, ev->Sender)) {
+            return;
+        }
+
         MoveDataSubscribers.insert(ev->Sender);
-        StartVacuum(TNoTag());
+        StartMoveDataVacuum(groups);
     }
 }
 
-void TExecutor::StartMoveDataVacuumFromOwner() {
+void TExecutor::StartMoveDataVacuumFromOwner(const TSet<ui32>& groups) {
+    /* The owner has already moved its own data and validated the groups */
+
     MoveDataVacuumInProgress = true;
-    StartVacuum(TNoTag());
+    StartMoveDataVacuum(THashSet<ui32>(groups.begin(), groups.end()));
 }
 
 void TExecutor::VacuumComplete(TVacuumGeneration generation, const TActorContext& ctx) {
@@ -5594,6 +5647,7 @@ void TExecutor::VacuumComplete(TVacuumGeneration generation, const TActorContext
         Owner->MoveDataCompleted(ctx);
     }
     MoveDataVacuumInProgress = false;
+    MoveDataGroups.reset();
     for (const auto& actor : MoveDataSubscribers) {
         ctx.Send(actor, new TEvTablet::TEvMoveDataResponse(
             TabletId(),

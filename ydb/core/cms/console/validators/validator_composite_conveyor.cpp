@@ -16,10 +16,18 @@ TString TCompositeConveyorConfigValidator::GetDescription() const {
 bool TCompositeConveyorConfigValidator::CheckConfig(const NKikimrConfig::TAppConfig& oldConfig,
     const NKikimrConfig::TAppConfig& newConfig,
     TVector<Ydb::Issue::IssueMessage>& issues) const {
-    Y_UNUSED(oldConfig);
+    if (oldConfig.HasCompositeConveyorConfig() && !newConfig.HasCompositeConveyorConfig()) {
+        AddError(issues, "removing CompositeConveyorConfig is not supported");
+        return false;
+    }
 
     if (!newConfig.HasCompositeConveyorConfig()) {
         return true;
+    }
+
+    if (oldConfig.GetCompositeConveyorConfig().GetEnabled() != newConfig.GetCompositeConveyorConfig().GetEnabled()) {
+        AddError(issues, "changing CompositeConveyorConfig.Enabled is not supported");
+        return false;
     }
 
     std::vector<TString> errors;

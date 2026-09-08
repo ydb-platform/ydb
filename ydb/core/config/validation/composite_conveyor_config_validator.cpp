@@ -1,6 +1,7 @@
 #include "validators.h"
 
 #include <ydb/core/tx/conveyor_composite/common/category.h>
+#include <ydb/library/actors/core/defs.h>
 
 #include <util/generic/hash_set.h>
 #include <util/string/join.h>
@@ -45,6 +46,10 @@ EValidationResult ValidateCompositeConveyorConfig(
         if (pool.HasWorkersCount()) {
             if (!std::isfinite(pool.GetWorkersCount()) || pool.GetWorkersCount() <= 0) {
                 return Fail(errors, "invalid composite conveyor workers count: " + ::ToString(pool.GetWorkersCount()));
+            }
+            if (pool.GetWorkersCount() > NActors::MaxWorkers) {
+                return Fail(errors, "composite conveyor workers count exceeds limit " + ::ToString(NActors::MaxWorkers)
+                    + ": " + ::ToString(pool.GetWorkersCount()));
             }
         } else if (pool.HasDefaultFractionOfThreadsCount()) {
             const double fraction = pool.GetDefaultFractionOfThreadsCount();

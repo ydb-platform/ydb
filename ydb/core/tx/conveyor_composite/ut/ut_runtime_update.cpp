@@ -7,6 +7,7 @@
 #include <ydb/core/tx/conveyor_composite/service/workers_pool.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/defs.h>
 #include <ydb/library/actors/core/events.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -1318,9 +1319,11 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         auto invalid = initial;
         invalid.MutableWorkerPools(0)->MutableLinks(0)->SetWeight(0);
         fixture.Update(invalid);
-        auto unsupported = initial;
-        unsupported.SetEnabled(false);
-        fixture.Update(unsupported);
+
+        auto excessive = initial;
+        excessive.MutableWorkerPools(0)->SetWorkersCount(NActors::MaxWorkers + 1);
+        fixture.Update(excessive);
+        UNIT_ASSERT_VALUES_EQUAL(GetWorkersCountLimitCounter(fixture, "pool-1"), 1);
 
         TAtomicCounter queuedTask;
         fixture.Submit(queuedTask, ESpecialTaskCategory::Scan);
@@ -1333,6 +1336,46 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         UNIT_ASSERT_VALUES_EQUAL(oldTask.Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(queuedTask.Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 0);
+    }
+
+    Y_UNIT_TEST(EnabledChangeIsIgnoredWhileOtherSettingsApply) {
+        for (const bool enabled : {true, false}) {
+            auto initial = BuildTopologyConfig(
+                {{{ESpecialTaskCategory::Scan, 1}, {ESpecialTaskCategory::Insert, 1}}}, {2});
+            initial.SetEnabled(enabled);
+            TRuntimeFixture fixture(initial);
+            UNIT_ASSERT_VALUES_EQUAL(TServiceOperator::IsEnabled(), enabled);
+            TAtomicCounter oldTask;
+            auto held = HoldTask(fixture, oldTask, ESpecialTaskCategory::Scan);
+
+            auto target = BuildTopologyConfig(
+                {{{ESpecialTaskCategory::Insert, 3}, {ESpecialTaskCategory::Normalizer, 7}}}, {1});
+            target.SetEnabled(!enabled);
+            auto* category = target.AddCategories();
+            category->SetName(::ToString(ESpecialTaskCategory::Insert));
+            category->SetQueueSizeLimit(17);
+            const auto [id, cookie] = fixture.SendUpdate(target);
+            fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+            UNIT_ASSERT(fixture.Responses.empty());
+            UNIT_ASSERT_VALUES_EQUAL(TServiceOperator::IsEnabled(), enabled);
+            UNIT_ASSERT_VALUES_EQUAL(GetWorkersCountLimitCounter(fixture, "pool-1"), 2);
+
+            fixture.Runtime.Send(held.Release(), 0, true);
+            fixture.WaitForUpdate(id, cookie);
+            UNIT_ASSERT_VALUES_EQUAL(oldTask.Val(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(TServiceOperator::IsEnabled(), enabled);
+            UNIT_ASSERT_VALUES_EQUAL(GetWorkersCountLimitCounter(fixture, "pool-1"), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Insert), 3);
+            UNIT_ASSERT_VALUES_EQUAL(GetQueueSizeLimitCounter(fixture, ESpecialTaskCategory::Insert), 17);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 0);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Normalizer), 1);
+
+            target.MutableWorkerPools(0)->MutableLinks(0)->SetWeight(4);
+            fixture.Update(target);
+            UNIT_ASSERT_VALUES_EQUAL(TServiceOperator::IsEnabled(), enabled);
+            UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Insert), 4);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Insert), 1);
+        }
     }
 
     Y_UNIT_TEST(SupersededPreparePreservesPoolIdentity) {

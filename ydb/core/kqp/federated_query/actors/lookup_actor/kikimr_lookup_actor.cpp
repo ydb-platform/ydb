@@ -1249,7 +1249,6 @@ namespace {
         ::NMonitoring::TDynamicCounters::TCounterPtr CpuTime;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlight;
         static constexpr size_t MaxSupportedFullscanRequest = 20000;
-        friend class TQuerySessionPoolServiceActor;
     };
 
     } // namespace

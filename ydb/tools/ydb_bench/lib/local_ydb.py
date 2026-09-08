@@ -230,7 +230,7 @@ def _sector_map_path(index, disk_size_gb):
     return "SectorMap:map_{}:{}:NONE".format(index, disk_size_gb)
 
 
-def _cluster_config(static_nodes, disk_size_gb, hostname=None):
+def _cluster_config(static_nodes, disk_size_gb, hostname=None, actor_system=None):
     # Nameservice and NodeBroker identify a node by its real host name.  Using
     # localhost here prevents a dynamic node from registering as a compute
     # unit of the tenant even when all processes run on the same machine.
@@ -270,6 +270,12 @@ def _cluster_config(static_nodes, disk_size_gb, hostname=None):
             "host_configs": host_configs,
             "hosts": hosts,
             "domains_config": {"domain": [{"domain_id": 1, "name": "Root"}]},
+            "actor_system_config": {
+                # An explicit actor-system config must retain automatic pool sizing.
+                "use_auto_config": True,
+                "use_shared_threads": (actor_system or {}).get("use_shared_threads", False),
+                "use_united_pool": (actor_system or {}).get("use_united_pool", False),
+            },
         },
     }
 
@@ -286,6 +292,7 @@ class LocalYdbCluster:
         timeout,
         cancel_event=None,
         progress=None,
+        actor_system=None,
     ):
         self.ydbd = Path(ydbd)
         self.ydb_cli = Path(ydb_cli)
@@ -296,6 +303,7 @@ class LocalYdbCluster:
         self.timeout = timeout
         self.cancel_event = cancel_event
         self.progress = progress
+        self.actor_system = dict(actor_system or {})
         self.static_processes = []
         self.dynamic_processes = []
         self.port_candidates = _mnc_port_candidates()
@@ -583,7 +591,9 @@ class LocalYdbCluster:
         for index, node in enumerate(self.static_nodes, 1):
             node_directory = self.directory / "static-{:02d}".format(index)
             node_directory.mkdir()
-        cluster_config = _cluster_config(self.static_nodes, self.geometry["disk_size_gb"], self.hostname)
+        cluster_config = _cluster_config(
+            self.static_nodes, self.geometry["disk_size_gb"], self.hostname, self.actor_system
+        )
         atomic_write_text(self.config_path, yaml.safe_dump(cluster_config, sort_keys=False))
         self._progress("starting-static-nodes", static_nodes=len(self.static_nodes))
         for index, (node, mask) in enumerate(zip(self.static_nodes, self.static_masks), 1):
@@ -1498,6 +1508,7 @@ def run_local_ydb(
             configuration.timeout_seconds,
             cancel_event,
             publish_progress,
+            actor_system=profile.get("actor_system"),
         )
 
     def create_lifecycle(target_cluster):

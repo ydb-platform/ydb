@@ -248,6 +248,7 @@ _JS = (
     "function yamlScalar(value){return typeof value==='string'?JSON.stringify(value):String(value)}\n"
     "const localYdbGeometryKeys={static_nodes:'static-nodes',dynamic_nodes:'dynamic-nodes',max_dynamic_nodes:'max-dynamic-"
     "nodes',disk_size_gb:'disk-size-gb',storage_groups:'storage-groups'};\n"
+    "const localYdbActorSystemKeys={use_shared_threads:'use-shared-threads',use_united_pool:'use-united-pool'};\n"
     "const localYdbSearchKeys={resolution_percent:'resolution-percent'};\n"
     "const localYdbObjectiveKeys={target_role:'target-role',plateau_gain_percent:'plateau-gain-percent',plateau_points:'p"
     "lateau-points',cpu_saturation_percent:'cpu-saturation-percent'};\n"
@@ -341,6 +342,7 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     "option.operation_defaults,operation)?option.operation_defaults[operation]:option.default]));return {type,operation,opt"
     "ions}}\n"
     "function defaultLocalYdb(){const definition=localYdbWorkloadDefinition('kv');return {workload:defaultLocalYdbWorkload('kv'),"
+    "actor_system:{use_shared_threads:false,use_united_pool:false},"
     "geometry:{preset:'single',static_nodes:1,dynamic_nodes:1,max_dynamic_nodes:1,disk_size_gb:64,storage_groups:1},client"
     ":{threads:localYdbDefaultClientThreads(definition)},load:{parameter:'rate',allow_errors:false,values:[1000]},measurement:{warmup:localYdbDefaultWarmupSeconds(definition),duration:30,rep"
     "etitions:3,verification_repetitions:3},affinity:{ydb_cli:{mode:'pack-numa-pack-chiplet-spread-core',cpus:'one-chiplet'},static_nodes:{mode:'none'"
@@ -349,7 +351,10 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     "load:','      type: '+workload.type,'      operation: '+workload.operation,'      options:');for(const [key,value] of "
     "Object.entries(workload.options))lines.push('        '+key+': '+yamlScalar(value));lines.push('    geometry:','      preset: '+conf"
     "ig.geometry.preset);for(const [key,yamlKey] of Object.entries(localYdbGeometryKeys))lines.push('      '+yamlKey+': '+c"
-    "onfig.geometry[key]);lines.push('    client:','      threads: '+config.client.threads,'    load:','      parameter: '"
+    "onfig.geometry[key]);lines.push('    actor-system:');"
+    "for(const [key,yamlKey] of Object.entries(localYdbActorSystemKeys))"
+    "lines.push('      '+yamlKey+': '+Boolean(config.actor_system?.[key]));"
+    "lines.push('    client:','      threads: '+config.client.threads,'    load:','      parameter: '"
     "+config.load.parameter,'      allow-errors: '+Boolean(config.load.allow_errors));if(config.load.values)lines.push('      values: '+yamlArray(config.load.values));else{lines."
     "push('      search:','        start: '+config.load.search.start,'        maximum: '+config.load.search.maximum);if("
     "config.load.objective.type==='latency-slo')lines.push('        multiplier: '+config.load.search.multiplier);for("
@@ -489,6 +494,8 @@ function localYdbProfileEditor(profile){
   const options=definition.options.map(option=>localYdbOptionField(option,workload.options[option.name])).join('');
   const geometryFields=Object.entries(localYdbGeometryKeys)
     .map(([key,label])=>localField('local-geometry-'+key,label,geometry[key],'','type=number min=1')).join('');
+  const actorSystemFields=Object.keys(localYdbActorSystemKeys)
+    .map(key=>localCheck('local-actor-system-'+key,key,Boolean(config.actor_system?.[key]),'')).join('');
   const loadCommon=
     localSelect('local-load-mode','Objective',loadMode,objectiveChoices)+
     localSelect('local-load-parameter','Parameter',load.parameter,definition.load_parameters)+
@@ -552,6 +559,7 @@ function localYdbProfileEditor(profile){
       'local-workload-operation','Operation',workload.operation,definition.operations
     )+options+'</div><h3>Cluster geometry</h3><div class=form-grid>'+
     localSelect('local-geometry-preset','Preset',geometry.preset,['single','storage','custom'])+geometryFields+
+    '</div><h3>Actor system (static and dynamic nodes)</h3><div class=form-grid>'+actorSystemFields+
     '</div><h3>Client and load</h3><div class=form-grid>'+
     localField('local-client-threads','YDB CLI threads',config.client.threads,clientThreadsHelp,'type=number min=1')+
     loadCommon+loadFields+'</div>'+slo+'<h3>Measurement</h3><div class=form-grid>'+
@@ -699,6 +707,9 @@ function bindLocalYdbEditor(profile){
       config.geometry.dynamic_nodes=1;config.geometry.max_dynamic_nodes=1
     }
     config.client.threads=localInteger('local-client-threads');
+    config.actor_system=Object.fromEntries(Object.keys(localYdbActorSystemKeys).map(key=>[
+      key,Boolean(document.querySelector('#local-actor-system-'+key)?.checked)
+    ]));
     const loadMode=document.querySelector('#local-load-mode').value;
     const parameter=document.querySelector('#local-load-parameter').value;
     const allow_errors=Boolean(document.querySelector('#local-load-allow-errors')?.checked);
@@ -1229,6 +1240,8 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     "    'Objective':objective.type??'points','Warmup seconds':warmup,\n"
     "    'Duration seconds':measurement.duration??'—','Repetitions':measurement.repetitions??'—',\n"
     "    'Verification repetitions':measurement.verification_repetitions??0,\n"
+    "    'use_shared_threads':parameters.actor_system?.use_shared_threads??false,\n"
+    "    'use_united_pool':parameters.actor_system?.use_united_pool??false,\n"
     "    'Geometry preset':geometry.preset??'—','Static nodes':geometry.static_nodes??'—',\n"
     "    'Initial dynamic nodes':geometry.dynamic_nodes??'—','Maximum dynamic nodes':geometry.max_dynamic_nodes??'—',\n"
     "    'Storage groups':geometry.storage_groups??'—','Disk size GiB':geometry.disk_size_gb??'—','YDB CLI threads':client.threads??'—',\n"
@@ -3958,6 +3971,7 @@ class RunService:
                 ),
             )
             client = project(value.get("client"), ("threads",))
+            actor_system = project(value.get("actor_system"), ("use_shared_threads", "use_united_pool"))
             load = project(value.get("load"), ("parameter", "allow_errors", "values", "search", "objective"))
             measurement = project(
                 value.get("measurement"),
@@ -3969,6 +3983,7 @@ class RunService:
                 for name, item in (
                     ("workload", workload),
                     ("geometry", geometry),
+                    ("actor_system", actor_system),
                     ("client", client),
                     ("load", load),
                     ("measurement", measurement),

@@ -870,6 +870,7 @@ public:
     }
 
     STATEFN(StateBase) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExportScan::TEvReady, Handle);
 
@@ -879,6 +880,7 @@ public:
     }
 
     STATEFN(StateResolveProxy) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
         default:
@@ -887,6 +889,7 @@ public:
     }
 
     STATEFN(StateUploadScheme) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleScheme);
         default:
@@ -895,6 +898,7 @@ public:
     }
 
     STATEFN(StateUploadPermissions) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandlePermissions);
         default:
@@ -903,6 +907,7 @@ public:
     }
 
     STATEFN(StateUploadChangefeed) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleChangefeed);
         default:
@@ -911,6 +916,7 @@ public:
     }
 
     STATEFN(StateUploadTopic) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleTopic);
         default:
@@ -919,6 +925,7 @@ public:
     }
 
     STATEFN(StateUploadMetadata) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleMetadata);
         default:
@@ -927,6 +934,7 @@ public:
     }
 
     STATEFN(StateUploadChecksum) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleChecksum);
         default:
@@ -935,6 +943,7 @@ public:
     }
 
     STATEFN(StateUploadData) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBuffer, Handle);
             hFunc(TEvDataShard::TEvS3Upload, Handle);
@@ -950,6 +959,7 @@ public:
     }
 
     STATEFN(StateCheckUploadedData) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvHeadObjectResponse, Handle);
         default:

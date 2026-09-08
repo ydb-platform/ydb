@@ -1636,6 +1636,13 @@ Y_UNIT_TEST_SUITE(KqpTx) {
             if (expectedStatus == EStatus::ABORTED) {
                 UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Scheme changed for table");
             }
+
+            // A mode that keeps reading past the scheme change keeps a usable transaction,
+            // while a failed statement releases it.
+            auto commitResult = tx->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(),
+                expectedStatus == EStatus::SUCCESS ? EStatus::SUCCESS : EStatus::NOT_FOUND,
+                commitResult.GetIssues().ToString());
         }
     };
 

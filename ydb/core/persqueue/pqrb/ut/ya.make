@@ -18,6 +18,7 @@ SRCS(
     partition_scale_manager_graph_cmp_ut.cpp
     partition_scale_manager_ut.cpp
     partitions_location_queue_ut.cpp
+    pipe_cache_ut.cpp
     scale_and_mirror_ut.cpp
     sdk_balancing_ut.cpp
     write_partition_ut.cpp

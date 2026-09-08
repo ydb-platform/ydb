@@ -63,6 +63,7 @@ namespace NKikimr::TEvPersQueue {
         EvPartitionUpdateReadMetrics,
         EvCheckMessageDeduplicationRequest,
         EvCheckMessageDeduplicationResponse,
+        EvUnregisterClient,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -97,6 +98,11 @@ namespace NKikimr::TEvPersQueue {
     struct TEvRegisterReadSession: public TEventPB<TEvRegisterReadSession,
             NKikimrPQ::TRegisterReadSession, EvRegisterReadSession> {
             TEvRegisterReadSession() {}
+    };
+
+    struct TEvUnregisterClient: public TEventPB<TEvUnregisterClient,
+            NKikimrPQ::TUnregisterClient, EvUnregisterClient> {
+            TEvUnregisterClient() {}
     };
 
     struct TEvGetReadSessionsInfo: public TEventPB<TEvGetReadSessionsInfo,

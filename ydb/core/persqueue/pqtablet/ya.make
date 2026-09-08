@@ -12,6 +12,7 @@ SRCS(
 
 
 PEERDIR(
+    library/cpp/containers/absl
     ydb/core/base
     ydb/core/persqueue/pqtablet/common
     ydb/core/persqueue/common/proxy

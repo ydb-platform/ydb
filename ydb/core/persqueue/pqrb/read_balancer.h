@@ -149,6 +149,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     void Handle(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx); // from ReadSession
     void HandleOnInit(TEvPersQueue::TEvRegisterReadSession::TPtr &ev, const TActorContext& ctx); // from ReadSession
     void Handle(TEvPersQueue::TEvRegisterReadSession::TPtr &ev, const TActorContext& ctx); // from ReadSession
+    void Handle(TEvPersQueue::TEvUnregisterClient::TPtr &ev, const TActorContext& ctx); // from ReadSession
     void Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActorContext& ctx);  // from ReadSession
 
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&);

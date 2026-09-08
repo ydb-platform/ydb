@@ -46,6 +46,7 @@ SRCS(
     partition_ut.cpp
     partitiongraph_ut.cpp
     pqtablet_ut.cpp
+    pipe_cache_ut.cpp
     sourceid_ut.cpp
     user_info_ut.cpp
     utils_ut.cpp

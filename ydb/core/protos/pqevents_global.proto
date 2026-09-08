@@ -55,6 +55,14 @@ message TRegisterReadSession {
     repeated uint32 Groups = 5;
 }
 
+// Explicitly end a reading session without closing the physical tablet pipe.
+// Required for PipePerNodeCache clients: Unlink does not notify the tablet.
+message TUnregisterClient {
+    optional string Session = 1;
+    optional NActorsProto.TActorId PipeClient = 2;
+    optional string ClientId = 3;
+}
+
 message TGetReadSessionsInfo {
     optional string ClientId = 1;
     repeated uint32 Partitions = 2;

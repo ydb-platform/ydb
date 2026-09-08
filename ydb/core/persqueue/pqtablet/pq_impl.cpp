@@ -2018,7 +2018,10 @@ void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, NWilson::T
         return;
     }
 
-    it->second = TPipeInfo::ForOwner(partActor, owner, it->second.ServerActors);
+    const ui32 serverActors = it->second.ServerActors;
+    const TActorId physicalPipe = it->second.PhysicalPipe;
+    it->second = TPipeInfo::ForOwner(partActor, owner, serverActors);
+    it->second.PhysicalPipe = physicalPipe;
 
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_OWNERSHIP);
     THolder<TEvPQ::TEvChangeOwner> event = MakeHolder<TEvPQ::TEvChangeOwner>(responseCookie, owner, pipeClient, sender,
@@ -2213,6 +2216,74 @@ void TPersQueue::DestroySession(TPipeInfo& pipeInfo) {
             )
     );
     pipeInfo.SessionId = TString{};
+}
+
+void TPersQueue::EnsurePipeHolder(const TActorId& pipeClient, const TActorId& pipeServerId) {
+    if (!pipeClient || PipesInfo.contains(pipeClient)) {
+        return;
+    }
+
+    auto serverIt = PipeServerToClient.find(pipeServerId);
+    if (serverIt == PipeServerToClient.end()) {
+        return;
+    }
+
+    const TActorId& physicalPipe = serverIt->second;
+    if (!PipesInfo.contains(physicalPipe)) {
+        return;
+    }
+
+    TPipeInfo info;
+    info.PhysicalPipe = physicalPipe;
+    PipesInfo.emplace(pipeClient, std::move(info));
+    PipeCacheHolders[physicalPipe].insert(pipeClient);
+
+    YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Created pipe-cache holder on shared pipe",
+        {"logPrefix", LogPrefix()},
+        {"pipeClient", pipeClient},
+        {"physicalPipe", physicalPipe},
+        {"serverId", pipeServerId});
+}
+
+void TPersQueue::CleanupPipeInfo(const TActorId& pipeClient, const TActorContext& ctx) {
+    auto it = PipesInfo.find(pipeClient);
+    if (it == PipesInfo.end()) {
+        return;
+    }
+
+    if (it->second.PartActor != TActorId()) {
+        ctx.Send(it->second.PartActor, new TEvPQ::TEvPipeDisconnected(
+                it->second.Owner, pipeClient
+        ));
+    }
+    if (!it->second.SessionId.empty()) {
+        DestroySession(it->second);
+    }
+
+    if (it->second.PhysicalPipe) {
+        if (auto hit = PipeCacheHolders.find(it->second.PhysicalPipe); hit != PipeCacheHolders.end()) {
+            hit->second.erase(pipeClient);
+            if (hit->second.empty()) {
+                PipeCacheHolders.erase(hit);
+            }
+        }
+    }
+
+    YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Pipe info destroyed",
+        {"logPrefix", LogPrefix()},
+        {"clientId", pipeClient});
+    PipesInfo.erase(it);
+    Counters->Simple()[COUNTER_PQ_TABLET_OPENED_PIPES] = PipesInfo.size();
+}
+
+void TPersQueue::CleanupPhysicalPipe(const TActorId& physicalClientId, const TActorContext& ctx) {
+    if (auto hit = PipeCacheHolders.find(physicalClientId); hit != PipeCacheHolders.end()) {
+        auto holders = hit->second; // copy — CleanupPipeInfo mutates the map
+        for (const auto& logical : holders) {
+            CleanupPipeInfo(logical, ctx);
+        }
+    }
+    CleanupPipeInfo(physicalClientId, ctx);
 }
 
 TMaybe<TEvPQ::TEvRegisterMessageGroup::TBody> TPersQueue::MakeRegisterMessageGroup(
@@ -2605,6 +2676,9 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
 
     auto& req = request.GetPartitionRequest();
     TActorId pipeClient = ActorIdFromProto(req.GetPipeClient());
+    if (pipeClient) {
+        EnsurePipeHolder(pipeClient, ev->Recipient);
+    }
 
     if (request.GetPartitionRequest().HasCmdRead() && s != TMP_REQUEST_MARKER) {
         auto pipeIter = PipesInfo.find(pipeClient);
@@ -2737,11 +2811,14 @@ void TPersQueue::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActo
     YDB_LOG_TRACE_COMP(NKikimrServices::PERSQUEUE, "Handle TEvTabletPipe::TEvServerConnected",
         {"logPrefix", LogPrefix()});
 
+    PipeServerToClient[ev->Get()->ServerId] = ev->Get()->ClientId;
+
     auto it = PipesInfo.insert({ev->Get()->ClientId, {}}).first;
     it->second.ServerActors++;
     YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Server connected, pipe now have active actors on pipe",
         {"logPrefix", LogPrefix()},
         {"clientId", ev->Get()->ClientId},
+        {"serverId", ev->Get()->ServerId},
         {"serverActors", it->second.ServerActors});
 
     Counters->Simple()[COUNTER_PQ_TABLET_OPENED_PIPES] = PipesInfo.size();
@@ -2753,25 +2830,17 @@ void TPersQueue::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TA
     YDB_LOG_TRACE_COMP(NKikimrServices::PERSQUEUE, "Handle TEvTabletPipe::TEvServerDisconnected",
         {"logPrefix", LogPrefix()});
 
+    PipeServerToClient.erase(ev->Get()->ServerId);
+
     //inform partition if needed;
     auto it = PipesInfo.find(ev->Get()->ClientId);
     if (it != PipesInfo.end()) {
         if(--(it->second.ServerActors) > 0) {
             return;
         }
-        if (it->second.PartActor != TActorId()) {
-            ctx.Send(it->second.PartActor, new TEvPQ::TEvPipeDisconnected(
-                    it->second.Owner, it->first
-            ));
-        }
-        if (!it->second.SessionId.empty()) {
-            DestroySession(it->second);
-        }
-        YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Server disconnected, pipe destroyed",
-            {"logPrefix", LogPrefix()},
-            {"clientId", ev->Get()->ClientId});
-        PipesInfo.erase(it);
-        Counters->Simple()[COUNTER_PQ_TABLET_OPENED_PIPES] = PipesInfo.size();
+        CleanupPhysicalPipe(ev->Get()->ClientId, ctx);
+    } else if (PipeCacheHolders.contains(ev->Get()->ClientId)) {
+        CleanupPhysicalPipe(ev->Get()->ClientId, ctx);
     }
 }
 

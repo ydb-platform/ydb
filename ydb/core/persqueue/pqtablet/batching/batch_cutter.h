@@ -24,18 +24,36 @@ struct TBatchCutterData {
     TBatchCutterData(TReadResult&&, NKikimrPQClient::TDataChunk&&) = delete;
 };
 
+struct TCutOutcome {
+    TVector<TReadResult> Records;
+    TString Error;
+
+    bool Ok() const {
+        return Error.empty();
+    }
+};
+
+struct TKeysOutcome {
+    THashMap<TString, ui64> Keys;
+    TString Error;
+
+    bool Ok() const {
+        return Error.empty();
+    }
+};
+
 class IBatchCutter {
 public:
     virtual ~IBatchCutter() = default;
 
-    virtual TVector<TReadResult> Cut(const TBatchCutterData& data, ui64 readStartOffset) const = 0;
-    virtual THashMap<TString, ui64> GetKeys(const TBatchCutterData& data, ui64 readStartOffset) const = 0;
+    virtual TCutOutcome Cut(const TBatchCutterData& data, ui64 readStartOffset) const = 0;
+    virtual TKeysOutcome GetKeys(const TBatchCutterData& data, ui64 readStartOffset) const = 0;
 };
 
 class TKafkaBatchCutter : public IBatchCutter {
 public:
-    TVector<TReadResult> Cut(const TBatchCutterData& data, ui64 readStartOffset) const override final;
-    THashMap<TString, ui64> GetKeys(const TBatchCutterData& data, ui64 readStartOffset) const override final;
+    TCutOutcome Cut(const TBatchCutterData& data, ui64 readStartOffset) const override final;
+    TKeysOutcome GetKeys(const TBatchCutterData& data, ui64 readStartOffset) const override final;
 };
 
 } // namespace NKikimr::NPQ::NBatching

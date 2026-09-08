@@ -22,7 +22,9 @@ void TBatchProcessor::Bootstrap(const NActors::TActorContext&) {
 }
 
 TString TBatchProcessor::BuildLogPrefix() const {
-    return TStringBuilder() << "[BatchProcessor][" << SelfId() << "] ";
+    // TBaseTabletActor::LogBuilder logs tablet id, not SelfId. TActorId already
+    // prints itself in [node:local:hint] form.
+    return TStringBuilder() << "[BatchProcessor]" << SelfId() << " ";
 }
 
 NActors::TActorId TBatchProcessor::GetOrCreateConsumerProcessor(const TString& user) {

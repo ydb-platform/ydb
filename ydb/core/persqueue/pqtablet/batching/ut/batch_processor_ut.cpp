@@ -71,6 +71,24 @@ TString MakeKafkaBatchPayload(
     return NKafka::WriteKafkaRecordBatch(batch);
 }
 
+TString MakeKafkaBatchPayloadWithOffsetDeltas(i64 delta0, i64 delta1) {
+    NKafka::TKafkaRecordBatch batch;
+    batch.BaseOffset = 100;
+    batch.Magic = 2;
+    batch.LastOffsetDelta = delta1;
+    batch.BaseTimestamp = 1000;
+    batch.MaxTimestamp = 1007;
+    batch.ProducerId = 42;
+    batch.ProducerEpoch = 3;
+    batch.BaseSequence = 10;
+    batch.Records.push_back(MakeKafkaRecord(5, delta0, "k0", "value0"));
+    batch.Records.push_back(MakeKafkaRecord(7, delta1, "k1", "value1"));
+    batch.BatchLength = batch.Size(2)
+        - sizeof(NKafka::TKafkaRecordBatch::BaseOffsetMeta::Type)
+        - sizeof(NKafka::TKafkaRecordBatch::BatchLengthMeta::Type);
+    return NKafka::WriteKafkaRecordBatch(batch);
+}
+
 TString SerializeDataChunk(NKikimrPQClient::TDataChunk chunk) {
     TString serialized;
     Y_ENSURE(chunk.SerializeToString(&serialized));
@@ -461,6 +479,49 @@ Y_UNIT_TEST_SUITE(TConsumerBatchProcessorTest) {
 
         env.Send(actor, new TEvProcessBatch(MakeReadContext(env.Edge, {MakePlainReadResult(11, "ok")})));
         UNIT_ASSERT_VALUES_EQUAL(GetCmdReadResult(env.Grab<TEvProcessBatchResult>()->Get()->Context).GetResult().size(), 1);
+    }
+
+    Y_UNIT_TEST(NegativeOffsetDeltaKeepsOriginalAndDoesNotPoisonTablet) {
+        TEnv env(true);
+        const auto actor = env.RegisterConsumer();
+
+        env.Send(actor, new TEvProcessBatch(MakeReadContext(
+            env.Edge,
+            {MakeKafkaBatchReadResult(MakeKafkaBatchPayloadWithOffsetDeltas(-1, 1), 10)},
+            "user",
+            7,
+            10)));
+
+        const auto ev = env.Grab<TEvProcessBatchResult>();
+        const auto& results = GetCmdReadResult(ev->Get()->Context).GetResult();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
+        UNIT_ASSERT(results.Get(0).GetIsBatch());
+        UNIT_ASSERT_VALUES_EQUAL(results.Get(0).GetOffset(), 10u);
+        UNIT_ASSERT(env.Runtime.FindActor(actor));
+    }
+
+    Y_UNIT_TEST(ProcessBatchKeepsPlainPrefixWhenLaterBatchIsCorrupt) {
+        TEnv env;
+        const auto actor = env.RegisterConsumer();
+
+        env.Send(actor, new TEvProcessBatch(MakeReadContext(
+            env.Edge,
+            {
+                MakePlainReadResult(10, "keep-me"),
+                MakeCorruptKafkaBatchReadResult(20),
+            },
+            "user",
+            7,
+            10)));
+
+        const auto ev = env.Grab<TEvProcessBatchResult>();
+        const auto& results = GetCmdReadResult(ev->Get()->Context).GetResult();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(results.Get(0).GetOffset(), 10u);
+        const auto chunk0 = NKikimr::GetDeserializedData(results.Get(0).GetData());
+        UNIT_ASSERT_VALUES_EQUAL(chunk0.GetData(), "keep-me");
+        UNIT_ASSERT_VALUES_EQUAL(results.Get(1).GetOffset(), 20u);
+        UNIT_ASSERT(results.Get(1).GetIsBatch());
     }
 
     Y_UNIT_TEST(UnsupportedSnappyKafkaBatchKeepsOriginalAndReplies) {

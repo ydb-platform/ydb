@@ -6,9 +6,11 @@
 
 #include <library/cpp/streams/zstd/zstd.h>
 
-#include <util/generic/yexception.h>
+#include <exception>
+
 #include <util/stream/output.h>
 #include <util/stream/zlib.h>
+#include <util/string/builder.h>
 
 namespace NKikimr::NPQ::NBatching {
 namespace {
@@ -47,135 +49,155 @@ TString CompressPayload(TStringBuf data, NPersQueueCommon::ECodec codec) {
     }
 }
 
-ui64 RecordOffset(ui64 baseOffset, i64 offsetDelta, ui64 parentOffset) {
+TString UnexpectedCodecError(const TBatchCutterData& data) {
+    const auto& dataChunk = data.DataChunk;
+    if (dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec()) {
+        return {};
+    }
+    return TStringBuilder() << "unexpected data chunk codec for kafka batch cutter"
+        << " has_codec=" << dataChunk.HasCodec()
+        << " codec=" << (dataChunk.HasCodec() ? static_cast<int>(dataChunk.GetCodec()) : -1)
+        << " expected_codec=" << static_cast<int>(KafkaBatchCodec())
+        << " offset=" << data.ReadResult.GetOffset();
+}
+
+TString TryRecordOffset(ui64 baseOffset, i64 offsetDelta, ui64 parentOffset, ui64& offset) {
     // Kafka encodes offsetDelta as a signed varint, but a valid RecordBatch uses
-    // non-negative deltas (0, 1, ...). A negative value is corrupt client data;
-    // adding it to ui64 would wrap instead of failing.
-    Y_ENSURE(offsetDelta >= 0,
-        "negative kafka record offset delta"
-        << " offset_delta=" << offsetDelta
-        << " base_offset=" << baseOffset
-        << " offset=" << parentOffset);
-    const ui64 offset = baseOffset + static_cast<ui64>(offsetDelta);
-    Y_ENSURE(offset >= baseOffset,
-        "kafka record offset overflow"
-        << " offset_delta=" << offsetDelta
-        << " base_offset=" << baseOffset
-        << " offset=" << parentOffset);
-    return offset;
+    // non-negative deltas (0, 1, ...). A negative or overflowing value is corrupt client data.
+    if (offsetDelta < 0) {
+        return TStringBuilder() << "negative kafka record offset delta"
+            << " offset_delta=" << offsetDelta
+            << " base_offset=" << baseOffset
+            << " offset=" << parentOffset;
+    }
+    offset = baseOffset + static_cast<ui64>(offsetDelta);
+    if (offset < baseOffset) {
+        return TStringBuilder() << "kafka record offset overflow"
+            << " offset_delta=" << offsetDelta
+            << " base_offset=" << baseOffset
+            << " offset=" << parentOffset;
+    }
+    return {};
 }
 
 } // namespace
 
-TVector<TReadResult> TKafkaBatchCutter::Cut(const TBatchCutterData& data, const ui64 readStartOffset) const {
+TCutOutcome TKafkaBatchCutter::Cut(const TBatchCutterData& data, const ui64 readStartOffset) const {
     const auto& dataChunk = data.DataChunk;
     if (dataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
-        return {data.ReadResult};
+        return TCutOutcome{.Records = {data.ReadResult}};
     }
 
-    // Bad on-disk/client data: throw yexception (catchable in UT and callers), not AFL_ENSURE
-    // which aborts outside an actor activation context.
-    Y_ENSURE(dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec(),
-        "unexpected data chunk codec for kafka batch cutter"
-        << " has_codec=" << dataChunk.HasCodec()
-        << " codec=" << (dataChunk.HasCodec() ? static_cast<int>(dataChunk.GetCodec()) : -1)
-        << " expected_codec=" << static_cast<int>(KafkaBatchCodec())
-        << " offset=" << data.ReadResult.GetOffset());
-
-    const auto batch = NKafka::ReadKafkaRecordBatch(dataChunk.GetData());
-    if (batch.Records.empty()) {
-        return {data.ReadResult};
+    if (TString error = UnexpectedCodecError(data); !error.empty()) {
+        return TCutOutcome{.Error = std::move(error)};
     }
 
-    const auto codec = ToDataChunkCodec(batch.CompressionType());
-
-    TVector<TReadResult> result;
-    result.reserve(batch.Records.size());
-
-    TReadResult itemTemplate(data.ReadResult);
-    itemTemplate.ClearData();
-    itemTemplate.SetLogicalMessageCount(1);
-    itemTemplate.SetIsBatch(false);
-    itemTemplate.ClearUncompressedSize();
-
-    NKikimrPQClient::TDataChunk itemChunk(dataChunk);
-    itemChunk.ClearData();
-    itemChunk.SetCodec(codec);
-
-    const ui64 baseOffset = data.ReadResult.GetOffset();
-    for (size_t i = 0; i < batch.Records.size(); ++i) {
-        const ui64 offset = RecordOffset(baseOffset, batch.Records[i].OffsetDelta, data.ReadResult.GetOffset());
-        if (offset < readStartOffset) {
-            continue;
+    try {
+        const auto batch = NKafka::ReadKafkaRecordBatch(dataChunk.GetData());
+        if (batch.Records.empty()) {
+            return TCutOutcome{.Records = {data.ReadResult}};
         }
 
-        const auto& record = batch.Records[i];
-        const ui64 seqNo = NKafka::GetRecordSeqNo(batch, i, record);
+        const auto codec = ToDataChunkCodec(batch.CompressionType());
 
-        TReadResult item(itemTemplate);
-        item.SetOffset(offset);
-        item.SetSeqNo(seqNo);
+        TVector<TReadResult> result;
+        result.reserve(batch.Records.size());
 
-        itemChunk.SetSeqNo(seqNo);
-        if (record.Value) {
-            itemChunk.SetData(CompressPayload(TStringBuf(record.Value->data(), record.Value->size()), codec));
-        } else {
-            itemChunk.ClearData();
-        }
-        TString serializedChunk;
-        Y_ENSURE(itemChunk.SerializeToString(&serializedChunk),
-            "failed to serialize data chunk"
-            << " offset=" << offset
-            << " seq_no=" << seqNo
-            << " codec=" << static_cast<int>(codec));
-        item.SetData(std::move(serializedChunk));
+        TReadResult itemTemplate(data.ReadResult);
+        itemTemplate.ClearData();
+        itemTemplate.SetLogicalMessageCount(1);
+        itemTemplate.SetIsBatch(false);
+        itemTemplate.ClearUncompressedSize();
 
-        if (record.Key) {
-            item.SetPartitionKey(TString(record.Key->data(), record.Key->size()));
+        NKikimrPQClient::TDataChunk itemChunk(dataChunk);
+        itemChunk.ClearData();
+        itemChunk.SetCodec(codec);
+
+        const ui64 baseOffset = data.ReadResult.GetOffset();
+        for (size_t i = 0; i < batch.Records.size(); ++i) {
+            ui64 offset = 0;
+            if (TString error = TryRecordOffset(baseOffset, batch.Records[i].OffsetDelta, data.ReadResult.GetOffset(), offset); !error.empty()) {
+                return TCutOutcome{.Error = std::move(error)};
+            }
+            if (offset < readStartOffset) {
+                continue;
+            }
+
+            const auto& record = batch.Records[i];
+            const ui64 seqNo = NKafka::GetRecordSeqNo(batch, i, record);
+
+            TReadResult item(itemTemplate);
+            item.SetOffset(offset);
+            item.SetSeqNo(seqNo);
+
+            itemChunk.SetSeqNo(seqNo);
+            if (record.Value) {
+                itemChunk.SetData(CompressPayload(TStringBuf(record.Value->data(), record.Value->size()), codec));
+            } else {
+                itemChunk.ClearData();
+            }
+            TString serializedChunk;
+            if (!itemChunk.SerializeToString(&serializedChunk)) {
+                return TCutOutcome{.Error = TStringBuilder()
+                    << "failed to serialize data chunk"
+                    << " offset=" << offset
+                    << " seq_no=" << seqNo
+                    << " codec=" << static_cast<int>(codec)};
+            }
+            item.SetData(std::move(serializedChunk));
+
+            if (record.Key) {
+                item.SetPartitionKey(TString(record.Key->data(), record.Key->size()));
+            }
+            const i64 timestamp = batch.BaseTimestamp + record.TimestampDelta;
+            if (timestamp > 0) {
+                item.SetCreateTimestampMS(timestamp);
+            }
+            result.push_back(std::move(item));
         }
-        const i64 timestamp = batch.BaseTimestamp + record.TimestampDelta;
-        if (timestamp > 0) {
-            item.SetCreateTimestampMS(timestamp);
-        }
-        result.push_back(std::move(item));
+
+        return TCutOutcome{.Records = std::move(result)};
+    } catch (const std::exception& e) {
+        return TCutOutcome{.Error = TString(e.what())};
     }
-
-    return result;
 }
 
-THashMap<TString, ui64> TKafkaBatchCutter::GetKeys(const TBatchCutterData& data, const ui64 readStartOffset) const {
-    THashMap<TString, ui64> result;
-
+TKeysOutcome TKafkaBatchCutter::GetKeys(const TBatchCutterData& data, const ui64 readStartOffset) const {
     const auto& dataChunk = data.DataChunk;
     if (dataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
-        return result;
+        return {};
     }
 
-    Y_ENSURE(dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec(),
-        "unexpected data chunk codec for kafka batch cutter"
-        << " has_codec=" << dataChunk.HasCodec()
-        << " codec=" << (dataChunk.HasCodec() ? static_cast<int>(dataChunk.GetCodec()) : -1)
-        << " expected_codec=" << static_cast<int>(KafkaBatchCodec())
-        << " offset=" << data.ReadResult.GetOffset());
-
-    const auto batch = NKafka::ReadKafkaRecordBatch(dataChunk.GetData());
-    const ui64 baseOffset = data.ReadResult.GetOffset();
-    for (const auto& record : batch.Records) {
-        const ui64 offset = RecordOffset(baseOffset, record.OffsetDelta, data.ReadResult.GetOffset());
-        if (offset < readStartOffset) {
-            continue;
-        }
-
-        if (!record.Key) {
-            continue;
-        }
-
-        TString key;
-        key.assign(record.Key->data(), record.Key->size());
-        result[key] = offset;
+    if (TString error = UnexpectedCodecError(data); !error.empty()) {
+        return TKeysOutcome{.Error = std::move(error)};
     }
 
-    return result;
+    try {
+        const auto batch = NKafka::ReadKafkaRecordBatch(dataChunk.GetData());
+        const ui64 baseOffset = data.ReadResult.GetOffset();
+        THashMap<TString, ui64> result;
+        for (const auto& record : batch.Records) {
+            ui64 offset = 0;
+            if (TString error = TryRecordOffset(baseOffset, record.OffsetDelta, data.ReadResult.GetOffset(), offset); !error.empty()) {
+                return TKeysOutcome{.Error = std::move(error)};
+            }
+            if (offset < readStartOffset) {
+                continue;
+            }
+
+            if (!record.Key) {
+                continue;
+            }
+
+            TString key;
+            key.assign(record.Key->data(), record.Key->size());
+            result[key] = offset;
+        }
+
+        return TKeysOutcome{.Keys = std::move(result)};
+    } catch (const std::exception& e) {
+        return TKeysOutcome{.Error = TString(e.what())};
+    }
 }
 
 } // namespace NKikimr::NPQ::NBatching

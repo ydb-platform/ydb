@@ -8,6 +8,8 @@
 #include <exception>
 #include <utility>
 
+#include <util/generic/strbuf.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT Service
 
 namespace NKikimr::NPQ::NBatching {
@@ -26,25 +28,52 @@ namespace {
         return key;
     }
 
+    void LogKafkaBatchUserError(
+        TStringBuf message,
+        const TString& logPrefix,
+        ui32 partition,
+        ui64 offset,
+        const TString& error,
+        TStringBuf user = {})
+    {
+        if (!user.empty()) {
+            YDB_LOG_ERROR_COMP(PERSQUEUE, message,
+                {"logPrefix", logPrefix},
+                {"errorType", "user"},
+                {"user", user},
+                {"partition", partition},
+                {"offset", offset},
+                {"error", error});
+        } else {
+            YDB_LOG_ERROR_COMP(PERSQUEUE, message,
+                {"logPrefix", logPrefix},
+                {"errorType", "user"},
+                {"partition", partition},
+                {"offset", offset},
+                {"error", error});
+        }
+    }
+
     TVector<TReadResult> CutOrKeepOriginal(
         const IBatchCutter& cutter,
         const TBatchCutterData& data,
         ui64 readStartOffset,
         const TString& logPrefix,
         const TString& user,
-        ui32 partitionId)
+        ui32 partition)
     {
-        try {
-            return cutter.Cut(data, readStartOffset);
-        } catch (const std::exception& e) {
-            YDB_LOG_ERROR_COMP(PERSQUEUE, "Failed to cut kafka batch, keeping original result",
-                {"logPrefix", logPrefix},
-                {"user", user},
-                {"partitionId", partitionId},
-                {"offset", data.ReadResult.GetOffset()},
-                {"error", TString(e.what())});
+        auto outcome = cutter.Cut(data, readStartOffset);
+        if (!outcome.Ok()) {
+            LogKafkaBatchUserError(
+                "Failed to cut kafka batch, keeping original result",
+                logPrefix,
+                partition,
+                data.ReadResult.GetOffset(),
+                outcome.Error,
+                user);
             return {data.ReadResult};
         }
+        return std::move(outcome.Records);
     }
 
     THashMap<TString, ui64> GetKeysOrEmpty(
@@ -52,18 +81,19 @@ namespace {
         const TBatchCutterData& data,
         ui64 readStartOffset,
         const TString& logPrefix,
-        ui32 partitionId)
+        ui32 partition)
     {
-        try {
-            return cutter.GetKeys(data, readStartOffset);
-        } catch (const std::exception& e) {
-            YDB_LOG_ERROR_COMP(PERSQUEUE, "Failed to get keys from kafka batch",
-                {"logPrefix", logPrefix},
-                {"partitionId", partitionId},
-                {"offset", data.ReadResult.GetOffset()},
-                {"error", TString(e.what())});
+        auto outcome = cutter.GetKeys(data, readStartOffset);
+        if (!outcome.Ok()) {
+            LogKafkaBatchUserError(
+                "Failed to get keys from kafka batch",
+                logPrefix,
+                partition,
+                data.ReadResult.GetOffset(),
+                outcome.Error);
             return {};
         }
+        return std::move(outcome.Keys);
     }
 }
 
@@ -115,9 +145,12 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::T
     TVector<TReadResult> expanded;
     expanded.reserve(originalResults.size());
 
+    ui64 batchOffset = context.Offset;
     try {
         ui32 resultsCount = 0;
-        auto addResult = [&](TReadResult& result) {
+        // Copy, do not Swap: if expansion throws later, originalResults must still
+        // hold the unmodified messages for the user-error fallback.
+        auto addResult = [&](const TReadResult& result) {
             if (result.GetOffset() < context.Offset) {
                 return false;
             }
@@ -126,12 +159,12 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::T
             }
 
             resultsCount += result.GetLogicalMessageCount();
-            expanded.emplace_back();
-            expanded.back().Swap(&result);
+            expanded.push_back(result);
             return resultsCount >= context.Count && context.Count > 0;
         };
 
-        for (auto& originalResult : originalResults) {
+        for (const auto& originalResult : originalResults) {
+            batchOffset = originalResult.GetOffset();
             auto dataChunk = NKikimr::GetDeserializedData(originalResult.GetData());
 
             if (!originalResult.GetIsBatch()) {
@@ -171,11 +204,13 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::T
             readResult->AddResult()->Swap(&result);
         }
     } catch (const std::exception& e) {
-        YDB_LOG_ERROR("Failed to process read batch, returning original results",
-            {"logPrefix", GetLogPrefix()},
-            {"user", User},
-            {"partitionId", context.PartitionId},
-            {"error", TString(e.what())});
+        LogKafkaBatchUserError(
+            "Failed to process read batch, returning original results",
+            GetLogPrefix(),
+            context.PartitionId,
+            batchOffset,
+            TString(e.what()),
+            User);
         results->Clear();
         for (auto& result : originalResults) {
             readResult->AddResult()->Swap(&result);
@@ -191,9 +226,11 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatchKeys::TPtr& ev, const NActor
     HasCurrentCPUUsagePartitionId = true;
 
     THashMap<ui64, TString> offsetToKey;
+    ui64 batchOffset = 0;
 
     try {
         for (const auto& result : context.Results) {
+            batchOffset = result.GetOffset();
             if (result.GetData().empty()) {
                 continue;
             }
@@ -224,10 +261,12 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatchKeys::TPtr& ev, const NActor
             }
         }
     } catch (const std::exception& e) {
-        YDB_LOG_ERROR("Failed to process batch keys, returning collected keys",
-            {"logPrefix", GetLogPrefix()},
-            {"partitionId", context.PartitionId},
-            {"error", TString(e.what())});
+        LogKafkaBatchUserError(
+            "Failed to process batch keys, returning collected keys",
+            GetLogPrefix(),
+            context.PartitionId,
+            batchOffset,
+            TString(e.what()));
     }
 
     ctx.Send(context.ResponseActor, new TEvProcessBatchKeysResult(std::move(offsetToKey)));

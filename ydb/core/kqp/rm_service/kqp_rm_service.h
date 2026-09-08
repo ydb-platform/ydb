@@ -50,6 +50,13 @@ public:
     std::atomic<i64> MemoryAvailability{std::numeric_limits<i64>::max()};
 };
 
+// The cookies a tx reads its memory availability from: the node total and, for a tx with a resource pool,
+// the pool resource. Handed out by the resource manager when the tx is constructed, see TTxState.
+struct TMemoryResourceCookies {
+    TIntrusivePtr<TMemoryResourceCookie> Total;
+    TIntrusivePtr<TMemoryResourceCookie> Pool;
+};
+
 class IKqpResourceManager;
 
 class TTxState : public TAtomicRefCount<TTxState> {
@@ -64,8 +71,10 @@ public:
     const TString Database;
     const bool MemoryPoolLimited;
     const bool CollectBacktrace;
-    TIntrusivePtr<TMemoryResourceCookie> TotalMemoryCookie;
-    TIntrusivePtr<TMemoryResourceCookie> PoolMemoryCookie;
+    // Attached at construction and never written again, so that GetMemoryAvailability() can be read from any
+    // thread without a lock, see IKqpResourceManager::GetMemoryResourceCookies
+    const TIntrusivePtr<TMemoryResourceCookie> TotalMemoryCookie;
+    const TIntrusivePtr<TMemoryResourceCookie> PoolMemoryCookie;
 
     std::atomic<ui64> TxScanQueryMemory = 0;
     std::atomic<ui64> TxExternalDataQueryMemory = 0;
@@ -88,6 +97,11 @@ public:
         const TString& database, bool collectBacktrace);
     ~TTxState();
 
+private:
+    TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, const TString& poolId, const double memoryPoolPercent,
+        const TString& database, bool collectBacktrace, TMemoryResourceCookies cookies);
+
+public:
     std::pair<TString, TString> MakePoolId() const {
         return std::make_pair(Database, PoolId);
     }
@@ -97,12 +111,10 @@ public:
     }
 
     // Node level memory availability of this tx: the minimum over the node total and the pool resource,
-    // see TMemoryResourceCookie. Unlimited until the first successful allocation assigns the cookies.
+    // see TMemoryResourceCookie. The cookies are attached at construction, nothing to synchronize here.
+    // Unlimited only with a resource manager that hands out no cookies (test stubs).
     i64 GetMemoryAvailability() const {
-        i64 result = std::numeric_limits<i64>::max();
-        if (TotalMemoryCookie) {
-            result = std::min(result, TotalMemoryCookie->MemoryAvailability.load());
-        }
+        i64 result = TotalMemoryCookie ? TotalMemoryCookie->MemoryAvailability.load() : std::numeric_limits<i64>::max();
         if (PoolMemoryCookie) {
             result = std::min(result, PoolMemoryCookie->MemoryAvailability.load());
         }
@@ -290,6 +302,10 @@ public:
     virtual ~IKqpResourceManager() = default;
 
     virtual const TIntrusivePtr<TKqpCounters>& GetCounters() const = 0;
+
+    // The spilling cookies for a new tx: the node total and, with a resource pool, the pool resource (created on
+    // its first use). Called by the TTxState constructor, the cookies then stay with the tx for its whole life.
+    virtual TMemoryResourceCookies GetMemoryResourceCookies(const TString& database, const TString& poolId, double memoryPoolPercent) = 0;
 
     virtual TKqpRMAllocateResult AllocateResources(TTxState& tx, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
 

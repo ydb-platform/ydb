@@ -647,8 +647,10 @@ void KqpRm::MemoryAvailability() {
 
     {
         auto tx = MakeTx(1, rm);
-        // nothing allocated yet: no cookie, nothing is known about the node
-        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), std::numeric_limits<i64>::max());
+        // the cookies are attached at construction: the node availability is known before anything is allocated
+        UNIT_ASSERT(tx->TotalMemoryCookie);
+        UNIT_ASSERT(!tx->PoolMemoryCookie); // no resource pool
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 800);
 
         UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 100}));
         UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 700);
@@ -676,9 +678,11 @@ void KqpRm::PoolMemoryAvailability() {
 
     {
         auto tx = MakePoolTx(1, rm, /* memoryPoolPercent = */ 50);
-        // pool limit 500, pool threshold at 400 used; node threshold at 800 used
-        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 100}));
+        // pool limit 500, pool threshold at 400 used; node threshold at 800 used. The pool resource is created
+        // together with the tx, so the pool cookie is there before the first allocation
         UNIT_ASSERT(tx->PoolMemoryCookie);
+        UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 400);
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 100}));
         UNIT_ASSERT_VALUES_EQUAL(tx->TotalMemoryCookie->MemoryAvailability.load(), 700);
         UNIT_ASSERT_VALUES_EQUAL(tx->PoolMemoryCookie->MemoryAvailability.load(), 300);
         UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 300);

@@ -41,8 +41,21 @@ static double NormalizePoolPercent(double percent) {
     return Min(percent, 100.0);
 }
 
+// The rule of TTxState::MemoryPoolLimited, also needed before a TTxState exists (the cookie hand-out).
+// The percent must already be normalized.
+static bool IsMemoryPoolLimited(const TString& poolId, double memoryPoolPercent) {
+    return !poolId.empty() && poolId != NResourcePool::DEFAULT_POOL_ID
+        && memoryPoolPercent > 0 && memoryPoolPercent < 100;
+}
+
 TTxState::TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, const TString& poolId, const double memoryPoolPercent,
     const TString& database, bool collectBacktrace)
+    : TTxState(resourceManager, txId, now, poolId, memoryPoolPercent, database, collectBacktrace,
+        resourceManager->GetMemoryResourceCookies(database, poolId, NormalizePoolPercent(memoryPoolPercent)))
+{}
+
+TTxState::TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, const TString& poolId, const double memoryPoolPercent,
+    const TString& database, bool collectBacktrace, TMemoryResourceCookies cookies)
     : ResourceManager(resourceManager)
     , Counters(resourceManager->GetCounters())
     , TxId(txId)
@@ -50,9 +63,10 @@ TTxState::TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 t
     , PoolId(poolId)
     , MemoryPoolPercent(NormalizePoolPercent(memoryPoolPercent))
     , Database(database)
-    , MemoryPoolLimited(!PoolId.empty() && PoolId != NResourcePool::DEFAULT_POOL_ID
-        && MemoryPoolPercent > 0 && MemoryPoolPercent < 100)
+    , MemoryPoolLimited(IsMemoryPoolLimited(PoolId, MemoryPoolPercent))
     , CollectBacktrace(collectBacktrace)
+    , TotalMemoryCookie(std::move(cookies.Total))
+    , PoolMemoryCookie(std::move(cookies.Pool))
 {}
 
 TTxState::~TTxState() {
@@ -249,6 +263,29 @@ public:
         }
     }
 
+    TMemoryResourceCookies GetMemoryResourceCookies(const TString& database, const TString& poolId, double memoryPoolPercent) override {
+        TMemoryResourceCookies cookies;
+        with_lock (Lock) {
+            cookies.Total = TotalMemoryResource->GetSpillingCookie();
+            if (IsMemoryPoolLimited(poolId, memoryPoolPercent)) {
+                cookies.Pool = GetOrCreatePoolMemoryResource(std::make_pair(database, poolId), memoryPoolPercent)->GetSpillingCookie();
+            }
+        }
+        return cookies;
+    }
+
+    // Must be called under Lock. The pool resource is created on its first use and its limit follows the
+    // latest tx of the pool afterwards.
+    TIntrusivePtr<TMemoryResource> GetOrCreatePoolMemoryResource(const std::pair<TString, TString>& poolKey, double memoryPoolPercent) {
+        auto [it, success] = MemoryNamedPools.emplace(poolKey, nullptr);
+        if (success) {
+            it->second = MakeIntrusive<TMemoryResource>(TotalMemoryResource->GetLimit(), memoryPoolPercent, SpillingPercent.load());
+        } else {
+            it->second->SetNewLimit(TotalMemoryResource->GetLimit(), memoryPoolPercent, SpillingPercent.load());
+        }
+        return it->second;
+    }
+
     TKqpRMAllocateResult AllocateResources(TTxState& tx, ui64 taskId, const TKqpResourcesRequest& resources) override
     {
         const ui64 txId = tx.TxId;
@@ -296,27 +333,12 @@ public:
             }
 
             hasScanQueryMemory = TotalMemoryResource->AcquireIfAvailable(resources.Memory);
-            if (!tx.TotalMemoryCookie) {
-                tx.TotalMemoryCookie = TotalMemoryResource->GetSpillingCookie();
-            }
 
             if (hasScanQueryMemory && tx.HasMemoryPoolLimit()) {
-                auto [it, success] = MemoryNamedPools.emplace(tx.MakePoolId(), nullptr);
-
-                if (success) {
-                    it->second = MakeIntrusive<TMemoryResource>(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, SpillingPercent.load());
-                } else {
-                    it->second->SetNewLimit(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, SpillingPercent.load());
-                }
-
-                auto& poolMemory = it->second;
+                auto poolMemory = GetOrCreatePoolMemoryResource(tx.MakePoolId(), tx.MemoryPoolPercent);
                 if (!poolMemory->AcquireIfAvailable(resources.Memory)) {
                     hasScanQueryMemory = false;
                     TotalMemoryResource->Release(resources.Memory);
-                }
-
-                if (!tx.PoolMemoryCookie) {
-                    tx.PoolMemoryCookie = poolMemory->GetSpillingCookie();
                 }
             }
         }
@@ -614,7 +636,7 @@ public:
     TActorId ResourceInfoExchanger = TActorId();
 
     // Pool resources are never erased, not even when their usage drops to zero: the transactions of a pool keep
-    // the spilling cookie they got on their first allocation (TTxState::PoolMemoryCookie, read lock-free), so the
+    // the spilling cookie attached at their construction (TTxState::PoolMemoryCookie, read lock-free), so the
     // resource that updates it has to stay the same one for as long as the pool is in use.
     absl::flat_hash_map<std::pair<TString, TString>, TIntrusivePtr<TMemoryResource>, THash<std::pair<TString, TString>>> MemoryNamedPools;
 };

@@ -2025,7 +2025,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 33);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 34);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -2033,6 +2033,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
             }
             UNIT_ASSERT(names.contains("partition_stats"));
+            UNIT_ASSERT(names.contains("query_metrics_one_minute"));
+            UNIT_ASSERT(names.contains("query_metrics_one_hour"));
             UNIT_ASSERT(names.contains("udf_modules"));
         }
         {
@@ -2046,7 +2048,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             auto children = result.GetChildren();
 
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 27);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 28);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -2054,6 +2056,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
             }
             UNIT_ASSERT(names.contains("partition_stats"));
+            UNIT_ASSERT(names.contains("query_metrics_one_minute"));
+            UNIT_ASSERT(names.contains("query_metrics_one_hour"));
             UNIT_ASSERT(names.contains("udf_modules"));
         }
         {

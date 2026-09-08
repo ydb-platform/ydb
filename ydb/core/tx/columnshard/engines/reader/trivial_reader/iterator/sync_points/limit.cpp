@@ -118,9 +118,13 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
             {"sourceIdx", source->GetSourceIdx()},
             {"fetched", FetchedCount},
             {"limit", Limit});
-        FilledIterators.emplace_back(arrs, source->GetStageResult().GetNotAppliedFilter(), source);
-        AFL_VERIFY(FilledIterators.back().IsFilled());
-        std::push_heap(FilledIterators.begin(), FilledIterators.end());
+        TSourceIterator iterator(arrs, source->GetStageResult().GetNotAppliedFilter(), source);
+        AFL_VERIFY(iterator.IsFilled());
+        // the filter can reject every row of the source, leaving nothing to compare against
+        if (iterator.IsValid()) {
+            FilledIterators.emplace_back(std::move(iterator));
+            std::push_heap(FilledIterators.begin(), FilledIterators.end());
+        }
     }
     if (DrainToLimit()) {
         Collection->Clear();

@@ -28,7 +28,7 @@ from ydb.tools.ydb_bench.lib.common import BenchmarkError, BenchmarkInterrupted,
 from ydb.tools.ydb_bench.lib.config import BACKGROUND_LOAD_MODES, build_run_plan, load_config
 from ydb.tools.ydb_bench.lib.results import ResultStore, _non_finite_json_as_null, load_manifest
 from ydb.tools.ydb_bench.lib.actors_core import run_benchmark
-from ydb.tools.ydb_bench.lib.common import extract_executable
+from ydb.tools.ydb_bench.lib.common import binary_catalog, extract_executable, load_profile_binaries
 from ydb.tools.ydb_bench.lib.import_results import MAX_TOTAL_SIZE, export_archive, import_archive
 from ydb.tools.ydb_bench.lib.local_ydb import run_local_ydb
 from ydb.tools.ydb_bench.lib.local_ydb_workloads import web_workload_catalog
@@ -347,7 +347,8 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     ":{threads:localYdbDefaultClientThreads(definition)},load:{parameter:'rate',allow_errors:false,values:[1000]},measurement:{warmup:localYdbDefaultWarmupSeconds(definition),duration:30,rep"
     "etitions:3,verification_repetitions:3},affinity:{ydb_cli:{mode:'pack-numa-pack-chiplet-spread-core',cpus:'one-chiplet'},static_nodes:{mode:'none'"
     ",cpus:null},dynamic_nodes:{mode:'none',cpus:null}}}}\n"
-    "function serializeLocalYdb(lines,profile){const config=profile.local_ydb,workload=config.workload;lines.push('    work"
+    "function serializeLocalYdb(lines,profile){const config=profile.local_ydb,workload=config.workload;"
+    "if(config.ydbd_binary)lines.push('    ydbd-binary: '+yamlScalar(config.ydbd_binary));lines.push('    work"
     "load:','      type: '+workload.type,'      operation: '+workload.operation,'      options:');for(const [key,value] of "
     "Object.entries(workload.options))lines.push('        '+key+': '+yamlScalar(value));lines.push('    geometry:','      preset: '+conf"
     "ig.geometry.preset);for(const [key,yamlKey] of Object.entries(localYdbGeometryKeys))lines.push('      '+yamlKey+': '+c"
@@ -478,6 +479,18 @@ function localYdbSloPercentile(definition,requested=null){
   if(requested&&supported.includes(requested))return requested;
   return supported.includes('p99')?'p99':supported[0]||null
 }
+function localYdbBinaryFields(config){
+  const catalog=editor.model.binary_catalog||{},path=config.ydbd_binary||'';
+  const choices=[['','Bundled ydbd'],...(catalog.ydbd||[]).map(item=>[item.path,item.version])];
+  if(path&&!choices.some(([value])=>value===path))choices.push([path,'Custom path']);
+  const selector='<div class=field><label for=local-ydbd-version>Version</label><select id=local-ydbd-version>'+
+    choices.map(([value,label])=>'<option value="'+esc(value)+'" '+(value===path?'selected':'')+'>'+
+      esc(label)+'</option>').join('')+'</select><small class=muted>'+esc(catalog.root?catalog.root+'/ydbd/':'')+'</small></div>';
+  const notice=catalog.error?'<p class="notice error">'+esc(catalog.error)+'</p>':
+    catalog.truncated?'<p class=notice>Binary catalog is truncated.</p>':'';
+  return selector+localField('local-ydbd-binary','Executable path',path,
+    'Absolute path on the benchmark host. Empty uses bundled ydbd.')+notice
+}
 function localYdbProfileEditor(profile){
   const config=profile.local_ydb,workload=config.workload,geometry=config.geometry,load=config.load,measurement=config.measurement;
   const definition=localYdbWorkloadDefinition(workload.type);
@@ -553,7 +566,8 @@ function localYdbProfileEditor(profile){
     '<div class=form-grid>'+localSelect(
       'benchmark','Benchmark',profile.benchmark,editor.model.benchmarks.map(item=>item.name)
     )+localField('profile-name','Profile name',profile.name,'letters, digits, . _ and -')+'</div>'+
-    '<h3>Workload</h3><div class=form-grid>'+localSelect(
+    '<h3>YDBD binary</h3><div class=form-grid>'+localYdbBinaryFields(config)+
+    '</div><h3>Workload</h3><div class=form-grid>'+localSelect(
       'local-workload-type','Type',workload.type,editor.model.local_ydb_workloads.map(item=>item.type)
     )+localSelect(
       'local-workload-operation','Operation',workload.operation,definition.operations
@@ -620,6 +634,10 @@ function bindLocalYdbEditor(profile){
       saveDraft();renderNew();return
     }
     profile.name=name;profile.key=benchmarkName+'/'+name;const config=profile.local_ydb;
+    if(event.target.id==='local-ydbd-version'){
+      if(event.target.value)config.ydbd_binary=event.target.value;else delete config.ydbd_binary;
+      editor.yaml=serializeConfig(editor.model);saveDraft();renderNew();return
+    }
     if(event.target.id==='local-workload-type'){
       config.workload=defaultLocalYdbWorkload(event.target.value);editor.selected=profile.key;
       const nextDefinition=localYdbWorkloadDefinition(event.target.value);
@@ -707,6 +725,9 @@ function bindLocalYdbEditor(profile){
       config.geometry.dynamic_nodes=1;config.geometry.max_dynamic_nodes=1
     }
     config.client.threads=localInteger('local-client-threads');
+    const binaryPath=document.querySelector('#local-ydbd-binary').value;
+    if(binaryPath&&!binaryPath.startsWith('/'))throw Error('YDBD executable path must be absolute.');
+    if(binaryPath)config.ydbd_binary=binaryPath;else delete config.ydbd_binary;
     config.actor_system=Object.fromEntries(Object.keys(localYdbActorSystemKeys).map(key=>[
       key,Boolean(document.querySelector('#local-actor-system-'+key)?.checked)
     ]));
@@ -759,7 +780,7 @@ function bindLocalYdbEditor(profile){
     const loadLimitInputs=Object.values(workloadDefinition.load_limits||{}).map(
       constraint=>'local-option-'+constraint.option
     );
-    if(localYdbNeedsRerender(event.target.id,loadLimitInputs))renderNew()
+    if(event.target.id==='local-ydbd-binary'||localYdbNeedsRerender(event.target.id,loadLimitInputs))renderNew()
   }catch(error){message().innerHTML=displayError(error)}};
   for(const input of document.querySelectorAll('#local-editor input,#local-editor select'))input.onchange=update;
   document.querySelector('#delete-profile').onclick=()=>{
@@ -1547,7 +1568,8 @@ function localRestoreActivityScroll(container,scrollTop,pinned){
 }
 function localProfileDetails(data,open){
   const configuration={
-    parameters:data.parameters||{},timeout_seconds:data.timeout_seconds??null,role_affinity:data.role_affinity||{}
+    parameters:data.parameters||{},binaries:data.binaries||{},
+    timeout_seconds:data.timeout_seconds??null,role_affinity:data.role_affinity||{}
   };
   return '<details class=local-profile-config data-local-profile-config'+(open?' open':'')+
     '><summary><strong>Launch parameters</strong> <span class=muted>Normalized profile and effective CPU affinity; '+
@@ -3122,12 +3144,15 @@ class RunService:
     without a real benchmark binary.
     """
 
-    def __init__(self, output, executor=None, event_limit=256, tail_limit=65536, perf_available=True):
+    def __init__(
+        self, output, executor=None, event_limit=256, tail_limit=65536, perf_available=True, binaries_dir="bin"
+    ):
         self.output = Path(output).resolve()
         self.output.mkdir(parents=True, exist_ok=True)
         self.executor = executor or self._unsupported_executor
         self.event_limit, self.tail_limit = event_limit, tail_limit
         self.perf_available = perf_available
+        self.binaries_dir = Path(binaries_dir).resolve()
         self._runs, self._lock = {}, threading.RLock()
         self._accepting_runs = True
         self._queue = deque()
@@ -3190,15 +3215,18 @@ class RunService:
 
     def editor_config(self, yaml_text, perf=False):
         if not yaml_text.strip():
-            return {
+            model = {
                 "output": str(self.output),
                 "benchmarks": benchmark_catalog(),
                 "affinity_modes": list(AFFINITY_MODES),
                 "background_load_modes": list(BACKGROUND_LOAD_MODES),
                 "profiles": [],
             }
-        loaded = self._load(yaml_text, perf)
-        return editor_model(loaded, self.output)
+        else:
+            loaded = self._load(yaml_text, perf)
+            model = editor_model(loaded, self.output)
+        model["binary_catalog"] = binary_catalog(self.binaries_dir)
+        return model
 
     def start(self, yaml_text, perf=False, continue_on_error=False):
         with self._lock:
@@ -4219,13 +4247,7 @@ def production_executor(resource_loader, tool_revision):
             if any("none" != mode for config in run["loaded"].runs for mode in config.background_load_modes):
                 background_binary = extract_executable(resource_loader("background_load"), work, "background_load")
             for configuration in run["loaded"].runs:
-                profile_binaries = {}
-                for resource_name in configuration.benchmark.resources:
-                    if resource_name not in binaries:
-                        binaries[resource_name] = extract_executable(
-                            resource_loader(resource_name), work, resource_name
-                        )
-                    profile_binaries[resource_name] = binaries[resource_name]
+                profile_binaries = load_profile_binaries(configuration, resource_loader, work, binaries)
                 binary = profile_binaries[configuration.benchmark.resource_name]
                 if cancelled.is_set():
                     return
@@ -4589,18 +4611,20 @@ def _handler(service):
     return Handler
 
 
-def make_server(listen, port, output, allow_remote=False, executor=None, perf_available=True):
+def make_server(listen, port, output, allow_remote=False, executor=None, perf_available=True, binaries_dir="bin"):
     if not _is_loopback(listen) and not allow_remote:
         raise BenchmarkError("non-loopback --listen requires --allow-remote")
     server_class = _IPv6ThreadingHTTPServer if ":" in listen else _RunServiceHTTPServer
-    service = RunService(output, executor=executor, perf_available=perf_available)
+    service = RunService(output, executor=executor, perf_available=perf_available, binaries_dir=binaries_dir)
     server = server_class((listen, port), _handler(service))
     server.service = service
     return server
 
 
-def serve(listen, port, output, no_open=False, allow_remote=False, executor=None, perf_available=True):
-    server = make_server(listen, port, output, allow_remote, executor, perf_available)
+def serve(
+    listen, port, output, no_open=False, allow_remote=False, executor=None, perf_available=True, binaries_dir="bin"
+):
+    server = make_server(listen, port, output, allow_remote, executor, perf_available, binaries_dir)
     url_host = "[{}]".format(listen) if ":" in listen else listen
     url = "http://{}:{}/".format(url_host, server.server_port)
     print(url)

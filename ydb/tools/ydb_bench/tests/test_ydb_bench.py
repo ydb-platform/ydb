@@ -252,7 +252,7 @@ class YdbBenchTest(unittest.TestCase):
 
         output = self.root / output_name
         binaries = {
-            name: mock.Mock(path=self.root / name, sha256=name + "-digest", size=1)
+            name: common.BinaryArtifact(path=self.root / name, sha256=name + "-digest", size=1)
             for name in ("ydbd", "ydb_cli", "process_guard")
         }
         events = []
@@ -2173,6 +2173,194 @@ class YdbBenchTest(unittest.TestCase):
                     )
                 )
 
+    def test_binary_catalog_and_editor_refresh(self):
+        catalog = self.root / "bin"
+        directory = catalog / "ydbd"
+        self.assertEqual(common.binary_catalog(catalog)["ydbd"], [])
+        self.assertFalse(catalog.exists())
+        directory.mkdir(parents=True)
+        for name in ("stable-26-3-1", "main"):
+            self._script("exit 0", name="bin/ydbd/" + name)
+        (directory / "readme").write_text("not executable")
+        (directory / "empty").touch(mode=0o755)
+        (directory / "subdirectory").mkdir()
+        self._script("exit 0", name="bin/ydbd/.temporary")
+        service = RunService(self.root / "results", binaries_dir=catalog)
+        result = service.editor_config("")["binary_catalog"]
+        self.assertEqual([item["version"] for item in result["ydbd"]], ["main", "stable-26-3-1"])
+        self.assertEqual(result["ydbd"][1]["path"], str(directory / "stable-26-3-1"))
+        self.assertFalse(result["truncated"])
+        self.assertTrue(common.binary_catalog(catalog, limit=1)["truncated"])
+        self._script("exit 0", name="bin/ydbd/new-build")
+        config = "local-ydb:\n  profile:\n    workload: {type: kv, operation: upsert}\n    load: {parameter: threads, values: [1]}\n"
+        refreshed = service.editor_config(config)["binary_catalog"]
+        self.assertIn("new-build", [item["version"] for item in refreshed["ydbd"]])
+        with mock.patch.object(common.os, "scandir", side_effect=PermissionError("denied")):
+            result = service.editor_config("")["binary_catalog"]
+        self.assertIn("Cannot read binary catalog", result["error"])
+        self.assertEqual(result["ydbd"], [])
+
+    def test_web_cli_passes_binary_catalog_directory(self):
+        with mock.patch.object(cli, "serve") as serve:
+            self.assertEqual(main(["web", "--binaries-dir", str(self.root / "bin")]), 0)
+        self.assertEqual(serve.call_args.kwargs["binaries_dir"], self.root / "bin")
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for browser logic checks")
+    def test_local_ydb_binary_catalog_selector(self):
+        script = """
+            const esc=value=>String(value??'');
+            const editor={model:{binary_catalog:{root:'/bin',ydbd:[{version:'stable-26-3-1',path:'/bin/ydbd/stable-26-3-1'}]}}};
+        """
+        script += web._JS[web._JS.index("function localField") : web._JS.index("function localYdbProfileEditor")]
+        script += """
+            process.stdout.write(JSON.stringify({
+              selected:localYdbBinaryFields({ydbd_binary:'/bin/ydbd/stable-26-3-1'}),
+              custom:localYdbBinaryFields({ydbd_binary:'/custom/ydbd'}),
+              bundled:localYdbBinaryFields({})
+            }));
+        """
+        result = json.loads(subprocess.check_output([shutil.which("node"), "-e", script], text=True, timeout=10))
+        self.assertIn('<option value="/bin/ydbd/stable-26-3-1" selected>stable-26-3-1</option>', result["selected"])
+        self.assertIn('<option value="/custom/ydbd" selected>Custom path</option>', result["custom"])
+        self.assertIn('<option value="" selected>Bundled ydbd</option>', result["bundled"])
+        self.assertIn('id="local-ydbd-binary" value="/bin/ydbd/stable-26-3-1"', result["selected"])
+
+    def test_local_ydb_external_binary_configuration(self):
+        profile = {"workload": {"type": "kv", "operation": "upsert"}, "load": {"parameter": "threads", "values": [1]}}
+
+        def load():
+            return load_config(self._config(yaml.safe_dump({"local-ydb": {"external": profile}}))).runs[0]
+
+        self.assertNotIn("ydbd_binary", load().parameters["local_ydb"])
+        profile["ydbd-binary"] = "/opt/build with spaces/ydbd"
+        self.assertEqual(load().parameters["local_ydb"]["ydbd_binary"], profile["ydbd-binary"])
+        for invalid in ("", "relative/ydbd", "~/ydbd", None, False, 12, [], {}, "/bad\0path"):
+            with self.subTest(invalid=invalid):
+                profile["ydbd-binary"] = invalid
+                with self.assertRaisesRegex(BenchmarkError, "ydbd-binary.*absolute path"):
+                    load()
+
+    def test_local_ydb_external_binary_snapshots_are_isolated_and_cached(self):
+        source = self._script("echo first", name="custom ydbd")
+        other = self._script("echo second", name="other-ydbd")
+        profile = {"workload": {"type": "kv", "operation": "upsert"}, "load": {"parameter": "threads", "values": [1]}}
+        profiles = {
+            "first": {**profile, "ydbd-binary": str(source)},
+            "second": {**profile, "ydbd-binary": str(other)},
+            "bundled": profile,
+        }
+        configurations = load_config(self._config(yaml.safe_dump({"local-ydb": profiles}, sort_keys=False))).runs
+        cache = {}
+        loader = mock.Mock(return_value=b"bundled")
+        artifacts = [
+            common.load_profile_binaries(config, loader, self.root / "work", cache) for config in configurations
+        ]
+        first = artifacts[0]["ydbd"]
+        self.assertEqual(first.path.read_bytes(), source.read_bytes())
+        self.assertEqual(first.sha256, hashlib.sha256(source.read_bytes()).hexdigest())
+        self.assertEqual(first.manifest_record()["source_path"], str(source))
+        self.assertEqual(first.size, source.stat().st_size)
+        self.assertEqual(artifacts[1]["ydbd"].path.read_bytes(), other.read_bytes())
+        self.assertEqual(artifacts[2]["ydbd"].path.read_bytes(), b"bundled")
+        self.assertEqual(len({item["ydbd"].path for item in artifacts}), 3)
+        self.assertNotIn("source_path", artifacts[2]["ydbd"].manifest_record())
+        source.write_text("replaced")
+        reused = common.load_profile_binaries(configurations[0], loader, self.root / "work", cache)
+        self.assertIs(reused["ydbd"], first)
+        self.assertEqual(subprocess.check_output([str(first.path)], text=True).strip(), "first")
+        self.assertEqual(sorted(call.args[0] for call in loader.call_args_list), ["process_guard", "ydb_cli", "ydbd"])
+
+    def test_external_binary_rejects_missing_directory_non_executable_and_empty(self):
+        source = self._script("", name="not-executable")
+        source.chmod(0o644)
+        empty = self.root / "empty"
+        empty.touch(mode=0o755)
+        for path in (source, empty, self.root, self.root / "missing"):
+            with self.subTest(path=path):
+                with self.assertRaisesRegex(BenchmarkError, "external executable"):
+                    common.copy_executable(path, self.root / "snapshot", "ydbd")
+
+    def test_cli_and_web_use_external_ydbd_without_loading_bundled_ydbd(self):
+        source = self._script("echo custom-ydbd")
+        config = self._config(
+            yaml.safe_dump(
+                {
+                    "local-ydb": {
+                        "external": {
+                            "ydbd-binary": str(source),
+                            "workload": {"type": "kv", "operation": "upsert"},
+                            "load": {"parameter": "threads", "values": [1]},
+                        }
+                    }
+                }
+            )
+        )
+
+        def loader(name):
+            self.assertNotEqual(name, "ydbd")
+            return b"bundled"
+
+        def execute(binaries, *args, **kwargs):
+            artifact = binaries["ydbd"]
+            self.assertEqual(artifact.source_path, str(source))
+            self.assertNotEqual(artifact.path, source)
+            self.assertEqual(subprocess.check_output([str(artifact.path)], text=True).strip(), "custom-ydbd")
+            raise BenchmarkError("stop after binary selection")
+
+        with mock.patch.object(cli, "run_local_ydb", side_effect=execute) as cli_run, redirect_stderr(io.StringIO()):
+            code = main(
+                ["run", "--config", str(config), "--output", str(self.root / "cli-result")],
+                resource_loader=loader,
+                tool_revision={},
+            )
+        self.assertEqual(code, 1)
+        cli_run.assert_called_once()
+        run = {
+            "loaded": load_config(config),
+            "root": self.root / "web-result",
+            "lock": threading.RLock(),
+            "finalized": False,
+            "continue_on_error": False,
+            "store": mock.Mock(manifest={"runs": [], "steps": []}),
+        }
+        with mock.patch.object(web, "run_local_ydb", side_effect=execute) as web_run:
+            with self.assertRaisesRegex(BenchmarkError, "stop after binary selection"):
+                web.production_executor(loader, {})(run, mock.Mock(), threading.Event())
+        web_run.assert_called_once()
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for browser logic checks")
+    def test_local_ydb_external_binary_builder_round_trip(self):
+        path = '/opt/build with spaces/quoted "ydbd"'
+        loaded = load_config(
+            self._config(
+                yaml.safe_dump(
+                    {
+                        "local-ydb": {
+                            "external": {
+                                "ydbd-binary": path,
+                                "workload": {"type": "kv", "operation": "upsert"},
+                                "load": {"parameter": "threads", "values": [1]},
+                            }
+                        }
+                    }
+                )
+            )
+        )
+        model = web.editor_model(loaded, self.root / "results")
+        script = "const editor={model:" + json.dumps(model) + "};\n"
+        script += web._JS[web._JS.index("function yamlArray") : web._JS.index("async function syncEditor")]
+        script += """
+            const profile=editor.model.profiles[0], external=[], bundled=[];
+            serializeLocalYdb(external,profile);
+            delete profile.local_ydb.ydbd_binary;
+            serializeLocalYdb(bundled,profile);
+            process.stdout.write(JSON.stringify({external:external.join('\\n'),bundled:bundled.join('\\n')}));
+        """
+        result = json.loads(subprocess.check_output([shutil.which("node"), "-e", script], text=True, timeout=10))
+        restored = load_config(self._config("local-ydb:\n  external:\n" + result["external"])).runs[0]
+        self.assertEqual(restored.parameters["local_ydb"]["ydbd_binary"], path)
+        self.assertNotIn("ydbd-binary", result["bundled"])
+
     def test_local_ydb_actor_system_flags_default_and_validate(self):
         profile = {"workload": {"type": "kv", "operation": "upsert"}, "load": {"parameter": "threads", "values": [1]}}
 
@@ -3175,7 +3363,7 @@ class YdbBenchTest(unittest.TestCase):
         events = []
         output = self.root / "command-audit"
         binaries = {
-            name: mock.Mock(path=self.root / name, sha256=name + "-digest", size=1)
+            name: common.BinaryArtifact(path=self.root / name, sha256=name + "-digest", size=1)
             for name in ("ydbd", "ydb_cli", "process_guard")
         }
         with mock.patch.object(local_ydb, "LocalYdbCluster", return_value=cluster), mock.patch.object(
@@ -4217,7 +4405,7 @@ class YdbBenchTest(unittest.TestCase):
         monitor = mock.Mock(records=[])
         monitor.stop.return_value = {}
         binaries = {
-            name: mock.Mock(path=self.root / name, sha256=name + "-digest", size=1)
+            name: common.BinaryArtifact(path=self.root / name, sha256=name + "-digest", size=1)
             for name in ("ydbd", "ydb_cli", "process_guard")
         }
         cpu_topology = CpuTopology(
@@ -4257,7 +4445,7 @@ class YdbBenchTest(unittest.TestCase):
         cluster = mock.Mock()
         cluster.start.side_effect = KeyboardInterrupt()
         binaries = {
-            name: mock.Mock(path=self.root / name, sha256=name + "-digest", size=1)
+            name: common.BinaryArtifact(path=self.root / name, sha256=name + "-digest", size=1)
             for name in ("ydbd", "ydb_cli", "process_guard")
         }
         cpu_topology = CpuTopology(

@@ -13,6 +13,7 @@ from ydb.tools.ydb_bench.lib.common import (
     atomic_copy_file,
     atomic_write_json,
     extract_executable,
+    load_profile_binaries,
 )
 from ydb.tools.ydb_bench.lib.config import build_run_plan, config_schema, load_config
 from ydb.tools.ydb_bench.lib.local_ydb import run_local_ydb
@@ -83,6 +84,7 @@ def _create_parser():
     web.add_argument("--listen", default="127.0.0.1")
     web.add_argument("--port", type=lambda value: int(value), default=0)
     web.add_argument("--output", default=Path("ydb-bench-results"), type=Path)
+    web.add_argument("--binaries-dir", default=Path("bin"), type=Path, help="binary catalog: DIR/ydbd/<version>")
     web.add_argument("--no-open", action="store_true")
     web.add_argument("--allow-remote", action="store_true")
     return parser
@@ -265,15 +267,9 @@ def _run(arguments, resource_loader, tool_revision):
             store.write()
 
             for configuration in loaded_config.runs:
-                profile_binaries = {}
-                for resource_name in configuration.benchmark.resources:
-                    if resource_name not in binaries:
-                        binaries[resource_name] = extract_executable(
-                            resource_loader(resource_name), temporary_directory, resource_name
-                        )
-                    profile_binaries[resource_name] = binaries[resource_name]
-                    binary = binaries[resource_name]
-                    binary_record = {"name": binary.path.name, "sha256": binary.sha256, "size": binary.size}
+                profile_binaries = load_profile_binaries(configuration, resource_loader, temporary_directory, binaries)
+                for resource_name, binary in profile_binaries.items():
+                    binary_record = binary.manifest_record()
                     manifest["binaries"][resource_name] = binary_record
                     manifest.setdefault("binary", binary_record)
                 binary = profile_binaries[configuration.benchmark.resource_name]
@@ -467,6 +463,7 @@ def main(argv=None, resource_loader=None, tool_revision=None):
                 arguments.allow_remote,
                 executor=production_executor(resource_loader, revision),
                 perf_available=str(revision.get("build_type", "")).lower() == "profile",
+                binaries_dir=arguments.binaries_dir,
             )
             return 0
         return _run(arguments, resource_loader, tool_revision or {"commit_id": "unknown"})

@@ -48,7 +48,6 @@ struct TRunParams {
 
     std::string DqBlockFile;
     std::string DqBlockGenerator;
-    size_t DqBlockRowLimit = 0;
     std::vector<std::string> DqBlockColumns;
     std::vector<std::string> DqBlockKeyColumns;
     std::vector<std::string> DqBlockAggregations;

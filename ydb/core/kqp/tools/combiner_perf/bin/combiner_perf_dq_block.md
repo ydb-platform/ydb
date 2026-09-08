@@ -33,11 +33,12 @@ Relevant commits are tagged with the `[combiner-perf-dq-blocks]` string in the c
 - Added DQ-block-specific console/JSON metrics instead of synthetic-generator fields.
 - Renamed the test entry point to `RunTestDqBlock`, the in-memory data/stream types to `TDqBlock*`, and the JSON fields from `parquet*` to `dqBlock*`.
 
-New CLI options:
+Relevant CLI options:
 
 - `--dq-block-file PATH` — input file, currently in Parquet format; mutually exclusive with `--dq-block-generator`.
 - `--dq-block-generator shuffle` — generate a shuffled `Uint32` column named `i`; the existing `--rand-seed` value is used to make the shuffle reproducible (and defaults to the current time).
-- `--dq-block-row-limit ROWS` — maximum rows to preload from a file; required generated row count for the shuffle source.
+- `--rows-per-run ROWS` — maximum rows to preload from a file, or the generated row count. It defaults to 10 million. For a file source, `0` reads the entire dataset; a generator requires a positive value.
+- `--num-keys KEYS` — number of distinct values produced by the shuffle generator. The generator fills the input by repeating `[0, KEYS)`, then shuffles it reproducibly. It defaults to 1,000 and cannot exceed `--rows-per-run`.
 - `--dq-block-columns NAME,...` — selected file columns, preserving input order. This is required for file input and defaults to `i` for the generator.
 - `--dq-block-keys NAME,...` — key columns for synthesized aggregation; every key must be in `--dq-block-columns`.
 - `--dq-block-aggregations AGG,...` — synthesized aggregations containing `sum:column_name` and/or `count`; sum columns must be selected.
@@ -45,15 +46,15 @@ New CLI options:
 
 The caller must provide exactly one of `--dq-block-file` and `--dq-block-generator`. It must also provide either both `--dq-block-keys` and `--dq-block-aggregations`, or `--dq-block-ast`; the two aggregation forms are mutually exclusive.
 
-The mode accepts the existing `--block-size`, `--run-count`, `--num-attempts`, `--no-verify`, `--llvm`, and `--spilling` controls. It accepts only `--mode=all` and `--mode=graph`; no timed reference-only/generator-only path exists. DQ-block-specific options are rejected for every other `-t` mode.
+The mode accepts the existing `--rows-per-run`, `--num-keys`, `--block-size`, `--run-count`, `--num-attempts`, `--no-verify`, `--llvm`, and `--spilling` controls. It accepts only `--mode=all` and `--mode=graph`; no timed reference-only/generator-only path exists. DQ-block-specific options are rejected for every other `-t` mode.
 
 ### Input and graph construction
 
 - Opens the file with vendored Arrow/Parquet (`contrib/libs/apache/arrow`, including `parquet/arrow/reader.h`).
-- Alternatively, materializes the range `[0, row-limit)` as `Uint32`, shuffles it in RAM, and packages it into Arrow blocks of at most 30,000 rows under the implicit column name `i`. A zero row count or a count greater than `Uint32`'s maximum is rejected.
+- Alternatively, materializes `--rows-per-run` `Uint32` values by looping over `[0, num-keys)`, shuffles them in RAM, and packages them into Arrow blocks of at most 10,000 rows under the implicit column name `i`. A zero row count, zero key count, key count larger than the row count, or key count beyond the `Uint32` cardinality is rejected.
 - Resolves requested columns against the Arrow schema, rejects missing/duplicate names, and maps supported primitive Arrow types to MKQL data slots.
 - Handles integer, floating-point, Boolean, UTF-8/binary string, date32/date64, and timestamp physical types. Arrays are cast to the physical Arrow representation expected by MKQL blocks where necessary (for example Boolean to `uint8`). Unsupported complex types fail with an explicit error.
-- Uses the requested block size as the Parquet record-batch size, stops precisely at the row limit, retains all selected arrays in RAM, and reports inferred types.
+- Uses the requested block size as the Parquet record-batch size, stops precisely at `--rows-per-run` when it is nonzero, retains all selected arrays in RAM, and reports inferred types.
 - Builds a block-wide stream type containing one `TBlockType::Many` per selected column plus the scalar `Uint64` block-length column.
 - If the custom AST contains an input transform, compiles it into a separate non-LLVM graph, runs it once over the preloaded input block stream, and retains its complete output stream as Arrow datums before constructing the measured aggregation graph. The datums are rewrapped in the aggregation graph's allocator, so the Arrow data stays zero-copy without sharing allocator-owned MKQL wrappers.
 - Either synthesizes key extraction, initialization, update, and finalization lambdas from the CLI aggregation description, or loads them from `--dq-block-ast`.
@@ -91,6 +92,7 @@ The AST file has the following shape (the older `AsTuple` root is also accepted)
 - Custom input transforms run during this preparation and are not part of the timed aggregation loop. `--run-count` replays the transformed blocks rather than rerunning the transform.
 - Every `--num-attempts` run uses `RunForked`, so each child receives the same pristine graph/input through fork copy-on-write.
 - Timing covers graph consumption only. Reference timing remains zero, and the best runtime/max RSS are merged with the existing metrics machinery.
+- Console and JSON metrics report the effective random seed; JSON uses the `randomSeed` field.
 
 ### Correctness checking
 
@@ -106,7 +108,7 @@ The AST file has the following shape (the older `AsTuple` root is also accepted)
 ydb/core/kqp/tools/combiner_perf/bin/combiner_perf \
   -t dq-block \
   --dq-block-file hits.parquet \
-  --dq-block-row-limit 20000 \
+  --rows-per-run 20000 \
   --dq-block-columns CounterID,RegionID,UserID \
   --dq-block-keys CounterID,RegionID \
   --dq-block-aggregations sum:UserID,count \
@@ -120,9 +122,9 @@ Custom AST example, using the checked-in `ast_example.txt`:
 ydb/core/kqp/tools/combiner_perf/bin/combiner_perf \
   -t dq-block \
   --dq-block-file hits.parquet \
-  --dq-block-row-limit 10000 \
+  --rows-per-run 10000 \
   --dq-block-columns CounterID,RegionID,UserID \
-  --dq-block-ast ast_example.txt \
+  --dq-block-ast ydb/core/kqp/tools/combiner_perf/bin/ast_example.txt \
   --block-size 128
 ```
 
@@ -131,13 +133,16 @@ Generator and stream-transform example, using `ast_generator_example.txt`:
 ```bash
 ydb/core/kqp/tools/combiner_perf/bin/combiner_perf \
   -t dq-block \
-  --dq-block-generator shuffle:42 \
-  --dq-block-row-limit 100000 \
-  --dq-block-ast ast_generator_example.txt \
-  --block-size 30000
+  --dq-block-generator shuffle \
+  --rand-seed 42 \
+  --rows-per-run 100000 \
+  --num-keys 1000 \
+  --dq-block-ast ydb/core/kqp/tools/combiner_perf/bin/ast_generator_example.txt \
+  --block-size 30000 \
+  --run-count 2
 ```
 
-The generator also supports the synthesized aggregation path, for example `--dq-block-keys i --dq-block-aggregations count`, without `--dq-block-columns`.
+The generator also supports the synthesized aggregation path, for example `--dq-block-keys i --dq-block-aggregations count`, without `--dq-block-columns`. `--run-count` replays the shuffled dataset that many times for both the measured aggregation and correctness verification.
 
 ## Validation performed
 
@@ -159,11 +164,15 @@ The generator also supports the synthesized aggregation path, for example `--dq-
 - Verified the stream-level `WideMap` struct-packing transform over 10,000 rows with an 8,192-row input block size: the transform precomputed the full output stream before timing and both aggregation implementations produced 3,459 groups.
 - Verified the input transform with LLVM enabled and `--run-count 2` over 1,000 rows: 338 groups from both implementations.
 - Verified the input transform with spilling enabled over 1,000 rows: 338 groups from both implementations.
-- Verified `shuffle:42` produces 1,000 generated rows without an explicit column list, and that the synthesized `count` path produces and verifies 1,000 groups.
+- Verified `shuffle` produces 1,000 generated rows without an explicit column list, and that the synthesized `count` path produces and verifies 1,000 groups.
 - Verified the scalar `WideFromBlocks`/`WideToBlocks` transform over the generated input: `% 100` precomputed 1,000 transformed rows and both aggregation implementations produced 100 groups.
-- Confirmed that specifying both input sources is rejected and that a generated row count of 4,294,967,296 is rejected as outside the `Uint32` range.
+- Confirmed that specifying both input sources is rejected and that invalid generated row/key cardinalities are rejected.
 - Confirmed DQ-block-specific options produce an error with another test mode.
 - After the rename, rebuilt `ydb/core/kqp/tools/combiner_perf/bin` and verified the synthesized `sum`/`count` path over 1,000 rows through the new `dq-block` CLI and JSON field names.
+- Rebuilt after replacing `--dq-block-row-limit` with `--rows-per-run`.
+- Verified that omitting `--rows-per-run` preloads its default of 10 million Parquet rows.
+- Verified 1,000 generated rows with 17 distinct keys and `--run-count 3`; both the block aggregation and scalar reference produced 17 groups with matching counts.
+- Verified `--rows-per-run 0` reads the full 99,997,497-row ClickBench Parquet dataset and successfully aggregates a single numeric column with spilling disabled.
 - `git diff --check` passed before commit.
 
 ## Follow-up scope

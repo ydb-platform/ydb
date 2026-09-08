@@ -406,7 +406,7 @@ TDqBlockData ReadDqBlockDataFromParquet(const TRunParams& params)
         fileReader->GetRecordBatchReader(rowGroups, columnIndices, &batchReader),
         "Cannot create Parquet record batch reader");
 
-    while (!params.DqBlockRowLimit || data.Rows < params.DqBlockRowLimit) {
+    while (!params.RowsPerRun || data.Rows < params.RowsPerRun) {
         std::shared_ptr<arrow::RecordBatch> batch;
         EnsureArrowStatus(batchReader->ReadNext(&batch), "Cannot read Parquet record batch");
         if (!batch) {
@@ -414,8 +414,8 @@ TDqBlockData ReadDqBlockDataFromParquet(const TRunParams& params)
         }
 
         size_t rows = batch->num_rows();
-        if (params.DqBlockRowLimit) {
-            rows = std::min(rows, params.DqBlockRowLimit - data.Rows);
+        if (params.RowsPerRun) {
+            rows = std::min(rows, params.RowsPerRun - data.Rows);
         }
         if (!rows) {
             break;
@@ -447,13 +447,16 @@ TDqBlockData ReadDqBlockDataFromParquet(const TRunParams& params)
     return data;
 }
 
-TDqBlockData GenerateShuffledUint32Data(TRunParams& params)
+TDqBlockData GenerateShuffledUint32Data(const TRunParams& params)
 {
-    Y_ENSURE(params.DqBlockRowLimit <= std::numeric_limits<ui32>::max(),
-        "Shuffle generator row limit exceeds the Uint32 range: " << params.DqBlockRowLimit);
+    constexpr ui64 uint32Cardinality = static_cast<ui64>(std::numeric_limits<ui32>::max()) + 1;
+    Y_ENSURE(params.NumKeys <= uint32Cardinality,
+        "Shuffle generator key count exceeds the Uint32 cardinality: " << params.NumKeys);
 
-    std::vector<ui32> numbers(params.DqBlockRowLimit);
-    std::iota(numbers.begin(), numbers.end(), 0);
+    std::vector<ui32> numbers(params.RowsPerRun);
+    for (size_t i = 0; i < numbers.size(); ++i) {
+        numbers[i] = static_cast<ui32>(i % params.NumKeys);
+    }
     const ui64 seed = params.RandomSeed.value_or(0);
     std::mt19937_64 random(seed);
     std::shuffle(numbers.begin(), numbers.end(), random);
@@ -478,8 +481,8 @@ TDqBlockData GenerateShuffledUint32Data(TRunParams& params)
         data.Batches.push_back(std::move(batch));
     }
     data.Rows = numbers.size();
-    Cerr << "Generated " << data.Rows << " shuffled Uint32 rows in "
-         << data.Batches.size() << " Arrow blocks with seed " << seed << Endl;
+    Cerr << "Generated " << data.Rows << " shuffled Uint32 rows with " << params.NumKeys
+         << " distinct keys in " << data.Batches.size() << " Arrow blocks with seed " << seed << Endl;
     return data;
 }
 

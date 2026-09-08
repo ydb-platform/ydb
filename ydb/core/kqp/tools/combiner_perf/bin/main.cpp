@@ -53,11 +53,13 @@ class TPrintingResultCollector : public TTestResultCollector {
         Cout << Endl;
         const bool dqBlock = TStringBuf(testName).Contains("DqBlock");
         Cout << "Data rows total: " << runParams.RowsPerRun << " x " << runParams.NumRuns << Endl;
+        Cout << "Random seed: " << *runParams.RandomSeed << Endl;
         if (dqBlock) {
             if (runParams.DqBlockGenerator.empty()) {
                 Cout << "Input file: " << runParams.DqBlockFile << Endl;
             } else {
                 Cout << "Input generator: " << runParams.DqBlockGenerator << Endl;
+                Cout << runParams.NumKeys << " distinct numeric keys" << Endl;
             }
             Cout << "Columns: " << JoinSeq(",", runParams.DqBlockColumns) << Endl;
             if (runParams.DqBlockAstFile.empty()) {
@@ -117,6 +119,7 @@ NJson::TJsonValue MakeJsonMetrics(const TRunParams& runParams, const TRunResult&
     }
     out["rowsPerRun"] = runParams.RowsPerRun;
     out["numRuns"] = runParams.NumRuns;
+    out["randomSeed"] = *runParams.RandomSeed;
     const bool dqBlock = TStringBuf(testName).Contains("DqBlock");
     if (TStringBuf(testName).Contains("Block") || dqBlock) {
         out["blockSize"] = runParams.BlockSize;
@@ -124,7 +127,9 @@ NJson::TJsonValue MakeJsonMetrics(const TRunParams& runParams, const TRunResult&
     if (dqBlock) {
         out["dqBlockFile"] = runParams.DqBlockFile;
         out["dqBlockGenerator"] = runParams.DqBlockGenerator;
-        out["dqBlockRowLimit"] = runParams.DqBlockRowLimit;
+        if (!runParams.DqBlockGenerator.empty()) {
+            out["numKeys"] = runParams.NumKeys;
+        }
         out["dqBlockColumns"] = JoinSeq(",", runParams.DqBlockColumns);
         out["dqBlockKeys"] = JoinSeq(",", runParams.DqBlockKeyColumns);
         out["dqBlockAggregations"] = JoinSeq(",", runParams.DqBlockAggregations);
@@ -342,7 +347,7 @@ int main(int argc, const char* argv[])
         .RequiredArgument()
         .StoreResult(&runParams.RowsPerRun)
         .DefaultValue(runParams.RowsPerRun)
-        .Help("Rows per single loop of the input stream");
+        .Help("Rows per single loop of the input stream; 0 reads all rows from a dq-block file");
     options.AddLongOption("run-count")
         .RequiredArgument()
         .StoreResult(&runParams.NumRuns)
@@ -481,10 +486,6 @@ int main(int argc, const char* argv[])
         .RequiredArgument("shuffle")
         .StoreResult(&runParams.DqBlockGenerator)
         .Help("Generated dq-block input; shuffle produces a shuffled Uint32 column named i");
-    options.AddLongOption("dq-block-row-limit")
-        .RequiredArgument("ROWS")
-        .StoreResult(&runParams.DqBlockRowLimit)
-        .Help("Maximum file rows to preload, or required generated row count");
     options.AddLongOption("dq-block-columns")
         .RequiredArgument("NAME,...")
         .SplitHandler(&runParams.DqBlockColumns, ',')
@@ -504,8 +505,8 @@ int main(int argc, const char* argv[])
 
     NLastGetopt::TOptsParseResult parsedOptions(&options, argc, argv);
 
-    const std::array<TString, 7> dqBlockOptions = {
-        "dq-block-file", "dq-block-generator", "dq-block-row-limit", "dq-block-columns", "dq-block-keys",
+    const std::array<TString, 6> dqBlockOptions = {
+        "dq-block-file", "dq-block-generator", "dq-block-columns", "dq-block-keys",
         "dq-block-aggregations", "dq-block-ast"};
     if (testType != ETestType::DqBlock) {
         for (const auto& option : dqBlockOptions) {
@@ -524,8 +525,12 @@ int main(int argc, const char* argv[])
         } else {
             Y_ENSURE(!runParams.DqBlockGenerator.empty(),
                 "--dq-block-generator cannot be empty");
-            Y_ENSURE(parsedOptions.Has("dq-block-row-limit") && runParams.DqBlockRowLimit > 0,
-                "A positive --dq-block-row-limit is required with --dq-block-generator");
+            Y_ENSURE(runParams.RowsPerRun > 0,
+                "A positive --rows-per-run is required with --dq-block-generator");
+            Y_ENSURE(runParams.NumKeys >= 1,
+                "A positive --num-keys is required with --dq-block-generator");
+            Y_ENSURE(runParams.NumKeys <= runParams.RowsPerRun,
+                "--num-keys cannot exceed --rows-per-run with --dq-block-generator");
             if (parsedOptions.Has("dq-block-columns")) {
                 Y_ENSURE(runParams.DqBlockColumns == std::vector<std::string>{"i"},
                     "The shuffle generator only provides column i");

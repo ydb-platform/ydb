@@ -33,6 +33,8 @@
 
 #include <util/system/file.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
+
 namespace NKikimr::NKqp {
 
 namespace {
@@ -57,6 +59,7 @@ namespace {
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const TString& path,
         bool addRoot) {
+
         auto driver = federatedQuerySetup->Driver;
 
         NYdb::TCommonClientSettings opts;
@@ -77,7 +80,8 @@ namespace {
                         return GetSchemeEntryTypeImpl(actorSystem, f, endpoint, database, useTls, credentialsProviderFactory, p, true);
                     }
                     TString message = TStringBuilder() <<  "Describe path '" << p << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "' failed.";
-                    LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, message + describePathResult.GetIssues().ToString());
+                    YDB_LOG_WARN_CTX(*actorSystem, message,
+                        {"issues", describePathResult.GetIssues()});
                     auto rootIssue = NYql::TIssue(message);
                     for (const auto& issue : describePathResult.GetIssues()) {
                         rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(NYdb::NAdapters::ToYqlIssue(issue)));

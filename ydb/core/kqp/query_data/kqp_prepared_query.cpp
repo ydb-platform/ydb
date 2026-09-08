@@ -16,6 +16,8 @@
 
 #include <ydb/library/actors/core/log.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
+
 namespace NKikimr::NKqp {
 
 using namespace NKikimr::NMiniKQL;
@@ -68,7 +70,7 @@ TKqpPhyTxHolder::TKqpPhyTxHolder(const std::shared_ptr<const NKikimrKqp::TPrepar
     for (auto&& i : Proto->GetStages()) {
         TStagePredictor predictor;
         if (!predictor.DeserializeFromKqpSettings(i.GetProgram().GetSettings())) {
-            ALS_ERROR(NKikimrServices::KQP_EXECUTER) << "cannot parse program settings for data prediction";
+            YDB_LOG_ERROR("Cannot parse program settings for data prediction");
             Predictors.emplace_back();
         } else {
             Predictors.emplace_back(std::move(predictor));

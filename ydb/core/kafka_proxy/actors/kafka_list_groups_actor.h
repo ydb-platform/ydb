@@ -53,9 +53,11 @@ public:
 
 void Bootstrap(const NActors::TActorContext& ctx);
 
-
-TStringBuilder LogPrefix() const {
-    return TStringBuilder() << "KafkaListGroupsActor{DatabasePath=" << DatabasePath << "}: ";
+NStructuredLog::TStructuredMessage LogPrefix() const {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"actorClassName", "KafkaListGroupsActor"},
+        {"selfId", SelfId()},
+        {"databasePath", DatabasePath});
 }
 
 private:

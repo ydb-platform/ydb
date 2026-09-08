@@ -23,28 +23,14 @@
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_RESOURCE_MANAGER
+
 namespace NKikimr {
 namespace NKqp {
 namespace NRm {
 
 using namespace NActors;
 using namespace NResourceBroker;
-
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-
-#define LOG_AS_SAFE(log) {if (ActorSystem) { log; }}
-
-#define LOG_AS_C(stream) LOG_AS_SAFE(LOG_CRIT_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
-#define LOG_AS_D(stream) LOG_AS_SAFE(LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
-#define LOG_AS_I(stream) LOG_AS_SAFE(LOG_INFO_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
-#define LOG_AS_E(stream) LOG_AS_SAFE(LOG_ERROR_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
-#define LOG_AS_W(stream) LOG_AS_SAFE(LOG_WARN_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
-#define LOG_AS_N(stream) LOG_AS_SAFE(LOG_NOTICE_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
 
 TTxState::TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, const TString& poolId, const double memoryPoolPercent,
     const TString& database, bool collectBacktrace)
@@ -353,7 +339,10 @@ public:
             TStringBuilder reason;
             reason << "TxId: " << txId << ", taskId: " << taskId << ". Not enough memory for query, requested: " << resources.Memory
                 << ". " << tx.ToString();
-            LOG_AS_N(reason);
+            if (ActorSystem) {
+                YDB_LOG_NOTICE_CTX(*ActorSystem, "",
+                    {"reason", reason});
+            }
             result.SetError(NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY, reason);
             return result;
         }
@@ -366,7 +355,12 @@ public:
             Y_ABORT_UNLESS(merged);
         }
 
-        LOG_AS_D("TxId: " << txId << ", taskId: " << taskId << ". Allocated " << resources.ToString());
+        if (ActorSystem) {
+            YDB_LOG_DEBUG_CTX(*ActorSystem, "Allocated",
+                {"txId", txId},
+                {"taskId", taskId},
+                {"resources", resources});
+        }
         FireResourcesPublishing();
         return result;
     }
@@ -406,11 +400,14 @@ public:
             }
         }
 
-        LOG_AS_D("TxId: " << tx.TxId << ", taskId: " << taskId
-            << ". Released resources, "
-            << "Memory: " << resources.Memory << ", "
-            << "Free Tier: " << resources.ExternalMemory << ", "
-            << "ExecutionUnits: " << resources.ExecutionUnits << ".");
+        if (ActorSystem) {
+            YDB_LOG_DEBUG_CTX(*ActorSystem, "Released resources, Free",
+                {"txId", tx.TxId},
+                {"taskId", taskId},
+                {"memory", resources.Memory},
+                {"tier", resources.ExternalMemory},
+                {"executionUnits", resources.ExecutionUnits});
+        }
 
         FireResourcesPublishing();
     }
@@ -441,7 +438,9 @@ public:
     }
 
     void RequestClusterResourcesInfo(TOnResourcesSnapshotCallback&& callback) override {
-        LOG_AS_D("Schedule Snapshot request");
+        if (ActorSystem) {
+            YDB_LOG_DEBUG_CTX(*ActorSystem, "Schedule Snapshot request");
+        }
         std::shared_ptr<TVector<NKikimrKqp::TKqpNodeResources>> infos;
         with_lock (ResourceSnapshotState->Lock) {
             infos = ResourceSnapshotState->Snapshot;
@@ -651,7 +650,9 @@ public:
     }
 
     void Bootstrap() {
-        LOG_D("Start KqpResourceManagerActor at " << SelfId() << " with ResourceBroker at " << ResourceBrokerId);
+        YDB_LOG_DEBUG("Start KqpResourceManagerActor at with ResourceBroker",
+            {"selfId", SelfId()},
+            {"resourceBrokerId", ResourceBrokerId});
 
         // Subscribe for tenant changes
         Send(MakeTenantPoolRootID(), new TEvents::TEvSubscribe);
@@ -675,7 +676,8 @@ public:
         WhiteBoardService = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
 
         if (WarmupInProgress) {
-            LOG_I("Warmup in progress, resource publishing delayed for up to " << WarmupDeadline);
+            YDB_LOG_INFO("Warmup in progress, resource publishing delayed for up",
+                {"warmupDeadline", WarmupDeadline});
             Schedule(WarmupDeadline, new TEvPrivate::TEvWarmupDeadline());
         }
 
@@ -694,21 +696,22 @@ public:
     void Handle(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         if (record.SystemStateInfoSize() != 1)  {
-            LOG_D("Unexpected whiteboard info");
+            YDB_LOG_DEBUG("Unexpected whiteboard info");
             return;
         }
 
         const auto& info = record.GetSystemStateInfo(0);
         if (AppData()->UserPoolId >= info.PoolStatsSize()) {
-            LOG_D("Unexpected whiteboard info: pool size is smaller than user pool id"
-                << ", pool size: " << info.PoolStatsSize()
-                << ", user pool id: " << AppData()->UserPoolId);
+            YDB_LOG_DEBUG("Unexpected whiteboard info: pool size is smaller than user pool id pool user pool",
+                {"size", info.PoolStatsSize()},
+                {"id", AppData()->UserPoolId});
             return;
         }
 
         const auto& pool = info.GetPoolStats(AppData()->UserPoolId);
 
-        LOG_D("Received node white board pool stats: " << pool.usage());
+        YDB_LOG_DEBUG("Received node white board pool",
+            {"stats", pool.usage()});
         ProxyNodeResources.SetCpuUsage(pool.usage());
         ProxyNodeResources.SetThreads(pool.threads());
     }
@@ -750,7 +753,9 @@ private:
     void HandleWork(TEvKqp::TEvKqpProxyPublishRequest::TPtr&) {
         SendWhiteboardRequest();
         if (AppData()->TenantName.empty() || !SelfDataCenterId) {
-            LOG_I("Cannot start publishing usage for kqp_proxy, tenants: " << AppData()->TenantName << ", " <<  SelfDataCenterId.value_or("empty"));
+            YDB_LOG_INFO("Cannot start publishing usage for kqp_proxy",
+                {"tenants", AppData()->TenantName},
+                {"selfDataCenterId", SelfDataCenterId.value_or("empty")});
             return;
         }
         PublishResourceUsage("kqp_proxy");
@@ -758,7 +763,8 @@ private:
 
     void HandleWork(TEvResourceBroker::TEvConfigResponse::TPtr& ev) {
         if (!ev->Get()->QueueConfig) {
-            LOG_E(NLocalDb::KqpResourceManagerQueue << " not configured!");
+            YDB_LOG_ERROR("Resource broker queue is not configured",
+                {"queueName", NLocalDb::KqpResourceManagerQueue});
             return;
         }
         auto& queueConfig = *ev->Get()->QueueConfig;
@@ -767,7 +773,8 @@ private:
             with_lock (ResourceManager->Lock) {
                 ResourceManager->TotalMemoryResource->SetNewLimit(queueConfig.GetLimit().GetMemory(), (double)100, ResourceManager->SpillingPercent.load());
             }
-            LOG_I("Total node memory for scan queries: " << queueConfig.GetLimit().GetMemory() << " bytes");
+            YDB_LOG_INFO("Total node memory for scan bytes",
+                {"queries", queueConfig.GetLimit().GetMemory()});
         }
     }
 
@@ -800,7 +807,8 @@ private:
                 if (tenant.empty()) {
                     tenant = slot.GetAssignedTenant();
                 } else {
-                    LOG_E("Multiple tenants are served by the node: " << ev->Get()->Record.ShortDebugString());
+                    YDB_LOG_ERROR("Multiple tenants are served by the",
+                        {"node", ev->Get()->Record.ShortDebugString()});
                 }
             }
         }
@@ -812,13 +820,15 @@ private:
             WbState.DomainNotFound = true;
         }
 
-        LOG_I("Received tenant pool status, serving tenant: " << tenant << ", board: " << WbState.BoardPath);
+        YDB_LOG_INFO("Received tenant pool status, serving",
+            {"tenant", tenant},
+            {"board", WbState.BoardPath});
 
         PublishResourceUsage("tenant updated");
     }
 
     static void HandleWork(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
-        LOG_D("Subscribed for config changes");
+        YDB_LOG_DEBUG("Subscribed for config changes");
     }
 
     void HandleWork(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
@@ -841,7 +851,8 @@ private:
         FORCE_VALUE(MinChannelBufferSize);
 #undef FORCE_VALUE
 
-        LOG_I("Updated table service config: " << config.DebugString());
+        YDB_LOG_INFO("Updated table service",
+            {"config", config.DebugString()});
 
         with_lock (ResourceManager->Lock) {
             i32 prev = ResourceManager->ExecutionUnitsLimit.load();
@@ -855,15 +866,16 @@ private:
     static void HandleWork(TEvents::TEvUndelivered::TPtr& ev) {
         switch (ev->Get()->SourceType) {
             case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
-                LOG_C("Failed to deliver subscription request to config dispatcher");
+                YDB_LOG_CRIT("Failed to deliver subscription request to config dispatcher");
                 break;
 
             case NConsole::TEvConsole::EvConfigNotificationResponse:
-                LOG_E("Failed to deliver config notification response");
+                YDB_LOG_ERROR("Failed to deliver config notification response");
                 break;
 
             default:
-                LOG_C("Undelivered event with unexpected source type: " << ev->Get()->SourceType);
+                YDB_LOG_CRIT("Undelivered event with unexpected source",
+                    {"type", ev->Get()->SourceType});
                 break;
         }
     }
@@ -944,7 +956,7 @@ private:
     void HandleWarmupComplete(TEvKqpWarmupComplete::TPtr&) {
         if (WarmupInProgress) {
             WarmupInProgress = false;
-            LOG_I("Warmup complete, starting resource publishing");
+            YDB_LOG_INFO("Warmup complete, starting resource publishing");
             PublishResourceUsage("warmup_complete");
         }
     }
@@ -952,7 +964,7 @@ private:
     void HandleWarmupDeadline() {
         if (WarmupInProgress) {
             WarmupInProgress = false;
-            LOG_W("Warmup deadline exceeded, forcing resource publishing");
+            YDB_LOG_WARN("Warmup deadline exceeded, forcing resource publishing");
             PublishResourceUsage("warmup_deadline");
         }
     }
@@ -968,7 +980,9 @@ private:
             PublishResourcesScheduledAt = *WbState.LastPublishTime + publishInterval;
 
             Schedule(*PublishResourcesScheduledAt - now, new TEvPrivate::TEvPublishResources);
-            LOG_D("Schedule publish at " << *PublishResourcesScheduledAt << ", after " << (*PublishResourcesScheduledAt - now));
+            YDB_LOG_DEBUG("Scheduled resource usage publish",
+                {"publishAt", *PublishResourcesScheduledAt},
+                {"delay", (*PublishResourcesScheduledAt - now)});
             return;
         }
 
@@ -988,7 +1002,7 @@ private:
                 }
             }
         } else {
-            LOG_D("Don't set KqpProxySharedResources");
+            YDB_LOG_DEBUG("Don't set KqpProxySharedResources");
         }
         ActorIdToProto(MakeKqpResourceManagerServiceID(SelfId().NodeId()), payload.MutableResourceManagerActorId()); // legacy
 
@@ -1015,10 +1029,10 @@ private:
             }
         }
 
-        LOG_I("Send to publish resource usage for "
-            << "reason: " << reason
-            << (WarmupInProgress ? " (warmup: zero resources)" : "")
-            << ", payload: " << payload.ShortDebugString());
+        YDB_LOG_INFO("Sending resource usage to publish",
+            {"reason", reason},
+            {"warmupInProgress", WarmupInProgress},
+            {"payload", payload.ShortDebugString()});
         WbState.LastPublishTime = now;
         if (ResourceManager->ResourceInfoExchanger) {
             Send(ResourceManager->ResourceInfoExchanger,

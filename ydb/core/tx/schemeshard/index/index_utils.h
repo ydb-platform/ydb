@@ -383,6 +383,13 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance: {
+            if (NKikimr::NFulltext::HasSuperLemmer(indexDesc.GetFulltextIndexDescription().GetSettings())
+                && !AppData()->FeatureFlags.GetEnableSuperLemmer()) {
+                status = NKikimrScheme::EStatus::StatusPreconditionFailed;
+                error = "SuperLemmer support is disabled";
+                return false;
+            }
+
             if (!checkInvertedIndex("Fulltext")) {
                 return false;
             }

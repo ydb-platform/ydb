@@ -36,7 +36,7 @@ inline void LogQueryTextImpl(TStructuredMessage& message, const TString& queryTe
     }
     std::string hashedQueryText(reinterpret_cast<char*>(hash), SHA256_DIGEST_LENGTH);
 
-    YDB_LOG_UPDATE_CONTEXT(message,
+    YDB_LOG_UPDATE_MESSAGE(message,
         {"queryText", Base64Encode(hashedQueryText)});
 }
 

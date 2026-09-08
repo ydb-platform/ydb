@@ -85,7 +85,7 @@ public:
         , Counters(counters)
         , OwnerActor(owner)
         , TasksGraph({}, Request.Transactions, Request.TxAlloc, {}, {}, Counters, {}, nullptr, false)
-        , LiteralExecuterSpan(TWilsonKqp::LiteralExecuter, std::move(Request.TraceId), "Execute")
+        , LiteralExecuterSpan(TWilsonKqp::LiteralExecuter, std::move(Request.TraceId), "Execute plan")
         , UserRequestContext(userRequestContext)
     {
         LiteralExecuterSpan.Attribute("ydb.actor.type", TString("TKqpLiteralExecuter"));

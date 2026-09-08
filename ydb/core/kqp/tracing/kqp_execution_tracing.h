@@ -1,6 +1,7 @@
 #pragma once
 
 #include "kqp_query_tracing.h"
+#include "kqp_task_tracing.h"
 
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
@@ -17,9 +18,9 @@ class TExecutionTraceStats {
 public:
     explicit TExecutionTraceStats(ui8 verbosity);
 
-    void OnTaskFinished(std::pair<ui64, ui32> stageId, const NKqpProto::TKqpPhyStage& stage,
+    void OnTaskFinished(std::pair<ui64, ui32> stageId, const TTaskTraceDescription& description,
         ui64 taskCount, const NYql::NDqProto::TEvComputeActorState& state, ui32 nodeId);
-    void AddTask(ui64 txIndex, const NKqpProto::TKqpPhyStage& stage, ui64 taskCount,
+    void AddTask(ui64 txIndex, const TTaskTraceDescription& description, ui64 taskCount,
         const NYql::NDqProto::TDqTaskStats& task, std::optional<ui64> durationUs, ui32 nodeId, bool failed);
     void Finish(NWilson::TSpan& span, NYql::NDqProto::TDqExecutionStats& stats,
         Ydb::StatusIds::StatusCode status) const;
@@ -44,7 +45,7 @@ private:
     };
 
     struct TStage {
-        TString Operation;
+        TTaskTraceDescription Description;
         ui64 TaskCount = 0;
         ui64 Reports = 0;
         ui64 FailedTasks = 0;

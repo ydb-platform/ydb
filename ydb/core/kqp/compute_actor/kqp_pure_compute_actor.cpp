@@ -1,3 +1,4 @@
+#include <ydb/core/kqp/tracing/kqp_task_tracing.h>
 #include <ydb/core/kqp/tracing/kqp_query_tracing.h>
 #include "kqp_pure_compute_actor.h"
 
@@ -46,7 +47,7 @@ TKqpComputeActor::TKqpComputeActor(
 }
 
 void TKqpComputeActor::DoBootstrap() {
-    ComputeActorSpan.Name("Compute task");
+    TTaskTraceDescription::Annotate(ComputeActorSpan, *GetTask().GetTask());
     ComputeActorSpan.Attribute("ydb.actor.type", TString("TKqpComputeActor"));
     const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
 

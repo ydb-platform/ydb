@@ -995,7 +995,7 @@ private:
         StartStreamingQueriesActors();
         StartCheckpointCoordinator();
         ExecuterStateSpan = ExecuterSpan.CreateChild(TWilsonKqp::DataExecuterRunTasks,
-            "Run", NWilson::EFlags::AUTO_END);
+            "Run tasks", NWilson::EFlags::AUTO_END);
 
         if (!ExecuteTasks()) {
             return;

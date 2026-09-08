@@ -9,40 +9,11 @@
 
 namespace NKikimr::NKqp {
 
-namespace {
-
-TString StageOperation(const NKqpProto::TKqpPhyStage& stage) {
-    for (const auto& input : stage.GetInputs()) {
-        if (input.HasStreamLookup()) {
-            return "Lookup";
-        }
-    }
-    if (!stage.GetSinks().empty() || stage.GetIsEffectsStage()) {
-        return "Write";
-    }
-    const auto& ast = stage.GetProgramAst();
-    if (ast.Contains("Join")) {
-        return "Join";
-    }
-    if (ast.Contains("Combine") || ast.Contains("Aggregate")) {
-        return "Aggregate";
-    }
-    if (ast.Contains("Filter")) {
-        return "Filter";
-    }
-    if (!stage.GetSources().empty() || !stage.GetTableOps().empty()) {
-        return "Read";
-    }
-    return "Compute";
-}
-
-}
-
 TExecutionTraceStats::TExecutionTraceStats(ui8 verbosity)
     : CollectDetails(verbosity >= TComponentTracingLevels::TQueryProcessor::Detailed) {
 }
 
-void TExecutionTraceStats::OnTaskFinished(std::pair<ui64, ui32> stageId, const NKqpProto::TKqpPhyStage& stage,
+void TExecutionTraceStats::OnTaskFinished(std::pair<ui64, ui32> stageId, const TTaskTraceDescription& description,
         ui64 taskCount, const NYql::NDqProto::TEvComputeActorState& state, ui32 nodeId) {
     NYql::NDqProto::TDqTaskStats empty;
     empty.SetTaskId(state.GetTaskId());
@@ -55,11 +26,11 @@ void TExecutionTraceStats::OnTaskFinished(std::pair<ui64, ui32> stageId, const N
     } else if (task.GetStartTimeMs() && task.GetFinishTimeMs() >= task.GetStartTimeMs()) {
         durationUs = (task.GetFinishTimeMs() - task.GetStartTimeMs()) * 1000;
     }
-    AddTask(stageId.first, stage, taskCount, task,
+    AddTask(stageId.first, description, taskCount, task,
         durationUs, nodeId, state.GetState() == NYql::NDqProto::COMPUTE_STATE_FAILURE);
 }
 
-void TExecutionTraceStats::AddTask(ui64 txIndex, const NKqpProto::TKqpPhyStage& stage, ui64 taskCount,
+void TExecutionTraceStats::AddTask(ui64 txIndex, const TTaskTraceDescription& description, ui64 taskCount,
         const NYql::NDqProto::TDqTaskStats& task, std::optional<ui64> durationUs, ui32 nodeId, bool failed) {
     const ui64 waitUs = task.GetWaitInputTimeUs() + task.GetWaitOutputTimeUs();
     const ui64 spilledBytes = task.GetSpillingComputeWriteBytes() + task.GetSpillingChannelWriteBytes();
@@ -73,7 +44,7 @@ void TExecutionTraceStats::AddTask(ui64 txIndex, const NKqpProto::TKqpPhyStage& 
         }
         it = Stages.try_emplace(std::make_pair(txIndex, task.GetStageId())).first;
         if (CollectDetails) {
-            it->second.Operation = StageOperation(stage);
+            it->second.Description = description;
         }
     }
     auto& summary = it->second;
@@ -169,7 +140,7 @@ void TExecutionTraceStats::Finish(NWilson::TSpan& span, NYql::NDqProto::TDqExecu
         span.Event("Stage statistics", {
             {"ydb.tx_index", static_cast<i64>(id.first)},
             {"ydb.stage_id", static_cast<i64>(id.second)},
-            {"ydb.stage.operation", stage.Operation},
+            {"ydb.stage.operations", stage.Description.OperationsAttribute()},
             {"ydb.tasks", static_cast<i64>(stage.TaskCount)},
             {"ydb.reported_tasks", static_cast<i64>(stage.Reports)},
             {"ydb.failed_tasks", static_cast<i64>(stage.FailedTasks)},

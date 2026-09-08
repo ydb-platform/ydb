@@ -132,16 +132,17 @@ public:
     TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const;
 
     bool NeedFetch(const std::string_view colName) const {
-        const auto path = NSubColumns::ResolveBestPath(
-            Header.GetColumnStats(), Header.GetOtherStats(), NSubColumns::ToJsonPath(colName)).DetachResult();
+        auto pathResult = NSubColumns::ResolveBestPath(Header.GetColumnStats(), Header.GetOtherStats(), NSubColumns::ToJsonPath(colName));
+        AFL_VERIFY(pathResult.IsSuccess())("column", colName)("error", pathResult.GetErrorMessage());
+        const auto path = pathResult.DetachResult();
         if (path && path->IsColumn) {
             return !PartialColumnsData.HasColumn(path->Path.ColumnIndex);
         }
         return path && !OthersData;
     }
 
-    void AddColumn(const TString& columnName, const std::shared_ptr<IChunkedArray>& arr) {
-        PartialColumnsData.AddColumn(Header.GetColumnStats().GetExactKeyIndexVerified(std::string_view(columnName.data(), columnName.size())), arr);
+    void AddColumn(const ui32 columnIndex, const std::shared_ptr<IChunkedArray>& arr) {
+        PartialColumnsData.AddColumn(columnIndex, arr);
     }
 
     bool HasOthers() const {

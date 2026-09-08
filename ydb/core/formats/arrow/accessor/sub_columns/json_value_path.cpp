@@ -39,7 +39,7 @@ TString QuoteJsonItem(const TStringBuf item) {
 }
 
 void AppendSubcolumnName(TString& currentPrefix, const TStringBuf item) {
-    if (currentPrefix) {
+    if (!currentPrefix.empty()) {
         currentPrefix.append(".");
     }
     AppendQuotedJsonItem(currentPrefix, item);

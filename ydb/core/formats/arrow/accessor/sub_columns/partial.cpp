@@ -36,13 +36,23 @@ TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> TSubColumnsPartialA
         }
         othersPath = othersResult.DetachResult();
     }
-    if (othersPath && (!columnsPath || !NSubColumns::TDictStats::TResolvedPath::IsBetterMatch(*columnsPath, *othersPath))) {
+    if (othersPath && (!columnsPath || !NSubColumns::TDictStats::TResolvedPath::IsBetterOrEqualMatchThan(*columnsPath, *othersPath))) {
         return OthersData->GetPathAccessor(std::move(*othersPath), recordsCount);
     }
     if (columnsPath) {
         return std::make_shared<NSubColumns::TJsonPathAccessor>(PartialColumnsData.GetAccessorVerified(columnsPath->ColumnIndex),
             std::move(columnsPath->RemainingPath), columnsPath->ValueType);
     }
+    auto headerColumnsResult = Header.GetColumnStats().ResolvePath(parsedPath);
+    if (headerColumnsResult.IsFail()) {
+        return TConclusionStatus::Fail(headerColumnsResult.GetErrorMessage());
+    }
+    auto headerOthersResult = Header.GetOtherStats().ResolvePath(parsedPath);
+    if (headerOthersResult.IsFail()) {
+        return TConclusionStatus::Fail(headerOthersResult.GetErrorMessage());
+    }
+    AFL_VERIFY(!headerColumnsResult.DetachResult());
+    AFL_VERIFY(!headerOthersResult.DetachResult());
     return NSubColumns::TOthersData::BuildEmptyPathAccessor(recordsCount);
 }
 

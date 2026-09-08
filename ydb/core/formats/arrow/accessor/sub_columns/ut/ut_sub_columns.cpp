@@ -625,7 +625,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
             BuildStats({ { R"("a")", NSubColumns::EValueType::BinaryJson }, { R"("a"."b")", NSubColumns::EValueType::BinaryJson } }),
             NSubColumns::TDictStats::BuildEmpty(), NKikimrArrowAccessorProto::TSubColumnsAccessor(), 0);
         TSubColumnsPartialArray partial(std::move(header), 1, arrow::binary(), NSubColumns::TSettings());
-        partial.AddColumn(R"("a")", CreateTrivialArrayAccessor(R"({"b":{"c":"value"}})"));
+        partial.AddColumn(partial.GetHeader().GetColumnStats().GetExactKeyIndexVerified(R"("a")"), CreateTrivialArrayAccessor(R"({"b":{"c":"value"}})"));
 
         auto accessorResult = partial.GetPathAccessor("$.a.b.c", 1);
         UNIT_ASSERT_C(accessorResult.IsSuccess(), accessorResult.GetErrorMessage());
@@ -634,12 +634,12 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         });
     }
 
-    Y_UNIT_TEST(PartialArrayFetchesMoreSpecificOthersPath) {
+    Y_UNIT_TEST(PartialArrayNeedsFetchForMoreSpecificOthersPath) {
         auto header = NSubColumns::TSubColumnsHeader(
             BuildStats({ { R"("a")", NSubColumns::EValueType::BinaryJson }, { R"("a"."b"."c")", NSubColumns::EValueType::BinaryJson } }),
             BuildStats({ { R"("a"."b")", NSubColumns::EValueType::BinaryJson } }), NKikimrArrowAccessorProto::TSubColumnsAccessor(), 0);
         TSubColumnsPartialArray partial(std::move(header), 1, arrow::binary(), NSubColumns::TSettings());
-        partial.AddColumn(R"("a")", CreateTrivialArrayAccessor(R"({"b":"columns"})"));
+        partial.AddColumn(partial.GetHeader().GetColumnStats().GetExactKeyIndexVerified(R"("a")"), CreateTrivialArrayAccessor(R"({"b":"columns"})"));
 
         UNIT_ASSERT(!partial.HasSubColumnData(R"("a"."b")"));
     }

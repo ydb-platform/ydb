@@ -27,7 +27,7 @@ public:
 
         bool operator==(const TResolvedPath&) const = default;
 
-        static bool IsBetterMatch(const TResolvedPath& first, const TResolvedPath& second) {
+        static bool IsBetterOrEqualMatchThan(const TResolvedPath& first, const TResolvedPath& second) {
             return first.RemainingPath.size() <= second.RemainingPath.size();
         }
 
@@ -327,7 +327,7 @@ inline TConclusion<std::optional<TResolvedPathMatch>> ResolveBestPath(
     }
     const auto columnsPath = columnsResult.DetachResult();
     const auto othersPath = othersResult.DetachResult();
-    if (!othersPath || (columnsPath && TDictStats::TResolvedPath::IsBetterMatch(*columnsPath, *othersPath))) {
+    if (!othersPath || (columnsPath && TDictStats::TResolvedPath::IsBetterOrEqualMatchThan(*columnsPath, *othersPath))) {
         return columnsPath ? std::optional<TResolvedPathMatch>(TResolvedPathMatch{ *columnsPath, true }) : std::nullopt;
     }
     return TResolvedPathMatch{ *othersPath, false };

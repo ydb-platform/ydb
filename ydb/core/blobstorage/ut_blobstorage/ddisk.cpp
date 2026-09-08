@@ -1169,17 +1169,21 @@ Y_UNIT_TEST_SUITE(DDisk) {
             auto info = f.GetPBInfo(false, true);
             auto& b = info->Get()->EraseBarriers;
             UNIT_ASSERT(b.size() == 3);
-            UNIT_ASSERT((b[{f.PBCreds[6].TabletId, static_cast<ui8>(f.PBCreds[6].DirectBlockGroupIndex)}] == 300)); // Hole
-            UNIT_ASSERT((b[{f.PBCreds[4].TabletId, static_cast<ui8>(f.PBCreds[4].DirectBlockGroupIndex)}] == 100)); // Hole
+            // Barriers survive recovery even without live records for the namespace.
+            UNIT_ASSERT((b[{f.PBCreds[6].TabletId, static_cast<ui8>(f.PBCreds[6].DirectBlockGroupIndex)}] == 300));
+            UNIT_ASSERT((b[{f.PBCreds[4].TabletId, static_cast<ui8>(f.PBCreds[4].DirectBlockGroupIndex)}] == 100));
             UNIT_ASSERT((b[{f.PBCreds[1].TabletId, static_cast<ui8>(f.PBCreds[1].DirectBlockGroupIndex)}] == 5));
         }
         f.ErasePB(2000, 7); // clear PB space to write more
         {
             auto info = f.GetPBInfo(false, true);
             auto& b = info->Get()->EraseBarriers;
-            UNIT_ASSERT(b.size() == 3);
-            UNIT_ASSERT((b[{f.PBCreds[7].TabletId, static_cast<ui8>(f.PBCreds[7].DirectBlockGroupIndex)}] == 2000)); // Hole replaced
-            UNIT_ASSERT((b[{f.PBCreds[4].TabletId, static_cast<ui8>(f.PBCreds[4].DirectBlockGroupIndex)}] == 100)); // Hole
+            // Preserved barriers are not reused by other tablets, so a new barrier
+            // slot is allocated for tablet7 rather than replacing tablet6's/tablet4's.
+            UNIT_ASSERT(b.size() == 4);
+            UNIT_ASSERT((b[{f.PBCreds[7].TabletId, static_cast<ui8>(f.PBCreds[7].DirectBlockGroupIndex)}] == 2000)); // New
+            UNIT_ASSERT((b[{f.PBCreds[6].TabletId, static_cast<ui8>(f.PBCreds[6].DirectBlockGroupIndex)}] == 300));
+            UNIT_ASSERT((b[{f.PBCreds[4].TabletId, static_cast<ui8>(f.PBCreds[4].DirectBlockGroupIndex)}] == 100));
             UNIT_ASSERT((b[{f.PBCreds[1].TabletId, static_cast<ui8>(f.PBCreds[1].DirectBlockGroupIndex)}] == 5));
         }
         f.WritePB(0, 128, 8);
@@ -1189,9 +1193,11 @@ Y_UNIT_TEST_SUITE(DDisk) {
         {
             auto info = f.GetPBInfo(false, true);
             auto& b = info->Get()->EraseBarriers;
-            UNIT_ASSERT(b.size() == 3);
+            UNIT_ASSERT(b.size() == 5);
             UNIT_ASSERT((b[{f.PBCreds[7].TabletId, static_cast<ui8>(f.PBCreds[7].DirectBlockGroupIndex)}] == 2000));
-            UNIT_ASSERT((b[{f.PBCreds[8].TabletId, static_cast<ui8>(f.PBCreds[8].DirectBlockGroupIndex)}] == 2551)); // Hole replaced
+            UNIT_ASSERT((b[{f.PBCreds[8].TabletId, static_cast<ui8>(f.PBCreds[8].DirectBlockGroupIndex)}] == 2551)); // New
+            UNIT_ASSERT((b[{f.PBCreds[6].TabletId, static_cast<ui8>(f.PBCreds[6].DirectBlockGroupIndex)}] == 300));
+            UNIT_ASSERT((b[{f.PBCreds[4].TabletId, static_cast<ui8>(f.PBCreds[4].DirectBlockGroupIndex)}] == 100));
             UNIT_ASSERT((b[{f.PBCreds[1].TabletId, static_cast<ui8>(f.PBCreds[1].DirectBlockGroupIndex)}] == 5));
         }
         f.WritePB(0, 128, 8);
@@ -1200,9 +1206,11 @@ Y_UNIT_TEST_SUITE(DDisk) {
         {
             auto info = f.GetPBInfo(false, true);
             auto& b = info->Get()->EraseBarriers;
-            UNIT_ASSERT(b.size() == 3);
+            UNIT_ASSERT(b.size() == 5);
             UNIT_ASSERT((b[{f.PBCreds[7].TabletId, static_cast<ui8>(f.PBCreds[7].DirectBlockGroupIndex)}] == 2000));
-            UNIT_ASSERT((b[{f.PBCreds[8].TabletId, static_cast<ui8>(f.PBCreds[8].DirectBlockGroupIndex)}] == 3500)); // Same place used
+            UNIT_ASSERT((b[{f.PBCreds[8].TabletId, static_cast<ui8>(f.PBCreds[8].DirectBlockGroupIndex)}] == 3500)); // Same place used (own barrier updated)
+            UNIT_ASSERT((b[{f.PBCreds[6].TabletId, static_cast<ui8>(f.PBCreds[6].DirectBlockGroupIndex)}] == 300));
+            UNIT_ASSERT((b[{f.PBCreds[4].TabletId, static_cast<ui8>(f.PBCreds[4].DirectBlockGroupIndex)}] == 100));
             UNIT_ASSERT((b[{f.PBCreds[1].TabletId, static_cast<ui8>(f.PBCreds[1].DirectBlockGroupIndex)}] == 5));
         }
         f.WritePB(0, 128, 9);
@@ -1211,20 +1219,24 @@ Y_UNIT_TEST_SUITE(DDisk) {
         {
             auto info = f.GetPBInfo(false, true);
             auto& b = info->Get()->EraseBarriers;
-            UNIT_ASSERT(b.size() == 4);
+            UNIT_ASSERT(b.size() == 6);
             UNIT_ASSERT((b[{f.PBCreds[9].TabletId, static_cast<ui8>(f.PBCreds[9].DirectBlockGroupIndex)}] == 6000)); // One new
-            UNIT_ASSERT((b[{f.PBCreds[7].TabletId, static_cast<ui8>(f.PBCreds[7].DirectBlockGroupIndex)}] == 2000));
             UNIT_ASSERT((b[{f.PBCreds[8].TabletId, static_cast<ui8>(f.PBCreds[8].DirectBlockGroupIndex)}] == 3500));
+            UNIT_ASSERT((b[{f.PBCreds[7].TabletId, static_cast<ui8>(f.PBCreds[7].DirectBlockGroupIndex)}] == 2000));
+            UNIT_ASSERT((b[{f.PBCreds[6].TabletId, static_cast<ui8>(f.PBCreds[6].DirectBlockGroupIndex)}] == 300));
+            UNIT_ASSERT((b[{f.PBCreds[4].TabletId, static_cast<ui8>(f.PBCreds[4].DirectBlockGroupIndex)}] == 100));
             UNIT_ASSERT((b[{f.PBCreds[1].TabletId, static_cast<ui8>(f.PBCreds[1].DirectBlockGroupIndex)}] == 5));
         }
         f.RestartNode();
         {
             auto info = f.GetPBInfo(false, true);
             auto& b = info->Get()->EraseBarriers;
-            UNIT_ASSERT(b.size() == 4);
+            UNIT_ASSERT(b.size() == 6);
             UNIT_ASSERT((b[{f.PBCreds[9].TabletId, static_cast<ui8>(f.PBCreds[9].DirectBlockGroupIndex)}] == 6000));
-            UNIT_ASSERT((b[{f.PBCreds[7].TabletId, static_cast<ui8>(f.PBCreds[7].DirectBlockGroupIndex)}] == 2000));
             UNIT_ASSERT((b[{f.PBCreds[8].TabletId, static_cast<ui8>(f.PBCreds[8].DirectBlockGroupIndex)}] == 3500));
+            UNIT_ASSERT((b[{f.PBCreds[7].TabletId, static_cast<ui8>(f.PBCreds[7].DirectBlockGroupIndex)}] == 2000));
+            UNIT_ASSERT((b[{f.PBCreds[6].TabletId, static_cast<ui8>(f.PBCreds[6].DirectBlockGroupIndex)}] == 300));
+            UNIT_ASSERT((b[{f.PBCreds[4].TabletId, static_cast<ui8>(f.PBCreds[4].DirectBlockGroupIndex)}] == 100));
             UNIT_ASSERT((b[{f.PBCreds[1].TabletId, static_cast<ui8>(f.PBCreds[1].DirectBlockGroupIndex)}] == 5));
         }
     }

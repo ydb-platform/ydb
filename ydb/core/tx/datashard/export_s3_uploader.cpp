@@ -152,10 +152,10 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         }
 
         if (msg.Response->Body.find('<') != TStringBuf::npos) {
-            EXPORT_LOG_E("Error at 'GetProxy'"
-                << ": self# " << this->SelfId()
-                << ", error# " << "invalid body"
-                << ", body# " << msg.Response->Body);
+            YDB_LOG_ERROR("[Export] body",
+                {"self", this->SelfId()},
+                {"body", msg.Response->Body},
+                {"error", "invalid"});
             return RetryOrFinish(Aws::S3::S3Error({Aws::S3::S3Errors::SERVICE_UNAVAILABLE, true}));
         }
 
@@ -653,7 +653,11 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             UploadId.Clear(); // force getting info after restart
             Retry();
         } else {
-            Error = TStringBuilder() << LogPrefix() << " error: " << error;
+            TStringBuilder prefixStr;
+            NStructuredLog::TTextWriter writer;
+            writer.Write(prefixStr, LogPrefix());
+
+            Error = TStringBuilder() << prefixStr << " error: " << error;
             PassAway();
         }
     }
@@ -673,7 +677,11 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             UploadId.Clear();
             Retry();
         } else {
-            Error = TStringBuilder() << LogPrefix() << " error: " << error;
+            TStringBuilder prefixStr;
+            NStructuredLog::TTextWriter writer;
+            writer.Write(prefixStr, LogPrefix());
+
+            Error = TStringBuilder() << prefixStr << " error: " << error;
             PassAway();
         }
     }
@@ -735,7 +743,11 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         if (CanRetry(error)) {
             Retry();
         } else {
-            Finish(false, TStringBuilder() << LogPrefix() << " error: " << error);
+            TStringBuilder prefixStr;
+            NStructuredLog::TTextWriter writer;
+            writer.Write(prefixStr, LogPrefix());
+
+            Finish(false, TStringBuilder() << prefixStr << " error: " << error);
         }
     }
 

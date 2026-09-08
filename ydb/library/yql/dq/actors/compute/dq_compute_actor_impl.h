@@ -394,7 +394,6 @@ protected:
         Y_ASSERT(!Terminated);
 
         auto guard = BindAllocator();
-        auto* alloc = guard.GetMutex();
         // memory hungry operators reach the task memory quota through this thread-local binding
         TDqOperatorMemoryQuotaScope operatorQuotaScope(MemoryQuota ? MemoryQuota->GetOperatorQuota() : nullptr);
 
@@ -407,7 +406,7 @@ protected:
         }
 
         if (MemoryQuota) {
-            MemoryQuota->TryShrinkMemory(alloc);
+            MemoryQuota->TryShrinkMemory();
         }
 
         ReportStats();

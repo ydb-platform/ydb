@@ -217,7 +217,7 @@ private:
         }
 
         if (MemoryQuota) {
-            MemoryQuota->TryShrinkMemory(guard.GetMutex());
+            MemoryQuota->TryShrinkMemory();
         }
 
         {
@@ -465,10 +465,11 @@ private:
 
         auto guard = TaskRunner->BindAllocator(MemoryQuota ? TMaybe<ui64>(MemoryQuota->GetMkqlMemoryLimit()) : Nothing());
         if (MemoryQuota) {
+            MemoryQuota->BindScopedAlloc(guard.GetMutex());
             if (settings.GetEnableSpilling()) {
-                MemoryQuota->TrySetIncreaseMemoryLimitCallbackWithRSSControl(guard.GetMutex());
+                MemoryQuota->TrySetIncreaseMemoryLimitCallbackWithRSSControl();
             } else {
-                MemoryQuota->TrySetIncreaseMemoryLimitCallback(guard.GetMutex());
+                MemoryQuota->TrySetIncreaseMemoryLimitCallback();
             }
         }
 

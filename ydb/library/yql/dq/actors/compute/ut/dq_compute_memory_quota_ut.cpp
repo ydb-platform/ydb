@@ -95,7 +95,8 @@ struct TQuotaEnv {
     }
 
     void Bind() {
-        Quota.TrySetIncreaseMemoryLimitCallback(&Alloc);
+        Quota.BindScopedAlloc(&Alloc);
+        Quota.TrySetIncreaseMemoryLimitCallback();
     }
 
     TScopedAlloc Alloc;
@@ -177,23 +178,34 @@ Y_UNIT_TEST_SUITE(TDqMemoryQuotaTest) {
         }
     }
 
+    // Without a bound allocator the quota is inert: nothing to grow or shrink, nothing for the operators
+    Y_UNIT_TEST(UnboundQuotaIsInert) {
+        TQuotaEnv env;
+        UNIT_ASSERT(!env.Quota.RequestExtraMemory(10_MB, /* isOptional = */ true));
+        UNIT_ASSERT(!env.Quota.RequestExtraMemory(10_MB, /* isOptional = */ false));
+        env.Quota.TryShrinkMemory();
+        UNIT_ASSERT_VALUES_EQUAL(env.Quota.GetMkqlMemoryLimit(), 40_MB);
+        UNIT_ASSERT_VALUES_EQUAL(env.Manager->Requests.size(), 1); // the initial allocation only
+        UNIT_ASSERT(env.Quota.GetOperatorQuota() == nullptr);
+    }
+
     Y_UNIT_TEST(OptionalGrantedAndRefused) {
         TQuotaEnv env;
         env.Bind();
 
-        UNIT_ASSERT(env.Quota.RequestExtraMemory(10_MB, /* isOptional = */ true, &env.Alloc));
+        UNIT_ASSERT(env.Quota.RequestExtraMemory(10_MB, /* isOptional = */ true));
         UNIT_ASSERT_VALUES_EQUAL(env.Quota.GetMkqlMemoryLimit(), 50_MB);
         UNIT_ASSERT_VALUES_EQUAL(env.Alloc.GetLimit(), 50_MB);
         UNIT_ASSERT(env.Manager->Requests.back().Optional);
 
         env.Manager->RefuseOptional = true;
-        UNIT_ASSERT(!env.Quota.RequestExtraMemory(10_MB, /* isOptional = */ true, &env.Alloc)); // no throw
+        UNIT_ASSERT(!env.Quota.RequestExtraMemory(10_MB, /* isOptional = */ true)); // no throw
         UNIT_ASSERT_VALUES_EQUAL(env.Quota.GetMkqlMemoryLimit(), 50_MB);
         UNIT_ASSERT_VALUES_EQUAL(env.Alloc.GetLimit(), 50_MB);
 
         // a mandatory refusal does not throw here either: the allocator throws when the limit is not raised
         env.Manager->RefuseAll = true;
-        UNIT_ASSERT(!env.Quota.RequestExtraMemory(10_MB, /* isOptional = */ false, &env.Alloc));
+        UNIT_ASSERT(!env.Quota.RequestExtraMemory(10_MB, /* isOptional = */ false));
         UNIT_ASSERT_VALUES_EQUAL(env.Quota.GetMkqlMemoryLimit(), 50_MB);
 
         // every request counts, granted or not: two optional and one mandatory, 10 MB each
@@ -206,10 +218,10 @@ Y_UNIT_TEST_SUITE(TDqMemoryQuotaTest) {
     Y_UNIT_TEST(HardLimit) {
         TQuotaEnv env(/* hardLimit = */ 45_MB);
         env.Bind();
-        UNIT_ASSERT(!env.Quota.RequestExtraMemory(10_MB, /* isOptional = */ true, &env.Alloc)); // refused, no throw
+        UNIT_ASSERT(!env.Quota.RequestExtraMemory(10_MB, /* isOptional = */ true)); // refused, no throw
         UNIT_ASSERT_VALUES_EQUAL(env.Quota.GetMkqlMemoryLimit(), 40_MB);
-        UNIT_ASSERT_EXCEPTION(env.Quota.RequestExtraMemory(10_MB, /* isOptional = */ false, &env.Alloc), THardMemoryLimitException);
-        UNIT_ASSERT(env.Quota.RequestExtraMemory(4_MB, /* isOptional = */ true, &env.Alloc)); // still fits
+        UNIT_ASSERT_EXCEPTION(env.Quota.RequestExtraMemory(10_MB, /* isOptional = */ false), THardMemoryLimitException);
+        UNIT_ASSERT(env.Quota.RequestExtraMemory(4_MB, /* isOptional = */ true)); // still fits
         UNIT_ASSERT_VALUES_EQUAL(env.Quota.GetMkqlMemoryLimit(), 44_MB);
     }
 
@@ -217,19 +229,19 @@ Y_UNIT_TEST_SUITE(TDqMemoryQuotaTest) {
         TQuotaEnv env;
         env.Bind();
         env.Manager->Availability = -1;
-        UNIT_ASSERT(env.Quota.RequestExtraMemory(1_MB, /* isOptional = */ true, &env.Alloc));
+        UNIT_ASSERT(env.Quota.RequestExtraMemory(1_MB, /* isOptional = */ true));
         UNIT_ASSERT(env.Alloc.Ref().GetMaximumLimitValueReached()); // the old IsReasonableToUseSpilling signal
         env.Manager->Availability = 1;
-        UNIT_ASSERT(env.Quota.RequestExtraMemory(1_MB, /* isOptional = */ true, &env.Alloc));
+        UNIT_ASSERT(env.Quota.RequestExtraMemory(1_MB, /* isOptional = */ true));
         UNIT_ASSERT(!env.Alloc.Ref().GetMaximumLimitValueReached());
         env.Manager->Availability = 0; // zero is not pressure, just "do not ask for optional quota"
-        UNIT_ASSERT(env.Quota.RequestExtraMemory(1_MB, /* isOptional = */ false, &env.Alloc));
+        UNIT_ASSERT(env.Quota.RequestExtraMemory(1_MB, /* isOptional = */ false));
         UNIT_ASSERT(!env.Alloc.Ref().GetMaximumLimitValueReached());
     }
 
     Y_UNIT_TEST(OperatorQuotaBinding) {
         TQuotaEnv env;
-        UNIT_ASSERT(env.Quota.GetOperatorQuota() == nullptr); // no allocator attached yet
+        UNIT_ASSERT(env.Quota.GetOperatorQuota() == nullptr); // no allocator bound yet
         env.Bind();
         IDqOperatorMemoryQuota* operatorQuota = env.Quota.GetOperatorQuota();
         UNIT_ASSERT(operatorQuota == &env.Quota);
@@ -276,7 +288,7 @@ Y_UNIT_TEST_SUITE(TDqMemoryQuotaTest) {
         MKQLFreeWithSize(block, blockSize, EMemorySubPool::Default);
         UNIT_ASSERT_VALUES_EQUAL(env.Alloc.GetAllocated() - env.Alloc.GetUsed(), 0); // no free pages appeared
 
-        env.Quota.TryShrinkMemory(&env.Alloc);
+        env.Quota.TryShrinkMemory();
         UNIT_ASSERT_VALUES_EQUAL(env.Quota.GetMkqlMemoryLimit(), 40_MB); // back to the initial limit
         UNIT_ASSERT_VALUES_EQUAL(env.Alloc.GetLimit(), 40_MB);
         UNIT_ASSERT_VALUES_EQUAL(env.Manager->Freed, grownLimit - 40_MB);
@@ -313,7 +325,7 @@ Y_UNIT_TEST_SUITE(TDqMemoryQuotaTest) {
         UNIT_ASSERT_VALUES_EQUAL(env.Quota.GetMkqlMemoryLimit(), 40_MB); // never grew
         const ui64 allocatedBefore = env.Alloc.GetAllocated();
 
-        env.Quota.TryShrinkMemory(&env.Alloc);
+        env.Quota.TryShrinkMemory();
         UNIT_ASSERT_VALUES_EQUAL(env.Alloc.GetAllocated(), allocatedBefore); // the cache is kept
         UNIT_ASSERT_VALUES_EQUAL(env.Alloc.GetAllocated() - env.Alloc.GetUsed(), cached);
         UNIT_ASSERT_VALUES_EQUAL(env.Quota.GetMkqlMemoryLimit(), 40_MB);
@@ -330,7 +342,7 @@ Y_UNIT_TEST_SUITE(TDqMemoryQuotaTest) {
         UNIT_ASSERT_VALUES_EQUAL(env.Quota.GetMkqlMemoryLimit(), 40_MB);
         UNIT_ASSERT_GT(env.Alloc.GetAllocated() - env.Alloc.GetUsed(), 32_MB);
 
-        env.Quota.TryShrinkMemory(&env.Alloc);
+        env.Quota.TryShrinkMemory();
         UNIT_ASSERT_VALUES_EQUAL(env.Alloc.GetAllocated() - env.Alloc.GetUsed(), 0); // the cache went to the global pool
         UNIT_ASSERT_LT(env.Alloc.GetAllocated(), 1_MB);
         UNIT_ASSERT_VALUES_EQUAL(env.Quota.GetMkqlMemoryLimit(), 40_MB); // never below the initial limit
@@ -346,13 +358,14 @@ Y_UNIT_TEST_SUITE(TDqMemoryQuotaTest) {
         {
             TDqMemoryQuota quota(counter, 40_MB, MakeLimits(manager), TTxId{ui64(1)}, 1, /* profileStats = */ false, /* actorSystem = */ nullptr);
             alloc.SetLimit(quota.GetMkqlMemoryLimit());
-            quota.TrySetIncreaseMemoryLimitCallback(&alloc);
+            quota.BindScopedAlloc(&alloc);
+            quota.TrySetIncreaseMemoryLimitCallback();
             // attached: a block beyond the limit grows it through the quota
             void* block = MKQLAllocWithSize(64_MB, EMemorySubPool::Default);
             UNIT_ASSERT(block);
             MKQLFreeWithSize(block, 64_MB, EMemorySubPool::Default);
             UNIT_ASSERT_GE(quota.GetMkqlMemoryLimit(), 64_MB);
-            quota.TryShrinkMemory(&alloc);
+            quota.TryShrinkMemory();
             UNIT_ASSERT_VALUES_EQUAL(quota.GetMkqlMemoryLimit(), 40_MB);
         }
         // detached: the same block hits the allocator limit and nothing raises it

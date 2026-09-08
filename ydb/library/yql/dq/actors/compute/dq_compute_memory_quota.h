@@ -60,7 +60,7 @@ namespace NYql::NDq {
             }
         }
 
-        // The attached allocator holds a callback into this object: detach before dying. Every owner keeps the
+        // The bound allocator holds a callback into this object: detach before dying. Every owner keeps the
         // allocator alive longer than the quota (a shared_ptr declared before it, see the compute actor and the
         // task runner actor), so the allocator is still there to be detached from.
         ~TDqMemoryQuota() {
@@ -73,35 +73,79 @@ namespace NYql::NDq {
             return MkqlMemoryLimit;
         }
 
-        void TrySetIncreaseMemoryLimitCallback(NKikimr::NMiniKQL::TScopedAlloc* alloc) {
+        // The allocator this quota manages: every other call works on it. Bound once by the owner, right after
+        // the allocator is created and before anything runs under it; the quota is inert until then.
+        void BindScopedAlloc(NKikimr::NMiniKQL::TScopedAlloc* alloc) {
+            Y_ABORT_UNLESS(alloc);
+            Y_ABORT_UNLESS(!Alloc || Alloc == alloc, "the memory quota is already bound to another allocator");
             Alloc = alloc;
-            alloc->Ref().SetIncreaseMemoryLimitCallback([this, alloc](ui64 limit, ui64 required) {
-                RequestExtraMemory(required - limit, /* isOptional = */ false, alloc);
+        }
+
+        void TrySetIncreaseMemoryLimitCallback() {
+            Y_ABORT_UNLESS(Alloc, "bind the allocator first");
+            Alloc->Ref().SetIncreaseMemoryLimitCallback([this](ui64 limit, ui64 required) {
+                DoRequestExtraMemory(required - limit, /* isOptional = */ false);
             });
         }
 
         // This callback is created for testing purposes and will be enabled only with spilling.
         // Most likely this callback will be removed after KIKIMR-21481.
-        void TrySetIncreaseMemoryLimitCallbackWithRSSControl(NKikimr::NMiniKQL::TScopedAlloc* alloc) {
+        void TrySetIncreaseMemoryLimitCallbackWithRSSControl() {
+            Y_ABORT_UNLESS(Alloc, "bind the allocator first");
             const ui64 limitRSS = std::numeric_limits<ui64>::max();
             const ui64 criticalRSSValue = limitRSS / 100 * 80;
 
-            Alloc = alloc;
-            alloc->Ref().SetIncreaseMemoryLimitCallback([this, alloc](ui64 limit, ui64 required) {
-                RequestExtraMemory(required - limit, /* isOptional = */ false, alloc);
+            Alloc->Ref().SetIncreaseMemoryLimitCallback([this](ui64 limit, ui64 required) {
+                DoRequestExtraMemory(required - limit, /* isOptional = */ false);
 
                 ui64 currentRSS = NMemInfo::GetMemInfo().RSS;
                 if (currentRSS > criticalRSSValue) {
-                    alloc->SetMaximumLimitValueReached(true);
+                    Alloc->SetMaximumLimitValueReached(true);
                 }
             });
         }
 
-        // Raise the MKQL memory limit by `memory` (rounded up to MB / MinMemAllocSize), returns true on success.
-        // Mandatory (isOptional == false): the per-task hard limit throws THardMemoryLimitException; a refusal of the
-        //   quota manager is logged and the limit stays, the allocator then throws TMemoryLimitExceededException itself.
-        // Optional: never throws, false when refused by the hard limit or by the quota manager.
-        bool RequestExtraMemory(ui64 memory, bool isOptional, NKikimr::NMiniKQL::TScopedAlloc* alloc) {
+        // IDqOperatorMemoryQuota, also the owner's entry points. They work on the bound allocator and only from
+        // the thread that has it bound (the owner under its allocator guard, an operator inside a bound scope);
+        // silent no-ops otherwise, operators then fall back to the allocator heuristics.
+        //
+        // RequestExtraMemory: raise the MKQL memory limit by `bytes` (rounded up to MB / MinMemAllocSize), true on
+        // success. Mandatory (isOptional == false): the per-task hard limit throws THardMemoryLimitException; a
+        // refusal of the quota manager is logged and the limit stays, the allocator then throws
+        // TMemoryLimitExceededException itself. Optional: never throws, false when refused by the hard limit or
+        // by the quota manager.
+        bool RequestExtraMemory(ui64 bytes, bool isOptional) override {
+            if (!IsBoundAllocator()) {
+                return false;
+            }
+            return DoRequestExtraMemory(bytes, isOptional);
+        }
+
+        i64 GetMemoryAvailability() const override {
+            return MemoryLimits.MemoryQuotaManager->GetMemoryAvailability();
+        }
+
+        // Explicit give-back: release free pages and return the unused part of the limit to the quota manager.
+        // GetUsed() excludes free pages, so MkqlMemoryLimit - used is what can be returned after ReleaseFreePages().
+        // Two triggers: enough cached free pages, or a grown limit with enough unused part - blocks larger than a
+        // page are malloc-backed (sized allocators) and their release never produces free pages. Neither fires while
+        // the limit is still the initial one and the page cache is small: the shrink never goes below the initial
+        // limit, so releasing the pages would only make the next execution take them from the global pool again.
+        void TryShrinkMemory() override {
+            if (IsBoundAllocator()) {
+                DoTryShrinkMemory();
+            }
+        }
+
+        // What the owner binds for the operators, nullptr when the operator memory quota is disabled
+        // or the allocator is not bound yet
+        IDqOperatorMemoryQuota* GetOperatorQuota() {
+            return (MemoryLimits.EnableOperatorMemoryQuota && Alloc) ? this : nullptr;
+        }
+
+    private:
+        bool DoRequestExtraMemory(ui64 memory, bool isOptional) {
+            auto* alloc = Alloc;
             memory = std::max(AlignMemorySizeToMbBoundary(memory), MemoryLimits.MinMemAllocSize);
 
             bool granted = false;
@@ -135,13 +179,8 @@ namespace NYql::NDq {
             return granted;
         }
 
-        // Explicit give-back: release free pages and return the unused part of the limit to the quota manager.
-        // GetUsed() excludes free pages, so MkqlMemoryLimit - used is what can be returned after ReleaseFreePages().
-        // Two triggers: enough cached free pages, or a grown limit with enough unused part - blocks larger than a
-        // page are malloc-backed (sized allocators) and their release never produces free pages. Neither fires while
-        // the limit is still the initial one and the page cache is small: the shrink never goes below the initial
-        // limit, so releasing the pages would only make the next execution take them from the global pool again.
-        void TryShrinkMemory(NKikimr::NMiniKQL::TScopedAlloc* alloc) {
+        void DoTryShrinkMemory() {
+            auto* alloc = Alloc;
             const ui64 used = alloc->GetUsed();
             const bool cachedPages = alloc->GetAllocated() - used > MemoryLimits.MinMemFreeSize;
             const bool grownLimit = MkqlMemoryLimit > InitialMkqlMemoryLimit && MkqlMemoryLimit > used
@@ -169,31 +208,6 @@ namespace NYql::NDq {
                     CAMQ_LOG_T("Peak memory usage: " << currentUsedMemory);
                 }
             }
-        }
-
-        // IDqOperatorMemoryQuota: operators call these inside a bound scope, on the thread that runs the graph
-        // under this quota's allocator. Silent no-ops otherwise (operators then fall back to the allocator heuristics).
-        bool RequestExtraMemory(ui64 bytes, bool isOptional) override {
-            if (!IsBoundAllocator()) {
-                return false;
-            }
-            return RequestExtraMemory(bytes, isOptional, Alloc);
-        }
-
-        i64 GetMemoryAvailability() const override {
-            return MemoryLimits.MemoryQuotaManager->GetMemoryAvailability();
-        }
-
-        void TryShrinkMemory() override {
-            if (IsBoundAllocator()) {
-                TryShrinkMemory(Alloc);
-            }
-        }
-
-        // What the owner binds for the operators, nullptr when the operator memory quota is disabled
-        // or the allocator is not attached yet
-        IDqOperatorMemoryQuota* GetOperatorQuota() {
-            return (MemoryLimits.EnableOperatorMemoryQuota && Alloc) ? this : nullptr;
         }
 
     public:
@@ -246,6 +260,6 @@ namespace NYql::NDq {
         const ui64 TaskId;
         THolder<TProfileStats> ProfileStats;
         NActors::TActorSystem* ActorSystem;
-        NKikimr::NMiniKQL::TScopedAlloc* Alloc = nullptr; // attached by TrySetIncreaseMemoryLimitCallback[WithRSSControl]
+        NKikimr::NMiniKQL::TScopedAlloc* Alloc = nullptr; // set by BindScopedAlloc
     };
 } // namespace NYql::NDq

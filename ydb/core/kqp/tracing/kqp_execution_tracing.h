@@ -14,16 +14,19 @@
 namespace NKikimr::NKqp {
 
 // Consumes terminal task reports once; the executer's planner deduplicates them.
-class TExecutionTraceStats {
+class TExecutionTrace {
 public:
-    explicit TExecutionTraceStats(ui8 verbosity);
+    explicit TExecutionTrace(ui8 verbosity);
 
+    ui64 StartStage(const NWilson::TSpan& parent, std::pair<ui64, ui32> stageId,
+        const TTaskTraceDescription& description, ui64 taskCount);
     void OnTaskFinished(std::pair<ui64, ui32> stageId, const TTaskTraceDescription& description,
         ui64 taskCount, const NYql::NDqProto::TEvComputeActorState& state, ui32 nodeId);
     void AddTask(ui64 txIndex, const TTaskTraceDescription& description, ui64 taskCount,
-        const NYql::NDqProto::TDqTaskStats& task, std::optional<ui64> durationUs, ui32 nodeId, bool failed);
+        const NYql::NDqProto::TDqTaskStats& task, std::optional<ui64> durationUs, ui32 nodeId,
+        Ydb::StatusIds::StatusCode status);
     void Finish(NWilson::TSpan& span, NYql::NDqProto::TDqExecutionStats& stats,
-        Ydb::StatusIds::StatusCode status) const;
+        Ydb::StatusIds::StatusCode status);
 
 private:
     struct TTask {
@@ -45,6 +48,8 @@ private:
     };
 
     struct TStage {
+        NWilson::TSpan Span;
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
         TTaskTraceDescription Description;
         ui64 TaskCount = 0;
         ui64 Reports = 0;
@@ -64,6 +69,8 @@ private:
         std::map<ui32, ui64> TasksByNode;
         std::vector<TTask> Tasks;
     };
+
+    static void FinishStage(TStage& stage, Ydb::StatusIds::StatusCode status);
 
     const bool CollectDetails;
     std::map<std::pair<ui64, ui32>, TStage> Stages;

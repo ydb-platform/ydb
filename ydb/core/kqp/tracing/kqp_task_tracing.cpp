@@ -2,6 +2,7 @@
 #include "kqp_trace_settings.h"
 
 #include <yql/essentials/ast/yql_ast.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 #include <array>
 #include <util/string/builder.h>
@@ -11,6 +12,7 @@ namespace NKikimr::NKqp {
 namespace {
 
 constexpr TStringBuf TaskOperationsParam = "ydb.trace.task_operations";
+constexpr char StageSpanIdParam[] = "ydb.trace.stage_span_id";
 enum EOperation : ui32 {
     Read = 1 << 0,
     Lookup = 1 << 1,
@@ -119,8 +121,16 @@ NWilson::TArrayValue TTaskTraceDescription::OperationsAttribute() const {
 }
 
 TString TTaskTraceDescription::Name() const {
+    return Name("Task: ");
+}
+
+TString TTaskTraceDescription::StageName() const {
+    return Name("Stage: ");
+}
+
+TString TTaskTraceDescription::Name(TStringBuf prefix) const {
     TStringBuilder name;
-    name << "Task: ";
+    name << prefix;
     size_t count = 0;
     for (const auto& op : OperationsAttribute()) {
         if (count == NQueryTraceSettings::MaxTaskNameOperations) {
@@ -155,6 +165,29 @@ void TTaskTraceDescription::Annotate(NWilson::TSpan& span, const NYql::NDqProto:
     }
     span.Name(description.Name());
     span.Attribute("ydb.task.operations", description.OperationsAttribute());
+}
+
+void SaveTaskTraceParent(NYql::NDqProto::TDqTask& task, ui64 stageSpanId) {
+    if (stageSpanId) {
+        (*task.MutableTaskParams())[StageSpanIdParam] = ToString(stageSpanId);
+    } else if (!task.GetTaskParams().empty()) {
+        task.MutableTaskParams()->erase(StageSpanIdParam);
+    }
+}
+
+NWilson::TTraceId GetTaskTraceParent(const NYql::NDqProto::TDqTask& task, const NWilson::TTraceId& parent) {
+    const auto it = task.GetTaskParams().find(StageSpanIdParam);
+    ui64 spanId = 0;
+    if (!parent || !parent.GetTimeToLive()
+            || parent.GetVerbosity() < TComponentTracingLevels::TQueryProcessor::Detailed
+            || it == task.GetTaskParams().end()
+            || !TryFromString(it->second, spanId) || !spanId) {
+        return NWilson::TTraceId(parent);
+    }
+    std::array<ui64, 2> traceId;
+    memcpy(traceId.data(), parent.GetTraceIdPtr(), parent.GetTraceIdSize());
+    return NWilson::TTraceId(traceId, spanId, parent.GetVerbosity(), parent.GetTimeToLive() - 1,
+        parent.IsRetroTrace());
 }
 
 } // namespace NKikimr::NKqp

@@ -21,6 +21,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <algorithm>
+#include <ranges>
 #include <util/folder/dirut.h>
 
 namespace NKikimr {
@@ -64,7 +65,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
     }
 
     bool SpanNameMatches(TStringBuf actual, TStringBuf expected) {
-        return expected == "Task: " ? actual.StartsWith(expected) : actual == expected;
+        return expected == "Task: " || expected == "Stage: " ? actual.StartsWith(expected) : actual == expected;
     }
 
     const TFakeWilsonUploader::TOtelSpan* FindSpan(const TFakeWilsonUploader& uploader, TStringBuf name) {
@@ -85,6 +86,12 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             }
         }
         return nullptr;
+    }
+
+    auto StageSpans(const TFakeWilsonUploader& uploader) {
+        return uploader.Spans | std::views::filter([](const auto& span) {
+            return span.name().StartsWith("Stage: ");
+        });
     }
 
     void AssertStatus(const TFakeWilsonUploader& uploader, TStringBuf name,
@@ -221,6 +228,8 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         AssertDescendant(*uploader, "Compile query", "Get query plan");
         AssertDescendant(*uploader, "Load metadata", "Compile query");
         AssertDescendant(*uploader, "Task: ", "Execute plan");
+        AssertDescendant(*uploader, "Task: ", "Stage: ");
+        AssertDescendant(*uploader, "Stage: ", "Run tasks");
         AssertDescendant(*uploader, "Run tasks", "Execute plan");
         AssertDescendant(*uploader, "Datashard.Read", "Read shard");
         AssertDescendant(*uploader, "Read shard", "Read table");
@@ -237,11 +246,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         const auto* shard = FindSpan(*uploader, "Datashard.Read");
         UNIT_ASSERT(FindAttribute(*shard, "ydb.shard_id"));
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*shard, "ydb.rows")->value().int_value(), 1);
-        UNIT_ASSERT(std::ranges::any_of(uploader->Spans, [](const auto& span) {
-            return std::ranges::any_of(span.events(), [](const auto& event) {
-                return event.name() == "Stage statistics";
-            });
-        }));
+        UNIT_ASSERT(!std::ranges::empty(StageSpans(*uploader)));
         UNIT_ASSERT(FindAttribute(*FindSpan(*uploader, "Task: "), "ydb.task_id"));
         UNIT_ASSERT(!FindSpan(*uploader, "Session.query.QUERY_ACTION_EXECUTE"));
     }
@@ -620,6 +625,8 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             UNIT_ASSERT_VALUES_EQUAL(uploader->Traces.size(), 1u);
             AssertDescendant(*uploader, "Scan shard", "Scan table");
             AssertDescendant(*uploader, "Scan table", "Execute plan");
+            AssertDescendant(*uploader, "Scan table", "Stage: ");
+            AssertDescendant(*uploader, "Task: ", "Stage: ");
             AssertStatus(*uploader, "Scan shard", NTraceProto::Status::STATUS_CODE_OK);
             AssertStatus(*uploader, "Scan table", NTraceProto::Status::STATUS_CODE_OK);
             const auto* shard = FindSpan(*uploader, "Scan shard");
@@ -671,41 +678,40 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 UNIT_ASSERT(!FindAttribute(*query, "ydb.task_stats_incomplete")->value().bool_value());
                 ui64 reported = 0, stageCpu = 0, stageInput = 0, stageOutput = 0;
                 bool hasJoin = false, hasAggregate = false;
-                for (const auto& span : uploader->Spans) {
-                    for (const auto& event : span.events()) {
-                        if (event.name() != "Stage statistics") {
-                            continue;
-                        }
-                        reported += FindAttribute(event, "ydb.reported_tasks")->value().int_value();
-                        stageCpu += FindAttribute(event, "ydb.cpu_us")->value().int_value();
-                        stageInput += FindAttribute(event, "ydb.input_rows")->value().int_value();
-                        stageOutput += FindAttribute(event, "ydb.output_rows")->value().int_value();
-                        for (const auto& operation : FindAttribute(event, "ydb.stage.operations")->value().array_value().values()) {
-                            hasJoin |= operation.string_value() == "Join";
-                            hasAggregate |= operation.string_value() == "Aggregate";
-                        }
-                        TStringBuilder nodes;
-                        const auto stageId = FindAttribute(event, "ydb.stage_id")->value().int_value();
-                        for (const auto& taskSpan : uploader->Spans) {
-                            const auto* taskStage = FindAttribute(taskSpan, "ydb.stage_id");
-                            if (taskSpan.name().StartsWith("Task: ") && taskStage
-                                    && taskStage->value().int_value() == stageId) {
-                                const auto* operations = FindAttribute(taskSpan, "ydb.task.operations");
-                                UNIT_ASSERT(operations);
-                                UNIT_ASSERT_VALUES_EQUAL(operations->value().SerializeAsString(),
-                                    FindAttribute(event, "ydb.stage.operations")->value().SerializeAsString());
-                            }
-                        }
-                        for (const auto& [node, count] : nodesByStage.at(stageId)) {
-                            if (nodes) {
-                                nodes << ",";
-                            }
-                            nodes << node << ":" << count;
-                        }
-                        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(event, "ydb.tasks_by_node")->value().string_value(), nodes);
-                        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(event, "ydb.tasks")->value().int_value(),
-                            FindAttribute(event, "ydb.reported_tasks")->value().int_value());
+                for (const auto& event : StageSpans(*uploader)) {
+                    reported += FindAttribute(event, "ydb.reported_tasks")->value().int_value();
+                    stageCpu += FindAttribute(event, "ydb.cpu_us")->value().int_value();
+                    stageInput += FindAttribute(event, "ydb.input_rows")->value().int_value();
+                    stageOutput += FindAttribute(event, "ydb.output_rows")->value().int_value();
+                    for (const auto& operation : FindAttribute(event, "ydb.stage.operations")->value().array_value().values()) {
+                        hasJoin |= operation.string_value() == "Join";
+                        hasAggregate |= operation.string_value() == "Aggregate";
                     }
+                    TStringBuilder nodes;
+                    const auto stageId = FindAttribute(event, "ydb.stage_id")->value().int_value();
+                    for (const auto& taskSpan : uploader->Spans) {
+                        const auto* taskStage = FindAttribute(taskSpan, "ydb.stage_id");
+                        if (taskSpan.name().StartsWith("Task: ") && taskStage
+                                && taskStage->value().int_value() == stageId) {
+                            const auto* operations = FindAttribute(taskSpan, "ydb.task.operations");
+                            UNIT_ASSERT(operations);
+                            UNIT_ASSERT_VALUES_EQUAL(taskSpan.parent_span_id(), event.span_id());
+                            UNIT_ASSERT_VALUES_EQUAL(taskSpan.trace_id(), event.trace_id());
+                            UNIT_ASSERT(taskSpan.start_time_unix_nano() >= event.start_time_unix_nano());
+                            UNIT_ASSERT(taskSpan.end_time_unix_nano() <= event.end_time_unix_nano());
+                            UNIT_ASSERT_VALUES_EQUAL(operations->value().SerializeAsString(),
+                                FindAttribute(event, "ydb.stage.operations")->value().SerializeAsString());
+                        }
+                    }
+                    for (const auto& [node, count] : nodesByStage.at(stageId)) {
+                        if (nodes) {
+                            nodes << ",";
+                        }
+                        nodes << node << ":" << count;
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(FindAttribute(event, "ydb.tasks_by_node")->value().string_value(), nodes);
+                    UNIT_ASSERT_VALUES_EQUAL(FindAttribute(event, "ydb.tasks")->value().int_value(),
+                        FindAttribute(event, "ydb.reported_tasks")->value().int_value());
                 }
                 if (level == TComponentTracingLevels::TQueryProcessor::Basic) {
                     UNIT_ASSERT_VALUES_EQUAL(reported, 0);
@@ -753,13 +759,9 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                     const auto* query = FindSpan(*uploader, "Query");
                     UNIT_ASSERT(query);
                     UNIT_ASSERT_C(!FindAttribute(*query, "ydb.task_stats_incomplete")->value().bool_value(), sql);
-                    for (const auto& span : uploader->Spans) {
-                        for (const auto& event : span.events()) {
-                            if (event.name() == "Stage statistics") {
-                                UNIT_ASSERT_VALUES_EQUAL_C(FindAttribute(event, "ydb.timed_tasks")->value().int_value(),
-                                    FindAttribute(event, "ydb.reported_tasks")->value().int_value(), sql);
-                            }
-                        }
+                    for (const auto& event : StageSpans(*uploader)) {
+                        UNIT_ASSERT_VALUES_EQUAL_C(FindAttribute(event, "ydb.timed_tasks")->value().int_value(),
+                            FindAttribute(event, "ydb.reported_tasks")->value().int_value(), sql);
                     }
                 }
             }
@@ -809,14 +811,10 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             }
             UNIT_ASSERT(shardRetried);
             bool taskRetried = false;
-            for (const auto& span : uploader->Spans) {
-                for (const auto& event : span.events()) {
-                    if (event.name() == "Stage statistics") {
-                        for (const auto& task : FindAttribute(event, "ydb.interesting_tasks")->value().array_value().values()) {
-                            for (const auto& attr : task.kvlist_value().values()) {
-                                taskRetried |= attr.key() == "ydb.read_retries" && attr.value().int_value() == 1;
-                            }
-                        }
+            for (const auto& event : StageSpans(*uploader)) {
+                for (const auto& task : FindAttribute(event, "ydb.interesting_tasks")->value().array_value().values()) {
+                    for (const auto& attr : task.kvlist_value().values()) {
+                        taskRetried |= attr.key() == "ydb.read_retries" && attr.value().int_value() == 1;
                     }
                 }
             }
@@ -846,9 +844,8 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             UNIT_ASSERT(execution && query);
             UNIT_ASSERT(FindAttribute(*execution, "ydb.task_stats_incomplete")->value().bool_value());
             UNIT_ASSERT(FindAttribute(*query, "ydb.task_stats_incomplete")->value().bool_value());
-            UNIT_ASSERT(std::ranges::any_of(execution->events(), [](const auto& event) {
-                return event.name() == "Stage statistics"
-                    && FindAttribute(event, "ydb.failed_tasks")->value().int_value() > 0;
+            UNIT_ASSERT(std::ranges::any_of(StageSpans(*uploader), [](const auto& event) {
+                return FindAttribute(event, "ydb.failed_tasks")->value().int_value() > 0;
             }));
         }
     }
@@ -917,12 +914,113 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         }
     }
 
+    Y_UNIT_TEST(StageSpansCloseWithTasksAndPreserveCompletedStagesOnCancellation) {
+        auto [runtime, server, sender] = CreateServer();
+        auto* uploader = RegisterUploader(runtime);
+        for (const auto status : {Ydb::StatusIds::SUCCESS, Ydb::StatusIds::CANCELLED}) {
+            ClearUploader(*uploader);
+            NKqp::TExecutionTrace trace(15);
+            NKqpProto::TKqpPhyStage physical;
+            physical.SetProgramAst("(Aggregate)");
+            const auto description = NKqp::TTaskTraceDescription::FromStage(physical);
+            NWilson::TSpan parent(TComponentTracingLevels::TQueryProcessor::Basic,
+                NWilson::TTraceId::NewTraceId(15, 4095), "Run tasks", NWilson::EFlags::NONE, runtime.GetActorSystem(0));
+            const auto firstId = trace.StartStage(parent, {0, 7}, description, 2);
+            const auto secondId = trace.StartStage(parent, {1, 7}, description, 1);
+            UNIT_ASSERT(firstId && secondId && firstId != secondId);
+            for (ui64 id : {1, 2}) {
+                NYql::NDqProto::TDqTask task;
+                task.SetId(id);
+                NKqp::SaveTaskTraceParent(task, firstId);
+                NWilson::TSpan child(TComponentTracingLevels::TQueryProcessor::Detailed,
+                    NKqp::GetTaskTraceParent(task, parent.GetTraceId()), "Task: Aggregate",
+                    NWilson::EFlags::NONE, runtime.GetActorSystem(0));
+                runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+                child.EndOk();
+                NYql::NDqProto::TDqTaskStats stats;
+                stats.SetTaskId(id);
+                stats.SetStageId(7);
+                trace.AddTask(0, description, 2, stats, 1'000'000, 1, Ydb::StatusIds::SUCCESS);
+            }
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+            UNIT_ASSERT_VALUES_EQUAL(std::ranges::distance(StageSpans(*uploader)), 1);
+            const auto completedEnd = StageSpans(*uploader).begin()->end_time_unix_nano();
+            runtime.AdvanceCurrentTime(TDuration::Seconds(5));
+            NYql::NDqProto::TDqExecutionStats stats;
+            trace.Finish(parent, stats, status);
+            NKqp::EndQueryTraceSpan(parent, status);
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+            UNIT_ASSERT(uploader->BuildTraceTrees());
+            UNIT_ASSERT_VALUES_EQUAL(std::ranges::distance(StageSpans(*uploader)), 2);
+            for (const auto& stage : StageSpans(*uploader)) {
+                const bool completed = FindAttribute(stage, "ydb.tx_index")->value().int_value() == 0;
+                const auto expected = completed ? NTraceProto::Status::STATUS_CODE_OK
+                    : status == Ydb::StatusIds::SUCCESS ? NTraceProto::Status::STATUS_CODE_UNSET
+                    : NTraceProto::Status::STATUS_CODE_ERROR;
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(stage.status().code()), static_cast<int>(expected));
+                if (completed) {
+                    UNIT_ASSERT_VALUES_EQUAL(stage.end_time_unix_nano(), completedEnd);
+                    UNIT_ASSERT_VALUES_EQUAL(FindAttribute(stage, "ydb.reported_tasks")->value().int_value(), 2);
+                    for (const auto& child : uploader->Spans) {
+                        if (child.name().StartsWith("Task: ")) {
+                            UNIT_ASSERT_VALUES_EQUAL(child.parent_span_id(), stage.span_id());
+                        }
+                    }
+                } else {
+                    UNIT_ASSERT(stage.end_time_unix_nano() > completedEnd);
+                    UNIT_ASSERT(FindAttribute(stage, "ydb.task_stats_incomplete")->value().bool_value());
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(StageTraceParentRespectsLevelsAndClearsCachedContext) {
+        auto [runtime, server, sender] = CreateServer();
+        auto* uploader = RegisterUploader(runtime);
+        for (const ui8 level : {6, 10}) {
+            ClearUploader(*uploader);
+            NWilson::TSpan parent(TComponentTracingLevels::TQueryProcessor::Basic,
+                NWilson::TTraceId::NewTraceId(level, 4095), "Run tasks", NWilson::EFlags::NONE, runtime.GetActorSystem(0));
+            NKqp::TExecutionTrace trace(level);
+            NKqpProto::TKqpPhyStage stage;
+            const auto spanId = trace.StartStage(parent, {0, 1}, NKqp::TTaskTraceDescription::FromStage(stage), 1);
+            UNIT_ASSERT_VALUES_EQUAL(bool(spanId), level == 10);
+            NYql::NDqProto::TDqTask task;
+            NKqp::SaveTaskTraceParent(task, spanId);
+            auto context = NKqp::GetTaskTraceParent(task, parent.GetTraceId());
+            UNIT_ASSERT(context.IsSameTrace(parent.GetTraceId()));
+            UNIT_ASSERT_VALUES_EQUAL(context.GetVerbosity(), level);
+            UNIT_ASSERT_VALUES_EQUAL(context == parent.GetTraceId(), level == 6);
+            if (level == 10) {
+                UNIT_ASSERT_VALUES_EQUAL(context.GetTimeToLive(), parent.GetTraceId().GetTimeToLive() - 1);
+            }
+            NKqp::SaveTaskTraceParent(task, 0);
+            UNIT_ASSERT(NKqp::GetTaskTraceParent(task, parent.GetTraceId()) == parent.GetTraceId());
+            UNIT_ASSERT(task.GetTaskParams().empty());
+            (*task.MutableTaskParams())["ydb.trace.stage_span_id"] = "invalid";
+            UNIT_ASSERT(NKqp::GetTaskTraceParent(task, parent.GetTraceId()) == parent.GetTraceId());
+            NKqp::SaveTaskTraceParent(task, 42);
+            UNIT_ASSERT(!NKqp::GetTaskTraceParent(task, {}));
+            auto basic = NWilson::TTraceId::NewTraceId(6, 100);
+            UNIT_ASSERT(NKqp::GetTaskTraceParent(task, basic) == basic);
+            NYql::NDqProto::TDqExecutionStats stats;
+            trace.Finish(parent, stats, Ydb::StatusIds::CANCELLED);
+            parent.EndError("cancelled");
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+            UNIT_ASSERT(uploader->BuildTraceTrees());
+            UNIT_ASSERT_VALUES_EQUAL(uploader->Traces.size(), 1);
+        }
+    }
+
     Y_UNIT_TEST(StageDiagnosticsPreserveAnomaliesAndTotals) {
         auto [runtime, server, sender] = CreateServer();
         auto* uploader = RegisterUploader(runtime);
-        NKqp::TExecutionTraceStats diagnostics(TComponentTracingLevels::TQueryProcessor::Detailed);
+        NKqp::TExecutionTrace diagnostics(TComponentTracingLevels::TQueryProcessor::Detailed);
         NKqpProto::TKqpPhyStage stage;
         stage.SetProgramAst("(Aggregate)");
+        NWilson::TSpan span(TComponentTracingLevels::TQueryProcessor::Basic,
+            NWilson::TTraceId::NewTraceId(15, 4095), "Execute plan", NWilson::EFlags::NONE, runtime.GetActorSystem(0));
+        diagnostics.StartStage(span, {0, 0}, NKqp::TTaskTraceDescription::FromStage(stage), 10);
         for (ui64 id = 1; id <= 10; ++id) {
             NYql::NDqProto::TDqTaskStats task;
             task.SetTaskId(id);
@@ -930,18 +1028,17 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             task.SetCpuTimeUs(5);
             task.SetWaitInputTimeUs(10);
             task.SetSpillingComputeWriteBytes(id == 2 ? 200 : 0);
-            diagnostics.AddTask(0, NKqp::TTaskTraceDescription::FromStage(stage), 10, task, id * 100, id <= 5 ? 1 : 2, id == 1);
+            diagnostics.AddTask(0, NKqp::TTaskTraceDescription::FromStage(stage), 10, task, id * 100, id <= 5 ? 1 : 2,
+                id == 1 ? Ydb::StatusIds::ABORTED : Ydb::StatusIds::SUCCESS);
         }
-        NWilson::TSpan span(TComponentTracingLevels::TQueryProcessor::Basic,
-            NWilson::TTraceId::NewTraceId(15, 4095), "Execute plan", NWilson::EFlags::NONE, runtime.GetActorSystem(0));
         NYql::NDqProto::TDqExecutionStats stats;
         diagnostics.Finish(span, stats, Ydb::StatusIds::ABORTED);
         span.EndError("task failed");
         runtime.SimulateSleep(TDuration::Seconds(1));
         const auto* execution = FindSpan(*uploader, "Execute plan");
         UNIT_ASSERT(execution);
-        UNIT_ASSERT_VALUES_EQUAL(execution->events_size(), 1);
-        const auto& event = execution->events(0);
+        UNIT_ASSERT_VALUES_EQUAL(std::ranges::distance(StageSpans(*uploader)), 1);
+        const auto& event = *StageSpans(*uploader).begin();
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(event, "ydb.reported_tasks")->value().int_value(), 10);
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(event, "ydb.failed_tasks")->value().int_value(), 1);
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(event, "ydb.task_duration_min_us")->value().int_value(), 100);
@@ -980,13 +1077,16 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*result, "ydb.locks_broken_as_victim")->value().int_value(), 3);
     }
 
-    Y_UNIT_TEST(BasicDiagnosticsKeepTotalsWithoutStageEvents) {
+    Y_UNIT_TEST(BasicDiagnosticsKeepTotalsWithoutStageSpans) {
         auto [runtime, server, sender] = CreateServer();
         auto* uploader = RegisterUploader(runtime);
         for (const ui8 level : {6, 10}) {
             ClearUploader(*uploader);
-            NKqp::TExecutionTraceStats diagnostics(level);
+            NKqp::TExecutionTrace diagnostics(level);
             NKqpProto::TKqpPhyStage stage;
+            NWilson::TSpan span(TComponentTracingLevels::TQueryProcessor::Basic,
+                NWilson::TTraceId::NewTraceId(level, 4095), "Execute plan", NWilson::EFlags::NONE, runtime.GetActorSystem(0));
+            diagnostics.StartStage(span, {0, 0}, NKqp::TTaskTraceDescription::FromStage(stage), 3);
             for (ui64 id = 0; id < 3; ++id) {
                 NYql::NDqProto::TEvComputeActorState state;
                 state.SetState(NYql::NDqProto::COMPUTE_STATE_FINISHED);
@@ -999,14 +1099,12 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 task.SetFinishTimeMs(100 + id);
                 diagnostics.OnTaskFinished({0, 0}, NKqp::TTaskTraceDescription::FromStage(stage), 3, state, 1);
             }
-            NWilson::TSpan span(TComponentTracingLevels::TQueryProcessor::Basic,
-                NWilson::TTraceId::NewTraceId(level, 4095), "Execute plan", NWilson::EFlags::NONE, runtime.GetActorSystem(0));
             NYql::NDqProto::TDqExecutionStats stats;
             diagnostics.Finish(span, stats, Ydb::StatusIds::SUCCESS);
             span.EndOk();
             runtime.SimulateSleep(TDuration::Seconds(1));
             const auto* execution = FindSpan(*uploader, "Execute plan");
-            UNIT_ASSERT_VALUES_EQUAL(execution->events_size(), level == 10 ? 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(std::ranges::distance(StageSpans(*uploader)), level == 10 ? 1 : 0);
             UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*execution, "ydb.wait_us")->value().int_value(), 3);
             UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*execution, "ydb.spilled_bytes")->value().int_value(), 6);
             UNIT_ASSERT_DOUBLES_EQUAL(FindAttribute(*execution, "ydb.max_task_skew")->value().double_value(), 2, 1e-9);
@@ -1017,28 +1115,29 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
     Y_UNIT_TEST(StageLimitsKeepTotalsAndTransactionIdentity) {
         auto [runtime, server, sender] = CreateServer();
         auto* uploader = RegisterUploader(runtime);
-        NKqp::TExecutionTraceStats diagnostics(TComponentTracingLevels::TQueryProcessor::Detailed);
+        NKqp::TExecutionTrace diagnostics(TComponentTracingLevels::TQueryProcessor::Detailed);
         NKqpProto::TKqpPhyStage stage;
         NYql::NDqProto::TDqTaskStats task;
         task.SetStageId(0);
         task.SetWaitOutputTimeUs(1);
         task.SetSpillingChannelWriteBytes(2);
-        for (ui64 tx = 0; tx < NKqp::NQueryTraceSettings::MaxStages + 3; ++tx) {
-            task.SetTaskId(tx + 1);
-            diagnostics.AddTask(tx, NKqp::TTaskTraceDescription::FromStage(stage), 2, task, std::nullopt, 1, true);
-        }
         NWilson::TSpan span(TComponentTracingLevels::TQueryProcessor::Basic,
             NWilson::TTraceId::NewTraceId(15, 4095), "Execute plan", NWilson::EFlags::NONE, runtime.GetActorSystem(0));
+        for (ui64 tx = 0; tx < NKqp::NQueryTraceSettings::MaxStages + 3; ++tx) {
+            diagnostics.StartStage(span, {tx, 0}, NKqp::TTaskTraceDescription::FromStage(stage), 2);
+            task.SetTaskId(tx + 1);
+            diagnostics.AddTask(tx, NKqp::TTaskTraceDescription::FromStage(stage), 2, task, std::nullopt, 1, Ydb::StatusIds::ABORTED);
+        }
         NYql::NDqProto::TDqExecutionStats stats;
         diagnostics.Finish(span, stats, Ydb::StatusIds::ABORTED);
         span.EndError("incomplete execution");
         runtime.SimulateSleep(TDuration::Seconds(1));
         const auto* execution = FindSpan(*uploader, "Execute plan");
-        UNIT_ASSERT_VALUES_EQUAL(execution->events_size(), NKqp::NQueryTraceSettings::MaxStages);
+        UNIT_ASSERT_VALUES_EQUAL(std::ranges::distance(StageSpans(*uploader)), NKqp::NQueryTraceSettings::MaxStages);
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*execution, "ydb.wait_us")->value().int_value(), NKqp::NQueryTraceSettings::MaxStages + 3);
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*execution, "ydb.spilled_bytes")->value().int_value(), 2 * (NKqp::NQueryTraceSettings::MaxStages + 3));
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*execution, "ydb.tasks_without_stage_details")->value().int_value(), 3);
-        for (const auto& event : execution->events()) {
+        for (const auto& event : StageSpans(*uploader)) {
             UNIT_ASSERT_VALUES_EQUAL(FindAttribute(event, "ydb.reported_tasks")->value().int_value(), 1);
             UNIT_ASSERT_VALUES_EQUAL(FindAttribute(event, "ydb.tasks")->value().int_value(), 2);
             UNIT_ASSERT_VALUES_EQUAL(FindAttribute(event, "ydb.timed_tasks")->value().int_value(), 0);

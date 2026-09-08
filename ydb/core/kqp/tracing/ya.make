@@ -15,6 +15,7 @@ PEERDIR(
     ydb/library/actors/wilson
     ydb/library/wilson_ids
     ydb/library/yql/dq/proto
+    ydb/library/yql/dq/actors
     ydb/library/yql/dq/actors/protos
     ydb/library/security
     ydb/public/api/protos

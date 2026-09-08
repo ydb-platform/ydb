@@ -159,7 +159,6 @@ public:
         BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();
 
         ExecuterSpan.Attribute("ydb.actor.type", spanName);
-        TasksGraph.PrepareTaskTracing(ExecuterSpan);
         if (ExecuterSpan) {
             TraceStats.emplace(ExecuterSpan.GetTraceId().GetVerbosity());
         }
@@ -1609,6 +1608,8 @@ protected:
     }
 
     [[nodiscard]] bool BuildPlannerAndSubmitTasks() {
+        auto& tasksSpan = ExecuterStateSpan.GetTraceId() ? ExecuterStateSpan : ExecuterSpan;
+        TasksGraph.PrepareTaskTracing(tasksSpan, TraceStats ? &*TraceStats : nullptr);
         Planner = CreateKqpPlanner({
             .TasksGraph = TasksGraph,
             .TxId = TxId,
@@ -1619,7 +1620,7 @@ protected:
             .StatsMode = Request.StatsMode,
             .WithProgressStats = Request.ProgressStatsPeriod != TDuration::Zero(),
             .RlPath = Request.RlPath,
-            .ExecuterSpan = ExecuterStateSpan.GetTraceId() ? ExecuterStateSpan : ExecuterSpan,
+            .ExecuterSpan = tasksSpan,
             .ResourcesSnapshot = std::move(ResourcesSnapshot),
             .ExecuterRetriesConfig = ExecuterRetriesConfig,
             .MkqlMemoryLimit = Request.MkqlMemoryLimit,
@@ -2204,7 +2205,7 @@ protected:
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
     NWilson::TSpan ExecuterSpan;
     NWilson::TSpan ExecuterStateSpan;
-    std::optional<TExecutionTraceStats> TraceStats;
+    std::optional<TExecutionTrace> TraceStats;
     THashMap<ui32, std::shared_ptr<NYql::NDq::IChannelBuffer>> ResultInputBuffers;
 
     struct TResultChannelFlowState {

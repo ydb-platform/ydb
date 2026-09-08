@@ -66,6 +66,7 @@ struct TAncestorLock {
     ui64 Counter = 0;
     TInstant CreationTime;
     ELockFlags Flags = ELockFlags::None;
+    THashMap<ui64, TWriteSeqNumState> WriteSeqNumStates; // WriterIndex -> state
 };
 
 class ILocksDb {
@@ -121,6 +122,8 @@ public:
     virtual void PersistRemoveLockWriteSeqNum(ui64 lockId, ui64 writerIndex) = 0;
     virtual void PersistAddAncestorLock(ui64 lockId, const TAncestorLock& lock) = 0;
     virtual void PersistRemoveAncestorLock(ui64 lockId, ui64 tabletId) = 0;
+    virtual void PersistAncestorLockWriteSeqNum(ui64 lockId, ui64 tabletId, ui64 writerIndex, ui64 writeSeqNum, const TString& serializedResult) = 0;
+    virtual void PersistRemoveAncestorLockWriteSeqNum(ui64 lockId, ui64 tabletId, ui64 writerIndex) = 0;
     virtual void PersistRemoveLock(ui64 lockId) = 0;
 
     // Persist adding/removing info on locked ranges

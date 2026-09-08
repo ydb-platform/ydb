@@ -270,6 +270,21 @@ public:
                 row.CreateTs = srcLockInfo.GetCreateTimestamp();
                 row.Flags = ui64(ELockFlags::Persistent);
 
+                auto writeSeqNumStateFromProto = [](const auto& proto) {
+                    TWriteSeqNumState state;
+                    state.WriterIndex = proto.GetWriterIndex();
+                    state.WriteSeqNum = proto.GetWriteSeqNum();
+                    state.SerializedResult = proto.GetSerializedResult();
+                    return state;
+                };
+
+                for (const auto& proto : srcLockInfo.GetWriteSeqNumStates()) {
+                    auto state = writeSeqNumStateFromProto(proto);
+                    if (state.WriteSeqNum) {
+                        row.WriteSeqNumStates.push_back(std::move(state));
+                    }
+                }
+
                 row.AncestorLocks.reserve(srcLockInfo.GetAncestorLocks().size());
                 for (const auto& protoLock : srcLockInfo.GetAncestorLocks()) {
                     TAncestorLock ancestorLock;
@@ -278,7 +293,15 @@ public:
                     ancestorLock.Counter = protoLock.GetCounter();
                     ancestorLock.CreationTime = TInstant::MicroSeconds(protoLock.GetCreateTimestamp());
                     ancestorLock.Flags = ELockFlags(protoLock.GetFlags());
-                    row.AncestorLocks.push_back(ancestorLock);
+
+                    for (const auto& proto : protoLock.GetWriteSeqNumStates()) {
+                        auto state = writeSeqNumStateFromProto(proto);
+                        if (state.WriteSeqNum) {
+                            ancestorLock.WriteSeqNumStates[state.WriterIndex] = state;
+                        }
+                    }
+
+                    row.AncestorLocks.push_back(std::move(ancestorLock));
                 }
 
                 for (const auto& pathProto : srcLockInfo.GetWriteTables()) {

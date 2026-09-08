@@ -304,8 +304,11 @@ void TLockInfo::PersistRemoveLock(ILocksDb* db) {
     WriteSeqNumStates.clear();
 
     // Remove ancestor shard records
-    for (const auto& [tabletId, _] : AncestorLocks) {
+    for (const auto& [tabletId, ancestorLock] : AncestorLocks) {
         db->PersistRemoveAncestorLock(LockId, tabletId);
+        for (const auto& [writerIdx, _] : ancestorLock.WriteSeqNumStates) {
+            db->PersistRemoveAncestorLockWriteSeqNum(LockId, tabletId, writerIdx);
+        }
     }
     AncestorLocks.clear();
 
@@ -1916,14 +1919,26 @@ bool TSysLocks::RestoreLockFromSplitSrc(ui64 srcTabletId, ILocksDb::TLockRow&& r
         ancestorLock.Counter = row.Counter;
         ancestorLock.CreationTime = TInstant::MicroSeconds(row.CreateTs);
         ancestorLock.Flags = ELockFlags(row.Flags);
+        for (auto& state : row.WriteSeqNumStates) {
+            ui64 index = state.WriterIndex;
+            locksDb.PersistAncestorLockWriteSeqNum(
+                row.LockId, srcTabletId,
+                state.WriterIndex, state.WriteSeqNum, state.SerializedResult);
+            ancestorLock.WriteSeqNumStates[index] = std::move(state);
+        }
 
-        lock->AddAncestorLock(std::move(ancestorLock));
         locksDb.PersistAddAncestorLock(row.LockId, ancestorLock);
+        lock->AddAncestorLock(std::move(ancestorLock));
     }
 
     // Add ancestor entries for grandparent shards (multi-hop split/merge)
-    for (const auto& ancestorLock : row.AncestorLocks) {
+    for (auto& ancestorLock : row.AncestorLocks) {
         locksDb.PersistAddAncestorLock(row.LockId, ancestorLock);
+        for (const auto& [_, state] : ancestorLock.WriteSeqNumStates) {
+            locksDb.PersistAncestorLockWriteSeqNum(
+                row.LockId, ancestorLock.TabletId,
+                state.WriterIndex, state.WriteSeqNum, state.SerializedResult);
+        }
         lock->AddAncestorLock(std::move(ancestorLock));
     }
 

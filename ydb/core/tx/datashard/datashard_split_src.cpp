@@ -203,6 +203,21 @@ public:
                 srcLockInfo.SetCreateTimestamp(lock.GetCreationTime().MicroSeconds());
                 srcLockInfo.SetFlags(ui64(lock.GetFlags()));
 
+                auto writeSeqNumStateToProto = [](const TWriteSeqNumState& state, auto* proto) {
+                    proto->SetWriterIndex(state.WriterIndex);
+                    proto->SetWriteSeqNum(state.WriteSeqNum);
+                    if (!state.SerializedResult.empty()) {
+                        proto->SetSerializedResult(state.SerializedResult);
+                    }
+                };
+
+                for (const auto& [_, state] : lock.GetWriteSeqNumStates()) {
+                    if (state.WriteSeqNum == 0) {
+                        continue;
+                    }
+                    writeSeqNumStateToProto(state, srcLockInfo.AddWriteSeqNumStates());
+                }
+
                 // Forward grandparent ancestor locks (multi-hop split/merge)
                 for (const auto& [tabletId, ancestorLock] : lock.GetAncestorLocks()) {
                     auto& proto = *srcLockInfo.AddAncestorLocks();
@@ -211,6 +226,12 @@ public:
                     proto.SetCounter(ancestorLock.Counter);
                     proto.SetCreateTimestamp(ancestorLock.CreationTime.MicroSeconds());
                     proto.SetFlags(ui64(ancestorLock.Flags));
+                    for (const auto& [_, state] : ancestorLock.WriteSeqNumStates) {
+                        if (state.WriteSeqNum == 0) {
+                            continue;
+                        }
+                        writeSeqNumStateToProto(state, proto.AddWriteSeqNumStates());
+                    }
                 }
 
                 for (const auto& pathId : lock.GetWriteTables()) {

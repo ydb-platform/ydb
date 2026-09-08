@@ -66,11 +66,27 @@ void TPartitionActor::CompleteLoadState(
             // in-flight slot and replay the BSController request once the fast
             // path service is ready (see HandleFastPathServiceReady).
             if (args.AddHostInProgress.Defined()) {
+                const auto& intent = *args.AddHostInProgress;
+                const ui32 dbgConnectionsConfigGeneration =
+                    DirectBlockGroupsConnections
+                        .GetDirectBlockGroupConnections(
+                            intent.GetDirectBlockGroupId())
+                        .GetDBGConnectionsConfigGeneration();
+
+                Y_ABORT_UNLESS(
+                    intent.GetDBGConnectionsConfigGeneration() ==
+                        dbgConnectionsConfigGeneration,
+                    "AddHost plan was decided on DBG connections config "
+                    "generation %u, the group is at %u",
+                    intent.GetDBGConnectionsConfigGeneration(),
+                    dbgConnectionsConfigGeneration);
+
                 AddHostInFlight = TAddHostInFlight{
-                    .DirectBlockGroupId =
-                        args.AddHostInProgress->GetDirectBlockGroupId(),
-                    .NewHostIndex = static_cast<THostIndex>(
-                        args.AddHostInProgress->GetNewHostIndex()),
+                    .DirectBlockGroupId = intent.GetDirectBlockGroupId(),
+                    .NewHostIndex =
+                        static_cast<THostIndex>(intent.GetNewHostIndex()),
+                    .DBGConnectionsConfigGeneration =
+                        intent.GetDBGConnectionsConfigGeneration(),
                 };
             }
         }

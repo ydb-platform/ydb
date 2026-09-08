@@ -98,13 +98,17 @@ private:
                 break;
             }
             (void)WaitForSpecificEvent<NActors::TEvents::TEvWakeup>(
-                &TS3DecompressorCoroImpl::ProcessUnexpectedEvent,
+                &TS3DecompressorCoroImpl::ProcessEventWhileAcquiringSlot,
                 now + *delay);
         }
         Working = true;
     }
 
-    void ProcessUnexpectedEvent(TAutoPtr<::NActors::IEventHandle> ev) {
+    // Process events while waiting for a slot to start a unit of work.
+    // The event processing MUST NOT re-enter StartUnit / ReconcileWorking —
+    // that would double-acquire the slot. No such handler exists today,
+    // but keep this invariant in mind when adding new ones.
+    void ProcessEventWhileAcquiringSlot(TAutoPtr<::NActors::IEventHandle> ev) {
         StateFunc(ev);
     }
 

@@ -9,6 +9,7 @@ PY_SRCS(
     import_results.py
     load_control.py
     local_ydb.py
+    local_ydb_workloads.py
     linux_telemetry.py
     runner.py
     results.py

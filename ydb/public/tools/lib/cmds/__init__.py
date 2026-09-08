@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 import argparse
 import logging
+import multiprocessing
+import re
 import shutil
 import signal
 import os
@@ -10,6 +12,8 @@ import string
 import typing  # noqa: F401
 import sys
 import types
+import time
+import errno
 from six.moves.urllib.parse import urlparse
 
 import yatest
@@ -24,6 +28,76 @@ from ydb.tests.library.harness.kikimr_port_allocator import KikimrFixedPortAlloc
 from library.python.testing.recipe import set_env
 
 logger = logging.getLogger(__name__)
+
+
+def _read_text(path):
+    try:
+        with open(path) as stream:
+            return stream.read().strip()
+    except (IOError, OSError):
+        return ''
+
+
+def _unescape_mount_path(path):
+    return re.sub(r'\\([0-7]{3})', lambda match: chr(int(match.group(1), 8)), path)
+
+
+def _cgroup_cpu_limits():
+    groups = {}
+    for line in _read_text('/proc/self/cgroup').splitlines():
+        fields = line.split(':', 2)
+        if len(fields) == 3:
+            for controller in fields[1].split(','):
+                groups[controller] = fields[2]
+
+    for line in _read_text('/proc/self/mountinfo').splitlines():
+        mount, separator, filesystem = line.partition(' - ')
+        fields, fs = mount.split(), filesystem.split()
+        if not separator or len(fields) < 6 or len(fs) < 3:
+            continue
+        if fs[0] == 'cgroup2':
+            group = groups.get('')
+        elif fs[0] == 'cgroup' and 'cpu' in fs[2].split(','):
+            group = groups.get('cpu')
+        else:
+            continue
+        if group is None:
+            continue
+
+        root, mountpoint = map(_unescape_mount_path, fields[3:5])
+        mountpoint = os.path.normpath(mountpoint)
+        relative = os.path.relpath(group, root)
+        if relative == '..' or relative.startswith('../'):
+            continue
+        directory = os.path.normpath(os.path.join(mountpoint, relative))
+        # A parent cgroup can impose a tighter limit than the process's own group.
+        while True:
+            if fs[0] == 'cgroup2':
+                quota = _read_text(os.path.join(directory, 'cpu.max')).split()
+            else:
+                quota = [_read_text(os.path.join(directory, name)) for name in
+                         ('cpu.cfs_quota_us', 'cpu.cfs_period_us')]
+            try:
+                maximum, period = map(int, quota)
+                if maximum >= 0 and period > 0:
+                    yield max(1, (maximum + period - 1) // period)
+            except ValueError:
+                pass  # Includes unlimited quotas (v2 "max") and missing files.
+            if directory == mountpoint:
+                break
+            directory = os.path.dirname(directory)
+
+
+def available_cpu_count():
+    """Count usable CPUs, bounded by affinity and visible cgroup CPU quotas."""
+    try:
+        count = len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):
+        try:
+            count = multiprocessing.cpu_count()
+        except NotImplementedError:
+            count = 1
+    return max(1, min([count] + list(_cgroup_cpu_limits())))
 
 
 class EmptyArguments(object):
@@ -393,11 +467,17 @@ def resolve_http_proxy_config(arguments):
     return config
 
 
-def deploy(arguments):
+def deploy(arguments, actor_system_config=None):
+    """Deploy a cluster, optionally replacing actor-system defaults in a newly generated config."""
     initialize_working_dir(arguments)
     recipe = Recipe(arguments)
 
     if os.path.exists(recipe.metafile_path()):
+        if actor_system_config is not None:
+            logger.info(
+                "Reusing the existing deployment configuration; "
+                "actor_system_config only applies to a new configuration"
+            )
         return start(arguments)
 
     if getattr(arguments, 'use_packages', None) is not None:
@@ -483,6 +563,7 @@ def deploy(arguments):
         verbose_memory_limit_exception=True,
         enforce_user_token_requirement=enforce_user_token_requirement,
         default_clusteradmin=default_clusteradmin,
+        overrided_actor_system_config=actor_system_config,
         **optionals
     )
 
@@ -560,6 +641,49 @@ def deploy(arguments):
     return endpoint, database
 
 
+def _process_is_alive(pid):
+    try:
+        os.kill(pid, 0)
+        if sys.platform.startswith('linux'):
+            # A zombie group leader may still have live threads holding sockets.
+            # Only a single-thread zombie is safe to treat as fully stopped.
+            with open('/proc/{}/stat'.format(pid)) as stream:
+                fields = stream.read().rsplit(')', 1)[1].split()
+                return fields[0] != 'Z' or int(fields[17]) > 1
+        return True
+    except OSError as error:
+        if error.errno in (errno.ESRCH, errno.ENOENT):
+            return False
+        raise
+
+
+def _wait_for_process_exit(pid, timeout=30):
+    deadline = time.time() + timeout
+    try:
+        while _process_is_alive(pid):
+            if time.time() >= deadline:
+                raise RuntimeError("YDB process {} did not exit within {} seconds".format(pid, timeout))
+            time.sleep(0.1)
+    except OSError as error:
+        raise RuntimeError("Cannot verify exit of YDB process {}: {}".format(pid, error))
+
+
+def _verify_process_command(pid, command):
+    if not sys.platform.startswith('linux'):
+        return
+    try:
+        with open('/proc/{}/cmdline'.format(pid), 'rb') as stream:
+            actual = stream.read().rstrip(b'\0').split(b'\0')
+    except OSError as error:
+        if error.errno in (errno.ENOENT, errno.ESRCH):
+            return
+        raise RuntimeError("Cannot verify YDB process {}: {}".format(pid, error))
+    if actual == [b''] and not _process_is_alive(pid):
+        return  # An unreaped zombie no longer has a command line.
+    if actual != [argument.encode('utf-8') for argument in command]:
+        raise RuntimeError("Refusing to stop PID {}: command differs from the recorded YDB command".format(pid))
+
+
 def _stop_instances(arguments):
     recipe = Recipe(arguments)
     if not os.path.exists(recipe.metafile_path()):
@@ -572,10 +696,15 @@ def _stop_instances(arguments):
 
     for node_id, node_meta in info['nodes'].items():
         pid = node_meta['pid']
+        _verify_process_command(pid, node_meta['command'])
         try:
             os.kill(pid, signal.SIGKILL)
-        except OSError:
-            pass
+        except OSError as error:
+            if error.errno != errno.ESRCH:
+                raise RuntimeError(
+                    "Cannot stop YDB process {}: {}; keeping the deployment intact".format(pid, error)
+                )
+        _wait_for_process_exit(pid)
 
         try:
             with open(node_meta['stderr_file'], "r") as r:

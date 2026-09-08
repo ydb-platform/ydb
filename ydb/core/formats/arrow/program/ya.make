@@ -67,6 +67,13 @@ CFLAGS(
 
 END()
 
+
 RECURSE_FOR_TESTS(
+    benchmark
     ut
+)
+
+RECURSE(
+    ascii_contains
+    olap_kernels
 )

@@ -6,11 +6,14 @@
 #include "grpc_request_proxy_handle_methods.h"
 
 #include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/path.h>
 
 #include <ydb/library/actors/core/actor.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
+
+#include <type_traits>
 
 namespace NKikimrConfig {
 class TAppConfig;
@@ -24,6 +27,31 @@ namespace NGRpcService {
 
 IActor* CreateGRpcRequestProxy(const NKikimrConfig::TAppConfig& appConfig);
 IActor* CreateGRpcRequestProxySimple(const NKikimrConfig::TAppConfig& appConfig);
+
+template <typename TEvent>
+bool ResolveRequestDatabase(TEvent* request, const TString& rootDatabase, bool ignoreRoot) {
+    if (!ignoreRoot || request->IsInternalCall()) {
+        return true;
+    }
+
+    const auto database = request->GetDatabaseName();
+    if constexpr (std::is_same_v<TEvent, TEvListEndpointsRequest>) {
+        const auto& discoveryDatabase = request->GetProtoRequest()->database();
+        if (discoveryDatabase.empty() || discoveryDatabase[0] != '/' || CanonizePath(discoveryDatabase).empty()) {
+            return true;
+        }
+        TString resolved = ResolveDatabasePath(discoveryDatabase, rootDatabase);
+        if (database && !database->empty()
+            && CanonizePath(ResolveDatabasePath(*database, rootDatabase)) != resolved) {
+            request->RaiseIssue(NYql::TIssue("ListEndpoints database and x-ydb-database resolve to different databases"));
+            return false;
+        }
+        request->SetResolvedDatabaseName(std::move(resolved));
+    } else if (database) {
+        request->SetResolvedDatabaseName(ResolveDatabasePath(*database, rootDatabase));
+    }
+    return true;
+}
 
 class TGRpcRequestProxy : public TGRpcRequestProxyHandleMethods, public IFacilityProvider {
 public:

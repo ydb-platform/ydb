@@ -24,7 +24,7 @@ using namespace NActors;
 
 static const ui32 MAX_DEFERRED_EVENTS_PER_DATABASE = 100;
 
-TString DatabaseFromDomain(const TAppData* appdata = AppData()) {
+TString DatabaseFromDomain(const TAppData* appdata) {
     auto dinfo = appdata->DomainsInfo;
     if (!dinfo)
         ythrow yexception() << "Invalid DomainsInfo ptr";
@@ -61,6 +61,7 @@ class TGRpcRequestProxyImpl
 public:
     explicit TGRpcRequestProxyImpl(const NKikimrConfig::TAppConfig& appConfig)
         : ChannelBufferSize(appConfig.GetTableServiceConfig().GetResourceManager().GetChannelBufferSize())
+        , IgnoreRoot(appConfig.GetGRpcConfig().GetIgnoreRoot())
     { }
 
     void Bootstrap(const TActorContext& ctx);
@@ -146,6 +147,11 @@ private:
             const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, error);
             requestBaseCtx->RaiseIssue(issue);
             requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+            return;
+        }
+
+        if (!ResolveRequestDatabase(event->Get(), RootDatabase, IgnoreRoot)) {
+            requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
             return;
         }
 
@@ -344,6 +350,7 @@ private:
     THashSet<TSubDomainKey> SubDomainKeys;
     bool AllowYdbRequestsWithoutDatabase = true;
     std::atomic<ui64> ChannelBufferSize;
+    const bool IgnoreRoot;
     TActorId SchemeCache;
     bool DynamicNode = false;
     TString RootDatabase;
@@ -373,7 +380,7 @@ void TGRpcRequestProxyImpl::Bootstrap(const TActorContext& ctx) {
     Counters = CreateGRpcProxyCounters(AppData()->Counters);
     InitializeGRpcProxyDbCountersRegistry(ctx.ActorSystem());
 
-    RootDatabase = DatabaseFromDomain();
+    RootDatabase = DatabaseFromDomain(AppData());
     Y_ABORT_UNLESS(!RootDatabase.empty());
     Databases.try_emplace(RootDatabase);
     DoStartUpdate(RootDatabase);

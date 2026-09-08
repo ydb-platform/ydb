@@ -58,6 +58,27 @@ TString DoCanonizePathOld(const TString& path)
 }
 
 Y_UNIT_TEST_SUITE(Path) {
+    Y_UNIT_TEST(ResolveDatabasePath) {
+        const TVector<std::pair<TString, TString>> cases = {
+            {"/ru/mydb123", "/backup/mydb123"},
+            {"/ru/team/mydb123", "/backup/team/mydb123"},
+            {"/kfront", "/backup/kfront"},
+            {"/backup", "/backup"},
+            {"/backup/mydb123", "/backup/mydb123"},
+            {"/backup2/mydb123", "/backup/mydb123"},
+            {"//ru///team/mydb123//", "/backup/team/mydb123"},
+            {"/kfront/", "/backup/kfront"},
+            {"", ""}, {"/", "/"}, {"///", "///"},
+            {"mydb123", "mydb123"}, {"team/mydb123", "team/mydb123"},
+            {"backup/mydb123", "backup/mydb123"},
+        };
+        for (const auto& [input, expected] : cases) {
+            UNIT_ASSERT_VALUES_EQUAL_C(NKikimr::ResolveDatabasePath(input, "/backup"), expected, input);
+            UNIT_ASSERT_VALUES_EQUAL_C(NKikimr::ResolveDatabasePath(expected, "/backup"), expected, input);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(NKikimr::ResolveDatabasePath("/kfront", "/root"), "/root/kfront");
+    }
+
     Y_UNIT_TEST(CanonizeOld) {
         for (size_t i = 0; i < Data.size(); i++) {
             const TString& result = DoCanonizePathOld(Data[i].first);

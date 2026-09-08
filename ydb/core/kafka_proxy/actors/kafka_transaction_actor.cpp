@@ -121,7 +121,17 @@ namespace NKafka {
 
         bool txnAborted = !ev->Get()->Request->Committed;
         if (CommitStarted) {
-            return; // we just ignore second and subsequent requests
+            if (txnAborted) {
+                SendFailResponse<TEndTxnResponseData>(ev, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
+                    "Commit already in progress");
+                return;
+            }
+            YDB_LOG_DEBUG("EndTxn commit already in progress; attaching retry",
+                {LogPrefix()},
+                {"correlationId", ev->Get()->CorrelationId},
+                {"pending", PendingEndTxnRequests.size()});
+            PendingEndTxnRequests.push_back(std::move(ev));
+            return;
         } else if (txnAborted) {
             SendOkResponse<TEndTxnResponseData>(ev);
             Die(ctx);
@@ -130,7 +140,7 @@ namespace NKafka {
             Die(ctx);
         } else {
             CommitStarted = true;
-            EndTxnRequestPtr = std::move(ev);
+            PendingEndTxnRequests.push_back(std::move(ev));
             StartKqpSession(ctx);
         }
     }
@@ -274,10 +284,19 @@ namespace NKafka {
         TBase::Die(ctx);
     }
 
-    void TTransactionActor::FailEndTxnRetryable(const TActorContext& ctx, const TString& errorMessage) {
-        if (EndTxnRequestPtr) {
-            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::COORDINATOR_NOT_AVAILABLE, errorMessage);
+    void TTransactionActor::ReplyPendingEndTxn(EKafkaErrors errorCode, const TString& errorMessage) {
+        for (auto& request : PendingEndTxnRequests) {
+            if (errorCode == EKafkaErrors::NONE_ERROR) {
+                SendOkResponse<TEndTxnResponseData>(request);
+            } else {
+                SendFailResponse<TEndTxnResponseData>(request, errorCode, errorMessage);
+            }
         }
+        PendingEndTxnRequests.clear();
+    }
+
+    void TTransactionActor::FailEndTxnRetryable(const TActorContext& ctx, const TString& errorMessage) {
+        ReplyPendingEndTxn(EKafkaErrors::COORDINATOR_NOT_AVAILABLE, errorMessage);
         ++KqpCookie;
         if (Kqp) {
             Kqp->CloseKqpSession(ctx);
@@ -286,7 +305,6 @@ namespace NKafka {
         KqpSessionId = "";
         LastSentToKqpRequest = EKafkaTxnKqpRequests::NO_REQUEST;
         CommitStarted = false;
-        EndTxnRequestPtr.Destroy();
     }
 
     bool TTransactionActor::TxnExpired() {
@@ -412,7 +430,7 @@ namespace NKafka {
         if (auto error = GetErrorInProducerState(producerState)) {
             YDB_LOG_WARN(error,
                 {LogPrefix()});
-            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::PRODUCER_FENCED, error->data());
+            ReplyPendingEndTxn(EKafkaErrors::PRODUCER_FENCED, error->data());
             Die(ctx);
             return;
         }
@@ -423,7 +441,7 @@ namespace NKafka {
             if (auto error = GetErrorInConsumersStates(consumerGenerationsByName)) {
                 YDB_LOG_WARN(error,
                     {LogPrefix()});
-                SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::PRODUCER_FENCED, error->data());
+                ReplyPendingEndTxn(EKafkaErrors::PRODUCER_FENCED, error->data());
                 Die(ctx);
                 return;
             }
@@ -453,7 +471,7 @@ namespace NKafka {
     void TTransactionActor::HandleCommitResponse(const TActorContext& ctx) {
         YDB_LOG_DEBUG("Successfully committed transaction. Sending ok and dying",
             {LogPrefix()});
-        SendOkResponse<TEndTxnResponseData>(EndTxnRequestPtr);
+        ReplyPendingEndTxn(EKafkaErrors::NONE_ERROR);
         Die(ctx);
     }
 

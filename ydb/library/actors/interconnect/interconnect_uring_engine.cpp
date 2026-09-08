@@ -3,6 +3,7 @@
 #include "uring_context.h" // for TUringContext::IsAvailable() / SqThreadIdleMs
 
 #include "v2_event_serializer.h"
+#include "v2_serialize_window.h"
 #include "interconnect_common.h"
 #include "interconnect_direct_session.h"
 #include "interconnect_uring_event_queue.h"
@@ -191,7 +192,7 @@ namespace NActors {
 
             std::vector<TIncomingEventQueue::TRecord> PendingRecordsHeap;
 
-            size_t SerializeWindowSize = 0;
+            TSerializeWindow SerializeWindow;
 
             ui64 BytesSent = 0;
             ui64 BytesReceived = 0;
@@ -305,7 +306,8 @@ namespace NActors {
                         break;
                     }
                     const size_t unsent = UnsentBytes + XdcUnsentBytes;
-                    size_t budget = unsent < SerializeWindowSize ? SerializeWindowSize - unsent : 0;
+                    const size_t windowSize = SerializeWindow.GetSize();
+                    size_t budget = unsent < windowSize ? windowSize - unsent : 0;
                     if (!budget) {
                         // The window is exhausted, which on a session with XDC can mean the XDC socket
                         // alone is backed up. Liveness must not depend on payload progress: the peer
@@ -397,18 +399,13 @@ namespace NActors {
 
                 size_t& unsent = xdc ? XdcUnsentBytes : UnsentBytes;
                 const size_t bytesToWrite = xdc ? XdcBytesToWriteLastTime : BytesToWriteLastTime;
-                const size_t unsentSumBefore = UnsentBytes + XdcUnsentBytes;
-
-                if (num == bytesToWrite && unsentSumBefore >= SerializeWindowSize) {
-                    SerializeWindowSize = Min(SerializeWindowSize + minSerializeWindowSize, maxSerializeWindowSize);
-                } else if (UnsentBytes + XdcUnsentBytes - num < SerializeWindowSize) {
-                    SerializeWindowSize = Max(SerializeWindowSize - minSerializeWindowSize, minSerializeWindowSize);
-                }
 
                 DropFrontSpans(xdc ? XdcOutgoingSpans : OutgoingSpans, num);
 
                 Y_ABORT_UNLESS(num <= unsent, "num# %zu unsent# %zu xdc# %d", num, unsent, int(xdc));
                 unsent -= num;
+                SerializeWindow.CompleteWrite(num, bytesToWrite, !WritePending && !XdcWritePending,
+                    minSerializeWindowSize, maxSerializeWindowSize);
 
                 size_t numEvents = events->size();
                 size_t numBuffers = buffers->size();
@@ -567,7 +564,7 @@ namespace NActors {
                                     PARAM2("PingPeriod", pingPeriod)
                                     PARAM2("ReceiveCallbacks size", ReceiveCallbacks.size())
                                     PARAM2("PendingRecordsHeap size", PendingRecordsHeap.size())
-                                    PARAM(SerializeWindowSize)
+                                    PARAM2("SerializeWindowSize", SerializeWindow.GetSize())
                                     PARAM2("NumBytesInScratchBuffers", Serializer.GetNumBytesInScratchBuffers())
                                     PARAM(BytesSent)
                                     PARAM(BytesReceived)
@@ -955,7 +952,13 @@ namespace NActors {
                 , MinWriteBufferSize(v2.MinWriteBufferSize)
                 , MaxWriteBufferSize(v2.MaxWriteBufferSize)
                 , MinSerializeWindowSize(v2.MinSerializeWindowSize)
-                , MaxSerializeWindowSize(v2.MaxSerializeWindowSize)
+                // A blocking socket write can complete in full after waiting for buffer space. Keep the
+                // combined batch within an explicitly configured send-buffer size; completion size alone
+                // cannot report that pressure.
+                , MaxSerializeWindowSize(engine.Common->Settings.TCPSocketBufferSize
+                    ? Max(v2.MinSerializeWindowSize,
+                        Min(v2.MaxSerializeWindowSize, engine.Common->Settings.TCPSocketBufferSize))
+                    : v2.MaxSerializeWindowSize)
             {
                 const ui32 sqThreadIdleMs = v2.SqThreadIdleMs
                     ? v2.SqThreadIdleMs
@@ -1819,6 +1822,9 @@ namespace NActors {
                         *BytesAliased += session.Serializer.GetBytesAliased();
                     }
                 }
+                if (idle) {
+                    session.SerializeWindow.BeginBatch(session.UnsentBytes + session.XdcUnsentBytes);
+                }
                 if (session.WritePending) {
                     return;
                 }
@@ -2019,7 +2025,7 @@ namespace NActors {
                 std::move(clockSkew), std::move(pingRTT), std::move(xdcSocket));
             session->ReadBufferSize = v2.MinReadBufferSize;
             session->WriteBufferSize = v2.MinWriteBufferSize;
-            session->SerializeWindowSize = v2.MinSerializeWindowSize;
+            session->SerializeWindow = TSerializeWindow(v2.MinSerializeWindowSize);
             const ui64 conn = reinterpret_cast<ui64>(session.get());
             Shards[shardIdx]->Register(std::move(session));
             return conn;

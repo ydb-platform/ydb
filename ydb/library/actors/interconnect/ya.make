@@ -67,6 +67,7 @@ SRCS(
     types.h
     v2_event_serializer.cpp
     v2_event_serializer.h
+    v2_serialize_window.h
     watchdog_timer.h
 )
 

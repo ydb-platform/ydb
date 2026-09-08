@@ -23,12 +23,12 @@ class TTasksManager;
 class TDistributor: public TActorBootstrapped<TDistributor> {
 private:
     using TBase = TActorBootstrapped<TDistributor>;
-    const NConfig::TConfig Config;
+    NConfig::TConfig Config;
     const TString ConveyorName = "common";
     std::shared_ptr<TTasksManager> Manager;
     TCounters Counters;
 
-    NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr LatestConfigNotification;
+    THolder<NActors::IEventHandle> PendingConfigReply;
 
     void HandleMain(TEvExecution::TEvNewTask::TPtr& ev);
     void HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev);
@@ -42,8 +42,7 @@ private:
     void SubscribeToCompositeConveyorConfig();
     void ScheduleConfigSubscriptionRetry();
     void ReplyConfigNotification(const NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
-    void TryApplyLatestConfig();
-    void CompleteConfigUpdate();
+    void TryApplyUpdate();
 
 public:
     STATEFN(StateMain) {

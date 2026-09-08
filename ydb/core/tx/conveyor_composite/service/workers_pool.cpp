@@ -14,24 +14,15 @@ void TWeightedCategory::SetWeight(const double weight) {
     Counters->ValueWeight->Set(weight);
 }
 
-void TWorkersPool::TWorkerInfo::OnStartTask(TTaskCompletionContexts&& completionContexts) {
+void TWorkersPool::TWorkerInfo::OnStartTask() {
     Y_ENSURE(!RunningTask, "worker already has a running task");
-    Y_ENSURE(!completionContexts.empty(), "worker task has no completion contexts");
+    Y_ENSURE(!StopPrepare, "cannot assign a task to a worker prepared for removal");
     RunningTask = true;
-    CompletionContexts = std::move(completionContexts);
 }
 
 void TWorkersPool::TWorkerInfo::OnStopTask() {
     Y_ENSURE(RunningTask, "worker has no running task to stop");
     RunningTask = false;
-    CompletionContexts.clear();
-}
-
-const TWorkersPool::TTaskCompletionContext& TWorkersPool::TWorkerInfo::GetCompletionContext(
-    const ESpecialTaskCategory category) const {
-    const auto it = CompletionContexts.find(category);
-    Y_ENSURE(it != CompletionContexts.end(), "completion context is missing for category " << category);
-    return it->second;
 }
 
 TWorkersPool::TWorkersPool(const TString& poolName, const ui64 workersPoolId, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
@@ -77,12 +68,9 @@ void TWorkersPool::UpdateWorkerCPULimit(const ui64 workerIdx, const double newLi
 }
 
 void TWorkersPool::IncreaseWorkers(const std::vector<double>& desiredCPULimits) {
-    Y_ENSURE(WorkersUpdate, "workers increase outside of config update");
-
     const ui64 oldWorkersCount = Workers.size();
     Y_ENSURE(oldWorkersCount < desiredCPULimits.size(), "workers increase has no additional workers");
 
-    UpdateWorkerCPULimit(oldWorkersCount - 1, desiredCPULimits[oldWorkersCount - 1]);
     for (ui64 workerIdx = oldWorkersCount; workerIdx < desiredCPULimits.size(); ++workerIdx) {
         Workers.emplace_back(
             std::make_unique<TWorker>(PoolName, desiredCPULimits[workerIdx], DistributorId, workerIdx, WorkersPoolId), desiredCPULimits[workerIdx]);
@@ -92,86 +80,81 @@ void TWorkersPool::IncreaseWorkers(const std::vector<double>& desiredCPULimits) 
 }
 
 void TWorkersPool::DecreaseWorkers(const std::vector<double>& desiredCPULimits) {
-    // first decrease worker phase
-    Y_ENSURE(WorkersUpdate, "workers decrease outside of config update");
-
     const ui64 oldWorkersCount = Workers.size();
     Y_ENSURE(desiredCPULimits.size() < oldWorkersCount, "workers decrease has no removed workers");
 
-    UpdateWorkerCPULimit(desiredCPULimits.size() - 1, desiredCPULimits[desiredCPULimits.size() - 1]);
     for (ui64 workerIdx = desiredCPULimits.size(); workerIdx < oldWorkersCount; ++workerIdx) {
-        auto& worker = Workers[workerIdx];
-        worker.RequestStop();
-        Y_ENSURE(WorkersUpdate->WorkersWaitingForRelease.emplace(workerIdx).second,
-            "worker is already waiting for release: " << workerIdx);
+        const auto& worker = Workers[workerIdx];
+        Y_ENSURE(worker.GetStopPrepare() && !worker.GetRunningTask(),
+            "worker is not prepared for removal: " << workerIdx);
+        TActivationContext::Send(worker.GetWorkerId(), std::make_unique<NActors::TEvents::TEvPoisonPill>());
     }
-    for (ui64 workerIdx = desiredCPULimits.size(); workerIdx < oldWorkersCount; ++workerIdx) {
-        auto& worker = Workers[workerIdx];
-        if (!worker.GetRunningTask()) {
-            RemoveFreeWorker(workerIdx);
-            Y_UNUSED(ReleaseWorker(workerIdx));
-        }
+    while (Workers.size() > desiredCPULimits.size()) {
+        Workers.pop_back();
     }
 }
 
-bool TWorkersPool::StartWorkersUpdate(const std::vector<double>& desiredCPULimits) {
-    Y_ENSURE(desiredCPULimits.size(), "workers update requires at least one worker");
-
-    Y_ENSURE(!WorkersUpdate, "another workers update is already in progress");
-    WorkersUpdate.emplace();
-    WorkersUpdate->DesiredWorkersCount = desiredCPULimits.size();
+void TWorkersPool::ApplyWorkersUpdate(const std::vector<double>& desiredCPULimits) {
+    Y_ENSURE(IsReadyForUpdate(), "pool is not prepared for config update");
 
     if (Workers.size() < desiredCPULimits.size()) {
         IncreaseWorkers(desiredCPULimits);
     } else if (desiredCPULimits.size() < Workers.size()) {
         DecreaseWorkers(desiredCPULimits);
-    } else {
-        UpdateWorkerCPULimit(Workers.size() - 1, desiredCPULimits.back());
-    }
-    return !WorkersUpdate || TryFinishWorkersUpdate();
-}
-
-bool TWorkersPool::StartWorkersRetirement() {
-    Y_ENSURE(!WorkersUpdate, "workers retirement during another workers update");
-    WorkersUpdate.emplace();
-    WorkersUpdate->DesiredWorkersCount = 0;
-    for (ui64 workerIdx = 0; workerIdx < Workers.size(); ++workerIdx) {
-        auto& worker = Workers[workerIdx];
-        worker.RequestStop();
-        Y_ENSURE(WorkersUpdate->WorkersWaitingForRelease.emplace(workerIdx).second,
-            "worker is already waiting for release: " << workerIdx);
     }
     for (ui64 workerIdx = 0; workerIdx < Workers.size(); ++workerIdx) {
-        auto& worker = Workers[workerIdx];
-        if (!worker.GetRunningTask()) {
-            RemoveFreeWorker(workerIdx);
-            Y_UNUSED(ReleaseWorker(workerIdx));
-        }
-    }
-    return !WorkersUpdate || TryFinishWorkersUpdate();
-}
-
-bool TWorkersPool::TryFinishWorkersUpdate() {
-    if (!WorkersUpdate || !WorkersUpdate->IsFinished()) {
-        return false;
+        Y_ENSURE(!Workers[workerIdx].GetStopPrepare(), "retained worker is prepared for removal");
+        UpdateWorkerCPULimit(workerIdx, desiredCPULimits[workerIdx]);
     }
 
-    // second decrease worker phase
-    const ui64 desiredWorkersCount = WorkersUpdate->DesiredWorkersCount;
-    if (desiredWorkersCount < Workers.size()) {
-        while (Workers.size() > desiredWorkersCount) {
-            Workers.pop_back();
-        }
-    }
-
-    WorkersCount = desiredWorkersCount;
+    WorkersCount = Workers.size();
     MaxWorkerThreads = std::accumulate(Workers.begin(), Workers.end(), 0.0,
         [](const double sum, const TWorkerInfo& worker) {
             return sum + worker.GetCPULimit();
         });
     Counters->WorkersCountLimit->Set(WorkersCount);
     Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
-    WorkersUpdate.reset();
+}
+
+void TWorkersPool::PrepareConfigUpdate(const NConfig::TWorkersPool* target) {
+    for (auto& link : CategoryLinks) {
+        const bool retained = target && std::any_of(target->GetLinks().begin(), target->GetLinks().end(),
+            [&](const auto& desiredLink) {
+                return desiredLink.GetCategory() == link.GetCategory()->GetCategory();
+            });
+        link.SetStopPrepare(!retained);
+    }
+
+    const ui64 desiredWorkersCount = target ? target->GetWorkersCount(NKqp::TStagePredictor::GetPossibleMaxLimitThreads()) : 0;
+    for (ui64 workerIdx = 0; workerIdx < Workers.size(); ++workerIdx) {
+        auto& worker = Workers[workerIdx];
+        const bool stopPrepare = workerIdx >= desiredWorkersCount;
+        if (worker.GetStopPrepare() == stopPrepare) {
+            continue;
+        }
+        worker.SetStopPrepare(stopPrepare);
+        if (!worker.GetRunningTask()) {
+            if (stopPrepare) {
+                RemoveFreeWorker(workerIdx);
+            } else {
+                ActiveWorkersIdx.emplace_back(workerIdx);
+            }
+        }
+    }
+    Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
+}
+
+bool TWorkersPool::IsReadyForUpdate() const {
+    for (const auto& link : CategoryLinks) {
+        if (link.GetStopPrepare() && link.GetInFlightTasks()) {
+            return false;
+        }
+    }
+    for (const auto& worker : Workers) {
+        if (worker.GetStopPrepare() && worker.GetRunningTask()) {
+            return false;
+        }
+    }
     return true;
 }
 
@@ -179,7 +162,7 @@ bool TWorkersPool::HasFreeWorker() const {
     return !ActiveWorkersIdx.empty();
 }
 
-void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch, TTaskCompletionContexts&& completionContexts) {
+void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch) {
     Y_ENSURE(HasFreeWorker(), "cannot run a task without a free worker");
     Y_ENSURE(tasksBatch.size(), "cannot run an empty task batch");
     const auto workerIdx = ActiveWorkersIdx.back();
@@ -187,27 +170,24 @@ void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch, TTaskCompletio
     Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
 
     auto& worker = Workers[workerIdx];
-    worker.OnStartTask(std::move(completionContexts));
+    worker.OnStartTask();
+    for (const auto& task : tasksBatch) {
+        auto& link = FindCategoryLink(task.GetCategory());
+        Y_ENSURE(!link.GetStopPrepare(), "cannot assign a task to a link prepared for removal");
+        link.OnTaskStarted();
+    }
     TActivationContext::Send(
         worker.GetWorkerId(), std::make_unique<TEvInternal::TEvNewTask>(std::move(tasksBatch), worker.GetCPULimit()));
 }
 
-bool TWorkersPool::ReleaseWorker(const ui64 workerIdx) {
+void TWorkersPool::ReleaseWorker(const ui64 workerIdx) {
     Y_ENSURE(workerIdx < Workers.size(), "released worker index is out of range: " << workerIdx);
     auto& worker = Workers[workerIdx];
-    if (worker.GetRunningTask()) {
-        worker.OnStopTask();
+    worker.OnStopTask();
+    if (!worker.GetStopPrepare()) {
+        ActiveWorkersIdx.emplace_back(workerIdx);
     }
-    if (worker.GetStopRequested()) {
-        Y_ENSURE(WorkersUpdate, "worker stop completion outside of config update");
-        Y_ENSURE(WorkersUpdate->WorkersWaitingForRelease.erase(workerIdx),
-            "worker is not waiting for release: " << workerIdx);
-        TActivationContext::Send(worker.GetWorkerId(), std::make_unique<NActors::TEvents::TEvPoisonPill>());
-        return TryFinishWorkersUpdate();
-    }
-    ActiveWorkersIdx.emplace_back(workerIdx);
     Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
-    return false;
 }
 
 bool TWorkersPool::DrainTasks() {
@@ -226,13 +206,18 @@ bool TWorkersPool::DrainTasks() {
         }
         return r.GetCPUUsage()->CalcWeight(r.GetWeight()) < l.GetCPUUsage()->CalcWeight(l.GetWeight());
     };
-    std::make_heap(CategoryLinks.begin(), CategoryLinks.end(), predHeap);
-    std::vector<TWeightedCategory> procLocal = CategoryLinks;
+    std::vector<TWeightedCategory> procLocal;
+    procLocal.reserve(CategoryLinks.size());
+    for (const auto& link : CategoryLinks) {
+        if (!link.GetStopPrepare()) {
+            procLocal.emplace_back(link);
+        }
+    }
+    std::make_heap(procLocal.begin(), procLocal.end(), predHeap);
     bool newTask = false;
     while (ActiveWorkersIdx.size() && procLocal.size() && procLocal.front().GetCategory()->HasTasks()) {
         TDuration predicted = TDuration::Zero();
         std::vector<TWorkerTask> tasks;
-        TTaskCompletionContexts completionContexts;
         THashSet<TString> scopes;
         while (procLocal.size() && (tasks.empty() || (predicted < DeliveringDuration.GetValue() * 10 && tasks.size() < MaxBatchSize)) &&
                procLocal.front().GetCategory()->HasTasks()) {
@@ -242,7 +227,6 @@ bool TWorkersPool::DrainTasks() {
                 procLocal.pop_back();
                 continue;
             }
-            completionContexts.try_emplace(procLocal.back().GetCategory()->GetCategory(), procLocal.back());
             tasks.emplace_back(std::move(*task));
             procLocal.back().GetCPUUsage()->AddPredicted(tasks.back().GetPredictedDuration());
             predicted += tasks.back().GetPredictedDuration();
@@ -250,7 +234,7 @@ bool TWorkersPool::DrainTasks() {
         }
         newTask = true;
         if (tasks.size()) {
-            RunTask(std::move(tasks), std::move(completionContexts));
+            RunTask(std::move(tasks));
         }
     }
     for (auto&& i : CategoryLinks) {
@@ -269,13 +253,22 @@ void TWorkersPool::PutTaskResults(std::vector<TWorkerTaskResult>&& result, const
 
     THashSet<TString> scopeIds;
     for (auto&& t : result) {
-        const auto& context = worker.GetCompletionContext(t.GetCategory());
-        context.GetCounters()->WaitingHistogram->Collect((t.GetStart() - t.GetCreateInstant()).MicroSeconds());
-        context.GetCounters()->TaskExecuteHistogram->Collect((t.GetFinish() - t.GetStart()).MicroSeconds());
-        context.GetCounters()->ExecuteDuration->Add((t.GetFinish() - t.GetStart()).MicroSeconds());
-        context.GetCPUUsage()->Exchange(t.GetPredictedDuration(), t.GetStart(), t.GetFinish());
-        context.GetCategory()->PutTaskResult(std::move(t), scopeIds);
+        auto& link = FindCategoryLink(t.GetCategory());
+        link.GetCounters()->WaitingHistogram->Collect((t.GetStart() - t.GetCreateInstant()).MicroSeconds());
+        link.GetCounters()->TaskExecuteHistogram->Collect((t.GetFinish() - t.GetStart()).MicroSeconds());
+        link.GetCounters()->ExecuteDuration->Add((t.GetFinish() - t.GetStart()).MicroSeconds());
+        link.GetCPUUsage()->Exchange(t.GetPredictedDuration(), t.GetStart(), t.GetFinish());
+        link.GetCategory()->PutTaskResult(std::move(t), scopeIds);
+        link.OnTaskFinished();
     }
+}
+
+TWeightedCategory& TWorkersPool::FindCategoryLink(const ESpecialTaskCategory category) {
+    const auto it = std::find_if(CategoryLinks.begin(), CategoryLinks.end(), [&](const auto& link) {
+        return link.GetCategory()->GetCategory() == category;
+    });
+    Y_ENSURE(it != CategoryLinks.end(), "worker pool link is missing for category " << category);
+    return *it;
 }
 
 void TWorkersPool::ApplyTopologyUpdate(
@@ -290,6 +283,7 @@ void TWorkersPool::ApplyTopologyUpdate(
             return process.GetCategory()->GetCategory() == category;
         });
         if (oldIt != oldProcesses.end()) {
+            Y_ENSURE(!oldIt->GetStopPrepare(), "retained link is prepared for removal");
             oldIt->SetWeight(linkConfig.GetWeight());
             newProcesses.emplace_back(std::move(*oldIt));
             oldProcesses.erase(oldIt);
@@ -300,6 +294,7 @@ void TWorkersPool::ApplyTopologyUpdate(
         }
     }
     for (auto& process : oldProcesses) {
+        Y_ENSURE(process.GetStopPrepare() && !process.GetInFlightTasks(), "link is not prepared for removal");
         process.GetCounters()->ValueWeight->Set(0);
     }
     CategoryLinks = std::move(newProcesses);
@@ -307,6 +302,7 @@ void TWorkersPool::ApplyTopologyUpdate(
 
 void TWorkersPool::ClearTopology() {
     for (auto& process : CategoryLinks) {
+        Y_ENSURE(process.GetStopPrepare() && !process.GetInFlightTasks(), "link is not prepared for removal");
         process.GetCounters()->ValueWeight->Set(0);
     }
     CategoryLinks.clear();

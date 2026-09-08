@@ -36,20 +36,31 @@ ui64 TTasksManager::AddWorkerPool(const NConfig::TWorkersPool& poolConfig,
     return workersPoolId;
 }
 
-void TTasksManager::TryFinalizeRemoval(const ui64 workersPoolId) {
-    auto& pool = MutableWorkersPool(workersPoolId);
-    if (!WorkerPoolNameToIndex.contains(pool.GetPoolName()) && !pool.HasWorkersUpdateInProgress()) {
-        WorkerPools[workersPoolId].reset();
+void TTasksManager::PrepareConfigUpdate(const NConfig::TConfig& config) {
+    THashMap<TString, const NConfig::TWorkersPool*> targets;
+    for (const auto& poolConfig : config.GetWorkerPools()) {
+        targets.emplace(poolConfig.GetName(), &poolConfig);
+    }
+    for (const auto& pool : WorkerPools) {
+        if (pool) {
+            const auto it = targets.find(pool->GetPoolName());
+            pool->PrepareConfigUpdate(it == targets.end() ? nullptr : it->second);
+        }
     }
 }
 
-bool TTasksManager::IsCurrentConfig(const NConfig::TConfig& config) const {
-    return Config == config;
+bool TTasksManager::IsReadyForUpdate() const {
+    for (const auto& pool : WorkerPools) {
+        if (pool && !pool->IsReadyForUpdate()) {
+            return false;
+        }
+    }
+    return true;
 }
 
-bool TTasksManager::StartConfigUpdate(const NConfig::TConfig& config,
+void TTasksManager::ApplyConfigUpdate(const NConfig::TConfig& config,
     const NActors::TActorId& distributorActorId, TCounters& counters) {
-    Y_ENSURE(config.IsEnabled() == Config.IsEnabled(), "runtime Enabled update is not supported yet");
+    Y_ENSURE(IsReadyForUpdate(), "conveyor is not prepared for config update");
 
     THashSet<TString> desiredPoolNames;
     desiredPoolNames.reserve(config.GetWorkerPools().size());
@@ -68,10 +79,9 @@ bool TTasksManager::StartConfigUpdate(const NConfig::TConfig& config,
         const ui64 poolIdx = WorkerPoolNameToIndex.at(poolName);
         WorkerPoolNameToIndex.erase(poolName);
         auto& pool = MutableWorkersPool(poolIdx);
+        pool.ApplyWorkersUpdate({});
         pool.ClearTopology();
-        if (pool.StartWorkersRetirement()) {
-            TryFinalizeRemoval(poolIdx);
-        }
+        WorkerPools[poolIdx].reset();
     }
 
     for (const auto& poolConfig : config.GetWorkerPools()) {
@@ -80,18 +90,6 @@ bool TTasksManager::StartConfigUpdate(const NConfig::TConfig& config,
         }
     }
 
-    // topology updates
-    for (const auto& poolConfig : config.GetWorkerPools()) {
-        auto& pool = MutableWorkersPool(WorkerPoolNameToIndex.at(poolConfig.GetName()));
-        pool.UpdateMaxBatchSize(poolConfig.GetMaxBatchSize());
-        pool.ApplyTopologyUpdate(poolConfig, Categories);
-    }
-    for (const auto category : GetEnumAllValues<ESpecialTaskCategory>()) {
-        MutableCategoryVerified(category).ApplyConfig(config.GetCategoryConfig(category));
-    }
-    Config = config;
-
-    // CPU usage updates
     const ui64 totalThreadsCount = NKqp::TStagePredictor::GetPossibleMaxLimitThreads();
     for (const auto& poolConfig : config.GetWorkerPools()) {
         const ui64 poolIdx = WorkerPoolNameToIndex.at(poolConfig.GetName());
@@ -101,26 +99,14 @@ bool TTasksManager::StartConfigUpdate(const NConfig::TConfig& config,
         for (ui64 workerIdx = 0; workerIdx < workersCount; ++workerIdx) {
             desiredCPULimits.emplace_back(poolConfig.GetWorkerCPUUsage(workerIdx, totalThreadsCount));
         }
-        MutableWorkersPool(poolIdx).StartWorkersUpdate(desiredCPULimits);
+        auto& pool = MutableWorkersPool(poolIdx);
+        pool.ApplyWorkersUpdate(desiredCPULimits);
+        pool.UpdateMaxBatchSize(poolConfig.GetMaxBatchSize());
+        pool.ApplyTopologyUpdate(poolConfig, Categories);
     }
-    return !HasWorkersUpdateInProgress();
-}
-
-bool TTasksManager::OnTaskProcessedResult(const ui64 workersPoolId, const ui64 workerIdx) {
-    if (!MutableWorkersPool(workersPoolId).ReleaseWorker(workerIdx)) {
-        return false;
+    for (const auto category : GetEnumAllValues<ESpecialTaskCategory>()) {
+        MutableCategoryVerified(category).ApplyConfig(config.GetCategoryConfig(category));
     }
-    TryFinalizeRemoval(workersPoolId);
-    return !HasWorkersUpdateInProgress();
-}
-
-bool TTasksManager::HasWorkersUpdateInProgress() const {
-    for (const auto& pool : BuildWorkerPools()) {
-        if (pool->HasWorkersUpdateInProgress()) {
-            return true;
-        }
-    }
-    return false;
 }
 
 }

@@ -12,6 +12,8 @@ private:
     YDB_READONLY(std::shared_ptr<TCPUUsage>, CPUUsage, std::make_shared<TCPUUsage>(nullptr));
     YDB_READONLY_DEF(std::shared_ptr<TProcessCategory>, Category);
     YDB_READONLY_DEF(std::shared_ptr<TWPCategorySignals>, Counters);
+    YDB_ACCESSOR(bool, StopPrepare, false);
+    YDB_READONLY(ui64, InFlightTasks, 0);
     double Weight = 1;
 
 public:
@@ -30,31 +32,23 @@ public:
 
     void SetWeight(const double weight);
 
+    void OnTaskStarted() {
+        ++InFlightTasks;
+    }
+
+    void OnTaskFinished() {
+        Y_ENSURE(InFlightTasks, "link has no task to finish");
+        --InFlightTasks;
+    }
 };
 
 class TWorkersPool {
 private:
-    class TTaskCompletionContext {
-        YDB_READONLY_DEF(std::shared_ptr<TCPUUsage>, CPUUsage);
-        YDB_READONLY_DEF(std::shared_ptr<TProcessCategory>, Category);
-        YDB_READONLY_DEF(std::shared_ptr<TWPCategorySignals>, Counters);
-
-    public:
-        explicit TTaskCompletionContext(const TWeightedCategory& link)
-            : CPUUsage(link.GetCPUUsage())
-            , Category(link.GetCategory())
-            , Counters(link.GetCounters()) {
-        }
-    };
-
-    using TTaskCompletionContexts = THashMap<ESpecialTaskCategory, TTaskCompletionContext>;
-
     class TWorkerInfo {
         YDB_READONLY(bool, RunningTask, false);
         YDB_READONLY_DEF(NActors::TActorId, WorkerId);
         YDB_READONLY(double, CPULimit, 1);
-        YDB_READONLY(bool, StopRequested, false);
-        TTaskCompletionContexts CompletionContexts;
+        YDB_ACCESSOR(bool, StopPrepare, false);
 
     public:
         TWorkerInfo(std::unique_ptr<TWorker>&& worker, const double cpuLimit)
@@ -66,22 +60,8 @@ private:
             CPULimit = value;
         }
 
-        void RequestStop() {
-            StopRequested = true;
-        }
-
-        void OnStartTask(TTaskCompletionContexts&& completionContexts);
+        void OnStartTask();
         void OnStopTask();
-        const TTaskCompletionContext& GetCompletionContext(const ESpecialTaskCategory category) const;
-    };
-
-    struct TWorkersUpdateState {
-        ui64 DesiredWorkersCount = 0;
-        THashSet<ui64> WorkersWaitingForRelease;
-
-        bool IsFinished() const {
-            return WorkersWaitingForRelease.empty();
-        }
     };
 
     ui64 WorkersCount = 0;
@@ -95,14 +75,13 @@ private:
     const TString PoolName;
     const NActors::TActorId DistributorId;
     const ui64 WorkersPoolId;
-    std::optional<TWorkersUpdateState> WorkersUpdate;
 
     void RemoveFreeWorker(const ui64 workerIdx);
     void UpdateWorkerCPULimit(const ui64 workerIdx, const double newLimit);
     void IncreaseWorkers(const std::vector<double>& desiredCPULimits);
     void DecreaseWorkers(const std::vector<double>& desiredCPULimits);
-    bool TryFinishWorkersUpdate();
-    void RunTask(std::vector<TWorkerTask>&& tasksBatch, TTaskCompletionContexts&& completionContexts);
+    void RunTask(std::vector<TWorkerTask>&& tasksBatch);
+    TWeightedCategory& FindCategoryLink(const ESpecialTaskCategory category);
 
 public:
     static constexpr double Eps = 1e-6;
@@ -122,14 +101,11 @@ public:
 
     void PutTaskResults(std::vector<TWorkerTaskResult>&& result, const ui64 workersPoolId = 0, const ui64 workerIdx = 0);
     bool HasFreeWorker() const;
-    bool ReleaseWorker(const ui64 workerIdx);
+    void ReleaseWorker(const ui64 workerIdx);
 
-    bool StartWorkersUpdate(const std::vector<double>& desiredCPULimits);
-    bool StartWorkersRetirement();
-
-    bool HasWorkersUpdateInProgress() const {
-        return WorkersUpdate.has_value();
-    }
+    void PrepareConfigUpdate(const NConfig::TWorkersPool* target);
+    bool IsReadyForUpdate() const;
+    void ApplyWorkersUpdate(const std::vector<double>& desiredCPULimits);
 
     const TString& GetPoolName() const {
         return PoolName;

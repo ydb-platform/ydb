@@ -2,7 +2,6 @@
 #include "service.h"
 
 #include <ydb/core/config/validation/validators.h>
-#include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/tx/conveyor_composite/tracing/probes.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 
@@ -66,37 +65,39 @@ void TDistributor::HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest
         {"action", "composite_conveyor_config_received"},
         {"hasConfig", true});
 
-    LatestConfigNotification = std::move(ev);
-    if (Manager->HasWorkersUpdateInProgress()) {
-        YDB_LOG_INFO("",
-            {"name", ConveyorName},
-            {"action", "composite_conveyor_config_update_queued"});
-        return;
-    }
-
-    TryApplyLatestConfig();
-}
-
-void TDistributor::TryApplyLatestConfig() {
-    Y_ENSURE(LatestConfigNotification, "config update attempt without a notification");
-    Y_ENSURE(!Manager->HasWorkersUpdateInProgress(), "config update attempt while another update is in progress");
-
-    const auto& candidateProto = LatestConfigNotification->Get()->Record.GetConfig().GetCompositeConveyorConfig();
+    const auto& candidateProto = appConfig.GetCompositeConveyorConfig();
     std::vector<TString> validationErrors;
-    Y_ENSURE(NKikimr::NConfig::ValidateCompositeConveyorConfig(candidateProto, validationErrors) !=
-            NKikimr::NConfig::EValidationResult::Error,
-        "invalid composite conveyor config: " << JoinSeq("; ", validationErrors));
-    auto desiredConfig = NConfig::TConfig::BuildFromProto(candidateProto).DetachResult();
-    if (Manager->IsCurrentConfig(desiredConfig)) {
-        ReplyConfigNotification(LatestConfigNotification);
-        LatestConfigNotification.Reset();
+    if (NKikimr::NConfig::ValidateCompositeConveyorConfig(candidateProto, validationErrors) ==
+        NKikimr::NConfig::EValidationResult::Error) {
+        YDB_LOG_ERROR("",
+            {"action", "composite_conveyor_config_rejected"},
+            {"error", JoinSeq("; ", validationErrors)});
+        ReplyConfigNotification(ev);
+        return;
+    }
+    auto parsedConfig = NConfig::TConfig::BuildFromProto(candidateProto);
+    if (parsedConfig.IsFail()) {
+        YDB_LOG_ERROR("",
+            {"action", "composite_conveyor_config_rejected"},
+            {"error", parsedConfig.GetErrorMessage()});
+        ReplyConfigNotification(ev);
+        return;
+    }
+    auto desiredConfig = parsedConfig.DetachResult();
+    if (desiredConfig.IsEnabled() != Config.IsEnabled()) {
+        YDB_LOG_ERROR("",
+            {"action", "composite_conveyor_config_rejected"},
+            {"error", "runtime Enabled update is not supported yet"});
+        ReplyConfigNotification(ev);
         return;
     }
 
-    const bool updateFinished = Manager->StartConfigUpdate(desiredConfig, SelfId(), Counters);
-    if (updateFinished) {
-        CompleteConfigUpdate();
-    }
+    auto reply = MakeHolder<NActors::IEventHandle>(ev->Sender, SelfId(),
+        new NConsole::TEvConsole::TEvConfigNotificationResponse(record),
+        NActors::IEventHandle::FlagTrackDelivery, ev->Cookie);
+    Config = std::move(desiredConfig);
+    PendingConfigReply = std::move(reply);
+    TryApplyUpdate();
     Y_UNUSED(Manager->DrainTasks());
 }
 
@@ -105,10 +106,18 @@ void TDistributor::ReplyConfigNotification(const NConsole::TEvConsole::TEvConfig
     Send(ev->Sender, response.Release(), NActors::IEventHandle::FlagTrackDelivery, ev->Cookie);
 }
 
-void TDistributor::CompleteConfigUpdate() {
-    Y_ENSURE(LatestConfigNotification, "config update completion without a notification");
-    Y_ENSURE(!Manager->HasWorkersUpdateInProgress(), "config update completion while workers update is still in progress");
-    TryApplyLatestConfig();
+void TDistributor::TryApplyUpdate() {
+    if (!PendingConfigReply) {
+        return;
+    }
+
+    Manager->PrepareConfigUpdate(Config);
+    if (!Manager->IsReadyForUpdate()) {
+        return;
+    }
+
+    Manager->ApplyConfigUpdate(Config, SelfId(), Counters);
+    Send(PendingConfigReply.Release());
 }
 
 void TDistributor::HandleMain(NActors::TEvents::TEvUndelivered::TPtr& ev) {
@@ -163,9 +172,8 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
 
     workersPool.AddDeliveryDuration(ev.GetForwardSendDuration() + backSendDuration);
     workersPool.PutTaskResults(ev.DetachResults(), ev.GetWorkersPoolId(), ev.GetWorkerIdx());
-    if (Manager->OnTaskProcessedResult(ev.GetWorkersPoolId(), ev.GetWorkerIdx())) {
-        CompleteConfigUpdate();
-    }
+    workersPool.ReleaseWorker(ev.GetWorkerIdx());
+    TryApplyUpdate();
     Y_UNUSED(Manager->DrainTasks());
 }
 

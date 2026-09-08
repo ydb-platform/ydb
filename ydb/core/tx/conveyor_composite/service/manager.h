@@ -10,13 +10,11 @@ private:
     std::vector<std::shared_ptr<TWorkersPool>> WorkerPools;
     THashMap<TString, ui64> WorkerPoolNameToIndex;
     std::vector<std::shared_ptr<TProcessCategory>> Categories;
-    NConfig::TConfig Config;
 
     std::vector<std::shared_ptr<TWorkersPool>> BuildWorkerPools() const;
     ui64 FindFreeWorkerPoolsPosition();
     ui64 AddWorkerPool(const NConfig::TWorkersPool& poolConfig,
         const NActors::TActorId& distributorActorId, TCounters& counters);
-    void TryFinalizeRemoval(const ui64 workersPoolId);
 
 public:
     TString DebugString() const {
@@ -31,12 +29,11 @@ public:
     }
 
     TTasksManager(const TString& /*convName*/, const NConfig::TConfig& config, const NActors::TActorId distributorActorId, TCounters& counters)
-        : Config(config)
     {
         for (auto&& i : GetEnumAllValues<ESpecialTaskCategory>()) {
-            Categories.emplace_back(std::make_shared<TProcessCategory>(Config.GetCategoryConfig(i), counters));
+            Categories.emplace_back(std::make_shared<TProcessCategory>(config.GetCategoryConfig(i), counters));
         }
-        for (const auto& poolConfig : Config.GetWorkerPools()) {
+        for (const auto& poolConfig : config.GetWorkerPools()) {
             AddWorkerPool(poolConfig, distributorActorId, counters);
         }
     }
@@ -63,12 +60,10 @@ public:
         return *Categories[(ui64)category];
     }
 
-    bool IsCurrentConfig(const NConfig::TConfig& config) const;
-
-    bool StartConfigUpdate(const NConfig::TConfig& config,
+    void PrepareConfigUpdate(const NConfig::TConfig& config);
+    bool IsReadyForUpdate() const;
+    void ApplyConfigUpdate(const NConfig::TConfig& config,
         const NActors::TActorId& distributorActorId, TCounters& counters);
-    bool OnTaskProcessedResult(const ui64 workersPoolId, const ui64 workerIdx);
-    bool HasWorkersUpdateInProgress() const;
 };
 
 }   // namespace NKikimr::NConveyorComposite

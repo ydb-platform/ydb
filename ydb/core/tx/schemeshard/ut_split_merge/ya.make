@@ -13,6 +13,7 @@ IF (NOT WITH_VALGRIND)
     ENDIF()
 
     PEERDIR(
+        ydb/public/lib/ydb_cli/dump/util/view_query_dummy
         library/cpp/getopt
         library/cpp/regex/pcre
         library/cpp/svnversion
@@ -20,6 +21,7 @@ IF (NOT WITH_VALGRIND)
         ydb/core/tx
         ydb/core/tx/schemeshard/ut_helpers
         yql/essentials/public/udf/service/exception_policy
+        yql/essentials/sql/v1_dummy
     )
 
     YQL_LAST_ABI_VERSION()

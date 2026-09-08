@@ -39,12 +39,14 @@ PEERDIR(
     ydb/core/tx/schemeshard
     ydb/core/ymq/actor
     ydb/core/ymq/base
+    ydb/public/lib/ydb_cli/dump/util
     ydb/library/folder_service/mock
     ydb/library/keys
     ydb/library/pdisk_io
     ydb/library/security
     yql/essentials/parser/pg_wrapper
     yql/essentials/sql/pg
+    yql/essentials/sql/v1
     ydb/library/yql/udfs/common/clickhouse/client
     yql/essentials/udfs/common/compress_base
     ydb/library/yql/udfs/common/datetime

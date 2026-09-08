@@ -11,6 +11,7 @@ PEERDIR(
     yql/essentials/parser/pg_wrapper
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/sql/pg
+    yql/essentials/sql/v1/translator_iface
 )
 
 END()
@@ -18,4 +19,3 @@ END()
 RECURSE(
     no_llvm
 )
-

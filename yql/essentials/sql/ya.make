@@ -23,4 +23,5 @@ RECURSE(
     settings
     v0
     v1
+    v1_dummy
 )

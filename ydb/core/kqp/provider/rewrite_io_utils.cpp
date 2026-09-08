@@ -7,7 +7,7 @@
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/translator_iface/translator.h>
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql {

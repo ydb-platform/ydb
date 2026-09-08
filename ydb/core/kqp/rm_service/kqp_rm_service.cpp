@@ -166,12 +166,12 @@ public:
 
     // A runtime SpillingPercent change: the spilling threshold moves, the limit stays
     void SetOverPercent(double overPercent) {
-        if (abs(overPercent - OverPercent) < MYEPS) {
-            return;
-        }
+        SetNewLimit(BaseLimit, MemoryPoolPercent, overPercent);
+    }
 
-        OverPercent = overPercent;
-        SetActualLimits();
+    // The configured spilling percent, the node total is its one holder (see TKqpResourceManager::SetConfigValues)
+    double GetOverPercent() const {
+        return OverPercent;
     }
 
     void SetActualLimits() {
@@ -224,7 +224,6 @@ public:
         : Counters(counters)
         , ExecutionUnitsResource(config.GetComputeActorsCount())
         , ExecutionUnitsLimit(config.GetComputeActorsCount())
-        , SpillingPercent(config.GetSpillingPercent())
         , TotalMemoryResource(MakeIntrusive<TMemoryResource>(config.GetQueryMemoryLimit(), (double)100, config.GetSpillingPercent()))
         , ResourceSnapshotState(std::make_shared<TResourceSnapshotState>())
     {
@@ -298,7 +297,7 @@ public:
     TIntrusivePtr<TMemoryResource> GetOrCreatePoolMemoryResource(const std::pair<TString, TString>& poolKey, double memoryPoolPercent) {
         auto [it, success] = MemoryNamedPools.emplace(poolKey, nullptr);
         if (success) {
-            it->second = MakeIntrusive<TMemoryResource>(TotalMemoryResource->GetLimit(), memoryPoolPercent, SpillingPercent.load());
+            it->second = MakeIntrusive<TMemoryResource>(TotalMemoryResource->GetLimit(), memoryPoolPercent, TotalMemoryResource->GetOverPercent());
         }
         return it->second;
     }
@@ -354,7 +353,7 @@ public:
             if (hasScanQueryMemory && tx.HasMemoryPoolLimit()) {
                 auto poolMemory = GetOrCreatePoolMemoryResource(tx.MakePoolId(), tx.MemoryPoolPercent);
                 // the pool limit follows the latest tx that allocates from the pool
-                poolMemory->SetNewLimit(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, SpillingPercent.load());
+                poolMemory->SetNewLimit(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, TotalMemoryResource->GetOverPercent());
                 if (!poolMemory->AcquireIfAvailable(resources.Memory)) {
                     hasScanQueryMemory = false;
                     TotalMemoryResource->Release(resources.Memory);
@@ -565,12 +564,11 @@ public:
         MinChannelBufferSize.store(config.GetMinChannelBufferSize());
         MaxTotalChannelBuffersSize.store(config.GetMaxTotalChannelBuffersSize());
         QueryMemoryLimit.store(config.GetQueryMemoryLimit());
-        SpillingPercent.store(config.GetSpillingPercent());
         // the spilling thresholds of the node total and of every pool follow the new percent right away,
-        // the cookies of the running transactions with them
+        // the cookies of the running transactions with them; the node total is the holder of the percent
         TotalMemoryResource->SetOverPercent(config.GetSpillingPercent());
         for (auto& [poolKey, poolMemory] : MemoryNamedPools) {
-            poolMemory->SetOverPercent(config.GetSpillingPercent());
+            poolMemory->SetOverPercent(TotalMemoryResource->GetOverPercent());
         }
         MaxNonParallelTopStageExecutionLimit.store(config.GetMaxNonParallelTopStageExecutionLimit());
         MaxNonParallelTasksExecutionLimit.store(config.GetMaxNonParallelTasksExecutionLimit());
@@ -641,7 +639,6 @@ public:
     // limits (guarded by Lock)
     std::atomic<i32> ExecutionUnitsResource;
     std::atomic<i32> ExecutionUnitsLimit;
-    std::atomic<double> SpillingPercent;
     TIntrusivePtr<TMemoryResource> TotalMemoryResource;
     std::atomic<ui64> ExternalDataQueryMemory = 0;
     std::atomic<ui64> MaxNonParallelTopStageExecutionLimit = 1;
@@ -838,7 +835,8 @@ private:
 
         if (queueConfig.GetLimit().GetMemory() > 0) {
             with_lock (ResourceManager->Lock) {
-                ResourceManager->TotalMemoryResource->SetNewLimit(queueConfig.GetLimit().GetMemory(), (double)100, ResourceManager->SpillingPercent.load());
+                auto& total = *ResourceManager->TotalMemoryResource;
+                total.SetNewLimit(queueConfig.GetLimit().GetMemory(), (double)100, total.GetOverPercent());
             }
             YDB_LOG_INFO("Total node memory for scan bytes",
                 {"queries", queueConfig.GetLimit().GetMemory()});

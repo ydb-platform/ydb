@@ -18,4 +18,4 @@ namespace NYql::NDq::NDqSourceLookup {
         const size_t maxKeysInRequest,
         const bool isMultiMatches
     );
-} // namespace NYql::NDq::NDqSoruceLookup
+} // namespace NYql::NDq::NDqSourceLookup

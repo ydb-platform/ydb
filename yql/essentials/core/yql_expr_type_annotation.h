@@ -39,7 +39,7 @@ T FromString(const TExprNode& node, NKikimr::NUdf::EDataSlot slot) {
                 return value;
             }
         } else if (NKikimr::NUdf::GetDataTypeInfo(slot).Features &
-            (NKikimr::NUdf::EDataTypeFeatures::DateType | NKikimr::NUdf::EDataTypeFeatures::TimeIntervalType)) {
+                   (NKikimr::NUdf::EDataTypeFeatures::DateType | NKikimr::NUdf::EDataTypeFeatures::TimeIntervalType)) {
             T ret;
             if (TryFromString<T>(node.Content(), ret) &&
                 NKikimr::NMiniKQL::IsValidValue(slot, NKikimr::NUdf::TUnboxedValuePod(ret))) {
@@ -75,19 +75,19 @@ bool EnsureTuple(TExprNode& node, TExprContext& ctx);
 bool EnsureTupleOfAtoms(TExprNode& node, TExprContext& ctx);
 bool EnsureTupleOfAtomsOrUniversal(TExprNode& node, TExprContext& ctx, bool& isUniversal);
 
-using TSettingNodeValidator = std::function<bool (TStringBuf name, TExprNode& setting, TExprContext& ctx)>;
+using TSettingNodeValidator = std::function<bool(TStringBuf name, TExprNode& setting, TExprContext& ctx)>;
 bool EnsureValidSettings(TExprNode& node,
-    const THashSet<TStringBuf>& supportedSettings,
-    const TSettingNodeValidator& validator,
-    TExprContext& ctx);
+                         const THashSet<TStringBuf>& supportedSettings,
+                         const TSettingNodeValidator& validator,
+                         TExprContext& ctx);
 bool EnsureValidUserSchemaSetting(TExprNode& node, TExprContext& ctx);
 TSettingNodeValidator RequireSingleValueSettings(const TSettingNodeValidator& validator);
 
 bool EnsureLambda(const TExprNode& node, TExprContext& ctx);
 IGraphTransformer::TStatus ConvertToLambda(TExprNode::TPtr& node, TExprContext& ctx, ui32 argumentsCount, ui32 maxArgumentsCount = Max<ui32>(),
-    bool withTypes = true);
+                                           bool withTypes = true);
 IGraphTransformer::TStatus ConvertToLambda(TExprNode::TPtr& node, TExprContext& ctx, bool& isUniversal, ui32 argumentsCount, ui32 maxArgumentsCount = Max<ui32>(),
-    bool withTypes = true);
+                                           bool withTypes = true);
 bool EnsureTupleSize(TExprNode& node, ui32 expectedSize, TExprContext& ctx);
 bool EnsureTupleMinSize(TExprNode& node, ui32 minSize, TExprContext& ctx);
 bool EnsureTupleMaxSize(TExprNode& node, ui32 maxSize, TExprContext& ctx);
@@ -209,8 +209,7 @@ bool EnsureAnySeqType(TPositionHandle position, const TTypeAnnotationNode& type,
 bool EnsureDependsOn(const TExprNode& node, TExprContext& ctx, bool inner = false);
 IGraphTransformer::TStatus EnsureDependsOnTailAndRewrite(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, const TTypeAnnotationContext& types,
-    ui32 requiredArgumentCount, ui32 requiredDependsOnCount, bool& isUniversal
-);
+    ui32 requiredArgumentCount, ui32 requiredDependsOnCount, bool& isUniversal);
 
 const TTypeAnnotationNode* MakeTypeHandleResourceType(TExprContext& ctx);
 bool EnsureTypeHandleResourceType(const TExprNode& node, TExprContext& ctx);
@@ -260,40 +259,40 @@ size_t GetOptionalLevel(const TTypeAnnotationNode* type);
 namespace NConvertFlags {
 
 enum EFlags {
-   DisableTruncation,
-   AllowUnsafeConvert,
-   Last
+    DisableTruncation,
+    AllowUnsafeConvert,
+    Last
 };
 
 using TConvertFlags = TEnumBitSet<EFlags, DisableTruncation, Last>;
 
-}
+} // namespace NConvertFlags
 
 using NConvertFlags::TConvertFlags;
 
 IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
-    const TTypeAnnotationNode& expectedType, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TConvertFlags flags = {});
+                                        const TTypeAnnotationNode& expectedType, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TConvertFlags flags = {});
 
 IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
-    TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TConvertFlags flags = {});
+                                        TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TConvertFlags flags = {});
 
 IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType, TExprContext& ctx,
-    const TTypeAnnotationContext& typeCtx, TConvertFlags flags = {});
+                                              const TTypeAnnotationContext& typeCtx, TConvertFlags flags = {});
 
 IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
-    const TTypeAnnotationNode& expectedType, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TConvertFlags flags = {});
+                                              const TTypeAnnotationNode& expectedType, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TConvertFlags flags = {});
 
 TMaybe<EDataSlot> GetSuperType(EDataSlot dataSlot1, EDataSlot dataSlot2, bool warn = false, TExprContext* ctx = nullptr, TPositionHandle* pos = nullptr);
 
 IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, TExprNode::TPtr& node2, TExprContext& ctx,
-    const TTypeAnnotationContext& typeCtx, const TTypeAnnotationNode*& commonType, TConvertFlags flags = {});
+                                                 const TTypeAnnotationContext& typeCtx, const TTypeAnnotationNode*& commonType, TConvertFlags flags = {});
 
 IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const TTypeAnnotationNode& type1,
-    TExprNode::TPtr& node2, const TTypeAnnotationNode& type2, TExprContext& ctx, const TTypeAnnotationContext& typeCtx,
-    const TTypeAnnotationNode*& commonType, TConvertFlags flags = {});
+                                                 TExprNode::TPtr& node2, const TTypeAnnotationNode& type2, TExprContext& ctx, const TTypeAnnotationContext& typeCtx,
+                                                 const TTypeAnnotationNode*& commonType, TConvertFlags flags = {});
 
-IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input,const TTypeAnnotationNode* targetType, TExprContext& ctx,
-    const TTypeAnnotationContext& typeCtx);
+IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input, const TTypeAnnotationNode* targetType, TExprContext& ctx,
+                                                 const TTypeAnnotationContext& typeCtx);
 
 bool IsSqlInCollectionItemsNullable(const NNodes::TCoSqlIn& node);
 
@@ -324,7 +323,7 @@ EDataSlot GetDateTypeByLevel(ui32 level);
 bool IsPureIsolatedLambda(const TExprNode& lambdaBody, TSyncMap* syncList = nullptr);
 TString GetIntegralAtomValue(ui64 value, bool hasSign);
 bool AllowIntegralConversion(NNodes::TCoIntegralCtor node, bool negate, EDataSlot toType,
-    TString* atomValue = nullptr);
+                             TString* atomValue = nullptr);
 void ExtractIntegralValue(const TExprNode& constructor, bool negate, bool& hasSign, bool& isSigned, ui64& value);
 bool IsDataTypeString(EDataSlot dataSlot);
 bool EnsureComparableDataType(TPositionHandle position, EDataSlot dataSlot, TExprContext& ctx);
@@ -356,12 +355,12 @@ inline constexpr TStringBuf SystemMemberPrefix = "_yql_";
 
 bool IsSystemMember(const TStringBuf& memberName);
 
-template<bool Deduplicte = true, ui8 OrListsOfAtomsDepth = 0U>
+template <bool Deduplicte = true, ui8 OrListsOfAtomsDepth = 0U>
 IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx,
-    bool& isUniversal);
+                                                 bool& isUniversal);
 
 IGraphTransformer::TStatus NormalizeKeyValueTuples(const TExprNode::TPtr& input, ui32 startIndex, TExprNode::TPtr& output,
-    TExprContext& ctx, bool deduplicate = false);
+                                                   TExprContext& ctx, bool deduplicate = false);
 
 std::optional<ui32> GetFieldPosition(const TMultiExprType& tupleType, const TStringBuf& field);
 std::optional<ui32> GetFieldPosition(const TTupleExprType& tupleType, const TStringBuf& field);
@@ -370,7 +369,7 @@ std::optional<ui32> GetWideBlockFieldPosition(const TMultiExprType& tupleType, c
 
 bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, bool& convertToPg, TPositionHandle pos, TExprContext& ctx);
 bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, bool& convertToPg, TPositionHandle pos, TExprContext& ctx,
-    bool& isUniversal);
+                   bool& isUniversal);
 bool HasContextFuncs(const TExprNode& input);
 IGraphTransformer::TStatus TryConvertToPgOp(TStringBuf op, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx);
 
@@ -389,11 +388,11 @@ bool GetAvgResultTypeOverState(const TPositionHandle& pos, const TTypeAnnotation
 bool GetMinMaxResultType(const TPositionHandle& pos, const TTypeAnnotationNode& inputType, const TTypeAnnotationNode*& retType, TExprContext& ctx);
 
 IGraphTransformer::TStatus ExtractPgTypesFromMultiLambda(TExprNode::TPtr& lambda, TVector<ui32>& argTypes,
-    bool& needRetype, TExprContext& ctx, bool& isUniversal);
+                                                         bool& needRetype, TExprContext& ctx, bool& isUniversal);
 
 void AdjustReturnType(ui32& returnType, const TVector<ui32>& procArgTypes, ui32 procVariadicType, const TVector<ui32>& argTypes);
 TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggregateDesc& aggDesc, bool onWindow,
-    const TExprNode::TPtr& lambda, const TVector<ui32>& argTypes, const TTypeAnnotationNode* itemType, TExprContext& ctx);
+                                          const TExprNode::TPtr& lambda, const TVector<ui32>& argTypes, const TTypeAnnotationNode* itemType, TExprContext& ctx);
 
 const TTypeAnnotationNode* GetOriginalResultType(TPositionHandle pos, bool isMany, const TTypeAnnotationNode* originalExtractorType, TExprContext& ctx);
 bool ApplyOriginalType(TExprNode::TPtr input, bool isMany, const TTypeAnnotationNode* originalExtractorType, TExprContext& ctx);
@@ -403,4 +402,4 @@ TStringBuf NormalizeCallableName(TStringBuf name);
 
 void CheckExpectedTypeAndColumnOrder(const TExprNode& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx);
 
-}
+} // namespace NYql

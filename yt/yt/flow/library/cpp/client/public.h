@@ -40,6 +40,7 @@ YT_DEFINE_ERROR_ENUM(
     ((GracefulShutdown)                (3304))
     // The worker cancelled the job after being disconnected from the controller for too long.
     ((AbandonedJob)                    (3306))
+    ((TimerStoreLimitExceeded)         (3307))
 );
 
 YT_DEFINE_STRONG_TYPEDEF(TVersion, i64);

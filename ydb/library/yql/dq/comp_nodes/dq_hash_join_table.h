@@ -118,6 +118,14 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         return Table_.RequiredMemoryForBuild(nTuples);
     }
 
+    void PrefetchDirectory(TSingleTuple row) const {
+        Table_.PrefetchDirectory(row.PackedData);
+    }
+
+    void PrefetchSlot(TSingleTuple row) const {
+        Table_.PrefetchSlot(row.PackedData);
+    }
+
     void Lookup(TSingleTuple row, std::invocable<TSingleTuple> auto consume) {
         if (Empty()){
             return;

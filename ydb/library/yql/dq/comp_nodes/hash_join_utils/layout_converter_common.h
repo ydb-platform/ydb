@@ -69,6 +69,10 @@ struct TPackResult {
     auto begin() const {return Iterator(*this, 0);}
     auto end() const {return Iterator(*this, this->NTuples);}
 
+    TSingleTuple TupleAt(i64 index, const NPackedTuple::TTupleLayout* layout) const {
+        return {.PackedData = PackedTuples.data() + layout->TotalRowSize * index,
+                .OverflowBegin = Overflow.data()};
+    }
 
     void Clear() {
         *this = TPackResult{};

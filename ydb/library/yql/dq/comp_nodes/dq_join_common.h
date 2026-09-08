@@ -3,6 +3,7 @@
 #include "dq_block_hash_join_settings.h"
 #include "dq_join_filters.h"
 #include <algorithm>
+#include <array>
 #include <numeric>
 #include <vector>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/alloc.h>
@@ -788,33 +789,73 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                 default:
                     MKQL_ENSURE(false, "unhandled ESpillResult case");
                 }
-                ui32 idx = 0;
-                for (TSingleTuple tuple : *state.FetchedPack) {
-                    if (idx++ < state.ResumeIndex) {
-                        continue;
-                    }
-                    if constexpr (IsGrid) {
+                if constexpr (IsGrid) {
+                    ui32 idx = 0;
+                    for (TSingleTuple tuple : *state.FetchedPack) {
+                        if (idx++ < state.ResumeIndex) {
+                            continue;
+                        }
                         if (!MatchGridRowInMemory(state, tuple, lookupToTable, isFull)) {
                             state.ResumeIndex = idx - 1;
                             return EFetchResult::One;
                         }
-                    } else {
-                        int bucketIndex = Settings.BucketIndex(tuple);
-                        bool thisBucketSpilled = state.Spiller.IsBucketSpilled(bucketIndex);
-                        if (thisBucketSpilled) {
-                            state.Spiller.AddRow({.Val = tuple, .Side = ESide::Probe, .BucketIndex = bucketIndex});
+                        if (isFull()) {
+                            state.ResumeIndex = idx;
+                            return EFetchResult::One;
+                        }
+                    }
+                } else {
+                    constexpr i64 dirDistance = 8;
+                    constexpr i64 slotDistance = 3;
+                    const TPackResult& probePack = *state.FetchedPack;
+                    const auto* probeLayout = Layouts_.Probe;
+                    auto& buckets = state.Spiller.GetState().Buckets;
+
+                    constexpr i64 ringMask = 15;
+                    static_assert(dirDistance <= ringMask, "ring must outlive the pipeline window");
+                    std::array<i32, ringMask + 1> bucketRing;
+                    auto enterPipeline = [&](i64 idx) {
+                        if (idx >= probePack.NTuples) {
+                            return;
+                        }
+                        const TSingleTuple aheadTuple = probePack.TupleAt(idx, probeLayout);
+                        const int aheadBucket = Settings.BucketIndex(aheadTuple);
+                        bucketRing[idx & ringMask] = aheadBucket;
+                        if (auto* aheadTable = std::get_if<TTable>(&buckets[aheadBucket])) {
+                            aheadTable->PrefetchDirectory(aheadTuple);
+                        }
+                    };
+
+                    for (i64 idx = state.ResumeIndex; idx < state.ResumeIndex + dirDistance; ++idx) {
+                        enterPipeline(idx);
+                    }
+                    for (i64 idx = state.ResumeIndex; idx < probePack.NTuples; ++idx) {
+                        enterPipeline(idx + dirDistance);
+                        if (const i64 slotAhead = idx + slotDistance; slotAhead < probePack.NTuples) {
+                            const TSingleTuple slotTuple = probePack.TupleAt(slotAhead, probeLayout);
+                            if (auto* slotTable =
+                                    std::get_if<TTable>(&buckets[bucketRing[slotAhead & ringMask]])) {
+                                slotTable->PrefetchSlot(slotTuple);
+                            }
+                        }
+
+                        const TSingleTuple tuple = probePack.TupleAt(idx, probeLayout);
+                        const int bucketIndex = bucketRing[idx & ringMask];
+                        if (state.Spiller.IsBucketSpilled(bucketIndex)) {
+                            state.Spiller.AddRow(
+                                {.Val = tuple, .Side = ESide::Probe, .BucketIndex = bucketIndex});
                         } else {
-                            TTable* thisTable = std::get_if<TTable>(&state.Spiller.GetState().Buckets[bucketIndex]);
+                            TTable* thisTable = std::get_if<TTable>(&buckets[bucketIndex]);
                             MKQL_ENSURE(thisTable, "sanity check");
                             if (!lookupToTable(*thisTable, tuple, state.BuildCursor)) {
-                                state.ResumeIndex = idx - 1;
+                                state.ResumeIndex = static_cast<ui32>(idx);
                                 return EFetchResult::One;
                             }
                         }
-                    }
-                    if (isFull()) {
-                        state.ResumeIndex = idx;
-                        return EFetchResult::One;
+                        if (isFull()) {
+                            state.ResumeIndex = static_cast<ui32>(idx + 1);
+                            return EFetchResult::One;
+                        }
                     }
                 }
                 state.FetchedPack = std::nullopt;

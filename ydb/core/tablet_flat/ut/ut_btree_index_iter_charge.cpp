@@ -129,7 +129,7 @@ namespace {
     void SetupSlices(const TTestParams& params, const TPartStore& part) {
         if (params.Slices) {
             TSlices slices;
-            auto partSlices = (TSlices*)part.Slices.Get();
+            auto partSlices = const_cast<TSlices*>(part.Slices.Get());
             auto add = [&](ui32 pageIndex1Inclusive, ui32 pageIndex2Exclusive) {
                 slices.push_back(IndexTools::MakeSlice(part, pageIndex1Inclusive, pageIndex2Exclusive));
             };
@@ -177,14 +177,15 @@ namespace {
             for (auto s : slices) {
                 partSlices->push_back(s);
             }
-
-            if (params.Slices <= TTestParams::None + 1) {
-                Cerr << DumpPart(part, 3) << Endl;
-            }
-            Cerr << "Slices";
-            part.Slices->Describe(Cerr);
-            Cerr << Endl;
         }
+
+        // Debug dump runs for every slice mode (None and Many included).
+        if (params.Slices <= TTestParams::None + 1) {
+            Cerr << DumpPart(part, 3) << Endl;
+        }
+        Cerr << "Slices";
+        part.Slices->Describe(Cerr);
+        Cerr << Endl;
     }
 
     TPartEggs MakePart(TTestParams params) {
@@ -312,7 +313,8 @@ namespace {
     // when it mis-tags the deepest index level as EPage::DataPage. This env keys
     // by byte offset (within room, since the same offset names different pages
     // in room 0 vs a column-group room) and validates the requested Type against
-    // the store's truth on every miss — the bug is caught on the first miss.
+    // the store's truth on every access (hits and misses alike), so a wrong Type
+    // is caught even for an offset already requested once.
     struct TTouchEnvV2 : public NTest::TTestEnv {
         const TPartStore* Part = nullptr;
 
@@ -328,16 +330,13 @@ namespace {
                 NPage::TGroupId groupId) override {
             Y_UNUSED(part);
             const ui32 room = groupId.Index;
-            auto& loaded = Loaded[room];
-            if (auto* p = loaded.FindPtr(location.Offset)) {
-                return p;
-            }
-            // Type-aware: the store knows the true page type for this offset/room.
-            // Resolve the byte offset to a page id within this room, then compare
-            // the charger's requested Type with the store's recorded page type.
-            // The buggy charger asks for the deepest index page as EPage::DataPage;
-            // the store says it is EPage::BTreeIndexV2 -> this assert catches the
-            // type mismatch immediately on every miss.
+            // Type-aware on every access, cache hits included: the store knows the
+            // true page type for this offset/room. Validate the charger's requested
+            // Type before serving from cache, so a same-offset request that later
+            // arrives with a wrong Type is caught too (it cannot be seen on the
+            // miss path alone once the page is already loaded). The buggy charger
+            // asks for the deepest index page as EPage::DataPage; the store says it
+            // is EPage::BTreeIndexV2 -> this assert catches the type mismatch.
             auto pageId = Part->Store->ResolveByteOffset(room, location.Offset.AsByteOffset());
             auto trueType = Part->GetPageType(pageId, groupId);
             UNIT_ASSERT_VALUES_EQUAL_C(
@@ -346,6 +345,9 @@ namespace {
                 << " room " << room
                 << ": charger asked " << static_cast<ui16>(location.Type)
                 << " store says " << static_cast<ui16>(trueType));
+            if (auto* p = Loaded[room].FindPtr(location.Offset)) {
+                return p;
+            }
             Touched[room].push_back(location);
             return nullptr;
         }
@@ -859,7 +861,6 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
     Y_UNIT_TEST(FewNodes_Groups_History_Sticky) {
         CheckPart({.Levels = 3, .Groups = true, .History = true, .StickSomePages = true});
     }
-
 }
 
 Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
@@ -1354,6 +1355,11 @@ namespace {
         const auto part = *eggs.Lone();
         SetupSlices(params, part);
         UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount(), params.Levels);
+        if (params.Groups) {
+            UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[1].LevelCount(), params.Levels);
+            UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[2].LevelCount(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[3].LevelCount(), 1);
+        }
         return eggs;
     }
 }
@@ -1417,21 +1423,33 @@ Y_UNIT_TEST_SUITE(TPartGroupBtreeIndexIterV2) {
         }
 
         // Key-based seek must land on the same page, not merely return the same status.
+        // Run the V2 side on TTouchEnvV2 (miss/load/resume) so the requested Type
+        // is validated against the store on the Seek/SeekReverse byte-offset paths.
         const auto* keyDefaults = v1Eggs.Scheme->Keys.Get();
         for (ui32 first : {0u, 1u, 3u, 5u}) {
             for (ui32 second : {0u, 5u, 13u}) {
                 for (bool reverse : {false, true}) {
                     for (ESeek seek : {ESeek::Exact, ESeek::Lower, ESeek::Upper}) {
-                        TTestEnv v1SeekEnv, v2SeekEnv;
+                        TTestEnv v1SeekEnv;
+                        TTouchEnvV2 v2SeekEnv(&v2Part);
                         auto v1Seek = CreateIndexIter(&v1Part, &v1SeekEnv, {});
                         auto v2Seek = CreateIndexIter(&v2Part, &v2SeekEnv, {});
                         auto key = MakeKey(first, second);
                         auto v1Ready = reverse
                             ? v1Seek->SeekReverse(seek, key, keyDefaults)
                             : v1Seek->Seek(seek, key, keyDefaults);
-                        auto v2Ready = reverse
-                            ? v2Seek->SeekReverse(seek, key, keyDefaults)
-                            : v2Seek->Seek(seek, key, keyDefaults);
+                        EReady v2Ready = EReady::Page;
+                        for (ui32 attempt = 0; attempt <= 10; attempt++) {
+                            v2SeekEnv.LoadTouched();
+                            v2Ready = reverse
+                                ? v2Seek->SeekReverse(seek, key, keyDefaults)
+                                : v2Seek->Seek(seek, key, keyDefaults);
+                            if (v2Ready != EReady::Page) {
+                                break;
+                            }
+                        }
+                        UNIT_ASSERT_C(v2Ready != EReady::Page,
+                            "V2 key seek did not become ready");
 
                         UNIT_ASSERT_VALUES_EQUAL(v1Ready, v2Ready);
                         UNIT_ASSERT_VALUES_EQUAL(v1Seek->IsValid(), v2Seek->IsValid());
@@ -1779,17 +1797,16 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndexV2) {
                 "row-id rev limit=" << limit
                 << " must not precharge more items than unlimited");
 
-            // Keys path — only for limits that fit within the key range.
-            if (limit >= 5) {
-                r = DoV2Resume(eggs, params, /*reverse=*/false,
-                    /*useKeys=*/true, limit, 0,
-                    "keys fwd limit=" + ToString(limit));
-                UNIT_ASSERT_C(r.ItemsPrecharged > 0,
-                    "keys fwd limit=" << limit << " must precharge items");
-                UNIT_ASSERT_LE_C(r.ItemsPrecharged, unlimited.ItemsPrecharged,
-                    "keys fwd limit=" << limit
-                    << " must not precharge more items than unlimited");
-            }
+            // Keys path: the (0, 3)..(5, 8) key range spans nearly all 40 rows,
+            // so every tested limit fits within it and precharges items.
+            r = DoV2Resume(eggs, params, /*reverse=*/false,
+                /*useKeys=*/true, limit, 0,
+                "keys fwd limit=" + ToString(limit));
+            UNIT_ASSERT_C(r.ItemsPrecharged > 0,
+                "keys fwd limit=" << limit << " must precharge items");
+            UNIT_ASSERT_LE_C(r.ItemsPrecharged, unlimited.ItemsPrecharged,
+                "keys fwd limit=" << limit
+                << " must not precharge more items than unlimited");
         }
     }
 

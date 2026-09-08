@@ -95,10 +95,16 @@ namespace {
 
     class TMetricsLabelsTestActor : public NActors::TActorBootstrapped<TMetricsLabelsTestActor> {
     public:
-        TMetricsLabelsTestActor(NActors::TActorId edge, TString consumer, bool firstClassCitizen)
+        TMetricsLabelsTestActor(
+            NActors::TActorId edge,
+            TString consumer,
+            bool firstClassCitizen,
+            TString databaseId = {}
+        )
             : Edge_(edge)
             , Consumer_(std::move(consumer))
             , FirstClassCitizen_(firstClassCitizen)
+            , DatabaseId_(std::move(databaseId))
         {
         }
 
@@ -106,12 +112,23 @@ namespace {
             NKikimr::AppData(ctx)->PQConfig.SetTopicsAreFirstClassCitizen(FirstClassCitizen_);
 
             auto* ev = new TEvMetricsLabelsResult;
-            ev->Labels = GetRequestMessageCountMetricsLabels(
-                "/Root/db",
-                "/Root/db/topic",
-                Consumer_,
-                "SendMessage"
-            );
+            if (DatabaseId_) {
+                ev->Labels = GetMetricsLabels(
+                    "/Root/db",
+                    "/Root/db/topic",
+                    Consumer_,
+                    "SendMessage",
+                    {{"name", "api.sqs.request.count"}},
+                    DatabaseId_
+                );
+            } else {
+                ev->Labels = GetRequestMessageCountMetricsLabels(
+                    "/Root/db",
+                    "/Root/db/topic",
+                    Consumer_,
+                    "SendMessage"
+                );
+            }
             ctx.Send(Edge_, ev);
             Die(ctx);
         }
@@ -120,6 +137,7 @@ namespace {
         NActors::TActorId Edge_;
         TString Consumer_;
         bool FirstClassCitizen_;
+        TString DatabaseId_;
     };
 
     TVector<std::pair<TString, TString>> CollectRequestMessageCountMetricsLabels(
@@ -135,6 +153,32 @@ namespace {
         );
         auto ev = runtime.GrabEdgeEvent<TEvMetricsLabelsResult>(edge);
         return ev->Get()->Labels;
+    }
+
+    TVector<std::pair<TString, TString>> CollectMetricsLabelsWithDatabaseId(
+        NKikimr::TTestActorRuntime& runtime,
+        const TString& databaseId
+    ) {
+        const auto edge = runtime.AllocateEdgeActor();
+        runtime.Register(
+            new TMetricsLabelsTestActor(edge, "ydb_sqs_consumer", true, databaseId),
+            0,
+            runtime.GetAppData().SystemPoolId
+        );
+        auto ev = runtime.GrabEdgeEvent<TEvMetricsLabelsResult>(edge);
+        return ev->Get()->Labels;
+    }
+
+    bool HasLabel(
+        const TVector<std::pair<TString, TString>>& labels,
+        const TString& key
+    ) {
+        for (const auto& [labelKey, _] : labels) {
+            if (labelKey == key) {
+                return true;
+            }
+        }
+        return false;
     }
 
 } // namespace
@@ -154,6 +198,18 @@ Y_UNIT_TEST_SUITE(SqsTopicMetricsLabels) {
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "name"), "api.sqs.request.message_count");
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "method"), "SendMessage");
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "topic"), "topic");
+        UNIT_ASSERT(HasLabel(labels, "database_id"));
+    }
+
+    Y_UNIT_TEST(IncludesDatabaseIdLabel) {
+        NKikimr::TTestActorRuntime runtime(1, false);
+        InitRuntime(runtime);
+
+        const auto labels = CollectMetricsLabelsWithDatabaseId(runtime, "database4");
+
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "database_id"), "database4");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "database"), "/Root/db");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "name"), "api.sqs.request.count");
     }
 
     Y_UNIT_TEST(ConvertOldConsumerNameForSharedConsumerInFederation) {

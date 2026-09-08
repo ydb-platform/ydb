@@ -48,6 +48,10 @@ size_t TRdmaCtx::GetDeviceIndex() const noexcept {
     return Impl->DeviceIndex;
 }
 
+int TRdmaCtx::GetMaxSge() const noexcept {
+    return Impl->DevAttr.max_sge;
+}
+
 TDeviceCtx::~TDeviceCtx() {
     ibv_dealloc_pd(ProtDomain);
     ibv_close_device(Context);

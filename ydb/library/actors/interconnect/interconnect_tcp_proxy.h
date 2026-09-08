@@ -15,6 +15,7 @@
 
 namespace NActors {
 
+    NInterconnect::NRdma::TRdmaRuntimeParams CreateRdmaRuntimeParams(int maxWr, bool enableSendReceive) noexcept;
 
     /* WARNING: all proxy actors should be alive during actorsystem activity */
     class TInterconnectProxyTCP
@@ -82,11 +83,23 @@ namespace NActors {
 
     private:
         friend class TInterconnectSessionTCP;
-        friend class TInterconnectSessionTCPv0;
+        friend class TInterconnectSessionRdma;
+        friend class TInterconnectSessionTCPv2;
         friend class THandshake;
         friend class TInputSessionTCP;
 
-        void UnregisterSession(TInterconnectSessionTCP* session);
+        void UnregisterSession(IInterconnectSession* session);
+
+        // Forwards a synchronous call to the current session through the IInterconnectSession interface,
+        // while setting up the session's actor recurse-context (as IActor::InvokeOtherActor would do for a
+        // concrete actor type).
+        template <typename TMethod, typename... TArgs>
+        decltype(auto) InvokeSession(TMethod&& method, TArgs&&... args) {
+            return IActor::InvokeOtherActor(Session->SessionActor(),
+                [&](auto&&) -> decltype(auto) {
+                    return std::invoke(std::forward<TMethod>(method), Session, std::forward<TArgs>(args)...);
+                });
+        }
 
 #define SESSION_EVENTS(HANDLER)                                \
     fFunc(TEvInterconnect::EvForward, HANDLER)                 \
@@ -135,6 +148,7 @@ namespace NActors {
                 cFunc(EvPassAwayIfNeeded, HandlePassAwayIfNeeded)                               \
                 hFunc(TEvSubscribeForConnection, Handle);                                       \
                 hFunc(TEvReportConnection, Handle);                                             \
+                hFunc(TEvProxyCall, Handle);                                                    \
                 fFunc(EvRdmaPendingHandshake, HandleRdmaDelayedHandshake)                       \
                 default:                                                                        \
                     Y_ABORT("unexpected event Type# 0x%08" PRIx32, type);                       \
@@ -413,6 +427,7 @@ namespace NActors {
         void RegisterRdmaFailure();
         void ScheduleDelayedRdmaHandshake();
         void SetRdmaRetryWatchdogPending(bool pending);
+        void Handle(TEvProxyCall::TPtr& ev);
 
         // hold all events before connection is established
         struct TPendingSessionEvent {
@@ -431,7 +446,7 @@ namespace NActors {
         void ProcessPendingSessionEvents();
         void DropSessionEvent(STATEFN_SIG);
 
-        TInterconnectSessionTCP* Session = nullptr;
+        IInterconnectSession* Session = nullptr;
         TActorId SessionID;
 
         // virtual ids used during handshake to check if it is the connection
@@ -491,7 +506,7 @@ namespace NActors {
             // drop existing session if we have one
             if (Session) {
                 LOG_INFO_IC("ICP04", "terminating current session as we are negotiating a new one");
-                IActor::InvokeOtherActor(*Session, &TInterconnectSessionTCP::Terminate, TDisconnectReason::NewSession());
+                InvokeSession(&IInterconnectSession::Terminate, TDisconnectReason::NewSession());
             }
 
             // ensure we have no current session

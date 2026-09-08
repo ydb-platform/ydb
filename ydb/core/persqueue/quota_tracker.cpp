@@ -34,7 +34,7 @@ namespace NKikimr::NPQ {
 
     bool TQuotaTracker::UpdateConfigIfChanged(const ui64 maxBurst, const ui64 speedPerSecond) {
         const ui64 newMaxBurst = TransformToQuota(maxBurst);
-        
+
         if (newMaxBurst != MaxBurst || speedPerSecond != SpeedPerSecond) {
             SpeedPerSecond = speedPerSecond;
             MaxBurst = newMaxBurst;
@@ -95,6 +95,5 @@ namespace NKikimr::NPQ {
     }
 
 } // NKikimr::NPQ
-
 
 

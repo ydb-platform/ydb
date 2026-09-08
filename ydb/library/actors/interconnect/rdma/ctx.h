@@ -63,6 +63,7 @@ public:
     int GetGidIndex() const noexcept;
     const ibv_gid& GetGid() const noexcept;
     size_t GetDeviceIndex() const noexcept;
+    int GetMaxSge() const noexcept;
 
     void Output(IOutputStream &str) const;
     TString ToString() const;

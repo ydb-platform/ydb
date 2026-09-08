@@ -58,36 +58,54 @@ namespace NActors {
         return true;
     }
 
-    void TCoroutineChunkSerializer::Produce(const void *data, size_t size) {
+    void TCoroutineChunkSerializer::Produce(const void* data, size_t size,
+            const NInterconnect::NRdma::TMemRegion* memRegion) {
         Y_ABORT_UNLESS(size <= SizeRemain);
         SizeRemain -= size;
         TotalSerializedDataSize += size;
 
         if (!Chunks.empty()) {
             auto& last = Chunks.back();
-            if (last.first + last.second == data) {
-                last.second += size; // just extend the last buffer
+            if (last.Buf + last.Size == data && last.MemRegion == memRegion) {
+                last.Size += size; // just extend the last buffer
                 return;
             }
         }
 
-        Chunks.emplace_back(static_cast<const char*>(data), size);
+        Chunks.emplace_back(TChunk{
+            .Buf = static_cast<const char*>(data),
+            .Size = size,
+            .MemRegion = memRegion,
+        });
     }
 
     bool TCoroutineChunkSerializer::WriteAliasedRaw(const void* data, int size) {
+        return WriteAliasedRawImpl(data, size, nullptr);
+    }
+
+    bool TCoroutineChunkSerializer::WriteAliasedRawImpl(const void* data, int size,
+            const NInterconnect::NRdma::TMemRegion* memRegion) {
         Y_ABORT_UNLESS(!CancelFlag);
         Y_ABORT_UNLESS(!AbortFlag);
         Y_ABORT_UNLESS(size >= 0);
         while (size) {
-            if (const size_t bytesToAppend = Min<size_t>(size, SizeRemain)) {
+            const bool copyAliased = !memRegion && AliasedMode == EAliasedMode::CopyToBuffer;
+            const size_t bytesToAppend = Min<size_t>(size, SizeRemain);
+            if (bytesToAppend) {
                 const void *produce = data;
-                if ((reinterpret_cast<uintptr_t>(data) & 63) + bytesToAppend <= 64 &&
-                        (Chunks.empty() || data != Chunks.back().first + Chunks.back().second)) {
+                const NInterconnect::NRdma::TMemRegion* producedMemRegion = memRegion;
+                const bool canGlue = !Chunks.empty() &&
+                    Chunks.back().Buf + Chunks.back().Size == data &&
+                    Chunks.back().MemRegion == memRegion;
+                if (!memRegion && (copyAliased ||
+                        ((reinterpret_cast<uintptr_t>(data) & 63) + bytesToAppend <= 64 &&
+                            !canGlue))) {
                     memcpy(BufferPtr, data, bytesToAppend);
                     produce = BufferPtr;
                     BufferPtr += bytesToAppend;
+                    producedMemRegion = nullptr;
                 }
-                Produce(produce, bytesToAppend);
+                Produce(produce, bytesToAppend, producedMemRegion);
                 data = static_cast<const char*>(data) + bytesToAppend;
                 size -= bytesToAppend;
             } else {
@@ -113,7 +131,7 @@ namespace NActors {
         *data = BufferPtr;
         *size = SizeRemain;
         BufferPtr += SizeRemain;
-        Produce(*data, *size);
+        Produce(*data, *size, nullptr);
         return true;
     }
 
@@ -124,11 +142,11 @@ namespace NActors {
         Y_ABORT_UNLESS(count > 0);
         Y_ABORT_UNLESS(!Chunks.empty());
         TChunk& buf = Chunks.back();
-        Y_ABORT_UNLESS((size_t)count <= buf.second);
-        Y_ABORT_UNLESS(buf.first + buf.second == BufferPtr, "buf# %p:%zu BufferPtr# %p SizeRemain# %zu NumChunks# %zu",
-            buf.first, buf.second, BufferPtr, SizeRemain, Chunks.size());
-        buf.second -= count;
-        if (!buf.second) {
+        Y_ABORT_UNLESS((size_t)count <= buf.Size, "count# %d buf.Size# %zu", count, buf.Size);
+        Y_ABORT_UNLESS(buf.Buf + buf.Size == BufferPtr, "buf# %p:%zu BufferPtr# %p SizeRemain# %zu NumChunks# %zu",
+            buf.Buf, buf.Size, BufferPtr, SizeRemain, Chunks.size());
+        buf.Size -= count;
+        if (!buf.Size) {
             Chunks.pop_back();
         }
         BufferPtr -= count;
@@ -145,7 +163,9 @@ namespace NActors {
 
     bool TCoroutineChunkSerializer::WriteRope(const TRope *rope) {
         for (auto iter = rope->Begin(); iter.Valid(); iter.AdvanceToNextContiguousBlock()) {
-            if (!WriteAliasedRaw(iter.ContiguousData(), iter.ContiguousSize())) {
+            const auto memRegion = NInterconnect::NRdma::TryExtractFromRcBuf(iter.GetChunk());
+            if (!WriteAliasedRawImpl(iter.ContiguousData(), iter.ContiguousSize(),
+                    memRegion.Empty() ? nullptr : memRegion.GetMemRegion())) {
                 return false;
             }
         }
@@ -156,7 +176,8 @@ namespace NActors {
         return WriteAliasedRaw(s->data(), s->length());
     }
 
-    std::span<TCoroutineChunkSerializer::TChunk> TCoroutineChunkSerializer::FeedBuf(void* data, size_t size) {
+    std::span<TCoroutineChunkSerializer::TChunk> TCoroutineChunkSerializer::FeedBuf(void* data, size_t size,
+            EAliasedMode aliasedMode) {
         // fill in base params
         BufferPtr = static_cast<char*>(data);
         SizeRemain = size;
@@ -165,6 +186,7 @@ namespace NActors {
         // transfer control to the coroutine
         Y_ABORT_UNLESS(Event);
         Chunks.clear();
+        AliasedMode = aliasedMode;
         Resume();
 
         return Chunks;

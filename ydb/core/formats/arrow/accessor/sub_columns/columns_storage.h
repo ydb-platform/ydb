@@ -20,12 +20,16 @@ private:
 
 public:
     TConclusion<std::shared_ptr<TJsonPathAccessor>> GetPathAccessor(const std::string_view path) const {
-        auto jsonPathAccessorTrie = std::make_shared<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie>();
-        for (ui32 i = 0; i < Stats.GetColumnsCount(); ++i) {
-            auto insertResult = jsonPathAccessorTrie->Insert(ToJsonPath(Stats.GetColumnName(i)), Records->GetColumnVerified(i), Stats.GetValueType(i));
-            AFL_VERIFY(insertResult.IsSuccess())("error", insertResult.GetErrorMessage());
+        auto pathInfoResult = Stats.ResolvePath(path);
+        if (pathInfoResult.IsFail()) {
+            return TConclusionStatus::Fail(pathInfoResult.GetErrorMessage());
         }
-        return jsonPathAccessorTrie->GetAccessor(path);
+        auto pathInfo = pathInfoResult.DetachResult();
+        if (!pathInfo) {
+            return std::make_shared<TJsonPathAccessor>(nullptr, TString{}, EValueType::BinaryJson);
+        }
+        return std::make_shared<TJsonPathAccessor>(
+            Records->GetColumnVerified(pathInfo->ColumnIndex), std::move(pathInfo->RemainingPath), pathInfo->ValueType);
     }
 
     NJson::TJsonValue DebugJson() const {

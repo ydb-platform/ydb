@@ -31,6 +31,15 @@ TString QuoteJsonItem(TStringBuf item) {
     return builder;
 }
 
+TString BuildSubcolumnName(const TStringBuf currentPrefix, const TStringBuf item) {
+    TStringBuilder builder;
+    if (currentPrefix) {
+        builder << currentPrefix << ".";
+    }
+    builder << QuoteJsonItem(item);
+    return builder;
+}
+
 TJsonPath ToJsonPath(TStringBuf path) {
     if (!path.StartsWith('"')) {
         return TString("$.") + QuoteJsonItem(path);
@@ -111,10 +120,7 @@ TString ToSubcolumnName(TStringBuf path) {
         if (pathTypes[i] == NYql::NJsonPath::EJsonPathItemType::ArrayAccess) {
             result.append(pathItems[i]);
         } else {
-            if (!result.empty()) {
-                result.append(".");
-            }
-            result.append(QuoteJsonItem(pathItems[i]));
+            result = BuildSubcolumnName(result, pathItems[i]);
         }
     }
 
@@ -200,61 +206,6 @@ void TJsonPathAccessor::VisitValues(const TValuesVisitor& visitor) const {
             }
         }
     });
-}
-
-TConclusionStatus TJsonPathAccessorTrie::Insert(TJsonPathBuf jsonPath, std::shared_ptr<IChunkedArray> accessor, const EValueType valueType,
-    const std::optional<ui64>& cookie) {
-    auto splittedPathResult = NSubColumns::SplitJsonPath(jsonPath, NSubColumns::TJsonPathSplitSettings{.FillTypes = true, .FillStartPositions = false});
-    if (!splittedPathResult.IsSuccess()) {
-        return splittedPathResult;
-    }
-
-    auto [pathItems, pathTypes, _] = splittedPathResult.DetachResult();
-    AFL_VERIFY(pathItems.size() == pathTypes.size());
-
-    auto currentNode = &Root;
-    for (decltype(pathItems)::size_type i = 0; i < pathItems.size(); ++i) {
-        AFL_VERIFY(pathTypes[i] == NYql::NJsonPath::EJsonPathItemType::MemberAccess);
-        if (auto found = currentNode->Children.find(pathItems[i]); found != currentNode->Children.end()) {
-            currentNode = found->second.get();
-        } else {
-            currentNode = currentNode->Children.emplace(pathItems[i], std::make_unique<TrieNode>()).first->second.get();
-        }
-    }
-
-    AFL_VERIFY(!currentNode->Accessor);
-
-    currentNode->Accessor = std::move(accessor);
-    currentNode->ValueType = valueType;
-    currentNode->Cookie = cookie;
-
-    return TConclusionStatus::Success();
-}
-
-TConclusion<std::shared_ptr<TJsonPathAccessor>> TJsonPathAccessorTrie::GetAccessor(TJsonPathBuf jsonPath) const {
-    auto splittedPathResult = SplitJsonPath(jsonPath, NSubColumns::TJsonPathSplitSettings{.FillTypes = false, .FillStartPositions = true});
-    if (!splittedPathResult.IsSuccess()) {
-        return splittedPathResult;
-    }
-
-    auto [pathItems, _, startPositions] = splittedPathResult.DetachResult();
-    AFL_VERIFY(pathItems.size() == startPositions.size());
-    auto currentNode = &Root;
-    for (decltype(pathItems)::size_type i = 0; i < pathItems.size(); ++i) {
-        if (auto found = currentNode->Children.find(pathItems[i]); found != currentNode->Children.end()) {
-            currentNode = found->second.get();
-        } else if (currentNode->Accessor || currentNode->Cookie) {
-            auto remainingPath = jsonPath.substr(startPositions[i]);
-            // strict is required, because there is a memory problem in NYql::NJsonPath::ExecuteJsonPath with lax and BinaryJson
-            return std::make_shared<TJsonPathAccessor>(currentNode->Accessor,
-                remainingPath.empty() ? TString{} : "strict $" + TString(remainingPath.data(), remainingPath.size()),
-                currentNode->ValueType, currentNode->Cookie);
-        } else {
-            return std::make_shared<TJsonPathAccessor>(nullptr, TString{}, EValueType::BinaryJson);
-        }
-    }
-
-    return std::make_shared<TJsonPathAccessor>(currentNode->Accessor, TString{}, currentNode->ValueType, currentNode->Cookie);
 }
 
 } // namespace NKikimr::NArrow::NAccessor::NSubColumns

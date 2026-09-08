@@ -7,7 +7,6 @@
 #include <yql/essentials/minikql/jsonpath/parser/parser.h>
 #include <ydb/library/accessor/accessor.h>
 
-#include <util/generic/map.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
@@ -21,6 +20,7 @@ using TJsonPath = TString;
 using TJsonPathBuf = TStringBuf;
 
 TString QuoteJsonItem(TStringBuf item);
+TString BuildSubcolumnName(TStringBuf currentPrefix, TStringBuf item);
 TJsonPath ToJsonPath(TStringBuf path);
 
 struct TSplittedJsonPath {
@@ -69,22 +69,6 @@ public:
     ui64 GetRecordsCount() const {
         return ChunkedArrayAccessor ? ChunkedArrayAccessor->GetRecordsCount() : 0;
     }
-};
-
-class TJsonPathAccessorTrie {
-    struct TrieNode {
-        TMap<TString, std::unique_ptr<TrieNode>> Children;
-        std::shared_ptr<IChunkedArray> Accessor;
-        EValueType ValueType = EValueType::BinaryJson;
-        std::optional<ui64> Cookie;
-    };
-
-    TrieNode Root;
-
-public:
-    TConclusionStatus Insert(TJsonPathBuf jsonPath, std::shared_ptr<IChunkedArray> accessor, const EValueType valueType,
-        const std::optional<ui64>& cookie = std::nullopt);
-    TConclusion<std::shared_ptr<TJsonPathAccessor>> GetAccessor(TJsonPathBuf jsonPath) const;
 };
 
 } // namespace NKikimr::NArrow::NAccessor::NSubColumns

@@ -172,6 +172,72 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
     }
 
+    // Complex JSON paths are processed on compaction and query. The second portion encodes `a`
+    // and `slash/key` differently to verify both decode to the first portion's keys.
+    TString scriptComplexPathVariants = R"(
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            Col1 Uint64 NOT NULL,
+            Col2 JsonDocument,
+            PRIMARY KEY (Col1)
+        )
+        PARTITION BY HASH(Col1)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1|2$$);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`,
+                    `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$0|1|1024$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES
+            (1u, JsonDocument(@@{"a":{"b":"nested"},"a.b":"flat","a[0]":{"b":"literal"},"a":[{"b":"array"}],"":{"x":"empty"},
+                "q\"u":{"b":"quote"},"slash/key":{"b":"slash"},"?":{"x":"question"}}@@));
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES
+            (1u, JsonDocument(@@{"\u0061":{"b":"merged_nested"},"a.b":"merged_flat","a[0]":{"b":"merged_literal"},"\u0061":[{"b":"merged_array"}],"":{"x":"merged_empty"},
+                "q\"u":{"b":"merged_quote"},"slash\/key":{"b":"merged_slash"},"?":{"x":"merged_question"}}@@));
+        ------
+        ONE_COMPACTION
+        ------
+        READ: SELECT Col1 FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a.b") = "merged_nested";
+        EXPECTED: [[1u]]
+        ------
+        READ: SELECT Col1 FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"a\".\"b\"") = "merged_nested";
+        EXPECTED: [[1u]]
+        ------
+        READ: SELECT Col1 FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.'a'.'b'") = "merged_nested";
+        EXPECTED: [[1u]]
+        ------
+        READ: SELECT Col1 FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"a.b\"") = "merged_flat";
+        EXPECTED: [[1u]]
+        ------
+        READ: SELECT Col1 FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"a[0]\".b") = "merged_literal";
+        EXPECTED: [[1u]]
+        ------
+        READ: SELECT Col1 FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a[0].b") = "merged_array";
+        EXPECTED: [[1u]]
+        ------
+        READ: SELECT Col1 FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"\".x") = "merged_empty";
+        EXPECTED: [[1u]]
+        ------
+        READ: SELECT Col1 FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, @@$."q\"u".b@@) = "merged_quote";
+        EXPECTED: [[1u]]
+        ------
+        READ: SELECT Col1 FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, @@$."slash/key".b@@) = "merged_slash";
+        EXPECTED: [[1u]]
+        ------
+        READ: SELECT Col1 FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"?\".x") = "merged_question";
+        EXPECTED: [[1u]]
+
+    )";
+    Y_UNIT_TEST_STRING_VARIATOR(ComplexPathVariants, scriptComplexPathVariants) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
+
     Y_UNIT_TEST_STRING_VARIATOR(FilterVariants, NSubColumnsScenarios::Filter(false)) {
         Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
     }

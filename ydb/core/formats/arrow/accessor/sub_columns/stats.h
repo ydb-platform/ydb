@@ -8,36 +8,46 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <library/cpp/containers/absl/flat_hash_map.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <util/generic/string.h>
+#include <util/stream/output.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 class TDictStats {
-private:
-    using TJsonPathAccessorTriePtr = std::shared_ptr<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie>;
+public:
+    struct TResolvedPath {
+        ui32 ColumnIndex;
+        EValueType ValueType;
+        TString RemainingPath;
 
+        bool operator==(const TResolvedPath&) const = default;
+
+        friend IOutputStream& operator<<(IOutputStream& out, const TResolvedPath& pathInfo) {
+            return out << "{ " << pathInfo.ColumnIndex << ", " << static_cast<ui32>(pathInfo.ValueType) << ", " << pathInfo.RemainingPath << " }";
+        }
+    };
+
+private:
     std::shared_ptr<arrow::RecordBatch> Original;
     std::shared_ptr<arrow::BinaryArray> DataNames;
     std::shared_ptr<arrow::UInt32Array> DataRecordsCount;
     std::shared_ptr<arrow::UInt32Array> DataSize;
     std::shared_ptr<arrow::UInt8Array> AccessorType;
     std::shared_ptr<arrow::UInt8Array> ValueType;
-    TJsonPathAccessorTriePtr CachedJsonPathAccessorTrie;
+    // keys are references to DataNames array values
+    absl::flat_hash_map<std::string_view, ui32> ColumnIndexes;
 
-    TJsonPathAccessorTriePtr GenerateJsonPathAccessorTrie() const {
-        auto jsonPathAccessorTrie = std::make_shared<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie>();
-        for (ui32 i = 0; i < DataNames->length(); ++i) {
-            const auto arrView = DataNames->GetView(i);
-            auto insertResult = jsonPathAccessorTrie->Insert(ToJsonPath(TStringBuf(arrView.data(), arrView.size())), nullptr, OthersExplicitBinaryJson, i);
-            AFL_VERIFY(insertResult.IsSuccess())("key_name", TStringBuf(arrView.data(), arrView.size()))
-                ("json_path", ToJsonPath(TStringBuf(arrView.data(), arrView.size())))
-                ("error", insertResult.GetErrorMessage());
+    std::optional<ui32> GetColumnIndexOptional(const std::string_view name) const {
+        const auto it = ColumnIndexes.find(name);
+        if (it != ColumnIndexes.end()) {
+            return it->second;
         }
-
-        return jsonPathAccessorTrie;
+        return std::nullopt;
     }
 
 public:
@@ -65,21 +75,55 @@ public:
     // and the legacy (4-column) layout via try-decode-fallback.
     static TDictStats DeserializeFromBlob(const TString& blob);
 
-    void CreateJsonPathAccessorTrieCache() {
-        CachedJsonPathAccessorTrie = GenerateJsonPathAccessorTrie();
+    template <class TColumnPredicate>
+    TConclusion<std::optional<TResolvedPath>> ResolvePath(const TJsonPathBuf jsonPath, const TColumnPredicate& isColumnAvailable) const {
+        auto splitResult = SplitJsonPath(jsonPath, TJsonPathSplitSettings{.FillTypes = true, .FillStartPositions = true});
+        if (splitResult.IsFail()) {
+            return TConclusionStatus::Fail(splitResult.GetErrorMessage());
+        }
+        const auto [pathItems, pathTypes, startPositions] = splitResult.DetachResult();
+        AFL_VERIFY(pathItems.size() == pathTypes.size());
+        AFL_VERIFY(pathItems.size() == startPositions.size());
+
+        TString columnName;
+        std::optional<ui32> columnIndex;
+        ui32 matchedItemsCount = 0;
+        for (ui32 i = 0; i < pathItems.size(); ++i) {
+            if (pathTypes[i] != NYql::NJsonPath::EJsonPathItemType::MemberAccess) {
+                break;
+            }
+            columnName = BuildSubcolumnName(columnName, pathItems[i]);
+            if (auto index = GetColumnIndexOptional(columnName); index && isColumnAvailable(*index)) {
+                columnIndex = index;
+                matchedItemsCount = i + 1;
+            }
+        }
+        if (!columnIndex) {
+            return std::optional<TResolvedPath>();
+        }
+
+        TString remainingPath;
+        // strict is required, because there is a memory problem in NYql::NJsonPath::ExecuteJsonPath with lax and BinaryJson
+        if (matchedItemsCount < startPositions.size()) {
+            remainingPath = "strict $" + TString(jsonPath.data() + startPositions[matchedItemsCount], jsonPath.size() - startPositions[matchedItemsCount]);
+        }
+        return std::optional<TResolvedPath>(TResolvedPath{ *columnIndex, GetValueType(*columnIndex), std::move(remainingPath) });
+    }
+
+    TConclusion<std::optional<TResolvedPath>> ResolvePath(const TJsonPathBuf jsonPath) const {
+        return ResolvePath(jsonPath, [](const ui32) {
+            return true;
+        });
     }
 
     std::optional<ui32> GetKeyIndexOptional(const std::string_view keyName) const {
-        auto accessorResult = CachedJsonPathAccessorTrie ? CachedJsonPathAccessorTrie->GetAccessor(ToJsonPath(keyName))
-                                                         : GenerateJsonPathAccessorTrie()->GetAccessor(ToJsonPath(keyName));
-        AFL_VERIFY(accessorResult.IsSuccess())("keyName", keyName)("jsonPath", ToJsonPath(keyName))("error", accessorResult.GetErrorMessage());
-
-        auto accessor = accessorResult.DetachResult();
-        if (!accessor) {
+        auto pathInfoResult = ResolvePath(ToJsonPath(keyName));
+        AFL_VERIFY(pathInfoResult.IsSuccess())("keyName", keyName)("jsonPath", ToJsonPath(keyName))("error", pathInfoResult.GetErrorMessage());
+        auto pathInfo = pathInfoResult.DetachResult();
+        if (!pathInfo) {
             return std::nullopt;
         }
-
-        return accessor->GetCookie();
+        return pathInfo->ColumnIndex;
     }
 
     ui32 GetKeyIndexVerified(const std::string_view keyName) const {

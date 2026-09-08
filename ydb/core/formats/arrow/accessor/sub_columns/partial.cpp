@@ -19,19 +19,18 @@ void TSubColumnsPartialArray::InitOthers(const TString& blob, const TChunkConstr
 }
 
 TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> TSubColumnsPartialArray::GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const {
-    auto jsonPathAccessorTrie = std::make_shared<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie>();
     auto headerStats = Header.GetColumnStats();
-    for (ui32 i = 0; i < headerStats.GetDataNamesCount(); ++i) {
-        if (PartialColumnsData.HasColumn(i)) {
-            auto insertResult = jsonPathAccessorTrie->Insert(
-                NSubColumns::ToJsonPath(headerStats.GetColumnName(i)), PartialColumnsData.GetAccessorVerified(i), headerStats.GetValueType(i));
-            AFL_VERIFY(insertResult.IsSuccess())("error", insertResult.GetErrorMessage());
-        }
+    // Resolve only among requested columns
+    auto pathInfoResult = headerStats.ResolvePath(svPath, [this](const ui32 columnIndex) {
+        return PartialColumnsData.HasColumn(columnIndex);
+    });
+    if (pathInfoResult.IsFail()) {
+        return TConclusionStatus::Fail(pathInfoResult.GetErrorMessage());
     }
-
-    auto accessorResult = jsonPathAccessorTrie->GetAccessor(svPath);
-    if (accessorResult.IsSuccess() && accessorResult.GetResult()->IsValid()) {
-        return accessorResult;
+    auto pathInfo = pathInfoResult.DetachResult();
+    if (pathInfo && PartialColumnsData.HasColumn(pathInfo->ColumnIndex)) {
+        return std::make_shared<NSubColumns::TJsonPathAccessor>(PartialColumnsData.GetAccessorVerified(pathInfo->ColumnIndex),
+            std::move(pathInfo->RemainingPath), pathInfo->ValueType);
     }
 
     if (OthersData) {

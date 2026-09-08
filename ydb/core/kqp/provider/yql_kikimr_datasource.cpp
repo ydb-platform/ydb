@@ -368,7 +368,14 @@ public:
             return false;
         }
 
-        auto source = ExternalSourceFactory->GetOrCreate(metadata.ExternalSource.Type);
+        if (!metadata.ExternalSource.DatabaseType) {
+            ctx.AddError(NYql::TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
+                << "Unsupported. Failed to load metadata for table: " << NCommon::FullTableName(table.first, table.second)
+                << " (unknown source type), please contact internal support"));
+            return false;
+        }
+
+        auto source = ExternalSourceFactory->GetOrCreate(*metadata.ExternalSource.DatabaseType);
         auto it = Types.DataSourceMap.find(source->GetName());
         if (it == Types.DataSourceMap.end()) {
             ctx.AddError(NYql::TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
@@ -380,7 +387,7 @@ public:
         THashMap<TString, TString> properties = {{
             {"location", metadata.ExternalSource.DataSourceLocation },
             {"installation", metadata.ExternalSource.DataSourceInstallation },
-            {"source_type", metadata.ExternalSource.Type}
+            {"source_type", ToStringDatabaseType(metadata.ExternalSource.DatabaseType)}
         }};
 
         properties.insert(metadata.ExternalSource.Properties.GetProperties().begin(), metadata.ExternalSource.Properties.GetProperties().end());
@@ -860,7 +867,12 @@ public:
                 }
                 if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource) {
                     YQL_ENSURE(ExternalSourceFactory);
-                    const auto& source = ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->ExternalSource.Type);
+                    if (!tableDesc.Metadata->ExternalSource.DatabaseType) {
+                        ctx.AddError(TIssue(node->Pos(ctx), TStringBuilder()
+                            << "Unknown source type for external data source \"" << tablePath << "\""));
+                        return nullptr;
+                    }
+                    const auto& source = ExternalSourceFactory->GetOrCreate(*tableDesc.Metadata->ExternalSource.DatabaseType);
                     ctx.Step.Repeat(TExprStep::DiscoveryIO)
                             .Repeat(TExprStep::Epochs)
                             .Repeat(TExprStep::Intents)
@@ -880,7 +892,12 @@ public:
                     return ctx.ChangeChildren(*node, std::move(retChildren));
                 } else if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalTable) {
                     YQL_ENSURE(ExternalSourceFactory);
-                    const auto& source = ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->ExternalSource.Type);
+                    if (!tableDesc.Metadata->ExternalSource.DatabaseType) {
+                        ctx.AddError(TIssue(node->Pos(ctx), TStringBuilder()
+                            << "Unknown source type for external table \"" << tablePath << "\""));
+                        return nullptr;
+                    }
+                    const auto& source = ExternalSourceFactory->GetOrCreate(*tableDesc.Metadata->ExternalSource.DatabaseType);
                     ctx.Step.Repeat(TExprStep::DiscoveryIO)
                             .Repeat(TExprStep::Epochs)
                             .Repeat(TExprStep::Intents)

@@ -30,7 +30,19 @@ enum class EDatabaseType {
 
 std::set<TString> GetAllExternalDataSourceTypes();
 
+std::set<EDatabaseType> GetAllExternalDataSourceDatabaseTypes();
+
 EDatabaseType DatabaseTypeFromDataSourceKind(NYql::EGenericDataSourceKind dataSourceKind);
+
+std::optional<EDatabaseType> DatabaseTypeFromString(const TString& type);
+
+inline TString ToStringDatabaseType(const std::optional<EDatabaseType>& type) {
+    return type ? ToString(*type) : TString{};
+}
+
+inline TString ToStringDatabaseType(const std::optional<EDatabaseType>& type, const TString& fallback) {
+    return type ? ToString(*type) : fallback;
+}
 
 NYql::EGenericDataSourceKind DatabaseTypeToDataSourceKind(EDatabaseType databaseType);
 

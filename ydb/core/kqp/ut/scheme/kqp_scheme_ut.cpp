@@ -9251,6 +9251,23 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Unknown AUTH_METHOD = UNKNOWN", result.GetIssues().ToString());
     }
 
+    Y_UNIT_TEST(CreateExternalDataSourceValidationSourceType) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString externalDataSourceName = "/Root/ExternalDataSource";
+        auto query = TStringBuilder() << R"(
+            CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                SOURCE_TYPE="UnknownSourceType",
+                LOCATION="my-bucket",
+                AUTH_METHOD="NONE"
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Unknown source type: UnknownSourceType", result.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(CreateExternalDataSourceValidationLocation) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddHostnamePatterns("common-bucket");

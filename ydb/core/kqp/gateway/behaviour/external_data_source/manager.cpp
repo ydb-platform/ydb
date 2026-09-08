@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/gateway/utils/metadata_helpers.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
 
 #include <ydb/library/conclusion/generic/result.h>
 #include <ydb/library/actors/core/actor.h>
@@ -82,7 +83,11 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
     NActors::TActorSystem* actorSystem)
 {
     externalDataSourceDesc.SetName(name);
-    externalDataSourceDesc.SetSourceType(GetOrEmpty(settings, "source_type"));
+    const auto sourceType = GetOrEmpty(settings, "source_type");
+    if (!NYql::DatabaseTypeFromString(sourceType)) {
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Unknown source type: " << sourceType);
+    }
+    externalDataSourceDesc.SetSourceType(sourceType);
     externalDataSourceDesc.SetLocation(GetOrEmpty(settings, "location"));
     externalDataSourceDesc.SetInstallation(GetOrEmpty(settings, "installation"));
 

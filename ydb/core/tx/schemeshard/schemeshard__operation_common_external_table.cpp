@@ -126,7 +126,7 @@ std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
     try {
         NKikimrExternalSources::TGeneral general;
         general.ParseFromStringOrThrow(desc.GetContent());
-        const auto source = factory->GetOrCreate(sourceType);
+        const auto source = factory->GetOrCreate(*NYql::DatabaseTypeFromString(sourceType));
         if (!source->HasExternalTable()) {
             errStr = TStringBuilder{} << "External table isn't supported for " << sourceType;
             return std::make_pair(nullptr, errStr);

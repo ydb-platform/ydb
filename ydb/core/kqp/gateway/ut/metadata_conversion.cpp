@@ -50,7 +50,7 @@ TEST(MetadataConversion, MakeAuthTest) {
 
 TEST(MetadataConversion, ConvertingExternalSourceMetadata) {
     NYql::TExternalSource externalSource{
-        .Type = "type",
+        .DatabaseType = NYql::EDatabaseType::Ydb,
         .TableLocation = "table-loc",
         .DataSourcePath = "ds-path",
         .DataSourceLocation = "ds-loc",
@@ -70,7 +70,7 @@ TEST(MetadataConversion, ConvertingExternalSourceMetadata) {
     NYql::TKikimrTableMetadata tableMetadata;
     ASSERT_TRUE(NKqp::EnrichMetadata(tableMetadata, *externalMetadata));
 
-    ASSERT_EQ(tableMetadata.ExternalSource.Type, externalSource.Type);
+    ASSERT_EQ(tableMetadata.ExternalSource.DatabaseType, externalSource.DatabaseType);
     ASSERT_EQ(tableMetadata.ExternalSource.TableLocation, externalSource.TableLocation);
     ASSERT_EQ(tableMetadata.ExternalSource.DataSourcePath, externalSource.DataSourcePath);
     ASSERT_EQ(tableMetadata.ExternalSource.DataSourceLocation, externalSource.DataSourceLocation);

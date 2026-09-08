@@ -1054,7 +1054,12 @@ public:
                 .Repeat(TExprStep::RewriteIO);
 
         YQL_ENSURE(ExternalSourceFactory);
-        const auto& externalSourceInfo = ExternalSourceFactory->GetOrCreate(externalSource.Type);
+        if (!externalSource.DatabaseType) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()
+                << "Unknown source type for external data source \"" << key.GetTablePath() << "\""));
+            return false;
+        }
+        const auto& externalSourceInfo = ExternalSourceFactory->GetOrCreate(*externalSource.DatabaseType);
         if (externalSource.SourceType == ESourceType::ExternalDataSource) {
             auto writeArgs = node->ChildrenList();
             writeArgs[1] = Build<TCoDataSink>(ctx, node->Pos())

@@ -837,7 +837,7 @@ typedef TIntrusivePtr<TKikimrTableMetadata> TKikimrTableMetadataPtr;
 
 struct TExternalSource {
     ESourceType SourceType = ESourceType::Unknown;
-    TString Type;
+    std::optional<EDatabaseType> DatabaseType;
     TString TableLocation;
     TString TableContent;
     TString DataSourcePath;

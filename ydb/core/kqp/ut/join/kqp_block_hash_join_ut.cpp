@@ -37,13 +37,12 @@ NKikimrConfig::TAppConfig AppCfgLowComputeLimits(double reasonableTreshold, bool
 }
 
 
-// Runs the spilling join under the given resource manager spilling threshold, with the operator memory quota
-// (RFC dq_memory_quota_20) bound or not, and checks whether the compute spilling counters moved.
-void RunSpillingCase(double spillingPercent, bool expectSpilling, bool enableOperatorMemoryQuota) {
+// Runs the spilling join under the given resource manager spilling threshold and checks whether the compute
+// spilling counters moved.
+void RunSpillingCase(double spillingPercent, bool expectSpilling) {
         TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig = AppCfgLowComputeLimits(spillingPercent);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetEnableOperatorMemoryQuota(enableOperatorMemoryQuota);
         TKikimrRunner kikimr(settings);
 
         auto queryClient = kikimr.GetQueryClient();
@@ -137,21 +136,13 @@ void RunSpillingCase(double spillingPercent, bool expectSpilling, bool enableOpe
 
 Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
     Y_UNIT_TEST(Spilling) {
-        RunSpillingCase(0.01, /* expectSpilling = */ true, /* enableOperatorMemoryQuota = */ false);
-    }
-
-    Y_UNIT_TEST(SpillingWithOperatorMemoryQuota) {
         // the negative memory availability of the resource manager drives the join to spill
-        RunSpillingCase(0.01, /* expectSpilling = */ true, /* enableOperatorMemoryQuota = */ true);
+        RunSpillingCase(0.01, /* expectSpilling = */ true);
     }
 
     Y_UNIT_TEST(NoSpillingAtHighPercent) {
-        RunSpillingCase(100, /* expectSpilling = */ false, /* enableOperatorMemoryQuota = */ false);
-    }
-
-    Y_UNIT_TEST(NoSpillingAtHighPercentWithOperatorMemoryQuota) {
-        // the availability never turns negative below the spilling threshold: no spilling, optional requests granted
-        RunSpillingCase(100, /* expectSpilling = */ false, /* enableOperatorMemoryQuota = */ true);
+        // the availability never turns negative below the spilling threshold: no spilling
+        RunSpillingCase(100, /* expectSpilling = */ false);
     }
     Y_UNIT_TEST_TWIN(BlockHashJoinTest, UseBlockHashJoin) {
         TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);

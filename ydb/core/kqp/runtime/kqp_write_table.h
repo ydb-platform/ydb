@@ -183,7 +183,10 @@ public:
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumns,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
         const ui32 defaultColumnsCount,
-        const i64 priority) = 0;
+        const i64 priority,
+        // MvccSnapshot of the operation that opened this write token. Each write
+        // token belongs to exactly one operation, so the snapshot travels with it.
+        const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot) = 0;
     virtual void Write(
         const TWriteToken token,
         IDataBatchPtr&& data) = 0;
@@ -198,6 +201,9 @@ public:
     virtual void SetTokenQuerySpanId(TWriteToken token, ui64 querySpanId) = 0;
     // Get the QuerySpanId of the first pending batch for a shard (0 if none).
     virtual ui64 GetFirstBatchQuerySpanId(ui64 shardId) const = 0;
+    // Get the MvccSnapshot that must be attached to the next message for a shard.
+    // All in-flight batches of the message must share the same snapshot.
+    virtual std::optional<NKikimrDataEvents::TMvccSnapshot> GetMessageMvccSnapshot(ui64 shardId) const = 0;
 
     virtual void Close() = 0;
 

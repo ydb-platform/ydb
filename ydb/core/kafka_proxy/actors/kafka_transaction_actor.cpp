@@ -142,9 +142,15 @@ namespace NKafka {
     void TTransactionActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
         YDB_LOG_DEBUG("KQP session created",
             {LogPrefix()});
+        if (!Kqp || !CommitStarted || ev->Cookie != KqpCookie) {
+            YDB_LOG_DEBUG("Ignoring stale KQP create-session response",
+                {LogPrefix()},
+                {"expectedCookie", KqpCookie},
+                {"actualCookie", ev->Cookie});
+            return;
+        }
         if (!Kqp->HandleCreateSessionResponse(ev, ctx)) {
-            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, "Failed to create KQP session");
-            Die(ctx);
+            FailEndTxnRetryable(ctx, "Failed to create KQP session");
             return;
         }
 
@@ -157,14 +163,19 @@ namespace NKafka {
         YDB_LOG_DEBUG("Received query response from KQP for request",
             {LogPrefix()},
             {"lastSentToKqpRequest", GetAsStr(LastSentToKqpRequest)});
+        if (!Kqp || !CommitStarted || ev->Cookie != KqpCookie) {
+            YDB_LOG_DEBUG("Ignoring stale KQP response",
+                {LogPrefix()},
+                {"expectedCookie", KqpCookie},
+                {"actualCookie", ev->Cookie});
+            return;
+        }
         const TString metadataDatabasePath = GetMetadataDatabasePath();
         const auto ydbStatus = ev->Get()->Record.GetYdbStatus();
         bool producerCreated = TryRequestProducerMetadataTablesCreation(ydbStatus, metadataDatabasePath, ResourceDatabasePath, ctx);
         bool consumerCreated = TryRequestConsumerMetadataTablesCreation(ydbStatus, metadataDatabasePath, ResourceDatabasePath, ctx);
         if (producerCreated || consumerCreated) {
-            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::INVALID_TXN_STATE,
-                "Kafka metadata tables are not initialized yet. Please retry.");
-            Die(ctx);
+            FailEndTxnRetryable(ctx, "Kafka metadata tables are not initialized yet. Please retry.");
             return;
         }
 
@@ -172,8 +183,7 @@ namespace NKafka {
             YDB_LOG_WARN(error,
                 {LogPrefix()},
                 {"error", error});
-            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error->data());
-            Die(ctx);
+            FailEndTxnRetryable(ctx, error->data());
             return;
         }
 
@@ -197,7 +207,7 @@ namespace NKafka {
         YDB_LOG_DEBUG("Sending create session request to KQP for database",
             {LogPrefix()},
             {"databasePath", DatabasePath});
-        Kqp->SendCreateSessionRequest(ctx);
+        Kqp->SendCreateSessionRequest(ctx, ++KqpCookie);
     }
 
     void TTransactionActor::SendToKqpValidationRequests(const TActorContext& ctx) {
@@ -262,6 +272,21 @@ namespace NKafka {
         }
         Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvTransactionActorDied(TransactionalId, ProducerInstanceId));
         TBase::Die(ctx);
+    }
+
+    void TTransactionActor::FailEndTxnRetryable(const TActorContext& ctx, const TString& errorMessage) {
+        if (EndTxnRequestPtr) {
+            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::COORDINATOR_NOT_AVAILABLE, errorMessage);
+        }
+        ++KqpCookie;
+        if (Kqp) {
+            Kqp->CloseKqpSession(ctx);
+            Kqp.reset();
+        }
+        KqpSessionId = "";
+        LastSentToKqpRequest = EKafkaTxnKqpRequests::NO_REQUEST;
+        CommitStarted = false;
+        EndTxnRequestPtr.Destroy();
     }
 
     bool TTransactionActor::TxnExpired() {
@@ -369,8 +394,7 @@ namespace NKafka {
             TString error = TStringBuilder() << "KQP returned wrong number of result sets on SELECT query. Expected " << expectedResultsSize << ", got " << resultsSize << ".";
             YDB_LOG_WARN(error,
                 {LogPrefix()});
-            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error);
-            Die(ctx);
+            FailEndTxnRetryable(ctx, error);
             return;
         }
 
@@ -382,8 +406,7 @@ namespace NKafka {
             TString error = TStringBuilder() << "Error parsing producer state response from KQP. Reason: " << y.what();
             YDB_LOG_WARN(error,
                 {LogPrefix()});
-            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error);
-            Die(ctx);
+            FailEndTxnRetryable(ctx, error);
             return;
         }
         if (auto error = GetErrorInProducerState(producerState)) {
@@ -409,6 +432,12 @@ namespace NKafka {
         YDB_LOG_DEBUG("Validated producer and consumers states. Everything is alright, adding kafka operations to transaction",
             {LogPrefix()});
         auto kqpTxnId = response.Record.GetResponse().GetTxMeta().id();
+        if (PartitionsInTxn.empty() && OffsetsToCommit.empty()) {
+            YDB_LOG_DEBUG("No kafka operations to add; committing empty transaction",
+                {LogPrefix()});
+            HandleAddKafkaOperationsResponse(kqpTxnId, ctx);
+            return;
+        }
         // finally everything is valid and we can add kafka operations to transaction and attempt to commit
         SendAddKafkaOperationsToTxRequest(kqpTxnId);
     }
@@ -429,14 +458,12 @@ namespace NKafka {
     }
 
     TMaybe<TString> TTransactionActor::GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
-        TStringBuilder builder = TStringBuilder() << "Received error on request to KQP. Last sent request: " << GetAsStr(LastSentToKqpRequest) << ". Reason: ";
-        if (ev->Cookie != KqpCookie) {
-            return builder << "Unexpected cookie in TEvQueryResponse. Expected KQP Cookie: " << KqpCookie << ", Actual: " << ev->Cookie << ".";
-        } else if (ev->Get()->Record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-            return builder << "Unexpected YDB status in TEvQueryResponse. Expected YDB SUCCESS status, Actual: " << ev->Get()->Record.GetYdbStatus() << ".";
-        } else {
+        if (ev->Get()->Record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             return {};
         }
+        return TStringBuilder() << "Received error on request to KQP. Last sent request: " << GetAsStr(LastSentToKqpRequest)
+            << ". Reason: Unexpected YDB status in TEvQueryResponse. Expected YDB SUCCESS status, Actual: "
+            << ev->Get()->Record.GetYdbStatus() << ".";
     }
 
     TMaybe<TProducerState> TTransactionActor::ParseProducerState(const NKqp::TEvKqp::TEvQueryResponse& response) {

@@ -75,14 +75,36 @@ TVector<TCell> MakeLockKey(const NKikimrDataEvents::TLock& lockProto) {
     return lockKey;
 }
 
+TVector<TCell> MakeLocalLockKey(const NKikimrDataEvents::TLock& lockProto, ui64 localTabletId) {
+    auto lockId = lockProto.GetLockId();
+    auto lockSchemeShard = lockProto.GetSchemeShard();
+    auto lockPathId = lockProto.GetPathId();
+
+    Y_ASSERT(TCell::CanInline(sizeof(lockId)));
+    Y_ASSERT(TCell::CanInline(sizeof(localTabletId)));
+    Y_ASSERT(TCell::CanInline(sizeof(lockSchemeShard)));
+    Y_ASSERT(TCell::CanInline(sizeof(lockPathId)));
+
+    TVector<TCell> lockKey{
+        TCell(reinterpret_cast<const char*>(&lockId), sizeof(lockId)),
+        TCell(reinterpret_cast<const char*>(&localTabletId), sizeof(localTabletId)),
+        TCell(reinterpret_cast<const char*>(&lockSchemeShard), sizeof(lockSchemeShard)),
+        TCell(reinterpret_cast<const char*>(&lockPathId), sizeof(lockPathId))};
+
+    return lockKey;
+}
+
 // returns list of broken locks
-TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLocks& txLocks, TSysLocks& sysLocks, ui64 tabletId)
+TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLocks& txLocks, TSysLocks& sysLocks, ui64 tabletId,
+    std::optional<ui64> localTabletId)
 {
     TVector<NKikimrDataEvents::TLock> brokenLocks;
 
     if (!NeedValidateLocks(txLocks.GetOp())) {
         return {};
     }
+
+    THashSet<ui64> processedLockIds;
 
     for (auto& lockProto : txLocks.GetLocks()) {
         if (lockProto.GetDataShard() != tabletId) {
@@ -120,6 +142,52 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLoc
                 {"actualWriteSeqNum", lock.WriteSeqNum});
             brokenLocks.emplace_back(lockProto);
         }
+        processedLockIds.insert(lockProto.GetLockId());
+    }
+
+    if (localTabletId.has_value()) {
+        for (auto& lockProto : txLocks.GetLocks()) {
+            if (lockProto.GetDataShard() == tabletId) {
+                continue;
+            }
+            if (processedLockIds.contains(lockProto.GetLockId())) {
+                continue;
+            }
+
+            auto lockInfo = sysLocks.GetRawLock(lockProto.GetLockId());
+            if (!lockInfo || lockInfo->IsBroken()) {
+                YDB_LOG_TRACE("ValidateLocks: broken ancestor lock (not found or broken)",
+                    {"lockId", lockProto.GetLockId()},
+                    {"expectedDataShard", lockProto.GetDataShard()});
+                brokenLocks.emplace_back(lockProto);
+                processedLockIds.insert(lockProto.GetLockId());
+                continue;
+            }
+
+            const auto& ancestors = lockInfo->GetAncestorLocks();
+            auto it = ancestors.find(lockProto.GetDataShard());
+            if (it == ancestors.end()) {
+                YDB_LOG_TRACE("ValidateLocks: broken ancestor lock (ancestor not found)",
+                    {"lockId", lockProto.GetLockId()},
+                    {"expectedDataShard", lockProto.GetDataShard()});
+                brokenLocks.emplace_back(lockProto);
+                processedLockIds.insert(lockProto.GetLockId());
+                continue;
+            }
+
+            if (it->second.Generation != lockProto.GetGeneration() ||
+                it->second.Counter != lockProto.GetCounter())
+            {
+                YDB_LOG_TRACE("ValidateLocks: broken ancestor lock (mismatch)",
+                    {"lockId", lockProto.GetLockId()},
+                    {"expectedGeneration", lockProto.GetGeneration()},
+                    {"expectedCounter", lockProto.GetCounter()},
+                    {"actualAncestorGeneration", it->second.Generation},
+                    {"actualAncestorCounter", it->second.Counter});
+                brokenLocks.emplace_back(lockProto);
+            }
+            processedLockIds.insert(lockProto.GetLockId());
+        }
     }
 
     return brokenLocks;
@@ -140,7 +208,7 @@ bool ReceiveLocks(const NKikimrDataEvents::TKqpLocks& locks, ui64 shardId) {
 }  // namespace
 
 
-void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLocks& sysLocks, TKeyValidator& keyValidator) {
+void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLocks& sysLocks, TKeyValidator& keyValidator, std::optional<ui64> localTabletId) {
     if (locks.LocksSize() == 0) {
         return;
     }
@@ -153,6 +221,8 @@ void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLock
         NScheme::TTypeInfo(NScheme::TUint64::TypeId),
     };
 
+    THashSet<ui64> processedLockIds;
+
     for (auto& lock : locks.GetLocks()) {
         auto lockKey = MakeLockKey(lock);
         if (sysLocks.IsMyKey(lockKey)) {
@@ -163,17 +233,38 @@ void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLock
             if (NeedEraseLocks(locks.GetOp())) {
                 keyValidator.AddWriteRange(sysLocksTableId, point, lockRowType, {}, /* isPureEraseOp */ true);
             }
+            processedLockIds.insert(lock.GetLockId());
+        }
+    }
+
+    if (localTabletId.has_value()) {
+        for (auto& lock : locks.GetLocks()) {
+            if (processedLockIds.contains(lock.GetLockId())) {
+                continue;
+            }
+            auto lockKey = MakeLocalLockKey(lock, *localTabletId);
+            // This is always "my key" since DataShard == localTabletId
+            auto point = TTableRange(lockKey, true, {}, true, /* point */ true);
+            if (NeedValidateLocks(locks.GetOp())) {
+                keyValidator.AddReadRange(sysLocksTableId, {}, point, lockRowType);
+            }
+            if (NeedEraseLocks(locks.GetOp())) {
+                keyValidator.AddWriteRange(sysLocksTableId, point, lockRowType, {}, /* isPureEraseOp */ true);
+            }
+            processedLockIds.insert(lock.GetLockId());
         }
     }
 }
 
 
-std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateLocks(ui64 origin, TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, const TInputOpData::TInReadSets& inReadSets) {
+std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateLocks(ui64 origin, TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, const TInputOpData::TInReadSets& inReadSets,
+    std::optional<ui64> localTabletId)
+{
     if (kqpLocks == nullptr || !NeedValidateLocks(kqpLocks->GetOp())) {
         return {true, {}};
     }
 
-    auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, origin);
+    auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, origin, localTabletId);
 
     if (!brokenLocks.empty()) {
         return {false, std::move(brokenLocks)};
@@ -239,7 +330,7 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
     bool sendLocks = SendLocks(*kqpLocks, origin);
     if (sendLocks) {
         // Note: it is possible to have no locks
-        auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, origin);
+        auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, origin, std::nullopt);
 
         if (!brokenLocks.empty()) {
             return {false, std::move(brokenLocks)};
@@ -369,7 +460,7 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrD
     TMap<std::pair<ui64, ui64>, NKikimrTx::TReadSetData> genericData;
 
     if (SendLocks(kqpLocks, tabletId) && !kqpLocks.GetReceivingShards().empty()) {
-        auto brokenLocks = ValidateLocks(kqpLocks, sysLocks, tabletId);
+        auto brokenLocks = ValidateLocks(kqpLocks, sysLocks, tabletId, std::nullopt);
 
         NKikimrTxDataShard::TKqpValidateLocksResult validateLocksResult;
         validateLocksResult.SetSuccess(brokenLocks.empty());
@@ -465,10 +556,12 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrD
     }
 }
 
-void KqpEraseLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks) {
+void KqpEraseLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks, std::optional<ui64> localTabletId) {
     if (kqpLocks == nullptr || !NeedEraseLocks(kqpLocks->GetOp())) {
         return;
     }
+
+    THashSet<ui64> processedLockIds;
 
     for (const auto& lockProto : kqpLocks->GetLocks()) {
         if (lockProto.GetDataShard() != origin) {
@@ -480,15 +573,35 @@ void KqpEraseLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, TS
 
         auto lockKey = MakeLockKey(lockProto);
         sysLocks.EraseLock(lockKey);
+        processedLockIds.insert(lockProto.GetLockId());
+    }
+
+    if (localTabletId.has_value()) {
+        for (const auto& lockProto : kqpLocks->GetLocks()) {
+            if (lockProto.GetDataShard() == origin) {
+                continue;
+            }
+            if (processedLockIds.contains(lockProto.GetLockId())) {
+                continue;
+            }
+
+            YDB_LOG_TRACE("KqpEraseLock (ancestor)",
+                {"lockProto", lockProto.ShortDebugString()});
+
+            sysLocks.EraseLock(lockProto.GetLockId());
+            processedLockIds.insert(lockProto.GetLockId());
+        }
     }
 }
 
-void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks, IDataShardUserDb& userDb) {
+void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks, IDataShardUserDb& userDb, std::optional<ui64> localTabletId) {
     if (kqpLocks == nullptr) {
         return;
     }
 
     if (NeedCommitLocks(kqpLocks->GetOp())) {
+        THashSet<ui64> processedLockIds;
+
         for (const auto& lockProto : kqpLocks->GetLocks()) {
             if (lockProto.GetDataShard() != origin) {
                 continue;
@@ -504,9 +617,34 @@ void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, T
             auto txId = lockProto.GetLockId();
 
             userDb.CommitChanges(tableId, txId);
+            processedLockIds.insert(txId);
+        }
+
+        if (localTabletId.has_value()) {
+            for (const auto& lockProto : kqpLocks->GetLocks()) {
+                if (lockProto.GetDataShard() == origin) {
+                    continue;
+                }
+                if (processedLockIds.contains(lockProto.GetLockId())) {
+                    continue;
+                }
+
+                auto lockInfo = sysLocks.GetRawLock(lockProto.GetLockId());
+                if (lockInfo) {
+                    YDB_LOG_TRACE("KqpCommitLock (ancestor)",
+                        {"lockProto", lockProto.ShortDebugString()});
+
+                    auto localKey = MakeLocalLockKey(lockProto, *localTabletId);
+                    sysLocks.CommitLock(localKey);
+
+                    TTableId tableId(lockProto.GetSchemeShard(), lockProto.GetPathId());
+                    userDb.CommitChanges(tableId, lockProto.GetLockId());
+                }
+                processedLockIds.insert(lockProto.GetLockId());
+            }
         }
     } else {
-        KqpEraseLocks(origin, kqpLocks, sysLocks);
+        KqpEraseLocks(origin, kqpLocks, sysLocks, localTabletId);
     }
 }
 

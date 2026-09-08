@@ -12,16 +12,19 @@
 
 #include <util/generic/ptr.h>
 
+#include <optional>
+
 namespace NKikimr {
 namespace NDataShard {
 
-void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLocks& sysLocks, TKeyValidator& keyValidator);
+void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLocks& sysLocks, TKeyValidator& keyValidator, std::optional<ui64> localTabletId);
 
 void KqpPrepareInReadsets(TInputOpData::TInReadSets& inReadSets,
     const NKikimrDataEvents::TKqpLocks& kqpLocks, ui64 tabletId);
 
 std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateLocks(ui64 tabletId, TSysLocks& sysLocks,
-    const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, const TInputOpData::TInReadSets& inReadSets);
+    const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, const TInputOpData::TInReadSets& inReadSets,
+    std::optional<ui64> localTabletId = std::nullopt);
 std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 tabletId, TSysLocks& sysLocks,
     const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, ui64 txId, const TVector<NKikimrTx::TEvReadSet>& delayedInReadSets,
     TInputOpData::TAwaitingDecisions& awaitingDecisions, TOutputOpData::TOutReadSets& outReadSets);
@@ -33,8 +36,8 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrD
 bool KqpLocksHasArbiter(const NKikimrDataEvents::TKqpLocks* kqpLocks);
 bool KqpLocksIsArbiter(ui64 tabletId, const NKikimrDataEvents::TKqpLocks* kqpLocks);
 
-void KqpEraseLocks(ui64 tabletId, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks);
-void KqpCommitLocks(ui64 tabletId, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks, IDataShardUserDb& userDb);
+void KqpEraseLocks(ui64 tabletId, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks, std::optional<ui64> localTabletId = std::nullopt);
+void KqpCommitLocks(ui64 tabletId, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks, IDataShardUserDb& userDb, std::optional<ui64> localTabletId = std::nullopt);
 
 void KqpUpdateDataShardStatCounters(TDataShard& dataShard, const NMiniKQL::TEngineHostCounters& counters);
 

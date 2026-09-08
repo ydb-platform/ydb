@@ -34,6 +34,7 @@ struct TRetryOperationSettings {
     FLUENT_SETTING_FLAG(Verbose);
     FLUENT_SETTING_FLAG(RetryUndefined);
     // Stops retry orchestration without cancelling an already running RPC.
+    // CLIENT_CANCELLED may replace a successful result; it does not imply rollback.
     FLUENT_SETTING_DEFAULT(std::stop_token, CancellationToken, std::stop_token{});
 
     static TBackoffSettings DefaultFastBackoffSettings() {

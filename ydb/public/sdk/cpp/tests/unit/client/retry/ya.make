@@ -17,6 +17,7 @@ PEERDIR(
     library/cpp/testing/common
     ydb/public/api/grpc
     ydb/public/api/protos
+    ydb/public/sdk/cpp/src/client/impl/internal/retry
     ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/row_ranges
     ydb/public/sdk/cpp/src/client/table

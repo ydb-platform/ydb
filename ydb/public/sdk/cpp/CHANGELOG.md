@@ -1,6 +1,6 @@
 * Added `EQ_HEIGHT_HISTOGRAM` to `EMultiColumnStatisticsType`.
 
-* Added `std::stop_token` cancellation to C++ SDK retry operations through `TRetryOperationSettings::CancellationToken`.
+* Added `std::stop_token` cancellation to C++ SDK retry operations through `TRetryOperationSettings::CancellationToken`. Cancellation does not stop an in-flight RPC or roll back its effects; `CLIENT_CANCELLED` may replace a successful result.
 
 # v3.22.0
 

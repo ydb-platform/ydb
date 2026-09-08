@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/rows.h>
 #include <ydb/public/sdk/cpp/src/client/row_ranges/rows_stream_drain.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry_sync.h>
 #include <ydb/public/sdk/cpp/tests/common/fake_trace_provider.h>
 
 #include <ydb/public/api/protos/ydb_value.pb.h>
@@ -26,6 +27,7 @@
 #include <deque>
 #include <functional>
 #include <stdexcept>
+#include <thread>
 
 using namespace NYdb;
 using namespace NYdb::NStatusHelpers;
@@ -315,7 +317,11 @@ Y_UNIT_TEST_SUITE(TRetryCancellationTest) {
                     return attemptResult.GetFuture();
                 },
                 FastRetrySettings().CancellationToken(stopSource.get_token()));
+            auto callbackThread = result.Apply([](const TAsyncStatus&) {
+                return std::this_thread::get_id();
+            });
             stopSource.request_stop();
+            UNIT_ASSERT(callbackThread.GetValue(TDuration::Seconds(1)) != std::this_thread::get_id());
             UNIT_ASSERT_VALUES_EQUAL(result.GetValue(TDuration::Seconds(1)).GetStatus(), EStatus::CLIENT_CANCELLED);
             auto tracer = traces->GetFakeTracer("ydb-cpp-sdk-table");
             UNIT_ASSERT(!tracer->GetLastSpan()->IsEnded());
@@ -324,10 +330,48 @@ Y_UNIT_TEST_SUITE(TRetryCancellationTest) {
             } else {
                 attemptResult.SetValue(OkStatus());
             }
+            fixture.Driver->Stop(true);
             for (const auto& span : tracer->GetSpans()) {
                 UNIT_ASSERT(span.Span->IsEnded());
             }
         }
+    }
+
+    Y_UNIT_TEST(OperationResultEndsSpansBeforeContinuations) {
+        for (auto status : {EStatus::SUCCESS, EStatus::CLIENT_CANCELLED}) {
+            auto traces = std::make_shared<NTests::TFakeTraceProvider>();
+            TTableClientFixture fixture(traces);
+            std::stop_source stopSource;
+            auto attemptResult = NThreading::NewPromise<TStatus>();
+            auto result = fixture.Client->RetryOperation(
+                [&](NTable::TTableClient&) { return attemptResult.GetFuture(); },
+                FastRetrySettings().CancellationToken(stopSource.get_token()));
+            auto checked = result.Apply([&](const TAsyncStatus& future) {
+                UNIT_ASSERT_VALUES_EQUAL(future.GetValue().GetStatus(), status);
+                stopSource.request_stop();
+                for (const auto& span : traces->GetFakeTracer("ydb-cpp-sdk-table")->GetSpans()) {
+                    UNIT_ASSERT(span.Span->IsEnded());
+                }
+            });
+            attemptResult.SetValue(TStatus(status, NIssue::TIssues{}));
+            checked.GetValueSync();
+        }
+    }
+
+    Y_UNIT_TEST(PreStoppedTokenSkipsBackoff) {
+        TTableClientFixture fixture;
+        std::stop_source stopSource;
+        stopSource.request_stop();
+        auto operation = [](NTable::TTableClient&) { return OkStatus(); };
+        struct TRetryContext : NRetry::Sync::TRetryWithoutSession<NTable::TTableClient, decltype(operation)> {
+            using TBase = NRetry::Sync::TRetryWithoutSession<NTable::TTableClient, decltype(operation)>;
+            using TBase::TBase;
+            using TBase::DoBackoff;
+        };
+        TRetryContext retry(*fixture.Client, operation,
+            FastRetrySettings().CancellationToken(stopSource.get_token()));
+        UNIT_ASSERT_VALUES_EQUAL(retry.DoBackoff(true).count(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(retry.DoBackoff(false).count(), 0);
     }
 
     Y_UNIT_TEST(SyncCancellationStopsAfterAttempt) {

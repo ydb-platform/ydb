@@ -20,38 +20,45 @@ namespace NYdb::inline Dev::NRetry::Async {
 
 template <typename TStatusType>
 class TRetryCompletion {
+    enum class EState {
+        Running,
+        Finished,
+        Cancelled,
+    };
+
 public:
-    TRetryCompletion(std::stop_token token, NThreading::TPromise<TStatusType> promise)
-        : Promise_(std::move(promise))
-        , StopCallback_(token, [this]() noexcept {
-            auto promise = Promise_;
-            if (!TryFinish()) {
+    template <typename TClientImpl>
+    TRetryCompletion(const std::shared_ptr<TClientImpl>& client, std::stop_token token,
+        NThreading::TPromise<TStatusType> promise)
+        : StopCallback_(token, [this, client, promise]() noexcept {
+            if (!TryFinish(EState::Cancelled)) {
                 return;
             }
-            try {
-                promise.TrySetValue(MakeRetryCancelledResult<TStatusType>());
-            } catch (...) {
-                promise.TrySetException(std::current_exception());
-            }
+            client->PostToResponseQueue([promise]() mutable {
+                try {
+                    promise.TrySetValue(MakeRetryCancelledResult<TStatusType>());
+                } catch (...) {
+                    promise.TrySetException(std::current_exception());
+                }
+            });
         })
     {}
 
     bool IsFinished() const noexcept {
-        return Finished_.load();
+        return State_.load() != EState::Running;
     }
 
     bool IsCancelled() const noexcept {
-        return Promise_.HasValue() && GetRetryStatusCode(Promise_.GetValue()) == EStatus::CLIENT_CANCELLED;
+        return State_.load() == EState::Cancelled;
     }
 
-    bool TryFinish() noexcept {
-        bool expected = false;
-        return Finished_.compare_exchange_strong(expected, true);
+    bool TryFinish(EState state = EState::Finished) noexcept {
+        auto expected = EState::Running;
+        return State_.compare_exchange_strong(expected, state);
     }
 
 private:
-    NThreading::TPromise<TStatusType> Promise_;
-    std::atomic_bool Finished_ = false;
+    std::atomic<EState> State_ = EState::Running;
     std::stop_callback<std::function<void()>> StopCallback_;
 };
 
@@ -115,7 +122,7 @@ protected:
         : TRetryContextBase(settings)
         , Client_(client)
         , Promise_(NThreading::NewPromise<TStatusType>())
-        , Completion_(settings.CancellationToken_, Promise_)
+        , Completion_(Client_.Impl_, settings.CancellationToken_, Promise_)
     {}
 
     virtual void Retry() = 0;

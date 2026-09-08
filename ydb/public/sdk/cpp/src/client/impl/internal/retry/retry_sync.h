@@ -60,6 +60,9 @@ protected:
     virtual TStatusType RunOperation() = 0;
 
     std::chrono::microseconds DoBackoff(bool fast) {
+        if (this->IsCancellationRequested()) {
+            return {};
+        }
         const auto &settings = fast ? this->Settings_.FastBackoffSettings_
                                     : this->Settings_.SlowBackoffSettings_;
         return Backoff(settings, this->RetryNumber_);

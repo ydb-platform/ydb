@@ -17,6 +17,10 @@ namespace {
 
 class TMockUnaryRetryClientImpl : public IClientImplCommon {
 public:
+    void PostToResponseQueue(std::function<void()>&& fn) {
+        fn();
+    }
+
     void ScheduleTask(const std::function<void()>& fn, TDeadline::Duration) override {
         fn();
     }

@@ -86,8 +86,6 @@ message TTableStats {
     // normalized index-record count (x BlobSubgroupSize / storage coef, see TSmallBlobsQuotaConfig)
     optional uint64 SmallBlobsCount = 42;
 
-    // Decaying CPU usage averages in microseconds per second, split by whether
-    // the operation accesses keys of user tables.
     optional uint64 CPUWithKeys = 43;
     optional uint64 CPUWithoutKeys = 44;
 }

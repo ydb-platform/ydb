@@ -3200,9 +3200,9 @@ public:
 
         Y_ENSURE(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
 
-        KeyedOperation = KeyedOperation || Op->KeysCount() > 0;
+        KeyedOperation = KeyedOperation || || (Op->HasKeysInfo() && Op->KeysCount() > 0);
         auto status = Self->Pipeline.RunExecutionPlan(Op, CompleteList, txc, ctx);
-        KeyedOperation = KeyedOperation || Op->KeysCount() > 0;
+        KeyedOperation = KeyedOperation || || (Op->HasKeysInfo() && Op->KeysCount() > 0);
 
         YDB_LOG_TRACE_CTX(ctx, "TTxReadViaPipeline Execute",
             {"txType", GetTxType()},

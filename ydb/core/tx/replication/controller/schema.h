@@ -110,13 +110,82 @@ struct TControllerSchema: NIceDb::Schema {
         using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, HeartbeatVersionStep, HeartbeatVersionTxId>;
     };
 
+    // One active (or last applied) CDC schema barrier per replicated target.
+    // The schema is stored as the normalized protobuf supplied by workers.  It
+    // is deliberately kept separate from Targets: a barrier must survive a
+    // controller restart without changing the target lifecycle state.
+    struct SchemaBarriers: Table<7> {
+        struct ReplicationId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TargetId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Phase: Column<3, NScheme::NTypeIds::Uint8> {};
+        struct Schema: Column<4, NScheme::NTypeIds::String> {};
+        struct DstAlterTxId: Column<5, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<ReplicationId, TargetId>;
+        using TColumns = TableColumns<ReplicationId, TargetId, Phase, Schema, DstAlterTxId>;
+    };
+
+    // This is the immutable membership snapshot used by a schema barrier.
+    // A worker is marked reported only after its report has been durably
+    // compared with the barrier schema.
+    struct SchemaBarrierWorkers: Table<8> {
+        struct ReplicationId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TargetId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct WorkerId: Column<3, NScheme::NTypeIds::Uint64> {};
+        struct Reported: Column<4, NScheme::NTypeIds::Bool> {};
+        struct Applied: Column<5, NScheme::NTypeIds::Bool> {};
+        struct Completed: Column<6, NScheme::NTypeIds::Bool> {};
+        struct Offset: Column<7, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<ReplicationId, TargetId, WorkerId>;
+        using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, Reported, Applied, Completed, Offset>;
+    };
+
+    // The complete target-only flush snapshot for a global-consistency
+    // schema barrier.  Entries intentionally remain after a successful
+    // target flush: replaying CommitWrites is idempotent and lets recovery
+    // resume safely without guessing which proposal result was persisted.
+    struct SchemaBarrierFlushes: Table<9> {
+        struct ReplicationId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TargetId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct WriteTxId: Column<3, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<ReplicationId, TargetId, WriteTxId>;
+        using TColumns = TableColumns<ReplicationId, TargetId, WriteTxId>;
+    };
+
+    // A completed DescribeTopic snapshot. Schema barriers may only snapshot
+    // workers after this marker is durable, never from a partial stream of
+    // asynchronous TEvRunWorker registrations.
+    struct WorkerSnapshots: Table<10> {
+        struct ReplicationId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TargetId: Column<2, NScheme::NTypeIds::Uint64> {};
+        using TKey = TableKey<ReplicationId, TargetId>;
+        using TColumns = TableColumns<ReplicationId, TargetId>;
+    };
+
+    // Configuration/state alterations accepted while a schema barrier is
+    // degraded.  The requested values already live in Replications; this row
+    // is the durable instruction to re-enter the target alter lifecycle once
+    // every barrier for the replication has become safe.
+    struct DeferredAlters: Table<11> {
+        struct ReplicationId: Column<1, NScheme::NTypeIds::Uint64> {};
+        using TKey = TableKey<ReplicationId>;
+        using TColumns = TableColumns<ReplicationId>;
+    };
+
     using TTables = SchemaTables<
         SysParams,
         Replications,
         Targets,
         SrcStreams,
         TxIds,
-        Workers
+        Workers,
+        SchemaBarriers,
+        SchemaBarrierWorkers,
+        SchemaBarrierFlushes,
+        WorkerSnapshots,
+        DeferredAlters
     >;
 
 }; // TControllerSchema

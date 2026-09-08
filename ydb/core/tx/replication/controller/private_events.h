@@ -31,12 +31,17 @@ struct TEvPrivate {
         EvResolveSecretResult,
         EvResolveResourceIdResult,
         EvAlterDstResult,
+        EvSchemaChangeDstAlterResult,
+        EvSchemaChangeDstAlterTxId,
+        EvSchemaChangeDstAlterTxIdSaved,
         EvRemoveWorker,
         EvDescribeTargetsResult,
         EvRequestCreateStream,
         EvAllowCreateStream,
         EvRequestDropStream,
         EvAllowDropStream,
+        EvWorkersRegistered,
+        EvResumeDeferredAlter,
 
         EvEnd,
     };
@@ -223,10 +228,55 @@ struct TEvPrivate {
         TString ToString() const override;
     };
 
+    // Completion of the data-plane schema executor. It must not be handled by
+    // the replication-lifecycle alter state machine.
+    struct TEvSchemaChangeDstAlterResult
+        : public TGenericSchemeResult<TEvSchemaChangeDstAlterResult, EvSchemaChangeDstAlterResult>
+    {
+        const ui64 DstAlterTxId;
+
+        explicit TEvSchemaChangeDstAlterResult(ui64 rid, ui64 tid, ui64 dstAlterTxId,
+            NKikimrScheme::EStatus status = NKikimrScheme::StatusSuccess, const TString& error = {});
+        TString ToString() const override;
+    };
+
+    struct TEvSchemaChangeDstAlterTxId
+        : public TEventLocal<TEvSchemaChangeDstAlterTxId, EvSchemaChangeDstAlterTxId>
+    {
+        const ui64 ReplicationId;
+        const ui64 TargetId;
+        const ui64 TxId;
+
+        TEvSchemaChangeDstAlterTxId(ui64 rid, ui64 tid, ui64 txId);
+    };
+
+    struct TEvSchemaChangeDstAlterTxIdSaved
+        : public TEventLocal<TEvSchemaChangeDstAlterTxIdSaved, EvSchemaChangeDstAlterTxIdSaved>
+    {
+        const ui64 TxId;
+
+        explicit TEvSchemaChangeDstAlterTxIdSaved(ui64 txId);
+    };
+
     struct TEvRemoveWorker: public TEventLocal<TEvRemoveWorker, EvRemoveWorker> {
         const TWorkerId Id;
 
         explicit TEvRemoveWorker(ui64 rid, ui64 tid, ui64 wid);
+        TString ToString() const override;
+    };
+
+    struct TEvWorkersRegistered: public TEventLocal<TEvWorkersRegistered, EvWorkersRegistered> {
+        ui64 ReplicationId;
+        ui64 TargetId;
+
+        TEvWorkersRegistered(ui64 rid, ui64 tid);
+        TString ToString() const override;
+    };
+
+    struct TEvResumeDeferredAlter: public TEventLocal<TEvResumeDeferredAlter, EvResumeDeferredAlter> {
+        const ui64 ReplicationId;
+
+        explicit TEvResumeDeferredAlter(ui64 rid);
         TString ToString() const override;
     };
 

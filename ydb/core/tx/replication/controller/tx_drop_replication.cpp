@@ -9,6 +9,7 @@ class TController::TTxDropReplication: public TTxBase {
     TEvPrivate::TEvDropReplication::TPtr PrivEv;
     THolder<IEventHandle> Result; // TEvController::TEvDropReplicationResult
     TReplication::TPtr Replication;
+    TVector<std::pair<ui64, ui64>> SchemaChangeDstAlterersToStop;
 
 public:
     explicit TTxDropReplication(TController* self, TEvController::TEvDropReplication::TPtr& ev)
@@ -67,6 +68,38 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
 
+        // Drop intentionally supersedes a deferred user alter.
+        Self->DeferredAlters.erase(Replication->GetId());
+        db.Table<Schema::DeferredAlters>().Key(Replication->GetId()).Delete();
+
+        // A schema actor is asynchronous and may report after this
+        // transaction.  Remove its durable work first; late results then see
+        // no barrier and are harmless instead of reviving a dropped target.
+        for (auto it = Self->SchemaBarriers.begin(); it != Self->SchemaBarriers.end();) {
+            if (it->first.first != Replication->GetId()) {
+                ++it;
+                continue;
+            }
+
+            const auto key = it->first;
+            for (const auto& workerId : it->second.ExpectedWorkers) {
+                db.Table<Schema::SchemaBarrierWorkers>()
+                    .Key(workerId.ReplicationId(), workerId.TargetId(), workerId.WorkerId()).Delete();
+            }
+            for (const auto writeTxId : it->second.TargetFlushTxIds) {
+                db.Table<Schema::SchemaBarrierFlushes>().Key(key.first, key.second, writeTxId).Delete();
+                Self->SchemaTargetFlushes.erase(writeTxId);
+            }
+            if (Self->ActiveSchemaTargetFlush && *Self->ActiveSchemaTargetFlush == key) {
+                Self->ActiveSchemaTargetFlush.reset();
+            }
+            if (Self->SchemaChangeDstAlterers.contains(key)) {
+                SchemaChangeDstAlterersToStop.push_back(key);
+            }
+            db.Table<Schema::SchemaBarriers>().Key(key.first, key.second).Delete();
+            it = Self->SchemaBarriers.erase(it);
+        }
+
         Replication->SetState(TReplication::EState::Removing);
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
             NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState())
@@ -77,6 +110,12 @@ public:
             if (!target) {
                 continue;
             }
+
+            // Worker snapshots are schema-barrier admission state, not
+            // target lifecycle state. They must not survive a dropped target
+            // and accidentally authorize reports from a later replication.
+            Self->WorkerSnapshots.erase({Replication->GetId(), tid});
+            db.Table<Schema::WorkerSnapshots>().Key(Replication->GetId(), tid).Delete();
 
             target->Shutdown(ctx);
 
@@ -142,6 +181,10 @@ public:
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         YDB_LOG_DEBUG_CTX(ctx, "Complete");
+
+        for (const auto& key : SchemaChangeDstAlterersToStop) {
+            Self->StopSchemaChangeDstAlter(key, ctx);
+        }
 
         if (Result) {
             ctx.Send(Result.Release());

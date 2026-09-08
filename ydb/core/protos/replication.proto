@@ -435,3 +435,40 @@ message TEvHeartbeat {
     optional TWorkerIdentity Worker = 1;
     optional NKikimrProto.TRowVersion Version = 2;
 }
+
+// A complete source-table snapshot carried by a CDC schema-change record.
+// Type is retained in YQL syntax so the controller can compare it with a
+// destination describe result without depending on source column identifiers.
+message TSchemaChange {
+    message TColumn {
+        optional string Name = 1;
+        optional string Type = 2;
+    }
+
+    optional NKikimrProto.TRowVersion Version = 1;
+    optional uint64 SourceSchemaVersion = 2;
+    repeated TColumn Columns = 3;
+    repeated string PrimaryKeyColumnNames = 4;
+}
+
+message TEvSchemaChangeReport {
+    optional TWorkerIdentity Worker = 1;
+    optional TSchemaChange Schema = 2;
+    optional bool Applied = 3 [default = false];
+    // Sent only after the controller's Applied acknowledgement and a topic
+    // checkpoint strictly beyond the schema record.
+    optional bool Completed = 4 [default = false];
+    // Offset of the schema record. It is persisted by the controller per
+    // worker so a replacement can compare it with the consumer's durable
+    // start offset after a lost completion handoff.
+    optional uint64 Offset = 5;
+}
+
+message TEvSchemaChangeResult {
+    optional TWorkerIdentity Worker = 1;
+    optional TSchemaChange Schema = 2;
+    optional TControllerIdentity Controller = 3;
+    optional bool Applied = 4 [default = false];
+    optional bool Completed = 5 [default = false];
+    optional uint64 Offset = 6;
+}

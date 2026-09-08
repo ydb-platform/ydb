@@ -26,6 +26,8 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/map.h>
 
+#include <optional>
+
 namespace NKikimr::NReplication::NController {
 
 class TController
@@ -47,6 +49,36 @@ public:
 
 private:
     using Schema = TControllerSchema;
+
+    static THolder<TEvTxUserProxy::TEvProposeTransaction> MakeCommitProposal(
+        ui64 writeTxId, const TVector<TString>& tables);
+
+    enum class ESchemaBarrierPhase: ui8 {
+        Collecting = 1,
+        FlushingTarget = 2,
+        Altering = 3,
+        Verifying = 4,
+        Applied = 5,
+        Error = 6,
+    };
+
+    struct TSchemaBarrier {
+        ESchemaBarrierPhase Phase = ESchemaBarrierPhase::Collecting;
+        NKikimrReplication::TSchemaChange Schema;
+        THashSet<TWorkerId> ExpectedWorkers;
+        THashSet<TWorkerId> ReportedWorkers;
+        THashSet<TWorkerId> AppliedWorkers;
+        THashSet<TWorkerId> CompletedWorkers;
+        THashMap<TWorkerId, ui64> WorkerOffsets;
+        ui64 DstAlterTxId = 0;
+
+        // Global consistency temporarily commits the already assigned write
+        // ids to just this target before its DDL is executed. The entries in
+        // AssignedTxIds deliberately remain intact: the next common
+        // heartbeat commits them normally to every target.
+        TVector<ui64> TargetFlushTxIds;
+        size_t NextTargetFlushTxId = 0;
+    };
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -92,6 +124,8 @@ private:
     void Handle(TEvPrivate::TEvUpdateTenantNodes::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvProcessQueues::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRemoveWorker::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvWorkersRegistered::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvResumeDeferredAlter::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDescribeTargetsResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestCreateStream::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestDropStream::TPtr& ev, const TActorContext& ctx);
@@ -103,6 +137,9 @@ private:
     void Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvHeartbeat::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvService::TEvSchemaChangeReport::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvSchemaChangeDstAlterTxId::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvSchemaChangeDstAlterResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
@@ -116,6 +153,7 @@ private:
     bool IsValidWorker(const TWorkerId& id) const;
     TWorkerInfo* GetOrCreateWorker(const TWorkerId& id, NKikimrReplication::TRunWorkerCommand* cmd = nullptr);
     void BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrReplication::TRunWorkerCommand& cmd);
+    void ReplaySchemaChangeRecovery(ui32 nodeId, const TWorkerId& id);
     void StopWorker(ui32 nodeId, const TWorkerId& id);
     void RemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     bool MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
@@ -147,6 +185,13 @@ private:
     class TTxAssignTxId;
     class TTxHeartbeat;
     class TTxCommitChanges;
+    class TTxRunWorker;
+    class TTxRemoveWorker;
+    class TTxWorkersRegistered;
+    class TTxSchemaChangeReport;
+    class TTxSchemaChangeDstAlterTxId;
+    class TTxSchemaChangeDstAlterResult;
+    class TTxResumeDeferredAlter;
 
     // tx runners
     void RunTxInitSchema(const TActorContext& ctx);
@@ -170,6 +215,18 @@ private:
     void RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx);
     void RunTxAssignTxId(const TActorContext& ctx);
     void RunTxHeartbeat(const TActorContext& ctx);
+    void RunTxRunWorker(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx);
+    void RunTxRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
+    void RunTxWorkersRegistered(TEvPrivate::TEvWorkersRegistered::TPtr& ev, const TActorContext& ctx);
+    void RunTxSchemaChangeReport(TEvService::TEvSchemaChangeReport::TPtr& ev, const TActorContext& ctx);
+    void RunTxSchemaChangeDstAlterTxId(TEvPrivate::TEvSchemaChangeDstAlterTxId::TPtr& ev, const TActorContext& ctx);
+    void RunTxSchemaChangeDstAlterResult(TEvPrivate::TEvSchemaChangeDstAlterResult::TPtr& ev, const TActorContext& ctx);
+    void RunTxResumeDeferredAlter(TEvPrivate::TEvResumeDeferredAlter::TPtr& ev, const TActorContext& ctx);
+
+    void StartSchemaChangeDstAlter(const std::pair<ui64, ui64>& key, const TActorContext& ctx);
+    void StopSchemaChangeDstAlter(const std::pair<ui64, ui64>& key, const TActorContext& ctx);
+    void StartSchemaChangeTargetFlush(const std::pair<ui64, ui64>& key, const TActorContext& ctx);
+    bool HasActiveSchemaBarrier(ui64 replicationId) const;
 
     // other
     template <typename T>
@@ -233,6 +290,16 @@ private:
     THashMap<TWorkerId, TRowVersion> PendingHeartbeats;
     bool ProcessHeartbeatsInFlight = false;
     ui64 CommittingTxId = 0;
+
+    // Keyed by (replication id, target id). DDL execution advances the phase
+    // in subsequent transactions; keeping the collector explicit prevents a
+    // fast worker from completing a barrier against a partial report set.
+    TMap<std::pair<ui64, ui64>, TSchemaBarrier> SchemaBarriers;
+    THashMap<std::pair<ui64, ui64>, TActorId> SchemaChangeDstAlterers;
+    THashSet<std::pair<ui64, ui64>> WorkerSnapshots;
+    THashSet<ui64> DeferredAlters;
+    THashMap<ui64, std::pair<ui64, ui64>> SchemaTargetFlushes;
+    std::optional<std::pair<ui64, ui64>> ActiveSchemaTargetFlush;
 
 }; // TController
 

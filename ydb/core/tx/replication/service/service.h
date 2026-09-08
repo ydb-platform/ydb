@@ -26,6 +26,8 @@ struct TEvService {
         EvGetTxId,
         EvTxIdResult,
         EvHeartbeat,
+        EvSchemaChangeReport,
+        EvSchemaChangeResult,
 
         EvEnd,
     };
@@ -128,6 +130,14 @@ struct TEvService {
         explicit TEvHeartbeat(const TRowVersion& version) {
             version.ToProto(Record.MutableVersion());
         }
+    };
+
+    struct TEvSchemaChangeReport: public TEventPB<TEvSchemaChangeReport, NKikimrReplication::TEvSchemaChangeReport, EvSchemaChangeReport> {
+        TEvSchemaChangeReport() = default;
+    };
+
+    struct TEvSchemaChangeResult: public TEventPB<TEvSchemaChangeResult, NKikimrReplication::TEvSchemaChangeResult, EvSchemaChangeResult> {
+        TEvSchemaChangeResult() = default;
     };
 };
 

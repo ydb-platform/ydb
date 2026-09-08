@@ -83,6 +83,7 @@ TOracle::TOracle(
           TTimePredictor(
               OracleConfig->GetTimePredictionHistorySize(),
               OracleConfig->GetTimePredictionNthFromEnd()))
+    , HealthPolicy(CreateDefaultHostHealthPolicy(OracleConfig))
 {
     HostsHealths.resize(HostStates.size());
     for (auto& healths: HostsHealths) {
@@ -103,37 +104,10 @@ void TOracle::Think(TInstant now)
 
         auto errorsInfo = HostStatistics[i].GetErrorsInfo(now);
 
-        if (newHostsHealths[i] == EHostHealth::Broken) {
-            // Host with broken ddisk can not be restored.
-            continue;
-        }
-
-        const bool hasSufferingSymptom =
-            (errorsInfo.ConsecutiveErrorCount != 0);
-        const bool hasTemporaryOfflineSymptom =
-            hasSufferingSymptom &&
-            ((errorsInfo.ConsecutiveErrorCount >=
-                  config.GetMinErrorsCountBeforeGoingOffline() &&
-              errorsInfo.FromFirstError >
-                  config.GetMaxDurationBeforeGoingTemporaryOffline()) ||
-             (errorsInfo.ConsecutiveErrorCount >=
-              config.GetErrorsCountForGoingOffline()) ||
-             (HostStates[i].UsedPBuffers.Size >=
-              config.GetErrorsTotalSizeForGoingOffline()));
-        const bool hasOfflineSymptom =
-            hasTemporaryOfflineSymptom &&
-            (errorsInfo.FromFirstError >
-             config.GetMaxDurationBeforeGoingOffline());
-
-        if (hasOfflineSymptom) {
-            newHostsHealths[i] = EHostHealth::Offline;
-        } else if (hasTemporaryOfflineSymptom) {
-            newHostsHealths[i] = EHostHealth::TemporaryOffline;
-        } else if (hasSufferingSymptom) {
-            newHostsHealths[i] = EHostHealth::Sufferer;
-        } else {
-            newHostsHealths[i] = EHostHealth::Online;
-        }
+        newHostsHealths[i] = HealthPolicy->GetNewHealth(
+            HostsHealths[i],
+            errorsInfo,
+            HostStates[i].UsedPBuffers.Size);
     }
 
     for (size_t i = 0; i < newHostsHealths.size(); ++i) {

@@ -484,6 +484,25 @@ Y_UNIT_TEST_SUITE(TDefaultHostHealthPolicyTest)
             EHostHealth::Offline,
             policy.Policy->GetNewHealth(EHostHealth::Offline, stats, 0));
     }
+
+    // Broken->Online
+
+    Y_UNIT_TEST(DoesntGoFromBrokenToOnlineOnEnoughSuccessesAfterDelay)
+    {
+        auto policy = CreatePolicyTest();
+
+        THostErrorsInfo stats{
+            .FromFirstSuccess =
+                DefaultMaxDurationBeforeReturningOnline + TDuration::Seconds(1),
+            .FromLastSuccess = TDuration::Seconds(0),
+            .ConsecutiveSuccessCount =
+                DefaultMinSuccessesCountBeforeReturningOnline,
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostHealth::Broken,
+            policy.Policy->GetNewHealth(EHostHealth::Broken, stats, 0));
+    }
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

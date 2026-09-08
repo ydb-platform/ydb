@@ -272,13 +272,16 @@ Y_UNIT_TEST_SUITE(TOracle)
             hostStateController.States[0]);
 
         // Generate success. Switching to the enabled state.
-        now += TDuration::Seconds(1);
-        oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
-        oracle.OnRequestSucceeded(
-            0,
-            EOperation::WriteToPBuffer,
-            now,
-            TDuration());
+        now += TDuration::Seconds(11);
+        for (size_t i = 0; i < 1000; ++i) {
+            oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestSucceeded(
+                0,
+                EOperation::WriteToPBuffer,
+                now,
+                TDuration());
+        }
+        now += TDuration::Seconds(11);
 
         oracle.Think(now);
         UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.States.size());
@@ -363,12 +366,15 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         // Generate success. Switching to the enabled state.
         now += TDuration::Seconds(1);
-        oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
-        oracle.OnRequestSucceeded(
-            0,
-            EOperation::WriteToPBuffer,
-            now,
-            TDuration());
+        for (size_t i = 0; i < 1000; ++i) {
+            oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestSucceeded(
+                0,
+                EOperation::WriteToPBuffer,
+                now,
+                TDuration());
+        }
+        now += TDuration::Seconds(11);
 
         oracle.Think(now);
         UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.States.size());
@@ -408,13 +414,16 @@ Y_UNIT_TEST_SUITE(TOracle)
             hostStateController.States[0]);
 
         // Generate success. Switching to the enabled state.
-        now += TDuration::Seconds(1);
-        oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
-        oracle.OnRequestSucceeded(
-            0,
-            EOperation::WriteToPBuffer,
-            now,
-            TDuration());
+        now += TDuration::Seconds(11);
+        for (size_t i = 0; i < 1000; ++i) {
+            oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestSucceeded(
+                0,
+                EOperation::WriteToPBuffer,
+                now,
+                TDuration());
+        }
+        now += TDuration::Seconds(11);
 
         oracle.Think(now);
         UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.States.size());

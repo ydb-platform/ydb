@@ -121,6 +121,14 @@ public:
     TControlWrapper StaticGroupChunkReservePerMille;
     i64 StaticGroupChunkReservePerMilleCached = 0;
     TControlWrapper ForcedPDiskSpaceColor;
+    std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> GetForcedPDiskSpaceColorIcb() const {
+        if (i64 forcedColor = ForcedPDiskSpaceColor; forcedColor != 0) {
+            if (NKikimrBlobStorage::TPDiskSpaceColor_E_IsValid(static_cast<int>(forcedColor))) {
+                return static_cast<NKikimrBlobStorage::TPDiskSpaceColor::E>(forcedColor);
+            }
+        }
+        return std::nullopt;
+    }
     NKikimrBlobStorage::TPDiskSpaceColor::E GetColorBorderIcb() {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
         switch (SemiStrictSpaceIsolation) {

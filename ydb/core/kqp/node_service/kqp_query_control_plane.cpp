@@ -88,7 +88,9 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
     , Limit(limit)
     , DataMemoryLimit(limit)
     , AllocationStep(step)
-    {}
+    {
+        Y_ABORT_UNLESS(AllocationStep != 0 && (AllocationStep & (AllocationStep - 1)) == 0, "the allocation step must be a power of two"); // it is used as an alignment mask
+    }
 
     ~TChannelQuotaManager() {
         ResourceManager->FreeResources(*Tx, 0, NRm::TKqpResourcesRequest{

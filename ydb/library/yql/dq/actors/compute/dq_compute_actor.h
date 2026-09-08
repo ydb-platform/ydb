@@ -285,7 +285,7 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
         : Limit(limit), Guarantee(guarantee), Step(step), Quota(quota) {
         Y_ABORT_UNLESS(Limit >= Guarantee);
         Y_ABORT_UNLESS(Limit >= Quota);
-        Y_ABORT_UNLESS((Step ^ ~Step) + 1 == 0);
+        Y_ABORT_UNLESS(Step != 0 && (Step & (Step - 1)) == 0, "the allocation step must be a power of two"); // it is used as an alignment mask
         MaxMemorySize = Limit;
     }
 

@@ -53,9 +53,6 @@ struct TRealPDiskTestConfig {
     ui32 MilestoneHugeBlobInBytes = 0;
     ui64 MaxCommonLogChunks = 0;
     ui32 GroupId = 0;
-    bool EnablePhantomFlagStorage = false;
-    ui64 PhantomFlagStorageLimit = 64_MB;
-    ui64 VolatilePhantomFlagStorageBlobSizeLimit = 0;
     bool EnableSmallDiskOptimization = true;
     bool RunSyncer = false;
     TDuration AdvanceEntryPointTimeout = TDuration::Seconds(5);
@@ -190,10 +187,6 @@ TIntrusivePtr<TVDiskConfig> MakeTestVDiskConfig(const TIntrusivePtr<TAllVDiskKin
     vdiskConfig->AdvanceEntryPointTimeout = testConfig.AdvanceEntryPointTimeout;
     vdiskConfig->RecoveryLogCutterFirstDuration = testConfig.RecoveryLogCutterFirstDuration;
     vdiskConfig->RecoveryLogCutterRegularDuration = testConfig.RecoveryLogCutterRegularDuration;
-    vdiskConfig->EnablePhantomFlagStorage = testConfig.EnablePhantomFlagStorage;
-    vdiskConfig->PhantomFlagStorageLimit = testConfig.PhantomFlagStorageLimit;
-    vdiskConfig->VolatilePhantomFlagStorageBlobSizeLimit =
-        testConfig.VolatilePhantomFlagStorageBlobSizeLimit;
     vdiskConfig->RunRepl = false;
     vdiskConfig->RunSyncer = testConfig.RunSyncer;
     vdiskConfig->UseCostTracker = false;
@@ -1172,7 +1165,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                 NKikimrBlobStorage::EPutHandleClass::TabletLog, false);
             for (ui32 i = 0; i < records; ++i) {
                 const TLogoBlobID blobId(TLogoBlobID(42, 1, nextStep++, 0, data.size(), nextCookie++), 1);
-                multiPut->AddVPut(blobId, TRcBuf(data), nullptr, false, false, false, nullptr, {}, false);
+                multiPut->AddVPut(blobId, TRcBuf(data), nullptr, nullptr, NWilson::TTraceId());
             }
 
             runtime.Send(new IEventHandle(putQueue, edge, multiPut.release()), NodeIndex);
@@ -1439,7 +1432,6 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         testConfig.SyncLogAdvisedIndexedBlockSize = 1_MB;
         testConfig.SyncLogMaxMemAmount = 64_MB;
         testConfig.SyncLogMaxDiskAmount = 1_GB + 256_MB;
-        testConfig.EnablePhantomFlagStorage = true;
         testConfig.AdvanceEntryPointTimeout = TDuration::Hours(1);
         testConfig.RecoveryLogCutterFirstDuration = TDuration::Hours(1);
         testConfig.RecoveryLogCutterRegularDuration = TDuration::Hours(1);
@@ -1461,7 +1453,6 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         ui64 lastReportedSyncLogFirstLsnToKeep = 0;
         ui32 entryPointCommits = 0;
         ui32 syncLogCommitDoneEvents = 0;
-        bool phantomFlagBuilderFinished = false;
         TString lastPDiskErrorReason;
 
         auto observePDiskLog = [&](const NPDisk::TEvLog& msg) {
@@ -1515,12 +1506,6 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                 case TEvBlobStorage::EvSyncLogCommitDone:
                     if (ev->Recipient == syncLogKeeperId) {
                         ++syncLogCommitDoneEvents;
-                    }
-                    break;
-
-                case TEvBlobStorage::EvPhantomFlagStorageFinishBuilder:
-                    if (ev->Recipient == syncLogKeeperId) {
-                        phantomFlagBuilderFinished = true;
                     }
                     break;
 
@@ -1595,12 +1580,12 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
 
         constexpr ui32 iterations = 12;
         TVector<ui64> expectedLsns;
-        TVector<TLogoBlobID> expectedPhantomFlags;
-        expectedLsns.reserve(iterations);
-        expectedPhantomFlags.reserve(iterations + 1);
+        TVector<TLogoBlobID> expectedBlobIds;
+        expectedLsns.reserve(iterations + 1);
+        expectedBlobIds.reserve(iterations + 1);
         for (ui32 iteration = 0; iteration < iterations; ++iteration) {
             const ui64 previousGcLsn = lastObservedGcLsn;
-            expectedPhantomFlags.push_back(collectDoNotKeep(putQueue));
+            expectedBlobIds.push_back(collectDoNotKeep(putQueue));
             UNIT_ASSERT_C(lastObservedGcLsn > previousGcLsn,
                 "DoNotKeep write did not advance the recovery log"
                 << " iteration# " << iteration
@@ -1664,7 +1649,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         // TEvSyncLogDbBirthLsn. A post-restart write discovers the new SyncLog actor and also
         // becomes part of the expected VSync stream; initialize DbBirthLsn explicitly afterwards.
         const ui64 preRestartLastLsn = expectedLsns.back();
-        expectedPhantomFlags.push_back(collectDoNotKeep(targetVDiskId));
+        expectedBlobIds.push_back(collectDoNotKeep(targetVDiskId));
         UNIT_ASSERT_C(lastObservedGcLsn > preRestartLastLsn,
             "post-restart probe write did not advance the recovery log");
         expectedLsns.push_back(lastObservedGcLsn);
@@ -1675,6 +1660,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         DispatchFor(runtime, TDuration::MilliSeconds(10));
 
         TVector<ui64> actualLsns;
+        TVector<TLogoBlobID> actualBlobIds;
         TSyncState syncState;
         ui32 diskReads = 0;
         bool finished = false;
@@ -1700,6 +1686,13 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                 UNIT_ASSERT_C(reader.Check(error), "invalid VSync fragment# " << error);
                 for (const NSyncLog::TRecordHdr* hdr : reader.ListRecords()) {
                     actualLsns.push_back(hdr->Lsn);
+                    UNIT_ASSERT_C(hdr->RecType == NSyncLog::TRecordHdr::RecLogoBlob,
+                        "unexpected VSync record# " << hdr->ToString());
+                    const auto* blob = hdr->GetLogoBlob();
+                    actualBlobIds.push_back(blob->LogoBlobID());
+                    UNIT_ASSERT_C(blob->Ingress.GetCollectMode(
+                        TIngress::IngressMode(storage.Info->Type)) == CollectModeDoNotKeep,
+                        "unexpected VSync collect mode# " << hdr->ToString());
                 }
             }
             if (record.HasStat()) {
@@ -1713,6 +1706,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         UNIT_ASSERT_C(diskReads > 0,
             "VSync did not read the recovered mutable-tail versions from SyncLog disk chunks");
         UNIT_ASSERT_VALUES_EQUAL(actualLsns, expectedLsns);
+        UNIT_ASSERT_VALUES_EQUAL(actualBlobIds, expectedBlobIds);
         for (ui32 i = 1; i < actualLsns.size(); ++i) {
             UNIT_ASSERT_C(actualLsns[i - 1] < actualLsns[i],
                 "VSync returned duplicate or unordered LSNs"
@@ -1720,36 +1714,6 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                 << " current# " << actualLsns[i]);
         }
         UNIT_ASSERT_VALUES_EQUAL(syncState.SyncedLsn, expectedLsns.back());
-
-        // Force the volatile Phantom Flag Storage to build from the SyncLog snapshot. BaldLog
-        // removes the disk chunk from the live index, while the builder retains and reads the old
-        // snapshot with the latest version of the mutable page.
-        runtime.Send(new IEventHandle(targetVDiskId, edge,
-            new TEvBlobStorage::TEvVBaldSyncLog(targetVDisk, true)), NodeIndex);
-        auto baldResult = runtime.GrabEdgeEvent<TEvBlobStorage::TEvVBaldSyncLogResult>(edge,
-            TDuration::Seconds(120));
-        UNIT_ASSERT_C(baldResult, "no BaldSyncLog result");
-        UNIT_ASSERT_VALUES_EQUAL(baldResult->Get()->Record.GetStatus(), NKikimrProto::OK);
-        UNIT_ASSERT_C(PumpUntil(runtime, [&] {
-            return phantomFlagBuilderFinished;
-        }, 1000, TDuration::MilliSeconds(10)),
-            "Phantom Flag Storage builder did not finish reading the SyncLog snapshot");
-
-        runtime.Send(new IEventHandle(syncLogKeeperId, edge,
-            new NSyncLog::TEvPhantomFlagStorageGetSnapshot()), NodeIndex);
-        auto phantomSnapshot = runtime.GrabEdgeEvent<NSyncLog::TEvPhantomFlagStorageGetSnapshotResult>(edge,
-            TDuration::Seconds(120));
-        UNIT_ASSERT_C(phantomSnapshot, "no Phantom Flag Storage snapshot result");
-        UNIT_ASSERT_C(phantomSnapshot->Get()->Eof,
-            "volatile Phantom Flag Storage snapshot must fit in one response");
-
-        TVector<TLogoBlobID> actualPhantomFlags;
-        for (const auto& flag : phantomSnapshot->Get()->Flags) {
-            actualPhantomFlags.push_back(flag.LogoBlobID());
-        }
-        Sort(expectedPhantomFlags);
-        Sort(actualPhantomFlags);
-        UNIT_ASSERT_VALUES_EQUAL(actualPhantomFlags, expectedPhantomFlags);
     }
 
     Y_UNIT_TEST(SyncLogMemOverflowSwapsDoNotFragmentDiskIndex) {

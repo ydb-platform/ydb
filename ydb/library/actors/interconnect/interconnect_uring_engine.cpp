@@ -1825,10 +1825,7 @@ namespace NActors {
                 if (idle) {
                     session.SerializeWindow.BeginBatch(session.UnsentBytes + session.XdcUnsentBytes);
                 }
-                if (session.WritePending) {
-                    return;
-                }
-                if (session.PrepareIovec()) {
+                if (!session.WritePending && session.PrepareIovec()) {
                     io_uring_sqe *sqe = GetSQE(&session, kOpWrite, session.PreferredRingIdx);
                     Y_ABORT_UNLESS(sqe);
                     const int fdOrIndex = session.FixedFileIndex >= 0
@@ -1840,14 +1837,7 @@ namespace NActors {
                     }
                     session.WritePending = true;
                 }
-            }
-
-            void MaybeIssueXdcWriteForSession(TSession& session) {
-                if (!session.XdcSocket || session.XdcWritePending || session.Terminated
-                        || session.MigrateTargetShard != ShardIdx) {
-                    return;
-                }
-                if (session.PrepareXdcIovec()) {
+                if (!session.XdcWritePending && session.XdcSocket && session.PrepareXdcIovec()) {
                     io_uring_sqe *sqe = GetSQE(&session, kOpXdcWrite, session.PreferredRingIdx);
                     Y_ABORT_UNLESS(sqe);
                     const int fdOrIndex = session.XdcFixedFileIndex >= 0

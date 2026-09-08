@@ -57,6 +57,8 @@ void TPartitionActor::StartPartitionTeardown(const NActors::TActorContext& ctx)
         "%s Become StateDelete",
         LogTitle.GetWithTime().c_str());
 
+    AbortPendingGrow(ctx, NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS);
+
     // A request already accepted by BSC can still allocate after our
     // deallocate (residual leak, follow-up).
     if (AddHostInFlight) {
@@ -221,6 +223,7 @@ void TPartitionActor::HandleAllocateResultDuringDelete(
         ev->Get()->Record.ShortDebugString().c_str());
 
     NTabletPipe::CloseAndForgetClient(SelfId(), BSControllerPipeClient);
+    AbortPendingGrow(ctx, NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS);
     if (AddHostInFlight) {
         NTabletPipe::CloseClient(ctx, AddHostInFlight->BSPipeClient);
         AddHostInFlight.reset();
@@ -240,7 +243,7 @@ void TPartitionActor::HandleUpdateVolumeConfigDuringDelete(
 
     auto response = std::make_unique<
         NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>();
-    response->Record.SetStatus(NKikimrBlockStore::ERROR);
+    response->Record.SetStatus(NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS);
     ctx.Send(ev->Sender, response.release());
 }
 
@@ -359,6 +362,7 @@ STFUNC(TPartitionActor::StateDelete)
         // The Run() future is not cancelled by Stop(); ignore a late ready
         // signal
         IgnoreFunc(TEvPartitionDirectPrivate::TEvFastPathServiceReady);
+        IgnoreFunc(TEvPartitionDirectPrivate::TEvGrownCapacityReady);
         default:
             HandleCommonEvents(ev);
             break;

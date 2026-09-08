@@ -54,6 +54,21 @@ private:
     TDiskDescription DiskDescription;
     TStorageConfigPtr StorageConfig;
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
+    // In-memory grow target. Persisted into VolumeConfig only after allocate,
+    // FPS Grow, and vhost UpdateEndpoint succeed.
+    std::optional<NKikimrBlockStore::TVolumeConfig> PendingGrowVolumeConfig;
+
+    struct TPendingGrowReply
+    {
+        NActors::TActorId Sender;
+        ui64 Cookie = 0;
+        ui64 TxId = 0;
+    };
+
+    // UpdateVolumeConfig that started this grow. Replied OK only after the
+    // grow is persisted; ERROR_UPDATE_IN_PROGRESS if it is still running or
+    // has to be retried. SchemeShard aborts on any other status.
+    std::optional<TPendingGrowReply> PendingGrowReply;
     NActors::TActorId BSControllerPipeClient;
 
     NActors::TActorId LoadActorAdapter;
@@ -61,6 +76,14 @@ private:
     TFastPathServicePtr FastPathService;
 
     TDirectBlockGroupsConnections DirectBlockGroupsConnections;
+
+    // Cookies of outstanding BSC requests. One counter for every pipe.
+    ui64 NextBscCookie = 1;
+    // Cookie of the bulk allocate on BSControllerPipeClient. Non-zero from
+    // the moment AllocateDDiskBlockGroup sends a request until that
+    // pipeline finishes (initial allocate, or grow: allocate + FPS Grow +
+    // vhost + persist).
+    ui64 InflightBscAllocateRequestCookie = 0;
 
     struct TDeleteWaiter
     {
@@ -76,6 +99,7 @@ private:
         size_t DirectBlockGroupId = 0;
         THostIndex NewHostIndex = InvalidHostIndex;
         NActors::TActorId BSPipeClient;
+        ui64 Cookie = 0;
     };
 
     // At most one add-host runs at a time across the whole partition.
@@ -152,7 +176,26 @@ private:
 
     void CreateBSControllerPipeClient(const NActors::TActorContext& ctx);
 
-    void AllocateDDiskBlockGroup(const NActors::TActorContext& ctx);
+    // PendingGrowVolumeConfig if a grow is in flight, otherwise VolumeConfig.
+    [[nodiscard]] const NKikimrBlockStore::TVolumeConfig&
+    EffectiveVolumeConfig() const;
+
+    // Sends a bulk DDisk allocate for EffectiveVolumeConfig. Returns false
+    // when a pipe is already open (nothing is sent, cookie is left alone).
+    [[nodiscard]] bool AllocateDDiskBlockGroup(
+        const NActors::TActorContext& ctx);
+
+    // Clears grow in-flight state and replies to SchemeShard if a grow is
+    // waiting. No-op when nothing is pending.
+    void AbortPendingGrow(
+        const NActors::TActorContext& ctx,
+        NKikimrBlockStore::EStatus status);
+
+    // Closes BSControllerPipeClient and aborts a pending grow so SchemeShard
+    // retries instead of stalling.
+    void FailBSControllerPipe(
+        const NActors::TActorContext& ctx,
+        const TString& reason);
 
     void HandleControllerAllocateDDiskBlockGroupResult(
         const NKikimr::TEvBlobStorage::
@@ -170,6 +213,21 @@ private:
     void HandleAddHostAllocationResult(
         const NKikimr::TEvBlobStorage::
             TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleResizeAllocationResult(
+        const NKikimr::TEvBlobStorage::
+            TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void ReplyPendingGrow(
+        const NActors::TActorContext& ctx,
+        NKikimrBlockStore::EStatus status);
+
+    void ApplyGrownCapacity();
+
+    void HandleGrownCapacityReady(
+        const TEvPartitionDirectPrivate::TEvGrownCapacityReady::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleGetLoadActorAdapterActorId(

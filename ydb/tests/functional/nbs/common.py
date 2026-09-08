@@ -101,13 +101,34 @@ class NbsTestBase:
 
         execute_ydbd(self.cluster, "token", ['admin', 'bs', 'config', 'invoke', '--proto', define_ddisk_pool])
 
-    def create_partition(self, disk_id, blocks_count=DEFAULT_DISK_BLOCKS_COUNT, block_size=4096):
+    def _dstool_nbs_partition_json(self, args, operation_name, disk_id):
         """
-        Create a disk and return the parsed CreatePartition JSON result.
+        Invoke ``dstool nbs partition ...`` and parse the JSON object it prints.
         """
         proc = execute_dstool_grpc(
             self.cluster,
             "token",
+            args,
+            check_exit_code=False,
+            return_process=True,
+        )
+
+        stdout = proc.std_out.decode('utf-8')
+        stderr = proc.std_err.decode('utf-8')
+
+        try:
+            return json.loads(stdout)
+        except json.JSONDecodeError as e:
+            assert False, (
+                f"{operation_name} for disk {disk_id} did not return JSON: "
+                f"{e}; stdout={stdout}, stderr={stderr}"
+            )
+
+    def create_partition(self, disk_id, blocks_count=DEFAULT_DISK_BLOCKS_COUNT, block_size=4096):
+        """
+        Create a disk and return the parsed CreatePartition JSON result.
+        """
+        return self._dstool_nbs_partition_json(
             [
                 'nbs',
                 'partition',
@@ -120,22 +141,9 @@ class NbsTestBase:
                 '--disk-id',
                 disk_id,
             ],
-            check_exit_code=False,
-            return_process=True,
+            'CreatePartition',
+            disk_id,
         )
-
-        stdout = proc.std_out.decode('utf-8')
-        stderr = proc.std_err.decode('utf-8')
-
-        try:
-            output = json.loads(stdout)
-        except json.JSONDecodeError as e:
-            assert False, (
-                f"CreatePartition for disk {disk_id} did not return JSON: "
-                f"{e}; stdout={stdout}, stderr={stderr}"
-            )
-
-        return output
 
     def create_disk(self, disk_id, blocks_count=DEFAULT_DISK_BLOCKS_COUNT, block_size=4096):
         """
@@ -160,6 +168,41 @@ class NbsTestBase:
         assert output.get('status') == 'SUCCESS', (
             f"CreatePartition failed for disk {disk_id}: {output}"
         )
+
+    def resize_partition(self, disk_id, blocks_count):
+        """
+        Grow a disk to ``blocks_count`` blocks and return the parsed JSON.
+        """
+        return self._dstool_nbs_partition_json(
+            [
+                'nbs',
+                'partition',
+                'resize',
+                '--disk-id',
+                disk_id,
+                f'--blocks-count={blocks_count}',
+            ],
+            'ResizePartition',
+            disk_id,
+        )
+
+    def resize_disk(self, disk_id, blocks_count):
+        """
+        Grow a disk to ``blocks_count`` blocks.
+        Returns the BlocksCount reported by ResizePartition.
+        """
+        output = self.resize_partition(disk_id, blocks_count)
+        assert output.get('status') == 'SUCCESS', (
+            f"ResizePartition failed for disk {disk_id}: {output}"
+        )
+        grown = output.get('blocksCount')
+        assert grown is not None, (
+            f"ResizePartition did not return blocksCount: {output}"
+        )
+        assert int(grown) == int(blocks_count), (
+            f"ResizePartition returned blocksCount={grown}, expected {blocks_count}"
+        )
+        return int(grown)
 
     def on_create_unavailable(self):
         """Hook for shared-cluster suites to recover a wedged NBS tenant."""

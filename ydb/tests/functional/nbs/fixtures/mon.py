@@ -40,12 +40,41 @@ def find_table(html, header_name):
     return None, []
 
 
+def find_table_any(html, *header_names):
+    """Like ``find_table``, trying each header name in order."""
+    for name in header_names:
+        headers, rows = find_table(html, name)
+        if headers is not None:
+            return headers, rows
+    return None, []
+
+
 def _cell(headers, row, name, default=''):
     name = name.lower()
     for i, header in enumerate(headers):
         if header.lower() == name:
             return row[i] if i < len(row) else default
     return default
+
+
+def _cell_any(headers, row, *names):
+    for name in names:
+        value = _cell(headers, row, name)
+        if value:
+            return value
+    return ''
+
+
+# "1:1000:17" plus optional " connected" / session text after strip_tags.
+_DISK_ID_RE = re.compile(r'(\d+):(\d+):(\d+)')
+
+
+def _parse_disk_id(value):
+    """Return (id, node_id, pdisk_id) from a Connections-table cell."""
+    match = _DISK_ID_RE.search(value or '')
+    if not match:
+        return '', None, None
+    return match.group(0), int(match.group(1)), int(match.group(2))
 
 
 def _parse_int(value, default=0):
@@ -117,7 +146,7 @@ def parse_dbg_hosts(html):
 
 def parse_dbg_connections(html):
     """Parse the DBG detail Connections table (node / PDisk / DDisk ids)."""
-    headers, rows = find_table(html, 'DDisk id')
+    headers, rows = find_table_any(html, 'DDisk id', 'DDisk')
     if headers is None:
         return []
     connections = []
@@ -126,18 +155,12 @@ def parse_dbg_connections(html):
         match = re.search(r'H(\d+)', label)
         if not match:
             continue
-        ddisk_id = _cell(headers, row, 'DDisk id')
-        pbuffer_id = _cell(headers, row, 'PBuffer id')
-        node_id = None
-        pdisk_id = None
-        pbuffer_node_id = None
-        parts = ddisk_id.split(':')
-        if len(parts) >= 2 and parts[0].isdigit():
-            node_id = int(parts[0])
-            pdisk_id = int(parts[1])
-        pb_parts = pbuffer_id.split(':')
-        if len(pb_parts) >= 1 and pb_parts[0].isdigit():
-            pbuffer_node_id = int(pb_parts[0])
+        ddisk_id, node_id, pdisk_id = _parse_disk_id(
+            _cell_any(headers, row, 'DDisk id', 'DDisk')
+        )
+        pbuffer_id, pbuffer_node_id, _ = _parse_disk_id(
+            _cell_any(headers, row, 'PBuffer id', 'PBuffer')
+        )
         connections.append(
             {
                 'index': int(match.group(1)),

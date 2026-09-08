@@ -15,12 +15,14 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/actors/helpers.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
+#include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/mon.h>
 
 #include <util/system/fs.h>
@@ -139,6 +141,7 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
     }
 
     NTabletPipe::CloseAndForgetClient(SelfId(), BSControllerPipeClient);
+    AbortPendingGrow(ctx, NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS);
     if (AddHostInFlight) {
         NTabletPipe::CloseAndForgetClient(
             SelfId(),
@@ -229,6 +232,12 @@ void TPartitionActor::HandleConnect(
         LogTitle.GetWithTime().c_str(),
         ToString(msg->ClientId).c_str(),
         ToString(msg->ServerId).c_str());
+
+    if (msg->ClientId == BSControllerPipeClient &&
+        msg->Status != NKikimrProto::OK)
+    {
+        FailBSControllerPipe(ctx, NKikimrProto::EReplyStatus_Name(msg->Status));
+    }
 }
 
 void TPartitionActor::HandleDisconnect(
@@ -244,6 +253,10 @@ void TPartitionActor::HandleDisconnect(
         LogTitle.GetWithTime().c_str(),
         ToString(msg->ClientId).c_str(),
         ToString(msg->ServerId).c_str());
+
+    if (msg->ClientId == BSControllerPipeClient) {
+        FailBSControllerPipe(ctx, "destroyed");
+    }
 }
 
 void TPartitionActor::HandleServerConnected(
@@ -394,8 +407,26 @@ void TPartitionActor::CreateBSControllerPipeClient(
         NTabletPipe::CreateClient(ctx.SelfID, MakeBSControllerID()));
 }
 
-void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
+const NKikimrBlockStore::TVolumeConfig&
+TPartitionActor::EffectiveVolumeConfig() const
 {
+    return PendingGrowVolumeConfig ? *PendingGrowVolumeConfig : VolumeConfig;
+}
+
+bool TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
+{
+    if (BSControllerPipeClient) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Skip DDisk allocation, pipe %s still open (cookie %lu)",
+            LogTitle.GetWithTime().c_str(),
+            BSControllerPipeClient.ToString().c_str(),
+            InflightBscAllocateRequestCookie);
+        return false;
+    }
+    Y_ABORT_UNLESS(!InflightBscAllocateRequestCookie);
+
     CreateBSControllerPipeClient(ctx);
 
     auto request = std::make_unique<
@@ -404,13 +435,12 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
     request->Record.SetPersistentBufferDDiskPoolName(
         StorageConfig->GetPersistentBufferDDiskPoolName());
 
-    // TODO: fill with tablet id
     request->Record.SetTabletId(TabletID());
 
-    const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
+    const auto& config = EffectiveVolumeConfig();
+    const ui64 blockCount = config.GetPartitions(0).GetBlockCount();
     const ui64 regionsCount =
-        AlignUp(blockCount * VolumeConfig.GetBlockSize(), RegionSize) /
-        RegionSize;
+        CalcRegionCount(blockCount, config.GetBlockSize());
 
     for (size_t i = 0; i < DirectBlockGroupsCount; i++) {
         auto* query = request->Record.AddQueries();
@@ -418,7 +448,37 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
         query->SetTargetNumVChunks(regionsCount);
     }
 
-    NTabletPipe::SendData(ctx, BSControllerPipeClient, request.release());
+    InflightBscAllocateRequestCookie = NextBscCookie++;
+    NTabletPipe::SendData(
+        ctx,
+        BSControllerPipeClient,
+        request.release(),
+        InflightBscAllocateRequestCookie);
+    return true;
+}
+
+void TPartitionActor::AbortPendingGrow(
+    const NActors::TActorContext& ctx,
+    NKikimrBlockStore::EStatus status)
+{
+    InflightBscAllocateRequestCookie = 0;
+    PendingGrowVolumeConfig.reset();
+    ReplyPendingGrow(ctx, status);
+}
+
+void TPartitionActor::FailBSControllerPipe(
+    const NActors::TActorContext& ctx,
+    const TString& reason)
+{
+    LOG_ERROR(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s BSController pipe failed: %s (cookie %lu)",
+        LogTitle.GetWithTime().c_str(),
+        reason.c_str(),
+        InflightBscAllocateRequestCookie);
+    NTabletPipe::CloseAndForgetClient(SelfId(), BSControllerPipeClient);
+    AbortPendingGrow(ctx, NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS);
 }
 
 TString TPartitionActor::GetSocketPath() const
@@ -619,12 +679,28 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
         LogTitle.GetWithTime().c_str(),
         ev->Get()->Record.DebugString().data());
 
-    // The first allocation response sets up the group; any later one is the
-    // result of an add-host request.
-    if (DDiskBlockGroupAllocated) {
+    if (AddHostInFlight && ev->Cookie == AddHostInFlight->Cookie) {
         HandleAddHostAllocationResult(ev, ctx);
-    } else {
+        return;
+    }
+    if (!InflightBscAllocateRequestCookie ||
+        ev->Cookie != InflightBscAllocateRequestCookie)
+    {
+        LOG_ERROR(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Stale AllocateDDiskBlockGroup cookie %lu (in flight %lu)",
+            LogTitle.GetWithTime().c_str(),
+            ev->Cookie,
+            InflightBscAllocateRequestCookie);
+        return;
+    }
+
+    if (!DDiskBlockGroupAllocated) {
+        InflightBscAllocateRequestCookie = 0;
         HandleInitialAllocationResult(ev, ctx);
+    } else {
+        HandleResizeAllocationResult(ev, ctx);
     }
 }
 
@@ -653,6 +729,7 @@ void TPartitionActor::HandleInitialAllocationResult(
         }
 
         DDiskBlockGroupAllocated = true;
+        ExecuteTx(ctx, CreateTx<TStoreVolumeConfig>(VolumeConfig));
         ExecuteTx(ctx, CreateTx<TStorePartitionIds>(std::move(ids)));
     } else {
         LOG_ERROR(
@@ -666,6 +743,109 @@ void TPartitionActor::HandleInitialAllocationResult(
     }
 
     NTabletPipe::CloseAndForgetClient(SelfId(), BSControllerPipeClient);
+}
+
+void TPartitionActor::HandleResizeAllocationResult(
+    const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    const auto* msg = ev->Get();
+
+    NTabletPipe::CloseAndForgetClient(SelfId(), BSControllerPipeClient);
+
+    if (msg->Record.GetStatus() != NKikimrProto::EReplyStatus::OK) {
+        LOG_ERROR(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Resize DDisk allocation failed: %d, reason: %s",
+            LogTitle.GetWithTime().c_str(),
+            msg->Record.GetStatus(),
+            msg->Record.GetErrorReason().data());
+        AbortPendingGrow(ctx, NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS);
+        return;
+    }
+
+    ApplyGrownCapacity();
+}
+
+void TPartitionActor::ReplyPendingGrow(
+    const NActors::TActorContext& ctx,
+    NKikimrBlockStore::EStatus status)
+{
+    if (!PendingGrowReply) {
+        return;
+    }
+
+    auto response = std::make_unique<
+        NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>();
+    response->Record.SetTxId(PendingGrowReply->TxId);
+    response->Record.SetOrigin(TabletID());
+    response->Record.SetStatus(status);
+    ctx.Send(
+        PendingGrowReply->Sender,
+        response.release(),
+        0,
+        PendingGrowReply->Cookie);
+    PendingGrowReply.reset();
+}
+
+void TPartitionActor::ApplyGrownCapacity()
+{
+    Y_ABORT_UNLESS(FastPathService);
+    Y_ABORT_UNLESS(PendingGrowVolumeConfig);
+    Y_ABORT_UNLESS(PendingGrowVolumeConfig->PartitionsSize() == 1);
+    const ui64 blockCount =
+        PendingGrowVolumeConfig->GetPartitions(0).GetBlockCount();
+
+    FastPathService->Grow(blockCount)
+        .Subscribe(
+            [actorSystem = TActivationContext::ActorSystem(),
+             selfId = SelfId()]   //
+            (const NThreading::TFuture<void>&) mutable
+            {
+                auto event = std::make_unique<
+                    TEvPartitionDirectPrivate::TEvGrownCapacityReady>();
+                actorSystem->Send(selfId, event.release());
+            });
+}
+
+void TPartitionActor::HandleGrownCapacityReady(
+    const TEvPartitionDirectPrivate::TEvGrownCapacityReady::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    Y_UNUSED(ev);
+    Y_ABORT_UNLESS(PendingGrowVolumeConfig);
+    Y_ABORT_UNLESS(PendingGrowVolumeConfig->PartitionsSize() == 1);
+    const ui64 blockCount =
+        PendingGrowVolumeConfig->GetPartitions(0).GetBlockCount();
+
+    const auto error = GetNbsService()->VhostServer->UpdateEndpoint(
+        GetSocketPath(),
+        blockCount);
+    if (HasError(error)) {
+        LOG_CRIT(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s UpdateEndpoint after resize failed: %s",
+            LogTitle.GetWithTime().c_str(),
+            FormatError(error).c_str());
+        ctx.Send(
+            Tablet(),
+            std::make_unique<TEvents::TEvPoisonPill>().release());
+        return;
+    }
+
+    VolumeConfig = *PendingGrowVolumeConfig;
+    ExecuteTx(ctx, CreateTx<TStoreVolumeConfig>(VolumeConfig));
+    InflightBscAllocateRequestCookie = 0;
+    PendingGrowVolumeConfig.reset();
+    ReplyPendingGrow(ctx, NKikimrBlockStore::OK);
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Grown capacity ready, persisting %lu blocks",
+        LogTitle.GetWithTime().c_str(),
+        blockCount);
 }
 
 void TPartitionActor::HandleGetLoadActorAdapterActorId(
@@ -685,54 +865,127 @@ void TPartitionActor::HandleUpdateVolumeConfig(
     const NActors::TActorContext& ctx)
 {
     const auto* msg = ev->Get();
+    const auto& volumeConfig = msg->Record.GetVolumeConfig();
 
     LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
         "%s Handle UpdateVolumeConfig request. Version: %d",
         LogTitle.GetWithTime().c_str(),
-        msg->Record.GetVolumeConfig().GetVersion());
+        volumeConfig.GetVersion());
 
-    if (DDiskBlockGroupAllocated) {
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Already has ddisk connections",
-            LogTitle.GetWithTime().c_str());
-
+    auto sendStatus = [&](NKikimrBlockStore::EStatus status)
+    {
         auto response = std::make_unique<
             NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>();
-        response->Record.SetStatus(NKikimrBlockStore::ERROR);
-        ctx.Send(ev->Sender, response.release());
+        response->Record.SetTxId(msg->Record.GetTxId());
+        response->Record.SetOrigin(TabletID());
+        response->Record.SetStatus(status);
+        ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+    };
+
+    if (volumeConfig.PartitionsSize() != 1) {
+        LOG_CRIT(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s UpdateVolumeConfig with %u partitions, expected 1; "
+            "replying OK so SchemeShard does not abort",
+            LogTitle.GetWithTime().c_str(),
+            volumeConfig.PartitionsSize());
+        sendStatus(NKikimrBlockStore::OK);
         return;
     }
 
-    const auto& volumeConfig = msg->Record.GetVolumeConfig();
-    Y_ABORT_UNLESS(volumeConfig.PartitionsSize() == 1);
+    if (!DDiskBlockGroupAllocated) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Handle UpdateVolumeConfig request VolumeConfig: %s",
+            LogTitle.GetWithTime().c_str(),
+            volumeConfig.DebugString().c_str());
 
+        VolumeConfig = volumeConfig;
+        if (!AllocateDDiskBlockGroup(ctx)) {
+            LOG_ERROR(
+                ctx,
+                NKikimrServices::NBS_PARTITION,
+                "%s Initial DDisk allocation not sent, pipe already open",
+                LogTitle.GetWithTime().c_str());
+        }
+        sendStatus(NKikimrBlockStore::OK);
+        return;
+    }
+
+    const ui64 newBlockCount = volumeConfig.GetPartitions(0).GetBlockCount();
+    const ui64 currentBlockCount =
+        VolumeConfig.PartitionsSize()
+            ? VolumeConfig.GetPartitions(0).GetBlockCount()
+            : 0;
+    const bool blockSizeUnchanged =
+        !volumeConfig.HasBlockSize() ||
+        volumeConfig.GetBlockSize() == VolumeConfig.GetBlockSize();
+    const ui32 newVersion = volumeConfig.GetVersion();
+    const ui32 currentVersion = VolumeConfig.GetVersion();
+
+    if (newVersion < currentVersion) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Ignoring stale UpdateVolumeConfig version %u (have %u)",
+            LogTitle.GetWithTime().c_str(),
+            newVersion,
+            currentVersion);
+        sendStatus(NKikimrBlockStore::OK);
+        return;
+    }
+
+    if (newVersion == currentVersion && newBlockCount == currentBlockCount) {
+        sendStatus(NKikimrBlockStore::OK);
+        return;
+    }
+
+    if (InflightBscAllocateRequestCookie || AddHostInFlight) {
+        sendStatus(NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS);
+        return;
+    }
+
+    const bool isGrow =
+        blockSizeUnchanged && newBlockCount >= currentBlockCount;
+    if (!isGrow) {
+        // SchemeShard must not send a shrink or a block-size change. Replying
+        // ERROR would abort SchemeShard (TConfigureParts::HandleReply).
+        LOG_CRIT(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Rejected UpdateVolumeConfig that is not a grow: "
+            "currentBlockCount=%lu newBlockCount=%lu blockSizeUnchanged=%d",
+            LogTitle.GetWithTime().c_str(),
+            currentBlockCount,
+            newBlockCount,
+            static_cast<int>(blockSizeUnchanged));
+        sendStatus(NKikimrBlockStore::OK);
+        return;
+    }
+
+    PendingGrowVolumeConfig = volumeConfig;
+    PendingGrowReply = TPendingGrowReply{
+        .Sender = ev->Sender,
+        .Cookie = ev->Cookie,
+        .TxId = msg->Record.GetTxId(),
+    };
     LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "%s Handle UpdateVolumeConfig request VolumeConfig: %s",
+        "%s Growing %lu -> %lu blocks",
         LogTitle.GetWithTime().c_str(),
-        volumeConfig.DebugString().c_str());
+        currentBlockCount,
+        newBlockCount);
 
-    ExecuteTx(ctx, CreateTx<TStoreVolumeConfig>(volumeConfig));
-
-    // Send response back to volume
-    auto response = std::make_unique<
-        NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>();
-    response->Record.SetTxId(msg->Record.GetTxId());
-    response->Record.SetOrigin(TabletID());
-    response->Record.SetStatus(NKikimrBlockStore::OK);
-
-    LOG_INFO(
-        TActivationContext::AsActorContext(),
-        NKikimrServices::NBS_PARTITION,
-        "%s Sending UpdateVolumeConfig response OK",
-        LogTitle.GetWithTime().c_str());
-
-    ctx.Send(ev->Sender, response.release());
+    if (!AllocateDDiskBlockGroup(ctx)) {
+        PendingGrowVolumeConfig.reset();
+        PendingGrowReply.reset();
+        sendStatus(NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS);
+    }
 }
 
 void TPartitionActor::HandleUpdateVChunkConfig(
@@ -866,6 +1119,9 @@ STFUNC(TPartitionActor::StateWork)
             HandleFastPathServiceStopped);
 
         HFunc(TEvService::TEvDeletePartitionRequest, HandleDeletePartition);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvGrownCapacityReady,
+            HandleGrownCapacityReady);
 
         default:
             HandleCommonEvents(ev);

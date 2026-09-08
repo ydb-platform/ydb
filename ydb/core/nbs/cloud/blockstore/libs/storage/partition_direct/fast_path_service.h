@@ -21,9 +21,16 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 
+#include <library/cpp/threading/hot_swap/hot_swap.h>
+
+#include <atomic>
+#include <memory>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+class TFastPathServiceAccessor;
 
 class TFastPathService
     : public IStorage
@@ -31,7 +38,33 @@ class TFastPathService
     , public IPartitionDirectService
     , public std::enable_shared_from_this<TFastPathService>
 {
+    friend class TFastPathServiceAccessor;
+
 private:
+    // Immutable set of regions published on Grow. IO threads take it
+    // wait-free; Grow publishes a grown copy from a DBG executor thread.
+    class TRegionsSnapshot: public TAtomicRefCount<TRegionsSnapshot>
+    {
+    public:
+        const TVector<TRegionPtr> Regions;
+
+        explicit TRegionsSnapshot(TVector<TRegionPtr> regions)
+            : Regions(std::move(regions))
+        {}
+    };
+
+    // Keeps the immutable volume config so it can be published through
+    // THotSwap while GetVolumeConfig() still returns a TVolumeConfigPtr.
+    class TVolumeConfigHolder: public TAtomicRefCount<TVolumeConfigHolder>
+    {
+    public:
+        const TVolumeConfigPtr Config;
+
+        explicit TVolumeConfigHolder(TVolumeConfigPtr config)
+            : Config(std::move(config))
+        {}
+    };
+
     NActors::TActorSystem* const ActorSystem = nullptr;
     const NActors::TActorId PartitionActorId;
     const TStorageConfigPtr StorageConfig;
@@ -41,7 +74,9 @@ private:
     const TVector<IDirectBlockGroupPtr> DirectBlockGroups;
     // Chaos controllers are indexed by DirectBlockGroup index.
     const TVector<NTransport::IChaosInjectorControlPtr> ChaosInjectorControls;
-    const TVector<TRegionPtr> Regions;   // 4 GiB each
+    // Immutable snapshot swapped on grow so IO threads stay wait-free.
+    // 4 GiB each.
+    THotSwap<TRegionsSnapshot> Regions;
 
     TLogTitle LogTitle;
     std::atomic<ui64> SequenceGenerator;
@@ -51,7 +86,9 @@ private:
 
     TVolumeCounters Counters;
     TVChunkCounters VChunkCounters;
-    TVolumeConfigPtr VolumeConfig;
+    // Same wait-free protocol as Regions: GetVolumeConfig is called from
+    // vhost IO threads.
+    THotSwap<TVolumeConfigHolder> VolumeConfig;
 
     // Accessed only from the partition actor thread.
     TChaosConfig ChaosConfig;
@@ -79,6 +116,9 @@ private:
     TAdaptiveLock CopyRangeBucketLock;
     std::optional<TSimpleLeakyBucket> CopyRangeBucket;
 
+    // Set at the start of Stop().
+    std::atomic<bool> Stopping{false};
+
 public:
     TFastPathService(
         NActors::TActorSystem* actorSystem,
@@ -101,6 +141,12 @@ public:
     // first time the Locked-session quorum is reached in every DBG.
     NThreading::TFuture<void> Run();
     NThreading::TFuture<void> Stop();
+
+    // Appends regions so the service covers newBlockCount. Must be called
+    // from the partition actor thread; the snapshot is published from a
+    // DBG executor thread after new vchunks start. Existing regions stay
+    // in place. Callers must wait before exposing the new capacity.
+    NThreading::TFuture<void> Grow(ui64 newBlockCount);
 
     [[nodiscard]] IDirectBlockGroupPtr GetDirectBlockGroup(ui32 dbgIndex) const;
 
@@ -183,6 +229,8 @@ public:
         std::optional<size_t> dbgIndex = std::nullopt) const;
 
 private:
+    void PublishVolumeConfig(ui64 newBlockCount);
+
     void OnRegionStopped(size_t regionIndex);
     void OnAllRegionsStopped();
 

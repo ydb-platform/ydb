@@ -48,7 +48,9 @@ public:
 
     ~TVChunk() override;
 
-    void Start();
+    // Posts DoStart onto the DBG executor. The future becomes ready after
+    // Register and RestoreDBGPBuffers -> UpdateDirtyMap have finished.
+    NThreading::TFuture<void> Start();
     NThreading::TFuture<void> Stop();
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
@@ -122,7 +124,7 @@ private:
 
     void UpdateDirtyMap(const TDBGRestoreResponse& response);
 
-    void DoStart();
+    void DoStart(NThreading::TPromise<void> started);
     void DoStop();
     void OnStopped();
 

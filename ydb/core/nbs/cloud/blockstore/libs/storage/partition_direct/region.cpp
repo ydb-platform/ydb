@@ -68,11 +68,14 @@ TRegion::TRegion(
     }
 }
 
-void TRegion::Run()
+NThreading::TFuture<void> TRegion::Run()
 {
+    TVector<NThreading::TFuture<void>> started;
+    started.reserve(VChunks.size());
     for (const auto& vChunk: VChunks) {
-        vChunk->Start();
+        started.push_back(vChunk->Start());
     }
+    return NThreading::WaitAll(started);
 }
 
 NThreading::TFuture<void> TRegion::Stop()

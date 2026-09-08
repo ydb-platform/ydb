@@ -41,6 +41,7 @@ struct TEvPartitionDirectPrivate
         EvPoisonByBlockedGeneration,
         EvAddHostToDBG,
         EvPartitionCleanupCompleted,
+        EvGrownCapacityReady,
 
         EvEnd,
     };
@@ -131,6 +132,13 @@ struct TEvPartitionDirectPrivate
         explicit TEvPartitionCleanupCompleted(NProto::TError error)
             : Error(std::move(error))
         {}
+    };
+
+    // FastPathService::Grow finished; the actor can UpdateEndpoint and persist.
+    struct TEvGrownCapacityReady
+        : public NActors::
+              TEventLocal<TEvGrownCapacityReady, EvGrownCapacityReady>
+    {
     };
 };
 

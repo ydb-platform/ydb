@@ -124,9 +124,6 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::T
             if (context.LastOffset != 0 && result.GetOffset() >= context.LastOffset) {
                 return false;
             }
-            if (resultsCount >= context.Count && context.Count > 0) {
-                return true;
-            }
 
             resultsCount += result.GetLogicalMessageCount();
             expanded.emplace_back();
@@ -238,9 +235,7 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatchKeys::TPtr& ev, const NActor
 
 void TConsumerBatchProcessor::FlushCPUUsageMetrics(const NActors::TActorContext& ctx, bool scheduleNext) {
     for (auto& [partitionId, cpuUsage] : CPUUsageMetricByPartition) {
-        if (cpuUsage) {
-            ctx.Send(TabletActorId, new TEvPQ::TEvConsumerBatchProcessorMetrics(partitionId, User, cpuUsage));
-        }
+        ctx.Send(TabletActorId, new TEvPQ::TEvConsumerBatchProcessorMetrics(partitionId, User, cpuUsage));
     }
     CPUUsageMetricByPartition.clear();
 

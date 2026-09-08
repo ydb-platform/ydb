@@ -156,7 +156,6 @@ TReadProcessingContext MakeReadContext(
     TReadProcessingContext context;
     context.User = user;
     context.PartitionId = partitionId;
-    context.Destination = 11;
     context.Offset = offset;
     context.Count = count;
     context.LastOffset = lastOffset;
@@ -235,7 +234,6 @@ Y_UNIT_TEST_SUITE(TConsumerBatchProcessorTest) {
         UNIT_ASSERT_VALUES_EQUAL(results.Get(1).GetOffset(), 11u);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Context.User, "user");
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Context.PartitionId, 7u);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Context.Destination, 11u);
     }
 
     Y_UNIT_TEST(ProcessKafkaBatchCutsRecords) {

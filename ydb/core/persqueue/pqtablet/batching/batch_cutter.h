@@ -1,10 +1,11 @@
 #pragma once
 
-#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/core/protos/msgbus_pq.pb.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/string.h>
+#include <util/generic/vector.h>
 
 namespace NKikimr::NPQ::NBatching {
 
@@ -33,9 +34,6 @@ public:
 
 class TKafkaBatchCutter : public IBatchCutter {
 public:
-    TKafkaBatchCutter() = default;
-    ~TKafkaBatchCutter() = default;
-
     TVector<TReadResult> Cut(const TBatchCutterData& data, ui64 readStartOffset) const override final;
     THashMap<TString, ui64> GetKeys(const TBatchCutterData& data, ui64 readStartOffset) const override final;
 };

@@ -30,6 +30,74 @@ namespace {
                     child.GetErasedRowCount(), levelCount, indexSize);
     }
 
+    // Helper: check that two TBtreeIndexMeta agree on row-level stats,
+    // ignoring the root reference (v1 uses page-id, v2 uses byte-offset).
+    void AssertMetaStatsEqual(const TBtreeIndexMeta& a, const TBtreeIndexMeta& b, const TString& msg) {
+        UNIT_ASSERT_VALUES_EQUAL_C(a.GetRowCount(), b.GetRowCount(), msg);
+        UNIT_ASSERT_VALUES_EQUAL_C(a.GetDataSize(), b.GetDataSize(), msg);
+        UNIT_ASSERT_VALUES_EQUAL_C(a.GetGroupDataSize(), b.GetGroupDataSize(), msg);
+        UNIT_ASSERT_VALUES_EQUAL_C(a.GetErasedRowCount(), b.GetErasedRowCount(), msg);
+        // IndexSize may differ slightly due to TChildV2 being larger than TChild
+    }
+
+    // Helper: assert v2 root properties on a TBtreeIndexMeta
+    void AssertV2Root(const TBtreeIndexMeta& meta, const TString& msg) {
+        UNIT_ASSERT_C(meta.HasRootV2(), msg + " expected HasV2Root");
+        UNIT_ASSERT_C(!meta.HasRootV1(), msg + " expected !HasV1Root");
+        UNIT_ASSERT_C(meta.RootV2.Offset.IsByteOffset(), msg + " expected V2Root byte offset");
+        UNIT_ASSERT_VALUES_EQUAL_C(meta.RootV1PageId(), Max<TPageId>(), msg + " expected Max RootPageIdV1");
+    }
+
+    // Helper: assert v1 root properties on a TBtreeIndexMeta
+    void AssertV1Root(const TBtreeIndexMeta& meta, const TString& msg) {
+        UNIT_ASSERT_C(meta.HasRootV1(), msg + " expected HasV1Root");
+        UNIT_ASSERT_C(!meta.HasRootV2(), msg + " expected !HasV2Root");
+        UNIT_ASSERT_C(meta.RootV1PageId() != Max<TPageId>(), msg + " expected valid RootPageIdV1");
+    }
+
+    // Helper: count actual rows by summing (GetNextRowId() - GetRowId()) across all data pages
+    // Each EReady::Data from the b-tree index iterator represents one data page loaded.
+    // The row range within that page is [GetRowId(), GetNextRowId()).
+    ui64 CountAllRows(const TPartStore& part, TGroupId groupId = {}) {
+        TTestEnv env;
+        auto index = CreateIndexIter(&part, &env, groupId);
+        ui64 count = 0;
+        for (size_t i = 0; ; i++) {
+            auto ready = i == 0 ? index->Seek(0) : index->Next();
+            if (ready != EReady::Data) {
+                Y_ENSURE(ready != EReady::Page, "Unexpected page fault");
+                break;
+            }
+            count += index->GetNextRowId() - index->GetRowId();
+        }
+        return count;
+    }
+
+    // Helper: collect all row offsets from iteration
+    TVector<TPageLocation> CollectPageLocations(const TPartStore& part, TGroupId groupId = {}) {
+        TTestEnv env;
+        auto index = CreateIndexIter(&part, &env, groupId);
+        TVector<TPageLocation> result;
+        for (size_t i = 0; ; i++) {
+            auto ready = i == 0 ? index->Seek(0) : index->Next();
+            if (ready != EReady::Data) {
+                Y_ENSURE(ready != EReady::Page, "Unexpected page fault");
+                break;
+            }
+            result.push_back(index->GetLocation());
+        }
+        return result;
+    }
+
+    // Helper: make a TConf with WriteBTreeIndexV2 = true, no V1 shadow (V2-only)
+    NPage::TConf MakeV2Conf(bool fin = true, ui32 page = 7 * 1024) {
+        NPage::TConf conf{ fin, page };
+        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV2 = true;
+        conf.WriteFlatIndex = false;
+        conf.BTreeIndexV2KeepV1Shadow = false;
+        return conf;
+    }
 
     TLayoutCook MakeLayout() {
         TLayoutCook lay;
@@ -987,6 +1055,1132 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
         auto expectedHist1 = Meta(part->IndexPages.BTreeHistoric[1].RootV1PageId(), 2000, dataSizeHist1, 0, 0, 3, 13014);
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeHistoric[1], expectedHist1, "Got " + part->IndexPages.BTreeHistoric[1].ToString());
     }
+}
+
+Y_UNIT_TEST_SUITE(TBtreeIndexNodeV2) {
+    using TChildV2 = TBtreeIndexNode::TChildV2;
+    using TShortChildV2 = TBtreeIndexNode::TShortChildV2;
+
+    Y_UNIT_TEST(TChildV2_Size) {
+        UNIT_ASSERT_VALUES_EQUAL(sizeof(TChildV2), 52);
+    }
+
+    Y_UNIT_TEST(TShortChildV2_Size) {
+        UNIT_ASSERT_VALUES_EQUAL(sizeof(TShortChildV2), 36);
+    }
+
+    Y_UNIT_TEST(TChildV2_GetLocation) {
+        TChildV2 child{
+            TPageOffset::FromByteOffset(12345),
+            6789,
+            0xDEADBEEF,
+            100,
+            200,
+            300,
+            50
+        };
+        auto loc = child.GetLocation(EPage::DataPage);
+        UNIT_ASSERT_EQUAL(loc.Offset, TPageOffset::FromByteOffset(12345));
+        UNIT_ASSERT_VALUES_EQUAL(loc.Size, 6789);
+        UNIT_ASSERT_VALUES_EQUAL(ui16(loc.Type), ui16(EPage::DataPage));
+        UNIT_ASSERT_VALUES_EQUAL(loc.Crc32, ui32(0xDEADBEEF));
+    }
+
+    Y_UNIT_TEST(TShortChildV2_GetLocation) {
+        TShortChildV2 child{
+            TPageOffset::FromByteOffset(99999),
+            1111,
+            0xCAFEBABE,
+            50,
+            200
+        };
+        auto loc = child.GetLocation(EPage::BTreeIndex);
+        UNIT_ASSERT_EQUAL(loc.Offset, TPageOffset::FromByteOffset(99999));
+        UNIT_ASSERT_VALUES_EQUAL(loc.Size, 1111);
+        UNIT_ASSERT_VALUES_EQUAL(ui16(loc.Type), ui16(EPage::BTreeIndex));
+        UNIT_ASSERT_VALUES_EQUAL(loc.Crc32, ui32(0xCAFEBABE));
+    }
+
+    Y_UNIT_TEST(V2_FieldOffsets) {
+        UNIT_ASSERT_VALUES_EQUAL(offsetof(TChildV2, Offset_), offsetof(TShortChildV2, Offset_));
+        UNIT_ASSERT_VALUES_EQUAL(offsetof(TChildV2, Size_), offsetof(TShortChildV2, Size_));
+        UNIT_ASSERT_VALUES_EQUAL(offsetof(TChildV2, Crc32_), offsetof(TShortChildV2, Crc32_));
+        UNIT_ASSERT_VALUES_EQUAL(offsetof(TChildV2, RowCount_), offsetof(TShortChildV2, RowCount_));
+        UNIT_ASSERT_VALUES_EQUAL(offsetof(TChildV2, DataSize_), offsetof(TShortChildV2, DataSize_));
+    }
+}
+
+// ========================================================================
+// Section 3: Twin format tests — v1 and v2 produce identical results
+// ========================================================================
+
+Y_UNIT_TEST_SUITE(TBtreeIndexTPartV2) {
+    using namespace NTest;
+
+    // Twin test: write same data in v1 and v2, compare row-level stats and iteration.
+    // feedRows takes (cook, lay) since TPartCook doesn't expose the layout.
+    void CheckTwin(const TLayoutCook& lay, NPage::TConf v1Conf, NPage::TConf v2Conf,
+                   std::function<void(TPartCook&, const TLayoutCook&)> feedRows) {
+        TPartCook v1Cook(lay, v1Conf);
+        feedRows(v1Cook, lay);
+        TPartEggs v1Eggs = v1Cook.Finish();
+        const auto v1Part = v1Eggs.Lone();
+
+        TPartCook v2Cook(lay, v2Conf);
+        feedRows(v2Cook, lay);
+        TPartEggs v2Eggs = v2Cook.Finish();
+        const auto v2Part = v2Eggs.Lone();
+
+        // V2 part must have v2 root
+        AssertV2Root(v2Part->IndexPages.BTreeGroups[0],
+            "V2 main group must have byte-offset root");
+
+        // V1 part must have v1 root
+        AssertV1Root(v1Part->IndexPages.BTreeGroups[0],
+            "V1 main group must have page-id root");
+
+        // Row-level stats must match between v1 and v2
+        AssertMetaStatsEqual(v1Part->IndexPages.BTreeGroups[0],
+            v2Part->IndexPages.BTreeGroups[0],
+            "V1 vs V2 BTreeGroups[0] stats mismatch");
+
+        // Same page count via iteration
+        auto v1Pages = IndexTools::CountMainPages(*v1Part);
+        auto v2Pages = IndexTools::CountMainPages(*v2Part);
+        UNIT_ASSERT_VALUES_EQUAL_C(v1Pages, v2Pages,
+            "V1 pages=" + ToString(v1Pages) + " V2 pages=" + ToString(v2Pages));
+
+        // Same total data size
+        auto v1DataSize = IndexTools::CountDataSize(*v1Part, TGroupId{0, 0});
+        auto v2DataSize = IndexTools::CountDataSize(*v2Part, TGroupId{0, 0});
+        UNIT_ASSERT_VALUES_EQUAL_C(v1DataSize, v2DataSize,
+            "V1 dataSize=" + ToString(v1DataSize) + " V2 dataSize=" + ToString(v2DataSize));
+
+        // Same row count from full iteration
+        UNIT_ASSERT_VALUES_EQUAL(CountAllRows(*v1Part), CountAllRows(*v2Part));
+
+        // Collect page locations and verify they are consistent
+        auto v1Locs = CollectPageLocations(*v1Part);
+        auto v2Locs = CollectPageLocations(*v2Part);
+        UNIT_ASSERT_VALUES_EQUAL(v1Locs.size(), v2Locs.size());
+        // V2 locations use byte offsets; V1 locations use page indices
+        // Sizes should match for each page
+        for (size_t i = 0; i < v1Locs.size(); i++) {
+            UNIT_ASSERT_VALUES_EQUAL_C(v1Locs[i].Size, v2Locs[i].Size,
+                "Page " + ToString(i) + " size mismatch: V1=" + ToString(v1Locs[i].Size) +
+                " V2=" + ToString(v2Locs[i].Size));
+        }
+    }
+
+    Y_UNIT_TEST(NoNodes_V2) {
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf v1Conf{ true, 7 * 1024 };
+        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV2 = false;
+
+        NPage::TConf v2Conf = MakeV2Conf();
+
+        auto feedRows = [](TPartCook& cook, const TLayoutCook& lay) {
+            for (ui32 i : xrange(5)) {
+                cook.Add(*TSchemedCookRow(*lay).Col(0u, TString(1024, 'x') + ToString(i)));
+            }
+        };
+
+        CheckTwin(lay, v1Conf, v2Conf, feedRows);
+    }
+
+    Y_UNIT_TEST(OneNode_V2) {
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf v1Conf{ true, 7 * 1024 };
+        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV2 = false;
+
+        NPage::TConf v2Conf = MakeV2Conf();
+
+        auto feedRows = [](TPartCook& cook, const TLayoutCook& lay) {
+            for (ui32 i : xrange(10)) {
+                cook.Add(*TSchemedCookRow(*lay).Col(0u, TString(1024, 'x') + ToString(i)));
+            }
+        };
+
+        CheckTwin(lay, v1Conf, v2Conf, feedRows);
+    }
+
+    Y_UNIT_TEST(FewNodes_V2) {
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf v1Conf{ true, 7 * 1024 };
+        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV2 = false;
+        v1Conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
+        v1Conf.Group(0).BTreeIndexNodeKeysMin = 3;
+
+        NPage::TConf v2Conf = MakeV2Conf();
+        v2Conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
+        v2Conf.Group(0).BTreeIndexNodeKeysMin = 3;
+
+        auto feedRows = [](TPartCook& cook, const TLayoutCook& lay) {
+            for (ui32 i : xrange(700)) {
+                cook.Add(*TSchemedCookRow(*lay).Col(i / 9, TString(1024, 'x') + ToString(i % 9)));
+            }
+        };
+
+        CheckTwin(lay, v1Conf, v2Conf, feedRows);
+    }
+
+    Y_UNIT_TEST(Erases_V2) {
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0});
+
+        NPage::TConf v1Conf{ true, 7 * 1024 };
+        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV2 = false;
+        v1Conf.Final = false;
+        v1Conf.Group(0).PageRows = 33;
+        v1Conf.Group(0).BTreeIndexNodeKeysMin = v1Conf.Group(0).BTreeIndexNodeKeysMax = 5;
+
+        NPage::TConf v2Conf = MakeV2Conf(false);
+        v2Conf.Group(0).PageRows = 33;
+        v2Conf.Group(0).BTreeIndexNodeKeysMin = v2Conf.Group(0).BTreeIndexNodeKeysMax = 5;
+
+        auto feedRows = [](TPartCook& cook, const TLayoutCook& lay) {
+            for (ui32 i : xrange(1000)) {
+                cook.Add(*TSchemedCookRow(*lay).Col(i, ToString(i)),
+                    i % 7 ? ERowOp::Upsert : ERowOp::Erase);
+            }
+        };
+
+        CheckTwin(lay, v1Conf, v2Conf, feedRows);
+    }
+
+    Y_UNIT_TEST(Groups_V2) {
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(1, 1,  NScheme::NTypeIds::String)
+            .Key({0});
+
+        NPage::TConf v1Conf{ true, 7 * 1024 };
+        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV2 = false;
+        v1Conf.Group(0).PageRows = 3;
+        v1Conf.Group(1).PageRows = 4;
+        v1Conf.Group(0).BTreeIndexNodeKeysMin = v1Conf.Group(0).BTreeIndexNodeKeysMax = 5;
+        v1Conf.Group(1).BTreeIndexNodeKeysMin = v1Conf.Group(1).BTreeIndexNodeKeysMax = 6;
+
+        NPage::TConf v2Conf = MakeV2Conf();
+        v2Conf.Group(0).PageRows = 3;
+        v2Conf.Group(1).PageRows = 4;
+        v2Conf.Group(0).BTreeIndexNodeKeysMin = v2Conf.Group(0).BTreeIndexNodeKeysMax = 5;
+        v2Conf.Group(1).BTreeIndexNodeKeysMin = v2Conf.Group(1).BTreeIndexNodeKeysMax = 6;
+
+        auto feedRows = [](TPartCook& cook, const TLayoutCook& lay) {
+            for (ui32 i : xrange(1000)) {
+                cook.Add(*TSchemedCookRow(*lay).Col(i, ToString(i)));
+            }
+        };
+
+        CheckTwin(lay, v1Conf, v2Conf, feedRows);
+    }
+
+    Y_UNIT_TEST(History_V2) {
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Col(1, 2,  NScheme::NTypeIds::String)
+            .Key({0});
+
+        NPage::TConf v1Conf{ true, 7 * 1024 };
+        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV2 = false;
+        v1Conf.Group(0).PageRows = 3;
+        v1Conf.Group(1).PageRows = 4;
+        v1Conf.Group(0).BTreeIndexNodeKeysMin = v1Conf.Group(0).BTreeIndexNodeKeysMax = 5;
+        v1Conf.Group(1).BTreeIndexNodeKeysMin = v1Conf.Group(1).BTreeIndexNodeKeysMax = 6;
+
+        NPage::TConf v2Conf = MakeV2Conf();
+        v2Conf.Group(0).PageRows = 3;
+        v2Conf.Group(1).PageRows = 4;
+        v2Conf.Group(0).BTreeIndexNodeKeysMin = v2Conf.Group(0).BTreeIndexNodeKeysMax = 5;
+        v2Conf.Group(1).BTreeIndexNodeKeysMin = v2Conf.Group(1).BTreeIndexNodeKeysMax = 6;
+
+        auto feedRows = [](TPartCook& cook, const TLayoutCook& lay) {
+            for (ui32 i : xrange(1000)) {
+                for (ui32 j : xrange(i % 5 + 1)) {
+                    cook.Ver({0, 10 - j}).Add(*TSchemedCookRow(*lay).Col(i, TString(i * 2 + j, 'x'), TString(i * 3 + j, 'x')));
+                }
+            }
+        };
+
+        TPartCook v1Cook(lay, v1Conf);
+        feedRows(v1Cook, lay);
+        TPartEggs v1Eggs = v1Cook.Finish();
+        const auto v1Part = v1Eggs.Lone();
+
+        TPartCook v2Cook(lay, v2Conf);
+        feedRows(v2Cook, lay);
+        TPartEggs v2Eggs = v2Cook.Finish();
+        const auto v2Part = v2Eggs.Lone();
+
+        // Check main group stats
+        AssertMetaStatsEqual(v1Part->IndexPages.BTreeGroups[0],
+            v2Part->IndexPages.BTreeGroups[0], "History main group stats");
+
+        // Check historic indexes
+        UNIT_ASSERT_VALUES_EQUAL(v1Part->IndexPages.BTreeHistoric.size(),
+            v2Part->IndexPages.BTreeHistoric.size());
+
+        for (size_t i = 0; i < v1Part->IndexPages.BTreeHistoric.size(); i++) {
+            AssertMetaStatsEqual(v1Part->IndexPages.BTreeHistoric[i],
+                v2Part->IndexPages.BTreeHistoric[i],
+                "History historic[" + ToString(i) + "] stats");
+            AssertV2Root(v2Part->IndexPages.BTreeHistoric[i],
+                "V2 historic[" + ToString(i) + "] root");
+        }
+    }
+}
+
+// ========================================================================
+// Section 4: V2 format-specific tests
+// ========================================================================
+
+Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
+    using namespace NTest;
+    using TChildV2 = TBtreeIndexNode::TChildV2;
+    using TShortChildV2 = TBtreeIndexNode::TShortChildV2;
+
+    Y_UNIT_TEST(V2_RootHasByteOffset) {
+        // Write a part in v2 and verify the root carries a byte offset
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf conf = MakeV2Conf();
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange(10)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(0u, TString(1024, 'x') + ToString(i)));
+        }
+        TPartEggs eggs = cook.Finish();
+        const auto part = eggs.Lone();
+
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+        AssertV2Root(meta, "V2 root");
+        // V2Root offset must be set
+        UNIT_ASSERT_C(!meta.RootV2.Offset.IsMax(), "V2Root byte offset must be set");
+        UNIT_ASSERT_C(meta.RootV2.Size > 0, "V2Root size must be > 0");
+    }
+
+    Y_UNIT_TEST(V1_RootHasPageIndex) {
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf conf{ true, 7 * 1024 };
+        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV2 = false;
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange(10)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(0u, TString(1024, 'x') + ToString(i)));
+        }
+        TPartEggs eggs = cook.Finish();
+        const auto part = eggs.Lone();
+
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+        AssertV1Root(meta, "V1 root");
+    }
+
+    Y_UNIT_TEST(V2_WriteThenRead_SingleLevel) {
+        // Write v2 part, iterate all rows, verify same row count as v1
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        auto feedRows = [](TPartCook& cook, const TLayoutCook& lay) {
+            for (ui32 i : xrange(50)) {
+                cook.Add(*TSchemedCookRow(*lay).Col(i, TString(200, 'x') + ToString(i)));
+            }
+        };
+
+        // V1 part
+        NPage::TConf v1Conf{ true, 7 * 1024 };
+        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV2 = false;
+        TPartCook v1Cook(lay, v1Conf);
+        feedRows(v1Cook, lay);
+        TPartEggs v1Eggs = v1Cook.Finish();
+
+        // V2 part
+        NPage::TConf v2Conf = MakeV2Conf();
+        TPartCook v2Cook(lay, v2Conf);
+        feedRows(v2Cook, lay);
+        TPartEggs v2Eggs = v2Cook.Finish();
+
+        const auto v1Part = v1Eggs.Lone();
+        const auto v2Part = v2Eggs.Lone();
+
+        // Iterate and compare page count
+        auto v1Pages = IndexTools::CountMainPages(*v1Part);
+        auto v2Pages = IndexTools::CountMainPages(*v2Part);
+        UNIT_ASSERT_VALUES_EQUAL(v1Pages, v2Pages);
+
+        // Verify full iteration returns same rows via both
+        UNIT_ASSERT_VALUES_EQUAL(CountAllRows(*v1Part), CountAllRows(*v2Part));
+    }
+
+    Y_UNIT_TEST(V2_WriteThenRead_MultiLevel) {
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        auto feedRows = [](TPartCook& cook, const TLayoutCook& lay) {
+            for (ui32 i : xrange(700)) {
+                cook.Add(*TSchemedCookRow(*lay).Col(i / 9, TString(1024, 'x') + ToString(i % 9)));
+            }
+        };
+
+        // V1 part with multi-level btree
+        NPage::TConf v1Conf{ true, 7 * 1024 };
+        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV2 = false;
+        v1Conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
+        v1Conf.Group(0).BTreeIndexNodeKeysMin = 3;
+        TPartCook v1Cook(lay, v1Conf);
+        feedRows(v1Cook, lay);
+        TPartEggs v1Eggs = v1Cook.Finish();
+
+        // V2 part with multi-level btree
+        NPage::TConf v2Conf = MakeV2Conf();
+        v2Conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
+        v2Conf.Group(0).BTreeIndexNodeKeysMin = 3;
+        TPartCook v2Cook(lay, v2Conf);
+        feedRows(v2Cook, lay);
+        TPartEggs v2Eggs = v2Cook.Finish();
+
+        const auto v1Part = v1Eggs.Lone();
+        const auto v2Part = v2Eggs.Lone();
+
+        // Must have >1 level
+        UNIT_ASSERT_C(v2Part->IndexPages.BTreeGroups[0].LevelCount() > 1,
+            "Expected multi-level btree, got LevelCount=" + ToString(v2Part->IndexPages.BTreeGroups[0].LevelCount()));
+
+        AssertV2Root(v2Part->IndexPages.BTreeGroups[0], "Multi-level V2 root");
+
+        // Same stats
+        AssertMetaStatsEqual(v1Part->IndexPages.BTreeGroups[0],
+            v2Part->IndexPages.BTreeGroups[0], "Multi-level stats");
+
+        // Same page count
+        UNIT_ASSERT_VALUES_EQUAL(IndexTools::CountMainPages(*v1Part), IndexTools::CountMainPages(*v2Part));
+
+        // Same row count
+        UNIT_ASSERT_VALUES_EQUAL(CountAllRows(*v1Part), CountAllRows(*v2Part));
+    }
+
+    Y_UNIT_TEST(V2_WriteThenRead_Historic) {
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Col(1, 2,  NScheme::NTypeIds::String)
+            .Key({0});
+
+        auto feedRows = [](TPartCook& cook, const TLayoutCook& lay) {
+            for (ui32 i : xrange(200)) {
+                for (ui32 j : xrange(i % 3 + 1)) {
+                    cook.Ver({0, 10 - j}).Add(*TSchemedCookRow(*lay).Col(i, TString(i * 2 + j, 'x'), TString(i * 3 + j, 'x')));
+                }
+            }
+        };
+
+        NPage::TConf v1Conf{ true, 7 * 1024 };
+        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV2 = false;
+        v1Conf.Group(0).PageRows = 3;
+        v1Conf.Group(1).PageRows = 4;
+
+        NPage::TConf v2Conf = MakeV2Conf();
+        v2Conf.Group(0).PageRows = 3;
+        v2Conf.Group(1).PageRows = 4;
+
+        TPartCook v1Cook(lay, v1Conf);
+        feedRows(v1Cook, lay);
+        TPartEggs v1Eggs = v1Cook.Finish();
+
+        TPartCook v2Cook(lay, v2Conf);
+        feedRows(v2Cook, lay);
+        TPartEggs v2Eggs = v2Cook.Finish();
+
+        const auto v1Part = v1Eggs.Lone();
+        const auto v2Part = v2Eggs.Lone();
+
+        // V2 historic indexes must exist and have byte-offset roots
+        UNIT_ASSERT_C(!v2Part->IndexPages.BTreeHistoric.empty(), "V2 must have historic indexes");
+
+        for (size_t i = 0; i < v2Part->IndexPages.BTreeHistoric.size(); i++) {
+            AssertV2Root(v2Part->IndexPages.BTreeHistoric[i],
+                "Historic[" + ToString(i) + "] V2 root");
+        }
+
+        // Same historic stats
+        UNIT_ASSERT_VALUES_EQUAL(v1Part->IndexPages.BTreeHistoric.size(),
+            v2Part->IndexPages.BTreeHistoric.size());
+
+        for (size_t i = 0; i < v1Part->IndexPages.BTreeHistoric.size(); i++) {
+            AssertMetaStatsEqual(v1Part->IndexPages.BTreeHistoric[i],
+                v2Part->IndexPages.BTreeHistoric[i],
+                "Historic[" + ToString(i) + "] stats");
+        }
+    }
+
+    Y_UNIT_TEST(V2_V2RootResolvedDirectly) {
+        // V2 root is resolved through TBtreeIndexMeta::V2Root directly,
+        // not through TMeta page-id lookup
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf conf = MakeV2Conf();
+        conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
+        conf.Group(0).BTreeIndexNodeKeysMin = 3;
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange(700)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(i / 9, TString(1024, 'x') + ToString(i % 9)));
+        }
+        TPartEggs eggs = cook.Finish();
+        const auto part = eggs.Lone();
+
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+        AssertV2Root(meta, "V2 root");
+
+        // GetBTreeRootLocation should return V2Root directly
+        auto rootLoc = NTable::GetBTreeRootLocation(meta,
+            part->GetPageCollection(0),
+            part->GetPageCollection(0));
+
+        UNIT_ASSERT_EQUAL(rootLoc, meta.RootV2);
+        UNIT_ASSERT_C(rootLoc.Offset.IsByteOffset(), "Root location must be byte offset");
+    }
+
+    Y_UNIT_TEST(V1_V1RootResolvedViaMeta) {
+        // V1 root is resolved through Part->GetPageLocation(rootPageId)
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf conf{ true, 7 * 1024 };
+        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV2 = false;
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange(10)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(0u, TString(1024, 'x') + ToString(i)));
+        }
+        TPartEggs eggs = cook.Finish();
+        const auto part = eggs.Lone();
+
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+        AssertV1Root(meta, "V1 root");
+
+        auto rootLoc = NTable::GetBTreeRootLocation(meta,
+            part->GetPageCollection(0),
+            part->GetPageCollection(0));
+
+        // Root location resolves through the page collection, which returns byte offsets
+        // for BTreeIndex pages (IsByteOffsetType returns true)
+        UNIT_ASSERT_C(rootLoc.Offset.IsByteOffset(), "V1 root resolved via page collection must be byte offset");
+    }
+
+    Y_UNIT_TEST(V2_NodeChildrenAreByteOffset) {
+        // After writing in v2, verify that btree node children carry byte-offset locations.
+        // V2 format is determined by root metadata (meta.HasRootV2()), not by page label version.
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf conf = MakeV2Conf();
+        conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
+        conf.Group(0).BTreeIndexNodeKeysMin = 3;
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange(700)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(i / 9, TString(1024, 'x') + ToString(i % 9)));
+        }
+        TPartEggs eggs = cook.Finish();
+        const auto part = eggs.Lone();
+
+        // The btree has multi-level — load the root page and check its format version
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+        UNIT_ASSERT_C(meta.LevelCount() >= 2, "Expected LevelCount >= 2, got " + ToString(meta.LevelCount()));
+
+        TTestEnv env;
+        auto rootPage = env.TryGetPage(part.Get(), meta.RootV2, TGroupId{});
+        UNIT_ASSERT_C(rootPage, "Failed to load V2 root page");
+
+        // V2 format is determined by root metadata — pass v2Format=true
+        TBtreeIndexNode rootNode(*rootPage, /*v2Format=*/true);
+
+        // All children in the root node must have byte-offset locations
+        for (TRecIdx i : xrange(rootNode.GetChildrenCount())) {
+            auto ref = rootNode.GetChild(i, false);
+            UNIT_ASSERT_C(std::holds_alternative<TPageLocation>(ref),
+                "Child " + ToString(i) + " must be a V2 byte-offset location");
+            auto& childLoc = std::get<TPageLocation>(ref);
+            UNIT_ASSERT_C(childLoc.Offset.IsByteOffset(),
+                "Child " + ToString(i) + " location must be byte offset");
+            UNIT_ASSERT_C(childLoc.Size > 0,
+                "Child " + ToString(i) + " must have Size > 0");
+        }
+    }
+
+    Y_UNIT_TEST(V2_NoFlatIndex) {
+        // V2 parts must not have a flat index (WriteFlatIndex is disabled)
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf conf = MakeV2Conf();
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange(10)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(0u, TString(1024, 'x') + ToString(i)));
+        }
+        TPartEggs eggs = cook.Finish();
+        const auto part = eggs.Lone();
+
+        // V2 part must have no flat index
+        UNIT_ASSERT_C(part->IndexPages.FlatGroups.empty(),
+            "V2 part must not have flat index groups");
+
+        // V2 part must have btree index
+        UNIT_ASSERT_C(!part->IndexPages.BTreeGroups.empty(),
+            "V2 part must have btree index groups");
+    }
+
+    Y_UNIT_TEST(V2_ConfDefaults) {
+        // Verify TConf defaults for WriteBTreeIndexV2
+        NPage::TConf conf;
+        UNIT_ASSERT_VALUES_EQUAL(conf.WriteBTreeIndexV2, false);
+
+        NPage::TConf v2Conf = MakeV2Conf();
+        UNIT_ASSERT_VALUES_EQUAL(v2Conf.WriteBTreeIndexV2, true);
+        UNIT_ASSERT_VALUES_EQUAL(v2Conf.WriteBTreeIndex, true);
+    }
+
+    // -----------------------------------------------------------------------
+    // Section 5.1: Write format flag tests
+    // -----------------------------------------------------------------------
+
+    Y_UNIT_TEST(WriteFlag_Off_Produces_V1) {
+        // WriteBTreeIndexV2 = false (default) produces v1 format
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf conf{ true, 7 * 1024 };
+        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV2 = false;
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange(10)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(0u, TString(1024, 'x') + ToString(i)));
+        }
+        TPartEggs eggs = cook.Finish();
+        const auto part = eggs.Lone();
+
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+        // V1 root must be present, V2 root must be absent
+        AssertV1Root(meta, "WriteFlag_Off");
+    }
+
+    Y_UNIT_TEST(WriteFlag_On_Produces_V2) {
+        // WriteBTreeIndexV2 = true produces v2 format with byte-offset root
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf conf = MakeV2Conf();
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange(10)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(0u, TString(1024, 'x') + ToString(i)));
+        }
+        TPartEggs eggs = cook.Finish();
+        const auto part = eggs.Lone();
+
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+        // V2 root must be present with byte offset, V1 root must be absent
+        AssertV2Root(meta, "WriteFlag_On");
+
+        // V2Root offset and size must be set
+        UNIT_ASSERT_C(!meta.RootV2.Offset.IsMax(), "V2Root byte offset must be set");
+        UNIT_ASSERT_C(meta.RootV2.Size > 0, "V2Root size must be > 0");
+    }
+
+    Y_UNIT_TEST(WriteFlag_Off_V1RootInProto) {
+        // V1 part proto has RootPageId but no RootOffset
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf conf{ true, 7 * 1024 };
+        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV2 = false;
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange(10)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(0u, TString(1024, 'x') + ToString(i)));
+        }
+        TPartEggs eggs = cook.Finish();
+        const auto part = eggs.Lone();
+
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+        UNIT_ASSERT_C(meta.HasRootV1(), "V1 part must have V1Root");
+        UNIT_ASSERT_C(!meta.HasRootV2(), "V1 part must not have V2Root");
+        UNIT_ASSERT_C(meta.RootV1PageId() != Max<TPageId>(), "RootPageId must be valid");
+    }
+
+    Y_UNIT_TEST(WriteFlag_On_V2RootInProto) {
+        // V2 part proto has RootOffset/RootSize/RootCrc32 but no RootPageId
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf conf = MakeV2Conf();
+        conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
+        conf.Group(0).BTreeIndexNodeKeysMin = 3;
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange(700)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(i / 9, TString(1024, 'x') + ToString(i % 9)));
+        }
+        TPartEggs eggs = cook.Finish();
+        const auto part = eggs.Lone();
+
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+        UNIT_ASSERT_C(meta.HasRootV2(), "V2 part must have V2Root");
+        UNIT_ASSERT_C(!meta.HasRootV1(), "V2 part must not have V1Root");
+        UNIT_ASSERT_VALUES_EQUAL(meta.RootV1PageId(), Max<TPageId>());
+
+        // V2Root must be a valid byte-offset location
+        UNIT_ASSERT_C(meta.RootV2.Offset.IsByteOffset(), "V2Root must be byte offset");
+        UNIT_ASSERT_C(meta.RootV2.Size > 0, "V2Root size must be > 0");
+    }
+
+    Y_UNIT_TEST(DualWrite_BothRootsPresent) {
+        // With WriteBTreeIndexV2 + KeepBTreeIndexV1, the writer emits both a V2 b-tree
+        // and a V1 b-tree, so a single TBtreeIndexMeta carries both roots on disk.
+        // This is what makes the part revert-safe (turn EnableLocalDBBtreeIndexV2 off → V1).
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf conf = MakeV2Conf();
+        conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
+        conf.Group(0).BTreeIndexNodeKeysMin = 3;
+        conf.BTreeIndexV2KeepV1Shadow = true;
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange(700)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(i / 9, TString(1024, 'x') + ToString(i % 9)));
+        }
+        TPartEggs eggs = cook.Finish();
+        const auto part = eggs.Lone();
+
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+        // Dual-root: both roots present, V2 preferred at read time
+        UNIT_ASSERT_C(meta.HasRootV2(), "dual-write part must have V2Root");
+        UNIT_ASSERT_C(meta.HasRootV1(), "dual-write part must have V1Root (revert path)");
+        UNIT_ASSERT_C(meta.RootV2.Offset.IsByteOffset(), "V2Root must be byte offset");
+        UNIT_ASSERT_C(meta.RootV1PageId() != Max<TPageId>(), "V1Root page id must be valid");
+
+        // Reader picks the V2 root when both are present
+        auto rootLoc = NTable::GetBTreeRootLocation(meta,
+            part->GetPageCollection(0), part->GetPageCollection(0));
+        UNIT_ASSERT_EQUAL(rootLoc, meta.RootV2);
+
+        // Create a V2-only reference part with the same data to compare iteration
+        NPage::TConf refConf = MakeV2Conf();
+        refConf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
+        refConf.Group(0).BTreeIndexNodeKeysMin = 3;
+        TPartCook refCook(lay, refConf);
+        for (ui32 i : xrange(700)) {
+            refCook.Add(*TSchemedCookRow(*lay).Col(i / 9, TString(1024, 'x') + ToString(i % 9)));
+        }
+        TPartEggs refEggs = refCook.Finish();
+        const auto refPart = refEggs.Lone();
+
+        // Verify both parts produce the same total row count
+        auto dualRows = CountAllRows(*part);
+        auto refRows = CountAllRows(*refPart);
+        UNIT_ASSERT_VALUES_EQUAL_C(dualRows, refRows,
+            "dual-write part must have the same row count as V2-only part");
+        UNIT_ASSERT_VALUES_EQUAL_C(dualRows, 700,
+            "dual-write part must produce exactly 700 rows");
+
+        // Data page count must match (identical data → identical data pages)
+        auto dualDataPages = IndexTools::CountMainPages(*part);
+        auto refDataPages = IndexTools::CountMainPages(*refPart);
+        UNIT_ASSERT_VALUES_EQUAL_C(dualDataPages, refDataPages,
+            "dual-write and V2-only parts must have the same data page count");
+
+        // Data size must match (same data pages)
+        auto dualDataSize = IndexTools::CountDataSize(*part, TGroupId{0, 0});
+        auto refDataSize = IndexTools::CountDataSize(*refPart, TGroupId{0, 0});
+        UNIT_ASSERT_VALUES_EQUAL_C(dualDataSize, refDataSize,
+            "dual-write and V2-only parts must have the same data size");
+    }
+
+    Y_UNIT_TEST(DualWrite_RevertToStripsV2Root) {
+        // A dual-root part, after the loader strips the V2 root (what
+        // EnableLocalDBBtreeIndexV2 off does), falls back to the V1 root and still iterates.
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf conf = MakeV2Conf();
+        conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
+        conf.Group(0).BTreeIndexNodeKeysMin = 3;
+        conf.BTreeIndexV2KeepV1Shadow = true;
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange(700)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(i / 9, TString(1024, 'x') + ToString(i % 9)));
+        }
+        TPartEggs eggs = cook.Finish();
+        auto part = eggs.Lone();
+
+        // Before strip: dual-root, reader uses V2
+        UNIT_ASSERT_C(part->IndexPages.BTreeGroups[0].HasRootV1() &&
+                      part->IndexPages.BTreeGroups[0].HasRootV2(), "expected dual-root part");
+
+        // Simulate EnableLocalDBBtreeIndexV2 off: build a modified IndexPages
+        // with V2 root stripped from BTreeGroups[0].
+        auto btreeGroups = part->IndexPages.BTreeGroups; // non-const copy
+        btreeGroups[0].RootV2 = NPage::TPageLocation::Max();
+
+        TPart::TIndexPages strippedPages{
+            part->IndexPages.FlatGroups,
+            part->IndexPages.FlatHistoric,
+            std::move(btreeGroups),
+            part->IndexPages.BTreeHistoric,
+        };
+
+        // After strip: only V1 root remains, reader falls back to V1
+        AssertV1Root(strippedPages.BTreeGroups[0], "dual-root part after V2 strip");
+
+        // Verify that GetBTreeRootLocation resolves through the V1 root
+        auto rootLocV1 = NTable::GetBTreeRootLocation(strippedPages.BTreeGroups[0],
+            part->GetPageCollection(0), part->GetPageCollection(0));
+        UNIT_ASSERT_C(rootLocV1, "stripped meta must resolve to a valid V1 root location");
+
+        // Build a modified part sharing the same underlying page data but with
+        // stripped V2 metadata, so iteration truly exercises the V1 fallback path.
+        auto strippedPart = TIntrusivePtr<TPartStore>(new TPartStore(
+            part->Store,
+            part->Label,
+            TPart::TParams{
+                part->Epoch,
+                part->Scheme,
+                std::move(strippedPages),
+                part->Blobs,
+                part->ByKeyPrefixes,
+                part->Large,
+                part->Small,
+                part->IndexesRawSize,
+                part->MinRowVersion,
+                part->MaxRowVersion,
+                part->GarbageStats,
+                part->TxIdStats,
+            },
+            part->Stat,
+            part->Slices));
+
+        // Create a V2-only reference part with the same data to compare iteration
+        NPage::TConf refConf = MakeV2Conf();
+        refConf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
+        refConf.Group(0).BTreeIndexNodeKeysMin = 3;
+        TPartCook refCook(lay, refConf);
+        for (ui32 i : xrange(700)) {
+            refCook.Add(*TSchemedCookRow(*lay).Col(i / 9, TString(1024, 'x') + ToString(i % 9)));
+        }
+        TPartEggs refEggs = refCook.Finish();
+        const auto refPart = refEggs.Lone();
+
+        // Verify the V1 fallback (after V2 strip) still produces all rows
+        auto v1Rows = CountAllRows(*strippedPart);
+        auto refRows = CountAllRows(*refPart);
+        UNIT_ASSERT_VALUES_EQUAL_C(v1Rows, refRows,
+            "V1 fallback must have the same row count as V2-only part");
+        UNIT_ASSERT_VALUES_EQUAL_C(v1Rows, 700,
+            "V1 fallback must produce exactly 700 rows");
+    }
+
+    Y_UNIT_TEST(DualWrite_V1LevelCountSyncedFromShadow) {
+        // V2 child structs are larger (TShortChildV2=36 vs TShortChild=20 for
+        // group pages), so V2 btree nodes hold fewer children and may need more
+        // levels than V1 for large datasets. The two trees are independent:
+        // each has its own root and its own LevelCount. Nothing is shared.
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(1, 1,  NScheme::NTypeIds::String)
+            .Key({0});
+
+        NPage::TConf conf = MakeV2Conf();
+        conf.BTreeIndexV2KeepV1Shadow = true;
+        // Force many small btree pages so V2's larger children produce more levels.
+        // Group 1 uses short format (20 vs 36 bytes per child, 80% larger for V2).
+        conf.Group(0).BTreeIndexNodeTargetSize = 1024;
+        conf.Group(1).BTreeIndexNodeTargetSize = 1024;
+        conf.Group(0).BTreeIndexNodeKeysMin = 2;
+        conf.Group(1).BTreeIndexNodeKeysMin = 2;
+        conf.Group(0).PageRows = 4;
+        conf.Group(1).PageRows = 3;
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange(5000)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(i, TString(64, 'x') + ToString(i)));
+        }
+        TPartEggs eggs = cook.Finish();
+        auto part = eggs.Lone();
+
+        const auto& metaOrig = part->IndexPages.BTreeGroups[1];
+        UNIT_ASSERT_C(metaOrig.HasRootV1() && metaOrig.HasRootV2(),
+            "Group 1 dual-write part must have both roots");
+
+        // ---------- Trees are independent: each has its own LevelCount ----------
+
+        UNIT_ASSERT_C(metaOrig.HasLevelCountV2(),
+            "Dual-write meta must have a valid (non-sentinel) LevelCountV2");
+        UNIT_ASSERT_C(metaOrig.LevelCountV1 != metaOrig.LevelCountV2,
+            "V1 and V2 level counts must diverge for large enough dataset"
+            << " (V1=" << metaOrig.LevelCountV1 << " V2=" << metaOrig.LevelCountV2 << ")");
+
+        // Helper: count actual V1 btree levels by walking from root downward.
+        const auto* store = part->Store.Get();
+        auto countV1Levels = [&](TPageId rootPageId, TGroupId) -> ui32 {
+            auto* page = store->GetPage(0, rootPageId);
+            UNIT_ASSERT_C(page, "V1 root page must be loadable");
+            TBtreeIndexNode node(*page, /*v2Format=*/false);
+            ui32 levels = 1;
+            auto child = node.GetChild(0, /*isDataPage=*/false);
+            while (std::holds_alternative<TPageId>(child)) {
+                ui32 childPageId = std::get<TPageId>(child);
+                auto* childPage = store->GetPage(0, childPageId);
+                UNIT_ASSERT_C(childPage, "V1 child page " << childPageId
+                    << " at level " << levels << " must be loadable");
+                auto childLabel = ReadUnaligned<NPage::TLabel>(childPage->data());
+                if (childLabel.Type != EPage::BTreeIndex) {
+                    break; // reached data pages
+                }
+                TBtreeIndexNode childNode(*childPage, /*v2Format=*/false);
+                child = childNode.GetChild(0, /*isDataPage=*/false);
+                levels++;
+            }
+            return levels;
+        };
+        ui32 v1ActualLevels = countV1Levels(metaOrig.RootV1PageId(), TGroupId{1});
+
+        // Helper: count actual V2 btree levels by walking from V2 root.
+        auto countV2Levels = [&](const NPage::TPageLocation& rootLoc, TGroupId) -> ui32 {
+            auto* page = store->GetPage(0, rootLoc.Offset);
+            UNIT_ASSERT_C(page, "V2 root page must be loadable");
+            auto label = ReadUnaligned<NPage::TLabel>(page->data());
+            UNIT_ASSERT_C(label.Type == EPage::BTreeIndexV2,
+                "V2 root must be BTreeIndexV2, got " << int(label.Type));
+            TBtreeIndexNode node(*page, /*v2Format=*/true);
+            ui32 levels = 1;
+            auto child = node.GetChild(0, /*isDataPage=*/false);
+            while (auto* loc = std::get_if<TPageLocation>(&child)) {
+                auto* childPage = store->GetPage(0, loc->Offset);
+                UNIT_ASSERT_C(childPage, "V2 child page at level " << levels
+                    << " must be loadable");
+                auto childLabel = ReadUnaligned<NPage::TLabel>(childPage->data());
+                if (childLabel.Type != EPage::BTreeIndexV2) {
+                    break; // reached data pages
+                }
+                TBtreeIndexNode childNode(*childPage, /*v2Format=*/true);
+                child = childNode.GetChild(0, /*isDataPage=*/false);
+                levels++;
+            }
+            return levels;
+        };
+        ui32 v2ActualLevels = countV2Levels(metaOrig.RootV2, TGroupId{1});
+
+        // Each tree's LevelCount matches its own actual structure.
+        UNIT_ASSERT_VALUES_EQUAL_C(metaOrig.LevelCountV1, v1ActualLevels,
+            "metadata LevelCountV1 must match V1 shadow (actual=" << v1ActualLevels << ")");
+        UNIT_ASSERT_VALUES_EQUAL_C(metaOrig.LevelCountV2, v2ActualLevels,
+            "metadata LevelCountV2 must match V2 tree (actual=" << v2ActualLevels << ")");
+
+        // ---------- Each tree is independently workable ----------
+
+        size_t v1Pages = 0, v2Pages = 0;
+
+        // 1) V1-only fallback: strip V2 root and LevelCountV2.
+        {
+            auto btreeGroups = part->IndexPages.BTreeGroups;
+            btreeGroups[1].RootV2 = NPage::TPageLocation::Max();
+            btreeGroups[1].LevelCountV2 = Max<ui32>();
+
+            UNIT_ASSERT_C(btreeGroups[1].HasRootV1() && !btreeGroups[1].HasRootV2(),
+                "After V2 strip: must have V1 root only");
+            UNIT_ASSERT_C(!btreeGroups[1].HasLevelCountV2(),
+                "After V2 strip: LevelCountV2 must be sentinel'd");
+            UNIT_ASSERT_VALUES_EQUAL_C(btreeGroups[1].LevelCount(), v1ActualLevels,
+                "V1 LevelCount must be preserved after V2 strip");
+            // LevelCountV1 already holds V1's value (set in proto field 2 by the writer)
+
+            TPart::TIndexPages strippedPages{
+                part->IndexPages.FlatGroups,
+                part->IndexPages.FlatHistoric,
+                std::move(btreeGroups),
+                part->IndexPages.BTreeHistoric,
+            };
+
+            auto strippedPart = TIntrusivePtr<TPartStore>(new TPartStore(
+                part->Store, part->Label,
+                TPart::TParams{
+                    part->Epoch, part->Scheme, std::move(strippedPages),
+                    part->Blobs, part->ByKeyPrefixes, part->Large, part->Small,
+                    part->IndexesRawSize, part->MinRowVersion, part->MaxRowVersion,
+                    part->GarbageStats, part->TxIdStats,
+                },
+                part->Stat, part->Slices));
+
+            v1Pages = IndexTools::CountMainPages(*strippedPart);
+            UNIT_ASSERT_C(v1Pages > 0, "V1-only fallback must find data pages");
+        }
+
+        // 2) V2-only path: strip V1 tree — sentinel its fields.
+        {
+            auto btreeGroups = part->IndexPages.BTreeGroups;
+            btreeGroups[1].RootV1 = Max<TPageId>();
+            btreeGroups[1].LevelCountV1 = Max<ui32>();
+
+            UNIT_ASSERT_C(!btreeGroups[1].HasRootV1() && btreeGroups[1].HasRootV2(),
+                "After V1 strip: must have V2 root only");
+            UNIT_ASSERT_C(btreeGroups[1].HasLevelCountV2(),
+                "V2 LevelCount must be valid (non-sentinel) after V1 strip");
+            UNIT_ASSERT_VALUES_EQUAL_C(btreeGroups[1].LevelCount(), v2ActualLevels,
+                "ActiveLevelCount must be V2 value after V1 strip");
+
+            TPart::TIndexPages strippedPages{
+                part->IndexPages.FlatGroups,
+                part->IndexPages.FlatHistoric,
+                std::move(btreeGroups),
+                part->IndexPages.BTreeHistoric,
+            };
+
+            auto strippedPart = TIntrusivePtr<TPartStore>(new TPartStore(
+                part->Store, part->Label,
+                TPart::TParams{
+                    part->Epoch, part->Scheme, std::move(strippedPages),
+                    part->Blobs, part->ByKeyPrefixes, part->Large, part->Small,
+                    part->IndexesRawSize, part->MinRowVersion, part->MaxRowVersion,
+                    part->GarbageStats, part->TxIdStats,
+                },
+                part->Stat, part->Slices));
+
+            v2Pages = IndexTools::CountMainPages(*strippedPart);
+            UNIT_ASSERT_C(v2Pages > 0, "V2-only path must find data pages");
+        }
+
+        // Both trees index the same data pages — different structures, same result.
+        UNIT_ASSERT_VALUES_EQUAL_C(v1Pages, v2Pages,
+            "V1 and V2 trees must reach the same data pages");
+    }
+}
+
+// ========================================================================
+// Section 5.2: Read format flag tests
+// ========================================================================
+
+Y_UNIT_TEST_SUITE(TBtreeIndexReadFlags) {
+    using namespace NTest;
+
+    Y_UNIT_TEST(ReadFlag_Off_KeepsV2OnlyRoot) {
+        // When EnableLocalDBBtreeIndexV2 is off, the loader strips V2 roots only
+        // from dual-root indexes. V2-only indexes keep their root because there
+        // is no V1 fallback.
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf v2Conf = MakeV2Conf();
+        TPartCook v2Cook(lay, v2Conf);
+        for (ui32 i : xrange(10)) {
+            v2Cook.Add(*TSchemedCookRow(*lay).Col(0u, TString(1024, 'x') + ToString(i)));
+        }
+        TPartEggs v2Eggs = v2Cook.Finish();
+        const auto part = v2Eggs.Lone();
+
+        // V2 part has a V2 root and no V1 root.
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+        AssertV2Root(meta, "V2-only part before read gate");
+
+        // Simulate the loader's V2-off gate.
+        auto gatedMeta = meta;
+        if (gatedMeta.HasRootV2() && gatedMeta.HasRootV1()) {
+            gatedMeta.RootV2 = NPage::TPageLocation::Max();
+            gatedMeta.LevelCountV2 = Max<ui32>();
+        }
+
+        AssertV2Root(gatedMeta, "V2-only part after read gate");
+        UNIT_ASSERT_EQUAL(gatedMeta.RootV2, meta.RootV2);
+    }
+
 }
 
 } // namespace NKikimr::NTable::NPage

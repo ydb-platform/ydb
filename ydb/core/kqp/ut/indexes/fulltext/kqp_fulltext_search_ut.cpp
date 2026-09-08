@@ -3704,23 +3704,35 @@ Y_UNIT_TEST(AddFulltextIndexAutoProvisionsRowId) {
     }
 }
 
-Y_UNIT_TEST(SelectWithFulltextMatchPrefixed) {
-    auto kikimr = KikimrPrefix();
+// Feature flags for a prefixed fulltext index whose doc-id is an auto-provisioned __ydb_row_id.
+static TKikimrRunner KikimrPrefixRowId(bool compact = false) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableFulltextIndexPrefix(true);
+    featureFlags.SetEnableUniqConstraint(true);
+    featureFlags.SetEnableAddUniqueIndex(true);
+    featureFlags.SetEnableFulltextIndexRowId(true);
+    featureFlags.SetEnableCompactFulltextIndex(compact);
+    return Kikimr(std::move(featureFlags));
+}
+
+Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixed, KeyPart) {
+    auto kikimr = KikimrPrefixRowId(true);
     auto db = kikimr.GetQueryClient();
 
     { // Create table with a prefixed fulltext index ON (UserId, Text)
-        TString query = R"sql(
+        TString query = Sprintf(R"sql(
             CREATE TABLE `/Root/Docs` (
                 Key Uint64,
                 UserId Uint64,
                 Text Utf8,
-                PRIMARY KEY (Key),
+                PRIMARY KEY (%s),
                 INDEX fulltext_idx
                     GLOBAL USING fulltext_plain
                     ON (UserId, Text)
                     WITH (tokenizer=standard, use_filter_lowercase=true)
             );
-        )sql";
+        )sql", KeyPart ? "UserId, Key" : "Key");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
@@ -3830,7 +3842,7 @@ Y_UNIT_TEST(CreatePrefixedFulltextIndexOnPrimaryKey) {
     )sql";
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_C(result.GetStatus() != EStatus::SUCCESS, result.GetIssues().ToString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "must not be a primary key column");
+    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "index prefix must not contain all primary key columns");
 }
 
 Y_UNIT_TEST(SelectWithFulltextRelevancePrefixed) {
@@ -4336,11 +4348,11 @@ Y_UNIT_TEST(SelectWithFulltextRelevancePrefixedPerPrefixStats) {
         {{"dogs", {}}});
 }
 
-Y_UNIT_TEST(SelectWithFulltextRelevancePrefixedWriteMaintenance) {
+Y_UNIT_TEST_TWIN(SelectWithFulltextRelevancePrefixedWriteMaintenance, KeyPart) {
     // Online write maintenance for a prefixed relevance index must keep the per-prefix BM25 statistics
     // (DocCount / SumDocLength) in sync. INSERT / UPDATE / DELETE on one prefix change that prefix's
     // scores while other prefixes stay isolated. Plain format only: compact relevance is build-only.
-    auto kikimr = KikimrPrefixCompact();
+    auto kikimr = KikimrPrefixRowId(true);
     auto db = kikimr.GetQueryClient();
 
     auto exec = [&](const TString& q) {
@@ -4348,9 +4360,14 @@ Y_UNIT_TEST(SelectWithFulltextRelevancePrefixedWriteMaintenance) {
         UNIT_ASSERT_VALUES_EQUAL_C(r.GetStatus(), EStatus::SUCCESS, r.GetIssues().ToString());
     };
 
-    exec(R"sql(
-        CREATE TABLE `/Root/Docs` (Key Uint64, UserId Uint64, Text Utf8, PRIMARY KEY (Key));
-    )sql");
+    exec(Sprintf(R"sql(
+        CREATE TABLE `/Root/Docs` (
+            Key Uint64,
+            UserId Uint64,
+            Text Utf8,
+            PRIMARY KEY (%s)
+        );
+    )sql", KeyPart ? "UserId, Key" : "Key"));
     exec(R"sql(
         UPSERT INTO `/Root/Docs` (Key, UserId, Text) VALUES
             (1, 100, "cats"),
@@ -4783,18 +4800,6 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixedRowIdComplexKey, Compact) {
     UNIT_ASSERT_VALUES_EQUAL("a2", matchedPks(R"sql(
         SELECT Pk FROM `/Root/Docs` VIEW `fulltext_idx`
         WHERE Tenant = "red" AND FulltextMatch(Text, "dogs");)sql"));
-}
-
-// Feature flags for a prefixed fulltext index whose doc-id is an auto-provisioned __ydb_row_id.
-static TKikimrRunner KikimrPrefixRowId(bool compact = false) {
-    NKikimrConfig::TFeatureFlags featureFlags;
-    featureFlags.SetEnableFulltextIndex(true);
-    featureFlags.SetEnableFulltextIndexPrefix(true);
-    featureFlags.SetEnableUniqConstraint(true);
-    featureFlags.SetEnableAddUniqueIndex(true);
-    featureFlags.SetEnableFulltextIndexRowId(true);
-    featureFlags.SetEnableCompactFulltextIndex(compact);
-    return Kikimr(std::move(featureFlags));
 }
 
 // Builds a table with a complex (multi-column, non-integer) primary key and a prefixed fulltext index

@@ -60,6 +60,15 @@ namespace NYql::NDq {
             }
         }
 
+        // The attached allocator holds a callback into this object: detach before dying. Every owner keeps the
+        // allocator alive longer than the quota (a shared_ptr declared before it, see the compute actor and the
+        // task runner actor), so the allocator is still there to be detached from.
+        ~TDqMemoryQuota() {
+            if (Alloc) {
+                Alloc->Ref().SetIncreaseMemoryLimitCallback({});
+            }
+        }
+
         ui64 GetMkqlMemoryLimit() const {
             return MkqlMemoryLimit;
         }

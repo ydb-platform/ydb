@@ -337,6 +337,29 @@ Y_UNIT_TEST_SUITE(TDqMemoryQuotaTest) {
         UNIT_ASSERT_VALUES_EQUAL(env.Manager->Freed, 0);
     }
 
+    // The quota detaches from the allocator when it dies: the allocator must not call a dead quota to raise its
+    // limit, exceeding the limit throws instead
+    Y_UNIT_TEST(DestructorDetachesFromAllocator) {
+        TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), /* supportsSizedAllocators = */ true);
+        auto manager = std::make_shared<TStubQuotaManager>();
+        ::NMonitoring::TDynamicCounters::TCounterPtr counter;
+        {
+            TDqMemoryQuota quota(counter, 40_MB, MakeLimits(manager), TTxId{ui64(1)}, 1, /* profileStats = */ false, /* actorSystem = */ nullptr);
+            alloc.SetLimit(quota.GetMkqlMemoryLimit());
+            quota.TrySetIncreaseMemoryLimitCallback(&alloc);
+            // attached: a block beyond the limit grows it through the quota
+            void* block = MKQLAllocWithSize(64_MB, EMemorySubPool::Default);
+            UNIT_ASSERT(block);
+            MKQLFreeWithSize(block, 64_MB, EMemorySubPool::Default);
+            UNIT_ASSERT_GE(quota.GetMkqlMemoryLimit(), 64_MB);
+            quota.TryShrinkMemory(&alloc);
+            UNIT_ASSERT_VALUES_EQUAL(quota.GetMkqlMemoryLimit(), 40_MB);
+        }
+        // detached: the same block hits the allocator limit and nothing raises it
+        UNIT_ASSERT_VALUES_EQUAL(alloc.GetLimit(), 40_MB);
+        UNIT_ASSERT_EXCEPTION(MKQLAllocWithSize(64_MB, EMemorySubPool::Default), NKikimr::TMemoryLimitExceededException);
+    }
+
     Y_UNIT_TEST(GuaranteeManagerNegativeParentDominates) {
         struct TParentedManager : public TGuaranteeQuotaManager {
             TParentedManager()

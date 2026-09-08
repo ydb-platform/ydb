@@ -136,10 +136,9 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
 
     // Node level memory availability of the tx (see NRm::TTxState::GetMemoryAvailability) plus the locally
     // prepaid quota. Channels do not spill on a negative value, but propagate it as back pressure,
-    // see TInputDescriptor::MemoryPressure. A negative node value is never masked by the prepaid quota.
+    // see TInputDescriptor::MemoryPressure.
     i64 GetMemoryAvailability() const override {
-        const i64 tx = Tx->GetMemoryAvailability();
-        return tx < 0 ? tx : NYql::NDq::AddMemoryAvailability(AvailableQuota.load(), tx);
+        return NYql::NDq::CombineMemoryAvailability(AvailableQuota.load(), Tx->GetMemoryAvailability());
     }
 
     void FreeQuota(ui64 memorySize) override {

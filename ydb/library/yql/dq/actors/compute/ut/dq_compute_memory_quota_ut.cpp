@@ -373,6 +373,15 @@ Y_UNIT_TEST_SUITE(TDqMemoryQuotaTest) {
         UNIT_ASSERT_EXCEPTION(MKQLAllocWithSize(64_MB, EMemorySubPool::Default), NKikimr::TMemoryLimitExceededException);
     }
 
+    // The rule shared by the quota managers: the local leftover adds to the parent value, a negative parent wins
+    Y_UNIT_TEST(CombineMemoryAvailability) {
+        UNIT_ASSERT_VALUES_EQUAL(CombineMemoryAvailability(100, 5), 105);
+        UNIT_ASSERT_VALUES_EQUAL(CombineMemoryAvailability(100, 0), 100);
+        UNIT_ASSERT_VALUES_EQUAL(CombineMemoryAvailability(100, -5), -5);
+        UNIT_ASSERT_VALUES_EQUAL(CombineMemoryAvailability(0, -5), -5);
+        UNIT_ASSERT_VALUES_EQUAL(CombineMemoryAvailability(100, std::numeric_limits<i64>::max()), std::numeric_limits<i64>::max());
+    }
+
     Y_UNIT_TEST(GuaranteeManagerNegativeParentDominates) {
         struct TParentedManager : public TGuaranteeQuotaManager {
             TParentedManager()

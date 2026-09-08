@@ -315,9 +315,7 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
     }
 
     i64 GetMemoryAvailability() const override {
-        // a negative parent value (over target) must not be masked by the locally prepaid leftover
-        const i64 extra = GetExtraMemoryAvailability();
-        return extra < 0 ? extra : AddMemoryAvailability(static_cast<i64>(Limit - Quota), extra);
+        return CombineMemoryAvailability(static_cast<i64>(Limit - Quota), GetExtraMemoryAvailability());
     }
 
     void FreeQuota(ui64 memorySize) override {

@@ -68,6 +68,12 @@ inline i64 AddMemoryAvailability(i64 a, i64 b) {
     return a + b;
 }
 
+// Availability of a quota manager that keeps a locally prepaid leftover on top of a parent (node level) value:
+// the sum, unless the parent is over target - a negative parent value is never masked by the leftover.
+inline i64 CombineMemoryAvailability(i64 localLeftover, i64 parent) {
+    return parent < 0 ? parent : AddMemoryAvailability(localLeftover, parent);
+}
+
 // Source/transform.
 // Must be IActor.
 //

@@ -308,6 +308,7 @@ public:
         UNIT_TEST(PoolMemoryAvailability);
         UNIT_TEST(PoolMemoryAvailabilityAfterRelease);
         UNIT_TEST(PoolLimitFollowsAllocatingTx);
+        UNIT_TEST(PoolReleaseMirrorsAcquire);
         UNIT_TEST(SpillingPercentReconfigure);
         UNIT_TEST(TaskQuotaManagerOptional);
         UNIT_TEST(SnapshotSharingByExchanger);
@@ -336,6 +337,7 @@ public:
     void PoolMemoryAvailability();
     void PoolMemoryAvailabilityAfterRelease();
     void PoolLimitFollowsAllocatingTx();
+    void PoolReleaseMirrorsAcquire();
     void SpillingPercentReconfigure();
     void TaskQuotaManagerOptional();
     void SnapshotSharing();
@@ -764,6 +766,37 @@ void KqpRm::PoolLimitFollowsAllocatingTx() {
 
         rm->FreeResources(*other, 1, NRm::TKqpResourcesRequest{.Memory = 10});
         rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.Memory = 450});
+    }
+
+    AssertResourceManagerStats(rm, 1000, 100);
+}
+
+// A tx of a pool without a memory limit (percent -1, the default) takes nothing from the pool and must give
+// nothing back to it either, whatever the txs with a limit have acquired there
+void KqpRm::PoolReleaseMirrorsAcquire() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    {
+        auto limited = MakePoolTx(1, rm, /* memoryPoolPercent = */ 50); // pool limit 500, threshold at 400 used
+        auto unlimited = MakePoolTx(2, rm, /* memoryPoolPercent = */ -1); // the same pool, no pool accounting
+        UNIT_ASSERT(limited->HasMemoryPoolLimit());
+        UNIT_ASSERT(!unlimited->HasMemoryPoolLimit());
+        UNIT_ASSERT(!unlimited->PoolMemoryCookie);
+
+        UNIT_ASSERT(rm->AllocateResources(*limited, 1, NRm::TKqpResourcesRequest{.Memory = 300}));
+        UNIT_ASSERT_VALUES_EQUAL(limited->GetMemoryAvailability(), 100); // 500 - 300 - 100
+
+        UNIT_ASSERT(rm->AllocateResources(*unlimited, 1, NRm::TKqpResourcesRequest{.Memory = 200})); // the node total only
+        UNIT_ASSERT_VALUES_EQUAL(limited->GetMemoryAvailability(), 100); // the pool did not move
+        UNIT_ASSERT_VALUES_EQUAL(unlimited->GetMemoryAvailability(), 300); // 1000 - 500 - 200
+        rm->FreeResources(*unlimited, 1, NRm::TKqpResourcesRequest{.Memory = 200});
+        UNIT_ASSERT_VALUES_EQUAL(limited->GetMemoryAvailability(), 100); // and did not move back either
+
+        rm->FreeResources(*limited, 1, NRm::TKqpResourcesRequest{.Memory = 300});
+        UNIT_ASSERT_VALUES_EQUAL(limited->GetMemoryAvailability(), 400);
     }
 
     AssertResourceManagerStats(rm, 1000, 100);

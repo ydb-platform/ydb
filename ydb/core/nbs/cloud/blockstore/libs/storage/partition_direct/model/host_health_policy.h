@@ -4,6 +4,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -19,6 +20,6 @@ public:
 };
 
 std::unique_ptr<IHostHealthPolicy> CreateDefaultHostHealthPolicy(
-    const TOracleConfig& config);
+    TOracleConfigPtr config);
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

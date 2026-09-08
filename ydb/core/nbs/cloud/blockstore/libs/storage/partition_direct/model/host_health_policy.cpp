@@ -5,7 +5,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 class TDefaultHostHealthPolicy: public IHostHealthPolicy
 {
 public:
-    explicit TDefaultHostHealthPolicy(const TOracleConfig& config);
+    explicit TDefaultHostHealthPolicy(TOracleConfigPtr config);
 
     [[nodiscard]] EHostHealth GetNewHealth(
         EHostHealth health,
@@ -27,10 +27,10 @@ private:
         const THostErrorsInfo& stats,
         ui64 errorsTotalSize) const;
 
-    const TOracleConfig& Config;
+    const TOracleConfigPtr Config;
 };
 
-TDefaultHostHealthPolicy::TDefaultHostHealthPolicy(const TOracleConfig& config)
+TDefaultHostHealthPolicy::TDefaultHostHealthPolicy(TOracleConfigPtr config)
     : Config(config)
 {}
 
@@ -59,7 +59,7 @@ EHostHealth TDefaultHostHealthPolicy::NewHealthFromOnline(
     const ui64 errorsTotalSize) const
 {
     if (IsDownByStats(stats, errorsTotalSize)) {
-        return stats.FromFirstError > Config.GetMaxDurationBeforeGoingOffline()
+        return stats.FromFirstError > Config->GetMaxDurationBeforeGoingOffline()
                    ? EHostHealth::Offline
                    : EHostHealth::TemporaryOffline;
     }
@@ -76,7 +76,7 @@ EHostHealth TDefaultHostHealthPolicy::NewHealthFromTemporaryOffline(
         return EHostHealth::Online;
     }
     if (IsDownByStats(stats, errorsTotalSize) &&
-        stats.FromFirstError > Config.GetMaxDurationBeforeGoingOffline())
+        stats.FromFirstError > Config->GetMaxDurationBeforeGoingOffline())
     {
         return EHostHealth::Offline;
     }
@@ -86,9 +86,9 @@ EHostHealth TDefaultHostHealthPolicy::NewHealthFromTemporaryOffline(
 bool TDefaultHostHealthPolicy::HasRecovered(const THostErrorsInfo& stats) const
 {
     return stats.ConsecutiveSuccessCount >=
-               Config.GetMinSuccessesCountBeforeReturningOnline() &&
+               Config->GetMinSuccessesCountBeforeReturningOnline() &&
            stats.FromFirstSuccess >
-               Config.GetMaxDurationBeforeReturningOnline();
+               Config->GetMaxDurationBeforeReturningOnline();
 }
 
 bool TDefaultHostHealthPolicy::IsDownByStats(
@@ -97,24 +97,24 @@ bool TDefaultHostHealthPolicy::IsDownByStats(
 {
     const bool softDowntimeByErrors =
         stats.ConsecutiveErrorCount >=
-        Config.GetMinErrorsCountBeforeGoingOffline();
+        Config->GetMinErrorsCountBeforeGoingOffline();
 
     const bool temporaryOfflineDelayOver =
         stats.FromFirstError >
-        Config.GetMaxDurationBeforeGoingTemporaryOffline();
+        Config->GetMaxDurationBeforeGoingTemporaryOffline();
 
     const bool hardDowntimeByErrors =
-        stats.ConsecutiveErrorCount >= Config.GetErrorsCountForGoingOffline();
+        stats.ConsecutiveErrorCount >= Config->GetErrorsCountForGoingOffline();
 
     const bool hardDowntimeByErrorsTotalSize =
-        errorsTotalSize >= Config.GetErrorsTotalSizeForGoingOffline();
+        errorsTotalSize >= Config->GetErrorsTotalSizeForGoingOffline();
 
     return hardDowntimeByErrorsTotalSize || hardDowntimeByErrors ||
            (softDowntimeByErrors && temporaryOfflineDelayOver);
 }
 
 std::unique_ptr<IHostHealthPolicy> CreateDefaultHostHealthPolicy(
-    const TOracleConfig& config)
+    TOracleConfigPtr config)
 {
     return std::make_unique<TDefaultHostHealthPolicy>(config);
 }

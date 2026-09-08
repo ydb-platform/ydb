@@ -41,9 +41,9 @@ Example of a message with compressed content:
 
 When writing to a topic via the SQS protocol, messages are evenly distributed across partitions. This guarantees that all messages with the same `MessageGroupId` end up in the same partition.
 
-For FIFO queues, message deduplication is supported by `MessageDeduplicationId`. If `MessageDeduplicationId` is not passed, deduplication by message content is available only when `ContentBasedDeduplication` is enabled (via the `CreateQueue` and `SetQueueAttributes` commands).
+For [First-In-First-Out (FIFO) queues](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-fifo-queues.html), each message must have a deduplication ID. Pass it in the [`MessageDeduplicationId`](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_SendMessage.html) parameter. If [`ContentBasedDeduplication`](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_CreateQueue.html) is enabled for the queue, this parameter may be omitted: {{ ydb-short-name }} generates the ID as a SHA-256 hash of the message body, excluding message attributes. If neither an explicit ID nor content-based deduplication is configured, the send request fails.
 
-Deduplication is implemented over a 5-minute window: a message with a duplicate `MessageDeduplicationId` can be written again after 5 minutes or more.
+Within the five-minute deduplication window, {{ ydb-short-name }} accepts a repeated send request with the same ID but does not add another message to the queue. After the window expires, the ID can be reused for a new message.
 
 There is a limit on the number of messages that can be written to a FIFO queue partition: 1000 messages per second. If you need to write more messages, increase the number of partitions. The queue limit is calculated as 1000 messages/sec/partition × number of partitions. For example, to write 10 thousand messages per second, create a FIFO queue with 10 partitions.
 

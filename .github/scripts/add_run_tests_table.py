@@ -42,7 +42,7 @@ def generate_run_tests_table(pr_number: int, app_domain: str) -> str:
         "test_size": "small,medium",
         "additional_ya_make_args": "",
         "build_preset": "relwithdebinfo",  # Default preset
-        "collect_coredumps": "false",
+        "collect_coredumps": "true",
         "return_url": return_url
     }
     query_string = "&".join([f"{k}={urllib.parse.quote(str(v), safe='')}" for k, v in params.items()])
@@ -59,7 +59,7 @@ def generate_run_tests_table(pr_number: int, app_domain: str) -> str:
     comment += "- **Test Size**: small, medium, large (default: small, medium)\n"
     comment += "- **Test Targets**: any directory path (default: `ydb/`)\n"
     comment += "- **Sanitizers**: ASAN, MSAN, TSAN\n"
-    comment += "- **Coredumps**: enable for debugging (default: off)\n"
+    comment += "- **Coredumps**: collected by default to a 100G /coredumps volume; can be disabled\n"
     comment += "- **Additional args**: custom ya make arguments\n\n"
     comment += button
     return comment

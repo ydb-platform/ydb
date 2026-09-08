@@ -61,8 +61,8 @@ inputs:
     description: "add ya make vars with git info"
   collect_coredumps:
     type: boolean
-    default: false
-    description: "Collect coredumps via enabling ulimit -c unlimited"
+    default: true
+    description: "Collect coredumps to a 100G loop volume at /coredumps (for ya test recovery)"
   pull_number:
     type: string
     required: false
@@ -127,5 +127,5 @@ runs:
         telegram_ydbot_token:  ${{ fromJSON( inputs.secs ).YDBOT_TELEGRAM_BOT_TOKEN || '' }}
         telegram_alert_logins: ${{ fromJSON( inputs.vars ).GH_ALERTS_TG_LOGINS || '' }}
         telegram_alert_chat: ${{ fromJSON( inputs.vars ).GH_ALERTS_TG_CHAT || '' }}
-        collect_coredumps: ${{ inputs.collect_coredumps }}
+        collect_coredumps: ${{ inputs.collect_coredumps != false }}
         pull_number: ${{ inputs.pull_number }}

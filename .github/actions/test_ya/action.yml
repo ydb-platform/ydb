@@ -73,8 +73,8 @@ inputs:
     description: "Telegram alert chat"
   collect_coredumps:
     type: boolean
-    default: false
-    description: "Collect coredumps via enabling ulimit -c unlimited"
+    default: true
+    description: "Collect coredumps to a 100G loop volume at /coredumps (for ya test recovery)"
   pull_number:
     type: string
     required: false
@@ -167,7 +167,7 @@ runs:
       id: build
       shell: bash
       env:
-        COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}
+        COLLECT_COREDUMPS: ${{ inputs.collect_coredumps != false }}
         PR_NUMBER: ${{ inputs.pull_number }}
         GITHUB_REF_NAME: ${{ github.ref_name }}
         GITHUB_BASE_REF: ${{ github.base_ref }}
@@ -175,11 +175,44 @@ runs:
       run: |
         set -ex
         
-        if [ "$COLLECT_COREDUMPS" = "true" ]; then
-          sudo mkdir -p /coredumps
-          sudo chmod 1777 /coredumps
-          echo "/coredumps/%p.%s" | sudo tee /proc/sys/kernel/core_pattern
-          ulimit -c unlimited
+        if [ "${COLLECT_COREDUMPS}" = "true" ]; then
+          # Bounded loop volume so a flaky suite cannot fill the runner root FS.
+          # File pattern (not a pipe): ya recovers via core_pattern and /coredumps/%e.%p.%s.
+          COREDUMP_SIZE_GB=100
+          COREDUMP_IMG=/var/lib/ydb-ci-coredumps.img
+          COREDUMP_MNT=/coredumps
+
+          if mountpoint -q "$COREDUMP_MNT"; then
+            sudo umount "$COREDUMP_MNT" || true
+          fi
+          sudo rm -f "$COREDUMP_IMG"
+          sudo mkdir -p "$COREDUMP_MNT"
+
+          avail_kb=$(df -Pk "$(dirname "$COREDUMP_IMG")" | awk 'NR==2 {print $4}')
+          need_kb=$((COREDUMP_SIZE_GB * 1024 * 1024))
+          if [ "$avail_kb" -lt "$need_kb" ]; then
+            echo "Not enough space for ${COREDUMP_SIZE_GB}G coredump volume (available ${avail_kb} KiB)"
+            exit 1
+          fi
+
+          if ! sudo fallocate -l "${COREDUMP_SIZE_GB}G" "$COREDUMP_IMG"; then
+            sudo dd if=/dev/zero of="$COREDUMP_IMG" bs=1M count=$((COREDUMP_SIZE_GB * 1024)) status=none
+          fi
+          sudo mkfs.ext4 -q -F "$COREDUMP_IMG"
+          sudo mount -o loop,rw,nosuid,nodev "$COREDUMP_IMG" "$COREDUMP_MNT"
+          sudo chmod 1777 "$COREDUMP_MNT"
+
+          echo "/coredumps/%e.%p.%s" | sudo tee /proc/sys/kernel/core_pattern
+
+          echo "COREDUMP_IMG=$COREDUMP_IMG" >> "$GITHUB_ENV"
+          echo "COREDUMP_MNT=$COREDUMP_MNT" >> "$GITHUB_ENV"
+
+          echo "::group::coredump diagnostics"
+          echo "core_pattern=$(cat /proc/sys/kernel/core_pattern)"
+          echo "coredump_img=$COREDUMP_IMG (${COREDUMP_SIZE_GB}G)"
+          ls -la "$COREDUMP_MNT"
+          df -h "$COREDUMP_MNT" /
+          echo "::endgroup::"
         else
           ulimit -c 0
         fi
@@ -433,18 +466,31 @@ runs:
             --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"
           )
 
+          # systemd-run --scope ignores shell ulimit; LimitCORE= is rejected for scopes;
+          # sudo -u resets RLIMIT_CORE. Raise both limits as root, then drop to runner.
+          if [ "${COLLECT_COREDUMPS}" = "true" ]; then
+            YA_MAKE_RUN_CMD=(
+              prlimit --core=unlimited:unlimited
+              setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups --
+              "${YA_MAKE_CMD[@]}"
+            )
+          else
+            YA_MAKE_RUN_CMD=(
+              sudo -n -E -u "$(id -un)" -- "${YA_MAKE_CMD[@]}"
+            )
+          fi
+
           # Timestamp for filtering dmesg to this try only.
           DMESG_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
 
           set +e
-          # sudo -u restores supplementary groups (e.g. docker); --uid/--gid on systemd-run does not.
+          # sudo -u / setpriv restore supplementary groups (e.g. docker); --uid/--gid on systemd-run does not.
           # Inner sudo -E keeps job env (needs SETENV in sudoers; standard on self-hosted runners).
           (sudo -n -E systemd-run --scope \
              --unit="${YA_MAKE_SCOPE_NAME}" \
              -p MemoryMax="${YA_MAKE_MEM_MAX}" \
              -p MemorySwapMax=0 \
-             -- sudo -n -E -u "$(id -un)" -- \
-             "${YA_MAKE_CMD[@]}"
+             -- "${YA_MAKE_RUN_CMD[@]}"
            echo $? > exit_code) </dev/null >> $YA_MAKE_OUTPUT 2>&1
           set -e
           RC=`cat exit_code`
@@ -589,11 +635,25 @@ runs:
           if [ $IS_LAST_RETRY = 1 ]; then
             break
           fi
+
+          # Free the bounded coredump volume for the next try (ya already postprocessed dumps).
+          if [ "${COLLECT_COREDUMPS}" = "true" ]; then
+            echo "Cleaning /coredumps before retry $((RETRY + 1))"
+            sudo find /coredumps -mindepth 1 -delete || true
+            df -h /coredumps || true
+          fi
+
           if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
               GRAPH_PATH=""
               CONTEXT_PATH=""
           fi
         done;
+
+        # Drop dump files after the last try; volume teardown is in a dedicated always() step.
+        if [ "${COLLECT_COREDUMPS}" = "true" ]; then
+          echo "Cleaning /coredumps after all test tries"
+          sudo find /coredumps -mindepth 1 -delete || true
+        fi
 
         if [ $BUILD_FAILED = 0 ]; then
           echo "status=true" >> $GITHUB_OUTPUT
@@ -673,6 +733,27 @@ runs:
       if: always()
       shell: bash
       run: df -h
+
+    - name: cleanup coredump volume
+      if: always()
+      shell: bash
+      env:
+        COLLECT_COREDUMPS: ${{ inputs.collect_coredumps != false }}
+      run: |
+        if [ "${COLLECT_COREDUMPS}" != "true" ]; then
+          exit 0
+        fi
+        set -x
+        COREDUMP_MNT="${COREDUMP_MNT:-/coredumps}"
+        COREDUMP_IMG="${COREDUMP_IMG:-/var/lib/ydb-ci-coredumps.img}"
+
+        # No-op if volume was never created (collect disabled or setup failed early).
+        if mountpoint -q "$COREDUMP_MNT"; then
+          sudo find "$COREDUMP_MNT" -mindepth 1 -delete || true
+          sudo umount "$COREDUMP_MNT" || true
+        fi
+        sudo rm -f "$COREDUMP_IMG" || true
+        df -h / || true
 
     - name: build_stats
       shell: bash

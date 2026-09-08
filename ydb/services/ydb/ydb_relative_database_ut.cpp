@@ -1,4 +1,4 @@
-#include "../ydb_common_ut.h"
+#include "ydb_common_ut.h"
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>

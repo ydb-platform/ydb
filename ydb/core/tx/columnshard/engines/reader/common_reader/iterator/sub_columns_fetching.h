@@ -102,13 +102,15 @@ public:
         AFL_VERIFY(!HeaderRange);
         if (!!PartialArray) {
             for (auto&& subColumnName : subColumns) {
-                const auto source = PartialArray->GetBestPathSource(NSubColumns::ToJsonPath(subColumnName));
-                if (source.ColumnIndex) {
-                    auto colBlobRange = PartialArray->GetColumnReadRange(*source.ColumnIndex);
+                const auto path = NSubColumns::ResolveBestPath(PartialArray->GetHeader().GetColumnStats(),
+                    PartialArray->GetHeader().GetOtherStats(), NSubColumns::ToJsonPath(subColumnName))
+                                      .DetachResult();
+                if (path && path->IsColumn) {
+                    auto colBlobRange = PartialArray->GetColumnReadRange(path->Path.ColumnIndex);
                     const TBlobRange subRange = FullChunkRange.BuildSubset(colBlobRange.GetOffset(), colBlobRange.GetSize());
                     reading->AddRange(subRange);
-                    AddFetchData(subColumnName, subRange, *source.ColumnIndex);
-                } else if (!PartialArray->HasOthers() && !OthersReadData && source.IsOther) {
+                    AddFetchData(subColumnName, subRange, path->Path.ColumnIndex);
+                } else if (!PartialArray->HasOthers() && !OthersReadData && path) {
                     auto readRange = PartialArray->GetHeader().GetOthersReadRange();
                     OthersReadData = FullChunkRange.BuildSubset(readRange.GetOffset(), readRange.GetSize());
                     reading->AddRange(*OthersReadData);

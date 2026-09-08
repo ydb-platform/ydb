@@ -27,6 +27,10 @@ public:
 
         bool operator==(const TResolvedPath&) const = default;
 
+        static bool IsBetterMatch(const TResolvedPath& first, const TResolvedPath& second) {
+            return first.RemainingPath.size() <= second.RemainingPath.size();
+        }
+
         friend IOutputStream& operator<<(IOutputStream& out, const TResolvedPath& pathInfo) {
             return out << "{ " << pathInfo.ColumnIndex << ", " << static_cast<ui32>(pathInfo.ValueType) << ", " << pathInfo.RemainingPath << " }";
         }
@@ -82,17 +86,13 @@ public:
     static TDictStats DeserializeFromBlob(const TString& blob);
 
     template <class TColumnPredicate>
-    TConclusion<std::optional<TResolvedPath>> ResolvePath(const TJsonPathBuf jsonPath, const TColumnPredicate& isColumnAvailable) const {
-        auto splitResult = SplitJsonPath(jsonPath, TJsonPathSplitSettings{.FillTypes = true, .FillStartPositions = true});
-        if (splitResult.IsFail()) {
-            return TConclusionStatus::Fail(splitResult.GetErrorMessage());
-        }
-        const auto [pathItems, pathTypes, startPositions] = splitResult.DetachResult();
+    TConclusion<std::optional<TResolvedPath>> ResolvePath(const TParsedJsonPath& jsonPath, const TColumnPredicate& isColumnAvailable) const {
+        const auto& [pathItems, pathTypes, startPositions] = jsonPath.Items;
         AFL_VERIFY(pathItems.size() == pathTypes.size());
         AFL_VERIFY(pathItems.size() == startPositions.size());
 
         TString columnName;
-        columnName.reserve(EstimateSubcolumnNameSize(jsonPath, pathItems.size()));
+        columnName.reserve(EstimateSubcolumnNameSize(jsonPath.Source, pathItems.size()));
         std::optional<ui32> columnIndex;
         ui32 matchedItemsCount = 0;
         for (ui32 i = 0; i < pathItems.size(); ++i) {
@@ -112,9 +112,24 @@ public:
         TString remainingPath;
         // strict is required, because there is a memory problem in NYql::NJsonPath::ExecuteJsonPath with lax and BinaryJson
         if (matchedItemsCount < startPositions.size()) {
-            remainingPath = "strict $" + TString(jsonPath.data() + startPositions[matchedItemsCount], jsonPath.size() - startPositions[matchedItemsCount]);
+            remainingPath = "strict $" + TString(jsonPath.Source.data() + startPositions[matchedItemsCount], jsonPath.Source.size() - startPositions[matchedItemsCount]);
         }
         return std::optional<TResolvedPath>(TResolvedPath{ *columnIndex, GetValueType(*columnIndex), std::move(remainingPath) });
+    }
+
+    template <class TColumnPredicate>
+    TConclusion<std::optional<TResolvedPath>> ResolvePath(const TJsonPathBuf jsonPath, const TColumnPredicate& isColumnAvailable) const {
+        auto parsed = ParseJsonPath(jsonPath);
+        if (parsed.IsFail()) {
+            return TConclusionStatus::Fail(parsed.GetErrorMessage());
+        }
+        return ResolvePath(parsed.GetResult(), isColumnAvailable);
+    }
+
+    TConclusion<std::optional<TResolvedPath>> ResolvePath(const TParsedJsonPath& jsonPath) const {
+        return ResolvePath(jsonPath, [](const ui32) {
+            return true;
+        });
     }
 
     TConclusion<std::optional<TResolvedPath>> ResolvePath(const TJsonPathBuf jsonPath) const {
@@ -290,4 +305,32 @@ public:
 
     TDictStats(const std::shared_ptr<arrow::RecordBatch>& original);
 };
+
+struct TResolvedPathMatch {
+    TDictStats::TResolvedPath Path;
+    bool IsColumn = false;
+};
+
+inline TConclusion<std::optional<TResolvedPathMatch>> ResolveBestPath(
+    const TDictStats& columnsStats, const TDictStats& othersStats, const TJsonPathBuf path) {
+    auto parsed = ParseJsonPath(path);
+    if (parsed.IsFail()) {
+        return TConclusionStatus::Fail(parsed.GetErrorMessage());
+    }
+    auto columnsResult = columnsStats.ResolvePath(parsed.GetResult());
+    if (columnsResult.IsFail()) {
+        return TConclusionStatus::Fail(columnsResult.GetErrorMessage());
+    }
+    auto othersResult = othersStats.ResolvePath(parsed.GetResult());
+    if (othersResult.IsFail()) {
+        return TConclusionStatus::Fail(othersResult.GetErrorMessage());
+    }
+    const auto columnsPath = columnsResult.DetachResult();
+    const auto othersPath = othersResult.DetachResult();
+    if (!othersPath || (columnsPath && TDictStats::TResolvedPath::IsBetterMatch(*columnsPath, *othersPath))) {
+        return columnsPath ? std::optional<TResolvedPathMatch>(TResolvedPathMatch{ *columnsPath, true }) : std::nullopt;
+    }
+    return TResolvedPathMatch{ *othersPath, false };
+}
+
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

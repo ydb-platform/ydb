@@ -97,11 +97,6 @@ protected:
     }
 
 public:
-    struct TPathSource {
-        std::optional<ui32> ColumnIndex;
-        bool IsOther = false;
-    };
-
     TSubColumnsPartialArray(TSubColumnsHeader&& header, const ui32 recordsCount, const std::shared_ptr<arrow::DataType>& dataType,
         const NSubColumns::TSettings& settings)
         : TBase(recordsCount, EType::SubColumnsPartialArray, dataType)
@@ -136,25 +131,13 @@ public:
 
     TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const;
 
-    TPathSource GetBestPathSource(const NSubColumns::TJsonPathBuf path) const {
-        auto columnsResult = Header.GetColumnStats().ResolvePath(path);
-        AFL_VERIFY(columnsResult.IsSuccess())("path", path)("error", columnsResult.GetErrorMessage());
-        auto othersResult = Header.GetOtherStats().ResolvePath(path);
-        AFL_VERIFY(othersResult.IsSuccess())("path", path)("error", othersResult.GetErrorMessage());
-        const auto columnsPath = columnsResult.DetachResult();
-        const auto othersPath = othersResult.DetachResult();
-        if (!othersPath || (columnsPath && NSubColumns::TJsonPathAccessor::IsBetterMatch(columnsPath->RemainingPath, othersPath->RemainingPath))) {
-            return { columnsPath ? std::optional<ui32>(columnsPath->ColumnIndex) : std::nullopt, false };
-        }
-        return { std::nullopt, true };
-    }
-
     bool NeedFetch(const std::string_view colName) const {
-        const auto source = GetBestPathSource(NSubColumns::ToJsonPath(colName));
-        if (source.ColumnIndex) {
-            return !PartialColumnsData.HasColumn(*source.ColumnIndex);
+        const auto path = NSubColumns::ResolveBestPath(
+            Header.GetColumnStats(), Header.GetOtherStats(), NSubColumns::ToJsonPath(colName)).DetachResult();
+        if (path && path->IsColumn) {
+            return !PartialColumnsData.HasColumn(path->Path.ColumnIndex);
         }
-        return source.IsOther && !OthersData;
+        return path && !OthersData;
     }
 
     void AddColumn(const TString& columnName, const std::shared_ptr<IChunkedArray>& arr) {

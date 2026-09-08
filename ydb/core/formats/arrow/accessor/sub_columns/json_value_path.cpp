@@ -113,6 +113,14 @@ TConclusion<TSplittedJsonPath> SplitJsonPath(TJsonPathBuf jsonPath, const TJsonP
     return result;
 }
 
+TConclusion<TParsedJsonPath> ParseJsonPath(const TJsonPathBuf jsonPath) {
+    auto result = SplitJsonPath(jsonPath, TJsonPathSplitSettings{.FillTypes = true, .FillStartPositions = true});
+    if (result.IsFail()) {
+        return TConclusionStatus::Fail(result.GetErrorMessage());
+    }
+    return TParsedJsonPath{jsonPath, result.DetachResult()};
+}
+
 TConclusionStatus ValidateJsonPath(TJsonPathBuf jsonPath) {
     const auto result = SplitJsonPath(jsonPath, TJsonPathSplitSettings{.FillTypes = false, .FillStartPositions = false});
     if (result.IsSuccess()) {

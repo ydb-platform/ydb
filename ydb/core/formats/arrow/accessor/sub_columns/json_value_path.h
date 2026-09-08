@@ -31,6 +31,11 @@ struct TSplittedJsonPath {
     TVector<TJsonPathBuf::size_type> StartPositions;
 };
 
+struct TParsedJsonPath {
+    TJsonPathBuf Source;
+    TSplittedJsonPath Items;
+};
+
 struct TJsonPathSplitSettings {
     bool FillTypes = false;
     bool FillStartPositions = false;
@@ -38,6 +43,7 @@ struct TJsonPathSplitSettings {
 
 
 TConclusion<TSplittedJsonPath> SplitJsonPath(TJsonPathBuf jsonPath, const TJsonPathSplitSettings& settings = {});
+TConclusion<TParsedJsonPath> ParseJsonPath(TJsonPathBuf jsonPath);
 
 TConclusionStatus ValidateJsonPath(TJsonPathBuf jsonPath);
 
@@ -66,18 +72,6 @@ public:
 
     bool IsValid() const {
         return ChunkedArrayAccessor != nullptr || Cookie.has_value();
-    }
-
-    static bool IsBetterMatch(const TStringBuf firstRemainingPath, const TStringBuf secondRemainingPath) {
-        return firstRemainingPath.size() <= secondRemainingPath.size();
-    }
-
-    static std::shared_ptr<TJsonPathAccessor> SelectBestMatch(
-        const std::shared_ptr<TJsonPathAccessor>& first, const std::shared_ptr<TJsonPathAccessor>& second) {
-        if (!second || !second->IsValid() || (first && first->IsValid() && IsBetterMatch(first->RemainingPath, second->RemainingPath))) {
-            return first;
-        }
-        return second;
     }
 
     ui64 GetRecordsCount() const {

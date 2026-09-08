@@ -571,9 +571,8 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         NSubColumns::TColumnsData columns(stats, records);
 
         const auto check = [&](const TStringBuf path, const std::optional<TStringBuf> expected) {
-            auto accessorResult = columns.GetPathAccessor(path);
-            UNIT_ASSERT_C(accessorResult.IsSuccess(), accessorResult.GetErrorMessage());
-            const auto accessor = accessorResult.DetachResult();
+            const auto pathInfo = ResolvePathVerified(stats, path);
+            const auto accessor = columns.GetPathAccessor(pathInfo);
             accessor->VisitValues([&](const std::optional<TStringBuf>& value) {
                 UNIT_ASSERT_VALUES_EQUAL_C(value, expected, path);
             });

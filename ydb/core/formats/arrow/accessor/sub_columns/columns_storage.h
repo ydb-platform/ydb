@@ -19,17 +19,9 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TGeneralContainer>, Records);
 
 public:
-    TConclusion<std::shared_ptr<TJsonPathAccessor>> GetPathAccessor(const std::string_view path) const {
-        auto pathInfoResult = Stats.ResolvePath(path);
-        if (pathInfoResult.IsFail()) {
-            return TConclusionStatus::Fail(pathInfoResult.GetErrorMessage());
-        }
-        auto pathInfo = pathInfoResult.DetachResult();
-        if (!pathInfo) {
-            return std::make_shared<TJsonPathAccessor>(nullptr, TString{}, EValueType::BinaryJson);
-        }
+    std::shared_ptr<TJsonPathAccessor> GetPathAccessor(TDictStats::TResolvedPath path) const {
         return std::make_shared<TJsonPathAccessor>(
-            Records->GetColumnVerified(pathInfo->ColumnIndex), std::move(pathInfo->RemainingPath), pathInfo->ValueType);
+            Records->GetColumnVerified(path.ColumnIndex), std::move(path.RemainingPath), path.ValueType);
     }
 
     NJson::TJsonValue DebugJson() const {

@@ -1544,7 +1544,7 @@ namespace NActors {
             if (const NInterconnect::TAddress* addr = std::get_if<NInterconnect::TAddress>(&sockname)) {
                 rdmaCtx = NLinkMgr::GetCtx(*addr);
                 if (rdmaCtx) {
-                    YDB_LOG_TRACE_COMP(::NActorsServices::INTERCONNECT, "Found verbs fontext for address",
+                    YDB_LOG_TRACE_COMP(::NActorsServices::INTERCONNECT, "Found verbs context for address",
                         {"marker", "ICRDMA"},
                         {"address", std::get<0>(sockname)});
                 } else {

@@ -388,7 +388,7 @@ namespace NActors {
             return;
         }
 
-        YDB_LOG_INFO_COMP(::NActorsServices::INTERCONNECT_SESSION, "Handshake done socket: %li",
+        YDB_LOG_INFO_COMP(::NActorsServices::INTERCONNECT_SESSION, "Handshake done socket",
             {"marker", "ICS09"},
             {"sender", ev->Sender},
             {"self", ev->Get()->Self},

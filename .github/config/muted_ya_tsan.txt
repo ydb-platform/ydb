@@ -120,7 +120,6 @@ ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingCDCMessage
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingJsonMessage
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingTargetTable
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingTargetTableOtherType
-ydb/core/transfer/ut/column_table Transfer_ColumnTable.Upsert_DifferentBatch
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.Upsert_OneBatch
 ydb/core/transfer/ut/column_table unittest.sole chunk
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Remote
@@ -136,7 +135,6 @@ ydb/core/transfer/ut/row_table Transfer_RowTable.KeyColumnLast
 ydb/core/transfer/ut/row_table Transfer_RowTable.MessageField_SeqNo
 ydb/core/transfer/ut/row_table Transfer_RowTable.WriteNullToKeyColumn
 ydb/core/transfer/ut/row_table unittest.sole chunk
-ydb/core/transfer/ut/transfer_metrics TransferMetrics.TestDescribeTransfer
 ydb/core/transfer/ut/transfer_metrics unittest.sole chunk
 ydb/core/tx/tx_proxy/ut_base_tenant TSubDomainTest.CoordinatorRunAtSubdomainNodeWhenAvailable
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-LocalUser-CreateUser-24
@@ -168,7 +166,6 @@ ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_set_statu
 ydb/tests/functional/encryption py3test.sole chunk
 ydb/tests/functional/encryption test_encryption.py.TestEncryption.test_simple_encryption
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
-ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/kqp/kqp_query_svc NodeIdDescribe.HasDistribution
 ydb/tests/functional/kqp/kqp_query_svc unittest.sole chunk
 ydb/tests/functional/nbs py3test.sole chunk
@@ -179,7 +176,6 @@ ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_a
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write_then_read
 ydb/tests/functional/replication Replication.TopicAutopartitioning
 ydb/tests/functional/replication unittest.sole chunk
-ydb/tests/functional/statistics test_restarts.py.test_basic
 ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[10]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[11]
@@ -627,7 +623,6 @@ ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW5T4LegacyCompaction.test
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[10]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[11]
-ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[7]
 ydb/tests/functional/tpc/medium test_upload.py.TestUploadTpchS0_1.test_tpch[8]
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestClickbenchWM.test
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestClickbenchWMComputeSchedulerP1T1.test
@@ -836,7 +831,6 @@ ydb/tests/stress/result_set_format/tests py3test.sole chunk
 ydb/tests/stress/result_set_format/tests test_arrow_workload.py.TestResultSetArrowWorkload.test
 ydb/tests/stress/result_set_format/tests test_value_workload.py.TestResultSetValueWorkload.test
 ydb/tests/stress/scheme_board/pile_promotion/tests test_scheme_board_workload.py.TestSchemeBoard.test_scheme_board
-ydb/tests/stress/show_create/table/tests test_workload.py.TestYdbWorkload.test_show_create_table_workload[30-test_sct]
 ydb/tests/stress/simple_queue/tests py3test.sole chunk
 ydb/tests/stress/simple_queue/tests test_workload.py.TestYdbWorkload.test[heavy-column]
 ydb/tests/stress/simple_queue/tests test_workload.py.TestYdbWorkload.test[heavy-row]

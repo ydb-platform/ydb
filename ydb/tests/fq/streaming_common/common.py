@@ -57,8 +57,8 @@ def get_ydb_config(request, enable_fq_connector=None):
     enable_dq_source_stream_lookup_join = param.get("enable_dq_source_stream_lookup_join", True)
     enable_kqp_constraints_transformer = param.get("kqp_constraints_transformer", True)
     enable_dq_source_stream_lookup_join_local_lookups = param.get(
-        "enable_dq_source_stream_lookup_join_local_lookups", False
-    )  # TODO YQ-5431
+        "enable_dq_source_stream_lookup_join_local_lookups", True
+    )
     enable_dq_source_stream_lookup_join_fullscan = param.get("enable_dq_source_stream_lookup_join_fullscan", True)
     enable_dq_source_stream_lookup_join_shuffle_mode = param.get(
         "enable_dq_source_stream_lookup_join_shuffle_mode", True
@@ -530,6 +530,27 @@ class StreamingTestBase(TestYdsBase):
             {"activity": activity, "sensor": "ActorsAliveByActivity", "execpool": "User"}
         )
         return result if result is not None else 0
+
+    def restart_node(self, kikimr: Kikimr, node_id: int) -> None:
+        """Restart a specific node in the cluster."""
+        node = kikimr.cluster.slots[node_id]
+        logger.info(f"Restarting node {node_id}")
+        node.stop()
+        node.set_log_file_prefix("logfile_restarted_")
+        node.start()
+
+    def restart_streaming_node(self, kikimr: Kikimr) -> int:
+        """Find and restart the node hosting the streaming query (DQ_PQ_READ_ACTOR).
+        Returns the restarted node ID."""
+        restart_node_id = None
+        for node_id in kikimr.cluster.slots:
+            count = self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
+            if count:
+                restart_node_id = node_id
+                break
+        assert restart_node_id is not None, "No node found with DQ_PQ_READ_ACTOR"
+        self.restart_node(kikimr, restart_node_id)
+        return restart_node_id
 
     def get_streaming_query_metric(
         self, kikimr: Kikimr, query_name: str, metric_name: str, expect_counters_exist: bool = False

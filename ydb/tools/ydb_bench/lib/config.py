@@ -120,6 +120,14 @@ def _profile_schema(benchmark):
             "required": ["workload", "load"],
             "properties": {
                 "workload": workload_config_schema(),
+                "actor-system": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "use-shared-threads": {"type": "boolean", "default": False},
+                        "use-united-pool": {"type": "boolean", "default": False},
+                    },
+                },
                 "geometry": {
                     "type": "object",
                     "additionalProperties": False,
@@ -534,12 +542,24 @@ def _local_role_affinity(value, location, default_mode, default_cpus=None):
 
 def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_frequency):
     location = "{}.{}".format(benchmark.name, profile_name)
-    value = _mapping(value, location, ("workload", "geometry", "client", "load", "measurement", "affinity", "timeout"))
+    value = _mapping(
+        value,
+        location,
+        ("workload", "geometry", "actor-system", "client", "load", "measurement", "affinity", "timeout"),
+    )
     if perf_enabled:
         _config_error(location, "does not support --perf; CPU utilization is collected per process role")
 
     workload = normalize_workload(value.get("workload"), location + ".workload")
     workload_metadata = workload_definition(workload["type"])
+
+    actor_system = _mapping(
+        value.get("actor-system"), location + ".actor-system", ("use-shared-threads", "use-united-pool")
+    )
+    actor_system_config = {
+        name.replace("-", "_"): _boolean(actor_system.get(name, False), location + ".actor-system." + name)
+        for name in ("use-shared-threads", "use-united-pool")
+    }
 
     geometry = _mapping(
         value.get("geometry"),
@@ -842,6 +862,7 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
             "local_ydb": {
                 "workload": workload,
                 "geometry": geometry_config,
+                "actor_system": actor_system_config,
                 "client": {"threads": client_threads},
                 "load": load_config,
                 "measurement": measurement_config,

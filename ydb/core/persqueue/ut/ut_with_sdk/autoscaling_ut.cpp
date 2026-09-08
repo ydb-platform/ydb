@@ -622,14 +622,15 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         ui64 txId = 1023;
         SplitPartition(setup, ++txId, 0, "a");
 
-        readSession1->WaitAndAssertPartitions({0, 1, 2}, "Must read all exists partitions because used new SDK");
+        readSession2->WaitAndAssertPartitions({0}, "Special session keeps the parent as a single-partition family");
+        readSession1->WaitAndAssertPartitions({1, 2}, "Common session reads the split children");
         readSession1->Commit();
         readSession2->Run();
 
         readSession2->WaitAndAssertPartitions({0}, "Must read partition 0 because it defined in the readSession");
         readSession2->Run();
 
-        readSession1->WaitAndAssertPartitions({1, 2}, "Partition 0 must rebalance to other sessions (Session-0)");
+        readSession1->WaitAndAssertPartitions({1, 2}, "Partition 0 stays on the special session");
 
         readSession1->Close();
         readSession2->Close();

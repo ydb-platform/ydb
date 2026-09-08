@@ -49,7 +49,7 @@ constexpr TDuration kErrorBackoffDuration = TDuration::MilliSeconds(10);
 constexpr ui32 kPipeRetryLimit = 3;
 constexpr ui32 kMaxInflightPerActor = 512;
 
-// Latency histogram bounds (spec §15.1). Up to ~134s, microsecond precision.
+// Latency histogram bounds: up to ~134s, microsecond precision.
 constexpr i64 kLatencyHistMaxUs = 134'000'000;
 constexpr i32 kLatencyHistPrecision = 4;
 

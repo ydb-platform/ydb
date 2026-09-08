@@ -86,6 +86,9 @@ local-ydb:
       max-dynamic-nodes: 8
       disk-size-gb: 64
       storage-groups: 1
+    actor-system:
+      use-shared-threads: false
+      use-united-pool: false
     client:
       threads: 64
     load:
@@ -124,6 +127,14 @@ ties prefer fewer dynamic nodes.
 Each static node gets its own `NONE`-profile SectorMap with the virtual size
 specified by `disk-size-gb`, so benchmark results are not limited by a host
 block device.
+
+`actor-system.use-shared-threads` and `actor-system.use-united-pool` are
+independent boolean switches (both default to `false`). They set YDBD's
+`use_shared_threads` and `use_united_pool` in `actor_system_config` for all
+static and dynamic nodes, including scaled and verification clusters, while
+keeping automatic pool sizing enabled. They do not affect the YDB CLI.
+The Builder exposes both switches; saved profile parameters and comparisons
+retain their values.
 
 An explicitly configured profile `timeout` caps every YDB CLI setup, warmup,
 measurement, and cleanup command. Workload-specific safety limits still apply

@@ -127,7 +127,7 @@ def get_ydb_config(request, enable_fq_connector=None):
         extra_feature_flags=extra_feature_flags,
         disabled_feature_flags=disabled_feature_flags,
         query_service_config={
-            "available_external_data_sources": ["ObjectStorage", "Ydb", "YdbTopics"],
+            "available_external_data_sources": ["ObjectStorage", "Ydb"],
             "enable_match_recognize": True,
         },
         table_service_config={

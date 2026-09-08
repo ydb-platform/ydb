@@ -373,7 +373,7 @@ public:
         if (it == Types.DataSourceMap.end()) {
             ctx.AddError(NYql::TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
                 << "Unsupported. Failed to load metadata for table: " << NCommon::FullTableName(table.first, table.second)
-                << " data source " << source->GetName() << " doesn't exist, please contact internal support"));
+                << " data source " << providerName << " doesn't exist, please contact internal support"));
             return false;
         }
 

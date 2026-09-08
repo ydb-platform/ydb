@@ -56,10 +56,17 @@ public:
      *
      * @param[in] sourceGroupId The ID of the source group to add
      * @param[in] sourceCounterGroup The counter group where the source counters are looked up
+     * @param[in] isFollowerSource Whether this source group is a follower leaf (step 09.5:
+     *            the PARTITION-level table-to-leaves rollup). A LeaderOnly counter
+     *            (TCounterOptions::LeaderOnly) is left unlooked-up for a follower
+     *            source — its slot stays empty rather than being resolved and summed,
+     *            which is what keeps a leader-only metric from being inflated by the
+     *            replication factor when every follower leaf is also a source group.
      */
     virtual void AddSourceCountersGroup(
         const TString& sourceGroupId,
-        NMonitoring::TDynamicCounterPtr sourceCounterGroup
+        NMonitoring::TDynamicCounterPtr sourceCounterGroup,
+        bool isFollowerSource = false
     ) = 0;
 
     /**

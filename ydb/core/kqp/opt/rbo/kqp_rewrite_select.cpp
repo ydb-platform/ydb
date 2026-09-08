@@ -362,7 +362,6 @@ TVector<TInfoUnit> GetSortDependencies(TExprNode::TPtr sort,
                                        const TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& groupByKeysExpressionsMap) {
     TVector<TInfoUnit> result;
     for (const auto& sortItem : sort->Child(1)->Children()) {
-        Y_ENSURE(sortItem->ChildPtr(1)->IsLambda(), "Not a lambda!");
         auto sortLambda = TCoLambda(sortItem->ChildPtr(1));
         TVector<TInfoUnit> lambdaMembers;
         auto groupRef = GetCallable(sortLambda.Body().Ptr(), "YqlGroupRef");
@@ -463,7 +462,6 @@ void FlattenNestedConjunctionsRec(TExprNode::TPtr node, TVector<TExprNode::TPtr>
 }
 
 TExprNode::TPtr FlattenNestedConjunctions(TExprNode::TPtr node, TExprContext &ctx) {
-    Y_ENSURE(node->IsLambda(), "Not a lambda!");
     auto lambda = TCoLambda(node);
     auto body = lambda.Body().Ptr();
 
@@ -543,7 +541,6 @@ bool IsJoinKeys(TExprNode::TPtr node, TExprNode::TPtr lambdaArg) {
 }
 
 void ExtractJoinKeysAndPredicates(TExprNode::TPtr node, TVector<TInfoUnit>& joinKeys, TVector<TExprNode::TPtr>& joinPredicates) {
-    Y_ENSURE(node->IsLambda(), "Not a lambda");
     auto lambda = TCoLambda(node);
 
     // YQL select contains a bunch of these for some reason
@@ -632,8 +629,6 @@ void EliminateDuplicateAggregations(TVector<std::tuple<TInfoUnit, TExprNode::TPt
         return;
     }
 
-    Y_ENSURE(havingFilterLambda, "Not a lambda!");
-
     auto membersToReplaces = FindNodes(TCoLambda(havingFilterLambda).Body().Ptr(), [](const TExprNode::TPtr& node) { return node->IsCallable("Member"); });
     if (membersToReplaces.size() == 0 || membersToReplaces.size() > 1) {
         return;
@@ -642,7 +637,6 @@ void EliminateDuplicateAggregations(TVector<std::tuple<TInfoUnit, TExprNode::TPt
     // Collect all columns which are needed after aggregations.
     THashSet<TString> aggregationResults;
     for (const auto& expression : expressionsMapPostAgg) {
-        Y_ENSURE(get<1>(expression), "Not a lambda!");
 
         auto lambda = TCoLambda(get<1>(expression));
         const auto members = FindNodes(lambda.Body().Ptr(), [](const TExprNode::TPtr& node) { return node->IsCallable("Member"); });
@@ -666,7 +660,6 @@ void EliminateDuplicateAggregations(TVector<std::tuple<TInfoUnit, TExprNode::TPt
     THashMap<TString, std::pair<TString, TString>> candidatesForHolders;
     for (const auto& expression : expressionsMapPreAgg) {
         const TString originalColName = get<0>(expression).GetFullName();
-        Y_ENSURE(get<1>(expression)->IsLambda(), "Not a lambda");
         auto lambda = TCoLambda(get<1>(expression));
         if (auto maybeMember = lambda.Body().Maybe<TCoMember>()) {
             const auto it = inputToOutputAggregation.find(originalColName);
@@ -688,7 +681,6 @@ void EliminateDuplicateAggregations(TVector<std::tuple<TInfoUnit, TExprNode::TPt
     TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>> newExpressionsMapPreAgg;
     THashSet<TString> taken;
     for (const auto& expression : expressionsMapPreAgg) {
-        Y_ENSURE(get<1>(expression)->IsLambda(), "Not a lambda!");
         auto lambda = TCoLambda(get<1>(expression));
         const TString colName = get<0>(expression).GetFullName();
         if (auto maybeMember = lambda.Body().Maybe<TCoMember>()) {
@@ -738,8 +730,6 @@ void EliminateDuplicateAggregations(TVector<std::tuple<TInfoUnit, TExprNode::TPt
 
     TNodeOnNodeOwnedMap nodeReplacementMap;
     nodeReplacementMap[membersToReplaces.front().Get()] = newMember;
-
-    Y_ENSURE(havingFilterLambda->IsLambda(), "Not a lambda!");
 
     // clang-format off
     havingFilterLambda = Build<TCoLambda>(ctx, pos)
@@ -1430,7 +1420,6 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
             const auto groupByList = groupExprsExpr->TailPtr();
             for (ui32 i = 0; i < groupByList->ChildrenSize(); ++i) {
                 auto pgGroup = groupByList->ChildPtr(i);
-                Y_ENSURE(pgGroup->Child(1)->IsLambda(), "Not a lambda!");
                 auto lambda = TCoLambda(ctx.DeepCopyLambda(*(pgGroup->Child(1))));
                 auto body = lambda.Body().Ptr();
                 TInfoUnit groupByKeyName;
@@ -1511,7 +1500,6 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
         TVector<TString> finalProjection;
         auto processResultColumn = [&](TExprNode::TPtr column, TExprNode::TPtr itemLambda) {
             TString columnName = TString(column->Content());
-            Y_ENSURE(itemLambda->IsLambda(), "Not a lambda!");
             auto lambda = TCoLambda(ctx.DeepCopyLambda(*(itemLambda)));
 
             auto aggregation = GetCallable(lambda.Body().Ptr(), "YqlAgg");

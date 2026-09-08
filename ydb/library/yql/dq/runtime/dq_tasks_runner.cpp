@@ -929,6 +929,9 @@ public:
 
     ERunStatus Run() final {
         LOG(TStringBuilder() << "Run task: " << TaskId);
+        if (CollectBasic() && !Stats->StartTs && !AllocatedHolder->ProgramParsed.PatternCacheEntry->ProgramInputsCount) {
+            Stats->StartTs = TInstant::Now();
+        }
         if (!AllocatedHolder->ResultStream && !AllocatedHolder->ResultStreamFinished) {
             auto guard = BindAllocator();
             TBindTerminator term(AllocatedHolder->ProgramParsed.CompGraph->GetTerminator());

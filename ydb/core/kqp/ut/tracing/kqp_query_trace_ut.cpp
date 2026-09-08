@@ -357,15 +357,37 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
     Y_UNIT_TEST(ForwardingAndEarlyRejection) {
         auto [runtime, server, sender] = CreateServer(2);
         auto* uploader = RegisterUploader(runtime);
-        runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId(0)), sender,
-            new NKqp::TEvKqp::TEvCreateSessionRequest()));
-        const auto created = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvCreateSessionResponse>(sender);
-        ExecSQL(runtime, sender, "SELECT 1;", 15, Ydb::StatusIds::SUCCESS,
-            created->Get()->Record.GetResponse().GetSessionId(), 1);
-        UNIT_ASSERT(uploader->BuildTraceTrees());
-        UNIT_ASSERT_VALUES_EQUAL(uploader->Traces.size(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(std::ranges::count_if(uploader->Spans,
-            [](const auto& span) { return span.name() == "KQP request"; }), 2);
+        for (const auto type : {NKikimrKqp::QUERY_TYPE_SQL_DML, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY}) {
+            const auto session = CreateSession(runtime, sender, type);
+            for (const ui8 level : {1, 15}) {
+                ClearUploader(*uploader);
+                ExecSQL(runtime, sender, "SELECT 1;", level, Ydb::StatusIds::SUCCESS, session, 1, type);
+                UNIT_ASSERT(uploader->BuildTraceTrees());
+                UNIT_ASSERT_VALUES_EQUAL(uploader->Traces.size(), 1u);
+                const TFakeWilsonUploader::TOtelSpan* forwarded = nullptr;
+                const TFakeWilsonUploader::TOtelSpan* local = nullptr;
+                size_t hops = 0;
+                for (const auto& span : uploader->Spans) {
+                    if (span.name() != "KQP request") {
+                        continue;
+                    }
+                    ++hops;
+                    UNIT_ASSERT_VALUES_EQUAL(FindAttribute(span, "ydb.target_node_id")->value().int_value(),
+                        runtime.GetNodeId(0));
+                    if (FindAttribute(span, "ydb.forwarded")->value().bool_value()) {
+                        forwarded = &span;
+                    } else {
+                        local = &span;
+                    }
+                }
+                UNIT_ASSERT_VALUES_EQUAL(hops, 2u);
+                UNIT_ASSERT(forwarded && local);
+                UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*forwarded, "node_id")->value().int_value(), runtime.GetNodeId(1));
+                UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*local, "node_id")->value().int_value(), runtime.GetNodeId(0));
+                UNIT_ASSERT_VALUES_EQUAL(local->parent_span_id(), forwarded->span_id());
+                UNIT_ASSERT_VALUES_EQUAL(FindSpan(*uploader, "Execute query")->parent_span_id(), local->span_id());
+            }
+        }
         ClearUploader(*uploader);
         ExecSQL(runtime, sender, "SELECT 1;", 15, Ydb::StatusIds::BAD_SESSION,
             "ydb://session/3?node_id=1&id=missing");
@@ -542,6 +564,52 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                     UNIT_ASSERT_VALUES_EQUAL(stageCpu, cpu);
                     UNIT_ASSERT_VALUES_EQUAL(stageInput, input);
                     UNIT_ASSERT_VALUES_EQUAL(stageOutput, output);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(SortedAndConstantTasksHaveTiming) {
+        auto [runtime, server, sender] = CreateServer(2);
+        CreateShardedTable(server, sender, "/Root", "table-1", 2, false);
+        ExecSQL(runtime, sender,
+            "UPSERT INTO `/Root/table-1` (key, value) VALUES (1u, 10u), (4000000000u, 20u);", 0);
+        auto* uploader = RegisterUploader(runtime);
+        const std::vector<TString> queries = {
+            "SELECT key, value FROM `/Root/table-1` ORDER BY value;",
+            "SELECT key, value FROM `/Root/table-1` WHERE value = 123u ORDER BY value;",
+            "UPSERT INTO `/Root/table-1` (key, value) VALUES (2u, 30u), (4000000001u, 40u);",
+        };
+        for (const auto type : {NKikimrKqp::QUERY_TYPE_SQL_DML, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY}) {
+            for (const ui8 level : {6, 10}) {
+                for (const auto& sql : queries) {
+                    ClearUploader(*uploader);
+                    size_t finishedTasks = 0;
+                    const auto observer = runtime.AddObserver<NYql::NDq::TEvDqCompute::TEvState>(
+                        [&](NYql::NDq::TEvDqCompute::TEvState::TPtr& ev) {
+                            const auto& state = ev->Get()->Record;
+                            if (state.GetState() != NYql::NDqProto::COMPUTE_STATE_FINISHED) {
+                                return;
+                            }
+                            UNIT_ASSERT_VALUES_EQUAL_C(state.GetStats().TasksSize(), 1, sql);
+                            const auto& task = state.GetStats().GetTasks(0);
+                            UNIT_ASSERT_C(task.GetStartTimeMs(), sql << ": " << task.DebugString());
+                            UNIT_ASSERT_C(task.GetFinishTimeMs() >= task.GetStartTimeMs(), sql << ": " << task.DebugString());
+                            ++finishedTasks;
+                        });
+                    ExecSQL(runtime, sender, sql, level, Ydb::StatusIds::SUCCESS, {}, 0, type);
+                    UNIT_ASSERT_C(finishedTasks, sql);
+                    const auto* query = FindSpan(*uploader, "Execute query");
+                    UNIT_ASSERT(query);
+                    UNIT_ASSERT_C(!FindAttribute(*query, "ydb.task_stats_incomplete")->value().bool_value(), sql);
+                    for (const auto& span : uploader->Spans) {
+                        for (const auto& event : span.events()) {
+                            if (event.name() == "Stage statistics") {
+                                UNIT_ASSERT_VALUES_EQUAL_C(FindAttribute(event, "ydb.timed_tasks")->value().int_value(),
+                                    FindAttribute(event, "ydb.reported_tasks")->value().int_value(), sql);
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -3977,7 +3977,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
-                "JSON index prefix column 'Key' must not be a primary key column");
+                "JSON index prefix must not contain all primary key columns");
         }
 
         {

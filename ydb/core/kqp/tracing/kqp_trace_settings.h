@@ -10,5 +10,8 @@ inline constexpr size_t MaxTasksPerStage = 5;
 inline constexpr size_t MaxTaskNameOperations = 2;
 inline constexpr size_t MaxNodesPerStage = 32;
 inline constexpr size_t MaxShardEvents = 32;
+inline constexpr size_t MaxActiveShardReads = 32;
+inline constexpr size_t MaxRetainedReadShards = 32;
+inline constexpr size_t MaxInterestingReadShards = 5;
 
 }

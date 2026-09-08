@@ -2,6 +2,7 @@
 #include <ydb/core/kqp/tracing/kqp_query_tracing.h>
 #include <ydb/core/kqp/tracing/kqp_execution_tracing.h>
 #include <ydb/core/kqp/tracing/kqp_scan_tracing.h>
+#include <ydb/core/kqp/tracing/kqp_shard_tracing.h>
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 #include <ydb/core/kqp/tracing/kqp_trace_settings.h>
 #include <ydb/core/kqp/common/simple/query_stats.h>
@@ -221,7 +222,8 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         AssertDescendant(*uploader, "Load metadata", "Compile query");
         AssertDescendant(*uploader, "Task: ", "Execute plan");
         AssertDescendant(*uploader, "Run tasks", "Execute plan");
-        AssertDescendant(*uploader, "Datashard.Read", "Read table");
+        AssertDescendant(*uploader, "Datashard.Read", "Read shard");
+        AssertDescendant(*uploader, "Read shard", "Read table");
         AssertDescendant(*uploader, "Datashard.CheckRead", "Datashard.Read");
         AssertDescendant(*uploader, "Datashard.ExecuteRead", "Datashard.Read");
         AssertDescendant(*uploader, "Read table", "Task: ");
@@ -764,8 +766,10 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         }
     }
 
-    Y_UNIT_TEST(RetriedReadAppearsInTaskDiagnostics) {
-        auto [runtime, server, sender] = CreateServer();
+    Y_UNIT_TEST_TWIN(RetriedReadAppearsInTaskDiagnostics, Lookup) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
+        auto [runtime, server, sender] = CreateServer(1, config);
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
         ExecSQL(runtime, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1u, 10u);", 0);
         auto* uploader = RegisterUploader(runtime);
@@ -785,14 +789,25 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 }
                 return previous ? previous(rt, ev) : false;
             });
-            ExecSQL(runtime, sender, "SELECT SUM(value) FROM `/Root/table-1`;",
+            ExecSQL(runtime, sender, Lookup ? R"(
+                $keys = AsList(AsStruct(1u AS key), AsStruct(4000000000u AS key));
+                SELECT b.value FROM AS_TABLE($keys) AS a JOIN `/Root/table-1` AS b ON a.key = b.key;
+            )" : "SELECT SUM(value) FROM `/Root/table-1`;",
                 15, Ydb::StatusIds::SUCCESS, {}, 0, type);
             runtime.SetEventFilter(std::move(previous));
             UNIT_ASSERT(interrupted);
             UNIT_ASSERT(uploader->BuildTraceTrees());
-            const auto* read = FindSpan(*uploader, "Read table");
+            const auto* read = FindSpan(*uploader, Lookup ? "Lookup rows" : "Read table");
             UNIT_ASSERT(read);
             UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*read, "ydb.read_retries")->value().int_value(), 1);
+            AssertDescendant(*uploader, "Datashard.Read", "Read shard");
+            bool shardRetried = false;
+            for (const auto& event : read->events()) {
+                shardRetried |= event.name() == "Shard read statistics"
+                    && FindAttribute(event, "ydb.read_retries")->value().int_value() == 1
+                    && FindAttribute(event, "ydb.reads")->value().int_value() == 2;
+            }
+            UNIT_ASSERT(shardRetried);
             bool taskRetried = false;
             for (const auto& span : uploader->Spans) {
                 for (const auto& event : span.events()) {
@@ -1030,6 +1045,119 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         }
     }
 
+    Y_UNIT_TEST(ShardReadsKeepLateFailuresRetriesAndSlowShards) {
+        auto [runtime, server, sender] = CreateServer();
+        auto* uploader = RegisterUploader(runtime);
+        NKqp::TShardReadTrace reads;
+        NWilson::TSpan parent(TComponentTracingLevels::TQueryProcessor::Detailed,
+            NWilson::TTraceId::NewTraceId(15, 4095), "Read table", NWilson::EFlags::NONE, runtime.GetActorSystem(0));
+        for (ui64 id = 1; id <= 40; ++id) {
+            reads.Start(parent, id, id);
+            runtime.AdvanceCurrentTime(TDuration::MilliSeconds(1));
+            reads.ReadResult(parent, id, 1, id, 1, Ydb::StatusIds::SUCCESS, true);
+        }
+        reads.Start(parent, 100, 100);
+        runtime.AdvanceCurrentTime(TDuration::MilliSeconds(1));
+        reads.ReadResult(parent, 100, 1, 100, 0, Ydb::StatusIds::OVERLOADED, false);
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        reads.Retry(parent, 100, 100);
+        reads.Start(parent, 100, 101);
+        runtime.AdvanceCurrentTime(TDuration::MilliSeconds(1));
+        reads.ReadResult(parent, 100, 2, 101, 3, Ydb::StatusIds::SUCCESS, true);
+        reads.Start(parent, 200, 200);
+        runtime.AdvanceCurrentTime(TDuration::Seconds(2));
+        reads.ReadResult(parent, 200, 2, 200, 5, Ydb::StatusIds::SUCCESS, true);
+        reads.Start(parent, 300, 300);
+        runtime.AdvanceCurrentTime(TDuration::MilliSeconds(1));
+        reads.Stop(300);
+        reads.Finish(parent);
+        parent.EndOk();
+        reads.Finish(parent);
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        UNIT_ASSERT(uploader->BuildTraceTrees());
+        const auto* result = FindSpan(*uploader, "Read table");
+        UNIT_ASSERT_VALUES_EQUAL(result->events_size(), NKqp::NQueryTraceSettings::MaxInterestingReadShards);
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*result, "ydb.shard_reads")->value().int_value(), 44);
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*result, "ydb.shard_summaries_dropped")->value().int_value(), 38);
+        bool hasRetry = false, hasSlow = false, hasStopped = false;
+        for (const auto& event : result->events()) {
+            const auto shardId = FindAttribute(event, "ydb.shard_id")->value().int_value();
+            if (shardId == 100) {
+                hasRetry = true;
+                UNIT_ASSERT_VALUES_EQUAL(FindAttribute(event, "ydb.read_retries")->value().int_value(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(FindAttribute(event, "ydb.failed_reads")->value().int_value(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(FindAttribute(event, "ydb.reads")->value().int_value(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(FindAttribute(event, "ydb.rows")->value().int_value(), 3);
+                UNIT_ASSERT_VALUES_EQUAL(FindAttribute(event, "ydb.status_code")->value().string_value(), "SUCCESS");
+                UNIT_ASSERT(FindAttribute(event, "ydb.duration_us")->value().int_value() >= 1'000'000);
+            }
+            hasSlow |= shardId == 200;
+            hasStopped |= shardId == 300;
+        }
+        UNIT_ASSERT(hasRetry && hasSlow && hasStopped);
+        size_t attempts = 0;
+        for (const auto& span : uploader->Spans) {
+            if (span.name() != "Read shard") {
+                continue;
+            }
+            ++attempts;
+            const auto id = FindAttribute(span, "ydb.read_id")->value().int_value();
+            if (id == 100 || id == 300) {
+                UNIT_ASSERT(!FindAttribute(span, "ydb.finished")->value().bool_value());
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(span.status().code()), static_cast<int>(id == 100
+                    ? NTraceProto::Status::STATUS_CODE_ERROR : NTraceProto::Status::STATUS_CODE_UNSET));
+            } else {
+                UNIT_ASSERT(FindAttribute(span, "ydb.finished")->value().bool_value());
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(span.status().code()),
+                    static_cast<int>(NTraceProto::Status::STATUS_CODE_OK));
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(attempts, 44);
+    }
+
+    Y_UNIT_TEST(ShardReadOverflowKeepsFailureAndCommonContext) {
+        auto [runtime, server, sender] = CreateServer();
+        auto* uploader = RegisterUploader(runtime);
+        for (const ui8 level : {10, 15}) {
+            ClearUploader(*uploader);
+            NKqp::TShardReadTrace reads;
+            NWilson::TSpan parent(TComponentTracingLevels::TQueryProcessor::Detailed,
+                NWilson::TTraceId::NewTraceId(level, 4095), "Read table", NWilson::EFlags::NONE, runtime.GetActorSystem(0));
+            for (ui64 id = 1; id <= NKqp::NQueryTraceSettings::MaxActiveShardReads; ++id) {
+                reads.Start(parent, id, id);
+            }
+            auto traceId = reads.Start(parent, 999, 999);
+            UNIT_ASSERT(traceId == parent.GetTraceId());
+            NWilson::TSpan native(TComponentTracingLevels::TQueryProcessor::Detailed,
+                std::move(traceId), "Datashard.Read", NWilson::EFlags::NONE, runtime.GetActorSystem(0));
+            native.EndError("read failed");
+            reads.ReadResult(parent, 999, 2, 999, 0, Ydb::StatusIds::UNAVAILABLE, false);
+            reads.Finish(parent);
+            parent.EndError("read failed");
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+            UNIT_ASSERT(uploader->BuildTraceTrees());
+            UNIT_ASSERT_VALUES_EQUAL(uploader->Traces.size(), 1);
+            AssertDescendant(*uploader, "Datashard.Read", "Read table");
+            const auto* result = FindSpan(*uploader, "Read table");
+            if (level == 10) {
+                UNIT_ASSERT(!FindSpan(*uploader, "Read shard"));
+                UNIT_ASSERT_VALUES_EQUAL(result->events_size(), 0);
+                continue;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*result, "ydb.shard_reads_untraced")->value().int_value(), 1);
+            UNIT_ASSERT(FindAttribute(*result, "ydb.shard_stats_incomplete")->value().bool_value());
+            bool found = false;
+            for (const auto& event : result->events()) {
+                if (FindAttribute(event, "ydb.shard_id")->value().int_value() == 999) {
+                    found = true;
+                    UNIT_ASSERT(!FindAttribute(event, "ydb.duration.measured")->value().bool_value());
+                    UNIT_ASSERT_VALUES_EQUAL(FindAttribute(event, "ydb.status_code")->value().string_value(), "UNAVAILABLE");
+                }
+            }
+            UNIT_ASSERT(found);
+        }
+    }
+
     Y_UNIT_TEST(ShardEventLimitRetainsLastAcknowledgement) {
         auto [runtime, server, sender] = CreateServer();
         auto* uploader = RegisterUploader(runtime);
@@ -1096,7 +1224,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 UNIT_ASSERT_C(lookup, uploader->PrintTraces());
                 UNIT_ASSERT_C(std::ranges::any_of(uploader->Spans, [](const auto& span) {
                     return span.name() == "Check rows" && std::ranges::any_of(span.events(), [](const auto& event) {
-                        return event.name() == "Shard read result";
+                        return event.name() == "Shard read statistics";
                     });
                 }), "type=" << static_cast<int>(type) << " step=" << step << " " << uploader->PrintTraces());
                 UNIT_ASSERT_VALUES_EQUAL(uploader->Traces.size(), 1);

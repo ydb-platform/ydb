@@ -121,20 +121,6 @@ bool TShardTraceEvents::Retain(const NWilson::TSpan& span, bool last) {
     return true;
 }
 
-void TShardTraceEvents::ReadResult(NWilson::TSpan& span, ui64 shardId, ui32 nodeId, ui64 readId,
-        ui64 rows, Ydb::StatusIds::StatusCode status, bool finished) {
-    if (Retain(span, status != Ydb::StatusIds::SUCCESS)) {
-        span.Event("Shard read result", {
-            {"ydb.shard_id", static_cast<i64>(shardId)},
-            {"ydb.node_id", static_cast<i64>(nodeId)},
-            {"ydb.read_id", static_cast<i64>(readId)},
-            {"ydb.rows", static_cast<i64>(rows)},
-            {"ydb.status_code", Ydb::StatusIds::StatusCode_Name(status)},
-            {"ydb.finished", finished},
-        });
-    }
-}
-
 void TShardTraceEvents::Acknowledge(NWilson::TSpan& span, ui64 shardId, bool last) {
     if (Retain(span, last)) {
         span.Event("Shard acknowledged", {

@@ -55,6 +55,24 @@ TString CompressPayload(TStringBuf data, NPersQueueCommon::ECodec codec) {
     }
 }
 
+ui64 RecordOffset(ui64 baseOffset, i64 offsetDelta, ui64 parentOffset) {
+    // Kafka encodes offsetDelta as a signed varint, but a valid RecordBatch uses
+    // non-negative deltas (0, 1, ...). A negative value is corrupt client data;
+    // adding it to ui64 would wrap instead of failing.
+    Y_ENSURE(offsetDelta >= 0,
+        "negative kafka record offset delta"
+        << " offset_delta=" << offsetDelta
+        << " base_offset=" << baseOffset
+        << " offset=" << parentOffset);
+    const ui64 offset = baseOffset + static_cast<ui64>(offsetDelta);
+    Y_ENSURE(offset >= baseOffset,
+        "kafka record offset overflow"
+        << " offset_delta=" << offsetDelta
+        << " base_offset=" << baseOffset
+        << " offset=" << parentOffset);
+    return offset;
+}
+
 } // namespace
 
 TVector<TReadResult> TKafkaBatchCutter::Cut(const TBatchCutterData& data, const ui64 readStartOffset) const {
@@ -94,7 +112,7 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TBatchCutterData& data, const 
 
     const ui64 baseOffset = data.ReadResult.GetOffset();
     for (size_t i = 0; i < batch.Records.size(); ++i) {
-        const auto offset = baseOffset + batch.Records[i].OffsetDelta;
+        const ui64 offset = RecordOffset(baseOffset, batch.Records[i].OffsetDelta, data.ReadResult.GetOffset());
         if (offset < readStartOffset) {
             continue;
         }
@@ -151,7 +169,7 @@ THashMap<TString, ui64> TKafkaBatchCutter::GetKeys(const TBatchCutterData& data,
     const auto batch = NKafka::ReadKafkaRecordBatch(dataChunk.GetData());
     const ui64 baseOffset = data.ReadResult.GetOffset();
     for (const auto& record : batch.Records) {
-        const auto offset = baseOffset + record.OffsetDelta;
+        const ui64 offset = RecordOffset(baseOffset, record.OffsetDelta, data.ReadResult.GetOffset());
         if (offset < readStartOffset) {
             continue;
         }

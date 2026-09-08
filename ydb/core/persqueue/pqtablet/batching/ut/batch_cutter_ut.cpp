@@ -10,6 +10,7 @@
 #include <library/cpp/streams/zstd/zstd.h>
 
 #include <util/generic/string.h>
+#include <util/generic/ylimits.h>
 #include <util/stream/mem.h>
 #include <util/stream/zlib.h>
 
@@ -131,6 +132,24 @@ TString MakeKafkaBatchPayloadWithNullValue() {
     batch.BaseSequence = 10;
     batch.Records.push_back(MakeKafkaRecordWithoutValue(5, 0, "k0"));
     batch.Records.push_back(MakeKafkaRecord(7, 1, "k1", "value1"));
+    batch.BatchLength = batch.Size(2)
+        - sizeof(NKafka::TKafkaRecordBatch::BaseOffsetMeta::Type)
+        - sizeof(NKafka::TKafkaRecordBatch::BatchLengthMeta::Type);
+    return NKafka::WriteKafkaRecordBatch(batch);
+}
+
+TString MakeKafkaBatchPayloadWithOffsetDeltas(i64 delta0, i64 delta1) {
+    NKafka::TKafkaRecordBatch batch;
+    batch.BaseOffset = 100;
+    batch.Magic = 2;
+    batch.LastOffsetDelta = delta1;
+    batch.BaseTimestamp = 1000;
+    batch.MaxTimestamp = 1007;
+    batch.ProducerId = 42;
+    batch.ProducerEpoch = 3;
+    batch.BaseSequence = 10;
+    batch.Records.push_back(MakeKafkaRecord(5, delta0, "k0", "value0"));
+    batch.Records.push_back(MakeKafkaRecord(7, delta1, "k1", "value1"));
     batch.BatchLength = batch.Size(2)
         - sizeof(NKafka::TKafkaRecordBatch::BaseOffsetMeta::Type)
         - sizeof(NKafka::TKafkaRecordBatch::BatchLengthMeta::Type);
@@ -399,8 +418,38 @@ Y_UNIT_TEST_SUITE(TBatchCutterTest) {
             yexception);
     }
 
+    Y_UNIT_TEST(CutFailsOnNegativeOffsetDelta) {
+        const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayloadWithOffsetDeltas(-1, 1));
+        UNIT_ASSERT_EXCEPTION(
+            TKafkaBatchCutter().Cut(TBatchCutterData(readResult, NKikimr::GetDeserializedData(readResult.GetData())), 10),
+            yexception);
+    }
+
+    Y_UNIT_TEST(CutFailsOnOffsetOverflow) {
+        auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayload());
+        readResult.SetOffset(Max<ui64>());
+        UNIT_ASSERT_EXCEPTION(
+            TKafkaBatchCutter().Cut(TBatchCutterData(readResult, NKikimr::GetDeserializedData(readResult.GetData())), 10),
+            yexception);
+    }
+
     Y_UNIT_TEST(GetKeysFailsOnCorruptKafkaPayload) {
         const auto readResult = MakeKafkaBatchReadResult("not-a-kafka-batch");
+        UNIT_ASSERT_EXCEPTION(
+            TKafkaBatchCutter().GetKeys(TBatchCutterData(readResult, NKikimr::GetDeserializedData(readResult.GetData())), 10),
+            yexception);
+    }
+
+    Y_UNIT_TEST(GetKeysFailsOnNegativeOffsetDelta) {
+        const auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayloadWithOffsetDeltas(-1, 1));
+        UNIT_ASSERT_EXCEPTION(
+            TKafkaBatchCutter().GetKeys(TBatchCutterData(readResult, NKikimr::GetDeserializedData(readResult.GetData())), 10),
+            yexception);
+    }
+
+    Y_UNIT_TEST(GetKeysFailsOnOffsetOverflow) {
+        auto readResult = MakeKafkaBatchReadResult(MakeKafkaBatchPayload());
+        readResult.SetOffset(Max<ui64>());
         UNIT_ASSERT_EXCEPTION(
             TKafkaBatchCutter().GetKeys(TBatchCutterData(readResult, NKikimr::GetDeserializedData(readResult.GetData())), 10),
             yexception);

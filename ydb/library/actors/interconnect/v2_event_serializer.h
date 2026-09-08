@@ -62,6 +62,10 @@ namespace NActors {
             ui16 GetType() const {
                 return TypeChannel & TypeMask;
             }
+
+            size_t GetMainChannelLength() const {
+                return sizeof(TChunkHeader) + (GetType() == kXdcPush ? 0 : Length);
+            }
         };
 
         struct TXdcSection {
@@ -76,8 +80,6 @@ namespace NActors {
 #pragma pack(pop)
 
         static_assert(sizeof(TXdcSection) == 17);
-
-        static constexpr size_t XdcPushFraming = sizeof(TChunkHeader) + sizeof(ui16);
 
     private:
         const bool Checksumming;

@@ -970,14 +970,14 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
         while (pos + sizeof(TChunkHeader) <= main.size()) {
             TChunkHeader chunk;
             memcpy(&chunk, main.data() + pos, sizeof(chunk));
+            UNIT_ASSERT(pos + chunk.GetMainChannelLength() <= main.size());
             pos += sizeof(chunk);
-            UNIT_ASSERT(pos + chunk.Length <= main.size());
             if (chunk.GetType() == TChunkHeader::kEventHeader) {
                 UNIT_ASSERT(headerOffset + chunk.Length <= sizeof(header));
                 memcpy(reinterpret_cast<char*>(&header) + headerOffset, main.data() + pos, chunk.Length);
                 headerOffset += chunk.Length;
             }
-            pos += chunk.Length;
+            pos += chunk.GetMainChannelLength() - sizeof(TChunkHeader);
         }
         UNIT_ASSERT_VALUES_EQUAL(headerOffset, sizeof(header));
         return header;

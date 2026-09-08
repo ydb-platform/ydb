@@ -831,6 +831,20 @@ void KqpRm::TaskQuotaManagerOptional() {
         // 1500 - 208 prepaid = 1292, aligned to 1296 > 692 left on the node
         UNIT_ASSERT(!cm->AllocateQuota(1500, /* isOptional = */ false));
         UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 1296);
+
+        // the resource manager refuses a small request (below 10 steps) that the pre-check let through: a
+        // mandatory one is tolerated as over-quoting, an optional one is refused and the prepaid quota restored
+        UNIT_ASSERT(rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 600})); // 92 bytes left on the node
+        tx->TotalMemoryCookie->MemoryAvailability.store(1'000'000); // the pre-check passes
+        UNIT_ASSERT(!cm->AllocateQuota(300, /* isOptional = */ true)); // 300 - 208 prepaid = 92, aligned to 96 > 92
+        UNIT_ASSERT_VALUES_EQUAL(tx->TxFailedAllocationSize.load(), 96); // refused by the resource manager
+        UNIT_ASSERT_VALUES_EQUAL(cm->GetMemoryAvailability(), 1'000'000 + 208); // the prepaid quota is intact
+        UNIT_ASSERT(cm->AllocateQuota(300, /* isOptional = */ false)); // the mandatory request is over-quoted
+        UNIT_ASSERT_VALUES_EQUAL(cm->GetMemoryAvailability(), 1'000'000 + 208 - 300);
+        cm->FreeQuota(300);
+        UNIT_ASSERT_VALUES_EQUAL(cm->GetMemoryAvailability(), 1'000'000 + 208);
+        tx->TotalMemoryCookie->MemoryAvailability.store(700);
+        rm->FreeResources(*tx, 2, NRm::TKqpResourcesRequest{.Memory = 600});
         cm.reset();
         UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().Memory, statsBefore.Memory);
 

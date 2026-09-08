@@ -122,8 +122,11 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
                     {"problem", "cannot_allocate_memory"},
                     {"txId", Tx->TxId},
                     {"taskId", 0},
-                    {"memory", memoryRequired});
-                if (memoryRequired >= AllocationStep * 10) {
+                    {"memory", memoryRequired},
+                    {"optional", isOptional});
+                // a little over-quoting is tolerated for mandatory requests only: the caller of an optional
+                // request can do without the memory, it must not get what the resource manager refused
+                if (isOptional || memoryRequired >= AllocationStep * 10) {
                     AvailableQuota.fetch_add(memorySize);
                     return false;
                 }

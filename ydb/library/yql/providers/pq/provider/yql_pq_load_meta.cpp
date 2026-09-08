@@ -145,10 +145,8 @@ private:
 
     TStatus FillState(TTopics& pendingTopics, TExprContext& ctx, bool isWrite) {
         for (auto& [key, pending] : pendingTopics) {
-            const TStructExprType* itemType = nullptr;
             try {
                 pending.Meta.FederatedTopic = pending.Future.GetValue();
-                itemType = CreateDefaultItemType(ctx);
             } catch (const std::exception& ex) {
                 if (!State_->UseYtflowEngine || !isWrite) {
                     TIssues issues;
@@ -157,9 +155,7 @@ private:
                     return TStatus::Error;
                 }
             }
-            if (!itemType) {
-                return TStatus::Error;
-            }
+            const TStructExprType* itemType = CreateDefaultItemType(ctx);
 
             if (!pending.Meta.RowSpec) {
                 pending.Meta.RowSpec = ExpandType(pending.Meta.Pos, *itemType, ctx);

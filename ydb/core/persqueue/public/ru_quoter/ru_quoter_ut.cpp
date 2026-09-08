@@ -233,13 +233,13 @@ TRequestUnitsQuoterSettings MakeSettings(ui64 ru) {
 Y_UNIT_TEST_SUITE(TRuQuoterTests) {
 
     Y_UNIT_TEST(ConvertAndDescription) {
-        UNIT_ASSERT_VALUES_EQUAL(Convert(EStatus::SUCCESS), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(Convert(EStatus::THROTTLED), Ydb::StatusIds::OVERLOADED);
-        UNIT_ASSERT_VALUES_EQUAL(Convert(EStatus::UNKNOWN_ERROR), Ydb::StatusIds::INTERNAL_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(Convert(EStatus::Success), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(Convert(EStatus::Throttled), Ydb::StatusIds::OVERLOADED);
+        UNIT_ASSERT_VALUES_EQUAL(Convert(EStatus::UnknownError), Ydb::StatusIds::INTERNAL_ERROR);
 
-        UNIT_ASSERT(Description(EStatus::SUCCESS).Contains("have been charged"));
-        UNIT_ASSERT_VALUES_EQUAL(Description(EStatus::THROTTLED), "Request was throttled by the rate limiter");
-        UNIT_ASSERT_VALUES_EQUAL(Description(EStatus::UNKNOWN_ERROR), "Unexpected rate limiter wakeup");
+        UNIT_ASSERT(Description(EStatus::Success).Contains("have been charged"));
+        UNIT_ASSERT_VALUES_EQUAL(Description(EStatus::Throttled), "Request was throttled by the rate limiter");
+        UNIT_ASSERT_VALUES_EQUAL(Description(EStatus::UnknownError), "Unexpected rate limiter wakeup");
     }
 
     Y_UNIT_TEST(ParseRlContextRequiresBothAttrs) {
@@ -290,8 +290,8 @@ Y_UNIT_TEST_SUITE(TRuQuoterTests) {
         env.Start(MakeSettings(0));
         auto ev = env.WaitResponse();
         UNIT_ASSERT(ev);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Status, EStatus::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Message, Description(EStatus::SUCCESS));
+        UNIT_ASSERT_VALUES_EQUAL(ev->Status, EStatus::Success);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Message, Description(EStatus::Success));
         UNIT_ASSERT_VALUES_EQUAL(navigates, 0u);
         UNIT_ASSERT(env.Bills.empty());
     }
@@ -305,7 +305,7 @@ Y_UNIT_TEST_SUITE(TRuQuoterTests) {
         env.Start(MakeSettings(2));
         auto ev = env.WaitResponse();
         UNIT_ASSERT(ev);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Status, EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Status, EStatus::Success);
         UNIT_ASSERT(env.Bills.empty());
         UNIT_ASSERT_VALUES_EQUAL(env.QuoterService->RequestCount, 0u);
     }
@@ -318,7 +318,7 @@ Y_UNIT_TEST_SUITE(TRuQuoterTests) {
         env.Start(MakeSettings(2));
         auto ev = env.WaitResponse();
         UNIT_ASSERT(ev);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Status, EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Status, EStatus::Success);
         UNIT_ASSERT(env.Bills.empty());
     }
 
@@ -331,7 +331,7 @@ Y_UNIT_TEST_SUITE(TRuQuoterTests) {
         env.Start(MakeSettings(7));
         auto ev = env.WaitResponse();
         UNIT_ASSERT(ev);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Status, EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Status, EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(env.QuoterService->RequestCount, 0u);
         UNIT_ASSERT_VALUES_EQUAL(env.Bills.size(), 1u);
         NJson::TJsonValue json;
@@ -349,7 +349,7 @@ Y_UNIT_TEST_SUITE(TRuQuoterTests) {
         env.Start(MakeSettings(2));
         auto ev = env.WaitResponse();
         UNIT_ASSERT(ev);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Status, EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Status, EStatus::Success);
         UNIT_ASSERT(env.Bills.empty());
     }
 
@@ -362,7 +362,7 @@ Y_UNIT_TEST_SUITE(TRuQuoterTests) {
         env.Start(MakeSettings(3));
         auto ev = env.WaitResponse();
         UNIT_ASSERT(ev);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Status, EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Status, EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(env.QuoterService->RequestCount, 1u);
         UNIT_ASSERT_VALUES_EQUAL(env.Bills.size(), 1u);
     }
@@ -376,8 +376,8 @@ Y_UNIT_TEST_SUITE(TRuQuoterTests) {
         env.Start(MakeSettings(3));
         auto ev = env.WaitResponse();
         UNIT_ASSERT(ev);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Status, EStatus::THROTTLED);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Message, Description(EStatus::THROTTLED));
+        UNIT_ASSERT_VALUES_EQUAL(ev->Status, EStatus::Throttled);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Message, Description(EStatus::Throttled));
         UNIT_ASSERT(env.Bills.empty());
     }
 
@@ -387,8 +387,8 @@ Y_UNIT_TEST_SUITE(TRuQuoterTests) {
         env.Runtime.Send(new IEventHandle(id, env.EdgeId, new TEvents::TEvWakeup(/*RecheckAcl*/ 4)), 0, true);
         auto ev = env.WaitResponse();
         UNIT_ASSERT(ev);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Status, EStatus::UNKNOWN_ERROR);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Message, Description(EStatus::UNKNOWN_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(ev->Status, EStatus::UnknownError);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Message, Description(EStatus::UnknownError));
         UNIT_ASSERT_VALUES_EQUAL(env.Cache->RequestCount, 1u);
     }
 
@@ -398,7 +398,7 @@ Y_UNIT_TEST_SUITE(TRuQuoterTests) {
         env.Runtime.Send(new IEventHandle(id, env.EdgeId, new TEvents::TEvWakeup(/*RlAllowed*/ 2)), 0, true);
         auto ev = env.WaitResponse();
         UNIT_ASSERT(ev);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Status, EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Status, EStatus::Success);
         UNIT_ASSERT(env.Bills.empty());
     }
 
@@ -408,7 +408,7 @@ Y_UNIT_TEST_SUITE(TRuQuoterTests) {
         env.Runtime.Send(new IEventHandle(id, env.EdgeId, new TEvents::TEvWakeup(/*RlNoResource*/ 3)), 0, true);
         auto ev = env.WaitResponse();
         UNIT_ASSERT(ev);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Status, EStatus::THROTTLED);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Status, EStatus::Throttled);
     }
 
     Y_UNIT_TEST(UnhandledExceptionRepliesUnknownError) {
@@ -434,7 +434,7 @@ Y_UNIT_TEST_SUITE(TRuQuoterTests) {
 
         auto ev = env.WaitResponse();
         UNIT_ASSERT(ev);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Status, EStatus::UNKNOWN_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Status, EStatus::UnknownError);
         UNIT_ASSERT(ev->Message.Contains("Unhandled exception"));
         UNIT_ASSERT(env.Bills.empty());
     }
@@ -466,13 +466,13 @@ Y_UNIT_TEST_SUITE(TRuQuoterTests) {
             new TEvTxProxySchemeCache::TEvNavigateKeySetResult(TAutoPtr<TSchemeCacheNavigate>())), 0, true);
         auto ev = env.WaitResponse();
         UNIT_ASSERT(ev);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Status, EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Status, EStatus::Success);
         UNIT_ASSERT(env.Bills.empty());
     }
 
     Y_UNIT_TEST(TEvChargeRequestUnitsResponseDefaultCtor) {
         TEvChargeRequestUnitsResponse ev;
-        UNIT_ASSERT_VALUES_EQUAL(ev.Status, EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ev.Status, EStatus::Success);
         UNIT_ASSERT(ev.Message.empty());
     }
 }

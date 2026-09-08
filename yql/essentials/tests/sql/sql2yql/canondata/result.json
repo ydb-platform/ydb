@@ -6859,6 +6859,34 @@
             "uri": "https://{canondata_backend}/1942100/698d95eec1cbd4e4ada1a8da105c203a7a12bb85/resource.tar.gz#test_sql2yql.test_optimizers-pull_just_logical_/sql.yql"
         }
     ],
+    "test_sql2yql.test[optimizers-pushdown_struct_subset_just]": [
+        {
+            "checksum": "cbd5ab4b16c59a74197e66bd2ce2e223",
+            "size": 2467,
+            "uri": "https://{canondata_backend}/1881367/eb037eec49f9aaa45047ea5682330fc9de947a66/resource.tar.gz#test_sql2yql.test_optimizers-pushdown_struct_subset_just_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[optimizers-pushdown_struct_subset_just_key]": [
+        {
+            "checksum": "6a5ccbd8d8ea562bcc15961bf2bd7291",
+            "size": 2502,
+            "uri": "https://{canondata_backend}/1881367/eb037eec49f9aaa45047ea5682330fc9de947a66/resource.tar.gz#test_sql2yql.test_optimizers-pushdown_struct_subset_just_key_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[optimizers-pushdown_struct_subset_some]": [
+        {
+            "checksum": "1317569fb198d3728c5711c26692362d",
+            "size": 2197,
+            "uri": "https://{canondata_backend}/1881367/eb037eec49f9aaa45047ea5682330fc9de947a66/resource.tar.gz#test_sql2yql.test_optimizers-pushdown_struct_subset_some_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[optimizers-pushdown_struct_subset_some_key]": [
+        {
+            "checksum": "1d691f5be9d27ce5c5c50bbc7bced059",
+            "size": 2232,
+            "uri": "https://{canondata_backend}/1881367/eb037eec49f9aaa45047ea5682330fc9de947a66/resource.tar.gz#test_sql2yql.test_optimizers-pushdown_struct_subset_some_key_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[optimizers-total_order]": [
         {
             "checksum": "e48707d4dbc8b31bb61d14997ce3319d",
@@ -18022,6 +18050,26 @@
     "test_sql_format.test[optimizers-pull_just_logical]": [
         {
             "uri": "file://test_sql_format.test_optimizers-pull_just_logical_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[optimizers-pushdown_struct_subset_just]": [
+        {
+            "uri": "file://test_sql_format.test_optimizers-pushdown_struct_subset_just_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[optimizers-pushdown_struct_subset_just_key]": [
+        {
+            "uri": "file://test_sql_format.test_optimizers-pushdown_struct_subset_just_key_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[optimizers-pushdown_struct_subset_some]": [
+        {
+            "uri": "file://test_sql_format.test_optimizers-pushdown_struct_subset_some_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[optimizers-pushdown_struct_subset_some_key]": [
+        {
+            "uri": "file://test_sql_format.test_optimizers-pushdown_struct_subset_some_key_/formatted.sql"
         }
     ],
     "test_sql_format.test[optimizers-total_order]": [

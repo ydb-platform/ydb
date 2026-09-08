@@ -95,6 +95,9 @@ public:
     bool HasLockConflicts(ui64 shardId) const;
     const NKikimrDataEvents::TLock* FindLastLock(ui64 shardId) const;
 
+    void MapAncestorShard(ui64 descendantShard, ui64 ancestorShard);
+    TVector<NKikimrDataEvents::TLock> GetLocksForShard(ui64 shardId) const;
+
     struct TLockRowsPromise {
         TTransactionState& State;
         TActorId Sender;
@@ -161,12 +164,17 @@ public:
             req->Record.MutableMvccSnapshot()->SetTxId(Snapshot->TxId);
         }
 
-        // Try to find the last known lock state
-        if (const auto* pLock = FindLastLock(shardId)) {
-            req->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-            req->Record.MutableLocks()->AddSendingShards(shardId);
-            req->Record.MutableLocks()->AddReceivingShards(shardId);
-            *req->Record.MutableLocks()->AddLocks() = *pLock;
+        // Include all relevant locks (direct + ancestor)
+        {
+            auto locks = GetLocksForShard(shardId);
+            if (!locks.empty()) {
+                req->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+                req->Record.MutableLocks()->AddSendingShards(shardId);
+                req->Record.MutableLocks()->AddReceivingShards(shardId);
+                for (const auto& lock : locks) {
+                    *req->Record.MutableLocks()->AddLocks() = lock;
+                }
+            }
         }
 
         (..., ops.ApplyTo(tableId, req));
@@ -200,8 +208,8 @@ public:
             req->Record.MutableLocks()->AddSendingShards(participant);
             req->Record.MutableLocks()->AddReceivingShards(participant);
         }
-        if (const auto* pLock = FindLastLock(shardId)) {
-            *req->Record.MutableLocks()->AddLocks() = *pLock;
+        for (const auto& lock : GetLocksForShard(shardId)) {
+            *req->Record.MutableLocks()->AddLocks() = lock;
         }
 
         (..., ops.ApplyTo(tableId, req));
@@ -226,6 +234,9 @@ public:
     void SendPlan();
 
     TString Rollback(ui64 shardId);
+
+private:
+    THashMap<ui64, THashSet<ui64>> AncestorMappings;
 
 public:
     TTestActorRuntime& Runtime;

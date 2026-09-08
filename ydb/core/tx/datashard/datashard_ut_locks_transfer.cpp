@@ -115,10 +115,16 @@ Y_UNIT_TEST(LocksTransferSimple) {
     tx.LockRows(tableId, shards.at(1), {15});
     tx.Write(tableId, shards.at(1), TWriteOperation::Upsert(15, 1500));
 
+    auto oldShards = shards;
     env.Split(1, 15);
     env.Merge(0, 1);
-    RebootTablet(runtime, shards.at(1), sender);
     env.PrintPartitioning();
+
+    tx.MapAncestorShard(shards.at(0), oldShards.at(0));
+    tx.MapAncestorShard(shards.at(0), oldShards.at(1));
+    tx.MapAncestorShard(shards.at(1), oldShards.at(1));
+
+    RebootTablet(runtime, shards.at(1), sender);
 
     UNIT_ASSERT_VALUES_EQUAL(
         tx.ReadKey(tableId, shards.at(0), 1),
@@ -127,20 +133,19 @@ Y_UNIT_TEST(LocksTransferSimple) {
         tx.ReadKey(tableId, shards.at(1), 15),
         "15, 1500\n");
 
-    tx.InitCommit(shards);
+    tx.InitCommit({shards.at(0), shards.at(1)});
     auto prepare1 = tx.PrepareCommit(tableId, shards.at(0));
     auto prepare2 = tx.PrepareCommit(tableId, shards.at(1));
     tx.SendPlan();
     UNIT_ASSERT_VALUES_EQUAL(prepare1.NextString(), "OK");
     UNIT_ASSERT_VALUES_EQUAL(prepare2.NextString(), "OK");
 
-    // TODO: not implemented yet
-    // UNIT_ASSERT_VALUES_EQUAL(
-    //     KqpSimpleExec(runtime, R"(
-    //         SELECT key, value FROM `/Root/table` ORDER BY key;
-    //     )"),
-    //     "{ items { int32_value: 1 } items { int32_value: 100 } }, "
-    //     "{ items { int32_value: 15 } items { int32_value: 1500 } }");
+    UNIT_ASSERT_VALUES_EQUAL(
+        KqpSimpleExec(runtime, R"(
+            SELECT key, value FROM `/Root/table` ORDER BY key;
+        )"),
+        "{ items { uint32_value: 1 } items { int32_value: 100 } }, "
+        "{ items { uint32_value: 15 } items { int32_value: 1500 } }");
 }
 
 } // Y_UNIT_TEST_SUITE(DataShardLocksTransfer)

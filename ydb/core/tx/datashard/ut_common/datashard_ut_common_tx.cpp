@@ -2,6 +2,8 @@
 
 #include <ydb/core/tx/data_events/payload_helper.h>
 
+#include <util/generic/hash_set.h>
+
 namespace NKikimr::NDataShard::NTxHelpers {
 
 ui64 AllocateTxId(TTestActorRuntime& runtime, const TActorId& sender) {
@@ -340,6 +342,32 @@ TString TTransactionState::Rollback(ui64 shardId) {
 
     Runtime.SendToPipe(shardId, sender, req.Release(), nodeIndex);
     return TWritePromise{*this, sender}.NextString();
+}
+
+void TTransactionState::MapAncestorShard(ui64 descendantShard, ui64 ancestorShard) {
+    AncestorMappings[descendantShard].insert(ancestorShard);
+}
+
+TVector<NKikimrDataEvents::TLock> TTransactionState::GetLocksForShard(ui64 shardId) const {
+    THashSet<std::tuple<ui64, ui64>> seen; // (LockId, DataShard)
+    TVector<NKikimrDataEvents::TLock> result;
+    const auto* ancestorSet = AncestorMappings.FindPtr(shardId);
+
+    for (auto it = Locks.rbegin(); it != Locks.rend(); ++it) {
+        const auto& lock = *it;
+        auto lockKey = std::make_tuple(lock.GetLockId(), lock.GetDataShard());
+        if (seen.contains(lockKey)) {
+            continue;
+        }
+        if (lock.GetDataShard() == shardId) {
+            seen.insert(lockKey);
+            result.push_back(lock);
+        } else if (ancestorSet && ancestorSet->contains(lock.GetDataShard())) {
+            seen.insert(lockKey);
+            result.push_back(lock);
+        }
+    }
+    return result;
 }
 
 }

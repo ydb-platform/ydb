@@ -1940,10 +1940,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto inputNode = testContext.ExprCtx.NewCallable(pos, "TestInput", {});
         auto output = testContext.ExprCtx.NewAtom(pos, "projected");
         auto source = testContext.ExprCtx.NewAtom(pos, "a");
-        auto mapElement = testContext.ExprCtx.NewCallable(pos, "KqpOpMapElementRename", {inputNode, output, source});
+        auto mapElement = testContext.ExprCtx.NewCallable(pos, "KqpOpMapElementRename", {output, source});
         auto mapElements = testContext.ExprCtx.NewList(pos, {mapElement});
         auto project = testContext.ExprCtx.NewAtom(pos, "true");
-        auto mapNode = testContext.ExprCtx.NewCallable(pos, "KqpOpMap", {inputNode, mapElements, project});
+        auto lambda = testContext.ExprCtx.NewLambda(pos, testContext.ExprCtx.NewArgument(pos, "arg"), testContext.ExprCtx.NewList(pos, {}));
+        auto mapNode = testContext.ExprCtx.NewCallable(pos, "KqpOpMap", {inputNode, lambda, mapElements, project});
 
         PlanConverter converter(testContext.TypeCtx, testContext.ExprCtx);
         converter.Converted[inputNode.Get()] = MakeTestRead({TInfoUnit("a"), TInfoUnit("payload")}, pos);
@@ -1991,10 +1992,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto inputNode = testContext.ExprCtx.NewCallable(pos, "TestInput", {});
         auto output = testContext.ExprCtx.NewAtom(pos, "out");
         auto source = testContext.ExprCtx.NewAtom(pos, "projected");
-        auto mapElement = testContext.ExprCtx.NewCallable(pos, "KqpOpMapElementRename", {inputNode, output, source});
+        auto mapElement = testContext.ExprCtx.NewCallable(pos, "KqpOpMapElementRename", {output, source});
         auto mapElements = testContext.ExprCtx.NewList(pos, {mapElement});
         auto project = testContext.ExprCtx.NewAtom(pos, "true");
-        auto mapNode = testContext.ExprCtx.NewCallable(pos, "KqpOpMap", {inputNode, mapElements, project});
+        auto lambda = testContext.ExprCtx.NewLambda(pos, testContext.ExprCtx.NewArgument(pos, "arg"), testContext.ExprCtx.NewList(pos, {}));
+        auto mapNode = testContext.ExprCtx.NewCallable(pos, "KqpOpMap", {inputNode, lambda, mapElements, project});
 
         PlanConverter converter(testContext.TypeCtx, testContext.ExprCtx);
         converter.Converted[inputNode.Get()] = sort;

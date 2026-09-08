@@ -885,8 +885,7 @@
             "Base": "TCallable",
             "Match": {"Type": "CallableBase"},
             "Children": [
-                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
-                {"Index": 1, "Name": "Variable", "Type": "TCoAtom"}
+                {"Index": 0, "Name": "Variable", "Type": "TCoAtom"}
             ]
         },
         {
@@ -894,7 +893,7 @@
             "Base": "TKqpOpMapElementBase",
             "Match": {"Type": "Callable", "Name": "KqpOpMapElementRename"},
             "Children": [
-                {"Index": 2, "Name": "From", "Type": "TCoAtom"}
+                {"Index": 1, "Name": "From", "Type": "TCoAtom"}
             ]
         },
         {
@@ -902,8 +901,7 @@
             "Base": "TKqpOpMapElementBase",
             "Match": {"Type": "Callable", "Name": "KqpOpMapElementLambda"},
             "Children": [
-                {"Index": 2, "Name": "Lambda", "Type": "TCoLambda"},
-                {"Index": 3, "Name": "ForceOptional", "Type": "TCoAtom"}
+                {"Index": 1, "Name": "ForceOptional", "Type": "TCoAtom"}
             ]
         },
         {
@@ -916,9 +914,10 @@
             "Match": {"Type": "Callable", "Name": "KqpOpMap"},
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
-                {"Index": 1, "Name": "MapElements", "Type": "TKqpOpElementList"},
-                {"Index": 2, "Name": "Project", "Type": "TCoAtom", "Optional" : true},
-                {"Index": 3, "Name": "Ordered", "Type": "TCoAtom", "Optional" : true}
+                {"Index": 1, "Name": "Lambda", "Type": "TCoLambda"},
+                {"Index": 2, "Name": "MapElements", "Type": "TKqpOpElementList"},
+                {"Index": 3, "Name": "Project", "Type": "TCoAtom", "Optional" : true},
+                {"Index": 4, "Name": "Ordered", "Type": "TCoAtom", "Optional" : true}
             ]
         },
         {

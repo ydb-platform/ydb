@@ -185,6 +185,7 @@ TVector<TInfoUnit> GetStructIUs(const TTypeAnnotationNode* type) {
 } // anonymous namespace
 
 TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
+    Y_ENSURE(node->IsLambda(), "Node is not lambda");
     auto lambda = TCoLambda(node);
     auto lambdaBody = lambda.Body().Ptr();
 
@@ -323,28 +324,25 @@ TIntrusivePtr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr node)
     return result;
 }
 
-TExprNode::TPtr GetMapElementLambda(TExprNode::TPtr lambdaPtr, const bool forceOptional, TExprContext& ctx) {
-    auto lambda = TCoLambda(lambdaPtr);
-    auto body = lambda.Body().Ptr();
-    auto lambdaArg = lambda.Args().Arg(0);
-    const TTypeAnnotationNode* bodyType = body->GetTypeAnn();
+TExprNode::TPtr GetMapElementExpr(TExprNode::TPtr elementPtr, TExprNode::TPtr lambdaArg, const bool forceOptional, TExprContext& ctx) {
+    const TTypeAnnotationNode* bodyType = elementPtr->GetTypeAnn();
     Y_ENSURE(bodyType);
     // Force optional by adding Just.
     if (!bodyType->IsOptionalOrNull() && forceOptional) {
         // clang-format off
-        body = Build<TCoJust>(ctx, lambdaPtr->Pos())
-            .Input(body)
+        elementPtr = Build<TCoJust>(ctx, elementPtr->Pos())
+            .Input(elementPtr)
         .Done().Ptr();
+    }
 
-        lambdaPtr = Build<TCoLambda>(ctx, lambdaPtr->Pos())
+    auto lambdaPtr = Build<TCoLambda>(ctx, elementPtr->Pos())
             .Args({"arg"})
             .Body<TExprApplier>()
-                .Apply(TExprBase(body))
-                .With(lambdaArg, "arg")
+                .Apply(TExprBase(elementPtr))
+                .With(TCoArgument(lambdaArg), "arg")
             .Build()
         .Done().Ptr();
         // clang-format on
-    }
     return lambdaPtr;
 }
 
@@ -353,6 +351,8 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node) {
     auto input = ExprNodeToOperator(opMap.Input().Ptr());
     const auto project = GetProject(opMap);
     TVector<TMapElement> mapElements;
+    TExprNode::TPtr lambdaElements = opMap.Lambda().Body().Ptr();
+    size_t lambdaElementIdx = 0;
 
     for (const auto& mapElement : opMap.MapElements()) {
         const auto iu = TInfoUnit(mapElement.Variable().StringValue());
@@ -364,14 +364,19 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node) {
             auto element = mapElement.Cast<TKqpOpMapElementLambda>();
             const auto forceOptional = GetForceOptional(element);
             // case lambda ($arg) { member $arg `name }
-            if (auto maybeMember = element.Lambda().Body().Maybe<TCoMember>();
-                !forceOptional && maybeMember && maybeMember.Cast().Struct().Ptr() == element.Lambda().Args().Arg(0).Ptr()) {
+
+            auto currLambdaElement = TExprBase(lambdaElements->ChildPtr(lambdaElementIdx++));
+            auto needsOptional = forceOptional && !currLambdaElement.Ptr()->GetTypeAnn()->IsOptionalOrNull();            
+
+            if (auto maybeMember = currLambdaElement.Maybe<TCoMember>();
+                !needsOptional && maybeMember && maybeMember.Cast().Struct().Ptr() == opMap.Lambda().Args().Arg(0).Ptr()) {
+
                 auto member = maybeMember.Cast();
                 auto name = member.Name().Cast<TCoAtom>();
                 auto fromIU = TInfoUnit(name.StringValue());
                 mapElements.emplace_back(iu, fromIU, node->Pos(), &Ctx, &PlanProps, project);
             } else {
-                TExpression exprLambda(GetMapElementLambda(element.Lambda().Ptr(), forceOptional, Ctx), &Ctx);
+                TExpression exprLambda(GetMapElementExpr(currLambdaElement.Ptr(), opMap.Lambda().Args().Arg(0).Ptr(), forceOptional, Ctx), &Ctx);
                 mapElements.emplace_back(iu, exprLambda);
             }
         }
@@ -473,14 +478,15 @@ TExprNode::TPtr MaybeForceColumnToOptional(const TTypeAnnotationNode* unionAllTy
     TVector<TExprNode> mapElements;
     for (ui32 i = 0; i < unionAllSize; ++i) {
         const auto mapElement = map.MapElements().Item(i).Ptr();
-        const TString fieldName = TString(mapElement->ChildPtr(1)->Content());
+        const TString fieldName = TString(mapElement->ChildPtr(TKqpOpMapElementBase::idx_Variable)->Content());
         auto inputFieldType = inputStructType->FindItemType(fieldName);
         Y_ENSURE(inputFieldType, TStringBuilder() << "Cannot find type for item " << fieldName;);
         auto unionAllFieldType = unionAllStructType->FindItemType(fieldName);
         Y_ENSURE(unionAllFieldType, TStringBuilder() << "Cannot find type for item " << fieldName;);
         // In case union all field type is optional but the same field for input is not - force optional.
         if (unionAllFieldType->IsOptionalOrNull() && !inputFieldType->IsOptionalOrNull()) {
-            mapElement->ChildRef(3) = Build<TCoAtom>(ctx, input->Pos()).Value("True").Done().Ptr();
+            Y_ENSURE(TKqpOpMapElementLambda::Match(mapElement.Get()), "Forcing optional is possible only for lambda map elements");
+            mapElement->ChildRef(TKqpOpMapElementLambda::idx_ForceOptional) = Build<TCoAtom>(ctx, input->Pos()).Value("True").Done().Ptr();
         }
     }
 

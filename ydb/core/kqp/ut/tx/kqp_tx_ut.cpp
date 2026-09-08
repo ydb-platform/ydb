@@ -1337,6 +1337,20 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         SetDefault,
     };
 
+    constexpr ESchemeOp AllSchemeOps[] = {
+        ESchemeOp::AddColumn,
+        ESchemeOp::DropReadColumn,
+        ESchemeOp::DropUnreadColumn,
+        ESchemeOp::TruncateTable,
+        ESchemeOp::AddIndex,
+        ESchemeOp::DropIndex,
+        ESchemeOp::DropIndexWithIndexRead,
+        ESchemeOp::AddChangefeed,
+        ESchemeOp::DropChangefeed,
+        ESchemeOp::SetFamily,
+        ESchemeOp::SetDefault,
+    };
+
     struct TSchemeOpSpec {
         TString Create = R"(
             CREATE TABLE `/Root/SchemeOpsTable` (
@@ -1626,151 +1640,73 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     };
 
     Y_UNIT_TEST(SchemeChangeIsolationSerializableRW) {
-        TSchemeChangeIsolationTester tester;
-        tester.TxSettings = NYdb::NQuery::TTxSettings::SerializableRW();
-        tester.Execute();
+        for (const auto op : AllSchemeOps) {
+            TSchemeChangeIsolationTester tester;
+            tester.Operation = op;
+            tester.TxSettings = NYdb::NQuery::TTxSettings::SerializableRW();
+            tester.Execute();
+        }
     }
 
     Y_UNIT_TEST(SchemeChangeIsolationSnapshotRO) {
-        TSchemeChangeIsolationTester tester;
-        tester.TxSettings = NYdb::NQuery::TTxSettings::SnapshotRO();
-        tester.Execute();
+        for (const auto op : AllSchemeOps) {
+            TSchemeChangeIsolationTester tester;
+            tester.Operation = op;
+            tester.TxSettings = NYdb::NQuery::TTxSettings::SnapshotRO();
+            tester.Execute();
+        }
     }
 
     Y_UNIT_TEST(SchemeChangeIsolationSnapshotRW) {
-        TSchemeChangeIsolationTester tester;
-        tester.TxSettings = NYdb::NQuery::TTxSettings::SnapshotRW();
-        tester.Execute();
+        for (const auto op : AllSchemeOps) {
+            TSchemeChangeIsolationTester tester;
+            tester.Operation = op;
+            tester.TxSettings = NYdb::NQuery::TTxSettings::SnapshotRW();
+            tester.Execute();
+        }
     }
 
     Y_UNIT_TEST(SchemeChangeIsolationStrictSerializableRW) {
-        TSchemeChangeIsolationTester tester;
-        tester.TxSettings = NYdb::NQuery::TTxSettings::StrictSerializableRW();
-        tester.EnableStrictSerializable = true;
-        tester.Execute();
+        for (const auto op : AllSchemeOps) {
+            TSchemeChangeIsolationTester tester;
+            tester.Operation = op;
+            tester.TxSettings = NYdb::NQuery::TTxSettings::StrictSerializableRW();
+            tester.EnableStrictSerializable = true;
+            tester.Execute();
+        }
     }
 
-    // Read Committed is meant to see the latest committed data on every statement, and the
-    // Online and Stale modes promise no consistency between statements at all.
+    // Read Committed is meant to see the latest committed data on every statement, and
+    // the Online and Stale modes promise no consistency between statements at all.
     Y_UNIT_TEST(SchemeChangeIsolationReadCommittedRW) {
-        TSchemeChangeIsolationTester tester;
-        tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
-        tester.EnableReadCommitted = true;
-        tester.PromisesRepeatableReads = false;
-        tester.Execute();
+        for (const auto op : AllSchemeOps) {
+            TSchemeChangeIsolationTester tester;
+            tester.Operation = op;
+            tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
+            tester.EnableReadCommitted = true;
+            tester.PromisesRepeatableReads = false;
+            tester.Execute();
+        }
     }
 
     Y_UNIT_TEST(SchemeChangeIsolationStaleRO) {
-        TSchemeChangeIsolationTester tester;
-        tester.TxSettings = NYdb::NQuery::TTxSettings::StaleRO();
-        tester.PromisesRepeatableReads = false;
-        tester.Execute();
+        for (const auto op : AllSchemeOps) {
+            TSchemeChangeIsolationTester tester;
+            tester.Operation = op;
+            tester.TxSettings = NYdb::NQuery::TTxSettings::StaleRO();
+            tester.PromisesRepeatableReads = false;
+            tester.Execute();
+        }
     }
 
     Y_UNIT_TEST(SchemeChangeIsolationOnlineRO) {
-        TSchemeChangeIsolationTester tester;
-        tester.TxSettings = NYdb::NQuery::TTxSettings::OnlineRO();
-        tester.PromisesRepeatableReads = false;
-        tester.Execute();
-    }
-
-    Y_UNIT_TEST(SchemeChangeReadCommittedAddColumn) {
-        TSchemeChangeIsolationTester tester;
-        tester.Operation = ESchemeOp::AddColumn;
-        tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
-        tester.EnableReadCommitted = true;
-        tester.PromisesRepeatableReads = false;
-        tester.Execute();
-    }
-
-    Y_UNIT_TEST(SchemeChangeReadCommittedDropReadColumn) {
-        TSchemeChangeIsolationTester tester;
-        tester.Operation = ESchemeOp::DropReadColumn;
-        tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
-        tester.EnableReadCommitted = true;
-        tester.PromisesRepeatableReads = false;
-        tester.Execute();
-    }
-
-    Y_UNIT_TEST(SchemeChangeReadCommittedDropUnreadColumn) {
-        TSchemeChangeIsolationTester tester;
-        tester.Operation = ESchemeOp::DropUnreadColumn;
-        tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
-        tester.EnableReadCommitted = true;
-        tester.PromisesRepeatableReads = false;
-        tester.Execute();
-    }
-
-    Y_UNIT_TEST(SchemeChangeReadCommittedTruncateTable) {
-        TSchemeChangeIsolationTester tester;
-        tester.Operation = ESchemeOp::TruncateTable;
-        tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
-        tester.EnableReadCommitted = true;
-        tester.PromisesRepeatableReads = false;
-        tester.Execute();
-    }
-
-    Y_UNIT_TEST(SchemeChangeReadCommittedAddIndex) {
-        TSchemeChangeIsolationTester tester;
-        tester.Operation = ESchemeOp::AddIndex;
-        tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
-        tester.EnableReadCommitted = true;
-        tester.PromisesRepeatableReads = false;
-        tester.Execute();
-    }
-
-    Y_UNIT_TEST(SchemeChangeReadCommittedDropIndex) {
-        TSchemeChangeIsolationTester tester;
-        tester.Operation = ESchemeOp::DropIndex;
-        tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
-        tester.EnableReadCommitted = true;
-        tester.PromisesRepeatableReads = false;
-        tester.Execute();
-    }
-
-    Y_UNIT_TEST(SchemeChangeReadCommittedDropIndexWithIndexRead) {
-        TSchemeChangeIsolationTester tester;
-        tester.Operation = ESchemeOp::DropIndexWithIndexRead;
-        tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
-        tester.EnableReadCommitted = true;
-        tester.PromisesRepeatableReads = false;
-        tester.Execute();
-    }
-
-    Y_UNIT_TEST(SchemeChangeReadCommittedAddChangefeed) {
-        TSchemeChangeIsolationTester tester;
-        tester.Operation = ESchemeOp::AddChangefeed;
-        tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
-        tester.EnableReadCommitted = true;
-        tester.PromisesRepeatableReads = false;
-        tester.Execute();
-    }
-
-    Y_UNIT_TEST(SchemeChangeReadCommittedDropChangefeed) {
-        TSchemeChangeIsolationTester tester;
-        tester.Operation = ESchemeOp::DropChangefeed;
-        tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
-        tester.EnableReadCommitted = true;
-        tester.PromisesRepeatableReads = false;
-        tester.Execute();
-    }
-
-    Y_UNIT_TEST(SchemeChangeReadCommittedSetFamily) {
-        TSchemeChangeIsolationTester tester;
-        tester.Operation = ESchemeOp::SetFamily;
-        tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
-        tester.EnableReadCommitted = true;
-        tester.PromisesRepeatableReads = false;
-        tester.Execute();
-    }
-
-    Y_UNIT_TEST(SchemeChangeReadCommittedSetDefault) {
-        TSchemeChangeIsolationTester tester;
-        tester.Operation = ESchemeOp::SetDefault;
-        tester.TxSettings = NYdb::NQuery::TTxSettings::ReadCommittedRW();
-        tester.EnableReadCommitted = true;
-        tester.PromisesRepeatableReads = false;
-        tester.Execute();
+        for (const auto op : AllSchemeOps) {
+            TSchemeChangeIsolationTester tester;
+            tester.Operation = op;
+            tester.TxSettings = NYdb::NQuery::TTxSettings::OnlineRO();
+            tester.PromisesRepeatableReads = false;
+            tester.Execute();
+        }
     }
 }
 

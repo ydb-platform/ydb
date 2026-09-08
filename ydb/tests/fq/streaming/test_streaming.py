@@ -2312,14 +2312,12 @@ FROM `{table_name}`"""
             assert len(result_set_rows) == 1
             return result_set_rows[0].Issues
 
-        def check_issues(issues: str, substring: str):
+        def check_issues(query_issues: str, substring: str):
             """Validate issues structure and content."""
-            if substring:
-                assert substring in issues, issues
-                assert "Previous query retries" in issues, issues
-            # JSON depth can grow with retries; only enforce a reasonable upper bound.
-            depth = max_json_depth(json.loads(issues))
-            assert depth <= 10, f"Issues JSON depth {depth} exceeds limit: {issues}"
+            assert substring in query_issues, query_issues
+            assert query_issues.count("Previous query retries") == 1, query_issues
+            depth = max_json_depth(json.loads(query_issues))
+            assert depth <= 10, f"Issues JSON depth {depth} exceeds limit: {query_issues}"
 
         self.write_stream(["2"], endpoint=endpoint)
         assert wait_for(lambda: "Previous query retries" in get_issues(), timeout_seconds=60, step_seconds=1), "Failed to wait for Previous query retries"

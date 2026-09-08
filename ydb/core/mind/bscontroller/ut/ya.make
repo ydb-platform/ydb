@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/mind/bscontroller)
 
 SRCS(
+    blob_checker_planner_ut.cpp
     grouper_ut.cpp
     group_mapper_ut.cpp
     mv_object_map_ut.cpp

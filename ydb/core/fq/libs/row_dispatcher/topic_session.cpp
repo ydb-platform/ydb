@@ -13,6 +13,7 @@
 #include <ydb/library/yql/providers/pq/common/pq_events_processor.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/errors.h>
 
 #include <util/generic/queue.h>
 
@@ -559,12 +560,27 @@ NYdb::NTopic::TReadSessionSettings TTopicSession::GetReadSessionSettings(const T
         {"bufferSize", BufferSize},
         {"consumerMode", Config.GetConsumerMode()});
 
+    auto retryPolicy = NYdb::NTopic::IRetryPolicy::GetExponentialBackoffPolicy(
+        /* minDelay           */ TDuration::MilliSeconds(500),
+        /* minLongRetryDelay  */ TDuration::Seconds(5),
+        /* maxDelay           */ TDuration::Seconds(20),
+        /* maxRetries         */ 100,
+        /* maxTime            */ TDuration::Seconds(60),
+        /* scaleFactor        */ 2.0,
+        /* customRetryClass   */ [](NYdb::EStatus status) {
+            if (status == NYdb::EStatus::CLIENT_UNAUTHENTICATED) {
+                return ERetryErrorClass::LongRetry;
+            }
+            return NYdb::NTopic::GetRetryErrorClass(status);
+        });
+
     auto settings = NYdb::NTopic::TReadSessionSettings()
         .TraceId(LogPrefix)
         .AppendTopics(topicReadSettings)
         .MaxMemoryUsageBytes(BufferSize)
         .ReadFromTimestamp(minTime)
-        .AutoPartitioningSupport(true);
+        .AutoPartitioningSupport(true)
+        .RetryPolicy(retryPolicy);
 
     if (Config.GetConsumerMode() == TRowDispatcherSettings::EConsumerMode::Without
      || (Config.GetConsumerMode() == TRowDispatcherSettings::EConsumerMode::Auto && !consumerName)) {

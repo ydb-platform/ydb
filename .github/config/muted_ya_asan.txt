@@ -194,6 +194,7 @@ ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.TopicWithData
 ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.TopicWithoutConsumer
 ydb/core/persqueue/public/mlp/ut TMLPReaderTests.TopicWithoutConsumer
 ydb/core/persqueue/public/mlp/ut unittest.sole chunk
+ydb/core/persqueue/public/schema/ut DescribeOperationActor.ValidateSchemaThrowsMapsToInternalError
 ydb/core/persqueue/public/schema/ut DlqAcl.AlterTopicMlpConsumerFailsWhenChangingDlqToTopicWithoutAccess
 ydb/core/persqueue/public/schema/ut DlqAcl.AlterTopicWithMlpConsumerFailsWhenDlqTopicDoesNotExist
 ydb/core/persqueue/public/schema/ut DlqAcl.AlterTopicWithMlpConsumerFailsWithoutDlqTopicAccess
@@ -207,6 +208,7 @@ ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerFailsWithou
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerSucceedsWithAlterSchemaAndUpdateRowOnDlqTopic
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerSucceedsWithOnlyAlterSchemaOnDlqTopic
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerSucceedsWithOnlyUpdateRowOnDlqTopic
+ydb/core/persqueue/public/schema/ut SchemaOps.AlterMissingWithoutIfExistsIsSchemeError
 ydb/core/persqueue/public/schema/ut TCheckDlqTopicsActor.SucceedsWithOnlyAlterSchema
 ydb/core/persqueue/public/schema/ut TCheckDlqTopicsActor.SucceedsWithOnlyUpdateRow
 ydb/core/persqueue/public/schema/ut unittest.sole chunk

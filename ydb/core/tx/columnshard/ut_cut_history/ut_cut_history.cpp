@@ -852,22 +852,40 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT(!cutter.IsChannelPoisonedForTest(DataChannel));
     }
 
-    // The range probe reports our own live blob in the window, and the bounds cover every channel of it.
+    // The range probe reports our own live blob in the window, and the bounds address exactly that channel.
     Y_UNIT_TEST(RangeProbeOurBlobDisproves) {
         TRangeProbeEnv env;
         env.Run({ MakeResponse(MakeBlob(TRangeProbeEnv::TabletId, TRangeProbeEnv::DataChannel, 3)) });
 
         const auto request = env.GrabRequest();
-        // The bounds span every channel of the window, so the channel filter lives in the response check.
-        const ui32 maxChannel = TLogoBlobID::MaxChannel;
+        // A blob id sorts channel before generation, so a channel-bounded request is an exact window, not a superset.
         UNIT_ASSERT_VALUES_EQUAL(request->From.Generation(), TRangeProbeEnv::OldFromGen);
         UNIT_ASSERT_VALUES_EQUAL(request->To.Generation(), TRangeProbeEnv::NextFromGen - 1);
-        UNIT_ASSERT_VALUES_EQUAL(request->From.Channel(), 0u);
-        UNIT_ASSERT_VALUES_EQUAL(request->To.Channel(), maxChannel);
+        UNIT_ASSERT_VALUES_EQUAL(request->From.Channel(), TRangeProbeEnv::DataChannel);
+        UNIT_ASSERT_VALUES_EQUAL(request->To.Channel(), TRangeProbeEnv::DataChannel);
         UNIT_ASSERT(request->IsIndexOnly);
         UNIT_ASSERT(!request->MustRestoreFirst);
 
         env.AssertDisproved(/*failures=*/0);
+    }
+
+    // Edge generations: the window includes fromGen and excludes nextFromGen.
+    Y_UNIT_TEST(RangeProbeWindowEdges) {
+        {
+            TRangeProbeEnv env;
+            env.Run({ MakeResponse(MakeBlob(TRangeProbeEnv::TabletId, TRangeProbeEnv::DataChannel, TRangeProbeEnv::OldFromGen)) });
+            env.AssertDisproved(/*failures=*/0);
+        }
+        {
+            TRangeProbeEnv env;
+            env.Run({ MakeResponse(MakeBlob(TRangeProbeEnv::TabletId, TRangeProbeEnv::DataChannel, TRangeProbeEnv::NextFromGen - 1)) });
+            env.AssertDisproved(/*failures=*/0);
+        }
+        {
+            TRangeProbeEnv env;
+            env.Run({ MakeResponse(MakeBlob(TRangeProbeEnv::TabletId, TRangeProbeEnv::DataChannel, TRangeProbeEnv::NextFromGen)) });
+            env.AssertNotDisproved();
+        }
     }
 
     // Blobs of another tablet, or of another channel sharing the group, say nothing about this entry.

@@ -158,7 +158,7 @@ public:
 private:
     static constexpr TDuration ProbeTimeout = TDuration::Minutes(1);
 
-    // The range spans every channel of those generations, because a blob id sorts by generation before channel.
+    // A blob id sorts channel before generation, so the request already isolates the channel; this re-checks it anyway.
     bool IsLiveBlobOfProbe(const TEvBlobStorage::TEvRangeResult::TResponse& resp, const TRangeProbe& probe) const {
         if (resp.DoNotKeep && !resp.Keep) {
             return false;
@@ -189,9 +189,9 @@ private:
             Disprove(probe, /*failure=*/true);
             return;
         }
-        const TLogoBlobID from(TabletId, probe.FromGeneration, 0, 0, 0, 0);
+        const TLogoBlobID from(TabletId, probe.FromGeneration, 0, probe.Channel, 0, 0);
         const TLogoBlobID to(
-            TabletId, probe.NextFromGeneration - 1, Max<ui32>(), TLogoBlobID::MaxChannel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie);
+            TabletId, probe.NextFromGeneration - 1, Max<ui32>(), probe.Channel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie);
         auto request = MakeHolder<TEvBlobStorage::TEvRange>(TabletId, from, to, /*mustRestoreFirst=*/false, Deadline, /*isIndexOnly=*/true);
         SendToBSProxy(ctx, probe.Group, request.Release(), index);
         ++InFlight;

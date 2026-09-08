@@ -1285,3 +1285,32 @@ ColumnShardHashV1 write affinity: params couldn't be built for stage 1
 - Тесты с PARTITION BY — используют `ColumnTableInfoPtr` (основной путь)
 - Тесты без PARTITION BY — используют `ShardKey->GetPartitions()` (fallback)
 - Тесты с PK fallback — работают через `CtasShardingColumns` из Rewrite-фазы
+
+### 7.4 Проблема 3: `CommitState` не уведомляет DQ framework
+
+**Симптом:** При ревью было обнаружено, что `TKqpDirectWriteActor::CommitState()` был заменён на пустой no-op:
+```cpp
+// Было (origin/main):
+void CommitState(const NYql::NDqProto::TCheckpoint& checkpoint) final {
+    Callbacks->OnAsyncOutputStateCommitted(OutputIndex, checkpoint);
+}
+
+// Стало (staged, баг):
+void CommitState(const NYql::NDqProto::TCheckpoint&) final {};
+```
+
+**Корневая причина:** При добавлении `TargetShardIds` в `TKqpDirectWriteActor` (раздел 2.3.8) метод `CommitState` был случайно упрощён до no-op. DQ framework требует, чтобы `CommitState()` вызвал `ICallbacks::OnAsyncOutputStateCommitted()` после применения side effects checkpoint'а — это часть протокола завершения checkpoint'а (см. [`dq_compute_actor_async_io.h:177`](ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h:177)). Без этого вызова tracking завершения checkpoint'а зависает.
+
+**Решение:** Восстановлен вызов `Callbacks->OnAsyncOutputStateCommitted(OutputIndex, checkpoint)` в [`kqp_write_actor.cpp:2987`](ydb/core/kqp/runtime/kqp_write_actor.cpp:2987):
+```cpp
+// Direct-write actors do not persist any DQ state: all data is written
+// directly to the table via the write controller, and there is no
+// intermediate buffer to checkpoint. The checkpoint is a no-op, but we
+// must still notify the DQ framework that the (empty) state has been
+// committed so that checkpoint completion tracking can proceed.
+void CommitState(const NYql::NDqProto::TCheckpoint& checkpoint) final {
+    Callbacks->OnAsyncOutputStateCommitted(OutputIndex, checkpoint);
+}
+```
+
+Сам state остаётся пустым (direct-write actor не сохраняет промежуточных данных), но уведомление DQ framework обязательно для корректного завершения checkpoint'а.

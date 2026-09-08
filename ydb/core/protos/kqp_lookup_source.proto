@@ -10,4 +10,5 @@ message TDqSourceKikimrLookupSource {
     string Path = 1;
     string Token = 2 [(Ydb.sensitive) = true];
     string Database = 3;
+    int32 StatsMode = 4;
 }

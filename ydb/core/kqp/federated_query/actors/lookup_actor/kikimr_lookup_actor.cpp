@@ -5,6 +5,7 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/protos/kqp_lookup_source.pb.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -961,11 +962,21 @@ namespace {
                 tx_control.mutable_begin_tx()->mutable_snapshot_read_only();
                 tx_control.set_commit_tx(true);
             }
+            auto statsMode = Ydb::Query::STATS_MODE_NONE;
+            switch((NYql::EKikimrStatsMode)LookupSource.GetStatsMode()) {
+#define TRANSLATE(X, Y) \
+                case NYql::EKikimrStatsMode::X: \
+                    statsMode = Ydb::Query::STATS_MODE_##Y; \
+                    break
+                TRANSLATE(None, NONE);
+                TRANSLATE(Basic, BASIC);
+                TRANSLATE(Full, FULL);
+                TRANSLATE(Profile, PROFILE);
+#undef TRANSLATE
+            }
             YDB_LOG_DEBUG("QueryStatsMode",
                     COMMON_LOG,
-                    {"mode", (request.set_stats_mode(Ydb::Query::STATS_MODE_BASIC), "BASIC")}); // intentional side effects, order important
-            YDB_LOG_TRACE("QueryStatsMode",
-                    {"mode", (request.set_stats_mode(Ydb::Query::STATS_MODE_FULL), "FULL")}); // intentional side effects, order important
+                    {"mode", (request.set_stats_mode(statsMode), Ydb::Query::StatsMode_Name(statsMode))}); // intentional side effects, there are no point to collect stats unless we enabled debug logs
             YDB_LOG_TRACE("Query",
                     COMMON_LOG,
                     {"query", request.DebugString()});

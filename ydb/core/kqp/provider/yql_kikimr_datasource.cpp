@@ -590,6 +590,7 @@ private:
         source.SetPath(path);
         source.SetToken(SessionCtx->GetUserToken() ? SessionCtx->GetUserToken()->SerializeAsString() : "");
         source.SetDatabase(SessionCtx->GetDatabase());
+        source.SetStatsMode((int)SessionCtx->Query().StatsMode);
 
         // preserve source description for read actor
         protoSettings.PackFrom(source);

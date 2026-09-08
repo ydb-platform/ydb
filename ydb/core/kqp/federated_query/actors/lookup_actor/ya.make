@@ -8,6 +8,7 @@ SRCS(
 PEERDIR(
     ydb/core/protos
     ydb/core/base
+    ydb/core/kqp/provider
     ydb/core/control/lib
     ydb/library/aclib/protos
     ydb/library/yql/dq/actors/compute

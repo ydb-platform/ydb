@@ -86,13 +86,14 @@ public:
         AFL_VERIFY(pathItems.size() == startPositions.size());
 
         TString columnName;
+        columnName.reserve(EstimateSubcolumnNameSize(jsonPath, pathItems.size()));
         std::optional<ui32> columnIndex;
         ui32 matchedItemsCount = 0;
         for (ui32 i = 0; i < pathItems.size(); ++i) {
             if (pathTypes[i] != NYql::NJsonPath::EJsonPathItemType::MemberAccess) {
                 break;
             }
-            columnName = BuildSubcolumnName(columnName, pathItems[i]);
+            AppendSubcolumnName(columnName, pathItems[i]);
             if (auto index = GetColumnIndexOptional(columnName); index && isColumnAvailable(*index)) {
                 columnIndex = index;
                 matchedItemsCount = i + 1;

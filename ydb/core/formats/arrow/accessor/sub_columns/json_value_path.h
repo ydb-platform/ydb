@@ -20,7 +20,9 @@ using TJsonPath = TString;
 using TJsonPathBuf = TStringBuf;
 
 TString QuoteJsonItem(TStringBuf item);
+void AppendSubcolumnName(TString& currentPrefix, TStringBuf item);
 TString BuildSubcolumnName(TStringBuf currentPrefix, TStringBuf item);
+size_t EstimateSubcolumnNameSize(TStringBuf path, size_t pathItemsCount);
 TJsonPath ToJsonPath(TStringBuf path);
 
 struct TSplittedJsonPath {

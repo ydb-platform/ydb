@@ -11,33 +11,49 @@
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
-TString QuoteJsonItem(TStringBuf item) {
-    TStringBuilder builder;
+namespace {
 
-    builder << '"';
+void AppendQuotedJsonItem(TString& result, const TStringBuf item) {
+    result.append("\"");
 
     for (char ch : item) {
         if (ch == '"') {
-            builder << "\\\"";
+            result.append("\\\"");
         } else if (ch == '\\') {
-            builder << "\\\\";
+            result.append("\\\\");
         } else {
-            builder << ch;
+            result.append(1, ch);
         }
     }
 
-    builder << '"';
+    result.append("\"");
+}
 
-    return builder;
+}
+
+TString QuoteJsonItem(const TStringBuf item) {
+    TString result;
+    result.reserve(item.size() + 2);
+    AppendQuotedJsonItem(result, item);
+    return result;
+}
+
+void AppendSubcolumnName(TString& currentPrefix, const TStringBuf item) {
+    if (currentPrefix) {
+        currentPrefix.append(".");
+    }
+    AppendQuotedJsonItem(currentPrefix, item);
 }
 
 TString BuildSubcolumnName(const TStringBuf currentPrefix, const TStringBuf item) {
-    TStringBuilder builder;
-    if (currentPrefix) {
-        builder << currentPrefix << ".";
-    }
-    builder << QuoteJsonItem(item);
-    return builder;
+    TString result(currentPrefix);
+    AppendSubcolumnName(result, item);
+    return result;
+}
+
+size_t EstimateSubcolumnNameSize(const TStringBuf path, const size_t pathItemsCount) {
+    // Every canonical member adds a pair of quotes.
+    return path.size() + 2 * pathItemsCount;
 }
 
 TJsonPath ToJsonPath(TStringBuf path) {
@@ -115,12 +131,12 @@ TString ToSubcolumnName(TStringBuf path) {
     }
     auto [pathItems, pathTypes, _] = pathItemsResult.DetachResult();
     TString result;
-    result.reserve(path.size() + 2 * pathItems.size());
+    result.reserve(EstimateSubcolumnNameSize(path, pathItems.size()));
     for (decltype(pathItems)::size_type i = 0; i < pathItems.size(); ++i) {
         if (pathTypes[i] == NYql::NJsonPath::EJsonPathItemType::ArrayAccess) {
             result.append(pathItems[i]);
         } else {
-            result = BuildSubcolumnName(result, pathItems[i]);
+            AppendSubcolumnName(result, pathItems[i]);
         }
     }
 

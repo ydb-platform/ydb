@@ -2606,7 +2606,9 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
     Y_UNIT_TEST(SyncRejectsCorruptedSourcePayloadBeforeWrite) {
         TTestContext ctx;
-        const TDiskHandle disk = ctx.CreateDDisk(10, 2);
+        NDDisk::TDDiskConfig config;
+        config.CheckChecksumBeforeWrite = true;
+        const TDiskHandle disk = ctx.CreateDDisk(10, 2, std::nullopt, config);
         NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 51, 1);
         const ui32 srcPDiskId = 97;
         const ui32 srcSlotId = 1;

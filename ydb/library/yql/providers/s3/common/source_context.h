@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <memory>
 #include <mutex>
@@ -54,7 +55,7 @@ struct TSourceContext {
 
     double Ratio() const {
         auto downloadedBytes = DownloadedBytes.load();
-        return downloadedBytes ? static_cast<double>(downloadedBytes) / DownloadedBytes.load() : 1.0;
+        return downloadedBytes ? std::max(1.0, static_cast<double>(DecodedBytes.load()) / downloadedBytes) : 1.0;
     }
 
     ui64 FairShare() {

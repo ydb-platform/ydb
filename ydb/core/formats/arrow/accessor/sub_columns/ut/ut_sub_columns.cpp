@@ -298,7 +298,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         UNIT_ASSERT(invalidResult.GetErrorMessage().Contains("Unsupported path"));
     }
 
-    Y_UNIT_TEST(SplitJsonPath) {
+    Y_UNIT_TEST(ParseJsonPath) {
         TString path = R"($.a."b".'c'.'d"'."'"."\"".""."."[0,2].b[0].c[3][4].d[2 to 5].e[last])";
         TVector<TString> expectedItems = {"a", "b", "c", "d\"", "'", "\"", "", ".", "[0,2]", "b", "[0]", "c", "[3]", "[4]", "d", "[2 to 5]", "e", "[last]"};
         using enum NYql::NJsonPath::EJsonPathItemType;
@@ -306,9 +306,9 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
             MemberAccess, ArrayAccess, MemberAccess, ArrayAccess, ArrayAccess, MemberAccess, ArrayAccess, MemberAccess, ArrayAccess};
         TVector<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathBuf::size_type> expectedStartPositions = {1, 3, 7, 11, 16, 20, 25, 28, 32, 37, 39, 42, 44, 47, 50, 52, 60, 62};
 
-        auto result = NKikimr::NArrow::NAccessor::NSubColumns::SplitJsonPath(path, NSubColumns::TJsonPathSplitSettings{.FillTypes = true, .FillStartPositions = true});
+        auto result = NKikimr::NArrow::NAccessor::NSubColumns::ParseJsonPath(path);
         UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
-        const auto [pathItems, pathTypes, startPositions] = result.DetachResult();
+        const auto [pathItems, pathTypes, startPositions] = result.DetachResult().Items;
 
         UNIT_ASSERT_VALUES_EQUAL(expectedItems, pathItems);
         UNIT_ASSERT_EQUAL(expectedTypes, pathTypes);

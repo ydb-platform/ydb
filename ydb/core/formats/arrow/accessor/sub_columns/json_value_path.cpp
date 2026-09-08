@@ -63,6 +63,13 @@ TJsonPath ToJsonPath(TStringBuf path) {
     return TString("$.") + path;
 }
 
+namespace {
+
+struct TJsonPathSplitSettings {
+    bool FillTypes = false;
+    bool FillStartPositions = false;
+};
+
 TConclusion<TSplittedJsonPath> SplitJsonPath(TJsonPathBuf jsonPath, const TJsonPathSplitSettings& settings) {
     NYql::TIssues issues;
     auto path = NYql::NJsonPath::ParseJsonPath(jsonPath, issues, 5);
@@ -113,6 +120,8 @@ TConclusion<TSplittedJsonPath> SplitJsonPath(TJsonPathBuf jsonPath, const TJsonP
     return result;
 }
 
+} // namespace
+
 TConclusion<TParsedJsonPath> ParseJsonPath(const TJsonPathBuf jsonPath) {
     auto result = SplitJsonPath(jsonPath, TJsonPathSplitSettings{.FillTypes = true, .FillStartPositions = true});
     if (result.IsFail()) {
@@ -130,9 +139,9 @@ TConclusionStatus ValidateJsonPath(TJsonPathBuf jsonPath) {
 }
 
 TString ToSubcolumnName(TStringBuf path) {
-    auto pathItemsResult = SplitJsonPath(path, NSubColumns::TJsonPathSplitSettings{.FillTypes = true, .FillStartPositions = false});
+    auto pathItemsResult = SplitJsonPath(path, TJsonPathSplitSettings{.FillTypes = true, .FillStartPositions = false});
     if (pathItemsResult.IsFail()) {
-        pathItemsResult = SplitJsonPath(ToJsonPath(path), NSubColumns::TJsonPathSplitSettings{.FillTypes = true, .FillStartPositions = false});
+        pathItemsResult = SplitJsonPath(ToJsonPath(path), TJsonPathSplitSettings{.FillTypes = true, .FillStartPositions = false});
         if (pathItemsResult.IsFail()) {
             return TString(path);
         }

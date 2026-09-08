@@ -36,13 +36,6 @@ struct TParsedJsonPath {
     TSplittedJsonPath Items;
 };
 
-struct TJsonPathSplitSettings {
-    bool FillTypes = false;
-    bool FillStartPositions = false;
-};
-
-
-TConclusion<TSplittedJsonPath> SplitJsonPath(TJsonPathBuf jsonPath, const TJsonPathSplitSettings& settings = {});
 TConclusion<TParsedJsonPath> ParseJsonPath(TJsonPathBuf jsonPath);
 
 TConclusionStatus ValidateJsonPath(TJsonPathBuf jsonPath);

@@ -178,7 +178,7 @@ class TNeumannHashTable {
 
     static ui32 EstimateLogSize(int nItems) {
         int estimated = 32 - std::countl_zero<ui32>(nItems);
-        return std::max(1, std::min(24, estimated > 2 ? estimated - 2 : estimated));
+        return std::max(1, std::min(24, estimated));
     }
 
 

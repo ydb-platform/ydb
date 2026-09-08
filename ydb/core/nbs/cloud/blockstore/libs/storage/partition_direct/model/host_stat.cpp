@@ -36,6 +36,9 @@ void THostStat::OnSuccess(
         --inflight;
     }
 
+    if (!FirstSuccessAt) {
+        FirstSuccessAt = now;
+    }
     LastSuccessAt = now;
     FirstErrorAt = TInstant();
     ConsecutiveErrorCount = 0;
@@ -54,6 +57,7 @@ void THostStat::OnError(TInstant now, EOperation operation)
         FirstErrorAt = now;
     }
     LastErrorAt = now;
+    FirstSuccessAt = TInstant();
     ++ConsecutiveErrorCount;
     ConsecutiveSuccessCount = 0;
 }
@@ -76,6 +80,12 @@ THostErrorsInfo THostStat::GetErrorsInfo(TInstant now) const
     }
     if (LastErrorAt) {
         result.FromLastError = now - LastErrorAt;
+    }
+    if (FirstSuccessAt) {
+        result.FromFirstSuccess = now - FirstSuccessAt;
+    }
+    if (LastSuccessAt) {
+        result.FromLastSuccess = now - LastSuccessAt;
     }
     result.ConsecutiveErrorCount = ConsecutiveErrorCount;
     result.ConsecutiveSuccessCount = ConsecutiveSuccessCount;
@@ -119,6 +129,9 @@ TString THostStat::DebugPrint() const
 
     TStringBuilder sb;
     const TInstant now = TInstant::Now();
+    if (FirstSuccessAt) {
+        sb << "FirstSuccess: " << FormatDuration(now - FirstSuccessAt) << ", ";
+    }
     if (LastSuccessAt) {
         sb << "LastSuccess: " << FormatDuration(now - LastSuccessAt) << ", ";
     }

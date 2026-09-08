@@ -39,6 +39,8 @@ struct THostErrorsInfo
 {
     TDuration FromFirstError;
     TDuration FromLastError;
+    TDuration FromFirstSuccess;
+    TDuration FromLastSuccess;
     size_t ConsecutiveErrorCount = 0;
     size_t ConsecutiveSuccessCount = 0;
 };
@@ -81,6 +83,7 @@ public:
 private:
     size_t& AccessInflightCount(EOperation operation);
 
+    TInstant FirstSuccessAt;
     TInstant LastSuccessAt;
     TInstant FirstErrorAt;
     TInstant LastErrorAt;

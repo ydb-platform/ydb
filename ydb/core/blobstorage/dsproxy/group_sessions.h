@@ -22,6 +22,7 @@ namespace NKikimr {
                     TActorId ActorId;
                     TIntrusivePtr<NBackpressure::TFlowRecord> FlowRecord;
                     std::optional<bool> ExtraBlockChecksSupport;
+                    std::optional<bool> Checksumming;
                     std::shared_ptr<const TCostModel> CostModel = nullptr;
                     struct AtomicParameter : public std::atomic<bool> {
                         AtomicParameter& operator=(const AtomicParameter& other) {
@@ -70,6 +71,21 @@ namespace NKikimr {
 
                 static NKikimrBlobStorage::EVDiskQueueId VDiskQueueId(const TEvBlobStorage::TEvVAssimilate&) {
                     return NKikimrBlobStorage::EVDiskQueueId::GetAsyncRead;
+                }
+
+                static NKikimrBlobStorage::EVDiskQueueId VDiskQueueId(NKikimrBlobStorage::EPutHandleClass hc) {
+                    switch (hc) {
+                        case NKikimrBlobStorage::EPutHandleClass::TabletLog:
+                            return NKikimrBlobStorage::EVDiskQueueId::PutTabletLog;
+
+                        case NKikimrBlobStorage::EPutHandleClass::AsyncBlob:
+                            return NKikimrBlobStorage::EVDiskQueueId::PutAsyncBlob;
+
+                        case NKikimrBlobStorage::EPutHandleClass::UserData:
+                            return NKikimrBlobStorage::EVDiskQueueId::PutUserData;
+                    }
+
+                    Y_ABORT();
                 }
 
                 TQueue& GetQueue(NKikimrBlobStorage::EVDiskQueueId queueId) {
@@ -171,13 +187,25 @@ namespace NKikimr {
         }
 
         void Send(const IActor& actor, const TBlobStorageGroupInfo::TTopology& topology, std::unique_ptr<IEventBase> event,
-                ui64 cookie, NWilson::TTraceId traceId, const TVDiskID vdiskId, NKikimrBlobStorage::EVDiskQueueId queueId) {
+                ui64 cookie, bool userChecksumming, NWilson::TTraceId traceId, const TVDiskID vdiskId,
+                NKikimrBlobStorage::EVDiskQueueId queueId) {
             auto& queues = FailDomains[topology.GetFailDomainOrderNumber(vdiskId)].VDisks[vdiskId.VDisk].Queues;
             TActorId queueActorId = queues.GetQueue(queueId).ActorId;
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Send to queueActorId# " << queueActorId
                 << " " << TypeName(*event) << "# " << event->ToString() << " cookie# " << cookie);
-            TActivationContext::Send(new IEventHandle(queueActorId, actor.SelfId(), event.release(), 0, cookie, nullptr,
-                std::move(traceId)));
+            TActivationContext::Send(new IEventHandle(queueActorId, actor.SelfId(), event.release(),
+                userChecksumming ? IEventHandle::FlagDisablePayloadChecksums : 0,
+                cookie, nullptr, std::move(traceId)));
+        }
+
+        bool ChecksumExpected(const TBlobStorageGroupInfo::TTopology& topology, TVDiskID vdiskId,
+                NKikimrBlobStorage::EVDiskQueueId queueId) {
+            return FailDomains[topology.GetFailDomainOrderNumber(vdiskId)]
+                .VDisks[vdiskId.VDisk]
+                .Queues
+                .GetQueue(queueId)
+                .Checksumming
+                .value_or(false);
         }
 
         ui64 GetPredictedDelayNsByOrderNumber(ui32 orderNumber, NKikimrBlobStorage::EVDiskQueueId queueId) {
@@ -221,7 +249,8 @@ namespace NKikimr {
         void Poison();
         bool GoodToGo(const TBlobStorageGroupInfo::TTopology& topology, bool waitForAllVDisks);
         void QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EVDiskQueueId queueId, bool connected,
-            bool extraBlockChecksSupport, std::shared_ptr<const TCostModel> costModel, const TBlobStorageGroupInfo::TTopology& topology);
+            bool extraBlockChecksSupport, bool checksumming, std::shared_ptr<const TCostModel> costModel,
+            const TBlobStorageGroupInfo::TTopology& topology);
         ui32 GetNumUnconnectedDisks();
         ui32 GetMinHugeBlobInBytes() const;
     };

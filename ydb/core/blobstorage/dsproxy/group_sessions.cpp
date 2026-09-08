@@ -116,7 +116,8 @@ bool TGroupSessions::GoodToGo(const TBlobStorageGroupInfo::TTopology& topology, 
 }
 
 void TGroupSessions::QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EVDiskQueueId queueId, bool connected,
-        bool extraGroupChecksSupport, std::shared_ptr<const TCostModel> costModel, const TBlobStorageGroupInfo::TTopology& topology) {
+        bool extraGroupChecksSupport, bool checksumming, std::shared_ptr<const TCostModel> costModel,
+        const TBlobStorageGroupInfo::TTopology& topology) {
     const auto v = topology.GetVDiskId(orderNumber);
     const ui32 fdom = topology.GetFailDomainOrderNumber(v);
     auto& f = GroupQueues->FailDomains[fdom];
@@ -128,6 +129,7 @@ void TGroupSessions::QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EV
     if (connected) {
         ConnectedQueuesMask[orderNumber] |= 1 << queueId;
         q.ExtraBlockChecksSupport = extraGroupChecksSupport;
+        q.Checksumming = checksumming;
         Y_ABORT_UNLESS(costModel);
         if (!q.CostModel || *q.CostModel != *costModel) {
             updated = true;
@@ -136,6 +138,7 @@ void TGroupSessions::QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EV
     } else {
         ConnectedQueuesMask[orderNumber] &= ~(1 << queueId);
         q.ExtraBlockChecksSupport.reset();
+        q.Checksumming.reset();
         if (q.CostModel) {
             updated = true;
             q.CostModel = nullptr;

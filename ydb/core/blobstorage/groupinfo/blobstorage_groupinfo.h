@@ -35,7 +35,7 @@ namespace NBlobMapper {
 } // NBlobMapper
 
 static constexpr ui8 MaxHandoffNodes = 6;
-static constexpr ui8 MaxNodesPerBlob = 10;
+static constexpr ui8 MaxNodesPerBlob = 12;
 static constexpr ui8 MaxTotalPartCount = 7;
 static constexpr ui8 MaxVDisksInGroup = 32;
 

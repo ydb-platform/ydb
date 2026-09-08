@@ -138,7 +138,7 @@ namespace NKikimr {
                 memcpy(&fullDataSize, header, sizeof(fullDataSize));
                 header += sizeof(fullDataSize);
                 Y_ABORT_UNLESS(fullDataSize == rec.LogoBlobId.BlobSize());
-                Y_ABORT_UNLESS(NMatrix::TVectorType::MakeOneHot(partId - 1, gtype.TotalPartCount()).Raw() == static_cast<ui8>(*header));
+                Y_ABORT_UNLESS(NMatrix::TVectorType::MakeOneHot(partId - 1, gtype.TotalPartCount()).Raw8() == static_cast<ui8>(*header));
                 trim += TDiskBlob::HeaderSize;
             }
 

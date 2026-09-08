@@ -71,7 +71,7 @@ namespace NKikimr {
         const bool RunHandoff;
         const TActorId SkeletonId;
 
-        std::vector<ui8> DelMap;
+        std::vector<NMatrix::TVectorType::TRaw> DelMap;
         size_t Counter = 0;
         TStat Stat;
     };

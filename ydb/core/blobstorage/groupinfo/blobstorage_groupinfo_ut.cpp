@@ -17,6 +17,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
                 if (species == TBlobStorageGroupType::ErasureMirror3dc) {
                     continue;
                 }
+                if (species == TBlobStorageGroupType::Erasure8Plus2Block && disks > 2) {
+                    continue; // 12 domains must fit the 32-VDisk group capacity.
+                }
 
                 const auto erasureType = TErasureType::EErasureSpecies(species);
                 const ui32 numFailDomains = TBlobStorageGroupType(erasureType).BlobSubgroupSize();
@@ -69,6 +72,10 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
 
         for (ui32 species = 0; species < TBlobStorageGroupType::ErasureSpeciesCount; ++species) {
             if (species == TBlobStorageGroupType::ErasureMirror3dc || species == TBlobStorageGroupType::ErasureMirror3of4) {
+                continue;
+            }
+            if (species == TBlobStorageGroupType::Erasure8Plus2Block) {
+                // The 2^30 Cartesian product is covered by the bounded wide-ingress corpus instead.
                 continue;
             }
 
@@ -138,8 +145,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
                 continue;
             }
 
-            const ui32 numFailDomains = 10;
-            const ui32 numVDisks = 3;
+            const bool wide = erasure == TBlobStorageGroupType::Erasure8Plus2Block;
+            const ui32 numFailDomains = wide ? 12 : 10;
+            const ui32 numVDisks = wide ? 2 : 3;
             TBlobStorageGroupInfo info(erasure, numVDisks, numFailDomains);
 
             // calculate number of handoff disks
@@ -248,4 +256,3 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
 }
 
 } // namespace NKikimr
-

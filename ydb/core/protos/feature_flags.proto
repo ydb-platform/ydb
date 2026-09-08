@@ -264,7 +264,7 @@ message TFeatureFlags {
     optional bool EnableStreamingQueriesPqSinkDeduplication = 235 [default = false];
     optional bool EnableBlobIdInSectorChecksum = 236 [default = false];
     optional bool TransferInternalDataDecompression = 237 [default = false];
-    optional bool EnableJsonIndex = 238 [default = false];
+    optional bool EnableJsonIndex = 238 [default = true];
     optional bool EnableSQSMigrationTopicCreation = 239 [default = false];
     optional bool EnableSQSMigrationCompatibility = 240 [default = false];
     optional bool EnableSQSMigrationFinished = 241 [default = false];
@@ -305,7 +305,7 @@ message TFeatureFlags {
     optional bool EnableUserAttributesInTopicQuery = 264 [default = true];
     optional bool EnableDqSourceStreamLookupJoinFullscan = 265 [default = false];
     optional bool EnableTopicsPredicatePushdown = 266 [default = false];
-    optional bool EnableJsonIndexAutoSelect = 267 [default = false];
+    optional bool EnableJsonIndexAutoSelect = 267 [default = true];
     optional bool ForbidRequestsToStaticNodesWithoutDatabase = 268 [default = true];
     optional bool EnableTabletDevUiSecurePath = 269 [default = false];
     optional bool EnableExtraSidsControlForHttpViewer = 270 [default = true];

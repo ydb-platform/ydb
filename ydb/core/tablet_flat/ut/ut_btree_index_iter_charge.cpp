@@ -126,8 +126,70 @@ namespace {
         const bool StickSomePages = false;
     };
 
+    void SetupSlices(const TTestParams& params, const TPartStore& part) {
+        if (params.Slices) {
+            TSlices slices;
+            auto partSlices = (TSlices*)part.Slices.Get();
+            auto add = [&](ui32 pageIndex1Inclusive, ui32 pageIndex2Exclusive) {
+                slices.push_back(IndexTools::MakeSlice(part, pageIndex1Inclusive, pageIndex2Exclusive));
+            };
+
+            switch (params.Slices) {
+            case TTestParams::Many:
+                add(0, 2);
+                add(3, 4);
+                add(4, 6);
+                add(7, 8);
+                add(8, 9);
+                add(10, 14);
+                add(16, 17);
+                add(17, 19);
+                add(19, 20);
+                break;
+            case TTestParams::Type1:
+                add(7, 8);
+                add(8, 9);
+                break;
+            case TTestParams::Type2:
+                add(7, 8);
+                break;
+            case TTestParams::Type3:
+                add(7, 9);
+                break;
+            case TTestParams::Type4:
+                add(7, 10);
+                break;
+            case TTestParams::Type5:
+                add(8, 10);
+                break;
+            case TTestParams::Type6:
+                add(9, 10);
+                break;
+            case TTestParams::Type7:
+                add(2, 4);
+                add(17, 18);
+                break;
+            default:
+                Y_ABORT("Unknown slices");
+            }
+
+            partSlices->clear();
+            for (auto s : slices) {
+                partSlices->push_back(s);
+            }
+
+            if (params.Slices <= TTestParams::None + 1) {
+                Cerr << DumpPart(part, 3) << Endl;
+            }
+            Cerr << "Slices";
+            part.Slices->Describe(Cerr);
+            Cerr << Endl;
+        }
+    }
+
     TPartEggs MakePart(TTestParams params) {
         NPage::TConf conf;
+        conf.WriteBTreeIndexV2 = false;
         switch (params.Levels) {
         case 0:
             conf.Group(0).PageRows = 999;
@@ -181,72 +243,7 @@ namespace {
 
         const auto part = *eggs.Lone();
 
-        if (params.Slices) {
-            TSlices slices;
-            auto partSlices = (TSlices*)part.Slices.Get();
-            auto add = [&](ui32 pageIndex1Inclusive, ui32 pageIndex2Exclusive) {
-                slices.push_back(IndexTools::MakeSlice(part, pageIndex1Inclusive, pageIndex2Exclusive));
-            };
-
-            switch (params.Slices) {
-            case TTestParams::Many: {
-                add(0, 2);
-                add(3, 4);
-                add(4, 6);
-                add(7, 8);
-                add(8, 9);
-                add(10, 14);
-                add(16, 17);
-                add(17, 19);
-                add(19, 20);
-                break;
-            }
-            case TTestParams::Type1: {
-                add(7, 8);
-                add(8, 9);
-                break;
-            }
-            case TTestParams::Type2: {
-                add(7, 8);
-                break;
-            }
-            case TTestParams::Type3: {
-                add(7, 9);
-                break;
-            }
-            case TTestParams::Type4: {
-                add(7, 10);
-                break;
-            }
-            case TTestParams::Type5: {
-                add(8, 10);
-                break;
-            }
-            case TTestParams::Type6: {
-                add(9, 10);
-                break;
-            }
-            case TTestParams::Type7: {
-                add(2, 4);
-                add(17, 18);
-                break;
-            }
-            default:
-                Y_ABORT("Unknown slices");
-            }
-
-            partSlices->clear();
-            for (auto s : slices) {
-                partSlices->push_back(s);
-            }
-        }
-
-        if (params.Slices <= TTestParams::None + 1) {
-            Cerr << DumpPart(part, 3) << Endl;
-        }
-        Cerr << "Slices";
-        part.Slices->Describe(Cerr);
-        Cerr << Endl;
+        SetupSlices(params, part);
 
         UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount(), params.Levels);
         if (params.Groups) {
@@ -308,6 +305,72 @@ namespace {
         UNIT_ASSERT_C(false,  error);
         return EReady::Page;
     }
+
+    // V2 twin of TTouchEnv: offset-keyed and Type-aware, mirroring production
+    // TPageCollectionReadEnv. TTouchEnv keys on TPageId and ignores location.Type,
+    // so it cannot see the offset/Type collision that the V2 charger produces
+    // when it mis-tags the deepest index level as EPage::DataPage. This env keys
+    // by byte offset (within room, since the same offset names different pages
+    // in room 0 vs a column-group room) and validates the requested Type against
+    // the store's truth on every miss — the bug is caught on the first miss.
+    struct TTouchEnvV2 : public NTest::TTestEnv {
+        const TPartStore* Part = nullptr;
+
+        // room -> loaded page bodies keyed by byte offset within that room
+        THashMap<ui32, THashMap<NPage::TPageOffset, TSharedData>> Loaded;
+        // room -> this round's outstanding misses
+        THashMap<ui32, TVector<NPage::TPageLocation>> Touched;
+
+        explicit TTouchEnvV2(const TPartStore* part)
+            : Part(part) {}
+
+        const TSharedData* TryGetPage(const TPart* part, const NPage::TPageLocation& location,
+                NPage::TGroupId groupId) override {
+            Y_UNUSED(part);
+            const ui32 room = groupId.Index;
+            auto& loaded = Loaded[room];
+            if (auto* p = loaded.FindPtr(location.Offset)) {
+                return p;
+            }
+            // Type-aware: the store knows the true page type for this offset/room.
+            // Resolve the byte offset to a page id within this room, then compare
+            // the charger's requested Type with the store's recorded page type.
+            // The buggy charger asks for the deepest index page as EPage::DataPage;
+            // the store says it is EPage::BTreeIndexV2 -> this assert catches the
+            // type mismatch immediately on every miss.
+            auto pageId = Part->Store->ResolveByteOffset(room, location.Offset.AsByteOffset());
+            auto trueType = Part->GetPageType(pageId, groupId);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                static_cast<ui16>(location.Type), static_cast<ui16>(trueType),
+                "Wrong Type for offset " << location.Offset.AsByteOffset()
+                << " room " << room
+                << ": charger asked " << static_cast<ui16>(location.Type)
+                << " store says " << static_cast<ui16>(trueType));
+            Touched[room].push_back(location);
+            return nullptr;
+        }
+
+        // Simulate ObtainToLoad -> fetch -> save: every miss becomes available.
+        void LoadTouched() {
+            for (auto& [room, locs] : Touched) {
+                auto& loaded = Loaded[room];
+                for (auto& loc : locs) {
+                    const auto* data = Part->Store->GetPage(room, loc.Offset);
+                    UNIT_ASSERT_C(data, "no page at offset " << loc.Offset.AsByteOffset()
+                        << " room " << room);
+                    loaded[loc.Offset] = TSharedData::Copy(*data);
+                }
+            }
+            Touched.clear();
+        }
+
+        bool TouchedEmpty() const {
+            for (const auto& [room, locs] : Touched) {
+                if (!locs.empty()) return false;
+            }
+            return true;
+        }
+    };
 }
 
 Y_UNIT_TEST_SUITE(TPartGroupBtreeIndexIter) {
@@ -796,6 +859,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
     Y_UNIT_TEST(FewNodes_Groups_History_Sticky) {
         CheckPart({.Levels = 3, .Groups = true, .History = true, .StickSomePages = true});
     }
+
 }
 
 Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
@@ -1226,6 +1290,558 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
             CheckPart({.Levels = 3, .Groups = true, .History = true, .Slices = TTestParams::ESlices(slices), .StickSomePages = true});
         }
+    }
+}
+
+// ========================================================================
+// Shared V2 part builders used by both TPartGroupBtreeIndexIterV2 and
+// TChargeBTreeIndexV2 suites.
+// ========================================================================
+
+namespace {
+    NPage::TConf MakeV2Conf(TTestParams params) {
+        NPage::TConf conf;
+        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV2 = true;
+        conf.WriteFlatIndex = false;
+        conf.BTreeIndexV2KeepV1Shadow = false;
+        switch (params.Levels) {
+        case 0:
+            conf.Group(0).PageRows = 999;
+            break;
+        case 1:
+            conf.Group(0).PageRows = 2;
+            break;
+        case 3:
+            conf.Group(0).PageRows = 2;
+            conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
+            break;
+        default:
+            Y_TABLET_ERROR("Unknown levels");
+        }
+        if (params.Groups) {
+            conf.Group(1).PageRows = params.Levels ? 1 : 999;
+            conf.Group(2).PageRows = 3;
+            conf.Group(3).PageRows = 1;
+            conf.Group(1).BTreeIndexNodeKeysMin = conf.Group(1).BTreeIndexNodeKeysMax = conf.Group(0).BTreeIndexNodeKeysMax;
+            conf.Group(2).BTreeIndexNodeKeysMin = conf.Group(2).BTreeIndexNodeKeysMax = 2;
+            conf.Group(3).BTreeIndexNodeKeysMin = conf.Group(3).BTreeIndexNodeKeysMax = 999;
+        }
+        return conf;
+    }
+
+    TPartEggs MakeV2Part(TTestParams params) {
+        auto conf = MakeV2Conf(params);
+
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::Uint32)
+            .Col(params.Groups ? 1 : 0, 2,  NScheme::NTypeIds::Uint32)
+            .Col(params.Groups ? 2 : 0, 3,  NScheme::NTypeIds::Uint64)
+            .Col(params.Groups ? 3 : 0, 4,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        TPartCook cook(lay, conf);
+        const TVector<ui32> secondCells = {1, 3, 4, 6, 7, 8, 10};
+        for (ui32 i : xrange<ui32>(0, 40)) {
+            for (int ver = params.History ? i % 3 : 0; ver >= 0; ver--) {
+                cook.Ver({0, ui64(ver)}).Add(*TSchemedCookRow(*lay).Col(i / 7, secondCells[i % 7], i, static_cast<ui64>(i), TString("xxxxxxxxxx_" + std::to_string(i))));
+            }
+        }
+
+        auto eggs = cook.Finish();
+        const auto part = *eggs.Lone();
+        SetupSlices(params, part);
+        UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount(), params.Levels);
+        return eggs;
+    }
+}
+
+// ========================================================================
+// Section 3.2: V2 twin tests — V2 B-tree produces same results as V1
+// ========================================================================
+
+Y_UNIT_TEST_SUITE(TPartGroupBtreeIndexIterV2) {
+    using namespace NTest;
+
+    // V2 twin: verify v2 btree iteration produces same results as v1 btree
+    void CheckV2Iter(TTestParams params) {
+        // Make v1 part (btree+flat)
+        TPartEggs v1Eggs = MakePart(params);
+        const auto v1Part = *v1Eggs.Lone();
+
+        // Make v2 part (btree only, no flat)
+        TPartEggs v2Eggs = MakeV2Part(params);
+        const auto v2Part = *v2Eggs.Lone();
+
+        // Both must have the same row count
+        UNIT_ASSERT_VALUES_EQUAL(v1Part.Stat.Rows, v2Part.Stat.Rows);
+
+        // Iterate both btree indexes and compare page-by-page. Keep V1 resident,
+        // but force V2 through miss/load/resume to validate byte-offset requests.
+        TTestEnv v1Env;
+        TTouchEnvV2 v2Env(&v2Part);
+        auto v1Index = CreateIndexIter(&v1Part, &v1Env, {});
+        auto v2Index = CreateIndexIter(&v2Part, &v2Env, {});
+
+        auto retryV2 = [&](auto&& action) -> EReady {
+            for (ui32 attempt = 0; attempt <= 10; attempt++) {
+                v2Env.LoadTouched();
+                if (auto ready = action(); ready != EReady::Page) {
+                    return ready;
+                }
+            }
+            UNIT_ASSERT_C(false, "V2 index iteration did not become ready");
+            return EReady::Page;
+        };
+
+        for (size_t i = 0; ; i++) {
+            auto v1Ready = i == 0 ? v1Index->Seek(0) : v1Index->Next();
+            auto v2Ready = retryV2([&]() {
+                return i == 0 ? v2Index->Seek(0) : v2Index->Next();
+            });
+
+            UNIT_ASSERT_VALUES_EQUAL_C(v1Ready, v2Ready,
+                "V2 iteration readiness differs at step " + ToString(i));
+            if (v1Ready != EReady::Data) {
+                break;
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL_C(v1Index->GetRowId(), v2Index->GetRowId(),
+                "V2 row id mismatch at step " + ToString(i));
+            UNIT_ASSERT_VALUES_EQUAL_C(v1Index->GetNextRowId(), v2Index->GetNextRowId(),
+                "V2 next row id mismatch at step " + ToString(i));
+            UNIT_ASSERT_VALUES_EQUAL_C(v1Index->GetLocation().Size, v2Index->GetLocation().Size,
+                "V2 page size mismatch at step " + ToString(i));
+        }
+
+        // Key-based seek must land on the same page, not merely return the same status.
+        const auto* keyDefaults = v1Eggs.Scheme->Keys.Get();
+        for (ui32 first : {0u, 1u, 3u, 5u}) {
+            for (ui32 second : {0u, 5u, 13u}) {
+                for (bool reverse : {false, true}) {
+                    for (ESeek seek : {ESeek::Exact, ESeek::Lower, ESeek::Upper}) {
+                        TTestEnv v1SeekEnv, v2SeekEnv;
+                        auto v1Seek = CreateIndexIter(&v1Part, &v1SeekEnv, {});
+                        auto v2Seek = CreateIndexIter(&v2Part, &v2SeekEnv, {});
+                        auto key = MakeKey(first, second);
+                        auto v1Ready = reverse
+                            ? v1Seek->SeekReverse(seek, key, keyDefaults)
+                            : v1Seek->Seek(seek, key, keyDefaults);
+                        auto v2Ready = reverse
+                            ? v2Seek->SeekReverse(seek, key, keyDefaults)
+                            : v2Seek->Seek(seek, key, keyDefaults);
+
+                        UNIT_ASSERT_VALUES_EQUAL(v1Ready, v2Ready);
+                        UNIT_ASSERT_VALUES_EQUAL(v1Seek->IsValid(), v2Seek->IsValid());
+                        if (v1Ready == EReady::Data) {
+                            UNIT_ASSERT_VALUES_EQUAL(v1Seek->GetRowId(), v2Seek->GetRowId());
+                            UNIT_ASSERT_VALUES_EQUAL(v1Seek->GetNextRowId(), v2Seek->GetNextRowId());
+                            UNIT_ASSERT_VALUES_EQUAL(v1Seek->GetLocation().Size, v2Seek->GetLocation().Size);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NoNodes_V2) {
+        CheckV2Iter({.Levels = 0});
+    }
+
+    Y_UNIT_TEST(OneNode_V2) {
+        CheckV2Iter({.Levels = 1});
+    }
+
+    Y_UNIT_TEST(FewNodes_V2) {
+        CheckV2Iter({.Levels = 3});
+    }
+
+}
+
+Y_UNIT_TEST_SUITE(TChargeBTreeIndexV2) {
+    using namespace NTest;
+
+    // Basic sanity: V2 part can be charged (charge returns ready, produces non-zero results)
+    void CheckV2ChargeBasic(TTestParams params) {
+        TPartEggs eggs = MakeV2Part(params);
+        const auto part = *eggs.Lone();
+
+        auto tags = TVector<TTag>();
+        for (auto c : eggs.Scheme->Cols) {
+            tags.push_back(c.Tag);
+        }
+
+        TTestEnv env;
+        TChargeBTreeIndex charge(&env, part, tags, true);
+        const auto& keyDefaults = *eggs.Scheme->Keys.Get();
+        const auto& meta = part.IndexPages.BTreeGroups[0];
+
+        // Full-range charge must succeed
+        auto result = charge.Do(TCells{}, TCells{}, 0, meta.GetRowCount() - 1, keyDefaults, 0, 0);
+        UNIT_ASSERT_C(result.Ready, "V2 full-range charge must be ready");
+        UNIT_ASSERT_C(result.ItemsPrecharged > 0, "V2 full-range charge must precharge items");
+    }
+
+    // Compare V2 btree charge vs V1 btree charge for the same data
+    void CheckV2VsV1Charge(TTestParams params) {
+        auto v1Eggs = MakePart(params);
+        auto v2Eggs = MakeV2Part(params);
+
+        const auto v1Part = *v1Eggs.Lone();
+        const auto v2Part = *v2Eggs.Lone();
+
+        // Verify both have same row count
+        UNIT_ASSERT_VALUES_EQUAL_C(v1Part.Stat.Rows, v2Part.Stat.Rows,
+            "V1 and V2 parts must have same row count");
+
+        auto tags = TVector<TTag>();
+        for (auto c : v1Eggs.Scheme->Cols) {
+            tags.push_back(c.Tag);
+        }
+        const auto& keyDefaults = *v1Eggs.Scheme->Keys.Get();
+
+        TTestEnv v1Env, v2Env;
+        TChargeBTreeIndex v1Charge(&v1Env, v1Part, tags, true);
+        TChargeBTreeIndex v2Charge(&v2Env, v2Part, tags, true);
+
+        const auto& v1Meta = v1Part.IndexPages.BTreeGroups[0];
+        const auto& v2Meta = v2Part.IndexPages.BTreeGroups[0];
+
+        // V1 and V2 must agree on meta-level stats
+        UNIT_ASSERT_VALUES_EQUAL(v1Meta.GetRowCount(), v2Meta.GetRowCount());
+        UNIT_ASSERT_VALUES_EQUAL(v1Meta.GetDataSize(), v2Meta.GetDataSize());
+
+        // Full-range charge
+        TRowId endRow = v1Meta.GetRowCount() - 1;
+        auto v1Result = v1Charge.Do(TCells{}, TCells{}, 0, endRow, keyDefaults, 0, 0);
+        auto v2Result = v2Charge.Do(TCells{}, TCells{}, 0, endRow, keyDefaults, 0, 0);
+
+        UNIT_ASSERT_C(v1Result.Ready, "V1 full charge must be ready");
+        UNIT_ASSERT_C(v2Result.Ready, "V2 full charge must be ready");
+        UNIT_ASSERT_VALUES_EQUAL_C(v1Result.ItemsPrecharged, v2Result.ItemsPrecharged,
+            "V1 and V2 must agree on full-range items precharged");
+        // V2 index pages are larger (byte-offset children), so V2 bytes must be
+        // at least V1 bytes. Both must be non-zero.
+        UNIT_ASSERT_C(v1Result.BytesPrecharged > 0, "V1 full charge must precharge bytes");
+        UNIT_ASSERT_C(v2Result.BytesPrecharged > 0, "V2 full charge must precharge bytes");
+        UNIT_ASSERT_GE_C(v2Result.BytesPrecharged, v1Result.BytesPrecharged,
+            "V2 must precharge at least as many bytes as V1 (V2 index pages are larger): "
+            << v2Result.BytesPrecharged << " vs " << v1Result.BytesPrecharged);
+    }
+
+    // Check charge with items limit produces consistent results
+    void CheckV2ChargeWithLimit(TTestParams params) {
+        auto eggs = MakeV2Part(params);
+        const auto part = *eggs.Lone();
+
+        auto tags = TVector<TTag>();
+        for (auto c : eggs.Scheme->Cols) {
+            tags.push_back(c.Tag);
+        }
+        const auto& keyDefaults = *eggs.Scheme->Keys.Get();
+        const auto& meta = part.IndexPages.BTreeGroups[0];
+
+        TTestEnv env;
+        TChargeBTreeIndex charge(&env, part, tags, true);
+
+        // Unlimited baseline — the limit variant must not precharge MORE items.
+        auto unlimited = charge.Do(TCells{}, TCells{}, 0, meta.GetRowCount() - 1,
+            keyDefaults, 0, 0);
+        UNIT_ASSERT_C(unlimited.Ready, "V2 unlimited charge must be ready");
+
+        auto limited = charge.Do(TCells{}, TCells{}, 0, meta.GetRowCount() - 1,
+            keyDefaults, 5, 0);
+        UNIT_ASSERT_C(limited.Ready, "V2 limited charge must be ready");
+        UNIT_ASSERT_GE_C(limited.ItemsPrecharged, 5,
+            "V2 full-range charge with limit 5 must precharge at least 5 items");
+        UNIT_ASSERT_LE_C(limited.ItemsPrecharged, unlimited.ItemsPrecharged,
+            "V2 limited charge must not precharge more items than unlimited ("
+            << limited.ItemsPrecharged << " vs " << unlimited.ItemsPrecharged << ")");
+    }
+
+    Y_UNIT_TEST(NoNodes_V2) {
+        CheckV2ChargeBasic({.Levels = 0});
+        CheckV2VsV1Charge({.Levels = 0});
+    }
+
+    Y_UNIT_TEST(OneNode_V2) {
+        CheckV2ChargeBasic({.Levels = 1});
+        CheckV2VsV1Charge({.Levels = 1});
+    }
+
+    Y_UNIT_TEST(FewNodes_V2) {
+        CheckV2ChargeBasic({.Levels = 3});
+        CheckV2VsV1Charge({.Levels = 3});
+    }
+
+    Y_UNIT_TEST(NoNodes_Groups_V2) {
+        CheckV2ChargeBasic({.Levels = 0, .Groups = true});
+        CheckV2VsV1Charge({.Levels = 0, .Groups = true});
+    }
+
+    Y_UNIT_TEST(NoNodes_History_V2) {
+        CheckV2ChargeBasic({.Levels = 0, .History = true});
+        CheckV2VsV1Charge({.Levels = 0, .History = true});
+    }
+
+    Y_UNIT_TEST(OneNode_History_V2) {
+        CheckV2ChargeBasic({.Levels = 1, .History = true});
+        CheckV2VsV1Charge({.Levels = 1, .History = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_History_V2) {
+        CheckV2ChargeBasic({.Levels = 3, .Groups = true, .History = true});
+        CheckV2VsV1Charge({.Levels = 3, .Groups = true, .History = true});
+    }
+
+    Y_UNIT_TEST(ChargeWithLimit_V2) {
+        CheckV2ChargeWithLimit({.Levels = 3});
+        CheckV2ChargeWithLimit({.Levels = 1});
+    }
+
+    Y_UNIT_TEST(NoNodes_Groups_History_V2) {
+        CheckV2ChargeBasic({.Levels = 0, .Groups = true, .History = true});
+        CheckV2VsV1Charge({.Levels = 0, .Groups = true, .History = true});
+    }
+
+    Y_UNIT_TEST(OneNode_Groups_V2) {
+        CheckV2ChargeBasic({.Levels = 1, .Groups = true});
+        CheckV2VsV1Charge({.Levels = 1, .Groups = true});
+    }
+
+    Y_UNIT_TEST(OneNode_Groups_History_V2) {
+        CheckV2ChargeBasic({.Levels = 1, .Groups = true, .History = true});
+        CheckV2VsV1Charge({.Levels = 1, .Groups = true, .History = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_V2) {
+        CheckV2ChargeBasic({.Levels = 3, .Groups = true});
+        CheckV2VsV1Charge({.Levels = 3, .Groups = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_History_V2) {
+        CheckV2ChargeBasic({.Levels = 3, .History = true});
+        CheckV2VsV1Charge({.Levels = 3, .History = true});
+    }
+
+    // -- V2 resume twins -----------------------------------------------------
+    // Drive a V2 part through a miss -> load -> re-Do() resume loop on an
+    // offset-keyed, Type-aware env (TTouchEnvV2). This is the production
+    // executor reschedule/resume flow that the V1/Type-blind TTouchEnv cannot
+    // exercise. The env's GetPageType check fails on the first miss if the
+    // charger mis-tags the deepest index level as EPage::DataPage.
+
+    ui32 GetV2FailsAllowed(TTestParams params) {
+        ui32 result = (params.Levels + 1) * 2;
+        if (params.History) result *= 2;
+        if (params.Groups) result *= 2;
+        return result;
+    }
+
+    ICharge::TResult DoV2Resume(TPartEggs& eggs, TTestParams params, bool reverse,
+            bool useKeys, ui64 itemsLimit, ui64 bytesLimit, const TString& message) {
+        const auto part = *eggs.Lone();
+        auto tags = TVector<TTag>();
+        for (auto c : eggs.Scheme->Cols) {
+            tags.push_back(c.Tag);
+        }
+        const auto& keyDefaults = *eggs.Scheme->Keys.Get();
+
+        TTouchEnvV2 env(&part);
+        TChargeBTreeIndex charge(&env, part, tags, true);
+
+        // A couple of in-range keys to drive the key1/key2 path (which hits the
+        // key-path BuildPageRef(remLevel<=0) that must stay correct, plus the
+        // data-page key-resolution branch). For row-id charge pass empty keys.
+        TCell k1c[2] = { TCell::Make<ui32>(0), TCell::Make<ui32>(3) };
+        TCell k2c[2] = { TCell::Make<ui32>(5), TCell::Make<ui32>(8) };
+        TCells key1{k1c, 2};
+        TCells key2{k2c, 2};
+        const TRowId lastRow = part.Stat.Rows - 1;
+
+        ICharge::TResult result;
+        const ui32 failsAllowed = GetV2FailsAllowed(params);
+        for (ui32 attempt = 0; attempt <= failsAllowed; attempt++) {
+            env.LoadTouched();
+            result = (useKeys
+                ? (reverse
+                    ? charge.DoReverse(key1, key2, lastRow, 0, keyDefaults, itemsLimit, bytesLimit)
+                    : charge.Do(key1, key2, 0, lastRow, keyDefaults, itemsLimit, bytesLimit))
+                : (reverse
+                    ? charge.DoReverse(TCells{}, TCells{}, lastRow, 0, keyDefaults, itemsLimit, bytesLimit)
+                    : charge.Do(TCells{}, TCells{}, 0, lastRow, keyDefaults, itemsLimit, bytesLimit)));
+            if (result.Ready) {
+                break;
+            }
+        }
+        UNIT_ASSERT_C(result.Ready,
+            "V2 resume did not become ready: " << message);
+        UNIT_ASSERT_C(env.TouchedEmpty(),
+            "V2 resume left unresolved misses: " << message);
+        return result;
+    }
+
+    void CheckV2Resume(TTestParams params) {
+        TPartEggs eggs = MakeV2Part(params);
+        const TString base = TStringBuilder()
+            << "Levels=" << params.Levels
+            << " Groups=" << params.Groups
+            << " History=" << params.History;
+        // Primary reproducer: forward row-id charge on a multi-level tree.
+        DoV2Resume(eggs, params, /*reverse=*/false, /*useKeys=*/false, 0, 0,
+            "row-id fwd " + base);
+        // Reverse row-id charge (DoReverse iterateLevel index-walk).
+        DoV2Resume(eggs, params, /*reverse=*/true, /*useKeys=*/false, 0, 0,
+            "row-id rev " + base);
+        // Keys charge: exercises the key1/key2 path + data-page resolution.
+        DoV2Resume(eggs, params, /*reverse=*/false, /*useKeys=*/true, 0, 0,
+            "keys fwd " + base);
+        // Keys reverse: key-walk in reverse with key-based range boundaries.
+        DoV2Resume(eggs, params, /*reverse=*/true, /*useKeys=*/true, 0, 0,
+            "keys rev " + base);
+        // Items limit on the row-id path.
+        DoV2Resume(eggs, params, /*reverse=*/false, /*useKeys=*/false, 5, 0,
+            "row-id fwd limit " + base);
+        // Bytes limit on the row-id path.
+        DoV2Resume(eggs, params, /*reverse=*/false, /*useKeys=*/false, 0, 500,
+            "row-id fwd bytes-limit " + base);
+    }
+
+    Y_UNIT_TEST(NoNodes_V2_Resume) {
+        // LevelCount == 0: root is a single data page; the index loop never
+        // runs, so the mis-tagging path is unreachable. Guards small-tree fix.
+        CheckV2Resume({.Levels = 0});
+    }
+
+    Y_UNIT_TEST(OneNode_V2_Resume) {
+        // LevelCount == 1: root is the only index level, children are data.
+        // iterateLevel's index-walk path (isLeafLevel=false) is never taken;
+        // the post-loop data pass tags children DataPage. Guards small-tree fix.
+        CheckV2Resume({.Levels = 1});
+    }
+
+    Y_UNIT_TEST(FewNodes_V2_Resume) {
+        // PRIMARY REPRODUCER. LevelCount == 3: root -> index -> index -> data.
+        // The index-walk iterateLevel builds the deepest index level's children
+        // (still index nodes). With the bug they are tagged EPage::DataPage;
+        // TTouchEnvV2's GetPageType check fails on the first miss.
+        CheckV2Resume({.Levels = 3});
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_V2_Resume) {
+        // Column groups: DoGroup()/DoGroupReverse() index-walk path, room-keyed.
+        CheckV2Resume({.Levels = 3, .Groups = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_History_V2_Resume) {
+        // History: DoHistory() index-walk path.
+        CheckV2Resume({.Levels = 3, .History = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_History_V2_Resume) {
+        // Groups + history: DoHistoricGroups -> DoGroup(true) index-walk.
+        CheckV2Resume({.Levels = 3, .Groups = true, .History = true});
+    }
+
+    Y_UNIT_TEST(ChargeWithLimit_V2_Resume) {
+        // Sweep varying items limits across forward/reverse/keys paths on a
+        // multi-level tree. Other resume tests (FewNodes_V2_Resume etc.) run
+        // CheckV2Resume which includes a single limit=5 fwd-only variant; here
+        // we verify that a range of limits all produce Ready charges (limit
+        // does not break the resume loop) and that each limited charge covers
+        // no more items than the unlimited baseline.
+        TTestParams params{.Levels = 3};
+        TPartEggs eggs = MakeV2Part(params);
+
+        const auto unlimited = DoV2Resume(eggs, params, /*reverse=*/false,
+            /*useKeys=*/false, 0, 0, "unlimited baseline");
+
+        for (ui64 limit : {1, 3, 5, 10, 100}) {
+            // Row-id forward.
+            auto r = DoV2Resume(eggs, params, /*reverse=*/false,
+                /*useKeys=*/false, limit, 0,
+                "row-id fwd limit=" + ToString(limit));
+            UNIT_ASSERT_C(r.ItemsPrecharged > 0,
+                "row-id fwd limit=" << limit << " must precharge items");
+            UNIT_ASSERT_LE_C(r.ItemsPrecharged, unlimited.ItemsPrecharged,
+                "row-id fwd limit=" << limit
+                << " must not precharge more items than unlimited");
+
+            // Row-id reverse.
+            r = DoV2Resume(eggs, params, /*reverse=*/true,
+                /*useKeys=*/false, limit, 0,
+                "row-id rev limit=" + ToString(limit));
+            UNIT_ASSERT_C(r.ItemsPrecharged > 0,
+                "row-id rev limit=" << limit << " must precharge items");
+            UNIT_ASSERT_LE_C(r.ItemsPrecharged, unlimited.ItemsPrecharged,
+                "row-id rev limit=" << limit
+                << " must not precharge more items than unlimited");
+
+            // Keys path — only for limits that fit within the key range.
+            if (limit >= 5) {
+                r = DoV2Resume(eggs, params, /*reverse=*/false,
+                    /*useKeys=*/true, limit, 0,
+                    "keys fwd limit=" + ToString(limit));
+                UNIT_ASSERT_C(r.ItemsPrecharged > 0,
+                    "keys fwd limit=" << limit << " must precharge items");
+                UNIT_ASSERT_LE_C(r.ItemsPrecharged, unlimited.ItemsPrecharged,
+                    "keys fwd limit=" << limit
+                    << " must not precharge more items than unlimited");
+            }
+        }
+    }
+
+}
+
+// ========================================================================
+// V2 reverse-iteration twin for the raw group index
+// ========================================================================
+
+Y_UNIT_TEST_SUITE(TPartGroupBtreeIndexIterReverseV2) {
+    using namespace NTest;
+
+    // Reverse iteration
+    void CheckV2IterationReverse(const TPartEggs& v1Eggs, const TPartEggs& v2Eggs) {
+        const auto v1Part = *v1Eggs.Lone();
+        const auto v2Part = *v2Eggs.Lone();
+
+        TTestEnv v1Env, v2Env;
+        auto v1Index = CreateIndexIter(&v1Part, &v1Env, {});
+        auto v2Index = CreateIndexIter(&v2Part, &v2Env, {});
+
+        // Seek to last row
+        auto v1Ready = v1Index->Seek(v1Part.Stat.Rows - 1);
+        auto v2Ready = v2Index->Seek(v2Part.Stat.Rows - 1);
+        UNIT_ASSERT_VALUES_EQUAL(v1Ready, v2Ready);
+
+        for (size_t i = 0; ; i++) {
+            if (v1Ready != EReady::Data) break;
+            UNIT_ASSERT_VALUES_EQUAL(v1Index->GetRowId(), v2Index->GetRowId());
+            v1Ready = v1Index->Prev();
+            v2Ready = v2Index->Prev();
+            UNIT_ASSERT_VALUES_EQUAL_C(v1Ready, v2Ready, "V2 prev differs at step " + ToString(i));
+        }
+    }
+
+    void CheckPart(TTestParams params) {
+        auto v1Eggs = MakePart(params);
+        auto v2Eggs = MakeV2Part(params);
+
+        CheckV2IterationReverse(v1Eggs, v2Eggs);
+    }
+
+    Y_UNIT_TEST(NoNodes_V2) {
+        CheckPart({.Levels = 0});
+    }
+
+    Y_UNIT_TEST(OneNode_V2) {
+        CheckPart({.Levels = 1});
+    }
+
+    Y_UNIT_TEST(FewNodes_V2) {
+        CheckPart({.Levels = 3});
     }
 }
 

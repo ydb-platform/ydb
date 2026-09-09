@@ -18,7 +18,6 @@ You need to have a GitHub account to suggest any changes to the {{ ydb-short-nam
   * Add keys to skotty with command [ssh-add](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent#adding-your-ssh-key-to-the-ssh-agent).
   * Edit `~/.skotty/config.yaml` file by adding a section:
 
-
     ```yaml
     keys_order:
         - added
@@ -26,16 +25,20 @@ You need to have a GitHub account to suggest any changes to the {{ ydb-short-nam
         - legacy
         - secure
     ```
-{% endif %}
 
 * If you have a yubikey, you can use the legacy key from the yubikey:
 
   * Suppose you already have a configured yubikey (or you configured yubikey locally).
-  {% if audience == "tech" %}
   * On your laptop: `skotty ssh keys`.
-  {% endif %}
   * Upload `legacy@yubikey` ssh key to GitHub ([via UI](https://github.com/settings/keys)).
   * Test connection on laptop: `ssh -T git@github.com`.
+{% endif %}
+
+{% if audience != "tech" %}
+
+* If you have a yubikey, you can use its key: upload the ssh key to GitHub [via UI](https://github.com/settings/keys).
+
+{% endif %}
 
 #### Remote development
 

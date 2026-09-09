@@ -2,6 +2,7 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/scheme_board/events_schemeshard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/library/actors/core/actor.h>
@@ -194,6 +195,12 @@ struct TFixture {
         TestDescribeResult(DescribePath(Runtime, SchemeShardId, WorkingDir), {NLs::Finished});
         UNIT_ASSERT_C(Generations.at(SchemeShardId) > previousGeneration, "SchemeShard did not restart");
     }
+
+    void CheckOwner(TActorId owner) {
+        const auto description = DescribePath(Runtime, SchemeShardId, QueryPath);
+        TestDescribeResult(description, {NLs::Finished, NLs::IsStreamingQuery});
+        UNIT_ASSERT_VALUES_EQUAL(ActorIdFromProto(description.GetPathDescription().GetStreamingQueryDescription().GetOperationOwnerActorId()), owner);
+    }
 };
 
 std::optional<NACLib::TUserToken> MakeUserToken(bool enabled) {
@@ -225,6 +232,7 @@ Y_UNIT_TEST_SUITE(TStreamingQueryOperationTrackingTest) {
         f.Propose(std::move(request));
 
         f.CheckQuery(1);
+        f.CheckOwner(f.Owner);
         f.CheckTracking(1, f.Owner, token);
         f.CheckRequests(1);
     }
@@ -242,6 +250,7 @@ Y_UNIT_TEST_SUITE(TStreamingQueryOperationTrackingTest) {
         f.Propose(std::move(request));
 
         f.CheckQuery(2, "false");
+        f.CheckOwner(f.Owner);
         f.CheckTracking(2, f.Owner, token);
         f.CheckRequests(1);
     }
@@ -381,10 +390,48 @@ Y_UNIT_TEST_SUITE(TStreamingQueryOperationTrackingTest) {
         // Ownership is already durable while the schema transaction awaits its plan.
         f.Reboot();
         const ui64 version = Alter ? 2 : 1;
-        f.CheckTracking(version, f.Owner, token);
+        f.CheckRequests(0);
         blockedPlan.Unblock().Stop();
         f.Env->TestWaitNotification(f.Runtime, txId);
         f.CheckQuery(version);
+        f.CheckTracking(version, f.Owner, token);
+        f.CheckRequests(1);
+    }
+
+    Y_UNIT_TEST_FLAGS(TrackerWaitsForPublicationAcknowledgement, Alter, Reboot) {
+        TFixture f;
+        if (Alter) {
+            f.Propose(f.MakeRequest(false));
+        }
+        const auto token = MakeUserToken(true);
+        auto request = f.MakeRequest(Alter, f.Owner);
+        SetUserToken(*request, token);
+        const ui64 txId = request->Record.GetTxId();
+        TBlockEvents<NSchemeBoard::NSchemeshardEvents::TEvUpdateAck> acknowledgements(f.Runtime, [txId](const auto& ev) {
+            return ev->Cookie == txId;
+        });
+
+        AsyncSend(f.Runtime, f.SchemeShardId, request.Release());
+        TestModificationResult(f.Runtime, txId);
+        f.Runtime.WaitFor("publication acknowledgement blocked", [&] { return !acknowledgements.empty(); });
+        const auto checkWaiting = [&] {
+            f.Runtime.SimulateSleep(TDuration::Seconds(1));
+            f.CheckRequests(0);
+            TestDescribeResult(DescribePath(f.Runtime, f.SchemeShardId, f.QueryPath),
+                {NLs::PathExist, NLs::CheckPathState(Alter ? NKikimrSchemeOp::EPathStateAlter : NKikimrSchemeOp::EPathStateCreate)});
+        };
+        checkWaiting();
+        if (Reboot) {
+            f.Reboot();
+            checkWaiting();
+        }
+
+        acknowledgements.Unblock().Stop();
+        f.Env->TestWaitNotification(f.Runtime, txId, f.SchemeShardId);
+        TestDescribeResult(DescribePath(f.Runtime, f.SchemeShardId, f.QueryPath), {NLs::CheckPathState()});
+        f.CheckQuery(Alter ? 2 : 1);
+        f.CheckOwner(f.Owner);
+        f.CheckTracking(Alter ? 2 : 1, f.Owner, token);
         f.CheckRequests(1);
     }
 
@@ -477,8 +524,10 @@ Y_UNIT_TEST_SUITE(TStreamingQueryOperationTrackingTest) {
         f.Propose(std::move(request));
         f.CheckQuery(2, "false");
         f.CheckRequests(1);
+        f.CheckOwner({});
         f.Reboot();
         f.CheckQuery(2, "false");
+        f.CheckOwner({});
         f.CheckRequests(1);
 
         const auto nextOwner = f.Runtime.AllocateEdgeActor();

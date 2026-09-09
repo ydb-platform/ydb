@@ -162,6 +162,7 @@ std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
         .SetWithSampleTables(false)
         .SetDomainRoot(options.DomainRoot)
         .SetNodeCount(options.NodeCount)
+        .SetUseRealThreads(options.UseRealThreads)
         .SetDynamicNodeCount(options.DynamicNodeCount)
         .SetEnableStorageProxy(true)
         .SetStoragePoolTypes(options.StoragePoolTypes)

@@ -4053,10 +4053,12 @@ void TSchemeShard::ResumeStreamingQueriesOperations(const TVector<TPathId>& ids)
         Y_ABORT_UNLESS(streamingQuery);
         Y_ABORT_UNLESS(streamingQuery->OperationOwnerActorId);
 
-        Send(
-            NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
-            NStreamingQuery::MakeStreamingOperationTrackerRequest(TPath::Init(id, this), Generation(), *streamingQuery)
-        );
+        if (const auto path = TPath::Init(id, this); !path.Base()->HasActiveChanges()) {
+            Send(
+                NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
+                NStreamingQuery::MakeStreamingOperationTrackerRequest(path, Generation(), *streamingQuery)
+            );
+        }
     }
 }
 

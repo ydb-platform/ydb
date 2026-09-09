@@ -75,17 +75,26 @@ class TDone : public NKikimr::NSchemeShard::TDone {
     using TBase = NKikimr::NSchemeShard::TDone;
 
 public:
-    TDone(TOperationId id, bool trackOperation)
-        : TBase(std::move(id))
-        , TrackOperation(trackOperation)
-    {}
+    using TBase::TBase;
 
 private:
     bool ProgressState(TOperationContext& context) override {
-        if (TrackOperation) {
-            const auto* txState = context.SS->FindTx(OperationId);
-            Y_ABORT_UNLESS(txState);
-            const auto& query = context.SS->StreamingQueries.at(txState->TargetPathId);
+        const auto* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        if (context.SS->StreamingQueries.at(txState->TargetPathId)->OperationOwnerActorId) {
+            context.OnComplete.PublishAndWaitPublication(OperationId, txState->TargetPathId);
+            return false;
+        }
+
+        return TBase::ProgressState(context);
+    }
+
+    bool HandleReply(TEvPrivate::TEvCompletePublication::TPtr& ev, TOperationContext& context) override {
+        const auto* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(ev->Get()->PathId == txState->TargetPathId);
+        const auto& query = context.SS->StreamingQueries.at(txState->TargetPathId);
+        if (query->OperationOwnerActorId) {
             context.OnComplete.Send(
                 NMetadata::NProvider::MakeServiceId(context.Ctx.SelfID.NodeId()),
                 MakeStreamingOperationTrackerRequest(TPath::Init(txState->TargetPathId, context.SS), context.SS->Generation(), *query)
@@ -94,8 +103,6 @@ private:
 
         return TBase::ProgressState(context);
     }
-
-    const bool TrackOperation;
 };
 
 class TCreateStreamingQuery : public TSubOperation {
@@ -121,7 +128,7 @@ class TCreateStreamingQuery : public TSubOperation {
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId, Transaction.GetCreateStreamingQuery().HasOperationOwnerActorId());
+            return MakeHolder<TDone>(OperationId);
         default:
             return nullptr;
         }

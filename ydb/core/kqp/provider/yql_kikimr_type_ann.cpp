@@ -1416,6 +1416,12 @@ private:
             return TStatus::Error;
         }
 
+        if (auto status = CompileGeneratedLambdas(*table, TString(node.DataSink().Cluster()), *SessionCtx, Types, ctx);
+            status != TStatus::Ok)
+        {
+            return status;
+        }
+
         auto rowType = table->SchemeNode;
         auto& filterLambda = node.Ptr()->ChildRef(TKiUpdateTable::idx_Filter);
         if (!UpdateLambdaAllArgumentsTypes(filterLambda, {rowType}, ctx)) {

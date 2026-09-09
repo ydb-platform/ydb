@@ -773,8 +773,9 @@ public:
             ThrowParquetNotOk(readers[0]->GetSchema(&schema));
             std::vector<int> columnIndices;
             std::vector<TColumnConverter> columnConverters;
+            std::vector<TMissingColumn> missingColumns;
 
-            BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters, ReadSpec->RowSpec, ReadSpec->Settings);
+            BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters, missingColumns, ReadSpec->RowSpec, ReadSpec->Settings);
 
             // select count(*) case - single reader is enough
             if (!columnIndices.empty()) {
@@ -882,7 +883,7 @@ public:
                 while (status = reader->ReadNext(&batch), status.ok() && batch) {
                     StartUnit();
                     Y_DEFER { StopUnit(); };
-                    auto convertedBatch = ConvertArrowColumns(batch, columnConverters);
+                    auto convertedBatch = ConvertArrowColumns(batch, columnConverters, missingColumns);
                     auto size = NUdf::GetSizeOfArrowBatchInBytes(*convertedBatch);
                     decodedBytes += size;
                     if (SourceContext->Add(size, SelfActorId, DownstreamPaused)) {
@@ -944,8 +945,9 @@ public:
         ThrowParquetNotOk(fileReader->GetSchema(&schema));
         std::vector<int> columnIndices;
         std::vector<TColumnConverter> columnConverters;
+        std::vector<TMissingColumn> missingColumns;
 
-        BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters, ReadSpec->RowSpec, ReadSpec->Settings);
+        BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters, missingColumns, ReadSpec->RowSpec, ReadSpec->Settings);
 
         for (int group = 0; group < fileReader->num_row_groups(); group++) {
 
@@ -970,7 +972,7 @@ public:
             bool isCancelled = false;
             ui64 numRows = 0;
             while (status = reader->ReadNext(&batch), status.ok() && batch) {
-                auto convertedBatch = ConvertArrowColumns(batch, columnConverters);
+                auto convertedBatch = ConvertArrowColumns(batch, columnConverters, missingColumns);
                 auto size = NUdf::GetSizeOfArrowBatchInBytes(*convertedBatch);
                 decodedBytes += size;
                 if (SourceContext->Add(size, SelfActorId, DownstreamPaused)) {

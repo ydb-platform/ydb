@@ -99,6 +99,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ReportingControllerLeakDurationMs(60'000, 1, 3'600'000)
     , ReportingControllerLeakRate(1, 1, 100'000)
     , MaxPutTimeoutSeconds(DefaultMaxPutTimeout.Seconds(), 1, 1'000'000)
+    , DormantTimeoutMinutes(DefaultDormantTimeout.Minutes(), 0, 1'000'000)
     , EnableDeepScrubbing(false, false, true)
     , EnableFreshSyncDataThrottling(0, 0, 1)
     , EnableStorageRetroTraceGeneration(DefaultEnableStorageRetroTraceGeneration, false, true)
@@ -365,7 +366,8 @@ void TNodeWarden::StartInvalidGroupProxy() {
         {"marker", "NW11"},
         {"groupId", groupId});
     TActivationContext::ActorSystem()->RegisterLocalService(MakeBlobStorageProxyID(groupId), Register(
-        CreateBlobStorageGroupEjectedProxy(groupId, DsProxyNodeMon), TMailboxType::ReadAsFilled, AppData()->SystemPoolId));
+        CreateBlobStorageGroupEjectedProxy(groupId, DsProxyNodeMon, DormantTimeoutMinutes),
+        TMailboxType::ReadAsFilled, AppData()->SystemPoolId));
 }
 
 void TNodeWarden::StopInvalidGroupProxy() {
@@ -520,6 +522,7 @@ void TNodeWarden::Bootstrap() {
         TControlBoard::RegisterSharedControl(ReportingControllerLeakDurationMs, icb->DSProxyControls.RequestReportingSettings.LeakDurationMs);
         TControlBoard::RegisterSharedControl(ReportingControllerLeakRate, icb->DSProxyControls.RequestReportingSettings.LeakRate);
         TControlBoard::RegisterSharedControl(MaxPutTimeoutSeconds, icb->DSProxyControls.MaxPutTimeoutSeconds);
+        TControlBoard::RegisterSharedControl(DormantTimeoutMinutes, icb->DSProxyControls.DormantTimeoutMinutes);
 
         TControlBoard::RegisterSharedControl(EnableFreshSyncDataThrottling, icb->VDiskControls.EnableFreshSyncDataThrottling);
         TControlBoard::RegisterSharedControl(EnableStorageRetroTraceGeneration,

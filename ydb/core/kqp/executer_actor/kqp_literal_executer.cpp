@@ -313,10 +313,8 @@ public:
         }
 
         LWTRACK(KqpLiteralExecuterFinalize, ResponseEv->Orbit, TxId);
-        if (LiteralExecuterSpan) {
-            LiteralExecuterSpan.Attribute("ydb.cpu_us",
-                static_cast<i64>(GetExecutionTraceCpuTimeUs(ResponseEv->Record.GetResponse().GetResult().GetStats())));
-        }
+        AddExecutionTraceCpuTime(LiteralExecuterSpan,
+            *ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), Stats->GetCpuTimeUs());
         EndQueryTraceSpan(LiteralExecuterSpan, Ydb::StatusIds::SUCCESS);
         CleanupCtx();
         YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_EXECUTER, "Execution is complete",

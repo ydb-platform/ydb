@@ -330,7 +330,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             for (const auto mode : {Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE,
                     Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC,
                     Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL}) {
-                for (const ui8 level : {1, 15}) {
+                for (const ui8 level : {0, 1, 15}) {
                     ClearUploader(*uploader);
                     std::map<TActorId, ui64> taskCpu;
                     const auto observer = runtime.AddObserver<NYql::NDq::TEvDqCompute::TEvState>(
@@ -342,11 +342,26 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                                 taskCpu[ev->Sender] = task.GetCpuTimeUs();
                             }
                         });
+                    const auto responses = runtime.AddObserver<NKqp::TEvKqpExecuter::TEvTxResponse>(
+                        [&](NKqp::TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
+                            if (!level) {
+                                NKqpProto::TKqpExecutionExtraStats extra;
+                                ev->Get()->Record.GetResponse().GetResult().GetStats().GetExtra().UnpackTo(&extra);
+                                UNIT_ASSERT(!extra.HasCpuTimeUs());
+                                UNIT_ASSERT(!extra.GetWaitTimeUs());
+                                UNIT_ASSERT(!extra.GetSpilledBytes());
+                                UNIT_ASSERT(!extra.GetMaxTaskSkew());
+                            }
+                        });
                     auto request = MakeSQLRequest("SELECT SUM(value) FROM `/Root/table-1` WHERE key > 0u;");
                     request->Record.MutableRequest()->SetType(type);
                     request->Record.MutableRequest()->SetCollectStats(mode);
                     ExecRequest(runtime, sender, std::move(request), level);
                     UNIT_ASSERT(!taskCpu.empty());
+                    if (!level) {
+                        UNIT_ASSERT(uploader->Spans.empty());
+                        continue;
+                    }
                     ui64 cpu = 0;
                     for (const auto& [actor, value] : taskCpu) {
                         cpu += value;
@@ -385,6 +400,32 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         }
     }
 
+    Y_UNIT_TEST(CommitCountsShardsOnlyForAnEnabledPhase) {
+        auto [runtime, server, sender] = CreateServer();
+        auto* uploader = RegisterUploader(runtime);
+        for (const ui8 level : {0, 1, 6, 10, 15}) {
+            ClearUploader(*uploader);
+            NWilson::TSpan parent(1, level ? NWilson::TTraceId::NewTraceId(level, 4095) : NWilson::TTraceId(),
+                "Commit", NWilson::EFlags::NONE, runtime.GetActorSystem(0));
+            NKqp::TCommitTracePhase phase;
+            ui32 counted = 0;
+            phase.Start(parent, NKqp::EQueryTracePhase::CommitPrepareShards, [&] {
+                ++counted;
+                return 3;
+            });
+            phase.End(Ydb::StatusIds::SUCCESS);
+            parent.EndOk();
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+            const bool detailed = level >= TComponentTracingLevels::TQueryProcessor::Detailed;
+            UNIT_ASSERT_VALUES_EQUAL(counted, detailed ? 1 : 0);
+            const auto* prepare = FindSpan(*uploader, "Prepare shards");
+            UNIT_ASSERT_VALUES_EQUAL(bool(prepare), detailed);
+            if (prepare) {
+                UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*prepare, "ydb.shards")->value().int_value(), 3);
+            }
+        }
+    }
+
     Y_UNIT_TEST(QueryCpuSeparatesOverheadAndPreservesBatchTotals) {
         auto [runtime, server, sender] = CreateServer();
         auto* uploader = RegisterUploader(runtime);
@@ -392,6 +433,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC}) {
             ClearUploader(*uploader);
             NKqp::TBatchOperationExecutionStats batch(mode);
+            NKqp::TBatchExecutionTrace trace;
             for (const ui64 cpu : {100, 200}) {
                 NYql::NDqProto::TDqExecutionStats execution;
                 if (mode == Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC) {
@@ -399,11 +441,18 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 }
                 NKqpProto::TKqpExecutionExtraStats extra;
                 extra.SetCpuTimeUs(cpu);
+                extra.SetWaitTimeUs(cpu / 10);
+                extra.SetSpilledBytes(cpu * 10);
+                extra.SetMaxTaskSkew(cpu / 100.0);
+                extra.SetTaskStatsIncomplete(cpu == 100);
                 execution.MutableExtra()->PackFrom(extra);
+                trace.AddExecution(execution);
                 batch.TakeExecStats(std::move(execution));
             }
             NKqp::TKqpQueryStats stats;
             batch.ExportExecStats(stats.Executions.emplace_back());
+            UNIT_ASSERT(!stats.Executions.back().HasExtra());
+            trace.Export(stats.Executions.back());
             UNIT_ASSERT_VALUES_EQUAL(stats.Executions.back().GetCpuTimeUs(),
                 mode == Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC ? 300 : 0);
             stats.Executions.emplace_back().SetCpuTimeUs(50);
@@ -416,6 +465,10 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             runtime.SimulateSleep(TDuration::MilliSeconds(1));
             const auto* span = FindSpan(*uploader, "Query");
             UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*span, "ydb.cpu_us")->value().int_value(), 350);
+            UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*span, "ydb.wait_us")->value().int_value(), 30);
+            UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*span, "ydb.spilled_bytes")->value().int_value(), 3000);
+            UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*span, "ydb.max_task_skew")->value().double_value(), 2.0);
+            UNIT_ASSERT(FindAttribute(*span, "ydb.task_stats_incomplete")->value().bool_value());
             UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*span, "ydb.compile.cpu_us")->value().int_value(), 13);
             UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*span, "ydb.session.cpu_us")->value().int_value(), 7);
         }
@@ -1237,16 +1290,15 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             NKqp::TExecutionTrace trace(15);
             NKqpProto::TKqpPhyStage physical;
             physical.SetProgramAst("(Aggregate)");
-            const auto description = NKqp::TTaskTraceDescription::FromStage(physical);
             NWilson::TSpan parent(TComponentTracingLevels::TQueryProcessor::Basic,
                 NWilson::TTraceId::NewTraceId(15, 4095), "Run tasks", NWilson::EFlags::NONE, runtime.GetActorSystem(0));
-            const auto firstId = trace.StartStage(parent, {0, 7}, description, 2);
-            const auto secondId = trace.StartStage(parent, {1, 7}, description, 1);
+            const auto firstId = trace.StartStage(parent, {0, 7}, physical, 2);
+            const auto secondId = trace.StartStage(parent, {1, 7}, physical, 1);
             UNIT_ASSERT(firstId && secondId && firstId != secondId);
             for (ui64 id : {1, 2}) {
                 NYql::NDqProto::TDqTask task;
                 task.SetId(id);
-                NKqp::SaveTaskTraceParent(task, firstId);
+                trace.AnnotateTask({0, 7}, task);
                 NWilson::TSpan child(TComponentTracingLevels::TQueryProcessor::Detailed,
                     NKqp::GetTaskTraceParent(task, parent.GetTraceId()), "Task: Aggregate",
                     NWilson::EFlags::NONE, runtime.GetActorSystem(0));
@@ -1255,7 +1307,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 NYql::NDqProto::TDqTaskStats stats;
                 stats.SetTaskId(id);
                 stats.SetStageId(7);
-                trace.AddTask(0, description, 2, stats, 1'000'000, 1, Ydb::StatusIds::SUCCESS);
+                trace.AddTask(0, 2, stats, 1'000'000, 1, Ydb::StatusIds::SUCCESS);
             }
             runtime.SimulateSleep(TDuration::MilliSeconds(1));
             UNIT_ASSERT_VALUES_EQUAL(std::ranges::distance(StageSpans(*uploader)), 1);
@@ -1289,7 +1341,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         }
     }
 
-    Y_UNIT_TEST(StageTraceParentRespectsLevelsAndClearsCachedContext) {
+    Y_UNIT_TEST(StageTraceParentRespectsLevelsAndRejectsInvalidContext) {
         auto [runtime, server, sender] = CreateServer();
         auto* uploader = RegisterUploader(runtime);
         for (const ui8 level : {6, 10}) {
@@ -1298,10 +1350,10 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 NWilson::TTraceId::NewTraceId(level, 4095), "Run tasks", NWilson::EFlags::NONE, runtime.GetActorSystem(0));
             NKqp::TExecutionTrace trace(level);
             NKqpProto::TKqpPhyStage stage;
-            const auto spanId = trace.StartStage(parent, {0, 1}, NKqp::TTaskTraceDescription::FromStage(stage), 1);
+            const auto spanId = trace.StartStage(parent, {0, 1}, stage, 1);
             UNIT_ASSERT_VALUES_EQUAL(bool(spanId), level == 10);
             NYql::NDqProto::TDqTask task;
-            NKqp::SaveTaskTraceParent(task, spanId);
+            trace.AnnotateTask({0, 1}, task);
             auto context = NKqp::GetTaskTraceParent(task, parent.GetTraceId());
             UNIT_ASSERT(context.IsSameTrace(parent.GetTraceId()));
             UNIT_ASSERT_VALUES_EQUAL(context.GetVerbosity(), level);
@@ -1335,7 +1387,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         stage.SetProgramAst("(Aggregate)");
         NWilson::TSpan span(TComponentTracingLevels::TQueryProcessor::Basic,
             NWilson::TTraceId::NewTraceId(15, 4095), "Execute plan", NWilson::EFlags::NONE, runtime.GetActorSystem(0));
-        diagnostics.StartStage(span, {0, 0}, NKqp::TTaskTraceDescription::FromStage(stage), 10);
+        diagnostics.StartStage(span, {0, 0}, stage, 10);
         for (ui64 id = 1; id <= 10; ++id) {
             NYql::NDqProto::TDqTaskStats task;
             task.SetTaskId(id);
@@ -1343,7 +1395,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             task.SetCpuTimeUs(5);
             task.SetWaitInputTimeUs(10);
             task.SetSpillingComputeWriteBytes(id == 2 ? 200 : 0);
-            diagnostics.AddTask(0, NKqp::TTaskTraceDescription::FromStage(stage), 10, task, id * 100, id <= 5 ? 1 : 2,
+            diagnostics.AddTask(0, 10, task, id * 100, id <= 5 ? 1 : 2,
                 id == 1 ? Ydb::StatusIds::ABORTED : Ydb::StatusIds::SUCCESS);
         }
         NYql::NDqProto::TDqExecutionStats stats;
@@ -1362,7 +1414,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         UNIT_ASSERT_DOUBLES_EQUAL(FindAttribute(event, "ydb.task_skew")->value().double_value(), 1000.0 / 550, 1e-9);
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(event, "ydb.tasks_by_node")->value().string_value(), "1:5,2:5");
         const auto& tasks = FindAttribute(event, "ydb.interesting_tasks")->value().array_value();
-        UNIT_ASSERT_VALUES_EQUAL(tasks.values_size(), NKqp::NQueryTraceSettings::MaxTasksPerStage);
+        UNIT_ASSERT_VALUES_EQUAL(tasks.values_size(), NKqp::NQueryTraceSettings::MAX_TASKS_PER_STAGE);
         bool hasFailed = false;
         bool hasSpill = false;
         for (const auto& task : tasks.values()) {
@@ -1401,7 +1453,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             NKqpProto::TKqpPhyStage stage;
             NWilson::TSpan span(TComponentTracingLevels::TQueryProcessor::Basic,
                 NWilson::TTraceId::NewTraceId(level, 4095), "Execute plan", NWilson::EFlags::NONE, runtime.GetActorSystem(0));
-            diagnostics.StartStage(span, {0, 0}, NKqp::TTaskTraceDescription::FromStage(stage), 3);
+            diagnostics.StartStage(span, {0, 0}, stage, 3);
             for (ui64 id = 0; id < 3; ++id) {
                 NYql::NDqProto::TEvComputeActorState state;
                 state.SetState(NYql::NDqProto::COMPUTE_STATE_FINISHED);
@@ -1412,7 +1464,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 task.SetSpillingComputeWriteBytes(2);
                 task.SetStartTimeMs(100);
                 task.SetFinishTimeMs(100 + id);
-                diagnostics.OnTaskFinished({0, 0}, NKqp::TTaskTraceDescription::FromStage(stage), 3, state, 1);
+                diagnostics.OnTaskFinished({0, 0}, 3, state, 1);
             }
             NYql::NDqProto::TDqExecutionStats stats;
             diagnostics.Finish(span, stats, Ydb::StatusIds::SUCCESS);
@@ -1438,19 +1490,19 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         task.SetSpillingChannelWriteBytes(2);
         NWilson::TSpan span(TComponentTracingLevels::TQueryProcessor::Basic,
             NWilson::TTraceId::NewTraceId(15, 4095), "Execute plan", NWilson::EFlags::NONE, runtime.GetActorSystem(0));
-        for (ui64 tx = 0; tx < NKqp::NQueryTraceSettings::MaxStages + 3; ++tx) {
-            diagnostics.StartStage(span, {tx, 0}, NKqp::TTaskTraceDescription::FromStage(stage), 2);
+        for (ui64 tx = 0; tx < NKqp::NQueryTraceSettings::MAX_STAGES + 3; ++tx) {
+            diagnostics.StartStage(span, {tx, 0}, stage, 2);
             task.SetTaskId(tx + 1);
-            diagnostics.AddTask(tx, NKqp::TTaskTraceDescription::FromStage(stage), 2, task, std::nullopt, 1, Ydb::StatusIds::ABORTED);
+            diagnostics.AddTask(tx, 2, task, std::nullopt, 1, Ydb::StatusIds::ABORTED);
         }
         NYql::NDqProto::TDqExecutionStats stats;
         diagnostics.Finish(span, stats, Ydb::StatusIds::ABORTED);
         span.EndError("incomplete execution");
         runtime.SimulateSleep(TDuration::Seconds(1));
         const auto* execution = FindSpan(*uploader, "Execute plan");
-        UNIT_ASSERT_VALUES_EQUAL(std::ranges::distance(StageSpans(*uploader)), NKqp::NQueryTraceSettings::MaxStages);
-        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*execution, "ydb.wait_us")->value().int_value(), NKqp::NQueryTraceSettings::MaxStages + 3);
-        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*execution, "ydb.spilled_bytes")->value().int_value(), 2 * (NKqp::NQueryTraceSettings::MaxStages + 3));
+        UNIT_ASSERT_VALUES_EQUAL(std::ranges::distance(StageSpans(*uploader)), NKqp::NQueryTraceSettings::MAX_STAGES);
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*execution, "ydb.wait_us")->value().int_value(), NKqp::NQueryTraceSettings::MAX_STAGES + 3);
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*execution, "ydb.spilled_bytes")->value().int_value(), 2 * (NKqp::NQueryTraceSettings::MAX_STAGES + 3));
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*execution, "ydb.tasks_without_stage_details")->value().int_value(), 3);
         for (const auto& event : StageSpans(*uploader)) {
             UNIT_ASSERT_VALUES_EQUAL(FindAttribute(event, "ydb.reported_tasks")->value().int_value(), 1);
@@ -1490,7 +1542,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
         UNIT_ASSERT(uploader->BuildTraceTrees());
         const auto* result = FindSpan(*uploader, "Read table");
-        UNIT_ASSERT_VALUES_EQUAL(result->events_size(), NKqp::NQueryTraceSettings::MaxInterestingReadShards);
+        UNIT_ASSERT_VALUES_EQUAL(result->events_size(), NKqp::NQueryTraceSettings::MAX_INTERESTING_READ_SHARDS);
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*result, "ydb.shard_reads")->value().int_value(), 44);
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*result, "ydb.shard_summaries_dropped")->value().int_value(), 38);
         bool hasRetry = false, hasSlow = false, hasStopped = false;
@@ -1537,7 +1589,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             NKqp::TShardReadTrace reads;
             NWilson::TSpan parent(TComponentTracingLevels::TQueryProcessor::Detailed,
                 NWilson::TTraceId::NewTraceId(level, 4095), "Read table", NWilson::EFlags::NONE, runtime.GetActorSystem(0));
-            for (ui64 id = 1; id <= NKqp::NQueryTraceSettings::MaxActiveShardReads; ++id) {
+            for (ui64 id = 1; id <= NKqp::NQueryTraceSettings::MAX_ACTIVE_SHARD_READS; ++id) {
                 reads.Start(parent, id, id);
             }
             auto traceId = reads.Start(parent, 999, 999);
@@ -1585,11 +1637,11 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         span.EndOk();
         runtime.SimulateSleep(TDuration::Seconds(1));
         const auto* phase = FindSpan(*uploader, "Prepare shards");
-        UNIT_ASSERT_VALUES_EQUAL(phase->events_size(), NKqp::NQueryTraceSettings::MaxShardEvents);
+        UNIT_ASSERT_VALUES_EQUAL(phase->events_size(), NKqp::NQueryTraceSettings::MAX_SHARD_EVENTS);
         const auto& last = phase->events(phase->events_size() - 1);
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(last, "ydb.shard_id")->value().int_value(), 100);
         UNIT_ASSERT(FindAttribute(last, "ydb.last_shard")->value().bool_value());
-        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*phase, "ydb.shard_events_dropped")->value().int_value(), 100 - NKqp::NQueryTraceSettings::MaxShardEvents);
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*phase, "ydb.shard_events_dropped")->value().int_value(), 100 - NKqp::NQueryTraceSettings::MAX_SHARD_EVENTS);
     }
 
     Y_UNIT_TEST(IndexMetadataPurposeAndBufferReads) {

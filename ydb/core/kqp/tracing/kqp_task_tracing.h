@@ -1,8 +1,14 @@
 #pragma once
 
-#include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
-#include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
+
+namespace NKqpProto {
+class TKqpPhyStage;
+} // namespace NKqpProto
+
+namespace NYql::NDqProto {
+class TDqTask;
+} // namespace NYql::NDqProto
 
 namespace NKikimr::NKqp {
 
@@ -17,7 +23,9 @@ public:
 
 private:
     TString Name(TStringBuf prefix) const;
-    ui32 Operations = 0;
+
+private:
+    ui32 Operations_ = 0;
 };
 
 void SaveTaskTraceParent(NYql::NDqProto::TDqTask& task, ui64 stageSpanId);

@@ -461,6 +461,10 @@ public:
         HistorySampleCount = 32;
     }
 
+    ui64 GetCpuTimeUs() const {
+        return StorageCpuTimeUs + ComputeCpuTimeUs.Sum;
+    }
+
     void Prepare();
 
     void AddNodeShardsCount(const ui32 stageId, const ui32 nodeId, const ui32 shardsCount) {
@@ -573,7 +577,6 @@ public:
     ui64 CpuTimeUs = 0;
     ui64 DurationUs = 0;
     ui64 ExecutersCpuTimeUs = 0;
-    NKqpProto::TKqpExecutionExtraStats ExtraStats;
 };
 
 } // namespace NKqp

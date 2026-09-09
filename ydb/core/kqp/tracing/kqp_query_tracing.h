@@ -1,17 +1,22 @@
 #pragma once
 
 #include <ydb/core/protos/kqp.pb.h>
-#include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
-#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
 
 namespace NKqpProto {
+class TKqpPhyQuery;
 class TKqpStatsQuery;
 } // namespace NKqpProto
+
+namespace NYql::NDqProto {
+class TDqComputeActorStats;
+class TDqExecutionStats;
+class TDqTaskStats;
+} // namespace NYql::NDqProto
 
 namespace NKikimr::NKqp {
 
@@ -64,6 +69,7 @@ void AddQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescription
     const TKqpQueryStats& stats, ui64 requestUnits, Ydb::StatusIds::StatusCode status);
 void AddWorkerQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescription& description,
     const NKikimrKqp::TEvQueryResponse& response, const NKqpProto::TKqpStatsQuery* workerStats);
+void AddExecutionTraceCpuTime(NWilson::TSpan& span, NYql::NDqProto::TDqExecutionStats& stats, ui64 cpuUs);
 ui64 GetExecutionTraceCpuTimeUs(const NYql::NDqProto::TDqExecutionStats& stats);
 void AddReadTraceStats(NWilson::TSpan& span, NYql::NDqProto::TDqTaskStats& stats,
     const TString& table, ui64 rows, ui64 retries);
@@ -79,19 +85,29 @@ public:
 
 private:
     bool Retain(const NWilson::TSpan& span, bool last = false);
-    ui64 Count = 0;
-    ui64 Dropped = 0;
+
+private:
+    ui64 Count_ = 0;
+    ui64 Dropped_ = 0;
 };
 
 class TCommitTracePhase {
 public:
-    void Start(const NWilson::TSpan& parent, EQueryTracePhase phase, ui64 shards);
+    template<class TCountShards>
+    void Start(const NWilson::TSpan& parent, EQueryTracePhase phase, TCountShards&& countShards) {
+        if (StartSpan(parent, phase)) {
+            Span_.Attribute("ydb.shards", static_cast<i64>(countShards()));
+        }
+    }
     void Acknowledge(ui64 shardId, bool last);
     void End(Ydb::StatusIds::StatusCode status);
 
 private:
-    NWilson::TSpan Span;
-    TShardTraceEvents Events;
+    bool StartSpan(const NWilson::TSpan& parent, EQueryTracePhase phase);
+
+private:
+    NWilson::TSpan Span_;
+    TShardTraceEvents Events_;
 };
 
 } // namespace NKikimr::NKqp

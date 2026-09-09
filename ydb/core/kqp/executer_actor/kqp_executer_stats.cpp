@@ -1539,7 +1539,7 @@ void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {
     if (!metrics) {
         return;
     }
-    metrics->CpuTimeMs = (StorageCpuTimeUs + ComputeCpuTimeUs.Sum) / 1000;
+    metrics->CpuTimeMs = GetCpuTimeUs() / 1000;
     metrics->DurationSeconds = (TInstant::Now().MicroSeconds() - StartTs.MicroSeconds()) / 1000000;
 
     ui64 memoryUsageBytes = 0;
@@ -1717,7 +1717,7 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
         }
             [[fallthrough]];
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC:
-            stats.SetCpuTimeUs(StorageCpuTimeUs + ComputeCpuTimeUs.Sum);
+            stats.SetCpuTimeUs(GetCpuTimeUs());
             stats.SetDurationUs(TInstant::Now().MicroSeconds() - StartTs.MicroSeconds());
             [[fallthrough]];
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE:
@@ -1745,7 +1745,6 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
     }
 
     ExtraStats.SetAffectedShards(AffectedShards.size());
-    ExtraStats.SetCpuTimeUs(StorageCpuTimeUs + ComputeCpuTimeUs.Sum);
     // Executer TxId, so that query stats can be matched with LWTrace records.
     // It is 0 for literal-only execution (such phases never reach shards).
     // Gated by EnableTxIdInStats feature flag.
@@ -1827,22 +1826,9 @@ void TBatchOperationExecutionStats::TakeExecStats(NYql::NDqProto::TDqExecutionSt
     CpuTimeUs += stats.GetCpuTimeUs();
     DurationUs += stats.GetDurationUs();
     ExecutersCpuTimeUs += stats.GetExecuterCpuTimeUs();
-    NKqpProto::TKqpExecutionExtraStats extra;
-    ui64 executionCpuUs = stats.GetCpuTimeUs();
-    if (stats.GetExtra().UnpackTo(&extra)) {
-        if (extra.HasCpuTimeUs()) {
-            executionCpuUs = extra.GetCpuTimeUs();
-        }
-        ExtraStats.SetWaitTimeUs(ExtraStats.GetWaitTimeUs() + extra.GetWaitTimeUs());
-        ExtraStats.SetSpilledBytes(ExtraStats.GetSpilledBytes() + extra.GetSpilledBytes());
-        ExtraStats.SetMaxTaskSkew(Max(ExtraStats.GetMaxTaskSkew(), extra.GetMaxTaskSkew()));
-        ExtraStats.SetTaskStatsIncomplete(ExtraStats.GetTaskStatsIncomplete() || extra.GetTaskStatsIncomplete());
-    }
-    ExtraStats.SetCpuTimeUs(ExtraStats.GetCpuTimeUs() + executionCpuUs);
 }
 
 void TBatchOperationExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats) const {
-    stats.MutableExtra()->PackFrom(ExtraStats);
     switch (StatsMode) {
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE:
             [[fallthrough]];

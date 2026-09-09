@@ -2,7 +2,6 @@
 #include "max_tasks_graph.h"
 
 #include "kqp_partition_helper.h"
-#include <ydb/core/kqp/tracing/kqp_execution_tracing.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/json_index/json_index.h>
@@ -28,8 +27,6 @@
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
 #include <ydb/services/udf_store/wasm/query_compartment_scope.h>
-
-#include <ydb/library/wilson_ids/wilson.h>
 
 #include <algorithm>
 
@@ -1891,19 +1888,6 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
     }
 }
 
-void TKqpTasksGraph::PrepareTaskTracing(const NWilson::TSpan& span, TExecutionTrace* trace) {
-    for (auto& [id, stage] : GetStagesInfo()) {
-        stage.Meta.TraceSpanId = 0;
-        stage.Meta.TraceDescription = {};
-        if (!trace || !span || span.GetTraceId().GetVerbosity() < TComponentTracingLevels::TQueryProcessor::Detailed) {
-            continue;
-        }
-        stage.Meta.TraceDescription = TTaskTraceDescription::FromStage(stage.Meta.GetStage(id));
-        stage.Meta.TraceSpanId = trace->StartStage(span, {id.TxId, id.StageId},
-            stage.Meta.TraceDescription, stage.Tasks.size());
-    }
-}
-
 void TKqpTasksGraph::SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDqTask* result, bool serializeAsyncIoSettings) const {
     const auto& stageInfo = GetStageInfo(task.StageId);
     ActorIdToProto(task.Meta.ExecuterId, result->MutableExecuter()->MutableActorId());
@@ -1919,9 +1903,6 @@ void TKqpTasksGraph::SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDq
     for (const auto& [paramName, paramValue] : task.Meta.TaskParams) {
         (*result->MutableTaskParams())[paramName] = paramValue;
     }
-
-    stageInfo.Meta.TraceDescription.Save(*result);
-    SaveTaskTraceParent(*result, stageInfo.Meta.TraceSpanId);
 
     for (const auto& readRange : task.Meta.ReadRanges) {
         result->AddReadRanges(readRange);

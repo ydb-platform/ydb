@@ -6157,7 +6157,7 @@ public:
     }
 
     void StartCommitPhase(EQueryTracePhase phase) {
-        CommitPhase.Start(BufferWriteActorStateSpan, phase, CountParticipatingShards());
+        CommitPhase.Start(BufferWriteActorStateSpan, phase, [this] { return CountParticipatingShards(); });
     }
 
     void UpdateTracingState(EQueryTracePhase phase, NWilson::TTraceId traceId,

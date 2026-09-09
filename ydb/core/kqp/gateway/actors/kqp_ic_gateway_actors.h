@@ -1,7 +1,5 @@
 #pragma once
 
-#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
-
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/appdata.h>
 #include <yql/essentials/providers/common/gateway/yql_provider_gateway.h>
@@ -9,6 +7,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/wilson/wilson_trace.h>
 
 
 namespace NKikimr::NKqp {
@@ -24,10 +23,12 @@ public:
         return NKikimrServices::TActivity::KQP_REQUEST_HANDLER;
     }
 
-    TRequestHandlerBase(TRequest* request, NThreading::TPromise<TResult> promise, TCallbackFunc callback)
+    TRequestHandlerBase(TRequest* request, NThreading::TPromise<TResult> promise, TCallbackFunc callback,
+            NWilson::TTraceId traceId = {})
         : Request(request)
         , Promise(promise)
-        , Callback(callback) {}
+        , Callback(callback)
+        , TraceId(std::move(traceId)) {}
 
     void HandleError(const TString &error, const TActorContext &ctx) {
         Promise.SetValue(NYql::NCommon::ResultFromError<TResult>(error));
@@ -85,6 +86,7 @@ protected:
     // the destructor.
     NThreading::TPromise<TResult> Promise;
     TCallbackFunc Callback;
+    NWilson::TTraceId TraceId;
 };
 
 template<typename TRequest, typename TResponse, typename TResult>
@@ -98,36 +100,20 @@ public:
     using TBase = typename TActorRequestHandler::TBase;
     using TCallbackFunc = typename TBase::TCallbackFunc;
 
-    using TStatusFunc = std::function<Ydb::StatusIds::StatusCode(const TResponse&)>;
-
     TActorRequestHandler(TActorId actorId, TRequest* request, NThreading::TPromise<TResult> promise,
-            TCallbackFunc callback, NWilson::TSpan span = {}, TStatusFunc status = {})
-        : TBase(request, promise, std::move(callback))
+            TCallbackFunc callback, NWilson::TTraceId traceId = {})
+        : TBase(request, promise, std::move(callback), std::move(traceId))
         , ActorId(actorId)
-        , Span(std::move(span))
-        , Status(std::move(status))
     {}
 
-    ~TActorRequestHandler() override {
-        if (Span) {
-            Span.EndError("Request did not complete");
-        }
-    }
-
-    void HandleResponse(typename TResponse::TPtr& ev, const TActorContext& ctx) override {
-        if (Span) {
-            EndQueryTraceSpan(Span, Status ? Status(*ev->Get()) : Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
-        }
-        TBase::HandleResponse(ev, ctx);
-    }
-
     void Bootstrap(const TActorContext& ctx) {
-        ctx.Send(ActorId, this->Request.Release(), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
+        ctx.Send(ActorId, this->Request.Release(), IEventHandle::FlagTrackDelivery, 0, std::move(this->TraceId));
 
         this->Become(&TActorRequestHandler::AwaitState);
     }
 
     using TBase::Handle;
+    using TBase::HandleResponse;
 
     STFUNC(AwaitState) {
         switch (ev->GetTypeRewrite()) {
@@ -140,8 +126,6 @@ public:
 
 private:
     TActorId ActorId;
-    NWilson::TSpan Span;
-    TStatusFunc Status;
 };
 
-}
+} // namespace NKikimr::NKqp

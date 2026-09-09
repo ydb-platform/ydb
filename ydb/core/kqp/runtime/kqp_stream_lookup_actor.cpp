@@ -1,6 +1,7 @@
-#include <ydb/core/kqp/tracing/kqp_shard_tracing.h>
 #include "kqp_stream_lookup_actor.h"
 
+#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
+#include <ydb/core/kqp/tracing/kqp_shard_tracing.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>

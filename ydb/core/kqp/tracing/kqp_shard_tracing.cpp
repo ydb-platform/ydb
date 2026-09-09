@@ -1,4 +1,6 @@
 #include "kqp_shard_tracing.h"
+
+#include "kqp_query_tracing.h"
 #include "kqp_trace_settings.h"
 
 #include <ydb/library/actors/core/actorsystem.h>
@@ -17,12 +19,12 @@ NWilson::TTraceId TShardReadTrace::Start(const NWilson::TSpan& parent, ui64 shar
     if (!Enabled(parent)) {
         return parent.GetTraceId();
     }
-    ++TotalReads;
-    if (Reads.size() >= NQueryTraceSettings::MaxActiveShardReads) {
-        ++UntracedReads;
+    ++TotalReads_;
+    if (Reads_.size() >= NQueryTraceSettings::MAX_ACTIVE_SHARD_READS) {
+        ++UntracedReads_;
         return parent.GetTraceId();
     }
-    auto& read = Reads[readId];
+    auto& read = Reads_[readId];
     read.Start = parent.GetActorSystem()->Monotonic();
     read.ShardId = shardId;
     read.Span = parent.CreateChild(TComponentTracingLevels::TQueryProcessor::Diagnostic,
@@ -39,15 +41,15 @@ void TShardReadTrace::ReadResult(NWilson::TSpan& parent, ui64 shardId, ui32 node
     if (!Enabled(parent)) {
         return;
     }
-    const auto it = Reads.find(readId);
-    if (it != Reads.end()) {
+    const auto it = Reads_.find(readId);
+    if (it != Reads_.end()) {
         it->second.NodeId = nodeId;
         it->second.Rows += rows;
         if (finished || status != Ydb::StatusIds::SUCCESS) {
             Complete(readId, status, finished);
         }
     } else {
-        auto& shard = Shards[shardId];
+        auto& shard = Shards_[shardId];
         shard.TimingIncomplete = true;
         shard.Rows += rows;
         shard.NodeId = nodeId;
@@ -61,12 +63,12 @@ void TShardReadTrace::ReadResult(NWilson::TSpan& parent, ui64 shardId, ui32 node
 }
 
 void TShardReadTrace::Complete(ui64 readId, Ydb::StatusIds::StatusCode status, bool finished) {
-    const auto it = Reads.find(readId);
-    if (it == Reads.end()) {
+    const auto it = Reads_.find(readId);
+    if (it == Reads_.end()) {
         return;
     }
     auto& read = it->second;
-    auto& shard = Shards[read.ShardId];
+    auto& shard = Shards_[read.ShardId];
     if (!shard.FirstRequest || read.Start < shard.FirstRequest) {
         shard.FirstRequest = read.Start;
     }
@@ -84,7 +86,7 @@ void TShardReadTrace::Complete(ui64 readId, Ydb::StatusIds::StatusCode status, b
     read.Span.Attribute("ydb.timing_boundary", TString(status == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED
         ? "request_to_stop" : "request_to_last_message"));
     EndQueryTraceSpan(read.Span, status);
-    Reads.erase(it);
+    Reads_.erase(it);
     RetainShards();
 }
 
@@ -93,7 +95,7 @@ void TShardReadTrace::Retry(NWilson::TSpan& parent, ui64 shardId, ui64 readId) {
         return;
     }
     Stop(readId);
-    auto& shard = Shards[shardId];
+    auto& shard = Shards_[shardId];
     ++shard.Retries;
     shard.LastReadId = readId;
     RetainShards();
@@ -104,26 +106,26 @@ void TShardReadTrace::Stop(ui64 readId) {
 }
 
 void TShardReadTrace::RetainShards() {
-    if (Shards.size() <= NQueryTraceSettings::MaxRetainedReadShards) {
+    if (Shards_.size() <= NQueryTraceSettings::MAX_RETAINED_READ_SHARDS) {
         return;
     }
-    const auto least = std::min_element(Shards.begin(), Shards.end(), [](const auto& lhs, const auto& rhs) {
+    const auto least = std::min_element(Shards_.begin(), Shards_.end(), [](const auto& lhs, const auto& rhs) {
         return std::tuple(lhs.second.Rank(), lhs.first) < std::tuple(rhs.second.Rank(), rhs.first);
     });
-    Shards.erase(least);
-    ++EvictedShards;
+    Shards_.erase(least);
+    ++EvictedShards_;
 }
 
 void TShardReadTrace::Finish(NWilson::TSpan& parent) {
-    while (!Reads.empty()) {
-        Stop(Reads.begin()->first);
+    while (!Reads_.empty()) {
+        Stop(Reads_.begin()->first);
     }
-    if (Enabled(parent) && TotalReads) {
-        std::vector<std::pair<ui64, TShard>> ranked(Shards.begin(), Shards.end());
+    if (Enabled(parent) && TotalReads_) {
+        std::vector<std::pair<ui64, TShard>> ranked(Shards_.begin(), Shards_.end());
         std::sort(ranked.begin(), ranked.end(), [](const auto& lhs, const auto& rhs) {
             return std::tuple(lhs.second.Rank(), lhs.first) > std::tuple(rhs.second.Rank(), rhs.first);
         });
-        const size_t retained = std::min(ranked.size(), NQueryTraceSettings::MaxInterestingReadShards);
+        const size_t retained = std::min(ranked.size(), NQueryTraceSettings::MAX_INTERESTING_READ_SHARDS);
         for (size_t i = 0; i < retained; ++i) {
             const auto& [id, shard] = ranked[i];
             parent.Event("Shard read statistics", {
@@ -141,15 +143,15 @@ void TShardReadTrace::Finish(NWilson::TSpan& parent) {
                 {"ydb.status_code", Ydb::StatusIds::StatusCode_Name(shard.LastStatus)},
             });
         }
-        parent.Attribute("ydb.shard_reads", static_cast<i64>(TotalReads));
-        parent.Attribute("ydb.shard_reads_untraced", static_cast<i64>(UntracedReads));
-        parent.Attribute("ydb.shard_summaries_dropped", static_cast<i64>(EvictedShards + ranked.size() - retained));
-        parent.Attribute("ydb.shard_stats_incomplete", bool(UntracedReads || EvictedShards));
+        parent.Attribute("ydb.shard_reads", static_cast<i64>(TotalReads_));
+        parent.Attribute("ydb.shard_reads_untraced", static_cast<i64>(UntracedReads_));
+        parent.Attribute("ydb.shard_summaries_dropped", static_cast<i64>(EvictedShards_ + ranked.size() - retained));
+        parent.Attribute("ydb.shard_stats_incomplete", bool(UntracedReads_ || EvictedShards_));
     }
-    Shards.clear();
-    TotalReads = 0;
-    UntracedReads = 0;
-    EvictedShards = 0;
+    Shards_.clear();
+    TotalReads_ = 0;
+    UntracedReads_ = 0;
+    EvictedShards_ = 0;
 }
 
 } // namespace NKikimr::NKqp

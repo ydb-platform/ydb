@@ -1,6 +1,9 @@
-#include "kqp_executer_stats.h"
 #include "kqp_planner.h"
+
+#include "kqp_executer_stats.h"
 #include "kqp_planner_strategy.h"
+
+#include <ydb/core/kqp/tracing/kqp_execution_tracing.h>
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/base/appdata.h>
@@ -108,6 +111,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , RlPath(args.RlPath)
     , ResourcesSnapshot(std::move(args.ResourcesSnapshot))
     , ExecuterSpan(args.ExecuterSpan)
+    , Trace(args.Trace)
     , ExecuterRetriesConfig(args.ExecuterRetriesConfig)
     , TasksGraph(args.TasksGraph)
     , MkqlMemoryLimit(args.MkqlMemoryLimit)
@@ -257,7 +261,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
 
     for (ui64 taskId : requestData.TaskIds) {
         const auto& task = TasksGraph.GetTask(taskId);
-        auto* serializedTask = TasksGraph.ArenaSerializeTaskToProto(task, true);
+        auto* serializedTask = SerializeTaskForExecution(task);
         if (ArrayBufferMinFillPercentage) {
             serializedTask->SetArrayBufferMinFillPercentage(*ArrayBufferMinFillPercentage);
         }
@@ -533,11 +537,19 @@ const IKqpGateway::TKqpSnapshot& TKqpPlanner::GetSnapshot() const {
     return TasksGraph.GetMeta().Snapshot;
 }
 
+NYql::NDqProto::TDqTask* TKqpPlanner::SerializeTaskForExecution(const TTask& task) {
+    auto* result = TasksGraph.ArenaSerializeTaskToProto(task, true);
+    if (Trace) {
+        Trace->AnnotateTask({task.StageId.TxId, task.StageId.StageId}, *result);
+    }
+    return result;
+}
+
 // optimizeProtoForLocalExecution - if we want to execute compute actor locally and don't want to serialize & then deserialize proto message
 // instead we just give ptr to proto message and after that we swap/copy it
 TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) {
     auto& task = TasksGraph.GetTask(taskId);
-    auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(task, true);
+    auto* taskDesc = SerializeTaskForExecution(task);
 
     if (!TxInfo) {
         double memoryPoolPercent = 100;

@@ -2420,6 +2420,8 @@ class YdbBenchTest(unittest.TestCase):
             const localMetricDirection=()=>null;
             const localComparisonDelta=()=>'';
             const mountLocalYdbComparisonCurves=()=>{};
+            const sectionTabs=()=>'';
+            const bindSectionTabs=()=>{};
             """
             + web._JS[mount_start:mount_finish]
             + """
@@ -7332,6 +7334,42 @@ class WebTest(unittest.TestCase):
         self.assertEqual(model["complete"]["status"], "completed")
         self.assertEqual(model["imported"]["source"], "imported")
 
+    @unittest.skipUnless(shutil.which("node"), "node is required for the compact Runs UI test")
+    def test_web_compact_runs_sorting_and_tabs(self):
+        helpers = web._JS[web._JS.index("function sectionTabs") : web._JS.index("let activeBannerLoading")]
+        runs = web._JS[web._JS.index("const selectedComparisonRuns") : web._JS.index("async function renderRuns")]
+        script = helpers + runs + """
+        const assert=require('assert');
+        const esc=value=>String(value??'').replaceAll('<','&lt;').replaceAll('"','&quot;');
+        const enc=encodeURIComponent,status=esc,humanTime=esc,duration=()=>'',runHref=()=>'';
+        const records=[{id:'older',started_at:'2025-01-01',duration_seconds:100},
+          {id:'newer',queued_at:'2025-02-01',duration_seconds:10}];
+        assert.deepEqual(sortRuns(records,'newest').map(item=>item.id),['newer','older']);
+        assert.deepEqual(sortRuns(records,'oldest').map(item=>item.id),['older','newer']);
+        assert.deepEqual(sortRuns(records,'longest').map(item=>item.id),['older','newer']);
+        assert.equal(records[0].id,'older');
+        selectedComparisonRuns.add('older');
+        const html=compactRun({...records[0],profile_names:['first','<second>'],profiles:2,repetitions:4});
+        assert(html.includes('checked'));
+        assert(html.includes('first')&&html.includes('&lt;second>'));
+        assert(html.includes('2 profiles · 4 steps'));
+        const storage=new Map;
+        const sessionStorage={getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)};
+        const buttons=['final','search'].map(key=>({dataset:{sectionTab:'comparison:'+key},
+          setAttribute(name,value){this[name]=value}}));
+        const panels=['final','search'].map(key=>({dataset:{sectionPanel:'comparison:'+key}}));
+        const container={dataset:{},querySelectorAll:selector=>selector.includes('tab')?buttons:panels};
+        bindSectionTabs(container,'comparison');
+        assert.equal(panels[1].hidden,true);
+        buttons[1].onclick();
+        assert.equal(panels[0].hidden,true);
+        assert.equal(buttons[1]['aria-pressed'],'true');
+        container.dataset={};
+        bindSectionTabs(container,'comparison');
+        assert.equal(panels[1].hidden,false);
+        """
+        subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True)
+
     def test_web_runs_are_sorted_newest_first(self):
         self._manifest(self.root / "older")
         self._manifest(self.root / "newer")
@@ -7549,6 +7587,8 @@ class WebTest(unittest.TestCase):
         worker.start()
         try:
             base = "http://127.0.0.1:{}".format(server.server_port)
+            with urllib.request.urlopen(base + "/api/activity-status") as response:
+                self.assertEqual(json.load(response), {"active_run_id": None, "queued": 0})
             with urllib.request.urlopen(base + "/") as response:
                 self.assertIn("default-src 'self'", response.headers["Content-Security-Policy"])
                 self.assertIn(b"app.js", response.read())
@@ -8094,6 +8134,7 @@ class WebTest(unittest.TestCase):
         self.assertTrue(started["first"].wait(2))
         second = service.start(config("second"))
         third = service.start(config("third"))
+        self.assertEqual(service.activity_status(), {"active_run_id": first["id"], "queued": 2})
 
         second_detail = service.detail(second["id"])
         third_detail = service.detail(third["id"])

@@ -15,11 +15,15 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
     , Counters(counters)
     , PercentileCounters(percentileCounters)
     , ResponseGroup(percentileCounters->GetSubgroup("subsystem", "response"))
+    , StateGroup(Counters->GetSubgroup("subsystem", "state"))
     , LatencyOverviewGroup(overviewCounters->GetSubgroup("subsystem", "latency"))
     , EventGroup(Counters->GetSubgroup("subsystem", "event"))
     , HandoffGroup(Counters->GetSubgroup("subsystem", "handoff"))
     , ActiveRequestsGroup(Counters->GetSubgroup("subsystem", "requests"))
 {
+    TransitionsToDormant = StateGroup->GetCounter("TransitionsToDormant", true);
+    TransitionsToActive = StateGroup->GetCounter("TransitionsToActive", true);
+
     if (info) {
         const TBlobStorageGroupInfo::TDynamicInfo& dyn = info->GetDynamicInfo();
         GroupIdGen = (ui64(dyn.GroupId.GetRawId()) << 32) | dyn.GroupGeneration;
@@ -117,6 +121,14 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
     RespStatPatch.emplace(respStatGroup->GetSubgroup("request", "patch"));
     RespStatAssimilate.emplace(respStatGroup->GetSubgroup("request", "assimilate"));
     RespStatCheckIntegrity.emplace(respStatGroup->GetSubgroup("request", "checkIntegrity"));
+}
+
+void TBlobStorageGroupProxyMon::CountDormancyTransition(bool isDormant) {
+    if (isDormant) {
+        ++*TransitionsToDormant;
+    } else {
+        ++*TransitionsToActive;
+    }
 }
 
 void TBlobStorageGroupProxyMon::BecomeFull() {
@@ -217,6 +229,23 @@ void TBlobStorageGroupProxyMon::ThroughputUpdate() {
     if (!IsLimitedMon) {
         for (auto *sensor : {&PutTabletLogThroughput, &PutAsyncBlobThroughput, &PutUserDataThroughput, &PutThroughput}) {
             sensor->get()->UpdateHistogram();
+        }
+    }
+}
+
+void TBlobStorageGroupProxyMon::PrepareForDormancy() {
+    // Replace every rolling frame, then publish once more against a refreshed
+    // frame to expose the resulting empty window.
+    for (size_t i = 0; i <= PercentileTrackerFrameCount; ++i) {
+        Update();
+    }
+    ResetThroughput();
+}
+
+void TBlobStorageGroupProxyMon::ResetThroughput() {
+    if (!IsLimitedMon) {
+        for (auto *sensor : {&PutTabletLogThroughput, &PutAsyncBlobThroughput, &PutUserDataThroughput, &PutThroughput}) {
+            sensor->get()->Reset();
         }
     }
 }

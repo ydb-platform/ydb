@@ -27,9 +27,9 @@ for those layers.
 
 `TUringRouter` owns the duplicated file handle passed to its constructor, its
 ring, wake eventfd and dedicated I/O thread. The actor-system pointer is
-borrowed and must remain usable until the last router owner releases it and all
-terminal callbacks have returned. The router is neither an actor nor the owner
-of the device's PDisk allocation.
+borrowed and must remain usable through `StopSync()`, including all terminal
+callbacks. The router is neither an actor nor the owner of the device's PDisk
+allocation.
 
 In the DDisk integration, PDisk lazily creates and starts one shared router for
 its device when the first `TEvYardInit` requests an `IUringRouterClient`. That
@@ -72,19 +72,19 @@ The lifetime boundary is the return value of submission:
   run for this attempt; the caller retains responsibility for the operation
   and its buffers.
 
-An accepted submission gets exactly one terminal callback before final router
-destruction returns: `OnComplete()` if it reached the kernel (including error
-completion), or `OnDrop()` if shutdown discards it first. The router does not
+An accepted submission gets exactly one terminal callback before `StopSync()`
+returns: `OnComplete()` if it reached the kernel (including error completion),
+or `OnDrop()` if shutdown discards it first. The router does not
 access the operation after that callback returns, so the callback may free it
 or return it to a pool. `GetInflight()` counts accepted queued/submitted work
 and callbacks still executing.
 
 `OnComplete()` and `OnDrop()` run on the I/O thread outside actor activation.
 They must be `noexcept`, must not use `TActivationContext`, and should send
-actor messages through the supplied `TActorSystem`. They must not release the
-last router reference, because its destructor would try to join the callback's
-own thread. Keep callback and optional sample-sink work short; the single I/O
-thread also services all other requests.
+actor messages through the supplied `TActorSystem`. They must not call
+`StopSync()` on this router or release its last reference, because synchronous
+shutdown would try to join the callback's own thread. Keep callback and optional
+sample-sink work short; the single I/O thread also services all other requests.
 
 `GetResult()` exposes the total requested byte count after successful logical
 completion, or a negative errno. The router advances the iovec window and
@@ -106,47 +106,56 @@ submission racing with that transition may still be accepted and will still
 receive one terminal callback. Repeated and concurrent `StopAsync()` calls are
 supported; concurrent setup and `Start()` calls are not part of the contract.
 
-The last shared-owner release runs synchronous shutdown in the router
-destructor. It appends a stop sentinel, calls `OnDrop()` for accepted work that
-has not reached the kernel, drains submitted I/O through `OnComplete()`, retires
-any pending wake poll, and uses an `IOSQE_IO_DRAIN` marker before joining the
-I/O thread and tearing down the ring. Callback state, backing buffers, and the
-actor system must therefore survive until each client's accepted I/O has
-finished and final router destruction has returned.
+`StopSync()` closes admission, waits for accepted publishers to finish queue
+publication and wake notification, appends a stop sentinel, and joins the I/O
+thread. Concurrent synchronous stops are serialized. The I/O thread calls
+`OnDrop()` for accepted work that has not reached the kernel, drains submitted
+I/O through `OnComplete()`, retires pending wake polls, and fences submitted
+work with an `IOSQE_IO_DRAIN` marker. Short-I/O continuations canceled by
+shutdown complete with `-ECANCELED`. Normal shutdown has no drain deadline.
+Callback state and backing buffers must survive until their terminal callbacks
+return; the actor system must remain usable through `StopSync()`.
 
-PDisk owns router creation and the non-blocking stop decision. During PDisk
-shutdown it detaches device sampling. If PDisk holds the only router reference,
-it calls `StopAsync()` and releases it, so final destruction performs the
-synchronous cleanup. If DDisk or PersistentBuffer clients still hold
-references, PDisk deliberately neither closes admission nor waits: an old slot
-may continue until its owner-stamped PDisk request detects the stale round.
-PDisk then releases its reference during destruction, and the last client to
-release the router performs the drain/drop above. The duplicated device handle
-remains open until then, so a replacement PDisk waits for the old holder when
-acquiring the device lock.
+Before returning, `StopSync()` destroys the ring and closes the duplicated
+device handle. The wake eventfd remains valid until router destruction, which
+also calls `StopSync()`. Retained initialization responses and submit-only
+client references therefore cannot keep the device handle open after
+synchronous shutdown; their new submissions are rejected without callbacks.
+
+PDisk owns the router and calls `StopSync()` during shutdown before stopping
+its block device and releasing the source descriptor. DDisk and PersistentBuffer
+clients cannot stop the shared router. Descriptor closure and device-lock
+reacquisition are separate guarantees: explicitly unlocking a device does not
+prove that its descriptor was closed. Sampling callbacks capture shared
+aggregator ownership directly and must not reference PDisk or its monitoring
+object.
 
 A fatal ring/backend failure marks the router broken and closes admission.
 PDisk observes that state and reports a device error once so that PDisk and its
-slots can be restarted. Clients still wait for their own accepted work. If a
-fatal failure leaves any operation potentially owned by the kernel, final
-destruction aborts instead of freeing storage whose ownership is unresolved.
+slots can be restarted. Clients still wait for their own accepted work. During
+synchronous teardown, fatal shutdown paths allow 200 ms for late completions.
+If data operations, published SQ entries, wake polls or stop markers remain
+unresolved at the deadline, the process aborts before freeing resources whose
+ownership may still belong to the kernel. Retaining only the ring and device
+handle would not protect caller-owned buffers.
 
 ## DDisk integration and fallback boundary
 
 [TPDisk::AttachSharedUringRouter](../../core/blobstorage/pdisk/blobstorage_pdisk_impl.cpp)
 handles a DDisk request for direct I/O. On the first request it duplicates the
 device handle, probes io_uring, creates and starts the per-device router, and
-installs fixed-file registration and device-timing sampling. Failure to create
-the shared router returns no client, so DDisk uses PDisk raw-event I/O instead.
+installs fixed-file registration and a timing sample sink with shared aggregator
+ownership. Failure to create the shared router returns no client, so DDisk uses
+PDisk raw-event I/O instead.
 `ForcePDiskFallback` opts out in the DDisk yard-init request and always selects
 that fallback path.
 
 [direct_io_op.cpp](../../core/blobstorage/ddisk/direct_io_op.cpp) owns DDisk's
-operation payload and delivery back to the actor. Selection of PDisk fallback
-and translation into PDisk requests belong to the DDisk caller, not to
-`TUringRouter`. A plain ring is still io_uring; an ordinary CQE error is not an
-automatic switch to PDisk. Changes at this boundary must preserve
-sender/cookie, payload ownership and final completion on both paths.
+operation payload, short-I/O counters, critical retries and delivery back to the
+actor. Selection of PDisk fallback and translation into PDisk requests belong
+to the DDisk caller, not to `TUringRouter`. A plain ring is still io_uring; an
+ordinary CQE error is not an automatic switch to PDisk. Changes at this boundary
+must preserve sender/cookie, payload ownership and final completion on both paths.
 
 ## Tests
 
@@ -157,10 +166,29 @@ The library target is `ydb/library/pdisk_io`; its Linux unit-test target is
 - Queue overload, multiple producers, wake-after-idle and normal I/O errors.
 - Fixed buffers, scatter/gather, retry cursor behavior and timing samples.
 - Submission before/after admission, submission racing with asynchronous stop,
-  concurrent stops, and destruction waiting for a running callback.
+  concurrent synchronous stops, ring and descriptor retirement, and synchronous
+  stop or destruction waiting for a running callback.
 
-Kernel or sandbox restrictions may prevent io_uring setup; distinguish that
-from an I/O correctness failure. DDisk/PB integration tests in
-`ydb/core/blobstorage/ddisk/ut` cover the caller layer and PDisk fallback.
-Library tests alone cannot establish actor shutdown fencing or PB record
-durability.
+Shared [uring_router_test_peer.h](uring_router_test_peer.h) exposes scripted
+issuer phases and retirement snapshots. Its instance-local, immutable hook
+bundle is installed before `Start()` and supplies publisher, callback and stop
+barriers. Keep hook state alive until callbacks retire; cleanup must release
+blocked threads before destroying the fixture. The private backend supplies a
+monotonic clock for deterministic fatal-drain deadlines.
+
+[uring_test_support.h](uring_test_support.h) provides `RequireUring()`. Native
+tests using this helper explicitly print `SKIP` when kernel or sandbox
+restrictions prevent io_uring setup. Pass `--test-param=require_io_uring=1` to
+make an unavailable native backend fail the capability check. Scripted-backend
+success does not establish native-kernel coverage.
+
+DDisk/PB tests in `ydb/core/blobstorage/ddisk/ut` cover the caller layer and
+PDisk fallback. Shared [ddisk_actor_test_peer.h](../../core/blobstorage/ddisk/ddisk_actor_test_peer.h)
+controls the forced-destructor clock;
+[blobstorage_pdisk_test_peer.h](../../core/blobstorage/pdisk/blobstorage_pdisk_test_peer.h)
+installs router configuration under `StateMutex` before router creation.
+[node_warden_test_peer.h](../../core/blobstorage/nodewarden/node_warden_test_peer.h)
+supports scripted Warden restart checks. The NodeWarden unit target also contains
+`TRequestedPDiskRestartFixture`, which uses a real file and native callback gates
+to exercise the DDisk/PB restart handoff. Library tests alone cannot establish
+actor shutdown fencing or PB record durability.

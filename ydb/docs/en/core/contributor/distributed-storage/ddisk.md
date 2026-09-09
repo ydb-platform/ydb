@@ -54,33 +54,79 @@ The operation reports `TEvSyncResult` after processing its destination work. It 
 
 Chunk-map snapshots and PDisk log increments restore ownership and integrity-extent mappings. PB then performs its own chunk scan and record recovery. Connection state must be re-established by clients after service replacement.
 
-Fatal PDisk or integrity failures can put the actor into its broken/termination path and fail parked work. Review failure handling alongside normal completions: pending chunk allocation, serialized writes, sync reads, and PB operations can all outlive the event that initiated shutdown.
+## Shutdown and Restart {#shutdown-and-restart}
 
-On stop, DDisk and PB reject new requests with `SESSION_MISMATCH` and independently
-wait for their own submitted router I/O. Existing completions may finish requests,
-but shutdown does not start further I/O or retries, and a write still requires its
-integrity and allocation-log durability conditions before success. PDisk fallback
-I/O does not delay actor shutdown. Callback cleanup and queued completion events
-finish before the actor dies. After one minute of outstanding direct I/O, the actor
-marks itself stalled and contributes one to the non-derivative `ddisks/io_stalled`
-gauge; completing the drain removes that contribution.
+DDisk and PB must always wait for their accepted asynchronous router I/O and
+callbacks before acknowledging shutdown. Neither actor may publish Gone while
+those callbacks still own its state. The PDisk fallback path instead cancels
+actor-owned requests and processes their terminal results before Gone; the
+PDisk stop barrier below drains the underlying device I/O.
 
-Router callback ownership and the stopping flag share one atomic state. A single
-completion guard recycles the operation or transfers it to a retry event before
-`OnDirectIODone` retires the running count and router callback ownership. Rejected
-submissions retire through the same method after error handling and destruction;
-PDisk fallback only retires the running count. `OnComplete` and `OnDrop` use the
-supplied actor system, including outside actor activation. Only shutdown publishes
-`TEvFinishStopping`: stop sends it if no callbacks remain, otherwise the last
-callback sends it. This final mailbox turn processes already-published results
-before destruction. A timeout observing zero callbacks does nothing.
+PDisk session loss starts the same idempotent Stopping state as poison, but
+only poison authorizes actor death and the shutdown acknowledgement. Stopping
+rejects new requests with `SESSION_MISMATCH`, cancels actor-owned fallback I/O
+and parked retries, and continues processing submitted I/O results. Cancellation
+balances counters and publishes results before the final mailbox barrier.
+Existing completions may finish writes only when their integrity and allocation
+log durability conditions are satisfied; shutdown starts no further I/O.
 
-PDisk does not unconditionally stop the shared router when PDisk itself stops.
-If PDisk is its sole owner, it closes admission with `StopAsync()` and releases
-the router. If DDisk or PB clients remain, PDisk leaves admission open and does
-not wait; the last shared-owner release drops work not submitted to the kernel,
-drains submitted I/O, joins the I/O thread, and closes the duplicated device
-handle.
+DDisk and PB drain their own I/O concurrently. PB releases its router reference
+before sending `TEvGone` to its concrete parent actor. The parent waits for both
+drains, releases its router reference, then notifies Warden. Tracked child poison
+handles an already absent PB; duplicate poison and notifications are harmless.
+After 60 seconds each actor with outstanding callbacks contributes one to
+`ddisks/io_stalled`, cleared as soon as its own drain finishes. Waiting for PB is
+reported separately. Normal shutdown waits indefinitely for stalled I/O.
+
+The callback retirement count and stopping flag share one atomic state. Callback
+cleanup and result publication precede retirement; completion and retry
+cancellation events finish before actor destruction. Forced actor destruction
+retains all members while waiting up to 10 seconds using monotonic time, then
+aborts if callbacks still own actor state. This forced-destruction deadline is
+separate from the 60-second stalled-I/O diagnostic and does not bound normal
+shutdown waits.
+
+Critical integrity/formatting overload errors permit 20 resubmissions, delayed
+by `min(1 ms × 2^(retry−1), 100 ms)`. The immediate callback event transfers the
+operation to an actor-owned map; timers contain only IDs. Broken/Stopping cancels
+parked operations and stale timers do nothing. Exhaustion returns `ERROR` with
+attempt count and last errno; ordinary-I/O error mapping is unchanged.
+
+PB restore consumes payloads only after successful reads. The first failed read
+enters Broken and fails queued requests with `ERROR`; late completions only
+retire accounting and cannot parse data, resume recovery or publish readiness.
+The restore set continues to mean chunks already scheduled.
+
+For a NodeWarden-requested PDisk restart, NodeWarden first requests shutdown of
+all affected DDisk actor incarnations. Each DDisk requests shutdown of its PB
+and waits for its own drain and the concrete child's `TEvGone`. Only after the
+last DDisk's Gone does NodeWarden send PDisk restart permission. Replacement
+DDisk/PB startup remains fenced while waiting for these actors and while the
+PDisk restart is in flight. The order is therefore PB drain/Gone and DDisk drain,
+then DDisk Gone, then PDisk restart permission; the two drains may finish in
+either order.
+
+A replacement PDisk cannot begin device I/O until the previous PDisk's I/O has
+retired. `TPDisk::Stop()` always calls the shared router's `StopSync()`, even if
+DDisk/PB or retained initialization results still hold router clients. This
+closes admission, waits for publishers and terminal callbacks, joins the issuer,
+retires the ring, and closes the router's duplicated device descriptor. PDisk
+then stops its source block device before replacement bootstrap. An old client
+can outlive this barrier, but it rejects new work and no longer owns an active
+ring or device descriptor. Healthy draining has no timeout; failure to retire
+kernel ownership on a broken ring aborts the process instead of permitting
+replacement startup with old I/O still live.
+
+The same synchronous I/O barrier applies when PDisk stops or restarts
+independently of the NodeWarden-requested sequence. DDisk and PB observe the
+stopped router on a rejected submission and enter Stopping; PDisk session loss
+also enters Stopping. There is no unsolicited router notification to an idle
+actor. PDisk waits for accepted router operations and their callbacks to retire,
+which protects actor state while those callbacks run. This barrier does not wait
+for the actors' final mailbox processing or Gone notifications. Those actors
+still drain their results, and poison remains required before actor death and
+notification to Warden. Do not equate this independent I/O barrier with the
+additional actor-Gone ordering of a requested restart.
 
 `TEvDeleteTabletChunks` retires a tablet's data chunk mappings. While deletion is in flight, writes and sync requests for that tablet can return `BUSY`. Controller claim removal and local chunk deletion are separate operations; callers must arrange their order and retire outstanding client work.
 

@@ -173,9 +173,9 @@ namespace {
                 : Sender(sender)
                 , Database(database)
             {}
-            NActors::TActorId Sender;
-            TString Database;
-            TString SessionId;
+            NActors::TActorId Sender; // set from CreateSession and until first reply in AttachSession
+            TString Database; // must match key in DatabaseStates
+            TString SessionId; // empty when session does not exists
             NRpcService::TStreamReadProcessorPtr<Ydb::Query::SessionState> StreamProcessor;
         };
 

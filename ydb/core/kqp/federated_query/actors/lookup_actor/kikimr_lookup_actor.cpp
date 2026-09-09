@@ -498,18 +498,7 @@ namespace {
         }
 
         void FinalizeSession(TSessionState::TPtr session) {
-            if (auto sender = session->Sender) {
-                session->Sender = {};
-                auto& databaseState = DatabaseStates[session->Database];
-                databaseState.ExpireTime = TInstant::Now() + DatabaseStatesCleanupPeriod;
-                Y_DEBUG_ABORT_UNLESS(databaseState.InflightCreateSessions > 0);
-                --databaseState.InflightCreateSessions;
-                // Retries are handled inside lookup actor
-                TIssues issues;
-                issues.AddIssue(TIssue("Session attach terminated with unknown status"));
-                Send(sender, new TEvSessionError(Ydb::StatusIds::UNDETERMINED, std::move(issues)));
-                TryEnqueueWaiting(databaseState, session->Database);
-            }
+            Y_DEBUG_ABORT_UNLESS(!session->Sender);
             YDB_LOG_DEBUG("FinalizeSession",
                     {"sessionId", session->SessionId});
             session->SessionId.clear();

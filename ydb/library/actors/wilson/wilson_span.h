@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <contrib/proto/opentelemetry/opentelemetry/proto/trace/v1/trace.pb.h>
 #include <util/generic/flags.h>
@@ -59,8 +60,10 @@ namespace NWilson {
             bool Ignored = false;
             bool EndAsIs = false; // don't update any data on End()
             NActors::TActorSystem* ActorSystem;
+            const NActors::TActorId UploaderId;
 
-            TData(TInstant startTime, ui64 startCycles, TTraceId traceId, TFlags flags, NActors::TActorSystem* actorSystem);
+            TData(TInstant startTime, ui64 startCycles, TTraceId traceId, TFlags flags,
+                NActors::TActorSystem* actorSystem, NActors::TActorId uploaderId);
 
             ~TData() {
                 Y_DEBUG_ABORT_UNLESS(Sent || Ignored);
@@ -75,7 +78,8 @@ namespace NWilson {
         TSpan(TSpan&&) = default;
 
         TSpan(ui8 verbosity, TTraceId parentId, std::variant<std::optional<TString>, const char*> name,
-            TFlags flags = EFlags::NONE, NActors::TActorSystem* actorSystem = nullptr);
+            TFlags flags = EFlags::NONE, NActors::TActorSystem* actorSystem = nullptr,
+            NActors::TActorId uploaderId = {});
         ~TSpan();
 
         TSpan& operator =(const TSpan&) = delete;
@@ -83,7 +87,7 @@ namespace NWilson {
 
         static TSpan ConstructTerminated(const TTraceId& parentId, const TTraceId& spanId,
                 TInstant startTs, TInstant endTs, NTraceProto::Status::StatusCode statusCode,
-                const TString& name);
+                const TString& name, NActors::TActorId uploaderId = {});
 
         explicit operator bool() const {
             return Data && !Data->Sent && !Data->Ignored;
@@ -197,7 +201,8 @@ namespace NWilson {
         }
 
         TSpan CreateChild(ui8 verbosity, std::variant<std::optional<TString>, const char*> name, TFlags flags = EFlags::NONE) const {
-            return TSpan(verbosity, GetTraceId(), std::move(name), flags, GetActorSystem());
+            return TSpan(verbosity, GetTraceId(), std::move(name), flags, GetActorSystem(),
+                Data ? Data->UploaderId : NActors::TActorId{});
         }
 
         TString GetName() const {

@@ -6,6 +6,8 @@
 
 #include <util/thread/singleton.h>
 #include <util/system/compiler.h>
+
+#include <array>
 #include <util/system/tls.h>
 #include <util/system/yassert.h>
 
@@ -13,61 +15,70 @@ namespace NKikimr::NJaegerTracing {
 
 namespace {
 
-Y_POD_STATIC_THREAD(TSamplingThrottlingControl*) TracingControlRawPtr;
+enum class ETracingChannel : size_t {
+    Dev = 0,
+    User = 1,
+    Count = 2,
+};
+
+TIntrusivePtr<TSamplingThrottlingConfigurator> ChannelConfigurator(ETracingChannel channel) {
+    return channel == ETracingChannel::User
+        ? AppData()->UserFacingTracingConfigurator
+        : AppData()->TracingConfigurator;
+}
 
 class TSamplingThrottlingControlTlsHolder {
 public:
-    TSamplingThrottlingControlTlsHolder()
-        : Control(CreateNewTracingControl())
-    {}
-
-    TSamplingThrottlingControl* GetTracingControlPtr() {
-        if (Y_UNLIKELY(!Control)) {
-            Control = CreateNewTracingControl();
+    TSamplingThrottlingControl* Get(ETracingChannel channel) {
+        auto& control = Controls[static_cast<size_t>(channel)];
+        if (Y_UNLIKELY(!control)) {
+            control = CreateControl(channel);
         }
-        return Control.Get();
+        return control.Get();
     }
 
-    void ResetTracingControl() {
-        Control = nullptr;
+    void Reset(ETracingChannel channel) {
+        Controls[static_cast<size_t>(channel)] = nullptr;
     }
 
 private:
-    static TIntrusivePtr<TSamplingThrottlingControl> CreateNewTracingControl() {
+    static TIntrusivePtr<TSamplingThrottlingControl> CreateControl(ETracingChannel channel) {
         Y_ASSERT(HasAppData()); // In general we must call this from actor thread
         if (Y_UNLIKELY(!HasAppData())) {
             return nullptr;
         }
-
-        return AppData()->TracingConfigurator->GetControl();
+        return ChannelConfigurator(channel)->GetControl();
     }
 
-private:
-    TIntrusivePtr<TSamplingThrottlingControl> Control;
+    std::array<TIntrusivePtr<TSamplingThrottlingControl>, static_cast<size_t>(ETracingChannel::Count)> Controls;
 };
 
-TSamplingThrottlingControl* GetTracingControlTls() {
-    if (Y_UNLIKELY(!TracingControlRawPtr)) {
-        TracingControlRawPtr = FastTlsSingleton<TSamplingThrottlingControlTlsHolder>()->GetTracingControlPtr();
-    }
-    return TracingControlRawPtr;
-}
-
-} // namespace
-
-NWilson::TTraceId HandleTracing(const TRequestDiscriminator& discriminator, const TMaybe<TString>& traceparent) {
-    TSamplingThrottlingControl* control = GetTracingControlTls();
+NWilson::TTraceId HandleTracing(ETracingChannel channel, const TRequestDiscriminator& discriminator,
+        const TMaybe<TString>& traceparent) {
+    TSamplingThrottlingControl* control = FastTlsSingleton<TSamplingThrottlingControlTlsHolder>()->Get(channel);
     if (Y_LIKELY(control)) {
         return control->HandleTracing(discriminator, traceparent);
     }
     return NWilson::TTraceId{};
 }
 
+void ClearTracingControl(ETracingChannel channel) {
+    FastTlsSingleton<TSamplingThrottlingControlTlsHolder>()->Reset(channel);
+}
+
+} // namespace
+
+NWilson::TTraceId HandleTracing(const TRequestDiscriminator& discriminator, const TMaybe<TString>& traceparent) {
+    return HandleTracing(ETracingChannel::Dev, discriminator, traceparent);
+}
+
+NWilson::TTraceId HandleUserFacingTracing(const TRequestDiscriminator& discriminator, const TMaybe<TString>& traceparent) {
+    return HandleTracing(ETracingChannel::User, discriminator, traceparent);
+}
+
 void ClearTracingControl() {
-    if (TracingControlRawPtr) {
-        TracingControlRawPtr = nullptr;
-        FastTlsSingleton<TSamplingThrottlingControlTlsHolder>()->ResetTracingControl();
-    }
+    ClearTracingControl(ETracingChannel::Dev);
+    ClearTracingControl(ETracingChannel::User);
 }
 
 } // namespace NKikimr::NJaegerTracing

@@ -225,7 +225,6 @@ public:
             }
         }
 
-        context.MemChanges.GrabSolomonVolume(context.SS, path.Base()->PathId);
         auto solomon = context.SS->SolomonVolumes.Update(path.Base()->PathId);
 
         if (!alter.HasPartitionCount() && !alter.GetUpdateChannelsBinding()) {

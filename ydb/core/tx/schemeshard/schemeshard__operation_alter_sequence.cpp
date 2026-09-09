@@ -491,7 +491,6 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->Sequences.contains(dstPath->PathId));
-        context.MemChanges.GrabSequence(context.SS, dstPath->PathId);
         auto sequenceInfo = context.SS->Sequences.Update(dstPath->PathId);
         Y_ABORT_UNLESS(!sequenceInfo->AlterData);
 

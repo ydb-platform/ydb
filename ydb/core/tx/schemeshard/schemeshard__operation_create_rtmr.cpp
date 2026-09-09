@@ -302,11 +302,8 @@ public:
             return result;
         }
 
-        const TPathId pathId = context.SS->AllocatePathId();
-        context.MemChanges.GrabNewPath(context.SS, pathId);
-        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
-        dstPath.MaterializeLeaf(owner, pathId);
-        result->SetPathId(pathId.LocalPathId);
+        dstPath.MaterializeLeaf(owner);
+        result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
         TPathElement::TPtr newRtmrVolume = dstPath.Base();
         newRtmrVolume->CreateTxId = OperationId.GetTxId();
@@ -331,7 +328,6 @@ public:
         context.SS->ChangeTxState(db, OperationId, TTxState::CreateParts);
         context.OnComplete.ActivateTx(OperationId);
 
-        context.MemChanges.GrabNewRtmrVolume(context.SS, newRtmrVolume->PathId);
         context.SS->RtmrVolumes.Set(newRtmrVolume->PathId, rtmrVolumeInfo);
         context.SS->TabletCounters->Simple()[COUNTER_RTMR_VOLUME_COUNT].Add(1);
         context.SS->TabletCounters->Simple()[COUNTER_RTMR_PARTITIONS_COUNT].Add(rtmrVolumeInfo->Partitions.size());

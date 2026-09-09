@@ -448,14 +448,12 @@ public:
             }
         }
 
-        const TPathId pathId = context.SS->AllocatePathId();
-        context.MemChanges.GrabNewPath(context.SS, pathId);
-        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
-        dstPath.MaterializeLeaf(owner, pathId);
-        result->SetPathId(pathId.LocalPathId);
+        dstPath.MaterializeLeaf(owner);
+        result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
         context.SS->TabletCounters->Simple()[COUNTER_OLAP_STORE_COUNT].Add(1);
 
+        TPathId pathId = dstPath.Base()->PathId;
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateOlapStore, pathId);
 
         ApplySharding(OperationId.GetTxId(), pathId, storeInfo, channelsBindings, txState, context.SS);
@@ -464,7 +462,6 @@ public:
 
         TOlapStoreInfo::TPtr pending = std::make_shared<TOlapStoreInfo>();
         pending->AlterData = storeInfo;
-        context.MemChanges.GrabNewOlapStore(context.SS, pathId);
         context.SS->OlapStores.Set(pathId, pending);
         context.SS->PersistOlapStore(db, pathId, *pending);
         context.SS->PersistOlapStoreAlter(db, pathId, *storeInfo);

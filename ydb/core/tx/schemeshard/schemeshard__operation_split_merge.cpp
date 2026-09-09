@@ -1083,7 +1083,6 @@ public:
             context.DbChanges.PersistShard(shard.Idx);
         }
 
-        context.MemChanges.GrabTable(context.SS, path->PathId);
         auto& mutableTableInfo = context.SS->Tables.Update(path->PathId);
 
         mutableTableInfo->RegisterSplitMergeOp(OperationId, op);

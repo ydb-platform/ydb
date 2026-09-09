@@ -354,7 +354,6 @@ void RegisterChanges(const TTxState& txState, const TTxId operationTxId, TOperat
     const auto& basenameId = path.Base()->PathId;
 
     context.MemChanges.GrabPath(context.SS, basenameId);
-    context.MemChanges.GrabDomain(context.SS, basenameId);
 
     // Registering shards is a bit complicated as every shard should be registered
     // in many places:

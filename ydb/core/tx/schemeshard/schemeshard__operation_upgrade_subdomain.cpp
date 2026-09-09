@@ -1232,7 +1232,6 @@ public:
         const TShardInfo& shardInfo = context.SS->ShardInfos.at(shardIdx);
         txState.Shards.emplace_back(shardIdx, TTabletTypes::SchemeShard, TTxState::CreateParts);
         alterData->AddPrivateShard(shardIdx);
-        context.MemChanges.GrabDomain(context.SS, pathId);
         subDomain->SetAlter(alterData);
 
 

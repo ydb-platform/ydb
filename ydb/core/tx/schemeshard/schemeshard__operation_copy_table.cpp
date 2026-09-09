@@ -141,6 +141,7 @@ public:
                 FillSrcSnapshot(txState, ui64(dstDatashardId), *combined.MutableSendSnapshot());
 
                 // Get coordinated version from source table's AlterData (shared across both drop and create)
+                // GrabTable is needed for proper rollback if operation fails
                 auto& srcTable = context.SS->Tables.Update(txState->SourcePathId);
                 context.MemChanges.GrabTable(context.SS, txState->SourcePathId);
                 srcTable->InitAlterData(OperationId);

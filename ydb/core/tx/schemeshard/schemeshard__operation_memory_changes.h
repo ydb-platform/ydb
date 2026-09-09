@@ -9,14 +9,11 @@
 #include <util/generic/ptr.h>
 #include <util/generic/stack.h>
 
-#include <memory>
 #include <optional>
-#include <tuple>
 
 namespace NKikimr::NSchemeShard {
 
 class TSchemeShard;
-struct TOlapStoreInfo;
 
 class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TPathState = std::pair<TPathId, TPathElement::TPtr>;
@@ -34,8 +31,7 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TLockState = std::pair<TPathId, TTxId>;
     TStack<TLockState> LockedPaths;
 
-    // Preserve the original table object as well as its independent snapshot.
-    using TTableState = std::tuple<TPathId, TTableInfo::TPtr, TTableInfo::TPtr>;
+    using TTableState = std::pair<TPathId, TTableInfo::TPtr>;
     TStack<TTableState> Tables;
 
     using TColumnTableState = std::pair<TPathId, TColumnTableInfo::TPtr>;
@@ -100,33 +96,6 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
 
     using TTestShardSetState = std::pair<TPathId, TTestShardSetInfo::TPtr>;
     TStack<TTestShardSetState> TestShardSets;
-
-    using TTopicState = std::pair<TPathId, TTopicInfo::TPtr>;
-    TStack<TTopicState> Topics;
-
-    using TBlockStoreVolumeState = std::pair<TPathId, TBlockStoreVolumeInfo::TPtr>;
-    TStack<TBlockStoreVolumeState> BlockStoreVolumes;
-
-    using TFileStoreInfoState = std::pair<TPathId, TFileStoreInfo::TPtr>;
-    TStack<TFileStoreInfoState> FileStoreInfos;
-
-    using TKesusInfoState = std::pair<TPathId, TKesusInfo::TPtr>;
-    TStack<TKesusInfoState> KesusInfos;
-
-    using TReplicationState = std::pair<TPathId, TReplicationInfo::TPtr>;
-    TStack<TReplicationState> Replications;
-
-    using TSolomonVolumeState = std::pair<TPathId, TSolomonVolumeInfo::TPtr>;
-    TStack<TSolomonVolumeState> SolomonVolumes;
-
-    using TBlobDepotState = std::pair<TPathId, TBlobDepotInfo::TPtr>;
-    TStack<TBlobDepotState> BlobDepots;
-
-    using TRtmrVolumeState = std::pair<TPathId, TRtmrVolumeInfo::TPtr>;
-    TStack<TRtmrVolumeState> RtmrVolumes;
-
-    using TOlapStoreState = std::pair<TPathId, std::shared_ptr<TOlapStoreInfo>>;
-    TStack<TOlapStoreState> OlapStores;
 
 public:
     ~TMemoryChanges() = default;
@@ -198,22 +167,6 @@ public:
 
     void GrabNewTestShardSet(TSchemeShard* ss, const TPathId& pathId);
     void GrabTestShardSet(TSchemeShard* ss, const TPathId& pathId);
-
-    void GrabNewTopic(TSchemeShard* ss, const TPathId& pathId);
-    void GrabTopic(TSchemeShard* ss, const TPathId& pathId);
-    void GrabNewBlockStoreVolume(TSchemeShard* ss, const TPathId& pathId);
-    void GrabBlockStoreVolume(TSchemeShard* ss, const TPathId& pathId);
-    void GrabNewFileStoreInfo(TSchemeShard* ss, const TPathId& pathId);
-    void GrabFileStoreInfo(TSchemeShard* ss, const TPathId& pathId);
-    void GrabNewKesusInfo(TSchemeShard* ss, const TPathId& pathId);
-    void GrabKesusInfo(TSchemeShard* ss, const TPathId& pathId);
-    void GrabNewReplication(TSchemeShard* ss, const TPathId& pathId);
-    void GrabReplication(TSchemeShard* ss, const TPathId& pathId);
-    void GrabNewSolomonVolume(TSchemeShard* ss, const TPathId& pathId);
-    void GrabSolomonVolume(TSchemeShard* ss, const TPathId& pathId);
-    void GrabNewBlobDepot(TSchemeShard* ss, const TPathId& pathId);
-    void GrabNewRtmrVolume(TSchemeShard* ss, const TPathId& pathId);
-    void GrabNewOlapStore(TSchemeShard* ss, const TPathId& pathId);
 
     void UnDo(TSchemeShard* ss);
 };

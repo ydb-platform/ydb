@@ -455,15 +455,12 @@ public:
             return result;
         }
 
-        const TPathId pathId = context.SS->AllocatePathId();
-        context.MemChanges.GrabNewPath(context.SS, pathId);
-        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
-        path.MaterializeLeaf(owner, pathId);
+        path.MaterializeLeaf(owner);
         path->CreateTxId = OperationId.GetTxId();
         path->LastTxId = OperationId.GetTxId();
         path->PathState = TPathElement::EPathState::EPathStateCreate;
         path->PathType = Strategy->GetPathType();
-        result->SetPathId(pathId.LocalPathId);
+        result->SetPathId(path->PathId.LocalPathId);
 
         IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
         parentPath.DomainInfo()->IncPathsInside(context.SS);
@@ -480,7 +477,6 @@ public:
 
         desc.MutableState()->MutableStandBy();
         auto replication = TReplicationInfo::Create(std::move(desc));
-        context.MemChanges.GrabNewReplication(context.SS, path->PathId);
         context.SS->Replications.Set(path->PathId, replication);
         context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Add(1);
 

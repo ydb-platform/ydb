@@ -315,7 +315,6 @@ public:
             return result;
         }
 
-        context.MemChanges.GrabKesusInfo(context.SS, path.Base()->PathId);
         auto kesus = context.SS->KesusInfos.Update(path.Base()->PathId);
         Y_ABORT_UNLESS(kesus);
         Y_ABORT_UNLESS(path.Base()->IsCreateFinished()); // checks.NotUnderOperation checks that path not under creation

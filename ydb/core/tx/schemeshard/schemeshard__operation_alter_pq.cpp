@@ -673,7 +673,6 @@ public:
             }
         }
 
-        context.MemChanges.GrabTopic(context.SS, path.Base()->PathId);
         auto topic = context.SS->Topics.Update(path.Base()->PathId);
         Y_ABORT_UNLESS(topic);
 

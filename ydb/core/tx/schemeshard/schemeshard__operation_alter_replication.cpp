@@ -407,7 +407,6 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->Replications.contains(path.Base()->PathId));
-        context.MemChanges.GrabReplication(context.SS, path.Base()->PathId);
         auto replication = context.SS->Replications.Update(path.Base()->PathId);
 
         if (replication->AlterVersion == 0) {

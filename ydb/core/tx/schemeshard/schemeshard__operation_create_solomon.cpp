@@ -346,11 +346,8 @@ public:
             }
         }
 
-        const TPathId pathId = context.SS->AllocatePathId();
-        context.MemChanges.GrabNewPath(context.SS, pathId);
-        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
-        dstPath.MaterializeLeaf(owner, pathId);
-        result->SetPathId(pathId.LocalPathId);
+        dstPath.MaterializeLeaf(owner);
+        result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
         TPathElement::TPtr newSolomon = dstPath.Base();
         newSolomon->CreateTxId = OperationId.GetTxId();
@@ -367,7 +364,6 @@ public:
             return result;
         }
 
-        context.MemChanges.GrabNewSolomonVolume(context.SS, newSolomon->PathId);
         context.SS->SolomonVolumes.Set(newSolomon->PathId, solomonVolume);
         context.SS->TabletCounters->Simple()[COUNTER_SOLOMON_VOLUME_COUNT].Add(1);
         context.SS->TabletCounters->Simple()[COUNTER_SOLOMON_PARTITIONS_COUNT].Add(solomonVolume->Partitions.size());

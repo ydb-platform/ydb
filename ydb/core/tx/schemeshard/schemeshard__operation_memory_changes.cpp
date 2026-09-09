@@ -4,79 +4,6 @@
 
 namespace NKikimr::NSchemeShard {
 
-namespace {
-
-template <class T>
-TIntrusivePtr<T> SnapshotObject(const T& original) {
-    return MakeIntrusive<T>(original);
-}
-
-TTopicInfo::TPtr SnapshotObject(const TTopicInfo& original) {
-    auto snapshot = MakeIntrusive<TTopicInfo>(original);
-    // Shards own partitions; the topic's partition map is only a raw-pointer
-    // index. Clone the owners and rebuild that index against the cloned nodes.
-    snapshot->Shards.clear();
-    snapshot->Partitions.clear();
-    for (const auto& [shardId, shard] : original.Shards) {
-        Y_ABORT_UNLESS(shard);
-        auto copy = MakeIntrusive<TTopicTabletInfo>();
-        for (const auto& partition : shard->Partitions) {
-            Y_ABORT_UNLESS(partition);
-            auto part = MakeHolder<TTopicTabletInfo::TTopicPartitionInfo>(*partition);
-            Y_ABORT_UNLESS(snapshot->Partitions.emplace(part->PqId, part.Get()).second);
-            copy->Partitions.push_back(part.Release());
-        }
-        snapshot->Shards.emplace(shardId, std::move(copy));
-    }
-    Y_ABORT_UNLESS(snapshot->Partitions.size() == original.Partitions.size());
-    return snapshot;
-}
-
-TBlockStoreVolumeInfo::TPtr SnapshotObject(const TBlockStoreVolumeInfo& original) {
-    auto snapshot = MakeIntrusive<TBlockStoreVolumeInfo>(original);
-    for (auto& [id, partition] : snapshot->Shards) {
-        partition = MakeIntrusive<TBlockStorePartitionInfo>(*partition);
-    }
-    return snapshot;
-}
-
-TSolomonVolumeInfo::TPtr SnapshotObject(const TSolomonVolumeInfo& original) {
-    auto snapshot = MakeIntrusive<TSolomonVolumeInfo>(original);
-    for (auto& [id, partition] : snapshot->Partitions) {
-        partition = MakeIntrusive<TSolomonPartitionInfo>(*partition);
-    }
-    return snapshot;
-}
-
-TFileStoreInfo::TPtr SnapshotObject(const TFileStoreInfo& original) {
-    // AlterConfig is uniquely owned, so the implicit copy constructor is deleted.
-    auto snapshot = MakeIntrusive<TFileStoreInfo>();
-    snapshot->IndexShardIdx = original.IndexShardIdx;
-    snapshot->IndexTabletId = original.IndexTabletId;
-    snapshot->Config = original.Config;
-    snapshot->Version = original.Version;
-    snapshot->AlterVersion = original.AlterVersion;
-    if (original.AlterConfig) {
-        snapshot->AlterConfig = MakeHolder<NKikimrFileStore::TConfig>(*original.AlterConfig);
-    }
-    return snapshot;
-}
-
-TKesusInfo::TPtr SnapshotObject(const TKesusInfo& original) {
-    auto snapshot = MakeIntrusive<TKesusInfo>();
-    snapshot->KesusShardIdx = original.KesusShardIdx;
-    snapshot->KesusTabletId = original.KesusTabletId;
-    snapshot->Config = original.Config;
-    snapshot->Version = original.Version;
-    snapshot->AlterVersion = original.AlterVersion;
-    if (original.AlterConfig) {
-        snapshot->AlterConfig = MakeHolder<Ydb::Coordination::Config>(*original.AlterConfig);
-    }
-    return snapshot;
-}
-
-} // namespace
-
 template <typename I, typename C, typename H>
 static void GrabNew(const I& id, const C& cont, H& holder) {
     Y_ABORT_UNLESS(!cont.contains(id));
@@ -86,7 +13,7 @@ static void GrabNew(const I& id, const C& cont, H& holder) {
 template <typename T, typename I, typename C, typename H>
 static void Grab(const I& id, const C& cont, H& holder) {
     Y_ABORT_UNLESS(cont.contains(id));
-    holder.emplace(id, SnapshotObject(*cont.at(id)));
+    holder.emplace(id, new T(*cont.at(id)));
 }
 
 void TMemoryChanges::GrabNewTxState(TSchemeShard* ss, const TOperationId& opId) {
@@ -102,13 +29,11 @@ void TMemoryChanges::GrabPath(TSchemeShard* ss, const TPathId& pathId) {
 }
 
 void TMemoryChanges::GrabNewTable(TSchemeShard* ss, const TPathId& pathId) {
-    Y_ABORT_UNLESS(!ss->Tables.contains(pathId));
-    Tables.emplace(pathId, nullptr, nullptr);
+    GrabNew(pathId, ss->Tables, Tables);
 }
 
 void TMemoryChanges::GrabTable(TSchemeShard* ss, const TPathId& pathId) {
-    auto original = ss->Tables.Update(pathId);
-    Tables.emplace(pathId, original, TTableInfo::DeepCopy(*original));
+    Grab<TTableInfo>(pathId, ss->Tables, Tables);
 }
 
 void TMemoryChanges::GrabNewColumnTable(TSchemeShard* ss, const TPathId& pathId) {
@@ -295,66 +220,6 @@ void TMemoryChanges::GrabTestShardSet(TSchemeShard* ss, const TPathId& pathId) {
     Grab<TTestShardSetInfo>(pathId, ss->TestShardSets, TestShardSets);
 }
 
-void TMemoryChanges::GrabNewTopic(TSchemeShard* ss, const TPathId& pathId) {
-    GrabNew(pathId, ss->Topics, Topics);
-}
-
-void TMemoryChanges::GrabTopic(TSchemeShard* ss, const TPathId& pathId) {
-    Grab<TTopicInfo>(pathId, ss->Topics, Topics);
-}
-
-void TMemoryChanges::GrabNewBlockStoreVolume(TSchemeShard* ss, const TPathId& pathId) {
-    GrabNew(pathId, ss->BlockStoreVolumes, BlockStoreVolumes);
-}
-
-void TMemoryChanges::GrabBlockStoreVolume(TSchemeShard* ss, const TPathId& pathId) {
-    Grab<TBlockStoreVolumeInfo>(pathId, ss->BlockStoreVolumes, BlockStoreVolumes);
-}
-
-void TMemoryChanges::GrabNewFileStoreInfo(TSchemeShard* ss, const TPathId& pathId) {
-    GrabNew(pathId, ss->FileStoreInfos, FileStoreInfos);
-}
-
-void TMemoryChanges::GrabFileStoreInfo(TSchemeShard* ss, const TPathId& pathId) {
-    Grab<TFileStoreInfo>(pathId, ss->FileStoreInfos, FileStoreInfos);
-}
-
-void TMemoryChanges::GrabNewKesusInfo(TSchemeShard* ss, const TPathId& pathId) {
-    GrabNew(pathId, ss->KesusInfos, KesusInfos);
-}
-
-void TMemoryChanges::GrabKesusInfo(TSchemeShard* ss, const TPathId& pathId) {
-    Grab<TKesusInfo>(pathId, ss->KesusInfos, KesusInfos);
-}
-
-void TMemoryChanges::GrabNewReplication(TSchemeShard* ss, const TPathId& pathId) {
-    GrabNew(pathId, ss->Replications, Replications);
-}
-
-void TMemoryChanges::GrabReplication(TSchemeShard* ss, const TPathId& pathId) {
-    Grab<TReplicationInfo>(pathId, ss->Replications, Replications);
-}
-
-void TMemoryChanges::GrabNewSolomonVolume(TSchemeShard* ss, const TPathId& pathId) {
-    GrabNew(pathId, ss->SolomonVolumes, SolomonVolumes);
-}
-
-void TMemoryChanges::GrabSolomonVolume(TSchemeShard* ss, const TPathId& pathId) {
-    Grab<TSolomonVolumeInfo>(pathId, ss->SolomonVolumes, SolomonVolumes);
-}
-
-void TMemoryChanges::GrabNewBlobDepot(TSchemeShard* ss, const TPathId& pathId) {
-    GrabNew(pathId, ss->BlobDepots, BlobDepots);
-}
-
-void TMemoryChanges::GrabNewRtmrVolume(TSchemeShard* ss, const TPathId& pathId) {
-    GrabNew(pathId, ss->RtmrVolumes, RtmrVolumes);
-}
-
-void TMemoryChanges::GrabNewOlapStore(TSchemeShard* ss, const TPathId& pathId) {
-    GrabNew(pathId, ss->OlapStores, OlapStores);
-}
-
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // be aware of the order of grab & undo ops
     // stack is the best way to manage it right
@@ -418,11 +283,8 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
     }
 
     while (Tables) {
-        const auto& [id, original, snapshot] = Tables.top();
-        if (snapshot) {
-            original->RestoreSnapshot(*snapshot);
-        }
-        ss->Tables.RestoreMembershipWithoutRefcount(id, original);
+        const auto& [id, elem] = Tables.top();
+        ss->Tables.RestoreMembershipWithoutRefcount(id, elem);
         Tables.pop();
     }
 
@@ -580,60 +442,6 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
         const auto& [id, elem] = TestShardSets.top();
         ss->TestShardSets.RestoreMembershipWithoutRefcount(id, elem);
         TestShardSets.pop();
-    }
-
-    while (Topics) {
-        const auto& [id, elem] = Topics.top();
-        ss->Topics.RestoreMembershipWithoutRefcount(id, elem);
-        Topics.pop();
-    }
-
-    while (BlockStoreVolumes) {
-        const auto& [id, elem] = BlockStoreVolumes.top();
-        ss->BlockStoreVolumes.RestoreMembershipWithoutRefcount(id, elem);
-        BlockStoreVolumes.pop();
-    }
-
-    while (FileStoreInfos) {
-        const auto& [id, elem] = FileStoreInfos.top();
-        ss->FileStoreInfos.RestoreMembershipWithoutRefcount(id, elem);
-        FileStoreInfos.pop();
-    }
-
-    while (KesusInfos) {
-        const auto& [id, elem] = KesusInfos.top();
-        ss->KesusInfos.RestoreMembershipWithoutRefcount(id, elem);
-        KesusInfos.pop();
-    }
-
-    while (Replications) {
-        const auto& [id, elem] = Replications.top();
-        ss->Replications.RestoreMembershipWithoutRefcount(id, elem);
-        Replications.pop();
-    }
-
-    while (SolomonVolumes) {
-        const auto& [id, elem] = SolomonVolumes.top();
-        ss->SolomonVolumes.RestoreMembershipWithoutRefcount(id, elem);
-        SolomonVolumes.pop();
-    }
-
-    while (BlobDepots) {
-        const auto& [id, elem] = BlobDepots.top();
-        ss->BlobDepots.RestoreMembershipWithoutRefcount(id, elem);
-        BlobDepots.pop();
-    }
-
-    while (RtmrVolumes) {
-        const auto& [id, elem] = RtmrVolumes.top();
-        ss->RtmrVolumes.RestoreMembershipWithoutRefcount(id, elem);
-        RtmrVolumes.pop();
-    }
-
-    while (OlapStores) {
-        const auto& [id, elem] = OlapStores.top();
-        ss->OlapStores.RestoreMembershipWithoutRefcount(id, elem);
-        OlapStores.pop();
     }
 
 #ifndef NDEBUG

@@ -701,7 +701,6 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(path.Base()->PathId));
-        context.MemChanges.GrabTable(context.SS, path.Base()->PathId);
         auto table = context.SS->Tables.Update(path.Base()->PathId);
 
         if (context.SS->IsTableInBackupCollection(path.Base()->PathId)) {

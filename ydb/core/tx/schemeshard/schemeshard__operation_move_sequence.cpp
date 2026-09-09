@@ -979,7 +979,6 @@ public:
         txState.State = TTxState::CreateParts;
 
         Y_ABORT_UNLESS(context.SS->Sequences.contains(srcPath.Base()->PathId));
-        context.MemChanges.GrabSequence(context.SS, srcPath.Base()->PathId);
         auto srcSequence = context.SS->Sequences.Update(srcPath.Base()->PathId);
         Y_ABORT_UNLESS(!srcSequence->Sharding.GetSequenceShards().empty());
 

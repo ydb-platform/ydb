@@ -664,16 +664,14 @@ public:
             return result;
         }
 
-        const TPathId pathId = context.SS->AllocatePathId();
-        context.MemChanges.GrabNewPath(context.SS, pathId);
-        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
-        dstPath.MaterializeLeaf(owner, pathId);
-        result->SetPathId(pathId.LocalPathId);
+        dstPath.MaterializeLeaf(owner);
+        result->SetPathId(dstPath->PathId.LocalPathId);
         context.SS->TabletCounters->Simple()[COUNTER_SEQUENCE_COUNT].Add(1);
 
         srcPath.Base()->PathState = TPathElement::EPathState::EPathStateCopying;
         srcPath.Base()->LastTxId = OperationId.GetTxId();
 
+        TPathId pathId = dstPath->PathId;
         dstPath->CreateTxId = OperationId.GetTxId();
         dstPath->LastTxId = OperationId.GetTxId();
         dstPath->PathState = TPathElement::EPathState::EPathStateCreate;
@@ -714,7 +712,6 @@ public:
         }
         context.SS->PersistPath(db, dstPath->PathId);
 
-        context.MemChanges.GrabNewSequence(context.SS, pathId);
         context.SS->Sequences.Set(pathId, sequenceInfo);
         context.SS->PersistSequence(db, pathId, *sequenceInfo);
         context.SS->PersistSequenceAlter(db, pathId, *alterData);

@@ -340,7 +340,6 @@ public:
             PersistShards(db, txState, shardsToCreate, context.SS);
             context.SS->PersistUpdateNextShardIdx(db);
         }
-        context.MemChanges.GrabDomain(context.SS, subDomain->PathId);
         subDomainInfo->SetAlter(alterData);
         context.SS->PersistSubDomainAlter(db, subDomain->PathId, *alterData);
 

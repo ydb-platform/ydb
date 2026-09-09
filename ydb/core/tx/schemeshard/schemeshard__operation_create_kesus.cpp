@@ -56,7 +56,6 @@ TTxState& PrepareChanges(TOperationId operationId, TPathElement::TPtr parentDir,
         item->ApplyACL(acl);
     }
     context.SS->PersistPath(db, item->PathId);
-    context.MemChanges.GrabNewKesusInfo(context.SS, pathId);
     context.SS->KesusInfos.Set(pathId, kesus);
     context.SS->PersistKesusInfo(db, pathId, kesus);
 
@@ -383,11 +382,8 @@ public:
             return result;
         }
 
-        const TPathId pathId = context.SS->AllocatePathId();
-        context.MemChanges.GrabNewPath(context.SS, pathId);
-        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
-        dstPath.MaterializeLeaf(owner, pathId);
-        result->SetPathId(pathId.LocalPathId);
+        dstPath.MaterializeLeaf(owner);
+        result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
         context.SS->TabletCounters->Simple()[COUNTER_KESUS_COUNT].Add(1);
         TKesusInfo::TPtr kesus = new TKesusInfo();

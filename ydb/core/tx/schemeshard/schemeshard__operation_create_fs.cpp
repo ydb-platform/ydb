@@ -404,11 +404,8 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
         return result;
     }
 
-    const TPathId pathId = context.SS->AllocatePathId();
-    context.MemChanges.GrabNewPath(context.SS, pathId);
-    context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
-    dstPath.MaterializeLeaf(owner, pathId);
-    result->SetPathId(pathId.LocalPathId);
+    dstPath.MaterializeLeaf(owner);
+    result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
     context.SS->TabletCounters->Simple()[COUNTER_FILESTORE_COUNT].Add(1);
     domainDir->ChangeFileStoreSpaceBegin(newFileStoreSpace, { });
@@ -517,7 +514,6 @@ TTxState& TCreateFileStore::PrepareChanges(
     }
     context.SS->PersistPath(db, fsPath->PathId);
 
-    context.MemChanges.GrabNewFileStoreInfo(context.SS, pathId);
     context.SS->FileStoreInfos.Set(pathId, fs);
     context.SS->PersistFileStoreInfo(db, pathId, fs);
 

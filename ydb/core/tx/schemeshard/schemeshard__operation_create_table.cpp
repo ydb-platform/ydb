@@ -717,11 +717,8 @@ public:
             return result;
         }
 
-        const TPathId pathId = context.SS->AllocatePathId();
-        context.MemChanges.GrabNewPath(context.SS, pathId);
-        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
-        dstPath.MaterializeLeaf(owner, pathId);
-        result->SetPathId(pathId.LocalPathId);
+        dstPath.MaterializeLeaf(owner);
+        result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
         TPathElement::TPtr newTable = dstPath.Base();
         newTable->CreateTxId = OperationId.GetTxId();
@@ -746,7 +743,6 @@ public:
             newTable->SetIncrementalRestoreTable();
         }
 
-        context.MemChanges.GrabNewTable(context.SS, newTable->PathId);
         context.SS->Tables.Set(newTable->PathId, tableInfo);
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_COUNT].Add(1);
 

@@ -345,7 +345,6 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
 
     Y_ABORT_UNLESS(path.Base()->IsCreateFinished());
 
-    context.MemChanges.GrabFileStoreInfo(context.SS, path.Base()->PathId);
     auto fs = context.SS->FileStoreInfos.Update(path.Base()->PathId);
     Y_VERIFY_S(fs, "FileStore info is null. PathId: " << path.Base()->PathId);
 

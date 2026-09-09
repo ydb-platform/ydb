@@ -439,7 +439,6 @@ public:
             }
         }
 
-        context.MemChanges.GrabBlockStoreVolume(context.SS, path.Base()->PathId);
         auto volume = context.SS->BlockStoreVolumes.Update(path.Base()->PathId);
         Y_ABORT_UNLESS(volume);
 

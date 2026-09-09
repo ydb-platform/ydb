@@ -899,7 +899,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
     Y_UNIT_TEST(RejectedAlterKeepsTTLTableConsistent) {
         // Regression (issue #33764): a rejected AlterTable must preserve the
         // live TTableInfo object shared with TTLEnabledTables. Update() does not
-        // snapshot or replace it; staged mutations have explicit undo. Replacing
+        // snapshot or replace it before parameter validation. Replacing
         // it on abort would desync the alias checked by TTxRunConditionalErase.
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

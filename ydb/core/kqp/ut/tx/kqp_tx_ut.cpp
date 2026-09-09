@@ -1340,6 +1340,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         SetFamily,
         SetDefault,
         DropCreateTable,
+        SamePathWrittenTwoWays,
         ViewReadAddColumn,
         ViewRecreate,
         TwoViewsRecreateOne,
@@ -1363,6 +1364,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         ESchemeOp::SetFamily,
         ESchemeOp::SetDefault,
         ESchemeOp::DropCreateTable,
+        ESchemeOp::SamePathWrittenTwoWays,
         ESchemeOp::ViewReadAddColumn,
         ESchemeOp::ViewRecreate,
         ESchemeOp::TwoViewsRecreateOne,
@@ -1387,6 +1389,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
             case ESchemeOp::SetFamily: return "SetFamily";
             case ESchemeOp::SetDefault: return "SetDefault";
             case ESchemeOp::DropCreateTable: return "DropCreateTable";
+            case ESchemeOp::SamePathWrittenTwoWays: return "SamePathWrittenTwoWays";
             case ESchemeOp::ViewReadAddColumn: return "ViewReadAddColumn";
             case ESchemeOp::ViewRecreate: return "ViewRecreate";
             case ESchemeOp::TwoViewsRecreateOne: return "TwoViewsRecreateOne";
@@ -1409,6 +1412,9 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         TString Operation;
 
         TString Read = "SELECT Key, Value FROM `/Root/SchemeOpsTable` ORDER BY Key;";
+
+        // The statement issued after the scheme operation, when it differs from the first.
+        TString SecondRead;
 
         // Status of the second read, in a transaction that promises repeatable reads and in
         // one that does not. They differ only where the schema version check is what fails:
@@ -1552,6 +1558,14 @@ Y_UNIT_TEST_SUITE(KqpTx) {
                 )";
                 break;
 
+            case ESchemeOp::SamePathWrittenTwoWays:
+                // The same table named absolutely and then relatively to the database. It is
+                // one object, so the change between the two reads has to be noticed.
+                spec.Operation = "ALTER TABLE `/Root/SchemeOpsTable` ADD COLUMN Extra Uint64;";
+                spec.Read = "SELECT Key, Value FROM `/Root/SchemeOpsTable` ORDER BY Key;";
+                spec.SecondRead = "SELECT Key, Value FROM `SchemeOpsTable` ORDER BY Key;";
+                break;
+
             case ESchemeOp::ViewReadAddColumn:
                 // The transaction reads the table through a view, and the table changes.
                 spec.Setup = R"(
@@ -1657,7 +1671,8 @@ Y_UNIT_TEST_SUITE(KqpTx) {
             UNIT_ASSERT_VALUES_EQUAL_C(schemeResult.GetStatus(), EStatus::SUCCESS,
                 schemeResult.GetIssues().ToString());
 
-            result = session.ExecuteDataQuery(Q_(spec.Read), TTxControl::Tx(*tx)).ExtractValueSync();
+            const TString& secondRead = spec.SecondRead ? spec.SecondRead : spec.Read;
+            result = session.ExecuteDataQuery(Q_(secondRead), TTxControl::Tx(*tx)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), spec.RepeatableReadStatus,
                 result.GetIssues().ToString());
             if (spec.RepeatableReadStatus == EStatus::ABORTED) {
@@ -1768,6 +1783,12 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         tester.Execute();
     }
 
+    Y_UNIT_TEST(SchemeChangeSamePathWrittenTwoWays) {
+        TSchemeChangeInTxTester tester;
+        tester.Operation = ESchemeOp::SamePathWrittenTwoWays;
+        tester.Execute();
+    }
+
     Y_UNIT_TEST(SchemeChangeViewReadAddColumn) {
         TSchemeChangeInTxTester tester;
         tester.Operation = ESchemeOp::ViewReadAddColumn;
@@ -1855,7 +1876,8 @@ Y_UNIT_TEST_SUITE(KqpTx) {
                 ? spec.RepeatableReadStatus
                 : spec.RelaxedStatus;
 
-            result = session.ExecuteQuery(spec.Read, NYdb::NQuery::TTxControl::Tx(*tx)).ExtractValueSync();
+            const TString& secondRead = spec.SecondRead ? spec.SecondRead : spec.Read;
+            result = session.ExecuteQuery(secondRead, NYdb::NQuery::TTxControl::Tx(*tx)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, op << ": " << result.GetIssues().ToString());
             if (expectedStatus == EStatus::ABORTED) {
                 UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Scheme changed for", op);

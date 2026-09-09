@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
@@ -9,6 +10,23 @@
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpDropLock = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpDropLock>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropLock>(
+    TAffectedESchemeOpDropLock,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // TDropLock resolves purely by name: TLockConfig has no path-id field.
+    const auto& op = tx.GetLockConfig();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), op.GetName(), 0);
+}
+
+} // namespace NOperation
 
 namespace {
 

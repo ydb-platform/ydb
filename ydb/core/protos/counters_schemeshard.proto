@@ -512,6 +512,10 @@ enum ECumulativeCounters {
 
     // Total time spent in TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats), in nanoseconds.
     COUNTER_PERIODIC_TABLE_STATS_HANDLE_TIME_NS = 151 [(CounterOpts) = {Name: "PeriodicTableStatsHandleTimeNs"}];
+
+    // A declaring operation wrote a path row it had not declared. Always a bug in that
+    // operation's GetAffectedPaths; tests assert this stays zero.
+    COUNTER_UNDECLARED_PATH_TOUCH = 152 [(CounterOpts) = {Name: "UndeclaredPathTouch"}];
 }
 
 enum EPercentileCounters {

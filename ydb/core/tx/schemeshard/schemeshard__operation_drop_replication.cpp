@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
@@ -392,6 +393,78 @@ private:
 }; // TDropReplication
 
 } // anonymous
+
+// DropReplication, DropReplicationCascade, DropTransfer, and DropTransferCascade all reach
+// TDropReplication::Propose with plain tx.GetDrop(): the "Cascade" flag only tells the
+// replication controller whether to cascade-delete underlying data, it does not fan out
+// over discovered scheme paths. Each op is therefore a plain target declaration.
+using TAffectedESchemeOpDropReplication = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropReplication>(
+    TAffectedESchemeOpDropReplication,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    const auto& drop = tx.GetDrop();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
+        drop.HasId() ? drop.GetId() : 0);
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpDropReplicationCascade = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropReplicationCascade>(
+    TAffectedESchemeOpDropReplicationCascade,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    const auto& drop = tx.GetDrop();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
+        drop.HasId() ? drop.GetId() : 0);
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpDropTransfer = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpDropTransfer>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropTransfer>(
+    TAffectedESchemeOpDropTransfer,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    const auto& drop = tx.GetDrop();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
+        drop.HasId() ? drop.GetId() : 0);
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpDropTransferCascade = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpDropTransferCascade>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropTransferCascade>(
+    TAffectedESchemeOpDropTransferCascade,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    const auto& drop = tx.GetDrop();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
+        drop.HasId() ? drop.GetId() : 0);
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateDropReplication(TOperationId id, const TTxTransaction& tx, bool cascade) {
     return MakeSubOperation<TDropReplication>(id, tx, cascade, &ReplicationStrategy);

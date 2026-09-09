@@ -14,7 +14,7 @@ using namespace NKikimr;
 
 namespace {
 
-NKikimrTabletBase::TEvGetCountersResponse GetCounters(TTestBasicRuntime& runtime) {
+NKikimrTabletBase::TEvGetCountersResponse GetCounters(TTestActorRuntime& runtime) {
     const auto sender = runtime.AllocateEdgeActor();
     runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, new TEvTablet::TEvGetCounters);
     auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvGetCountersResponse>(sender);
@@ -23,7 +23,7 @@ NKikimrTabletBase::TEvGetCountersResponse GetCounters(TTestBasicRuntime& runtime
     return ev->Get()->Record;
 }
 
-auto GetPercentileCounters(TTestBasicRuntime& runtime, const TString& name) {
+auto GetPercentileCounters(TTestActorRuntime& runtime, const TString& name) {
     const auto counters = GetCounters(runtime);
     for (const auto& counter : counters.GetTabletCounters().GetAppCounters().GetPercentileCounters()) {
         if (name != counter.GetName()) {
@@ -40,7 +40,7 @@ auto GetPercentileCounters(TTestBasicRuntime& runtime, const TString& name) {
 
 namespace NSchemeShardUT_Private {
 
-ui64 GetSimpleCounter(TTestBasicRuntime& runtime, const TString& name) {
+ui64 GetSimpleCounter(TTestActorRuntime& runtime, const TString& name) {
     const auto counters = GetCounters(runtime);
     for (const auto& counter : counters.GetTabletCounters().GetAppCounters().GetSimpleCounters()) {
         if (name != counter.GetName()) {
@@ -54,11 +54,11 @@ ui64 GetSimpleCounter(TTestBasicRuntime& runtime, const TString& name) {
     return 0; // unreachable
 }
 
-void CheckSimpleCounter(TTestBasicRuntime& runtime, const TString& name, ui64 value) {
+void CheckSimpleCounter(TTestActorRuntime& runtime, const TString& name, ui64 value) {
     UNIT_ASSERT_VALUES_EQUAL(value, GetSimpleCounter(runtime, name));
 }
 
-ui64 GetCumulativeCounter(TTestBasicRuntime& runtime, const TString& name) {
+ui64 GetCumulativeCounter(TTestActorRuntime& runtime, const TString& name) {
     const auto counters = GetCounters(runtime);
     for (const auto& counter : counters.GetTabletCounters().GetAppCounters().GetCumulativeCounters()) {
         if (name != counter.GetName()) {
@@ -85,12 +85,12 @@ ui64 GetPercentileCounter(const auto& counters, const TString& range) {
     Y_FAIL("Range not found: %s", range.c_str());
 }
 
-ui64 GetPercentileCounter(TTestBasicRuntime& runtime, const TString& name, const TString& range) {
+ui64 GetPercentileCounter(TTestActorRuntime& runtime, const TString& name, const TString& range) {
     auto counters = GetPercentileCounters(runtime, name);
     return GetPercentileCounter(counters, range);
 }
 
-void CheckPercentileCounter(TTestBasicRuntime& runtime, const TString& name, const THashMap<TString, ui64>& rangeValues) {
+void CheckPercentileCounter(TTestActorRuntime& runtime, const TString& name, const THashMap<TString, ui64>& rangeValues) {
     auto counters = GetPercentileCounters(runtime, name);
     Cerr << counters.DebugString();
     for (const auto& [range, value] : rangeValues) {

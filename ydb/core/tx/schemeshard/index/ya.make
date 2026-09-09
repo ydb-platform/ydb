@@ -47,6 +47,10 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tx
     ydb/core/tx/datashard
+    # schemeshard__affected_paths_traits.h includes the generated op_type_list.h, and ya
+    # requires a PEERDIR to the module owning a generated artifact. Not a cycle: generated
+    # only peers ydb/core/protos, and this directory is peered *from* schemeshard, not to it.
+    ydb/core/tx/schemeshard/generated
 )
 
 YQL_LAST_ABI_VERSION()

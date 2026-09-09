@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_common_external_table.h"
@@ -374,6 +375,22 @@ bool SetName<TTag>(
 {
     tx.MutableCreateExternalTable()->SetName(name);
     return true;
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpCreateExternalTable = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateExternalTable>(
+    TAffectedESchemeOpCreateExternalTable,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    return DeclareChildOfWorkingDir(tx.GetWorkingDir(), tx.GetCreateExternalTable().GetName());
 }
 
 } // namespace NOperation

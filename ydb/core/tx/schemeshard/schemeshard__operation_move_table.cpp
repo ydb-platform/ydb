@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
@@ -1026,6 +1027,52 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpMoveTable = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpMoveTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpMoveTable>(
+    TAffectedESchemeOpMoveTable,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    const auto& move = tx.GetMoveTable();
+    TAffectedPaths result;
+    result.Paths.push_back(TAffectedPath{
+        .Role = TAffectedPath::ERole::Source,
+        .Path = move.GetSrcPath(),
+    });
+    result.Paths.push_back(TAffectedPath{
+        .Role = TAffectedPath::ERole::Container,
+        .Path = TString(ExtractParent(move.GetSrcPath())),
+    });
+    result.Paths.push_back(TAffectedPath{
+        .Role = TAffectedPath::ERole::Target,
+        .Path = move.GetDstPath(),
+    });
+    result.Paths.push_back(TAffectedPath{
+        .Role = TAffectedPath::ERole::Container,
+        .Path = TString(ExtractParent(move.GetDstPath())),
+    });
+
+    // The only fan-out in this migration that constructed-part declarations do NOT cover:
+    // TMoveTable::Propose itself PersistPath's each of the source's index children while
+    // remapping them, before any part is proposed. Established by removing this and watching
+    // exactly one test fail -- MoveColumnTableWithLocalBloomIndexes, on
+    // /MyRoot/ColumnTable/idx_bloom. Conditional on the source having children, so moving a
+    // plain table keeps its cross-check.
+    if (const TPath src = TPath::Resolve(move.GetSrcPath(), context.SS);
+        src.IsResolved() && !src.Base()->GetChildren().empty())
+    {
+        result.Incomplete = true;
+    }
+    return result;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateMoveTable(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TMoveTable>(id, tx);

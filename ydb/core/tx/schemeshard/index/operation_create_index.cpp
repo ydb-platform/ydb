@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/schemeshard__affected_paths_traits.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -287,6 +288,22 @@ public:
 } // anonymous namespace
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpCreateTableIndex = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateTableIndex>(
+    TAffectedESchemeOpCreateTableIndex,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    return DeclareChildOfWorkingDir(tx.GetWorkingDir(), tx.GetCreateTableIndex().GetName());
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewTableIndex(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateTableIndex>(id, tx);

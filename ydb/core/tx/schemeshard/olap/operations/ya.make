@@ -20,6 +20,10 @@ SRCS(
 PEERDIR(
     ydb/core/mind/hive
     ydb/services/bg_tasks
+    # schemeshard__affected_paths_traits.h includes the generated op_type_list.h, and ya
+    # requires a PEERDIR to the module owning a generated artifact. Not a cycle: generated
+    # only peers ydb/core/protos, and this directory is peered *from* schemeshard, not to it.
+    ydb/core/tx/schemeshard/generated
     ydb/core/tx/schemeshard/olap/operations/alter
 )
 

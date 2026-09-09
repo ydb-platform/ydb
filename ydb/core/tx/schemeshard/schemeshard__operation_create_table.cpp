@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
@@ -852,6 +853,28 @@ bool SetName<TTag>(
 {
     tx.MutableCreateTable()->SetName(name);
     return true;
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpCreateTable = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateTable>(
+    TAffectedESchemeOpCreateTable,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    // A copy-from-table create is dispatched to CreateCopyTable instead of TCreateTable::
+    // Propose (see the HasCopyFromTable branch in MakeOperationParts), so it never writes
+    // the path row this declaration would name -- same reason GetTargetName returns nullopt.
+    if (tx.GetCreateTable().HasCopyFromTable()) {
+        return std::nullopt;
+    }
+    return DeclareChildOfWorkingDir(tx.GetWorkingDir(), tx.GetCreateTable().GetName());
 }
 
 } // namespace NOperation

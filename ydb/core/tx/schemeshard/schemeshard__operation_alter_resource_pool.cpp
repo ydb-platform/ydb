@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_common_resource_pool.h"
 #include "schemeshard_impl.h"
@@ -188,6 +189,24 @@ public:
 };
 
 }  // anonymous namespace
+
+using TAffectedESchemeOpAlterResourcePool = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpAlterResourcePool>(
+    TAffectedESchemeOpAlterResourcePool,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // No pathId field; TAlterResourcePool::Propose (this file) resolves by Name only, reusing
+    // the CreateResourcePool proto (there is no separate AlterResourcePool message).
+    const auto& resourcePoolDescription = tx.GetCreateResourcePool();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), resourcePoolDescription.GetName(), 0);
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateAlterResourcePool(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterResourcePool>(id, tx);

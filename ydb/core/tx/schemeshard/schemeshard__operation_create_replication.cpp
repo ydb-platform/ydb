@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
@@ -584,6 +585,33 @@ template <>
 bool SetName<TTransferTag>(TTransferTag, TTxTransaction& tx, const TString& name) {
     tx.MutableReplication()->SetName(name);
     return true;
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpCreateReplication = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication>;
+using TAffectedESchemeOpCreateTransfer = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateReplication>(
+    TAffectedESchemeOpCreateReplication,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    return DeclareChildOfWorkingDir(tx.GetWorkingDir(), tx.GetReplication().GetName());
+}
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateTransfer>(
+    TAffectedESchemeOpCreateTransfer,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    return DeclareChildOfWorkingDir(tx.GetWorkingDir(), tx.GetReplication().GetName());
 }
 
 } // namespace NOperation

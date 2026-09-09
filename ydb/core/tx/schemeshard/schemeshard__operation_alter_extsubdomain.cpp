@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_common_subdomain.h"
 #include "schemeshard__operation_part.h"
@@ -1067,6 +1068,44 @@ ISubOperation::TPtr CreateAlterExtSubDomainCreateHive(TOperationId id, TTxState:
     Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TAlterExtSubDomainCreateHive>(id, state);
 }
+
+using TAffectedESchemeOpAlterExtSubDomainCreateHive = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomainCreateHive>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpAlterExtSubDomainCreateHive>(
+    TAffectedESchemeOpAlterExtSubDomainCreateHive,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // CreateCompatibleAlterExtSubDomain (below) synthesizes this part with the same
+    // WorkingDir and SubDomain payload it passes to the sibling AlterExtSubDomain part.
+    // TAlterExtSubDomainCreateHive::Propose (above) resolves WorkingDir + GetName() the
+    // same way, no pathId field.
+    const auto& inputSettings = tx.GetSubDomain();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), inputSettings.GetName(), 0);
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpAlterExtSubDomain = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomain>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpAlterExtSubDomain>(
+    TAffectedESchemeOpAlterExtSubDomain,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // No pathId field; both TAlterExtSubDomain::Propose (this file) and the
+    // CreateCompatibleAlterExtSubDomain dispatcher resolve by Name only.
+    const auto& inputSettings = tx.GetSubDomain();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), inputSettings.GetName(), 0);
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateAlterExtSubDomain(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterExtSubDomain>(id, tx);

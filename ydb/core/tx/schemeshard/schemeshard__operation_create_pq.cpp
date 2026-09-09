@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 
@@ -629,6 +630,22 @@ bool SetName<TTag>(
 {
     tx.MutableCreatePersQueueGroup()->SetName(name);
     return true;
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpCreatePersQueueGroup = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreatePersQueueGroup>(
+    TAffectedESchemeOpCreatePersQueueGroup,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    return DeclareChildOfWorkingDir(tx.GetWorkingDir(), tx.GetCreatePersQueueGroup().GetName());
 }
 
 } // namespace NOperation

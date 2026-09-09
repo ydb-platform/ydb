@@ -1,5 +1,6 @@
 #include "schemeshard__operation_create_cdc_stream.h"
 
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_cdc_stream_common.h"
@@ -919,6 +920,79 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
 } // namespace NCdc
 
 using namespace NCdc;
+
+using TAffectedESchemeOpCreateCdcStream = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateCdcStream>(
+    TAffectedESchemeOpCreateCdcStream,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    // CreateNewCdcStream (above) expands into a lock, CreateCdcStreamImpl/AtTable, and a
+    // CreatePersQueueGroup sub-tx, each declared separately under its own op type. The
+    // stream's own path is known from the request, so name it here for the outbox record,
+    // but mark Incomplete: this declaration does not attempt to re-derive the PQ topic path
+    // or the index-rebuild AlterTableIndex touch that CreateNewCdcStream may also emit.
+    const auto& op = tx.GetCreateCdcStream();
+    TAffectedPaths result = DeclareChildOfWorkingDir(
+        JoinPath({tx.GetWorkingDir(), op.GetTableName()}),
+        op.GetStreamDescription().GetName());
+    result.Incomplete = true;
+    return result;
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpCreateCdcStreamImpl = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamImpl>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateCdcStreamImpl>(
+    TAffectedESchemeOpCreateCdcStreamImpl,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    // DoCreateStreamImpl (above) synthesizes this part with WorkingDir == the table path,
+    // so the stream sits directly under it: TNewCdcStream::Propose resolves
+    // tablePath.Child(streamName), the same field used here.
+    const auto& op = tx.GetCreateCdcStream();
+    return DeclareChildOfWorkingDir(tx.GetWorkingDir(), op.GetStreamDescription().GetName());
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpCreateCdcStreamAtTable = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamAtTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateCdcStreamAtTable>(
+    TAffectedESchemeOpCreateCdcStreamAtTable,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // DoCreateStream (above) synthesizes this part with WorkingDir == the table's parent,
+    // so it alters the table itself: TNewCdcStreamAtTable::Propose resolves
+    // workingDirPath.Child(tableName), the same field used here.
+    const auto& op = tx.GetCreateCdcStream();
+    TAffectedPaths result = DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), op.GetTableName(), 0);
+    // TProposeAtTable::HandleReply (schemeshard__operation_common_cdc_stream.cpp), shared by
+    // every CdcStreamAtTable op, also walks path->GetChildren() to sync AlterVersion/
+    // DirAlterVersion on any table-index children -- discovered at execution time, not
+    // enumerable from this request.
+    if (!result.Unresolved) {
+        result.Incomplete = true;
+    }
+    return result;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewCdcStreamImpl(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TNewCdcStream>(id, tx);

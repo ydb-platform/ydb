@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/schemeshard__affected_paths_traits.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_cdc_stream_common.h>
@@ -598,5 +599,42 @@ ISubOperation::TPtr CreateUpdateMainTableOnIndexMove(TOperationId id, const TTxT
 ISubOperation::TPtr CreateUpdateMainTableOnIndexMove(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TUpdateMainTableOnIndexMove>(id, state);
 }
+
+using TAffectedESchemeOpMoveIndex = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpMoveIndex>(
+    TAffectedESchemeOpMoveIndex,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    // CreateConsistentMoveIndex/CreateConsistentMoveLocalIndex (above) resolve src/dst under
+    // the given table path and fan out into an AlterTable touch on the main table, an
+    // optional drop of a pre-existing dst index (AllowOverwrite), the MoveTableIndex rename
+    // itself, and a MoveTable+MoveSequence pair per impl table -- each declared separately
+    // under its own op type. Declare the index rename that anchors all of that and mark
+    // Incomplete rather than re-deriving the impl-table fan-out here.
+    const auto& moving = tx.GetMoveIndex();
+    const TString tablePath = moving.GetTablePath();
+    TAffectedPaths result;
+    result.Paths.push_back(TAffectedPath{
+        .Role = TAffectedPath::ERole::Source,
+        .Path = JoinPath({tablePath, moving.GetSrcPath()}),
+    });
+    result.Paths.push_back(TAffectedPath{
+        .Role = TAffectedPath::ERole::Target,
+        .Path = JoinPath({tablePath, moving.GetDstPath()}),
+    });
+    // No Incomplete. This expands into constructed parts, and IgniteOperation asks each
+    // part for its own declaration before proposing it, so their paths are covered.
+    // Verified rather than assumed: with this removed the schemeshard suites stay green
+    // under the cross-check.
+    return result;
+}
+
+} // namespace NOperation
 
 }

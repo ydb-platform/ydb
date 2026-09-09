@@ -513,9 +513,19 @@ TWasmManifest ParseManifest(TStringBuf manifestJson) {
         if (!functions.IsArray()) {
             ythrow yexception() << "Wasm manifest functions must be an array";
         }
+        // A repeat inside functions[] used to be kept: BuildModuleStateFromManifest
+        // maps the name to whichever declaration came last while pushing the name
+        // onto its order twice, so one declaration was silently shadowed and the
+        // name reached the YQL function sink two times.
+        THashSet<TString> declaredNames;
         for (const auto& functionNode : functions.GetArray()) {
-            manifest.Functions.push_back(
-                ParseFunctionDescriptor(functionNode, manifest.CallingConventionEnum));
+            auto descriptor = ParseFunctionDescriptor(functionNode, manifest.CallingConventionEnum);
+            if (!declaredNames.insert(descriptor.Name).second) {
+                ythrow yexception()
+                    << "Duplicate YQL function name '" << descriptor.Name
+                    << "' in functions[] (names must be unique across functions/objects)";
+            }
+            manifest.Functions.push_back(std::move(descriptor));
         }
     }
 

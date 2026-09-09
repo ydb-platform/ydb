@@ -308,4 +308,88 @@ Y_UNIT_TEST(RejectDeeplyNestedType) {
     UNIT_ASSERT_EXCEPTION_CONTAINS(ParseManifest(manifest), yexception, "Type nesting exceeds");
 }
 
+Y_UNIT_TEST(RejectDuplicateFunctionName) {
+    // One declaration shadowed the other while the name went to the YQL
+    // function sink twice, so which of the two YQL called was decided by the
+    // order they happened to be written in.
+    const TString manifest = R"({
+        "module_name": "Dup",
+        "functions": [
+            {
+                "name": "f",
+                "export": "first",
+                "argument_types": [],
+                "result_type": {"value": "int64", "tag": "concrete_type"}
+            },
+            {
+                "name": "f",
+                "export": "second",
+                "argument_types": [],
+                "result_type": {"value": "uint64", "tag": "concrete_type"}
+            }
+        ]
+    })";
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        ParseManifest(manifest),
+        yexception,
+        "Duplicate YQL function name 'f' in functions[]");
+}
+
+Y_UNIT_TEST(RejectFunctionNameTakenByAnObjectMethod) {
+    const TString manifest = R"({
+        "module_name": "Clash",
+        "functions": [
+            {
+                "name": "Run",
+                "export": "plain_run",
+                "argument_types": [],
+                "result_type": {"value": "int64", "tag": "concrete_type"}
+            }
+        ],
+        "objects": [
+            {
+                "name": "Foo",
+                "create_export": "foo_create",
+                "methods": [
+                    {
+                        "name": "Run",
+                        "export": "foo_run",
+                        "yql_binding": "plain",
+                        "argument_types": [],
+                        "result_type": {"value": "uint64", "tag": "concrete_type"}
+                    }
+                ]
+            }
+        ]
+    })";
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        ParseManifest(manifest),
+        yexception,
+        "Duplicate YQL function name 'Run'");
+}
+
+Y_UNIT_TEST(AcceptDistinctFunctionNames) {
+    const TString manifest = R"({
+        "module_name": "Fine",
+        "functions": [
+            {
+                "name": "f",
+                "export": "first",
+                "argument_types": [],
+                "result_type": {"value": "int64", "tag": "concrete_type"}
+            },
+            {
+                "name": "g",
+                "export": "second",
+                "argument_types": [],
+                "result_type": {"value": "int64", "tag": "concrete_type"}
+            }
+        ]
+    })";
+    const auto parsed = ParseManifest(manifest);
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions.size(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[0].Name, "f");
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[1].Name, "g");
+}
+
 } // Y_UNIT_TEST_SUITE

@@ -297,6 +297,17 @@ void EnsureKind(const TWasmBridgeNodeTable::TNode& node, EBridgeValueKind expect
             << static_cast<int>(expected)
             << ", got " << static_cast<int>(node.ValueKind);
     }
+    // An iterator is registered with the value kind of the container it walks,
+    // so it satisfies the comparison above wherever that container is expected.
+    // It is not a value of it: MiniKQL answers the container accessors on an
+    // iterator by throwing, and a dict iterator's Type is its key type, which
+    // leaves DictKeyTypeOf() empty and turns the key check into nothing.
+    if (IsBridgeIteratorKind(node.Kind)) {
+        ythrow yexception()
+            << "Bridge: " << what << " got an iterator over kind "
+            << static_cast<int>(expected)
+            << ", not a value of it";
+    }
 }
 
 void EnsureStringKind(const TWasmBridgeNodeTable::TNode& node, const char* what) {
@@ -327,6 +338,13 @@ void EnsureNodeMatchesType(
     const TType* expected,
     const char* what)
 {
+    if (IsBridgeIteratorKind(node.Kind)) {
+        // Registered with the value kind of the container it walks, so it
+        // answers for that container's family here. Checked before the slot is
+        // even looked at: no declaration accepts an iterator.
+        ythrow yexception()
+            << "Bridge: " << what << " got an iterator, not a value";
+    }
     const auto* helper = CurrentTypeHelper();
     if (!expected || !helper) {
         // Untyped slot: nothing declared to check against.
@@ -895,10 +913,11 @@ TVector<TUnboxedValue> ResolveHandleArray(
     auto* compartment = CurrentCompartmentOrThrow();
     const ui64* handles = n == 0
         ? nullptr
+        // Element count, not bytes: PtrFromVM scales by sizeof(T) itself.
         : PtrFromVM(
             compartment,
             std::bit_cast<ui64*>(static_cast<uintptr_t>(handlesOff)),
-            sizeof(ui64) * static_cast<size_t>(n));
+            static_cast<size_t>(n));
     TVector<TUnboxedValue> values(static_cast<size_t>(n));
     for (i64 i = 0; i < n; ++i) {
         const TType* expected = expectedTypes.empty()
@@ -1129,7 +1148,7 @@ ui64 BridgeRunHost(ui64 callableHandle, ui64 argsOff, i32 n) {
     TVector<TUnboxedValuePod> argsPod(declared);
     const ui64* handles = n == 0
         ? nullptr
-        : PtrFromVM(compartment, std::bit_cast<ui64*>(static_cast<uintptr_t>(argsOff)), sizeof(ui64) * static_cast<size_t>(n));
+        : PtrFromVM(compartment, std::bit_cast<ui64*>(static_cast<uintptr_t>(argsOff)), static_cast<size_t>(n));
     for (i32 i = 0; i < n; ++i) {
         const ui64 h = handles[i];
         if (h != NullBridgeHandle) {
@@ -1225,7 +1244,7 @@ i32 BridgeTakeReleasedUserDataHost(ui64 dstOff, i32 cap) {
     ui64* out = PtrFromVM(
         compartment,
         std::bit_cast<ui64*>(static_cast<uintptr_t>(dstOff)),
-        sizeof(ui64) * static_cast<size_t>(cap));
+        static_cast<size_t>(cap));
     i32 count = 0;
     ui64 value = 0;
     while (count < cap && cache.PopReleasedUserData(value)) {

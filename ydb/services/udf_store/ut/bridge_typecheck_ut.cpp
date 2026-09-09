@@ -53,8 +53,13 @@ constexpr TStringBuf BridgeTypeCheckWast = R"(
     (module
         (import "env" "memory" (memory i64 8 2097152))
         (import "env" "BridgeDictContains" (func $contains (param i64 i64) (result i32)))
+        (import "env" "BridgeDictIterNext" (func $dict_iter_next (param i64 i64 i64) (result i32)))
+        (import "env" "BridgeDictLength" (func $dict_length (param i64) (result i64)))
         (import "env" "BridgeDictLookup" (func $lookup (param i64 i64) (result i64)))
+        (import "env" "BridgeDictMakeIterator" (func $dict_iter (param i64) (result i64)))
         (import "env" "BridgeGetResultType" (func $result_type (result i64)))
+        (import "env" "BridgeListLength" (func $list_length (param i64) (result i64)))
+        (import "env" "BridgeListMakeIterator" (func $list_iter (param i64) (result i64)))
         (import "env" "BridgeMakeArray" (func $make_array (param i64 i32) (result i64)))
         (import "env" "BridgeMakeDict" (func $make_dict (param i64 i64 i32) (result i64)))
         (import "env" "BridgeMakeList" (func $make_list (param i64 i32) (result i64)))
@@ -131,6 +136,45 @@ constexpr TStringBuf BridgeTypeCheckWast = R"(
             (i64.store (local.get $result) (call $make_list (local.get $items) (i32.const 2)))
         )
         (export "make_list_two" (func $make_list_two))
+
+        (func $dict_iter_then_lookup (param $ctx i64) (param $result i64)
+                (param $dict i64) (param $key i64)
+            (local $iter i64)
+            (local.set $iter (call $dict_iter (local.get $dict)))
+            (i64.store (local.get $result) (call $lookup (local.get $iter) (local.get $key)))
+            (call $unref (local.get $iter))
+        )
+        (export "dict_iter_then_lookup" (func $dict_iter_then_lookup))
+
+        (func $dict_iter_then_length (param $ctx i64) (param $result i64) (param $dict i64)
+            (local $iter i64)
+            (local.set $iter (call $dict_iter (local.get $dict)))
+            (i64.store (local.get $result) (call $dict_length (local.get $iter)))
+            (call $unref (local.get $iter))
+        )
+        (export "dict_iter_then_length" (func $dict_iter_then_length))
+
+        (func $list_iter_then_length (param $ctx i64) (param $result i64) (param $list i64)
+            (local $iter i64)
+            (local.set $iter (call $list_iter (local.get $list)))
+            (i64.store (local.get $result) (call $list_length (local.get $iter)))
+            (call $unref (local.get $iter))
+        )
+        (export "list_iter_then_length" (func $list_iter_then_length))
+
+        (func $dict_iter_then_next (param $ctx i64) (param $result i64)
+                (param $dict i64) (param $out i64)
+            (local $iter i64)
+            (local.set $iter (call $dict_iter (local.get $dict)))
+            (i64.store (local.get $result)
+                (i64.extend_i32_u
+                    (call $dict_iter_next
+                        (local.get $iter)
+                        (local.get $out)
+                        (i64.add (local.get $out) (i64.const 8)))))
+            (call $unref (local.get $iter))
+        )
+        (export "dict_iter_then_next" (func $dict_iter_then_next))
 
         (func $run_one (param $ctx i64) (param $result i64)
                 (param $callable i64) (param $arg i64) (param $argv i64)
@@ -748,6 +792,114 @@ Y_UNIT_TEST(MakeOptionalKeepsAReusedContainerReadable) {
     table.Unref(keyHandle);
     table.Unref(payloadHandle);
     UNIT_ASSERT_VALUES_EQUAL(table.DebugSize(), 0u);
+}
+
+Y_UNIT_TEST(DictLookupRejectsAnIteratorInPlaceOfTheDict) {
+    // An iterator is registered with the value kind of the container it walks,
+    // so it used to pass for that container everywhere. For a dict iterator
+    // that also disarmed the key check: its Type is the key type, so the
+    // DictKeyTypeOf() of it is empty and the guard took its untyped-slot
+    // early return.
+    TMiniKqlEnv mkql;
+    auto* dictType = NKikimr::NMiniKQL::TDictType::Create(
+        MkqlStringType(mkql),
+        MkqlInt64Type(mkql),
+        mkql.Env);
+
+    TTypeCheckUdf udf(mkql, 58, MkqlInt64Type(mkql));
+    auto& table = udf.Table();
+
+    auto dict = MakeStringIntDict(mkql, "a", 1);
+    const ui64 dictHandle = table.Register(
+        EBridgeNodeKind::Dict,
+        EBridgeValueKind::Dict,
+        AsBridgeType(dictType),
+        TUnboxedValue(dict));
+    const ui64 keyHandle = table.Register(
+        EBridgeNodeKind::String,
+        EBridgeValueKind::String,
+        AsBridgeType(MkqlStringType(mkql)),
+        mkql.ValueBuilder.NewString(TStringRef("a", 1)));
+
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        udf.Invoke("dict_iter_then_lookup", {dictHandle, keyHandle}),
+        yexception,
+        "BridgeDictLookup got an iterator");
+
+    table.Unref(keyHandle);
+    table.Unref(dictHandle);
+}
+
+Y_UNIT_TEST(DictLengthRejectsAnIterator) {
+    TMiniKqlEnv mkql;
+    auto* dictType = NKikimr::NMiniKQL::TDictType::Create(
+        MkqlStringType(mkql),
+        MkqlInt64Type(mkql),
+        mkql.Env);
+
+    TTypeCheckUdf udf(mkql, 59, MkqlInt64Type(mkql));
+    auto& table = udf.Table();
+
+    auto dict = MakeStringIntDict(mkql, "a", 1);
+    const ui64 dictHandle = table.Register(
+        EBridgeNodeKind::Dict,
+        EBridgeValueKind::Dict,
+        AsBridgeType(dictType),
+        TUnboxedValue(dict));
+
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        udf.Invoke("dict_iter_then_length", {dictHandle}),
+        yexception,
+        "BridgeDictLength got an iterator");
+
+    table.Unref(dictHandle);
+}
+
+Y_UNIT_TEST(ListLengthRejectsAnIterator) {
+    TMiniKqlEnv mkql;
+    auto* listType = NKikimr::NMiniKQL::TListType::Create(MkqlInt64Type(mkql), mkql.Env);
+
+    TTypeCheckUdf udf(mkql, 60, MkqlInt64Type(mkql));
+    auto& table = udf.Table();
+
+    TUnboxedValue items[] = {TUnboxedValuePod(i64{7})};
+    const ui64 listHandle = table.Register(
+        EBridgeNodeKind::List,
+        EBridgeValueKind::List,
+        AsBridgeType(listType),
+        mkql.ValueBuilder.NewList(items, 1));
+
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        udf.Invoke("list_iter_then_length", {listHandle}),
+        yexception,
+        "BridgeListLength got an iterator");
+
+    table.Unref(listHandle);
+}
+
+Y_UNIT_TEST(AnIteratorStillWalksThroughItsOwnIntrinsic) {
+    // The control for the three above: what the guard refuses is an iterator
+    // standing in for a container, not iteration itself.
+    TMiniKqlEnv mkql;
+    auto* dictType = NKikimr::NMiniKQL::TDictType::Create(
+        MkqlStringType(mkql),
+        MkqlInt64Type(mkql),
+        mkql.Env);
+
+    TTypeCheckUdf udf(mkql, 61, MkqlInt64Type(mkql));
+    auto& table = udf.Table();
+
+    auto dict = MakeStringIntDict(mkql, "a", 1);
+    const ui64 dictHandle = table.Register(
+        EBridgeNodeKind::Dict,
+        EBridgeValueKind::Dict,
+        AsBridgeType(dictType),
+        TUnboxedValue(dict));
+
+    const ui64 has = udf.Invoke("dict_iter_then_next", {dictHandle, udf.Scratch(2)});
+    UNIT_ASSERT_VALUES_EQUAL(has, 1u);
+
+    table.Unref(dictHandle);
 }
 
 } // Y_UNIT_TEST_SUITE

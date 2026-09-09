@@ -38,7 +38,7 @@ bool JoinAndVerifyBlobs(
     const TVector<TString>& chunks,
     ui64 expectedChunkCount,
     ui64 expectedSize,
-    TStringBuf expectedMd5,
+    TMaybe<TStringBuf> expectedMd5,
     TString& body,
     TString& error)
 {
@@ -49,19 +49,29 @@ bool JoinAndVerifyBlobs(
         return false;
     }
 
+    if (expectedSize == 0) {
+        error = "metadata records no size";
+        return false;
+    }
+
+    if (expectedMd5 && expectedMd5->empty()) {
+        error = "metadata records no md5";
+        return false;
+    }
+
     body = JoinBlobs(chunks);
 
-    if (expectedSize != 0 && body.size() != expectedSize) {
+    if (body.size() != expectedSize) {
         error = TStringBuilder()
             << "size mismatch: meta=" << expectedSize << " actual=" << body.size();
         return false;
     }
 
-    if (!expectedMd5.empty()) {
+    if (expectedMd5) {
         const TString actualMd5 = MD5::Calc(body);
-        if (actualMd5 != expectedMd5) {
+        if (actualMd5 != *expectedMd5) {
             error = TStringBuilder()
-                << "md5 mismatch: meta=" << expectedMd5 << " actual=" << actualMd5;
+                << "md5 mismatch: meta=" << *expectedMd5 << " actual=" << actualMd5;
             return false;
         }
     }

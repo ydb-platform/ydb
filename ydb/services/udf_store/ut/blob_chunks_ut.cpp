@@ -70,11 +70,30 @@ Y_UNIT_TEST(VerifyAcceptsAWholeBlob) {
     UNIT_ASSERT_VALUES_EQUAL(body, data);
 }
 
-Y_UNIT_TEST(VerifyAcceptsAnEmptyBlob) {
-    TString body = "leftover";
+Y_UNIT_TEST(VerifyRejectsMetadataWithoutASize) {
+    // A row with no size used to disable the size check instead of failing it,
+    // and on the artifact path -- where no md5 is recorded either -- that left
+    // nothing checking the object code at all. No module has an empty body,
+    // so a zero size is missing metadata rather than an empty blob.
+    const TVector<TString> chunks = {"corrupted"};
+    TString body;
     TString error;
-    UNIT_ASSERT(JoinAndVerifyBlobs({}, 0, 0, {}, body, error));
-    UNIT_ASSERT_VALUES_EQUAL(body, "");
+    UNIT_ASSERT(!JoinAndVerifyBlobs(chunks, chunks.size(), 0, {}, body, error));
+    UNIT_ASSERT_STRING_CONTAINS(error, "no size");
+}
+
+Y_UNIT_TEST(VerifyRejectsAnEmptyMd5WhereOneWasExpected) {
+    // Nothing() says the table records no md5; an empty string says the row
+    // should have carried one and does not.
+    const TString data = "0123456789abcdef";
+    const auto chunks = SplitBlob(data, 5);
+    TString body;
+    TString error;
+    UNIT_ASSERT(!JoinAndVerifyBlobs(chunks, chunks.size(), data.size(), TStringBuf(), body, error));
+    UNIT_ASSERT_STRING_CONTAINS(error, "no md5");
+
+    UNIT_ASSERT(JoinAndVerifyBlobs(chunks, chunks.size(), data.size(), Nothing(), body, error));
+    UNIT_ASSERT_VALUES_EQUAL(body, data);
 }
 
 Y_UNIT_TEST(VerifyRejectsAMissingChunk) {

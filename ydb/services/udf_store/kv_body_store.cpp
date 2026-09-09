@@ -80,7 +80,7 @@ void TKvBodyReadActor::CreatePipeAndSendRead() {
     }
 
     TFsPath finalPath = TFsPath(OutputDir) / Name;
-    TmpFilePath = finalPath.GetPath() + ".tmp";
+    TmpFilePath = finalPath.GetPath() + UdfTmpFileSuffix;
 
     try {
         TmpFile = MakeHolder<TFile>(TmpFilePath, CreateAlways | WrOnly | Seq);

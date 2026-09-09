@@ -2,6 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <limits.h>
+
 using namespace NKikimr::NUdfStore;
 
 Y_UNIT_TEST_SUITE(TUdfNameTest) {
@@ -23,6 +25,16 @@ Y_UNIT_TEST(RejectsNamesThatEscapeTheOutputDirectory) {
     UNIT_ASSERT(!IsSafeUdfFileName("/absolute"));
     UNIT_ASSERT(!IsSafeUdfFileName(TStringBuf("nul\0byte", 8)));
     UNIT_ASSERT(!IsSafeUdfFileName(TString(4096, 'x')));
+}
+
+Y_UNIT_TEST(RejectsNamesWhoseTemporarySiblingWouldNotFit) {
+    // The body lands in `<name>.tmp` first, so a name that leaves no room for
+    // the suffix used to be accepted here and then fail with ENAMETOOLONG on
+    // every load, forever. On Linux the boundary is 251 accepted, 252 refused.
+    const size_t longest = NAME_MAX - UdfTmpFileSuffix.size();
+    UNIT_ASSERT(IsSafeUdfFileName(TString(longest, 'x')));
+    UNIT_ASSERT(!IsSafeUdfFileName(TString(longest + 1, 'x')));
+    UNIT_ASSERT(!IsSafeUdfFileName(TString(NAME_MAX, 'x')));
 }
 
 } // Y_UNIT_TEST_SUITE

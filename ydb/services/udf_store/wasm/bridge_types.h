@@ -228,6 +228,13 @@ inline const char* BridgeKindFamilyAsStr(EBridgeKindFamily family) {
     return "unknown";
 }
 
+//! An iterator over a container, not a value of it. Such a node carries the
+//! container's EBridgeValueKind so the guest sees where it came from, so the
+//! node kind is the only thing telling the two apart.
+inline bool IsBridgeIteratorKind(EBridgeNodeKind kind) {
+    return kind == EBridgeNodeKind::ListIterator || kind == EBridgeNodeKind::DictIterator;
+}
+
 //! Readable through the string intrinsics (length / copy / ensure).
 inline bool IsBridgeStringKind(EBridgeValueKind kind) {
     switch (kind) {

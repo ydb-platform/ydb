@@ -145,7 +145,7 @@ void TWasmArtifactLoadActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRe
                     wasmChunks,
                     ModuleArtifact_.WasmDataChunkCount,
                     ModuleArtifact_.WasmDataSize,
-                    {},
+                    Nothing(),
                     PendingWasmData_,
                     joinError))
             {
@@ -168,7 +168,7 @@ void TWasmArtifactLoadActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRe
                     objectChunks,
                     ModuleArtifact_.ObjectCodeChunkCount,
                     ModuleArtifact_.ObjectCodeSize,
-                    {},
+                    Nothing(),
                     ModuleArtifact_.ObjectCode,
                     joinError))
             {
@@ -206,7 +206,7 @@ void TWasmArtifactLoadActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRe
                     wasmChunks,
                     PendingLibraryArtifact_.WasmDataChunkCount,
                     PendingLibraryArtifact_.WasmDataSize,
-                    {},
+                    Nothing(),
                     PendingWasmData_,
                     joinError))
             {
@@ -231,7 +231,7 @@ void TWasmArtifactLoadActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRe
                     objectChunks,
                     PendingLibraryArtifact_.ObjectCodeChunkCount,
                     PendingLibraryArtifact_.ObjectCodeSize,
-                    {},
+                    Nothing(),
                     objectCode,
                     joinError))
             {

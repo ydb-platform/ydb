@@ -2,6 +2,7 @@
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
+#include <util/generic/maybe.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
@@ -18,13 +19,20 @@ TString JoinBlobs(const TVector<TString>& chunks);
 //! name, so a hash mismatch means the upload landed corrupted, not that we
 //! fetched the wrong module. Writes the body to `body` and returns true on
 //! success; on failure `error` explains which check failed.
-//! An empty `expectedMd5` or a zero `expectedSize` skips that check, for rows
-//! written before the field was populated.
+//!
+//! Metadata that is missing is a failure, not a reason to skip a check: the
+//! `modules` table is writable by whoever uploads, and a row without a size
+//! would otherwise let a truncated body through unnoticed. A blob with no
+//! recorded size is refused outright — no module has an empty body.
+//!
+//! `expectedMd5` is `Nothing()` only for a blob whose table records no md5 at
+//! all, which is the case for the compiled artifacts; an empty md5 where one
+//! was expected is refused the same way a missing size is.
 bool JoinAndVerifyBlobs(
     const TVector<TString>& chunks,
     ui64 expectedChunkCount,
     ui64 expectedSize,
-    TStringBuf expectedMd5,
+    TMaybe<TStringBuf> expectedMd5,
     TString& body,
     TString& error);
 

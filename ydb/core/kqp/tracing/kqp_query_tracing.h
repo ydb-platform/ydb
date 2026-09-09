@@ -18,6 +18,31 @@ struct TQueryTraceDescription {
     TString Operation;
 };
 
+enum class EQueryTracePhase {
+    Admission,
+    ResolveTables,
+    ResolveShards,
+    ResolveMetadata,
+    ResolvePartitioning,
+    Snapshot,
+    SessionSnapshot,
+    PersistentSnapshot,
+    RunTasks,
+    BufferLookup,
+    Write,
+    WaitForWrites,
+    FlushEffects,
+    Commit,
+    CommitPrepareShards,
+    CommitApplyShards,
+    CommitCoordinator,
+    Rollback,
+};
+
+NWilson::TSpan MakeQueryPhaseTraceSpan(ui8 verbosity, NWilson::TTraceId parent,
+    EQueryTracePhase phase, NWilson::TFlags flags = NWilson::EFlags::NONE,
+    NActors::TActorSystem* actorSystem = nullptr);
+
 TQueryTraceDescription DescribeQueryTrace(NKikimrKqp::EQueryType queryType,
     size_t statementCount, const NKqpProto::TKqpPhyQuery& physicalQuery,
     const TMaybe<TString>& commandTag);
@@ -53,7 +78,7 @@ private:
 
 class TCommitTracePhase {
 public:
-    void Start(const NWilson::TSpan& parent, const char* name, ui64 shards);
+    void Start(const NWilson::TSpan& parent, EQueryTracePhase phase, ui64 shards);
     void Acknowledge(ui64 shardId, bool last);
     void End(Ydb::StatusIds::StatusCode status);
 

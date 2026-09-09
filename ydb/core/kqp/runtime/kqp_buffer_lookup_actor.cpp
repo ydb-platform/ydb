@@ -165,7 +165,8 @@ public:
             const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot,
             const NWilson::TTraceId& traceId) override {
         if (!LookupActorSpan) {
-            LookupActorSpan = NWilson::TSpan(TWilsonKqp::LookupActor, NWilson::TTraceId(traceId), "Check rows");
+            LookupActorSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::LookupActor,
+                NWilson::TTraceId(traceId), EQueryTracePhase::BufferLookup);
         }
         TLookupSettings settings {
             .TablePath = Settings.TablePath,

@@ -29,6 +29,8 @@ NWilson::TTraceId TShardReadTrace::Start(const NWilson::TSpan& parent, ui64 shar
         "Read shard", NWilson::EFlags::AUTO_END);
     read.Span.Attribute("ydb.shard_id", static_cast<i64>(shardId));
     read.Span.Attribute("ydb.read_id", static_cast<i64>(readId));
+    read.Span.Attribute("ydb.code.component", TString("KqpShardRead"));
+    read.Span.Attribute("ydb.peer.actor.type", TString("DataShard"));
     return read.Span.GetTraceId();
 }
 

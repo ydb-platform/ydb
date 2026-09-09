@@ -1,11 +1,9 @@
 #include "partition.h"
-#include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include "partition_util.h"
 #include <ydb/library/actors/core/log.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE
-
+#undef NPQ_LOG_PREFIX
 #undef LOG
 #undef LOG_T
 #undef LOG_D
@@ -16,14 +14,16 @@
 #undef LOG_C
 #undef LOG_A
 
-#define LOG_T(T, ...) YDB_LOG_TRACE(T, {"logPrefix", LogPrefix()}, ##__VA_ARGS__)
-#define LOG_D(T, ...) YDB_LOG_DEBUG(T, {"logPrefix", LogPrefix()}, ##__VA_ARGS__)
-#define LOG_I(T, ...) YDB_LOG_INFO(T, {"logPrefix", LogPrefix()}, ##__VA_ARGS__)
-#define LOG_N(T, ...) YDB_LOG_NOTICE(T, {"logPrefix", LogPrefix()}, ##__VA_ARGS__)
-#define LOG_W(T, ...) YDB_LOG_WARN(T, {"logPrefix", LogPrefix()}, ##__VA_ARGS__)
-#define LOG_E(T, ...) YDB_LOG_ERROR(T, {"logPrefix", LogPrefix()}, ##__VA_ARGS__)
-#define LOG_C(T, ...) YDB_LOG_CRIT(T, {"logPrefix", LogPrefix()}, ##__VA_ARGS__)
-#define LOG_A(T, ...) YDB_LOG_ALERT(T, {"logPrefix", LogPrefix()}, ##__VA_ARGS__)
+#define NPQ_LOG_PREFIX this->LogPrefix()
+#define LOG(level, T, ...) YDB_LOG_COMP(level, NKikimrServices::PERSQUEUE, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
+#define LOG_T(T, ...) YDB_LOG_TRACE_COMP(NKikimrServices::PERSQUEUE, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
+#define LOG_D(T, ...) YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
+#define LOG_I(T, ...) YDB_LOG_INFO_COMP(NKikimrServices::PERSQUEUE, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
+#define LOG_N(T, ...) YDB_LOG_NOTICE_COMP(NKikimrServices::PERSQUEUE, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
+#define LOG_W(T, ...) YDB_LOG_WARN_COMP(NKikimrServices::PERSQUEUE, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
+#define LOG_E(T, ...) YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
+#define LOG_C(T, ...) YDB_LOG_CRIT_COMP(NKikimrServices::PERSQUEUE, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
+#define LOG_A(T, ...) YDB_LOG_ALERT_COMP(NKikimrServices::PERSQUEUE, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
 
 namespace NKikimr::NPQ {
 std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(const TActorId& selfId, ui64 nextRequestCookie, ui64 startOffset, ui64 lastOffset, TMaybe<ui64> nextPartNo = Nothing()) {
@@ -46,6 +46,40 @@ std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(const TActorId& selfId, ui64 nextRequ
         selfId // replyTo
     );
     return evRead;
+}
+
+namespace {
+
+const char* CompactionStepName(TPartitionCompaction::EStep step) {
+    switch (step) {
+        case TPartitionCompaction::EStep::PENDING:
+            return "pending";
+        case TPartitionCompaction::EStep::READING:
+            return "reading";
+        case TPartitionCompaction::EStep::COMPACTING:
+            return "compacting";
+    }
+    Y_ABORT("unexpected compaction step");
+}
+
+} // namespace
+
+TLogPrefix TPartitionCompaction::MakeLogPrefix(const TPartition* actor, const char* compactionStep) {
+    TLogPrefix prefix = MakeNpqLogPrefix(actor->LogBuilder(), actor->GetLogPrefix());
+    prefix.AppendMessage(YDB_LOG_CREATE_MESSAGE({"compactionStep", compactionStep}));
+    return prefix;
+}
+
+TLogPrefix TPartitionCompaction::LogPrefix() const {
+    return MakeLogPrefix(PartitionActor, CompactionStepName(Step));
+}
+
+TLogPrefix TPartitionCompaction::TReadState::LogPrefix() const {
+    return MakeLogPrefix(PartitionActor, "reading");
+}
+
+TLogPrefix TPartitionCompaction::TCompactState::LogPrefix() const {
+    return MakeLogPrefix(PartitionActor, "compacting");
 }
 
 TPartitionCompaction::TPartitionCompaction(ui64 firstUncompactedOffset, ui64 partRequestCookie, TPartition* partitionActor)

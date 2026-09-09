@@ -2304,7 +2304,7 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
 
         for (ui64 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
             const auto& stage = tx.Body->GetStages(stageIdx);
-            auto& stageInfo = GetStageInfo({txIdx, stageIdx});
+            auto& stageInfo = GetStageInfo(MakeStageId(txIdx, stageIdx));
 
             if (const auto& sources = stage.GetSources(); !sources.empty() && sources[0].GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
                 RestoreReadTasksFromSource(stageInfo, resourcesSnapshot);

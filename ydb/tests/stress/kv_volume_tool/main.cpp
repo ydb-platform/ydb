@@ -1037,8 +1037,15 @@ struct TOptions {
     ui64 KeyCount = 0;
     ui32 BatchSize = 1;
     ui32 TraceEveryN = 0;
+    ui32 ThreadOffset = 0;
     bool Verbose = false;
 };
+
+// Pin each worker to one tablet so slow S3 PUTs cannot convoy every partition.
+// Extra threads (threads > partitions) pipeline a second RPC into the same tablet.
+ui64 StickyPartitionId(ui32 threadIndex, ui32 partitionCount) {
+    return threadIndex % partitionCount;
+}
 
 struct TLoadContext {
     static constexpr ui64 MaxLoggedErrors = 50;
@@ -1200,14 +1207,14 @@ std::thread BuildWriteWorker(TLoadContext& ctx, ui32 t) {
             ctx.WriteLimiter.Acquire(batchBytes);
 
             const ui64 written = ctx.WrittenPerThread[t].load(std::memory_order_relaxed);
-            const ui64 baseKeyIndex = (ctx.Options.KeyCount > 0) ? (written % ctx.Options.KeyCount) : written;
-            const ui64 partitionId = (t + baseKeyIndex) % ctx.Options.PartitionCount;
+            const ui32 globalThread = t + ctx.Options.ThreadOffset;
+            const ui64 partitionId = StickyPartitionId(globalThread, ctx.Options.PartitionCount);
 
             TVector<TString> keys;
             keys.reserve(ctx.Options.BatchSize);
             for (ui32 b = 0; b < ctx.Options.BatchSize; ++b) {
                 const ui64 ki = (ctx.Options.KeyCount > 0) ? ((written + b) % ctx.Options.KeyCount) : (written + b);
-                keys.push_back(TStringBuilder() << "load_" << ctx.RunId << "_" << t << "_" << ki);
+                keys.push_back(TStringBuilder() << "load_" << ctx.RunId << "_" << globalThread << "_" << ki);
             }
 
             TString error;
@@ -1260,8 +1267,9 @@ std::thread BuildReadWorker(TLoadContext& ctx, ui32 t) {
             const ui64 usable = (ctx.Options.KeyCount > 0) ? Min(written, ctx.Options.KeyCount) : written;
             std::uniform_int_distribution<ui64> keyDist(0, usable - 1);
             const ui64 keyIndex = keyDist(rng);
-            const ui64 partitionId = (writer + keyIndex) % ctx.Options.PartitionCount;
-            const TString key = TStringBuilder() << "load_" << ctx.RunId << "_" << writer << "_" << keyIndex;
+            const ui32 globalWriter = writer + ctx.Options.ThreadOffset;
+            const ui64 partitionId = StickyPartitionId(globalWriter, ctx.Options.PartitionCount);
+            const TString key = TStringBuilder() << "load_" << ctx.RunId << "_" << globalWriter << "_" << keyIndex;
 
             TString error;
             const TTraceContext trace = ctx.NextTraceparent(ctx.ReadTraceCounter);
@@ -1314,6 +1322,12 @@ int LoadVolume(const TOptions& options, const TVector<TString>& endpoints, const
     }
     Cout << "  storage channel: " << options.StorageChannel << Endl;
     Cout << "  write threads: " << options.Threads << Endl;
+    Cout << "  partitions: sticky, thread t -> partition (t + " << options.ThreadOffset << ") % " << options.PartitionCount;
+    if (options.Threads > options.PartitionCount) {
+        Cout << " (" << options.Threads << " threads / " << options.PartitionCount
+             << " tablets, pipelined)";
+    }
+    Cout << Endl;
     Cout << "  read threads: " << options.ReadThreads
          << (ctx.DedicatedReaders ? " (dedicated)" : " (inline via --read-percent)") << Endl;
     if (!ctx.DedicatedReaders) {
@@ -1584,7 +1598,7 @@ int LoadVolumeChannels(const TOptions& options, const TString& endpoint, const T
 
             ui64 i = 0;
             while (!stop.load(std::memory_order_relaxed) && std::chrono::steady_clock::now() < deadline) {
-                const ui64 partitionId = (config.ThreadIndex + i) % options.PartitionCount;
+                const ui64 partitionId = StickyPartitionId(config.ThreadIndex, options.PartitionCount);
                 const TString key = TStringBuilder() << config.KeyPrefix << "_" << i;
 
                 TString error;
@@ -1796,6 +1810,9 @@ TOptions ParseOptions(int argc, char** argv) {
 
     opts.AddLongOption("trace-every-n", "Send a traceparent header on every N-th RPC and log its trace id with the measured latency (for load command, 0 = off). Requires an external_throttling rule for KeyValue.ExecuteTransaction / KeyValue.Read in the cluster tracing_config")
         .StoreResult(&options.TraceEveryN)
+        .DefaultValue("0");
+    opts.AddLongOption("thread-offset", "Offset added to thread index for sticky partition assignment and key naming. Use to run multiple kvtool instances on different hosts without partition overlap (e.g. host1: --thread-offset 0, host2: --thread-offset 256)")
+        .StoreResult(&options.ThreadOffset)
         .DefaultValue("0");
 
     opts.AddLongOption("report-period", "Report period in seconds (for load/load-channels commands)")

@@ -2464,11 +2464,18 @@ FROM `{table_name}`"""
 
 
     @pytest.mark.parametrize("local_topics", [True, False])
+    @pytest.mark.parametrize(
+        "max_tasks_per_stage, should_restart",
+        [(None, True), (2, False)],
+        ids=["default", "max_tasks_per_stage_2"],
+    )
     def test_read_tasks_are_rebalanced_to_new_slots(
         self: StreamingTestBase,
         kikimr: Kikimr,
         entity_name: Callable[[str], str],
         local_topics: bool,
+        max_tasks_per_stage: int | None,
+        should_restart: bool,
     ) -> None:
         inp, out, _ = self.get_io_names(
             kikimr,
@@ -2478,11 +2485,15 @@ FROM `{table_name}`"""
             partitions_count=100,
         )
 
-        query_name = f"test_read_tasks_are_rebalanced_to_new_slots{local_topics!s:.1}"
+        query_name = (
+            f"test_read_tasks_are_rebalanced_to_new_slots"
+            f"_{local_topics!s:.1}_{max_tasks_per_stage or 'default'}"
+        )
 
         kikimr.ydb_client.query(f"""
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
+                {f'PRAGMA ydb.MaxTasksPerStage = "{max_tasks_per_stage}";' if max_tasks_per_stage else ''}
                 $in = SELECT Data FROM {inp};
                 INSERT INTO {out} SELECT Data FROM $in;
             END DO;
@@ -2517,11 +2528,15 @@ FROM `{table_name}`"""
         kikimr.cluster.wait_tenant_up(kikimr.get_database_name(), token="root@builtin")
         assert len(kikimr.cluster.slots) == 5
 
-        assert wait_for(
+        retry_count_increased = wait_for(
             lambda: retry_count() > retry_count_before_scaling,
-            timeout_seconds=60,
+            timeout_seconds=60 if should_restart else 30,
             step_seconds=1,
-        ), "Streaming query RetryCount did not increase after adding slots"
+        )
+        if should_restart:
+            assert retry_count_increased, "Streaming query RetryCount did not increase after adding slots"
+        else:
+            assert not retry_count_increased, "Streaming query restarted after adding slots"
 
         # TODO
         # assert wait_for(

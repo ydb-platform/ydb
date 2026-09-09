@@ -1335,6 +1335,9 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         DropChangefeed,
         SetFamily,
         SetDefault,
+        ViewReadAddColumn,
+        ViewRecreate,
+        ViewDrop,
     };
 
     constexpr ESchemeOp AllSchemeOps[] = {
@@ -1349,6 +1352,9 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         ESchemeOp::DropChangefeed,
         ESchemeOp::SetFamily,
         ESchemeOp::SetDefault,
+        ESchemeOp::ViewReadAddColumn,
+        ESchemeOp::ViewRecreate,
+        ESchemeOp::ViewDrop,
     };
 
     struct TSchemeOpSpec {
@@ -1451,6 +1457,45 @@ Y_UNIT_TEST_SUITE(KqpTx) {
             case ESchemeOp::SetDefault:
                 spec.Operation = R"(ALTER TABLE `/Root/SchemeOpsTable` ALTER COLUMN Value SET DEFAULT "def"u;)";
                 break;
+
+            case ESchemeOp::ViewReadAddColumn:
+                // The transaction reads the table through a view, and the table changes.
+                spec.Setup = R"(
+                    CREATE VIEW `/Root/SchemeOpsView` WITH (security_invoker = TRUE) AS
+                        SELECT * FROM `/Root/SchemeOpsTable`;
+                )";
+                spec.Operation = "ALTER TABLE `/Root/SchemeOpsTable` ADD COLUMN Extra Uint64;";
+                spec.Read = "SELECT * FROM `/Root/SchemeOpsView` ORDER BY Key;";
+                break;
+
+            case ESchemeOp::ViewRecreate:
+                // The table is untouched; the view is redefined to select fewer columns.
+                // The transaction reads through the new definition instead of aborting: view
+                // versions travel in ViewInfos, which the check does not look at. Fixed by the
+                // next commit.
+                spec.Setup = R"(
+                    CREATE VIEW `/Root/SchemeOpsView` WITH (security_invoker = TRUE) AS
+                        SELECT Key, Value FROM `/Root/SchemeOpsTable`;
+                )";
+                spec.Operation = R"(
+                    DROP VIEW `/Root/SchemeOpsView`;
+                    CREATE VIEW `/Root/SchemeOpsView` WITH (security_invoker = TRUE) AS
+                        SELECT Key FROM `/Root/SchemeOpsTable`;
+                )";
+                spec.Read = "SELECT * FROM `/Root/SchemeOpsView` ORDER BY Key;";
+                spec.RepeatableReadStatus = EStatus::SUCCESS;
+                break;
+
+            case ESchemeOp::ViewDrop:
+                spec.Setup = R"(
+                    CREATE VIEW `/Root/SchemeOpsView` WITH (security_invoker = TRUE) AS
+                        SELECT Key, Value FROM `/Root/SchemeOpsTable`;
+                )";
+                spec.Operation = "DROP VIEW `/Root/SchemeOpsView`;";
+                spec.Read = "SELECT * FROM `/Root/SchemeOpsView` ORDER BY Key;";
+                spec.RepeatableReadStatus = EStatus::SCHEME_ERROR;
+                spec.RelaxedStatus = EStatus::SCHEME_ERROR;
+                break;
         }
         return spec;
     }
@@ -1501,9 +1546,10 @@ Y_UNIT_TEST_SUITE(KqpTx) {
                 UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Scheme changed for table");
             }
 
-            // The transaction is released on failure, so the client cannot commit it anymore.
+            // A failed statement releases the transaction; a tolerated change leaves it usable.
             auto commitResult = tx->Commit().ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::NOT_FOUND,
+            UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(),
+                spec.RepeatableReadStatus == EStatus::SUCCESS ? EStatus::SUCCESS : EStatus::NOT_FOUND,
                 commitResult.GetIssues().ToString());
         }
     };
@@ -1571,6 +1617,24 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     Y_UNIT_TEST(SchemeChangeSetDefault) {
         TSchemeChangeInTxTester tester;
         tester.Operation = ESchemeOp::SetDefault;
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeViewReadAddColumn) {
+        TSchemeChangeInTxTester tester;
+        tester.Operation = ESchemeOp::ViewReadAddColumn;
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeViewRecreate) {
+        TSchemeChangeInTxTester tester;
+        tester.Operation = ESchemeOp::ViewRecreate;
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeViewDrop) {
+        TSchemeChangeInTxTester tester;
+        tester.Operation = ESchemeOp::ViewDrop;
         tester.Execute();
     }
 

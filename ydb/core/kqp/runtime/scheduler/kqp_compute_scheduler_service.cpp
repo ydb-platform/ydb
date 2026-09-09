@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/services/workload_manager/events.h>
@@ -90,6 +91,13 @@ public:
 
         Scheduler->SetTotalCpuLimit(CalculateTotalCpuLimit()); // TODO: take total cpu limit from outside
 
+        // The node's own database is known before the scheduler may be used by anyone - the state is
+        // not entered yet, so no event can be handled before it is registered. The other databases
+        // (serverless) are registered by the proxy service once they are resolved.
+        if (const auto& tenantName = AppData()->TenantName; !tenantName.empty()) {
+            Scheduler->AddOrUpdateDatabase(CanonizePath(tenantName), {});
+        }
+
         Become(&TComputeSchedulerService::State);
         Schedule(UpdateFairSharePeriod, new NActors::TEvents::TEvWakeup());
     }
@@ -136,7 +144,6 @@ public:
     void Handle(TEvAddDatabase::TPtr& ev) {
         NHdrf::TStaticAttributes const attrs {
             .Weight = ev->Get()->Weight, // TODO: weight shouldn't be negative!
-            .CpuGuarantee = Scheduler->GetTotalCpuLimit(), // TODO: set database guarantee properly in the future
         };
         Scheduler->AddOrUpdateDatabase(ev->Get()->DatabaseId, attrs);
 
@@ -279,6 +286,12 @@ private:
     }
 
     // TODO: handle invalid configuration on DDL level.
+    // TODO: retry the rejected configuration once the sibling pools release their guarantees.
+    //       Every pool is watched by its own handler actor, so there is no ordering between the
+    //       updates of different pools: redistributing the guarantees between two pools by two
+    //       valid DDL queries may be delivered here in the reverse order. The pool that arrives
+    //       first is then rejected against the stale guarantee of its sibling and stays without
+    //       any guarantee until its own configuration changes again.
     void ApplyPoolConfig(const TString& databaseId, const TString& poolId, NHdrf::TStaticAttributes attrs) {
         try {
             Scheduler->AddOrUpdatePool(databaseId, poolId, attrs);
@@ -326,18 +339,39 @@ ui64 TComputeScheduler::GetTotalCpuLimit() const {
     return Root->TotalLimit;
 }
 
+void TComputeScheduler::SetDefaultDatabaseGuarantee(NHdrf::TStaticAttributes& attrs) const {
+    if (!attrs.CpuGuarantee) {
+        attrs.CpuGuarantee = Min<ui64>(Root->TotalLimit, attrs.GetCpuLimit());
+    }
+}
+
+NHdrf::NDynamic::TDatabasePtr TComputeScheduler::GetOrCreateDatabase(const NHdrf::TDatabaseId& databaseId) {
+    if (auto database = Root->GetDatabase(databaseId)) {
+        return database;
+    }
+
+    NHdrf::TStaticAttributes attrs;
+    SetDefaultDatabaseGuarantee(attrs);
+
+    auto database = std::make_shared<TDatabase>(databaseId, attrs);
+    Root->AddDatabase(database);
+    return database;
+}
+
 void TComputeScheduler::AddOrUpdateDatabase(const TString& databaseId, const NHdrf::TStaticAttributes& attrs) {
     TWriteGuard lock(Mutex);
 
     auto database = Root->GetDatabase(databaseId);
+    auto merged = database ? database->MergedWith(attrs) : attrs;
+    SetDefaultDatabaseGuarantee(merged);
 
     // Databases are intentionally not validated against the root's guarantee.
-    ValidateAttributes(database ? database->MergedWith(attrs) : attrs, database.get(), nullptr);
+    ValidateAttributes(merged, database.get(), nullptr);
 
     if (database) {
-        database->Update(attrs);
+        database->Update(merged);
     } else {
-        Root->AddDatabase(std::make_shared<TDatabase>(databaseId, attrs));
+        Root->AddDatabase(std::make_shared<TDatabase>(databaseId, merged));
     }
 }
 
@@ -345,8 +379,7 @@ void TComputeScheduler::AddOrUpdatePool(const TString& databaseId, const TString
     Y_ENSURE(!poolId.empty());
 
     TWriteGuard lock(Mutex);
-    auto database = Root->GetDatabase(databaseId);
-    Y_ENSURE(database, "Database not found: " << databaseId);
+    auto database = GetOrCreateDatabase(databaseId);
 
     auto pool = database->GetPool(poolId);
     ValidateAttributes(pool ? pool->MergedWith(attrs) : attrs, pool.get(), database.get());

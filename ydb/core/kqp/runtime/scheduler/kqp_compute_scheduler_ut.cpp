@@ -842,7 +842,8 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
             - The sum of the pools' guarantees is not allowed to exceed the guarantee of their database
             - An updated pool doesn't reserve its guarantee twice
             - Lowering the database's guarantee below the sum of the pools' ones is prohibited
-            - A pool cannot be guaranteed anything until its database is
+            - A database with no guarantee configured promises its pools everything it may use itself
+            - A child cannot be guaranteed anything until its parent is
         */
         constexpr ui64 kCpuLimit = 10;
         constexpr ui64 kDatabaseGuarantee = 6;
@@ -868,11 +869,51 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateDatabase(databaseId, {.CpuGuarantee = kDatabaseGuarantee - 1}), yexception);
         scheduler.AddOrUpdateDatabase(databaseId, {.CpuGuarantee = kDatabaseGuarantee});
 
-        // A pool of a database without a guarantee may not be guaranteed anything - but still works
-        const TString unguaranteedDatabaseId = "db2";
-        scheduler.AddOrUpdateDatabase(unguaranteedDatabaseId, {});
-        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(unguaranteedDatabaseId, "pool1", {.CpuGuarantee = 1}), yexception);
-        scheduler.AddOrUpdatePool(unguaranteedDatabaseId, "pool1", {});
+        // A database is guaranteed everything it may use by default - whether it is registered
+        // explicitly or created implicitly by its first pool
+        scheduler.AddOrUpdateDatabase("db2", {});
+        scheduler.AddOrUpdatePool("db2", "pool1", {.CpuGuarantee = kCpuLimit});
+        scheduler.AddOrUpdatePool("db3", "pool1", {.CpuGuarantee = kCpuLimit});
+
+        // A query cannot reserve anything from a pool that is not guaranteed anything itself
+        scheduler.AddOrUpdatePool("db2", "pool2", {});
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery("db2", "pool2", 1, {.CpuGuarantee = 1}), yexception);
+    }
+
+    Y_UNIT_TEST(ImplicitDatabase) {
+        /*
+            Scenario:
+            - A pool of an unknown database creates that database implicitly, so that the pools don't
+              depend on whether the explicit registration has already reached the scheduler
+            - An implicitly created database is guaranteed everything it may use, so the guarantees of
+              its pools are not rejected before it is registered
+            - The explicit registration keeps the pools that have been added meanwhile
+        */
+        constexpr ui64 kCpuLimit = 10;
+
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        const TOptions options{
+            .DelayParams = kDefaultDelayParams,
+        };
+        TComputeScheduler scheduler(counters, options);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
+
+        const TString databaseId = "db1";
+        const TString poolId = "pool1";
+
+        // The database is not registered yet
+        scheduler.AddOrUpdatePool(databaseId, poolId, {.CpuGuarantee = kCpuLimit});
+
+        const NHdrf::TQueryId queryId = 1;
+        auto query = scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {});
+        UNIT_ASSERT(query);
+
+        // The late registration doesn't drop the pool and doesn't conflict with its guarantee
+        scheduler.AddOrUpdateDatabase(databaseId, {});
+        UNIT_ASSERT(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}) == query);
+
+        // The whole guarantee of the database is reserved by the pool by now
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(databaseId, "pool2", {.CpuGuarantee = 1}), yexception);
     }
 
     Y_UNIT_TEST(ResetPoolGuarantee) {
@@ -916,11 +957,10 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         scheduler.AddOrUpdatePool(databaseId, "pool2", {.CpuGuarantee = 0});
         scheduler.AddOrUpdateDatabase(databaseId, {.CpuGuarantee = 0});
 
-        // A pool of a database without a guarantee may not reserve anything, but may still be reset
-        const TString unguaranteedDatabaseId = "db2";
-        scheduler.AddOrUpdateDatabase(unguaranteedDatabaseId, {});
-        scheduler.AddOrUpdatePool(unguaranteedDatabaseId, "pool1", {.CpuGuarantee = 0});
-        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(unguaranteedDatabaseId, "pool1", {.CpuGuarantee = 1}), yexception);
+        // Resetting is allowed even under a parent that is not guaranteed anything itself
+        scheduler.AddOrUpdatePool(databaseId, "pool3", {});
+        scheduler.AddOrUpdateQuery(databaseId, "pool3", 1, {.CpuGuarantee = 0});
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery(databaseId, "pool3", 2, {.CpuGuarantee = 1}), yexception);
     }
 
     Y_UNIT_TEST_TWIN(AddUpdateQueries, DefaultFairShareMode) {
@@ -1197,7 +1237,8 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         /*
             Scenario:
             - Double removing of query should throw exception
-            - Adding to or updating non-existent database/pool should throw exception
+            - Adding a pool to an unknown database creates that database implicitly
+            - Adding or updating a query of a non-existent database/pool should throw exception
         */
         constexpr ui64 kCpuLimit = 12;
 
@@ -1220,7 +1261,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         UNIT_ASSERT_NO_EXCEPTION(scheduler.RemoveQuery(std::get<NHdrf::TQueryId>(query->GetId())));
         UNIT_ASSERT_NO_EXCEPTION(scheduler.RemoveQuery(0));
         UNIT_ASSERT_NO_EXCEPTION(scheduler.RemoveQuery(std::get<NHdrf::TQueryId>(query->GetId())));
-        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool("non-existent", poolId, {}), yexception);
+        UNIT_ASSERT_NO_EXCEPTION(scheduler.AddOrUpdatePool("implicit-db", poolId, {}));
         UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery("non-existent", poolId, queryId, {}), yexception);
         UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery(databaseId, "non-existent", queryId, {}), yexception);
         UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery("non-existent", "non-existent", queryId, {}), yexception);

@@ -272,7 +272,8 @@ public:
         ui32 topicPartitionsCount,
         bool enableStreamingQueriesCounters,
         TActorId infoAggregator,
-        TDuration checkPartitionCountPeriod)
+        TDuration checkPartitionCountPeriod,
+        bool enableStreamingQueryTopicAutopartitioning)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
         , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId)
         , Metrics(txId, taskId, counters, SourceParams, enableStreamingQueriesCounters)
@@ -286,6 +287,7 @@ public:
         , TopicPartitionsCount(topicPartitionsCount)
         , WithoutConsumer(SourceParams.GetConsumerName().empty())
         , CheckPartitionCountPeriod(checkPartitionCountPeriod)
+        , EnableStreamingQueryTopicAutopartitioning(enableStreamingQueryTopicAutopartitioning)
     {
         if (const auto& period = SourceParams.GetReconnectPeriod(); !TDuration::TryParse(period, ReconnectPeriod)) {
             SRC_LOG_N("Failed to parse reconnect period: " << period);
@@ -1220,6 +1222,13 @@ private:
         void operator()(NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& event) {
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
             SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " EndPartitionSessionEvent received");
+            if (!Self.EnableStreamingQueryTopicAutopartitioning && !Self.SourceParams.GetStopAtCurrentEndOffsets()) {
+                TStringBuilder message;
+                message << "Topic (" << Self.SourceParams.GetTopicPath() << ") with auto partitioning is not supported.";
+                SRC_LOG_E(message);
+                Self.Send(Self.ComputeActorId, new TEvAsyncInputError(Self.InputIndex, TIssues({TIssue(message)}), NYql::NDqProto::StatusIds::SCHEME_ERROR));
+                return;
+            }
             // Do not confirm the end of a partition session. Its child partitions
             // will be picked up after the streaming query restarts on a partition-count change.
         }
@@ -1321,6 +1330,7 @@ private:
     THashMap<TPartitionKey, NYdb::NTopic::TPartitionSession::TPtr> ActivePartitionSessions;
     bool StatusRequestScheduled = false;
     const TDuration CheckPartitionCountPeriod;
+    const bool EnableStreamingQueryTopicAutopartitioning;
     TInstant NextCheckPartitionTime = TInstant::Now();
     bool PartitionCountTimerScheduled = false;
     TMaybe<ui64> BeginOffset;
@@ -1377,7 +1387,8 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
     bool enableStreamingQueriesCounters,
     i64 bufferSize,
     TActorId infoAggregator,
-    TDuration checkPartitionCountPeriod
+    TDuration checkPartitionCountPeriod,
+    bool enableStreamingQueryTopicAutopartitioning
 ) {
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -1406,15 +1417,16 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
         topicPartitionsCount,
         enableStreamingQueriesCounters,
         infoAggregator,
-        checkPartitionCountPeriod
+        checkPartitionCountPeriod,
+        enableStreamingQueryTopicAutopartitioning
     );
 
     return {actor, actor};
 }
 
-void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const IPqStaticGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& reconnectPeriod, bool enableStreamingQueriesCounters) {
+void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const IPqStaticGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& reconnectPeriod, bool enableStreamingQueriesCounters, bool enableStreamingQueryTopicAutopartitioning) {
     factory.RegisterSource<NPq::NProto::TDqPqTopicSource>(TString(PqSource),
-        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, reconnectPeriod, enableStreamingQueriesCounters](
+        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, reconnectPeriod, enableStreamingQueriesCounters, enableStreamingQueryTopicAutopartitioning](
             NPq::NProto::TDqPqTopicSource&& settings,
             IDqAsyncIoFactory::TSourceArguments&& args)
     {
@@ -1469,7 +1481,8 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
                 enableStreamingQueriesCounters,
                 PQReadDefaultFreeSpace,
                 infoAggregator,
-                checkPartitionCountPeriod);
+                checkPartitionCountPeriod,
+                enableStreamingQueryTopicAutopartitioning);
         }
 
         const TStringBuf format(settings.GetFormat());

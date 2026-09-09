@@ -44,7 +44,8 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     bool enableStreamingQueriesCounters,
     i64 bufferSize = PQReadDefaultFreeSpace,
     NActors::TActorId infoAggregator = {},
-    TDuration CheckPartitionCountPeriod = PqDefaultCheckPartitionCountPeriod
+    TDuration CheckPartitionCountPeriod = PqDefaultCheckPartitionCountPeriod,
+    bool enableStreamingQueryTopicAutopartitioning = false
 );
 
 void RegisterDqPqReadActorFactory(
@@ -54,6 +55,7 @@ void RegisterDqPqReadActorFactory(
     const IPqStaticGateway::TPtr& pqGateway,
     const ::NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<::NMonitoring::TDynamicCounters>(),
     const TString& reconnectPeriod = {},
-    bool enableStreamingQueriesCounters = true);
+    bool enableStreamingQueriesCounters = true,
+    bool enableStreamingQueryTopicAutopartitioning = false);
 
 } // namespace NYql::NDq

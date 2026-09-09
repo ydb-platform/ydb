@@ -1,6 +1,11 @@
 #pragma once
 
+#include "public.h"
+
 #include "block_range.h"
+
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator_adapter.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator_pool.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
@@ -14,7 +19,7 @@ namespace NYdb::NBS::NBlockStore {
 // key (ui64) with efficient overlap checking capabilities. It's designed to
 // store and query block ranges and it key, particularly useful for determining
 // if a given range overlaps with any of the stored ranges.
-template <typename TKey, typename TValue>
+template <typename TKey, typename TValue, bool UseArenaAllocator = false>
 class TBlockRangeMap
 {
 public:
@@ -53,11 +58,35 @@ private:
         }
     };
 
+    using TRanges = std::conditional_t<
+        UseArenaAllocator,
+        TMap<TItemKey, TValue, TLess<TItemKey>, TArenaPoolAdapter<TItemKey>>,
+        TMap<TItemKey, TValue, TLess<TItemKey>>>;
+    using TRangeIt = decltype(TRanges().begin());
+    using TRangeByKey = std::conditional_t<
+        UseArenaAllocator,
+        // When used arena allocator
+        std::unordered_map<
+            TKey,
+            TRangeIt,
+            THash<TKey>,
+            TEqualTo<TKey>,
+            TArenaPoolAdapter<std::pair<const TKey, TRangeIt>>>,
+        // When used std::allocator
+        THashMap<TKey, TRangeIt>>;
+
     ui64 MaxLength = 0;
-    TMap<TItemKey, TValue> Ranges;
-    THashMap<TKey, decltype(Ranges.begin())> RangeByKey;
+    TRanges Ranges;
+    TRangeByKey RangeByKey;
 
 public:
+    TBlockRangeMap() = default;
+
+    explicit TBlockRangeMap(TArenaAllocatorPool* pool)
+        : Ranges(typename TRanges::allocator_type(pool))
+        , RangeByKey(typename TRangeByKey::allocator_type(pool))
+    {}
+
     // Adds a block range to the collection. Returns false if the key already
     // exists in the collection.
     bool AddRange(TKey key, TBlockRange64 range, TValue value = {})

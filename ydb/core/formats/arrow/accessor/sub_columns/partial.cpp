@@ -20,7 +20,7 @@ TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> TSubColumnsPartialA
         return TConclusionStatus::Fail(parsedResult.GetErrorMessage());
     }
     const auto parsedPath = parsedResult.DetachResult();
-    auto headerStats = Header.GetColumnStats();
+    const auto& headerStats = Header.GetColumnStats();
     auto columnsResult = headerStats.ResolvePath(parsedPath, [this](const ui32 columnIndex) {
         return PartialColumnsData.HasColumn(columnIndex);
     });

@@ -138,6 +138,7 @@ public:
         });
     }
 
+    // Returns the longest stored member-wise prefix; malformed paths do not match.
     std::optional<ui32> GetKeyOrPrefixIndexOptional(const std::string_view keyName) const {
         auto pathInfoResult = ResolvePath(ToJsonPath(keyName));
         if (pathInfoResult.IsFail()) {

@@ -156,6 +156,11 @@ public:
     // Close session when resource is deleted.
     virtual void CloseSession(Ydb::StatusIds::StatusCode status, const TString& reason);
 
+    // Deactivate session without notifying the client. Used when the client
+    // itself requested the session to be closed (session garbage collection).
+    // Must be called only when IsActive() is true. Default: nothing to do.
+    virtual void Deactivate() {}
+
     // Properties for viewer
     virtual bool IsActive() const {
         return Active;
@@ -301,7 +306,9 @@ public:
     }
 
     void OnSessionDisconnected(const NActors::TActorId& clientId) {
-        Sessions.erase(clientId);
+        if (Sessions.erase(clientId) && Counters.Sessions) {
+            Counters.Sessions->Dec();
+        }
     }
 
     // TTickProcessor interface implementation.
@@ -413,6 +420,9 @@ public:
     TQuoterSession* GetOrCreateSession(const NActors::TActorId& clientId, ui32 clientVersion, TQuoterResourceTree* resource);
     TQuoterSession* FindSession(const NActors::TActorId& clientId, ui64 resourceId);
     const TQuoterSession* FindSession(const NActors::TActorId& clientId, ui64 resourceId) const;
+    // Destroy a single session at the client's request. Idempotent: does nothing
+    // if the session does not exist. Does not notify the client.
+    void CloseSession(const NActors::TActorId& clientId, ui64 resourceId);
     void DisconnectSession(const NActors::TActorId& pipeServerId);
     void SetPipeServerId(TQuoterSessionId sessionId, const NActors::TActorId& prevId, const NActors::TActorId& id);
 

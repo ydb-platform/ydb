@@ -465,6 +465,7 @@ message TEvUpdateConsumptionState {
         uint64 ResourceId = 1;
         bool ConsumeResource = 2;
         double Amount = 3;
+        bool CloseSession = 4;
     }
     repeated TResourceInfo ResourcesInfo = 1;
     NActorsProto.TActorId ActorID = 2;

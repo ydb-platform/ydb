@@ -78,11 +78,11 @@ NWilson::TSpan MakeQueryPhaseTraceSpan(ui8 verbosity, NWilson::TTraceId parent,
     return span;
 }
 
-void AddQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescription& description,
-        const TKqpQueryStats& stats, ui64 requestUnits, Ydb::StatusIds::StatusCode status) {
-    if (!span) {
-        return;
-    }
+namespace {
+
+template<class TStats>
+void AddQueryExecutionAttributes(NWilson::TSpan& span, const TQueryTraceDescription& description,
+        const TStats& stats, ui64 requestUnits, Ydb::StatusIds::StatusCode status) {
     span.Attribute("db.query.summary", description.DisplayName);
     span.Attribute("db.operation.name", description.Operation);
     ui64 cpuUs = 0;
@@ -93,7 +93,7 @@ void AddQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescription
     ui64 spilledBytes = 0;
     double maxTaskSkew = 0;
     bool taskStatsIncomplete = false;
-    for (const auto& execution : stats.Executions) {
+    for (const auto& execution : stats.GetExecutions()) {
         cpuUs += GetExecutionTraceCpuTimeUs(execution);
         NKqpProto::TKqpExecutionExtraStats extra;
         if (execution.GetExtra().UnpackTo(&extra)) {
@@ -108,13 +108,8 @@ void AddQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescription
             rowsWritten += table.GetWriteRows() + table.GetEraseRows();
         }
     }
-    if (stats.Compilation) {
-        span.Attribute("ydb.compile.cpu_us", static_cast<i64>(stats.Compilation->CpuTimeUs));
-        span.Attribute("ydb.compile.cache_hit", stats.Compilation->FromCache);
-        span.Attribute("ydb.compile.duration_us", static_cast<i64>(stats.Compilation->DurationUs));
-    }
     span.Attribute("ydb.cpu_us", static_cast<i64>(cpuUs));
-    span.Attribute("ydb.session.cpu_us", static_cast<i64>(stats.WorkerCpuTimeUs));
+    span.Attribute("ydb.session.cpu_us", static_cast<i64>(stats.GetWorkerCpuTimeUs()));
     span.Attribute("ydb.rows_read", static_cast<i64>(rowsRead));
     span.Attribute("ydb.bytes_read", static_cast<i64>(bytesRead));
     span.Attribute("ydb.rows_written", static_cast<i64>(rowsWritten));
@@ -124,10 +119,42 @@ void AddQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescription
         span.Attribute("ydb.max_task_skew", maxTaskSkew);
         span.Attribute("ydb.task_stats_incomplete", taskStatsIncomplete);
     }
-    span.Attribute("ydb.locks_broken_as_victim", static_cast<i64>(stats.LocksBrokenAsVictim));
-    span.Attribute("ydb.locks_broken_as_breaker", static_cast<i64>(stats.LocksBrokenAsBreaker));
     span.Attribute("ydb.consumed_ru", static_cast<i64>(requestUnits));
     span.Attribute("ydb.status_code", Ydb::StatusIds::StatusCode_Name(status));
+}
+
+void AddQueryCompilationAttributes(NWilson::TSpan& span, bool fromCache, ui64 cpuUs, ui64 durationUs) {
+    span.Attribute("ydb.compile.cpu_us", static_cast<i64>(cpuUs));
+    span.Attribute("ydb.compile.cache_hit", fromCache);
+    span.Attribute("ydb.compile.duration_us", static_cast<i64>(durationUs));
+}
+
+} // namespace
+
+void AddQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescription& description,
+        const TKqpQueryStats& stats, ui64 requestUnits, Ydb::StatusIds::StatusCode status) {
+    if (!span) {
+        return;
+    }
+    AddQueryExecutionAttributes(span, description, stats, requestUnits, status);
+    if (stats.Compilation) {
+        AddQueryCompilationAttributes(span, stats.Compilation->FromCache,
+            stats.Compilation->CpuTimeUs, stats.Compilation->DurationUs);
+    }
+    span.Attribute("ydb.locks_broken_as_victim", static_cast<i64>(stats.LocksBrokenAsVictim));
+    span.Attribute("ydb.locks_broken_as_breaker", static_cast<i64>(stats.LocksBrokenAsBreaker));
+}
+
+void AddWorkerQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescription& description,
+        const NKikimrKqp::TEvQueryResponse& response, const NKqpProto::TKqpStatsQuery* workerStats) {
+    if (span) {
+        const auto& stats = workerStats ? *workerStats : response.GetResponse().GetQueryStats();
+        AddQueryExecutionAttributes(span, description, stats, response.GetConsumedRu(), response.GetYdbStatus());
+        if (stats.HasCompilation()) {
+            const auto& compilation = stats.GetCompilation();
+            AddQueryCompilationAttributes(span, compilation.GetFromCache(), compilation.GetCpuTimeUs(), compilation.GetDurationUs());
+        }
+    }
 }
 
 ui64 GetExecutionTraceCpuTimeUs(const NYql::NDqProto::TDqExecutionStats& stats) {

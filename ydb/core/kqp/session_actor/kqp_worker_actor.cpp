@@ -57,6 +57,7 @@ struct TKqpQueryState {
     NYql::TKikimrQueryDeadlines QueryDeadlines;
     ui32 ReplyFlags = 0;
     bool KeepSession = false;
+    bool CollectTraceStats = false;
 };
 
 struct TKqpCleanupState {
@@ -183,6 +184,7 @@ public:
         auto now = TAppData::TimeProvider->Now();
 
         QueryState->Sender = ev->Sender;
+        QueryState->CollectTraceStats = bool(ev->TraceId);
         QueryState->RequestEv.reset(ev->Release().Release());
 
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(
@@ -853,6 +855,8 @@ private:
         if (reportStats) {
             record.MutableResponse()->MutableQueryStats()->Swap(&stats);
             record.MutableResponse()->SetQueryPlan(queryResult.QueryPlan);
+        } else if (QueryState->CollectTraceStats) {
+            responseEv->WorkerStats = std::make_unique<NKqpProto::TKqpStatsQuery>(std::move(stats));
         }
 
         AddTrailingInfo(responseEv->Record);

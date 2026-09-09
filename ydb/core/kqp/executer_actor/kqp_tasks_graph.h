@@ -91,7 +91,7 @@ struct TStageInfoMeta {
     ETableKind TableKind{};
     TIntrusiveConstPtr<TTableConstInfo> TableConstInfo;
     TIntrusiveConstPtr<NKikimr::NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo> ColumnTableInfoPtr;
-    std::optional<NKikimrKqp::TKqpTableSinkSettings> ResolvedSinkSettings; // Populated by table resolver for OLAP sinks
+    std::optional<NKikimrKqp::TKqpTableSinkSettings> ResolvedSinkSettings; // CTAS only
     std::vector<TString> CsShardingColumns;
     std::unordered_map<TString, TActorId> ControlPlaneActors;
 

@@ -34,6 +34,7 @@
     #include <stdio.h>
     #include <dirent.h>
     #include <errno.h>
+    #include <grp.h>
     #include <pwd.h>
     #include <sys/ioctl.h>
     #include <sys/types.h>
@@ -47,7 +48,6 @@
     #include <fcntl.h>
     #include <pty.h>
     #include <pwd.h>
-    #include <grp.h>
     #include <utmp.h>
     #include <sys/prctl.h>
     #include <sys/sysmacros.h>
@@ -845,6 +845,11 @@ void SetUid(int uid)
     // Set unprivileged uid for user process.
     if (setuid(0) != 0) {
         THROW_ERROR_EXCEPTION("Unable to set zero uid")
+            .With(TError::FromSystem());
+    }
+
+    if (setgroups(0, nullptr) != 0) {
+        THROW_ERROR_EXCEPTION("Unable to clear supplementary groups")
             .With(TError::FromSystem());
     }
 

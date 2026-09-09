@@ -417,6 +417,7 @@ protected:
             case Ydb::StatusIds::ALREADY_EXISTS: return NYql::TIssuesIds::KIKIMR_SCHEME_ERROR;
             case Ydb::StatusIds::INTERNAL_ERROR: return NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR;
             case Ydb::StatusIds::PRECONDITION_FAILED: return NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED;
+            case Ydb::StatusIds::NOT_FOUND: return NYql::TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND;
             default: return NYql::YqlStatusFromYdbStatus(status);
         }
     }
@@ -2549,7 +2550,11 @@ private:
         }
 
         auto previousInfo = std::exchange(SchemeInfo, ev->Get()->Info);
-        if (Context.GetUserToken() && Context.GetUserToken()->GetSerializedToken() && SchemeInfo && SchemeInfo->SecurityObject && Access) {
+        if (Context.GetUserToken() && Context.GetUserToken()->GetSerializedToken() && SchemeInfo && Access) {
+            if (!SchemeInfo->SecurityObject) {
+                return TBase::FatalError(Ydb::StatusIds::INTERNAL_ERROR, "Missing streaming query security object");
+            }
+
             if (const auto& securityObject = *SchemeInfo->SecurityObject; !securityObject.CheckAccess(Access, *Context.GetUserToken())) {
                 YDB_LOG_WARN("[StreamingQueries] Access denied",
                     {"logPrefix", LogPrefix()},
@@ -2658,7 +2663,8 @@ private:
         }
 
         auto token = Context.GetUserToken();
-        if (SchemeOperationStarted) {
+        if (SchemeOperationStarted || (Access & NACLib::RemoveSchema)) {
+            // DROP registers its operation with an internal ALTER after checking the user's RemoveSchema permission.
             token = NACLib::TSystemUsers::Metadata();
             token->SaveSerializationInfo();
         }
@@ -2754,8 +2760,14 @@ private:
 
     std::optional<NKikimrSchemeOp::TModifyScheme> GetEndSchemeTx(bool success) override {
         Y_UNUSED(success);
+        auto pathPairStatus = TStreamingQueryManager::SplitPath(TBase::QueryPath, TBase::Context.GetDatabase(), /* createDir */ false);
+        Y_VALIDATE(!pathPairStatus.IsFail(), "Failed to split path");
+        const auto& [workingDir, name] = pathPairStatus.DetachResult();
+
         auto result = SchemeTx;
         result.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterStreamingQuery);
+        result.SetWorkingDir(workingDir);
+        result.MutableCreateStreamingQuery()->SetName(name);
         return result;
     }
 

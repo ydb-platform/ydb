@@ -242,6 +242,15 @@ message TResponse {
     // TChooseProxyRequest
     optional string ProxyName = 1050;
     optional uint64 ProxyCookie = 1051;
+
+    message TInterconnectLoadResult {
+        optional uint64 ThroughputBytes = 1;
+        optional uint64 ThroughputSamples = 2;
+        optional uint64 RttSamples = 3;
+        optional uint64 DurationUs = 4;
+        optional uint64 MaxRttGapUs = 5;
+    }
+    optional TInterconnectLoadResult InterconnectLoadResult = 1100;
 }
 
 message TFakeConfigDummy {
@@ -614,6 +623,7 @@ message TInterconnectDebug {
 
     optional string SecurityToken = 13 [(Ydb.sensitive) = true];
     optional uint32 RdmaMode = 14;
+    optional bool WaitForCompletion = 16;
 }
 
 message TConsoleRequest {

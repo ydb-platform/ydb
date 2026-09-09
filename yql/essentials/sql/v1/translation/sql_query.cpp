@@ -1681,6 +1681,14 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             auto params = TAnalyzeParams{.Table = std::make_shared<TTableRef>(tr), .Columns = std::move(columns)};
+            if (analyzeTable.HasBlock3()) {
+                const auto& sample = analyzeTable.GetBlock3().GetRule_sample_clause1();
+                TSqlExpression expr(*this);
+                params.SampleRate = Unwrap(expr.Build(sample.GetRule_expr2()));
+                if (!params.SampleRate) {
+                    return false;
+                }
+            }
             AddStatementToBlocks(blocks, BuildAnalyze(Ctx_.Pos(), tr.Service, tr.Cluster, params, Ctx_.Scoped));
             break;
         }

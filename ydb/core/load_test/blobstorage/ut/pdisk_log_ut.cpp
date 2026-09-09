@@ -1,12 +1,24 @@
-#include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/pdisk/mock/pdisk_mock.h>
+#include <ydb/core/util/actorsys_test/testactorsys.h>
 #include <ydb/core/load_test/service_actor.h>
 
 #include <library/cpp/protobuf/util/pb_io.h>
+#include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/scope.h>
+
+using namespace NKikimr;
+using namespace NActors;
 
 Y_UNIT_TEST_SUITE(PDiskLogLoadTest) {
     Y_UNIT_TEST(DelayedFirstYardInitResult) {
-        TEnvironmentSetup env({.NodeCount = 1});
-        auto& runtime = *env.Runtime;
+        TTestActorSystem runtime(1);
+        const auto timeProvider = TAppData::TimeProvider;
+        TAppData::TimeProvider = TTestActorSystem::CreateTimeProvider();
+        Y_DEFER {
+            runtime.Stop();
+            TAppData::TimeProvider = timeProvider;
+        };
+        runtime.Start();
         constexpr ui32 nodeId = 1;
         constexpr ui32 pdiskId = 99;
         constexpr ui64 pdiskGuid = 12345;

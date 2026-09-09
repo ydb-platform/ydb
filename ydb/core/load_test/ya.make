@@ -33,6 +33,7 @@ PEERDIR(
 END()
 
 RECURSE_FOR_TESTS(
+    blobstorage
     ut
     ut_ycsb
 )

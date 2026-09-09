@@ -10,6 +10,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -250,6 +251,7 @@ struct TTableAndSomeData {
     TMKQLDeque<TFuturePage> Futures;
     std::optional<TPackResult> CurrentProbePack;
     ui32 ProbeResumeIndex = 0;
+    size_t BuildCursor = 0;
 };
 
 namespace NJoinPackedTuples {
@@ -294,15 +296,24 @@ template <typename Source> class TInMemoryHashJoin {
             return EFetchResult::Finish;
         }
 
+        auto lookupProbeRow = [&](TSingleTuple probeTuple) {
+            return Table_.Lookup(probeTuple, BuildCursor_,
+                                 [&](TSingleTuple buildTuple) {
+                                     consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
+                                 },
+                                 isFull);
+        };
+
         if (FetchedPack_.has_value()) {
             ui32 idx = 0;
             for (TSingleTuple probeTuple : *FetchedPack_) {
                 if (idx++ < ResumeIndex_) {
                     continue;
                 }
-                Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
-                    consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
-                });
+                if (!lookupProbeRow(probeTuple)) {
+                    ResumeIndex_ = idx - 1;
+                    return EFetchResult::One;
+                }
                 if (isFull()) {
                     ResumeIndex_ = idx;
                     return EFetchResult::One;
@@ -322,9 +333,10 @@ template <typename Source> class TInMemoryHashJoin {
                 ui32 idx = 0;
                 for (TSingleTuple probeTuple : *FetchedPack_) {
                     idx++;
-                    Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
-                        consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
-                    });
+                    if (!lookupProbeRow(probeTuple)) {
+                        ResumeIndex_ = idx - 1;
+                        return EFetchResult::One;
+                    }
                     if (isFull()) {
                         ResumeIndex_ = idx;
                         return EFetchResult::One;
@@ -349,6 +361,7 @@ template <typename Source> class TInMemoryHashJoin {
     TMKQLVector<IBlockLayoutConverter::TPackResult> BuildChunks_;
     std::optional<IBlockLayoutConverter::TPackResult> FetchedPack_;
     ui32 ResumeIndex_ = 0;
+    size_t BuildCursor_ = 0;
 };
 
 template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THybridHashJoin {
@@ -420,6 +433,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         TProbeSpiller<Settings> Spiller;
         std::optional<TPackResult> FetchedPack;
         ui32 ResumeIndex = 0;
+        size_t BuildCursor = 0;
     };
 
     using DumpedBuckets = std::unordered_map<int, TSpilledBucket>;
@@ -513,30 +527,40 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         auto notEnoughMemory = [hasSpiller = !!Spiller_] {
             return hasSpiller && TlsAllocState->IsMemoryYellowZoneEnabled();
         };
-        auto lookupToTable = [&](TTable& table, TSingleTuple tuple) {
-            bool found = false;
+        auto lookupToTable = [&](TTable& table, TSingleTuple tuple, size_t& buildCursor) {
+            // A non-zero cursor means this probe already emitted a match on a previous call.
+            bool found = buildCursor > 0;
+            auto lookup = [&](auto onMatch) {
+                return table.Lookup(tuple, buildCursor, onMatch, isFull);
+            };
             if constexpr (Kind == EJoinKind::Left) {
                 if (Settings_.LeftIsBuild()) {
-                    table.Lookup(tuple, [&](TSingleTuple tableMatch) {
+                    if (!lookup([&](TSingleTuple tableMatch) {
                         found = true;
                         consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
-                    });
+                    })) {
+                        return false;
+                    }
                 } else {
-                    table.Lookup(tuple, [&](TSingleTuple tableMatch) {
+                    if (!lookup([&](TSingleTuple tableMatch) {
                         found = true;
                         consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
-                    });
+                    })) {
+                        return false;
+                    }
                     if (!found) {
                         consume(tuple);
                     }
                 }
             } else {
-                table.Lookup(tuple, [&](TSingleTuple tableMatch) {
+                if (!lookup([&](TSingleTuple tableMatch) {
                     found = true;
                     if constexpr (Kind == EJoinKind::Inner) {
                         consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
                     }
-                });
+                })) {
+                    return false;
+                }
                 if constexpr (Kind == EJoinKind::LeftOnly) {
                     if (!found) {
                         consume(tuple);
@@ -548,6 +572,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     }
                 }
             }
+            return true;
         };
         if (std::get_if<Init>(&State_)) {
             State_ = FetchingBuild{*this};
@@ -704,7 +729,10 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     } else {
                         TTable* thisTable = std::get_if<TTable>(&state.Spiller.GetState().Buckets[bucketIndex]);
                         MKQL_ENSURE(thisTable, "sanity check");
-                        lookupToTable(*thisTable, tuple);
+                        if (!lookupToTable(*thisTable, tuple, state.BuildCursor)) {
+                            state.ResumeIndex = idx - 1;
+                            return EFetchResult::One;
+                        }
                     }
                     if (isFull()) {
                         state.ResumeIndex = idx;
@@ -772,7 +800,10 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                             if (idx++ < table->ProbeResumeIndex) {
                                 continue;
                             }
-                            lookupToTable(table->Table, probeTuple);
+                            if (!lookupToTable(table->Table, probeTuple, table->BuildCursor)) {
+                                table->ProbeResumeIndex = idx - 1;
+                                return EFetchResult::One;
+                            }
                             if (isFull()) {
                                 table->ProbeResumeIndex = idx;
                                 return EFetchResult::One;

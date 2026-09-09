@@ -164,6 +164,10 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
         return Output_.Probe.NTuples;
     }
 
+    i64 SizeBytes() const {
+        return Output_.Build.AllocatedBytes() + Output_.Probe.AllocatedBytes();
+    }
+
 
 
     using TuplePairs = TSides<TPackResult>;
@@ -317,7 +321,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                 return NYql::NUdf::EFetchStatus::Finish;
             }
             auto outputIsFull = [&]() {
-                return Output_.SizeTuples() >= MaxOutputRows_;
+                return Output_.SizeBytes() >= static_cast<i64>(MaxBlockSizeInBytes);
             };
             while (!outputIsFull()) {
                 auto res = Join_.MatchRows(*Ctx_, Output_.MakeConsumeFn(), outputIsFull);
@@ -344,7 +348,6 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
         JoinType Join_;
         TComputationContext* Ctx_;
         TRenamesPackedTupleOutput<Kind> Output_;
-        static constexpr i64 MaxOutputRows_ = 10000;
         bool Finished_ = false;
     };
 

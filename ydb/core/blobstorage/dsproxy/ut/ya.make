@@ -26,6 +26,7 @@ SRCS(
     dsproxy_sequence_ut.cpp
     dsproxy_patch_ut.cpp
     dsproxy_counters_ut.cpp
+    dsproxy_inflight_latency_ut.cpp
     dsproxy_request_reporting_ut.cpp
     dsproxy_discover_ut.cpp
     dsproxy_check_integrity_ut.cpp

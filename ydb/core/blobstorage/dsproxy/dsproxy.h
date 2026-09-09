@@ -78,6 +78,10 @@ struct TEvDeathNote : public TEventLocal<TEvDeathNote, TEvBlobStorage::EvDeathNo
     {}
 };
 
+struct TEvStoragePoolRequestFinished
+    : public TEventLocal<TEvStoragePoolRequestFinished, TEvBlobStorage::EvStoragePoolRequestFinished>
+{};
+
 struct TEvAbortOperation : public TEventLocal<TEvAbortOperation, TEvBlobStorage::EvAbortOperation>
 {};
 
@@ -169,6 +173,8 @@ inline void SetExecutionRelay(IEventBase& ev, std::shared_ptr<TEvBlobStorage::TE
             Y_ABORT("unexpected event Type# 0x%08" PRIx32, type);
     }
 }
+
+ui32 CountGetRequestBytes(const TEvBlobStorage::TEvGet& ev);
 
 struct TAccelerationParams {
     double SlowDiskThreshold = DefaultSlowDiskThreshold;
@@ -598,6 +604,7 @@ struct TBlobStorageProxyControlWrappers {
 
 struct TBlobStorageProxyParameters {
     bool UseActorSystemTimeInBSQueue = false;
+    TActorId InFlightLatencyAggregator;
 
     TBlobStorageProxyControlWrappers Controls;
 };

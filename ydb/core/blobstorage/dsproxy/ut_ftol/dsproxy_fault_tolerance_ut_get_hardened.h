@@ -20,6 +20,14 @@ public:
     using TFaultToleranceTestBase::TFaultToleranceTestBase;
 
     void RunTestAction() {
+        const bool wide = Info->Type.GetErasure() == TBlobStorageGroupType::Erasure8Plus2Block;
+        if (wide) {
+            Data = TString::Uninitialized(4097);
+            char* bytes = Data.Detach();
+            for (ui32 i = 0; i < Data.size(); ++i) {
+                bytes[i] = char((i * 137 + i / 251) % 256);
+            }
+        }
         WriteParts();
 
         enum EState {
@@ -40,6 +48,36 @@ public:
         }
 
         const ui32 numDisks = Info->GetTotalVDisksNum();
+        std::vector<std::vector<EState>> wideStates;
+        if (wide) {
+            // 1 healthy + 24 single + 264 double error/lost combinations, and representative triples.
+            wideStates.emplace_back(numDisks, ST_OK);
+            for (ui32 first = 0; first < numDisks; ++first) {
+                for (EState a : {ST_ERR, ST_LOST}) {
+                    auto single = std::vector<EState>(numDisks, ST_OK);
+                    single[first] = a;
+                    wideStates.push_back(single);
+                    for (ui32 second = 0; second < first; ++second) {
+                        for (EState b : {ST_ERR, ST_LOST}) {
+                            auto pair = single;
+                            pair[second] = b;
+                            wideStates.push_back(std::move(pair));
+                        }
+                    }
+                }
+            }
+            for (ui32 mask : {0x007u, 0x103u, 0x301u, 0xc01u, 0xd00u}) {
+                for (EState state : {ST_ERR, ST_LOST}) {
+                    auto triple = std::vector<EState>(numDisks, ST_OK);
+                    for (ui32 i = 0; i < numDisks; ++i) {
+                        if (mask >> i & 1) {
+                            triple[i] = state;
+                        }
+                    }
+                    wideStates.push_back(std::move(triple));
+                }
+            }
+        }
         ui32 nIter = 0;
         for (const auto& [id, blobInfo] : BlobsWritten) {
             if (nIter % TestPartCount != TestPartIdx) {
@@ -52,6 +90,7 @@ public:
                 << Endl;
 
             std::vector<EState> states(numDisks, ST_OK);
+            size_t wideStateIndex = 0;
             for (;;) {
                 // send queries
                 ui32 responsesPending = 0;
@@ -196,6 +235,14 @@ public:
                     UNIT_ASSERT(false);
                 }
 
+                // The wide corpus is deterministic and bounded; do not enumerate 3^12 states per layout.
+                if (wide) {
+                    if (++wideStateIndex == wideStates.size()) {
+                        break;
+                    }
+                    states = wideStates[wideStateIndex];
+                    continue;
+                }
                 // advance to next option
                 bool carry = true;
                 for (ui32 i = 0; carry && i < numDisks; ++i) {
@@ -235,7 +282,7 @@ public:
         const TBlobStorageGroupInfo::TTopology *topology = &Info->GetTopology();
         const TBlobStorageGroupInfo::IQuorumChecker& checker = topology->GetQuorumChecker();
 
-        TSubgroupPartLayout::GeneratePossibleLayouts(type, 1, [&](const TSubgroupPartLayout& layout) {
+        auto writeLayout = [&](const TSubgroupPartLayout& layout) {
             bool almostWritten = false;
             bool unwritten = false;
 
@@ -276,14 +323,14 @@ public:
                 }
                 if (found) {
                     almostWritten = true;
-                } else if (type.GetErasure() == TBlobStorageGroupType::Erasure4Plus2Block) {
+                } else if (type.ErasureFamily() == TBlobStorageGroupType::ErasureParityBlock) {
                     i32 count = 0;
                     for (ui32 partIdx = 0; partIdx < type.TotalPartCount(); ++partIdx) {
                         if (layout.GetDisksWithPart(partIdx)) {
                             count++;
                         }
                     }
-                    if (count < 4) {
+                    if (count < static_cast<i32>(type.MinimalRestorablePartCount())) {
                         unwritten = true;
                     } else {
                         return;
@@ -307,11 +354,67 @@ public:
                 const NKikimrProto::EReplyStatus res = PutToVDisk(orderNums[idxInSubgroup], partId,
                     parts.Parts[partIdx].OwnedString.ConvertToString());
                 UNIT_ASSERT_VALUES_EQUAL(res, NKikimrProto::OK);
-                disksWrittenTo |= {topology, topology->GetVDiskId(idxInSubgroup)};
+                disksWrittenTo |= {topology, topology->GetVDiskId(orderNums[idxInSubgroup])};
             });
 
             BlobsWritten.emplace(id, TBlobInfo{.DisksWrittenTo = disksWrittenTo, .Layout = layout, .AlmostWritten = almostWritten, .Unwritten = unwritten});
-        });
+        };
+        if (type.GetErasure() != TBlobStorageGroupType::Erasure8Plus2Block) {
+            TSubgroupPartLayout::GeneratePossibleLayouts(type, 1, writeLayout);
+            return;
+        }
+
+        TSubgroupPartLayout full;
+        const ui32 parts = type.TotalPartCount();
+        for (ui32 part = 0; part < parts; ++part) {
+            full.AddItem(part, part, type);
+        }
+        writeLayout(full);
+        for (ui32 first = 0; first < parts; ++first) {
+            auto absent = full;
+            absent.ClearItem(first, first, type);
+            writeLayout(absent);
+            for (ui32 handoff = 0; handoff < type.Handoff(); ++handoff) {
+                auto moved = absent;
+                moved.AddItem(parts + handoff, first, type);
+                writeLayout(moved);
+            }
+            for (ui32 second = 0; second < first; ++second) {
+                for (bool swap : {false, true}) {
+                    auto moved = absent;
+                    moved.ClearItem(second, second, type);
+                    moved.AddItem(parts + swap, first, type);
+                    moved.AddItem(parts + !swap, second, type);
+                    writeLayout(moved);
+                }
+            }
+        }
+        // Match GeneratePossibleLayouts(type, 1): at most one part per handoff.
+        // The phantom oracle below counts distinct parts; with dense handoffs
+        // that can exceed the independent replicas used by PhantomCheck.
+        // Dense layouts have a separate DSProxyBlock82 regression.
+        ui64 seed = 0x82422026;
+        for (ui32 iteration = 0; iteration < 64; ++iteration) {
+            TSubgroupPartLayout layout;
+            auto next = [&] {
+                seed ^= seed << 13;
+                seed ^= seed >> 7;
+                seed ^= seed << 17;
+                return seed;
+            };
+            for (ui32 part = 0; part < parts; ++part) {
+                if (next() & 1) {
+                    layout.AddItem(part, part, type);
+                }
+            }
+            for (ui32 handoff = 0; handoff < type.Handoff(); ++handoff) {
+                const ui32 part = next() % (parts + 1);
+                if (part < parts) {
+                    layout.AddItem(parts + handoff, part, type);
+                }
+            }
+            writeLayout(layout);
+        }
     }
 };
 

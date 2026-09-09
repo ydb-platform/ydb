@@ -32,10 +32,12 @@ namespace NKikimr {
                 TReplQuoter::TPtr replPDiskReadQuoter,
                 TReplQuoter::TPtr replPDiskWriteQuoter,
                 TReplQuoter::TPtr replNodeRequestQuoter,
-                TReplQuoter::TPtr replNodeResponseQuoter)
+                TReplQuoter::TPtr replNodeResponseQuoter,
+                bool addHeader)
         : TBSProxyContext(vdiskCounters->GetSubgroup("subsystem", "memhull"))
         , VDiskActorId(vdiskActorId)
         , Top(std::move(top))
+        , EffectiveAddHeader(addHeader && Top->GType.CanUseLegacyHeader())
         , VDiskCounters(vdiskCounters)
         , VDiskMemCounters(vdiskCounters->GetSubgroup("subsystem", "memhull"))
         , Histograms(VDiskCounters, type)

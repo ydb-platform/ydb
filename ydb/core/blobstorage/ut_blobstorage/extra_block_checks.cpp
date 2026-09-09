@@ -1,10 +1,10 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 
 Y_UNIT_TEST_SUITE(ExtraBlockChecks) {
-    Y_UNIT_TEST(Basic) {
+    void RunBasic(TBlobStorageGroupType erasure) {
         TEnvironmentSetup env(TEnvironmentSetup::TSettings{
-            .NodeCount = 8,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .NodeCount = erasure.BlobSubgroupSize(),
+            .Erasure = erasure,
         });
 
         auto& runtime = env.Runtime;
@@ -66,4 +66,7 @@ Y_UNIT_TEST_SUITE(ExtraBlockChecks) {
             UNIT_ASSERT_VALUES_EQUAL(map[b], NKikimrProto::OK);
         }
     }
+
+    Y_UNIT_TEST(Basic) { RunBasic(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(BasicBlock82) { RunBasic(TBlobStorageGroupType::Erasure8Plus2Block); }
 }

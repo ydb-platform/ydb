@@ -66,7 +66,7 @@ namespace NKikimr {
 
             struct TPartSet {
                 const TLogoBlobID Id;
-                TStackVec<TRope, 8> Parts;
+                TStackVec<TRope, MaxTotalPartCount> Parts;
                 ui32 PartsMask = 0;
                 ui32 DisksRepliedOK = 0;
                 ui32 DisksRepliedNODATA = 0;
@@ -194,7 +194,7 @@ namespace NKikimr {
                         }
 
                         ui32 numSmallParts = 0, numMissingParts = 0, numHuge = 0;
-                        std::array<TRope, 8> partData; // part data for small blobs
+                        std::array<TRope, MaxTotalPartCount> partData; // part data for small blobs
                         NMatrix::TVectorType small(0, parts.GetSize());
 
                         for (ui8 i = parts.FirstPosition(); i != parts.GetSize(); i = parts.NextPosition(i)) {

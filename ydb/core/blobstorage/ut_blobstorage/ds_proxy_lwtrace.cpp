@@ -2,11 +2,11 @@
 
 
 Y_UNIT_TEST_SUITE(DsProxyLwTrace) {
-    Y_UNIT_TEST(TestGetDSProxyVDiskRequestDuration) {
+    void RunTestGetDSProxyVDiskRequestDuration(TBlobStorageGroupType::EErasureSpecies erasure) {
         TEnvironmentSetup env({
-            .NodeCount = 8,
+            .NodeCount = TBlobStorageGroupType(erasure).BlobSubgroupSize(),
             .VDiskReplPausedAtStart = false,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .Erasure = erasure,
         });
         env.CreateBoxAndPool(1, 1);
         env.Sim(TDuration::Minutes(1));
@@ -40,4 +40,7 @@ Y_UNIT_TEST_SUITE(DsProxyLwTrace) {
         });
         auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender, /* termOnCapture */ false);
     }
+
+    Y_UNIT_TEST(TestGetDSProxyVDiskRequestDuration) { RunTestGetDSProxyVDiskRequestDuration(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(TestGetDSProxyVDiskRequestDurationBlock82) { RunTestGetDSProxyVDiskRequestDuration(TBlobStorageGroupType::Erasure8Plus2Block); }
 }

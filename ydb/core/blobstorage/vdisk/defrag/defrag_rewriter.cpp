@@ -156,6 +156,7 @@ namespace NKikimr {
                 SelfVDiskId, true, nullptr, TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob,
                 TWriteSource::DefragRewrite);
             writeEvent->RewriteBlob = true;
+            writeEvent->RewriteHugeBlob = true;
             TEventsQuoter::QuoteMessage(DCtx->Throttler, std::make_unique<IEventHandle>(DCtx->SkeletonId, SelfId(), writeEvent.release()),
                 msgSize, DCtx->VCfg->DefragThrottlerBytesRate);
         }

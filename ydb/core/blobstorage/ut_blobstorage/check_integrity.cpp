@@ -13,7 +13,7 @@ struct TCheckIntegrityEnvBase {
 
     std::unique_ptr<IEventHandle> Result;
 
-    TCheckIntegrityEnvBase(TEnvironmentSetup::TSettings&& settings)
+    TCheckIntegrityEnvBase(TEnvironmentSetup::TSettings&& settings, ui32 crcMode = 0)
         : Env(std::move(settings))
     {
         Env.CreateBoxAndPool(1, 1);
@@ -26,6 +26,8 @@ struct TCheckIntegrityEnvBase {
         TString error;
         const bool success = TLogoBlobID::Parse(Id, "[72075186270680851:57:3905:6:786432:1024:0]", error);
         UNIT_ASSERT(success);
+        Id = TLogoBlobID(Id.TabletID(), Id.Generation(), Id.Step(), Id.Channel(),
+            Id.BlobSize(), Id.Cookie(), 0, crcMode);
 
         auto size = Id.BlobSize();
         Data.resize(size);
@@ -83,15 +85,15 @@ struct TCheckIntegrityEnvBase {
     }
 };
 
-struct TCheckIntegrityEnvBlock42 : public TCheckIntegrityEnvBase {
+struct TCheckIntegrityEnvParityBlock : public TCheckIntegrityEnvBase {
     std::vector<TString> Parts;
     std::vector<TString> ErrorParts;
 
-    TCheckIntegrityEnvBlock42()
+    TCheckIntegrityEnvParityBlock(TErasureType::EErasureSpecies species, ui32 crcModeRaw = 0)
         : TCheckIntegrityEnvBase(TEnvironmentSetup::TSettings{
-            .NodeCount = 8,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-        })
+            .NodeCount = TBlobStorageGroupType(species).BlobSubgroupSize(),
+            .Erasure = species,
+        }, crcModeRaw)
     {
         auto crcMode = (TErasureType::ECrcMode)Id.CrcMode();
 
@@ -128,95 +130,116 @@ struct TCheckIntegrityEnvMirror3of4 : public TCheckIntegrityEnvBase {
     {}
 };
 
-Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
+namespace NCheckIntegrityParityBlock {
+    void PlacementOk(TErasureType::EErasureSpecies species, ui32 crcMode = 0) {
+        TCheckIntegrityEnvParityBlock check(species, crcMode);
+        const ui32 total = check.Info->Type.TotalPartCount();
+        const ui32 required = check.Info->Type.DataParts();
+        Y_UNUSED(total);
+        Y_UNUSED(required);
 
-    Y_UNIT_TEST(PlacementOk) {
-        TCheckIntegrityEnvBlock42 check;
-
-        for (ui32 i = 0; i < 6; ++i) {
+        for (ui32 i = 0; i < total; ++i) {
             check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
         }
 
         auto result = check.Request();
         UNIT_ASSERT(result->Status == NKikimrProto::OK);
         UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
-    }
+        }
+    void PlacementOkHandoff(TErasureType::EErasureSpecies species, ui32 crcMode = 0) {
+        TCheckIntegrityEnvParityBlock check(species, crcMode);
+        const ui32 total = check.Info->Type.TotalPartCount();
+        const ui32 required = check.Info->Type.DataParts();
+        Y_UNUSED(total);
+        Y_UNUSED(required);
 
-    Y_UNIT_TEST(PlacementOkHandoff) {
-        TCheckIntegrityEnvBlock42 check;
-
-        for (ui32 i = 2; i < 6; ++i) {
+        for (ui32 i = 2; i < total; ++i) {
             check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
         }
-        check.Env.PutBlob(check.VDisks[6], TLogoBlobID(check.Id, 1), check.Parts[0]);
-        check.Env.PutBlob(check.VDisks[7], TLogoBlobID(check.Id, 2), check.Parts[1]);
+        check.Env.PutBlob(check.VDisks[total], TLogoBlobID(check.Id, 1), check.Parts[0]);
+        check.Env.PutBlob(check.VDisks[(total + 1)], TLogoBlobID(check.Id, 2), check.Parts[1]);
 
         auto result = check.Request();
         UNIT_ASSERT(result->Status == NKikimrProto::OK);
         UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
-    }
+        }
+    void PlacementMissingParts(TErasureType::EErasureSpecies species, ui32 crcMode = 0) {
+        TCheckIntegrityEnvParityBlock check(species, crcMode);
+        const ui32 total = check.Info->Type.TotalPartCount();
+        const ui32 required = check.Info->Type.DataParts();
+        Y_UNUSED(total);
+        Y_UNUSED(required);
 
-    Y_UNIT_TEST(PlacementMissingParts) {
-        TCheckIntegrityEnvBlock42 check;
-
-        for (ui32 i = 2; i < 6; ++i) {
+        for (ui32 i = 2; i < total; ++i) {
             check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
         }
 
         auto result = check.Request();
         UNIT_ASSERT(result->Status == NKikimrProto::OK);
         UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_BLOB_IS_RECOVERABLE);
-    }
+        }
+    void PlacementBlobIsLost(TErasureType::EErasureSpecies species, ui32 crcMode = 0) {
+        TCheckIntegrityEnvParityBlock check(species, crcMode);
+        const ui32 total = check.Info->Type.TotalPartCount();
+        const ui32 required = check.Info->Type.DataParts();
+        Y_UNUSED(total);
+        Y_UNUSED(required);
 
-    Y_UNIT_TEST(PlacementBlobIsLost) {
-        TCheckIntegrityEnvBlock42 check;
-
-        for (ui32 i = 0; i < 3; ++i) {
+        for (ui32 i = 0; i < (required - 1); ++i) {
             check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
         }
 
         auto result = check.Request();
         UNIT_ASSERT(result->Status == NKikimrProto::OK);
         UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_BLOB_IS_LOST);
-    }
+        }
+    void PlacementWrongDisks(TErasureType::EErasureSpecies species, ui32 crcMode = 0) {
+        TCheckIntegrityEnvParityBlock check(species, crcMode);
+        const ui32 total = check.Info->Type.TotalPartCount();
+        const ui32 required = check.Info->Type.DataParts();
+        Y_UNUSED(total);
+        Y_UNUSED(required);
 
-    Y_UNIT_TEST(PlacementWrongDisks) {
-        TCheckIntegrityEnvBlock42 check;
-
-        for (ui32 i = 2; i < 6; ++i) {
+        for (ui32 i = 2; i < total; ++i) {
             check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
         }
-        check.Env.PutBlob(check.VDisks[6], TLogoBlobID(check.Id, 1), check.Parts[0]);
-        check.Env.PutBlob(check.VDisks[6], TLogoBlobID(check.Id, 2), check.Parts[1]);
+        check.Env.PutBlob(check.VDisks[total], TLogoBlobID(check.Id, 1), check.Parts[0]);
+        check.Env.PutBlob(check.VDisks[total], TLogoBlobID(check.Id, 2), check.Parts[1]);
 
         auto result = check.Request();
         UNIT_ASSERT(result->Status == NKikimrProto::OK);
         UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_BLOB_IS_RECOVERABLE);
-    }
+        }
+    void PlacementAllOnHandoff(TErasureType::EErasureSpecies species, ui32 crcMode = 0) {
+        TCheckIntegrityEnvParityBlock check(species, crcMode);
+        const ui32 total = check.Info->Type.TotalPartCount();
+        const ui32 required = check.Info->Type.DataParts();
+        Y_UNUSED(total);
+        Y_UNUSED(required);
 
-    Y_UNIT_TEST(PlacementAllOnHandoff) {
-        TCheckIntegrityEnvBlock42 check;
-
-        for (ui32 i = 0; i < 6; ++i) {
-            check.Env.PutBlob(check.VDisks[6], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
+        for (ui32 i = 0; i < total; ++i) {
+            check.Env.PutBlob(check.VDisks[total], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
         }
 
         auto result = check.Request();
         UNIT_ASSERT(result->Status == NKikimrProto::OK);
         UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_BLOB_IS_RECOVERABLE);
-    }
+        }
+    void PlacementDisintegrated(TErasureType::EErasureSpecies species, ui32 crcMode = 0) {
+        TCheckIntegrityEnvParityBlock check(species, crcMode);
+        const ui32 total = check.Info->Type.TotalPartCount();
+        const ui32 required = check.Info->Type.DataParts();
+        Y_UNUSED(total);
+        Y_UNUSED(required);
 
-    Y_UNIT_TEST(PlacementDisintegrated) {
-        TCheckIntegrityEnvBlock42 check;
-
-        for (ui32 i = 0; i < 6; ++i) {
+        for (ui32 i = 0; i < total; ++i) {
             check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
         }
 
         THashSet<TVDiskID> errorDisks;
-        errorDisks.insert(check.VDisks[5]);
-        errorDisks.insert(check.VDisks[6]);
-        errorDisks.insert(check.VDisks[7]);
+        errorDisks.insert(check.VDisks[(total - 1)]);
+        errorDisks.insert(check.VDisks[total]);
+        errorDisks.insert(check.VDisks[(total + 1)]);
 
         check.Env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
             return check.InjectError(NKikimrProto::ERROR, errorDisks, ev);
@@ -225,18 +248,21 @@ Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
         auto result = check.Request();
         UNIT_ASSERT(result->Status == NKikimrProto::ERROR);
         Cerr << result->ErrorReason << Endl;
-    }
+        }
+    void PlacementOkWithErrors(TErasureType::EErasureSpecies species, ui32 crcMode = 0) {
+        TCheckIntegrityEnvParityBlock check(species, crcMode);
+        const ui32 total = check.Info->Type.TotalPartCount();
+        const ui32 required = check.Info->Type.DataParts();
+        Y_UNUSED(total);
+        Y_UNUSED(required);
 
-    Y_UNIT_TEST(PlacementOkWithErrors) {
-        TCheckIntegrityEnvBlock42 check;
-
-        for (ui32 i = 0; i < 6; ++i) {
+        for (ui32 i = 0; i < total; ++i) {
             check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
         }
 
         THashSet<TVDiskID> errorDisks;
-        errorDisks.insert(check.VDisks[6]);
-        errorDisks.insert(check.VDisks[7]);
+        errorDisks.insert(check.VDisks[total]);
+        errorDisks.insert(check.VDisks[(total + 1)]);
 
         check.Env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
             return check.InjectError(NKikimrProto::ERROR, errorDisks, ev);
@@ -245,12 +271,15 @@ Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
         auto result = check.Request();
         UNIT_ASSERT(result->Status == NKikimrProto::OK);
         UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
-    }
+        }
+    void PlacementWithErrorsOnBlobDisks(TErasureType::EErasureSpecies species, ui32 crcMode = 0) {
+        TCheckIntegrityEnvParityBlock check(species, crcMode);
+        const ui32 total = check.Info->Type.TotalPartCount();
+        const ui32 required = check.Info->Type.DataParts();
+        Y_UNUSED(total);
+        Y_UNUSED(required);
 
-    Y_UNIT_TEST(PlacementWithErrorsOnBlobDisks) {
-        TCheckIntegrityEnvBlock42 check;
-
-        for (ui32 i = 0; i < 6; ++i) {
+        for (ui32 i = 0; i < total; ++i) {
             check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
         }
 
@@ -265,12 +294,15 @@ Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
         auto result = check.Request();
         UNIT_ASSERT(result->Status == NKikimrProto::OK);
         UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_BLOB_IS_RECOVERABLE);
-    }
+        }
+    void PlacementStatusUnknown(TErasureType::EErasureSpecies species, ui32 crcMode = 0) {
+        TCheckIntegrityEnvParityBlock check(species, crcMode);
+        const ui32 total = check.Info->Type.TotalPartCount();
+        const ui32 required = check.Info->Type.DataParts();
+        Y_UNUSED(total);
+        Y_UNUSED(required);
 
-    Y_UNIT_TEST(PlacementStatusUnknown) {
-        TCheckIntegrityEnvBlock42 check;
-
-        for (ui32 i = 0; i < 5; ++i) {
+        for (ui32 i = 0; i < (total - 1); ++i) {
             check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
         }
 
@@ -285,12 +317,15 @@ Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
         auto result = check.Request();
         UNIT_ASSERT(result->Status == NKikimrProto::OK);
         UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_UNKNOWN);
-    }
+        }
+    void DataOk(TErasureType::EErasureSpecies species, ui32 crcMode = 0) {
+        TCheckIntegrityEnvParityBlock check(species, crcMode);
+        const ui32 total = check.Info->Type.TotalPartCount();
+        const ui32 required = check.Info->Type.DataParts();
+        Y_UNUSED(total);
+        Y_UNUSED(required);
 
-    Y_UNIT_TEST(DataOk) {
-        TCheckIntegrityEnvBlock42 check;
-
-        for (ui32 i = 0; i < 6; ++i) {
+        for (ui32 i = 0; i < total; ++i) {
             check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
         }
 
@@ -300,16 +335,19 @@ Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
         UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_OK);
 
         Cerr << result->DataInfo << Endl;
-    }
+        }
+    void DataOkAdditionalEqualParts(TErasureType::EErasureSpecies species, ui32 crcMode = 0) {
+        TCheckIntegrityEnvParityBlock check(species, crcMode);
+        const ui32 total = check.Info->Type.TotalPartCount();
+        const ui32 required = check.Info->Type.DataParts();
+        Y_UNUSED(total);
+        Y_UNUSED(required);
 
-    Y_UNIT_TEST(DataOkAdditionalEqualParts) {
-        TCheckIntegrityEnvBlock42 check;
-
-        for (ui32 i = 0; i < 6; ++i) {
+        for (ui32 i = 0; i < total; ++i) {
             check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
         }
-        check.Env.PutBlob(check.VDisks[6], TLogoBlobID(check.Id, 1), check.Parts[0]);
-        check.Env.PutBlob(check.VDisks[7], TLogoBlobID(check.Id, 2), check.Parts[1]);
+        check.Env.PutBlob(check.VDisks[total], TLogoBlobID(check.Id, 1), check.Parts[0]);
+        check.Env.PutBlob(check.VDisks[(total + 1)], TLogoBlobID(check.Id, 2), check.Parts[1]);
 
         auto result = check.Request();
         UNIT_ASSERT(result->Status == NKikimrProto::OK);
@@ -317,16 +355,19 @@ Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
         UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_OK);
 
         Cerr << result->DataInfo << Endl;
-    }
+        }
+    void DataErrorAdditionalUnequalParts(TErasureType::EErasureSpecies species, ui32 crcMode = 0) {
+        TCheckIntegrityEnvParityBlock check(species, crcMode);
+        const ui32 total = check.Info->Type.TotalPartCount();
+        const ui32 required = check.Info->Type.DataParts();
+        Y_UNUSED(total);
+        Y_UNUSED(required);
 
-    Y_UNIT_TEST(DataErrorAdditionalUnequalParts) {
-        TCheckIntegrityEnvBlock42 check;
-
-        for (ui32 i = 0; i < 6; ++i) {
+        for (ui32 i = 0; i < total; ++i) {
             check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
         }
-        check.Env.PutBlob(check.VDisks[6], TLogoBlobID(check.Id, 1), check.ErrorParts[0]);
-        check.Env.PutBlob(check.VDisks[7], TLogoBlobID(check.Id, 1), check.ErrorParts[1]);
+        check.Env.PutBlob(check.VDisks[total], TLogoBlobID(check.Id, 1), check.ErrorParts[0]);
+        check.Env.PutBlob(check.VDisks[(total + 1)], TLogoBlobID(check.Id, 1), check.ErrorParts[1]);
 
         auto result = check.Request();
         UNIT_ASSERT(result->Status == NKikimrProto::OK);
@@ -334,15 +375,18 @@ Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
         UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR);
 
         Cerr << result->DataInfo << Endl;
-    }
+        }
+    void DataErrorSixPartsOneBroken(TErasureType::EErasureSpecies species, ui32 crcMode = 0) {
+        TCheckIntegrityEnvParityBlock check(species, crcMode);
+        const ui32 total = check.Info->Type.TotalPartCount();
+        const ui32 required = check.Info->Type.DataParts();
+        Y_UNUSED(total);
+        Y_UNUSED(required);
 
-    Y_UNIT_TEST(DataErrorSixPartsOneBroken) {
-        TCheckIntegrityEnvBlock42 check;
-
-        for (ui32 i = 0; i < 5; ++i) {
+        for (ui32 i = 0; i < (total - 1); ++i) {
             check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
         }
-        check.Env.PutBlob(check.VDisks[5], TLogoBlobID(check.Id, 6), check.ErrorParts[5]);
+        check.Env.PutBlob(check.VDisks[(total - 1)], TLogoBlobID(check.Id, total), check.ErrorParts[(total - 1)]);
 
         auto result = check.Request();
         UNIT_ASSERT(result->Status == NKikimrProto::OK);
@@ -350,16 +394,19 @@ Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
         UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR);
 
         Cerr << result->DataInfo << Endl;
-    }
+        }
+    void DataErrorSixPartsTwoBroken(TErasureType::EErasureSpecies species, ui32 crcMode = 0) {
+        TCheckIntegrityEnvParityBlock check(species, crcMode);
+        const ui32 total = check.Info->Type.TotalPartCount();
+        const ui32 required = check.Info->Type.DataParts();
+        Y_UNUSED(total);
+        Y_UNUSED(required);
 
-    Y_UNIT_TEST(DataErrorSixPartsTwoBroken) {
-        TCheckIntegrityEnvBlock42 check;
-
-        for (ui32 i = 0; i < 4; ++i) {
+        for (ui32 i = 0; i < required; ++i) {
             check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
         }
-        check.Env.PutBlob(check.VDisks[4], TLogoBlobID(check.Id, 5), check.ErrorParts[4]);
-        check.Env.PutBlob(check.VDisks[5], TLogoBlobID(check.Id, 6), check.ErrorParts[5]);
+        check.Env.PutBlob(check.VDisks[required], TLogoBlobID(check.Id, (total - 1)), check.ErrorParts[required]);
+        check.Env.PutBlob(check.VDisks[(total - 1)], TLogoBlobID(check.Id, total), check.ErrorParts[(total - 1)]);
 
         auto result = check.Request();
         UNIT_ASSERT(result->Status == NKikimrProto::OK);
@@ -367,12 +414,15 @@ Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
         UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR);
 
         Cerr << result->DataInfo << Endl;
-    }
+        }
+    void DataOkErasureFiveParts(TErasureType::EErasureSpecies species, ui32 crcMode = 0) {
+        TCheckIntegrityEnvParityBlock check(species, crcMode);
+        const ui32 total = check.Info->Type.TotalPartCount();
+        const ui32 required = check.Info->Type.DataParts();
+        Y_UNUSED(total);
+        Y_UNUSED(required);
 
-    Y_UNIT_TEST(DataOkErasureFiveParts) {
-        TCheckIntegrityEnvBlock42 check;
-
-        for (ui32 i = 0; i < 5; ++i) {
+        for (ui32 i = 0; i < (total - 1); ++i) {
             check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
         }
 
@@ -382,15 +432,18 @@ Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
         UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_OK);
 
         Cerr << result->DataInfo << Endl;
-    }
+        }
+    void DataErrorFivePartsOneBroken(TErasureType::EErasureSpecies species, ui32 crcMode = 0) {
+        TCheckIntegrityEnvParityBlock check(species, crcMode);
+        const ui32 total = check.Info->Type.TotalPartCount();
+        const ui32 required = check.Info->Type.DataParts();
+        Y_UNUSED(total);
+        Y_UNUSED(required);
 
-    Y_UNIT_TEST(DataErrorFivePartsOneBroken) {
-        TCheckIntegrityEnvBlock42 check;
-
-        for (ui32 i = 0; i < 4; ++i) {
+        for (ui32 i = 0; i < required; ++i) {
             check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
         }
-        check.Env.PutBlob(check.VDisks[4], TLogoBlobID(check.Id, 5), check.ErrorParts[4]);
+        check.Env.PutBlob(check.VDisks[required], TLogoBlobID(check.Id, (total - 1)), check.ErrorParts[required]);
 
         auto result = check.Request();
         UNIT_ASSERT(result->Status == NKikimrProto::OK);
@@ -398,16 +451,19 @@ Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
         UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR);
 
         Cerr << result->DataInfo << Endl;
-    }
+        }
+    void DataErrorHeavySixPartsWithManyBroken(TErasureType::EErasureSpecies species, ui32 crcMode = 0) {
+        TCheckIntegrityEnvParityBlock check(species, crcMode);
+        const ui32 total = check.Info->Type.TotalPartCount();
+        const ui32 required = check.Info->Type.DataParts();
+        Y_UNUSED(total);
+        Y_UNUSED(required);
 
-    Y_UNIT_TEST(DataErrorHeavySixPartsWithManyBroken) {
-        TCheckIntegrityEnvBlock42 check;
-
-        for (ui32 i = 0; i < 6; ++i) {
+        for (ui32 i = 0; i < total; ++i) {
             check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
         }
-        for (ui32 i = 0; i < 6; ++i) {
-            check.Env.PutBlob(check.VDisks[6], TLogoBlobID(check.Id, i + 1), check.ErrorParts[i]);
+        for (ui32 i = 0; i < total; ++i) {
+            check.Env.PutBlob(check.VDisks[total], TLogoBlobID(check.Id, i + 1), check.ErrorParts[i]);
         }
 
         auto result = check.Request();
@@ -416,12 +472,15 @@ Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
         UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR);
 
         Cerr << result->DataInfo << Endl;
-    }
+        }
+    void DataStatusUnknown(TErasureType::EErasureSpecies species, ui32 crcMode = 0) {
+        TCheckIntegrityEnvParityBlock check(species, crcMode);
+        const ui32 total = check.Info->Type.TotalPartCount();
+        const ui32 required = check.Info->Type.DataParts();
+        Y_UNUSED(total);
+        Y_UNUSED(required);
 
-    Y_UNIT_TEST(DataStatusUnknown) {
-        TCheckIntegrityEnvBlock42 check;
-
-        for (ui32 i = 0; i < 5; ++i) {
+        for (ui32 i = 0; i < (total - 1); ++i) {
             check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
         }
 
@@ -439,6 +498,92 @@ Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
         UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_UNKNOWN);
 
         Cerr << result->DataInfo << Endl;
+        }
+}
+
+Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
+    Y_UNIT_TEST(PlacementOk) { NCheckIntegrityParityBlock::PlacementOk(TErasureType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(PlacementOkHandoff) { NCheckIntegrityParityBlock::PlacementOkHandoff(TErasureType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(PlacementMissingParts) { NCheckIntegrityParityBlock::PlacementMissingParts(TErasureType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(PlacementBlobIsLost) { NCheckIntegrityParityBlock::PlacementBlobIsLost(TErasureType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(PlacementWrongDisks) { NCheckIntegrityParityBlock::PlacementWrongDisks(TErasureType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(PlacementAllOnHandoff) { NCheckIntegrityParityBlock::PlacementAllOnHandoff(TErasureType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(PlacementDisintegrated) { NCheckIntegrityParityBlock::PlacementDisintegrated(TErasureType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(PlacementOkWithErrors) { NCheckIntegrityParityBlock::PlacementOkWithErrors(TErasureType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(PlacementWithErrorsOnBlobDisks) { NCheckIntegrityParityBlock::PlacementWithErrorsOnBlobDisks(TErasureType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(PlacementStatusUnknown) { NCheckIntegrityParityBlock::PlacementStatusUnknown(TErasureType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(DataOk) { NCheckIntegrityParityBlock::DataOk(TErasureType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(DataOkAdditionalEqualParts) { NCheckIntegrityParityBlock::DataOkAdditionalEqualParts(TErasureType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(DataErrorAdditionalUnequalParts) { NCheckIntegrityParityBlock::DataErrorAdditionalUnequalParts(TErasureType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(DataErrorSixPartsOneBroken) { NCheckIntegrityParityBlock::DataErrorSixPartsOneBroken(TErasureType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(DataErrorSixPartsTwoBroken) { NCheckIntegrityParityBlock::DataErrorSixPartsTwoBroken(TErasureType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(DataOkErasureFiveParts) { NCheckIntegrityParityBlock::DataOkErasureFiveParts(TErasureType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(DataErrorFivePartsOneBroken) { NCheckIntegrityParityBlock::DataErrorFivePartsOneBroken(TErasureType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(DataErrorHeavySixPartsWithManyBroken) { NCheckIntegrityParityBlock::DataErrorHeavySixPartsWithManyBroken(TErasureType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(DataStatusUnknown) { NCheckIntegrityParityBlock::DataStatusUnknown(TErasureType::Erasure4Plus2Block); }
+}
+
+Y_UNIT_TEST_SUITE(CheckIntegrityBlock82) {
+    Y_UNIT_TEST(MalformedPartReply) {
+        for (auto crc : {TErasureType::CrcModeNone, TErasureType::CrcModeWholePart}) {
+            TCheckIntegrityEnvParityBlock check(TErasureType::Erasure8Plus2Block, crc);
+            for (ui32 part = 0; part < check.Parts.size(); ++part) {
+                check.Env.PutBlob(check.VDisks[part], TLogoBlobID(check.Id, part + 1), check.Parts[part]);
+            }
+            for (ui32 partId : {1u, 8u, 9u, 10u}) {
+                for (ui32 badSize : {1u, ui32(check.Parts[partId - 1].size() - 1), ui32(check.Parts[partId - 1].size() + 1)}) {
+                    bool injected = false;
+                    check.Env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+                        if (event->GetTypeRewrite() == TEvBlobStorage::EvVGetResult) {
+                            auto* reply = event->Get<TEvBlobStorage::TEvVGetResult>();
+                            for (auto& item : *reply->Record.MutableResult()) {
+                                if (item.GetStatus() == NKikimrProto::OK &&
+                                        LogoBlobIDFromLogoBlobID(item.GetBlobID()) == TLogoBlobID(check.Id, partId)) {
+                                    item.ClearPayloadId();
+                                    item.SetBufferData(TString(badSize, 'x'));
+                                    item.SetSize(badSize);
+                                    injected = true;
+                                }
+                            }
+                        }
+                        return true;
+                    };
+                    const auto* result = check.Request();
+                    UNIT_ASSERT(injected);
+                    UNIT_ASSERT_VALUES_EQUAL(result->Status, NKikimrProto::OK);
+                    UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR);
+                    check.Env.Runtime->FilterFunction = {};
+                }
+            }
+        }
+    }
+    Y_UNIT_TEST(PlacementOk) { NCheckIntegrityParityBlock::PlacementOk(TErasureType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(PlacementOkHandoff) { NCheckIntegrityParityBlock::PlacementOkHandoff(TErasureType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(PlacementMissingParts) { NCheckIntegrityParityBlock::PlacementMissingParts(TErasureType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(PlacementBlobIsLost) { NCheckIntegrityParityBlock::PlacementBlobIsLost(TErasureType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(PlacementWrongDisks) { NCheckIntegrityParityBlock::PlacementWrongDisks(TErasureType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(PlacementAllOnHandoff) { NCheckIntegrityParityBlock::PlacementAllOnHandoff(TErasureType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(PlacementDisintegrated) { NCheckIntegrityParityBlock::PlacementDisintegrated(TErasureType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(PlacementOkWithErrors) { NCheckIntegrityParityBlock::PlacementOkWithErrors(TErasureType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(PlacementWithErrorsOnBlobDisks) { NCheckIntegrityParityBlock::PlacementWithErrorsOnBlobDisks(TErasureType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(PlacementStatusUnknown) { NCheckIntegrityParityBlock::PlacementStatusUnknown(TErasureType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(DataOk) { NCheckIntegrityParityBlock::DataOk(TErasureType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(DataOkAdditionalEqualParts) { NCheckIntegrityParityBlock::DataOkAdditionalEqualParts(TErasureType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(DataErrorAdditionalUnequalParts) { NCheckIntegrityParityBlock::DataErrorAdditionalUnequalParts(TErasureType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(DataErrorSixPartsOneBroken) { NCheckIntegrityParityBlock::DataErrorSixPartsOneBroken(TErasureType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(DataErrorSixPartsTwoBroken) { NCheckIntegrityParityBlock::DataErrorSixPartsTwoBroken(TErasureType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(DataOkErasureFiveParts) { NCheckIntegrityParityBlock::DataOkErasureFiveParts(TErasureType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(DataErrorFivePartsOneBroken) { NCheckIntegrityParityBlock::DataErrorFivePartsOneBroken(TErasureType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(DataErrorHeavySixPartsWithManyBroken) { NCheckIntegrityParityBlock::DataErrorHeavySixPartsWithManyBroken(TErasureType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(DataStatusUnknown) { NCheckIntegrityParityBlock::DataStatusUnknown(TErasureType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(WholePartCRC) {
+        NCheckIntegrityParityBlock::DataOk(TErasureType::Erasure8Plus2Block, TErasureType::CrcModeWholePart);
+        NCheckIntegrityParityBlock::DataOkAdditionalEqualParts(TErasureType::Erasure8Plus2Block, TErasureType::CrcModeWholePart);
+        NCheckIntegrityParityBlock::DataErrorAdditionalUnequalParts(TErasureType::Erasure8Plus2Block, TErasureType::CrcModeWholePart);
+        NCheckIntegrityParityBlock::DataErrorSixPartsOneBroken(TErasureType::Erasure8Plus2Block, TErasureType::CrcModeWholePart);
+        NCheckIntegrityParityBlock::DataErrorSixPartsTwoBroken(TErasureType::Erasure8Plus2Block, TErasureType::CrcModeWholePart);
+        NCheckIntegrityParityBlock::DataOkErasureFiveParts(TErasureType::Erasure8Plus2Block, TErasureType::CrcModeWholePart);
+        NCheckIntegrityParityBlock::DataErrorFivePartsOneBroken(TErasureType::Erasure8Plus2Block, TErasureType::CrcModeWholePart);
     }
 }
 

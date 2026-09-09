@@ -20,6 +20,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    dsproxy_block82_ut.cpp
     dsproxy_put_ut.cpp
     dsproxy_quorum_tracker_ut.cpp
     dsproxy_sequence_ut.cpp

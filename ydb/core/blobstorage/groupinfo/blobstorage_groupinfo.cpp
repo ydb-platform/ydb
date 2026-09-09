@@ -560,7 +560,6 @@ TBlobStorageGroupInfo::IQuorumChecker *TBlobStorageGroupInfo::TTopology::CreateQ
 TBlobStorageGroupInfo::IDataIntegrityChecker*
 TBlobStorageGroupInfo::TTopology::CreateDataIntegrityChecker(const TTopology* topology) {
     switch (topology->GType.GetErasure()) {
-        case TBlobStorageGroupType::Erasure8Plus2Block:
         case TBlobStorageGroupType::ErasureNone:
         case TBlobStorageGroupType::ErasureMirror3:
         case TBlobStorageGroupType::Erasure3Plus1Block:
@@ -580,7 +579,8 @@ TBlobStorageGroupInfo::TTopology::CreateDataIntegrityChecker(const TTopology* to
             return new TDataIntegrityCheckerTrivial(topology);
 
         case TBlobStorageGroupType::Erasure4Plus2Block:
-            return new TDataIntegrityCheckerBlock42(topology);
+        case TBlobStorageGroupType::Erasure8Plus2Block:
+            return new TDataIntegrityCheckerParityBlock(topology);
 
         case TBlobStorageGroupType::ErasureMirror3dc:
             return new TDataIntegrityCheckerMirror3dc(topology);

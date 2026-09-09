@@ -48,6 +48,7 @@ struct TTestArgs {
         }
         switch (GType.GetErasure()) {
         case TErasureType::Erasure4Plus2Block:
+        case TErasureType::Erasure8Plus2Block:
             for (ui64 idx = 0; idx < GType.TotalPartCount(); ++idx) {
                 PartPlacement[idx].push_back(idx + 1);
             }
@@ -327,6 +328,10 @@ void ConductGet(TTestBasicRuntime &runtime, const TTestArgs &args, ENaivePatchCa
     TEvBlobStorage::TEvGet *get = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGet>(handle);
     UNIT_ASSERT_VALUES_EQUAL(get->QuerySize, 1);
     UNIT_ASSERT_VALUES_EQUAL(get->Queries[0].Id, args.OriginalId);
+    UNIT_ASSERT_VALUES_EQUAL(get->Queries[0].Shift, 0);
+    UNIT_ASSERT_VALUES_EQUAL(get->Queries[0].Size, args.OriginalId.BlobSize());
+    UNIT_ASSERT(get->Deadline > runtime.GetCurrentTime());
+    UNIT_ASSERT(get->Deadline != TInstant::Max());
     UNIT_ASSERT_VALUES_EQUAL(handle->Cookie, args.PatchedId.Hash());
 
     std::unique_ptr<TEvBlobStorage::TEvGetResult> getResult;
@@ -367,6 +372,8 @@ void ConductPut(TTestBasicRuntime &runtime, const TTestArgs &args, ENaivePatchCa
     TAutoPtr<IEventHandle> handle;
     TEvBlobStorage::TEvPut *put = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvPut>(handle);
     UNIT_ASSERT_VALUES_EQUAL(put->Id, args.PatchedId);
+    UNIT_ASSERT(put->Deadline > runtime.GetCurrentTime());
+    UNIT_ASSERT(put->Deadline != TInstant::Max());
     UNIT_ASSERT_VALUES_EQUAL(handle->Cookie, args.OriginalId.Hash());
     TString patchedBuffer = MakePatchedBuffer(args);
     UNIT_ASSERT_VALUES_EQUAL(put->Buffer.ExtractUnderlyingContainerOrCopy<TString>(), patchedBuffer);
@@ -485,6 +492,7 @@ void ConductVMovedPatch(TTestBasicRuntime &runtime, const TTestArgs &args, EMove
     UNIT_ASSERT(args.OriginalId == LogoBlobIDFromLogoBlobID(vPatchRecord.GetOriginalBlobId()));
     UNIT_ASSERT(args.PatchedId == LogoBlobIDFromLogoBlobID(vPatchRecord.GetPatchedBlobId()));
     UNIT_ASSERT_VALUES_EQUAL(vPatchRecord.DiffsSize(), args.Diffs.size());
+    UNIT_ASSERT(vPatchRecord.GetMsgQoS().GetDeadlineSeconds() > runtime.GetCurrentTime().Seconds());
     for (ui32 diffIdx = 0; diffIdx < args.Diffs.size(); ++diffIdx) {
         UNIT_ASSERT_VALUES_EQUAL(vPatchRecord.GetDiffs(diffIdx).GetOffset(), args.Diffs[diffIdx].Offset);
         UNIT_ASSERT_EQUAL(vPatchRecord.GetDiffs(diffIdx).GetBuffer(), args.Diffs[diffIdx].Buffer);
@@ -682,6 +690,16 @@ void RunGeneralTest(void(*runner)(TTestBasicRuntime &runtime, const TTestArgs &a
 
     Y_UNIT_TEST_PATCH_PACK(ErasureNone)
     Y_UNIT_TEST_PATCH_PACK(Erasure4Plus2Block)
+    Y_UNIT_TEST(NaiveOk_Block82) { RunGeneralTest(RunNaivePatchTest, TErasureType::Erasure8Plus2Block, ENaivePatchCase::Ok); }
+    Y_UNIT_TEST(NaiveErrorOnGetItem_Block82) { RunGeneralTest(RunNaivePatchTest, TErasureType::Erasure8Plus2Block, ENaivePatchCase::ErrorOnGetItem); }
+    Y_UNIT_TEST(NaiveErrorOnGet_Block82) { RunGeneralTest(RunNaivePatchTest, TErasureType::Erasure8Plus2Block, ENaivePatchCase::ErrorOnGet); }
+    Y_UNIT_TEST(NaiveErrorOnPut_Block82) { RunGeneralTest(RunNaivePatchTest, TErasureType::Erasure8Plus2Block, ENaivePatchCase::ErrorOnPut); }
+    Y_UNIT_TEST(MovedOk_Block82) { RunGeneralTest(RunMovedPatchTest, TErasureType::Erasure8Plus2Block, EMovedPatchCase::Ok); }
+    Y_UNIT_TEST(MovedError_Block82) { RunGeneralTest(RunMovedPatchTest, TErasureType::Erasure8Plus2Block, EMovedPatchCase::Error); }
+    Y_UNIT_TEST(SecuredOk_Block82) { RunGeneralTest(RunSecuredPatchTest, TErasureType::Erasure8Plus2Block, ENaivePatchCase::Ok); }
+    Y_UNIT_TEST(SecuredErrorOnGetItem_Block82) { RunGeneralTest(RunSecuredPatchTest, TErasureType::Erasure8Plus2Block, ENaivePatchCase::ErrorOnGetItem); }
+    Y_UNIT_TEST(SecuredErrorOnGet_Block82) { RunGeneralTest(RunSecuredPatchTest, TErasureType::Erasure8Plus2Block, ENaivePatchCase::ErrorOnGet); }
+    Y_UNIT_TEST(SecuredErrorOnPut_Block82) { RunGeneralTest(RunSecuredPatchTest, TErasureType::Erasure8Plus2Block, ENaivePatchCase::ErrorOnPut); }
     Y_UNIT_TEST_PATCH_PACK(ErasureMirror3dc)
 
 }
@@ -699,19 +717,19 @@ void MakeFaultToleranceArgsForBlock4Plus2(TTestArgs &args, i64 wiped1, i64 wiped
         args.PartPlacement[wiped2].clear();
     }
     if (handoff1 > 0) {
-        args.PartPlacement[6].push_back(handoff1);
+        args.PartPlacement[args.GType.TotalPartCount()].push_back(handoff1);
     }
     if (handoff2 > 0) {
-        args.PartPlacement[7].push_back(handoff2);
+        args.PartPlacement[args.GType.TotalPartCount() + 1].push_back(handoff2);
     }
     if (extraHandoff < 0) {
-        args.PartPlacement[6].push_back(-extraHandoff);
+        args.PartPlacement[args.GType.TotalPartCount()].push_back(-extraHandoff);
     }
     if (extraHandoff > 0) {
-        args.PartPlacement[7].push_back(extraHandoff);
+        args.PartPlacement[args.GType.TotalPartCount() + 1].push_back(extraHandoff);
     }
-    for (ui32 bit = 1, idx = 0; bit < errorMask; idx++, bit <<= 1) {
-        args.ErrorVDisks[idx] = (errorMask & bit);
+    for (ui32 idx = 0; idx < args.ErrorVDisks.size(); ++idx) {
+        args.ErrorVDisks[idx] = (errorMask >> idx) & 1;
     }
 }
 
@@ -848,6 +866,29 @@ Y_UNIT_TEST_SUITE(TDSProxyFaultTolerancePatchTest) {
         }
     }
 
+
+    Y_UNIT_TEST(Block82) {
+        TTestArgs args;
+        args.MakeDefault(TBlobStorageGroupType::Erasure8Plus2Block);
+        TTestBasicRuntime runtime;
+        SetupRuntime(runtime);
+        TVector<ui32> masks{0, 7, 0x301, 0xc01};
+        for (ui32 i = 0; i < 12; ++i) {
+            masks.push_back(ui32{1} << i);
+            for (ui32 j = 0; j < i; ++j) {
+                masks.push_back((ui32{1} << i) | (ui32{1} << j));
+            }
+        }
+        for (ui32 mask : masks) {
+            for (auto [first, second] : {std::pair<i64, i64>{-1, -1}, {0, 1}, {0, 8}, {8, 9}}) {
+                for (bool handoffs : {false, true}) {
+                    MakeFaultToleranceArgsForBlock4Plus2(args, first, second, mask,
+                        handoffs ? first + 1 : 0, handoffs ? second + 1 : 0, 0);
+                    RunFaultToleranceBlock4Plus2(runtime, args);
+                }
+            }
+        }
+    }
 
     Y_UNIT_TEST(block42) {
         TBlobStorageGroupType type = TBlobStorageGroupType::Erasure4Plus2Block;

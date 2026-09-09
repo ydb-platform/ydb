@@ -90,6 +90,7 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
     void CountingEventsTest(TString typeOperation, ui32 eventsCount, TBlobStorageGroupType groupType)
     {
         TEnvironmentSetup env({
+            .NodeCount = Max<ui32>(9, groupType.BlobSubgroupSize()),
             .VDiskReplPausedAtStart = true,
             .Erasure = groupType,
             .UseActorSystemTimeInBSQueue = false,
@@ -197,6 +198,8 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
         CountingEventsTest("put", 49, TBlobStorageGroupType::ErasureMirror3dc);
     }
 
+    Y_UNIT_TEST(Put_Block82) { CountingEventsTest("put", 145, TBlobStorageGroupType::Erasure8Plus2Block); }
+
     Y_UNIT_TEST(Put_Block42) {
         CountingEventsTest("put", 89, TBlobStorageGroupType::Erasure4Plus2Block);
     }
@@ -214,6 +217,8 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
         CountingEventsTest("get", 14, TBlobStorageGroupType::ErasureMirror3dc);
     }
 
+    Y_UNIT_TEST(Get_Block82) { CountingEventsTest("get", 69, TBlobStorageGroupType::Erasure8Plus2Block); }
+
     Y_UNIT_TEST(Get_Block42) {
         CountingEventsTest("get", 69, TBlobStorageGroupType::Erasure4Plus2Block);
     }
@@ -230,6 +235,8 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
         CountingEventsTest("collect", 124, TBlobStorageGroupType::ErasureMirror3dc);
     }
 
+    Y_UNIT_TEST(Collect_Block82) { CountingEventsTest("collect", 168, TBlobStorageGroupType::Erasure8Plus2Block); }
+
     Y_UNIT_TEST(Collect_Block42) {
         CountingEventsTest("collect", 112, TBlobStorageGroupType::Erasure4Plus2Block);
     }
@@ -238,4 +245,3 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
         CountingEventsTest("collect", 16, TBlobStorageGroupType::ErasureNone);
     }
 }
-

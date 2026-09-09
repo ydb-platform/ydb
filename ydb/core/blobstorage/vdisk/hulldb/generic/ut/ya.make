@@ -13,6 +13,7 @@ PEERDIR(
 )
 
 SRCS(
+    blobstorage_hulldatamerger_block82_ut.cpp
     hullds_sst_it_all_ut.cpp
     blobstorage_hullwritesst_ut.cpp
 )

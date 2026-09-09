@@ -1,10 +1,10 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 
 Y_UNIT_TEST_SUITE(BlobStorageBlockRace) {
-    Y_UNIT_TEST(Test) {
+    void RunTest(TBlobStorageGroupType erasure) {
         TEnvironmentSetup env{{
-            .NodeCount = 8,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .NodeCount = erasure.BlobSubgroupSize(),
+            .Erasure = erasure,
         }};
         auto& runtime = env.Runtime;
 
@@ -46,10 +46,13 @@ Y_UNIT_TEST_SUITE(BlobStorageBlockRace) {
         }
     }
 
-    Y_UNIT_TEST(BlocksRacingViaSyncLog) {
+    Y_UNIT_TEST(Test) { RunTest(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(TestBlock82) { RunTest(TBlobStorageGroupType::Erasure8Plus2Block); }
+
+    void RunBlocksRacingViaSyncLog(TBlobStorageGroupType erasure) {
         TEnvironmentSetup env{{
-            .NodeCount = 8,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .NodeCount = erasure.BlobSubgroupSize(),
+            .Erasure = erasure,
         }};
 
         ui32 numVDiskSyncEvents = 0;
@@ -121,15 +124,18 @@ Y_UNIT_TEST_SUITE(BlobStorageBlockRace) {
         checkStatus(NKikimrProto::ALREADY);
     }
 
-    Y_UNIT_TEST(BlocksRacingViaSyncLog2) {
+    Y_UNIT_TEST(BlocksRacingViaSyncLog) { RunBlocksRacingViaSyncLog(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(BlocksRacingViaSyncLogBlock82) { RunBlocksRacingViaSyncLog(TBlobStorageGroupType::Erasure8Plus2Block); }
+
+    void RunBlocksRacingViaSyncLog2(TBlobStorageGroupType erasure) {
         TEnvironmentSetup env{{
-            .NodeCount = 8,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .NodeCount = erasure.BlobSubgroupSize(),
+            .Erasure = erasure,
         }};
 
         ui32 numVDiskSyncEvents = 0;
         std::deque<std::pair<ui32, std::unique_ptr<IEventHandle>>> postponedEventQ;
-        bool postponeNodes1to6 = false;
+        bool postponeMainNodes = false;
         env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvBlobStorage::EvVSyncResult:
@@ -137,7 +143,7 @@ Y_UNIT_TEST_SUITE(BlobStorageBlockRace) {
                     ++numVDiskSyncEvents;
                     break;
             }
-            if (postponeNodes1to6 && ev->GetTypeRewrite() == TEvBlobStorage::EvLog && nodeId >= 1 && nodeId <= 6) {
+            if (postponeMainNodes && ev->GetTypeRewrite() == TEvBlobStorage::EvLog && nodeId >= 1 && nodeId <= erasure.TotalPartCount()) {
                 postponedEventQ.emplace_back(nodeId, std::exchange(ev, nullptr));
                 return false;
             }
@@ -184,20 +190,23 @@ Y_UNIT_TEST_SUITE(BlobStorageBlockRace) {
         };
 
         numVDiskSyncEvents = 0;
-        postponeNodes1to6 = true;
-        issue(0, 6, guid1);
-        issue(6, 8, guid2);
+        postponeMainNodes = true;
+        issue(0, erasure.TotalPartCount(), guid1);
+        issue(erasure.TotalPartCount(), erasure.BlobSubgroupSize(), guid2);
         checkStatus(2, NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(numVDiskSyncEvents, 0);
         env.Sim(TDuration::Seconds(10));
         UNIT_ASSERT(numVDiskSyncEvents);
-        postponeNodes1to6 = false;
+        postponeMainNodes = false;
         sendPostponed();
-        checkStatus(6, NKikimrProto::OK);
+        checkStatus(erasure.TotalPartCount(), NKikimrProto::OK);
         env.Sim(TDuration::Seconds(10));
-        issue(0, 6, guid2);
-        checkStatus(6, NKikimrProto::ALREADY);
-        issue(0, 6, guid1);
-        checkStatus(6, NKikimrProto::OK);
+        issue(0, erasure.TotalPartCount(), guid2);
+        checkStatus(erasure.TotalPartCount(), NKikimrProto::ALREADY);
+        issue(0, erasure.TotalPartCount(), guid1);
+        checkStatus(erasure.TotalPartCount(), NKikimrProto::OK);
     }
+
+    Y_UNIT_TEST(BlocksRacingViaSyncLog2) { RunBlocksRacingViaSyncLog2(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(BlocksRacingViaSyncLog2Block82) { RunBlocksRacingViaSyncLog2(TBlobStorageGroupType::Erasure8Plus2Block); }
 }

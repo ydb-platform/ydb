@@ -311,6 +311,10 @@ void RunTestLevel(const TBlobStorageGroupInfo& info, TBlackboard& blackboard,
 
 Y_UNIT_TEST_SUITE(DSProxyStrategyTest) {
 
+    Y_UNIT_TEST(Restore_Block82) {
+        RunStrategyTest<TRestoreStrategy>(TBlobStorageGroupType::Erasure8Plus2Block);
+    }
+
     Y_UNIT_TEST(Restore_block42) {
         RunStrategyTest<TRestoreStrategy>(TBlobStorageGroupType::Erasure4Plus2Block);
     }

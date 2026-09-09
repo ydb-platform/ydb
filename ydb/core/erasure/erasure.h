@@ -351,6 +351,13 @@ struct TErasureType {
         IncrementalSplitData(crcMode, rope, outPartSet);
     }
 
+    // The distributed XOR-diff protocol implements the legacy EVENODD code.
+    // Mirrors have a separate direct-patch path; ISA-L RS needs full Get+Put.
+    bool SupportsXorDiff() const {
+        return ErasureFamily() == ErasureParityBlock && ParityParts() == 2
+            && ErasureSpecies != Erasure8Plus2Block;
+    }
+
     void SplitDiffs(ECrcMode crcMode, ui32 dataSize, const TVector<TDiff> &diffs, TPartDiffSet& outDiffSet) const;
     void ApplyDiff(ECrcMode crcMode, ui8 *dst, const TVector<TDiff> &diffs) const;
     void MakeXorDiff(ECrcMode crcMode, ui32 dataSize, const ui8 *src, const TVector<TDiff> &inDiffs,

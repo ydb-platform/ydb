@@ -148,8 +148,9 @@ namespace NKikimr {
             }
         }
 
-        Y_UNIT_TEST(IngressCreateFromRepl) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 1, 8);
+        void IngressCreateFromRepl(TBlobStorageGroupType::EErasureSpecies species) {
+            const TBlobStorageGroupType type(species);
+            TBlobStorageGroupInfo groupInfo(species, 1, type.BlobSubgroupSize());
             TLogoBlobID id(0, 1, 0, 0, 10, 0);
             const ui8 subgroup = groupInfo.Type.BlobSubgroupSize();
             TBlobStorageGroupInfo::TVDiskIds vdisks;
@@ -177,7 +178,7 @@ namespace NKikimr {
                     UNIT_ASSERT_EQUAL(ingress.LocalParts(groupInfo.Type), parts);
 
                     if (vdisk < totalParts) {
-                        UNIT_ASSERT_EQUAL(ingress.KnownParts(groupInfo.Type, vdisk), parts & NMatrix::TVectorType(0x80 >> vdisk, totalParts));
+                        UNIT_ASSERT_EQUAL(ingress.KnownParts(groupInfo.Type, vdisk), parts & NMatrix::TVectorType::MakeOneHot(vdisk, totalParts));
                         for (ui32 i = 0; i < groupInfo.Type.Handoff(); ++i) {
                             UNIT_ASSERT(ingress.KnownParts(groupInfo.Type, totalParts + i).Empty());
                         }
@@ -190,6 +191,32 @@ namespace NKikimr {
                         }
                     }
                 }
+            }
+        }
+
+        Y_UNIT_TEST(IngressCreateFromRepl) {
+            IngressCreateFromRepl(TBlobStorageGroupType::Erasure4Plus2Block);
+        }
+
+        Y_UNIT_TEST(IngressCreateFromReplBlock82) {
+            IngressCreateFromRepl(TBlobStorageGroupType::Erasure8Plus2Block);
+        }
+
+        Y_UNIT_TEST(IngressCacheAndBarrierQuorumBlock82) {
+            TBlobStorageGroupInfo info(TBlobStorageGroupType::Erasure8Plus2Block, 2, 12);
+            const auto cache = TIngressCache::Create(info.PickTopology(), info.GetVDiskId(23));
+            UNIT_ASSERT_VALUES_EQUAL(cache->VDiskOrderNum, 23);
+            UNIT_ASSERT_VALUES_EQUAL(cache->TotalVDisks, 24);
+            UNIT_ASSERT_VALUES_EQUAL(cache->DomainsNum, 12);
+            UNIT_ASSERT_VALUES_EQUAL(cache->DisksInDomain, 2);
+            UNIT_ASSERT_VALUES_EQUAL(cache->Handoff, 2);
+            UNIT_ASSERT_VALUES_EQUAL(cache->BarrierIngressValueMask, 0xFFFFFF);
+            UNIT_ASSERT_VALUES_EQUAL(cache->BarrierIngressDomainMask, 3);
+            TBarrierIngress barrier;
+            for (ui8 disk = 0; disk < 24; ++disk) {
+                TBarrierIngress next(disk);
+                TBarrierIngress::Merge(barrier, next);
+                UNIT_ASSERT_VALUES_EQUAL(barrier.IsQuorum(cache.Get()), disk >= 19);
             }
         }
 

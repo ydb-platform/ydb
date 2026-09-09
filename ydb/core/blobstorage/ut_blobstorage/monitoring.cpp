@@ -113,7 +113,7 @@ void TestDSProxyAndVDiskEqualCost(const TBlobStorageGroupInfo::TTopology& topolo
 Y_UNIT_TEST(Test##requestType##erasure##Requests##requests##Inflight##inflight) {   \
     auto groupType = TBlobStorageGroupType::Erasure##erasure;                       \
     ui32 realms = (groupType == TBlobStorageGroupType::ErasureMirror3dc) ? 3 : 1;   \
-    ui32 domains = (groupType == TBlobStorageGroupType::ErasureMirror3dc) ? 3 : 8;  \
+    ui32 domains = (groupType == TBlobStorageGroupType::ErasureMirror3dc) ? 3 : TBlobStorageGroupType(groupType).BlobSubgroupSize();  \
     TBlobStorageGroupInfo::TTopology topology(groupType, realms, domains, 1, true); \
     auto actor = new TInflightActor##requestType({requests, inflight});             \
     TestDSProxyAndVDiskEqualCost(topology, actor);                                  \
@@ -123,7 +123,7 @@ Y_UNIT_TEST(Test##requestType##erasure##Requests##requests##Inflight##inflight) 
 Y_UNIT_TEST(Test##requestType##erasure##Requests##requests##Inflight##inflight##BlobSize##dataSize) {   \
     auto groupType = TBlobStorageGroupType::Erasure##erasure;                                           \
     ui32 realms = (groupType == TBlobStorageGroupType::ErasureMirror3dc) ? 3 : 1;                       \
-    ui32 domains = (groupType == TBlobStorageGroupType::ErasureMirror3dc) ? 3 : 8;                      \
+    ui32 domains = (groupType == TBlobStorageGroupType::ErasureMirror3dc) ? 3 : TBlobStorageGroupType(groupType).BlobSubgroupSize();                      \
     TBlobStorageGroupInfo::TTopology topology(groupType, realms, domains, 1, true);                     \
     auto actor = new TInflightActor##requestType({requests, inflight}, dataSize);                       \
     TestDSProxyAndVDiskEqualCost(topology, actor);                                                      \
@@ -147,6 +147,16 @@ Y_UNIT_TEST_SUITE(CostMetricsPutBlock4Plus2) {
     MAKE_TEST_W_DATASIZE(4Plus2Block, Put, 10, 10, 1000);
     MAKE_TEST_W_DATASIZE(4Plus2Block, Put, 100, 10, 1000);
     MAKE_TEST_W_DATASIZE(4Plus2Block, Put, 10000, 1000, 1000);
+}
+
+Y_UNIT_TEST_SUITE(CostMetricsPutBlock82) {
+    MAKE_TEST_W_DATASIZE(8Plus2Block, Put, 1, 1, 1000);
+    MAKE_TEST_W_DATASIZE(8Plus2Block, Put, 10, 1, 1000);
+    MAKE_TEST_W_DATASIZE(8Plus2Block, Put, 10000, 1, 1000);
+    MAKE_TEST_W_DATASIZE(8Plus2Block, Put, 2, 2, 1000);
+    MAKE_TEST_W_DATASIZE(8Plus2Block, Put, 10, 10, 1000);
+    MAKE_TEST_W_DATASIZE(8Plus2Block, Put, 100, 10, 1000);
+    MAKE_TEST_W_DATASIZE(8Plus2Block, Put, 10000, 1000, 1000);
 }
 
 Y_UNIT_TEST_SUITE(CostMetricsPutHugeMirror3dc) {
@@ -178,6 +188,16 @@ Y_UNIT_TEST_SUITE(CostMetricsGetBlock4Plus2) {
     MAKE_TEST_W_DATASIZE(4Plus2Block, Get, 10000, 1000, 1000);
 }
 
+Y_UNIT_TEST_SUITE(CostMetricsGetBlock82) {
+    MAKE_TEST_W_DATASIZE(8Plus2Block, Get, 1, 1, 1000);
+    MAKE_TEST_W_DATASIZE(8Plus2Block, Get, 10, 1, 1000);
+    MAKE_TEST_W_DATASIZE(8Plus2Block, Get, 10000, 1, 1000);
+    MAKE_TEST_W_DATASIZE(8Plus2Block, Get, 2, 2, 1000);
+    MAKE_TEST_W_DATASIZE(8Plus2Block, Get, 10, 10, 1000);
+    MAKE_TEST_W_DATASIZE(8Plus2Block, Get, 100, 10, 1000);
+    MAKE_TEST_W_DATASIZE(8Plus2Block, Get, 10000, 1000, 1000);
+}
+
 Y_UNIT_TEST_SUITE(CostMetricsGetHugeMirror3dc) {
     MAKE_TEST_W_DATASIZE(Mirror3dc, Get, 1, 1, 2000000);
     MAKE_TEST_W_DATASIZE(Mirror3dc, Get, 10, 1, 2000000);
@@ -205,6 +225,16 @@ Y_UNIT_TEST_SUITE(CostMetricsPatchBlock4Plus2) {
     MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 10, 10, 1000);
     MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 100, 10, 1000);
     MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 10000, 100, 1000);
+}
+
+Y_UNIT_TEST_SUITE(CostMetricsPatchBlock82) {
+    MAKE_TEST_W_DATASIZE(8Plus2Block, Patch, 1, 1, 1000);
+    MAKE_TEST_W_DATASIZE(8Plus2Block, Patch, 10, 1, 1000);
+    MAKE_TEST_W_DATASIZE(8Plus2Block, Patch, 100, 1, 1000);
+    MAKE_TEST_W_DATASIZE(8Plus2Block, Patch, 2, 2, 1000);
+    MAKE_TEST_W_DATASIZE(8Plus2Block, Patch, 10, 10, 1000);
+    MAKE_TEST_W_DATASIZE(8Plus2Block, Patch, 100, 10, 1000);
+    MAKE_TEST_W_DATASIZE(8Plus2Block, Patch, 10000, 100, 1000);
 }
 
 enum class ELoadDistribution : ui8 {

@@ -385,6 +385,9 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
     IoContext = std::make_shared<NKikimr::NPDisk::TIoContextFactoryOSS>();
     AppData->IoContextFactory = IoContext.get();
 
+    if (BeforeActorSystemStart) {
+        BeforeActorSystemStart(*setup1);
+    }
     ActorSystem1.reset(new TActorSystem(setup1, AppData.get(), logSettings));
     Monitoring->RegisterActorPage(actorsMonPage, "logger", "Logger", false, ActorSystem1.get(), loggerActorId);
     loggerActor->Log(Now(), NKikimr::NLog::PRI_NOTICE, NActorsServices::TEST, "Actor system created");

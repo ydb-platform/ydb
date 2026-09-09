@@ -3535,33 +3535,6 @@ void TPersQueue::SendDeferredReadSetAcks(const TActorContext& ctx)
     DeferredReadSetAcks.clear();
 }
 
-<<<<<<< HEAD
-void TPersQueue::MovePendingDeferredPlanStepAcks()
-{
-    AFL_ENSURE(DeferredPlanStepAcks.empty())("DeferredPlanStepAcks", DeferredPlanStepAcks.size());
-    DeferredPlanStepAcks = std::move(PendingDeferredPlanStepAcks);
-    PendingDeferredPlanStepAcks.clear();
-}
-
-void TPersQueue::AddPendingDeferredPlanStepAck(TDeferredPlanStepAck&& ack)
-{
-    PendingDeferredPlanStepAcks.push_back(std::move(ack));
-}
-
-void TPersQueue::SendDeferredPlanStepAcks(const TActorContext& ctx)
-{
-    for (auto& e : DeferredPlanStepAcks) {
-        PQ_LOG_TX_D("Send deferred TEvPlanStep acks." <<
-                    "Step: " << e.Event->Record.GetStep() <<
-		    ", TxCount: " << e.Event->Record.TransactionsSize());
-        SendPlanStepAcks(ctx, e.Sender, *e.Event);
-    }
-
-    DeferredPlanStepAcks.clear();
-}
-
-=======
->>>>>>> 86829277e30 (restore immediate PlanStep ack for unknown txs)
 void TPersQueue::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx)
 {
     PQ_LOG_TX_I("Handle TEvTxProcessing::TEvReadSetAck " << ev->Get()->Record.ShortDebugString());
@@ -3895,32 +3868,10 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
             SendPlanStepAcks(ctx, tx);
         }
     } else {
-<<<<<<< HEAD
-<<<<<<< HEAD
-        // No known TxId in this PlanStep (including an empty Transactions list).
-        //
-        // Do not ack immediately: PlanStep is advanced in memory before _txinfo is persisted.
-        // A stale leader can keep that inflated PlanStep after losing generation while the new
-        // leader still has the older durable watermark. Immediate ack on step <= PlanStep
-        // (retransmit of an already-handled step) or on step > PlanStep (e.g. SchemeShard
-        // CreatePQ re-plan after Attach→NODATA) would let the stale tablet confirm the step
-        // without a successful KV write. Defer ack until WRITE_TX succeeds — same fence as
-        // deferred TEvReadSetAck for unknown txs. Watermark is not moved on this path.
-        PQ_LOG_TX_W("All-unknown PlanStep; deferring ack until WRITE_TX completes." <<
-                    " Step: " << step <<
-		    ", PlanStep: " << PlanStep <<
-		    ", TxCount: " << event.TransactionsSize());
-        AddPendingDeferredPlanStepAck({.Sender = sender, .Event = std::move(ev)});
-        TryWriteTxs(ctx);
-=======
-        // таблетка PQ успела выполнить и удалить все транзакции этого шага. надо отправить подтверждение
-=======
         // No TxId from this PlanStep is in Txs: empty Transactions, unknown/future ids,
         // or a retransmit after the step's txs were already executed and deleted.
         // Ack immediately so the mediator sees steps in order.
->>>>>>> a544d5d61ad (clarify all-unknown PlanStep ack comment)
         SendPlanStepAcks(ctx, sender, *ev);
->>>>>>> 86829277e30 (restore immediate PlanStep ack for unknown txs)
     }
 
     PQ_LOG_TX_D("PlanStep " << PlanStep << ", PlanTxId " << PlanTxId);

@@ -194,7 +194,7 @@ public:
         for (const auto& op : operations) {
             const ui64 requested = op.GetWriteSeqNum().WriteSeqNum;
             if (!requested) continue;
-            const ui64 ds = op.GetWriteSeqNum().DataShard;
+            const ui64 ds = op.GetOriginalShard();
             const ui64 key = (ds == 0 || ds == tabletId) ? 0 : ds;
             auto& g = groups[key];
             if (!g.MinRequested) {
@@ -313,7 +313,7 @@ public:
 
         // All continuations: track max per group for ApplyLocks to persist.
         for (const auto& [ds, g] : groups) {
-            guardLocks.SetWriteSeqNums.push_back(TLockWriteSeqNum{writerIndex, g.MaxRequested, ds});
+            guardLocks.SetWriteSeqNums.emplace(ds, TLockWriteSeqNum{writerIndex, g.MaxRequested});
         }
         return std::nullopt;
     }
@@ -356,7 +356,7 @@ public:
             const ui64 requested = op.GetWriteSeqNum().WriteSeqNum;
             if (requested) {
                 writerIndex = op.GetWriteSeqNum().WriterIndex;
-                const ui64 ds = op.GetWriteSeqNum().DataShard;
+                const ui64 ds = op.GetOriginalShard();
                 if (ds == 0 || ds == tabletId) {
                     hasCurrentShardSeqNum = true;
                     if (requested > maxCurrentShardRequested) {
@@ -384,15 +384,15 @@ public:
         auto lock = DataShard.SysLocksTable().GetRawLock(guardLocks.LockTxId);
         if (!lock) return;
         auto serialized = SerializeWriteSeqNumResult(writeOp->GetWriteResult()->Record);
-        for (const auto& seqNum : guardLocks.SetWriteSeqNums) {
-            if (seqNum.DataShard == 0) {
+        for (const auto& [shardId, seqNum] : guardLocks.SetWriteSeqNums) {
+            if (shardId == 0) {
                 if (lock->GetWriteSeqNum(seqNum.WriterIndex) == seqNum.WriteSeqNum) {
                     lock->SetWriteSeqNumResult(seqNum.WriterIndex, serialized, db);
                 }
             } else {
-                auto* state = lock->FindAncestorWriteSeqNumState(seqNum.DataShard, seqNum.WriterIndex);
+                auto* state = lock->FindAncestorWriteSeqNumState(shardId, seqNum.WriterIndex);
                 if (state && state->WriteSeqNum == seqNum.WriteSeqNum) {
-                    lock->SetAncestorWriteSeqNumResult(seqNum.DataShard, seqNum.WriterIndex, serialized, db);
+                    lock->SetAncestorWriteSeqNumResult(shardId, seqNum.WriterIndex, serialized, db);
                 }
             }
         }

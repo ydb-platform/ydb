@@ -146,10 +146,10 @@ public:
             for (auto& op : *req->Record.MutableOperations()) {
                 op.MutableWriteSeqNum()->SetWriterIndex(*WriterIndex);
                 op.MutableWriteSeqNum()->SetWriteSeqNum(seqNum);
-                if (destShardId != origShardId) {
-                    op.MutableWriteSeqNum()->SetDataShard(origShardId);
-                }
                 ++seqNum;
+                if (destShardId != origShardId) {
+                    op.SetOriginalShard(origShardId);
+                }
             }
         }
         return req;

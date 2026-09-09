@@ -181,7 +181,6 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLoc
             ui32 ancestorSeqNumCount = 0;
             bool ancestorSeqNumMismatch = false;
             for (const auto& wsn : lockProto.GetWriteSeqNums()) {
-                if (wsn.GetDataShard() != lockProto.GetDataShard()) continue;
                 ++ancestorSeqNumCount;
                 auto jt = it->second.WriteSeqNumStates.find(wsn.GetWriterIndex());
                 if (jt == it->second.WriteSeqNumStates.end()

@@ -1417,14 +1417,14 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
                 waitPersistent = true;
             }
 
-            for (const auto& seqNum : Update->SetWriteSeqNums) {
+            for (const auto& [shardId, seqNum] : Update->SetWriteSeqNums) {
                 // Advance even if no rows were applied (e.g. UPDATE of a missing row).
-                if (seqNum.DataShard == 0) {
+                if (shardId == 0) {
                     if (lock->SetWriteSeqNum(seqNum.WriterIndex, seqNum.WriteSeqNum, Db)) {
                         waitPersistent = true;
                     }
                 } else {
-                    if (lock->SetAncestorWriteSeqNum(seqNum.DataShard, seqNum.WriterIndex, seqNum.WriteSeqNum, Db)) {
+                    if (lock->SetAncestorWriteSeqNum(shardId, seqNum.WriterIndex, seqNum.WriteSeqNum, Db)) {
                         waitPersistent = true;
                     }
                 }

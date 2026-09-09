@@ -32,6 +32,7 @@ private:
     YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
     YDB_READONLY_DEF(TIntrusivePtr<NACLib::TUserContext>, UserCtx);
     YDB_READONLY_DEF(TLockWriteSeqNum, WriteSeqNum);
+    YDB_READONLY_DEF(ui64, OriginalShard);
 };
 
 class TValidatedWriteTx: TNonCopyable, public TValidatedTx {

@@ -28,7 +28,6 @@ namespace NDataShard {
 struct TLockWriteSeqNum {
     ui64 WriterIndex = 0;
     ui64 WriteSeqNum = 0;
-    ui64 DataShard = 0;  // 0 = current shard; non-zero = ancestor shard
 };
 
 // Last uncommitted write for one WriterIndex.
@@ -1022,7 +1021,7 @@ struct TLocksUpdate {
 
     // These uncommitted writes' positions in their writers' chains; ApplyLocks persists them on the lock.
     // Each entry may target the current shard (DataShard == 0) or an ancestor shard (DataShard != 0).
-    TVector<TLockWriteSeqNum> SetWriteSeqNums;
+    THashMap<ui64, TLockWriteSeqNum> SetWriteSeqNums;
 
     // Returns effective BreakerQuerySpanId: explicit override (commit path) if set,
     // then conflict-derived SpanId (from AddBreakLock), then falls back to QuerySpanId.

@@ -10,7 +10,6 @@ option java_package = "ru.yandex.kikimr.proto";
 message TWriteSeqNum {
     optional uint64 WriterIndex = 1;
     optional uint64 WriteSeqNum = 2;
-    optional uint64 DataShard = 3;
 }
 
 message TLock {
@@ -121,6 +120,9 @@ message TEvWrite {
         optional bool IsBulk = 8;
         optional uint64 QuerySpanId = 9;
         optional TWriteSeqNum WriteSeqNum = 10;
+        // If this operation is retried on a different shard after a split/merge, this field contains
+        // the original shard id.
+        optional fixed64 OriginalShard = 11;
     }
 
     // Transaction operations

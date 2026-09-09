@@ -118,11 +118,7 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         return Table_.RequiredMemoryForBuild(nTuples);
     }
 
-    void Lookup(TSingleTuple row, std::invocable<TSingleTuple> auto consume) {
-        size_t resumeIndex = 0;
-        Lookup(row, resumeIndex, consume, [] { return false; });
-    }
-
+    // resumeIndex is where the scan of this probe continues, 0 once every match was consumed
     bool Lookup(TSingleTuple row, size_t& resumeIndex, std::invocable<TSingleTuple> auto consume,
                 std::predicate auto isFull) {
         if (Empty()) {
@@ -148,13 +144,12 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         if (Empty()) {
             return false;
         }
-        auto iterator = Table_.Find(row.PackedData, row.OverflowBegin);
-        while (const ui8* tuplePackedData = Table_.NextMatch(iterator, row.OverflowBegin)) {
-            if (accept(TSingleTuple{tuplePackedData, BuildData_.Overflow.data()})) {
-                return true;
-            }
-        }
-        return false;
+        bool found = false;
+        Table_.Apply(row.PackedData, row.OverflowBegin, [&](const ui8* packed) {
+            found = accept(TSingleTuple{packed, BuildData_.Overflow.data()});
+            return !found;
+        });
+        return found;
     }
 
     bool ForEachFrom(size_t& resumeIndex, std::invocable<TSingleTuple> auto consume,

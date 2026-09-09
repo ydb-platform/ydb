@@ -347,7 +347,6 @@ template <typename Source> class TInMemoryHashJoin {
             if (resEnum == EFetchResult::One) {
                 FetchedPack_ = std::move(GetPayload(var));
                 ResumeIndex_ = 0;
-                BuildCursor_ = 0;
                 ui32 idx = 0;
                 for (TSingleTuple probeTuple : *FetchedPack_) {
                     idx++;
@@ -614,6 +613,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
             if constexpr (HasFilter) {
                 filter->StartProbeRow(probeRow);
             }
+            // A non-zero cursor means this probe already emitted a match on a previous call
             [[maybe_unused]] bool found = buildCursor > 0;
             auto onMatch = [&](TSingleTuple tableMatch) {
                 if constexpr (HasFilter) {
@@ -632,6 +632,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                 if (!table.ForEachFrom(buildCursor, onMatch, isFull)) {
                     return false;
                 }
+                buildCursor = 0;
             } else if constexpr (SemiOrOnlyJoin(Join.Kind) && !PreservedRowsInBuildTable()) {
                 found = table.LookupAny(probeRow, [&](TSingleTuple tableMatch) {
                     if constexpr (HasFilter) {
@@ -644,7 +645,6 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     return false;
                 }
             }
-            buildCursor = 0;
             if constexpr (!PreservedRowsInBuildTable()) {
                 if constexpr (Join.Kind == EJoinKind::Left || Join.Kind == EJoinKind::LeftOnly) {
                     if (!found) {

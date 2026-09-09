@@ -10,7 +10,6 @@
 #include <util/generic/buffer.h>
 
 #include <bit>
-#include <type_traits>
 
 #include "tuple.h"
 #include "join_defs.h"
@@ -455,14 +454,16 @@ class TNeumannHashTable {
         return Buffer_.empty();
     }
 
-    void Apply(const ui8 *const row, const ui8 *const overflow, auto onMatch) const {
+    void Apply(const ui8 *const row, const ui8 *const overflow,
+               std::predicate<const ui8*> auto onMatch) const {
         size_t slot = 0;
         Apply(row, overflow, slot, onMatch);
     }
 
-    // slot is the next directory slot of this key. If onMatch returns bool, false stops
-    // the scan and leaves slot at the next slot to visit
-    void Apply(const ui8 *const row, const ui8 *const overflow, size_t& slot, auto onMatch) const {
+    // slot is the next directory slot of this key. onMatch returns false to stop the scan,
+    // leaving slot at the slot to continue from
+    void Apply(const ui8 *const row, const ui8 *const overflow, size_t& slot,
+               std::predicate<const ui8*> auto onMatch) const {
         MKQL_ENSURE(Layout_ != nullptr, "sanity check");
         MKQL_ENSURE(!Directories_.empty() && Tuples_ != nullptr, "lookup to empty table?");
 
@@ -485,25 +486,17 @@ class TNeumannHashTable {
 
         const ui8 *matchedRow;
 
-        auto visit = [&](const ui8* matched) {
-            if constexpr (std::is_void_v<decltype(onMatch(matched))>) {
-                onMatch(matched);
-                return true;
-            } else {
-                return bool(onMatch(matched));
-            }
-        };
-
         if constexpr (!ConsecutiveDuplicates) {
             const ui8* it = begin + slot * BufferSlotSize_;
             MKQL_ENSURE(it <= end, "Apply resume past the end of the directory");
             for (; it != end; it += BufferSlotSize_) {
-                if (GetRowMatch(it, row, overflow, &matchedRow) && !visit(matchedRow)) {
+                if (GetRowMatch(it, row, overflow, &matchedRow) && !onMatch(matchedRow)) {
                     slot = (it - begin) / BufferSlotSize_ + 1;
                     return;
                 }
             }
         } else {
+            MKQL_ENSURE(slot == 0, "Apply cannot resume over consecutive duplicates");
             ui32 size = 0;
             for (auto it = begin; it != end; it += size * BufferSlotSize_) {
                 size = ReadUnaligned<ui32>(it + RowIndexSize_);
@@ -512,7 +505,7 @@ class TNeumannHashTable {
                 }
 
                 for (; size; --size, it += BufferSlotSize_) {
-                    if (!visit(it)) {
+                    if (!onMatch(it)) {
                         return;
                     }
                 }

@@ -38,6 +38,9 @@ namespace NKikimr {
     void TBlobStorageGroupProxy::HandleUpdateGroupStat() {
         Y_ABORT_UNLESS(GroupStatUpdateScheduled);
         GroupStatUpdateScheduled = false;
+        if (IsDormant) {
+            return;
+        }
         if (Info) {
             Stat.Fadeout(TActivationContext::Now());
             for (ui32 i = 0, num = Info->GetTotalVDisksNum(); i < num; ++i) {
@@ -50,6 +53,10 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::ScheduleUpdateGroupStat() {
+        GroupStatUpdatesStarted = true;
+        if (IsDormant) {
+            return;
+        }
         if (!std::exchange(GroupStatUpdateScheduled, true)) {
             Schedule(GroupStatUpdateInterval, new TEvUpdateGroupStat);
         }

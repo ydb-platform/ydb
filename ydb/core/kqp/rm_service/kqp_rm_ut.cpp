@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/tablet/resource_broker_impl.h>
 
 #include <ydb/core/testlib/actor_helpers.h>
@@ -26,6 +27,8 @@ using namespace NKikimrResourceBroker;
 using namespace NResourceBroker;
 
 namespace {
+
+constexpr ui64 KQP_QUEUE_MEMORY_LIMIT = 50'000;
 
 TTenantTestConfig MakeTenantTestConfig() {
     TTenantTestConfig cfg = {
@@ -78,7 +81,7 @@ TResourceBrokerConfig MakeResourceBrokerTestConfig() {
     queue->SetName("queue_kqp_resource_manager");
     queue->SetWeight(20);
     queue->MutableLimit()->AddResource(4);
-    queue->MutableLimit()->AddResource(50'000);
+    queue->MutableLimit()->AddResource(KQP_QUEUE_MEMORY_LIMIT);
 
     auto task = config.AddTasks();
     task->SetName("unknown");
@@ -173,6 +176,18 @@ public:
         WaitForBootstrap();
     }
 
+    void SetSpillingPercent(double spillingPercent) {
+        auto config = MakeKqpResourceManagerConfig();
+        config.SetSpillingPercent(spillingPercent);
+
+        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        request->Record.MutableConfig()->MutableTableServiceConfig()->MutableResourceManager()->CopyFrom(config);
+
+        auto edge = Runtime->AllocateEdgeActor();
+        Runtime->Send(new IEventHandle(ResourceManagers.front(), edge, request.Release()), 0, true);
+        Runtime->GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edge);
+    }
+
     void AssertResourceBrokerSensors(i64 cpu, i64 mem, i64 enqueued, std::optional<i64> finished, i64 infly) {
         auto q = Counters->GetSubgroup("queue", "queue_kqp_resource_manager");
         UNIT_ASSERT_VALUES_EQUAL(q->GetCounter("CPUConsumption")->Val(), cpu);
@@ -193,8 +208,9 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(t->GetCounter("InFlyTasks")->Val(), infly);
     }
 
-    TIntrusivePtr<NRm::TTxState> MakeTx(ui64 txId, std::shared_ptr<NRm::IKqpResourceManager> rm) {
-        return MakeIntrusive<NRm::TTxState>(rm, txId, TInstant::Now(), "", (double)100, "", false);
+    TIntrusivePtr<NRm::TTxState> MakeTx(ui64 txId, std::shared_ptr<NRm::IKqpResourceManager> rm,
+            const TString& poolId = "", double memoryPoolPercent = 100) {
+        return MakeIntrusive<NRm::TTxState>(rm, txId, TInstant::Now(), poolId, memoryPoolPercent, "", false);
     }
 
     void AssertResourceManagerStats(
@@ -282,6 +298,13 @@ public:
         UNIT_TEST(SnapshotSharingByExchanger);
         UNIT_TEST(NodesMembershipByExchanger);
         UNIT_TEST(DisonnectNodes);
+        UNIT_TEST(PoolLimitNotReleasedByUnchargedQuery);
+        UNIT_TEST(PoolLimitNotReleasedByUnchargedQueryOnRollback);
+        UNIT_TEST(PoolLimitNotChargedByHundredPercentQuery);
+        UNIT_TEST(PoolLimitNotChargedForDefaultPool);
+        UNIT_TEST(PoolLimitIgnoredForSenselessPercents);
+        UNIT_TEST(PoolLimitAppliedJustBelowHundredPercent);
+        UNIT_TEST(SpillingPercentAppliedWithoutPoolLimit);
     UNIT_TEST_SUITE_END();
 
     void SingleTask();
@@ -299,6 +322,13 @@ public:
     void NodesMembership();
     void NodesMembershipByExchanger();
     void DisonnectNodes();
+    void PoolLimitNotReleasedByUnchargedQuery();
+    void PoolLimitNotReleasedByUnchargedQueryOnRollback();
+    void PoolLimitNotChargedByHundredPercentQuery();
+    void PoolLimitNotChargedForDefaultPool();
+    void PoolLimitIgnoredForSenselessPercents();
+    void PoolLimitAppliedJustBelowHundredPercent();
+    void SpillingPercentAppliedWithoutPoolLimit();
 
 private:
     THolder<TTestBasicRuntime> Runtime;
@@ -714,6 +744,180 @@ void KqpRm::DisonnectNodes() {
     Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
 
     CheckSnapshot(0, {{1000, 100}}, rm_first);
+}
+
+void KqpRm::PoolLimitNotReleasedByUnchargedQuery() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    NRm::TKqpResourcesRequest request{.ExecutionUnits = 1, .Memory = 300};
+
+    {
+        auto limitedTx = MakeTx(1, rm, "p", 50);
+        auto unlimitedTx = MakeTx(2, rm, "p", -1);
+        auto anotherLimitedTx = MakeTx(3, rm, "p", 50);
+
+        UNIT_ASSERT(rm->AllocateResources(*limitedTx, 1, request));
+        UNIT_ASSERT(rm->AllocateResources(*unlimitedTx, 2, request));
+
+        rm->FreeResources(*unlimitedTx, 2, request);
+
+        UNIT_ASSERT(!rm->AllocateResources(*anotherLimitedTx, 3, request));
+        AssertResourceManagerStats(rm, 700, 99);
+    }
+
+    AssertResourceManagerStats(rm, 1000, 100);
+}
+
+void KqpRm::PoolLimitNotReleasedByUnchargedQueryOnRollback() {
+    auto config = MakeKqpResourceManagerConfig();
+    config.SetQueryMemoryLimit(90'000);
+
+    StartRms({config, MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    {
+        auto limitedTx = MakeTx(1, rm, "p", 50);
+        auto unlimitedTx = MakeTx(2, rm, "p", -1);
+        auto anotherLimitedTx = MakeTx(3, rm, "p", 50);
+
+        UNIT_ASSERT(rm->AllocateResources(*limitedTx, 1,
+            NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 30'000}));
+        UNIT_ASSERT(!rm->AllocateResources(*unlimitedTx, 2,
+            NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = KQP_QUEUE_MEMORY_LIMIT}));
+        UNIT_ASSERT(!rm->AllocateResources(*anotherLimitedTx, 3,
+            NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 18'000}));
+
+        AssertResourceManagerStats(rm, 60'000, 99);
+    }
+
+    AssertResourceManagerStats(rm, 90'000, 100);
+}
+
+void KqpRm::PoolLimitNotChargedByHundredPercentQuery() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    {
+        auto limitedTx = MakeTx(1, rm, "p", 50);
+        auto unlimitedTx = MakeTx(2, rm, "p", 100);
+        auto anotherLimitedTx = MakeTx(3, rm, "p", 50);
+        auto overflowingTx = MakeTx(4, rm, "p", 50);
+
+        UNIT_ASSERT(rm->AllocateResources(*limitedTx, 1,
+            NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 400}));
+        UNIT_ASSERT(rm->AllocateResources(*unlimitedTx, 2,
+            NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 100}));
+        UNIT_ASSERT(rm->AllocateResources(*anotherLimitedTx, 3,
+            NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 100}));
+        UNIT_ASSERT(!rm->AllocateResources(*overflowingTx, 4,
+            NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 1}));
+
+        AssertResourceManagerStats(rm, 400, 97);
+    }
+
+    AssertResourceManagerStats(rm, 1000, 100);
+}
+
+void KqpRm::PoolLimitNotChargedForDefaultPool() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    {
+        auto firstTx = MakeTx(1, rm, NResourcePool::DEFAULT_POOL_ID, 50);
+        auto secondTx = MakeTx(2, rm, NResourcePool::DEFAULT_POOL_ID, 50);
+        auto overflowingTx = MakeTx(3, rm, NResourcePool::DEFAULT_POOL_ID, 50);
+
+        UNIT_ASSERT(rm->AllocateResources(*firstTx, 1,
+            NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 600}));
+        UNIT_ASSERT(rm->AllocateResources(*secondTx, 2,
+            NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 400}));
+        UNIT_ASSERT(!rm->AllocateResources(*overflowingTx, 3,
+            NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 1}));
+
+        AssertResourceManagerStats(rm, 0, 98);
+    }
+
+    AssertResourceManagerStats(rm, 1000, 100);
+}
+
+void KqpRm::PoolLimitIgnoredForSenselessPercents() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    {
+        auto nanTx = MakeTx(1, rm, "p", std::numeric_limits<double>::quiet_NaN());
+        auto overTx = MakeTx(2, rm, "p", 150);
+
+        UNIT_ASSERT(!nanTx->HasMemoryPoolLimit());
+        UNIT_ASSERT(!overTx->HasMemoryPoolLimit());
+
+        UNIT_ASSERT(rm->AllocateResources(*nanTx, 1,
+            NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 600}));
+        UNIT_ASSERT(rm->AllocateResources(*overTx, 2,
+            NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 400}));
+
+        AssertResourceManagerStats(rm, 0, 98);
+    }
+
+    AssertResourceManagerStats(rm, 1000, 100);
+}
+
+void KqpRm::PoolLimitAppliedJustBelowHundredPercent() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    {
+        auto firstTx = MakeTx(1, rm, "p", 99);
+        auto secondTx = MakeTx(2, rm, "p", 99);
+        auto overflowingTx = MakeTx(3, rm, "p", 99);
+
+        UNIT_ASSERT(rm->AllocateResources(*firstTx, 1,
+            NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 900}));
+        UNIT_ASSERT(rm->AllocateResources(*secondTx, 2,
+            NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 50}));
+        UNIT_ASSERT(!rm->AllocateResources(*overflowingTx, 3,
+            NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 50}));
+
+        AssertResourceManagerStats(rm, 50, 98);
+    }
+
+    AssertResourceManagerStats(rm, 1000, 100);
+}
+
+void KqpRm::SpillingPercentAppliedWithoutPoolLimit() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    {
+        auto tx = MakeTx(1, rm, NResourcePool::DEFAULT_POOL_ID, 100);
+
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1,
+            NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 600}));
+        UNIT_ASSERT(!tx->IsReasonableToStartSpilling());
+
+        SetSpillingPercent(20);
+        UNIT_ASSERT(tx->IsReasonableToStartSpilling());
+
+        SetSpillingPercent(80);
+        UNIT_ASSERT(!tx->IsReasonableToStartSpilling());
+    }
+
+    AssertResourceManagerStats(rm, 1000, 100);
 }
 
 } // namespace NKqp

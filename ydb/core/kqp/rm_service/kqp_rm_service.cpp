@@ -23,6 +23,8 @@
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
 
+#include <cmath>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_RESOURCE_MANAGER
 
 namespace NKikimr {
@@ -32,6 +34,13 @@ namespace NRm {
 using namespace NActors;
 using namespace NResourceBroker;
 
+static double NormalizePoolPercent(double percent) {
+    if (!std::isfinite(percent) || percent < 0) {
+        return -1;
+    }
+    return Min(percent, 100.0);
+}
+
 TTxState::TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, const TString& poolId, const double memoryPoolPercent,
     const TString& database, bool collectBacktrace)
     : ResourceManager(resourceManager)
@@ -39,8 +48,10 @@ TTxState::TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 t
     , TxId(txId)
     , CreatedAt(now)
     , PoolId(poolId)
-    , MemoryPoolPercent(memoryPoolPercent)
+    , MemoryPoolPercent(NormalizePoolPercent(memoryPoolPercent))
     , Database(database)
+    , MemoryPoolLimited(!PoolId.empty() && PoolId != NResourcePool::DEFAULT_POOL_ID
+        && MemoryPoolPercent > 0 && MemoryPoolPercent < 100)
     , CollectBacktrace(collectBacktrace)
 {}
 
@@ -397,7 +408,6 @@ public:
                     auto it = MemoryNamedPools.find(tx.MakePoolId());
                     if (it != MemoryNamedPools.end()) {
                         it->second->Release(resources.Memory);
-
                         if (it->second->GetUsed() == 0) {
                             MemoryNamedPools.erase(it);
                         }

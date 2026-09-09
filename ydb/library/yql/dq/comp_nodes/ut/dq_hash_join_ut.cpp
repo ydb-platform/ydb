@@ -961,6 +961,27 @@ TJoinTestData OutputBufferBoundedTestData() {
     return td;
 }
 
+constexpr int HighFanoutBuildRows = 25000;
+constexpr int HighFanoutValueSize = 512;
+
+TJoinTestData HighFanoutInnerJoinTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftKeys = {1};
+    TVector<TString> leftValues = {TString(HighFanoutValueSize, 'P')};
+    TVector<ui64> rightKeys(HighFanoutBuildRows, 1);
+    TVector<TString> rightValues(HighFanoutBuildRows);
+    for (int i = 0; i < HighFanoutBuildRows; ++i) {
+        rightValues[i] = TString(HighFanoutValueSize, 'a' + (i % 26));
+    }
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
 TJoinTestData ScalarPayloadInnerJoinTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -1268,6 +1289,36 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         UNIT_ASSERT_C(maxBlockRows <= maxOutputRows,
             TStringBuilder() << "Max block size " << maxBlockRows
                              << " should be at most " << maxOutputRows);
+    }
+
+    Y_UNIT_TEST(TestOutputBufferBoundedHighFanout) {
+        auto td = HighFanoutInnerJoinTestData();
+        auto descr = MakeJoinDescription(td);
+
+        THolder<IComputationGraph> graph = ConstructJoinGraphStream(
+            td.Kind, ETestedJoinAlgo::kBlockHash, descr, true, td.JoinSettings);
+
+        const size_t tupleWidth = td.Renames.size() + 1;
+        std::vector<NUdf::TUnboxedValue> buff(tupleWidth);
+        auto stream = graph->GetValue();
+
+        i64 totalRows = 0;
+        int blockCount = 0;
+        while (true) {
+            const auto status = stream.WideFetch(buff.data(), tupleWidth);
+            if (status == NYql::NUdf::EFetchStatus::Finish) {
+                break;
+            }
+            if (status == NYql::NUdf::EFetchStatus::Yield) {
+                continue;
+            }
+            totalRows += ArrowScalarAsInt(TArrowBlock::From(buff[tupleWidth - 1]));
+            ++blockCount;
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(totalRows, HighFanoutBuildRows);
+        UNIT_ASSERT_C(blockCount > 1,
+            TStringBuilder() << "Expected high-fanout lookup to flush multiple output blocks, got " << blockCount);
     }
 }
 } // namespace NKikimr::NMiniKQL

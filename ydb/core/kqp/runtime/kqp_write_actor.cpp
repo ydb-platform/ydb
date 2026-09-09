@@ -5405,9 +5405,7 @@ public:
     }
 
     void HandleRollback(TEvKqpBuffer::TEvRollback::TPtr& ev) {
-        // A no-op write can already be rolling back its read locks when the
-        // commit executer times out. Session cleanup then starts a new executer
-        // for the same rollback; send the pending result to that executer.
+        // A timeout can replace the executer while rollback is in progress.
         ExecuterActorId = ev->Get()->ExecuterActorId;
     }
 

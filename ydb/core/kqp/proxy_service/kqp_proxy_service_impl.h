@@ -386,9 +386,7 @@ public:
         return OrderedSessions.end();
     }
 
-    // Own the id: it may come from TargetIdIndex, whose entry is removed
-    // before the other session indexes have finished using it.
-    std::pair<TNodeId, TActorId> Erase(TString sessionId) {
+    std::pair<TNodeId, TActorId> Erase(const TString& sessionId) {
         auto it = LocalSessions.find(sessionId);
         auto result = std::make_pair<TNodeId, TActorId>(0, TActorId());
         if (it != LocalSessions.end()) {

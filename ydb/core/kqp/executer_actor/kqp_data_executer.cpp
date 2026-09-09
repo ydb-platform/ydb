@@ -1303,20 +1303,30 @@ private:
             {"enableWatermarks", Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks()},
             {"traceId", TraceId()});
 
-        StreamingQueryNodesManagerId = Register(
-            NFq::CreateStreamingQueryNodesManager(
-                SelfId(),
-                Database,
-                ToString(TxId),
-                graphParams,
-                TDuration::Seconds(10),
-                TDuration::Seconds(10)));
-        YDB_LOG_DEBUG("Created new StreamingQueryNodesManager",
-            {"marker", "KQPDATA"},
-            {"actorId", SelfId()},
-            {"txId", TxId},
-            {"streamingQueryNodesManagerId", StreamingQueryNodesManagerId},
-            {"traceId", TraceId()});
+        bool hasPqSources = false;
+        for (const auto& transaction : Request.Transactions) {
+            if (transaction.Body->GetHasPqSources()) {
+                hasPqSources = true;
+                break;
+            }
+        }
+
+        if (hasPqSources) {
+            StreamingQueryNodesManagerId = Register(
+                NFq::CreateStreamingQueryNodesManager(
+                    SelfId(),
+                    Database,
+                    context->StreamingQueryPath,
+                    graphParams,
+                    TDuration::Seconds(10),
+                    TDuration::Seconds(10)));
+            YDB_LOG_DEBUG("Created new StreamingQueryNodesManager",
+                {"marker", "KQPDATA"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"streamingQueryNodesManagerId", StreamingQueryNodesManagerId},
+                {"traceId", TraceId()});
+        }
     }
 
 private:

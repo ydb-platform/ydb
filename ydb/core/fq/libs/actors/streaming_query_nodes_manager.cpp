@@ -11,6 +11,7 @@
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/string/join.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_RUN_ACTOR
 
@@ -117,7 +118,7 @@ public:
     static constexpr char ActorName[] = "STREAMING_QUERY_NODES_MANAGER";
 
     void Bootstrap() {
-        LOG_D("StreamingQueryNodesManager started",
+        LOG_I("StreamingQueryNodesManager started",
             {"tenant", TenantName},
             {"taskCount", TopicSourceTaskNodes.size()},
             {"partitionCount", TopicPartitionsCount},
@@ -151,10 +152,14 @@ private:
         if (topicSourceTask == TopicSourceTaskNodes.end()) {
             return;
         }
-        topicSourceTask->second = ev->Sender.NodeId();
+        const ui32 nodeId = ev->Sender.NodeId();
+        if (!topicSourceTask->second) {
+            topicSourceTask->second = nodeId;
+            QueryNodes.insert(nodeId);
+        }
         LOG_D("Task node updated",
             {"taskId", taskId},
-            {"nodeId", ev->Sender.NodeId()});
+            {"nodeId", nodeId});
     }
 
     void Handle(TEvents::TEvWakeup::TPtr& ev) {
@@ -186,14 +191,10 @@ private:
     // -------------------------------------------------------------------------
 
     void CheckNodes(const TVector<ui32>& nodes) {
-        if (TopicSourceTaskNodes.empty()) {
-            return;
-        }
-
         const ui64 totalNodes = nodes.size();
 
         LOG_D("Received tenant node list",
-            {"totalNodes", totalNodes},
+            {"totalTenantNodes", totalNodes},
             {"topicSourceTasks", TopicSourceTaskNodes.size()},
             {"topicPartitions", TopicPartitionsCount});
 
@@ -206,52 +207,28 @@ private:
             return;
         }
 
-        THashSet<ui32> queryNodes;
-        for (const auto& [_, nodeId] : TopicSourceTaskNodes) {
-            if (nodeId) {
-                queryNodes.insert(*nodeId);
-            }
-        }
-        const ui64 nodesWithQuery = queryNodes.size();
+        const ui64 nodesWithQuery = QueryNodes.size();
+        const ui64 expectedTasks = (TopicPartitionsCount + 5 - 1) / 5;
+        const ui64 expectedNodesWithQuery = Min(totalNodes, expectedTasks);
 
-        // Restart only when topic readers cover less than half of tenant nodes
-        // and the query reads more than one partition per five tenant nodes.
-        // nodesWithQuery / totalNodes < 0.5  ⟺  nodesWithQuery * 2 < totalNodes
-        if (nodesWithQuery * 2 < totalNodes && TopicPartitionsCount > totalNodes / 5) {
+        if (nodesWithQuery < expectedNodesWithQuery) {
             const TString reason = TStringBuilder()
                 << "StreamingQuery health check failed: "
-                << "nodes with topic reader tasks (" << nodesWithQuery << ") "
-                << "is less than half of total tenant nodes (" << totalNodes << "). "
-                << "Topic partition count (" << TopicPartitionsCount << ") "
-                << "is greater than one fifth of total tenant nodes. "
+                << "nodes with topic reader tasks (" << nodesWithQuery << " [" << JoinSeq(", ", QueryNodes) << "]) "
+                << "is less than expected (" << expectedNodesWithQuery << "). "
+                << "Total tenant nodes: " << totalNodes << ". "
+                << "Expected topic reader tasks: " << expectedTasks << ". "
                 << "Query will be aborted.";
             LOG_W(reason);
             Abort(reason);
             return;
         }
 
-        if (nodesWithQuery * 2 < totalNodes) {
-            LOG_D("Health check passed: too few topic partitions to restart query",
-                {"nodesWithQuery", nodesWithQuery},
-                {"totalNodes", totalNodes},
-                {"topicPartitions", TopicPartitionsCount});
-            return;
-        }
-
-        // Check 2: if taskCount <= 2 * nodesWithQuery – do nothing extra.
-        // This is already the healthy case; we just log for visibility.
-        if (TopicSourceTaskNodes.size() <= 2 * nodesWithQuery) {
-            LOG_D("Health check passed",
-                {"nodesWithQuery", nodesWithQuery},
-                {"totalNodes", totalNodes},
-                {"taskCount", TopicSourceTaskNodes.size()});
-        } else {
-            // Tasks are piling up on fewer nodes than expected – log a warning
-            // but do NOT abort here per the spec.
-            LOG_W("Task concentration warning: taskCount > 2 * nodesWithQuery",
-                {"taskCount", TopicSourceTaskNodes.size()},
-                {"nodesWithQuery", nodesWithQuery});
-        }
+        LOG_D("Health check passed",
+            {"nodesWithQuery", nodesWithQuery},
+            {"expectedNodesWithQuery", expectedNodesWithQuery},
+            {"totalNodes", totalNodes},
+            {"expectedTasks", expectedTasks});
     }
 
     void ScheduleWakeup() {
@@ -276,6 +253,8 @@ private:
 
     // Contains topic-source tasks and their latest known node, when reported.
     THashMap<ui64, TMaybe<ui32>> TopicSourceTaskNodes;
+    // Nodes that have reported a topic-source task state.
+    THashSet<ui32> QueryNodes;
     ui64 TopicPartitionsCount = 0;
 
     bool LookupInFlight = false;

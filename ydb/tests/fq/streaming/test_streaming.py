@@ -2436,6 +2436,7 @@ FROM `{table_name}`"""
             END DO;
         """)
         self.wait_completed_checkpoints(kikimr, query_name)
+        time.sleep(60)
 
         path = f"{kikimr.get_database_name()}/{query_name}"
 
@@ -2457,7 +2458,8 @@ FROM `{table_name}`"""
 
         assert wait_for(
             lambda: streaming_query_tasks_count() > tasks_before_scaling,
-            timeout=60,
+            timeout_seconds=60,
+            step_seconds=1
         ), "The total number of streaming query tasks did not increase after adding slots"
 
         def read_tasks_are_on_every_slot() -> bool:
@@ -2469,6 +2471,9 @@ FROM `{table_name}`"""
                     return False
             return True
 
-        assert wait_for(read_tasks_are_on_every_slot, timeout=60), "Read tasks were not placed on every tenant slot"
+        assert wait_for(read_tasks_are_on_every_slot,
+            timeout_seconds=60,
+            step_seconds=1
+        ), "Read tasks were not placed on every tenant slot"
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")

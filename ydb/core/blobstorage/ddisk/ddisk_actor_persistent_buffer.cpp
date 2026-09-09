@@ -713,7 +713,7 @@ namespace NKikimr::NDDisk {
             PersistentBufferDataSectorsInfo.clear();
 
             PersistentBufferBarriersManager.RestoreBarriers(PersistentBuffers, PersistentBufferSpaceAllocator);
-            // Without an ownership marker, remnants of a retired namespace are not live data.
+            // Without an ownership marker, remnants of a retired registration are not live data.
             std::erase_if(PersistentBuffers, [this](const auto& item) {
                 return !PersistentBufferBarriersManager.HasBarrier(item.first.TabletId, item.first.DirectBlockGroupIndex);
             });
@@ -1868,7 +1868,7 @@ namespace NKikimr::NDDisk {
             return;
         }
         if (!creds.TabletId || creds.DirectBlockGroupIndex > Max<ui8>()) {
-            SendReply(*ev, std::make_unique<TEvRegisterPersistentBufferResult>(TStatus::INCORRECT_REQUEST, "invalid persistent buffer namespace"));
+            SendReply(*ev, std::make_unique<TEvRegisterPersistentBufferResult>(TStatus::INCORRECT_REQUEST, "invalid persistent buffer registration"));
             return;
         }
         if (!PersistentBufferReady) {
@@ -1883,7 +1883,7 @@ namespace NKikimr::NDDisk {
         const TPersistentBufferTabletKey key{creds.TabletId, static_cast<ui8>(creds.DirectBlockGroupIndex)};
         if (PersistentBufferBarriersManager.HasBarrier(key.TabletId, key.DirectBlockGroupIndex)
                 || PersistentBufferRemovals.contains(key)) {
-            SendReply(*ev, std::make_unique<TEvRegisterPersistentBufferResult>(TStatus::INCORRECT_REQUEST, "persistent buffer namespace already registered or closed"));
+            SendReply(*ev, std::make_unique<TEvRegisterPersistentBufferResult>(TStatus::INCORRECT_REQUEST, "persistent buffer already registered or closed"));
             return;
         }
         if (HasPersistentBufferBarrierInflight()) {
@@ -1908,7 +1908,7 @@ namespace NKikimr::NDDisk {
         }
         const TQueryCredentials creds(ev->Get()->Record.GetCredentials());
         if (!creds.TabletId || creds.DirectBlockGroupIndex > Max<ui8>()) {
-            SendReply(*ev, std::make_unique<TEvUnregisterPersistentBufferResult>(TStatus::INCORRECT_REQUEST, "invalid persistent buffer namespace"));
+            SendReply(*ev, std::make_unique<TEvUnregisterPersistentBufferResult>(TStatus::INCORRECT_REQUEST, "invalid persistent buffer registration"));
             return;
         }
         if (!PersistentBufferReady) {
@@ -1923,14 +1923,14 @@ namespace NKikimr::NDDisk {
         const TPersistentBufferTabletKey key{creds.TabletId, static_cast<ui8>(creds.DirectBlockGroupIndex)};
         if (auto it = PersistentBufferRemovals.find(key); it != PersistentBufferRemovals.end()) {
             if (it->second.Request) {
-                SendReply(*ev, std::make_unique<TEvUnregisterPersistentBufferResult>(TStatus::BUSY, "namespace removal in progress"));
+                SendReply(*ev, std::make_unique<TEvUnregisterPersistentBufferResult>(TStatus::BUSY, "registration removal in progress"));
             } else {
                 it->second.Request.Reset(ev.Release());
             }
             return;
         }
         if (!PersistentBufferBarriersManager.HasBarrier(key.TabletId, key.DirectBlockGroupIndex)) {
-            SendReply(*ev, std::make_unique<TEvUnregisterPersistentBufferResult>(TStatus::INCORRECT_REQUEST, "namespace is not registered"));
+            SendReply(*ev, std::make_unique<TEvUnregisterPersistentBufferResult>(TStatus::INCORRECT_REQUEST, "registration is not found"));
             return;
         }
         auto& removal = PersistentBufferRemovals[key];

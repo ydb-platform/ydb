@@ -1894,7 +1894,7 @@ void TNbsDbgLikeActor::HandlePeerRegistration(NDDisk::TEvRegisterPersistentBuffe
         return;
     }
     // Probe even after a rejected duplicate registration: only a successful list
-    // proves that the existing namespace is durable and is still being served.
+    // proves that the existing registration is durable and is still being served.
     auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(
         AllocConfig.GetTabletId(), Generation(), PB[k].Guid, MyDbgIndex);
     creds.ConnectionToken = PB[k].Token;

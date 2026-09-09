@@ -374,7 +374,7 @@ void TICStorageTransportActor::HandleRegisterPersistentBufferResult(
         request.ConnectionResult.GetDDiskInstanceGuid();
     credentials.ConnectionToken.emplace(
         request.ConnectionResult.GetConnectionToken());
-    // A duplicate registration is rejected. Verify that the existing namespace
+    // A duplicate registration is rejected. Verify that the existing registration
     // is still served before publishing the connected session to the partition.
     SendWithUndeliveryTracking(
         ctx,

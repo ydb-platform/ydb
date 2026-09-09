@@ -2744,11 +2744,11 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             0,
             NUnitTest::RandomString(DefaultBlockSize, 7));
 
-        // Each allocated PB namespace is retired before deallocating the DBG.
+        // Each allocated PB registration is retired before deallocating the DBG.
         UNIT_ASSERT_VALUES_EQUAL_C(
             allocatedPBuffers.size(),
             wipeBarrierOks.size(),
-            "unregister OK replies vs allocated PB namespaces");
+            "unregister OK replies vs allocated PB registrations");
         UNIT_ASSERT_C(
             pendingWipeBarriers.empty(),
             "unanswered wipe barrier-erase keys: "

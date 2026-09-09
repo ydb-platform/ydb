@@ -56,7 +56,7 @@ namespace NKikimr::NDDisk {
                 auto* item = result->Record.AddResult();
                 item->MutablePersistentBufferId()->CopyFrom(id);
                 item->MutableResult()->SetStatus(ownershipStatus);
-                item->MutableResult()->SetErrorReason("persistent buffer namespace is not ready, registered, or active");
+                item->MutableResult()->SetErrorReason("persistent buffer registration is not ready, registered, or active");
             }
             SendReply(*ev, std::move(result));
             return;

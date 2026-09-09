@@ -28,26 +28,27 @@ Registration rejects timestamps older than this interval,
 as well as timestamps in the future. A successful reply follows a durable
 barrier write with generation and LSN zero. An existing barrier rejects
 registration, including when it has no live records. On reconnect, a client
-can use `TEvListPersistentBuffer` to verify that an existing namespace is
-still served. Writes, reads, listing and erases require a registered namespace;
-connection management and diagnostics remain available before registration.
+can use `TEvListPersistentBuffer` to verify that an existing registration is
+still served. Writes, reads, listing and erases require a registered
+`(TabletId, DirectBlockGroupIndex)`; connection management and diagnostics
+remain available before registration.
 
-`TEvUnregisterPersistentBuffer` permanently retires the namespace. The PB
+`TEvUnregisterPersistentBuffer` permanently retires the registration. The PB
 stops admitting its operations, drains outstanding work and writes a barrier
 with maximum generation and LSN. It then waits twice the registration timeout
 (10 seconds by default), durably removes the barrier entry and replies `OK`.
 Registration is rejected throughout retirement. The delay makes registration
-messages sent before retirement too old to recreate the namespace after the
+messages sent before retirement too old to recreate the registration after the
 barrier is removed. If recovery finds the maximum barrier, it resumes retirement
 with a full waiting interval. Failed barrier writes require recovery before
 the PB can resume normal operations.
 
 The NBS direct-partition transport completes a PB connection only after
 `Connect`, registration, and a successful list probe. The probe also verifies
-an existing namespace after duplicate registration is rejected on reconnect.
-Partition deletion unregisters every tablet/DBG namespace, including separate
-namespaces sharing one PB, before deleting DDisk chunks and deallocating the
-groups in BSC. An already absent namespace satisfies that cleanup step.
+an existing registration after duplicate registration is rejected on reconnect.
+Partition deletion unregisters every tablet/DBG registration, including separate
+registrations sharing one PB, before deleting DDisk chunks and deallocating the
+groups in BSC. An already absent registration satisfies that cleanup step.
 
 ## Write, Read, and Replicate
 

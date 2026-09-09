@@ -335,8 +335,8 @@ private:
             NKikimrBlobStorage::NDDisk::TReplyStatus_E_Name(record.GetStatus())
                 .c_str());
 
-        // Cleanup may be retried after a lost reply or target namespaces may
-        // never have been registered. Their absence already satisfies cleanup.
+        // Cleanup may be retried after a lost reply or target registrations may
+        // never have been made. Their absence already satisfies cleanup.
         if (record.GetStatus() ==
             NKikimrBlobStorage::NDDisk::TReplyStatus::BUSY)
         {

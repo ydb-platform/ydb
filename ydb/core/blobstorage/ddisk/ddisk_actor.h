@@ -947,7 +947,7 @@ namespace NKikimr::NDDisk {
                     const auto status = CheckPersistentBufferOwnership(creds);
                     if (status != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
                         SendReply(ev, std::make_unique<typename TEvent::TResult>(status,
-                            "persistent buffer namespace is not registered, not yet durable, or closed"));
+                            "persistent buffer registration is not registered, not yet durable, or closed"));
                         registerError();
                         return false;
                     }

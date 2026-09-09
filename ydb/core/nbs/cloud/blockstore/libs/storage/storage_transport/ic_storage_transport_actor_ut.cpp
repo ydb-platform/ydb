@@ -115,7 +115,7 @@ Y_UNIT_TEST_SUITE(TICStorageTransportRegistrationTest)
             123);
     }
 
-    Y_UNIT_TEST(ExistingNamespaceMustStillBeServed)
+    Y_UNIT_TEST(ExistingRegistrationMustStillBeServed)
     {
         for (auto status: {TStatus::OK, TStatus::OUTDATED}) {
             TRegistrationFixture fixture;

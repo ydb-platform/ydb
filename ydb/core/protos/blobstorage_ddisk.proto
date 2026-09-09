@@ -256,7 +256,7 @@ message TEvRegisterPersistentBufferResult {
     optional string ErrorReason = 2;
 }
 
-// Permanently retire a namespace. OK follows durable removal of its closed barrier.
+// Permanently retire a registration. OK follows durable removal of its closed barrier.
 message TEvUnregisterPersistentBuffer {
     TRequestCredentials Credentials = 1;
 }

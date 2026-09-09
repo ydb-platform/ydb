@@ -505,7 +505,7 @@ struct TPersistentBufferFormat {
     // are saved in the header. Existing checksum-formatted records remain readable.
     // Kept last to preserve existing positional aggregate initialization.
     bool EnableChecksums = true;
-    // Registration age limit. Closed namespaces are retained for twice this interval.
+    // Registration age limit. Closed registrations are retained for twice this interval.
     ui32 RegistrationTimeoutMilliseconds = 5000;
 };
 

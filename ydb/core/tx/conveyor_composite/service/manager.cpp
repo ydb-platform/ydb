@@ -6,17 +6,6 @@
 
 namespace NKikimr::NConveyorComposite {
 
-std::vector<std::shared_ptr<TWorkersPool>> TTasksManager::BuildWorkerPools() const {
-    std::vector<std::shared_ptr<TWorkersPool>> result;
-    result.reserve(WorkerPools.size());
-    for (const auto& pool : WorkerPools) {
-        if (pool) {
-            result.emplace_back(pool);
-        }
-    }
-    return result;
-}
-
 ui64 TTasksManager::FindFreeWorkerPoolsPosition() {
     const auto it = std::find(WorkerPools.begin(), WorkerPools.end(), nullptr);
     if (it != WorkerPools.end()) {

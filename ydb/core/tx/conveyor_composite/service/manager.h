@@ -4,6 +4,8 @@
 
 #include <ydb/core/tx/conveyor_composite/usage/config.h>
 
+#include <ranges>
+
 namespace NKikimr::NConveyorComposite {
 class TTasksManager {
 private:
@@ -11,7 +13,10 @@ private:
     THashMap<TString, ui64> WorkerPoolNameToIndex;
     std::vector<std::shared_ptr<TProcessCategory>> Categories;
 
-    std::vector<std::shared_ptr<TWorkersPool>> BuildWorkerPools() const;
+    auto BuildWorkerPools() const {
+        return WorkerPools | std::views::filter([](const auto& pool) { return pool != nullptr; });
+    }
+
     ui64 FindFreeWorkerPoolsPosition();
     ui64 AddWorkerPool(const NConfig::TWorkersPool& poolConfig,
         const NActors::TActorId& distributorActorId, TCounters& counters);

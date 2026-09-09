@@ -98,10 +98,10 @@ struct TEvPrivate {
 
         // Query locking
         EvLockStreamingQueryResult,
-        EvPingOperationOwnerResult,
         EvUnlockStreamingQueryResult,
         EvCheckAliveRequest,
         EvCheckAliveResponse,
+        EvPingOperationOwnerResult,
 
         EvEnd
     };
@@ -414,24 +414,10 @@ protected:
         switch (status) {
             case Ydb::StatusIds::UNDETERMINED:
             case Ydb::StatusIds::STATUS_CODE_UNSPECIFIED: return NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN;
-            case Ydb::StatusIds::ALREADY_EXISTS:
-            case Ydb::StatusIds::SCHEME_ERROR: return NYql::TIssuesIds::KIKIMR_SCHEME_ERROR;
-            case Ydb::StatusIds::SESSION_BUSY:
-            case Ydb::StatusIds::SESSION_EXPIRED: return NYql::TIssuesIds::KIKIMR_BAD_OPERATION;
-            case Ydb::StatusIds::SUCCESS: return NYql::TIssuesIds::SUCCESS;
-            case Ydb::StatusIds::BAD_REQUEST: return NYql::TIssuesIds::KIKIMR_BAD_REQUEST;
-            case Ydb::StatusIds::UNAUTHORIZED: return NYql::TIssuesIds::KIKIMR_ACCESS_DENIED;
+            case Ydb::StatusIds::ALREADY_EXISTS: return NYql::TIssuesIds::KIKIMR_SCHEME_ERROR;
             case Ydb::StatusIds::INTERNAL_ERROR: return NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR;
-            case Ydb::StatusIds::ABORTED: return NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED;
-            case Ydb::StatusIds::UNAVAILABLE: return NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE;
-            case Ydb::StatusIds::OVERLOADED: return NYql::TIssuesIds::KIKIMR_OVERLOADED;
-            case Ydb::StatusIds::TIMEOUT: return NYql::TIssuesIds::KIKIMR_TIMEOUT;
-            case Ydb::StatusIds::BAD_SESSION: return NYql::TIssuesIds::KIKIMR_TOO_MANY_TRANSACTIONS;
             case Ydb::StatusIds::PRECONDITION_FAILED: return NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED;
-            case Ydb::StatusIds::CANCELLED: return NYql::TIssuesIds::KIKIMR_OPERATION_CANCELLED;
-            case Ydb::StatusIds::UNSUPPORTED: return NYql::TIssuesIds::KIKIMR_UNSUPPORTED;
-            case Ydb::StatusIds::NOT_FOUND: return NYql::TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND;
-            default: return NYql::TIssuesIds::DEFAULT_ERROR;
+            default: return NYql::YqlStatusFromYdbStatus(status);
         }
     }
 
@@ -1332,6 +1318,15 @@ private:
         const auto currentOwnerId = schemeInfo.GetOwnerSchemeshardId();
         const auto currentLocalPathId = schemeInfo.GetLocalPathId();
         if (currentOwnerId && currentLocalPathId && (currentOwnerId != Settings.QueryPathId.OwnerId || currentLocalPathId != Settings.QueryPathId.LocalPathId)) {
+            if (currentOwnerId == Settings.QueryPathId.OwnerId && currentLocalPathId < Settings.QueryPathId.LocalPathId) {
+                // Older version compatibility
+                State.ClearSchemeInfo();
+                State.ClearOperationOwnerGeneration();
+                State.SetStatus(NKikimrKqp::TStreamingQueryState::STATUS_DELETING);
+                ExpireAt = TInstant::Now() + INITIAL_OPERATION_TTL;
+                return true;
+            }
+
             OperationAlreadyFinished = true;
             Finish(Ydb::StatusIds::SUCCESS, TStringBuilder()
                 << "Streaming query path id changed on: " << currentOwnerId << "." << currentLocalPathId
@@ -2338,6 +2333,16 @@ private:
             return;
         }
 
+        if (QuerySettings.InflightOperation != TStreamingQueryMeta::TOperations::Drop) {
+            // Older version compatibility
+            State.ClearCheckpointId();
+            State.ClearQueryTextRevision();
+            State.SetStatus(NKikimrKqp::TStreamingQueryState::STATUS_CREATED);
+            Become(&TThis::StateFunc);
+            UpdateQueryState("finish previous query cleanup");
+            return;
+        }
+
         Finish(Ydb::StatusIds::SUCCESS);
     }
 
@@ -2454,7 +2459,7 @@ public:
     )
 
 protected:
-    virtual bool ValidateSchemeVersion(const TSchemeInfo& schemeInfo) const = 0;
+    virtual bool ValidateSchemeVersion(const TSchemeInfo& schemeInfo, const std::optional<TSchemeInfo>& previousInfo) const = 0;
 
     virtual bool HandleStreamingOperationStaleOwner(const TActorId& owner) {
         Y_UNUSED(owner);
@@ -2543,7 +2548,7 @@ private:
             return;
         }
 
-        SchemeInfo = ev->Get()->Info;
+        auto previousInfo = std::exchange(SchemeInfo, ev->Get()->Info);
         if (Context.GetUserToken() && Context.GetUserToken()->GetSerializedToken() && SchemeInfo && SchemeInfo->SecurityObject && Access) {
             if (const auto& securityObject = *SchemeInfo->SecurityObject; !securityObject.CheckAccess(Access, *Context.GetUserToken())) {
                 YDB_LOG_WARN("[StreamingQueries] Access denied",
@@ -2570,7 +2575,7 @@ private:
             return;
         }
 
-        if (!SchemeInfo || !ValidateSchemeVersion(*SchemeInfo)) {
+        if (!SchemeInfo || !ValidateSchemeVersion(*SchemeInfo, previousInfo)) {
             SchemeOperationStarted = false;
             return TBase::FatalError(Ydb::StatusIds::PRECONDITION_FAILED, "Streaming query info was changed due to multiple modifications inflight");
         }
@@ -2736,8 +2741,15 @@ public:
     }
 
 private:
-    bool ValidateSchemeVersion(const TSchemeInfo& schemeInfo) const final {
-        return schemeInfo.InflightOperationOwnerId == TBase::SelfId();
+    bool ValidateSchemeVersion(const TSchemeInfo& schemeInfo, const std::optional<TSchemeInfo>& previousInfo) const final {
+        if (schemeInfo.InflightOperationOwnerId) {
+            return schemeInfo.InflightOperationOwnerId == TBase::SelfId();
+        }
+
+        // Older version compatibility
+        return schemeInfo.Properties.GetProperties().contains(TStreamingQueryConfig::TProperties::InflightOperation)
+            && schemeInfo.Version == (previousInfo ? previousInfo->Version + 1 : 1)
+            && (!previousInfo || schemeInfo.PathId == previousInfo->PathId);
     }
 
     std::optional<NKikimrSchemeOp::TModifyScheme> GetEndSchemeTx(bool success) override {
@@ -2987,7 +2999,7 @@ private:
         }
     }
 
-    bool ValidateSchemeVersion(const TSchemeInfo& schemeInfo) const final {
+    bool ValidateSchemeVersion(const TSchemeInfo& schemeInfo, const std::optional<TSchemeInfo>&) const final {
         return schemeInfo.PathId == Settings.PathId && schemeInfo.Version == Settings.AlterVersion && schemeInfo.InflightOperationOwnerId;
     }
 

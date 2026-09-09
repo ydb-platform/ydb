@@ -241,9 +241,225 @@ bool IsLockRequest(const TEvKqp::TEvQueryRequest::TPtr& ev) {
     return ev->Get()->GetQuery().Contains("-- TLockStreamingQueryRequestActor::ReadQueryInfo");
 }
 
+struct TMainCheckAliveRequest : TEventPB<TMainCheckAliveRequest, google::protobuf::Empty,
+    EventSpaceBegin(TEvents::ES_PRIVATE) + 8> {};
+struct TMainCheckAliveResponse : TEventPB<TMainCheckAliveResponse, google::protobuf::Empty,
+    EventSpaceBegin(TEvents::ES_PRIVATE) + 9> {};
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
+    Y_UNIT_TEST(MixedVersionLivenessPreservesWireIds) {
+        TContinuationTest f;
+        TBlockEvents<TEvTrackOperationCompletion> tracking(f.Runtime);
+        TBlockEvents<TEvKqp::TEvQueryRequest> locking(f.Runtime, IsLockRequest);
+        auto result = f.Start(TContinuationTest::CreateQuery());
+        f.WaitFor("operation awaiting its row lock", [&] { return !tracking.empty() && !locking.empty(); });
+        const auto owner = tracking.front()->Get()->GetOperationOwner();
+        TActorId checker;
+        bool replied = false;
+        auto wire = f.Runtime.AddObserver([&](auto& ev) {
+            if (ev->Recipient == owner) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->GetTypeRewrite(), TMainCheckAliveRequest::EventType);
+                checker = ev->Sender;
+            } else if (checker && ev->Recipient == checker && ev->Sender == owner) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->GetTypeRewrite(), TMainCheckAliveResponse::EventType);
+                replied = true;
+            } else {
+                return;
+            }
+            // Deserialize at the receiver, as Interconnect does between different versions.
+            ev.Reset(new IEventHandle(ev->GetTypeRewrite(), ev->Flags, ev->Recipient, ev->Sender,
+                ev->ReleaseChainBuffer(), ev->Cookie));
+        });
+        tracking.Unblock().Stop();
+        f.WaitFor("owner answered the compatible liveness probe", [&] { return replied; });
+        UNIT_ASSERT(!result.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(f.Finished, 0);
+        wire.Remove();
+        locking.Unblock().Stop();
+        UNIT_ASSERT_VALUES_EQUAL(f.Runtime.WaitFuture(result).GetStatus(), EStatus::SUCCESS);
+        f.WaitFinished(1);
+        f.CheckSettled();
+    }
+
+    Y_UNIT_TEST(MixedVersionSchemeShardWithoutOperationOwner) {
+        TContinuationTest f;
+        ui64 registrations = 0;
+        auto legacySchemeShard = f.Runtime.AddObserver<TEvTxUserProxy::TEvProposeTransaction>([&](auto& ev) {
+            auto* tx = ev->Get()->Record.MutableTransaction()->MutableModifyScheme();
+            if (!tx->HasCreateStreamingQuery()) {
+                return;
+            }
+            auto* query = tx->MutableCreateStreamingQuery();
+            if (query->GetName() == TContinuationTest::QueryName && query->HasOperationOwnerActorId()) {
+                query->ClearOperationOwnerActorId();
+                ++registrations;
+            }
+        });
+        f.Exec(TContinuationTest::CreateQuery());
+        f.CheckSettled();
+        f.Exec("ALTER STREAMING QUERY ContinuedQuery SET (RUN = FALSE);");
+        f.CheckSettled();
+        f.Exec("CREATE OR REPLACE STREAMING QUERY ContinuedQuery WITH (RUN = FALSE) AS DO BEGIN "
+            "INSERT INTO Source.output SELECT value FROM Source.input WITH (FORMAT = 'raw', SCHEMA (value String NOT NULL)); END DO;");
+        f.CheckSettled();
+        f.Exec("DROP STREAMING QUERY ContinuedQuery;");
+        f.CheckDropped();
+        UNIT_ASSERT_VALUES_EQUAL(registrations, 4);
+        UNIT_ASSERT(f.Tracking.empty());
+    }
+
+    Y_UNIT_TEST_TWIN(MixedVersionLegacyMetadataStates, Drop) {
+        TContinuationTest f;
+        using TState = NKikimrKqp::TStreamingQueryState;
+        for (const auto status : {TState::STATUS_UNSPECIFIED, TState::STATUS_CREATING, TState::STATUS_CREATED,
+            TState::STATUS_STARTING, TState::STATUS_RUNNING, TState::STATUS_STOPPING, TState::STATUS_STOPPED,
+            TState::STATUS_DELETING}) {
+            f.Exec(TContinuationTest::CreateQuery());
+            f.WaitFinished(f.Tracking.size());
+            const auto deadOwner = f.Tracking.back()->GetOperationOwner();
+            UNIT_ASSERT(!f.Runtime.FindActor(deadOwner));
+            auto state = f.CheckRow();
+            state.SetStatus(status);
+            state.SetOperationActorId(ScriptExecutionRunnerActorIdString(deadOwner));
+            state.ClearOperationOwnerGeneration();
+            state.MutableSchemeInfo()->SetAlterVersion(
+                f.Describe()->ResultSet.at(0).Self->Info.GetVersion().GetStreamingQueryVersion());
+            auto json = NProtobufJson::Proto2Json(state);
+            UNIT_ASSERT(json.EndsWith('}'));
+            json.pop_back();
+            // main writes these fields and does not know OperationOwnerGeneration.
+            json += R"(,"OperationName":"ALTER STREAMING QUERY","OperationStartedAt":{"seconds":1},"QueryText":"legacy text","Run":false,"ResourcePool":""})";
+            TParamsBuilder params;
+            params.AddParam("$state").Json(json).Build();
+            const auto updated = f.Runtime.WaitFuture(f.MetadataClient.ExecuteQuery(
+                "DECLARE $state AS Json; UPDATE `.metadata/streaming/queries` SET state = $state "
+                "WHERE query_path = '/Root/ContinuedQuery';", TTxControl::NoTx(), params.Build()));
+            UNIT_ASSERT_C(updated.IsSuccess(), updated.GetIssues().ToString());
+
+            if constexpr (!Drop) {
+                f.Exec("ALTER STREAMING QUERY ContinuedQuery SET (RUN = FALSE);");
+                f.CheckSettled();
+                const auto actual = f.CheckRow().GetStatus();
+                UNIT_ASSERT_C(actual == TState::STATUS_CREATED || actual == TState::STATUS_STOPPED,
+                    "Legacy state " << TState::EStatus_Name(status) << " was not synchronized: " << TState::EStatus_Name(actual));
+            }
+            f.Exec("DROP STREAMING QUERY ContinuedQuery;");
+            f.CheckDropped();
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(MixedVersionOwnerlessDescriptionRejectsChangedObject, PathChanged) {
+        TContinuationTest f;
+        f.Exec(TContinuationTest::CreateQuery());
+        f.WaitFinished(1);
+        const auto initialState = f.CheckRow().SerializeAsString();
+        bool registered = false;
+        auto legacySchemeShard = f.Runtime.AddObserver<TEvTxUserProxy::TEvProposeTransaction>([&](auto& ev) {
+            auto* tx = ev->Get()->Record.MutableTransaction()->MutableModifyScheme();
+            if (tx->HasCreateStreamingQuery() && tx->GetCreateStreamingQuery().GetName() == TContinuationTest::QueryName
+                && tx->GetCreateStreamingQuery().HasOperationOwnerActorId()) {
+                tx->MutableCreateStreamingQuery()->ClearOperationOwnerActorId();
+                registered = true;
+            }
+        });
+        bool changed = false;
+        auto descriptions = f.Runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>([&](auto& ev) {
+            for (auto& entry : ev->Get()->Request->ResultSet) {
+                if (registered && entry.SyncVersion && entry.Path == SplitPath(TString(TContinuationTest::QueryPath)) && entry.Self) {
+                    auto self = MakeIntrusive<NSchemeCache::TSchemeCacheNavigate::TDirEntryInfo>(*entry.Self);
+                    if constexpr (PathChanged) {
+                        self->Info.SetPathId(self->Info.GetPathId() + 1);
+                    } else {
+                        auto* version = self->Info.MutableVersion();
+                        version->SetStreamingQueryVersion(version->GetStreamingQueryVersion() + 1);
+                    }
+                    entry.Self = std::move(self);
+                    changed = true;
+                }
+            }
+        });
+        f.Exec("ALTER STREAMING QUERY ContinuedQuery SET (RUN = FALSE);", EStatus::PRECONDITION_FAILED);
+        UNIT_ASSERT(changed);
+        UNIT_ASSERT_VALUES_EQUAL(f.CheckRow().SerializeAsString(), initialState);
+        descriptions.Remove();
+        legacySchemeShard.Remove();
+        f.Exec("ALTER STREAMING QUERY ContinuedQuery SET (RUN = FALSE);");
+        f.CheckSettled();
+    }
+
+    Y_UNIT_TEST(MixedVersionRecreatesQueryWithLegacyOrphanRow) {
+        TContinuationTest f;
+        f.Exec(TContinuationTest::CreateQuery());
+        f.WaitFinished(1);
+        const auto oldPathId = f.CheckRow().GetSchemeInfo().GetLocalPathId();
+        // main can finish the scheme drop and lose its owner before removing the row.
+        f.DropInSchemeShard();
+        UNIT_ASSERT_VALUES_EQUAL(f.CheckRow().GetSchemeInfo().GetLocalPathId(), oldPathId);
+
+        f.Exec(TContinuationTest::CreateQuery());
+        f.CheckSettled();
+        const auto state = f.CheckRow();
+        UNIT_ASSERT(state.GetSchemeInfo().GetLocalPathId() > oldPathId);
+        UNIT_ASSERT_VALUES_EQUAL(state.GetSchemeInfo().GetLocalPathId(),
+            f.Describe()->ResultSet.at(0).Self->Info.GetPathId());
+        f.Exec("ALTER STREAMING QUERY ContinuedQuery SET (RUN = FALSE);");
+        f.CheckSettled();
+        f.Exec("DROP STREAMING QUERY ContinuedQuery;");
+        f.CheckDropped();
+    }
+
+    Y_UNIT_TEST(MixedVersionDelayedLockDoesNotChangeRecreatedQuery) {
+        TContinuationTest f;
+        TBlockEvents<TEvTrackOperationCompletion> tracking(f.Runtime);
+        TBlockEvents<TEvKqp::TEvQueryRequest> locking(f.Runtime, IsLockRequest);
+        auto result = f.Start(TContinuationTest::CreateQuery());
+        f.WaitFor("old operation awaiting its row lock", [&] { return !tracking.empty() && !locking.empty(); });
+        locking.Stop();
+        f.DropInSchemeShard();
+        f.Exec(TContinuationTest::CreateQuery());
+        f.CheckSettled();
+        const auto recreated = f.CheckRow().SerializeAsString();
+
+        locking.Unblock();
+        UNIT_ASSERT_VALUES_EQUAL(f.Runtime.WaitFuture(result).GetStatus(), EStatus::PRECONDITION_FAILED);
+        UNIT_ASSERT_VALUES_EQUAL(f.CheckRow().SerializeAsString(), recreated);
+        tracking.Unblock().Stop();
+        f.WaitFinished(2);
+        f.CheckSettled();
+    }
+
+    Y_UNIT_TEST(MixedVersionPreservesDisabledMetadataTtl) {
+        TContinuationTest f(false);
+        // Pre-stage the added column before rolling out new nodes, keeping TTL disabled.
+        TVector<NKikimrSchemeOp::TColumnDescription> columns;
+        for (const auto& [name, type] : TVector<std::pair<TString, TString>>{
+            {"database_id", "Utf8"}, {"query_path", "Utf8"}, {"state", "Json"}, {"expire_at", "Timestamp"}}) {
+            auto& column = columns.emplace_back();
+            column.SetName(name);
+            column.SetType(type);
+        }
+        const auto edge = f.Runtime.AllocateEdgeActor();
+        f.Runtime.Register(CreateTableCreator({".metadata", "streaming", "queries"},
+            std::move(columns), {"database_id", "query_path"}, NKikimrServices::KQP_PROXY),
+            0, 0, TMailboxType::Simple, 0, edge);
+        const auto created = f.Runtime.GrabEdgeEvent<TEvTableCreator::TEvCreateTableResponse>(edge);
+        UNIT_ASSERT_C(created && created->Get()->Success, "Could not pre-stage queries table");
+        UNIT_ASSERT_VALUES_EQUAL(f.ExecMetadata("SELECT * FROM `.metadata/streaming/queries`;").GetResultSet(0).ColumnsCount(), 4);
+
+        f.Exec(TContinuationTest::CreateQuery());
+        f.CheckSettled();
+        auto client = f.Runner->GetTableClient(NYdb::NTable::TClientSettings().AuthToken(BUILTIN_ACL_METADATA));
+        auto session = f.Runtime.WaitFuture(client.CreateSession());
+        UNIT_ASSERT_C(session.IsSuccess(), session.GetIssues().ToString());
+        const auto description = f.Runtime.WaitFuture(session.GetSession().DescribeTable("/Root/.metadata/streaming/queries"));
+        UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
+        UNIT_ASSERT(!description.GetTableDescription().GetTtlSettings());
+        f.Exec("DROP STREAMING QUERY ContinuedQuery;");
+        f.CheckDropped();
+    }
+
     Y_UNIT_TEST(CreateAlterDropAndValidationErrorsFinish) {
         TContinuationTest f;
         f.Exec(TContinuationTest::CreateQuery());
@@ -1308,11 +1524,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
             column.SetType(type);
         }
         const auto edge = f.Runtime.AllocateEdgeActor();
-        f.Runtime.Register(CreateTableCreator({"Root", ".metadata", "streaming", "queries"},
+        f.Runtime.Register(CreateTableCreator({".metadata", "streaming", "queries"},
             std::move(columns), {"database_id", "query_path"}, NKikimrServices::KQP_PROXY),
             0, 0, TMailboxType::Simple, 0, edge);
         const auto created = f.Runtime.GrabEdgeEvent<TEvTableCreator::TEvCreateTableResponse>(edge);
         UNIT_ASSERT_C(created && created->Get()->Success, "Could not create legacy queries table");
+        UNIT_ASSERT_VALUES_EQUAL(f.ExecMetadata("SELECT * FROM `.metadata/streaming/queries`;").GetResultSet(0).ColumnsCount(), 3);
 
         f.Exec(TContinuationTest::CreateQuery());
         f.CheckSettled();

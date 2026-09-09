@@ -72,7 +72,6 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
     }
 
     Y_ENSURE(ActiveOp && ActiveOp->IsInProgress());
-    KeyedOperation = KeyedOperation || (ActiveOp->HasKeysInfo() && ActiveOp->KeysCount() > 0);
     auto status = Self->Pipeline.RunExecutionPlan(ActiveOp, CompleteList, txc, ctx);
     KeyedOperation = KeyedOperation || (ActiveOp->HasKeysInfo() && ActiveOp->KeysCount() > 0);
 

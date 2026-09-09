@@ -355,7 +355,7 @@ message TFeatureFlags {
     optional bool DisableFileStoreSSDSystemSpaceAccounting = 302 [default = false, (RequireRestart) = true];
     optional bool EnableHasPredicatesInResourcePoolClassifiers = 303 [default = true];
     optional bool EnableRejectActionInResourcePoolClassifiers = 304 [default = true];
-    optional bool EnableMoveWithColumnTableReplace = 305 [default = false];
+    optional bool EnableMoveWithColumnTableReplace = 305 [default = true];
     optional bool DisableOldSecrets = 306 [default = false];
     optional bool EnableKafkaServerlessTransactions = 307 [default = false];
     optional bool EnableGeneratedStored = 308 [default = false];

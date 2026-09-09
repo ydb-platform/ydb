@@ -36,6 +36,7 @@ struct TKqpProxyRequest {
     TString SessionId;
     TKqpDbCountersPtr DbCounters;
     NWilson::TSpan Span;
+    bool QueryDispatched = false;
 
     TKqpProxyRequest(const TActorId& sender, ui64 senderCookie, const TString& traceId,
         ui32 eventType)

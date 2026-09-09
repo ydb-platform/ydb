@@ -30,6 +30,7 @@ TString FallbackQueryTraceName(NKikimrKqp::EQueryType queryType,
 void AddQueryTraceAttributes(NWilson::TSpan& span, NKikimrKqp::EQueryType queryType,
     NKikimrKqp::EQueryAction action, const TString& database, const TString& query);
 void EndQueryTraceSpan(NWilson::TSpan& span, Ydb::StatusIds::StatusCode status);
+void EndProxyQueryTraceSpan(NWilson::TSpan& span, const NKikimrKqp::TEvQueryResponse& response);
 void AddQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescription& description,
     const TKqpQueryStats& stats, ui64 requestUnits, Ydb::StatusIds::StatusCode status);
 void AddReadTraceStats(NWilson::TSpan& span, NYql::NDqProto::TDqTaskStats& stats,

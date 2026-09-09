@@ -641,13 +641,6 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                 if (!table.ForEachFrom(buildCursor, onMatch, isFull)) {
                     return false;
                 }
-            } else if constexpr (SemiOrOnlyJoin(Join.Kind) && !PreservedRowsInBuildTable()) {
-                found = table.LookupAny(probeRow, [&](TSingleTuple tableMatch) {
-                    if constexpr (HasFilter) {
-                        return filter->PairPasses(tableMatch);
-                    }
-                    return true;
-                });
             } else {
                 if (!table.Lookup(probeRow, buildCursor, onMatch, isFull)) {
                     return false;

@@ -29,3 +29,7 @@ Test filters should include part of full test name. Full test name format depend
 ## C++
 
 - Use C++20 or earlier
+
+## Agent instructions
+
+- Before you add or change instructions for AI agents (`AGENTS.md`, `CLAUDE.md`, skills, rules), read [ydb/agents/.agents/skills/ydb-agent-instructions/SKILL.md](ydb/agents/.agents/skills/ydb-agent-instructions/SKILL.md).

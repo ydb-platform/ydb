@@ -5,6 +5,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_race unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_block4_2
 ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3of4
+ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
 ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
 ydb/core/kafka_proxy/ut RequestUtilityActors.DescribeConfigs
 ydb/core/kafka_proxy/ut TTopicLocationActor.MissingTopicIsSchemeError
@@ -14,6 +15,7 @@ ydb/core/kafka_proxy/ut TTopicOffsetsActor.MissingPartitionIsSchemeError
 ydb/core/kafka_proxy/ut/protocol KafkaProtocol.TopicsCompactionGapFromRetention
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CreateAndAlterStreamingQuery
 ydb/core/kqp/ut/federated_query/datastreams unittest.[*/*] chunk
+ydb/core/persqueue/public/schema/ut unittest.sole chunk
 ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactWithIndexCreation[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactWithIndexCreation[TabletRebootsBucket1]
 ydb/core/tx/schemeshard/ut_compaction_reboots unittest.[*/*] chunk

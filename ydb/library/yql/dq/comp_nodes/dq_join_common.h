@@ -14,6 +14,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -1136,6 +1137,10 @@ struct TPackedTupleOutputBase : NNonCopyable::TMoveOnly {
         return Output_.SelectSide(Join.Preserved).NTuples;
     }
 
+    i64 SizeBytes() const {
+        return Output_.Build.AllocatedBytes() + Output_.Probe.AllocatedBytes();
+    }
+
     auto MakeConsumeFn() {
         struct ConsumeFn {
             TPackedTupleOutputBase& Self;
@@ -1182,10 +1187,11 @@ protected:
     BuildNullIfNeeded Nulls_;
 };
 
-template <i64 MaxOutputRows, typename JoinType, typename OutputType, typename FlushSink>
+template <typename JoinType, typename OutputType, typename FlushSink>
 EFetchResult RunPackedHashJoinBatch(TComputationContext& ctx, JoinType& join, OutputType& output, FlushSink&& onFlush,
                                     TPackedTuplePairFilter* filter = nullptr) {
-    auto outputIsFull = [&]() { return output.SizeTuples() >= MaxOutputRows; };
+    // Bound the batch in bytes, not rows: rows say nothing about memory once overflow columns are fat
+    auto outputIsFull = [&]() { return output.SizeBytes() >= static_cast<i64>(MaxBlockSizeInBytes); };
     while (!outputIsFull()) {
         switch (join.MatchRows(ctx, output.MakeConsumeFn(), outputIsFull, filter)) {
         case EFetchResult::Finish:

@@ -10,6 +10,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -1068,6 +1069,49 @@ TJoinTestData HighFanoutInnerJoinTestData() {
     return td;
 }
 
+// The next two share the same shape - one probe row matching every build row - and differ only in
+// how wide a row is, so the byte budget is the only thing deciding how many rows a block holds.
+constexpr int NarrowRowsFanout = 40000;
+
+TJoinTestData NarrowRowsHighFanoutTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftKeys = {1};
+    TVector<ui64> leftValues = {7};
+    TVector<ui64> rightKeys(NarrowRowsFanout, 1);
+    TVector<ui64> rightValues(NarrowRowsFanout);
+    for (int i = 0; i < NarrowRowsFanout; ++i) {
+        rightValues[i] = i;
+    }
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+constexpr int WideRowsFanout = 300;
+constexpr int WideRowsValueSize = 4096;
+
+TJoinTestData WideRowsHighFanoutTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftKeys = {1};
+    TVector<TString> leftValues = {TString(WideRowsValueSize, 'P')};
+    TVector<ui64> rightKeys(WideRowsFanout, 1);
+    TVector<TString> rightValues(WideRowsFanout);
+    for (int i = 0; i < WideRowsFanout; ++i) {
+        rightValues[i] = TString(WideRowsValueSize, 'a' + (i % 26));
+    }
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
 TJoinTestData OutputBufferBoundedTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -1938,8 +1982,24 @@ void AssertSpilled(IComputationGraph& graph) {
 struct TOutputBlockStats {
     i64 TotalRows = 0;
     i64 MaxBlockRows = 0;
+    i64 MaxBlockBytes = 0;
     int BlockCount = 0;
 };
+
+i64 ArrayDataBytes(const arrow::ArrayData& data) {
+    i64 bytes = 0;
+    for (const auto& buffer : data.buffers) {
+        if (buffer) {
+            bytes += buffer->size();
+        }
+    }
+    for (const auto& child : data.child_data) {
+        if (child) {
+            bytes += ArrayDataBytes(*child);
+        }
+    }
+    return bytes;
+}
 
 TOutputBlockStats MeasureOutputBlocks(TJoinTestData& td) {
     auto descr = MakeJoinDescription(td);
@@ -1966,6 +2026,15 @@ TOutputBlockStats MeasureOutputBlocks(TJoinTestData& td) {
         const i64 rows = ArrowScalarAsInt(TArrowBlock::From(buff[tupleWidth - 1]));
         stats.TotalRows += rows;
         stats.MaxBlockRows = std::max(stats.MaxBlockRows, rows);
+
+        i64 blockBytes = 0;
+        for (size_t column = 0; column + 1 < tupleWidth; ++column) {
+            const arrow::Datum& datum = TArrowBlock::From(buff[column]).GetDatum();
+            if (datum.is_array()) {
+                blockBytes += ArrayDataBytes(*datum.array());
+            }
+        }
+        stats.MaxBlockBytes = std::max(stats.MaxBlockBytes, blockBytes);
         ++stats.BlockCount;
     }
     if (td.ExpectsSpilling) {
@@ -1975,14 +2044,17 @@ TOutputBlockStats MeasureOutputBlocks(TJoinTestData& td) {
 }
 
 void AssertOutputBufferBounded(const TOutputBlockStats& stats, i64 expectedTotal) {
-    constexpr i64 maxOutputRows = 10000;
     UNIT_ASSERT_VALUES_EQUAL(stats.TotalRows, expectedTotal);
     UNIT_ASSERT_C(stats.BlockCount > 1,
         TStringBuilder() << "Expected multiple output blocks but got " << stats.BlockCount
                          << " (all " << stats.TotalRows << " rows in one block)");
-    UNIT_ASSERT_C(stats.MaxBlockRows <= maxOutputRows,
-        TStringBuilder() << "Max block size " << stats.MaxBlockRows
-                         << " should be at most " << maxOutputRows);
+    // The join checks the budget after appending a row, so a block may overshoot it by one row.
+    // Rows are uniform in these tests, so the block average stands in for that last row.
+    const i64 rowBytes = stats.MaxBlockBytes / std::max<i64>(stats.MaxBlockRows, 1);
+    const i64 maxBlockBytes = MaxBlockSizeInBytes + rowBytes;
+    UNIT_ASSERT_C(stats.MaxBlockBytes <= maxBlockBytes,
+        TStringBuilder() << "Max block size " << stats.MaxBlockBytes << " bytes ("
+                         << stats.MaxBlockRows << " rows) should be at most " << maxBlockBytes);
 }
 
 void Test(TJoinTestData testData, bool blockJoin, bool withSpiller = true) {
@@ -2419,6 +2491,23 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     Y_UNIT_TEST(TestOutputBufferBoundedHighFanout) {
         auto td = HighFanoutInnerJoinTestData();
         AssertOutputBufferBounded(MeasureOutputBlocks(td), HighFanoutBuildRows);
+    }
+
+    // Thousands of narrow rows fit in one block, while a few dozen wide rows already fill it.
+    // A row-based limit cannot do both: it would either fragment the narrow case or let the wide
+    // case grow a block to tens of megabytes.
+    Y_UNIT_TEST(TestOutputBufferBoundedNarrowRows) {
+        auto td = NarrowRowsHighFanoutTestData();
+        const auto stats = MeasureOutputBlocks(td);
+        AssertOutputBufferBounded(stats, NarrowRowsFanout);
+        UNIT_ASSERT_GT(stats.MaxBlockRows, 2000);
+    }
+
+    Y_UNIT_TEST(TestOutputBufferBoundedWideRows) {
+        auto td = WideRowsHighFanoutTestData();
+        const auto stats = MeasureOutputBlocks(td);
+        AssertOutputBufferBounded(stats, WideRowsFanout);
+        UNIT_ASSERT_LT(stats.MaxBlockRows, 200);
     }
 
     Y_UNIT_TEST(TestOutputBufferBoundedLeftSemiLeftIsBuild) {

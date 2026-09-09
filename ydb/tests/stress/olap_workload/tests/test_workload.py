@@ -19,11 +19,11 @@ class TestYdbWorkload(StressFixture):
                 "enable_columnshard_interval": True,
                 "enable_columnshard_uuid": True,
                 "enable_columnshard_dy_number": True,
+                "enable_columnshard_group_decommission": True,
             },
             column_shard_config={
                 "allow_nullable_columns_in_pk": True,
-                "generate_internal_path_id": True
-
+                "generate_internal_path_id": True,
             }
         )
 

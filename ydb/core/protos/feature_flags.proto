@@ -384,4 +384,6 @@ message TFeatureFlags {
     optional bool EnableCheckpointsCompression = 325 [default = false];
     optional bool EnableDataShardLocksTransferOnSplit = 326 [default = false];
     optional bool EnableDqSourceStreamLookupJoinLocalLookups = 327 [default = false];
+    // Gates both ColumnShard decommission legs; EnableCutHistory governs channels 0/1 instead.
+    optional bool EnableColumnshardGroupDecommission = 328 [default = false];
 }

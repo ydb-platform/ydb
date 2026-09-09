@@ -201,7 +201,8 @@ void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& port
     }
 }
 
-void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const {
+void TGranuleMeta::BuildActualizationTasks(
+    NActualizer::TTieringProcessContext& context, const TDuration actualizationLag, const bool moveDataOnly) const {
     if (context.GetActualInstant() < NextActualizations) {
         YDB_LOG_DEBUG("",
             {"event", "skip_actualization"},
@@ -209,7 +210,7 @@ void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& 
         return;
     }
     NActualizer::TExternalTasksContext extTasks(Portions);
-    ActualizationIndex->ExtractActualizationTasks(context, extTasks);
+    ActualizationIndex->ExtractActualizationTasks(context, extTasks, moveDataOnly);
     NextActualizations = context.GetActualInstant() + actualizationLag;
 }
 

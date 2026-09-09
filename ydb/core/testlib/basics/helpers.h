@@ -81,7 +81,7 @@ namespace NFake {
 
     };
 
-    // Configure before runtime initialization; keep a subsystem supplied by the test.
+    // Configure before runtime initialization; replace any earlier PDisk subsystem registration.
     void SetupPDiskSubsystem(TTestActorRuntime* runtime, bool stranded = true);
 
     TActorId MakeBoardReplicaID(ui32 node, ui32 replicaIndex);

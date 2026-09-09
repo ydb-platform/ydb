@@ -103,12 +103,10 @@ namespace NKikimr {
             if (previous) {
                 previous(nodeIndex, setup);
             }
-            if (!NActors::GetSubSystem<IPDiskSubsystem>(setup->SubSystems)) {
-                if (stranded && !runtime->IsRealThreads()) {
-                    setup->RegisterSubSystem<IPDiskSubsystem>(std::make_unique<TStrandedPDiskSubsystem>(runtime));
-                } else {
-                    setup->RegisterSubSystem<IPDiskSubsystem>(CreatePDiskSubsystem());
-                }
+            if (stranded && !runtime->IsRealThreads()) {
+                setup->RegisterSubSystem<IPDiskSubsystem>(std::make_unique<TStrandedPDiskSubsystem>(runtime));
+            } else {
+                setup->RegisterSubSystem<IPDiskSubsystem>(CreatePDiskSubsystem());
             }
         };
     }

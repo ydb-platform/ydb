@@ -9,19 +9,22 @@ Release date: September 2, 2026.
 #### Functionality
 
 * Added support for [incremental backups](./concepts/datamodel/backup-collection.md?version=v26.2), which store only changes relative to the preceding backup in a collection.
-* Added [export of database objects](./reference/ydb-cli/export-import/export-nfs.md?version=v26.2) to the local file system, including network file systems mounted over NFS.
+* Added [export of database objects](./reference/ydb-cli/export-import/export-nfs.md?version=main) to the local file system, including network file systems mounted over NFS.
 * [Streaming queries](./dev/streaming-query/index.md?version=v26.2) can read from local topics, write to local topics, read local tables, and contain multiple `INSERT` statements.
 * Streaming queries gained [watermarks](./dev/streaming-query/watermarks.md?version=v26.2) and evaluation of scalar expressions outside the context of an individual message.
-* Column-oriented tables gained [Bloom and Bloom n-gram skip indexes](./dev/bloom-skip-indexes.md?version=v26.2), as well as configurable column compression.
+* Added [Bloom skip indexes](./dev/bloom-skip-indexes.md?version=main): Bloom and Bloom n-gram indexes for column-oriented tables, and prefix Bloom indexes for row-oriented tables. Column-oriented tables also gained configurable column compression.
+* Added [min-max skip indexes](./dev/min_max-skip-index.md?version=main) for column-oriented tables. The feature is available when `EnableLocalMinMaxIndex` is enabled.
 * Added online construction of unique secondary indexes. The [parallelism level](./yql/reference/syntax/alter_table/indexes.md?version=v26.2) can be configured for index builds.
 * [Full-text indexes](./dev/fulltext-indexes.md?version=v26.2) are enabled by default.
 * [`ALTER TABLE`](./yql/reference/syntax/alter_table/columns.md?version=v26.2) statements `ALTER COLUMN SET DEFAULT` and `ALTER COLUMN DROP DEFAULT` are available by default.
-* YQL statements [`TRUNCATE TABLE`](./yql/reference/syntax/truncate-table.md?version=v26.2) and [`DISCARD SELECT`](./yql/reference/syntax/discard.md?version=v26.2) are available by default.
-* QueryService can return query results in [Apache Arrow format](./reference/ydb-sdk/data-formats/format-arrow.md?version=v26.2); this capability is enabled by default.
-* Added forced [table compaction](./yql/reference/syntax/alter_table/compact.md?version=v26.2) using `ALTER TABLE ... COMPACT`.
+* YQL statements [`TRUNCATE TABLE`](./yql/reference/syntax/truncate-table.md?version=v26.2) and [`DISCARD SELECT`](./yql/reference/syntax/discard.md?version=main) are available by default.
+* QueryService can return query results in [Apache Arrow format](./reference/ydb-sdk/data-formats/format-arrow.md?version=main); this capability is enabled by default.
+* Added forced [table compaction](./yql/reference/syntax/alter_table/compact.md?version=main) using `ALTER TABLE ... COMPACT`.
 * Added automatic storage balancing between groups and background validation of disk placement.
 * Table partitioning schema changes and transactions between topics and tables are faster.
 * Added audit logging for topic operations.
+* Added [built-in minidump collection based on Google Breakpad](./devops/observability/minidumps.md?version=v26.2) for Linux nodes.
+* Added the [`ydb-dstool pdisk populate`](./reference/ydb-dstool/pdisk-populate.md?version=main) subcommand for reproducing a PDisk workload on another device.
 
 #### Bug Fixes
 

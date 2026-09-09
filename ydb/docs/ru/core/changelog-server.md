@@ -9,19 +9,22 @@
 #### Функциональность
 
 * Добавлена поддержка [инкрементальных резервных копий](./concepts/datamodel/backup-collection.md?version=v26.2), которые позволяют сохранять только изменения относительно предыдущей резервной копии в коллекции.
-* Добавлен [экспорт объектов базы данных](./reference/ydb-cli/export-import/export-nfs.md?version=v26.2) в локальную файловую систему, в том числе в сетевые файловые системы, подключённые по NFS.
+* Добавлен [экспорт объектов базы данных](./reference/ydb-cli/export-import/export-nfs.md?version=main) в локальную файловую систему, в том числе в сетевые файловые системы, подключённые по NFS.
 * [Потоковые запросы](./dev/streaming-query/index.md?version=v26.2) поддерживают чтение из локальных топиков, запись в локальные топики, чтение локальных таблиц и несколько инструкций `INSERT` в одном запросе.
 * В потоковых запросах добавлены [watermarks](./dev/streaming-query/watermarks.md?version=v26.2) и вычисление скалярных выражений вне контекста отдельного сообщения.
-* Для колоночных таблиц добавлены [skip-индексы Bloom и Bloom n-gram](./dev/bloom-skip-indexes.md?version=v26.2), а также настройка сжатия колонок.
+* Добавлены [Bloom-индексы](./dev/bloom-skip-indexes.md?version=main): Bloom и Bloom n-gram для колоночных таблиц и префиксные Bloom-индексы для строковых таблиц. Для колоночных таблиц также добавлена настройка сжатия колонок.
+* Добавлены [min_max-индексы](./dev/min_max-skip-index.md?version=main) для колоночных таблиц. Функциональность доступна при включённом `EnableLocalMinMaxIndex`.
 * Добавлено построение уникальных вторичных индексов без остановки таблицы. Для построения индексов можно настраивать [уровень параллелизма](./yql/reference/syntax/alter_table/indexes.md?version=v26.2).
 * [Полнотекстовые индексы](./dev/fulltext-indexes.md?version=v26.2) включены по умолчанию.
 * В [`ALTER TABLE`](./yql/reference/syntax/alter_table/columns.md?version=v26.2) по умолчанию доступны инструкции `ALTER COLUMN SET DEFAULT` и `ALTER COLUMN DROP DEFAULT`.
-* По умолчанию доступны инструкции YQL [`TRUNCATE TABLE`](./yql/reference/syntax/truncate-table.md?version=v26.2) и [`DISCARD SELECT`](./yql/reference/syntax/discard.md?version=v26.2).
-* QueryService поддерживает выдачу результатов запросов в [формате Apache Arrow](./reference/ydb-sdk/data-formats/format-arrow.md?version=v26.2); эта возможность включена по умолчанию.
-* Добавлен запуск принудительной [компакции таблицы](./yql/reference/syntax/alter_table/compact.md?version=v26.2) с помощью `ALTER TABLE ... COMPACT`.
+* По умолчанию доступны инструкции YQL [`TRUNCATE TABLE`](./yql/reference/syntax/truncate-table.md?version=v26.2) и [`DISCARD SELECT`](./yql/reference/syntax/discard.md?version=main).
+* QueryService поддерживает выдачу результатов запросов в [формате Apache Arrow](./reference/ydb-sdk/data-formats/format-arrow.md?version=main); эта возможность включена по умолчанию.
+* Добавлен запуск принудительной [компакции таблицы](./yql/reference/syntax/alter_table/compact.md?version=main) с помощью `ALTER TABLE ... COMPACT`.
 * Добавлена автоматическая балансировка хранилища между группами и фоновая проверка корректности размещения дисков.
 * Ускорены изменение схемы партиционирования таблиц и транзакции между топиками и таблицами.
 * Добавлено аудитное логирование операций с топиками.
+* Добавлен [встроенный сбор минидампов на базе Google Breakpad](./devops/observability/minidumps.md?version=v26.2) для узлов Linux.
+* Добавлена подкоманда [`ydb-dstool pdisk populate`](./reference/ydb-dstool/pdisk-populate.md?version=main) для воспроизведения нагрузки PDisk на другом устройстве.
 
 #### Исправления ошибок
 

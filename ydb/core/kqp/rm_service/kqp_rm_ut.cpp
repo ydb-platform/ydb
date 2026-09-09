@@ -2,6 +2,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/tablet/resource_broker_impl.h>
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/tenant_runtime.h>
@@ -120,6 +121,7 @@ class KqpRm : public TTestBase {
 public:
     void SetUp() override {
         Runtime = MakeHolder<TTenantTestRuntime>(MakeTenantTestConfig());
+        SetPoolsCountersFlag(true);
 
         NActors::NLog::EPriority priority = DETAILED_LOG ? NLog::PRI_DEBUG : NLog::PRI_ERROR;
         Runtime->SetLogPriority(NKikimrServices::RESOURCE_BROKER, priority);
@@ -209,8 +211,25 @@ public:
     }
 
     TIntrusivePtr<NRm::TTxState> MakeTx(ui64 txId, std::shared_ptr<NRm::IKqpResourceManager> rm,
-            const TString& poolId = "", double memoryPoolPercent = 100) {
-        return MakeIntrusive<NRm::TTxState>(rm, txId, TInstant::Now(), poolId, memoryPoolPercent, "", false);
+            const TString& poolId = "", double memoryPoolPercent = 100, const TString& database = "") {
+        return MakeIntrusive<NRm::TTxState>(rm, txId, TInstant::Now(), poolId, memoryPoolPercent, database, false);
+    }
+
+    void SetPoolsCountersFlag(bool value) {
+        for (ui32 nodeIndex = 0; nodeIndex < Runtime->GetNodeCount(); ++nodeIndex) {
+            Runtime->GetAppData(nodeIndex).FeatureFlags.SetEnableResourcePoolsCounters(value);
+        }
+    }
+
+    NMonitoring::TDynamicCounterPtr FindPoolSensorGroup(const TString& database, const TString& poolId) {
+        auto wm = GetServiceCounters(Counters, "kqp")->FindSubgroup("subsystem", "workload_manager");
+        return wm ? wm->FindSubgroup("pool", database + "/" + poolId) : nullptr;
+    }
+
+    NMonitoring::TDynamicCounterPtr GetPoolSensorGroup(const TString& database, const TString& poolId) {
+        auto group = FindPoolSensorGroup(database, poolId);
+        UNIT_ASSERT(group);
+        return group;
     }
 
     void AssertResourceManagerStats(
@@ -305,6 +324,10 @@ public:
         UNIT_TEST(PoolLimitIgnoredForSenselessPercents);
         UNIT_TEST(PoolLimitAppliedJustBelowHundredPercent);
         UNIT_TEST(SpillingPercentAppliedWithoutPoolLimit);
+        UNIT_TEST(P09PoolLimitAndAllocated);
+        UNIT_TEST(P11PoolDenied);
+        UNIT_TEST(P14PoolSensorsPersistAcrossIdle);
+        UNIT_TEST(P15PoolSensorsAppearAfterFlagEnabled);
     UNIT_TEST_SUITE_END();
 
     void SingleTask();
@@ -329,6 +352,10 @@ public:
     void PoolLimitIgnoredForSenselessPercents();
     void PoolLimitAppliedJustBelowHundredPercent();
     void SpillingPercentAppliedWithoutPoolLimit();
+    void P09PoolLimitAndAllocated();
+    void P11PoolDenied();
+    void P14PoolSensorsPersistAcrossIdle();
+    void P15PoolSensorsAppearAfterFlagEnabled();
 
 private:
     THolder<TTestBasicRuntime> Runtime;
@@ -918,6 +945,113 @@ void KqpRm::SpillingPercentAppliedWithoutPoolLimit() {
     }
 
     AssertResourceManagerStats(rm, 1000, 100);
+}
+
+void KqpRm::P09PoolLimitAndAllocated() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    auto tx = MakeTx(1, rm, "pool_a", 50, "db1");
+    NRm::TKqpResourcesRequest request{.Memory = 100};
+
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, request));
+
+    auto sensorGroup = GetPoolSensorGroup("db1", "pool_a");
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryLimit", false)->Val(), 500);
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryAllocated", false)->Val(), 100);
+
+    UNIT_ASSERT(rm->AllocateResources(*tx, 2, request));
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryAllocated", false)->Val(), 200);
+
+    rm->FreeResources(*tx, 1, request);
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryAllocated", false)->Val(), 100);
+
+    rm->FreeResources(*tx, 2, request);
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryAllocated", false)->Val(), 0);
+}
+
+void KqpRm::P11PoolDenied() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    auto tx = MakeTx(1, rm, "pool_c", 10, "db1");
+    NRm::TKqpResourcesRequest request{.Memory = 40};
+
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, request));
+    UNIT_ASSERT(rm->AllocateResources(*tx, 2, request));
+
+    auto deniedCtr = GetPoolSensorGroup("db1", "pool_c")->GetCounter("MemoryDeniedRequests", true);
+    UNIT_ASSERT_VALUES_EQUAL(deniedCtr->Val(), 0);
+
+    UNIT_ASSERT(!rm->AllocateResources(*tx, 3, request));
+    UNIT_ASSERT_VALUES_EQUAL(deniedCtr->Val(), 1);
+
+    UNIT_ASSERT(!rm->AllocateResources(*tx, 4, request));
+    UNIT_ASSERT_VALUES_EQUAL(deniedCtr->Val(), 2);
+}
+
+void KqpRm::P14PoolSensorsPersistAcrossIdle() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    NRm::TKqpResourcesRequest request{.Memory = 40};
+
+    {
+        auto tx = MakeTx(1, rm, "pool_p14", 10, "db1");
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, request));
+        rm->FreeResources(*tx, 1, request);
+    }
+
+    auto sensorGroup = GetPoolSensorGroup("db1", "pool_p14");
+    auto limitCtr = sensorGroup->GetCounter("MemoryLimit", false);
+    auto allocCtr = sensorGroup->GetCounter("MemoryAllocated", false);
+    auto deniedCtr = sensorGroup->GetCounter("MemoryDeniedRequests", true);
+
+    UNIT_ASSERT_VALUES_EQUAL(limitCtr->Val(), 100);
+    UNIT_ASSERT_VALUES_EQUAL(allocCtr->Val(), 0);
+
+    {
+        auto tx = MakeTx(2, rm, "pool_p14", 10, "db1");
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, request));
+        UNIT_ASSERT(rm->AllocateResources(*tx, 2, request));
+        UNIT_ASSERT(!rm->AllocateResources(*tx, 3, request));
+
+        UNIT_ASSERT_VALUES_EQUAL(limitCtr->Val(), 100);
+        UNIT_ASSERT_VALUES_EQUAL(allocCtr->Val(), 80);
+        UNIT_ASSERT_VALUES_EQUAL(deniedCtr->Val(), 1);
+    }
+}
+
+void KqpRm::P15PoolSensorsAppearAfterFlagEnabled() {
+    SetPoolsCountersFlag(false);
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    NRm::TKqpResourcesRequest request{.Memory = 40};
+
+    {
+        auto tx = MakeTx(1, rm, "pool_p15", 10, "db1");
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, request));
+        rm->FreeResources(*tx, 1, request);
+    }
+    UNIT_ASSERT(!FindPoolSensorGroup("db1", "pool_p15"));
+
+    SetPoolsCountersFlag(true);
+
+    {
+        auto tx = MakeTx(2, rm, "pool_p15", 10, "db1");
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, request));
+
+        auto sensorGroup = GetPoolSensorGroup("db1", "pool_p15");
+        UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryLimit", false)->Val(), 100);
+        UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryAllocated", false)->Val(), 40);
+    }
 }
 
 } // namespace NKqp

@@ -72,6 +72,25 @@ ui64 Percentage(ui64 limit, double percent) {
     return static_cast<double>(limit) / 100 * percent + MYEPS;
 }
 
+struct TPoolSensors {
+    NMonitoring::TDynamicCounters::TCounterPtr Limit;
+    NMonitoring::TDynamicCounters::TCounterPtr Allocated;
+    NMonitoring::TDynamicCounters::TCounterPtr DeniedRequests;
+
+    explicit operator bool() const {
+        return Limit != nullptr;
+    }
+};
+
+TPoolSensors MakePoolSensors(const TIntrusivePtr<TKqpCounters>& counters, const TString& database, const TString& poolId) {
+    auto group = counters->GetWorkloadManagerCounters()->GetSubgroup("pool", TStringBuilder() << database << '/' << poolId);
+    return TPoolSensors{
+        .Limit = group->GetCounter("MemoryLimit", false),
+        .Allocated = group->GetCounter("MemoryAllocated", false),
+        .DeniedRequests = group->GetCounter("MemoryDeniedRequests", true),
+    };
+}
+
 class TMemoryResource : public TAtomicRefCount<TMemoryResource> {
 public:
     explicit TMemoryResource(ui64 baseLimit, double memoryPoolPercent, double overPercent)
@@ -96,9 +115,34 @@ public:
         if (Available() >= value) {
             Used += value;
             UpdateCookie();
+            if (Sensors) {
+                Sensors.Allocated->Set(Used);
+            }
             return true;
         }
         return false;
+    }
+
+    bool HasSensors() const {
+        return static_cast<bool>(Sensors);
+    }
+
+    void AttachSensors(TPoolSensors sensors) {
+        Sensors = std::move(sensors);
+        Sensors.Limit->Set(Limit);
+        Sensors.Allocated->Set(Used);
+        Sensors.DeniedRequests->Add(DeniedRequests);
+    }
+
+    void RecordDenied() {
+        ++DeniedRequests;
+        if (Sensors) {
+            Sensors.DeniedRequests->Inc();
+        }
+    }
+
+    ui64 GetDeniedRequests() const {
+        return DeniedRequests;
     }
 
     TIntrusivePtr<TMemoryResourceCookie> GetSpillingCookie() const {
@@ -121,6 +165,9 @@ public:
         }
 
         UpdateCookie();
+        if (Sensors) {
+            Sensors.Allocated->Set(Used);
+        }
     }
 
     void SetNewLimit(ui64 baseLimit, double memoryPoolPercent, double overPercent) {
@@ -142,6 +189,9 @@ public:
         Limit = Percentage(BaseLimit, MemoryPoolPercent);
         OverLimit = OverPercentage(Limit, OverPercent);
         UpdateCookie();
+        if (Sensors) {
+            Sensors.Limit->Set(Limit);
+        }
     }
 
     ui64 GetLimit() const {
@@ -159,8 +209,10 @@ private:
     ui64 Used;
     double MemoryPoolPercent;
     double OverPercent;
+    ui64 DeniedRequests = 0;
 
     TIntrusivePtr<TMemoryResourceCookie> SpillingCookie;
+    TPoolSensors Sensors;
 };
 
 struct TEvPrivate {
@@ -305,9 +357,14 @@ public:
                 }
 
                 auto& poolMemory = it->second;
+                if (!poolMemory->HasSensors() && PoolSensorsEnabled()) {
+                    poolMemory->AttachSensors(MakePoolSensors(Counters, tx.Database, tx.PoolId));
+                }
+
                 if (!poolMemory->AcquireIfAvailable(resources.Memory)) {
                     hasScanQueryMemory = false;
                     TotalMemoryResource->Release(resources.Memory);
+                    poolMemory->RecordDenied();
                 }
 
                 if (!tx.PoolMemoryCookie) {
@@ -567,6 +624,10 @@ public:
                 tmp.swap(PatternCache);
             }
         }
+    }
+
+    bool PoolSensorsEnabled() const {
+        return Counters && ActorSystem && AppData(ActorSystem)->FeatureFlags.GetEnableResourcePoolsCounters();
     }
 
     TActorId SelfId;

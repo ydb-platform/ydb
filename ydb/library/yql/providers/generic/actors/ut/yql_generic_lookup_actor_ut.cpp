@@ -150,7 +150,14 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         NYql::NLog::InitLogger(loggerConfig, false);
 
         TTestActorRuntimeBase runtime;
+        runtime.SetLogBackend(NActors::CreateStderrBackend());
         runtime.Initialize();
+        runtime.GetLogSettings(0)->Append(
+                NKikimrServices::EServiceKikimr_MIN,
+                NKikimrServices::EServiceKikimr_MAX,
+                NKikimrServices::EServiceKikimr_Name<NLog::EComponent>
+            );
+        runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::EPriority::PRI_TRACE);
         auto edge = runtime.AllocateEdgeActor();
 
         NYql::TGenericDataSourceInstance dsi;
@@ -348,7 +355,14 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         NYql::NLog::InitLogger(loggerConfig, false);
 
         TTestActorRuntimeBase runtime(1, 1, true);
+        runtime.SetLogBackend(NActors::CreateStderrBackend());
         runtime.Initialize();
+        runtime.GetLogSettings(0)->Append(
+                NKikimrServices::EServiceKikimr_MIN,
+                NKikimrServices::EServiceKikimr_MAX,
+                NKikimrServices::EServiceKikimr_Name<NLog::EComponent>
+            );
+        runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::EPriority::PRI_TRACE);
         auto edge = runtime.AllocateEdgeActor();
 
         NYql::TGenericDataSourceInstance dsi;
@@ -778,7 +792,14 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         NYql::NLog::InitLogger(loggerConfig, false);
 
         TTestActorRuntimeBase runtime(1, 1, true);
+        runtime.SetLogBackend(NActors::CreateStderrBackend());
         runtime.Initialize();
+        runtime.GetLogSettings(0)->Append(
+                NKikimrServices::EServiceKikimr_MIN,
+                NKikimrServices::EServiceKikimr_MAX,
+                NKikimrServices::EServiceKikimr_Name<NLog::EComponent>
+            );
+        runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::EPriority::PRI_TRACE);
         auto edge = runtime.AllocateEdgeActor();
 
         NYql::TGenericDataSourceInstance dsi;

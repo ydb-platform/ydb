@@ -3896,6 +3896,7 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
         }
     } else {
 <<<<<<< HEAD
+<<<<<<< HEAD
         // No known TxId in this PlanStep (including an empty Transactions list).
         //
         // Do not ack immediately: PlanStep is advanced in memory before _txinfo is persisted.
@@ -3913,6 +3914,11 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
         TryWriteTxs(ctx);
 =======
         // таблетка PQ успела выполнить и удалить все транзакции этого шага. надо отправить подтверждение
+=======
+        // No TxId from this PlanStep is in Txs: empty Transactions, unknown/future ids,
+        // or a retransmit after the step's txs were already executed and deleted.
+        // Ack immediately so the mediator sees steps in order.
+>>>>>>> a544d5d61ad (clarify all-unknown PlanStep ack comment)
         SendPlanStepAcks(ctx, sender, *ev);
 >>>>>>> 86829277e30 (restore immediate PlanStep ack for unknown txs)
     }

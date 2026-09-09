@@ -3067,6 +3067,117 @@ Y_UNIT_TEST_F(Deferred_ReadSetAck_From_Silent_Peer_Without_Propose, TPQTabletFix
                              .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
 }
 
+Y_UNIT_TEST_F(Immediate_PlanStepAck_For_Unknown_Without_WriteTx, TPQTabletFixture)
+{
+    // All-unknown PlanStep is acked immediately; must not wait for a WRITE_TX cycle.
+    const ui64 unknownTxId = 424301;
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    TVector<TAutoPtr<IEventHandle>> heldRequests;
+    bool holdWriteTx = true;
+    auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (holdWriteTx) {
+            if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+                if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                    heldRequests.push_back(event);
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    SendPlanStep({.Step=100, .TxIds={unknownTxId}});
+
+    WaitPlanStepAck({.Step=100, .TxIds={unknownTxId}});
+    WaitPlanStepAccepted({.Step=100});
+
+    UNIT_ASSERT(heldRequests.empty());
+
+    holdWriteTx = false;
+    Ctx->Runtime->SetObserverFunc(prev);
+}
+
+Y_UNIT_TEST_F(PlanStepAccepted_Order_Unknown_Before_Executed_Retransmit, TPQTabletFixture)
+{
+    // Mediator contract: PlanStepAccepted must arrive in ascending step order.
+    // Regression: deferred all-unknown ack after an immediate EXECUTED retransmit
+    // inverted the order and stalled the mediator head.
+    const ui64 txId = 67890;
+    const ui64 unknownTxId = 424302;
+    const ui64 mockTabletId = 22222;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=200, .TxIds={txId}});
+
+    WaitReadSet(*tablet, {.Step=200, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=200, .TxId=txId, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    // Drain the initial PlanStep ack/accepted for the known EXECUTED tx.
+    WaitPlanStepAck({.Step=200, .TxIds={txId}});
+    WaitPlanStepAccepted({.Step=200});
+
+    // Keep tx in Txs (EXECUTED / waiting RS acks) so a retransmit still hits the known path.
+    TVector<ui64> acceptedSteps;
+    TVector<TAutoPtr<IEventHandle>> heldRequests;
+    bool holdWriteTx = true;
+    auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (auto* msg = event->CastAsLocal<TEvTxProcessing::TEvPlanStepAccepted>()) {
+            acceptedSteps.push_back(msg->Record.GetStep());
+        }
+        if (holdWriteTx) {
+            if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+                if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                    heldRequests.push_back(event);
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    // Lower all-unknown step first, then retransmit of the higher EXECUTED step.
+    SendPlanStep({.Step=100, .TxIds={unknownTxId}});
+    SendPlanStep({.Step=200, .TxIds={txId}});
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return acceptedSteps.size() >= 2;
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(acceptedSteps.size(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL(acceptedSteps[0], 100u);
+    UNIT_ASSERT_VALUES_EQUAL(acceptedSteps[1], 200u);
+
+    // Both accepteds must arrive without a successful WRITE_TX cycle.
+    UNIT_ASSERT(heldRequests.empty());
+
+    holdWriteTx = false;
+    Ctx->Runtime->SetObserverFunc(prev);
+
+    WaitPlanStepAck({.Step=100, .TxIds={unknownTxId}});
+    WaitPlanStepAck({.Step=200, .TxIds={txId}});
+}
+
 Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_After_Timeout, TPQTabletFixture)
 {
     NKafka::TProducerInstanceId producerInstanceId = {1, 0};

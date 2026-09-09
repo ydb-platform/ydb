@@ -160,12 +160,10 @@ TString ToSubcolumnName(TStringBuf path) {
     return result;
 }
 
-TJsonPathAccessor::TJsonPathAccessor(std::shared_ptr<IChunkedArray> accessor, TString remainingPath, const EValueType valueType,
-    const std::optional<ui64>& cookie)
+TJsonPathAccessor::TJsonPathAccessor(std::shared_ptr<IChunkedArray> accessor, TString remainingPath, const EValueType valueType)
     : ChunkedArrayAccessor(std::move(accessor))
     , RemainingPath(std::move(remainingPath))
-    , ValueType(valueType)
-    , Cookie(cookie) {
+    , ValueType(valueType) {
     if (!RemainingPath.empty()) {
         NYql::TIssues issues;
         RemainingPathPtr = NYql::NJsonPath::ParseJsonPath(RemainingPath, issues, 5);

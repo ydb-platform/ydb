@@ -51,20 +51,18 @@ class TJsonPathAccessor {
     YDB_READONLY_DEF(std::shared_ptr<IChunkedArray>, ChunkedArrayAccessor);
     YDB_READONLY_DEF(TString, RemainingPath);
     YDB_READONLY(EValueType, ValueType, EValueType::BinaryJson);
-    YDB_READONLY_DEF(std::optional<ui64>, Cookie);
     NYql::NJsonPath::TJsonPathPtr RemainingPathPtr;
 
 public:
     using TValuesVisitor = std::function<void(const std::optional<TStringBuf>& value)>;
 
-    TJsonPathAccessor(std::shared_ptr<IChunkedArray> accessor, TString remainingPath, const EValueType valueType,
-        const std::optional<ui64>& cookie = std::nullopt);
+    TJsonPathAccessor(std::shared_ptr<IChunkedArray> accessor, TString remainingPath, EValueType valueType);
 
     std::shared_ptr<IChunkedArray> GetNativeStringArray() const;
     void VisitValues(const TValuesVisitor& visitor) const;
 
     bool IsValid() const {
-        return ChunkedArrayAccessor != nullptr || Cookie.has_value();
+        return ChunkedArrayAccessor != nullptr;
     }
 
     ui64 GetRecordsCount() const {

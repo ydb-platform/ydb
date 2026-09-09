@@ -2964,6 +2964,8 @@ message TColumnShardConfig {
     // Bound IsDrained() queue scans per tablet — the cost that scales with ColumnShards per node.
     optional uint32 CutHistoryNominateCadenceSeconds = 77 [default = 60];
     optional uint32 CutHistoryMaxDrainChecksPerNomination = 78 [default = 8];
+    // Run the whole proof pipeline and export its timings, but never place a barrier or cut.
+    optional bool CutHistoryMeasureOnly = 79 [default = true];
     optional uint64 NodePortionsCountLimit = 73;
 
     message TFlowControlConfig {

@@ -54,6 +54,15 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr SweepCandidates;
     NMonitoring::TDynamicCounters::TCounterPtr ChannelsPoisoned;
     NMonitoring::TDynamicCounters::TCounterPtr EntriesDisproved;
+    NMonitoring::TDynamicCounters::TCounterPtr EntriesProven;
+    NMonitoring::TDynamicCounters::TCounterPtr EntriesDisprovedRate;
+    NMonitoring::THistogramPtr NominationDurationMs;
+    NMonitoring::THistogramPtr NominationEntriesExamined;
+    NMonitoring::THistogramPtr NominationDrainChecks;
+    NMonitoring::THistogramPtr SweepDurationMs;
+    NMonitoring::THistogramPtr SweepBatchDurationMs;
+    NMonitoring::THistogramPtr SweepBatches;
+    NMonitoring::THistogramPtr SweepPortionsScanned;
 
 public:
     THistoryCutterCounters(const TCommonCountersOwner& sameAs, const TString& componentName);
@@ -79,6 +88,35 @@ public:
         SweepCandidates->Add(sweepCandidates);
         ChannelsPoisoned->Add(channelsPoisoned);
         EntriesDisproved->Add(entriesDisproved);
+    }
+
+    void OnNominationScanned(const TDuration duration, const ui64 entriesExamined, const ui64 drainChecks) const {
+        NominationDurationMs->Collect(duration.MilliSeconds());
+        NominationEntriesExamined->Collect(entriesExamined);
+        NominationDrainChecks->Collect(drainChecks);
+    }
+
+    void OnSweepBatch(const TDuration duration) const {
+        SweepBatchDurationMs->Collect(duration.MilliSeconds());
+    }
+
+    void OnSweepScanned(const TDuration duration, const ui64 batches, const ui64 portionsScanned) const {
+        SweepDurationMs->Collect(duration.MilliSeconds());
+        SweepBatches->Collect(batches);
+        SweepPortionsScanned->Collect(portionsScanned);
+    }
+
+    void OnEntriesDisproved(const ui64 count) const {
+        EntriesDisprovedRate->Add(count);
+    }
+
+    // Passed every gate and the final re-check; in probe mode this is where the entry stops.
+    void OnEntryProven() const {
+        EntriesProven->Add(1);
+    }
+
+    ui64 GetEntriesProvenValue() const {
+        return EntriesProven->Val();
     }
 };
 

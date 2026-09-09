@@ -351,6 +351,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
     // Underflow poisons the channel; nomination then skips it though every other gate is open.
     Y_UNIT_TEST(UnderflowPoisonsChannelAndBlocksNomination) {
         TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.ColumnShardConfig.SetCutHistoryMeasureOnly(false);
         actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
         static constexpr ui64 TabletId = 1010;
@@ -443,6 +444,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         TTestBasicRuntime runtime;
         TAppPrepare app;
         runtime.Initialize(app.Unwrap());
+        runtime.GetAppData().ColumnShardConfig.SetCutHistoryMeasureOnly(false);
         auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
 
         static constexpr ui64 TabletId = 3030;
@@ -527,6 +529,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         TTestBasicRuntime runtime;
         TAppPrepare app;
         runtime.Initialize(app.Unwrap());
+        runtime.GetAppData().ColumnShardConfig.SetCutHistoryMeasureOnly(false);
         auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
 
         static constexpr ui64 TabletId = 4040;
@@ -600,6 +603,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         TTestBasicRuntime runtime;
         TAppPrepare app;
         runtime.Initialize(app.Unwrap());
+        runtime.GetAppData().ColumnShardConfig.SetCutHistoryMeasureOnly(false);
         auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
 
         static constexpr ui64 TabletId = 4041;
@@ -725,6 +729,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
     // A live portion in the range blocks nomination; the portion erase from MoveData opens the gate.
     Y_UNIT_TEST(LivePortionBlocksNomination) {
         TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.ColumnShardConfig.SetCutHistoryMeasureOnly(false);
         actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
         static constexpr ui64 TabletId = 3131;
@@ -751,6 +756,106 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         cutter.OnPortionRemoved(PortionId);
         UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(key), 0);
         UNIT_ASSERT(!cutter.IsChannelPoisonedForTest(DataChannel));
+    }
+
+    // The mirror of LivePortionBlocksNomination: probe mode benchmarks the sweep, so a live portion must not skip it.
+    Y_UNIT_TEST(MeasureOnlyNominatesDespiteLivePortion) {
+        TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        actorSystemStub.AppData.ColumnShardConfig.SetCutHistoryMeasureOnly(true);
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+        static constexpr ui64 TabletId = 3133;
+        static constexpr ui32 DataChannel = 2;
+        static constexpr ui32 OldFromGen = 0;
+        static constexpr ui32 CurrentGen = 5;
+        static constexpr ui64 PortionId = 78;
+
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, CurrentGen, /*nChannels=*/3, { { OldFromGen, 100 }, { CurrentGen, 200 } });
+        TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, TActorId(), TestSignals());
+        const TEntryKey key{ DataChannel, OldFromGen };
+        const auto ctx = NActors::TActivationContext::AsActorContext();
+
+        THashMap<ui64, std::vector<NOlap::TUnifiedBlobId>> portionBlobs;
+        portionBlobs[PortionId].push_back(MakeUnifiedBlob(MakeBlob(TabletId, DataChannel, OldFromGen + 3)));
+        cutter.OnBootComplete(portionBlobs);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(key), 1);
+
+        UNIT_ASSERT_C(cutter.TryNominate(ctx), "probe mode must sweep an entry a live portion still pins");
+        UNIT_ASSERT_VALUES_EQUAL(guard->GetNominated().size(), 1);
+        UNIT_ASSERT_C(guard->GetCut().empty(), "nothing may be reported as cut");
+    }
+
+    // Probe mode proves the same entry SweepHappyPathSendsHardBarrier cuts, but must leave no trace in BS or Hive.
+    Y_UNIT_TEST(MeasureOnlyProvesWithoutCutting) {
+        TTestBasicRuntime runtime;
+        TAppPrepare app;
+        runtime.Initialize(app.Unwrap());
+        runtime.GetAppData().ColumnShardConfig.SetCutHistoryMeasureOnly(true);
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+
+        static constexpr ui64 TabletId = 3232;
+        static constexpr ui32 DataChannel = 2;
+        static constexpr ui32 OldFromGen = 0;
+        static constexpr ui32 OldGroup = 100;
+        static constexpr ui32 ActiveFromGen = 5;
+        static constexpr ui32 ActiveGroup = 200;
+        static constexpr ui32 CurrentGen = ActiveFromGen;
+
+        const auto edgeTablet = runtime.AllocateEdgeActor();
+        const auto edgeLauncher = runtime.AllocateEdgeActor();
+        const auto edgeBs = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeBlobStorageProxyID(OldGroup), edgeBs);
+        const auto runner = runtime.Register(new TRunnerActor());
+        auto runInActor = [&](std::function<void(const NActors::TActorContext&)> fn) {
+            runtime.Send(new IEventHandle(runner, edgeTablet, new TEvRunInActor(std::move(fn))));
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        };
+
+        auto [info, bm, shared] =
+            MakeCutterEnv(TabletId, CurrentGen, /*nChannels=*/3, { { OldFromGen, OldGroup }, { ActiveFromGen, ActiveGroup } });
+        TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, edgeTablet, TestSignals());
+        cutter.SetLauncherActorId(edgeLauncher);
+        const TEntryKey key{ DataChannel, OldFromGen };
+        const ui64 provenBefore = TestSignals().GetEntriesProvenValue();
+
+        // Counting observers, not a blocking grab: waiting on a queue that stays empty stalls the clock.
+        ui32 barriersSeen = 0;
+        ui32 cutsSeen = 0;
+        auto barrierObserver = runtime.AddObserver<TEvBlobStorage::TEvCollectGarbage>([&](auto&&) {
+            ++barriersSeen;
+        });
+        auto cutObserver = runtime.AddObserver<TEvTablet::TEvCutTabletHistory>([&](auto&&) {
+            ++cutsSeen;
+        });
+
+        bool nominated = false;
+        runInActor([&](const NActors::TActorContext& ctx) {
+            nominated = cutter.TryNominate(ctx);
+        });
+        UNIT_ASSERT_C(nominated, "probe mode must still run the whole proof pipeline");
+        UNIT_ASSERT(runtime.GrabEdgeEvent<NColumnShard::TEvPrivate::TEvStartCutHistorySweep>(edgeTablet));
+        UNIT_ASSERT_VALUES_EQUAL(guard->GetNominated().size(), 1);
+
+        cutter.SetPortionSnapshot({});
+        runInActor([&](const NActors::TActorContext& ctx) {
+            cutter.OnBatchComplete({}, /*exhausted=*/true, ctx);
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL_C(TestSignals().GetEntriesProvenValue(), provenBefore + 1, "the entry must be counted as proven");
+        UNIT_ASSERT_C(cutter.GetCutStateForTest(key) == ECutState::None, "probe mode must leave the entry re-measurable");
+        UNIT_ASSERT_C(guard->GetCut().empty(), "nothing may be reported as cut");
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL_C(barriersSeen, 0u, "no hard barrier may reach BlobStorage");
+        UNIT_ASSERT_VALUES_EQUAL_C(cutsSeen, 0u, "no cut request may reach Hive");
+
+        // Re-measurable: with the cadence elapsed the same entry is nominated again.
+        runtime.AdvanceCurrentTime(THistoryCutterWrapper::DefaultNominateCadence * 2);
+        runInActor([&](const NActors::TActorContext& ctx) {
+            nominated = cutter.TryNominate(ctx);
+        });
+        UNIT_ASSERT_C(nominated, "a would-cut entry must be re-examined on the next round");
+        UNIT_ASSERT_VALUES_EQUAL(guard->GetNominated().size(), 2);
     }
 
 }   // TCutHistoryCutterCounters

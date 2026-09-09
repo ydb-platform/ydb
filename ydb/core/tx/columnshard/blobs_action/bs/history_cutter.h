@@ -97,6 +97,9 @@ public:
     static TDuration GetNominateCadence();
     static ui32 GetMaxDrainChecksPerNomination();
 
+    // Probe mode: prove everything, then stop short of the barrier so the scrape can be timed safely.
+    static bool IsMeasureOnly();
+
 protected:
     void StartSweepForTest(TVector<TEntryKey>&& candidates) {
         SweepInFlight = true;
@@ -212,6 +215,11 @@ private:
 
     TVector<std::pair<TInternalPathId, ui64>> SweepPortionIds;
     size_t SweepPortionOffset = 0;
+
+    // Wall-clock probes for the 1 PiB scrape cost; monotonic so a clock jump cannot produce negatives.
+    TMonotonic SweepStartedAt;
+    TMonotonic BatchStartedAt;
+    ui64 SweepBatchCount = 0;
 };
 
 }   // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage

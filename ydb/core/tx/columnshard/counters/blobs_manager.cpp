@@ -29,7 +29,17 @@ THistoryCutterCounters::THistoryCutterCounters(const TCommonCountersOwner& sameA
     , SweepCandidates(TBase::GetValue("Sweep/Candidates"))
     , ChannelsPoisoned(TBase::GetValue("Channels/Poisoned"))
     , EntriesDisproved(TBase::GetValue("Entries/Disproved"))
+    , EntriesProven(TBase::GetDeriviative("Entries/Proven/Count"))
+    , EntriesDisprovedRate(TBase::GetDeriviative("Entries/Disproved/Count"))
 {
+    // Names and units are a comparison contract between read-path arms: renaming one invalidates the run.
+    NominationDurationMs = TBase::GetHistogram("Nomination/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 1));
+    NominationEntriesExamined = TBase::GetHistogram("Nomination/Entries/Examined", NMonitoring::ExponentialHistogram(16, 2, 1));
+    NominationDrainChecks = TBase::GetHistogram("Nomination/DrainChecks", NMonitoring::ExponentialHistogram(12, 2, 1));
+    SweepDurationMs = TBase::GetHistogram("Sweep/DurationMs", NMonitoring::ExponentialHistogram(20, 2, 10));
+    SweepBatchDurationMs = TBase::GetHistogram("Sweep/Batch/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 1));
+    SweepBatches = TBase::GetHistogram("Sweep/Batches", NMonitoring::ExponentialHistogram(18, 2, 1));
+    SweepPortionsScanned = TBase::GetHistogram("Sweep/Portions/Scanned", NMonitoring::ExponentialHistogram(20, 2, 100));
 }
 
 TBlobsManagerGCCounters::TBlobsManagerGCCounters(const TCommonCountersOwner& sameAs, const TString& componentName)

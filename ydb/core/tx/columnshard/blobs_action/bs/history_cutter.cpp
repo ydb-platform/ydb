@@ -127,6 +127,10 @@ ui32 THistoryCutterWrapper::GetMaxDrainChecksPerNomination() {
     return checks ? checks : DefaultMaxDrainChecksPerNomination;
 }
 
+bool THistoryCutterWrapper::IsMeasureOnly() {
+    return HasAppData() && AppDataVerified().ColumnShardConfig.GetCutHistoryMeasureOnly();
+}
+
 bool THistoryCutterWrapper::IsEnabled() const {
     if (NYDBTest::TControllers::GetColumnShardController()->IsCSCutHistoryEnabled()) {
         return true;
@@ -320,6 +324,8 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
         return false;
     }
     LastNominateAt = ctx.Now();
+    const TMonotonic nominationStartedAt = TMonotonic::Now();
+    ui64 entriesExamined = 0;
 
     // The next round resumes from the first channel this one did not fully service.
     ui32 drainChecks = 0;
@@ -332,6 +338,8 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
     }
     const ui32 dataChannels = channelCount - TGlobal::FirstDataChannel;
     const ui32 firstChannel = NextChannelToCheck;
+    // Probe mode benchmarks the sweep read path, so the gates that would skip it only get measured, never obeyed.
+    const bool measureOnly = IsMeasureOnly();
     TVector<TEntryKey> batch;
     for (ui32 idx = 0; idx < dataChannels; ++idx) {
         const ui32 ch = TGlobal::FirstDataChannel + (firstChannel - TGlobal::FirstDataChannel + idx) % dataChannels;
@@ -346,30 +354,34 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
         const auto& hist = TabletInfo->Channels[ch].History;
         for (int i = 0; i < static_cast<int>(hist.size()) - 1; ++i) {
             const TEntryKey key{ ch, hist[i].FromGeneration };
+            ++entriesExamined;
             if (const auto* state = CutState.FindPtr(key); state && *state != ECutState::None) {
                 continue;
             }
-            if (const auto* count = Counters.FindPtr(key); count && *count != 0) {
+            if (const auto* count = Counters.FindPtr(key); count && *count != 0 && !measureOnly) {
                 continue;
             }
             if (const auto* disproval = DisprovedAt.FindPtr(key);
-                disproval && ctx.Now() - disproval->At < GetDisprovedCooldown(disproval->Attempts)) {
+                disproval && ctx.Now() - disproval->At < GetDisprovedCooldown(disproval->Attempts) && !measureOnly) {
                 continue;
             }
-            if (!SeenGroupsCheckPasses(key)) {
+            if (!SeenGroupsCheckPasses(key) && !measureOnly) {
                 continue;
             }
             if (drainChecks >= GetMaxDrainChecksPerNomination()) {
                 break;
             }
             ++drainChecks;
-            if (!IsDrained(key)) {
+            if (!IsDrained(key) && !measureOnly) {
                 continue;
             }
             batch.push_back(key);
             NYDBTest::TControllers::GetColumnShardController()->OnHistoryEntryNominated(key.Channel, key.FromGeneration);
         }
     }
+
+    // Collected on both exits: the IsDrained scans are paid for even when nothing is nominated.
+    Signals.OnNominationScanned(TMonotonic::Now() - nominationStartedAt, entriesExamined, drainChecks);
 
     if (batch.empty()) {
         return false;
@@ -379,6 +391,8 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
         CutState[key] = ECutState::Verifying;
     }
     SweepInFlight = true;
+    SweepStartedAt = TMonotonic::Now();
+    SweepBatchCount = 0;
     Signals.OnNomination();
     PublishLevels(batch.size());
     SweepSurvivors = batch;
@@ -396,6 +410,8 @@ void THistoryCutterWrapper::SetPortionSnapshot(TVector<std::pair<TInternalPathId
 }
 
 TVector<std::pair<TInternalPathId, ui64>> THistoryCutterWrapper::GetNextBatch(size_t batchSize, bool& isLast) {
+    BatchStartedAt = TMonotonic::Now();
+    ++SweepBatchCount;
     TVector<std::pair<TInternalPathId, ui64>> batch;
     const size_t remaining = SweepPortionIds.size() - SweepPortionOffset;
     const size_t take = (remaining > batchSize) ? batchSize : remaining;
@@ -408,6 +424,7 @@ TVector<std::pair<TInternalPathId, ui64>> THistoryCutterWrapper::GetNextBatch(si
 }
 
 void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved, bool exhausted, const TActorContext& ctx) {
+    Signals.OnSweepBatch(TMonotonic::Now() - BatchStartedAt);
     for (const auto& key : disproved) {
         auto& state = DisprovedAt[key];
         state.At = ctx.Now();
@@ -415,6 +432,7 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
         CutState[key] = ECutState::None;
     }
     if (!disproved.empty()) {
+        Signals.OnEntriesDisproved(disproved.size());
         PublishLevels();
         EraseIf(SweepSurvivors, [&](const TEntryKey& key) {
             return disproved.contains(key);
@@ -428,6 +446,7 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
 
     SweepInFlight = false;
     Signals.OnSweepCompleted();
+    Signals.OnSweepScanned(TMonotonic::Now() - SweepStartedAt, SweepBatchCount, SweepPortionOffset);
     PublishLevels(0);
     SweepCandidates.reset();
     SweepPortionIds.clear();
@@ -465,6 +484,14 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
             }
         }
         if (!groupId) {
+            CutState[key] = ECutState::None;
+            continue;
+        }
+
+        // Counted in both modes so the probe and cutting arms line up field for field.
+        Signals.OnEntryProven();
+        if (IsMeasureOnly()) {
+            // Nothing durable happens: reset to None so the next round re-measures the same entry.
             CutState[key] = ECutState::None;
             continue;
         }

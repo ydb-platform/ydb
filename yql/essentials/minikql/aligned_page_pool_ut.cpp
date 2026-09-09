@@ -190,6 +190,42 @@ Y_UNIT_TEST(YellowZoneZeroDivision) {
     UNIT_ASSERT_EQUAL(false, alloc.IsMemoryYellowZoneEnabled());
 }
 
+Y_UNIT_TEST(GlobalFreeListCleanupReleasesEverything) {
+#ifndef _win_
+    // A clean-up of the global free list must give the whole address space back: before, unmapping
+    // the pages one by one punched holes in the mappings and exhausted `vm.max_map_count`, and
+    // replacing that with madvise() leaked the address space along with the page tables backing it
+    // (see `VmPTE` in /proc/self/status).
+    constexpr size_t PAGES = 1024; // 64Mb worth of pool pages per cycle
+    constexpr size_t CYCLES = 8;
+
+    const auto cycle = [] {
+        TAlignedPagePool pool(__LOCATION__);
+        std::vector<void*> pages;
+        pages.reserve(PAGES);
+        for (size_t i = 0; i < PAGES; ++i) {
+            pages.push_back(pool.GetPage());
+        }
+        for (void* page : pages) {
+            pool.ReturnPage(page);
+        }
+        pool.ReleaseFreePages();
+        TAlignedPagePool::DoCleanupGlobalFreeList(0);
+    };
+
+    cycle(); // warm up, so that the pages leaked by the other tests of the suite don't count
+
+    const size_t regions = GetMappedRegionsCount();
+    const size_t addressSpace = GetMappedAddressSpaceSize();
+
+    for (size_t i = 0; i < CYCLES; ++i) {
+        cycle();
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedRegionsCount(), regions);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedAddressSpaceSize(), addressSpace);
+    }
+#endif
+}
+
 } // Y_UNIT_TEST_SUITE(TAlignedPagePoolTest)
 
 } // namespace NKikimr::NMiniKQL

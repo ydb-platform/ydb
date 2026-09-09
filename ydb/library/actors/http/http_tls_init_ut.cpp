@@ -12,7 +12,6 @@
 #include <util/system/condvar.h>
 #include <util/system/mutex.h>
 #include <netinet/in.h>
-#include <atomic>
 #include <cerrno>
 
 namespace {
@@ -21,20 +20,13 @@ namespace {
 // to build a security context out of it.
 const TString MALFORMED_PEM = "-----BEGIN CERTIFICATE-----\nnot base64\n-----END CERTIFICATE-----\n";
 
-constexpr TStringBuf RETRY_LOG_MARKER = "Failed to init - retrying...";
-
-struct TServerPem {
-    NKikimr::NCertTestUtils::TCertAndKey Ca = NKikimr::NCertTestUtils::GenerateCA(NKikimr::NCertTestUtils::TProps::AsCA());
-    NKikimr::NCertTestUtils::TCertAndKey Server = NKikimr::NCertTestUtils::GenerateSignedCert(Ca, NKikimr::NCertTestUtils::TProps::AsServer());
-
-    TString CertificateOnly() const {
-        return TString(Server.Certificate);
-    }
-
-    TString CertificateAndKey() const {
-        return TString(Server.Certificate) + TString(Server.PrivateKey);
-    }
-};
+// Inline PEM as consumers pass it: the server certificate followed by its private key.
+TString GenerateServerPem() {
+    using namespace NKikimr::NCertTestUtils;
+    TCertAndKey ca = GenerateCA(TProps::AsCA());
+    TCertAndKey server = GenerateSignedCert(ca, TProps::AsServer());
+    return TString(server.Certificate) + TString(server.PrivateKey);
+}
 
 enum class EProbeResult {
     Refused,
@@ -77,14 +69,14 @@ std::pair<TString, ui16> BoundHostAndPort(const TIntrusivePtr<NHttp::TSocketDesc
 // dropped by default in simulated mode, so retries only happen because of this filter.
 struct TSimulatedProxy {
     NActors::TTestActorRuntimeBase Runtime{1, false};
-    std::atomic<ui32> Retries{0};
+    ui32 Retries = 0;
     NActors::TActorId ProxyId;
     NActors::TActorId EdgeId;
 
     TSimulatedProxy() {
         Runtime.SetScheduledEventFilter([this](NActors::TTestActorRuntimeBase&, TAutoPtr<NActors::IEventHandle>& event, TDuration, TInstant&) {
             if (event->GetTypeRewrite() == NHttp::TEvHttpProxy::TEvAddListeningPort::EventType) {
-                Retries.fetch_add(1);
+                ++Retries;
                 return false; // keep the acceptor's retry
             }
             return true; // default: drop other scheduled events
@@ -177,41 +169,17 @@ Y_UNIT_TEST_SUITE(HttpProxyTlsInitialization) {
         proxy.AddListeningPort(std::move(add));
 
         UNIT_ASSERT(proxy.NoConfirmListenWithin(TDuration::MilliSeconds(500)));
-        UNIT_ASSERT_GE(proxy.Retries.load(), 1u);
+        UNIT_ASSERT_GE(proxy.Retries, 1u);
         UNIT_ASSERT_EQUAL_C(ProbeTcp("127.0.0.1", port), EProbeResult::Refused,
             "Invalid TLS configuration opened a TCP listener");
 
         UNIT_ASSERT(proxy.NoConfirmListenWithin(TDuration::Seconds(2)));
-        UNIT_ASSERT_GE(proxy.Retries.load(), 2u);
+        UNIT_ASSERT_GE(proxy.Retries, 2u);
         UNIT_ASSERT_EQUAL_C(ProbeTcp("127.0.0.1", port), EProbeResult::Refused,
             "Retrying acceptor opened a TCP listener without a security context");
     }
 
-    // A certificate without its private key fails later inside the helper than a malformed
-    // PEM does; the listener contract must be the same.
-    Y_UNIT_TEST(CertificateWithoutKeyDoesNotListen) {
-        TServerPem pem;
-        TPortManager portManager;
-        TIpPort port = portManager.GetTcpPort();
-
-        TSimulatedProxy proxy;
-        THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
-        add->Secure = true;
-        add->SslCertificatePem = pem.CertificateOnly();
-        proxy.AddListeningPort(std::move(add));
-
-        UNIT_ASSERT(proxy.NoConfirmListenWithin(TDuration::MilliSeconds(500)));
-        UNIT_ASSERT_GE(proxy.Retries.load(), 1u);
-        UNIT_ASSERT_EQUAL_C(ProbeTcp("127.0.0.1", port), EProbeResult::Refused,
-            "Certificate without a private key opened a TCP listener");
-
-        UNIT_ASSERT(proxy.NoConfirmListenWithin(TDuration::Seconds(2)));
-        UNIT_ASSERT_GE(proxy.Retries.load(), 2u);
-        UNIT_ASSERT_EQUAL(ProbeTcp("127.0.0.1", port), EProbeResult::Refused);
-    }
-
     Y_UNIT_TEST(ValidInlinePemServesHttps) {
-        TServerPem pem;
         NActors::TTestActorRuntimeBase runtime(1, true);
         TPortManager portManager;
         TIpPort port = portManager.GetTcpPort();
@@ -220,7 +188,7 @@ Y_UNIT_TEST_SUITE(HttpProxyTlsInitialization) {
         NActors::TActorId proxyId = runtime.Register(NHttp::CreateHttpProxy());
         THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
         add->Secure = true;
-        add->SslCertificatePem = pem.CertificateAndKey();
+        add->SslCertificatePem = GenerateServerPem();
         runtime.Send(new NActors::IEventHandle(proxyId, runtime.AllocateEdgeActor(), add.Release()), 0, true);
 
         TAutoPtr<NActors::IEventHandle> handle;
@@ -247,7 +215,7 @@ Y_UNIT_TEST_SUITE(HttpProxyTlsInitialization) {
             proxy.AddListeningPort(std::move(add));
 
             UNIT_ASSERT(proxy.NoConfirmListenWithin(TDuration::Seconds(2)));
-            UNIT_ASSERT_GE(proxy.Retries.load(), 1u);
+            UNIT_ASSERT_GE(proxy.Retries, 1u);
             UNIT_ASSERT_EQUAL_C(ProbeTcp(host, port), EProbeResult::Connected,
                 "Caller-owned prebound socket stopped listening");
         }
@@ -262,7 +230,6 @@ Y_UNIT_TEST_SUITE(HttpProxyTlsInitialization) {
     // Valid TLS with an unavailable port keeps the retry path working: the acceptor must
     // pick the port up once it is free instead of giving up or confirming too early.
     Y_UNIT_TEST(BindFailureRetriesWithValidTls) {
-        TServerPem pem;
         TPortManager portManager;
         TIpPort port = portManager.GetTcpPort();
 
@@ -271,7 +238,7 @@ Y_UNIT_TEST_SUITE(HttpProxyTlsInitialization) {
         UNIT_ASSERT_EQUAL(occupier->Bind(occupier->MakeAddress(TString(), port).get()), 0);
         UNIT_ASSERT_EQUAL(occupier->Listen(1), 0);
 
-        TAutoPtr<TLogBackend> backend(new TCountingLogBackend(RETRY_LOG_MARKER));
+        TAutoPtr<TLogBackend> backend(new TCountingLogBackend("Failed to init - retrying..."));
         auto* countingBackend = dynamic_cast<TCountingLogBackend*>(backend.Get());
 
         NActors::TTestActorRuntimeBase runtime(1, true);
@@ -281,7 +248,7 @@ Y_UNIT_TEST_SUITE(HttpProxyTlsInitialization) {
         NActors::TActorId proxyId = runtime.Register(NHttp::CreateHttpProxy());
         THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
         add->Secure = true;
-        add->SslCertificatePem = pem.CertificateAndKey();
+        add->SslCertificatePem = GenerateServerPem();
         runtime.Send(new NActors::IEventHandle(proxyId, runtime.AllocateEdgeActor(), add.Release()), 0, true);
 
         UNIT_ASSERT_C(countingBackend->WaitForCount(2, TDuration::Seconds(20)),

@@ -64,9 +64,8 @@ bool HasRepeatableReads(NKqpProto::EIsolationLevel isolationLevel) {
             return false;
 
         case NKqpProto::ISOLATION_LEVEL_UNDEFINED:
-            return false;
-
-        default:
+        case NKqpProto::EIsolationLevel_INT_MIN_SENTINEL_DO_NOT_USE_:
+        case NKqpProto::EIsolationLevel_INT_MAX_SENTINEL_DO_NOT_USE_:
             return false;
     }
 }

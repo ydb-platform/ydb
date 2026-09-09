@@ -253,6 +253,7 @@ void TConfig::Reset()
 
     CacheUploadDeduplicationMode = GetUploadingDeduplicationMode("YT_UPLOAD_DEDUPLICATION", EUploadDeduplicationMode::Host);
     CacheUploadDeduplicationThreshold = 10_MB;
+    LockFileStorage = false;
 
     RetryCount = Max(GetInt("YT_RETRY_COUNT", 10), 1);
     ReadRetryCount = Max(GetInt("YT_READ_RETRY_COUNT", 30), 1);
@@ -459,6 +460,7 @@ void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer)
         .Item("cache_upload_deduplication_mode")
             .Value(TEnumTraits<EUploadDeduplicationMode>::ToString(config.CacheUploadDeduplicationMode))
         .Item("cache_upload_deduplication_threshold").Value(config.CacheUploadDeduplicationThreshold)
+        .Item("lock_file_storage").Value(config.LockFileStorage)
         .Item("mount_sandbox_in_tmpfs").Value(config.MountSandboxInTmpfs)
         .Item("api_file_path_options").Value(config.ApiFilePathOptions)
         .Item("use_abortable_response").Value(config.UseAbortableResponse)
@@ -542,6 +544,7 @@ void Deserialize(TConfig& config, const TNode& node)
     DESERIALIZE_ITEM("cache_lock_timeout_per_gb", config.CacheLockTimeoutPerGb);
     DESERIALIZE_ITEM("cache_upload_deduplication_mode", config.CacheUploadDeduplicationMode);
     DESERIALIZE_ITEM("cache_upload_deduplication_threshold", config.CacheUploadDeduplicationThreshold);
+    DESERIALIZE_ITEM("lock_file_storage", config.LockFileStorage);
     DESERIALIZE_ITEM("mount_sandbox_in_tmpfs", config.MountSandboxInTmpfs);
     DESERIALIZE_ITEM("api_file_path_options", config.ApiFilePathOptions);
     DESERIALIZE_ITEM("use_abortable_response", config.UseAbortableResponse);

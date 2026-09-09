@@ -63,3 +63,23 @@ NodeWarden tests are collected by `ydb/core/blobstorage/nodewarden/ut`; configur
 - [{#T}](../distributed-storage.md)
 - [{#T}](ddisk.md)
 - [{#T}](persistent-buffer.md)
+
+## Requested PDisk restart and DDisk shutdown
+
+A requested restart first enters `WaitingForDDisks`, then `RestartSent`. Starts
+are blocked in both phases. Warden tracks concrete DDisk actor incarnations
+until `TEvGone`, including already stopping actors and actors whose slots were
+deleted. An old incarnation cannot clear a replacement slot's shutdown state.
+Each DDisk acknowledges only after its PB child and its own I/O have drained.
+
+Configuration changes while waiting are coalesced; Warden rereads the current
+configuration before forwarding exactly one restart request. Changes after
+forwarding retain the subsequent-restart behavior. Generation-tagged 30-second
+reminders and monitoring expose remaining actors. Removing PDisk cancels restart
+waiting state. Removal followed by same-path replacement has separate lifecycle
+handling and is not covered by this requested-restart fence.
+
+After the DDisk acknowledgements, PDisk synchronously stops its router before
+releasing it. Ring teardown and closing the duplicated device descriptor release
+the device lock even if queued initialization responses retain client references.
+Only then can the replacement acquire the device.

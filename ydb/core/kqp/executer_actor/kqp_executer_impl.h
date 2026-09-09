@@ -1999,7 +1999,7 @@ protected:
                     *ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), response.GetStatus());
             }
             const auto& stats = response.GetResult().GetStats();
-            ExecuterSpan.Attribute("ydb.cpu_us", static_cast<i64>(stats.GetCpuTimeUs()));
+            ExecuterSpan.Attribute("ydb.cpu_us", static_cast<i64>(GetExecutionTraceCpuTimeUs(stats)));
             ExecuterSpan.Attribute("ydb.locks_broken_as_victim", static_cast<i64>(Stats->LocksBrokenAsVictim));
             ExecuterSpan.Attribute("ydb.locks_broken_as_breaker", static_cast<i64>(Stats->LocksBrokenAsBreaker));
         }

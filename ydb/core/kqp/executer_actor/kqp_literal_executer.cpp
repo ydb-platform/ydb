@@ -315,7 +315,7 @@ public:
         LWTRACK(KqpLiteralExecuterFinalize, ResponseEv->Orbit, TxId);
         if (LiteralExecuterSpan) {
             LiteralExecuterSpan.Attribute("ydb.cpu_us",
-                static_cast<i64>(ResponseEv->Record.GetResponse().GetResult().GetStats().GetCpuTimeUs()));
+                static_cast<i64>(GetExecutionTraceCpuTimeUs(ResponseEv->Record.GetResponse().GetResult().GetStats())));
         }
         EndQueryTraceSpan(LiteralExecuterSpan, Ydb::StatusIds::SUCCESS);
         CleanupCtx();

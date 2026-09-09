@@ -3653,6 +3653,157 @@ Y_UNIT_TEST_F(Deferred_PlanStepAck_For_Unknown_Waits_WriteTx, TPQTabletFixture)
     WaitPlanStepAccepted({.Step=100});
 }
 
+Y_UNIT_TEST_F(PlanStepAccepted_Known_Not_Acked_By_Later_Unknown_WriteTx, TPQTabletFixture)
+{
+    // A later all-unknown WRITE_TX fence must not unlock an earlier known PlanStep
+    // that is still waiting for EXECUTED (no global step watermark).
+    const ui64 txId = 67890;
+    const ui64 unknownTxId = 424303;
+    const ui64 mockTabletId = 22222;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    // Known step 100 is queued; tx is not EXECUTED yet (waiting for peer ReadSet).
+    SendPlanStep({.Step=100, .TxIds={txId}});
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+
+    TVector<TAutoPtr<IEventHandle>> heldRequests;
+    bool holdWriteTx = true;
+    bool seenWriteTxResponse = false;
+    auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (holdWriteTx) {
+            if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+                if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                    heldRequests.push_back(event);
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+            }
+        }
+        if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvResponse>()) {
+            if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                seenWriteTxResponse = true;
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    SendPlanStep({.Step=200, .TxIds={unknownTxId}});
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return !heldRequests.empty();
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
+
+    holdWriteTx = false;
+    for (auto& held : heldRequests) {
+        Ctx->Runtime->Send(held.Release());
+    }
+    heldRequests.clear();
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return seenWriteTxResponse;
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
+    Ctx->Runtime->SetObserverFunc(prev);
+
+    // After the all-unknown fence succeeds, step 200 is Ready but blocked behind
+    // not-Ready known step 100 — no Accepted may leave yet.
+    {
+        auto premature = Ctx->Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAccepted>(
+            TDuration::Seconds(1));
+        UNIT_ASSERT(premature == nullptr);
+    }
+
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    WaitPlanStepAccepted({.Step=100});
+    WaitPlanStepAccepted({.Step=200});
+    WaitPlanStepAck({.Step=100, .TxIds={txId}});
+    WaitPlanStepAck({.Step=200, .TxIds={unknownTxId}});
+}
+
+Y_UNIT_TEST_F(No_WriteTx_BusyLoop_While_Known_PlanStep_Pending, TPQTabletFixture)
+{
+    // A not-Ready known PlanStep in PlanStepAckQueue must not keep restarting WRITE_TX
+    // after an unrelated fence cycle (canProcess must not key off the whole queue).
+    const ui64 txId = 67890;
+    const ui64 unknownTxId = 424304;
+    const ui64 mockTabletId = 22222;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+
+    ui64 writeTxCount = 0;
+    auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+            if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                ++writeTxCount;
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    // Known PlanStep alone does not start WRITE_TX.
+    {
+        auto premature = Ctx->Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAccepted>(
+            TDuration::Seconds(1));
+        UNIT_ASSERT(premature == nullptr);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(writeTxCount, 0);
+
+    SendPlanStep({.Step=200, .TxIds={unknownTxId}});
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return writeTxCount >= 1;
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
+
+    // Let the fence WRITE_TX finish and give EndWriteTxs→TryWriteTxs a chance to loop.
+    {
+        auto premature = Ctx->Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAccepted>(
+            TDuration::Seconds(1));
+        UNIT_ASSERT(premature == nullptr);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(writeTxCount, 1);
+
+    Ctx->Runtime->SetObserverFunc(prev);
+}
+
 Y_UNIT_TEST_F(PlanStepAccepted_Order_Unknown_Before_Executed_Retransmit, TPQTabletFixture)
 {
     // Mediator contract: PlanStepAccepted must arrive in ascending step order.

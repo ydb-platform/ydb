@@ -484,15 +484,10 @@ namespace NKikimr::NStorage {
         const ui64 pdiskGuid = pdisk.GetPDiskGuid();
         const ui64 pdiskCategory = pdisk.GetPDiskCategory();
         Cfg->PDiskKey.Initialize();
-        if (auto* subsystem = ActorContext().ActorSystem()->GetSubSystem<IPDiskSubsystem>()) {
-            subsystem->Start(ActorContext(), pdiskID, pdiskConfig, Cfg->PDiskKey,
-                blobStorageExecutorPoolId, LocalNodeId);
-        } else {
-            // Compatibility for test runtimes that still inject a per-warden factory.
-            Y_ABORT_UNLESS(Cfg->PDiskServiceFactory, "IPDiskSubsystem is not registered");
-            Cfg->PDiskServiceFactory->Create(ActorContext(), pdiskID, pdiskConfig, Cfg->PDiskKey,
-                blobStorageExecutorPoolId, LocalNodeId);
-        }
+        auto* subsystem = ActorContext().ActorSystem()->GetSubSystem<IPDiskSubsystem>();
+        Y_ABORT_UNLESS(subsystem, "IPDiskSubsystem is not registered");
+        subsystem->Start(ActorContext(), pdiskID, pdiskConfig, Cfg->PDiskKey,
+            blobStorageExecutorPoolId, LocalNodeId);
         if (!temporary) {
             Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate(pdiskID, path, pdiskGuid, pdiskCategory));
             Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddRole("Storage"));

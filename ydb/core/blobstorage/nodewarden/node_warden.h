@@ -42,7 +42,6 @@ namespace NKikimr {
         std::optional<NKikimrBlobStorage::TYamlConfig> YamlConfig;
         TString StartupConfigYaml;
         std::optional<TString> StartupStorageYaml;
-        TIntrusivePtr<IPDiskServiceFactory> PDiskServiceFactory;
         TIntrusivePtr<TAllVDiskKinds> AllVDiskKinds;
         TIntrusivePtr<NPDisk::TDriveModelDb> AllDriveModels;
         NKikimrBlobStorage::TPDiskConfig PDiskConfigOverlay;
@@ -72,7 +71,7 @@ namespace NKikimr {
 
         std::function<void(TVDiskConfig&)> VDiskConfigPreprocessor;
 
-        TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory>& pDiskServiceFactory = {});
+        TNodeWardenConfig();
         ~TNodeWardenConfig();
 
         bool IsCacheEnabled() const {

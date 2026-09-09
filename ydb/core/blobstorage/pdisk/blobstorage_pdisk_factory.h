@@ -11,18 +11,6 @@ namespace NActors {
 
 namespace NKikimr {
 
-class IPDiskServiceFactory : public TThrRefBase {
-public:
-    virtual void Create(const TActorContext &ctx, ui32 pDiskID, const TIntrusivePtr<TPDiskConfig> &cfg,
-        const NPDisk::TMainKey &mainKey, ui32 poolId, ui32 nodeId) = 0;
-};
-
 std::unique_ptr<IPDiskSubsystem> CreatePDiskSubsystem();
-
-class TRealPDiskServiceFactory : public IPDiskServiceFactory {
-public:
-    void Create(const TActorContext &ctx, ui32 pDiskID, const TIntrusivePtr<TPDiskConfig> &cfg,
-        const NPDisk::TMainKey &mainKey, ui32 poolId, ui32 nodeId) override;
-};
 
 } // NKikimr

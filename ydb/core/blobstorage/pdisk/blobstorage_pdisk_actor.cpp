@@ -1706,9 +1706,5 @@ std::unique_ptr<IPDiskSubsystem> CreatePDiskSubsystem() {
     return std::make_unique<TPDiskSubsystem>();
 }
 
-void TRealPDiskServiceFactory::Create(const TActorContext &ctx, ui32 pDiskID,
-        const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainKey &mainKey, ui32 poolId, ui32 nodeId) {
-    CreatePDiskActor(ctx.ExecutorThread, AppData(ctx)->Counters, cfg, mainKey, pDiskID, poolId, nodeId);
-}
 
 } // NKikimr

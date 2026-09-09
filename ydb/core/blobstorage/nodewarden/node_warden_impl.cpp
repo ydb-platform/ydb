@@ -32,10 +32,9 @@
 using namespace NKikimr;
 using namespace NStorage;
 
-TNodeWardenConfig::TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory>& pDiskServiceFactory)
+TNodeWardenConfig::TNodeWardenConfig()
     : BlobStorageConfig(std::make_unique<NKikimrConfig::TBlobStorageConfig>())
     , NameserviceConfig(std::make_unique<NKikimrConfig::TStaticNameserviceConfig>())
-    , PDiskServiceFactory(pDiskServiceFactory)
     , AllVDiskKinds(new TAllVDiskKinds)
     , AllDriveModels(new NPDisk::TDriveModelDb)
     , FeatureFlags(std::make_unique<NKikimrConfig::TFeatureFlags>())

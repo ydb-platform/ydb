@@ -22,16 +22,12 @@ struct TTestFixture {
     std::unordered_map<TStringBuf, TType*, THash<TStringBuf>> RowTypes;
     NDB::FormatSettings Settings;
 
-    TType* MakeType(NUdf::TDataTypeId typeId, bool optional) {
-        TType* type = TDataType::Create(typeId, Env);
-        if (optional) {
-            type = TOptionalType::Create(type, Env);
-        }
-        return type;
+    void AddColumn(TStringBuf name, NUdf::TDataTypeId typeId) {
+        RowTypes.emplace(name, TDataType::Create(typeId, Env));
     }
 
-    void AddColumn(TStringBuf name, NUdf::TDataTypeId typeId, bool optional) {
-        RowTypes.emplace(name, MakeType(typeId, optional));
+    void AddOptionalColumn(TStringBuf name, NUdf::TDataTypeId typeId) {
+        RowTypes.emplace(name, TOptionalType::Create(TDataType::Create(typeId, Env), Env));
     }
 };
 
@@ -49,16 +45,15 @@ std::shared_ptr<arrow::Array> MakeArray(const std::vector<TValue>& values) {
 Y_UNIT_TEST_SUITE(TArrowColumnConvertersTest) {
     Y_UNIT_TEST(MissingOptionalColumnIsFilledWithNulls) {
         TTestFixture f;
-        f.AddColumn("a", NUdf::TDataType<i32>::Id, false);
-        f.AddColumn("b", NUdf::TDataType<char*>::Id, true);
-        f.AddColumn("c", NUdf::TDataType<i64>::Id, true);
+        f.AddColumn("a", NUdf::TDataType<i32>::Id);
+        f.AddOptionalColumn("b", NUdf::TDataType<char*>::Id);
+        f.AddOptionalColumn("c", NUdf::TDataType<i64>::Id);
 
         auto outputSchema = arrow::schema({
             arrow::field("a", arrow::int32(), false),
             arrow::field("b", arrow::binary(), true),
             arrow::field("c", arrow::int64(), true),
         });
-        // column "b" is absent in the file
         auto dataSchema = arrow::schema({
             arrow::field("c", arrow::int64(), true),
             arrow::field("a", arrow::int32(), false),
@@ -75,7 +70,6 @@ Y_UNIT_TEST_SUITE(TArrowColumnConvertersTest) {
         UNIT_ASSERT_VALUES_EQUAL(missingColumns[0].OutputIndex, 1);
         UNIT_ASSERT_VALUES_EQUAL(missingColumns[0].Field->name(), "b");
 
-        // batch contains the read columns in output order: a, c
         auto batch = arrow::RecordBatch::Make(
             arrow::schema({outputSchema->field(0), outputSchema->field(2)}), 3,
             {MakeArray<arrow::Int32Type>(std::vector<i32>{1, 2, 3}), MakeArray<arrow::Int64Type>(std::vector<i64>{10, 20, 30})});
@@ -97,9 +91,9 @@ Y_UNIT_TEST_SUITE(TArrowColumnConvertersTest) {
 
     Y_UNIT_TEST(MissingColumnsAtBothEnds) {
         TTestFixture f;
-        f.AddColumn("a", NUdf::TDataType<i32>::Id, true);
-        f.AddColumn("b", NUdf::TDataType<i64>::Id, false);
-        f.AddColumn("c", NUdf::TDataType<double>::Id, true);
+        f.AddOptionalColumn("a", NUdf::TDataType<i32>::Id);
+        f.AddColumn("b", NUdf::TDataType<i64>::Id);
+        f.AddOptionalColumn("c", NUdf::TDataType<double>::Id);
 
         auto outputSchema = arrow::schema({
             arrow::field("a", arrow::int32(), true),
@@ -133,10 +127,9 @@ Y_UNIT_TEST_SUITE(TArrowColumnConvertersTest) {
     }
 
     Y_UNIT_TEST(AllColumnsMissing) {
-        // Nothing to read from the file, only the row count is known (same as select count(*) path)
         TTestFixture f;
-        f.AddColumn("a", NUdf::TDataType<i32>::Id, true);
-        f.AddColumn("b", NUdf::TDataType<char*>::Id, true);
+        f.AddOptionalColumn("a", NUdf::TDataType<i32>::Id);
+        f.AddOptionalColumn("b", NUdf::TDataType<char*>::Id);
 
         auto outputSchema = arrow::schema({
             arrow::field("a", arrow::int32(), true),
@@ -164,8 +157,8 @@ Y_UNIT_TEST_SUITE(TArrowColumnConvertersTest) {
 
     Y_UNIT_TEST(MissingNonOptionalColumnFails) {
         TTestFixture f;
-        f.AddColumn("a", NUdf::TDataType<i32>::Id, false);
-        f.AddColumn("b", NUdf::TDataType<char*>::Id, false);
+        f.AddColumn("a", NUdf::TDataType<i32>::Id);
+        f.AddColumn("b", NUdf::TDataType<char*>::Id);
 
         auto outputSchema = arrow::schema({
             arrow::field("a", arrow::int32(), false),
@@ -183,7 +176,7 @@ Y_UNIT_TEST_SUITE(TArrowColumnConvertersTest) {
 
     Y_UNIT_TEST(NoMissingColumnsKeepsBatch) {
         TTestFixture f;
-        f.AddColumn("a", NUdf::TDataType<i32>::Id, true);
+        f.AddOptionalColumn("a", NUdf::TDataType<i32>::Id);
 
         auto outputSchema = arrow::schema({arrow::field("a", arrow::int32(), true)});
         auto dataSchema = arrow::schema({arrow::field("a", arrow::int32(), true)});

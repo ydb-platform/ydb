@@ -651,7 +651,6 @@ Pear,15
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_missing_optional_column_in_parquet(self, kikimr, s3, client, unique_prefix):
-        # optional column absent in the file is read as NULL
         self.create_bucket_and_upload_file("test.parquet", s3, kikimr)
         storage_connection_name = unique_prefix + "fruitbucket"
         client.create_storage_connection(storage_connection_name, "fbucket")
@@ -662,8 +661,8 @@ Pear,15
             WITH (format=parquet, SCHEMA (
                 Fruit String NOT NULL,
                 Price Int NOT NULL,
-                ZZZZZ String,
-                Missing Json
+                ZZZZZ String?,
+                Missing Json?
             ))
             ORDER BY Price;
             '''
@@ -692,7 +691,6 @@ Pear,15
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_only_missing_optional_columns_in_parquet(self, kikimr, s3, client, unique_prefix):
-        # no column of the schema is present in the file, only the row count is taken from it
         self.create_bucket_and_upload_file("test.parquet", s3, kikimr)
         storage_connection_name = unique_prefix + "fruitbucket"
         client.create_storage_connection(storage_connection_name, "fbucket")
@@ -701,7 +699,7 @@ Pear,15
             SELECT COUNT(*) AS cnt, COUNT(Missing) AS cnt_missing
             FROM `{storage_connection_name}`.`test.parquet`
             WITH (format=parquet, SCHEMA (
-                Missing String
+                Missing String?
             ));
             '''
 

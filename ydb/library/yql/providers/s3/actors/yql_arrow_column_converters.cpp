@@ -917,7 +917,6 @@ void BuildColumnConverters(std::shared_ptr<arrow::Schema> outputSchema, std::sha
                 throw parquet::ParquetException(TStringBuilder() << "Missing field: " << targetField->name()
                     << " (only optional fields may be absent in file), found fields in arrow file: " << dataSchema->ToString());
             }
-            // Optional column absent in the file is filled with nulls, see ConvertArrowColumns
             missingColumns.push_back({i, targetField});
             continue;
         }
@@ -946,8 +945,6 @@ std::shared_ptr<arrow::RecordBatch> ConvertArrowColumns(std::shared_ptr<arrow::R
         return arrow::RecordBatch::Make(batch->schema(), batch->num_rows(), columns);
     }
 
-    // Missing columns are sorted by OutputIndex, so all columns preceding
-    // the inserted one are already in place at the moment of insertion
     auto fields = batch->schema()->fields();
     for (const auto& missingColumn : missingColumns) {
         auto nullColumn = arrow::MakeArrayOfNull(missingColumn.Field->type(), batch->num_rows());

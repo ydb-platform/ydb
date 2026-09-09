@@ -23,19 +23,12 @@ TColumnConverter BuildOutputColumnConverter(
     const std::string& columnName,
     NKikimr::NMiniKQL::TType* columnType);
 
-// Optional column from the output schema that is absent in the file.
-// Such columns are not read from the file and are filled with nulls
-// at position OutputIndex of the resulting record batch.
+// Optional output column absent in the file, filled with nulls at OutputIndex of the record batch
 struct TMissingColumn {
     int OutputIndex = -1;
     std::shared_ptr<arrow::Field> Field;
 };
 
-// Matches output schema columns with file (data schema) columns.
-// columnIndices - indices of file columns to read, in output schema order (missing columns are skipped)
-// columnConverters - converters for read columns, parallel to columnIndices
-// missingColumns - optional output columns absent in the file, sorted by OutputIndex
-// Throws if a non optional column is absent in the file.
 void BuildColumnConverters(
     std::shared_ptr<arrow::Schema> outputSchema,
     std::shared_ptr<arrow::Schema> dataSchema,
@@ -45,7 +38,6 @@ void BuildColumnConverters(
     std::unordered_map<TStringBuf, NKikimr::NMiniKQL::TType*, THash<TStringBuf>> rowTypes,
     const NDB::FormatSettings& settings);
 
-// Applies converters to batch columns and inserts null columns for missingColumns.
 std::shared_ptr<arrow::RecordBatch> ConvertArrowColumns(
     std::shared_ptr<arrow::RecordBatch> batch,
     std::vector<TColumnConverter>& columnConverters,

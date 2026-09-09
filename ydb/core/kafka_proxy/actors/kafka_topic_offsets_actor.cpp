@@ -125,7 +125,7 @@ private:
         const auto it = ev->Get()->Topics.find(Settings.Path);
         AFL_ENSURE(it != ev->Get()->Topics.end())("path", Settings.Path);
         const auto& topicInfo = it->second;
-        if (topicInfo.Status != NDescriber::EStatus::SUCCESS) {
+        if (topicInfo.Status != NDescriber::EStatus::Success) {
             return HandleDescribeError(topicInfo);
         }
 
@@ -189,7 +189,7 @@ private:
         auto status = NDescriber::Convert(topicInfo.Status);
         if (Settings.UnauthenticatedExistenceCheck && !Settings.Token.empty()) {
             if (!DidUnauthenticatedExistenceCheck &&
-                topicInfo.Status == NDescriber::EStatus::UNAUTHORIZED)
+                topicInfo.Status == NDescriber::EStatus::Unauthorized)
             {
                 DidUnauthenticatedExistenceCheck = true;
                 StartDescribe(/*anonymous=*/true);

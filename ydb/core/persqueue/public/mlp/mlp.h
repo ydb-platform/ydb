@@ -21,7 +21,7 @@ enum class EOperationResult : ui8 {
     Failed = 3,
 };
 
-enum EEv : ui32 {
+enum class EEv : ui32 {
     EvReadResponse = InternalEventSpaceBegin(NPQ::NEvents::EServices::MLP),
     EvWriteResponse,
     EvChangeResponse,
@@ -35,7 +35,7 @@ struct TMessageId {
     ui64 Offset;
 };
 
-struct TEvWriteResponse : public NActors::TEventLocal<TEvWriteResponse, EEv::EvWriteResponse> {
+struct TEvWriteResponse : public NActors::TEventLocal<TEvWriteResponse, static_cast<ui32>(EEv::EvWriteResponse)> {
 
     NDescriber::EStatus DescribeStatus;
     ui64 BalancerTabletId = 0;
@@ -49,7 +49,7 @@ struct TEvWriteResponse : public NActors::TEventLocal<TEvWriteResponse, EEv::EvW
     std::vector<TMessage> Messages;
 };
 
-struct TEvReadResponse : public NActors::TEventLocal<TEvReadResponse, EEv::EvReadResponse> {
+struct TEvReadResponse : public NActors::TEventLocal<TEvReadResponse, static_cast<ui32>(EEv::EvReadResponse)> {
 
     TEvReadResponse(Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, TString&& errorDescription = {})
         : Status(status)
@@ -76,7 +76,7 @@ struct TEvReadResponse : public NActors::TEventLocal<TEvReadResponse, EEv::EvRea
 };
 
 
-struct TEvChangeResponse : public NActors::TEventLocal<TEvChangeResponse, EEv::EvChangeResponse> {
+struct TEvChangeResponse : public NActors::TEventLocal<TEvChangeResponse, static_cast<ui32>(EEv::EvChangeResponse)> {
 
     TEvChangeResponse(Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, TString&& errorDescription = {})
         : Status(status)
@@ -95,7 +95,7 @@ struct TEvChangeResponse : public NActors::TEventLocal<TEvChangeResponse, EEv::E
     std::vector<TResult> Messages;
 };
 
-struct TEvPurgeResponse : public NActors::TEventLocal<TEvPurgeResponse, EEv::EvPurgeResponse> {
+struct TEvPurgeResponse : public NActors::TEventLocal<TEvPurgeResponse, static_cast<ui32>(EEv::EvPurgeResponse)> {
 
     TEvPurgeResponse(Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, TString&& errorDescription = {})
         : Status(status)
@@ -107,7 +107,7 @@ struct TEvPurgeResponse : public NActors::TEventLocal<TEvPurgeResponse, EEv::EvP
     TString ErrorDescription;
 };
 
-struct TEvDescribeResponse : public NActors::TEventLocal<TEvDescribeResponse, EEv::EvDescribeResponse> {
+struct TEvDescribeResponse : public NActors::TEventLocal<TEvDescribeResponse, static_cast<ui32>(EEv::EvDescribeResponse)> {
     TEvDescribeResponse(Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, TString&& errorDescription = {})
         : Status(status)
         , ErrorDescription(std::move(errorDescription))

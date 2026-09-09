@@ -78,7 +78,7 @@ private:
 
         auto& topic = topics.begin()->second;
         switch(topic.Status) {
-            case NDescriber::EStatus::SUCCESS: {
+            case NDescriber::EStatus::Success: {
                 TopicInfo = topic.Info;
 
                 if (!HasConsumer(TopicInfo->Description.GetPQTabletConfig(), Settings.Consumer)) {
@@ -88,7 +88,7 @@ private:
 
                 return DoChanges();
             }
-            case NDescriber::EStatus::BAD_REQUEST: {
+            case NDescriber::EStatus::BadRequest: {
                 return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST,
                     NDescriber::Description(Settings.TopicName, topic.Status));
             }

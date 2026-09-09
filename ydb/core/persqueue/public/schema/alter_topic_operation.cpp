@@ -65,23 +65,23 @@ private:
 
         TopicInfo = std::move(topics.begin()->second);
         switch(TopicInfo.Status) {
-            case NDescriber::EStatus::SUCCESS: {
+            case NDescriber::EStatus::Success: {
                 if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
                     return DoAlter();
                 } else {
                     return DoGetClustersList();
                 }
             }
-            case NDescriber::EStatus::NOT_FOUND: {
+            case NDescriber::EStatus::NotFound: {
                 if (Settings.IfExists) {
                     return ReplyAndDie(Ydb::StatusIds::SUCCESS, "");
                 }
-                return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, NDescriber::Description(Settings.Strategy->GetTopicName(), NDescriber::EStatus::NOT_FOUND));
+                return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, NDescriber::Description(Settings.Strategy->GetTopicName(), NDescriber::EStatus::NotFound));
             }
-            case NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS: {
+            case NDescriber::EStatus::UnauthorizedWithDescribeAccess: {
                 return ReplyAndDie(Ydb::StatusIds::UNAUTHORIZED, NDescriber::Description(Settings.Strategy->GetTopicName(), TopicInfo.Status));
             }
-            case NDescriber::EStatus::BAD_REQUEST: {
+            case NDescriber::EStatus::BadRequest: {
                 return ReplyAndDie(Ydb::StatusIds::BAD_REQUEST, NDescriber::Description(Settings.Strategy->GetTopicName(), TopicInfo.Status));
             }
             default: {

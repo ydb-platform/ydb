@@ -207,7 +207,7 @@ NKikimrPQ::TPQTabletConfig DescribeTabletConfig(
     auto response = runtime.GrabEdgeEvent<NPQ::NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
     UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1u);
     const auto& topic = response->Topics.begin()->second;
-    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::Success);
     return topic.Info->Description.GetPQTabletConfig();
 }
 
@@ -237,7 +237,7 @@ void AssertDescribeAliases(
         UNIT_ASSERT_VALUES_EQUAL_C(response->Topics.size(), 1u, name);
         const auto it = response->Topics.find(name);
         UNIT_ASSERT_C(it != response->Topics.end(), name);
-        UNIT_ASSERT_VALUES_EQUAL_C(it->second.Status, NPQ::NDescriber::EStatus::SUCCESS, name);
+        UNIT_ASSERT_VALUES_EQUAL_C(it->second.Status, NPQ::NDescriber::EStatus::Success, name);
         UNIT_ASSERT_VALUES_EQUAL_C(it->second.RealPath, expectedRealPath, name);
 
         const auto describe = DescribeTopic(runtime, name);

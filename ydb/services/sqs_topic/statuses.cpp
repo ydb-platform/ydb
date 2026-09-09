@@ -11,20 +11,20 @@ namespace NKikimr::NSqsTopic::V1 {
         };
         switch (status) {
             using enum NKikimr::NPQ::NDescriber::EStatus;
-            case SUCCESS:
+            case Success:
                 break;
-            case NOT_FOUND:
-            case NOT_TOPIC:
+            case NotFound:
+            case NotTopic:
                 MakeError(&result.Error.ConstructInPlace(), NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, NPQ::NDescriber::Description(topicPath, status));
                 break;
-            case UNAUTHORIZED:
-            case UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
+            case Unauthorized:
+            case UnauthorizedWithDescribeAccess:
                 MakeError(&result.Error.ConstructInPlace(), NKikimr::NSQS::NErrors::ACCESS_DENIED, NPQ::NDescriber::Description(topicPath, status));
                 break;
-            case BAD_REQUEST:
+            case BadRequest:
                 MakeError(&result.Error.ConstructInPlace(), NKikimr::NSQS::NErrors::INVALID_PARAMETER_VALUE, NPQ::NDescriber::Description(topicPath, status));
                 break;
-            case UNKNOWN_ERROR:
+            case UnknownError:
                 MakeError(&result.Error.ConstructInPlace(), NKikimr::NSQS::NErrors::INTERNAL_FAILURE, NPQ::NDescriber::Description(topicPath, status));
                 break;
         }
@@ -81,7 +81,7 @@ namespace NKikimr::NSqsTopic::V1 {
         using enum NPQ::NDescriber::EStatus;
         const TString describePath = info.RealPath ? info.RealPath : topicPath;
         switch (info.Status) {
-            case SUCCESS:
+            case Success:
                 if (info.CdcStream && policy.CdcUnsupportedMessage) {
                     return MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION, *policy.CdcUnsupportedMessage);
                 }
@@ -90,21 +90,21 @@ namespace NKikimr::NSqsTopic::V1 {
                         "Failed to describe topic: creation is not completed");
                 }
                 return Nothing();
-            case NOT_TOPIC:
+            case NotTopic:
                 return MakeError(*policy.NotTopicError, policy.NotTopicMessage);
-            case NOT_FOUND:
+            case NotFound:
                 if (!policy.NotFoundIsError) {
                     return Nothing();
                 }
                 return MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE, policy.NotFoundMessage);
-            case UNAUTHORIZED:
+            case Unauthorized:
                 return MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE, policy.NotFoundMessage);
-            case UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
+            case UnauthorizedWithDescribeAccess:
                 return MakeError(NSQS::NErrors::ACCESS_DENIED, "Access denied");
-            case BAD_REQUEST:
+            case BadRequest:
                 return MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE,
                     NPQ::NDescriber::Description(topicPath, info.Status));
-            case UNKNOWN_ERROR:
+            case UnknownError:
                 if (!policy.UnknownErrorMessage.empty()) {
                     return MakeError(NSQS::NErrors::INTERNAL_FAILURE, policy.UnknownErrorMessage);
                 }

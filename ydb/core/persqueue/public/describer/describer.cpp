@@ -56,7 +56,7 @@ public:
                     {"logPrefix", LOG_PREFIX},
                     {"topic", topic},
                     {"reason", resolved.error()});
-                SetErrorResult(topic, EStatus::BAD_REQUEST);
+                SetErrorResult(topic, EStatus::BadRequest);
                 continue;
             }
             YDB_LOG_DEBUG("Name resolved",
@@ -130,13 +130,13 @@ public:
                                 {"logPrefix", LOG_PREFIX},
                                 {"realPath", realPath});
 
-                            SetErrorResults(originals, EStatus::UNAUTHORIZED);
+                            SetErrorResults(originals, EStatus::Unauthorized);
                         } else {
                             YDB_LOG_DEBUG("Path not found",
                                 {"logPrefix", LOG_PREFIX},
                                 {"realPath", realPath});
 
-                            SetErrorResults(originals, EStatus::NOT_FOUND);
+                            SetErrorResults(originals, EStatus::NotFound);
                         }
                     } else {
                         unknownPaths.insert(realPath);
@@ -147,7 +147,7 @@ public:
                     YDB_LOG_DEBUG("Path ACCESS DENIED",
                         {"logPrefix", LOG_PREFIX},
                         {"realPath", realPath});
-                    SetErrorResults(originals, EStatus::UNAUTHORIZED);
+                    SetErrorResults(originals, EStatus::Unauthorized);
                     break;
                 }
                 case TSchemeCacheNavigate::EStatus::Ok: {
@@ -171,7 +171,7 @@ public:
                                 YDB_LOG_DEBUG("Path not found",
                                     {"logPrefix", LOG_PREFIX},
                                     {"realPath", realPath});
-                                SetErrorResults(originals, EStatus::NOT_FOUND);
+                                SetErrorResults(originals, EStatus::NotFound);
                             } else {
                                 unknownPaths.insert(realPath);
                             }
@@ -183,14 +183,14 @@ public:
 
                                 SetTopicResults(originals, TTopicInfo{
                                     .Status = entry.SecurityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *Settings.UserToken)
-                                            ? EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS : EStatus::UNAUTHORIZED
+                                            ? EStatus::UnauthorizedWithDescribeAccess : EStatus::Unauthorized
                                 });
                             } else {
                                 YDB_LOG_DEBUG("Path SUCCESS",
                                     {"logPrefix", LOG_PREFIX},
                                     {"realPath", realPath});
                                 SetTopicResults(originals, TTopicInfo{
-                                    .Status = EStatus::SUCCESS,
+                                    .Status = EStatus::Success,
                                     .RealPath = realPath,
                                     .CdcStream = isCDCStream,
                                     .CdcStreamName = cdcStreamName,
@@ -211,11 +211,11 @@ public:
                                 {"logPrefix", LOG_PREFIX},
                                 {"realPath", realPath});
                             SetTopicResults(originals, TTopicInfo{
-                                .Status = EStatus::UNAUTHORIZED
+                                .Status = EStatus::Unauthorized
                             });
                         } else {
                             SetTopicResults(originals, TTopicInfo{
-                                .Status = EStatus::NOT_TOPIC,
+                                .Status = EStatus::NotTopic,
                                 .RealPath = realPath
                             });
                         }
@@ -227,7 +227,7 @@ public:
                         {"logPrefix", LOG_PREFIX},
                         {"realPath", realPath});
                     SetTopicResults(originals, TTopicInfo{
-                        .Status = EStatus::UNKNOWN_ERROR,
+                        .Status = EStatus::UnknownError,
                         .RealPath = realPath
                     });
                     break;
@@ -364,35 +364,35 @@ NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent, const TSt
 
 Ydb::StatusIds::StatusCode Convert(const EStatus status) {
     switch (status) {
-        case EStatus::SUCCESS:
+        case EStatus::Success:
             return Ydb::StatusIds::SUCCESS;
-        case EStatus::NOT_FOUND:
-        case EStatus::NOT_TOPIC:
+        case EStatus::NotFound:
+        case EStatus::NotTopic:
             return Ydb::StatusIds::NOT_FOUND;
-        case EStatus::UNAUTHORIZED:
-        case EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
+        case EStatus::Unauthorized:
+        case EStatus::UnauthorizedWithDescribeAccess:
             return Ydb::StatusIds::UNAUTHORIZED;
-        case EStatus::BAD_REQUEST:
+        case EStatus::BadRequest:
             return Ydb::StatusIds::BAD_REQUEST;
-        case EStatus::UNKNOWN_ERROR:
+        case EStatus::UnknownError:
             return Ydb::StatusIds::INTERNAL_ERROR;
     }
 }
 
 TString Description(const TString& topicPath, const EStatus status) {
     switch (status) {
-        case EStatus::SUCCESS:
+        case EStatus::Success:
             return TStringBuilder() << "The topic '" << topicPath << "' has been successfully described";
-        case EStatus::NOT_FOUND:
-        case EStatus::UNAUTHORIZED:
+        case EStatus::NotFound:
+        case EStatus::Unauthorized:
             return TStringBuilder() << "You do not have access permissions or the '" << topicPath << "' does not exist";
-        case EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
+        case EStatus::UnauthorizedWithDescribeAccess:
             return TStringBuilder() << "You do not have access permissions to the '" << topicPath << "' topic";
-        case EStatus::NOT_TOPIC:
+        case EStatus::NotTopic:
             return TStringBuilder() << "The '" << topicPath << "' path is not a topic";
-        case EStatus::BAD_REQUEST:
+        case EStatus::BadRequest:
             return TStringBuilder() << "Invalid topic name '" << topicPath << "'";
-        case EStatus::UNKNOWN_ERROR:
+        case EStatus::UnknownError:
             return TStringBuilder() << "Error describing the path '" << topicPath << "'";
     }
 }

@@ -283,7 +283,7 @@ Y_UNIT_TEST(CreateAlterDropPrepareOnlyAndIfFlags) {
         auto edge = runtime.AllocateEdgeActor();
         runtime.Register(NDescriber::CreateDescriberActor(edge, "/Root", {path}));
         auto response = runtime.GrabEdgeEvent<NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
-        UNIT_ASSERT_VALUES_EQUAL(response->Topics.begin()->second.Status, NDescriber::EStatus::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(response->Topics.begin()->second.Status, NDescriber::EStatus::NotFound);
     }
 
     AssertStatus(DoCreate(runtime, MakeCreateTopicRequest(path)), Ydb::StatusIds::SUCCESS);

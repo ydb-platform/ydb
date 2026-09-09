@@ -53,7 +53,7 @@ void TWriterActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     auto& topic = topics.begin()->second;
     DescribeStatus = topic.Status;
     switch(topic.Status) {
-        case NDescriber::EStatus::SUCCESS: {
+        case NDescriber::EStatus::Success: {
             TopicInfo = topic.Info;
             return DoWrite();
         }

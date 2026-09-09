@@ -65,22 +65,22 @@ private:
 
         TopicInfo = std::move(topics.begin()->second);
         switch(TopicInfo.Status) {
-            case NDescriber::EStatus::SUCCESS: {
+            case NDescriber::EStatus::Success: {
                 if (TopicInfo.CdcStream) {
-                    return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, NDescriber::Description(Settings.Path, NDescriber::EStatus::NOT_FOUND));
+                    return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, NDescriber::Description(Settings.Path, NDescriber::EStatus::NotFound));
                 }
                 return DoDrop();
             }
-            case NDescriber::EStatus::NOT_FOUND: {
+            case NDescriber::EStatus::NotFound: {
                 if (Settings.IfExists) {
                     return ReplyAndDie(Ydb::StatusIds::SUCCESS, "");
                 }
-                return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, NDescriber::Description(Settings.Path, NDescriber::EStatus::NOT_FOUND));
+                return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, NDescriber::Description(Settings.Path, NDescriber::EStatus::NotFound));
             }
-            case NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS: {
+            case NDescriber::EStatus::UnauthorizedWithDescribeAccess: {
                 return ReplyAndDie(Ydb::StatusIds::UNAUTHORIZED, NDescriber::Description(Settings.Path, TopicInfo.Status));
             }
-            case NDescriber::EStatus::BAD_REQUEST: {
+            case NDescriber::EStatus::BadRequest: {
                 return ReplyAndDie(Ydb::StatusIds::BAD_REQUEST, NDescriber::Description(Settings.Path, TopicInfo.Status));
             }
             default: {

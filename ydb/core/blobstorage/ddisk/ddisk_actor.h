@@ -223,6 +223,24 @@ namespace NKikimr::NDDisk {
 
         TCounters Counters;
 
+<<<<<<< HEAD
+=======
+        // Separate from the shared monitoring counters: only this actor's router
+        // callbacks contribute, until their last access to actor-owned state.
+    private:
+        friend class TDDiskActorTestPeer;
+        std::function<TMonotonic()> DestructionNow;
+        std::function<void()> DestructionSleep;
+    public:
+        static constexpr ui64 DirectIoStopping = ui64{1} << 63;
+        std::atomic<ui64> DirectIoState{0};
+        ui64 GetDirectIoInflight() const {
+            return DirectIoState.load(std::memory_order_acquire) & ~DirectIoStopping;
+        }
+        void OnDirectIODone(NActors::TActorSystem* actorSystem);
+        NMonitoring::TDynamicCounters::TCounterPtr IoStalledCounter;
+
+>>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
 #if defined(__linux__)
         // we share Counters with UringRouter, so that
         // UringRouter must be after the counters to have a
@@ -243,6 +261,38 @@ namespace NKikimr::NDDisk {
                 EvIssuePersistentBufferChunkAllocation,
                 EvDeallocatePersistentBufferChunk,
                 EvDeallocatePersistentBufferChunkResult,
+<<<<<<< HEAD
+=======
+                EvRetryListPersistentBuffer,
+                EvDDiskIoResult,
+                EvIntegrityIoResult,
+                EvHandleSerializedWriteForChunk,
+                EvChunkFormatIoResult,
+                EvFinishStopping,
+                EvStopIoTimeout,
+                EvBeginStopping,
+                EvCompleteStop,
+                EvRetryIODelayed,
+            };
+
+            struct TEvCompleteStop : TEventLocal<TEvCompleteStop, EvCompleteStop> {};
+            struct TEvBeginStopping : TEventLocal<TEvBeginStopping, EvBeginStopping> {};
+            struct TEvRetryIODelayed : TEventLocal<TEvRetryIODelayed, EvRetryIODelayed> {
+                ui64 Id;
+                explicit TEvRetryIODelayed(ui64 id) : Id(id) {}
+            };
+            struct TEvFinishStopping : TEventLocal<TEvFinishStopping, EvFinishStopping> {};
+            struct TEvStopIoTimeout : TEventLocal<TEvStopIoTimeout, EvStopIoTimeout> {};
+
+           struct TEvRetryListPersistentBuffer : TEventLocal<TEvRetryListPersistentBuffer, EvRetryListPersistentBuffer> {
+                TAutoPtr<TEventHandle<TEvListPersistentBuffer>> Ev;
+                ui32 RetriesLeft;
+
+                TEvRetryListPersistentBuffer(TAutoPtr<TEventHandle<TEvListPersistentBuffer>> ev, ui32 retriesLeft)
+                    : Ev(ev)
+                    , RetriesLeft(retriesLeft)
+                {}
+>>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
             };
 
             struct TEvIssuePersistentBufferChunkAllocation : TEventLocal<TEvIssuePersistentBufferChunkAllocation, EvIssuePersistentBufferChunkAllocation> {
@@ -370,6 +420,52 @@ namespace NKikimr::NDDisk {
 
         const bool IsPersistentBufferActor = false;
 
+<<<<<<< HEAD
+=======
+        // Actor-thread-only health state. I/O callbacks communicate status/data exclusively
+        // through TEvPrivate callbacks, so Broken ordering is defined by the actor mailbox.
+        bool Broken = false;
+        TString BrokenReason;
+
+        static constexpr TDuration StopIoTimeout = TDuration::Minutes(1);
+        static constexpr TStringBuf StoppingReason = "DDisk is stopping";
+        bool Stopping = false;
+        bool IoStalled = false;
+        bool PoisonReceived = false;
+        bool OwnDrainComplete = false;
+        bool OwnDrainFinishing = false;
+        void CompleteStop();
+        bool PersistentBufferGone = true;
+        TActorId ParentDDiskId;
+        static constexpr ui64 PBShutdownCookie = Max<ui64>();
+        void BeginStopping(TString reason);
+        void HandleBeginStopping();
+        void TryCompleteStop();
+        void HandleGone(TEvents::TEvGone::TPtr ev);
+        void CancelPendingIo(std::unique_ptr<TDirectIoOpBase> op);
+        void CancelRetries();
+        void HandleRetryIODelayed(TEvPrivate::TEvRetryIODelayed::TPtr ev);
+
+        void RejectQueryWhenStopping(IEventHandle& ev);
+        void RejectQuery(IEventHandle& ev,
+            NKikimrBlobStorage::NDDisk::TReplyStatus::E status, const TString& reason);
+        void RejectPendingDDiskQueries(
+            NKikimrBlobStorage::NDDisk::TReplyStatus::E status, const TString& reason);
+        void RejectQueuedQueries();
+        void FinishStopping();
+        void HandleStopIoTimeout();
+        void ClearIoStalled();
+
+        bool IsBroken() const;
+        bool ChecksumsEnabled() const {
+            return Config.EnableChecksums;
+        }
+        TString GetBrokenReason() const;
+        void EnterBroken(TString reason);
+        void FailPendingDDiskQuery(std::unique_ptr<IEventHandle> ev);
+        void FailDirectIoOp(std::unique_ptr<TDirectIoOpBase> op, TString reason = {});
+
+>>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
     public:
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
@@ -385,11 +481,15 @@ namespace NKikimr::NDDisk {
         void Bootstrap();
         STFUNC(StateFuncDDisk);
         STFUNC(StateFuncPersistentBuffer);
+<<<<<<< HEAD
         STFUNC(StateFuncTerminate);
+=======
+        STFUNC(StateFuncStopping);
+>>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
         void PassAway() override;
 
         // Mirrors TVDiskContext::CheckPDiskResponse: returns true on OK, returns false and
-        // switches to StateFuncTerminate on session-loss statuses (ERROR / INVALID_OWNER /
+        // switches to StateFuncStopping on session-loss statuses (ERROR / INVALID_OWNER /
         // INVALID_ROUND) and device-error statuses (CORRUPTED / OUT_OF_SPACE), Y_ABORTs on
         // anything else. Caller must `return` immediately on false because the actor's
         // state has changed.
@@ -482,6 +582,8 @@ namespace NKikimr::NDDisk {
 
         THashMap<ui64, TPendingIoOp> WriteCallbacks;
         THashMap<ui64, TPendingIoOp> ReadCallbacks;
+        THashMap<ui64, TPendingIoOp> DelayedRetries;
+        ui64 NextRetryId = 0;
 
         void IssueChunkAllocation(ui64 tabletId, ui64 vChunkIndex);
         void Handle(NPDisk::TEvChunkReserveResult::TPtr ev);

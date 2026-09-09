@@ -979,6 +979,22 @@ public:
         PDisk->InputRequest(request);
     }
 
+<<<<<<< HEAD
+=======
+    // Raw device I/O samples from an IO_URING source (DDisk / PersistentBuffer
+    // actor) sharing this physical device. Feed them into the same merged
+    // aggregator that PDisk's own block device thread pushes samples into, so
+    // TSharedCallback::Exec's periodic window computation merges both.
+    // Pushing is thread-safe (TDeviceOverestimationAggregator::Push takes a
+    // mutex), so this is safe to call from the actor thread regardless of what
+    // the block device thread is doing concurrently.
+    void Handle(NPDisk::TEvDeviceOverestimationSamples::TPtr &ev) {
+        for (const auto& sample : ev->Get()->Samples) {
+            PDisk->Mon.DeviceOverestimationMerged->Push(sample);
+        }
+    }
+
+>>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
     void Handle(NPDisk::TEvLog::TPtr &ev) {
         double burstMs;
         TLogWrite* request = PDisk->ReqCreator.CreateLogWrite(*ev->Get(), ev->Sender, burstMs, std::move(ev->TraceId));

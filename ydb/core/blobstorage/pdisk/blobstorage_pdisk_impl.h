@@ -33,6 +33,12 @@
 #include <util/system/condvar.h>
 #include <util/system/mutex.h>
 
+<<<<<<< HEAD
+=======
+#include <atomic>
+#include <functional>
+#include <memory>
+>>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
 #include <queue>
 
 namespace NKikimr {
@@ -47,6 +53,12 @@ class TCompletionEventSender;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 class TPDisk : public IPDisk {
+#if defined(__linux__)
+    friend class TPDiskTestPeer;
+    // Configured under StateMutex before the first router creation attempt.
+    std::function<void(TUringRouter&)> ConfigureRouterForTest;
+#endif
+
 public:
 #ifdef ENABLE_PDISK_SHRED
     static constexpr bool IS_SHRED_ENABLED = true;
@@ -208,6 +220,17 @@ public:
     // Incapsulated components
     TPDiskThread PDiskThread;
     THolder<IBlockDevice> BlockDevice;
+<<<<<<< HEAD
+=======
+#if defined(__linux__)
+    // DDisk/PB hold IUringRouterClient copies of this pointer. PDisk releases
+    // it during Stop() only when no clients remain; otherwise the final owner
+    // destroys the router, drains accepted I/O, and closes the duplicated fd.
+    std::shared_ptr<TUringRouter> SharedUringRouter;
+#endif
+    bool SharedUringCreateAttempted = false;
+    bool SharedUringFailureReported = false;
+>>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
     THolder<TLogWriter> CommonLogger;
     THolder<TSysLogWriter> SysLogger;
 
@@ -381,6 +404,15 @@ public:
     bool YardInitStart(TYardInit &evYardInit);
     void YardInitFinish(TYardInit &evYardInit);
     bool YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner);
+<<<<<<< HEAD
+=======
+    void AttachSharedUringRouter(const TYardInit& evYardInit, TEvYardInitResult& result);
+    void EnsureSharedUringRouter(ui32 idleSpinUs);
+#if defined(__linux__)
+    TDeviceIoSampleSink MakeUringSampleSink() const;
+#endif
+    void CheckSharedUringRouter(); // Called by the PDisk worker
+>>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
     void YardResize(TYardResize &evYardResize);
     void ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request);
 

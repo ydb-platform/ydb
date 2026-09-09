@@ -119,6 +119,7 @@ namespace NKikimr::NStorage {
     };
 
     class TNodeWarden : public TActorBootstrapped<TNodeWarden> {
+        friend class TNodeWardenTestPeer;
         TIntrusivePtr<TNodeWardenConfig> Cfg;
         TIntrusivePtr<TDsProxyNodeMon> DsProxyNodeMon;
         TActorId DsProxyNodeMonActor;
@@ -186,8 +187,19 @@ namespace NKikimr::NStorage {
                 EvDereferencePDisk,
                 EvSaveConfigResult,
                 EvRetrySaveConfig,
+<<<<<<< HEAD
+=======
+                EvRetrySlay,
+                EvRestartDrainReminder,
+>>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
             };
 
+            struct TEvRestartDrainReminder : TEventLocal<TEvRestartDrainReminder, EvRestartDrainReminder> {
+                ui32 PDiskId;
+                ui64 Generation;
+                TEvRestartDrainReminder(ui32 pdiskId, ui64 generation)
+                    : PDiskId(pdiskId), Generation(generation) {}
+            };
             struct TEvSendDiskMetrics : TEventLocal<TEvSendDiskMetrics, EvSendDiskMetrics> {};
             struct TEvUpdateStats : TEventLocal<TEvUpdateStats, EvUpdateStats> {};
             struct TEvUpdateNodeDrives : TEventLocal<TEvUpdateNodeDrives, EvUpdateNodeDrives> {};
@@ -469,6 +481,7 @@ namespace NKikimr::NStorage {
             };
             std::optional<TRuntimeData> RuntimeData;
             bool ShutdownPending = false;
+            TActorId ShutdownActorId;
             bool RestartAfterShutdown = false;
 
             // Last VDiskId reported to Node Whiteboard.
@@ -524,7 +537,19 @@ namespace NKikimr::NStorage {
         THashMap<TActorId, TVSlotId> VDiskIdByActor;
         std::map<TVSlotId, ui64> SlayInFlight;
         // PDiskId -> is another restart required after the current restart.
-        std::unordered_map<ui32, bool> PDiskRestartInFlight;
+        struct TPDiskRestart {
+            enum class EPhase { WaitingForDDisks, RestartSent };
+            EPhase Phase = EPhase::WaitingForDDisks;
+            bool RequiresAnotherRestart = false;
+            ui64 Generation = 0;
+            THashSet<TActorId> WaitingFor;
+        };
+        std::unordered_map<ui32, TPDiskRestart> PDiskRestartInFlight;
+        // Survives poison and slot deletion until the concrete actor reports Gone.
+        THashMap<TActorId, TVSlotId> DDiskActors;
+        ui64 NextPDiskRestartGeneration = 0;
+        void TrySendPDiskRestart(ui32 pdiskId);
+        void Handle(TEvPrivate::TEvRestartDrainReminder::TPtr ev);
         TIntrusiveList<TVDiskRecord, TUnreportedMetricTag> VDisksWithUnreportedMetrics;
 
         void DestroyLocalVDisk(TVDiskRecord& vdisk);

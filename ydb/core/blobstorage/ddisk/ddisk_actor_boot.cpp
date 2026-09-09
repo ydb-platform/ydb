@@ -128,7 +128,16 @@ namespace NKikimr::NDDisk {
         }
         auto pbActor = std::make_unique<TDDiskActor>(TVDiskConfig::TBaseInfo(BaseInfo),
             Info, TPersistentBufferFormat(PersistentBufferFormat), TDDiskConfig(Config), CountersParent,
+<<<<<<< HEAD
             PersistentBufferChunks, PersistentBufferUniqueId, PDiskParams, std::move(format), std::move(DiskFd.Duplicate()));
+=======
+            PersistentBufferChunks, PersistentBufferUniqueId, PDiskParams, std::move(format)
+#if defined(__linux__)
+            , UringRouter
+#endif
+            );
+        pbActor->ParentDDiskId = SelfId();
+>>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
         auto *as = TActivationContext::ActorSystem();
         PersistentBufferActorId = as->Register(pbActor.release(), TMailboxType::Revolving, AppData()->SystemPoolId);
         auto pbServiceId = MakeBlobStoragePersistentBufferId(BaseInfo.PDiskActorID.NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);

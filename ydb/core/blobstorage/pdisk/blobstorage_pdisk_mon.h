@@ -14,6 +14,7 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
 #include <util/generic/vector.h>
+#include <memory>
 
 
 namespace NKikimr {
@@ -311,6 +312,20 @@ struct TPDiskMon {
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceActualCostNs;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceOverestimationRatio;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceNonperformanceMs;
+<<<<<<< HEAD
+=======
+
+    // Merged device overestimation: combines samples from PDisk's own block
+    // device thread together with samples from the shared TUringRouter I/O
+    // thread (DDisk / PersistentBuffer I/O on the same physical device),
+    // via TDeviceOverestimationAggregator. See blobstorage_pdisk_device_overestimation.h.
+    std::shared_ptr<NPDisk::TDeviceOverestimationAggregator> DeviceOverestimationMerged =
+        std::make_shared<NPDisk::TDeviceOverestimationAggregator>();
+    ::NMonitoring::TDynamicCounters::TCounterPtr DeviceOverestimationRatioMerged;
+    ::NMonitoring::TDynamicCounters::TCounterPtr DeviceNonperformanceMsMerged;
+    ::NMonitoring::TDynamicCounters::TCounterPtr DeviceOverestimationDroppedSamples;
+
+>>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceInterruptedSystemCalls;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceSubmitThreadBusyTimeNs;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceCompletionThreadBusyTimeNs;

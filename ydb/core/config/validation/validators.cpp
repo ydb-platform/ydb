@@ -361,12 +361,6 @@ EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::v
     if (result == NKikimr::NConfig::EValidationResult::Error) {
         return EValidationResult::Error;
     }
-    if (config.HasCompositeConveyorConfig()) {
-        result = ValidateCompositeConveyorConfig(config.GetCompositeConveyorConfig(), msg);
-        if (result == EValidationResult::Error) {
-            return result;
-        }
-    }
     if (msg.size() > 0) {
         return EValidationResult::Warn;
     }

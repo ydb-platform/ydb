@@ -243,6 +243,21 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         UNIT_ASSERT(FindAttribute(*query, "ydb.cpu_us"));
         UNIT_ASSERT(FindAttribute(*query, "ydb.wait_us"));
         UNIT_ASSERT(FindAttribute(*query, "ydb.spilled_bytes"));
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*query, "ydb.code.component")->value().string_value(), "KQP");
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*FindSpan(*uploader, "KQP request"), "ydb.code.component")->value().string_value(), "KQP");
+        const auto* run = FindSpan(*uploader, "Run tasks");
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*run, "ydb.phase")->value().string_value(), "RunTasks");
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*run, "ydb.code.component")->value().string_value(), "DqExecution");
+        const auto* resolve = FindSpan(*uploader, "Resolve tables");
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*resolve, "ydb.phase")->value().string_value(), "ResolveTables");
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*resolve, "ydb.actor.type")->value().string_value(), "TKqpTableResolver");
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*resolve, "ydb.code.component")->value().string_value(), "KqpExecuter.Prepare");
+        const auto* metadata = FindSpan(*uploader, "Metadata");
+        UNIT_ASSERT(metadata);
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*metadata, "ydb.peer.actor.type")->value().string_value(), "SchemeCache");
+        const auto* read = FindSpan(*uploader, "Read shard");
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*read, "ydb.code.component")->value().string_value(), "KqpShardRead");
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*read, "ydb.peer.actor.type")->value().string_value(), "DataShard");
         const auto* shard = FindSpan(*uploader, "Datashard.Read");
         UNIT_ASSERT(FindAttribute(*shard, "ydb.shard_id"));
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*shard, "ydb.rows")->value().int_value(), 1);
@@ -634,6 +649,11 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         AssertStatus(*uploader, "Coordinator", NTraceProto::Status::STATUS_CODE_OK);
         AssertStatus(*uploader, "Apply commit", NTraceProto::Status::STATUS_CODE_OK);
         AssertDescendant(*uploader, "Prepare shards", "Commit");
+        const auto* prepare = FindSpan(*uploader, "Prepare shards");
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*prepare, "ydb.phase")->value().string_value(), "CommitPrepareShards");
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*prepare, "ydb.peer.actor.type")->value().string_value(), "DataShard");
+        const auto* commit = FindSpan(*uploader, "Commit");
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*commit, "ydb.actor.type")->value().string_value(), "TKqpBufferWriteActor");
         for (const auto* name : {"Prepare shards", "Apply commit"}) {
             const auto* phase = FindSpan(*uploader, name);
             UNIT_ASSERT_VALUES_EQUAL(phase->events_size(), 2);

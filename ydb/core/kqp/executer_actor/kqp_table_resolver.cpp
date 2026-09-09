@@ -474,8 +474,8 @@ private:
         }
 
         if (!ResolvingNamesFinished) {
-            MetadataSpan = NWilson::TSpan(TComponentTracingLevels::TQueryProcessor::Detailed,
-                NWilson::TTraceId(TraceId), "Metadata", NWilson::EFlags::AUTO_END);
+            MetadataSpan = MakeQueryPhaseTraceSpan(TComponentTracingLevels::TQueryProcessor::Detailed,
+                NWilson::TTraceId(TraceId), EQueryTracePhase::ResolveMetadata, NWilson::EFlags::AUTO_END);
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()),
                 0, 0, MetadataSpan.GetTraceId());
             Become(&TKqpTableResolver::ResolveNamesState);
@@ -483,15 +483,15 @@ private:
         }
 
         if (requestNavigate->ResultSet.size()) {
-            MetadataSpan = NWilson::TSpan(TComponentTracingLevels::TQueryProcessor::Detailed,
-                NWilson::TTraceId(TraceId), "Metadata", NWilson::EFlags::AUTO_END);
+            MetadataSpan = MakeQueryPhaseTraceSpan(TComponentTracingLevels::TQueryProcessor::Detailed,
+                NWilson::TTraceId(TraceId), EQueryTracePhase::ResolveMetadata, NWilson::EFlags::AUTO_END);
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()),
                 0, 0, MetadataSpan.GetTraceId());
         } else {
             NavigationFinished = true;
         }
-        PartitioningSpan = NWilson::TSpan(TComponentTracingLevels::TQueryProcessor::Detailed,
-            NWilson::TTraceId(TraceId), "Partitioning", NWilson::EFlags::AUTO_END);
+        PartitioningSpan = MakeQueryPhaseTraceSpan(TComponentTracingLevels::TQueryProcessor::Detailed,
+            NWilson::TTraceId(TraceId), EQueryTracePhase::ResolvePartitioning, NWilson::EFlags::AUTO_END);
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request),
             0, 0, PartitioningSpan.GetTraceId());
         Become(&TKqpTableResolver::ResolveKeysState);

@@ -28,6 +28,7 @@ ui64 TExecutionTrace::StartStage(const NWilson::TSpan& parent, std::pair<ui64, u
             description.StageName(), NWilson::EFlags::AUTO_END);
         stage.Span.Attribute("ydb.tx_index", static_cast<i64>(stageId.first));
         stage.Span.Attribute("ydb.stage_id", static_cast<i64>(stageId.second));
+        stage.Span.Attribute("ydb.code.component", TString("DqExecution"));
         stage.Span.Attribute("ydb.timing_boundary", TString("tasks_launch_to_last_report"));
     }
     ui64 spanId = 0;

@@ -11,6 +11,73 @@
 
 namespace NKikimr::NKqp {
 
+NWilson::TSpan MakeQueryPhaseTraceSpan(ui8 verbosity, NWilson::TTraceId parent,
+        EQueryTracePhase phase, NWilson::TFlags flags, NActors::TActorSystem* actorSystem) {
+    struct TDescription {
+        const char* Name;
+        const char* Phase;
+        const char* Actor;
+        const char* Component = nullptr;
+        const char* Peer = nullptr;
+    };
+    const auto description = [phase]() -> TDescription {
+        switch (phase) {
+            case EQueryTracePhase::Admission:
+                return {"Queued", "Admission", "TKqpSessionActor", nullptr, "WorkloadService"};
+            case EQueryTracePhase::ResolveTables:
+                return {"Resolve tables", "ResolveTables", "TKqpTableResolver", "KqpExecuter.Prepare"};
+            case EQueryTracePhase::ResolveShards:
+                return {"Locate shards", "ResolveShards", "TKqpShardsResolver", "KqpExecuter.Prepare"};
+            case EQueryTracePhase::ResolveMetadata:
+                return {"Metadata", "ResolveMetadata", "TKqpTableResolver", "KqpExecuter.Prepare", "SchemeCache"};
+            case EQueryTracePhase::ResolvePartitioning:
+                return {"Partitioning", "ResolvePartitioning", "TKqpTableResolver", "KqpExecuter.Prepare", "SchemeCache"};
+            case EQueryTracePhase::Snapshot:
+                return {"Acquire snapshot", "Snapshot", "TKqpDataExecuter", "KqpExecuter.Prepare", "TLongTxService"};
+            case EQueryTracePhase::SessionSnapshot:
+                return {"Acquire snapshot", "Snapshot", "TKqpSessionActor", nullptr, "TSnapshotManagerActor"};
+            case EQueryTracePhase::PersistentSnapshot:
+                return {"Acquire persistent snapshot", "Snapshot", "TKqpSessionActor", nullptr, "TSnapshotManagerActor"};
+            case EQueryTracePhase::RunTasks:
+                return {"Run tasks", "RunTasks", nullptr, "DqExecution"};
+            case EQueryTracePhase::BufferLookup:
+                return {"Check rows", "BufferLookup", "TKqpBufferLookupActor", "KqpBufferLookup", "DataShard"};
+            case EQueryTracePhase::Write:
+                return {"Write", "Write", "TKqpBufferWriteActor"};
+            case EQueryTracePhase::WaitForWrites:
+                return {"Wait for writes", "WaitForWrites", "TKqpBufferWriteActor"};
+            case EQueryTracePhase::FlushEffects:
+                return {"Flush effects", "FlushEffects", "TKqpBufferWriteActor"};
+            case EQueryTracePhase::Commit:
+                return {"Commit", "Commit", "TKqpBufferWriteActor"};
+            case EQueryTracePhase::CommitPrepareShards:
+                return {"Prepare shards", "CommitPrepareShards", "TKqpBufferWriteActor", nullptr, "DataShard"};
+            case EQueryTracePhase::CommitApplyShards:
+                return {"Apply commit", "CommitApplyShards", "TKqpBufferWriteActor", nullptr, "DataShard"};
+            case EQueryTracePhase::CommitCoordinator:
+                return {"Coordinator", "CommitCoordinator", "TKqpBufferWriteActor", nullptr, "TxCoordinator"};
+            case EQueryTracePhase::Rollback:
+                return {"Rollback", "Rollback", "TKqpBufferWriteActor"};
+        }
+        Y_UNREACHABLE();
+    }();
+    NWilson::TSpan span(verbosity, std::move(parent), description.Name, flags, actorSystem);
+    if (!span) {
+        return span;
+    }
+    span.Attribute("ydb.phase", TString(description.Phase));
+    if (description.Actor) {
+        span.Attribute("ydb.actor.type", TString(description.Actor));
+    }
+    if (description.Component) {
+        span.Attribute("ydb.code.component", TString(description.Component));
+    }
+    if (description.Peer) {
+        span.Attribute("ydb.peer.actor.type", TString(description.Peer));
+    }
+    return span;
+}
+
 void AddQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescription& description,
         const TKqpQueryStats& stats, ui64 requestUnits, Ydb::StatusIds::StatusCode status) {
     if (!span) {
@@ -138,10 +205,10 @@ void TShardTraceEvents::Finish(NWilson::TSpan& span) {
     Dropped = 0;
 }
 
-void TCommitTracePhase::Start(const NWilson::TSpan& parent, const char* name, ui64 shards) {
+void TCommitTracePhase::Start(const NWilson::TSpan& parent, EQueryTracePhase phase, ui64 shards) {
     End(Ydb::StatusIds::SUCCESS);
-    Span = parent.CreateChild(TComponentTracingLevels::TQueryProcessor::Detailed, name, NWilson::EFlags::AUTO_END);
-    Span.Attribute("ydb.actor.type", TString("TKqpBufferWriteActor"));
+    Span = MakeQueryPhaseTraceSpan(TComponentTracingLevels::TQueryProcessor::Detailed,
+        parent.GetTraceId(), phase, NWilson::EFlags::AUTO_END, parent.GetActorSystem());
     Span.Attribute("ydb.shards", static_cast<i64>(shards));
 }
 
@@ -375,6 +442,7 @@ void AddQueryTraceAttributes(NWilson::TSpan& span, NKikimrKqp::EQueryType queryT
         return;
     }
     span.Attribute("db.system.name", TString("ydb"));
+    span.Attribute("ydb.code.component", TString("KQP"));
     span.Attribute("ydb.query.type", NKikimrKqp::EQueryType_Name(queryType));
     span.Attribute("ydb.query.action", QueryTraceActionName(action));
     if (database) {

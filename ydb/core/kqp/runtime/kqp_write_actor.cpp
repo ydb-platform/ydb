@@ -3442,7 +3442,7 @@ public:
         , QuerySpanId(settings.QuerySpanId)
     {
         Counters->BufferActorsCount->Inc();
-        UpdateTracingState("Write", std::move(settings.TraceId));
+        UpdateTracingState(EQueryTracePhase::Write, std::move(settings.TraceId));
     }
 
     void Bootstrap() {
@@ -4323,7 +4323,7 @@ public:
 
     void Handle(TEvBufferWrite::TPtr& ev) {
         if (ev->TraceId && !BufferWriteActorStateSpan.GetTraceId()) {
-            UpdateTracingState("Write", NWilson::TTraceId(ev->TraceId));
+            UpdateTracingState(EQueryTracePhase::Write, NWilson::TTraceId(ev->TraceId));
         }
         Counters->ForwardActorWritesLatencyHistogram->Collect((TInstant::Now() - ev->Get()->SendTime).MicroSeconds());
         TWriteToken token;
@@ -4575,9 +4575,9 @@ public:
 
         Counters->BufferActorFlushes->Inc();
         if (TxId) {
-            StartCommitPhase("Flush effects");
+            StartCommitPhase(EQueryTracePhase::FlushEffects);
         } else {
-            UpdateTracingState("Flush effects", std::move(traceId), TComponentTracingLevels::TQueryProcessor::Basic);
+            UpdateTracingState(EQueryTracePhase::FlushEffects, std::move(traceId), TComponentTracingLevels::TQueryProcessor::Basic);
         }
         OperationStartTime = TInstant::Now();
 
@@ -4601,7 +4601,7 @@ public:
             Rollback(std::move(traceId), /* waitForResult */ true);
             return;
         }
-        UpdateTracingState("Commit", std::move(traceId), TComponentTracingLevels::TQueryProcessor::Basic);
+        UpdateTracingState(EQueryTracePhase::Commit, std::move(traceId), TComponentTracingLevels::TQueryProcessor::Basic);
         if (TxManager->BrokenLocks()) {
             NYql::TIssues issues;
             issues.AddIssue(*TxManager->GetLockIssue());
@@ -4631,7 +4631,7 @@ public:
     }
 
     bool Prepare() {
-        StartCommitPhase("Prepare shards");
+        StartCommitPhase(EQueryTracePhase::CommitPrepareShards);
         OperationStartTime = TInstant::Now();
 
         YDB_LOG_DEBUG("Start prepare for distributed commit",
@@ -4659,7 +4659,7 @@ public:
 
     bool ImmediateCommit() {
         Counters->BufferActorImmediateCommits->Inc();
-        StartCommitPhase("Apply commit");
+        StartCommitPhase(EQueryTracePhase::CommitApplyShards);
         OperationStartTime = TInstant::Now();
 
         YDB_LOG_DEBUG("Start immediate commit",
@@ -4683,7 +4683,7 @@ public:
     }
 
     void DistributedCommit() {
-        StartCommitPhase("Coordinator");
+        StartCommitPhase(EQueryTracePhase::CommitCoordinator);
         Counters->BufferActorDistributedCommits->Inc();
         OperationStartTime = TInstant::Now();
 
@@ -4708,7 +4708,7 @@ public:
             Counters->BufferActorRollbacks->Inc();
             CommitPhase.End(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
             EndQueryTraceSpan(BufferWriteActorStateSpan, Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
-            UpdateTracingState("Rollback", std::move(traceId), TComponentTracingLevels::TQueryProcessor::Basic);
+            UpdateTracingState(EQueryTracePhase::Rollback, std::move(traceId), TComponentTracingLevels::TQueryProcessor::Basic);
 
             YDB_LOG_DEBUG("Start rollback",
                 {"logPrefix", this->LogPrefix});
@@ -5057,7 +5057,7 @@ public:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned:
                 TxProxyMon->ClientTxStatusPlanned->Inc();
                 TxPlanned = true;
-                StartCommitPhase("Apply commit");
+                StartCommitPhase(EQueryTracePhase::CommitApplyShards);
                 if (TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE) {
                     AFL_ENSURE(res->Record.HasStepId());
                     AFL_ENSURE(res->Record.HasTxId());
@@ -5386,7 +5386,7 @@ public:
         }
         YQL_ENSURE(CurrentStateFunc() == &TThis::StateWrite);
         Become(&TThis::StateWaitTasks);
-        UpdateTracingState("Wait for writes", NWilson::TTraceId(ev->TraceId));
+        UpdateTracingState(EQueryTracePhase::WaitForWrites, NWilson::TTraceId(ev->TraceId));
 
         AfterWaitTasksState = TAfterWaitTasksState{
             .IsCommit = false,
@@ -5403,7 +5403,7 @@ public:
         }
         YQL_ENSURE(CurrentStateFunc() == &TThis::StateWrite);
         Become(&TThis::StateWaitTasks);
-        UpdateTracingState("Wait for writes", NWilson::TTraceId(ev->TraceId));
+        UpdateTracingState(EQueryTracePhase::WaitForWrites, NWilson::TTraceId(ev->TraceId));
 
         AfterWaitTasksState = TAfterWaitTasksState{
             .IsCommit = true,
@@ -6156,16 +6156,16 @@ public:
         ReplyErrorImpl(statusCode, std::move(issues));
     }
 
-    void StartCommitPhase(const char* name) {
-        CommitPhase.Start(BufferWriteActorStateSpan, name, CountParticipatingShards());
+    void StartCommitPhase(EQueryTracePhase phase) {
+        CommitPhase.Start(BufferWriteActorStateSpan, phase, CountParticipatingShards());
     }
 
-    void UpdateTracingState(const char* name, NWilson::TTraceId traceId,
+    void UpdateTracingState(EQueryTracePhase phase, NWilson::TTraceId traceId,
             ui8 verbosity = TWilsonKqp::BufferWriteActorState) {
         CommitPhase.End(Ydb::StatusIds::SUCCESS);
         EndQueryTraceSpan(BufferWriteActorStateSpan, Ydb::StatusIds::SUCCESS);
-        BufferWriteActorStateSpan = NWilson::TSpan(verbosity, std::move(traceId),
-            name, NWilson::EFlags::AUTO_END);
+        BufferWriteActorStateSpan = MakeQueryPhaseTraceSpan(verbosity, std::move(traceId),
+            phase, NWilson::EFlags::AUTO_END);
         ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
             actor->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
         });

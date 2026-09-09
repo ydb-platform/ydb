@@ -341,7 +341,8 @@ message TEvQueryResponse {
     reserved 5; // (deprecated) ForcedNewEngine
     optional uint64 ConsumedRu = 6;
     optional bool WorkerIsClosing = 7 [default = false];
-    optional ERejectionStage RejectionStage = 8;
+    reserved 8; // UserFacingTrace
+    optional ERejectionStage RejectionStage = 9;
 }
 
 message TCloseSessionRequest {

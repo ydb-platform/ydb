@@ -252,9 +252,10 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*resolve, "ydb.phase")->value().string_value(), "ResolveTables");
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*resolve, "ydb.actor.type")->value().string_value(), "TKqpTableResolver");
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*resolve, "ydb.code.component")->value().string_value(), "KqpExecuter.Prepare");
-        const auto* metadata = FindSpan(*uploader, "Metadata");
-        UNIT_ASSERT(metadata);
-        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*metadata, "ydb.peer.actor.type")->value().string_value(), "SchemeCache");
+        const auto* partitioning = FindSpan(*uploader, "Partitioning");
+        UNIT_ASSERT(partitioning);
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*partitioning, "ydb.phase")->value().string_value(), "ResolvePartitioning");
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*partitioning, "ydb.peer.actor.type")->value().string_value(), "SchemeCache");
         const auto* read = FindSpan(*uploader, "Read shard");
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*read, "ydb.code.component")->value().string_value(), "KqpShardRead");
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*read, "ydb.peer.actor.type")->value().string_value(), "DataShard");
@@ -613,12 +614,13 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
     Y_UNIT_TEST(ForwardedTimeoutIsNotAnEarlyRejection) {
         auto [runtime, server, sender] = CreateServer(2);
         auto* uploader = RegisterUploader(runtime);
+        const auto proxyId = runtime.GetLocalServiceId(NKqp::MakeKqpProxyID(runtime.GetNodeId(0)), 0);
         for (const auto type : {NKikimrKqp::QUERY_TYPE_SQL_DML, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY}) {
             const auto session = CreateSession(runtime, sender, type);
             TAutoPtr<IEventHandle> forwarded;
             auto previous = runtime.SetEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
                 if (ev->GetTypeRewrite() == NKqp::TEvKqp::TEvQueryRequest::EventType
-                        && ev->GetRecipientRewrite() == NKqp::MakeKqpProxyID(runtime.GetNodeId(0))) {
+                        && ev->GetRecipientRewrite() == proxyId) {
                     forwarded = ev;
                     return true;
                 }
@@ -734,6 +736,10 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             AssertDescendant(*uploader, "Task: ", "Stage: ");
             AssertStatus(*uploader, "Scan shard", NTraceProto::Status::STATUS_CODE_OK);
             AssertStatus(*uploader, "Scan table", NTraceProto::Status::STATUS_CODE_OK);
+            const auto* metadata = FindSpan(*uploader, "Metadata");
+            UNIT_ASSERT(metadata);
+            UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*metadata, "ydb.phase")->value().string_value(), "ResolveMetadata");
+            UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*metadata, "ydb.peer.actor.type")->value().string_value(), "SchemeCache");
             const auto* shard = FindSpan(*uploader, "Scan shard");
             UNIT_ASSERT(FindAttribute(*shard, "ydb.shard_id"));
             UNIT_ASSERT(FindAttribute(*shard, "ydb.node_id"));

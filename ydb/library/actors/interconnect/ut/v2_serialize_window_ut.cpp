@@ -17,186 +17,160 @@ namespace {
 
 Y_UNIT_TEST_SUITE(InterconnectV2SerializeWindow) {
 
-    Y_UNIT_TEST(XdcFullBatchesGrowRegardlessOfCompletionOrder) {
-        for (bool xdcFirst : {false, true}) {
-            TSerializeWindow window(MinWindow);
-            for (size_t batch = 0; batch < 32; ++batch) {
-                const size_t size = window.GetSize();
-                const size_t main = 128;
-                const size_t xdc = size - main;
-                window.BeginBatch(main + xdc);
-
-                const size_t first = xdcFirst ? xdc : main;
-                window.CompleteWrite(first, first, false, MinWindow, MaxWindow);
-                UNIT_ASSERT_VALUES_EQUAL(window.GetSize(), size);
-
-                const size_t last = xdcFirst ? main : xdc;
-                window.CompleteWrite(last, last, true, MinWindow, MaxWindow);
-                UNIT_ASSERT_VALUES_EQUAL(window.GetSize(), Min(size + MinWindow, MaxWindow));
-            }
-            UNIT_ASSERT_VALUES_EQUAL(window.GetSize(), MaxWindow);
-        }
-    }
-
-    Y_UNIT_TEST(ShortWriteIsRememberedUntilBothSocketsComplete) {
-        for (bool xdcFirst : {false, true}) {
-            TSerializeWindow window(4 * MinWindow);
-            const size_t main = 1024;
-            const size_t xdc = window.GetSize() - main;
-            window.BeginBatch(main + xdc);
-
-            const size_t first = xdcFirst ? xdc : main;
-            window.CompleteWrite(first / 2, first, false, MinWindow, MaxWindow);
-            UNIT_ASSERT_VALUES_EQUAL(window.GetSize(), 4 * MinWindow);
-
-            // Retry the short write while the other socket's original write is still pending.
-            window.CompleteWrite(first / 2, first / 2, false, MinWindow, MaxWindow);
-            UNIT_ASSERT_VALUES_EQUAL(window.GetSize(), 4 * MinWindow);
-
-            const size_t last = xdcFirst ? main : xdc;
-            window.CompleteWrite(last, last, true, MinWindow, MaxWindow);
-            UNIT_ASSERT_VALUES_EQUAL(window.GetSize(), 3 * MinWindow);
-        }
-    }
-
-    Y_UNIT_TEST(UnderfilledBatchShrinksOnce) {
-        TSerializeWindow window(4 * MinWindow);
-        for (size_t batch = 0; batch < 5; ++batch) {
-            const size_t size = window.GetSize();
-            window.BeginBatch(2048);
-            window.CompleteWrite(128, 128, false, MinWindow, MaxWindow);
-            UNIT_ASSERT_VALUES_EQUAL(window.GetSize(), size);
-            window.CompleteWrite(1920, 1920, true, MinWindow, MaxWindow);
-            UNIT_ASSERT_VALUES_EQUAL(window.GetSize(), Max(size - MinWindow, MinWindow));
-        }
-        UNIT_ASSERT_VALUES_EQUAL(window.GetSize(), MinWindow);
-    }
-
-    Y_UNIT_TEST(SingleSocketBatchesAndShortWrites) {
-        TSerializeWindow window(MinWindow);
-        window.BeginBatch(MinWindow);
-        window.CompleteWrite(MinWindow, MinWindow, true, MinWindow, MaxWindow);
-        UNIT_ASSERT_VALUES_EQUAL(window.GetSize(), 2 * MinWindow);
-
-        window.BeginBatch(2 * MinWindow);
-        window.CompleteWrite(MinWindow, 2 * MinWindow, true, MinWindow, MaxWindow);
-        UNIT_ASSERT_VALUES_EQUAL(window.GetSize(), MinWindow);
-
-        // A successful new batch must not inherit the previous batch's short-write result.
-        window.BeginBatch(MinWindow);
-        window.CompleteWrite(MinWindow, MinWindow, true, MinWindow, MaxWindow);
-        UNIT_ASSERT_VALUES_EQUAL(window.GetSize(), 2 * MinWindow);
-    }
-
-    Y_UNIT_TEST(MainOnlyBatchAfterXdc) {
-        TSerializeWindow window(MinWindow);
-        window.BeginBatch(MinWindow);
-        window.CompleteWrite(128, 128, false, MinWindow, MaxWindow);
-        window.CompleteWrite(MinWindow - 128, MinWindow - 128, true, MinWindow, MaxWindow);
-
-        window.BeginBatch(2 * MinWindow);
-        window.CompleteWrite(2 * MinWindow, 2 * MinWindow, true, MinWindow, MaxWindow);
-        UNIT_ASSERT_VALUES_EQUAL(window.GetSize(), 3 * MinWindow);
-    }
-
-    Y_UNIT_TEST(FixedWindow) {
-        TSerializeWindow window(MaxWindow);
-        window.BeginBatch(MaxWindow);
-        window.CompleteWrite(128, 128, false, MaxWindow, MaxWindow);
-        window.CompleteWrite(MaxWindow - 128, MaxWindow - 128, true, MaxWindow, MaxWindow);
+    Y_UNIT_TEST(StartsAtMaxAndReportsRemaining) {
+        TSerializeWindow window(MinWindow, MaxWindow);
+        UNIT_ASSERT_VALUES_EQUAL(window.GetMainSize(), MaxWindow);
+        UNIT_ASSERT_VALUES_EQUAL(window.GetXdcSize(), 0);
         UNIT_ASSERT_VALUES_EQUAL(window.GetSize(), MaxWindow);
-
-        window.BeginBatch(MinWindow);
-        window.CompleteWrite(1024, MinWindow, true, MaxWindow, MaxWindow);
-        UNIT_ASSERT_VALUES_EQUAL(window.GetSize(), MaxWindow);
+        UNIT_ASSERT_VALUES_EQUAL(window.RemainingMain(0), MaxWindow);
+        UNIT_ASSERT_VALUES_EQUAL(window.RemainingMain(MaxWindow / 2), MaxWindow / 2);
+        UNIT_ASSERT_VALUES_EQUAL(window.RemainingMain(MaxWindow), 0);
+        UNIT_ASSERT_VALUES_EQUAL(window.RemainingXdc(0), 0);
     }
 
-    Y_UNIT_TEST(EndpointBatchWaitsForBothStreams) {
-        TSerializeWindow window(MinWindow);
-        window.BeginBatch(MinWindow, 100, 200);
-
-        window.CompleteWrite(100, 100, 100, 0, MinWindow, MaxWindow);
-        UNIT_ASSERT_VALUES_EQUAL(window.GetSize(), MinWindow);
-
-        window.CompleteWrite(200, 200, 100, 200, MinWindow, MaxWindow);
-        UNIT_ASSERT_VALUES_EQUAL(window.GetSize(), 2 * MinWindow);
+    Y_UNIT_TEST(XdcCapsMainSeparately) {
+        constexpr size_t xdcMax = 256 * 1024;
+        TSerializeWindow window(MinWindow, xdcMax, /*hasXdc=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(window.GetMainSize(), TSerializeWindow::MaxMainWindowWithXdc);
+        UNIT_ASSERT_VALUES_EQUAL(window.GetXdcSize(), xdcMax);
+        UNIT_ASSERT_VALUES_EQUAL(window.GetSize(), window.GetMainSize() + window.GetXdcSize());
+        UNIT_ASSERT_VALUES_EQUAL(window.RemainingXdc(1024), xdcMax - 1024);
     }
 
-    Y_UNIT_TEST(EndpointBatchRemembersShortWrite) {
-        TSerializeWindow window(MinWindow);
-        window.BeginBatch(MinWindow, 100, 200);
+    Y_UNIT_TEST(ShortWriteShrinksOnlyThatSocket) {
+        TSerializeWindow window(MinWindow, MaxWindow, /*hasXdc=*/ true);
+        const size_t mainBefore = window.GetMainSize();
+        const size_t xdcBefore = window.GetXdcSize();
 
-        window.CompleteWrite(40, 100, 40, 0, MinWindow, MaxWindow);
-        window.CompleteWrite(60, 60, 100, 200, MinWindow, MaxWindow);
-        UNIT_ASSERT_VALUES_EQUAL(window.GetSize(), MinWindow);
+        window.CompleteWrite(xdcBefore / 2, xdcBefore, /*xdc=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(window.GetXdcSize(), xdcBefore - MinWindow);
+        UNIT_ASSERT_VALUES_EQUAL(window.GetMainSize(), mainBefore);
+
+        window.CompleteWrite(mainBefore / 2, mainBefore, /*xdc=*/ false);
+        UNIT_ASSERT_VALUES_EQUAL(window.GetMainSize(), mainBefore - MinWindow);
+        UNIT_ASSERT_VALUES_EQUAL(window.GetXdcSize(), xdcBefore - MinWindow);
     }
 
-    Y_UNIT_TEST(FourKiBPayloadsUseGrowingBatches) {
+    Y_UNIT_TEST(FullTargetWriteGrowsBack) {
+        TSerializeWindow window(MinWindow, MaxWindow);
+        window.CompleteWrite(MinWindow, MaxWindow, /*xdc=*/ false);
+        UNIT_ASSERT_VALUES_EQUAL(window.GetMainSize(), MaxWindow - MinWindow);
+
+        window.CompleteWrite(window.GetMainSize(), window.GetMainSize(), /*xdc=*/ false);
+        UNIT_ASSERT_VALUES_EQUAL(window.GetMainSize(), MaxWindow);
+    }
+
+    Y_UNIT_TEST(UnderfilledFullWriteDoesNotShrink) {
+        TSerializeWindow window(MinWindow, MaxWindow, /*hasXdc=*/ true);
+        const size_t mainBefore = window.GetMainSize();
+        const size_t xdcBefore = window.GetXdcSize();
+
+        window.CompleteWrite(128, 128, /*xdc=*/ false);
+        window.CompleteWrite(2048, 2048, /*xdc=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(window.GetMainSize(), mainBefore);
+        UNIT_ASSERT_VALUES_EQUAL(window.GetXdcSize(), xdcBefore);
+    }
+
+    Y_UNIT_TEST(FixedWindowStaysPut) {
+        TSerializeWindow window(MaxWindow, MaxWindow);
+        window.CompleteWrite(128, 128, /*xdc=*/ false);
+        UNIT_ASSERT_VALUES_EQUAL(window.GetMainSize(), MaxWindow);
+        window.CompleteWrite(1024, MaxWindow, /*xdc=*/ false);
+        UNIT_ASSERT_VALUES_EQUAL(window.GetMainSize(), MaxWindow);
+        window.CompleteWrite(MaxWindow, MaxWindow, /*xdc=*/ false);
+        UNIT_ASSERT_VALUES_EQUAL(window.GetMainSize(), MaxWindow);
+    }
+
+    Y_UNIT_TEST(IndependentStreamBudgetsDrainXdcEvents) {
         for (bool preserialize : {false, true}) {
-            for (bool xdcFirst : {false, true}) {
-                TEventSerializer serializer(false, true);
-                TSerializeWindow window(MinWindow);
-                constexpr size_t NumEvents = 512;
-                for (size_t i = 0; i < NumEvents; ++i) {
-                    auto ev = std::make_unique<TEvPayload>();
-                    ev->Record.SetMeta("window");
-                    ev->AddPayload(TRope(TString(4096, 'x')));
-                    auto handle = std::make_unique<IEventHandle>(TActorId(2, 0, 1, 0), TActorId(1, 0, 1, 0),
-                        ev.release(), 0, i);
-                    if (preserialize) {
-                        handle->Preserialize(true);
-                    }
-                    serializer.Push(std::move(handle));
+            TEventSerializer serializer(false, true);
+            TSerializeWindow window(MinWindow, MaxWindow, /*hasXdc=*/ true);
+            constexpr size_t NumEvents = 512;
+            for (size_t i = 0; i < NumEvents; ++i) {
+                auto ev = std::make_unique<TEvPayload>();
+                ev->Record.SetMeta("window");
+                ev->AddPayload(TRope(TString(4096, 'x')));
+                auto handle = std::make_unique<IEventHandle>(TActorId(2, 0, 1, 0), TActorId(1, 0, 1, 0),
+                    ev.release(), 0, i);
+                if (preserialize) {
+                    handle->Preserialize(true);
                 }
+                serializer.Push(std::move(handle));
+            }
 
-                TRcBuf mainBuffer;
-                TRcBuf xdcBuffer;
-                size_t peakWindow = 0;
-                size_t eventsCommitted = 0;
-                for (size_t batch = 0; serializer.IsTrafficPending(); ++batch) {
-                    UNIT_ASSERT_LT(batch, 2 * NumEvents);
-                    const size_t size = window.GetSize();
-                    peakWindow = Max(peakWindow, size);
-                    const ui64 mainBefore = serializer.GetCumulativeProducedMain();
-                    const ui64 xdcBefore = serializer.GetCumulativeProducedXdc();
+            TRcBuf mainBuffer;
+            TRcBuf xdcBuffer;
+            size_t eventsCommitted = 0;
+            size_t mainUnsent = 0;
+            size_t xdcUnsent = 0;
+            for (size_t batch = 0; serializer.IsTrafficPending() || mainUnsent || xdcUnsent; ++batch) {
+                UNIT_ASSERT_LT(batch, 4 * NumEvents);
+                const size_t mainBudget = window.RemainingMain(mainUnsent);
+                const size_t xdcBudget = window.RemainingXdc(xdcUnsent);
+                if (mainBudget || xdcBudget) {
+                    if (mainBuffer.size() < MinWindow) {
+                        mainBuffer = TRcBuf::Uninitialized(MinWindow);
+                    }
+                    if (xdcBuffer.size() < MinWindow) {
+                        xdcBuffer = TRcBuf::Uninitialized(MinWindow);
+                    }
                     std::vector<TContiguousSpan> mainSpans;
                     std::vector<TContiguousSpan> xdcSpans;
-                    size_t produced = 0;
-                    while (produced < size && mainSpans.size() < 64 && xdcSpans.size() < 64) {
-                        if (mainBuffer.size() < MinWindow) {
-                            mainBuffer = TRcBuf::Uninitialized(MinWindow);
-                        }
-                        if (xdcBuffer.size() < MinWindow) {
-                            xdcBuffer = TRcBuf::Uninitialized(MinWindow);
-                        }
-                        const size_t n = serializer.ProduceOutputStream(mainBuffer, &mainSpans,
-                            &xdcBuffer, &xdcSpans, size - produced);
-                        if (!n) {
-                            break;
-                        }
-                        produced += n;
-                    }
-                    UNIT_ASSERT_GT(produced, 0);
-
-                    const size_t main = serializer.GetCumulativeProducedMain() - mainBefore;
-                    const size_t xdc = serializer.GetCumulativeProducedXdc() - xdcBefore;
-                    window.BeginBatch(main + xdc);
-                    std::vector<std::unique_ptr<IEventBase>> events;
-                    std::vector<TIntrusivePtr<TEventSerializedData>> buffers;
-                    auto complete = [&](bool isXdc, bool last) {
-                        const size_t n = isXdc ? xdc : main;
-                        if (n) {
-                            window.CompleteWrite(n, n, last, MinWindow, MaxWindow);
-                            serializer.CommitProducedBytes(isXdc ? 0 : n, isXdc ? n : 0, nullptr, &events, &buffers);
-                        }
-                    };
-                    complete(xdcFirst, !(xdcFirst ? main : xdc));
-                    complete(!xdcFirst, true);
-                    eventsCommitted += events.size() + buffers.size();
+                    const ui64 mainBefore = serializer.GetCumulativeProducedMain();
+                    const ui64 xdcBefore = serializer.GetCumulativeProducedXdc();
+                    serializer.ProduceOutputStream(mainBuffer, &mainSpans, &xdcBuffer, &xdcSpans,
+                        mainBudget, xdcBudget);
+                    mainUnsent += serializer.GetCumulativeProducedMain() - mainBefore;
+                    xdcUnsent += serializer.GetCumulativeProducedXdc() - xdcBefore;
                 }
-                UNIT_ASSERT_VALUES_EQUAL(eventsCommitted, NumEvents);
-                UNIT_ASSERT_VALUES_EQUAL(peakWindow, MaxWindow);
+
+                UNIT_ASSERT(mainUnsent || xdcUnsent || !serializer.IsTrafficPending());
+
+                std::vector<std::unique_ptr<IEventBase>> events;
+                std::vector<TIntrusivePtr<TEventSerializedData>> buffers;
+                // Complete one stream at a time so a short XDC write cannot move the main cap.
+                if (xdcUnsent) {
+                    const size_t n = Min(xdcUnsent, window.GetXdcSize());
+                    window.CompleteWrite(n, n, /*xdc=*/ true);
+                    serializer.CommitProducedBytes(0, n, nullptr, &events, &buffers);
+                    xdcUnsent -= n;
+                } else if (mainUnsent) {
+                    const size_t n = Min(mainUnsent, window.GetMainSize());
+                    window.CompleteWrite(n, n, /*xdc=*/ false);
+                    serializer.CommitProducedBytes(n, 0, nullptr, &events, &buffers);
+                    mainUnsent -= n;
+                }
+                eventsCommitted += events.size() + buffers.size();
             }
+            UNIT_ASSERT_VALUES_EQUAL(eventsCommitted, NumEvents);
+            UNIT_ASSERT_VALUES_EQUAL(window.GetXdcSize(), MaxWindow);
+            UNIT_ASSERT_VALUES_EQUAL(window.GetMainSize(), Min(MaxWindow, TSerializeWindow::MaxMainWindowWithXdc));
         }
+    }
+
+    Y_UNIT_TEST(XdcShortWriteDoesNotShrinkMainWhileDraining) {
+        TEventSerializer serializer(false, true);
+        TSerializeWindow window(MinWindow, MaxWindow, /*hasXdc=*/ true);
+        auto ev = std::make_unique<TEvPayload>();
+        ev->Record.SetMeta("short");
+        ev->AddPayload(TRope(TString(32 * 1024, 'y')));
+        auto handle = std::make_unique<IEventHandle>(TActorId(2, 0, 1, 0), TActorId(1, 0, 1, 0),
+            ev.release(), 0, 1);
+        serializer.Push(std::move(handle));
+
+        TRcBuf mainBuffer = TRcBuf::Uninitialized(MinWindow);
+        TRcBuf xdcBuffer = TRcBuf::Uninitialized(MinWindow);
+        std::vector<TContiguousSpan> mainSpans;
+        std::vector<TContiguousSpan> xdcSpans;
+        const size_t produced = serializer.ProduceOutputStream(mainBuffer, &mainSpans, &xdcBuffer, &xdcSpans,
+            window.RemainingMain(0), window.RemainingXdc(0));
+        UNIT_ASSERT_GT(produced, 0);
+        const size_t xdc = serializer.GetCumulativeProducedXdc();
+        UNIT_ASSERT_GT(xdc, 0);
+
+        const size_t mainBefore = window.GetMainSize();
+        window.CompleteWrite(xdc / 2, xdc, /*xdc=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(window.GetMainSize(), mainBefore);
+        UNIT_ASSERT_VALUES_EQUAL(window.GetXdcSize(), MaxWindow - MinWindow);
     }
 }

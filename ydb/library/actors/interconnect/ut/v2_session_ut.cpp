@@ -1044,9 +1044,10 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
             }
         }, "XDC bytes observed on both sides");
         UNIT_ASSERT_VALUES_EQUAL(SessionHtmlCounter(*cluster, 1, 2, "Params.UseExternalDataChannel"), 1);
-        // A large payload fills many batches. Successful writes on both sockets must grow the shared
-        // window beyond its initial 4 KiB; per-socket feedback used to cancel that growth every batch.
+        // Per-socket caps start at the configured max (sndbuf-bounded). A large XDC payload must
+        // not collapse the session window back to 4 KiB.
         UNIT_ASSERT_GT(SessionHtmlCounter(*cluster, 1, 2, "SerializeWindowSize"), 8192);
+        UNIT_ASSERT_GT(SessionHtmlCounter(*cluster, 1, 2, "SerializeWindowSizeXdc"), 8192);
     }
 
     Y_UNIT_TEST(XdcDisabledStaysOnMain) {

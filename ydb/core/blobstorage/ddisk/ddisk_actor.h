@@ -183,6 +183,7 @@ namespace NKikimr::NDDisk {
                 LIST_COUNTERS_INTERFACE_OPS(DECLARE_COUNTERS_INTERFACE)
 
 #undef DECLARE_COUNTERS_INTERFACE
+                NMonitoring::TDynamicCounters::TCounterPtr UnalignedWritePayloads;
             } Interface;
 
             struct {
@@ -228,9 +229,8 @@ namespace NKikimr::NDDisk {
             struct {
                 // Writes rejected because no checksum list was attached.
                 NMonitoring::TDynamicCounters::TCounterPtr WritesWithoutChecksums;
-                // Sender-supplied checksum mismatches detected on TEvWrite / TEvWritePersistentBuffer(s),
-                // i.e. rejections with TReplyStatus::CORRUPTED. Covers both the DDisk data path and the
-                // PersistentBuffer path, so it lives in its own subsystem rather than under PersistentBuffer.
+                // Payload checksum mismatches (write-time sender list, sync source payload, or
+                // disk-read vs stored checksums) reported as TReplyStatus::CORRUPTED.
                 NMonitoring::TDynamicCounters::TCounterPtr ChecksumMismatch;
                 NMonitoring::TDynamicCounters::TCounterPtr IntegrityPairReads;
                 // Pair-slot writes only; chunk-header and extent-format writes are excluded.

@@ -37,7 +37,7 @@ SRCS(
     kqp_write_table.cpp
 
     scheduler/kqp_compute_scheduler_service.cpp
-    scheduler/kqp_dq_scheduler_context.cpp
+    scheduler/kqp_schedulable_work_factory.cpp
     scheduler/kqp_schedulable_base.cpp
     scheduler/kqp_schedulable_read.cpp
     scheduler/kqp_schedulable_task.cpp

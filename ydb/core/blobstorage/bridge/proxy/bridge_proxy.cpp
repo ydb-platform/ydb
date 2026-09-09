@@ -187,6 +187,7 @@ namespace NKikimr {
                 result->ErrorReason = std::move(ev->ErrorReason);
                 result->IsTabletStorageInfoVersionObsolete = ev->IsTabletStorageInfoVersionObsolete
                     || (current && current->IsTabletStorageInfoVersionObsolete);
+                result->ActualGeneration = Max(ev->ActualGeneration, current ? current->ActualGeneration : 0);
                 return result;
             }
 

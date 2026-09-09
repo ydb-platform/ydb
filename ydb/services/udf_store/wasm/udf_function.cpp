@@ -109,14 +109,14 @@ TUnboxedValue ReadResultUnboxed(
                     << "Wasm UDF returned wrong value type for Int64 result: "
                     << static_cast<int>(result.Type);
             }
-            return TUnboxedValuePod(result.Data.Int64);
+            return TUnboxedValuePod(static_cast<i64>(result.Data.Int64));
         case EUdfValueType::Uint64:
             if (result.Type != EAbiValueType::Uint64) {
                 ythrow yexception()
                     << "Wasm UDF returned wrong value type for Uint64 result: "
                     << static_cast<int>(result.Type);
             }
-            return TUnboxedValuePod(result.Data.Uint64);
+            return TUnboxedValuePod(static_cast<ui64>(result.Data.Uint64));
         case EUdfValueType::Double:
             if (result.Type != EAbiValueType::Double) {
                 ythrow yexception()

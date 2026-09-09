@@ -4,6 +4,9 @@ from dataclasses import dataclass
 
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
 
+MAX_AUTOMATIC_SEARCH_ATTEMPTS = 64
+MAX_LOAD_VALUE = (1 << 53) - 1
+
 
 @dataclass(frozen=True)
 class LoadSearchResult:
@@ -16,8 +19,61 @@ class LoadSearchResult:
 
 
 def _next_geometric(current, maximum, multiplier):
+    if multiplier >= maximum / current:
+        return maximum
     candidate = max(current + 1, int(round(current * multiplier)))
     return min(maximum, candidate)
+
+
+def _binary_probe_count(low, high, resolution):
+    probes = 0
+    width = high - low
+    while width > resolution:
+        probes += 1
+        width = (width + 1) // 2
+    return probes
+
+
+def _maximum_latency_attempts(search):
+    current = search["start"]
+    maximum = search["maximum"]
+    probes = 1
+    worst = probes
+    while current < maximum:
+        previous = current
+        current = _next_geometric(current, maximum, search["multiplier"])
+        probes += 1
+        resolution = max(1, int(round(max(current, 1) * search["resolution_percent"] / 100.0)))
+        worst = max(worst, probes + _binary_probe_count(previous, current, resolution))
+        if worst > MAX_AUTOMATIC_SEARCH_ATTEMPTS:
+            return worst
+    return worst
+
+
+def validate_search_attempt_bound(config):
+    """Reject latency searches whose worst path exceeds the runtime budget."""
+    objective_type = config["objective"]["type"]
+    if objective_type == "maximize-throughput":
+        # Throughput search branches on both feasibility and observed throughput.
+        # It is stopped gracefully by the runtime budget instead of rejecting a
+        # range using a pessimistic estimate which cannot account for cached probes.
+        return
+    elif objective_type == "latency-slo":
+        attempts = _maximum_latency_attempts(config["search"])
+    else:
+        raise BenchmarkError("unsupported load objective: {}".format(objective_type))
+    if attempts > MAX_AUTOMATIC_SEARCH_ATTEMPTS:
+        raise BenchmarkError(
+            "automatic load search may require more than {} attempts; "
+            "narrow the range or increase multiplier/resolution-percent".format(MAX_AUTOMATIC_SEARCH_ATTEMPTS)
+        )
+
+
+def _ensure_attempt_capacity(attempts):
+    if len(attempts) >= MAX_AUTOMATIC_SEARCH_ATTEMPTS:
+        raise BenchmarkError(
+            "automatic load search exceeded its {}-attempt safety limit".format(MAX_AUTOMATIC_SEARCH_ATTEMPTS)
+        )
 
 
 def _target_cpu(metrics, target_role):
@@ -32,11 +88,83 @@ def _with_decision(metrics, load, passed, reason):
     return {**metrics, "load": load, "passed": bool(passed), "decision": reason}
 
 
+def _invalid_measurement_reason(metrics):
+    empty_repetitions = metrics.get("empty_repetitions")
+    if empty_repetitions:
+        noun = "repetition" if empty_repetitions == 1 else "repetitions"
+        return "invalid measurement: {} {} completed with zero successful operations".format(empty_repetitions, noun)
+    if metrics.get("transactions") == 0:
+        return "invalid measurement: workload completed with zero successful operations"
+    return None
+
+
+def evaluate_load(config, load, metrics):
+    """Return whether one measured load is feasible and explain the decision."""
+    invalid_reason = _invalid_measurement_reason(metrics)
+    if invalid_reason is not None:
+        return False, invalid_reason
+
+    errors = metrics.get("errors", 0)
+    if "values" in config:
+        passed = config.get("allow_errors", False) or not errors
+        if errors:
+            reason = "{} workload errors {}".format(
+                errors,
+                "allowed" if config.get("allow_errors", False) else "reported",
+            )
+        else:
+            reason = "configured point"
+        return passed, reason
+
+    objective = config["objective"]
+    objective_type = objective["type"]
+    if objective_type == "maximize-throughput":
+        if "errors" not in metrics:
+            return True, "workload does not report request errors"
+        if errors and not config.get("allow_errors", False):
+            return False, "workload reported errors"
+        if errors:
+            return True, "{} workload errors allowed".format(errors)
+        return True, "workload completed without errors"
+
+    if objective_type == "latency-slo":
+        latency = metrics[objective.get("latency_metric", objective["percentile"] + "_ms")]
+        if latency > objective["max_ms"]:
+            return False, "{} latency {:.3f} ms exceeds {:.3f} ms".format(
+                objective["percentile"], latency, objective["max_ms"]
+            )
+        if not config.get("allow_errors", False) and errors > objective["max_errors"]:
+            return False, "errors {} exceed {}".format(errors, objective["max_errors"])
+        if config["parameter"] == "rate":
+            ratio = metrics["throughput"] / load
+            if ratio < objective["min_achieved_rate_ratio"]:
+                return False, "achieved rate ratio {:.4f} is below {:.4f}".format(
+                    ratio, objective["min_achieved_rate_ratio"]
+                )
+        reason = "latency SLO satisfied"
+        if "errors" not in metrics:
+            reason += "; workload does not report request errors"
+        elif errors:
+            reason += "; {} workload errors allowed".format(errors)
+        return True, reason
+
+    raise BenchmarkError("unsupported load objective: {}".format(objective_type))
+
+
 def _best_throughput(attempts):
     candidates = [item for item in attempts if item["passed"]]
     if not candidates:
         return None
     return max(candidates, key=lambda item: (item["throughput"], -item["load"]))["load"]
+
+
+def _lowest_saturated_plateau_load(attempts, tolerance_percent):
+    candidates = [item for item in attempts if item["passed"] and item.get("target_cpu_saturated")]
+    if not candidates:
+        return None
+    best_throughput = max(item["throughput"] for item in candidates)
+    minimum_throughput = best_throughput * (1.0 - tolerance_percent / 100.0)
+    return min(item["load"] for item in candidates if item["throughput"] >= minimum_throughput)
 
 
 def _throughput_gain(lower, upper):
@@ -56,15 +184,9 @@ def _append_attempt(attempts, record, on_attempt):
 
 def _run_points(config, measure, on_attempt):
     attempts = []
-    allow_errors = config.get("allow_errors", False)
     for value in config["values"]:
         metrics = measure(value)
-        errors = metrics["errors"]
-        passed = allow_errors or not errors
-        if errors:
-            reason = "{} workload errors {}".format(errors, "allowed" if allow_errors else "reported")
-        else:
-            reason = "configured point"
+        passed, reason = evaluate_load(config, value, metrics)
         _append_attempt(
             attempts,
             _with_decision(metrics, value, passed, reason),
@@ -85,21 +207,22 @@ def _run_throughput(config, measure, on_attempt):
     objective = config["objective"]
     attempts = []
     measured = {}
-    allow_errors = config.get("allow_errors", False)
     failing_load = None
     plateau = 0
     plateau_confirmed = False
+    search_limit_reached = False
 
-    def sample(load, reason, baseline=None):
+    def sample(load, reason, baseline=None, search_low=None, search_high=None):
         nonlocal failing_load
         if load in measured:
             return measured[load]
+        _ensure_attempt_capacity(attempts)
         metrics = measure(load)
         saturated = _target_cpu(metrics, objective["target_role"]) >= objective["cpu_saturation_percent"]
-        passed = allow_errors or not metrics["errors"]
+        passed, evaluation_reason = evaluate_load(config, load, metrics)
         gain = None if baseline is None else _throughput_gain(baseline["throughput"], metrics["throughput"])
         if not passed:
-            decision = "workload reported errors"
+            decision = evaluation_reason
             failing_load = load if failing_load is None else min(failing_load, load)
         else:
             decision = reason
@@ -107,10 +230,20 @@ def _run_throughput(config, measure, on_attempt):
                 decision += "; throughput increased from zero baseline"
             elif gain is not None:
                 decision += "; throughput gain {:.3f}%".format(gain)
-            if metrics["errors"]:
-                decision += "; {} workload errors allowed".format(metrics["errors"])
+            if "errors" not in metrics or metrics.get("errors", 0):
+                decision += "; " + evaluation_reason
+        search_interval = {}
+        if search_low is not None:
+            search_interval["search_low"] = search_low
+        if search_high is not None:
+            search_interval["search_high"] = search_high
         record = _with_decision(
-            {**metrics, "throughput_gain_percent": gain, "target_cpu_saturated": saturated},
+            {
+                **metrics,
+                **search_interval,
+                "throughput_gain_percent": gain,
+                "target_cpu_saturated": saturated,
+            },
             load,
             passed,
             decision,
@@ -120,12 +253,12 @@ def _run_throughput(config, measure, on_attempt):
 
     start = search["start"]
     maximum = search["maximum"]
-    first = sample(start, "minimum ternary-search load")
+    first = sample(start, "minimum ternary-search load", search_low=start, search_high=maximum)
     if not first["passed"]:
         return LoadSearchResult(
             tuple(attempts),
             None,
-            "workload errors at minimum load {}".format(start),
+            "minimum load {} is infeasible: {}".format(start, first["decision"]),
             "no-feasible-point",
             failing_load=start,
         )
@@ -139,19 +272,31 @@ def _run_throughput(config, measure, on_attempt):
         upper_load = high - third
         if lower_load >= upper_load:
             break
-        lower = sample(lower_load, "lower ternary probe")
+        if len(attempts) >= MAX_AUTOMATIC_SEARCH_ATTEMPTS and lower_load not in measured:
+            search_limit_reached = True
+            break
+        lower = sample(lower_load, "lower ternary probe", search_low=low, search_high=high)
         if not lower["passed"]:
             plateau = 0
             high = lower_load - 1
             continue
-        upper = sample(upper_load, "upper ternary probe", baseline=lower)
+        if len(attempts) >= MAX_AUTOMATIC_SEARCH_ATTEMPTS and upper_load not in measured:
+            search_limit_reached = True
+            break
+        upper = sample(
+            upper_load,
+            "upper ternary probe",
+            baseline=lower,
+            search_low=low,
+            search_high=high,
+        )
         if not upper["passed"]:
             plateau = 0
             high = upper_load - 1
             continue
         gain = _throughput_gain(lower["throughput"], upper["throughput"])
         saturated_plateau = (
-            gain is not None and gain < objective["plateau_gain_percent"] and upper["target_cpu_saturated"]
+            gain is not None and abs(gain) <= objective["plateau_gain_percent"] and upper["target_cpu_saturated"]
         )
         if saturated_plateau:
             plateau += 1
@@ -165,9 +310,19 @@ def _run_throughput(config, measure, on_attempt):
             low = lower_load + 1
 
     for load in sorted({low, (low + high) // 2, high}):
-        sample(load, "final ternary candidate")
-    selected = _best_throughput(attempts)
-    if selected is None:
+        if len(attempts) >= MAX_AUTOMATIC_SEARCH_ATTEMPTS and load not in measured:
+            search_limit_reached = True
+            break
+        sample(load, "final ternary candidate", search_low=low, search_high=high)
+    selected = (
+        _lowest_saturated_plateau_load(attempts, objective["plateau_gain_percent"])
+        if plateau_confirmed
+        else _best_throughput(attempts)
+    )
+    if search_limit_reached:
+        outcome = "search-limit-reached"
+        stop_reason = "throughput search reached its {}-attempt safety limit".format(MAX_AUTOMATIC_SEARCH_ATTEMPTS)
+    elif selected is None:
         outcome = "no-feasible-point"
         stop_reason = "ternary search found no feasible load"
     elif plateau_confirmed:
@@ -176,8 +331,16 @@ def _run_throughput(config, measure, on_attempt):
             objective["target_role"]
         )
     elif failing_load is not None:
-        outcome = "bounded-by-errors"
-        stop_reason = "workload errors bounded the ternary search below {}".format(failing_load)
+        failing_attempt = measured[failing_load]
+        invalid_reason = _invalid_measurement_reason(failing_attempt)
+        if invalid_reason is not None:
+            outcome = "bounded-by-invalid-sample"
+            stop_reason = "invalid measurement bounded the ternary search below {}: {}".format(
+                failing_load, invalid_reason
+            )
+        else:
+            outcome = "bounded-by-errors"
+            stop_reason = "workload errors bounded the ternary search below {}".format(failing_load)
     elif selected == maximum and measured.get(maximum, {}).get("passed"):
         outcome = "lower-bound"
         stop_reason = "maximum configured load {} remains the best observed point".format(maximum)
@@ -194,27 +357,6 @@ def _run_throughput(config, measure, on_attempt):
     )
 
 
-def _latency_passes(config, load, metrics):
-    objective = config["objective"]
-    latency = metrics[objective["percentile"] + "_ms"]
-    if latency > objective["max_ms"]:
-        return False, "{} latency {:.3f} ms exceeds {:.3f} ms".format(
-            objective["percentile"], latency, objective["max_ms"]
-        )
-    if not config.get("allow_errors", False) and metrics["errors"] > objective["max_errors"]:
-        return False, "errors {} exceed {}".format(metrics["errors"], objective["max_errors"])
-    if config["parameter"] == "rate":
-        ratio = metrics["throughput"] / load
-        if ratio < objective["min_achieved_rate_ratio"]:
-            return False, "achieved rate ratio {:.4f} is below {:.4f}".format(
-                ratio, objective["min_achieved_rate_ratio"]
-            )
-    reason = "latency SLO satisfied"
-    if metrics["errors"]:
-        reason += "; {} workload errors allowed".format(metrics["errors"])
-    return True, reason
-
-
 def _run_latency(config, measure, on_attempt):
     search = config["search"]
     attempts = []
@@ -223,8 +365,9 @@ def _run_latency(config, measure, on_attempt):
     def sample(load):
         if load in measured:
             return measured[load]
+        _ensure_attempt_capacity(attempts)
         metrics = measure(load)
-        passed, reason = _latency_passes(config, load, metrics)
+        passed, reason = evaluate_load(config, load, metrics)
         record = _with_decision(metrics, load, passed, reason)
         _append_attempt(attempts, record, on_attempt)
         measured[load] = record
@@ -254,7 +397,7 @@ def _run_latency(config, measure, on_attempt):
         return LoadSearchResult(
             tuple(attempts),
             None,
-            "minimum load {} does not satisfy latency SLO".format(first_fail),
+            "minimum load {} is infeasible: {}".format(first_fail, measured[first_fail]["decision"]),
             "no-feasible-point",
             failing_load=first_fail,
         )
@@ -273,12 +416,18 @@ def _run_latency(config, measure, on_attempt):
             high = candidate
 
     selected = low or None
-    reason = "latency SLO bracketed between {} and {}".format(low, high)
+    invalid_reason = _invalid_measurement_reason(measured[high])
+    if invalid_reason is not None:
+        outcome = "bounded-by-invalid-sample"
+        reason = "invalid measurement bounded the latency search above {}: {}".format(low, invalid_reason)
+    else:
+        outcome = "boundary-found"
+        reason = "latency SLO bracketed between {} and {}".format(low, high)
     return LoadSearchResult(
         tuple(attempts),
         selected,
         reason,
-        "boundary-found" if selected is not None else "no-feasible-point",
+        outcome if selected is not None else "no-feasible-point",
         passing_load=selected,
         failing_load=high,
     )
@@ -288,6 +437,7 @@ def search_load(config, measure, on_attempt=None):
     """Run the configured controller using ``measure(load) -> metrics``."""
     if "values" in config:
         return _run_points(config, measure, on_attempt)
+    validate_search_attempt_bound(config)
     objective_type = config["objective"]["type"]
     if objective_type == "maximize-throughput":
         return _run_throughput(config, measure, on_attempt)

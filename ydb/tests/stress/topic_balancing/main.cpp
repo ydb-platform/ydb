@@ -10,6 +10,7 @@
 #include <util/system/mutex.h>
 
 #include <atomic>
+#include <cstring>
 #include <memory>
 #include <thread>
 #include <unordered_set>
@@ -56,6 +57,9 @@ struct TOptions {
         ui32 maxLagMs = 1000;
         opts.AddLongOption("max-lag-ms", "Max age of the last active session per partition").RequiredArgument("MS")
             .StoreResult(&maxLagMs);
+        opts.AddLongOption("auto-partitioning",
+                "Run the split/merge workload instead of fixed-partition session churn")
+            .NoArgument();
         opts.SetFreeArgsNum(0);
         NLastGetopt::TOptsParseResult res(&opts, argc, argv);
 
@@ -333,7 +337,15 @@ void EnsureStatus(const TStatus& status, const TString& what) {
 
 } // namespace
 
+int RunAutoPartitioningWorkload(int argc, const char* argv[]);
+
 int main(int argc, const char* argv[]) {
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--auto-partitioning") == 0) {
+            return RunAutoPartitioningWorkload(argc, argv);
+        }
+    }
+
     const TOptions opts(argc, argv);
     const std::string topicPath = MakeTopicPath(opts.Database, opts.Path);
 

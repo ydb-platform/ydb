@@ -129,6 +129,7 @@ public:
 
     TString Run(const NKikimrClient::TSqsRequest& request, const TString& expectedSourceAddress) {
         PeerName_.clear();
+        RequestId_ = request.GetRequestId();
         GotAuthorizeTicket_ = false;
 
         Runtime_.Register(new TSourceAddressProbeActor(request, expectedSourceAddress));
@@ -164,7 +165,8 @@ private:
                 auto* authorizeTicket = ev->CastAsLocal<TEvTicketParser::TEvAuthorizeTicket>();
                 UNIT_ASSERT(authorizeTicket);
                 UNIT_ASSERT_VALUES_EQUAL(authorizeTicket->Ticket, Ticket);
-                PeerName_ = authorizeTicket->PeerName;
+                PeerName_ = authorizeTicket->TraceContext.PeerName;
+                UNIT_ASSERT_VALUES_EQUAL(authorizeTicket->TraceContext.RequestId, RequestId_);
                 GotAuthorizeTicket_ = true;
                 return NActors::TTestActorRuntimeBase::EEventAction::DROP;
             }
@@ -177,6 +179,7 @@ private:
     NActors::TTestBasicRuntime Runtime_;
     TActorId EdgeActor_;
     TString PeerName_;
+    TString RequestId_;
     bool GotAuthorizeTicket_ = false;
 };
 

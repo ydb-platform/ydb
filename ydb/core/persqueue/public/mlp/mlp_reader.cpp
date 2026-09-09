@@ -54,7 +54,7 @@ void TReaderActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
 
     auto& topic = topics.begin()->second;
     switch(topic.Status) {
-        case NDescriber::EStatus::SUCCESS: {
+        case NDescriber::EStatus::Success: {
             Info = topic.Info;
             ConsumerConfig = GetConsumer(Info->Description.GetPQTabletConfig(), Settings.Consumer);
             if (!ConsumerConfig) {
@@ -63,7 +63,7 @@ void TReaderActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
             }
             return DoSelectPartition();
         }
-        case NDescriber::EStatus::BAD_REQUEST: {
+        case NDescriber::EStatus::BadRequest: {
             return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST,
                 NDescriber::Description(Settings.TopicName, topic.Status));
         }

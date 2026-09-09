@@ -223,6 +223,10 @@ message JobStopRequest {
     repeated TAttribute Attribute = 4;
     bool Force = 5;
     bool NegativeRevision = 6;
+    // Lifetime of a non-forced stop filter in seconds, e.g. 30. Ignored when
+    // Force = true. Values above 600 are clamped to 600. Zero keeps the legacy
+    // TTL: 600 seconds since the filter's last match. Negative values are rejected.
+    int64 TtlSeconds = 7;
 }
 
 message JobStopResponse {

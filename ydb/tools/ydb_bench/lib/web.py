@@ -415,6 +415,8 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     "onfig.geometry[key]);lines.push('    actor-system:');"
     "for(const [key,yamlKey] of Object.entries(localYdbActorSystemKeys))"
     "lines.push('      '+yamlKey+': '+Boolean(config.actor_system?.[key]));"
+    "for(const role of ['static_nodes','dynamic_nodes']){const count=config.actor_system?.[role]?.cpu_count;"
+    "if(count!==undefined)lines.push('      '+role.replaceAll('_','-')+':','        cpu-count: '+count);}"
     "lines.push('    client:','      threads: '+config.client.threads,'    load:','      parameter: '"
     "+config.load.parameter,'      allow-errors: '+Boolean(config.load.allow_errors));if(config.load.values)lines.push('      values: '+yamlArray(config.load.values));else{lines."
     "push('      search:','        start: '+config.load.search.start,'        maximum: '+config.load.search.maximum);if("
@@ -565,6 +567,12 @@ function localYdbProfileEditor(profile){
     .map(([key,label])=>localField('local-geometry-'+key,label,geometry[key],'','type=number min=1')).join('');
   const actorSystemFields=Object.keys(localYdbActorSystemKeys)
     .map(key=>actorSystemFlag(key,Boolean(config.actor_system?.[key]))).join('');
+  const actorCpuFields=['static_nodes','dynamic_nodes'].map(role=>localField(
+    'local-actor-cpu-'+role,(role==='static_nodes'?'Static':'Dynamic')+' node vCPUs',
+    config.actor_system?.[role]?.cpu_count??'',
+    'Per-node actor-system capacity; independent of CPU placement. Empty: automatic.',
+    'type=number min=1 max=32767'
+  )).join('');
   const loadCommon=
     localSelect('local-load-mode','Objective',loadMode,objectiveChoices)+
     localSelect('local-load-parameter','Parameter',load.parameter,definition.load_parameters)+
@@ -629,6 +637,7 @@ function localYdbProfileEditor(profile){
     )+options+'</div><h3>Cluster geometry</h3><div class=form-grid>'+
     localSelect('local-geometry-preset','Preset',geometry.preset,['single','storage','custom'])+geometryFields+
     '</div><h3>Actor system (static and dynamic nodes)</h3><div class=actor-flags>'+actorSystemFields+
+    '</div><div class=form-grid>'+actorCpuFields+
     '</div><h3>Client and load</h3><div class=form-grid>'+
     localField('local-client-threads','YDB CLI threads',config.client.threads,clientThreadsHelp,'type=number min=1')+
     loadCommon+loadFields+'</div>'+slo+'<h3>Measurement</h3><div class=form-grid>'+
@@ -779,6 +788,14 @@ function bindLocalYdbEditor(profile){
     config.actor_system=Object.fromEntries(Object.keys(localYdbActorSystemKeys).map(key=>[
       key,Boolean(document.querySelector('#local-actor-system-'+key)?.checked)
     ]));
+    for(const role of ['static_nodes','dynamic_nodes']){
+      const id='local-actor-cpu-'+role;
+      if(document.querySelector('#'+id)?.value){
+        const count=localInteger(id);
+        if(count>32767)throw Error('Actor-system vCPUs must not exceed 32767.');
+        config.actor_system[role]={cpu_count:count};
+      }
+    }
     const loadMode=document.querySelector('#local-load-mode').value;
     const parameter=document.querySelector('#local-load-parameter').value;
     const allow_errors=Boolean(document.querySelector('#local-load-allow-errors')?.checked);
@@ -1402,6 +1419,8 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     "    'Duration seconds':measurement.duration??'—','Repetitions':measurement.repetitions??'—',\n"
     "    'Verification repetitions':measurement.verification_repetitions??0,\n"
     "    'use_shared_threads':parameters.actor_system?.use_shared_threads??false,\n"
+    "    'Static node vCPUs':parameters.actor_system?.static_nodes?.cpu_count??'automatic',\n"
+    "    'Dynamic node vCPUs':parameters.actor_system?.dynamic_nodes?.cpu_count??'automatic',\n"
     "    'use_united_pool':parameters.actor_system?.use_united_pool??false,\n"
     "    'Geometry preset':geometry.preset??'—','Static nodes':geometry.static_nodes??'—',\n"
     "    'Initial dynamic nodes':geometry.dynamic_nodes??'—','Maximum dynamic nodes':geometry.max_dynamic_nodes??'—',\n"
@@ -2071,7 +2090,11 @@ function localReportConfiguration(data){
     ])+'</div>'+localReportTable('CPU placement',affinity,['Role','Logical CPU IDs'])+
     localReportTable('Workload',[
       ['Type',p.workload?.type],['Operation',p.workload?.operation],...rows(p.workload?.options)
-    ])+localReportTable('Actor system',rows(p.actor_system))+
+    ])+localReportTable('Actor system',[
+      ['Static node vCPUs',p.actor_system?.static_nodes?.cpu_count??'Automatic'],
+      ['Dynamic node vCPUs',p.actor_system?.dynamic_nodes?.cpu_count??'Automatic'],
+      ...rows(Object.fromEntries(Object.entries(p.actor_system||{}).filter(([key])=>!['static_nodes','dynamic_nodes'].includes(key))))
+    ])+
     localReportTable('Binaries',Object.entries(data.binaries||{}).map(([role,binary])=>[
       role.replaceAll('_',' '),String(binary.name||'—').split('/').pop(),binary.sha256||'—'
     ]),['Role','Name','SHA-256'])+'</details>'
@@ -4426,7 +4449,9 @@ class RunService:
                 ),
             )
             client = project(value.get("client"), ("threads",))
-            actor_system = project(value.get("actor_system"), ("use_shared_threads", "use_united_pool"))
+            actor_system = project(
+                value.get("actor_system"), ("use_shared_threads", "use_united_pool", "static_nodes", "dynamic_nodes")
+            )
             load = project(value.get("load"), ("parameter", "allow_errors", "values", "search", "objective"))
             measurement = project(
                 value.get("measurement"),

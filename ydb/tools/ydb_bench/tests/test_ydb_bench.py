@@ -2173,6 +2173,19 @@ class YdbBenchTest(unittest.TestCase):
                     )
                 )
 
+    def test_local_ydb_actor_cpu_count_is_independent_of_affinity(self):
+        profile = {"workload": {"type": "kv", "operation": "upsert"}, "load": {"parameter": "threads", "values": [1]}}
+        profile["actor-system"] = {"static-nodes": {"cpu-count": 8}, "dynamic-nodes": {"cpu-count": 4}}
+        loaded = load_config(self._config(yaml.safe_dump({"local-ydb": {"cpu": profile}}))).runs[0]
+        actor_system = loaded.parameters["local_ydb"]["actor_system"]
+        self.assertEqual(actor_system["static_nodes"], {"cpu_count": 8})
+        self.assertEqual(actor_system["dynamic_nodes"], {"cpu_count": 4})
+        for value in (True, 0, -1, 1.5, "8", None, 32768):
+            with self.subTest(value=value):
+                profile["actor-system"]["static-nodes"]["cpu-count"] = value
+                with self.assertRaisesRegex(BenchmarkError, "cpu-count"):
+                    load_config(self._config(yaml.safe_dump({"local-ydb": {"cpu": profile}})))
+
     def test_local_ydb_actor_system_flags_default_and_validate(self):
         profile = {"workload": {"type": "kv", "operation": "upsert"}, "load": {"parameter": "threads", "values": [1]}}
 
@@ -2211,7 +2224,11 @@ class YdbBenchTest(unittest.TestCase):
               flags:
                 workload: {type: stock, operation: put-rand-order}
                 load: {parameter: threads, values: [1]}
-                actor-system: {use-shared-threads: true, use-united-pool: false}
+                actor-system:
+                  use-shared-threads: true
+                  use-united-pool: false
+                  static-nodes: {cpu-count: 8}
+                  dynamic-nodes: {cpu-count: 4}
         """))
         model = web.editor_model(loaded, self.root / "results")
         script = "const editor={model:" + json.dumps(model) + "};\n"
@@ -2246,6 +2263,8 @@ class YdbBenchTest(unittest.TestCase):
         self.assertFalse(result["old"]["use_shared_threads"])
         self.assertTrue(result["current"]["use_shared_threads"])
         self.assertFalse(result["current"]["use_united_pool"])
+        self.assertEqual(result["current"]["Static node vCPUs"], 8)
+        self.assertEqual(result["current"]["Dynamic node vCPUs"], 4)
 
     def test_local_ydb_profile_is_editable_by_web_builder(self):
         loaded = load_config(self._config("""
@@ -4528,6 +4547,19 @@ class YdbBenchTest(unittest.TestCase):
             self.assertEqual(command[command.index("--yaml-config") + 1], cluster.config_path)
         config = yaml.safe_load(cluster.config_path.read_text(encoding="utf-8"))
         self.assertEqual(config["config"]["actor_system_config"], {"use_auto_config": True, **flags})
+
+        cluster.actor_system.update(static_nodes={"cpu_count": 8}, dynamic_nodes={"cpu_count": 4})
+        for role, expected in (("static_nodes", 8), ("dynamic_nodes", 4)):
+            with self.subTest(role=role):
+                directory = cluster.directory / role
+                directory.mkdir()
+                path = cluster._node_config(role, directory)
+                effective = yaml.safe_load(path.read_text(encoding="utf-8"))
+                self.assertEqual(
+                    effective["config"]["actor_system_config"],
+                    {"use_auto_config": True, **flags, "cpu_count": expected},
+                )
+        self.assertNotIn("cpu_count", yaml.safe_load(cluster.config_path.read_text())["config"]["actor_system_config"])
 
     def test_local_ydb_scaling_waits_for_database_and_every_new_node(self):
         cluster_directory = self.root / "scaling-cluster"

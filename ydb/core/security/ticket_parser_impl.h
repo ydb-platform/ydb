@@ -431,7 +431,9 @@ private:
             if (it != ServiceTokens.end()) {
                 request->Token = it->second;
                 YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Create AccessService request",
-                    {"token", MaskTicket(request->Token)}
+                    {"token", MaskTicket(request->Token)},
+                    {"peerName", record.TraceContext.PeerName},
+                    {"requestId", record.TraceContext.RequestId}
                 );
             }
         }

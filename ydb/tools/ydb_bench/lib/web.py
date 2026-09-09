@@ -172,6 +172,16 @@ _CSS = (
 .local-charts .chart-panel h3{margin-top:0}
 .local-attempts-scroll{max-width:100%;overflow-x:auto}
 .local-attempts{width:max-content;min-width:100%}.local-attempts td,.local-attempts th{white-space:nowrap}
+.discovery-status{display:flex;flex-wrap:wrap;align-items:baseline;gap:.4rem 1rem;margin:.8rem 0 .3rem}
+.discovery-geometry{color:var(--muted);margin-bottom:.8rem}
+.discovery-attempts{width:100%;table-layout:auto}
+.discovery-attempts td,.discovery-attempts th{white-space:normal}
+.discovery-attempts tr[data-attempt-href]{cursor:pointer}
+.discovery-attempts tr[data-attempt-href]:hover{background:#f5f7fb}
+[data-local-ydb-panel=discovery] .chart-panel{border:0;border-radius:0;padding:.4rem 0}
+[data-local-ydb-panel=discovery] .local-stage{border:0;border-radius:0;padding:.3rem 0;background:none}
+[data-local-ydb-panel=discovery] .local-stages{gap:1.5rem}
+[data-local-ydb-panel=discovery] .local-profile-config,[data-local-ydb-panel=discovery] .local-activity{border:0}
 .local-current-command{margin:.8rem 0;padding:.8rem;border:1px solid #d0d5dd;border-radius:7px;background:#101828;color:#fff}
 .local-current-command .muted{color:#d0d5dd}
 .local-command-code{margin:.45rem 0 0;white-space:pre-wrap;overflow-wrap:anywhere;font:12px ui-monospace,SFMono-Regular,Menlo,monospace}
@@ -212,6 +222,36 @@ padding:.6rem;border:1px solid #d0d5dd;min-width:8rem;flex-direction:column}.den
 .dense-run-id:focus-visible::after{outline:2px solid var(--accent);outline-offset:2px}
 .dense-run-select,.dense-run-actions{position:relative;z-index:1}
 .dense-run-actions[open]{z-index:2}
+.report-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem 2rem}
+.report-table{width:100%;font-variant-numeric:tabular-nums}.report-table th,.report-table td{text-align:right}
+.report-table th:first-child,.report-table td:first-child{text-align:left}
+.report-config{margin-top:1rem}.report-config summary{cursor:pointer;font-weight:650}
+.report-config .report-columns{margin:1rem 0}.report-config td{overflow-wrap:anywhere}
+.report-source{margin:.75rem 0;color:var(--muted)}
+.card.local-result-container{border:0;border-radius:0;box-shadow:none;padding-top:0}
+.card.profile-overview{border:0;border-radius:0;box-shadow:none}
+.profile-metric-summary{margin:0 0 1.25rem}
+.profile-metric-summary .local-kpis{grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:1.5rem;margin-top:0}
+.profile-metric-summary .local-kpis>div{border:0;background:none;padding:.4rem 0}
+.profile-metric-summary .local-kpis strong{font-size:1.8rem}
+.profile-metric-summary .metric-unit{font-size:.85rem;font-weight:400;color:var(--muted)}
+.attempt-page .chart-panel{border:0;border-radius:0;padding:.4rem 0}
+.attempt-page .profile-metric-summary{margin-top:.8rem}
+.attempt-meta{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;color:var(--muted);margin:.5rem 0 1rem}
+.attempt-command{margin:1rem 0}.attempt-command h3{margin-bottom:.4rem}
+.attempt-command pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:none;padding:.8rem;background:var(--panel)}
+.run-tabs{margin-bottom:.25rem}
+.run-header{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:.5rem}
+.run-header .page-title{margin:0;min-width:0;overflow-wrap:anywhere}
+.run-header .toolbar{margin:0 0 0 auto;flex-wrap:wrap}
+.run-header .downloads{position:relative}
+.run-header .downloads .actions{position:absolute;right:0;z-index:20;background:#fff;border:1px solid #d0d5dd;padding:.7rem}
+.run-tabs{overflow:visible;flex-wrap:wrap}
+.local-profile-tabs{flex-wrap:wrap}
+[data-local-ydb-panel=result] .local-kpis>div{border:0;background:none;padding:.4rem 0;border-radius:0}
+[data-local-ydb-panel=result] .local-kpis{gap:1.5rem}
+[data-local-ydb-panel=result] .local-kpis strong{font-size:1.8rem}
+@media(max-width:650px){.report-columns{grid-template-columns:1fr}}
 @media(max-width:900px){.local-live{grid-template-columns:1fr 1fr}.local-charts{grid-template-columns:1fr}}
 """
     '.status.queued{color:var(--warn)}\n'
@@ -2005,6 +2045,60 @@ function localResultFacts(title,facts){
     '</strong>'+(item.help?'<small class=muted>'+esc(item.help)+'</small>':'')+'</div>'
   ).join('')+'</div></section>'
 }
+function localReportTable(title,rows,headers=[]){
+  if(!rows.length)return '';
+  return '<section class=local-result-section><h3>'+esc(title)+'</h3><table class=report-table>'+
+    (headers.length?'<thead><tr>'+headers.map(value=>'<th>'+esc(value)+'</th>').join('')+'</tr></thead>':'')+
+    '<tbody>'+rows.map(row=>'<tr>'+row.map(value=>'<td>'+esc(value??'—')+'</td>').join('')+'</tr>').join('')+
+    '</tbody></table></section>'
+}
+function localReportConfiguration(data){
+  const p=data.parameters||{},m=p.measurement||{},g=p.geometry||{},result=data.result||{},objective=p.load?.objective||{};
+  const value=item=>item===null||item===undefined?'—':typeof item==='object'?JSON.stringify(item):String(item);
+  const rows=object=>Object.entries(object||{}).map(([key,item])=>[key.replaceAll('_',' '),value(item)]);
+  const affinity=Object.entries(data.role_affinity||{}).map(([role,cpus])=>[
+    role.replaceAll('_',' '),Array.isArray(cpus)?cpuRanges(cpus):'OS managed'
+  ]);
+  return '<details class=report-config data-report-config><summary>Configuration</summary><div class=report-columns>'+
+    localReportTable('Measurement',[
+      ['Duration',m.duration===undefined?'—':m.duration+' s'],
+      ['Warmup',m.warmup===null?'Automatic':m.warmup===undefined?'—':m.warmup+' s'],
+      ['Repetitions',m.repetitions],['Objective',objective.type||'points'],
+      ...(objective.type==='latency-slo'?[[objective.percentile||'Latency','≤ '+objective.max_ms+' ms']]:[])
+    ])+localReportTable('Cluster',[
+      ['Static nodes',g.static_nodes],['Dynamic nodes',result.dynamic_nodes??g.dynamic_nodes],
+      ['Storage groups',g.storage_groups]
+    ])+'</div>'+localReportTable('CPU placement',affinity,['Role','Logical CPU IDs'])+
+    localReportTable('Workload',[
+      ['Type',p.workload?.type],['Operation',p.workload?.operation],...rows(p.workload?.options)
+    ])+localReportTable('Actor system',rows(p.actor_system))+
+    localReportTable('Binaries',Object.entries(data.binaries||{}).map(([role,binary])=>[
+      role.replaceAll('_',' '),String(binary.name||'—').split('/').pop(),binary.sha256||'—'
+    ]),['Role','Name','SHA-256'])+'</details>'
+}
+function localReportMetrics(data){
+  const schema=localResultSchema(data),metrics=localResultMetrics(data.result||{},schema).metrics;
+  const formatted=(name,unit)=>localMetricPresent(metrics,name)?
+    (unit==='ms'&&name===schema.slo_metrics?.pmax&&Number(metrics[name])>=1000?
+      metricLabel(Number(metrics[name])/1000)+' s':metricLabel(metrics[name])+(unit?' '+unit:'')):'—';
+  const latency=Object.entries(schema.slo_metrics||{}).filter(([,name])=>localMetricPresent(metrics,name)).map(
+    ([label,name])=>[label==='pmax'?'Maximum':label,formatted(name,localMetricDescriptor(schema,name)?.unit||'ms')]
+  );
+  const counters=[['transactions','Successful operations'],['errors','Errors'],['retries','Retries']].filter(
+    ([name])=>localMetricPresent(metrics,name)
+  ).map(([name,label])=>[label,formatted(name,'')]);
+  if(data.parameters?.load?.allow_errors)counters.push(['Error policy','Errors allowed']);
+  const cpu=[['dynamic','Dynamic nodes'],['static','Static nodes'],['cli','YDB CLI'],['host','Host (% of all CPUs)']].filter(
+    ([role])=>localMetricPresent(metrics,role+'_cpu_mean')||localMetricPresent(metrics,role+'_cpu_max')
+  ).map(([role,label])=>[label,formatted(role+'_cpu_mean','%'),formatted(role+'_cpu_max','%')]);
+  const known=new Set(['throughput','transactions','errors','retries',...Object.values(schema.slo_metrics||{})]);
+  const extra=(schema.metrics||[]).filter(metric=>!known.has(metric.name)&&localMetricPresent(metrics,metric.name)).map(
+    metric=>[localMetricLabel(schema,metric.name),formatted(metric.name,metric.unit)]
+  );
+  return '<div class=report-columns>'+localReportTable('Latency',latency)+localReportTable('Requests',counters)+
+    '</div>'+localReportTable('CPU usage · % of assigned CPUs',cpu,['Role','Mean','Peak'])+
+    localReportTable('Additional workload metrics',extra)
+}
 function localResultPanel(data){
   const view=localResultViewModel(data);
   if(!view.hasResult){
@@ -2013,13 +2107,14 @@ function localResultPanel(data){
       (terminal?'No result was produced.':'Result will appear when the profile finishes.')+'</strong>'+
       (view.error?'<p>'+esc(view.error)+'</p>':'')+'</div>'
   }
-  return '<div class=local-result-heading><div><span class="local-result-badge '+esc(view.tone)+'">'+
-    esc(view.label)+'</span>'+(view.detail?'<p class=muted>'+esc(view.detail)+'</p>':'')+
-    '</div><div class=local-result-source><span class=muted>Metric source</span><strong>'+esc(view.source)+
-    '</strong><small class=muted>'+esc(view.sourceHelp)+'</small></div></div><div class=local-kpis>'+view.primary.map(item=>
-    localKpi(item.label,item.value,item.unit+(item.help?(item.unit?' · ':'')+item.help:''),item.primary)
-  ).join('')+'</div>'+localVerificationSummary(data)+localResultFacts('Selected configuration',view.config)+
-    localResultFacts('CPU at the reported point',view.cpu)+localResultFacts('Additional workload metrics',view.secondary)
+  const result=data.result||{},verification=data.verification||{},normal=view.tone!=='bad'&&view.tone!=='warn';
+  const verified=localResultMetrics(result,localResultSchema(data)).verified;
+  const source=verified?'Result of verification · '+(data.parameters?.measurement?.duration??'—')+' s · '+
+    (verification.completed_repetitions??'—')+' repetition(s)':'Search measurement · no completed verification';
+  return '<div class=local-result-heading><span class="local-result-badge '+esc(view.tone)+'">'+
+    esc(normal&&result.outcome==='boundary-found'?'SLO satisfied':view.label)+'</span></div>'+
+    (!normal&&view.detail?'<p class=error>'+esc(view.detail)+'</p>':'')+
+    '<p class=report-source>'+esc(source)+'</p>'+localReportMetrics(data)+localReportConfiguration(data)
 }
 function localYdbDefaultView(data){
   return ['running','preparing'].includes(data.state)?'discovery':data.result?'result':'discovery'
@@ -2032,7 +2127,19 @@ function localYdbViewHref(container,view){
   return runId&&profile?'#run/'+enc(runId)+'/profile/'+enc('local-ydb/'+profile+'/view/'+view):'#'
 }
 function localYdbViewTabs(container,data,selected){
-  return '<nav class=local-profile-tabs aria-label="Local YDB profile view">'+[
+  const view=localResultViewModel(data),result=data.result||{};
+  const metrics=view.hasResult?view.primary.slice(1).filter(item=>!['Errors','Dynamic nodes'].includes(item.label)):[];
+  const selectedLoad=view.hasResult?view.primary[0]:null;
+  const [percentile]=localPreferredSlo(localResultSchema(data),data.parameters?.load?.objective||{});
+  const summary=metrics.length?'<section class=profile-metric-summary aria-label="Profile result summary">'+
+    '<div class=local-kpis>'+metrics.map(item=>'<div><div class=muted>'+
+      esc(item.label===percentile?'Latency ('+percentile+')':item.label)+'</div><strong>'+esc(item.value)+
+      (item.unit?' <span class=metric-unit>'+esc(item.unit)+'</span>':'')+'</strong></div>').join('')+'</div>'+
+    (selectedLoad?'<div class=muted>'+esc(localSearchAxisLabel(
+      result.parameter||data.parameters?.load?.parameter,data.parameters?.workload?.type
+    ))+': '+esc(selectedLoad.value)+'</div>':'')+
+    (view.tone==='bad'||view.tone==='warn'?'<div class="'+esc(view.tone)+'">'+esc(view.label)+'</div>':'')+'</section>':'';
+  return summary+'<nav class=local-profile-tabs aria-label="Local YDB profile view">'+[
     ['result','Result'],['discovery',localYdbDiscoveryLabel(data)]
   ].map(([view,label])=>'<a class="local-profile-tab '+(view===selected?'active':'')+'" '+
     (view===selected?'aria-current=page ':'')+'data-local-ydb-view="'+view+'" href="'+
@@ -2077,6 +2184,14 @@ function localRestoreYdbViewFocus(container,view){
   );
   if(tab&&typeof tab.focus==='function')tab.focus({preventScroll:true})
 }
+function bindLocalAttemptRows(container){
+  for(const row of container.querySelectorAll('[data-attempt-href]'))row.onclick=event=>{
+    if(event.defaultPrevented||event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
+    if(event.target.closest('a,button,input,select,textarea,label,summary,details'))return;
+    if(window.getSelection()?.toString())return;
+    location.hash=row.dataset.attemptHref
+  }
+}
 function renderLocalYdbProfile(container,data){
   const failure=['failed','cancelled'].includes(data.state)?'<section class=profile-error role=alert><h3>'+
     (data.state==='failed'?'Profile failed':'Profile cancelled')+'</h3><div>'+
@@ -2116,9 +2231,6 @@ function renderLocalYdbProfile(container,data){
     if(selectedView==='discovery')localRestoreActivityScroll(container,activityScrollTop,activityPinned);
     localRestoreYdbViewFocus(container,focusedView);return
   }
-  const openCommandAttempts=new Set(
-    [...container.querySelectorAll('[data-command-attempt][open]')].map(details=>details.dataset.commandAttempt)
-  );
   const profileConfigOpen=container.querySelector('[data-local-profile-config][open]')!==null;
   const progress=data.progress||{},attempts=data.attempts||[],searches=data.searches||[];
   const result=data.result||null,parameters=data.parameters||{},loadConfig=parameters.load||{};
@@ -2140,18 +2252,20 @@ function renderLocalYdbProfile(container,data){
       Math.min(phaseDuration,phaseElapsed)+'"></progress>':'';
   let html=loadConfig.allow_errors?
     '<div class=notice>Failed workload requests are allowed for this profile and remain visible in metrics.</div>':'';
-  html+='<div class=local-live><div><span class=muted>Current phase</span><div class=local-phase>'+
-    esc(localPhaseLabel(profileActive?progress.phase||data.state:data.state))+'</div><div class=muted>'+
-    esc(['running','preparing'].includes(data.state)?phaseHelp||'Waiting for the next milestone':'')+'</div>'+phaseProgress+'</div>';
+  html+='<div class=discovery-status><strong>'+
+    esc(localPhaseLabel(profileActive?progress.phase||data.state:data.state))+'</strong><span class=muted>'+
+    esc(elapsedLabel(profileElapsed))+' · '+esc(attempts.length)+' completed attempts</span>'+
+    (profileActive?'<span class=muted>'+esc(phaseHelp)+'</span>':'');
   const dynamicNodes=
     progress.dynamic_nodes??result?.dynamic_nodes??parameters.geometry?.dynamic_nodes??'—';
   const candidate=progress.load===undefined?
     '—':(progress.parameter||loadConfig.parameter||'load')+' '+metricLabel(progress.load);
-  html+=localKpi('Profile elapsed',elapsedLabel(profileElapsed))+
-    localKpi('Geometry',(parameters.geometry?.static_nodes??'—')+' static · '+dynamicNodes+' dynamic')+
-    localKpi('Candidate',candidate)+'</div>';
+  html+=(profileActive?'<span>Candidate: '+esc(candidate)+'</span>':'')+'</div>'+phaseProgress+
+    '<div class=discovery-geometry>'+esc(parameters.geometry?.static_nodes??'—')+' static · '+
+    esc(dynamicNodes)+' dynamic'+(objective.type==='latency-slo'?
+      ' · SLO: latency ('+esc(latencyPercentile)+') ≤ '+esc(objective.max_ms)+' ms':'')+'</div>';
   html+=localProfileDetails(data,profileConfigOpen);
-  if(progress.current_command?.argv?.length){
+  if(profileActive&&progress.current_command?.argv?.length){
     html+='<section class=local-current-command><span class=muted>Running command</span>'+
       '<pre class=local-command-code><code>'+esc(localCommandText(progress.current_command))+
       '</code></pre></section>'
@@ -2159,17 +2273,11 @@ function renderLocalYdbProfile(container,data){
   html+=localActivityLog(
     data.activity||[],Boolean(data.activity_truncated),activityOpen,data.activity_error||''
   );
-  if(!result){
-    html+='<div class=local-kpis>'+localKpi(
-      'Completed attempts',attempts.length,'search stage '+(progress.search_stage||1),true
-    )+localKpi(
-      'Latest throughput',attempts.length?metricLabel(attempts.at(-1).throughput):'—',throughputUnit
-    )+(latencyMetric?localKpi(
-      'Latest '+latencyPercentile,
-      attempts.length?metricLabel(localAttemptMetric(attempts.at(-1),latencyMetric,resultSchema)):'—',
-      localMetricDescriptor(resultSchema,latencyMetric)?.unit||''
-    ):'')+'</div>'
-  }
+  if(!result&&attempts.length)html+='<p class=muted>Latest measurement: '+
+    esc(metricLabel(attempts.at(-1).throughput))+' '+esc(throughputUnit)+
+    (latencyMetric?' · latency ('+esc(latencyPercentile)+'): '+esc(metricLabel(
+      localAttemptMetric(attempts.at(-1),latencyMetric,resultSchema)))+' '+
+      esc(localMetricDescriptor(resultSchema,latencyMetric)?.unit||''):'')+'</p>';
   const currentStage=Number(progress.search_stage||0);
   const lastStored=searches.length?Math.max(...searches.map(item=>Number(item.stage)||0)):0;
   const xAxis=container.dataset.localYdbXAxis==='parameter'?'parameter':'attempt';
@@ -2190,7 +2298,8 @@ function renderLocalYdbProfile(container,data){
     esc(progress.dynamic_nodes??'—')+' dynamic</strong><div>In progress</div><div class=muted>'+
     esc(attempts.filter(item=>Number(item.search_stage)===currentStage).length)+
     ' completed attempts</div></div>':'';
-  html+='<h3>Geometry stages</h3><div class=local-stages>'+stageCards+currentStageCard+'</div>';
+  if(searches.length>1||currentStage>1)html+='<h3>Geometry stages</h3><div class=local-stages>'+
+    stageCards+currentStageCard+'</div>';
   if(attempts.length){
     const xField=xAxis==='parameter'?'load':'attempt';
     const xName=xAxis==='parameter'?searchAxisLabel:'Attempt';
@@ -2275,24 +2384,21 @@ function renderLocalYdbProfile(container,data){
       xName,xValues,
       series:chartSeries
     };
-    const axisHelp=xAxis==='parameter'?
-      'Points are ordered by the searched parameter; geometry stages remain separate.':
-      'Execution order shows how the controller moved through candidate values.';
     html+='<div class=run-section-title><h3>Search process</h3><div class=actions><span class=muted>X axis</span>'+
       '<button type=button data-local-chart-x=attempt class="'+(xAxis==='attempt'?'primary':'')+
       '" aria-pressed="'+(xAxis==='attempt')+'">Attempts (search order)</button>'+
       '<button type=button data-local-chart-x=parameter class="'+(xAxis==='parameter'?'primary':'')+
       '" aria-pressed="'+(xAxis==='parameter')+'">'+esc(searchAxisLabel)+'</button></div></div>'+
-      '<p class=muted>'+esc(axisHelp)+'</p><div class=local-charts>'+
-      (showSearchProgress?localChart(
-        objective.type==='maximize-throughput'?'Ternary search progress':'Load search progress',
-        'load',xName,xValues,candidateSeries
-      ):'')+
+      '<div class=local-charts>'+
       localChart(
         (loadConfig.parameter==='rate'?'Offered and achieved':'Achieved')+' throughput ('+throughputUnit+')',
         'throughput',xName,xValues,throughputSeries
       )+
       (latencySeries.length?localChart('Latency (ms)','latency_ms',xName,xValues,latencySeries):'')+
+      (showSearchProgress?localChart(
+        objective.type==='maximize-throughput'?'Ternary search progress':'Load search progress',
+        'load',xName,xValues,candidateSeries
+      ):'')+
       extraCharts.map(chart=>localChart(
         'Workload metrics ('+chart.unit+')',chart.alias,xName,xValues,chart.series
       )).join('')+
@@ -2303,26 +2409,21 @@ function renderLocalYdbProfile(container,data){
       esc(metric.description||'')+'">'+esc(localMetricLabel(resultSchema,metric.name))+
       (metric.unit?' ('+esc(metric.unit)+')':'')+'</th>').join('');
     html+='<h3>Attempts</h3><div class=local-attempts-scroll tabindex=0 role=region aria-label="Search attempts">'+
-      '<table class=local-attempts><thead><tr><th>#</th><th>Stage</th><th>Dynamic</th><th>Candidate</th>'+
-      workloadHeaders+'<th>Static CPU</th><th>Dynamic CPU</th><th>CLI CPU</th>'+
-      '<th>Verdict</th><th>Decision</th><th>Duration</th><th>Commands</th></tr></thead><tbody>'+
-      attempts.map(item=>'<tr><td><a href="'+esc(localAttemptHref(
-        container.dataset.localYdbRunId,container.dataset.localYdbProfile,item.attempt
-      ))+'">'+esc(item.attempt)+'</a></td><td>'+esc(item.search_stage)+'</td><td>'+
-        esc(item.dynamic_nodes)+'</td><td>'+esc(metricLabel(item.load))+'</td>'+
+      '<table class="local-attempts discovery-attempts"><thead><tr><th>#</th><th>'+esc(searchAxisLabel)+'</th>'+
+      workloadHeaders+'<th>Verdict</th><th>Duration</th></tr></thead><tbody>'+
+      attempts.map(item=>{
+        const href=esc(localAttemptHref(container.dataset.localYdbRunId,container.dataset.localYdbProfile,item.attempt));
+        return '<tr data-attempt-href="'+href+'"><td><a href="'+href+'">'+esc(item.attempt)+
+        '</a></td><td>'+esc(metricLabel(item.load))+'</td>'+
         displayedMetrics.map(metric=>'<td>'+esc(metricLabel(
           localAttemptMetric(item,metric.name,resultSchema)??'—'
-        ))+'</td>').join('')+'<td>'+
-        esc(metricLabel(item.static_cpu_mean))+'%</td><td>'+esc(metricLabel(item.dynamic_cpu_mean))+
-        '%</td><td>'+esc(metricLabel(item.cli_cpu_mean))+'%</td><td class="'+
-        (item.passed?'attempt-pass':'attempt-fail')+'">'+(item.passed?'PASS':'FAIL')+'</td><td>'+esc(item.decision)+
-        '</td><td>'+esc(elapsedLabel(item.duration_seconds))+'</td><td class=local-command-cell>'+
-        localCommandDetails(item,openCommandAttempts.has(String(item.attempt)))+'</td></tr>'
-      ).join('')+'</tbody></table></div>';
+        ))+'</td>').join('')+'<td class="'+(item.passed?'attempt-pass':'attempt-fail')+'">'+
+        (item.passed?'PASS':'FAIL')+'</td><td>'+esc(elapsedLabel(item.duration_seconds))+'</td></tr>'
+      }).join('')+'</tbody></table></div>';
   }else html+='<div class=empty>'+(profileActive?
     'No completed search attempts yet. The timeline will appear after the first measurement.':
     'No completed measurements were recorded.')+'</div>';
-  if(data.progress?.attempt)html+='<p><a href="'+esc(localAttemptHref(
+  if(profileActive&&data.progress?.attempt)html+='<p><a href="'+esc(localAttemptHref(
     container.dataset.localYdbRunId,container.dataset.localYdbProfile,data.progress.attempt
   ))+'">Current attempt metrics</a></p>';
   if(data.verification?.configured_repetitions)html+='<p><a href="'+esc(localAttemptHref(
@@ -2335,6 +2436,7 @@ function renderLocalYdbProfile(container,data){
     (selectedView==='discovery'?'':' hidden')+'>'+html+'</section>';
   localApplyYdbView(container,selectedView,container.dataset.localYdbViewExplicit==='true');
   localBindYdbViews(container);
+  bindLocalAttemptRows(container);
   if(selectedView==='discovery')localRestoreActivityScroll(container,activityScrollTop,activityPinned);
   localRestoreYdbViewFocus(container,focusedView);
   for(const axisButton of container.querySelectorAll('[data-local-chart-x]'))axisButton.onclick=()=>{
@@ -2413,18 +2515,70 @@ function localCounterCharts(samples,repetition,nodeKey,raw){
     [...names,'ElapsedMicrosec','CpuMicrosec'].map(name=>[name,threadSeries])
   )}
 }
-async function renderLocalYdbAttempt(runId,profile,attempt){
+function localAttemptReport(data,item){
+  if(!item)return '<p class=muted>No completed measurement for this attempt yet.</p>';
+  const measurement=data.parameters?.measurement||{};
+  return localReportMetrics({...data,result:{selected_metrics:localAttemptMetrics(data,item),metrics_source:'search'}})+
+    '<p class=muted>Measurement: '+esc(measurement.duration??'—')+' s · warmup: '+
+    esc(measurement.warmup===null?'automatic':(measurement.warmup??'—')+' s')+' · '+
+    esc(item.completed_repetitions??measurement.repetitions??'—')+' repetition(s)</p>'
+}
+function localAttemptMetrics(data,item){
+  return {...item,...(item===data.verification?data.result?.verified_metrics:null),...(item?.metrics||{})}
+}
+function localAttemptHeader(data,item,context){
+  const schema=localResultSchema(data),objective=data.parameters?.load?.objective||{};
+  const metrics=localAttemptMetrics(data,item),[percentile,latency]=localPreferredSlo(schema,objective);
+  const passed=item?.passed??item?.accepted;
+  const label=passed===true?(objective.type==='latency-slo'?'SLO satisfied':'PASS'):
+    passed===false?'FAIL':localPhaseLabel(context.status||context.state||data.state);
+  const reason=item?.error||item?.reason||(passed===true&&objective.type==='latency-slo'?
+    'latency ('+percentile+') ≤ '+objective.max_ms+' ms':item?.decision);
+  const kpi=(name,value,unit)=>'<div><div class=muted>'+esc(name)+'</div><strong>'+esc(metricLabel(value??'—'))+
+    ' <span class=metric-unit>'+esc(unit)+'</span></strong></div>';
+  return '<div class="'+(passed===false?'attempt-fail':passed===true?'attempt-pass':'muted')+'">'+esc(label)+
+    (reason?' · '+esc(reason):'')+'</div><section class=profile-metric-summary aria-label="Attempt result summary">'+
+    '<div class=local-kpis>'+kpi(schema.throughput_unit==='query operations/s'?'Successful query operations':
+      localMetricLabel(schema,'throughput'),metrics.throughput,schema.throughput_unit)+
+    (latency?kpi('Latency ('+percentile+')',localAttemptMetric(metrics,latency,schema),
+      localMetricDescriptor(schema,latency)?.unit||'ms'):'')+'</div></section><div class=attempt-meta><span>'+
+    esc(localSearchAxisLabel(data.parameters?.load?.parameter,data.parameters?.workload?.type))+': '+
+    esc(context.load??'—')+'</span><span>Duration: '+esc(elapsedLabel(context.duration_seconds))+'</span><span>'+
+    (context.search_stage?'Stage '+esc(context.search_stage)+' · ':'')+
+    esc(data.parameters?.geometry?.static_nodes??'—')+' static · '+esc(context.dynamic_nodes??'—')+' dynamic</span></div>'
+}
+function localAttemptCommands(context){
+  const commands=context.commands?.length?context.commands:context.current_command?[context.current_command]:[];
+  return commands.length?commands.map(command=>'<section class=attempt-command><h3>'+esc(localPhaseLabel(command.phase))+
+    '</h3><div class=muted>'+esc([
+      command.repetition?'Repetition '+command.repetition:null,
+      Number.isFinite(command.duration_seconds)?elapsedLabel(command.duration_seconds):null,
+      command.exit_code!==undefined?'exit '+command.exit_code:null
+    ].filter(Boolean).join(' · '))+'</div><pre><code>'+esc(localCommandText(command))+'</code></pre></section>').join(''):
+    '<div class=empty>No recorded commands for this attempt.</div>'
+}
+function localAttemptView(value){return ['summary','counters','commands'].includes(value)?value:'summary'}
+async function renderLocalYdbAttempt(runId,profile,attempt,requestedView='summary'){
   clearRefresh();
+  let selectedView=localAttemptView(requestedView);
+  const attemptHref=localAttemptHref(runId,profile,attempt);
   const discovery='#run/'+enc(runId)+'/profile/'+enc('local-ydb/'+profile+'/view/discovery');
-  app.innerHTML=shell('runs','<div class=breadcrumbs><a href="'+esc(discovery)+'">'+
-    esc(runId+' / '+profile)+' / Discovery</a></div><h1 class=page-title>'+
+  app.innerHTML=shell('runs','<div class=attempt-page><div class=breadcrumbs><a href="'+esc(discovery)+'">'+
+    esc(runId+' / '+profile)+' / Discovery</a></div><div class=run-header><h1 class=page-title>'+
     (attempt==='verification'?'Verification':'Attempt '+esc(attempt))+
-    '</h1><div id=attempt-summary></div><section class=card><div class=toolbar>'+
-    '<label>Repetition <select id=counter-repetition></select></label>'+
+    '</h1><div class=toolbar><button id=counter-refresh>Refresh</button><details class=downloads hidden '+
+    'id=attempt-downloads><summary>Downloads</summary><div class=actions id=attempt-artifacts></div></details></div></div>'+
+    '<div id=attempt-error></div><div id=attempt-header></div><nav class=local-profile-tabs aria-label="Attempt details">'+
+    [['summary','Summary'],['counters','YDB counters'],['commands','Commands']].map(([view,label])=>
+      '<a class=local-profile-tab data-attempt-view="'+view+'" href="'+esc(attemptHref+'/'+view)+'">'+label+'</a>'
+    ).join('')+'</nav><section data-attempt-panel=summary id=attempt-summary></section>'+
+    '<section data-attempt-panel=counters><div class=toolbar>'+
+    '<label id=counter-repetition-label>Repetition <select id=counter-repetition></select></label>'+
+    '<span id=counter-single-repetition class=muted></span>'+
     '<label>Node <select id=counter-node></select></label>'+
     '<label><input type=checkbox id=counter-raw> Raw microsecond counters</label>'+
-    '<button id=counter-refresh>Refresh</button></div><div id=counter-notice></div>'+
-    '<div id=counter-charts class=local-charts></div></section>');
+    '</div><div id=counter-notice></div><div id=counter-charts class=local-charts></div></section>'+
+    '<section data-attempt-panel=commands id=attempt-commands></section></div>');
   const target=document.querySelector('#counter-charts'),summary=document.querySelector('#attempt-summary');
   const repetition=document.querySelector('#counter-repetition'),node=document.querySelector('#counter-node');
   const raw=document.querySelector('#counter-raw');
@@ -2437,49 +2591,68 @@ async function renderLocalYdbAttempt(runId,profile,attempt){
   };
   const draw=()=>{
     options(repetition,[...new Set(samples.map(item=>item.context?.repetition).filter(Number.isFinite))].sort((a,b)=>a-b));
+    document.querySelector('#counter-repetition-label').hidden=repetition.options.length<2;
+    document.querySelector('#counter-single-repetition').textContent=repetition.options.length===1?
+      'Repetition '+repetition.value:'';
     const selected=samples.filter(item=>String(item.context?.repetition)===repetition.value);
     options(node,[...new Set(selected.flatMap(item=>item.nodes.map(value=>value.role+' '+value.index)))].sort());
     if(!selected.length){target.innerHTML='<div class=empty>No YDB counter samples for this attempt.</div>';return}
     const {xValues,series}=localCounterCharts(samples,repetition.value,node.value,raw.checked);
     const unit=raw.checked?'µs':'µs/s';
-    target.innerHTML='<div class=chart-legend>'+series.Current.map((item,index)=>
-      '<span><i class="legend-swatch chart-bg-'+index%chartColors.length+'"></i>'+esc(item.label)+'</span>'
-    ).join('')+'</div>'+['Current','Default','Max','PossibleMax','PotentialMax'].map(name=>
+    target.innerHTML=['Current','Default','Max','PossibleMax','PotentialMax'].map(name=>
       localChart(name+' threads',name,'Time (s)',xValues,series[name])
     ).join('')+
       localChart('ElapsedMicrosec ('+unit+')','ElapsedMicrosec','Time (s)',xValues,series.ElapsedMicrosec)+
       localChart('CpuMicrosec ('+unit+')','CpuMicrosec','Time (s)',xValues,series.CpuMicrosec);
     bindChartTooltips(target,'Time (s)',xValues,series,Object.keys(series),chartColors,true,value=>value.toFixed(2))
   };
+  const applyView=()=>{
+    for(const panel of app.querySelectorAll('[data-attempt-panel]'))panel.hidden=panel.dataset.attemptPanel!==selectedView;
+    for(const tab of app.querySelectorAll('[data-attempt-view]')){
+      const active=tab.dataset.attemptView===selectedView;
+      tab.classList.toggle('active',active);
+      if(active)tab.setAttribute('aria-current','page');else tab.removeAttribute('aria-current')
+    }
+    if(selectedView==='counters')draw()
+  };
+  for(const tab of app.querySelectorAll('[data-attempt-view]'))tab.onclick=event=>{
+    if(event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
+    event.preventDefault();selectedView=localAttemptView(tab.dataset.attemptView);
+    history.pushState(null,'',attemptHref+'/'+selectedView);applyView()
+  };
+  applyView();
   for(const select of [repetition,node,raw])select.onchange=draw;
   const refresh=async()=>{
     if(loading||!target.isConnected)return;loading=true;
     try{
       const [data,metrics]=await Promise.all([
         api('/api/runs/'+enc(runId)+'/local-ydb-profile?profile='+enc(profile)),
-        api('/api/runs/'+enc(runId)+'/local-ydb-metrics?profile='+enc(profile)+'&attempt='+enc(attempt))
+        api('/api/runs/'+enc(runId)+'/local-ydb-metrics?profile='+enc(profile)+'&attempt='+enc(attempt)).catch(
+          error=>({samples:[],error:String(error)})
+        )
       ]);
       if(!target.isConnected)return;
       const item=attempt==='verification'?data.verification:(data.attempts||[]).find(value=>String(value.attempt)===attempt);
       const context=item||data.progress||{};
-      const load=context.load??data.result?.selected_load;
-      const dynamic=context.dynamic_nodes??data.result?.dynamic_nodes;
-      const commandsOpen=Boolean(summary.querySelector('.local-command-history')?.open);
-      summary.innerHTML='<section class=card><div class=toolbar><span>Candidate: <strong>'+esc(load??'—')+
-        '</strong> '+esc(data.parameters?.load?.parameter||'')+'</span><span>Dynamic nodes: <strong>'+
-        esc(dynamic??'—')+'</strong></span></div>'+localCommandDetails(context,commandsOpen)+
-        (metrics.artifact?'<p><a href="'+esc(metrics.artifact)+'">Download raw YDB metrics (JSONL)</a></p>':'')+'</section>';
+      document.querySelector('#attempt-error').innerHTML='';
+      document.querySelector('#attempt-header').innerHTML=localAttemptHeader(data,item,context);
+      summary.innerHTML=localAttemptReport(data,item);
+      document.querySelector('#attempt-commands').innerHTML=localAttemptCommands(context);
+      document.querySelector('#attempt-downloads').hidden=!metrics.artifact;
+      document.querySelector('#attempt-artifacts').innerHTML=metrics.artifact?'<a href="'+esc(metrics.artifact)+
+        '">Profile YDB counters (JSONL)</a>':'';
       samples=metrics.samples||[];
       const errors=[...new Set(samples.flatMap(sample=>[
         sample.error,...sample.nodes.map(value=>value.error?value.role+' '+value.index+': '+value.error:null)
       ]).filter(Boolean))];
       document.querySelector('#counter-notice').innerHTML=[
+        metrics.error,
         metrics.truncated?'Showing a limited sample history.':null,
         metrics.invalid_records?'Some invalid metric records were skipped.':null,...errors.slice(0,8)
       ].filter(Boolean).map(message=>'<div class=notice>'+esc(message)+'</div>').join('');
-      draw();
+      if(selectedView==='counters')draw();
       if(!['running','preparing'].includes(data.state))clearRefresh()
-    }catch(error){if(target.isConnected)target.innerHTML=displayError(error)}finally{loading=false}
+    }catch(error){if(target.isConnected)document.querySelector('#attempt-error').innerHTML=displayError(error)}finally{loading=false}
   };
   document.querySelector('#counter-refresh').onclick=refresh;
   refreshTimer=setInterval(refresh,2000);await refresh()
@@ -2524,14 +2697,13 @@ function parseLocalYdbProfileSelection(groups,selected){
     "selection.profile?selection.view:'',activeBenchmark=activeProfile?activeProfile.split('/')[0]:'';\n"
     "    const crumbs=[{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:id}];if(activeProfile&&profileKeys.length>1)cr"
     "umbs.push({route:'run/'+enc(id)+'/profile/'+enc(activeProfile),label:activeProfile});\n"
-    "    let content=breadcrumbs(crumbs)+queueNotice+'<h1 class=page-title>'+esc(id)+'</h1><div class=toolbar><button id=ref"
+    "    let content=breadcrumbs(crumbs)+queueNotice+'<div class=run-header><h1 class=page-title>'+esc(activeProfile||id)+'</h1><div class=toolbar><button id=ref"
     "resh-run>Refresh</button>'+(['queued','running'].includes(run.state)?'<button class=danger id=cancel-run>Cancel</button>'"
     ":'')+'<button id=repeat-run>Repeat with this YAML</button><details class=downloads><summary>Downloads</summary><div cla"
     "ss=actions><a href=\"'+runHref(id,'config')+'\">YAML</a><a href=\"'+runHref(id,'manifest')+'\">run.json</a><a href=\"'+r"
-    "unHref(id,'archive')+'\">Artifacts</a></div></details></div><div class=grid><section class=card><div class=form-grid><d"
-    "iv><div class=muted>Status</div>'+status(run.status)+'</div><div><div class=muted>Output</div><code>'+esc(run.output_di"
-    "rectory||id)+'</code></div><div><div class=muted>Time</div>'+esc(humanTime(run.started_at))+' / '+duration(run)+'</div>"
-    "<div><div class=muted>Progress</div>'+run.finished_steps+' / '+run.steps.length+' steps</div></div></section>';\n"
+    "unHref(id,'archive')+'\">Archive.zip</a></div></details></div></div><p class=muted>'+status(run.status)+' · '+"
+    "esc(humanTime(run.started_at))+' · Run duration '+duration(run)+' · '+run.finished_steps+' / '+run.steps.length+"
+    "' steps</p><div class=grid>';\n"
     "    if(run.state==='recovery_required')content+='<div class=\"notice error\"><strong>Interrupted.</strong> The web servi"
     "ce restarted while this run was active. Verify that the previous benchmark process stopped before repeating it.</div>'"
     ";\n"
@@ -2543,8 +2715,7 @@ function parseLocalYdbProfileSelection(groups,selected){
     "ter(step=>!['pending','running'].includes(step.state)).length,affinities=new Set(steps.map(step=>step.affinity)).size;re"
     "turn '<tr><td><a href=\"#run/'+enc(id)+'/profile/'+enc(key)+'\">'+esc(key)+'</a></td><td>'+done+' / '+steps.length+'</td"
     "><td>'+status(aggregateState(steps))+'</td><td>'+affinities+'</td></tr>'}).join('')+'</table></section>';\n"
-    "    if(activeProfile)content+=activeBenchmark==='local-ydb'?'<section class=card><div class=run-section-title><h2>Local "
-    "YDB profile</h2><strong>'+esc(activeProfile)+'</strong></div><div id=local-ydb-result>Loading profile data…</div>"
+    "    if(activeProfile)content+=activeBenchmark==='local-ydb'?'<section class=\"card local-result-container\"><div id=local-ydb-result>Loading profile data…</div>"
     "</section>':'<section class=card><div class=run-section-title><h2>Results</h2><strong>'+esc(activeProfile)+'</strong>"
     "</div><p class=muted>Affinity variants are lines. Choose a common X axis, one or more Y metrics, and fixed values for "
     "the remaining dimensions.</p><div id=run-chart>Loading summary data…</div></section>';\n"
@@ -2655,8 +2826,8 @@ function parseLocalYdbProfileSelection(groups,selected){
     '}\n'
     "async function compose(){const pieces=routeParts(),current=pieces.join('/');if(current==='runs')return renderRuns();if(current==='new')return renderN"
     "ew('builder');if(current==='new/yaml')return renderNew('yaml');if(current==='topology')return renderTopology();if(curren"
-    "t==='comparisons')return renderComparisons();if(pieces[0]==='attempt'&&pieces.length===4)"
-    "return renderLocalYdbAttempt(pieces[1],pieces[2],pieces[3]);if(pieces[0]==='run'){if(pieces[2]"
+    "t==='comparisons')return renderComparisons();if(pieces[0]==='attempt'&&[4,5].includes(pieces.length))"
+    "return renderLocalYdbAttempt(pieces[1],pieces[2],pieces[3],pieces[4]);if(pieces[0]==='run'){if(pieces[2]"
     "==='profile')return renderRun(pieces[1],pieces.slice(3).join('/'));return renderRun(pieces.slice(1).join('/'))}setRoute("
     "'runs')}\n"
     "addEventListener('hashchange',compose);setInterval(refreshActiveBanner,3000);compose();\n"

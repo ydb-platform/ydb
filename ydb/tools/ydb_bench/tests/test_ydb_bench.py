@@ -2877,8 +2877,10 @@ class YdbBenchTest(unittest.TestCase):
               panels:Object.fromEntries(container.panels.map(item=>[item.dataset.localYdbPanel,item.hidden])),
               hasResultMarkup:container.innerHTML.includes('data-local-ydb-panel=result'),
               hasDiscoveryMarkup:container.innerHTML.includes('data-local-ydb-panel=discovery'),
-              hasResultContent:container.innerHTML.includes('Metric source'),
-              hasDiscoveryContent:container.innerHTML.includes('Geometry stages'),
+              hasResultContent:container.innerHTML.includes('Search measurement · no completed verification'),
+              hasFormattedMetrics:container.innerHTML.includes('class=report-table'),
+              hasConfiguration:container.innerHTML.includes('data-report-config'),
+              hasDiscoveryContent:container.innerHTML.includes('class=discovery-status'),
               focused:container.focused||null,preventedFocusScroll:Boolean(container.preventedFocusScroll)
             });
             process.stdout.write(JSON.stringify({finished:summarize(finished),running:summarize(running)}));
@@ -2898,6 +2900,8 @@ class YdbBenchTest(unittest.TestCase):
         self.assertTrue(result["finished"]["hasResultMarkup"])
         self.assertTrue(result["finished"]["hasDiscoveryMarkup"])
         self.assertTrue(result["finished"]["hasResultContent"])
+        self.assertTrue(result["finished"]["hasFormattedMetrics"])
+        self.assertTrue(result["finished"]["hasConfiguration"])
         self.assertTrue(result["finished"]["hasDiscoveryContent"])
         self.assertEqual(result["finished"]["focused"], "discovery")
         self.assertTrue(result["finished"]["preventedFocusScroll"])
@@ -2905,11 +2909,103 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(result["running"]["tabs"], ["result", "discovery"])
         self.assertEqual(result["running"]["panels"], {"result": True, "discovery": False})
 
+    @unittest.skipUnless(shutil.which("node"), "node is required for the attempt report test")
+    def test_local_ydb_attempt_report_tabs_and_metric_sources(self):
+        start = web._JS.index("function localAttemptReport")
+        finish = web._JS.index("async function renderLocalYdbAttempt", start)
+        schema_start = web._JS.index("function localLegacyResultSchema")
+        schema_finish = web._JS.index("function localChart", schema_start)
+        script = (
+            """
+            const assert=require('node:assert/strict');
+            const esc=v=>String(v??'').replaceAll('<','&lt;');
+            const metricLabel=v=>String(v),elapsedLabel=v=>String(v??0);
+            const localPhaseLabel=v=>v,localSearchAxisLabel=()=> 'YDB CLI threads';
+            const localCommandText=c=>c.argv.join(' ');
+            const localReportMetrics=data=>JSON.stringify(data.result.selected_metrics);
+            """
+            + web._JS[schema_start:schema_finish]
+            + web._JS[start:finish]
+            + """
+            const data={parameters:{workload:{type:'stock'},load:{parameter:'threads',
+              objective:{type:'latency-slo',percentile:'p95',max_ms:20}}},
+              verification:{accepted:false,load:64},result:{verified_metrics:{throughput:4000,p95_ms:21}}};
+            const item={passed:true,load:32,throughput:3000,p95_ms:18,p99_ms:99};
+            const header=localAttemptHeader(data,item,item);
+            assert.ok(header.includes('Latency (p95)'));
+            assert.ok(header.includes('Successful query operations'));
+            assert.ok(header.includes('3000'));
+            assert.ok(!header.includes('4000'));
+            assert.ok(!header.includes('Latency (p99)'));
+            assert.equal(localAttemptMetrics(data,data.verification).throughput,4000);
+            assert.ok(localAttemptHeader(data,data.verification,data.verification).includes('FAIL'));
+            assert.ok(localAttemptHeader(data,{...item,passed:false,error:'<bad>'},item).includes('&lt;bad>'));
+            assert.equal(localAttemptView('counters'),'counters');
+            assert.equal(localAttemptView('commands'),'commands');
+            assert.equal(localAttemptView('invalid'),'summary');
+            assert.ok(localAttemptReport(data,null).includes('No completed measurement'));
+            assert.ok(localAttemptCommands({}).includes('No recorded commands'));
+            assert.ok(localAttemptCommands({commands:[{argv:['ydb','<arg>'],phase:'measuring',exit_code:0}]}).includes('&lt;arg>'));
+            assert.ok(!localAttemptCommands({commands:[{argv:['ydb'],phase:'measuring'}]}).includes('<details'));
+            """
+        )
+        subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True, text=True, timeout=10)
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the attempt route test")
+    def test_local_ydb_attempt_tab_deep_links(self):
+        start = web._JS.index("async function compose()")
+        finish = web._JS.index("addEventListener('hashchange'", start)
+        script = (
+            """
+            const assert=require('node:assert/strict');let pieces,seen;
+            const routeParts=()=>pieces;
+            const setRoute=()=>{throw Error('Unexpected redirect')};
+            const renderLocalYdbAttempt=(...args)=>{seen=args};
+            """
+            + web._JS[start:finish]
+            + """
+            (async()=>{
+              for(const view of [undefined,'summary','counters','commands']){
+                pieces=['attempt','run','profile','7'];if(view)pieces.push(view);
+                await compose();assert.deepEqual(seen,['run','profile','7',view]);
+              }
+            })().catch(error=>{console.error(error);process.exitCode=1});
+            """
+        )
+        subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True, text=True, timeout=10)
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the attempt navigation test")
+    def test_local_ydb_attempt_row_navigation_preserves_interactive_controls(self):
+        start = web._JS.index("function bindLocalAttemptRows")
+        finish = web._JS.index("function renderLocalYdbProfile", start)
+        script = (
+            """
+            const assert=require('node:assert/strict');
+            const location={hash:''};let selection='';
+            const window={getSelection:()=>({toString:()=>selection})};
+            const row={dataset:{attemptHref:'#attempt/run/profile/7'}};
+            """
+            + web._JS[start:finish]
+            + """
+            bindLocalAttemptRows({querySelectorAll:()=>[row]});
+            const click={button:0,target:{closest:()=>null}};
+            row.onclick(click);assert.equal(location.hash,row.dataset.attemptHref);
+            for(const override of [
+              {target:{closest:()=>({})}},{ctrlKey:true},{metaKey:true},
+              {shiftKey:true},{altKey:true},{button:1},{defaultPrevented:true}
+            ]){
+              location.hash='';row.onclick({...click,...override});assert.equal(location.hash,'');
+            }
+            selection='selected text';row.onclick(click);assert.equal(location.hash,'');
+            """
+        )
+        subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True, text=True, timeout=10)
+
     @unittest.skipUnless(shutil.which("node"), "node is required for the local YDB attempts UI test")
     def test_local_ydb_web_attempts_use_objective_latency_percentile(self):
         schema_start = web._JS.index("function localLegacyResultSchema")
         schema_finish = web._JS.index("function localChart", schema_start)
-        render_start = web._JS.index("function renderLocalYdbProfile")
+        render_start = web._JS.index("function bindLocalAttemptRows")
         render_finish = web._JS.index("async function mountLocalYdbProfile", render_start)
         script = (
             "const enc=encodeURIComponent;\n"
@@ -2971,7 +3067,7 @@ class YdbBenchTest(unittest.TestCase):
                 passed:true,decision:'within SLO',duration_seconds:1
               }]
             });
-            const table=container.innerHTML.slice(container.innerHTML.indexOf('<table class=local-attempts>'));
+            const table=container.innerHTML.slice(container.innerHTML.indexOf('<table class="local-attempts discovery-attempts">'));
             process.stdout.write(JSON.stringify({table}));
             """
         )
@@ -2987,6 +3083,9 @@ class YdbBenchTest(unittest.TestCase):
         self.assertNotIn(">p99 (ms)</th>", table)
         self.assertIn(">5.95</td>", table)
         self.assertNotIn(">99.99</td>", table)
+        self.assertIn("data-attempt-href=", table)
+        self.assertNotIn("<details", table)
+        self.assertNotIn("<th>Static CPU</th>", table)
 
     @unittest.skipUnless(shutil.which("node"), "node is required for the schema-aware Builder test")
     def test_local_ydb_web_builder_omits_unsupported_error_controls(self):
@@ -7698,12 +7797,13 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"Ternary resolution (%)", script)
                 self.assertIn(b"Growth multiplier", script)
                 self.assertIn(b"Geometry stages", script)
-                self.assertIn(b"Current phase", script)
+                self.assertIn(b"class=discovery-status", script)
                 self.assertIn(b"Running command", script)
                 self.assertIn(b"function localShellArg", script)
                 self.assertIn(b"function localCommandDetails", script)
                 self.assertIn(b"progress.current_command", script)
-                self.assertIn(b"<th>Commands</th>", script)
+                self.assertIn(b"function localAttemptReport", script)
+                self.assertIn(b"data-attempt-href", script)
                 self.assertIn(b"class=local-attempts-scroll", script)
                 self.assertIn(b"data-local-profile-config", script)
                 self.assertIn(b"profileConfigOpen", script)

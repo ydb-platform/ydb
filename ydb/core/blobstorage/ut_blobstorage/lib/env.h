@@ -87,15 +87,15 @@ struct TEnvironmentSetup {
 
     const TSettings Settings;
 
-    class TMockPDiskServiceFactory : public IPDiskServiceFactory {
+    class TMockPDiskSubsystem : public IPDiskSubsystem {
         TEnvironmentSetup& Env;
 
     public:
-        TMockPDiskServiceFactory(TEnvironmentSetup& env)
-            : Env(env)
+        TMockPDiskSubsystem(TEnvironmentSetup* env)
+            : Env(*env)
         {}
 
-        void Create(const TActorContext& ctx, ui32 pdiskId, const TIntrusivePtr<TPDiskConfig>& cfg,
+        void Start(const TActorContext& ctx, ui32 pdiskId, const TIntrusivePtr<TPDiskConfig>& cfg,
                 const NPDisk::TMainKey& /*mainKey*/, ui32 poolId, ui32 nodeId) override {
             const auto key = std::make_pair(nodeId, pdiskId);
             TIntrusivePtr<TPDiskMockState>& state = Env.PDiskMockStates[key];
@@ -305,6 +305,9 @@ struct TEnvironmentSetup {
 
     void Initialize() {
         Runtime = MakeRuntime();
+        Runtime->SetupNodeSubSystems = [this](ui32, TActorSystemSetup* setup) {
+            setup->RegisterSubSystem<IPDiskSubsystem>(std::make_unique<TMockPDiskSubsystem>(this));
+        };
         TAppData::TimeProvider = TTestActorSystem::CreateTimeProvider();
         if (Settings.PrepareRuntime) {
             Settings.PrepareRuntime(*Runtime);
@@ -441,7 +444,7 @@ struct TEnvironmentSetup {
             if (Settings.NodeWardenMockSetup) {
                 warden.reset(new TNodeWardenMockActor(Settings.NodeWardenMockSetup));
             } else {
-                auto config = MakeIntrusive<TNodeWardenConfig>(new TMockPDiskServiceFactory(*this));
+                auto config = MakeIntrusive<TNodeWardenConfig>();
                 if (Settings.SelfManagementConfig) {
                     config->SelfManagementConfig = std::make_unique<NKikimrConfig::TSelfManagementConfig>();
                     config->SelfManagementConfig->SetEnabled(true);

@@ -72,7 +72,7 @@ namespace NKikimr {
 
         std::function<void(TVDiskConfig&)> VDiskConfigPreprocessor;
 
-        TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory>& pDiskServiceFactory);
+        TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory>& pDiskServiceFactory = {});
         ~TNodeWardenConfig();
 
         bool IsCacheEnabled() const {

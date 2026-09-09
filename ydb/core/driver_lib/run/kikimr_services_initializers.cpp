@@ -1179,7 +1179,10 @@ TBSNodeWardenInitializer::TBSNodeWardenInitializer(const TKikimrRunConfig& runCo
 
 void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                   const NKikimr::TAppData* appData) {
-    TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig(new TRealPDiskServiceFactory()));
+    if (!NActors::GetSubSystem<IPDiskSubsystem>(setup->SubSystems)) {
+        setup->RegisterSubSystem<IPDiskSubsystem>(CreatePDiskSubsystem());
+    }
+    TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig());
     nodeWardenConfig->BlobStorageExecutorPoolIds =
         NActorSystemConfigHelpers::GetBlobStorageExecutorPoolIds(Config.GetActorSystemConfig());
     if (Config.HasBlobStorageConfig()) {

@@ -344,9 +344,11 @@ public:
         bool operator==(const TSchemaIdentity& other) const = default;
     };
 
-    // Identity of every schema object, as the statements of this tx were compiled against it.
-    // Keyed by path rather than by path id: an object dropped and created anew under the same
-    // name is a different object, and the transaction must not read it as if nothing happened.
+    // A statement is compiled against one schema version of each object it uses, and every
+    // later statement of the transaction has to see that same version. This is what the
+    // earlier statements were compiled against.
+    // Keyed by path, not by path id: an object dropped and created anew under the same name is
+    // a different object, and the transaction must not read it as if nothing had changed.
     THashMap<TString, TSchemaIdentity> SchemaObjects;
 
     NDataIntegrity::TQueryTextCollector QueryTextCollector;
@@ -501,7 +503,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery);
 
 // Whether the mode promises that all reads of a transaction observe the same state.
-bool HasRepeatableReads(NKqpProto::EIsolationLevel isolationLevel);
+bool GuaranteesRepeatableReads(NKqpProto::EIsolationLevel isolationLevel);
 
 bool HasOlapTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOlapTableWriteInStage(const NKqpProto::TKqpPhyStage& stage);

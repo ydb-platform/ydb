@@ -1575,7 +1575,7 @@ public:
         // Only modes that promise repeatable reads are aborted: the rest are documented to
         // observe newer data between statements.
         if (QueryState->TxCtx->EffectiveIsolationLevel
-                && HasRepeatableReads(*QueryState->TxCtx->EffectiveIsolationLevel)) {
+                && GuaranteesRepeatableReads(*QueryState->TxCtx->EffectiveIsolationLevel)) {
             const NKqpProto::TKqpTableInfo* changed = nullptr;
 
             auto rememberOrCompare = [&](const auto& infos) {

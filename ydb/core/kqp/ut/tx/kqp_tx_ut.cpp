@@ -1764,7 +1764,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     }
 
     // Same scenario over the query service, where every isolation mode is reachable.
-    // PromisesRepeatableReads mirrors HasRepeatableReads() in kqp_tx.cpp and picks which of
+    // PromisesRepeatableReads mirrors GuaranteesRepeatableReads() in kqp_tx.cpp and picks which of
     // the two statuses of the operation is expected.
     struct TSchemeChangeIsolationTester {
         ESchemeOp Operation = ESchemeOp::AddColumn;

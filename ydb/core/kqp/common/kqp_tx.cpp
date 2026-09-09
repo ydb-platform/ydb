@@ -44,7 +44,7 @@ TKqpTransactionInfo TKqpTransactionContext::GetInfo() const {
     return txInfo;
 }
 
-bool HasRepeatableReads(NKqpProto::EIsolationLevel isolationLevel) {
+bool GuaranteesRepeatableReads(NKqpProto::EIsolationLevel isolationLevel) {
     switch (isolationLevel) {
         case NKqpProto::ISOLATION_LEVEL_SERIALIZABLE:
         case NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE:
@@ -64,10 +64,15 @@ bool HasRepeatableReads(NKqpProto::EIsolationLevel isolationLevel) {
             return false;
 
         case NKqpProto::ISOLATION_LEVEL_UNDEFINED:
+            // A query without transaction control: every statement is its own transaction.
+            return false;
+
         case NKqpProto::EIsolationLevel_INT_MIN_SENTINEL_DO_NOT_USE_:
         case NKqpProto::EIsolationLevel_INT_MAX_SENTINEL_DO_NOT_USE_:
-            return false;
+            break;
     }
+
+    Y_UNREACHABLE();
 }
 
 bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfiguration& config, bool rollbackTx,

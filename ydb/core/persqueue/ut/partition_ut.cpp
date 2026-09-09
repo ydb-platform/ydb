@@ -5026,10 +5026,14 @@ void AddBodyKeyToEncoder(
     TPartitionBlobEncoder& encoder,
     const TPartitionId& partitionId,
     ui64 offset,
-    ui32 size)
+    ui32 size,
+    TInstant timestamp = TInstant::MilliSeconds(1),
+    ui16 partNo = 0,
+    ui32 count = 1,
+    ui16 internalPartsCount = 0)
 {
-    const TKey key = TKey::ForBody(TKeyPrefix::TypeData, partitionId, offset, 0, 1, 0);
-    encoder.DataKeysBody.push_back(TDataKey{key, size, TInstant::MilliSeconds(1), 0, MakeTestBlobKeyToken()});
+    const TKey key = TKey::ForBody(TKeyPrefix::TypeData, partitionId, offset, partNo, count, internalPartsCount);
+    encoder.DataKeysBody.push_back(TDataKey{key, size, timestamp, 0, MakeTestBlobKeyToken()});
     encoder.BodySize += size;
 }
 
@@ -5041,7 +5045,8 @@ void AddHeadKeyWithPartNo(
     ui16 partNo,
     char fill,
     ui64 seqNo,
-    ui32 levelIndex = 0)
+    ui32 levelIndex = 0,
+    TInstant timestamp = TInstant::MilliSeconds(1))
 {
     std::deque<TClientBlob> dq;
     dq.push_back(MakeSinglePartBodyReadBlob(seqNo, fill));
@@ -5057,10 +5062,23 @@ void AddHeadKeyWithPartNo(
         }
     }
     encoder.DataKeysHead[levelIndex].AddKey(key, blobSize);
-    encoder.HeadKeys.push_back(TDataKey{key, blobSize, TInstant::MilliSeconds(1), 0, MakeTestBlobKeyToken()});
+    encoder.HeadKeys.push_back(TDataKey{key, blobSize, timestamp, 0, MakeTestBlobKeyToken()});
     encoder.Head.AddBatch(batch);
     encoder.Head.Offset = offset;
     encoder.Head.PartNo = partNo;
+}
+
+void SetEncoderRange(TPartitionBlobEncoder& encoder, ui64 startOffset, ui64 endOffset) {
+    encoder.StartOffset = startOffset;
+    encoder.EndOffset = endOffset;
+    encoder.Head.Offset = endOffset;
+    encoder.Head.PartNo = 0;
+}
+
+void ClearEncoderKeys(TPartitionBlobEncoder& encoder) {
+    encoder.DataKeysBody.clear();
+    encoder.HeadKeys.clear();
+    encoder.BodySize = 0;
 }
 
 Y_UNIT_TEST_F(GetCompactionZoneEmptyStartOffsetUsesFwzBodyStart, TPartitionFixture) {
@@ -5128,6 +5146,361 @@ private:
     std::function<void(const TActorContext&)> Body;
 };
 
+<<<<<<< HEAD
+=======
+Y_UNIT_TEST_F(InitWithMetaOffsetsButNoDataKeysNormalizesEmptyPartition, TPartitionFixture) {
+    // Regression for #49507: meta says [0, 3804) but data range is NODATA.
+    // Without normalization InitComplete → ReportCounters → GetWriteTimeEstimate crashes.
+    UNIT_ASSERT(Ctx.Defined());
+
+    constexpr ui64 metaEnd = 3804;
+    TPartition* partition = CreatePartition({
+        .Partition = TPartitionId{1},
+        .Begin = 0,
+        .End = metaEnd,
+        .Config = {
+            // Offset within stale meta range: before normalize AnyCommits would be true
+            // (Offset > BlobEncoder.StartOffset == 0); after normalize StartOffset == metaEnd.
+            .Consumers = {{.Consumer = "user", .Offset = 100}},
+        },
+        .EndWriteTimestamp = TInstant::Seconds(1),
+        .NoDataKeys = true,
+    });
+
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), metaEnd);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    UNIT_ASSERT_VALUES_EQUAL(cz.StartOffset, metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(cz.EndOffset, metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(fwz.StartOffset, metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(fwz.EndOffset, metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(cz.Head.Offset, metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(fwz.Head.Offset, metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(cz.NewHead.Offset, metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(fwz.NewHead.Offset, metaEnd);
+    UNIT_ASSERT(cz.IsEmpty());
+    UNIT_ASSERT(fwz.IsEmpty());
+
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 0), TInstant::Zero());
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, metaEnd), TInstant::Zero());
+    UNIT_ASSERT(!TPartitionTestWrapper::GetAnyCommits(*partition, "user"));
+}
+
+Y_UNIT_TEST_F(InitWithMetaOffsetsEmptyOkDataRangeNormalizesEmptyPartition, TPartitionFixture) {
+    // Same inconsistent meta as #49507, but data range returns OK with zero pairs —
+    // hits FormHeadAndProceed empty-keys → NormalizeOffsetsForEmptyData.
+    UNIT_ASSERT(Ctx.Defined());
+
+    constexpr ui64 metaEnd = 3804;
+    TPartition* partition = CreatePartition({
+        .Partition = TPartitionId{1},
+        .Begin = 0,
+        .End = metaEnd,
+        .EndWriteTimestamp = TInstant::Seconds(1),
+        .EmptyDataRangeOk = true,
+    });
+
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), metaEnd);
+    UNIT_ASSERT(TPartitionTestWrapper::CompactionBlobEncoder(*partition).IsEmpty());
+    UNIT_ASSERT(TPartitionTestWrapper::BlobEncoder(*partition).IsEmpty());
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 0), TInstant::Zero());
+}
+
+Y_UNIT_TEST_F(InitWithNonZeroMetaStartAndNoDataKeysNormalizesToEnd, TPartitionFixture) {
+    // Retention advanced StartOffset; meta [100, 3804) but blobs are gone.
+    UNIT_ASSERT(Ctx.Defined());
+
+    constexpr ui64 metaStart = 100;
+    constexpr ui64 metaEnd = 3804;
+    TPartition* partition = CreatePartition({
+        .Partition = TPartitionId{1},
+        .Begin = metaStart,
+        .End = metaEnd,
+        .EndWriteTimestamp = TInstant::Seconds(1),
+        .NoDataKeys = true,
+    });
+
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), metaEnd);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    UNIT_ASSERT_VALUES_EQUAL(cz.StartOffset, metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(cz.EndOffset, metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(fwz.StartOffset, metaEnd);
+    UNIT_ASSERT_VALUES_EQUAL(fwz.EndOffset, metaEnd);
+}
+
+Y_UNIT_TEST_F(GetWriteTimeEstimateReturnsTimestampFromBodyKeys, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    constexpr ui64 begin = 0;
+    constexpr ui64 end = 10;
+    TPartition* partition = CreatePartition({
+        .Partition = TPartitionId{1},
+        .Begin = begin,
+        .End = end,
+        .EndWriteTimestamp = TInstant::Seconds(1),
+    });
+
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), begin);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), end);
+    UNIT_ASSERT(!TPartitionTestWrapper::CompactionBlobEncoder(*partition).IsEmpty() ||
+                !TPartitionTestWrapper::BlobEncoder(*partition).IsEmpty());
+
+    const TInstant ts = TPartitionTestWrapper::GetWriteTimeEstimate(*partition, begin);
+    UNIT_ASSERT_GT(ts, TInstant::Zero());
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, end), TInstant::Zero());
+}
+
+Y_UNIT_TEST_F(GetWriteTimeEstimateEmptyCompactionZoneUsesFastWriteHead, TPartitionFixture) {
+    // YDBBUGS-824: compacted zone reports [0, End) with no keys after body compaction,
+    // fast-write zone keeps data only in HeadKeys. GetWriteTimeEstimate used to pick the
+    // empty compacted zone because BlobEncoder.DataKeysBody was empty and abort.
+    UNIT_ASSERT(Ctx.Defined());
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    const TPartitionId partitionId(1);
+
+    constexpr ui64 compactedEnd = 273561;
+    constexpr ui64 fastWriteEnd = 282336;
+    constexpr ui64 laggingOffset = 272449;
+    const TInstant headTs = TInstant::MilliSeconds(42);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    ClearEncoderKeys(cz);
+    SetEncoderRange(cz, 0, compactedEnd);
+
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    ClearEncoderKeys(fwz);
+    SetEncoderRange(fwz, compactedEnd, fastWriteEnd);
+    AddHeadKeyWithPartNo(fwz, 8_MB, partitionId, compactedEnd, 0, 'm', 1, 0, headTs);
+
+    UNIT_ASSERT(cz.IsEmpty());
+    UNIT_ASSERT(!fwz.IsEmpty());
+    UNIT_ASSERT(fwz.DataKeysBody.empty());
+    UNIT_ASSERT(!fwz.HeadKeys.empty());
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        TPartitionTestWrapper::GetWriteTimeEstimate(*partition, laggingOffset), headTs);
+    UNIT_ASSERT_VALUES_EQUAL(
+        TPartitionTestWrapper::GetWriteTimeEstimate(*partition, compactedEnd), headTs);
+    UNIT_ASSERT_VALUES_EQUAL(
+        TPartitionTestWrapper::GetWriteTimeEstimate(*partition, fastWriteEnd), TInstant::Zero());
+}
+
+Y_UNIT_TEST_F(GetWriteTimeEstimateSnapsAcrossGapBeforeFirstCompactedKey, TPartitionFixture) {
+    // YDBBUGS-824 / #27934: mirroring leaves a hole before the first compacted blob while
+    // CompactionBlobEncoder.StartOffset stays 0. Offset inside the hole must not abort.
+    UNIT_ASSERT(Ctx.Defined());
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    const TPartitionId partitionId(1);
+
+    constexpr ui64 firstCompactedOffset = 273000;
+    constexpr ui64 compactedEnd = 273561;
+    constexpr ui64 fastWriteEnd = 282336;
+    constexpr ui64 offsetInGap = 272449;
+    const TInstant compactedTs = TInstant::MilliSeconds(11);
+    const TInstant fastWriteTs = TInstant::MilliSeconds(22);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    ClearEncoderKeys(cz);
+    SetEncoderRange(cz, 0, compactedEnd);
+    AddBodyKeyToEncoder(cz, partitionId, firstCompactedOffset, 1000, compactedTs);
+
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    ClearEncoderKeys(fwz);
+    SetEncoderRange(fwz, compactedEnd, fastWriteEnd);
+    AddBodyKeyToEncoder(fwz, partitionId, compactedEnd, 1000, fastWriteTs);
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        TPartitionTestWrapper::GetWriteTimeEstimate(*partition, offsetInGap), compactedTs);
+}
+
+Y_UNIT_TEST_F(GetWriteTimeEstimateGapBetweenZonesUsesFastWriteStart, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    const TPartitionId partitionId(1);
+
+    constexpr ui64 compactedEnd = 200;
+    constexpr ui64 fastWriteStart = 300;
+    constexpr ui64 fastWriteEnd = 400;
+    const TInstant compactedTs = TInstant::MilliSeconds(11);
+    const TInstant fastWriteTs = TInstant::MilliSeconds(22);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    ClearEncoderKeys(cz);
+    SetEncoderRange(cz, 0, compactedEnd);
+    AddBodyKeyToEncoder(cz, partitionId, 100, 1000, compactedTs);
+
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    ClearEncoderKeys(fwz);
+    SetEncoderRange(fwz, fastWriteStart, fastWriteEnd);
+    AddBodyKeyToEncoder(fwz, partitionId, fastWriteStart, 1000, fastWriteTs);
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 250), fastWriteTs);
+}
+
+Y_UNIT_TEST_F(GetWriteTimeEstimateEmptyZonesReturnsZero, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    ClearEncoderKeys(cz);
+    SetEncoderRange(cz, 0, 273561);
+
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    ClearEncoderKeys(fwz);
+    SetEncoderRange(fwz, 273561, 282336);
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 272449), TInstant::Zero());
+}
+
+Y_UNIT_TEST_F(GetWriteTimeEstimateCompactionHeadOnlyGapBeforeHead, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    const TPartitionId partitionId(1);
+
+    constexpr ui64 headOffset = 273000;
+    constexpr ui64 compactedEnd = 273561;
+    constexpr ui64 fastWriteEnd = 282336;
+    const TInstant headTs = TInstant::MilliSeconds(17);
+    const TInstant fastWriteTs = TInstant::MilliSeconds(33);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    ClearEncoderKeys(cz);
+    SetEncoderRange(cz, 0, compactedEnd);
+    AddHeadKeyWithPartNo(cz, 8_MB, partitionId, headOffset, 0, 'h', 1, 0, headTs);
+
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    ClearEncoderKeys(fwz);
+    SetEncoderRange(fwz, compactedEnd, fastWriteEnd);
+    AddBodyKeyToEncoder(fwz, partitionId, compactedEnd, 1000, fastWriteTs);
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 272449), headTs);
+}
+
+Y_UNIT_TEST_F(GetWriteTimeEstimateNativeSmallAndKafkaBatch, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    const TPartitionId partitionId(1);
+    const TInstant smallTs = TInstant::MilliSeconds(5);
+    const TInstant batchTs = TInstant::MilliSeconds(7);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+
+    ClearEncoderKeys(cz);
+    SetEncoderRange(cz, 0, 1);
+    AddBodyKeyToEncoder(cz, partitionId, 0, 100, smallTs, 0, 1);
+    ClearEncoderKeys(fwz);
+    SetEncoderRange(fwz, 1, 1);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 0), smallTs);
+
+    ClearEncoderKeys(cz);
+    SetEncoderRange(cz, 10, 20);
+    AddBodyKeyToEncoder(cz, partitionId, 10, 1000, batchTs, 0, 10);
+    ClearEncoderKeys(fwz);
+    SetEncoderRange(fwz, 20, 20);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 10), batchTs);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 15), batchTs);
+}
+
+Y_UNIT_TEST_F(GetWriteTimeEstimateLargeMessagePartsInOneBlob, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    const TPartitionId partitionId(1);
+    const TInstant ts = TInstant::MilliSeconds(9);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    ClearEncoderKeys(cz);
+    SetEncoderRange(cz, 0, 1);
+    AddBodyKeyToEncoder(cz, partitionId, 0, 600_KB, ts, 0, 1, /*internalPartsCount=*/3);
+
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    ClearEncoderKeys(fwz);
+    SetEncoderRange(fwz, 1, 1);
+
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 0), ts);
+}
+
+Y_UNIT_TEST_F(GetWriteTimeEstimateLargeMessagePartsAcrossBlobs, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    const TPartitionId partitionId(1);
+    const TInstant firstPartTs = TInstant::MilliSeconds(3);
+    const TInstant secondPartTs = TInstant::MilliSeconds(4);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    ClearEncoderKeys(cz);
+    SetEncoderRange(cz, 0, 1);
+    AddBodyKeyToEncoder(cz, partitionId, 0, 300_KB, firstPartTs, 0, 1, 1);
+    AddBodyKeyToEncoder(cz, partitionId, 0, 300_KB, secondPartTs, 1, 1, 0);
+
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    ClearEncoderKeys(fwz);
+    SetEncoderRange(fwz, 1, 1);
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 0), firstPartTs);
+}
+
+Y_UNIT_TEST_F(GetWriteTimeEstimateFirstKeyWithPartNoDoesNotAbort, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    const TPartitionId partitionId(1);
+    const TInstant ts = TInstant::MilliSeconds(8);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    ClearEncoderKeys(cz);
+    SetEncoderRange(cz, 0, 273561);
+
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    ClearEncoderKeys(fwz);
+    SetEncoderRange(fwz, 273561, 282336);
+    AddHeadKeyWithPartNo(fwz, 8_MB, partitionId, 273561, 2, 'm', 1, 0, ts);
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 272449), ts);
+}
+
+Y_UNIT_TEST_F(GetClientOffsetSurvivesInitWithMetaButNoDataKeys, TPartitionFixture) {
+    // E2E: InitComplete → ReportCounters and later GetClientOffset must not crash
+    // when meta offsets exist without data keys (#49507).
+    UNIT_ASSERT(Ctx.Defined());
+
+    constexpr ui64 metaEnd = 3804;
+    const TString client = "user";
+    CreatePartition({
+        .Partition = TPartitionId{1},
+        .Begin = 0,
+        .End = metaEnd,
+        .Config = {
+            .Consumers = {{.Consumer = client, .Offset = 0}},
+        },
+        .EndWriteTimestamp = TInstant::Seconds(1),
+        .NoDataKeys = true,
+    });
+
+    SendGetOffset(1, client);
+    WaitProxyResponse({.Cookie = 1, .Status = NMsgBusProxy::MSTATUS_OK, .Offset = 0});
+}
+
+>>>>>>> fd11cc7cf21 ([PQ] Do not abort GetWriteTimeEstimate on empty compaction zone (YDBBUGS-824) (#52640))
 Y_UNIT_TEST_F(FinalizeEmptyBlobEncoderResetsHeadPartNo, TPartitionFixture) {
     UNIT_ASSERT(Ctx.Defined());
     TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});

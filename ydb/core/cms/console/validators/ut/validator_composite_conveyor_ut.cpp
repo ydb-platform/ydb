@@ -1,4 +1,4 @@
-#include "../validator_composite_conveyor.h"
+#include <ydb/core/cms/console/validators/validator_composite_conveyor.h>
 
 #include <ydb/library/actors/core/defs.h>
 

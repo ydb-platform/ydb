@@ -6,6 +6,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/fq/streaming_common/iam_grpc_emulator/recipe/r
 
 TEST_SRCS(
     test_iam.py
+    test_partitions.py
     test_scalar_topic_write.py
     test_streaming.py
     test_watermarks.py

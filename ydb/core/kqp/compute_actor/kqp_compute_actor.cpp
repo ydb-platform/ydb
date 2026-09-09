@@ -211,7 +211,15 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
         const auto& driver = federatedQuerySetup->Driver;
         Y_VALIDATE(driver, "Missing YDB driver in federated query setup");
 
-        NYql::NDq::RegisterDqPqReadActorFactory(*factory, *driver, federatedQuerySetup->CredentialsFactory, pqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSourceTracker"), {}, enableStreamingQueriesCounters);
+        NYql::NDq::RegisterDqPqReadActorFactory(
+            *factory,
+            *driver,
+            federatedQuerySetup->CredentialsFactory,
+            pqGateway,
+            counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSourceTracker"),
+            {},
+            enableStreamingQueriesCounters,
+            NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueryTopicAutopartitioning());
         NYql::NDq::RegisterDqPqWriteActorFactory(*factory, *driver, federatedQuerySetup->CredentialsFactory, pqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSinkTracker"), enableStreamingQueriesCounters, NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesPqSinkDeduplication());
         NYql::NDq::RegisterDqPqInfoAggregationActorFactory(*factory);
     }

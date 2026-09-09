@@ -7,6 +7,7 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -53,12 +54,20 @@ void InjectTaskStates(
     }
 }
 
-NProto::TGraphParams MakeTopicSourceGraph(ui64 taskCount) {
+NProto::TGraphParams MakeTopicSourceGraph(ui64 taskCount, ui64 topicPartitionsCount = 0) {
     NProto::TGraphParams graphParams;
+    topicPartitionsCount = topicPartitionsCount ? topicPartitionsCount : taskCount;
     for (ui64 taskId = 0; taskId < taskCount; ++taskId) {
         auto* task = graphParams.AddTasks();
         task->SetId(taskId);
         task->AddInputs()->MutableSource()->SetType(TString(NYql::NDq::PqSource));
+
+        NYql::NPq::NProto::TDqReadTaskParams readTaskParams;
+        auto* partitioningParams = readTaskParams.AddPartitioningParams();
+        partitioningParams->SetTopicPartitionsCount(topicPartitionsCount);
+        partitioningParams->SetEachTopicPartitionGroupId(taskId);
+        partitioningParams->SetDqPartitionsCount(taskCount);
+        task->AddReadRanges(readTaskParams.SerializeAsString());
     }
     return graphParams;
 }
@@ -128,13 +137,14 @@ Y_UNIT_TEST(AbortWhenRatioBelowThreshold) {
 
     TActorId edgeActor = runtime.AllocateEdgeActor();
 
-    // 1 task running on 10 tenant nodes → ratio = 1/10 = 0.1 < 0.5 → abort.
+    // 1 task reads 3 partitions on 10 tenant nodes: 3 > 10 / 5.
+    // Its node coverage is 1/10 = 0.1 < 0.5 → abort.
     TActorId manager = runtime.Register(
         CreateStreamingQueryNodesManager(
             edgeActor,
             "/Root/test",
             "query-2",
-            MakeTopicSourceGraph(1),
+            MakeTopicSourceGraph(1, 3),
             TDuration::Hours(1), TDuration::Zero()));
 
     runtime.EnableScheduleForActor(manager, true);
@@ -314,7 +324,42 @@ Y_UNIT_TEST(NoAbortAtExactlyHalf) {
 }
 
 // ---------------------------------------------------------------------------
-// 7. Task count > 2 * nodesWithQuery while ratio >= 0.5 → no abort (just warn).
+// 7. A poor node coverage alone does not restart a small-partition query.
+// ---------------------------------------------------------------------------
+Y_UNIT_TEST(NoAbortWhenPartitionCountIsNotAboveThreshold) {
+    TTestActorRuntime runtime(1, false);
+    runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+
+    TActorId edgeActor = runtime.AllocateEdgeActor();
+
+    // 1 task on 10 nodes has poor coverage, but reads exactly 2 partitions.
+    // 2 == 10 / 5, so the strict partition-count condition is not met.
+    TActorId manager = runtime.Register(
+        CreateStreamingQueryNodesManager(
+            edgeActor,
+            "/Root/test",
+            "query-7",
+            MakeTopicSourceGraph(1, 2),
+            TDuration::Hours(1), TDuration::Zero()));
+
+    runtime.EnableScheduleForActor(manager, true);
+    runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+
+    InjectTaskStates(runtime, manager, {1});
+    runtime.Send(new IEventHandle(manager, edgeActor,
+        new TEvents::TEvWakeup(/* tag */ 1)));
+    runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+    InjectLookupResult(runtime, manager, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
+    runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+
+    TAutoPtr<IEventHandle> handle;
+    auto* ev = runtime.GrabEdgeEventRethrow<TEvStreamingQueryNodesManager::TEvAbortQuery>(
+        handle, TDuration::MilliSeconds(100));
+    UNIT_ASSERT_C(ev == nullptr, "Partition count equal to nodeCount / 5 must not abort");
+}
+
+// ---------------------------------------------------------------------------
+// 8. Task count > 2 * nodesWithQuery while ratio >= 0.5 → no abort (just warn).
 // ---------------------------------------------------------------------------
 Y_UNIT_TEST(NoAbortWhenManyTasksOnFewNodesButRatioOk) {
     TTestActorRuntime runtime(1, false);
@@ -329,7 +374,7 @@ Y_UNIT_TEST(NoAbortWhenManyTasksOnFewNodesButRatioOk) {
         CreateStreamingQueryNodesManager(
             edgeActor,
             "/Root/test",
-            "query-7",
+            "query-8",
             MakeTopicSourceGraph(100),
             TDuration::Hours(1), TDuration::Zero()));
 
@@ -351,7 +396,7 @@ Y_UNIT_TEST(NoAbortWhenManyTasksOnFewNodesButRatioOk) {
 }
 
 // ---------------------------------------------------------------------------
-// 8. Non-topic tasks do not participate in the node coverage check.
+// 9. Non-topic tasks do not participate in the node coverage check.
 // ---------------------------------------------------------------------------
 Y_UNIT_TEST(NonTopicTasksAreIgnored) {
     TTestActorRuntime runtime(1, false);
@@ -362,7 +407,7 @@ Y_UNIT_TEST(NonTopicTasksAreIgnored) {
         CreateStreamingQueryNodesManager(
             edgeActor,
             "/Root/test",
-            "query-8",
+            "query-9",
             MakeGraphWithTopicAndNonTopicTasks(5, 100),
             TDuration::Hours(1), TDuration::Zero()));
 

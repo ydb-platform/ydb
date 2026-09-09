@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/testlib/default
     ydb/library/actors/testlib
     ydb/library/yql/dq/common
+    ydb/library/yql/providers/pq/proto
 )
 
 YQL_LAST_ABI_VERSION()

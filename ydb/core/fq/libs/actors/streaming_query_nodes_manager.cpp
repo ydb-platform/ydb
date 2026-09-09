@@ -6,6 +6,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
+#include <ydb/library/yql/providers/pq/common/pq_partitions.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -37,6 +39,55 @@ bool IsTopicSourceTask(const NYql::NDqProto::TDqTask& task) {
     return false;
 }
 
+ui64 GetTopicPartitionsCount(const NYql::NDqProto::TDqTask& task) {
+    if (task.ReadRangesSize() == 0) {
+        return 0;
+    }
+
+    NYql::NPq::NProto::TDqPqTopicSource topicSource;
+    bool topicSourceFound = false;
+
+    if (const auto it = task.GetTaskParams().find("pq_topic_source"); it != task.GetTaskParams().end()) {
+        topicSourceFound = topicSource.ParseFromString(it->second);
+    }
+
+    if (!topicSourceFound) {
+        for (const auto& input : task.GetInputs()) {
+            if (input.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource
+                && input.GetSource().GetType() == NYql::NDq::PqSource
+                && input.GetSource().GetSettings().UnpackTo(&topicSource))
+            {
+                topicSourceFound = true;
+                break;
+            }
+        }
+    }
+
+    std::vector<NYql::NDq::TPartitionKey> federatedClusters;
+    if (topicSourceFound) {
+        for (const auto& cluster : topicSource.GetFederatedClusters()) {
+            federatedClusters.push_back({
+                .Cluster = cluster.GetName(),
+                .PartitionId = cluster.GetPartitionsCount(),
+            });
+        }
+    }
+
+    TVector<TString> readRanges;
+    readRanges.reserve(task.ReadRangesSize());
+    for (const auto& readRange : task.GetReadRanges()) {
+        readRanges.push_back(readRange);
+    }
+
+    THashMap<TString, TString> taskParams;
+    for (const auto& [key, value] : task.GetTaskParams()) {
+        taskParams.emplace(key, value);
+    }
+
+    const auto readTaskParams = NYql::NDq::ExtractReadTaskParams(taskParams, readRanges);
+    return NYql::NDq::GetPartitionsToRead(readTaskParams, federatedClusters).size();
+}
+
 class TStreamingQueryNodesManager
     : public TActorBootstrapped<TStreamingQueryNodesManager>
 {
@@ -58,6 +109,7 @@ public:
         for (const auto& task : GraphParams.GetTasks()) {
             if (IsTopicSourceTask(task)) {
                 TopicSourceTaskNodes.emplace(task.GetId(), Nothing());
+                TopicPartitionsCount += GetTopicPartitionsCount(task);
             }
         }
     }
@@ -68,6 +120,7 @@ public:
         LOG_D("StreamingQueryNodesManager started",
             {"tenant", TenantName},
             {"taskCount", TopicSourceTaskNodes.size()},
+            {"partitionCount", TopicPartitionsCount},
             {"checkPeriod", CheckPeriod},
             {"startDelay", StartDelay});
 
@@ -141,7 +194,8 @@ private:
 
         LOG_D("Received tenant node list",
             {"totalNodes", totalNodes},
-            {"topicSourceTasks", TopicSourceTaskNodes.size()});
+            {"topicSourceTasks", TopicSourceTaskNodes.size()},
+            {"topicPartitions", TopicPartitionsCount});
 
         if (totalNodes == 0) {
             LOG_W("Tenant has no nodes, skipping check");
@@ -160,16 +214,27 @@ private:
         }
         const ui64 nodesWithQuery = queryNodes.size();
 
-        // Check 1: fraction of nodes hosting topic readers must be >= 0.5.
+        // Restart only when topic readers cover less than half of tenant nodes
+        // and the query reads more than one partition per five tenant nodes.
         // nodesWithQuery / totalNodes < 0.5  ⟺  nodesWithQuery * 2 < totalNodes
-        if (nodesWithQuery * 2 < totalNodes) {
+        if (nodesWithQuery * 2 < totalNodes && TopicPartitionsCount > totalNodes / 5) {
             const TString reason = TStringBuilder()
                 << "StreamingQuery health check failed: "
                 << "nodes with topic reader tasks (" << nodesWithQuery << ") "
                 << "is less than half of total tenant nodes (" << totalNodes << "). "
+                << "Topic partition count (" << TopicPartitionsCount << ") "
+                << "is greater than one fifth of total tenant nodes. "
                 << "Query will be aborted.";
             LOG_W(reason);
             Abort(reason);
+            return;
+        }
+
+        if (nodesWithQuery * 2 < totalNodes) {
+            LOG_D("Health check passed: too few topic partitions to restart query",
+                {"nodesWithQuery", nodesWithQuery},
+                {"totalNodes", totalNodes},
+                {"topicPartitions", TopicPartitionsCount});
             return;
         }
 
@@ -211,6 +276,7 @@ private:
 
     // Contains topic-source tasks and their latest known node, when reported.
     THashMap<ui64, TMaybe<ui32>> TopicSourceTaskNodes;
+    ui64 TopicPartitionsCount = 0;
 
     bool LookupInFlight = false;
     bool AlreadyAborted = false;

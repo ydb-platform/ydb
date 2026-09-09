@@ -21,15 +21,15 @@
 
 namespace NKikimr::NPQ::NRuQuoter {
 
-enum EEv : ui32 {
+enum class EEv : ui32 {
     EvChargeRequestUnitsResponse = InternalEventSpaceBegin(NPQ::NEvents::EServices::RU_QUOTER),
     EvEnd
 };
 
 enum class EStatus {
-    SUCCESS,
-    THROTTLED,
-    UNKNOWN_ERROR
+    Success,
+    Throttled,
+    UnknownError
 };
 
 
@@ -39,7 +39,7 @@ struct TRequestUnitsQuoterSettings {
     TString Token;
 };
 
-struct TEvChargeRequestUnitsResponse : public NActors::TEventLocal<TEvChargeRequestUnitsResponse, EEv::EvChargeRequestUnitsResponse> {
+struct TEvChargeRequestUnitsResponse : public NActors::TEventLocal<TEvChargeRequestUnitsResponse, static_cast<ui32>(EEv::EvChargeRequestUnitsResponse)> {
 
     TEvChargeRequestUnitsResponse() = default;
 
@@ -49,7 +49,7 @@ struct TEvChargeRequestUnitsResponse : public NActors::TEventLocal<TEvChargeRequ
     {
     }
 
-    EStatus Status = EStatus::SUCCESS;
+    EStatus Status = EStatus::Success;
     TString Message;
 };
 

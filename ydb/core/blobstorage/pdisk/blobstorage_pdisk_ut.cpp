@@ -69,6 +69,40 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         pDisk->Wakeup();
     }
 
+#if defined(__linux__)
+    Y_UNIT_TEST(TestSharedUringRouterFailureNotification) {
+        TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+        const TActorId recipient = runtime.AllocateEdgeActor();
+
+        auto pCtx = std::make_shared<NPDisk::TPDiskCtx>(runtime.GetActorSystem(0), 12345, recipient);
+        auto cfg = MakeIntrusive<TPDiskConfig>("", ui64{12345}, ui32{12345},
+            TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        auto pDisk = MakeHolder<NPDisk::TPDisk>(pCtx, cfg, counters);
+
+        pDisk->CheckSharedUringRouter();
+        UNIT_ASSERT(runtime.CaptureMailboxEvents(recipient.Hint(), recipient.NodeId()).empty());
+
+        // No worker or I/O is started, so this also works without kernel io_uring support.
+        pDisk->SharedUringRouter = std::make_shared<NPDisk::TUringRouter>(TFileHandle{}, pCtx->ActorSystem);
+        pDisk->SharedUringRouter->StopAsync(true);
+        UNIT_ASSERT(pDisk->SharedUringRouter->IsBroken());
+        for (ui32 i = 0; i < 3; ++i) {
+            pDisk->CheckSharedUringRouter();
+        }
+
+        auto events = runtime.CaptureMailboxEvents(recipient.Hint(), recipient.NodeId());
+        UNIT_ASSERT_VALUES_EQUAL(events.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(events.front()->GetTypeRewrite(), NPDisk::TEvDeviceError::EventType);
+        UNIT_ASSERT_VALUES_EQUAL(events.front()->Get<NPDisk::TEvDeviceError>()->Info,
+            "shared TUringRouter entered broken state");
+
+        pDisk->CheckSharedUringRouter();
+        UNIT_ASSERT(runtime.CaptureMailboxEvents(recipient.Hint(), recipient.NodeId()).empty());
+    }
+#endif
+
     Y_UNIT_TEST(TestThatEveryValueOfEStateEnumKeepsItIntegerValue) {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Warning!

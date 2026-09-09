@@ -12,7 +12,7 @@
 namespace NKikimr::NDDisk {
 
     void TDDiskActor::IssueChunkAllocation(ui64 tabletId, ui64 vChunkIndex) {
-        if (Y_UNLIKELY(IsBroken())) {
+        if (Stopping || Y_UNLIKELY(IsBroken())) {
             return;
         }
         ChunkAllocateQueue.emplace(TChunkForData{tabletId, vChunkIndex});
@@ -94,6 +94,9 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::IssueNextChunkFormatWrite(TChunkIdx chunkIdx) {
         static constexpr ui32 FormatSliceSize = 16u << 20;
 
+        if (Stopping) {
+            return;
+        }
         Y_ABORT_UNLESS(!Config.EnableChecksums);
         const auto it = FormattingChunks.find(chunkIdx);
         Y_ABORT_UNLESS(it != FormattingChunks.end());
@@ -117,6 +120,10 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::Handle(TEvPrivate::TEvChunkFormatIoResult::TPtr ev) {
         const auto& msg = *ev->Get();
+        if (Stopping) {
+            FormattingChunks.erase(msg.ChunkIdx);
+            return;
+        }
         const auto it = FormattingChunks.find(msg.ChunkIdx);
         Y_ABORT_UNLESS(it != FormattingChunks.end());
         Y_ABORT_UNLESS(it->second == msg.OffsetInBytes);
@@ -147,6 +154,9 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::HandleChunkReserved() {
+        if (Stopping) {
+            return;
+        }
         Y_ABORT_UNLESS(!IsPersistentBufferActor);
         while (!ChunkAllocateQueue.empty() && !ChunkReserve.empty()) {
             if (Y_UNLIKELY(IsBroken())
@@ -240,7 +250,7 @@ namespace NKikimr::NDDisk {
 
     bool TDDiskActor::ProcessIntegrityActions() {
         Y_ABORT_UNLESS(Config.EnableChecksums && IntegrityManager);
-        if (Y_UNLIKELY(IsBroken())) {
+        if (Stopping || Y_UNLIKELY(IsBroken())) {
             Y_UNUSED(IntegrityManager->TakeActions());
             return false;
         }
@@ -325,6 +335,12 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::DrainIntegrityManager(bool kickReserve) {
         Y_ABORT_UNLESS(Config.EnableChecksums && IntegrityManager);
+        if (Stopping) {
+            // Submitted I/O can finish its existing joins, but any work produced
+            // by those completions must wait for the next actor incarnation.
+            ProcessIntegrityCompletions();
+            return;
+        }
         const bool queuedChunkAllocation = ProcessIntegrityActions();
         ProcessIntegrityCompletions();
         OpenDataChunkWritePath(IntegrityManager->TakePlacedKeys());
@@ -334,7 +350,7 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::OpenDataChunkWritePath(std::vector<TIntegrityManager::TDataChunkKey> placedKeys) {
-        if (Y_UNLIKELY(IsBroken())) {
+        if (Stopping || Y_UNLIKELY(IsBroken())) {
             return;
         }
         for (const auto& key : placedKeys) {
@@ -357,6 +373,9 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::ReclaimUnusedIntegrityChunks(std::function<void()> completion) {
+        if (Stopping) {
+            return;
+        }
         if (!Config.EnableChecksums) {
             if (completion) {
                 completion();
@@ -397,7 +416,7 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::IssueDataChunkIncrement(ui64 tabletId, ui64 vChunkIndex) {
-        if (Y_UNLIKELY(IsBroken())) {
+        if (Stopping || Y_UNLIKELY(IsBroken())) {
             return;
         }
 
@@ -495,7 +514,11 @@ namespace NKikimr::NDDisk {
         // Transient OVERLOADED errors are retried in TDirectIoOpBase::OnComplete while the
         // op still owns its buffers. Any non-OK status that reaches this handler is fatal.
         if (msg.Status != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
-            EnterBroken(msg.ErrorMessage);
+            if (!Stopping) {
+                EnterBroken(msg.ErrorMessage);
+            }
+            // While stopping, the failed integrity join remains pending until
+            // final cleanup can reject it with SESSION_MISMATCH.
             return;
         }
         if (Y_UNLIKELY(IsBroken())) {
@@ -509,6 +532,9 @@ namespace NKikimr::NDDisk {
             readyKeys = IntegrityManager->OnIoCompleted(msg.IoId);
         }
         DrainIntegrityManager();
+        if (Stopping) {
+            return;
+        }
 
         for (const auto& key : readyKeys) {
             IssueDataChunkIncrement(key.TabletId, key.VChunkIndex);
@@ -518,7 +544,7 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Handle(TEvPrivate::TEvHandleEventForChunk::TPtr ev) {
-        if (Y_UNLIKELY(IsBroken())) {
+        if (Stopping || Y_UNLIKELY(IsBroken())) {
             return;
         }
 
@@ -558,7 +584,7 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::ScheduleSerializedWrite(ui64 tabletId, ui64 vChunkIndex) {
         TChunkRef& chunkRef = ChunkRefs.at(tabletId).at(vChunkIndex);
-        if (Y_UNLIKELY(IsBroken()) || chunkRef.IntegrityExtentWriteInFlight
+        if (Stopping || Y_UNLIKELY(IsBroken()) || chunkRef.IntegrityExtentWriteInFlight
                 || chunkRef.SerializedWriteResumeScheduled
                 || chunkRef.PendingSerializedWrites.empty()) {
             return;
@@ -578,7 +604,7 @@ namespace NKikimr::NDDisk {
         auto& msg = *ev->Get();
         // EnterBroken clears SerializedWriteResumeScheduled but cannot recall a
         // self-message already in the mailbox. Bail out before the flag assert.
-        if (Y_UNLIKELY(IsBroken())) {
+        if (Stopping || Y_UNLIKELY(IsBroken())) {
             return;
         }
 

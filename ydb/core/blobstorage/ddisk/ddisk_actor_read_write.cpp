@@ -228,7 +228,7 @@ namespace NKikimr::NDDisk {
             std::unique_ptr<TDirectIoOpBase> op = std::move(it->second.Op);
             WriteCallbacks.erase(it);
             op->SetResult(-EIO);
-            op.release()->OnComplete(TActorContext::ActorSystem());
+            op.release()->OnComplete(TActivationContext::ActorSystem());
             return;
         }
 
@@ -240,7 +240,7 @@ namespace NKikimr::NDDisk {
                 std::unique_ptr<TDirectIoOpBase> op = std::move(it->second.Op);
                 WriteCallbacks.erase(it);
                 op->SetResult(-EIO);
-                op.release()->OnComplete(TActorContext::ActorSystem());
+                op.release()->OnComplete(TActivationContext::ActorSystem());
                 return;
             }
             if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvChunkWriteRawResult)")) {
@@ -255,7 +255,7 @@ namespace NKikimr::NDDisk {
         Y_DEBUG_ABORT_UNLESS(op->GetTotalSize() <= static_cast<ui64>(Max<i32>()));
         op->SetResult(static_cast<i32>(op->GetTotalSize()));
 
-        op.release()->OnComplete(TActorContext::ActorSystem());
+        op.release()->OnComplete(TActivationContext::ActorSystem());
     }
 
     void TDDiskActor::Handle(TEvRead::TPtr ev) {
@@ -332,6 +332,12 @@ namespace NKikimr::NDDisk {
         const auto& record = ev->Get<TEvRead>()->Record;
         const TQueryCredentials creds(record.GetCredentials());
         const TBlockSelector selector(record.GetSelector());
+        if (Stopping) {
+            Counters.Interface.Read.Reply(false, selector.Size);
+            SendReply(*ev, std::make_unique<TEvReadResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::SESSION_MISMATCH, TString(StoppingReason)));
+            return;
+        }
         TChunkRef& chunkRef = ChunkRefs.at(creds.TabletId).at(selector.VChunkIndex);
 
         auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Read",
@@ -553,7 +559,7 @@ namespace NKikimr::NDDisk {
             std::unique_ptr<TDirectIoOpBase> op = std::move(it->second.Op);
             ReadCallbacks.erase(it);
             op->SetResult(-EIO);
-            op.release()->OnComplete(TActorContext::ActorSystem());
+            op.release()->OnComplete(TActivationContext::ActorSystem());
             return;
         }
 
@@ -564,7 +570,7 @@ namespace NKikimr::NDDisk {
                 std::unique_ptr<TDirectIoOpBase> op = std::move(it->second.Op);
                 ReadCallbacks.erase(it);
                 op->SetResult(-EIO);
-                op.release()->OnComplete(TActorContext::ActorSystem());
+                op.release()->OnComplete(TActivationContext::ActorSystem());
                 return;
             }
             if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvChunkReadRawResult)")) {
@@ -579,7 +585,7 @@ namespace NKikimr::NDDisk {
         Y_DEBUG_ABORT_UNLESS(op->GetTotalSize() <= static_cast<ui64>(Max<i32>()));
         op->SetResult(static_cast<i32>(op->GetTotalSize()), std::move(msg.Data));
 
-        op.release()->OnComplete(TActorContext::ActorSystem());
+        op.release()->OnComplete(TActivationContext::ActorSystem());
     }
 
     void TDDiskActor::DirectUringOpImpl(std::unique_ptr<TDirectIoOpBase>& op) {
@@ -591,19 +597,27 @@ namespace NKikimr::NDDisk {
         // counter before making the call, and do not touch rawOp after acceptance.
         TDirectIoOpBase* rawOp = op.release();
         Counters.DirectIO.RunningCount->Inc();
+        DirectIoState.fetch_add(1, std::memory_order_relaxed);
 
-        // this is our main/regular path
+        bool accepted = false;
         switch (rawOp->GetOperationType()) {
         case NPDisk::TUringOperationBase::EREAD:
-            Y_ABORT_UNLESS(UringRouter->Read(rawOp),
-                "live io_uring router rejected a read submission");
+            accepted = UringRouter->Read(rawOp);
             break;
         case NPDisk::TUringOperationBase::EWRITE:
-            Y_ABORT_UNLESS(UringRouter->Write(rawOp),
-                "live io_uring router rejected a write submission");
+            accepted = UringRouter->Write(rawOp);
             break;
         default:
             Y_ABORT("Unknown OperationType");
+        }
+
+        if (Y_UNLIKELY(!accepted)) {
+            // StopAsync() makes rejection expected while PDisk is shutting
+            // down. Submit() did not take ownership, so restore it and fail on
+            // the actor thread; OnDrop() is reserved for accepted operations
+            // and would violate the I/O-thread producer side of the op pool.
+            op.reset(rawOp);
+            FailDirectIoOp(std::move(op), "io_uring router stopped before submission");
         }
 #else
         Y_UNUSED(op);
@@ -611,9 +625,10 @@ namespace NKikimr::NDDisk {
 #endif
     }
 
-    void TDDiskActor::DirectUringOp(std::unique_ptr<TDirectIoOpBase>& op, bool isShort) {
+    void TDDiskActor::DirectUringOp(std::unique_ptr<TDirectIoOpBase>& op, bool isRetry) {
+        Y_ABORT_UNLESS(!Stopping);
         if (Y_UNLIKELY(IsBroken())) {
-            if (isShort) {
+            if (isRetry) {
                 switch (op->GetOperationType()) {
                     case NPDisk::TUringOperationBase::EREAD:
                         Counters.DirectIO.Read.Done(op->GetTotalSize());
@@ -631,7 +646,7 @@ namespace NKikimr::NDDisk {
             return;
         }
 
-        if (Y_LIKELY(!isShort)) {
+        if (Y_LIKELY(!isRetry)) {
             switch (op->GetOperationType()) {
             case NPDisk::TUringOperationBase::EREAD:
                 Counters.DirectIO.Read.Request(op->GetTotalSize());
@@ -666,18 +681,32 @@ namespace NKikimr::NDDisk {
         }
     }
 
-    TDDiskActor::TEvPrivate::TEvShortIO::TEvShortIO(std::unique_ptr<TDirectIoOpBase> op)
+    TDDiskActor::TEvPrivate::TEvRetryIO::TEvRetryIO(std::unique_ptr<TDirectIoOpBase> op)
         : Op(std::move(op))
     {}
 
-    TDDiskActor::TEvPrivate::TEvShortIO::~TEvShortIO() = default;
+    TDDiskActor::TEvPrivate::TEvRetryIO::~TEvRetryIO() = default;
 
-    void TDDiskActor::HandleShortIO(TEvPrivate::TEvShortIO::TPtr ev) {
+    void TDDiskActor::HandleRetryIO(TEvPrivate::TEvRetryIO::TPtr ev) {
         std::unique_ptr<TDirectIoOpBase> op = std::move(ev->Get()->Op);
+
+        if (Stopping) {
+            switch (op->GetOperationType()) {
+                case NPDisk::TUringOperationBase::EREAD:
+                    Counters.DirectIO.Read.Done(op->GetTotalSize());
+                    break;
+                case NPDisk::TUringOperationBase::EWRITE:
+                    Counters.DirectIO.Write.Done(op->GetTotalSize());
+                    break;
+                default:
+                    Y_ABORT("Unknown OperationType");
+            }
+            return;
+        }
 
 #if defined(__linux__)
         if (Y_LIKELY(UringRouter)) {
-            DirectUringOp(op, /*isShort=*/true);
+            DirectUringOp(op, /*isRetry=*/true);
             return;
         }
 
@@ -693,11 +722,11 @@ namespace NKikimr::NDDisk {
         }
         op->Reply(TActivationContext::ActorSystem(),
             NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
-            "io_uring stopped before short-I/O retry");
+            "io_uring stopped before I/O error retry");
         op.reset();
 #else
         Y_UNUSED(op);
-        Y_ABORT("TEvShortIO is only available with io_uring");
+        Y_ABORT("TEvRetryIO is only available with io_uring");
 #endif
     }
 
@@ -717,10 +746,6 @@ namespace NKikimr::NDDisk {
             }
             case EWakeupTag::WakeupProcessDeallocatePersistentBufferChunk: {
                 ProcessDeallocatePersistentBufferChunk(true);
-                break;
-            }
-            case EWakeupTag::WakeupFlushDeviceOverestimationSamples: {
-                FlushDeviceOverestimationSamples();
                 break;
             }
         }

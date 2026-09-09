@@ -1212,9 +1212,19 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
         lookupPayloadColumns,
         inputColumns
     );
-    auto taskCounters = args.StatsLevel != TCollectStatsLevel::None ? args.TaskCounters : nullptr;
-    if (taskCounters && args.StatsLevel != TCollectStatsLevel::Basic) {
-        taskCounters = taskCounters->GetSubgroup("task_id", ToString(args.TaskId))->GetSubgroup("input", ToString(args.InputIndex));
+    auto taskCounters = args.TaskCounters;
+    switch(args.StatsLevel) {
+        case TCollectStatsLevel::None:
+        case TCollectStatsLevel::Basic:
+            taskCounters = nullptr;
+            break;
+        case TCollectStatsLevel::Profile:
+            if (taskCounters) {
+                taskCounters = taskCounters->GetSubgroup("task_id", ToString(args.TaskId))->GetSubgroup("input", ToString(args.InputIndex));
+            }
+            break;
+        case TCollectStatsLevel::Full:
+            break;
     }
     if (settings.GetIsMultiget()) {
         auto actor = isWide ?

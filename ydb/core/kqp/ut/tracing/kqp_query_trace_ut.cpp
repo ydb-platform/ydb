@@ -19,6 +19,8 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <algorithm>
@@ -417,6 +419,106 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*span, "ydb.compile.cpu_us")->value().int_value(), 13);
             UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*span, "ydb.session.cpu_us")->value().int_value(), 7);
         }
+    }
+
+    Y_UNIT_TEST(ScriptQueryUsesWorkerStatistics) {
+        NKqp::TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        auto* sampling = settings.AppConfig.MutableTracingConfig()->AddSampling();
+        sampling->SetFraction(1.0);
+        sampling->SetLevel(15);
+        sampling->SetMaxTracesPerMinute(1'000'000);
+        sampling->SetMaxTracesBurst(1'000'000);
+        NKqp::TKikimrRunner kikimr(settings);
+        kikimr.GetTestClient().CreateTable("/Root", R"(
+            Name: "table-1"
+            Columns { Name: "key", Type: "Uint64" }
+            Columns { Name: "value", Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto write = session.ExecuteDataQuery(
+            "UPSERT INTO `/Root/table-1` (key, value) VALUES (1u, 10u), (2u, 20u);",
+            NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        auto* uploader = RegisterUploader(*kikimr.GetTestServer().GetRuntime());
+        NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+        for (const bool streaming : {false, true}) {
+            for (const auto mode : {NYdb::NTable::ECollectQueryStatsMode::None,
+                    NYdb::NTable::ECollectQueryStatsMode::Basic}) {
+                ClearUploader(*uploader);
+                const auto requestSettings = NYdb::NScripting::TExecuteYqlRequestSettings()
+                    .CollectQueryStats(mode).ReportCostInfo(true);
+                const TString sql = "SELECT SUM(value) FROM `/Root/table-1`;";
+                float consumedRu = 0;
+                bool hasStats = false;
+                if (streaming) {
+                    auto iterator = client.StreamExecuteYqlScript(sql, requestSettings).GetValueSync();
+                    UNIT_ASSERT_C(iterator.IsSuccess(), iterator.GetIssues().ToString());
+                    while (true) {
+                        auto part = iterator.ReadNext().GetValueSync();
+                        consumedRu += part.GetConsumedRu();
+                        hasStats |= part.HasQueryStats();
+                        if (!part.IsSuccess()) {
+                            UNIT_ASSERT_C(part.EOS(), part.GetIssues().ToString());
+                            break;
+                        }
+                    }
+                } else {
+                    const auto result = client.ExecuteYqlScript(sql, requestSettings).GetValueSync();
+                    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                    consumedRu = result.GetConsumedRu();
+                    hasStats = result.GetStats().has_value();
+                }
+                Sleep(TDuration::Seconds(1));
+                UNIT_ASSERT(uploader->BuildTraceTrees());
+                const auto type = streaming ? NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING : NKikimrKqp::QUERY_TYPE_SQL_SCRIPT;
+                const auto query = std::ranges::find_if(uploader->Spans, [&](const auto& span) {
+                    const auto* queryType = FindAttribute(span, "ydb.query.type");
+                    return span.name() == "Query" && queryType
+                        && queryType->value().string_value() == NKikimrKqp::EQueryType_Name(type);
+                });
+                UNIT_ASSERT_C(query != uploader->Spans.end(), uploader->PrintTraces());
+                UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*query, "ydb.rows_read")->value().int_value(), 2);
+                UNIT_ASSERT(FindAttribute(*query, "ydb.bytes_read")->value().int_value() > 0);
+                UNIT_ASSERT(FindAttribute(*query, "ydb.cpu_us")->value().int_value() > 0);
+                UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*query, "ydb.consumed_ru")->value().int_value(), consumedRu);
+                UNIT_ASSERT_VALUES_EQUAL(hasStats, mode == NYdb::NTable::ECollectQueryStatsMode::Basic);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(RecompileRefreshesRequestedTableDiagnostics) {
+        auto [runtime, server, sender] = CreateServer();
+        CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
+        const auto session = CreateSession(runtime, sender, NKikimrKqp::QUERY_TYPE_SQL_DML);
+        auto request = MakeSQLRequest("SELECT * FROM `/Root/table-1`;");
+        request->Record.MutableRequest()->SetSessionId(session);
+        request->Record.MutableRequest()->SetCollectDiagnostics(true);
+        request->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
+        const auto prepared = ExecRequest(runtime, sender, std::move(request), 0);
+        UNIT_ASSERT(prepared.GetResponse().GetPreparedQuery());
+        UNIT_ASSERT(prepared.GetResponse().GetQueryDiagnostics().Contains("table_metadata"));
+        UNIT_ASSERT(!prepared.GetResponse().GetQueryDiagnostics().Contains("AddedForRecompile"));
+
+        ExecSQL(runtime, sender, "ALTER TABLE `/Root/table-1` ADD COLUMN AddedForRecompile Uint64;",
+            0, Ydb::StatusIds::SUCCESS, {}, 0, NKikimrKqp::QUERY_TYPE_SQL_DDL);
+        ui32 recompilations = 0;
+        const auto observer = runtime.AddObserver<NKqp::TEvKqp::TEvRecompileRequest>(
+            [&](NKqp::TEvKqp::TEvRecompileRequest::TPtr& ev) {
+                ++recompilations;
+                UNIT_ASSERT(ev->Get()->CollectDiagnostics);
+            });
+        request = MakeSQLRequest("");
+        request->Record.MutableRequest()->SetSessionId(session);
+        request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED);
+        request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_PREPARED_DML);
+        request->Record.MutableRequest()->SetPreparedQuery(prepared.GetResponse().GetPreparedQuery());
+        request->Record.MutableRequest()->SetCollectDiagnostics(true);
+        const auto recompiled = ExecRequest(runtime, sender, std::move(request), 0);
+        UNIT_ASSERT_VALUES_EQUAL(recompilations, 1);
+        UNIT_ASSERT_C(recompiled.GetResponse().GetQueryDiagnostics().Contains("AddedForRecompile"),
+            recompiled.GetResponse().GetQueryDiagnostics());
     }
 
     Y_UNIT_TEST(CommonConfigSamplesSdkReadPaths) {

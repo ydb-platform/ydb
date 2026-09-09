@@ -375,6 +375,8 @@ public:
 
     void ForwardResponse(TEvKqp::TEvQueryResponse::TPtr& ev) {
         QueryResponse = std::unique_ptr<TEvKqp::TEvQueryResponse>(ev->Release().Release());
+        AddWorkerQueryResultAttributes(QueryState->KqpSessionSpan, QueryState->TraceDescription,
+            QueryResponse->Record, QueryResponse->WorkerStats.get());
         Cleanup();
     }
 
@@ -3523,7 +3525,7 @@ public:
         EndQueryTraceSpan(QueryState->AdmissionSpan, status);
         EndQueryTraceSpan(QueryState->AcquireSnapshotSpan, status);
         auto& querySpan = QueryState->KqpSessionSpan;
-        if (querySpan) {
+        if (querySpan && QueryState->RequestEv) {
             AddQueryResultAttributes(querySpan, QueryState->TraceDescription, QueryState->QueryStats,
                 CalcRequestUnit(QueryState->QueryStats), status);
         }

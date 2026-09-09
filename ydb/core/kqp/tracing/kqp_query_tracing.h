@@ -9,6 +9,10 @@
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
 
+namespace NKqpProto {
+class TKqpStatsQuery;
+} // namespace NKqpProto
+
 namespace NKikimr::NKqp {
 
 struct TKqpQueryStats;
@@ -58,6 +62,8 @@ void EndQueryTraceSpan(NWilson::TSpan& span, Ydb::StatusIds::StatusCode status);
 void EndProxyQueryTraceSpan(NWilson::TSpan& span, const NKikimrKqp::TEvQueryResponse& response);
 void AddQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescription& description,
     const TKqpQueryStats& stats, ui64 requestUnits, Ydb::StatusIds::StatusCode status);
+void AddWorkerQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescription& description,
+    const NKikimrKqp::TEvQueryResponse& response, const NKqpProto::TKqpStatsQuery* workerStats);
 ui64 GetExecutionTraceCpuTimeUs(const NYql::NDqProto::TDqExecutionStats& stats);
 void AddReadTraceStats(NWilson::TSpan& span, NYql::NDqProto::TDqTaskStats& stats,
     const TString& table, ui64 rows, ui64 retries);

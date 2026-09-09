@@ -92,5 +92,17 @@ void CalculateCountersDiff(NKikimrSysView::TDbCounters* diff,
 void ResetSimpleCounters(NKikimrSysView::TDbCounters* dst);
 void ResetMaxCounters(NKikimrSysView::TDbCounters* dst);
 
+// Clear output and encode an absolute snapshot when prev is absent, or a delta
+// otherwise. Unsigned subtraction and addition reconstruct decreases modulo
+// 2^64, including histogram buckets that shrink or become empty.
+void CalculateCountersDiff(NKikimrSysView::TDbCounters* diff,
+    const NKikimrSysView::TDbCounters& current,
+    NKikimrSysView::TDbCounters* prev = nullptr);
+
+// Executor/App use deltas; their MAX counterparts are always absolute.
+void CalculateCountersDiff(NKikimrSysView::TDbTabletCounters* diff,
+    const NKikimrSysView::TDbTabletCounters& current,
+    NKikimrSysView::TDbTabletCounters* prev = nullptr);
+
 } // NSysView
 } // NKikimr

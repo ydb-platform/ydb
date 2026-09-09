@@ -8,6 +8,7 @@ PEERDIR(
 )
 
 SRCS(
+    db_counters_codec_ut.cpp
     query_history_ut.cpp
 )
 

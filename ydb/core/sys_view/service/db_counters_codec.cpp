@@ -142,5 +142,31 @@ void ResetMaxCounters(NKikimrSysView::TDbCounters* dst) {
     }
 }
 
+void CalculateCountersDiff(NKikimrSysView::TDbCounters* diff,
+    const NKikimrSysView::TDbCounters& current,
+    NKikimrSysView::TDbCounters* prev)
+{
+    diff->Clear();
+    if (prev) {
+        CalculateCountersDiff(diff, current, *prev);
+    } else {
+        CopyCounters(diff, current);
+    }
+}
+
+void CalculateCountersDiff(NKikimrSysView::TDbTabletCounters* diff,
+    const NKikimrSysView::TDbTabletCounters& current,
+    NKikimrSysView::TDbTabletCounters* prev)
+{
+    diff->Clear();
+    diff->SetType(current.GetType());
+    CalculateCountersDiff(diff->MutableExecutorCounters(), current.GetExecutorCounters(),
+        prev && prev->HasExecutorCounters() ? prev->MutableExecutorCounters() : nullptr);
+    CalculateCountersDiff(diff->MutableAppCounters(), current.GetAppCounters(),
+        prev && prev->HasAppCounters() ? prev->MutableAppCounters() : nullptr);
+    CalculateCountersDiff(diff->MutableMaxExecutorCounters(), current.GetMaxExecutorCounters());
+    CalculateCountersDiff(diff->MutableMaxAppCounters(), current.GetMaxAppCounters());
+}
+
 } // NSysView
 } // NKikimr

@@ -1333,6 +1333,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         DropIndexWithIndexRead,
         AlterIndexWithIndexRead,
         AlterTableWithIndexRead,
+        AlterTableWithCoveredIndexRead,
         MoveTable,
         AddChangefeed,
         DropChangefeed,
@@ -1354,6 +1355,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         ESchemeOp::DropIndexWithIndexRead,
         ESchemeOp::AlterIndexWithIndexRead,
         ESchemeOp::AlterTableWithIndexRead,
+        ESchemeOp::AlterTableWithCoveredIndexRead,
         ESchemeOp::MoveTable,
         ESchemeOp::AddChangefeed,
         ESchemeOp::DropChangefeed,
@@ -1376,6 +1378,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
             case ESchemeOp::DropIndexWithIndexRead: return "DropIndexWithIndexRead";
             case ESchemeOp::AlterIndexWithIndexRead: return "AlterIndexWithIndexRead";
             case ESchemeOp::AlterTableWithIndexRead: return "AlterTableWithIndexRead";
+            case ESchemeOp::AlterTableWithCoveredIndexRead: return "AlterTableWithCoveredIndexRead";
             case ESchemeOp::MoveTable: return "MoveTable";
             case ESchemeOp::AddChangefeed: return "AddChangefeed";
             case ESchemeOp::DropChangefeed: return "DropChangefeed";
@@ -1481,6 +1484,15 @@ Y_UNIT_TEST_SUITE(KqpTx) {
                 spec.Setup = "ALTER TABLE `/Root/SchemeOpsTable` ADD INDEX ValueIndex GLOBAL SYNC ON (`Value`);";
                 spec.Operation = "ALTER TABLE `/Root/SchemeOpsTable` ADD COLUMN Extra Uint64;";
                 spec.Read = R"(SELECT Key, Payload FROM `/Root/SchemeOpsTable` VIEW ValueIndex WHERE Value = "One";)";
+                break;
+
+            case ESchemeOp::AlterTableWithCoveredIndexRead:
+                // Every column read is covered by the index, so the plan never touches the
+                // table. The query still names the table, so its version is what the statement
+                // was compiled against and a change to it has to abort just the same.
+                spec.Setup = "ALTER TABLE `/Root/SchemeOpsTable` ADD INDEX ValueIndex GLOBAL SYNC ON (`Value`);";
+                spec.Operation = "ALTER TABLE `/Root/SchemeOpsTable` ADD COLUMN Extra Uint64;";
+                spec.Read = R"(SELECT Key, Value FROM `/Root/SchemeOpsTable` VIEW ValueIndex WHERE Value = "One";)";
                 break;
 
             case ESchemeOp::MoveTable:
@@ -1688,6 +1700,12 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     Y_UNIT_TEST(SchemeChangeAlterTableWithIndexRead) {
         TSchemeChangeInTxTester tester;
         tester.Operation = ESchemeOp::AlterTableWithIndexRead;
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeAlterTableWithCoveredIndexRead) {
+        TSchemeChangeInTxTester tester;
+        tester.Operation = ESchemeOp::AlterTableWithCoveredIndexRead;
         tester.Execute();
     }
 

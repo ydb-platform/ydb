@@ -2912,7 +2912,9 @@ class YdbBenchTest(unittest.TestCase):
         render_start = web._JS.index("function renderLocalYdbProfile")
         render_finish = web._JS.index("async function mountLocalYdbProfile", render_start)
         script = (
-            """
+            "const enc=encodeURIComponent;\n"
+            + web._JS[web._JS.index("function localAttemptHref(") : web._JS.index("function localCounterCharts(")]
+            + """
             const esc=value=>String(value??'');
             const metricLabel=value=>String(value??'—');
             const elapsedLabel=value=>String(value??0);
@@ -4539,12 +4541,13 @@ class YdbBenchTest(unittest.TestCase):
 
         partial = command_result("grpc://benchmark-host:20000\n")
         complete = command_result("grpc://benchmark-host:20000\ngrpc://benchmark-host:20001 [zone-a]\n")
-        with mock.patch.object(local_ydb, "run_command", side_effect=(partial, complete)) as run, mock.patch.object(
-            local_ydb.time, "sleep"
-        ):
+        unavailable = command_result("", exit_code=1, stderr="Status: UNAVAILABLE\nDatabase nodes resolve failed")
+        with mock.patch.object(
+            local_ydb, "run_command", side_effect=(unavailable, partial, complete)
+        ) as run, mock.patch.object(local_ydb.time, "sleep"):
             cluster._wait_client_endpoints(30)
 
-        self.assertEqual(run.call_count, 2)
+        self.assertEqual(run.call_count, 3)
         command = run.call_args_list[0].args[0]
         self.assertEqual(
             command,
@@ -4560,7 +4563,12 @@ class YdbBenchTest(unittest.TestCase):
         )
         self.assertEqual(run.call_args_list[0].kwargs["cpu_affinity"], (0, 1))
         attempts = json.loads((cluster_directory / "client-discovery-attempts.json").read_text(encoding="utf-8"))
-        self.assertEqual([item["stdout"] for item in attempts], [partial.stdout, complete.stdout])
+        self.assertEqual([item["stdout"] for item in attempts], [unavailable.stdout, partial.stdout, complete.stdout])
+        with mock.patch.object(local_ydb, "run_command", return_value=unavailable) as run, mock.patch.object(
+            local_ydb.time, "monotonic", side_effect=(0, 0, 31)
+        ), self.assertRaisesRegex(BenchmarkError, "discovery exited with code 1: Status: UNAVAILABLE"):
+            cluster._wait_client_endpoints(30)
+        run.assert_called_once()
 
     def test_local_ydb_client_readiness_does_not_hide_cli_failures(self):
         cluster_directory = self.root / "client-ready-failure"

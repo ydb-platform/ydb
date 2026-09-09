@@ -177,16 +177,16 @@ namespace NKikimr::NSqsTopic::V1 {
             }
             const auto& ctx = TlsActivationContext->AsActorContext();
             switch (ev->Get()->Status) {
-                case NPQ::NRuQuoter::EStatus::SUCCESS:
+                case NPQ::NRuQuoter::EStatus::Success:
                     static_cast<TDerived*>(this)->OnRequestUnitsCharged(ctx);
                     return;
-                case NPQ::NRuQuoter::EStatus::THROTTLED:
+                case NPQ::NRuQuoter::EStatus::Throttled:
                     ReplyWithError(MakeError(NSQS::NErrors::THROTTLING_EXCEPTION,
                         ev->Get()->Message.empty()
                             ? NPQ::NRuQuoter::Description(ev->Get()->Status)
                             : ev->Get()->Message));
                     return;
-                case NPQ::NRuQuoter::EStatus::UNKNOWN_ERROR:
+                case NPQ::NRuQuoter::EStatus::UnknownError:
                     ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
                         ev->Get()->Message.empty()
                             ? NPQ::NRuQuoter::Description(ev->Get()->Status)

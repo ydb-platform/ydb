@@ -223,6 +223,20 @@ geometry on a fresh cluster; that cluster's configuration is stored in
 The profile page separates the final **Result** from the **Discovery** process.
 Result presents the selected load, throughput, latency, errors, and CPU metrics;
 Discovery keeps the attempt history, synchronized search charts, and commands.
+Each attempt links to a separate page with YDB executor-pool counters, grouped by
+node and measurement repetition. Verification has its own metrics page.
+The collector samples the local monitoring endpoints every two seconds during
+measurements and saves `ydb-metrics.jsonl` with the profile artifacts.
+Thread-count gauges are displayed as threads (the original counters use threads
+multiplied by 100); elapsed and CPU microseconds can be displayed as raw counters
+or per-second deltas. Counter resets and failed samples break the rate series.
+Each counter has its own chart with lines for all pools of the selected
+node, including both microsecond counters. Hover values use
+two decimal places and share a time cursor across charts.
+Collection is best-effort, limited to 32 MiB per profile, 64 nodes and 32 pools
+per node. The attempt view retains at most 300 samples / 2 MiB and reports
+truncation; the full saved file can be downloaded. Historical runs without the
+artifact show an empty metrics page.
 
 During a local YDB run, the CLI reports cluster startup, workload initialization,
 warmup, measurement, cleanup, evaluation, and dynamic-node scaling milestones.

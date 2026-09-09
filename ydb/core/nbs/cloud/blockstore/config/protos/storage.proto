@@ -165,6 +165,10 @@ message TStorageServiceConfig
     // PersistentBuffer validate payload checksums of data read from disk.
     optional bool CheckChecksumWhenRead = 36;
 
+    // How long (in microseconds) the DDisk io_uring thread busy-polls before
+    // parking when idle. Defaults to 10.
+    optional uint32 IdleSpinUs = 37;
+
     // Maximum aggregate bandwidth in megabytes per second for copying ranges
     // within a DirectBlockGroup. 0 disables throttling.
     optional uint32 CopyRangeBandwidthMbs = 33;

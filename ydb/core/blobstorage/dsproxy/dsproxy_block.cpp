@@ -20,6 +20,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
     const TWriteSource WriteSource;
     bool SeenAlready = false;
     bool SeenObsoleteVersion = false;
+    ui32 ActualGeneration = 0;
 
     TGroupQuorumTracker QuorumTracker;
 
@@ -32,6 +33,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
         const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
         const TVDiskIdShort shortId(ev->Cookie);
         SeenObsoleteVersion |= record.GetIsTabletStorageInfoVersionObsolete();
+        ActualGeneration = Max(ActualGeneration, record.GetGeneration());
 
         Y_ABORT_UNLESS(shortId.FailRealm == vdisk.FailRealm &&
                 shortId.FailDomain == vdisk.FailDomain &&
@@ -103,6 +105,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
         std::unique_ptr<TEvBlobStorage::TEvBlockResult> result(new TEvBlobStorage::TEvBlockResult(status));
         result->ErrorReason = ErrorReason;
         result->IsTabletStorageInfoVersionObsolete = status != NKikimrProto::OK && SeenObsoleteVersion;
+        result->ActualGeneration = ActualGeneration;
         DSP_LOG_LOG_S(PriorityForStatusResult(status), "DSPB04", "Result# " << result->Print(false));
         Mon->CountBlockResponseTime(TActivationContext::Monotonic() - RequestStartTime);
         return SendResponseAndDie(std::move(result));

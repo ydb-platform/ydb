@@ -28,6 +28,7 @@ from ydb.tools.ydb_bench.lib.common import (
     atomic_write_text,
 )
 from ydb.tools.ydb_bench.lib.linux_telemetry import LinuxCpuMonitor
+from ydb.tools.ydb_bench.lib.ydb_telemetry import YdbCountersMonitor
 from ydb.tools.ydb_bench.lib.load_control import evaluate_load, search_load
 from ydb.tools.ydb_bench.lib.local_ydb_workloads import (
     GENERIC_TOTAL_RESULT,
@@ -230,7 +231,7 @@ def _sector_map_path(index, disk_size_gb):
     return "SectorMap:map_{}:{}:NONE".format(index, disk_size_gb)
 
 
-def _cluster_config(static_nodes, disk_size_gb, hostname=None):
+def _cluster_config(static_nodes, disk_size_gb, hostname=None, actor_system=None):
     # Nameservice and NodeBroker identify a node by its real host name.  Using
     # localhost here prevents a dynamic node from registering as a compute
     # unit of the tenant even when all processes run on the same machine.
@@ -270,6 +271,12 @@ def _cluster_config(static_nodes, disk_size_gb, hostname=None):
             "host_configs": host_configs,
             "hosts": hosts,
             "domains_config": {"domain": [{"domain_id": 1, "name": "Root"}]},
+            "actor_system_config": {
+                # An explicit actor-system config must retain automatic pool sizing.
+                "use_auto_config": True,
+                "use_shared_threads": (actor_system or {}).get("use_shared_threads", False),
+                "use_united_pool": (actor_system or {}).get("use_united_pool", False),
+            },
         },
     }
 
@@ -286,6 +293,7 @@ class LocalYdbCluster:
         timeout,
         cancel_event=None,
         progress=None,
+        actor_system=None,
     ):
         self.ydbd = Path(ydbd)
         self.ydb_cli = Path(ydb_cli)
@@ -296,6 +304,7 @@ class LocalYdbCluster:
         self.timeout = timeout
         self.cancel_event = cancel_event
         self.progress = progress
+        self.actor_system = dict(actor_system or {})
         self.static_processes = []
         self.dynamic_processes = []
         self.port_candidates = _mnc_port_candidates()
@@ -321,6 +330,13 @@ class LocalYdbCluster:
     @property
     def static_pids(self):
         return tuple(process.pid for process in self.static_processes if process.poll() is None)
+
+    def monitoring_nodes(self):
+        return [
+            (role, index, node["mon_port"])
+            for role, nodes in (("static", self.static_nodes), ("dynamic", self.dynamic_nodes))
+            for index, node in enumerate(nodes, 1)
+        ]
 
     @property
     def dynamic_pids(self):
@@ -533,6 +549,14 @@ class LocalYdbCluster:
             if result.interrupted:
                 self._write_attempts("client-discovery", result, attempts)
                 raise BenchmarkInterrupted("YDB client endpoint discovery was interrupted")
+            if (
+                result.exit_code
+                and not result.timed_out
+                and "Status: UNAVAILABLE" in (line.strip() for line in result.stderr.splitlines())
+                and time.monotonic() < deadline
+            ):
+                time.sleep(1)
+                continue
             if result.timed_out or result.exit_code:
                 self._write_attempts("client-discovery", result, attempts)
                 details = result.stderr.strip() or result.stdout.strip() or "no diagnostics"
@@ -583,7 +607,9 @@ class LocalYdbCluster:
         for index, node in enumerate(self.static_nodes, 1):
             node_directory = self.directory / "static-{:02d}".format(index)
             node_directory.mkdir()
-        cluster_config = _cluster_config(self.static_nodes, self.geometry["disk_size_gb"], self.hostname)
+        cluster_config = _cluster_config(
+            self.static_nodes, self.geometry["disk_size_gb"], self.hostname, self.actor_system
+        )
         atomic_write_text(self.config_path, yaml.safe_dump(cluster_config, sort_keys=False))
         self._progress("starting-static-nodes", static_nodes=len(self.static_nodes))
         for index, (node, mask) in enumerate(zip(self.static_nodes, self.static_masks), 1):
@@ -906,6 +932,7 @@ class WorkloadLifecycle:
         cancel_event,
         progress,
         command_timeout_seconds=None,
+        metrics_path=None,
     ):
         self.cluster = cluster
         self.workload_cli = workload_cli
@@ -923,6 +950,7 @@ class WorkloadLifecycle:
         ):
             raise BenchmarkError("workload command timeout must be a positive finite number")
         self.command_timeout_seconds = command_timeout_seconds
+        self.metrics_path = metrics_path
         self.definition = workload_definition(workload["type"])
         self._profile_opened = False
         self._profile_closed = False
@@ -1240,8 +1268,14 @@ class WorkloadLifecycle:
                 "cli": _role_capacity(self.affinities["ydb_cli"], self.topology),
             },
         )
+        ydb_monitor = YdbCountersMonitor(
+            self.metrics_path,
+            self.cluster.monitoring_nodes,
+            {**state.fields, "phase": phases["measure"], "repetition": repetition},
+        )
         monitor.start()
         try:
+            ydb_monitor.start()
             plan = build_run_plan(
                 self.workload_cli,
                 state.table_path,
@@ -1278,7 +1312,10 @@ class WorkloadLifecycle:
                 on_process_started=lambda process: cli_pids.append(process.pid),
             )
         finally:
-            cpu = monitor.stop()
+            try:
+                cpu = monitor.stop()
+            finally:
+                ydb_monitor.stop()
         self.cluster.ensure_running("YDB process exited during workload measurement")
         commands.append(
             _command_record(
@@ -1498,6 +1535,7 @@ def run_local_ydb(
             configuration.timeout_seconds,
             cancel_event,
             publish_progress,
+            actor_system=profile.get("actor_system"),
         )
 
     def create_lifecycle(target_cluster):
@@ -1514,6 +1552,7 @@ def run_local_ydb(
             cancel_event,
             publish_progress,
             command_timeout_seconds=(configuration.timeout_seconds if configuration.timeout_explicit else None),
+            metrics_path=output_directory / "ydb-metrics.jsonl",
         )
 
     cluster = create_cluster(output_directory / "cluster", profile["geometry"])
@@ -1782,6 +1821,7 @@ def run_local_ydb(
                         purpose="verification",
                     )
                     atomic_write_json(directory / "commands.json", commands)
+                    verification.setdefault("commands", []).extend(commands)
                     verification["completed_repetitions"] = repetition
                     verification_rows.append(metrics)
                     _write_csv(
@@ -1885,7 +1925,7 @@ def run_local_ydb(
             publish_progress(
                 "verification-completed",
                 result=compact_result_progress(),
-                verification=verification,
+                verification={key: value for key, value in verification.items() if key != "commands"},
             )
 
         close_lifecycle()
@@ -1911,6 +1951,8 @@ def run_local_ydb(
                 "repetitions.csv",
                 "cluster/cluster.yaml",
             ]
+            if (output_directory / "ydb-metrics.jsonl").is_file():
+                artifacts.append("ydb-metrics.jsonl")
             if verification["status"] == "completed":
                 artifacts += ["verification-summary.csv", "verification-repetitions.csv"]
                 if verification.get("cluster") == "fresh":

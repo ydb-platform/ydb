@@ -582,6 +582,9 @@ struct TPersistentBufferFormat {
     DECLARE_DDISK_EVENT(Write) {
         using TResult = TEvWriteResult;
 
+        // Receiver-local bookkeeping: queued requests can re-enter the write handler.
+        bool PayloadAlignmentChecked = false;
+
         TEvWrite() = default;
 
         TEvWrite(const TQueryCredentials& creds, const TBlockSelector& selector, const TWriteInstruction& instruction) {

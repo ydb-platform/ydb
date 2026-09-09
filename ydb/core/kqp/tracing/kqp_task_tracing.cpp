@@ -1,19 +1,26 @@
 #include "kqp_task_tracing.h"
+
 #include "kqp_trace_settings.h"
 
-#include <yql/essentials/ast/yql_ast.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 
-#include <array>
+#include <yql/essentials/ast/yql_ast.h>
+
 #include <util/string/builder.h>
 #include <util/string/cast.h>
+
+#include <array>
+#include <cstring>
 
 namespace NKikimr::NKqp {
 namespace {
 
-constexpr TStringBuf TaskOperationsParam = "ydb.trace.task_operations";
-constexpr char StageSpanIdParam[] = "ydb.trace.stage_span_id";
-enum EOperation : ui32 {
+constexpr TStringBuf TASK_OPERATIONS_PARAM = "ydb.trace.task_operations";
+constexpr char STAGE_SPAN_ID_PARAM[] = "ydb.trace.stage_span_id";
+enum class EOperation : ui32 {
+    None = 0,
     Read = 1 << 0,
     Lookup = 1 << 1,
     Join = 1 << 2,
@@ -22,28 +29,28 @@ enum EOperation : ui32 {
     Sort = 1 << 5,
     Write = 1 << 6,
 };
-constexpr std::array OperationNames = {
-    std::pair{Read, "Read"}, std::pair{Lookup, "Lookup"}, std::pair{Join, "Join"},
-    std::pair{Filter, "Filter"}, std::pair{Aggregate, "Aggregate"},
-    std::pair{Sort, "Sort"}, std::pair{Write, "Write"},
+constexpr std::array OPERATION_NAMES = {
+    std::pair{EOperation::Read, "Read"}, std::pair{EOperation::Lookup, "Lookup"}, std::pair{EOperation::Join, "Join"},
+    std::pair{EOperation::Filter, "Filter"}, std::pair{EOperation::Aggregate, "Aggregate"},
+    std::pair{EOperation::Sort, "Sort"}, std::pair{EOperation::Write, "Write"},
 };
 
-ui32 CallableOperation(TStringBuf name) {
+EOperation CallableOperation(TStringBuf name) {
     if (name.Contains("Join")) {
-        return Join;
+        return EOperation::Join;
     }
     if (name.Contains("Combine") || name.Contains("Aggregate")) {
-        return Aggregate;
+        return EOperation::Aggregate;
     }
     if (name.Contains("Filter")) {
-        return Filter;
+        return EOperation::Filter;
     }
     if (name == "Sort" || name == "Top" || name == "TopSort"
             || name.StartsWith("WideSort") || name.StartsWith("WideTop")
             || name.StartsWith("BlockSort") || name.StartsWith("BlockTop")) {
-        return Sort;
+        return EOperation::Sort;
     }
-    return 0;
+    return EOperation::None;
 }
 
 } // namespace
@@ -51,26 +58,26 @@ ui32 CallableOperation(TStringBuf name) {
 TTaskTraceDescription TTaskTraceDescription::FromStage(const NKqpProto::TKqpPhyStage& stage) {
     TTaskTraceDescription result;
     if (!stage.GetSources().empty()) {
-        result.Operations |= Read;
+        result.Operations_ |= static_cast<ui32>(EOperation::Read);
     }
     for (const auto& input : stage.GetInputs()) {
         if (input.HasStreamLookup()) {
-            result.Operations |= Lookup;
+            result.Operations_ |= static_cast<ui32>(EOperation::Lookup);
         }
     }
     if (!stage.GetSinks().empty() || stage.GetIsEffectsStage()) {
-        result.Operations |= Write;
+        result.Operations_ |= static_cast<ui32>(EOperation::Write);
     }
     for (const auto& op : stage.GetTableOps()) {
         switch (op.GetTypeCase()) {
             case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
             case NKqpProto::TKqpPhyTableOperation::kDeleteRows:
-                result.Operations |= Write;
+                result.Operations_ |= static_cast<ui32>(EOperation::Write);
                 break;
             case NKqpProto::TKqpPhyTableOperation::kReadRange:
             case NKqpProto::TKqpPhyTableOperation::kReadOlapRange:
             case NKqpProto::TKqpPhyTableOperation::kReadRanges:
-                result.Operations |= Read;
+                result.Operations_ |= static_cast<ui32>(EOperation::Read);
                 break;
             default:
                 break;
@@ -96,7 +103,7 @@ TTaskTraceDescription TTaskTraceDescription::FromStage(const NKqpProto::TKqpPhyS
                     continue;
                 }
                 if (head->GetFlags() == NYql::TNodeFlags::Default) {
-                    result.Operations |= CallableOperation(head->GetContent());
+                    result.Operations_ |= static_cast<ui32>(CallableOperation(head->GetContent()));
                 }
             }
             for (const auto* child : node->GetChildren()) {
@@ -109,8 +116,8 @@ TTaskTraceDescription TTaskTraceDescription::FromStage(const NKqpProto::TKqpPhyS
 
 NWilson::TArrayValue TTaskTraceDescription::OperationsAttribute() const {
     NWilson::TArrayValue result;
-    for (const auto& [bit, name] : OperationNames) {
-        if (Operations & bit) {
+    for (const auto& [bit, name] : OPERATION_NAMES) {
+        if (Operations_ & static_cast<ui32>(bit)) {
             result.emplace_back(TString(name));
         }
     }
@@ -133,7 +140,7 @@ TString TTaskTraceDescription::Name(TStringBuf prefix) const {
     name << prefix;
     size_t count = 0;
     for (const auto& op : OperationsAttribute()) {
-        if (count == NQueryTraceSettings::MaxTaskNameOperations) {
+        if (count == NQueryTraceSettings::MAX_TASK_NAME_OPERATIONS) {
             break;
         }
         if (count++) {
@@ -145,13 +152,13 @@ TString TTaskTraceDescription::Name(TStringBuf prefix) const {
 }
 
 void TTaskTraceDescription::Save(NYql::NDqProto::TDqTask& task) const {
-    if (!Operations) {
+    if (!Operations_) {
         if (!task.GetTaskParams().empty()) {
-            task.MutableTaskParams()->erase(TString(TaskOperationsParam));
+            task.MutableTaskParams()->erase(TString(TASK_OPERATIONS_PARAM));
         }
         return;
     }
-    (*task.MutableTaskParams())[TString(TaskOperationsParam)] = ToString(Operations);
+    (*task.MutableTaskParams())[TString(TASK_OPERATIONS_PARAM)] = ToString(Operations_);
 }
 
 void TTaskTraceDescription::Annotate(NWilson::TSpan& span, const NYql::NDqProto::TDqTask& task) {
@@ -159,9 +166,9 @@ void TTaskTraceDescription::Annotate(NWilson::TSpan& span, const NYql::NDqProto:
         return;
     }
     TTaskTraceDescription description;
-    const auto it = task.GetTaskParams().find(TString(TaskOperationsParam));
+    const auto it = task.GetTaskParams().find(TString(TASK_OPERATIONS_PARAM));
     if (it != task.GetTaskParams().end()) {
-        TryFromString(it->second, description.Operations);
+        TryFromString(it->second, description.Operations_);
     }
     span.Name(description.Name());
     span.Attribute("ydb.task.operations", description.OperationsAttribute());
@@ -169,14 +176,14 @@ void TTaskTraceDescription::Annotate(NWilson::TSpan& span, const NYql::NDqProto:
 
 void SaveTaskTraceParent(NYql::NDqProto::TDqTask& task, ui64 stageSpanId) {
     if (stageSpanId) {
-        (*task.MutableTaskParams())[StageSpanIdParam] = ToString(stageSpanId);
+        (*task.MutableTaskParams())[STAGE_SPAN_ID_PARAM] = ToString(stageSpanId);
     } else if (!task.GetTaskParams().empty()) {
-        task.MutableTaskParams()->erase(StageSpanIdParam);
+        task.MutableTaskParams()->erase(STAGE_SPAN_ID_PARAM);
     }
 }
 
 NWilson::TTraceId GetTaskTraceParent(const NYql::NDqProto::TDqTask& task, const NWilson::TTraceId& parent) {
-    const auto it = task.GetTaskParams().find(StageSpanIdParam);
+    const auto it = task.GetTaskParams().find(STAGE_SPAN_ID_PARAM);
     ui64 spanId = 0;
     if (!parent || !parent.GetTimeToLive()
             || parent.GetVerbosity() < TComponentTracingLevels::TQueryProcessor::Detailed

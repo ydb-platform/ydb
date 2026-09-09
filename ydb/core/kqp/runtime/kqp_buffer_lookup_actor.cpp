@@ -1,6 +1,7 @@
-#include <ydb/core/kqp/tracing/kqp_shard_tracing.h>
 #include "kqp_buffer_lookup_actor.h"
 
+#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
+#include <ydb/core/kqp/tracing/kqp_shard_tracing.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/common/kqp_locks_tli_helpers.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>

@@ -1,9 +1,12 @@
 #pragma once
 
-#include "kqp_query_tracing.h"
+#include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+
+#include <library/cpp/time_provider/monotonic.h>
 
 #include <util/datetime/base.h>
-#include <library/cpp/time_provider/monotonic.h>
+
 #include <map>
 #include <tuple>
 
@@ -27,7 +30,16 @@ private:
         ui64 Rows = 0;
     };
 
-    struct TShard {
+    class TShard {
+    public:
+        ui64 DurationUs() const {
+            return FirstRequest && LastResponse >= FirstRequest ? (LastResponse - FirstRequest).MicroSeconds() : 0;
+        }
+        auto Rank() const {
+            return std::tuple(FailedReads > 0, Retries > 0, StoppedReads > 0, DurationUs());
+        }
+
+    public:
         TMonotonic FirstRequest;
         TMonotonic LastResponse;
         ui64 Rows = 0;
@@ -39,24 +51,18 @@ private:
         ui32 NodeId = 0;
         bool TimingIncomplete = false;
         Ydb::StatusIds::StatusCode LastStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
-
-        ui64 DurationUs() const {
-            return FirstRequest && LastResponse >= FirstRequest ? (LastResponse - FirstRequest).MicroSeconds() : 0;
-        }
-        auto Rank() const {
-            return std::tuple(FailedReads > 0, Retries > 0, StoppedReads > 0, DurationUs());
-        }
     };
 
     static bool Enabled(const NWilson::TSpan& parent);
     void Complete(ui64 readId, Ydb::StatusIds::StatusCode status, bool finished);
     void RetainShards();
 
-    std::map<ui64, TRead> Reads;
-    std::map<ui64, TShard> Shards;
-    ui64 TotalReads = 0;
-    ui64 UntracedReads = 0;
-    ui64 EvictedShards = 0;
+private:
+    std::map<ui64, TRead> Reads_;
+    std::map<ui64, TShard> Shards_;
+    ui64 TotalReads_ = 0;
+    ui64 UntracedReads_ = 0;
+    ui64 EvictedShards_ = 0;
 };
 
 } // namespace NKikimr::NKqp

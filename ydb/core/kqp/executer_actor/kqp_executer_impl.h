@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/tracing/kqp_execution_tracing.h>
+#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
 
 #include "kqp_executer.h"
 #include "kqp_executer_stats.h"
@@ -964,7 +965,7 @@ protected:
                         const auto& task = TasksGraph.GetTask(taskId);
                         const auto& stage = TasksGraph.GetStageInfo(task.StageId);
                         TraceStats->OnTaskFinished({stage.Id.TxId, stage.Id.StageId},
-                            stage.Meta.TraceDescription, stage.Tasks.size(), state, computeActor.NodeId());
+                            stage.Tasks.size(), state, computeActor.NodeId());
                     }
                     ui64 cycleCount = GetCycleCountFast();
 
@@ -1611,7 +1612,11 @@ protected:
 
     [[nodiscard]] bool BuildPlannerAndSubmitTasks() {
         auto& tasksSpan = ExecuterStateSpan.GetTraceId() ? ExecuterStateSpan : ExecuterSpan;
-        TasksGraph.PrepareTaskTracing(tasksSpan, TraceStats ? &*TraceStats : nullptr);
+        if (TraceStats) {
+            for (const auto& [id, stage] : TasksGraph.GetStagesInfo()) {
+                TraceStats->StartStage(tasksSpan, {id.TxId, id.StageId}, stage.Meta.GetStage(id), stage.Tasks.size());
+            }
+        }
         Planner = CreateKqpPlanner({
             .TasksGraph = TasksGraph,
             .TxId = TxId,
@@ -1623,6 +1628,7 @@ protected:
             .WithProgressStats = Request.ProgressStatsPeriod != TDuration::Zero(),
             .RlPath = Request.RlPath,
             .ExecuterSpan = tasksSpan,
+            .Trace = TraceStats ? &*TraceStats : nullptr,
             .ResourcesSnapshot = std::move(ResourcesSnapshot),
             .ExecuterRetriesConfig = ExecuterRetriesConfig,
             .MkqlMemoryLimit = Request.MkqlMemoryLimit,
@@ -2002,13 +2008,13 @@ protected:
         }
 
         const auto& response = ResponseEv->Record.GetResponse();
+        AddExecutionTraceCpuTime(ExecuterSpan,
+            *ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), Stats->GetCpuTimeUs());
         if (ExecuterSpan) {
             if (TraceStats) {
                 TraceStats->Finish(ExecuterSpan,
                     *ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), response.GetStatus());
             }
-            const auto& stats = response.GetResult().GetStats();
-            ExecuterSpan.Attribute("ydb.cpu_us", static_cast<i64>(GetExecutionTraceCpuTimeUs(stats)));
             ExecuterSpan.Attribute("ydb.locks_broken_as_victim", static_cast<i64>(Stats->LocksBrokenAsVictim));
             ExecuterSpan.Attribute("ydb.locks_broken_as_breaker", static_cast<i64>(Stats->LocksBrokenAsBreaker));
         }

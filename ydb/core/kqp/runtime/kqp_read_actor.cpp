@@ -1,6 +1,7 @@
-#include <ydb/core/kqp/tracing/kqp_shard_tracing.h>
 #include "kqp_read_actor.h"
 
+#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
+#include <ydb/core/kqp/tracing/kqp_shard_tracing.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/base/tablet_pipecache.h>

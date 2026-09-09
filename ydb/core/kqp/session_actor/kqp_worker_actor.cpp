@@ -188,9 +188,9 @@ public:
         QueryState->RequestEv.reset(ev->Release().Release());
 
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(
-            Settings.Cluster, TlsActivationContext->ActorSystem(), Config, false, nullptr);
+            Settings.Cluster, TlsActivationContext->ActorSystem(), Config, false, nullptr, std::nullopt, NWilson::TTraceId(ev->TraceId));
         Gateway = CreateKikimrIcGateway(Settings.Cluster, QueryState->RequestEv->GetType(), Settings.Database, QueryState->RequestEv->GetDatabaseId(), std::move(loader),
-            ctx.ActorSystem(), ctx.SelfID.NodeId(), RequestCounters, QueryServiceConfig);
+            ctx.ActorSystem(), ctx.SelfID.NodeId(), RequestCounters, QueryServiceConfig, NWilson::TTraceId(ev->TraceId));
 
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 

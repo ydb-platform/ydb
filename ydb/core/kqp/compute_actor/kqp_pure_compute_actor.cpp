@@ -1,9 +1,9 @@
-#include <ydb/core/kqp/tracing/kqp_task_tracing.h>
-#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
 #include "kqp_pure_compute_actor.h"
 
 #include "kqp_compute_actor_impl.h"
 
+#include <ydb/core/kqp/tracing/kqp_task_tracing.h>
+#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/services/udf_store/wasm/query_compartment_scope.h>

@@ -1,13 +1,17 @@
 #include "kqp_query_tracing.h"
+
 #include "kqp_trace_settings.h"
 
 #include <ydb/core/kqp/common/simple/helpers.h>
 #include <ydb/core/kqp/common/simple/query_stats.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/library/security/util.h>
 #include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
+
+#include <util/string/builder.h>
 
 #include <google/protobuf/any.pb.h>
-#include <util/string/builder.h>
 
 namespace NKikimr::NKqp {
 
@@ -157,6 +161,17 @@ void AddWorkerQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescr
     }
 }
 
+void AddExecutionTraceCpuTime(NWilson::TSpan& span, NYql::NDqProto::TDqExecutionStats& stats, ui64 cpuUs) {
+    if (!span.GetTraceId()) {
+        return;
+    }
+    NKqpProto::TKqpExecutionExtraStats extra;
+    stats.GetExtra().UnpackTo(&extra);
+    extra.SetCpuTimeUs(cpuUs);
+    stats.MutableExtra()->PackFrom(extra);
+    span.Attribute("ydb.cpu_us", static_cast<i64>(cpuUs));
+}
+
 ui64 GetExecutionTraceCpuTimeUs(const NYql::NDqProto::TDqExecutionStats& stats) {
     NKqpProto::TKqpExecutionExtraStats extra;
     return stats.GetExtra().UnpackTo(&extra) && extra.HasCpuTimeUs()
@@ -213,12 +228,12 @@ bool TShardTraceEvents::Retain(const NWilson::TSpan& span, bool last) {
     if (!span || span.GetTraceId().GetVerbosity() < TComponentTracingLevels::TQueryProcessor::Diagnostic) {
         return false;
     }
-    if (Count >= NQueryTraceSettings::MaxShardEvents
-            || (Count >= NQueryTraceSettings::MaxShardEvents - 1 && !last)) {
-        ++Dropped;
+    if (Count_ >= NQueryTraceSettings::MAX_SHARD_EVENTS
+            || (Count_ >= NQueryTraceSettings::MAX_SHARD_EVENTS - 1 && !last)) {
+        ++Dropped_;
         return false;
     }
-    ++Count;
+    ++Count_;
     return true;
 }
 
@@ -232,27 +247,27 @@ void TShardTraceEvents::Acknowledge(NWilson::TSpan& span, ui64 shardId, bool las
 }
 
 void TShardTraceEvents::Finish(NWilson::TSpan& span) {
-    if (span && Dropped) {
-        span.Attribute("ydb.shard_events_dropped", static_cast<i64>(Dropped));
+    if (span && Dropped_) {
+        span.Attribute("ydb.shard_events_dropped", static_cast<i64>(Dropped_));
     }
-    Count = 0;
-    Dropped = 0;
+    Count_ = 0;
+    Dropped_ = 0;
 }
 
-void TCommitTracePhase::Start(const NWilson::TSpan& parent, EQueryTracePhase phase, ui64 shards) {
+bool TCommitTracePhase::StartSpan(const NWilson::TSpan& parent, EQueryTracePhase phase) {
     End(Ydb::StatusIds::SUCCESS);
-    Span = MakeQueryPhaseTraceSpan(TComponentTracingLevels::TQueryProcessor::Detailed,
+    Span_ = MakeQueryPhaseTraceSpan(TComponentTracingLevels::TQueryProcessor::Detailed,
         parent.GetTraceId(), phase, NWilson::EFlags::AUTO_END, parent.GetActorSystem());
-    Span.Attribute("ydb.shards", static_cast<i64>(shards));
+    return bool(Span_);
 }
 
 void TCommitTracePhase::Acknowledge(ui64 shardId, bool last) {
-    Events.Acknowledge(Span, shardId, last);
+    Events_.Acknowledge(Span_, shardId, last);
 }
 
 void TCommitTracePhase::End(Ydb::StatusIds::StatusCode status) {
-    Events.Finish(Span);
-    EndQueryTraceSpan(Span, status);
+    Events_.Finish(Span_);
+    EndQueryTraceSpan(Span_, status);
 }
 
 namespace {
@@ -482,7 +497,7 @@ void AddQueryTraceAttributes(NWilson::TSpan& span, NKikimrKqp::EQueryType queryT
     if (database) {
         span.Attribute("db.namespace", database);
     }
-    if (!query.empty() && query.size() <= NQueryTraceSettings::MaxQueryTextBytes) {
+    if (!query.empty() && query.size() <= NQueryTraceSettings::MAX_QUERY_TEXT_BYTES) {
         span.Attribute("db.query.text", NKikimr::ProtectQueryForLoggingIfSensitive(query));
     }
 }

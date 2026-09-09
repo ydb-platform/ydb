@@ -50,20 +50,31 @@ class TJsonPathAccessor {
     YDB_READONLY_DEF(std::shared_ptr<IChunkedArray>, ChunkedArrayAccessor);
     YDB_READONLY_DEF(TString, RemainingPath);
     YDB_READONLY(EValueType, ValueType, EValueType::BinaryJson);
-    YDB_READONLY_DEF(std::optional<ui64>, Cookie);
+    YDB_READONLY_DEF(std::optional<ui32>, Cookie);
     NYql::NJsonPath::TJsonPathPtr RemainingPathPtr;
 
 public:
     using TValuesVisitor = std::function<void(const std::optional<TStringBuf>& value)>;
 
     TJsonPathAccessor(std::shared_ptr<IChunkedArray> accessor, TString remainingPath, const EValueType valueType,
-        const std::optional<ui64>& cookie = std::nullopt);
+        const std::optional<ui32>& cookie = std::nullopt);
 
     std::shared_ptr<IChunkedArray> GetNativeStringArray() const;
     void VisitValues(const TValuesVisitor& visitor) const;
 
     bool IsValid() const {
         return ChunkedArrayAccessor != nullptr || Cookie.has_value();
+    }
+
+    static std::shared_ptr<TJsonPathAccessor> SelectBestMatch(
+        const std::shared_ptr<TJsonPathAccessor>& first, const std::shared_ptr<TJsonPathAccessor>& second) {
+        if (!first) {
+            return second;
+        }
+        if (!second || !second->IsValid() || (first->IsValid() && first->RemainingPath.size() <= second->RemainingPath.size())) {
+            return first;
+        }
+        return second;
     }
 
     ui64 GetRecordsCount() const {
@@ -76,14 +87,14 @@ class TJsonPathAccessorTrie {
         TMap<TString, std::unique_ptr<TrieNode>> Children;
         std::shared_ptr<IChunkedArray> Accessor;
         EValueType ValueType = EValueType::BinaryJson;
-        std::optional<ui64> Cookie;
+        std::optional<ui32> Cookie;
     };
 
     TrieNode Root;
 
 public:
     TConclusionStatus Insert(TJsonPathBuf jsonPath, std::shared_ptr<IChunkedArray> accessor, const EValueType valueType,
-        const std::optional<ui64>& cookie = std::nullopt);
+        const std::optional<ui32>& cookie = std::nullopt);
     TConclusion<std::shared_ptr<TJsonPathAccessor>> GetAccessor(TJsonPathBuf jsonPath) const;
 };
 

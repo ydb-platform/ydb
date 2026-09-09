@@ -25,7 +25,7 @@ private:
     std::shared_ptr<arrow::UInt32Array> DataSize;
     std::shared_ptr<arrow::UInt8Array> AccessorType;
     std::shared_ptr<arrow::UInt8Array> ValueType;
-    TJsonPathAccessorTriePtr CachedJsonPathAccessorTrie;
+    mutable TJsonPathAccessorTriePtr CachedJsonPathAccessorTrie;
 
     TJsonPathAccessorTriePtr GenerateJsonPathAccessorTrie() const {
         auto jsonPathAccessorTrie = std::make_shared<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie>();
@@ -65,16 +65,17 @@ public:
     // and the legacy (4-column) layout via try-decode-fallback.
     static TDictStats DeserializeFromBlob(const TString& blob);
 
-    void CreateJsonPathAccessorTrieCache() {
-        CachedJsonPathAccessorTrie = GenerateJsonPathAccessorTrie();
+    std::shared_ptr<TJsonPathAccessor> GetPathAccessor(const std::string_view keyName) const {
+        if (!CachedJsonPathAccessorTrie) {
+            CachedJsonPathAccessorTrie = GenerateJsonPathAccessorTrie();
+        }
+        auto accessorResult = CachedJsonPathAccessorTrie->GetAccessor(ToJsonPath(keyName));
+        AFL_VERIFY(accessorResult.IsSuccess())("keyName", keyName)("jsonPath", ToJsonPath(keyName))("error", accessorResult.GetErrorMessage());
+        return accessorResult.DetachResult();
     }
 
     std::optional<ui32> GetKeyIndexOptional(const std::string_view keyName) const {
-        auto accessorResult = CachedJsonPathAccessorTrie ? CachedJsonPathAccessorTrie->GetAccessor(ToJsonPath(keyName))
-                                                         : GenerateJsonPathAccessorTrie()->GetAccessor(ToJsonPath(keyName));
-        AFL_VERIFY(accessorResult.IsSuccess())("keyName", keyName)("jsonPath", ToJsonPath(keyName))("error", accessorResult.GetErrorMessage());
-
-        auto accessor = accessorResult.DetachResult();
+        auto accessor = GetPathAccessor(keyName);
         if (!accessor) {
             return std::nullopt;
         }

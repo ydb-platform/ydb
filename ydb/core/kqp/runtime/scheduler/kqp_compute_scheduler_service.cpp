@@ -39,12 +39,13 @@ void ValidateAttributes(const NHdrf::TStaticAttributes& attrs, const TDynamicEle
     if (attrs.CpuGuarantee) {
         const auto guarantee = attrs.GetCpuGuarantee();
 
-        Y_ENSURE(guarantee <= attrs.GetCpuLimit(),
-            "CpuGuarantee (" << guarantee << ") should not exceed CpuLimit (" << attrs.GetCpuLimit() << ")");
+        Y_ENSURE_EX(guarantee <= attrs.GetCpuLimit(), TCpuGuaranteeError()
+            << "CpuGuarantee (" << guarantee << ") should not exceed CpuLimit (" << attrs.GetCpuLimit() << ")");
 
         // A zero guarantee reserves nothing from the parent - resetting is always allowed
         if (parent && guarantee > 0) {
-            Y_ENSURE(parent->CpuGuarantee, "Child cannot set CpuGuarantee until the parent's guarantee is set");
+            Y_ENSURE_EX(parent->CpuGuarantee, TCpuGuaranteeError()
+                << "Child cannot set CpuGuarantee until the parent's guarantee is set");
 
             // Calculate unreserved parent guarantee excluding `element`
             ui64 unreserved = *parent->CpuGuarantee;
@@ -57,14 +58,14 @@ void ValidateAttributes(const NHdrf::TStaticAttributes& attrs, const TDynamicEle
                 }
             });
 
-            Y_ENSURE(guarantee <= unreserved,
-                "CpuGuarantee (" << guarantee << ") exceeds the guarantee left by the parent (" << unreserved << ")");
+            Y_ENSURE_EX(guarantee <= unreserved, TCpuGuaranteeError()
+                << "CpuGuarantee (" << guarantee << ") exceeds the guarantee left by the parent (" << unreserved << ")");
         }
 
         if (element) {
             const auto reserved = element->GetChildrenCpuGuarantee();
-            Y_ENSURE(guarantee >= reserved,
-                "CpuGuarantee (" << guarantee << ") is less than the guarantees already reserved by children (" << reserved << ")");
+            Y_ENSURE_EX(guarantee >= reserved, TCpuGuaranteeError()
+                << "CpuGuarantee (" << guarantee << ") is less than the guarantees already reserved by children (" << reserved << ")");
         }
     }
 }
@@ -295,16 +296,17 @@ private:
     void ApplyPoolConfig(const TString& databaseId, const TString& poolId, NHdrf::TStaticAttributes attrs) {
         try {
             Scheduler->AddOrUpdatePool(databaseId, poolId, attrs);
-        } catch (const std::exception& e) {
+            return;
+        } catch (const TCpuGuaranteeError& e) {
             YDB_LOG_ERROR("Rejected guarantee",
                 {"pool", databaseId},
                 {"poolId", poolId},
                 {"attrs", attrs},
                 {"error", TString(e.what())});
-
-            attrs.CpuGuarantee = 0;
-            Scheduler->AddOrUpdatePool(databaseId, poolId, attrs);
         }
+
+        attrs.CpuGuarantee = 0;
+        Scheduler->AddOrUpdatePool(databaseId, poolId, attrs);
     }
 
 private:

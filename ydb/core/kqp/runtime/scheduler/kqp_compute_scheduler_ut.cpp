@@ -826,13 +826,13 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         scheduler.AddOrUpdateDatabase(databaseId, {.CpuGuarantee = kCpuLimit});
 
         const TString poolId = "pool1";
-        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(databaseId, poolId, {.CpuLimit = kPoolLimit, .CpuGuarantee = kPoolLimit + 1}), yexception);
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(databaseId, poolId, {.CpuLimit = kPoolLimit, .CpuGuarantee = kPoolLimit + 1}), TCpuGuaranteeError);
 
         // The rejected configuration should not be applied even partially
         scheduler.AddOrUpdatePool(databaseId, poolId, {.CpuLimit = kPoolLimit, .CpuGuarantee = kPoolLimit});
 
-        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(databaseId, poolId, {.CpuGuarantee = kPoolLimit + 1}), yexception);
-        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(databaseId, poolId, {.CpuLimit = kPoolLimit - 1}), yexception);
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(databaseId, poolId, {.CpuGuarantee = kPoolLimit + 1}), TCpuGuaranteeError);
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(databaseId, poolId, {.CpuLimit = kPoolLimit - 1}), TCpuGuaranteeError);
     }
 
     Y_UNIT_TEST(PoolGuaranteesAgainstDatabaseGuarantee) {
@@ -862,11 +862,11 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         scheduler.AddOrUpdateDatabase(databaseId, {.CpuGuarantee = kDatabaseGuarantee});
 
         scheduler.AddOrUpdatePool(databaseId, "pool1", {.CpuGuarantee = 4});
-        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(databaseId, "pool2", {.CpuGuarantee = 3}), yexception);
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(databaseId, "pool2", {.CpuGuarantee = 3}), TCpuGuaranteeError);
         scheduler.AddOrUpdatePool(databaseId, "pool2", {.CpuGuarantee = 2});
         scheduler.AddOrUpdatePool(databaseId, "pool2", {.CpuGuarantee = 2});
 
-        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateDatabase(databaseId, {.CpuGuarantee = kDatabaseGuarantee - 1}), yexception);
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateDatabase(databaseId, {.CpuGuarantee = kDatabaseGuarantee - 1}), TCpuGuaranteeError);
         scheduler.AddOrUpdateDatabase(databaseId, {.CpuGuarantee = kDatabaseGuarantee});
 
         // A database is guaranteed everything it may use by default - whether it is registered
@@ -877,7 +877,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
         // A query cannot reserve anything from a pool that is not guaranteed anything itself
         scheduler.AddOrUpdatePool("db2", "pool2", {});
-        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery("db2", "pool2", 1, {.CpuGuarantee = 1}), yexception);
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery("db2", "pool2", 1, {.CpuGuarantee = 1}), TCpuGuaranteeError);
     }
 
     Y_UNIT_TEST(ImplicitDatabase) {
@@ -913,7 +913,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         UNIT_ASSERT(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}) == query);
 
         // The whole guarantee of the database is reserved by the pool by now
-        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(databaseId, "pool2", {.CpuGuarantee = 1}), yexception);
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(databaseId, "pool2", {.CpuGuarantee = 1}), TCpuGuaranteeError);
     }
 
     Y_UNIT_TEST(ResetPoolGuarantee) {
@@ -938,21 +938,21 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         scheduler.AddOrUpdatePool(databaseId, "pool1", {.CpuGuarantee = 6});
 
         // Only 4 of the database's guarantee is left, so the second pool doesn't fit
-        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(databaseId, "pool2", {.CpuGuarantee = 5}), yexception);
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(databaseId, "pool2", {.CpuGuarantee = 5}), TCpuGuaranteeError);
 
         // The database cannot be reset while the first pool still reserves a part of its guarantee
-        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateDatabase(databaseId, {.CpuGuarantee = 0}), yexception);
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateDatabase(databaseId, {.CpuGuarantee = 0}), TCpuGuaranteeError);
 
         // Resetting the first pool releases its reservation for the second one
         scheduler.AddOrUpdatePool(databaseId, "pool1", {.CpuGuarantee = 0});
         scheduler.AddOrUpdatePool(databaseId, "pool2", {.CpuGuarantee = 5});
 
         // The released guarantee is reserved by the second pool now, so only 5 is left
-        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(databaseId, "pool1", {.CpuGuarantee = 6}), yexception);
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(databaseId, "pool1", {.CpuGuarantee = 6}), TCpuGuaranteeError);
         scheduler.AddOrUpdatePool(databaseId, "pool1", {.CpuGuarantee = 5});
 
         // Now the whole database's guarantee is reserved and may be released back
-        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateDatabase(databaseId, {.CpuGuarantee = kCpuLimit - 1}), yexception);
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateDatabase(databaseId, {.CpuGuarantee = kCpuLimit - 1}), TCpuGuaranteeError);
         scheduler.AddOrUpdatePool(databaseId, "pool1", {.CpuGuarantee = 0});
         scheduler.AddOrUpdatePool(databaseId, "pool2", {.CpuGuarantee = 0});
         scheduler.AddOrUpdateDatabase(databaseId, {.CpuGuarantee = 0});
@@ -960,7 +960,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         // Resetting is allowed even under a parent that is not guaranteed anything itself
         scheduler.AddOrUpdatePool(databaseId, "pool3", {});
         scheduler.AddOrUpdateQuery(databaseId, "pool3", 1, {.CpuGuarantee = 0});
-        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery(databaseId, "pool3", 2, {.CpuGuarantee = 1}), yexception);
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery(databaseId, "pool3", 2, {.CpuGuarantee = 1}), TCpuGuaranteeError);
     }
 
     Y_UNIT_TEST_TWIN(AddUpdateQueries, DefaultFairShareMode) {

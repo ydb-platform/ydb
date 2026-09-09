@@ -8,6 +8,8 @@
 
 namespace NKikimr::NKqp::NScheduler {
 
+class TCpuGuaranteeError : public yexception {};
+
 class TComputeScheduler : public std::enable_shared_from_this<TComputeScheduler> {
 public:
     TComputeScheduler(const TIntrusivePtr<TKqpCounters>& counters, const TOptions& options);

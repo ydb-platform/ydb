@@ -9,12 +9,15 @@
 #include <ydb/core/protos/shared_cache.pb.h>
 
 #include <ydb/library/actors/testlib/test_runtime.h>
-#include <library/cpp/testing/unittest/tests_data.h>
+#include <library/cpp/testing/common/network.h>
 #include <library/cpp/threading/future/future.h>
 
 #include <ydb/core/protos/key.pb.h>
 
 #include <ydb/core/testlib/audit_helpers/audit_helper.h>
+
+#include <util/generic/vector.h>
+#include <util/system/mutex.h>
 
 namespace NKikimr {
     struct TAppData;
@@ -31,8 +34,7 @@ namespace NActors {
 
 
     class TTestActorRuntime
-        : private TPortManager
-        , public TTestActorRuntimeBase
+        : public TTestActorRuntimeBase
     {
     private:
         struct TNodeData: public TNodeDataBase {
@@ -118,9 +120,10 @@ namespace NActors {
         NKikimr::TAppData& GetAppData(ui32 nodeIndex = 0);
         ui32 GetFirstNodeId();
 
-        TPortManager& GetPortManager() {
-            return *this;
-        }
+        // Allocates a free port and keeps it reserved until the runtime is
+        // destroyed. A non-zero argument is only honoured when NO_RANDOM_PORTS
+        // is set, otherwise a random free port is returned.
+        ui16 GetPort(ui16 port = 0);
 
         static bool DefaultScheduledFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline);
 
@@ -148,6 +151,8 @@ namespace NActors {
         TKeyConfigGenerator KeyConfigGenerator;
         THolder<IDestructable> Opaque;
         TVector<ui16> MonPorts;
+        TMutex PortLock;
+        TVector<NTesting::TPortHolder> Ports;
         TVector<std::function<void(ui32, NKikimr::TAppData&)>> AppDataInit_;
         bool NeedStatsCollectors = false;
         std::optional<TActorSystemSetupConfig> ActorSystemSetupConfig;

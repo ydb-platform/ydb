@@ -61,8 +61,7 @@ namespace NActors {
     }
 
     TTestActorRuntime::TTestActorRuntime(THeSingleSystemEnv d)
-        : TPortManager(false)
-        , TTestActorRuntimeBase{d}
+        : TTestActorRuntimeBase{d}
     {
         /* How it is possible to do initilization without these components? */
         NKikimr::TAppData::RandomProvider = RandomProvider;
@@ -72,30 +71,26 @@ namespace NActors {
     }
 
     TTestActorRuntime::TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads, bool useRdmaAllocator)
-        : TPortManager(false)
-        , TTestActorRuntimeBase{nodeCount, dataCenterCount, useRealThreads, useRdmaAllocator}
+        : TTestActorRuntimeBase{nodeCount, dataCenterCount, useRealThreads, useRdmaAllocator}
     {
         Initialize();
     }
 
     TTestActorRuntime::TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads, NKikimr::NAudit::TAuditLogBackends&& auditLogBackends)
-        : TPortManager(false)
-        , TTestActorRuntimeBase{nodeCount, dataCenterCount, useRealThreads}
+        : TTestActorRuntimeBase{nodeCount, dataCenterCount, useRealThreads}
         , AuditLogBackends(std::move(auditLogBackends))
     {
         Initialize();
     }
 
     TTestActorRuntime::TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount)
-        : TPortManager(false)
-        , TTestActorRuntimeBase{nodeCount, dataCenterCount}
+        : TTestActorRuntimeBase{nodeCount, dataCenterCount}
     {
         Initialize();
     }
 
     TTestActorRuntime::TTestActorRuntime(ui32 nodeCount, bool useRealThreads)
-        : TPortManager(false)
-        , TTestActorRuntimeBase{nodeCount, useRealThreads}
+        : TTestActorRuntimeBase{nodeCount, useRealThreads}
     {
         Initialize();
     }
@@ -119,6 +114,15 @@ namespace NActors {
 
         App0 = nullptr;
         NKikimr::NJaegerTracing::ClearTracingControl();
+    }
+
+    ui16 TTestActorRuntime::GetPort(ui16 port) {
+        NTesting::TPortHolder holder = NTesting::NLegacy::GetPort(port);
+        const ui16 result = holder;
+
+        TGuard<TMutex> guard(PortLock);
+        Ports.push_back(std::move(holder));
+        return result;
     }
 
     void TTestActorRuntime::AddAppDataInit(std::function<void(ui32, NKikimr::TAppData&)> callback) {
@@ -238,7 +242,7 @@ namespace NActors {
             }
 
             if (NeedMonitoring && !SingleSysEnv) {
-                ui16 port = MonitoringPortOffset ? MonitoringPortOffset + nodeIndex : GetPortManager().GetPort();
+                ui16 port = MonitoringPortOffset ? MonitoringPortOffset + nodeIndex : GetPort();
                 node->Mon.Reset(new NActors::TMon({
                     .Port = port,
                     .Threads = 10,

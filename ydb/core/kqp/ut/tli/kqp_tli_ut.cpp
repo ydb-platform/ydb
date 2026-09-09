@@ -601,8 +601,7 @@ namespace {
         {
             ConfigureKikimrForTli(Kikimr);
 
-            auto& portManager = Kikimr.GetTestServer().GetRuntime()->GetPortManager();
-            const ui16 breakerPort = portManager.GetPort();
+            const ui16 breakerPort = Kikimr.GetTestServer().GetRuntime()->GetPort();
             Kikimr.GetTestServer().EnableGRpc(breakerPort, 1);
 
             const auto baseConfig = Kikimr.GetDriverConfig();

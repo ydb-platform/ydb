@@ -34,6 +34,7 @@ Y_UNIT_TEST_SUITE(TBlockBlobStorageTest) {
                     auto* msg = ev->Get<TEvBlobStorage::TEvBlockResult>();
                     auto target = ev->GetRecipientRewrite();
                     if (msg->Status != NKikimrProto::OK) {
+                        msg->ActualGeneration = 123;
                         Cerr << "... blocking block result " << msg->Status << " for " << target << Endl;
                         blocked.emplace_back(ev.Release());
                         return TTestActorRuntime::EEventAction::DROP;
@@ -74,6 +75,7 @@ Y_UNIT_TEST_SUITE(TBlockBlobStorageTest) {
 
         auto ev = runtime.GrabEdgeEventRethrow<TEvTabletBase::TEvBlockBlobStorageResult>(owner);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrProto::NO_GROUP);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->ActualGeneration, 123);
     }
 
 } // Y_UNIT_TEST_SUITE(TBlockBlobStorageTest)

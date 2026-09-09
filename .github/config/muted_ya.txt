@@ -72,6 +72,7 @@ ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRollingUpgrad
 ydb/tests/compatibility/topics test_sqs_topic.py.TestTopicSqsRollingUpdate.test_write_and_read[rolling_stable-26-2-1_to_stable-26-3-1]
 ydb/tests/compatibility/topics test_sqs_topic.py.TestTopicSqsRollingUpdate.test_write_and_read[rolling_stable-26-3-1_to_prestable-26-4]
 ydb/tests/fq/streaming py3test.[*/*] chunk
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_issues_after_restart[kikimr0-False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_issues_after_restart[kikimr0-True]
 ydb/tests/fq/streaming/generic py3test.sole chunk
 ydb/tests/fq/streaming/generic test_iam_generic.py.TestIamAuthGeneric.test_generic_lookup_iam_auth[aje00000000000000000-kikimr0]

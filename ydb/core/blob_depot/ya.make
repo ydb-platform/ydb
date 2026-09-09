@@ -54,6 +54,7 @@ LIBRARY()
         mon_main.h
         move_data.cpp
         s3.h
+        s3_error.h
         s3_router.h
         s3_router_events.h
         space_monitor.cpp

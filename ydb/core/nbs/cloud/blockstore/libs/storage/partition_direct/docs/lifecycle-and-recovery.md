@@ -32,6 +32,16 @@ information; subsequent wire operations use the shared DDisk token contract.
 Blocked-generation errors cause the partition to stop rather than serving
 with stale ownership.
 
+For a PB connection, `TICStorageTransportActor` retains the successful
+`TEvConnect` response while it sends `TEvRegisterPersistentBuffer` with the
+current timestamp and the connection's tablet/DBG identity. Registration
+`BUSY` or `OVERLOADED` responses retry after 100 ms within the same connection
+attempt. After registration succeeds or is rejected as a duplicate, the
+transport probes with `TEvListPersistentBuffer`. Only a successful probe
+completes the connection promise successfully. This prevents an existing
+but retiring namespace from being published as a usable PB connection.
+The later recovery listing still supplies the records to the dirty map.
+
 ## Restoring PB records
 
 `DoListPBuffers` runs [TRestoreRequestExecutor](../restore_request.cpp),
@@ -172,7 +182,14 @@ For partition deletion,
 [delete_partition.cpp](../../partition_direct_tablet/delete_partition.cpp)
 stops the fast path and starts
 [TPartitionCleanupActor](../../partition_direct_tablet/partition_cleanup_actor.cpp).
-Cleanup wipes PB records, deletes DDisk tablet chunks and then requests BSC
+Cleanup sends `TEvUnregisterPersistentBuffer` for every tablet/DBG namespace
+in the persisted connections. Endpoints are deduplicated within each DBG,
+so two DBGs sharing a PB still produce separate unregister requests. Each
+successful response follows the PB's maximum-barrier write, twice the
+registration timeout, and durable removal of the barrier. Cleanup treats
+an absent namespace (`INCORRECT_REQUEST`) as already removed and retries
+`BUSY` after 100 ms within its existing 60-second timeout. It waits for all
+PB namespaces before deleting DDisk tablet chunks and requesting BSC
 deallocation. This is an explicit resource lifecycle; stopping an ordinary
 worker or completing a user write does not imply deletion of its DBG.
 

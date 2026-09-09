@@ -80,6 +80,71 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
         }
     }
 
+    Y_UNIT_TEST(RestoreKeepsOwnershipMarkersWithoutRecords) {
+        auto mgr = MakeManager();
+        auto alloc = MakeAllocator();
+        TPersistentBufferBarriers header{};
+        header.Header.Flags = TPersistentBufferHeader::IS_BARRIER;
+        header.Header.RecordLsn = 1;
+        header.Barriers[0] = {100, 0, 0, 1};
+        // A deleted slot must not hide subsequent ownership markers.
+        header.Barriers[2] = {100, Max<ui32>(), Max<ui64>(), 2};
+        UNIT_ASSERT(mgr.AddBarrier(&header.Header, 0, 1));
+        std::map<TPersistentBufferId, TPersistentBuffer> buffers;
+        mgr.RestoreBarriers(buffers, alloc);
+        UNIT_ASSERT(mgr.PersistentBufferBarriersLocation.contains({100, 1}));
+        UNIT_ASSERT(mgr.PersistentBufferBarriersLocation.contains({100, 2}));
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(100, 2).Generation, Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(100, 2).Lsn, Max<ui64>());
+        mgr.MoveBarrier(200, 0, 0, MakeSector(0, 2));
+        UNIT_ASSERT(mgr.PersistentBufferBarriersLocation.contains({100, 1}));
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetBarrier(100, 2).Lsn, Max<ui64>());
+    }
+
+    Y_UNIT_TEST(RestoreBarrierDoesNotEraseNewerGeneration) {
+        auto mgr = MakeManager();
+        auto alloc = MakeAllocator();
+        TPersistentBufferBarriers header{};
+        header.Header.Flags = TPersistentBufferHeader::IS_BARRIER;
+        header.Header.RecordLsn = 1;
+        header.Barriers[0] = {100, 1, 100, 0};
+        UNIT_ASSERT(mgr.AddBarrier(&header.Header, 0, 1));
+        std::map<TPersistentBufferId, TPersistentBuffer> buffers;
+        buffers[{100, 2}].Records[1] = {};
+        mgr.RestoreBarriers(buffers, alloc);
+        UNIT_ASSERT(buffers.contains({100, 2}));
+        UNIT_ASSERT(buffers.at({100, 2}).Records.contains(1));
+    }
+
+    Y_UNIT_TEST(RemovedBarrierDoesNotReappearAndKeepsFollowingEntries) {
+        auto mgr = MakeManager();
+        mgr.MoveBarrier(100, Max<ui32>(), Max<ui64>(), MakeSector(0, 1), 1);
+        auto [unusedChunk, unusedSector, before] =
+            mgr.MoveBarrier(100, 0, 0, MakeSector(0, 2), 2);
+        const auto oldHeader = before.Header;
+        auto [oldChunk, oldSector, after] = mgr.RemoveBarrier(100, MakeSector(0, 3), 1);
+        UNIT_ASSERT_VALUES_EQUAL(oldChunk, 0);
+        UNIT_ASSERT_VALUES_EQUAL(oldSector, 2);
+        UNIT_ASSERT(!mgr.HasBarrier(100, 1));
+        UNIT_ASSERT(mgr.HasBarrier(100, 2));
+        for (bool reverse : {false, true}) {
+            auto restored = MakeManager();
+            auto alloc = MakeAllocator();
+            // Recovery can discover both physical copies in either order.
+            if (reverse) {
+                restored.AddBarrier(&after.Header.Header, 0, 3);
+                restored.AddBarrier(&oldHeader.Header, 0, 2);
+            } else {
+                restored.AddBarrier(&oldHeader.Header, 0, 2);
+                restored.AddBarrier(&after.Header.Header, 0, 3);
+            }
+            std::map<TPersistentBufferId, TPersistentBuffer> buffers;
+            restored.RestoreBarriers(buffers, alloc);
+            UNIT_ASSERT(!restored.HasBarrier(100, 1));
+            UNIT_ASSERT(restored.HasBarrier(100, 2));
+        }
+    }
+
     Y_UNIT_TEST(CompactDoesNotSetFlagWhenFitsRaw) {
         auto mgr = MakeManager();
 

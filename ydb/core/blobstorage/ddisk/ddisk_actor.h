@@ -272,6 +272,14 @@ namespace NKikimr::NDDisk {
                 EvBeginStopping,
                 EvCompleteStop,
                 EvRetryIODelayed,
+                EvProcessPersistentBufferRemoval,
+            };
+
+            struct TEvProcessPersistentBufferRemoval : TEventLocal<TEvProcessPersistentBufferRemoval, EvProcessPersistentBufferRemoval> {
+                TPersistentBufferTabletKey Key;
+                explicit TEvProcessPersistentBufferRemoval(TPersistentBufferTabletKey key)
+                    : Key(key)
+                {}
             };
 
             struct TEvCompleteStop : TEventLocal<TEvCompleteStop, EvCompleteStop> {};
@@ -930,6 +938,22 @@ namespace NKikimr::NDDisk {
 
             creds.SerializeResolvedForRequest(record.MutableCredentials());
 
+            if constexpr (std::is_same_v<TEventType, TEvWritePersistentBuffer>
+                    || std::is_same_v<TEventType, TEvReadPersistentBuffer>
+                    || std::is_same_v<TEventType, TEvErasePersistentBuffer>
+                    || std::is_same_v<TEventType, TEvBatchErasePersistentBuffer>
+                    || std::is_same_v<TEventType, TEvListPersistentBuffer>) {
+                if (PersistentBufferReady) {
+                    const auto status = CheckPersistentBufferOwnership(creds);
+                    if (status != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+                        SendReply(ev, std::make_unique<typename TEvent::TResult>(status,
+                            "persistent buffer namespace is not registered, not yet durable, or closed"));
+                        registerError();
+                        return false;
+                    }
+                }
+            }
+
             using TRecord = std::decay_t<decltype(record)>;
 
             if constexpr (NPrivate::THasSelectorField<TRecord>::value) {
@@ -1142,6 +1166,8 @@ namespace NKikimr::NDDisk {
             std::optional<TString> ErrorMessage = std::nullopt;
 
             NHPTimer::STime StartTs{};
+            enum class EBarrierOperation { None, Erase, Register, Close, Remove };
+            EBarrierOperation BarrierOperation = EBarrierOperation::None;
         };
 
         struct TPersistentBufferEraseInflight {
@@ -1164,6 +1190,21 @@ namespace NKikimr::NDDisk {
 
         TPersistentBufferSpaceAllocator PersistentBufferSpaceAllocator;
         TPersistentBufferBarriersManager PersistentBufferBarriersManager;
+
+        struct TPersistentBufferRemoval {
+            enum class EStage { Drain, Close, Wait, Remove };
+            EStage Stage = EStage::Drain;
+            TInstant Deadline;
+            TAutoPtr<IEventHandle> Request;
+        };
+        std::map<TPersistentBufferTabletKey, TPersistentBufferRemoval> PersistentBufferRemovals;
+        std::set<TPersistentBufferTabletKey> PersistentBufferRegistrations;
+        bool HasPersistentBufferBarrierInflight() const;
+        NKikimrBlobStorage::NDDisk::TReplyStatus::E CheckPersistentBufferOwnership(const TQueryCredentials& creds) const;
+        void Handle(TEvRegisterPersistentBuffer::TPtr ev);
+        void Handle(TEvUnregisterPersistentBuffer::TPtr ev);
+        void Handle(TEvPrivate::TEvProcessPersistentBufferRemoval::TPtr ev);
+        void ProcessPersistentBufferRemoval(TPersistentBufferTabletKey key);
 
         ui64 PersistentBufferChunkMapSnapshotLsn = Max<ui64>();
         std::queue<TPendingEvent> PendingPersistentBufferEvents;
@@ -1211,7 +1252,8 @@ namespace NKikimr::NDDisk {
         void ProcessPersistentBufferBatchWrite();
         double GetPersistentBufferFreeSpace();
         void ErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases);
-        void BarrierErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases, ui64 lsn);
+        void BarrierErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases, ui64 lsn,
+            TPersistentBufferDiskOperationInFlight::EBarrierOperation operation = TPersistentBufferDiskOperationInFlight::EBarrierOperation::Erase);
         void FastErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases, const TFastErase& fastErase);
         void ClearPersistentBufferRecords(TPersistentBufferDiskOperationInFlight& inflight, ui64 partCookie);
         void HandleWritePart(TPersistentBufferDiskOperationInFlight& inflight,  ui64 opCookie, ui64 partCookie);

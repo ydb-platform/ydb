@@ -130,6 +130,10 @@ namespace NKikimr::NDDisk {
             EvPersistentBufferInfo,
             EvDeleteTabletChunks,
             EvDeleteTabletChunksResult,
+            EvRegisterPersistentBuffer,
+            EvRegisterPersistentBufferResult,
+            EvUnregisterPersistentBuffer,
+            EvUnregisterPersistentBufferResult,
         };
     };
 
@@ -501,6 +505,8 @@ struct TPersistentBufferFormat {
     // are saved in the header. Existing checksum-formatted records remain readable.
     // Kept last to preserve existing positional aggregate initialization.
     bool EnableChecksums = true;
+    // Registration age limit. Closed namespaces are retained for twice this interval.
+    ui32 RegistrationTimeoutMilliseconds = 5000;
 };
 
 #define DECLARE_DDISK_EVENT(NAME) \
@@ -532,6 +538,47 @@ struct TPersistentBufferFormat {
     struct TEvPersistentBufferInfo;
     struct TEvDeleteTabletChunks;
     struct TEvDeleteTabletChunksResult;
+    struct TEvRegisterPersistentBufferResult;
+    struct TEvUnregisterPersistentBufferResult;
+
+    DECLARE_DDISK_EVENT(RegisterPersistentBuffer) {
+        using TResult = TEvRegisterPersistentBufferResult;
+        TEvRegisterPersistentBuffer() = default;
+        TEvRegisterPersistentBuffer(const TQueryCredentials& creds, TInstant timestamp) {
+            creds.SerializeForRequest(Record.MutableCredentials());
+            Record.SetTimestampMicroseconds(timestamp.MicroSeconds());
+        }
+    };
+
+    DECLARE_DDISK_EVENT(RegisterPersistentBufferResult) {
+        TEvRegisterPersistentBufferResult() = default;
+        TEvRegisterPersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+                const std::optional<TString>& errorReason = std::nullopt) {
+            Record.SetStatus(status);
+            if (errorReason) {
+                Record.SetErrorReason(*errorReason);
+            }
+        }
+    };
+
+    DECLARE_DDISK_EVENT(UnregisterPersistentBuffer) {
+        using TResult = TEvUnregisterPersistentBufferResult;
+        TEvUnregisterPersistentBuffer() = default;
+        TEvUnregisterPersistentBuffer(const TQueryCredentials& creds) {
+            creds.SerializeForRequest(Record.MutableCredentials());
+        }
+    };
+
+    DECLARE_DDISK_EVENT(UnregisterPersistentBufferResult) {
+        TEvUnregisterPersistentBufferResult() = default;
+        TEvUnregisterPersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+                const std::optional<TString>& errorReason = std::nullopt) {
+            Record.SetStatus(status);
+            if (errorReason) {
+                Record.SetErrorReason(*errorReason);
+            }
+        }
+    };
 
     DECLARE_DDISK_EVENT(Connect) {
         using TResult = TEvConnectResult;

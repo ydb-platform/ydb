@@ -18,6 +18,37 @@ Duplicate-payload conflict detection is under development. For a record written 
 
 The PB namespace contains a generation, while its erase barrier spans generations for one `(TabletId, DirectBlockGroupIndex)`. A client recovering an older generation can read or erase its records using the operation's record-generation field where available, while authenticating through its current session.
 
+## Registration and Retirement
+
+Before issuing data operations, a client connects to the PB and sends
+`TEvRegisterPersistentBuffer` for `(TabletId, DirectBlockGroupIndex)`, with its
+current timestamp in microseconds. `TPBufferConfig.RegistrationTimeoutMilliseconds`
+defaults to 5000; NodeWarden passes it to `TPersistentBufferFormat::RegistrationTimeoutMilliseconds`.
+Registration rejects timestamps older than this interval,
+as well as timestamps in the future. A successful reply follows a durable
+barrier write with generation and LSN zero. An existing barrier rejects
+registration, including when it has no live records. On reconnect, a client
+can use `TEvListPersistentBuffer` to verify that an existing namespace is
+still served. Writes, reads, listing and erases require a registered namespace;
+connection management and diagnostics remain available before registration.
+
+`TEvUnregisterPersistentBuffer` permanently retires the namespace. The PB
+stops admitting its operations, drains outstanding work and writes a barrier
+with maximum generation and LSN. It then waits twice the registration timeout
+(10 seconds by default), durably removes the barrier entry and replies `OK`.
+Registration is rejected throughout retirement. The delay makes registration
+messages sent before retirement too old to recreate the namespace after the
+barrier is removed. If recovery finds the maximum barrier, it resumes retirement
+with a full waiting interval. Failed barrier writes require recovery before
+the PB can resume normal operations.
+
+The NBS direct-partition transport completes a PB connection only after
+`Connect`, registration, and a successful list probe. The probe also verifies
+an existing namespace after duplicate registration is rejected on reconnect.
+Partition deletion unregisters every tablet/DBG namespace, including separate
+namespaces sharing one PB, before deleting DDisk chunks and deallocating the
+groups in BSC. An already absent namespace satisfies that cleanup step.
+
 ## Write, Read, and Replicate
 
 `TEvWritePersistentBuffer` writes one record to one PB. The payload helpers in [ddisk.h](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/ddisk/ddisk.h) construct event payload references and checksum fields. With checksum validation enabled, the PB rejects a mismatching payload before allocation or I/O.

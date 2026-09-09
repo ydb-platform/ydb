@@ -24,6 +24,8 @@ struct TEvTransportPrivate
 
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
+        // Retain session credentials until PB registration has been verified.
+        TResult ConnectionResult;
         NThreading::TPromise<TResult> ConnectPromise =
             NThreading::NewPromise<TResult>();
         NThreading::TPromise<ui32> DisconnectPromise =

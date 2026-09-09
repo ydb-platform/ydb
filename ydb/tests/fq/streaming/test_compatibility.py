@@ -9,7 +9,7 @@ from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 logger = logging.getLogger(__name__)
 
 
-class SimpleTest(TestYdsBase):
+class SimpleTest:
     Id = 0
 
     def __init__(self, prefix):
@@ -20,9 +20,6 @@ class SimpleTest(TestYdsBase):
 
     def get_name(self):
         return f"{self.prefix}_test666_{self.id}"
-
-    def get_path(self, database: str = "/Root"):
-        return f"{database}/{self.get_name()}"
 
     def get_query_text(self, inp, out):
         name = self.get_name()
@@ -46,54 +43,62 @@ class SimpleTest(TestYdsBase):
 
 Queries = [SimpleTest("test_compatibility_")]
 
+class StreamingTestBase2(StreamingTestBase):
 
-class TestStreamingCompatibility(StreamingTestBase):
+    def start_query(self, kikimr, query):
+        self.current_query_name = query.get_name()
+        logger.debug(f"Start query {self.current_query_name}")
+        kikimr.ydb_client.query(query.get_query_text(self.inp, self.out))
+        self.wait_completed_checkpoints(kikimr, self.current_query_name)
+
+    def check_data(self, kikimr, query):
+        self.current_query_name = query.get_name()
+        logger.debug(f"Write test data for query {self.current_query_name}")
+        data, expected_data = query.get_test_data()
+        self.write_stream(data, endpoint=self.topic_endpoint)
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=self.topic_endpoint, timeout=60) == expected_data
+        self.wait_completed_checkpoints(kikimr, self.current_query_name)
+
+    def stop_query(self, kikimr, query):
+        self.current_query_name = query.get_name()
+        logger.debug(f"Stopping {self.current_query_name}...")
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{self.current_query_name}` SET (RUN = FALSE);")
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{self.current_query_name}`;")
+        logger.debug(f"Query {self.current_query_name} is dropped")
+
+
+class TestStreamingCompatibility(StreamingTestBase2):
 
     @pytest.mark.parametrize("kikimr", [{"is_compatibility_tests": True}], indirect=["kikimr"])
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_compatibility(self: StreamingTestBase, kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
-        inp, out, endpoint = self.get_io_names(kikimr, "test_compatibility", local_topics, entity_name, partitions_count=10)
+    def test_compatibility(self: StreamingTestBase2, kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
+        self.inp, self.out, self.topic_endpoint = self.get_io_names(kikimr, "test_compatibility", local_topics, entity_name, partitions_count=10)
 
-        database = kikimr.endpoint.database
+        try:
+            for query in Queries:
+                self.start_query(kikimr, query)
 
-        for query in Queries:
-            logger.debug(f"Start query {query.get_name()}")
-            kikimr.ydb_client.query(query.get_query_text(inp, out))
-            self.wait_completed_checkpoints(kikimr, query.get_path(database))
+            # check input/output data
+            for query in Queries:
+                self.check_data(kikimr, query)
 
-        for query in Queries:
-            logger.debug(f"Test data for query {query.get_name()}")
-            data, expected_data = query.get_test_data()
-            self.write_stream(data, endpoint=endpoint)
-            assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint, timeout=60) == expected_data
-            self.wait_completed_checkpoints(kikimr, query.get_path(database))
+            for i, _ in enumerate(kikimr.rolling()):
+                time.sleep(5)
 
-        for i, _ in enumerate(kikimr.roll()):
-            time.sleep(5)
+                for query in Queries:
+                    self.check_data(kikimr, query)
+
+                kikimr.recreate_driver()
+                tmp_queries = [SimpleTest("test_compatibility_")]
+                for query in tmp_queries:
+                    self.start_query(kikimr, query)
+                    self.check_data(kikimr, query)
+                    self.stop_query(kikimr, query)
 
             for query in Queries:
-                logger.debug(f"Test data for query {query.get_name()}")
-                data, expected_data = query.get_test_data()
-                self.write_stream(data, endpoint=endpoint)
-                assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint, timeout=60) == expected_data
-                self.wait_completed_checkpoints(kikimr, query.get_path(database))
+                self.stop_query(kikimr, query)
+                time.sleep(0.5)
 
-            kikimr.recreate_driver()
-            tmp_queries = [SimpleTest("test_compatibility_")]
-            for query in tmp_queries:
-                logger.debug(f"Start new query  {query.get_name()}")
-                kikimr.ydb_client.query(query.get_query_text(inp, out))
-                self.wait_completed_checkpoints(kikimr, query.get_path(database))
-                data, expected_data = query.get_test_data()
-                self.write_stream(data, endpoint=endpoint)
-                assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint, timeout=60) == expected_data
-                logger.debug(f"Stoping {query.get_name()}...")
-                kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query.get_name()}`;")
-                logger.debug(f"Query {query.get_name()} no longer exists)")
-
-        for query in Queries:
-            logger.debug(f"Stoping {query.get_name()}...")
-            kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query.get_name()}` SET (RUN = FALSE);")
-            kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query.get_name()}`;")
-            logger.debug(f"Query {query.get_name()} is dropped")
-            time.sleep(0.5)
+        except AssertionError as error:
+            path = f"{kikimr.get_database_name()}/{self.current_query_name}"
+            raise AssertionError(f"{error}\n{self.get_diagnostics(kikimr, path)}") from error

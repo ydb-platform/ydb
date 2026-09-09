@@ -72,7 +72,7 @@ def get_ydb_config(request, enable_fq_connector=None):
         "enable_streaming_queries_pq_sink_deduplication",
         "enable_external_data_source_auth_method_iam",
         "allow_ydb_requests_without_database",
-        "enable_updating_partitions_on_streaming_query_restart",
+  #      "enable_updating_partitions_on_streaming_query_restart",
     }
     disabled_feature_flags = []
     if enable_shared_reading_in_streaming_queries:
@@ -80,15 +80,15 @@ def get_ydb_config(request, enable_fq_connector=None):
     else:
         disabled_feature_flags.append("enable_shared_reading_in_streaming_queries")
 
-    if enable_shared_reading_structured_json_parsing:
-        extra_feature_flags.add("enable_shared_reading_structured_json_parsing")
+   # if enable_shared_reading_structured_json_parsing:
+   #     extra_feature_flags.add("enable_shared_reading_structured_json_parsing")
     if enable_streaming_queries:
         extra_feature_flags.add("enable_streaming_queries")
     else:
         disabled_feature_flags.append("enable_streaming_queries")
 
-    if enable_dq_source_stream_lookup_join_local_lookups:
-        extra_feature_flags.add("enable_dq_source_stream_lookup_join_local_lookups")
+ #   if enable_dq_source_stream_lookup_join_local_lookups:
+ #       extra_feature_flags.add("enable_dq_source_stream_lookup_join_local_lookups")
     if enable_dq_source_stream_lookup_join_fullscan:
         extra_feature_flags.add("enable_dq_source_stream_lookup_join_fullscan")
     if enable_dq_source_stream_lookup_join_shuffle_mode:
@@ -365,6 +365,9 @@ class YdbClient:
                 result.extend(_read_batch())
             return result
 
+    def wait_connection(self, timeout=5):
+        self.driver.wait(timeout, fail_fast=True)
+
 
 _SECTIONS_FOR_CMS = [
     "table_service_config",
@@ -442,12 +445,18 @@ class Kikimr:
     def __init__(
         self,
         config: KikimrConfigGenerator,
+        main_binary_path: str,
+        stable_binary_path: str,
         timeout_seconds: int = 240,
         enable_discovery: bool = True,
         tenant_database: str = "/Root/my_tenant",
     ):
-        ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
-        logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
+        #kikimr_driver_path
+        #ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
+        logger.info(yatest.common.execute([main_binary_path, "-V"], wait=True).stdout.decode("utf-8"))
+
+        self.main_binary_path = main_binary_path
+        self.stable_binary_path = stable_binary_path
 
         full_yaml_config = copy.deepcopy(config.yaml_config)
 
@@ -486,10 +495,7 @@ class Kikimr:
 
     def recreate_driver(self):
         self.ydb_client.stop()
-        self.ydb_client = YdbClient(
-
-            database=self.endpoint.database, endpoint=f"grpc://{self.endpoint.endpoint}", enable_discovery=False
-        )
+        self.ydb_client = self._setup_ydb_client(self.endpoint, enable_discovery=False)
 
     @staticmethod
     def _setup_ydb_client(endpoint: Endpoint, enable_discovery: bool) -> YdbClient:
@@ -505,6 +511,57 @@ class Kikimr:
 
     def get_database_name(self) -> str:
         return self.endpoint.database
+
+    def wait_for_readiness(self, timeout: int = 60) -> None:
+        """Spin until the cluster accepts queries (verified via the stable node)."""
+        deadline = time.time() + timeout
+        last_exc = None
+        while time.time() < deadline:
+            try:
+                self.ydb_client.wait_connection(timeout=5)
+                return
+            except Exception as exc:
+                last_exc = exc
+                logger.warning("Readiness check failed: %r", exc)
+                time.sleep(2)
+        raise TimeoutError(f"Cluster not ready after {timeout}s") from last_exc
+
+    def rolling(self):
+        rolling_slot_id = 1
+        logger.info(f"rolling update: step 1 — switching slot {rolling_slot_id} to stable version")
+        rolling_node = self.cluster.slots[rolling_slot_id]
+        rolling_node.stop()
+        rolling_node.binary_path = self.stable_binary_path
+        rolling_node.set_log_file_prefix("logfile_stable_")
+        rolling_node.start()
+        self.wait_for_readiness()
+        logger.info(f"rolling update: step 1 complete")
+        yield
+
+        rolling_slot_id = 2
+        logger.info(f"rolling update: step2  — switching slot {rolling_slot_id} to stable version")
+        rolling_node = self.cluster.slots[rolling_slot_id]
+        rolling_node.stop()
+        rolling_node.binary_path = self.stable_binary_path
+        rolling_node.set_log_file_prefix("logfile_stable_")
+        rolling_node.start()
+        self.wait_for_readiness()
+        logger.info(f"rolling update: step 2 complete")
+        yield
+
+        logger.info(f"rolling update: step 3 — switching slots back to main version")
+        for rolling_node in self.cluster.slots.values():
+            rolling_node.stop()
+
+        for rolling_node in self.cluster.slots.values():
+            rolling_node.binary_path = self.main_binary_path
+            rolling_node.set_log_file_prefix("logfile_main_restored_")
+
+        for rolling_node in self.cluster.slots.values():
+            rolling_node.start()
+            self.wait_for_readiness()
+        logger.info("rolling update: step 3 complete")
+        yield
 
 
 class StreamingTestBase(TestYdsBase):
@@ -535,6 +592,25 @@ class StreamingTestBase(TestYdsBase):
             endpoint = self.get_endpoint(kikimr, local_topics=False)
         kikimr.ydb_client.create_external_data_source(source_name, endpoint.endpoint, endpoint.database, shared)
 
+    def get_diagnostics(self, kikimr, path: str):
+        try:
+            result_sets = kikimr.ydb_client.query(
+                f'SELECT Status, Issues FROM `.sys/streaming_queries` WHERE Path = "{path}";'
+            )
+            return (
+                "\n".join(
+                    "Status: {status}\nIssues:\n{issues}".format(
+                        status=row["Status"],
+                        issues=json.dumps(json.loads(row["Issues"]), indent=2, ensure_ascii=False),
+                    )
+                    for row in result_sets[0].rows
+                )
+                if result_sets
+                else []
+            )
+        except Exception as diagnostics_error:
+            return f"failed to retrieve Status / Issues: {diagnostics_error}"
+            
     def wait_completed_checkpoints(
         self,
         kikimr: Kikimr,
@@ -549,25 +625,7 @@ class StreamingTestBase(TestYdsBase):
                 kikimr.cluster, path, timeout=timeout, checkpoints_count=checkpoints_count, wait_delta=True
             )
         except AssertionError as error:
-            diagnostics = "failed to retrieve Status / Issues"
-            try:
-                result_sets = kikimr.ydb_client.query(
-                    f'SELECT Status, Issues FROM `.sys/streaming_queries` WHERE Path = "{path}";'
-                )
-                diagnostics = (
-                    "\n".join(
-                        "Status: {status}\nIssues:\n{issues}".format(
-                            status=row["Status"],
-                            issues=json.dumps(json.loads(row["Issues"]), indent=2, ensure_ascii=False),
-                        )
-                        for row in result_sets[0].rows
-                    )
-                    if result_sets
-                    else []
-                )
-            except Exception as diagnostics_error:
-                diagnostics = f"failed to retrieve Status / Issues: {diagnostics_error}"
-            raise AssertionError(f"{error}\n{diagnostics}") from error
+            raise AssertionError(f"{error}\n{self.get_diagnostics(kikimr, path)}") from error
 
     def get_actor_count(self, kikimr: Kikimr, node_id: int, activity: str) -> int:
         result = get_sensors(kikimr.cluster, node_id, "utils").find_sensor(
@@ -715,6 +773,7 @@ class StreamingTestBase(TestYdsBase):
         )
         return endpoint, refs[0], paths[0]
 
+    # TODO rm
     def roll(self, kikimr):
         all_nodes = [(id, n, "node") for id, n in kikimr.cluster.slots.items()] + [
             (id, n, "slot") for id, n in kikimr.cluster.slots.items()

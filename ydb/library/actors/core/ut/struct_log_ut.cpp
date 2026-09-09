@@ -19,27 +19,92 @@ template <typename T>
 void TestType(const std::vector<T>& values) {
     auto typeCode = TTypesMapping::GetCode<T>();
 
-    for (auto value : values) {
-        auto originalStr = TTypesMapping::ToString(value);
+    for (auto originalValue : values) {
+        auto originalStr = TTypesMapping::ToString(originalValue);
 
         TBinaryData data;
-        TTypesMapping::Serialize<T>(value, data);
+        TTypesMapping::Serialize<T>(originalValue, data);
 
         T readValue;
         auto hasRead = TTypesMapping::Deserialize<T>(readValue, typeCode, data.data(), data.size());
         UNIT_ASSERT(hasRead);
+        UNIT_ASSERT_VALUES_EQUAL(originalValue, readValue);
 
-        TString recoveredStr;
-        if (hasRead) {
-            recoveredStr = TTypesMapping::ToString(readValue);
-        }
-
-        UNIT_ASSERT(value == readValue);
+        auto recoveredStr = TTypesMapping::ToString(readValue);
+        UNIT_ASSERT_VALUES_EQUAL(originalStr, recoveredStr);
     }
 }
 
 Y_UNIT_TEST_SUITE(StructLog) {
-    Y_UNIT_TEST(NativeTypes) { TestType<TString>({"", "a", "ab", "abc"}); }
+    Y_UNIT_TEST(NativeTypes) {
+        TestType<TString>({"", "a", "ab", "abc"});
+        TestType<ui8>({1, 2, 3, 4, 5});
+        TestType<i8>({1, 2, 3, 4, 5});
+        TestType<ui16>({1, 2, 3, 4, 5});
+        TestType<i16>({1, 2, 3, 4, 5});
+        TestType<ui32>({1, 2, 3, 4, 5});
+        TestType<i32>({1, 2, 3, 4, 5});
+        TestType<ui64>({1, 2, 3, 4, 5});
+        TestType<i64>({1, 2, 3, 4, 5});
+        TestType<bool>({true, false});
+        TestType<float>({1, 2, 3, 4, 5});
+        TestType<double>({1, 2, 3, 4, 5});
+        TestType<long double>({1, 2, 3, 4, 5});
+    }
+
+    #define TEST_MESSAGE_EXTRACT_TO_STRING(M, S)                          \
+        {                                                                 \
+            TStringValueExtractor extractor;                              \
+            auto stringValue = extractor.ExtractValue(M, "value");        \
+            UNIT_ASSERT(stringValue.has_value());                         \
+            UNIT_ASSERT_STRINGS_EQUAL(stringValue.value(), S);            \
+        }
+
+    Y_UNIT_TEST(NativeTypesExtractString) {
+
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui16>(3)}), "3");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i16>(4)}), "4");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui32>(5)}), "5");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i32>(6)}), "6");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui64>(7)}), "7");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i64>(8)}), "8");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", true}), "true");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", false}), "false");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", TString("abc")}), "abc");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", "abc"}), "abc");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), "1.123000");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), "1.123000");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), "1.123000");
+
+        int i = 0;
+        auto ptr = static_cast<void*>(&i);
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", ptr}), TStringBuilder() << ptr);
+
+        ptr = nullptr;
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", ptr}), TStringBuilder() << ptr);
+    }
+
+    template <typename T, typename A, bool OK>
+    void CheckNativeExtraction(const T& value) {
+        auto msg = YDB_LOG_CREATE_MESSAGE({"value", value});
+
+        using TExtractorType = TNativeValueExtractor<A>;
+        TExtractorType extractor;
+
+        auto result = extractor.ExtractValue(msg, "value");
+        UNIT_ASSERT_EQUAL(result.first, OK ? TExtractorType::TResultKind::Ok : TExtractorType::TResultKind::NoCast);
+        if constexpr(OK) {
+            UNIT_ASSERT(result.second.has_value());
+            UNIT_ASSERT_EQUAL(result.second.value(), static_cast<A>(value));
+        }
+    }
+
+    Y_UNIT_TEST(NativeTypesExtractNative) {
+        CheckNativeExtraction<ui8, ui64, true>(1);
+        CheckNativeExtraction<ui64, ui8, true>(1);
+        CheckNativeExtraction<ui8, TString, false>(1);
+        CheckNativeExtraction<TString, ui8, false>("1");
+    }
 
     Y_UNIT_TEST(TestKeyName) {
         // compile vs compile
@@ -211,9 +276,9 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", true}), "value=true");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TString("abc")}), "value=abc");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", "abc"}), "value=abc");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), "value=1.123");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), "value=1.123");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), "value=1.123");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), "value=1.123000");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), "value=1.123000");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), "value=1.123000");
 
         int i = 0;
         auto ptr = static_cast<void*>(&i);
@@ -519,9 +584,9 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", true}), R"({"value":true})");
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TString("abc")}), R"({"value":"abc"})");
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", "abc"}), R"({"value":"abc"})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), R"({"value":"1.123"})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), R"({"value":"1.123"})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), R"({"value":"1.123"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), R"({"value":1.123})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), R"({"value":1.123})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), R"({"value":1.123})");
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", NActors::TActorId(1, 2)}), R"({"value":"[0:1:2]"})");
 
         // reuse message and sub message
@@ -571,54 +636,5 @@ Y_UNIT_TEST_SUITE(StructLog) {
         );
     }
 
-    #define TEST_MESSAGE_EXTRACT_TO_STRING(M, S)                          \
-        {                                                                 \
-            TStringValueExtractor extractor;                              \
-            auto stringValue = extractor.ExtractValue(M, "value");        \
-            UNIT_ASSERT(stringValue.has_value());                         \
-            UNIT_ASSERT_STRINGS_EQUAL(stringValue.value(), S);            \
-        }
-
-    Y_UNIT_TEST(NativeTypesToString) {
-
-        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui16>(3)}), "3");
-        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i16>(4)}), "4");
-        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui32>(5)}), "5");
-        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i32>(6)}), "6");
-        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui64>(7)}), "7");
-        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i64>(8)}), "8");
-        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", true}), "true");
-        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", false}), "false");
-        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", TString("abc")}), "abc");
-        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", "abc"}), "abc");
-        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), "1.123");
-        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), "1.123");
-        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), "1.123");
-
-        int i = 0;
-        auto ptr = static_cast<void*>(&i);
-        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", ptr}), TStringBuilder() << ptr);
-
-        ptr = nullptr;
-        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", ptr}), TStringBuilder() << ptr);
-    }
-
-    Y_UNIT_TEST(NativeTypesToNative) {
-        auto msg = YDB_LOG_CREATE_MESSAGE({"value", "3"});
-
-        using TExtractorType = TNativeValueExtractor<TString>;
-        TExtractorType extractor;
-
-        auto result = extractor.ExtractValue(msg, "value");
-        Cerr << "ResultKind=" << static_cast<unsigned>(result.first) << Endl;
-        UNIT_ASSERT_EQUAL(result.first, TExtractorType::TResultKind::Ok);
-        UNIT_ASSERT(result.second.has_value());
-        UNIT_ASSERT_EQUAL(result.second.value(), "3");
-
-        result = extractor.ExtractValue(msg, "value1");
-        Cerr << "ResultKind=" << static_cast<unsigned>(result.first) << Endl;
-        UNIT_ASSERT_EQUAL(result.first, TExtractorType::TResultKind::NoValue);
-        UNIT_ASSERT(!result.second.has_value());
-    }
 }
 }  // namespace NActors::NStructuredLog

@@ -67,7 +67,11 @@ struct TNativePlainTypeSupport : public std::true_type
     }
 
     static TString ToString(const T& value) {
-        return std::to_string(value);
+        if constexpr(std::is_same_v<T, char>) {
+            return TString(&value, 1);
+        } else {
+            return std::to_string(value);
+        }
     }
 
     static void AppendToString(const T& value, TStringBuilder& stringBuffer) {

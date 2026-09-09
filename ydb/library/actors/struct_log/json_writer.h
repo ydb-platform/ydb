@@ -98,7 +98,7 @@ protected:
         if constexpr (std::is_same_v<T, TString>) {
             JsonWriter.WriteString(value);
         } else if constexpr (std::is_same_v<T, i8>) {
-            JsonWriter.WriteString(std::to_string(value));
+            JsonWriter.WriteString(TNativePlainTypeSupport<char>::ToString(value));
         } else if constexpr (std::is_same_v<T, ui8> || std::is_same_v<T, ui16> || std::is_same_v<T, ui32> || std::is_same_v<T, ui64>) {
             JsonWriter.WriteULongLong(value);
         } else if constexpr (std::is_same_v<T, i16> || std::is_same_v<T, i32> || std::is_same_v<T, i64>) {

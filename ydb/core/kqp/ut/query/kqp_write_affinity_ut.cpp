@@ -514,6 +514,81 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
     }
 
     /*
+     * Regression test: CTAS without PARTITION BY and a multi-column PRIMARY KEY
+     * whose DDL order differs from alphabetical order.
+     *
+     * The sharding columns fallback to the PK columns and MUST preserve the DDL
+     * order: schemeshard derives the target table's hash sharding from the PK in
+     * DDL order, and both the sender (DQ ColumnShardHashV1) and the receiver
+     * (TConsistencySharding64) hash rows on these columns IN ORDER. A permuted
+     * order (e.g. from iterating a THashSet of PK column names) makes the hashes
+     * uncorrelated: every per-shard task then receives rows for all shards
+     * (AFL_VERIFY(splitResult.size() == 1) fires with actual=<shardCount> under
+     * KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK, and KeyColumns order in the plan
+     * mismatches regardless of the flag).
+     *
+     * NOTE: the source is an in-memory list (AS_TABLE), so the CTAS is the only
+     * OLAP write in this test. Under KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK every
+     * OLAP write must carry TargetShardIds (i.e. be an affinity write), so a
+     * setup INSERT into an OLAP source table would abort the run.
+     */
+    Y_UNIT_TEST_TWIN(CtasNoPartitionByMultiColumnPkPreservesOrder, EnableCsWriteAffinity) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        // NOTE: use SetKqpSettings (like the pure-literal tests) so the setting
+        // propagates reliably for every CTAS source path.
+        settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(EnableCsWriteAffinity));
+        TKikimrRunner kikimr(settings);
+
+        auto client = kikimr.GetQueryClient();
+
+        // CTAS without PARTITION BY, PK in non-alphabetical DDL order:
+        // sharding columns must be [Col3, Col1, Col2] (PK order), NOT sorted.
+        {
+            const TString ctasQuery =
+                "$rowCount = " + ToString(kRowCount) + ";" + R"(
+                $data = ListMap(ListFromRange(0, $rowCount), ($x) -> {
+                    RETURN AsStruct($x AS Col1, $x + 1 AS Col2, $x + 2 AS Col3);
+                });
+                CREATE TABLE `/Root/DestPkOrder` (
+                    PRIMARY KEY (Col3, Col1, Col2)
+                )
+                WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4)
+                AS SELECT Unwrap(CAST(Col1 AS Uint64)) AS Col1,
+                          Unwrap(CAST(Col2 AS Uint64)) AS Col2,
+                          Unwrap(CAST(Col3 AS Uint64)) AS Col3
+                FROM AS_TABLE($data);
+            )";
+
+            // Execute CTAS and verify the shuffle key columns order from the same
+            // execution: KeyColumns must match the PK DDL order (and no HashShuffle
+            // at all when affinity is disabled).
+            {
+                const auto plan = ExplainAndExecuteQuery(client, ctasQuery);
+                const TString planStr = NJson::WriteJson(&plan, false);
+                VerifyHashShuffleKeyColumns(plan, planStr, EnableCsWriteAffinity, {"Col3", "Col1", "Col2"});
+            }
+
+            // Verify exact data: rows (i, i+1, i+2), all Uint64.
+            {
+                auto it = client.StreamExecuteQuery(R"(
+                    SELECT Col1, Col2, Col3 FROM `/Root/DestPkOrder` ORDER BY Col1 ASC;
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), NYdb::EStatus::SUCCESS, it.GetIssues().ToString());
+                TString expected = "[";
+                for (int i = 0; i < kRowCount; ++i) {
+                    if (i > 0) {
+                        expected += ";";
+                    }
+                    expected += TStringBuilder() << "[" << i << "u;" << (i + 1) << "u;" << (i + 2) << "u]";
+                }
+                expected += "]";
+                CompareYson(StreamResultToYson(it), expected);
+            }
+        }
+    }
+
+    /*
      * Test sharding columns when PRIMARY KEY differs from sharding key (PartitionBy).
      * PK=(Col1, Col2) but PARTITION BY HASH(Col2) → KeyColumns should be ["Col2"].
      */

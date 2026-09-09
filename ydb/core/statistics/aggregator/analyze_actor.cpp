@@ -86,7 +86,9 @@ public:
 
         YDB_LOG_WARN("ScanActor OnFinish non-success",
             {"selfId", SelfId()},
-            {"status", status});
+            {"status", status},
+            {"issues", issues.ToOneLineString()},
+            {"query", Query});
 
         if (!ResponseSent) {
             auto response = std::make_unique<TEvPrivate::TEvAnalyzeScanResult>(
@@ -147,7 +149,8 @@ void TAnalyzeActor::FinishWithFailure(
         {"selfId", SelfId()},
         {"status", static_cast<int>(status)},
         {"operationId", OperationId.Quote()},
-        {"pathId", PathId});
+        {"pathId", PathId},
+        {"issue", NYql::TIssues{issue}.ToOneLineString()});
 
     auto response = std::make_unique<TEvStatistics::TEvAnalyzeActorResult>(status);
 
@@ -678,6 +681,9 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     auto& result = *ev->Get();
     if (result.Status != Ydb::StatusIds::SUCCESS) {
         NYql::TIssue error(TStringBuilder() << "Statistics calculation query failed with " << result.Status);
+        for (const auto& issue : result.Issues) {
+            error.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
+        }
         FinishWithFailure(
             TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
             std::move(error));

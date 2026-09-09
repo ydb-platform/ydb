@@ -33,11 +33,14 @@ public:
 IDqOperatorMemoryQuota* GetDqOperatorMemoryQuota();
 
 // For the owner tearing a quota down while a scope is still active (termination from inside an execution):
-// clears the binding if it points at `quota`, a no-op otherwise. The active scope restores its own previous
-// value on exit as usual, so do not nest scopes of a quota that may die inside the inner scope.
+// clears the binding if it points at `quota`, a no-op otherwise. The scope clears the binding on exit in any
+// case, so an unbind under an active scope needs nothing else.
 void UnbindDqOperatorMemoryQuota(const IDqOperatorMemoryQuota* quota);
 
-// RAII binding, nestable: the destructor restores the previously bound quota. `quota` may be nullptr.
+// RAII binding for one graph execution, opened by the owner at the top of it. NOT nestable: the destructor
+// clears the binding instead of restoring an outer one, and the constructor aborts on a nested scope - a
+// restored binding could point at a quota that UnbindDqOperatorMemoryQuota tore down inside the inner scope.
+// `quota` may be nullptr.
 class TDqOperatorMemoryQuotaScope {
 public:
     explicit TDqOperatorMemoryQuotaScope(IDqOperatorMemoryQuota* quota);
@@ -45,9 +48,6 @@ public:
 
     TDqOperatorMemoryQuotaScope(const TDqOperatorMemoryQuotaScope&) = delete;
     TDqOperatorMemoryQuotaScope& operator=(const TDqOperatorMemoryQuotaScope&) = delete;
-
-private:
-    IDqOperatorMemoryQuota* const Previous;
 };
 
 } // namespace NYql::NDq

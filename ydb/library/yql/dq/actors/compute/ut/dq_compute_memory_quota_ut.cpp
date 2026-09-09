@@ -411,7 +411,7 @@ Y_UNIT_TEST_SUITE(TDqMemoryQuotaTest) {
             quota.Destroy(); // the destructor does it on its own
             UNIT_ASSERT(GetDqOperatorMemoryQuota() == nullptr);
         }
-        UNIT_ASSERT(GetDqOperatorMemoryQuota() == nullptr); // the scope restored what was bound before it
+        UNIT_ASSERT(GetDqOperatorMemoryQuota() == nullptr); // the scope cleared the binding on exit
     }
 
     Y_UNIT_TEST(GuaranteeManagerNegativeParentDominates) {

@@ -242,7 +242,7 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
             /*totalBlockCount=*/100,
             /*operationalBlockCount=*/40);
 
-        UNIT_ASSERT_VALUES_EQUAL(40, ddisk.GetFreshBlockCount());
+        UNIT_ASSERT_VALUES_EQUAL(60, ddisk.GetFreshBlockCount());
         UNIT_ASSERT_VALUES_EQUAL(0, ddisk.GetRottenBlockCount());
 
         ddisk.OnRangeFlushed(

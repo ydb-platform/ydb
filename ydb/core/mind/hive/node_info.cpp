@@ -491,7 +491,7 @@ bool TNodeInfo::HasTabletsForBalancer(EResourceToBalance resource, TInstant now)
     }
     auto it = Tablets.find(TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING);
     return it != Tablets.end() && std::any_of(it->second.begin(), it->second.end(), [&](const TTabletInfo* tablet) {
-        return tablet->IsGoodForBalancer(now, resource);
+        return tablet->IsRunning() && tablet->IsGoodForBalancer(now, resource);
     });
 }
 
@@ -537,7 +537,7 @@ double TNodeInfo::GetNodeUsage(const TResourceNormalizedValues& normValues, ERes
 }
 
 double TNodeInfo::GetTabletUsage(EResourceToBalance resource) const {
-    return GetNodeUsage(NormalizeRawValues(ResourceValues, GetResourceMaximumValues()), resource);
+    return TTabletInfo::ExtractResourceUsage(NormalizeRawValues(ResourceValues, GetResourceMaximumValues()), resource);
 }
 
 double TNodeInfo::GetNodeUsage(EResourceToBalance resource) const {

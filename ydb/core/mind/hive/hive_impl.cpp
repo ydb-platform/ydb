@@ -2801,27 +2801,47 @@ std::optional<TBalancerSettings> THive::GetScatterBalancerSettings(TConstArrayRe
     const auto minScatter = GetMinScatterToBalance();
     const auto minUsage = GetMinNodeUsageToBalance();
     for (const auto& [resource, type] : resources) {
-        // The cohort is resource-specific: a node with no movable CPU tablets
-        // must not keep CPU balancing active or lower its minimum.
-        std::vector<const TNodeInfo*> eligibleNodes;
-        eligibleNodes.reserve(nodes.size());
+        // Loaded nodes without movable tablets must not affect the thresholds.
+        // Keep resource-idle receivers as comparison points, including new nodes
+        // and nodes whose movable tablets consume a different resource.
+        std::vector<const TNodeInfo*> sourceCandidates;
+        std::vector<const TNodeInfo*> comparisonNodes;
+        sourceCandidates.reserve(nodes.size());
+        comparisonNodes.reserve(nodes.size());
         for (const auto* node : nodes) {
+            if (!node->IsAlive() || node->Down || node->Freeze) {
+                continue;
+            }
             if (node->HasTabletsForBalancer(resource, now)) {
-                eligibleNodes.push_back(node);
+                sourceCandidates.push_back(node);
+                comparisonNodes.push_back(node);
+            } else if (node->GetNodeUsage(resource) == 0
+                       && (resource == EResourceToBalance::Counter
+                           || node->GetNodeUsage() == 0
+                           || node->HasTabletsForBalancer(EResourceToBalance::ComputeResources, now))) {
+                // Counter scatter compares tablet counts independently of compute load.
+                // An empty node with only external load is not a compute receiver.
+                comparisonNodes.push_back(node);
             }
         }
-        auto eligibleRange = eligibleNodes
+        auto comparisonRange = comparisonNodes
             | std::views::transform([](const TNodeInfo* node) -> const TNodeInfo& { return *node; });
-        const auto stats = GetStats(eligibleRange.begin(), eligibleRange.end());
+        const auto stats = GetStats(comparisonRange.begin(), comparisonRange.end());
         const double scatterLimit = TTabletInfo::ExtractResourceUsage(minScatter, resource);
         if (!(TTabletInfo::ExtractResourceUsage(stats.ScatterByResource, resource) > scatterLimit)) {
             continue;
         }
-        // scatter = (maximum - max(minimum, floor)) / maximum. Only sources
-        // strictly above floor / (1 - scatterLimit) can cause this trigger.
-        const double sourceThreshold = TTabletInfo::ExtractResourceUsage(minUsage, resource) / (1 - scatterLimit);
+        double minimumUsage = std::numeric_limits<double>::max();
+        for (const auto& node : stats.Values) {
+            minimumUsage = std::min(minimumUsage, TTabletInfo::ExtractResourceUsage(node.ResourceNormValues, resource));
+        }
+        // scatter = (maximum - max(minimum, floor)) / maximum. Hold the initial
+        // effective minimum fixed for this pass and only shed load from sources
+        // strictly above max(minimum, floor) / (1 - scatterLimit).
+        const double effectiveMinimum = std::max(minimumUsage, TTabletInfo::ExtractResourceUsage(minUsage, resource));
+        const double sourceThreshold = effectiveMinimum / (1 - scatterLimit);
         std::vector<TNodeId> sourceNodeIds;
-        for (const auto* node : eligibleNodes) {
+        for (const auto* node : sourceCandidates) {
             if (node->GetTabletUsage(resource) > sourceThreshold) {
                 sourceNodeIds.push_back(node->Id);
             }

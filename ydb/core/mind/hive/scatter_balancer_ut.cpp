@@ -188,15 +188,96 @@ Y_UNIT_TEST_SUITE(THiveScatterBalancerTest) {
         UNIT_ASSERT(!fixture.Settings());
     }
 
-    Y_UNIT_TEST(EmptyAndSingleEligibleCohortsDoNotStartUnrestrictedBalancer) {
+    Y_UNIT_TEST(UnmovableMinimumDoesNotLowerSourceThreshold) {
+        TScatterFixture fixture;
+        fixture.AddNode(EResourceToBalance::CPU, 10'000);
+        fixture.Tablets.back()->BalancerPolicy = TTabletInfo::EBalancerPolicy::POLICY_IGNORE;
+        fixture.AddNode(EResourceToBalance::CPU, 40'000);
+        fixture.AddNode(EResourceToBalance::CPU, 50'000);
+        fixture.AddNode(EResourceToBalance::CPU, 90'000);
+        auto settings = fixture.Settings();
+        AssertSources(settings, {4});
+        UNIT_ASSERT(settings->ResourceToBalance == EResourceToBalance::CPU);
+        UNIT_ASSERT_DOUBLES_EQUAL(*settings->MinNodeUsage, .08, 1e-12);
+    }
+
+    Y_UNIT_TEST(IdleReceiverAllowsSingleSourceWithoutBecomingASource) {
         TScatterFixture fixture;
         UNIT_ASSERT(!fixture.Settings());
         fixture.AddNode(EResourceToBalance::CPU, 0, false);
         fixture.AddNode(EResourceToBalance::CPU, 500'000, false);
         UNIT_ASSERT(!fixture.Settings());
         fixture.AddNode(EResourceToBalance::CPU, 900'000);
-        // Empty recipients remain possible destinations, but are not scatter cohort members.
+        AssertSources(fixture.Settings(), {3});
+    }
+
+    Y_UNIT_TEST(SingleSourceWithoutIdleReceiversDoesNotTrigger) {
+        TScatterFixture fixture;
+        fixture.AddNode(EResourceToBalance::CPU, 900'000);
         UNIT_ASSERT(!fixture.Settings());
+    }
+
+    Y_UNIT_TEST(BackgroundOnlyScalarUsageIsNotAnIdleComputeReceiver) {
+        TScatterFixture fixture;
+        fixture.Hive.CurrentConfig.SetMinCounterScatterToBalance(1.);
+        for (int i = 0; i < 5; ++i) {
+            fixture.AddNode(EResourceToBalance::CPU, 50'000);
+        }
+        auto& background = fixture.AddNode(EResourceToBalance::CPU, 0, false);
+        AssertSources(fixture.Settings(), {1, 2, 3, 4, 5});
+
+        for (int i = 0; i < 20; ++i) {
+            background.AveragedNodeTotalUsage.Push(.06);
+        }
+        background.NodeTotalUsage = background.AveragedNodeTotalUsage.GetValue();
+        UNIT_ASSERT(background.AveragedNodeTotalUsage.IsValueStable());
+        UNIT_ASSERT_DOUBLES_EQUAL(background.GetNodeUsage(), .06, 1e-12);
+        UNIT_ASSERT_DOUBLES_EQUAL(background.GetNodeUsage(EResourceToBalance::CPU), 0., 1e-12);
+        UNIT_ASSERT(!background.HasTabletsForBalancer(EResourceToBalance::ComputeResources, fixture.Now));
+        // The equal 5% sources must not be compared with external load masquerading as zero CPU.
+        UNIT_ASSERT(!fixture.Settings());
+    }
+
+    Y_UNIT_TEST(ResourceIdleNodeWithOtherMovableResourceCanReceive) {
+        TScatterFixture fixture;
+        auto& receiver = fixture.AddNode(EResourceToBalance::Memory, 10'000);
+        fixture.AddNode(EResourceToBalance::CPU, 50'000);
+        UNIT_ASSERT_DOUBLES_EQUAL(receiver.GetNodeUsage(EResourceToBalance::CPU), 0., 1e-12);
+        UNIT_ASSERT(receiver.GetNodeUsage() > 0.);
+        UNIT_ASSERT(receiver.HasTabletsForBalancer(EResourceToBalance::ComputeResources, fixture.Now));
+        auto settings = fixture.Settings();
+        AssertSources(settings, {2});
+        UNIT_ASSERT(settings->ResourceToBalance == EResourceToBalance::CPU);
+    }
+
+    Y_UNIT_TEST(CounterIdleReceiverMayHaveBackgroundComputeLoad) {
+        TScatterFixture fixture;
+        auto& receiver = fixture.AddNode(EResourceToBalance::CPU, 800'000, false);
+        auto& source = fixture.AddNode(EResourceToBalance::Counter, 3);
+        fixture.AddTablet(source, EResourceToBalance::Counter);
+        fixture.AddTablet(source, EResourceToBalance::Counter);
+        UNIT_ASSERT(receiver.GetNodeUsage() > 0.);
+        UNIT_ASSERT(!receiver.HasTabletsForBalancer(EResourceToBalance::ComputeResources, fixture.Now));
+        auto settings = fixture.Settings();
+        AssertSources(settings, {2});
+        UNIT_ASSERT(settings->ResourceToBalance == EResourceToBalance::Counter);
+    }
+
+    Y_UNIT_TEST(IdleReceiversMustBeAliveUpAndUnfrozen) {
+        for (int unavailableState = 0; unavailableState < 3; ++unavailableState) {
+            TScatterFixture fixture;
+            fixture.AddNode(EResourceToBalance::CPU, 50'000);
+            auto& receiver = fixture.AddNode(EResourceToBalance::CPU, 0, false);
+            AssertSources(fixture.Settings(), {1});
+            if (unavailableState == 0) {
+                receiver.SetAlive(false);
+            } else if (unavailableState == 1) {
+                receiver.Down = true;
+            } else {
+                receiver.Freeze = true;
+            }
+            UNIT_ASSERT(!fixture.Settings());
+        }
     }
 
     Y_UNIT_TEST(NodeEligibilityChecksLivenessAdministrativeStateAndRunningTablets) {
@@ -204,6 +285,12 @@ Y_UNIT_TEST_SUITE(THiveScatterBalancerTest) {
         auto& node = fixture.AddNode(EResourceToBalance::CPU, 50'000, false);
         UNIT_ASSERT(!node.HasTabletsForBalancer(EResourceToBalance::CPU, fixture.Now));
         auto& tablet = fixture.AddTablet(node, EResourceToBalance::CPU);
+        UNIT_ASSERT(node.HasTabletsForBalancer(EResourceToBalance::CPU, fixture.Now));
+        // Group reassignment can retain the RUNNING bucket while the leader is
+        // not ready for a restart. Use the same readiness check as the balancer.
+        tablet.State = ETabletState::GroupAssignment;
+        UNIT_ASSERT(!node.HasTabletsForBalancer(EResourceToBalance::CPU, fixture.Now));
+        tablet.State = ETabletState::ReadyToWork;
         UNIT_ASSERT(node.HasTabletsForBalancer(EResourceToBalance::CPU, fixture.Now));
         node.SetAlive(false);
         UNIT_ASSERT(!node.HasTabletsForBalancer(EResourceToBalance::CPU, fixture.Now));
@@ -251,6 +338,9 @@ Y_UNIT_TEST_SUITE(THiveScatterBalancerTest) {
     Y_UNIT_TEST(ResourceCohortsAreIndependent) {
         for (auto resource : {EResourceToBalance::CPU, EResourceToBalance::Memory, EResourceToBalance::Network}) {
             TScatterFixture fixture;
+            fixture.Hive.CurrentConfig.SetMinCPUScatterToBalance(resource == EResourceToBalance::CPU ? .5 : 1.);
+            fixture.Hive.CurrentConfig.SetMinMemoryScatterToBalance(resource == EResourceToBalance::Memory ? .5 : 1.);
+            fixture.Hive.CurrentConfig.SetMinNetworkScatterToBalance(resource == EResourceToBalance::Network ? .5 : 1.);
             fixture.AddNode(resource, 10'000);
             fixture.AddNode(resource, 50'000);
             auto other = resource == EResourceToBalance::CPU ? EResourceToBalance::Memory : EResourceToBalance::CPU;
@@ -272,9 +362,29 @@ Y_UNIT_TEST_SUITE(THiveScatterBalancerTest) {
         fixture.AddTablet(second, EResourceToBalance::Counter);
         SetResource(second.ResourceValues, EResourceToBalance::Counter, 3);
         auto settings = fixture.Settings();
-        AssertSources(settings, {1, 2});
+        AssertSources(settings, {2});
         UNIT_ASSERT(settings->Type == EBalancerType::ScatterCounter);
-        UNIT_ASSERT_DOUBLES_EQUAL(*settings->MinNodeUsage, 0., 1e-12);
+        UNIT_ASSERT_DOUBLES_EQUAL(*settings->MinNodeUsage, 1.25e-6, 1e-12);
+    }
+
+    Y_UNIT_TEST(SourceThresholdUsesResourceMinimumAboveFloor) {
+        for (auto resource : {EResourceToBalance::CPU, EResourceToBalance::Memory, EResourceToBalance::Network}) {
+            TScatterFixture fixture;
+            fixture.Hive.CurrentConfig.SetMinCounterScatterToBalance(1.);
+            fixture.Hive.CurrentConfig.SetMinCPUScatterToBalance(resource == EResourceToBalance::CPU ? .5 : 1.);
+            fixture.Hive.CurrentConfig.SetMinMemoryScatterToBalance(resource == EResourceToBalance::Memory ? .5 : 1.);
+            fixture.Hive.CurrentConfig.SetMinNetworkScatterToBalance(resource == EResourceToBalance::Network ? .5 : 1.);
+            auto& minimum = fixture.AddNode(resource, 40'000);
+            fixture.AddNode(resource, 50'000);
+            fixture.AddNode(resource, 90'000);
+            // Composite node usage must not replace the selected resource minimum.
+            const auto other = resource == EResourceToBalance::CPU ? EResourceToBalance::Memory : EResourceToBalance::CPU;
+            SetResource(minimum.ResourceValues, other, 500'000);
+            auto settings = fixture.Settings();
+            AssertSources(settings, {3});
+            UNIT_ASSERT(settings->ResourceToBalance == resource);
+            UNIT_ASSERT_DOUBLES_EQUAL(*settings->MinNodeUsage, .08, 1e-12);
+        }
     }
 
     Y_UNIT_TEST(SourceThresholdUsesOneMinusScatterAndStrictComparison) {
@@ -310,13 +420,18 @@ Y_UNIT_TEST_SUITE(THiveScatterBalancerTest) {
         auto& source = fixture.AddNode(EResourceToBalance::CPU, 50'000);
         for (int i = 0; i < 20; ++i) {
             source.AveragedResourceTotalValues.Push(source.ResourceValues);
+            source.AveragedNodeTotalUsage.Push(.05);
         }
         source.ResourceTotalValues = source.AveragedResourceTotalValues.GetValue();
+        source.NodeTotalUsage = source.AveragedNodeTotalUsage.GetValue();
         UNIT_ASSERT(source.AveragedResourceTotalValues.IsValueStable());
+        UNIT_ASSERT(source.AveragedNodeTotalUsage.IsValueStable());
         AssertSources(fixture.Settings(), {2});
         SetResource(source.ResourceValues, EResourceToBalance::CPU, 30'000);
         UNIT_ASSERT_DOUBLES_EQUAL(source.GetNodeUsage(EResourceToBalance::CPU), .05, 1e-12);
+        UNIT_ASSERT_DOUBLES_EQUAL(source.GetNodeUsage(), .05, 1e-12);
         UNIT_ASSERT_DOUBLES_EQUAL(source.GetTabletUsage(EResourceToBalance::CPU), .03, 1e-12);
+        UNIT_ASSERT_DOUBLES_EQUAL(source.GetTabletUsage(EResourceToBalance::ComputeResources), .03, 1e-12);
         UNIT_ASSERT(!fixture.Settings());
     }
 }

@@ -128,6 +128,7 @@ protected:
     std::vector<TNodeId>::iterator NextNode;
     std::vector<TFullTabletId> Tablets;
     std::vector<TFullTabletId>::iterator NextTablet;
+    std::unordered_set<TNodeId> ScatterSourceNodeIds;
     std::unordered_map<TFullTabletId, TNodeId> ScatterSourcesInFlight;
 
     static constexpr ui64 MAX_TABLETS_PROCESSED = 10;
@@ -195,7 +196,8 @@ protected:
         }
         // Wait for a source's previous restart to update its resource totals.
         // Other sources can still make progress up to MaxInFlight.
-        return !node.Down && !node.Freeze
+        return ScatterSourceNodeIds.contains(node.Id)
+            && !node.Down && !node.Freeze
             && node.GetTabletUsage(Settings.ResourceToBalance) > *Settings.MinNodeUsage
             && std::none_of(ScatterSourcesInFlight.begin(), ScatterSourcesInFlight.end(), [&](const auto& entry) {
                 return entry.second == node.Id;
@@ -420,6 +422,9 @@ public:
         , Settings(std::move(settings))
         , Stats(Hive->BalancerStats[static_cast<std::size_t>(Settings.Type)])
     {
+        if (Settings.MinNodeUsage) {
+            ScatterSourceNodeIds.insert(Settings.FilterNodeIds.begin(), Settings.FilterNodeIds.end());
+        }
         Stats.IsRunningNow = true;
         Stats.CurrentMaxMovements = Settings.MaxMovements ? Settings.MaxMovements : Hive->TabletsTotal;
         Stats.CurrentMovements = 0;

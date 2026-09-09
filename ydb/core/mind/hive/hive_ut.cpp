@@ -5486,13 +5486,19 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         auto limitsObserver = runtime.AddObserver<TEvLocal::TEvStatus>([](auto&& ev) {
             ev->Get()->Record.ClearResourceMaximum();
         });
-        TBlockEvents<NHive::TEvPrivate::TEvProcessTabletBalancer> blockBalancer(runtime);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
         {
             TDispatchOptions options;
             options.FinalEvents.emplace_back(TEvLocal::EvStatus, NUM_NODES);
             runtime.DispatchEvents(options);
         }
+        const TActorId hiveActor = ResolveTablet(runtime, hiveTablet);
+        auto blockBalancer = runtime.AddObserver<NHive::TEvPrivate::TEvProcessTabletBalancer>([hiveActor](auto& ev) {
+            // Private event IDs may be shared by unrelated actors, including BSC.
+            if (ev->Recipient == hiveActor) {
+                ev.Reset();
+            }
+        });
         const TActorId sender = runtime.AllocateEdgeActor();
         using TDistribution = std::array<std::vector<ui64>, NUM_NODES>;
         TDistribution initial;
@@ -5592,7 +5598,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 it->second = target;
             }
         });
-        blockBalancer.Stop();
+        blockBalancer.Remove();
         BalanceTablets(runtime, hiveTablet, sender);
         {
             TDispatchOptions options;
@@ -5961,6 +5967,9 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         Setup(runtime, true, 1, [](TAppPrepare& app) {
             app.HiveConfig.SetTabletKickCooldownPeriod(0);
             app.HiveConfig.SetResourceChangeReactionPeriod(0);
+            // The second node's two CPU tablets contribute 30%. A 20% source
+            // threshold permits one 15% tablet move before this donor stops.
+            app.HiveConfig.SetMinNodeUsageToBalance(0.1);
         });
         const int nodeBase = runtime.GetNodeId(0);
         TActorId senderA = runtime.AllocateEdgeActor();

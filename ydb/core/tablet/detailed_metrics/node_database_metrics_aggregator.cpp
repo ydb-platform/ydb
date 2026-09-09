@@ -2,6 +2,7 @@
 
 #include "detailed_metrics_counter_set.h"
 
+#include <ydb/core/sys_view/service/db_counters_codec.h>
 #include <ydb/core/tablet/private/aggregated_tablet_counters.h>
 
 #include <util/generic/hash.h>
@@ -155,6 +156,22 @@ public:
         }
     }
 
+    void Pack(NKikimrSysView::TDbTabletCounters& out) {
+        RecalcAll();
+
+        NKikimrSysView::TDbTabletCounters current;
+        current.SetType(TabletType);
+        if (ExecutorCounters.IsInitialized) {
+            ExecutorCounters.ToProto(*current.MutableExecutorCounters(), *current.MutableMaxExecutorCounters());
+        }
+        if (AppCounters.IsInitialized) {
+            AppCounters.ToProto(*current.MutableAppCounters(), *current.MutableMaxAppCounters());
+        }
+
+        NSysView::CalculateCountersDiff(&out, current, &Previous);
+        Previous.Swap(&current);
+    }
+
 private:
     TTabletTypes::EType TabletType;
 
@@ -167,16 +184,19 @@ private:
 
     THashMap<TTabletKey, ui64> SourceIds;
     ui64 NextSourceId = 0;
+
+    NKikimrSysView::TDbTabletCounters Previous;
 };
 
 /**
  * Everything the aggregator keeps for a single table.
  *
- * @note Only one of the two shapes is ever populated, the one chosen by
- *       the effective metrics level of the table.
+ * @note Both shapes can be populated while a metrics level change converges
+ *       tablet by tablet. Pack emits each populated shape under its own level.
  */
 struct TTableEntry {
     NMonitoring::TDynamicCounterPtr TableGroup;
+    TString TablePath;
 
     /**
      * The tablet type of the first tablet of this table that was registered.
@@ -253,7 +273,7 @@ public:
             return;
         }
 
-        auto* entry = GetOrCreateTable(metricsLevel, relativePath);
+        auto* entry = GetOrCreateTable(tablePath, metricsLevel, relativePath);
         if (!entry) {
             return;
         }
@@ -350,6 +370,32 @@ public:
         }
     }
 
+    void Pack(NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters>& out) override {
+        TGuard<TMutex> guard(DetailedMetricsLock());
+
+        for (auto& [_, entry] : Tables) {
+            if (entry.TableBucket) {
+                auto* tableCounters = out.Add();
+                tableCounters->SetTablePath(entry.TablePath);
+                tableCounters->SetLevel(TDetailedMetricsSettings::MetricsLevelTable);
+                entry.TableBucket->Pack(*tableCounters->MutableTableCounters());
+            }
+
+            if (!entry.Leaves.empty()) {
+                auto* tableCounters = out.Add();
+                tableCounters->SetTablePath(entry.TablePath);
+                tableCounters->SetLevel(TDetailedMetricsSettings::MetricsLevelPartition);
+
+                for (auto& [tablet, leaf] : entry.Leaves) {
+                    auto* leafOut = tableCounters->AddLeaves();
+                    leafOut->SetTabletId(tablet.first);
+                    leafOut->SetFollowerId(tablet.second);
+                    leaf->Pack(*leafOut->MutableCounters());
+                }
+            }
+        }
+    }
+
 private:
     /**
      * Assert that this instance is only ever handed the tablets of its own role.
@@ -400,7 +446,9 @@ private:
     /**
      * @return The per-table state, or nullptr if the table collects no detailed metrics
      */
-    TTableEntry* GetOrCreateTable(EDetailedMetricsLevel metricsLevel, const TStringBuf relativePath) {
+    TTableEntry* GetOrCreateTable(
+        const TString& tablePath, EDetailedMetricsLevel metricsLevel, const TStringBuf relativePath)
+    {
         if (!IsTableLevel(metricsLevel) && !IsPartitionLevel(metricsLevel)) {
             return nullptr;
         }
@@ -423,6 +471,7 @@ private:
         const TString newKey(relativePath);
         auto& entry = Tables[newKey];
         entry.TableGroup = GetOrCreateDatabaseGroup()->GetSubgroup(TABLE_LABEL, newKey);
+        entry.TablePath = tablePath;
 
         return &entry;
     }

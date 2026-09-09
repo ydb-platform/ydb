@@ -1,6 +1,8 @@
 #include "node_database_metrics_aggregator.h"
 #include "ut_helpers.h"
 
+#include <ydb/core/sys_view/service/db_counters_codec.h>
+
 #include <library/cpp/monlib/dynamic_counters/encode.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -14,6 +16,7 @@
 
 #include <atomic>
 #include <thread>
+#include <tuple>
 
 using namespace NKikimr;
 using namespace NKikimr::NDetailedMetricsTests;
@@ -399,6 +402,46 @@ TString GetHistogramBuckets(NMonitoring::TDynamicCounterPtr countersGroup, const
     }
 
     return buckets;
+}
+
+using TPackedTables = NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters>;
+
+TPackedTables PackOnce(const TNodeDatabaseMetricsAggregatorPtr& aggregator) {
+    TPackedTables out;
+    aggregator->Pack(out);
+    return out;
+}
+
+const NKikimrSysView::TDetailedTableCounters* FindPackedTable(
+    const TPackedTables& tables, EDetailedMetricsLevel level)
+{
+    for (const auto& table : tables) {
+        if (table.GetTablePath() == TABLE_PATH && table.GetLevel() == level) {
+            return &table;
+        }
+    }
+    return nullptr;
+}
+
+const NKikimrSysView::TDetailedTableCounters::TLeaf* FindPackedLeaf(
+    const NKikimrSysView::TDetailedTableCounters& table, ui64 tabletId, ui32 followerId)
+{
+    for (const auto& leaf : table.GetLeaves()) {
+        if (leaf.GetTabletId() == tabletId && leaf.GetFollowerId() == followerId) {
+            return &leaf;
+        }
+    }
+    return nullptr;
+}
+
+ui64 GetPackedCumulativeDelta(const NKikimrSysView::TDbCounters& counters, ui32 index) {
+    const auto& values = counters.GetCumulative();
+    for (int i = 0; i + 1 < values.size(); i += 2) {
+        if (values.Get(i) == index) {
+            return values.Get(i + 1);
+        }
+    }
+    return 0;
 }
 
 void DumpCounters(const TString& title, NMonitoring::TDynamicCounterPtr rootGroup) {
@@ -2506,5 +2549,149 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         }
 
         UNIT_ASSERT(reader.Join() > 0);
+    }
+
+    Y_UNIT_TEST(PackTableLevelUsesThePreviousSnapshotForCumulativeDeltas) {
+        TRoleTrees trees;
+        TFakeTablet leader(1000, 0);
+        TInstant now = TInstant::Seconds(100);
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 10).AddCumulative(CONSUMED_CPU, 100);
+        leader.Report(trees.Leaders, TDetailedMetricsSettings::MetricsLevelTable, now);
+
+        auto first = PackOnce(trees.Leaders);
+        const auto* table = FindPackedTable(first, TDetailedMetricsSettings::MetricsLevelTable);
+        UNIT_ASSERT(table);
+        UNIT_ASSERT(table->HasTableCounters());
+        UNIT_ASSERT_VALUES_EQUAL(table->LeavesSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(table->GetTableCounters().GetExecutorCounters().GetSimple(DB_UNIQUE_ROWS_TOTAL), 10);
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(table->GetTableCounters().GetExecutorCounters(), CONSUMED_CPU), 100);
+
+        // Several reports and recalculations must not advance the Pack baseline.
+        for (ui64 delta : {15, 25}) {
+            now += TDuration::Seconds(5);
+            leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 20).AddCumulative(CONSUMED_CPU, delta);
+            leader.Report(trees.Leaders, TDetailedMetricsSettings::MetricsLevelTable, now);
+            trees.RecalculateAllCounters();
+        }
+        auto second = PackOnce(trees.Leaders);
+        table = FindPackedTable(second, TDetailedMetricsSettings::MetricsLevelTable);
+        UNIT_ASSERT(table);
+        UNIT_ASSERT_VALUES_EQUAL(table->GetTableCounters().GetExecutorCounters().GetSimple(DB_UNIQUE_ROWS_TOTAL), 20);
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(table->GetTableCounters().GetExecutorCounters(), CONSUMED_CPU), 40);
+
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 0);
+        leader.Report(trees.Leaders, TDetailedMetricsSettings::MetricsLevelTable, now + TDuration::Seconds(5));
+        auto third = PackOnce(trees.Leaders);
+        table = FindPackedTable(third, TDetailedMetricsSettings::MetricsLevelTable);
+        UNIT_ASSERT(table);
+        UNIT_ASSERT_VALUES_EQUAL(table->GetTableCounters().GetExecutorCounters().GetSimple(DB_UNIQUE_ROWS_TOTAL), 0);
+        UNIT_ASSERT_VALUES_EQUAL(table->GetTableCounters().GetExecutorCounters().CumulativeSize(), 0);
+        TFakeTablet follower(1000, 1);
+        follower.Report(trees.Followers, TDetailedMetricsSettings::MetricsLevelTable, now);
+        UNIT_ASSERT(PackOnce(trees.Followers).empty());
+    }
+
+    Y_UNIT_TEST(PackPartitionLevelKeepsBothRolesAndPerLeafBaselines) {
+        TRoleTrees trees;
+        const TInstant now = TInstant::Seconds(100);
+        TFakeTablet leader(1000, 0);
+        TFakeTablet follower1(1000, 1);
+        TFakeTablet follower2(2000, 1);
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 3).AddCumulative(CONSUMED_CPU, 30);
+        follower1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 9).AddCumulative(CONSUMED_CPU, 90);
+        follower2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5).AddCumulative(CONSUMED_CPU, 50);
+        leader.Report(trees.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, now);
+        follower1.Report(trees.Followers, TDetailedMetricsSettings::MetricsLevelPartition, now);
+        follower2.Report(trees.Followers, TDetailedMetricsSettings::MetricsLevelPartition, now);
+
+        auto leaders = PackOnce(trees.Leaders);
+        auto followers = PackOnce(trees.Followers);
+        const auto* leaderTable = FindPackedTable(leaders, TDetailedMetricsSettings::MetricsLevelPartition);
+        const auto* followerTable = FindPackedTable(followers, TDetailedMetricsSettings::MetricsLevelPartition);
+        UNIT_ASSERT(leaderTable && followerTable);
+        UNIT_ASSERT(!leaderTable->HasTableCounters() && !followerTable->HasTableCounters());
+        UNIT_ASSERT_VALUES_EQUAL(leaderTable->LeavesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(followerTable->LeavesSize(), 2);
+        for (const auto& [table, tablet, value] : {
+            std::tuple{leaderTable, &leader, 3u},
+            std::tuple{followerTable, &follower1, 9u},
+            std::tuple{followerTable, &follower2, 5u}})
+        {
+            const auto* leaf = FindPackedLeaf(*table, tablet->TabletId, tablet->FollowerId);
+            UNIT_ASSERT(leaf);
+            UNIT_ASSERT_VALUES_EQUAL(leaf->GetCounters().GetExecutorCounters().GetSimple(DB_UNIQUE_ROWS_TOTAL), value);
+            UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(leaf->GetCounters().GetExecutorCounters(), CONSUMED_CPU), value * 10);
+        }
+
+        follower1.AddCumulative(CONSUMED_CPU, 7);
+        follower1.Report(trees.Followers, TDetailedMetricsSettings::MetricsLevelPartition, now + TDuration::Seconds(5));
+        auto next = PackOnce(trees.Followers);
+        followerTable = FindPackedTable(next, TDetailedMetricsSettings::MetricsLevelPartition);
+        UNIT_ASSERT(followerTable);
+        const auto* changed = FindPackedLeaf(*followerTable, 1000, 1);
+        const auto* unchanged = FindPackedLeaf(*followerTable, 2000, 1);
+        UNIT_ASSERT(changed && unchanged);
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(changed->GetCounters().GetExecutorCounters(), CONSUMED_CPU), 7);
+        UNIT_ASSERT_VALUES_EQUAL(unchanged->GetCounters().GetExecutorCounters().GetSimple(DB_UNIQUE_ROWS_TOTAL), 5);
+        UNIT_ASSERT_VALUES_EQUAL(unchanged->GetCounters().GetExecutorCounters().CumulativeSize(), 0);
+    }
+
+    Y_UNIT_TEST(PackHistogramDecreaseRoundTripsWhenATabletLeaves) {
+        TRoleTrees trees;
+        const TInstant now = TInstant::Seconds(100);
+        TFakeTablet leader1(1000, 0);
+        TFakeTablet leader2(2000, 0);
+        for (auto* tablet : {&leader1, &leader2}) {
+            tablet->AddCumulative(CONSUMED_CPU, 100);
+            tablet->Report(trees.Leaders, TDetailedMetricsSettings::MetricsLevelTable, now);
+        }
+        auto first = PackOnce(trees.Leaders);
+        const auto* firstTable = FindPackedTable(first, TDetailedMetricsSettings::MetricsLevelTable);
+        UNIT_ASSERT(firstTable);
+        NKikimrSysView::TDbCounters restored;
+        NSysView::TAggregateCumulative<false>::Apply(&restored, firstTable->GetTableCounters().GetExecutorCounters());
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetHistogram(0).GetBuckets(0), 2);
+
+        trees.Leaders->ForgetTablet(leader2.TabletId, leader2.FollowerId);
+        auto packed = PackOnce(trees.Leaders);
+        const auto* table = FindPackedTable(packed, TDetailedMetricsSettings::MetricsLevelTable);
+        UNIT_ASSERT(table);
+        const auto& counters = table->GetTableCounters().GetExecutorCounters();
+        UNIT_ASSERT_VALUES_EQUAL(counters.HistogramSize(), 1);
+        // The occupied bucket shrinks from 2 to 1 using an unsigned modulo decrement.
+        UNIT_ASSERT_VALUES_EQUAL(counters.GetHistogram(0).BucketsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(counters.GetHistogram(0).GetBuckets(0), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.GetHistogram(0).GetBuckets(1), ui64(1) - ui64(2));
+        NSysView::TAggregateCumulative<false>::Apply(&restored, counters);
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetHistogram(0).GetBuckets(0), 1);
+    }
+
+    Y_UNIT_TEST(PackEmitsBothShapesWhileTheLevelConverges) {
+        TRoleTrees trees;
+        const TInstant now = TInstant::Seconds(100);
+        TFakeTablet leader1(1000, 0);
+        TFakeTablet leader2(2000, 0);
+        leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1).AddCumulative(CONSUMED_CPU, 100);
+        leader2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2).AddCumulative(CONSUMED_CPU, 200);
+        for (auto* tablet : {&leader1, &leader2}) {
+            tablet->Report(trees.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, now);
+        }
+        leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 3).AddCumulative(CONSUMED_CPU, 50);
+        leader1.Report(trees.Leaders, TDetailedMetricsSettings::MetricsLevelTable, now);
+
+        auto packed = PackOnce(trees.Leaders);
+        UNIT_ASSERT_VALUES_EQUAL(packed.size(), 2);
+        const auto* table = FindPackedTable(packed, TDetailedMetricsSettings::MetricsLevelTable);
+        const auto* partition = FindPackedTable(packed, TDetailedMetricsSettings::MetricsLevelPartition);
+        UNIT_ASSERT(table && partition);
+        UNIT_ASSERT(table->HasTableCounters());
+        UNIT_ASSERT_VALUES_EQUAL(table->LeavesSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(table->GetTableCounters().GetExecutorCounters().GetSimple(DB_UNIQUE_ROWS_TOTAL), 3);
+        UNIT_ASSERT(!partition->HasTableCounters());
+        UNIT_ASSERT_VALUES_EQUAL(partition->LeavesSize(), 1);
+        const auto* leaf = FindPackedLeaf(*partition, leader2.TabletId, leader2.FollowerId);
+        UNIT_ASSERT(leaf);
+        UNIT_ASSERT_VALUES_EQUAL(leaf->GetCounters().GetExecutorCounters().GetSimple(DB_UNIQUE_ROWS_TOTAL), 2);
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(leaf->GetCounters().GetExecutorCounters(), CONSUMED_CPU), 200);
     }
 }

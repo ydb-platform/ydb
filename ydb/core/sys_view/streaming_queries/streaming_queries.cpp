@@ -10,7 +10,6 @@
 
 #include <contrib/libs/fmt/include/fmt/format.h>
 
-#include <library/cpp/protobuf/interop/cast.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
@@ -696,7 +695,7 @@ public:
                 TSchema::Status::ColumnId, TSchema::Issues::ColumnId, TSchema::Plan::ColumnId,
                 TSchema::Ast::ColumnId, TSchema::RetryCount::ColumnId, TSchema::LastFailAt::ColumnId,
                 TSchema::SuspendedUntil::ColumnId, TSchema::SubmittedAt::ColumnId,
-                TSchema::FinishedAt::ColumnId
+                TSchema::StartedAt::ColumnId, TSchema::FinishedAt::ColumnId
             }, column.Tag)) {
                 break;
             }

@@ -1,5 +1,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
+#include <util/generic/is_in.h>
+
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TStreamingQueryTestReboots) {
@@ -8,12 +10,10 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTestReboots) {
         const auto& actualProperties = actual.properties();
 
         const auto isManagedProperty = [](const auto& key) {
-            return key == "__created_by"
-                || key == "__modified_by"
-                || key == "__started_by"
-                || key == "__stopped_by"
-                || key == "__created_at"
-                || key == "__modified_at";
+            return IsIn({
+                "__created_by", "__modified_by", "__started_by",
+                "__stopped_by", "__created_at", "__modified_at"
+            }, key);
         };
 
         size_t actualUserPropertiesCount = 0;

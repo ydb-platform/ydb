@@ -33,6 +33,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
+#include <ydb/library/yql/dq/actors/dq.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
@@ -3387,6 +3388,7 @@ struct TWriteSettings {
 
     bool EnableStreamWrite = false;
     ui64 QuerySpanId = 0;
+    ui64 BufferLookupDiagnosticsExecutionId = 0;
 };
 
 struct TBufferWriteMessage {
@@ -3739,6 +3741,7 @@ public:
             .Counters = Counters,
 
             .ParentTraceId = BufferWriteActorStateSpan.GetTraceId(),
+            .CollectShardDiagnostics = CollectBufferLookupDiagnostics,
             .Database = settings.Database,
         });
 
@@ -4338,6 +4341,13 @@ public:
         if (!ev->Get()->Token) {
             AFL_ENSURE(ev->Get()->Settings);
             auto& settings = *ev->Get()->Settings;
+            if (BufferLookupDiagnosticsExecutionId != settings.BufferLookupDiagnosticsExecutionId) {
+                BufferLookupDiagnosticsExecutionId = settings.BufferLookupDiagnosticsExecutionId;
+                CollectBufferLookupDiagnostics = BufferLookupDiagnosticsExecutionId != 0;
+                ForEachLookupActor([&](IKqpBufferTableLookup* actor, const TActorId) {
+                    actor->ResetShardDiagnostics(CollectBufferLookupDiagnostics);
+                });
+            }
             if (!WriteInfos.empty()) {
                 AFL_ENSURE(LockTxId == settings.TransactionSettings.LockTxId);
                 AFL_ENSURE(LockNodeId == settings.TransactionSettings.LockNodeId);
@@ -4634,6 +4644,9 @@ public:
     bool Prepare(std::optional<NWilson::TTraceId> traceId) {
         UpdateTracingState("Commit", std::move(traceId));
         OperationStartTime = TInstant::Now();
+        if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
+            CommitDiagnosticsCapture->OnPrepareStarted(OperationStartTime);
+        }
 
         YDB_LOG_DEBUG("Start prepare for distributed commit",
             {"logPrefix", this->LogPrefix});
@@ -4662,6 +4675,9 @@ public:
         Counters->BufferActorImmediateCommits->Inc();
         UpdateTracingState("Commit", std::move(traceId));
         OperationStartTime = TInstant::Now();
+        if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
+            CommitDiagnosticsCapture->OnImmediateCommitStarted(OperationStartTime);
+        }
 
         YDB_LOG_DEBUG("Start immediate commit",
             {"logPrefix", this->LogPrefix});
@@ -4686,6 +4702,9 @@ public:
     void DistributedCommit() {
         Counters->BufferActorDistributedCommits->Inc();
         OperationStartTime = TInstant::Now();
+        if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
+            CommitDiagnosticsCapture->OnDistributedCommitStarted(OperationStartTime);
+        }
 
         YDB_LOG_DEBUG("Start distributed commit with",
             {"logPrefix", this->LogPrefix},
@@ -5053,6 +5072,9 @@ public:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned:
                 TxProxyMon->ClientTxStatusPlanned->Inc();
                 TxPlanned = true;
+                if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
+                    CommitDiagnosticsCapture->OnCoordinatorPlanned();
+                }
                 if (TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE) {
                     AFL_ENSURE(res->Record.HasStepId());
                     AFL_ENSURE(res->Record.HasTxId());
@@ -5393,6 +5415,10 @@ public:
 
     void Handle(TEvKqpBuffer::TEvCommit::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
+        if (ev->Get()->CollectTimeline || ev->Get()->CollectShards) {
+            CommitDiagnosticsCapture = std::make_unique<TCommitDiagnosticsCapture>(
+                ev->Get()->CollectTimeline, ev->Get()->CollectShards);
+        }
         for (auto& [_, writeTask] : WriteTasks) {
             AFL_ENSURE(writeTask.IsClosed());
         }
@@ -5840,6 +5866,9 @@ public:
     }
 
     void OnPrepared(IKqpTransactionManager::TPrepareResult&& preparedInfo, ui64) override {
+        if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
+            CommitDiagnosticsCapture->OnShardPrepared(preparedInfo.ShardId);
+        }
         if (HandleDeferredLocksBrokenOnPrepare()) return;
         if (!preparedInfo.Coordinator || (TxManager->GetCoordinator() && preparedInfo.Coordinator != TxManager->GetCoordinator())) {
             YDB_LOG_ERROR("Handle TEvWriteResult: unable to select coordinator. Tx canceled, previously selected coordinator selected at propose",
@@ -5877,6 +5906,9 @@ public:
                 ("writeResult", writeResultTimestamp->TxId)
                 ("shardId", shardId);
         }
+        if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
+            CommitDiagnosticsCapture->OnShardCommitted(shardId);
+        }
         if (PendingCommitShards > 0) {
             --PendingCommitShards;
         }
@@ -5889,10 +5921,11 @@ public:
                 {"logPrefix", this->LogPrefix},
                 {"txId", TxId.value_or(0)});
             OnOperationFinished(Counters->BufferActorCommitLatencyHistogram);
-            Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
-                BuildStats(),
-                std::move(CommitTimestamp)
-            });
+            auto result = std::make_unique<TEvKqpBuffer::TEvResult>(BuildStats(), std::move(CommitTimestamp));
+            if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
+                result->CommitDiagnostics = CommitDiagnosticsCapture->Finish(Ydb::StatusIds::SUCCESS);
+            }
+            Send<ESendingType::Tail>(ExecuterActorId, result.release());
             ExecuterActorId = {};
             AFL_ENSURE(GetTotalMemory() == 0);
             PassAway();
@@ -6166,10 +6199,15 @@ public:
         CancelProposal();
         Become(&TKqpBufferWriteActor::StateError);
 
+        TCommitDiagnostics diagnostics;
+        if (Y_UNLIKELY(CommitDiagnosticsCapture)) {
+            diagnostics = CommitDiagnosticsCapture->Finish(NYql::NDq::DqStatusToYdbStatus(statusCode));
+        }
         Send<ESendingType::Tail>(SessionActorId, new TEvKqpBuffer::TEvError{
             statusCode,
             std::move(issues),
-            BuildStats()
+            BuildStats(),
+            std::move(diagnostics)
         });
 
         Clear();
@@ -6292,6 +6330,9 @@ private:
     bool TxPlanned = false;
     std::optional<ui64> Coordinator;
     std::optional<TCommitTimestamp> CommitTimestamp;
+    bool CollectBufferLookupDiagnostics = false;
+    ui64 BufferLookupDiagnosticsExecutionId = 0;
+    std::unique_ptr<TCommitDiagnosticsCapture> CommitDiagnosticsCapture;
 
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;
@@ -6641,6 +6682,7 @@ private:
 
                 .EnableStreamWrite = Settings.GetEnableStreamWrite(),
                 .QuerySpanId = Settings.GetQuerySpanId(),
+                .BufferLookupDiagnosticsExecutionId = Settings.GetBufferLookupDiagnosticsExecutionId(),
             };
 
             for (const auto& indexSettings : Settings.GetIndexes()) {

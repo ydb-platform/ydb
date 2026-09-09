@@ -34,6 +34,7 @@
 #include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
+#include <ydb/core/kqp/tracing/kqp_user_facing.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
@@ -741,6 +742,11 @@ public:
     }
 
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
+        const bool collectUserFacingTrace = ev->Get()->Record.HasUserFacingTrace()
+            && ev->Get()->Record.GetUserFacingTrace().HasTraceId();
+        if (collectUserFacingTrace) {
+            ev->Get()->EnsureProxyTraceSeed();
+        }
         if (!DatabasesCache.SetDatabaseIdOrDefer(ev, static_cast<i32>(EDelayedRequestType::QueryRequest), ActorContext())) {
             return;
         }
@@ -755,6 +761,9 @@ public:
         const auto queryAction = ev->Get()->GetAction();
         TKqpRequestInfo requestInfo(traceId);
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvQueryRequest);
+        if (collectUserFacingTrace) {
+            PendingRequests.SetUserFacingTrace(requestId, *ev->Get());
+        }
         // Hold external client queries until warmup finishes; warmup's own traffic (PREPARE compilations, internal calls, the Metadata-system-user sysview fetch) must pass or it self-deadlocks.
         if (!WarmupGateOpen && !ev->Get()->GetIsWarmupCompilation() && !ev->Get()->IsInternalCall()) {
             const auto& userToken = ev->Get()->GetUserToken();
@@ -865,6 +874,10 @@ public:
             {"targetId", targetId});
         auto status = timerDuration == cancelAfter ? NYql::NDqProto::StatusIds::CANCELLED : NYql::NDqProto::StatusIds::TIMEOUT;
         StartQueryTimeout(requestId, timerDuration, status);
+        if (collectUserFacingTrace) {
+            PendingRequests.MarkUserFacingTraceSent(
+                requestId, SelfId().NodeId(), targetId.NodeId(), *ev->Get());
+        }
         Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId, std::move(ev->TraceId));
     }
 
@@ -1051,7 +1064,24 @@ public:
             LocalSessions->StartIdleCheck(info, GetSessionIdleDuration());
         }
 
+        IActor* userFacingRenderer = nullptr;
+        if constexpr (std::is_same_v<TEvent, TEvKqp::TEvQueryResponse::TPtr>) {
+            if (proxyRequest->UserFacingTrace) {
+                const auto& record = ev->Get()->Record;
+                const auto& trace = record.GetUserFacingTrace();
+                if (auto snapshot = proxyRequest->UserFacingTrace->Detach(
+                        record.GetYdbStatus(), SelfId().NodeId(), trace.GetName(),
+                        trace.GetOperation(), trace.GetCoverage())) {
+                    userFacingRenderer = CreateProxyUserFacingTraceRendererActor(
+                        std::move(*snapshot));
+                }
+            }
+        }
+
         Send<ESendingType::Tail>(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
+        if (userFacingRenderer) {
+            Register(userFacingRenderer, TMailboxType::HTSwap, AppData()->BatchPoolId);
+        }
 
         if (info && proxyRequest->EventType == TKqpEvents::EvQueryRequest) {
             LocalSessions->DetachQueryText(info);
@@ -1781,6 +1811,15 @@ private:
     void HandleDelayedRequestError(EDelayedRequestType requestType, THolder<IEventHandle> requestEvent, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
         switch (requestType) {
             case EDelayedRequestType::QueryRequest: {
+                auto* request = static_cast<TEvKqp::TEvQueryRequest*>(requestEvent->GetBase());
+                if (request && request->Record.HasUserFacingTrace()
+                        && request->Record.GetUserFacingTrace().HasTraceId()) {
+                    TProxyUserFacingTraceContext trace(*request);
+                    if (auto snapshot = trace.Detach(status, SelfId().NodeId())) {
+                        Register(CreateProxyUserFacingTraceRendererActor(std::move(*snapshot)),
+                            TMailboxType::HTSwap, AppData()->BatchPoolId);
+                    }
+                }
                 auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
                 response->Record.SetYdbStatus(status);
                 NYql::IssuesToMessage(issues, response->Record.MutableResponse()->MutableQueryIssues());

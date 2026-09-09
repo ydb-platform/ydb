@@ -1,8 +1,11 @@
 #pragma once
 
 #include <array>
+#include <optional>
 
 #include "kqp_tasks_graph.h"
+
+#include <ydb/core/kqp/common/kqp_execution_trace.h>
 
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
@@ -451,6 +454,15 @@ public:
 
     bool CollectStatsByLongTasks = false;
 
+    bool CollectExecutionDiagnostics = false;
+    bool CollectBufferLookupDiagnostics = false;
+    std::unordered_map<ui32, TStageTraceSnapshot> TraceStages;
+    TBufferLookupDiagnostics BufferLookupDiagnostics;
+
+    void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats,
+        Ydb::Table::QueryStatsCollection::Mode exportMode);
+    void ExportDiagnosticsSnapshot(TExecutionTraceSnapshot& snapshot);
+
     TQueryExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode, const TKqpTasksGraph* const tasksGraph,
         NYql::NDqProto::TDqExecutionStats* const result, ui64 deadlockTimeoutMs)
         : StatsMode(statsMode)
@@ -490,13 +502,13 @@ public:
     TVector<TDeferredBreakerInfo> DeferredBreakers;
 
     void CollectLockStats(const NKikimrQueryStats::TTxStats& txStats);
+    void CollectLockStats(const NKqpProto::TKqpLockStats& lockStats);
 
     void UpdateQueryTables(const NYql::NDqProto::TDqTaskStats& taskStats, NKikimrQueryStats::TTxStats* txStats);
     void UpdateStorageTables(const NYql::NDqProto::TDqTaskStats& taskStats, NKikimrQueryStats::TTxStats* txStats);
     void UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats, NKikimrQueryStats::TTxStats* txStats,
         NYql::NDqProto::EComputeState state, TDuration collectLongTaskStatsTimeout);
     void UpdateNodeStats(ui32 nodeId, const NYql::NDqProto::TEvNodeState& state);
-    void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats);
     void FillStageDurationUs(NYql::NDqProto::TDqStageStats& stats);
     ui64 EstimateCollectMem();
     ui64 EstimateFinishMem();

@@ -1,5 +1,7 @@
 #include "kqp_stream_lookup_actor.h"
 
+#include <ydb/core/kqp/common/kqp_runtime_diagnostics.h>
+
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
@@ -81,6 +83,8 @@ public:
         , UseFollowers(settings.GetAllowUseFollowers())
         , IsTableImmutable(settings.GetIsTableImmutable())
         , HasVectorTopK(settings.HasVectorTopK())
+        , ShardReadDiagnostics(ShouldCollectShardReadDiagnostics(args.TaskParams)
+            ? std::make_unique<TShardReadDiagnosticsCollector>() : nullptr)
         , PipeCacheId(UseFollowers ? FollowersPipeCacheId : MainPipeCacheId)
         , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())
         , NodeLockId(settings.HasLockNodeId() ? settings.GetLockNodeId() : TMaybe<ui32>())
@@ -187,13 +191,19 @@ public:
             tableStats->MutableExtra()->PackFrom(tableExtraStats);
 
             // Add lock stats for broken locks from stream lookup operations
-            if (!BrokenLocks.empty()) {
+            if (!BrokenLocks.empty() || (ShardReadDiagnostics
+                    && (TotalRetryAttempts > 0 || !ShardReadDiagnostics->Empty()))) {
                 NKqpProto::TKqpTaskExtraStats extraStats;
                 if (stats->HasExtra()) {
                     stats->GetExtra().UnpackTo(&extraStats);
                 }
-                extraStats.MutableLockStats()->SetBrokenAsVictim(
-                    extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
+                if (!BrokenLocks.empty()) {
+                    extraStats.MutableLockStats()->SetBrokenAsVictim(
+                        extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
+                }
+                if (ShardReadDiagnostics) {
+                    ShardReadDiagnostics->Export(extraStats, TotalRetryAttempts);
+                }
                 stats->MutableExtra()->PackFrom(extraStats);
             }
         }
@@ -664,6 +674,15 @@ private:
 
         auto& read = readIt->second;
         ui64 shardId = read.ShardId;
+
+        if (Y_UNLIKELY(ShardReadDiagnostics)) {
+            ui32 retryAttempts = 0;
+            if (auto it = Reads.ShardsState.find(shardId); it != Reads.ShardsState.end()) {
+                retryAttempts = it->second.RetryAttempts;
+            }
+            ShardReadDiagnostics->OnFinish(shardId, record.GetRowCount(), retryAttempts, 0,
+                record.GetStatus().GetCode(), record.GetFinished());
+        }
 
         TStringBuilder txLocks;
         for (const auto& lock : record.GetTxLocks()) {
@@ -1190,6 +1209,9 @@ private:
     }
 
     void StartTableRead(ui64 shardId, THolder<TEvDataShard::TEvRead> request) {
+        if (Y_UNLIKELY(ShardReadDiagnostics)) {
+            ShardReadDiagnostics->OnStart(shardId);
+        }
         Counters->CreatedIterators->Inc();
         auto& record = request->Record;
 
@@ -1415,6 +1437,10 @@ private:
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
+        if (Y_UNLIKELY(ShardReadDiagnostics)) {
+            ShardReadDiagnostics->OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
+                ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::ABORTED);
+        }
         NYql::TIssue issue(message);
         for (const auto& i : subIssues) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
@@ -1443,6 +1469,7 @@ private:
     const bool UseFollowers;
     const bool IsTableImmutable;
     const bool HasVectorTopK;
+    std::unique_ptr<TShardReadDiagnosticsCollector> ShardReadDiagnostics;
     const TActorId PipeCacheId;
     const TMaybe<ui64> LockTxId;
     const TMaybe<ui32> NodeLockId;

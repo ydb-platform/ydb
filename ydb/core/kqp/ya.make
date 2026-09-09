@@ -32,6 +32,7 @@ PEERDIR(
     ydb/core/kqp/rm_service
     ydb/core/kqp/runtime
     ydb/core/kqp/session_actor
+    ydb/core/kqp/tracing
     ydb/core/protos
     ydb/core/sys_view/service
     ydb/core/util
@@ -74,6 +75,7 @@ RECURSE(
     runtime
     session_actor
     tests
+    tracing
 )
 
 RECURSE_FOR_TESTS(

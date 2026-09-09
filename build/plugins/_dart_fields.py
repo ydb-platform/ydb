@@ -1386,6 +1386,9 @@ class TestFiles:
 
     @classmethod
     def tsc_typecheck_input_files(cls, unit, flat_args, spec_args):
+        if unit.get("_TS_LEGACY_FACADE") == "yes":
+            return cls.ts_check_srcs(unit, flat_args, spec_args)
+
         typecheck_files = get_values_list(unit, "TS_INPUT_FILES")
         typecheck_test_files = get_values_list(unit, "TS_INPUT_TEST_FILES")
         test_files = [_common.resolve_common_const(f) for f in typecheck_files + typecheck_test_files]

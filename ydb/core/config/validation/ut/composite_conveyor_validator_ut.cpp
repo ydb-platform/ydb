@@ -1,4 +1,4 @@
-#include "../validators.h"
+#include <ydb/core/config/validation/validators.h>
 
 #include <ydb/library/actors/core/defs.h>
 

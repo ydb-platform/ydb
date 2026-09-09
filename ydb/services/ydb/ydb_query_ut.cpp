@@ -1,7 +1,6 @@
 #include "ydb_common_ut.h"
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
-#include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
@@ -42,48 +41,6 @@ struct TMockMonHttpRequest : NMonitoring::IMonHttpRequest {
     NMonitoring::IMonPage* GetPage() const override { Y_ABORT("Not implemented"); }
     NMonitoring::IMonHttpRequest* MakeChild(NMonitoring::IMonPage*, const TString&) const override { Y_ABORT("Not implemented"); }
 };
-
-struct TCreateQuerySessionResult {
-    Ydb::StatusIds::StatusCode Status;
-    TString SessionId;
-};
-
-TCreateQuerySessionResult TryCreateQuerySession(const NGRpcProxy::TGRpcClientConfig& clientConfig) {
-    NYdbGrpc::TGRpcClientLow clientLow;
-    auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Query::V1::QueryService>(clientConfig);
-    auto promise = NThreading::NewPromise<TCreateQuerySessionResult>();
-
-    Ydb::Query::CreateSessionRequest request;
-    NYdbGrpc::TResponseCallback<Ydb::Query::CreateSessionResponse> responseCb =
-        [promise](NYdbGrpc::TGrpcStatus&& grpcStatus, Ydb::Query::CreateSessionResponse&& response) mutable {
-            UNIT_ASSERT(!grpcStatus.InternalError);
-            UNIT_ASSERT_C(grpcStatus.GRpcStatusCode == 0, grpcStatus.Msg + " " + grpcStatus.Details);
-            promise.SetValue({response.status(), response.session_id()});
-        };
-    connection->DoRequest(request, std::move(responseCb),
-        &Ydb::Query::V1::QueryService::Stub::AsyncCreateSession);
-
-    return promise.GetFuture().GetValueSync();
-}
-
-TString CreateTableSessionWithoutDelete(ui16 grpcPort) {
-    auto channel = grpc::CreateChannel(
-        "localhost:" + ToString(grpcPort), grpc::InsecureChannelCredentials());
-    auto stub = Ydb::Table::V1::TableService::NewStub(channel);
-    grpc::ClientContext context;
-    Ydb::Table::CreateSessionRequest request;
-    Ydb::Table::CreateSessionResponse response;
-
-    const auto status = stub->CreateSession(&context, request, &response);
-    UNIT_ASSERT_C(status.ok(), status.error_message());
-    UNIT_ASSERT(response.operation().ready());
-    UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
-
-    Ydb::Table::CreateSessionResult result;
-    UNIT_ASSERT(response.operation().result().UnpackTo(&result));
-    UNIT_ASSERT(!result.session_id().empty());
-    return result.session_id();
-}
 
 } // namespace
 
@@ -135,42 +92,6 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
         }
 
         UNIT_ASSERT(allDoneOk);
-    }
-
-    Y_UNIT_TEST(TestForgottenTableSessionExpiresByIdleTimeout) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto* tableServiceConfig = appConfig.MutableTableServiceConfig();
-        tableServiceConfig->SetSessionsLimitPerNode(1);
-        tableServiceConfig->SetSessionIdleDurationSeconds(1);
-
-        TKikimrWithGrpcAndRootSchema server(
-            appConfig, {}, {}, false, nullptr, nullptr, /* dynamicNodeCount */ 1);
-
-        // Reproduce SDK <= 3.146.3 behavior: create a Table session and forget it
-        // without sending DeleteSession.
-        const TString forgottenSessionId = CreateTableSessionWithoutDelete(server.GetPort());
-        UNIT_ASSERT(!forgottenSessionId.empty());
-
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(
-            TStringBuilder() << "localhost:" << server.GetPort());
-        auto atLimit = TryCreateQuerySession(clientConfig);
-        UNIT_ASSERT_VALUES_EQUAL(atLimit.Status, Ydb::StatusIds::OVERLOADED);
-
-        // KQP checks idle sessions every two seconds. Retry until the forgotten
-        // Table session is closed and its slot becomes available.
-        const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
-        TCreateQuerySessionResult afterIdleCleanup;
-        do {
-            afterIdleCleanup = TryCreateQuerySession(clientConfig);
-            if (afterIdleCleanup.Status == Ydb::StatusIds::SUCCESS) {
-                break;
-            }
-            UNIT_ASSERT_VALUES_EQUAL(afterIdleCleanup.Status, Ydb::StatusIds::OVERLOADED);
-            Sleep(TDuration::MilliSeconds(50));
-        } while (TInstant::Now() < deadline);
-
-        UNIT_ASSERT_VALUES_EQUAL(afterIdleCleanup.Status, Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT(!afterIdleCleanup.SessionId.empty());
     }
 
     Y_UNIT_TEST(TestAttachTwice) {

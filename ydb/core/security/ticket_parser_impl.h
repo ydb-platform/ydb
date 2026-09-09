@@ -423,8 +423,18 @@ private:
     }
 
     template <typename TRequest, typename TTokenRecord>
-    static THolder<TRequest> CreateAccessServiceRequest(const TString& key, const TTokenRecord& record) {
+    THolder<TRequest> CreateAccessServiceRequest(const TString& key, const TTokenRecord& record) const {
         auto request = MakeHolder<TRequest>(key);
+
+        if (Config.HasAccessServiceTokenName() && Config.GetTokenManager().GetEnable()) {
+            auto it = ServiceTokens.find(Config.GetAccessServiceTokenName());
+            if (it != ServiceTokens.end()) {
+                request->Token = it->second;
+                YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Create AccessService request",
+                    {"token", MaskTicket(request->Token)}
+                );
+            }
+        }
 
         if (record.Signature.AccessKeyId) {
             const auto& sign = record.Signature;
@@ -544,17 +554,6 @@ private:
     template <typename TTokenRecord>
     void AccessServiceBulkAuthorize(const TString& key, TTokenRecord& record) const {
         auto request = CreateAccessServiceRequest<TEvAccessServiceBulkAuthorizeRequestV2>(key, record);
-        if (Config.HasAccessServiceTokenName() && Config.GetTokenManager().GetEnable()) {
-            auto it = ServiceTokens.find(Config.GetAccessServiceTokenName());
-            if (it != ServiceTokens.end()) {
-                request->Token = it->second;
-                YDB_LOG_TRACE_COMP(NKikimrServices::TICKET_PARSER, "Create BulkAuthorizeV2 request",
-                    {"token", MaskTicket(request->Token)},
-                    {"peerName", record.TraceContext.PeerName},
-                    {"requestId", record.TraceContext.RequestId}
-                );
-            }
-        }
         TStringBuilder requestForPermissions;
         for (const auto& [permissionName, permissionRecord] : record.Permissions) {
             auto action = request->Request.mutable_actions()->add_items();

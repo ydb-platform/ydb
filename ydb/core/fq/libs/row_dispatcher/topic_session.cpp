@@ -6,6 +6,7 @@
 #include <ydb/core/fq/libs/metrics/sanitize_label.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/format_handler.h>
+#include <ydb/core/fq/libs/row_dispatcher/memory/memory_quota.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -312,6 +313,7 @@ private:
     bool InflightReconnect = false;
     TDuration ReconnectPeriod;
 
+    TMemoryQuota ReadSessionMemory;
     NYql::ITopicClient::TPtr TopicClient;
     std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
     std::map<ITopicFormatHandler::TSettings, ITopicFormatHandler::TPtr> FormatHandlers;
@@ -388,6 +390,7 @@ private:
     void Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
     void HandleError(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
     void HandleException(const std::exception& err);
+    void HandleMemoryLimitException(const NKikimr::TMemoryLimitExceededException&);
 
     void SendStatistics();
     bool CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
@@ -409,6 +412,7 @@ private:
         hFunc(NFq::TEvRowDispatcher::TEvStartSession, Handle);
         cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         hFunc(NFq::TEvRowDispatcher::TEvStopSession, Handle);,
+        ExceptionFunc(NKikimr::TMemoryLimitExceededException, HandleMemoryLimitException)
         ExceptionFunc(std::exception, HandleException)
     )
 
@@ -423,6 +427,7 @@ private:
         IgnoreFunc(NFq::TEvPrivate::TEvSendStatistic);
         IgnoreFunc(NFq::TEvPrivate::TEvReconnectSession);
         IgnoreFunc(NFq::TEvPrivate::TEvGetEventByTimerEvent);,
+        ExceptionFunc(NKikimr::TMemoryLimitExceededException, HandleMemoryLimitException)
         ExceptionFunc(std::exception, HandleException)
     )
 };
@@ -459,6 +464,7 @@ TTopicSession::TTopicSession(
     , FunctionRegistry(functionRegistry)
     , BufferSize(maxBufferSize)
     , LogPrefix("TopicSession")
+    , ReadSessionMemory(config.GetMemoryQuotaManager())
     , Counters(counters)
     , CountersRoot(countersRoot)
     , EnableStreamingQueriesCounters(enableStreamingQueriesCounters)
@@ -600,6 +606,7 @@ void TTopicSession::CreateTopicSession() {
     if (!ReadSession) {
         // Use any sourceParams.
         const auto& client = Clients.begin()->second;
+        ReadSessionMemory.Resize(BufferSize);
         ReadSession = GetTopicClient(client->UseSsl, client->UseActorSystemThreads).CreateReadSession(GetReadSessionSettings(client->ConsumerName));
         StartingMessageTimestamp = GetMinStartingMessageTimestamp();
         SubscribeOnNextEvent();
@@ -709,6 +716,7 @@ void TTopicSession::CloseTopicSession() {
         {"logPrefix", LogPrefix});
     ReadSession->Close(TDuration::Zero());
     ReadSession.reset();
+    ReadSessionMemory.Resize(0);
 }
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
@@ -860,14 +868,13 @@ void TTopicSession::SendData(TClientsInfo& info) {
 
             batchSize += serializedData.GetSize();
 
-            NFq::NRowDispatcherProto::TEvMessage message;
-            message.SetPayloadId(event->AddPayload(std::move(serializedData)));
-            message.MutableOffsets()->Assign(offsets.begin(), offsets.end());
+            event->Record.SetNextMessageOffset(offsets.back() + 1);
+            auto* message = event->Record.AddMessages();
+            message->SetPayloadId(event->AddPayload(std::move(serializedData)));
+            message->MutableOffsets()->Assign(offsets.begin(), offsets.end());
             if (watermark) {
-                message.AddWatermarksUs(watermark->MicroSeconds());
+                message->AddWatermarksUs(watermark->MicroSeconds());
             }
-            event->Record.AddMessages()->CopyFrom(std::move(message));
-            event->Record.SetNextMessageOffset(*offsets.rbegin() + 1);
 
             if (batchSize > MAX_BATCH_SIZE) {
                 break;
@@ -1060,6 +1067,7 @@ void TTopicSession::FatalError(const TStatus& status) {
     StopReadSession();
     ErrorStatus = status;
     Become(&TTopicSession::ErrorState);
+    FormatHandlers.clear();
 }
 
 void TTopicSession::ThrowFatalError(const TStatus& status) {
@@ -1092,6 +1100,7 @@ void TTopicSession::StopReadSession() {
         ReadSession.reset();
     }
     TopicClient.Reset();
+    ReadSessionMemory.Resize(0);
 }
 
 void TTopicSession::SendDataArrived(TClientsInfo& info) {
@@ -1107,6 +1116,12 @@ void TTopicSession::SendDataArrived(TClientsInfo& info) {
     event->Record.SetPartitionId(PartitionId);
     event->ReadActorId = info.ReadActorId;
     Send(RowDispatcherActorId, event.release());
+}
+
+void TTopicSession::HandleMemoryLimitException(const NKikimr::TMemoryLimitExceededException&) {
+    if (CurrentStateFunc() != &TThis::ErrorState) {
+        FatalError(TStatus::Fail(EStatusId::OVERLOADED, "Row dispatcher memory limit exceeded"));
+    }
 }
 
 void TTopicSession::HandleException(const std::exception& e) {

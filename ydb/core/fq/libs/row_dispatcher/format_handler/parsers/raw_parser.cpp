@@ -19,8 +19,8 @@ public:
     using TPtr = TIntrusivePtr<TRawParser>;
 
 public:
-    TRawParser(IParsedDataConsumer::TPtr consumer, const TSchemaColumn& schema, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters)
-        : TBase(std::move(consumer), __LOCATION__, functionRegistry, counters)
+    TRawParser(IParsedDataConsumer::TPtr consumer, const TSchemaColumn& schema, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters, std::shared_ptr<NYql::NDq::IMemoryQuotaManager> memoryQuotaManager)
+        : TBase(std::move(consumer), __LOCATION__, functionRegistry, counters, std::move(memoryQuotaManager))
         , Schema(schema)
         , LogPrefix("TRawParser: ")
     {}
@@ -83,7 +83,7 @@ public:
         return InitColumnParser();
     }
 
-    const TVector<ui64>& GetOffsets() const override {
+    std::span<const ui64> GetOffsets() const override {
         return Offsets;
     }
 
@@ -118,6 +118,7 @@ protected:
         }
         ParsedColumn.clear();
         Offsets.clear();
+        CurrentMessage = {};
     }
 
 private:
@@ -127,20 +128,20 @@ private:
     NYql::NUdf::EDataSlot DataSlot;
     ui64 NumberOptionals = 0;
 
-    TString CurrentMessage;
+    TStringBuf CurrentMessage;
     TVector<ui64> Offsets;
     TVector<NYql::NUdf::TUnboxedValue> ParsedColumn;
 };
 
 }  // anonymous namespace
 
-TValueStatus<ITopicParser::TPtr> CreateRawParser(IParsedDataConsumer::TPtr consumer, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters) {
+TValueStatus<ITopicParser::TPtr> CreateRawParser(IParsedDataConsumer::TPtr consumer, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters, std::shared_ptr<NYql::NDq::IMemoryQuotaManager> memoryQuotaManager) {
     const auto& columns = consumer->GetColumns();
     if (columns.size() != 1) {
         return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Expected only one column for raw format, but got " << columns.size());
     }
 
-    TRawParser::TPtr parser = MakeIntrusive<TRawParser>(consumer, columns[0], functionRegistry, counters);
+    TRawParser::TPtr parser = MakeIntrusive<TRawParser>(consumer, columns[0], functionRegistry, counters, std::move(memoryQuotaManager));
     if (auto status = parser->InitColumnParser(); status.IsFail()) {
         return status.AddParentIssue(TStringBuilder() << "Failed to create raw parser for column " << columns[0].ToString());
     }

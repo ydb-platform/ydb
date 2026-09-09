@@ -75,6 +75,7 @@ struct TFormatHandlerConfig {
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     TJsonParserConfig JsonParserConfig;
     TTopicFiltersConfig FiltersConfig;
+    std::shared_ptr<NYql::NDq::IMemoryQuotaManager> MemoryQuotaManager;
 };
 
 ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext& owner, const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings, const TCountersDesc& counters);
@@ -82,7 +83,7 @@ TFormatHandlerConfig CreateFormatHandlerConfig(const TRowDispatcherSettings& row
 
 namespace NTests {
 
-ITopicFormatHandler::TPtr CreateTestFormatHandler(const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings);
+ITopicFormatHandler::TPtr CreateTestFormatHandler(const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings, const TCountersDesc& counters = {});
 
 }  // namespace NTests
 

@@ -1,6 +1,6 @@
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/kqp/rm_service/kqp_rm_memory_quota.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
-#include <ydb/core/cms/console/console.h>
 #include <ydb/core/tablet/resource_broker_impl.h>
 
 #include <ydb/core/testlib/actor_helpers.h>
@@ -312,6 +312,8 @@ public:
         UNIT_TEST(SpillingPercentReconfigure);
         UNIT_TEST(TotalLimitReconfigure);
         UNIT_TEST(TaskQuotaManagerOptional);
+        UNIT_TEST(ServiceMemoryQuota);
+        UNIT_TEST(ConcurrentServiceMemoryQuota);
         UNIT_TEST(SnapshotSharingByExchanger);
         UNIT_TEST(NodesMembershipByExchanger);
         UNIT_TEST(DisonnectNodes);
@@ -342,6 +344,8 @@ public:
     void SpillingPercentReconfigure();
     void TotalLimitReconfigure();
     void TaskQuotaManagerOptional();
+    void ServiceMemoryQuota();
+    void ConcurrentServiceMemoryQuota();
     void SnapshotSharing();
     void SnapshotSharingByExchanger();
     void NodesMembership();
@@ -391,6 +395,43 @@ void KqpRm::SingleTask() {
     }
 
     AssertResourceBrokerSensors(0, 0, 0, 1, 0);
+}
+
+void KqpRm::ServiceMemoryQuota() {
+    StartRms();
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    {
+        auto quota = NRm::CreateMemoryQuotaManager(rm);
+        UNIT_ASSERT(quota->AllocateQuota(600));
+        UNIT_ASSERT(!quota->AllocateQuota(500));
+        UNIT_ASSERT_VALUES_EQUAL(quota->GetCurrentQuota(), 600);
+        AssertResourceManagerStats(rm, 400, 100);
+        quota->FreeQuota(200);
+        UNIT_ASSERT(quota->AllocateQuota(500));
+        UNIT_ASSERT_VALUES_EQUAL(quota->GetCurrentQuota(), 900);
+        quota->FreeQuota(900);
+        AssertResourceManagerStats(rm, 1000, 100);
+    }
+    AssertResourceBrokerSensors(0, 0, 0, std::nullopt, 0);
+}
+
+void KqpRm::ConcurrentServiceMemoryQuota() {
+    StartRms();
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    {
+        auto quota = NRm::CreateMemoryQuotaManager(rm);
+        NPar::LocalExecutor().RunAdditionalThreads(4);
+        NPar::LocalExecutor().ExecRange([&](int) {
+            for (ui32 i = 0; i < 100; ++i) {
+                if (quota->AllocateQuota(300)) {
+                    quota->FreeQuota(300);
+                }
+            }
+        }, 0, 8, NPar::TLocalExecutor::WAIT_COMPLETE);
+        UNIT_ASSERT_VALUES_EQUAL(quota->GetCurrentQuota(), 0);
+        AssertResourceManagerStats(rm, 1000, 100);
+    }
+    AssertResourceBrokerSensors(0, 0, 0, std::nullopt, 0);
 }
 
 void KqpRm::ManyTasks() {

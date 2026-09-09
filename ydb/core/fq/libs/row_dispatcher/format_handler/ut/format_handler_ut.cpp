@@ -1,11 +1,39 @@
 #include <mutex>
+#include <thread>
 
+#include <library/cpp/threading/future/future.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/format_handler.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/ut/common/ut_common.h>
+#include <ydb/library/actors/core/executelater.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 namespace NFq::NRowDispatcher::NTests {
 
 namespace {
+
+class TThreadSafeQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
+public:
+    using TGuaranteeQuotaManager::TGuaranteeQuotaManager;
+
+    bool AllocateQuota(ui64 size) override {
+        std::lock_guard lock(Mutex);
+        return TGuaranteeQuotaManager::AllocateQuota(size);
+    }
+
+    void FreeQuota(ui64 size) override {
+        std::lock_guard lock(Mutex);
+        TGuaranteeQuotaManager::FreeQuota(size);
+    }
+
+    ui64 GetCurrentQuota() const override {
+        std::lock_guard lock(Mutex);
+        return TGuaranteeQuotaManager::GetCurrentQuota();
+    }
+
+private:
+    mutable std::mutex Mutex;
+};
 
 class TFormatHandlerFixture : public TBaseFixture {
 public:
@@ -54,14 +82,17 @@ public:
             HasData_ = false;
         }
 
-        void ExpectError(TStatusCode statusCode, const TString& message) {
+        void ExpectError(TStatusCode statusCode, const TString& message, bool fatal = false) {
             std::lock_guard lock(Mutex_);
             UNIT_ASSERT_C(!ExpectedError_, "Cannot add existing error, client id: " << ClientId_);
             ExpectedError_ = {statusCode, message};
+            ExpectedFatalError_ = fatal;
         }
 
         void Validate() const {
             std::lock_guard lock(Mutex_);
+            UNIT_ASSERT_C(!UnexpectedError_, "Client received an unexpected error, client id: " << ClientId_);
+            UNIT_ASSERT_C(!CallbackAfterFatalError_, "Client received a callback after its fatal error, client id: " << ClientId_);
             UNIT_ASSERT_C(Offsets_.empty(), "Found " << Offsets_.size() << " missing batches, client id: " << ClientId_);
             UNIT_ASSERT_VALUES_EQUAL_C(ExpectedFilteredRows_, 0, "Found " << ExpectedFilteredRows_ << " not filtered rows, client id: " << ClientId_);
             UNIT_ASSERT_C(!ExpectedError_, "Expected error: " << ExpectedError_->second << ", client id: " << ClientId_);
@@ -104,11 +135,21 @@ public:
 
         void OnClientError(TStatus status) override {
             std::lock_guard lock(Mutex_);
+            UnexpectedError_ |= !ExpectedError_;
+            CallbackAfterFatalError_ |= FatalErrorReceived_;
             UNIT_ASSERT_C(!Offsets_.empty(), "Unexpected message batch, status: " << status.GetErrorMessage() << ", client id: " << ClientId_);
 
             if (ExpectedError_) {
                 CheckError(status, ExpectedError_->first, ExpectedError_->second);
                 ExpectedError_ = std::nullopt;
+                if (ExpectedFatalError_) {
+                    FatalErrorReceived_ = true;
+                    Offsets_ = {};
+                    ExpectedFilteredRows_ = 0;
+                    HasData_ = false;
+                    Frozen_ = true;
+                    ExpectedFatalError_ = false;
+                }
             } else {
                 CheckSuccess(status);
             }
@@ -116,11 +157,13 @@ public:
 
         void StartClientSession() override {
             std::lock_guard lock(Mutex_);
+            CallbackAfterFatalError_ |= FatalErrorReceived_;
             Started_ = true;
         }
 
         void AddDataToClient(ui64 offset, ui64 numberRows, ui64 rowSize, TMaybe<TInstant> /* watermark */) override {
             std::lock_guard lock(Mutex_);
+            CallbackAfterFatalError_ |= FatalErrorReceived_;
             UNIT_ASSERT_C(Started_, "Unexpected data for not started session");
             UNIT_ASSERT_GE_C(rowSize, 0, "Expected non zero row size, got: " << rowSize);
             UNIT_ASSERT_C(!ExpectedError_, "Expected error: " << ExpectedError_->second << ", client id: " << ClientId_);
@@ -132,6 +175,7 @@ public:
 
         void UpdateClientOffset(ui64 offset) override {
             std::lock_guard lock(Mutex_);
+            CallbackAfterFatalError_ |= FatalErrorReceived_;
             UNIT_ASSERT_C(Started_, "Unexpected offset for not started session");
             UNIT_ASSERT_C(!ExpectedError_, "Error is not handled: " << ExpectedError_->second << ", client id: " << ClientId_);
             UNIT_ASSERT_C(!Offsets_.empty(), "Unexpected message batch, offset: " << offset << ", client id: " << ClientId_);
@@ -156,6 +200,10 @@ public:
         ui64 ExpectedFilteredRows_ = 0;
         std::queue<ui64> Offsets_;
         std::optional<std::pair<TStatusCode, TString>> ExpectedError_;
+        bool ExpectedFatalError_ = false;
+        bool UnexpectedError_ = false;
+        bool FatalErrorReceived_ = false;
+        bool CallbackAfterFatalError_ = false;
         mutable std::mutex Mutex_;
     };
 
@@ -185,8 +233,22 @@ public:
     }
 
 public:
-    void CreateFormatHandler(const TFormatHandlerConfig& config, ITopicFormatHandler::TSettings settings = {.ParsingFormat = "json_each_row"}) {
-        FormatHandler = CreateTestFormatHandler(config, settings);
+    void RunInActorContext(std::function<void()> callback) {
+        auto completed = NThreading::NewPromise<void>();
+        Runtime.Register(NActors::CreateExecuteLaterActor([callback = std::move(callback), completed]() mutable {
+            try {
+                callback();
+                completed.SetValue();
+            } catch (...) {
+                completed.SetException(std::current_exception());
+            }
+        }, NActors::IActor::EActivityType::ACTORLIB_COMMON));
+        UNIT_ASSERT_C(completed.GetFuture().Wait(WAIT_TIMEOUT), "Actor callback timed out");
+        completed.GetFuture().GetValueSync();
+    }
+
+    void CreateFormatHandler(const TFormatHandlerConfig& config, ITopicFormatHandler::TSettings settings = {.ParsingFormat = "json_each_row"}, const TCountersDesc& counters = {}) {
+        FormatHandler = CreateTestFormatHandler(config, settings, counters);
     }
 
     [[nodiscard]] TStatus MakeClient(TVector<TSchemaColumn> columns, TString watermarkExpr, TString filterExpr, TCallback callback, ui64 expectedFilteredRows) {
@@ -257,7 +319,7 @@ public:
     TCallback BatchCheck(TVector<TMessages> messages) const {
         return [this, expectedIndex = 0ull, expectedMessages = std::move(messages)](NActors::TActorId clientId, TQueue<TDataBatch>&& data) mutable {
             while (!data.empty()) {
-                auto [actualMessages, actualOffsets, actualWatermark] = data.front();
+                auto [actualMessages, actualOffsets, actualWatermark] = std::move(data.front());
                 data.pop();
 
                 UNIT_ASSERT_LT_C(expectedIndex, expectedMessages.size(), "Expected less messages, clientId: " << clientId << ", got " << data.size() << " batches");
@@ -302,6 +364,208 @@ public:
 
 
 Y_UNIT_TEST_SUITE(TestFormatHandler) {
+    Y_UNIT_TEST_F(FatalParsingErrorStopsAllClients, TFormatHandlerFixture) {
+        CreateFormatHandler(
+            {.FunctionRegistry = FunctionRegistry, .JsonParserConfig = {.FunctionRegistry = FunctionRegistry}, .FiltersConfig = {.CompileServiceId = CompileService}},
+            {.ParsingFormat = "raw"});
+        const TVector<TSchemaColumn> columns = {{"data", "[DataType; Uint64]"}};
+        for (size_t i = 0; i < 2; ++i) {
+            CheckSuccess(MakeClient(columns, "", "", EmptyCheck(), 1));
+            Clients.back()->ExpectOffsets({41});
+        }
+        FormatHandler->ParseMessages({GetMessage(41, "1")});
+
+        const TString error = "Failed to parse massege at offset 42";
+        for (auto& client : Clients) {
+            client->ExpectOffsets({42});
+            client->ExpectError(EStatusId::BAD_REQUEST, error, true);
+        }
+        // Neither later rows in this call nor subsequent calls may resume processing.
+        FormatHandler->ParseMessages({GetMessage(42, "invalid"), GetMessage(43, "2"), GetMessage(44, "invalid again")});
+        FormatHandler->ParseMessages({GetMessage(45, "3")});
+        FormatHandler->ForceRefresh();
+        for (const auto clientId : ClientIds) {
+            UNIT_ASSERT(FormatHandler->ExtractClientData(clientId).empty());
+        }
+        CheckError(MakeClient(columns, "", "", EmptyCheck(), 0), EStatusId::BAD_REQUEST, error);
+
+        for (const auto clientId : ClientIds) {
+            RemoveClient(clientId);
+        }
+        UNIT_ASSERT(!FormatHandler->HasClients());
+        CheckError(MakeClient(columns, "", "", EmptyCheck(), 0), EStatusId::BAD_REQUEST, error);
+    }
+
+    Y_UNIT_TEST_F(FatalErrorDuringSchemaRefreshRejectsNewClient, TFormatHandlerFixture) {
+        RunInActorContext([&] {
+            CreateFormatHandler({
+                .FunctionRegistry = FunctionRegistry,
+                .JsonParserConfig = {.FunctionRegistry = FunctionRegistry, .LatencyLimit = TDuration::Hours(1)},
+                .FiltersConfig = {.CompileServiceId = CompileService},
+            });
+            CheckSuccess(MakeClient({{"data", "[DataType; String]"}}, "", "", EmptyCheck(), 0));
+            const TString error = "Failed to parse";
+            Clients.back()->ExpectOffsets({42});
+            Clients.back()->ExpectError(EStatusId::BAD_REQUEST, error, true);
+            FormatHandler->ParseMessages({GetMessage(42, "not json")});
+
+            const auto newClient = MakeIntrusive<TClientDataConsumer>(
+                NActors::TActorId(100, 0, 0, 0), TVector<TSchemaColumn>{{"other", "[DataType; String]"}}, "", "", EmptyCheck(), ui64{0});
+            CheckError(FormatHandler->AddClient(newClient), EStatusId::BAD_REQUEST, error);
+            newClient->Validate();
+            UNIT_ASSERT(!newClient->IsStarted());
+
+            FormatHandler->ForceRefresh();
+            FormatHandler->ParseMessages({GetMessage(43, R"({"data": "valid"})")});
+            UNIT_ASSERT(FormatHandler->ExtractClientData(ClientIds.back()).empty());
+            RemoveClient(ClientIds.back());
+            UNIT_ASSERT(!FormatHandler->HasClients());
+        });
+    }
+
+    Y_UNIT_TEST_F(FatalErrorWithPendingCompilation, TFormatHandlerFixture) {
+        const auto compileService = Runtime.AllocateEdgeActor();
+        TCountersDesc counters;
+        NKikimr::TAlignedPagePoolCounters poolCounters(counters.CountersRoot, "row_dispatcher");
+        CreateFormatHandler(
+            {.FunctionRegistry = FunctionRegistry, .JsonParserConfig = {.FunctionRegistry = FunctionRegistry}, .FiltersConfig = {.CompileServiceId = compileService}},
+            {.ParsingFormat = "raw"}, counters);
+        const auto client = MakeIntrusive<TClientDataConsumer>(
+            NActors::TActorId(100, 0, 0, 0), TVector<TSchemaColumn>{{"data", "[DataType; Uint64]"}}, "", "TRUE", EmptyCheck(), ui64{0});
+        CheckSuccess(FormatHandler->AddClient(client));
+        Clients.push_back(client);
+        auto request = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvPurecalcCompileRequest>(compileService, WAIT_TIMEOUT);
+        UNIT_ASSERT(request);
+        UNIT_ASSERT(!client->IsStarted());
+
+        client->ExpectOffsets({42});
+        client->ExpectError(EStatusId::BAD_REQUEST, "Failed to parse massege at offset 42", true);
+        FormatHandler->ParseMessages({GetMessage(42, "invalid")});
+        client->Validate();
+        FormatHandler->RemoveClient(client->GetClientId());
+        FormatHandler.Reset();
+        NTestUtils::WaitFor(WAIT_TIMEOUT, "format handler allocator release", [&] {
+            return poolCounters.TotalBytesAllocatedCntr->Val() == 0;
+        });
+
+        // The compile service can release its program holder after handler destruction.
+        with_lock(Alloc) {
+            NYql::NUdf::TUnboxedValue value = NKikimr::NMiniKQL::MakeStringNotFilled(1_KB);
+            const auto allocated = Alloc.GetAllocated();
+            request.Reset();
+            UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
+            UNIT_ASSERT_VALUES_EQUAL(Alloc.GetAllocated(), allocated);
+        }
+    }
+
+    Y_UNIT_TEST_F(OffsetsUseHandlerAllocator, TFormatHandlerFixture) {
+        auto manager = std::make_shared<TThreadSafeQuotaManager>(64_MB, 64_MB);
+        TCountersDesc counters;
+        NKikimr::TAlignedPagePoolCounters poolCounters(counters.CountersRoot, "row_dispatcher");
+        CreateFormatHandler(
+            {.FunctionRegistry = FunctionRegistry, .JsonParserConfig = {.FunctionRegistry = FunctionRegistry}, .FiltersConfig = {.CompileServiceId = CompileService}, .MemoryQuotaManager = manager},
+            {.ParsingFormat = "raw"}, counters);
+
+        constexpr size_t rows = 8192;
+        TQueue<TDataBatch> completed;
+        for (size_t client = 0; client < 2; ++client) {
+            CheckSuccess(MakeClient({{"data", "[DataType; String]"}}, "", "", [&](auto, TQueue<TDataBatch>&& data) {
+                UNIT_ASSERT_VALUES_EQUAL(data.size(), 1);
+                const auto& offsets = data.front().Offsets;
+                UNIT_ASSERT_VALUES_EQUAL(offsets.size(), rows);
+                for (size_t i = 0; i < rows; ++i) {
+                    UNIT_ASSERT_VALUES_EQUAL(offsets[i], offsets.front() + i);
+                }
+                completed.emplace(std::move(data.front()));
+            }, 2 * rows));
+        }
+
+        const auto allocatedBefore = poolCounters.TotalBytesAllocatedCntr->Val();
+        i64 allocatedAfter = 0;
+        with_lock(Alloc) {
+            NYql::NUdf::TUnboxedValue foreignValue = NKikimr::NMiniKQL::MakeStringNotFilled(1_KB);
+            const auto foreignAllocated = Alloc.GetAllocated();
+            for (size_t batch = 0; batch < 2; ++batch) {
+                TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> messages;
+                TVector<ui64> expectedOffsets;
+                for (size_t i = 0; i < rows; ++i) {
+                    messages.push_back(GetMessage(batch * rows + i, "x"));
+                    expectedOffsets.push_back(batch * rows + i);
+                }
+                ParseMessages(messages, std::move(expectedOffsets));
+                UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
+                UNIT_ASSERT_VALUES_EQUAL(Alloc.GetAllocated(), foreignAllocated);
+                if (!batch) {
+                    allocatedAfter = poolCounters.TotalBytesAllocatedCntr->Val();
+                    UNIT_ASSERT_GT(allocatedAfter, allocatedBefore);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(poolCounters.TotalBytesAllocatedCntr->Val(), allocatedAfter);
+                }
+            }
+            for (auto clientId : ClientIds) {
+                RemoveClient(clientId);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
+            UNIT_ASSERT_VALUES_EQUAL(Alloc.GetAllocated(), foreignAllocated);
+        }
+
+        FormatHandler.Reset();
+        NTestUtils::WaitFor(WAIT_TIMEOUT, "format handler allocator release", [&] {
+            return poolCounters.TotalBytesAllocatedCntr->Val() == 0;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(poolCounters.LostPagesBytesFreeCntr->Val(), 0);
+        UNIT_ASSERT_GT(manager->GetCurrentQuota(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(completed.size(), 4);
+
+        bool allocatorRestored = false;
+        std::thread destroyBatches([batches = std::move(completed), &allocatorRestored, rows]() mutable {
+            NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true);
+            NYql::NUdf::TUnboxedValue value = NKikimr::NMiniKQL::MakeStringNotFilled(1_KB);
+            const auto allocated = alloc.GetAllocated();
+            while (!batches.empty()) {
+                UNIT_ASSERT_VALUES_EQUAL(batches.front().Offsets.size(), rows);
+                batches.pop();
+            }
+            allocatorRestored = NKikimr::NMiniKQL::TlsAllocState == &alloc.Ref() && alloc.GetAllocated() == allocated;
+        });
+        destroyBatches.join();
+        UNIT_ASSERT(allocatorRestored);
+        NTestUtils::WaitFor(WAIT_TIMEOUT, "completed batches quota release", [&] {
+            return manager->GetCurrentQuota() == 0;
+        });
+    }
+
+    Y_UNIT_TEST_F(OffsetReleaseQuotaRejection, TFormatHandlerFixture) {
+        constexpr ui64 limit = 8_MB;
+        auto manager = std::make_shared<TThreadSafeQuotaManager>(limit, limit);
+        CreateFormatHandler(
+            {.FunctionRegistry = FunctionRegistry, .JsonParserConfig = {.FunctionRegistry = FunctionRegistry}, .FiltersConfig = {.CompileServiceId = CompileService}, .MemoryQuotaManager = manager},
+            {.ParsingFormat = "raw"});
+        CheckSuccess(MakeClient({{"data", "[DataType; String]"}}, "", "",
+            BatchCheck({{{42}, {}, TBatch().AddRow(TRow().AddString("x"))}}), 1));
+
+        Clients.back()->ExpectOffsets({42});
+        with_lock(Alloc) {
+            FormatHandler->ParseMessages({GetMessage(42, "x")});
+            {
+                TMemoryQuota competingBuffer(manager);
+                competingBuffer.Resize(limit - manager->GetCurrentQuota() - sizeof(ui64) + 1);
+                UNIT_ASSERT_EXCEPTION(FormatHandler->ExtractClientData(ClientIds.back()), NKikimr::TMemoryLimitExceededException);
+                UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
+
+                // Releasing one byte leaves exactly enough quota for one offset.
+                competingBuffer.Resize(competingBuffer.GetSize() - 1);
+                Clients.back()->Callback(ClientIds.back(), FormatHandler->ExtractClientData(ClientIds.back()));
+            }
+            RemoveClient(ClientIds.back());
+            UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
+        }
+        FormatHandler.Reset();
+        NTestUtils::WaitFor(WAIT_TIMEOUT, "format handler quota release", [&] {
+            return manager->GetCurrentQuota() == 0;
+        });
+    }
+
     Y_UNIT_TEST_F(ManyJsonClients, TFormatHandlerFixture) {
         constexpr ui64 firstOffset = 42;
         const TSchemaColumn commonColumn = {"common", "[DataType; String]"};

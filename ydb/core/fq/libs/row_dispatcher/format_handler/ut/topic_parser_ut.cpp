@@ -1,10 +1,29 @@
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/parsers/json_parser.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/parsers/raw_parser.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/ut/common/ut_common.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+
+#include <thread>
 
 namespace NFq::NRowDispatcher::NTests {
 
 namespace {
+
+class TCountingQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
+public:
+    using TGuaranteeQuotaManager::TGuaranteeQuotaManager;
+
+    bool AllocateQuota(ui64 size) override {
+        ++Requests;
+        const bool result = TGuaranteeQuotaManager::AllocateQuota(size);
+        PeakQuota = std::max(PeakQuota, GetCurrentQuota());
+        return result;
+    }
+
+    ui64 Requests = 0;
+    ui64 PeakQuota = 0;
+};
 
 class TBaseParserFixture : public TBaseFixture {
 public:
@@ -173,26 +192,348 @@ public:
 
 protected:
     TValueStatus<ITopicParser::TPtr> CreateParser() override {
-        return CreateJsonParser(ParserHandler, Config, {});
+        return CreateJsonParser(ParserHandler, Config, Counters);
     }
 
 public:
     TJsonParserConfig Config;
+    TCountersDesc Counters;
 };
 
 using TJsonParserFixture = TJsonParserBaseFixture<false>;
 using TJsonParserFixtureSkipErrors = TJsonParserBaseFixture<true>;
 
 class TRawParserFixture : public TBaseParserFixture {
+public:
+    NYql::NDq::IMemoryQuotaManager::TPtr MemoryQuotaManager;
+
 protected:
     TValueStatus<ITopicParser::TPtr> CreateParser() override {
-        return CreateRawParser(ParserHandler, FunctionRegistry, {});
+        return CreateRawParser(ParserHandler, FunctionRegistry, {}, MemoryQuotaManager);
     }
 };
 
 }  // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TestJsonParser) {
+    Y_UNIT_TEST_F(MemoryQuotaForBuffers, TJsonParserFixture) {
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(8_MB, 8_MB);
+        Config.MemoryQuotaManager = manager;
+        CheckSuccess(MakeParser({"a1"}, "[DataType; String]", [](auto, auto) {}));
+        UNIT_ASSERT_GT(manager->GetCurrentQuota(), Config.BatchSize);
+        {
+            TMemoryQuota competingBuffer(manager);
+            competingBuffer.Resize(8_MB - manager->GetCurrentQuota());
+            ParserHandler->ExpectCommonError(EStatusId::OVERLOADED, "Row dispatcher memory limit exceeded");
+            PushToParser(FIRST_OFFSET, R"({"a1":"hello"})");
+        }
+        Parser.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
+    Y_UNIT_TEST_F(MemoryQuotaRejectsParserCreation, TJsonParserFixture) {
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(1_MB, 1_MB);
+        Config.MemoryQuotaManager = manager;
+        with_lock(Alloc) {
+            UNIT_ASSERT_EXCEPTION(MakeParser({"a1"}, "[DataType; String]", [](auto, auto) {}), NKikimr::TMemoryLimitExceededException);
+            UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
+    Y_UNIT_TEST_F(MemoryQuotaReusesColumnBuffers, TJsonParserFixture) {
+        auto manager = std::make_shared<TCountingQuotaManager>(8_MB, 8_MB);
+        Config.MemoryQuotaManager = manager;
+        CheckSuccess(MakeParser({"a", "b"}, "[DataType; Bool]"));
+        const auto retainedQuota = manager->GetCurrentQuota();
+
+        for (size_t i = 0; i < 3; ++i) {
+            manager->PeakQuota = retainedQuota;
+            CheckSuccess(Parser->ChangeConsumer(ParserHandler));
+            UNIT_ASSERT_VALUES_EQUAL(manager->PeakQuota, retainedQuota);
+            UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), retainedQuota);
+        }
+
+        Parser.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
+    Y_UNIT_TEST_F(MemoryQuotaRejectsInputBufferGrowth, TJsonParserFixture) {
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(4_MB, 4_MB);
+        Config.MemoryQuotaManager = manager;
+        Config.BatchSize = 4_KB;
+        CheckSuccess(MakeParser({"a"}, "[DataType; Bool]"));
+        with_lock(Alloc) {
+            UNIT_ASSERT_EXCEPTION(Parser->ParseMessages({GetMessage(FIRST_OFFSET, TString(8_MB, ' '))}), NKikimr::TMemoryLimitExceededException);
+            UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
+        }
+        PushToParser(FIRST_OFFSET, R"({"a":true})");
+        Parser.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
+    Y_UNIT_TEST_F(MemoryQuotaRejectsColumnIndexGrowth, TJsonParserFixture) {
+        constexpr ui64 limit = 4_MB;
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(limit, limit);
+        Config.MemoryQuotaManager = manager;
+        Config.BatchSize = 4_KB;
+        CheckSuccess(MakeParser({"a"}, "[DataType; Bool]"));
+        TVector<TSchemaColumn> columns;
+        for (size_t i = 0; i < 128; ++i) {
+            columns.push_back({ToString(i), "[DataType; Bool]"});
+        }
+        auto consumer = MakeIntrusive<TParsedDataConsumer>(*this, columns, [](auto, auto) {});
+        {
+            TMemoryQuota competingBuffer(manager);
+            competingBuffer.Resize(limit - manager->GetCurrentQuota());
+            with_lock(Alloc) {
+                UNIT_ASSERT_EXCEPTION(Parser->ChangeConsumer(consumer), NKikimr::TMemoryLimitExceededException);
+                Parser.Reset();
+                UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), competingBuffer.GetSize());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
+    Y_UNIT_TEST_F(MemoryQuotaPreservesBufferedMessagesAfterRejectedGrowth, TJsonParserFixture) {
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(4_MB, 4_MB);
+        Config.MemoryQuotaManager = manager;
+        Config.BatchSize = 4_KB;
+        Config.LatencyLimit = TDuration::Hours(1);
+        CheckSuccess(MakeParser({"a"}, "[DataType; Bool]", [](ui64 numberRows, auto result) {
+            UNIT_ASSERT_VALUES_EQUAL(numberRows, 2);
+            UNIT_ASSERT(result[0][0].template Get<bool>());
+            UNIT_ASSERT(!result[0][1].template Get<bool>());
+        }));
+
+        Parser->ParseMessages({GetMessage(FIRST_OFFSET, R"({"a":true})")});
+        UNIT_ASSERT_EXCEPTION(Parser->ParseMessages({GetMessage(FIRST_OFFSET + 1, TString(8_MB, ' '))}), NKikimr::TMemoryLimitExceededException);
+        Parser->ParseMessages({GetMessage(FIRST_OFFSET + 1, R"({"a":false})")});
+        UNIT_ASSERT_VALUES_EQUAL(ParserHandler->NumberBatches, 0);
+        ExpectedBatches = 1;
+        Parser->Refresh(true);
+        Parser.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
+    Y_UNIT_TEST_F(AllocatorRestoredBetweenBatches, TJsonParserFixture) {
+        Config.BufferCellCount = 2;
+        CheckSuccess(MakeParser({"a"}, "[DataType; Bool]", [this](ui64, auto) {
+            UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
+            with_lock(Alloc) {
+                NYql::NUdf::TUnboxedValue value = NKikimr::NMiniKQL::MakeStringNotFilled(1_KB);
+                UNIT_ASSERT_VALUES_EQUAL(value.AsStringRef().Size(), 1_KB);
+            }
+        }));
+
+        TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> messages;
+        for (size_t i = 0; i < 5; ++i) {
+            messages.push_back(GetMessage(FIRST_OFFSET + i, R"({"a":true})"));
+        }
+        ExpectedBatches = 3;
+        with_lock(Alloc) {
+            Parser->ParseMessages(messages);
+            UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
+        }
+    }
+
+    Y_UNIT_TEST_F(MemoryQuotaReleasedOnAnotherThread, TJsonParserFixture) {
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(64_MB, 64_MB);
+        Config.MemoryQuotaManager = manager;
+        Config.BatchSize = 4_KB;
+        Config.LatencyLimit = TDuration::Hours(1);
+        Counters.MkqlCountersName = "ParserBuffers";
+        NKikimr::TAlignedPagePoolCounters poolCounters(Counters.CountersRoot, Counters.MkqlCountersName);
+
+        TVector<TString> names;
+        for (size_t i = 0; i < 128; ++i) {
+            names.push_back(TString(64, 'a') + ToString(i));
+        }
+        CheckSuccess(MakeParser(names, "[OptionalType; [StructType; [[value; [DataType; String]]]]]"));
+
+        with_lock(Alloc) {
+            // Grow and parse once, then leave data buffered for destruction.
+            PushToParser(FIRST_OFFSET, TString(128_KB, ' ') + "{}");
+            Parser->ParseMessages({GetMessage(FIRST_OFFSET + 1, "{}")});
+            UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
+        }
+
+        bool allocatorRestored = false;
+        bool foreignMemoryUnchanged = false;
+        std::thread destroyParser([parser = std::move(Parser), &allocatorRestored, &foreignMemoryUnchanged]() mutable {
+            NKikimr::NMiniKQL::TScopedAlloc otherAlloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true);
+            NYql::NUdf::TUnboxedValue value = NKikimr::NMiniKQL::MakeStringNotFilled(1_KB);
+            const auto allocated = otherAlloc.GetAllocated();
+            parser.Reset();
+            allocatorRestored = NKikimr::NMiniKQL::TlsAllocState == &otherAlloc.Ref();
+            foreignMemoryUnchanged = otherAlloc.GetAllocated() == allocated;
+        });
+        destroyParser.join();
+
+        UNIT_ASSERT(allocatorRestored);
+        UNIT_ASSERT(foreignMemoryUnchanged);
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(poolCounters.TotalBytesAllocatedCntr->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(poolCounters.LostPagesBytesFreeCntr->Val(), 0);
+    }
+
+    Y_UNIT_TEST_F(MemoryQuotaForWideColumnNames, TJsonParserFixture) {
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(64_MB, 64_MB);
+        Config.MemoryQuotaManager = manager;
+        Config.BatchSize = 1_KB;
+
+        TVector<TString> names;
+        for (size_t i = 0; i < 1000; ++i) {
+            names.push_back(ToString(i));
+        }
+        CheckSuccess(MakeParser(names, "[DataType; Bool]"));
+        const auto shortNamesQuota = manager->GetCurrentQuota();
+        Parser.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+
+        for (auto& name : names) {
+            name += TString(1_KB, 'a');
+        }
+        CheckSuccess(MakeParser(names, "[DataType; Bool]"));
+        UNIT_ASSERT_GE(manager->GetCurrentQuota(), shortNamesQuota + names.size() * 1_KB);
+        Parser.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
+    Y_UNIT_TEST_F(MemoryQuotaRejectsColumnStrings, TJsonParserFixture) {
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(2_MB, 2_MB);
+        Config.MemoryQuotaManager = manager;
+        Config.BatchSize = 1_KB;
+        Config.BufferCellCount = 1;
+
+        UNIT_ASSERT_EXCEPTION(MakeParser({TString(2_MB, 'a')}, "[DataType; Bool]"), NKikimr::TMemoryLimitExceededException);
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+        UNIT_ASSERT_EXCEPTION(MakeParser({"a"}, TString(2_MB, ' ') + "[DataType; Bool]"), NKikimr::TMemoryLimitExceededException);
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
+    Y_UNIT_TEST_F(MemoryQuotaReleasesNestedColumnMetadata, TJsonParserFixture) {
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(64_MB, 64_MB);
+        Config.MemoryQuotaManager = manager;
+        Config.BatchSize = 1_KB;
+        Config.BufferCellCount = 1;
+        Counters.MkqlCountersName = "ColumnMetadata";
+        NKikimr::TAlignedPagePoolCounters poolCounters(Counters.CountersRoot, Counters.MkqlCountersName);
+
+        constexpr size_t membersCount = 128;
+        TStringBuilder type;
+        type << "[StructType; [";
+        for (size_t i = 0; i < membersCount; ++i) {
+            type << "[f" << i << "; [StructType; [[value; [DataType; Bool]]]]];";
+        }
+        type << "]]";
+        CheckSuccess(MakeParser({"a"}, type));
+        const auto nestedQuota = manager->GetCurrentQuota();
+        auto nestedConsumer = ParserHandler;
+
+        ParserHandler = MakeIntrusive<TParsedDataConsumer>(
+            *this, TVector<TSchemaColumn>{{"a", "[DataType; Bool]"}}, [](auto, auto) {});
+        CheckSuccess(Parser->ChangeConsumer(ParserHandler));
+        // MiniKQL retains its reserved pages for reuse until the parser is destroyed.
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), nestedQuota);
+
+        for (size_t i = 0; i < 3; ++i) {
+            CheckSuccess(Parser->ChangeConsumer(nestedConsumer));
+            CheckSuccess(Parser->ChangeConsumer(ParserHandler));
+        }
+        CheckSuccess(Parser->ChangeConsumer(nestedConsumer));
+        CheckSuccess(Parser->ChangeConsumer(MakeIntrusive<TParsedDataConsumer>(
+            *this, TVector<TSchemaColumn>{{"a", type}, {"b", type}}, [](auto, auto) {})));
+        CheckSuccess(Parser->ChangeConsumer(ParserHandler));
+        PushToParser(FIRST_OFFSET, R"({"a":true})");
+        Parser.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(poolCounters.TotalBytesAllocatedCntr->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(poolCounters.LostPagesBytesFreeCntr->Val(), 0);
+    }
+
+    Y_UNIT_TEST_F(MemoryQuotaRejectsNestedColumnMetadata, TJsonParserFixture) {
+        Config.BatchSize = 1_KB;
+        Config.BufferCellCount = 1;
+        TStringBuilder type;
+        type << "[StructType; [";
+        for (size_t i = 0; i < 1000; ++i) {
+            type << "[f" << i << "; [DataType; Bool]];";
+        }
+        type << "]]";
+
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(64_MB, 64_MB);
+        Config.MemoryQuotaManager = manager;
+        CheckSuccess(MakeParser({"a"}, type));
+        const auto requiredQuota = manager->GetCurrentQuota();
+        Parser.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+
+        manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(requiredQuota - 1, requiredQuota - 1);
+        Config.MemoryQuotaManager = manager;
+        UNIT_ASSERT_EXCEPTION(MakeParser({"a"}, type), NKikimr::TMemoryLimitExceededException);
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
+    Y_UNIT_TEST_F(ColumnErrorsWithExhaustedMemoryQuota, TJsonParserFixture) {
+        constexpr ui64 limit = 64_MB;
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(limit, limit);
+        Config.MemoryQuotaManager = manager;
+        Config.BatchSize = 4_KB;
+        Config.BufferCellCount = 1;
+
+        CheckSuccess(MakeParser({"a"}, "[DataType; Bool]"));
+        // Warm the input and simdjson buffers before exhausting the quota.
+        PushToParser(FIRST_OFFSET, TString(1_KB, ' ') + R"({"a":true})");
+        {
+            TMemoryQuota competingBuffer(manager);
+            competingBuffer.Resize(limit - manager->GetCurrentQuota());
+            const TString badMessage = TStringBuilder() << R"({"a":")" << TString(1_KB, 'x') << R"("})";
+            CheckColumnError(badMessage, 0, EStatusId::BAD_REQUEST, "Failed to parse data type Bool from json string");
+            CheckColumnError("{}", 0, EStatusId::PRECONDITION_FAILED, "missing values in non optional column");
+            PushToParser(ParserHandler->CurrentOffset, R"({"a":true})");
+        }
+        Parser.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
+    Y_UNIT_TEST_F(MemoryQuotaGrowthAfterSchemaChange, TJsonParserFixture) {
+        constexpr size_t rows = 1000;
+        auto manager = std::make_shared<TCountingQuotaManager>(64_MB, 64_MB);
+        Config.MemoryQuotaManager = manager;
+        Config.BufferCellCount = rows;
+        CheckSuccess(MakeParser({"a", "b"}, "[DataType; Bool]"));
+
+        // Removing a column doubles the row limit beyond the buffers reserved
+        // at construction. Growing them must not request quota for every row.
+        ParserHandler = MakeIntrusive<TParsedDataConsumer>(
+            *this,
+            TVector<TSchemaColumn>{{"a", "[DataType; Bool]"}},
+            [=](ui64 numberRows, auto result) {
+                UNIT_ASSERT_VALUES_EQUAL(numberRows, rows);
+                UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+                for (const auto& value : result[0]) {
+                    UNIT_ASSERT(value.template Get<bool>());
+                }
+            }
+        );
+        CheckSuccess(Parser->ChangeConsumer(ParserHandler));
+
+        TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> messages;
+        messages.reserve(rows);
+        for (size_t i = 0; i < rows; ++i) {
+            messages.push_back(GetMessage(FIRST_OFFSET + i, R"({"a":true})"));
+        }
+        manager->Requests = 0;
+        ExpectedBatches = 1;
+        Parser->ParseMessages(messages);
+        UNIT_ASSERT_LT(manager->Requests, 32);
+
+        Parser.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
     Y_UNIT_TEST_F(Simple1, TJsonParserFixture) {
         CheckSuccess(MakeParser({{"a1", "[DataType; String]"}, {"a2", "[OptionalType; [DataType; Uint64]]"}}, [](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
             UNIT_ASSERT_VALUES_EQUAL(1, numberRows);
@@ -957,6 +1298,16 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
 }
 
 Y_UNIT_TEST_SUITE(TestRawParser) {
+    Y_UNIT_TEST_F(MemoryQuotaLimitsParsedStrings, TRawParserFixture) {
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(1_MB, 1_MB);
+        MemoryQuotaManager = manager;
+        CheckSuccess(MakeParser({"a1"}, "[DataType; String]", [](auto, auto) {}));
+        ParserHandler->ExpectCommonError(EStatusId::OVERLOADED, "Row dispatcher memory limit exceeded");
+        PushToParser(FIRST_OFFSET, TString(2_MB, 'a'));
+        Parser.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
     Y_UNIT_TEST_F(Simple, TRawParserFixture) {
         CheckSuccess(MakeParser({{"data", "[OptionalType; [DataType; String]]"}}, [](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
             UNIT_ASSERT_VALUES_EQUAL(1, numberRows);

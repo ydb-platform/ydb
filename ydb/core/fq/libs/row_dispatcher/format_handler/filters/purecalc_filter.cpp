@@ -75,14 +75,18 @@ struct TInputType {
 
 class TInputSpec : public NYql::NPureCalc::TInputSpecBase {
 public:
-    explicit TInputSpec(const NYT::TNode& schema)
-        : Schemas({schema})
+    TInputSpec(const NYT::TNode& schema, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager)
+        : MemoryQuotaManager(std::move(memoryQuotaManager))
+        , Schemas({schema})
     {}
 
 public:
     const TVector<NYT::TNode>& GetSchemas() const override {
         return Schemas;
     }
+
+public:
+    const NYql::NDq::IMemoryQuotaManager::TPtr MemoryQuotaManager;
 
 private:
     const TVector<NYT::TNode> Schemas;
@@ -93,6 +97,7 @@ public:
     TInputConsumer(const TInputSpec& spec, NYql::NPureCalc::TWorkerHolder<NYql::NPureCalc::IPushStreamWorker> worker)
         : Worker(std::move(worker))
     {
+        LimitAllocator(Worker->GetScopedAlloc(), spec.MemoryQuotaManager);
         const NKikimr::NMiniKQL::TStructType* structType = Worker->GetInputType();
         const ui64 count = structType->GetMembersCount();
 
@@ -276,12 +281,14 @@ public:
         IProcessedDataConsumer::TPtr consumer,
         NYT::TNode inputSchema,
         NYT::TNode outputSchema,
-        TString query
+        TString query,
+        NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager
     )
         : Consumer_(std::move(consumer))
         , InputSchema_(std::move(inputSchema))
         , OutputSchema_(std::move(outputSchema))
         , Query_(std::move(query))
+        , MemoryQuotaManager_(std::move(memoryQuotaManager))
     {}
 
     NYql::NPureCalc::IConsumer<TInputType>& GetConsumer() {
@@ -294,7 +301,7 @@ public:
         // Program should be stateless because input values
         // allocated on another allocator and should be released
         Program_ = programFactory->MakePushStreamProgram(
-            TInputSpec(InputSchema_),
+            TInputSpec(InputSchema_, MemoryQuotaManager_),
             TOutputSpec(OutputSchema_),
             Query_,
             NYql::NPureCalc::ETranslationMode::SQL
@@ -311,6 +318,7 @@ private:
     NYT::TNode InputSchema_;
     NYT::TNode OutputSchema_;
     TString Query_;
+    const NYql::NDq::IMemoryQuotaManager::TPtr MemoryQuotaManager_;
 
     THolder<NYql::NPureCalc::TPushStreamProgram<TInputSpec, TOutputSpec>> Program_;
     THolder<NYql::NPureCalc::IConsumer<TInputType>> InputConsumer_;
@@ -481,7 +489,7 @@ private:
 
 }  // anonymous namespace
 
-IProgramHolder::TPtr CreateProgramHolder(IProcessedDataConsumer::TPtr consumer) {
+IProgramHolder::TPtr CreateProgramHolder(IProcessedDataConsumer::TPtr consumer, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager) {
     auto query = GenerateSql(consumer);
 
     if (!query) {
@@ -492,7 +500,8 @@ IProgramHolder::TPtr CreateProgramHolder(IProcessedDataConsumer::TPtr consumer) 
         consumer,
         MakeInputSchema(consumer),
         MakeOutputSchema(consumer),
-        std::move(query)
+        std::move(query),
+        std::move(memoryQuotaManager)
     );
 }
 

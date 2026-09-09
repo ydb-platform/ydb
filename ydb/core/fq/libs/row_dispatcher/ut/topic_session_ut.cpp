@@ -13,6 +13,7 @@
 #include <ydb/tests/fq/pq_async_io/ut_helpers.h>
 
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/public/purecalc/common/interface.h>
@@ -87,7 +88,7 @@ public:
             topicPath,
             GetDefaultPqEndpoint(),
             GetDefaultPqDatabase(),
-            Config,
+            TRowDispatcherSettings(Config).SetMemoryQuotaManager(MemoryQuotaManager),
             FunctionRegistry.Get(),
             RowDispatcherActorId,
             compileServiceActorId,
@@ -284,6 +285,7 @@ public:
     NActors::TActorId ReadActorId3;
     ui32 PartitionId = 0;
     NConfig::TRowDispatcherConfig Config;
+    NYql::NDq::IMemoryQuotaManager::TPtr MemoryQuotaManager;
     TIntrusivePtr<IMockPqGateway> MockPqGateway;
     IMockPqReadSession::TPtr MockReadSession;
 
@@ -299,6 +301,16 @@ using TMockTopicFixture = TFixture<true>;
 }  // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TopicSessionTests) {
+
+    Y_UNIT_TEST_F(MemoryQuotaLimitsSdkReadBuffer, TRealTopicFixture) {
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(8_MB, 8_MB);
+        MemoryQuotaManager = manager;
+        Init("topic1");
+        StartSession(ReadActorId1, BuildSource(true));
+        ExpectSessionError(ReadActorId1, EStatusId::OVERLOADED, "Row dispatcher memory limit exceeded");
+        StartSession(ReadActorId2, BuildSource(true), Nothing(), true);
+        ExpectSessionError(ReadActorId2, EStatusId::OVERLOADED, "Row dispatcher memory limit exceeded");
+    }
 
     Y_UNIT_TEST_F(TwoSessionsWithoutOffsets, TRealTopicFixture) {
         const TString topicName = "topic1";

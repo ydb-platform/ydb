@@ -6,6 +6,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <yql/essentials/minikql/aligned_page_pool.h>
 #include <yql/essentials/public/purecalc/common/interface.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::FQ_ROW_DISPATCHER
@@ -58,6 +59,8 @@ public:
         TStatus status = TStatus::Success();
         try {
             programHolder->CreateProgram(Factory);
+        } catch (const NKikimr::TMemoryLimitExceededException&) {
+            status = TStatus::Fail(EStatusId::OVERLOADED, "Row dispatcher memory limit exceeded while preparing a filter");
         } catch (const NYql::NPureCalc::TCompileError& error) {
             status = TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Compile issues: " << error.GetIssues())
                 .AddIssue(TStringBuilder() << "Final yql: " << error.GetYql())

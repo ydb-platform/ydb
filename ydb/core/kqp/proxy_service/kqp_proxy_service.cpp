@@ -33,6 +33,7 @@
 #include <ydb/services/workload_manager/query_classifier.h>
 #include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/core/kqp/rm_service/kqp_rm_memory_quota.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -2063,7 +2064,7 @@ private:
             NFq::TRowDispatcherSettings(
                 streamingQueries.GetExternalStorage(),
                 FeatureFlags.GetEnableSharedReadingStructuredJsonParsing()
-            ),
+            ).SetMemoryQuotaManager(NRm::CreateMemoryQuotaManager(ResourceManager_)),
             NKikimr::CreateYdbCredentialsProviderFactory,
             FederatedQuerySetup->CredentialsFactory,
             AppData()->FunctionRegistry,

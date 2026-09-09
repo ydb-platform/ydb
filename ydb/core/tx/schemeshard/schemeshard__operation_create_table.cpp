@@ -315,7 +315,7 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        auto& table = context.SS->Tables.UpdateUntracked(pathId);
+        auto& table = context.SS->Tables.Update(pathId);
         Y_ABORT_UNLESS(table);
         table->AlterVersion = NEW_TABLE_ALTER_VERSION;
 
@@ -746,7 +746,8 @@ public:
             newTable->SetIncrementalRestoreTable();
         }
 
-        context.SS->Tables.Set({.Path = newTable->PathId, .Value = tableInfo, .Changes = context.MemChanges});
+        context.MemChanges.GrabNewTable(context.SS, newTable->PathId);
+        context.SS->Tables.Set(newTable->PathId, tableInfo);
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_COUNT].Add(1);
 
         if ((parentPath.Base()->IsDirectory() || parentPath.Base()->IsDomainRoot()) && parentPath.Base()->HasActiveChanges()) {

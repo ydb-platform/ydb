@@ -196,7 +196,7 @@ public:
         txState->PlanStep = step;
         context.SS->PersistTxPlanStep(db, OperationId, step);
 
-        context.SS->Sequences.SetUntracked(pathId, alterData);
+        context.SS->Sequences.Set(pathId, alterData);
         context.SS->PersistSequenceAlterRemove(db, pathId);
         context.SS->PersistSequence(db, pathId, *alterData);
 
@@ -435,7 +435,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        auto& sequenceInfo = context.SS->Sequences.UpdateUntracked(pathId);
+        auto& sequenceInfo = context.SS->Sequences.Update(pathId);
         UpdateSequenceDescription(sequenceInfo->Description);
 
         context.SS->PersistSequence(db, pathId, *sequenceInfo);
@@ -978,6 +978,7 @@ public:
         txState.State = TTxState::CreateParts;
 
         Y_ABORT_UNLESS(context.SS->Sequences.contains(srcPath.Base()->PathId));
+        context.MemChanges.GrabSequence(context.SS, srcPath.Base()->PathId);
         auto srcSequence = context.SS->Sequences.Update(srcPath.Base()->PathId);
         Y_ABORT_UNLESS(!srcSequence->Sharding.GetSequenceShards().empty());
 
@@ -985,9 +986,6 @@ public:
         TShardIdx sequenceShard = FromProto(protoSequenceShard);
 
         TSequenceInfo::TPtr sequenceInfo = new TSequenceInfo(0);
-        context.MemChanges.RecordUndo([srcSequence, previous = srcSequence->AlterData]() {
-            srcSequence->AlterData = previous;
-        });
         sequenceInfo->AlterData = srcSequence->CreateNextVersion();
 
         txState.Shards.emplace_back(sequenceShard, ETabletType::SequenceShard, TTxState::ConfigureParts);
@@ -1002,7 +1000,8 @@ public:
             p->SetLocalId(ui64(sequenceShard.GetLocalId()));
         }
 
-        context.SS->Sequences.Set({.Path = dstPath.Base()->PathId, .Value = sequenceInfo, .Changes = context.MemChanges});
+        context.MemChanges.GrabNewSequence(context.SS, dstPath.Base()->PathId);
+        context.SS->Sequences.Set(dstPath.Base()->PathId, sequenceInfo);
 
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);

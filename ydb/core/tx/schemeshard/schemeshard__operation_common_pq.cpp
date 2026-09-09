@@ -393,7 +393,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                 "topicName is empty"
                     <<", pathId: " << txState->TargetPathId);
 
-    auto& pqGroup = context.SS->Topics.UpdateUntracked(txState->TargetPathId);
+    auto& pqGroup = context.SS->Topics.Update(txState->TargetPathId);
     Y_VERIFY_S(pqGroup,
                 "pqGroup is null"
                     << ", pathId " << txState->TargetPathId);
@@ -768,7 +768,7 @@ void TPropose::PersistState(const TTxState& txState,
     context.SS->ClearDescribePathCaches(Path);
     context.OnComplete.PublishToSchemeBoard(OperationId, PathId);
 
-    auto& pqGroup = context.SS->Topics.UpdateUntracked(PathId);
+    auto& pqGroup = context.SS->Topics.Update(PathId);
 
     NKikimrPQ::TPQTabletConfig tabletConfig = pqGroup->GetTabletConfig();
     NKikimrPQ::TPQTabletConfig newTabletConfig = pqGroup->AlterData->GetTabletConfig();

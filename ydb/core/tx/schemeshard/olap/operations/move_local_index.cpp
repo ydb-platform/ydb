@@ -96,7 +96,7 @@ public:
             auto indexData = context.SS->Indexes.at(dstPathId);
             Y_ABORT_UNLESS(indexData->AlterData, "AlterData must be valid after TTableIndexInfo::Create");
             context.SS->PersistTableIndex(db, dstPathId);
-            context.SS->Indexes.SetUntracked(dstPathId, indexData->AlterData);
+            context.SS->Indexes.Set(dstPathId, indexData->AlterData);
         }
 
         // Drop the source index path (stored in SourcePathId)
@@ -354,7 +354,8 @@ public:
         srcPath.Base()->DropTxId = OperationId.GetTxId();
         srcPath.Base()->LastTxId = OperationId.GetTxId();
 
-        context.SS->Indexes.Set({.Path = newIndexPath->PathId, .Value = newIndexData, .Changes = context.MemChanges});
+        context.MemChanges.GrabNewIndex(context.SS, newIndexPath->PathId);
+        context.SS->Indexes.Set(newIndexPath->PathId, newIndexData);
 
         context.OnComplete.ActivateTx(OperationId);
 

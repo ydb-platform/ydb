@@ -503,7 +503,7 @@ public:
         // so that next stages would get extsubdomain's hive tablet id
         // by requesting on extsubdomain's path
         {
-            auto& subdomain = context.SS->SubDomains.UpdateUntracked(txState->TargetPathId);
+            auto& subdomain = context.SS->SubDomains.Update(txState->TargetPathId);
             subdomain->AddPrivateShard(shardIdx);
             subdomain->AddInternalShard(shardIdx, context.SS);
 

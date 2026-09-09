@@ -201,7 +201,8 @@ class TAlterStreamingQuery : public TSubOperation {
             streamingQuery->ApplyACL(acl);
         }
 
-        context.SS->StreamingQueries.Set({.Path = dstPath.Base()->PathId, .Value = queryInfo, .Changes = context.MemChanges});
+        context.MemChanges.GrabStreamingQuery(context.SS, dstPath.Base()->PathId);
+        context.SS->StreamingQueries.Set(dstPath.Base()->PathId, queryInfo);
     }
 
 public:

@@ -161,7 +161,7 @@ public:
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterFileStore);
         TPathId pathId = txState->TargetPathId;
 
-        auto& fs = context.SS->FileStoreInfos.UpdateUntracked(pathId);
+        auto& fs = context.SS->FileStoreInfos.Update(pathId);
         Y_VERIFY_S(fs, "FileStore info is null. PathId: " << pathId);
 
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);

@@ -321,7 +321,7 @@ public:
     TDbRefMap<TTopicInfo::TPtr> Topics{"Topics", this, DbRefMaps};
     TDbRefMap<TRtmrVolumeInfo::TPtr> RtmrVolumes{"RtmrVolumes", this, DbRefMaps};
     TDbRefMap<TSolomonVolumeInfo::TPtr> SolomonVolumes{"SolomonVolumes", this, DbRefMaps};
-    // Also mutated untracked in armed propose in a few places (extsubdomain dual-tracking).
+    // Domain snapshots are coordinated separately by GrabDomain.
     TDbRefMap<TSubDomainInfo::TPtr> SubDomains{"SubDomains", this, DbRefMaps};
     TDbRefMap<TBlockStoreVolumeInfo::TPtr> BlockStoreVolumes{"BlockStoreVolumes", this, DbRefMaps};
     TDbRefMap<TFileStoreInfo::TPtr> FileStoreInfos{"FileStoreInfos", this, DbRefMaps};
@@ -350,8 +350,6 @@ public:
     THashMap<TTxId, TPublicationInfo> Publications;
     THashMap<TOperationId, TTxState> TxInFlight;
     THashMap<TPathId, TPathDbRef> OwnDbRefs; // path's own type info record ref
-    // Non-null only inside an armed propose; undo-less mutators assert against it.
-    const TMemoryChanges* ArmedChanges = nullptr;
     THashMap<TOperationId, NKikimrSchemeOp::TLongIncrementalRestoreOp> LongIncrementalRestoreOps;
 
     // Simplified state tracking for sequential incremental restore

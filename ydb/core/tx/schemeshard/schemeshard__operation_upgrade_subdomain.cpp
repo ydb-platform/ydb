@@ -578,7 +578,7 @@ public:
         context.SS->PersistPath(db, path->PathId);
         context.SS->ClearDescribePathCaches(path);
 
-        auto subDomain = context.SS->SubDomains.UpdateUntracked(pathId);
+        auto subDomain = context.SS->SubDomains.Update(pathId);
         subDomain->SetAlterPrivate(nullptr);
         context.SS->PersistSubDomain(db, pathId, *subDomain);
         context.SS->PersistSubDomainSchemeQuotas(db, pathId, *subDomain);
@@ -610,9 +610,9 @@ public:
         item->SwapChildren(HiddenChildren); //return back children
         item->PreSerializedChildrenListing.clear();
 
-        // Copy, not a reference: the SetUntracked below reseats this slot, and
+        // Copy, not a reference: the Set below reseats this slot, and
         // *subDomain must still see the original object at PersistDeleteSubDomainAlter.
-        auto subDomain = context.SS->SubDomains.UpdateUntracked(pathId);
+        auto subDomain = context.SS->SubDomains.Update(pathId);
         Y_ABORT_UNLESS(subDomain);
         auto alterData = subDomain->GetAlter();
         Y_ABORT_UNLESS(alterData);
@@ -626,7 +626,7 @@ public:
         subDomain->SetAlterPrivate(nullptr);
 
         alterData->SetVersion(alterData->GetVersion() + 1);
-        context.SS->SubDomains.SetUntracked(pathId, alterData);
+        context.SS->SubDomains.Set(pathId, alterData);
 
         context.SS->PersistSubDomainVersion(db, pathId, *alterData);
         context.SS->PersistSubDomainSchemeQuotas(db, pathId, *alterData);
@@ -669,7 +669,7 @@ public:
 
         item->PathType = TPathElement::EPathType::EPathTypeExtSubDomain;
 
-        auto subDomain = context.SS->SubDomains.UpdateUntracked(pathId);
+        auto subDomain = context.SS->SubDomains.Update(pathId);
         auto alterData = subDomain->GetAlter();
         Y_ABORT_UNLESS(alterData);
         Y_ABORT_UNLESS(subDomain->GetVersion() < alterData->GetVersion());
@@ -679,7 +679,7 @@ public:
 
         alterData->SetAlterPrivate(subDomain);
         subDomain->SetAlterPrivate(nullptr);
-        context.SS->SubDomains.SetUntracked(pathId, alterData);
+        context.SS->SubDomains.Set(pathId, alterData);
 
         item->SwapChildren(HiddenChildren);
         item->PreSerializedChildrenListing.clear();

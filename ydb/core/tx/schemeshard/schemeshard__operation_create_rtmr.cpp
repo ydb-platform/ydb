@@ -84,7 +84,7 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateRtmrVolume);
 
-        auto& rtmrVol = context.SS->RtmrVolumes.UpdateUntracked(txState->TargetPathId);
+        auto& rtmrVol = context.SS->RtmrVolumes.Update(txState->TargetPathId);
         Y_VERIFY_S(rtmrVol, "rtmr volume is null. PathId: " << txState->TargetPathId);
         Y_ABORT_UNLESS(rtmrVol->Partitions.size() == txState->Shards.size(),
                  "%" PRIu64 "rtmr shards expected, %" PRIu64 " created",
@@ -331,7 +331,8 @@ public:
         context.SS->ChangeTxState(db, OperationId, TTxState::CreateParts);
         context.OnComplete.ActivateTx(OperationId);
 
-        context.SS->RtmrVolumes.Set({.Path = newRtmrVolume->PathId, .Value = rtmrVolumeInfo, .Changes = context.MemChanges});
+        context.MemChanges.GrabNewRtmrVolume(context.SS, newRtmrVolume->PathId);
+        context.SS->RtmrVolumes.Set(newRtmrVolume->PathId, rtmrVolumeInfo);
         context.SS->TabletCounters->Simple()[COUNTER_RTMR_VOLUME_COUNT].Add(1);
         context.SS->TabletCounters->Simple()[COUNTER_RTMR_PARTITIONS_COUNT].Add(rtmrVolumeInfo->Partitions.size());
 

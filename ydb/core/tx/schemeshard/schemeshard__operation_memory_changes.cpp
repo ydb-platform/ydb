@@ -2,29 +2,53 @@
 
 #include "schemeshard_impl.h"
 
+#include <type_traits>
+
 namespace NKikimr::NSchemeShard {
 
-TMemoryChanges::~TMemoryChanges() {
-    // Backstop: IgniteOperation disarms on every exit, so this normally has
-    // nothing to do.
-    Disarm();
-}
-
-void TMemoryChanges::Arm(TSchemeShard* ss) {
+void TMemoryChanges::Arm(TSchemeShard*) {
+    Y_ABORT_UNLESS(!Armed);
     Armed = true;
-    SS = ss;
-    ss->ArmedChanges = this;
 }
 
 void TMemoryChanges::Disarm() {
     Armed = false;
-    // Several instances coexist (init, stats, side effects); only the propose one
-    // arms, so withdraw only our own registration.
-    if (SS && SS->ArmedChanges == this) {
-        SS->ArmedChanges = nullptr;
-    }
-    SS = nullptr;
 }
+
+namespace {
+
+template <class V>
+void GrabNewReferenceEntry(TMemoryChanges& changes, TDbRefMap<V>& map, const TPathId& pathId) {
+    Y_ABORT_UNLESS(changes.IsArmed());
+    Y_ABORT_UNLESS(!map.contains(pathId));
+    Y_ABORT_UNLESS(changes.IsPathTracked(pathId));
+    changes.RecordUndo([&map, pathId]() {
+        map.RestoreMembershipWithoutRefcount(pathId, {});
+    });
+}
+
+template <class T>
+void GrabReferenceEntry(TMemoryChanges& changes, TDbRefMap<TIntrusivePtr<T>>& map, const TPathId& pathId) {
+    Y_ABORT_UNLESS(changes.IsArmed());
+    auto original = map.Update(pathId);
+    auto snapshot = [&]() {
+        if constexpr (std::is_same_v<T, TTableInfo>) {
+            return TTableInfo::DeepCopy(*original);
+        } else {
+            return MakeIntrusive<T>(*original);
+        }
+    }();
+    changes.RecordUndo([&map, pathId, original, snapshot]() {
+        if constexpr (std::is_same_v<T, TTableInfo>) {
+            original->RestoreSnapshot(*snapshot);
+        } else {
+            *original = *snapshot;
+        }
+        map.RestoreMembershipWithoutRefcount(pathId, original);
+    });
+}
+
+} // namespace
 
 template <typename I, typename C, typename H>
 static void GrabNew(const I& id, const C& cont, H& holder) {
@@ -36,6 +60,146 @@ template <typename T, typename I, typename C, typename H>
 static void Grab(const I& id, const C& cont, H& holder) {
     Y_ABORT_UNLESS(cont.contains(id));
     holder.emplace(id, new T(*cont.at(id)));
+}
+
+void TMemoryChanges::GrabNewTable(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNewReferenceEntry(*this, ss->Tables, pathId);
+}
+
+void TMemoryChanges::GrabTable(TSchemeShard* ss, const TPathId& pathId) {
+    GrabReferenceEntry(*this, ss->Tables, pathId);
+}
+
+void TMemoryChanges::GrabNewIndex(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNewReferenceEntry(*this, ss->Indexes, pathId);
+}
+
+void TMemoryChanges::GrabIndex(TSchemeShard* ss, const TPathId& pathId) {
+    GrabReferenceEntry(*this, ss->Indexes, pathId);
+}
+
+void TMemoryChanges::GrabNewSequence(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNewReferenceEntry(*this, ss->Sequences, pathId);
+}
+
+void TMemoryChanges::GrabSequence(TSchemeShard* ss, const TPathId& pathId) {
+    GrabReferenceEntry(*this, ss->Sequences, pathId);
+}
+
+void TMemoryChanges::GrabNewCdcStream(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNewReferenceEntry(*this, ss->CdcStreams, pathId);
+}
+
+void TMemoryChanges::GrabCdcStream(TSchemeShard* ss, const TPathId& pathId) {
+    GrabReferenceEntry(*this, ss->CdcStreams, pathId);
+}
+
+void TMemoryChanges::GrabNewReplication(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNewReferenceEntry(*this, ss->Replications, pathId);
+}
+
+void TMemoryChanges::GrabNewBlobDepot(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNewReferenceEntry(*this, ss->BlobDepots, pathId);
+}
+
+void TMemoryChanges::GrabNewTopic(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNewReferenceEntry(*this, ss->Topics, pathId);
+}
+
+void TMemoryChanges::GrabNewRtmrVolume(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNewReferenceEntry(*this, ss->RtmrVolumes, pathId);
+}
+
+void TMemoryChanges::GrabNewSolomonVolume(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNewReferenceEntry(*this, ss->SolomonVolumes, pathId);
+}
+
+void TMemoryChanges::GrabNewBlockStoreVolume(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNewReferenceEntry(*this, ss->BlockStoreVolumes, pathId);
+}
+
+void TMemoryChanges::GrabNewFileStoreInfo(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNewReferenceEntry(*this, ss->FileStoreInfos, pathId);
+}
+
+void TMemoryChanges::GrabNewKesusInfo(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNewReferenceEntry(*this, ss->KesusInfos, pathId);
+}
+
+void TMemoryChanges::GrabNewOlapStore(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNewReferenceEntry(*this, ss->OlapStores, pathId);
+}
+
+void TMemoryChanges::GrabNewExternalTable(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNewReferenceEntry(*this, ss->ExternalTables, pathId);
+}
+
+void TMemoryChanges::GrabExternalTable(TSchemeShard* ss, const TPathId& pathId) {
+    GrabReferenceEntry(*this, ss->ExternalTables, pathId);
+}
+
+void TMemoryChanges::GrabNewExternalDataSource(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNewReferenceEntry(*this, ss->ExternalDataSources, pathId);
+}
+
+void TMemoryChanges::GrabExternalDataSource(TSchemeShard* ss, const TPathId& pathId) {
+    GrabReferenceEntry(*this, ss->ExternalDataSources, pathId);
+}
+
+void TMemoryChanges::GrabNewView(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNewReferenceEntry(*this, ss->Views, pathId);
+}
+
+void TMemoryChanges::GrabView(TSchemeShard* ss, const TPathId& pathId) {
+    GrabReferenceEntry(*this, ss->Views, pathId);
+}
+
+void TMemoryChanges::GrabNewResourcePool(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNewReferenceEntry(*this, ss->ResourcePools, pathId);
+}
+
+void TMemoryChanges::GrabResourcePool(TSchemeShard* ss, const TPathId& pathId) {
+    GrabReferenceEntry(*this, ss->ResourcePools, pathId);
+}
+
+void TMemoryChanges::GrabNewBackupCollection(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNewReferenceEntry(*this, ss->BackupCollections, pathId);
+}
+
+void TMemoryChanges::GrabBackupCollection(TSchemeShard* ss, const TPathId& pathId) {
+    GrabReferenceEntry(*this, ss->BackupCollections, pathId);
+}
+
+void TMemoryChanges::GrabNewSysView(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNewReferenceEntry(*this, ss->SysViews, pathId);
+}
+
+void TMemoryChanges::GrabSysView(TSchemeShard* ss, const TPathId& pathId) {
+    GrabReferenceEntry(*this, ss->SysViews, pathId);
+}
+
+void TMemoryChanges::GrabNewSecret(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNewReferenceEntry(*this, ss->Secrets, pathId);
+}
+
+void TMemoryChanges::GrabSecret(TSchemeShard* ss, const TPathId& pathId) {
+    GrabReferenceEntry(*this, ss->Secrets, pathId);
+}
+
+void TMemoryChanges::GrabNewStreamingQuery(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNewReferenceEntry(*this, ss->StreamingQueries, pathId);
+}
+
+void TMemoryChanges::GrabStreamingQuery(TSchemeShard* ss, const TPathId& pathId) {
+    GrabReferenceEntry(*this, ss->StreamingQueries, pathId);
+}
+
+void TMemoryChanges::GrabNewTestShardSet(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNewReferenceEntry(*this, ss->TestShardSets, pathId);
+}
+
+void TMemoryChanges::GrabTestShardSet(TSchemeShard* ss, const TPathId& pathId) {
+    GrabReferenceEntry(*this, ss->TestShardSets, pathId);
 }
 
 void TMemoryChanges::GrabNewTxState(TSchemeShard* ss, const TOperationId& opId) {
@@ -214,7 +378,8 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // Restore ss->SubDomains entries to saved copies of TSubDomainInfo objects.
     // No copy, simple pointer replacement.
     for (const auto& [id, savedState] : SubDomains) {
-        auto& subdomain = ss->SubDomains.UndoRestore(id, savedState);
+        ss->SubDomains.RestoreMembershipWithoutRefcount(id, savedState);
+        const auto& subdomain = ss->SubDomains.Update(id);
         if (ss->GetCurrentSubDomainPathId() == id) {
             subdomain->UpdateCounters(ss);
         }

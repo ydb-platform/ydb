@@ -67,9 +67,9 @@ Y_UNIT_TEST_SUITE(TDbRefMapTest) {
             auto first = MakeIntrusive<TTableInfo>();
             auto second = MakeIntrusive<TTableInfo>();
 
-            ss.Tables.SetUntracked(pathId, first);
+            ss.Tables.Set(pathId, first);
             UNIT_ASSERT_VALUES_EQUAL(ss.PathsById.at(pathId)->DbRefCount, initialRefs + 1);
-            ss.Tables.SetUntracked(pathId, second);
+            ss.Tables.Set(pathId, second);
             UNIT_ASSERT_EQUAL(ss.Tables.at(pathId).Get(), second.Get());
             UNIT_ASSERT_VALUES_EQUAL(ss.PathsById.at(pathId)->DbRefCount, initialRefs + 1);
             UNIT_ASSERT_VALUES_EQUAL(ss.Tables.erase(pathId), 1);
@@ -90,10 +90,12 @@ Y_UNIT_TEST_SUITE(TDbRefMapTest) {
             TMemoryChanges changes;
             changes.Arm(&ss);
             changes.GrabPath(&ss, pathId);
-            ss.Tables.Set({.Path = pathId, .Value = first, .Changes = changes});
+            changes.GrabNewTable(&ss, pathId);
+            ss.Tables.Set(pathId, first);
             changes.RecordUndo([first]() { first->AlterVersion = 10; });
             first->AlterVersion = 11;
-            ss.Tables.Set({.Path = pathId, .Value = second, .Changes = changes});
+            changes.GrabTable(&ss, pathId);
+            ss.Tables.Set(pathId, second);
             changes.RecordUndo([second]() { second->AlterVersion = 20; });
             second->AlterVersion = 21;
             UNIT_ASSERT_VALUES_EQUAL(ss.PathsById.at(pathId)->DbRefCount, initialRefs + 1);
@@ -115,7 +117,7 @@ Y_UNIT_TEST_SUITE(TDbRefMapTest) {
             auto second = MakeIntrusive<TTableInfo>();
             first->AlterVersion = 10;
             second->AlterVersion = 20;
-            ss.Tables.SetUntracked(pathId, first);
+            ss.Tables.Set(pathId, first);
             const auto initialRefs = ss.PathsById.at(pathId)->DbRefCount;
 
             TMemoryChanges changes;
@@ -123,7 +125,8 @@ Y_UNIT_TEST_SUITE(TDbRefMapTest) {
             changes.GrabPath(&ss, pathId);
             changes.RecordUndo([first]() { first->AlterVersion = 10; });
             ss.Tables.Update(pathId)->AlterVersion = 11;
-            ss.Tables.Set({.Path = pathId, .Value = second, .Changes = changes});
+            changes.GrabTable(&ss, pathId);
+            ss.Tables.Set(pathId, second);
             changes.RecordUndo([second]() { second->AlterVersion = 20; });
             ss.Tables.Update(pathId)->AlterVersion = 21;
 
@@ -143,7 +146,7 @@ Y_UNIT_TEST_SUITE(TDbRefMapTest) {
             table->SetPartitioning(MakeShards(2));
             auto previous = MakeIntrusive<TTableInfo::TAlterTableInfo>();
             table->AlterData = previous;
-            ss.Tables.SetUntracked(pathId, table);
+            ss.Tables.Set(pathId, table);
             const auto* alias = table.Get();
             const auto* partition = table->GetPartitions().front();
             const auto* stats = &table->GetStats().PartitionStats.at(partition->ShardIdx);
@@ -169,13 +172,77 @@ Y_UNIT_TEST_SUITE(TDbRefMapTest) {
         });
     }
 
+    Y_UNIT_TEST(GrabTableRestoresStateAndKeepsAliases) {
+        WithSchemeShard([](TSchemeShard& ss, const TPathId& pathId) {
+            auto table = MakeIntrusive<TTableInfo>();
+            table->SetPartitioning(MakeShards(3));
+            table->AlterVersion = 10;
+            auto previousAlter = MakeIntrusive<TTableInfo::TAlterTableInfo>();
+            table->AlterData = previousAlter;
+            ss.Tables.Set(pathId, table);
+            ss.TTLEnabledTables[pathId] = table;
+            const auto initialRefs = ss.PathsById.at(pathId)->DbRefCount;
+            const auto initialOwners = table.RefCount();
+
+            TMemoryChanges changes;
+            changes.Arm(&ss);
+            changes.GrabTable(&ss, pathId);
+            table->AlterVersion = 20;
+            table->AlterData = MakeIntrusive<TTableInfo::TAlterTableInfo>();
+            // Destroy the original storage. A shallow snapshot would retain
+            // pointers to those old partition nodes after rollback.
+            table->SetPartitioning(MakeShards(2, 2));
+            ss.Tables.Set(pathId, MakeIntrusive<TTableInfo>());
+            changes.UnDo(&ss);
+            changes.Disarm();
+
+            UNIT_ASSERT_EQUAL(ss.Tables.at(pathId).Get(), table.Get());
+            UNIT_ASSERT_EQUAL(ss.TTLEnabledTables.at(pathId).Get(), table.Get());
+            UNIT_ASSERT_VALUES_EQUAL(table.RefCount(), initialOwners);
+            UNIT_ASSERT_VALUES_EQUAL(table->AlterVersion, 10);
+            UNIT_ASSERT_EQUAL(table->AlterData.Get(), previousAlter.Get());
+            UNIT_ASSERT_VALUES_EQUAL(table->GetPartitions().size(), 3);
+            for (ui32 i = 0; i < 3; ++i) {
+                UNIT_ASSERT_EQUAL(table->GetPartitions()[i]->ShardIdx, TShardIdx(1, i));
+            }
+            // Both the snapshot and original storage are gone now.
+            table->VerifyConsistency();
+            UNIT_ASSERT_VALUES_EQUAL(ss.PathsById.at(pathId)->DbRefCount, initialRefs);
+            ss.TTLEnabledTables.erase(pathId);
+            ss.Tables.erase(pathId);
+        });
+    }
+
+    Y_UNIT_TEST(RepeatedTypedSnapshotsRestoreInReverseOrder) {
+        WithSchemeShard([](TSchemeShard& ss, const TPathId& pathId) {
+            auto table = MakeIntrusive<TTableInfo>();
+            table->SetPartitioning(MakeShards(2));
+            table->AlterVersion = 10;
+            ss.Tables.Set(pathId, table);
+
+            TMemoryChanges changes;
+            changes.Arm(&ss);
+            changes.GrabTable(&ss, pathId);
+            table->AlterVersion = 20;
+            changes.GrabTable(&ss, pathId);
+            table->AlterVersion = 30;
+            changes.UnDo(&ss);
+            changes.Disarm();
+
+            UNIT_ASSERT_EQUAL(ss.Tables.at(pathId).Get(), table.Get());
+            UNIT_ASSERT_VALUES_EQUAL(table->AlterVersion, 10);
+            table->VerifyConsistency();
+            ss.Tables.erase(pathId);
+        });
+    }
+
     Y_UNIT_TEST(UpdateDoesNotSnapshotTwoHundredThousandShards) {
         WithSchemeShard([](TSchemeShard& ss, const TPathId& pathId) {
             constexpr ui32 shardCount = 200000;
             auto table = MakeIntrusive<TTableInfo>();
             table->SetPartitioning(MakeShards(shardCount));
             table->AlterData = MakeIntrusive<TTableInfo::TAlterTableInfo>();
-            ss.Tables.SetUntracked(pathId, table);
+            ss.Tables.Set(pathId, table);
             UNIT_ASSERT_VALUES_EQUAL(table->GetStats().PartitionStats.size(), shardCount);
             const auto* partition = table->GetPartitions().front();
             const auto* stats = &table->GetStats().PartitionStats.at(partition->ShardIdx);

@@ -205,7 +205,8 @@ class TCreateStreamingQuery : public TSubOperation {
             .AlterVersion = 1,
             .Properties = Transaction.GetCreateStreamingQuery().GetProperties(),
         });
-        context.SS->StreamingQueries.Set({.Path = dstPath.Base()->PathId, .Value = streamingQueryInfo, .Changes = context.MemChanges});
+        context.MemChanges.GrabNewStreamingQuery(context.SS, dstPath.Base()->PathId);
+        context.SS->StreamingQueries.Set(dstPath.Base()->PathId, streamingQueryInfo);
     }
 
 public:

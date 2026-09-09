@@ -1637,7 +1637,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 rootDomainInfo->InitializeAsGlobal(Self->CreateRootProcessingParams(ctx));
 
-                Self->SubDomains.SetUntracked(Self->RootPathId(), rootDomainInfo);
+                Self->SubDomains.Set(Self->RootPathId(), rootDomainInfo);
             }
 
             auto rowset = db.Table<Schema::SubDomains>().Range().Select();
@@ -1666,7 +1666,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         planResolution,
                         timeCastBuckets,
                         resourcesDomainId);
-                    Self->SubDomains.SetUntracked(pathId, domainInfo);
+                    Self->SubDomains.Set(pathId, domainInfo);
 
                     TTabletId sharedHiveId = rowset.GetValue<Schema::SubDomains::SharedHiveId>();
                     domainInfo->SetSharedHive(sharedHiveId);
@@ -1749,7 +1749,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     Y_VERIFY_S(path->IsDomainRoot(), "Path is not a subdomain, pathId: " << pathId);
 
                     Y_ABORT_UNLESS(Self->SubDomains.contains(pathId));
-                    auto& subdomainInfo = Self->SubDomains.UpdateUntracked(pathId);
+                    auto& subdomainInfo = Self->SubDomains.Update(pathId);
                     Y_ABORT_UNLESS(!subdomainInfo->GetAlter());
 
                     TSubDomainInfo::TPtr alter;
@@ -1851,7 +1851,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TShardIdx shardIdx = Self->MakeLocalId(localShardIdx);
 
                 Y_ABORT_UNLESS(Self->SubDomains.contains(pathId));
-                Self->SubDomains.UpdateUntracked(pathId)->AddPrivateShard(shardIdx);
+                Self->SubDomains.Update(pathId)->AddPrivateShard(shardIdx);
 
                 if (!rowset.Next())
                     return false;
@@ -1870,7 +1870,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     TShardIdx shardIdx = Self->MakeLocalId(localShardIdx);
 
                     Y_ABORT_UNLESS(Self->SubDomains.contains(pathId));
-                    auto& subdomainInfo = Self->SubDomains.UpdateUntracked(pathId);
+                    auto& subdomainInfo = Self->SubDomains.Update(pathId);
                     Y_ABORT_UNLESS(subdomainInfo->GetAlter());
                     subdomainInfo->GetAlter()->AddPrivateShard(shardIdx);
 
@@ -1896,7 +1896,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     quota.Available = rowset.GetValue<Schema::SubDomainSchemeQuotas::Available>();
                     quota.LastUpdate = TInstant::MicroSeconds(rowset.GetValue<Schema::SubDomainSchemeQuotas::LastUpdateUs>());
                     quota.Dirty = false;
-                    Self->SubDomains.UpdateUntracked(pathId)->AddSchemeQuota(quota);
+                    Self->SubDomains.Update(pathId)->AddSchemeQuota(quota);
                 }
 
                 if (!rowset.Next())
@@ -2014,7 +2014,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 tableInfo->IsBackup = std::get<8>(rec);
                 tableInfo->IsRestore = std::get<13>(rec);
 
-                Self->Tables.SetUntracked(pathId, tableInfo);
+                Self->Tables.Set(pathId, tableInfo);
                 if (tableInfo->IsTTLEnabled()) {
                     Self->TTLEnabledTables[pathId] = tableInfo;
                     Self->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Add(1);
@@ -2046,7 +2046,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TLocalPathId localPathId = rowset.GetValue<Schema::ExternalTable::LocalPathId>();
                 TPathId pathId(ownerPathId, localPathId);
 
-                auto& externalTable = Self->ExternalTables.SetUntracked(pathId, new TExternalTableInfo());
+                auto& externalTable = Self->ExternalTables.Set(pathId, new TExternalTableInfo());
                 externalTable->SourceType = rowset.GetValue<Schema::ExternalTable::SourceType>();
                 externalTable->DataSourcePath = rowset.GetValue<Schema::ExternalTable::DataSourcePath>();
                 externalTable->Location = rowset.GetValue<Schema::ExternalTable::Location>();
@@ -2069,7 +2069,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TLocalPathId localPathId = rowset.GetValue<Schema::ExternalDataSource::LocalPathId>();
                 TPathId pathId(ownerPathId, localPathId);
 
-                auto& externalDataSource = Self->ExternalDataSources.SetUntracked(pathId, new TExternalDataSourceInfo());
+                auto& externalDataSource = Self->ExternalDataSources.Set(pathId, new TExternalDataSourceInfo());
                 externalDataSource->AlterVersion = rowset.GetValue<Schema::ExternalDataSource::AlterVersion>();
                 externalDataSource->SourceType = rowset.GetValue<Schema::ExternalDataSource::SourceType>();
                 externalDataSource->Location = rowset.GetValue<Schema::ExternalDataSource::Location>();
@@ -2094,7 +2094,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TLocalPathId localPathId = rowset.GetValue<Schema::View::PathId>();
                 TPathId pathId(selfId, localPathId);
 
-                auto& view = Self->Views.SetUntracked(pathId, new TViewInfo());
+                auto& view = Self->Views.Set(pathId, new TViewInfo());
                 view->AlterVersion = rowset.GetValue<Schema::View::AlterVersion>();
                 view->QueryText = rowset.GetValue<Schema::View::QueryText>();
                 Y_PROTOBUF_SUPPRESS_NODISCARD view->CapturedContext.ParseFromString(
@@ -2118,7 +2118,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TLocalPathId localPathId = rowset.GetValue<Schema::SysView::PathId>();
                 TPathId pathId(selfId, localPathId);
 
-                auto& sysView = Self->SysViews.SetUntracked(pathId, new TSysViewInfo());
+                auto& sysView = Self->SysViews.Set(pathId, new TSysViewInfo());
                 sysView->AlterVersion = rowset.GetValue<Schema::SysView::AlterVersion>();
                 sysView->Type = rowset.GetValue<Schema::SysView::SysViewType>();
 
@@ -2140,7 +2140,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TLocalPathId localPathId = rowset.GetValue<Schema::ResourcePool::LocalPathId>();
                 TPathId pathId(ownerPathId, localPathId);
 
-                auto& resourcePool = Self->ResourcePools.SetUntracked(pathId, new TResourcePoolInfo());
+                auto& resourcePool = Self->ResourcePools.Set(pathId, new TResourcePoolInfo());
                 resourcePool->AlterVersion = rowset.GetValue<Schema::ResourcePool::AlterVersion>();
                 Y_PROTOBUF_SUPPRESS_NODISCARD resourcePool->Properties.ParseFromString(rowset.GetValue<Schema::ResourcePool::Properties>());
 
@@ -2162,7 +2162,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TLocalPathId localPathId = rowset.GetValue<Schema::BackupCollection::LocalPathId>();
                 TPathId pathId(ownerPathId, localPathId);
 
-                auto& backupCollection = Self->BackupCollections.SetUntracked(pathId, new TBackupCollectionInfo());
+                auto& backupCollection = Self->BackupCollections.Set(pathId, new TBackupCollectionInfo());
                 backupCollection->AlterVersion = rowset.GetValue<Schema::BackupCollection::AlterVersion>();
                 Y_PROTOBUF_SUPPRESS_NODISCARD backupCollection->Description.ParseFromString(rowset.GetValue<Schema::BackupCollection::Description>());
                 Self->RegisterBackupCollectionTables(backupCollection);
@@ -2185,7 +2185,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 const TLocalPathId localPathId = rowset.GetValue<Schema::StreamingQueryState::LocalPathId>();
                 const TPathId pathId(ownerPathId, localPathId);
 
-                auto& streamingQuery = Self->StreamingQueries.SetUntracked(pathId, new TStreamingQueryInfo());
+                auto& streamingQuery = Self->StreamingQueries.Set(pathId, new TStreamingQueryInfo());
                 streamingQuery->AlterVersion = rowset.GetValue<Schema::StreamingQueryState::AlterVersion>();
                 Y_PROTOBUF_SUPPRESS_NODISCARD streamingQuery->Properties.ParseFromString(rowset.GetValue<Schema::StreamingQueryState::Properties>());
 
@@ -2299,7 +2299,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 Y_VERIFY_S(Self->Tables.FindPtr(pathId), "Table doesn't exist, pathId: " << pathId);
 
-                auto& tableInfo = Self->Tables.UpdateUntracked(pathId);
+                auto& tableInfo = Self->Tables.Update(pathId);
                 tableInfo->InitAlterData();
                 if (colId >= tableInfo->AlterData->NextColumnId) {
                     tableInfo->AlterData->NextColumnId = colId + 1; // calc next NextColumnId
@@ -2463,7 +2463,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     if (prevTableId) {
                         Y_ABORT_UNLESS(!partitions.empty());
                         Y_ABORT_UNLESS(Self->Tables.contains(prevTableId));
-                        auto tableInfo = Self->Tables.UpdateUntracked(prevTableId);
+                        auto tableInfo = Self->Tables.Update(prevTableId);
                         Self->SetPartitioning(prevTableId, tableInfo, std::move(partitions));
                         partitions.clear();
                         Self->TabletCounters->Simple()[COUNTER_FORMAT_POSITION_TABLE_COUNT].Add(1);
@@ -2497,7 +2497,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             if (prevTableId) {
                 Y_ABORT_UNLESS(!partitions.empty());
                 Y_ABORT_UNLESS(Self->Tables.contains(prevTableId));
-                auto tableInfo = Self->Tables.UpdateUntracked(prevTableId);
+                auto tableInfo = Self->Tables.Update(prevTableId);
                 Self->SetPartitioning(prevTableId, tableInfo, std::move(partitions));
                 partitions.clear();
                 Self->TabletCounters->Simple()[COUNTER_FORMAT_POSITION_TABLE_COUNT].Add(1);
@@ -2520,7 +2520,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
                 Y_ABORT_UNLESS(!partitions.empty(), "tablePathId %s", ToString(tablePathId).c_str());
                 Y_ABORT_UNLESS(Self->Tables.contains(tablePathId), "tablePathId %s", ToString(tablePathId).c_str());
-                auto tableInfo = Self->Tables.UpdateUntracked(tablePathId);
+                auto tableInfo = Self->Tables.Update(tablePathId);
                 Y_ABORT_UNLESS(!tableInfo->Columns.empty(), "tablePathId %s", ToString(tablePathId).c_str());
                 // tables must not have mixed format partitions
                 Y_ABORT_UNLESS(tableInfo->GetPartitions().empty(), "tablePathId %s", ToString(tablePathId).c_str());
@@ -2661,7 +2661,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
 
                 Y_ABORT_UNLESS(Self->Tables.contains(tableId));
-                auto& tableInfo = Self->Tables.UpdateUntracked(tableId);
+                auto& tableInfo = Self->Tables.Update(tableId);
 
                 const ui64 partitionId = rowSet.GetValue<Schema::TablePartitionStats::PartitionId>();
                 Y_ABORT_UNLESS(partitionId < tableInfo->GetPartitions().size());
@@ -2794,7 +2794,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                     continue;
                 }
-                auto& tableInfo = Self->Tables.UpdateUntracked(tableId);
+                auto& tableInfo = Self->Tables.Update(tableId);
                 if (!tableInfo->GetPartitionStore().contains(shardIdx)) {
                     if (!rowSet.Next()) {
                         return false;
@@ -2918,7 +2918,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 const bool ok = pqGroup->FillKeySchema(pqGroup->TabletConfig);
                 Y_ABORT_UNLESS(ok);
 
-                Self->Topics.SetUntracked(pathId, pqGroup);
+                Self->Topics.Set(pathId, pqGroup);
 
                 auto it = pqBalancers.find(pathId);
                 if (it != pqBalancers.end()) {
@@ -3097,7 +3097,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TLocalPathId localPathId = rowset.GetValue<Schema::RtmrVolumes::PathId>();
                 TPathId pathId(selfId, localPathId);
 
-                Self->RtmrVolumes.SetUntracked(pathId, new TRtmrVolumeInfo());
+                Self->RtmrVolumes.Set(pathId, new TRtmrVolumeInfo());
 
                 if (!rowset.Next())
                     return false;
@@ -3151,7 +3151,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TSolomonVolumeInfo::TPtr solomon = new TSolomonVolumeInfo(version);
                 solomon->Version = version;
 
-                Self->SolomonVolumes.SetUntracked(pathId, solomon);
+                Self->SolomonVolumes.Set(pathId, solomon);
 
                 if (!rowset.Next())
                     return false;
@@ -3201,7 +3201,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 ui64 version = rowset.GetValue<Schema::AlterSolomonVolumes::Version>();
 
                 Y_ABORT_UNLESS(Self->SolomonVolumes.contains(pathId));
-                auto& solomon = Self->SolomonVolumes.UpdateUntracked(pathId);
+                auto& solomon = Self->SolomonVolumes.Update(pathId);
 
                 Y_ABORT_UNLESS(solomon->AlterData == nullptr);
                 solomon->AlterData = solomon->CreateAlter(version);
@@ -3227,7 +3227,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 const ui64 partitionId = rowset.GetValue<Schema::AlterSolomonPartitions::PartitionId>();
 
                 Y_ABORT_UNLESS(Self->SolomonVolumes.contains(pathId));
-                auto& solomon = Self->SolomonVolumes.UpdateUntracked(pathId);
+                auto& solomon = Self->SolomonVolumes.Update(pathId);
                 Y_ABORT_UNLESS(solomon->AlterData);
 
                 if (solomon->Partitions.size() <= partitionId) {
@@ -3280,7 +3280,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                    << ", path type: " << NKikimrSchemeOp::EPathType_Name(path->PathType));
 
                     Y_ABORT_UNLESS(!Self->Indexes.contains(pathId));
-                    Self->Indexes.SetUntracked(pathId, new TTableIndexInfo(alterVersion, indexType, state, description));
+                    Self->Indexes.Set(pathId, new TTableIndexInfo(alterVersion, indexType, state, description));
                 } else {
                     migratedAlteredIndexes.emplace_back(pathId, alterVersion);
                 }
@@ -3296,7 +3296,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     db.Table<Schema::MigratedTableIndex>().Key(migratedIndexPathId.OwnerId, migratedIndexPathId.LocalPathId).Update(
                         NIceDb::TUpdate<Schema::MigratedTableIndex::AlterVersion>(alterVersion)
                     );
-                    Self->Indexes.UpdateUntracked(migratedIndexPathId)->AlterVersion = alterVersion;
+                    Self->Indexes.Update(migratedIndexPathId)->AlterVersion = alterVersion;
                     // remove record from Schema::TableIndex
                     db.Table<Schema::TableIndex>().Key(pathId.LocalPathId).Delete();
                 }
@@ -3323,9 +3323,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     Y_VERIFY_S(path->IsTableIndex(), "Path is not a table index, pathId: " << pathId);
 
                     if (!Self->Indexes.contains(pathId)) {
-                        Self->Indexes.SetUntracked(pathId, TTableIndexInfo::NotExistedYet(indexType));
+                        Self->Indexes.Set(pathId, TTableIndexInfo::NotExistedYet(indexType));
                     }
-                    auto& tableIndex = Self->Indexes.UpdateUntracked(pathId);
+                    auto& tableIndex = Self->Indexes.Update(pathId);
                     Y_ABORT_UNLESS(tableIndex->AlterData == nullptr);
                     Y_ABORT_UNLESS(tableIndex->AlterVersion < alterVersion);
                     tableIndex->AlterData = new TTableIndexInfo(alterVersion, indexType, state, description);
@@ -3373,7 +3373,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_VERIFY_S(path->IsTableIndex(), "Path is not a table index, pathId: " << pathId);
 
                 Y_ABORT_UNLESS(Self->Indexes.contains(pathId));
-                auto& tableIndex = Self->Indexes.UpdateUntracked(pathId);
+                auto& tableIndex = Self->Indexes.Update(pathId);
 
                 Y_ABORT_UNLESS(keyId == tableIndex->IndexKeys.size());
                 tableIndex->IndexKeys.emplace_back(keyName);
@@ -3391,7 +3391,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     Y_VERIFY_S(path->IsTableIndex(), "Path is not a table index, pathId: " << pathId);
 
                     if (Self->Indexes.contains(pathId)) {
-                        auto& tableIndex = Self->Indexes.UpdateUntracked(pathId);
+                        auto& tableIndex = Self->Indexes.Update(pathId);
 
                         Y_ABORT_UNLESS(dataId == tableIndex->IndexDataColumns.size());
                         tableIndex->IndexDataColumns.emplace_back(dataName);
@@ -3426,7 +3426,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     Y_VERIFY_S(path->IsTableIndex(), "Path is not a table index, pathId: " << pathId);
 
                     Y_ABORT_UNLESS(Self->Indexes.contains(pathId));
-                    auto& tableIndex = Self->Indexes.UpdateUntracked(pathId);
+                    auto& tableIndex = Self->Indexes.Update(pathId);
 
                     Y_ABORT_UNLESS(tableIndex->AlterData != nullptr);
                     auto alterData = tableIndex->AlterData;
@@ -3460,7 +3460,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         Y_VERIFY_S(path->IsTableIndex(), "Path is not a table index, pathId: " << pathId);
 
                         if (Self->Indexes.contains(pathId)) {
-                            auto& tableIndex = Self->Indexes.UpdateUntracked(pathId);
+                            auto& tableIndex = Self->Indexes.Update(pathId);
 
                             Y_ABORT_UNLESS(tableIndex->AlterData != nullptr);
                             auto alterData = tableIndex->AlterData;
@@ -3516,7 +3516,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     << ", path type: " << NKikimrSchemeOp::EPathType_Name(path->PathType));
 
                 Y_ABORT_UNLESS(!Self->CdcStreams.contains(pathId));
-                const auto& stream = Self->CdcStreams.SetUntracked(pathId, new TCdcStreamInfo(alterVersion, std::move(settings)));
+                const auto& stream = Self->CdcStreams.Set(pathId, new TCdcStreamInfo(alterVersion, std::move(settings)));
 
                 if (stream->State == NKikimrSchemeOp::ECdcStreamStateScan) {
                     Y_VERIFY_S(Self->PathsById.contains(path->ParentPathId), "Parent path is not found"
@@ -3564,10 +3564,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 if (!Self->CdcStreams.contains(pathId)) {
                     Y_ABORT_UNLESS(alterVersion == 1);
-                    Self->CdcStreams.SetUntracked(pathId, TCdcStreamInfo::New(settings));
+                    Self->CdcStreams.Set(pathId, TCdcStreamInfo::New(settings));
                 }
 
-                auto& stream = Self->CdcStreams.UpdateUntracked(pathId);
+                auto& stream = Self->CdcStreams.Update(pathId);
                 Y_ABORT_UNLESS(stream->AlterData == nullptr);
                 Y_ABORT_UNLESS(stream->AlterVersion < alterVersion);
                 stream->AlterData = new TCdcStreamInfo(alterVersion, std::move(settings));
@@ -3611,7 +3611,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_VERIFY_S(Self->CdcStreams.contains(pathId), "Cdc stream not found"
                     << ": pathId# " << pathId);
 
-                auto& stream = Self->CdcStreams.UpdateUntracked(pathId);
+                auto& stream = Self->CdcStreams.Update(pathId);
                 stream->ScanShards.emplace(shardIdx, status);
 
                 if (status != NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE) {
@@ -3639,7 +3639,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TString kind = rowset.GetValue<Schema::StoragePools::PoolKind>();
 
                 Y_ABORT_UNLESS(Self->SubDomains.contains(pathId));
-                Self->SubDomains.UpdateUntracked(pathId)->AddStoragePool(TStoragePool(name, kind));
+                Self->SubDomains.Update(pathId)->AddStoragePool(TStoragePool(name, kind));
 
                 if (!rowset.Next())
                     return false;
@@ -3659,7 +3659,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     TString kind = rowset.GetValue<Schema::StoragePoolsAlterData::PoolKind>();
 
                     Y_ABORT_UNLESS(Self->SubDomains.contains(pathId));
-                    auto& subdomainInfo = Self->SubDomains.UpdateUntracked(pathId);
+                    auto& subdomainInfo = Self->SubDomains.Update(pathId);
                     Y_ABORT_UNLESS(subdomainInfo->GetAlter());
                     subdomainInfo->GetAlter()->AddStoragePool(TStoragePool(name, kind));
 
@@ -3689,7 +3689,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
 
             if (!Self->IsDomainSchemeShard && Self->SubDomains.contains(Self->RootPathId())) {
-                Self->SubDomains.UpdateUntracked(Self->RootPathId())->Initialize(Self->ShardInfos);
+                Self->SubDomains.Update(Self->RootPathId())->Initialize(Self->ShardInfos);
             }
         }
 
@@ -3712,7 +3712,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 volume->AlterVersion = rowset.GetValue<Schema::BlockStoreVolumes::AlterVersion>();
                 volume->MountToken = rowset.GetValue<Schema::BlockStoreVolumes::MountToken>();
                 volume->TokenVersion = rowset.GetValue<Schema::BlockStoreVolumes::TokenVersion>();
-                Self->BlockStoreVolumes.SetUntracked(pathId, volume);
+                Self->BlockStoreVolumes.Set(pathId, volume);
 
                 auto it = nbsVolumeShards.find(pathId);
                 if (it != nbsVolumeShards.end()) {
@@ -3808,7 +3808,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     Y_ABORT_UNLESS(parseOk);
                     fs->Version = rowset.GetValueOrDefault<Schema::FileStoreInfos::Version>();
                 }
-                Self->FileStoreInfos.SetUntracked(pathId, fs);
+                Self->FileStoreInfos.Set(pathId, fs);
 
                 auto it = fileStoreShards.find(pathId);
                 if (it != fileStoreShards.end()) {
@@ -3875,7 +3875,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     Y_ABORT_UNLESS(parseOk);
                     kesus->Version = version;
                 }
-                Self->KesusInfos.SetUntracked(pathId, kesus);
+                Self->KesusInfos.Set(pathId, kesus);
 
                 auto it = kesusShards.find(pathId);
                 if (it != kesusShards.end()) {
@@ -4046,7 +4046,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                         // legacy, ???
                         Y_ABORT_UNLESS(Self->Tables.contains(tablePathId));
-                        TTableInfo::TPtr tableInfo = Self->Tables.UpdateUntracked(tablePathId);
+                        TTableInfo::TPtr tableInfo = Self->Tables.Update(tablePathId);
                         tableInfo->InitAlterData();
                         tableInfo->DeserializeAlterExtraData(extraData);
                     }
@@ -4186,8 +4186,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 TOlapStoreInfo::TPtr storeInfo = std::make_shared<TOlapStoreInfo>(alterVersion, std::move(sharding));
                 storeInfo->ParseFromLocalDB(description);
-                Self->OlapStores.SetUntracked(pathId, storeInfo);
-                Self->SetPartitioning(pathId, Self->OlapStores.UpdateUntracked(pathId));
+                Self->OlapStores.Set(pathId, storeInfo);
+                Self->SetPartitioning(pathId, Self->OlapStores.Update(pathId));
 
                 if (!rowset.Next()) {
                     return false;
@@ -4219,7 +4219,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 TOlapStoreInfo::TPtr storeInfo = std::make_shared<TOlapStoreInfo>(alterVersion, std::move(sharding), std::move(alterBody));
                 storeInfo->ParseFromLocalDB(description);
-                Self->OlapStores.UpdateUntracked(pathId)->AlterData = storeInfo;
+                Self->OlapStores.Update(pathId)->AlterData = storeInfo;
 
                 if (!rowset.Next()) {
                     return false;
@@ -4425,7 +4425,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             Y_ABORT_UNLESS(txState->SplitDescription);
 
             Y_ABORT_UNLESS(Self->Tables.contains(txState->TargetPathId));
-            TTableInfo::TPtr tableInfo = Self->Tables.UpdateUntracked(txState->TargetPathId);
+            TTableInfo::TPtr tableInfo = Self->Tables.Update(txState->TargetPathId);
             tableInfo->RegisterSplitMergeOp(opId, *txState);
 
             for (ui32 i = 0; i < txState->SplitDescription->DestinationRangesSize(); ++i) {
@@ -5831,7 +5831,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_ABORT_UNLESS(sharding.ParseFromString(rowset.GetValue<Schema::Sequences::Sharding>()));
 
                 TSequenceInfo::TPtr sequenceInfo = new TSequenceInfo(alterVersion, std::move(description), std::move(sharding));
-                Self->Sequences.SetUntracked(pathId, sequenceInfo);
+                Self->Sequences.Set(pathId, sequenceInfo);
 
                 if (!rowset.Next()) {
                     return false;
@@ -5857,7 +5857,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TSequenceInfo::TPtr alterData = new TSequenceInfo(alterVersion, std::move(description), std::move(sharding));
                 Y_VERIFY_S(Self->Sequences.contains(pathId),
                     "Cannot load alter for sequence " << pathId);
-                Self->Sequences.UpdateUntracked(pathId)->AlterData = alterData;
+                Self->Sequences.Update(pathId)->AlterData = alterData;
 
                 if (!rowset.Next()) {
                     return false;
@@ -5879,7 +5879,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_ABORT_UNLESS(description.ParseFromString(rowset.GetValue<Schema::Replications::Description>()));
 
                 TReplicationInfo::TPtr replicationInfo = new TReplicationInfo(alterVersion, std::move(description));
-                Self->Replications.SetUntracked(pathId, replicationInfo);
+                Self->Replications.Set(pathId, replicationInfo);
 
                 if (replicationControllers.contains(pathId)) {
                     replicationInfo->ControllerShardIdx = replicationControllers.at(pathId);
@@ -5907,7 +5907,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TReplicationInfo::TPtr alterData = new TReplicationInfo(alterVersion, std::move(description));
                 Y_VERIFY_S(Self->Replications.contains(pathId),
                     "Cannot load alter for replication " << pathId);
-                auto& replicationInfo = Self->Replications.UpdateUntracked(pathId);
+                auto& replicationInfo = Self->Replications.Update(pathId);
 
                 alterData->ControllerShardIdx = replicationInfo->ControllerShardIdx;
                 replicationInfo->AlterData = alterData;
@@ -5935,7 +5935,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_ABORT_UNLESS(success);
 
                 auto blobDepot = MakeIntrusive<TBlobDepotInfo>(alterVersion, description);
-                Self->BlobDepots.SetUntracked(pathId, blobDepot);
+                Self->BlobDepots.Set(pathId, blobDepot);
 
                 if (const auto it = blobDepotShards.find(pathId); it != blobDepotShards.end()) {
                     blobDepot->BlobDepotShardIdx = it->second;
@@ -5989,7 +5989,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     Y_PROTOBUF_SUPPRESS_NODISCARD testShardSetInfo->CmdInitialize.ParseFromString(serializedCmdInitialize);
                 }
 
-                Self->TestShardSets.SetUntracked(pathId, testShardSetInfo);
+                Self->TestShardSets.Set(pathId, testShardSetInfo);
                 Self->TabletCounters->Simple()[COUNTER_TEST_SHARD_SET_COUNT].Add(1);
 
                 if (!rowset.Next()) {
@@ -6441,7 +6441,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_ABORT_UNLESS(description.ParseFromString(rowset.GetValue<Schema::Secrets::Description>()));
 
                 TSecretInfo::TPtr secretInfo = new TSecretInfo(version, std::move(description));
-                Self->Secrets.SetUntracked(pathId, secretInfo);
+                Self->Secrets.Set(pathId, secretInfo);
 
                 if (!rowset.Next()) {
                     return false;
@@ -6465,7 +6465,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TSecretInfo::TPtr alterData = new TSecretInfo(version, std::move(description));
                 Y_VERIFY_S(Self->Secrets.contains(pathId), "Cannot load alter for secret " << pathId);
 
-                auto& secretInfo = Self->Secrets.UpdateUntracked(pathId);
+                auto& secretInfo = Self->Secrets.Update(pathId);
                 secretInfo->AlterData = alterData;
 
                 if (!rowset.Next()) {

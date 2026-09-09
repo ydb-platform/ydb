@@ -489,7 +489,7 @@ bool TDone::Process(TOperationContext& context) {
         if (!tableInfo->IsStandalone()) {
             const auto storePathId = tableInfo->GetOlapStorePathIdVerified();
             if (context.SS->OlapStores.contains(storePathId)) {
-                auto& storeInfo = context.SS->OlapStores.UpdateUntracked(storePathId);
+                auto& storeInfo = context.SS->OlapStores.Update(storePathId);
                 storeInfo->ColumnTablesUnderOperation.erase(pathId);
             }
         }
@@ -804,7 +804,7 @@ void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &
     Y_ABORT_UNLESS(txState.ShardsInProgress.empty());
 
     Y_ABORT_UNLESS(context.SS->Tables.contains(txState.TargetPathId));
-    TTableInfo::TPtr table = context.SS->Tables.UpdateUntracked(txState.TargetPathId);
+    TTableInfo::TPtr table = context.SS->Tables.Update(txState.TargetPathId);
     TTxState::ETxState commonShardOp = TTxState::CreateParts;
 
     if (txState.TxType == TTxState::TxAlterTable) {
@@ -943,10 +943,10 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
     Y_ABORT_UNLESS(context.SS->PathsById.at(txState.SourcePathId)->PathState == TPathElement::EPathState::EPathStateCopying);
     Y_ABORT_UNLESS(context.SS->PathsById.contains(txState.TargetPathId));
     auto dstPath = context.SS->PathsById.at(txState.TargetPathId);
-    auto& domainInfo = context.SS->SubDomains.UpdateUntracked(dstPath->DomainPathId);
+    auto& domainInfo = context.SS->SubDomains.Update(dstPath->DomainPathId);
 
-    auto& srcTableInfo = context.SS->Tables.UpdateUntracked(txState.SourcePathId);
-    auto& dstTableInfo = context.SS->Tables.UpdateUntracked(txState.TargetPathId);
+    auto& srcTableInfo = context.SS->Tables.Update(txState.SourcePathId);
+    auto& dstTableInfo = context.SS->Tables.Update(txState.TargetPathId);
 
     NIceDb::TNiceDb db(context.GetDB());
 
@@ -1455,7 +1455,7 @@ TVector<TPathId> SyncChildIndexVersions(
         if (!context.SS->Indexes.contains(childPathId)) {
             continue;
         }
-        auto& index = context.SS->Indexes.UpdateUntracked(childPathId);
+        auto& index = context.SS->Indexes.Update(childPathId);
         if (index->AlterVersion < targetVersion) {
             index->AlterVersion = targetVersion;
             // If there's ongoing alter operation, also update alterData version to converge

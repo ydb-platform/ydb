@@ -1012,6 +1012,18 @@ public:
         return copy;
     }
 
+    // Keep the table object held by aliases such as TTLEnabledTables. Internal
+    // partition pointers must be rebound to the copied store on restoration.
+    void RestoreSnapshot(const TTableInfo& snapshot) {
+        Y_ABORT_UNLESS(this != &snapshot);
+        *this = snapshot;
+        for (ui64 i = 0; i < snapshot.Partitions.size(); ++i) {
+            Partitions[i] = PartitionStore.FindPtr(snapshot.Partitions[i]->ShardIdx);
+            Y_ABORT_UNLESS(Partitions[i]);
+        }
+        VerifyConsistency();
+    }
+
     struct TCreateAlterDataFeatureFlags {
         bool EnableTablePgTypes;
         bool EnableTableDatetime64;

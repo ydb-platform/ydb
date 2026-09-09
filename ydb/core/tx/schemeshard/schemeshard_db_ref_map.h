@@ -1,7 +1,6 @@
 #pragma once
 
 #include "schemeshard_path_db_ref.h"
-#include "schemeshard__operation_memory_changes.h"
 
 #include <ydb/core/scheme/scheme_pathid.h>
 
@@ -39,9 +38,8 @@ public:
 
 // THashMap<TPathId, V> holding a DbRefCount self-ref per entry: insert acquires,
 // erase releases. No operator[], so a missing-key read can't silently acquire.
-// Set records membership undo; Update leaves mutation undo to its caller where
-// proposal rollback is supported. Both belong to the armed propose phase.
-// SetUntracked/UpdateUntracked/erase are for other phases (init, plan-step, progress, stats).
+// Proposal rollback is coordinated at explicit Grab* call sites. The container
+// itself only accounts for membership references.
 template <class V>
 class TDbRefMap : public IDbRefMap {
     using TInner = THashMap<TPathId, V>;
@@ -51,13 +49,6 @@ public:
     using const_iterator = typename TInner::const_iterator;
     using value_type = typename TInner::value_type;
     using TConstView = typename NDbRefDetail::TConstView<V>::type;
-
-    // Designated-initializer args: Foo.Set({.Path=id, .Value=info, .Changes=ctx.MemChanges}).
-    struct TSetArgs {
-        TPathId Path;
-        V Value;
-        TMemoryChanges& Changes;
-    };
 
     // Self-registers at construction (registration can't be missed); `reason`
     // is the map's name, logged on each DbRefCount change.
@@ -81,27 +72,8 @@ public:
         return Map;
     }
 
-    // Insert/assign (acquires on new key) and record the matching undo.
-    V& Set(TSetArgs args) {
-        Y_VERIFY_DEBUG_S(args.Changes.IsArmed(),
-            "tracked Set on " << Reason.c_str() << " outside an armed propose; use SetUntracked");
-        auto it = Map.find(args.Path);
-        if (it == Map.end()) {
-            Y_VERIFY_DEBUG_S(args.Changes.IsPathTracked(args.Path),
-                "Set(" << Reason.c_str() << ") acquires a ref on " << args.Path
-                << " but the path was not grabbed in this tx; GrabNewPath/GrabPath it first");
-            args.Changes.RecordUndo([this, id = args.Path]() { UndoErase(id); });
-            it = Map.emplace(args.Path, std::move(args.Value)).first;
-            AcquirePathDbRef(SS, args.Path, Reason);
-        } else {
-            args.Changes.RecordUndo([this, id = args.Path, old = it->second]() { UndoRestore(id, old); });
-            it->second = std::move(args.Value);
-        }
-        return it->second;
-    }
-
-    // Insert/assign, acquiring on new key, without recording undo (init restore, SubDomains).
-    V& SetUntracked(const TPathId& id, V value) {
+    // Insert/assign, acquiring exactly one reference on a new key.
+    V& Set(const TPathId& id, V value) {
         auto it = Map.find(id);
         if (it == Map.end()) {
             it = Map.emplace(id, std::move(value)).first;
@@ -113,7 +85,7 @@ public:
     }
 
     // Acquires on new key, no undo. SubDomains-only.
-    V& EmplaceUntracked(const TPathId& id) {
+    V& Emplace(const TPathId& id) {
         auto it = Map.find(id);
         if (it == Map.end()) {
             it = Map.emplace(id, V{}).first;
@@ -122,28 +94,14 @@ public:
         return it->second;
     }
 
-    // Mutable access during propose. This does NOT snapshot the object: callers
-    // supporting proposal rollback must record undo for the fields they change.
-    // Existing operations that prohibit proposal rollback keep that contract.
-    // Returns const V& so the pointee stays mutable (->Field), but replacing the
-    // slot still requires Set().
+    // Mutable pointee access. Snapshotting is the caller's responsibility.
+    // The slot cannot be replaced through this reference.
     const V& Update(const TPathId& id) {
-        Y_VERIFY_DEBUG_S(IsProposeArmed(SS),
-            "Update on " << Reason.c_str() << " outside an armed propose; use UpdateUntracked");
         return Map.at(id);
     }
 
-    // Pointee-mutable access without undo, for non-transactional callers (init, stats).
-    // Const V& (no slot reseat); propose operations use Update().
-    const V& UpdateUntracked(const TPathId& id) {
-        return Map.at(id);
-    }
-
-    // No undo: only legal outside an armed propose (an armed-propose erase can't roll back).
+    // Remove membership and release its reference.
     size_t erase(const TPathId& id) {
-        Y_VERIFY_DEBUG_S(!IsProposeArmed(SS),
-            "erase on " << Reason.c_str() << " during an armed propose is not reversible;"
-            " erase at plan step or later");
         if (Map.contains(id)) {
             ReleasePathDbRef(SS, id, Reason);
         }
@@ -156,7 +114,7 @@ public:
     // Read accessors are const-only: they never hand out a mutable slot, so a caller
     // can't reseat an entry (it->second = newPtr) and desync the self-ref. The
     // const_iterator/const V* still permit pointee mutation (->Field); the sanctioned
-    // mutation gates are Set/Update/UpdateUntracked.
+    // mutation gates are Set/Update.
     const_iterator find(const TPathId& id) const { return Map.find(id); }
     const V* FindPtr(const TPathId& id) const { return Map.FindPtr(id); }
     V Value(const TPathId& id, const V& def) const { return Map.Value(id, def); }
@@ -184,23 +142,18 @@ public:
         }
     }
 
+    // Restore membership after an external snapshot has already restored path
+    // counters. Ordinary Set/erase would account for those references twice.
+    // A null value marks an entry that did not exist in the snapshot.
+    void RestoreMembershipWithoutRefcount(const TPathId& id, V value) {
+        if (value) {
+            Map[id] = std::move(value);
+        } else {
+            Map.erase(id);
+        }
+    }
+
 private:
-    // Undo is driven only by TMemoryChanges; ops must never call these.
-    friend class TMemoryChanges;
-
-    // Set-undo: bring back the replaced value's original pointer (the Paths snapshot
-    // owns the counter). Used when Set() overwrote an existing entry.
-    V& UndoRestore(const TPathId& id, V value) {
-        auto& slot = Map[id];
-        slot = std::move(value);
-        return slot;
-    }
-
-    // Drop a tx-created entry without releasing (Paths owns the counter).
-    void UndoErase(const TPathId& id) {
-        Map.erase(id);
-    }
-
     TRefLabel Reason;
     TSchemeShard* SS = nullptr;
     TInner Map;

@@ -212,7 +212,7 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        context.SS->Sequences.SetUntracked(pathId, alterData);
+        context.SS->Sequences.Set(pathId, alterData);
         context.SS->PersistSequenceAlterRemove(db, pathId);
         context.SS->PersistSequence(db, pathId, *alterData);
 
@@ -565,7 +565,8 @@ public:
         }
         context.SS->PersistPath(db, dstPath->PathId);
 
-        context.SS->Sequences.Set({.Path = pathId, .Value = sequenceInfo, .Changes = context.MemChanges});
+        context.MemChanges.GrabNewSequence(context.SS, pathId);
+        context.SS->Sequences.Set(pathId, sequenceInfo);
         context.SS->PersistSequence(db, pathId, *sequenceInfo);
         context.SS->PersistSequenceAlter(db, pathId, *alterData);
 

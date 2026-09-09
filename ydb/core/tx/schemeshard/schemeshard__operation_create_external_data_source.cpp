@@ -219,7 +219,8 @@ public:
         externalDataSource->PathState = TPathElement::EPathState::EPathStateCreate;
         externalDataSource->LastTxId  = OperationId.GetTxId();
 
-        context.SS->ExternalDataSources.Set({.Path = newPathId, .Value = externalDataSourceInfo, .Changes = context.MemChanges});
+        context.MemChanges.GrabNewExternalDataSource(context.SS, newPathId);
+        context.SS->ExternalDataSources.Set(newPathId, externalDataSourceInfo);
         if (!acl.empty()) {
             externalDataSource->ApplyACL(acl);
         }

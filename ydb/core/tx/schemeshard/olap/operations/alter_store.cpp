@@ -215,7 +215,7 @@ public:
         alterData->AlterBody.Clear();
         alterData->ColumnTables = storeInfo->ColumnTables;
         alterData->ColumnTablesUnderOperation = storeInfo->ColumnTablesUnderOperation;
-        context.SS->OlapStores.SetUntracked(pathId, alterData);
+        context.SS->OlapStores.Set(pathId, alterData);
 
         context.SS->PersistOlapStoreAlterRemove(db, pathId);
         context.SS->PersistOlapStore(db, pathId, *alterData);
@@ -514,7 +514,7 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->OlapStores.contains(path->PathId));
-        auto storeInfo = context.SS->OlapStores.UpdateUntracked(path->PathId);
+        auto storeInfo = context.SS->OlapStores.Update(path->PathId);
 
         if (!storeInfo->ColumnTablesUnderOperation.empty()) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, "Store has unfinished table operations");

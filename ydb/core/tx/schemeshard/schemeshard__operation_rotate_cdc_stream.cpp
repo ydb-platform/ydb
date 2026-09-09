@@ -69,11 +69,11 @@ public:
         context.SS->PersistCreateStep(db, newStreamPathId, step);
 
         context.SS->PersistCdcStream(db, newStreamPathId);
-        context.SS->CdcStreams.SetUntracked(newStreamPathId, newStream->AlterData);
+        context.SS->CdcStreams.Set(newStreamPathId, newStream->AlterData);
         context.SS->TabletCounters->Simple()[COUNTER_CDC_STREAMS_COUNT].Add(1);
 
         context.SS->PersistCdcStream(db, oldStreamPathId);
-        context.SS->CdcStreams.UpdateUntracked(oldStreamPathId)->FinishAlter();
+        context.SS->CdcStreams.Update(oldStreamPathId)->FinishAlter();
 
         context.SS->ClearDescribePathCaches(oldStreamPath);
         context.SS->ClearDescribePathCaches(newStreamPath);
@@ -221,6 +221,7 @@ public:
 
 
         Y_ABORT_UNLESS(context.SS->CdcStreams.contains(oldStreamPath.Base()->PathId));
+        context.MemChanges.GrabCdcStream(context.SS, oldStreamPath.Base()->PathId);
         auto oldStream = context.SS->CdcStreams.Update(oldStreamPath.Base()->PathId);
 
         TCdcStreamInfo::EState requiredState = TCdcStreamInfo::EState::ECdcStreamStateDisabled;
@@ -372,9 +373,6 @@ public:
         context.DbChanges.PersistAlterCdcStream(pathId);
         context.DbChanges.PersistTxState(OperationId);
 
-        context.MemChanges.RecordUndo([oldStream, previous = oldStream->AlterData]() {
-            oldStream->AlterData = previous;
-        });
         auto streamAlter = oldStream->CreateNextVersion();
         Y_ABORT_UNLESS(streamAlter);
         streamAlter->State = newState;
@@ -400,7 +398,8 @@ public:
         newStreamPath.Base()->PathType = TPathElement::EPathType::EPathTypeCdcStream;
         newStreamPath.Base()->UserAttrs->AlterData = userAttrs;
 
-        context.SS->CdcStreams.Set({.Path = pathId, .Value = newStream, .Changes = context.MemChanges});
+        context.MemChanges.GrabNewCdcStream(context.SS, pathId);
+        context.SS->CdcStreams.Set(pathId, newStream);
 
         newStreamPath.DomainInfo()->IncPathsInside(context.SS);
         IncAliveChildrenSafeWithUndo(OperationId, tablePath, context); // for correct discard of ChildrenExist prop
@@ -432,7 +431,7 @@ protected:
         auto path = context.SS->PathsById.at(pathId);
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        auto& table = context.SS->Tables.UpdateUntracked(pathId);
+        auto& table = context.SS->Tables.Update(pathId);
 
         auto& notice = *tx.MutableRotateCdcStreamNotice();
         pathId.ToProto(notice.MutablePathId());

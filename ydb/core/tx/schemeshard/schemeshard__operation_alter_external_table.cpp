@@ -317,8 +317,10 @@ public:
 
         context.MemChanges.GrabPath(context.SS, externalTable->PathId);
         context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        context.MemChanges.GrabExternalDataSource(context.SS, dataSourcePath.Base()->PathId);
         if (!IsSameDataSource) {
             context.MemChanges.GrabPath(context.SS, dataSourcePath.Base()->PathId);
+            context.MemChanges.GrabExternalDataSource(context.SS, OldDataSourcePathId);
         }
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
@@ -346,7 +348,8 @@ public:
             }
         }
 
-        context.SS->ExternalTables.Set({.Path = externalTable->PathId, .Value = externalTableInfo, .Changes = context.MemChanges});
+        context.MemChanges.GrabExternalTable(context.SS, externalTable->PathId);
+        context.SS->ExternalTables.Set(externalTable->PathId, externalTableInfo);
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterExternalTable,
                                                   externalTable->PathId, dataSourcePath.Base()->PathId);

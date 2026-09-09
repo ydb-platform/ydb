@@ -177,7 +177,8 @@ public:
         resourcePool->PathState = TPathElement::EPathState::EPathStateCreate;
         resourcePool->LastTxId  = OperationId.GetTxId();
 
-        context.SS->ResourcePools.Set({.Path = newPathId, .Value = resourcePoolInfo, .Changes = context.MemChanges});
+        context.MemChanges.GrabNewResourcePool(context.SS, newPathId);
+        context.SS->ResourcePools.Set(newPathId, resourcePoolInfo);
         if (!acl.empty()) {
             resourcePool->ApplyACL(acl);
         }

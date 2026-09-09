@@ -215,7 +215,8 @@ public:
         }
 
         TSysViewInfo::TPtr sysViewInfo = CreateSysView(sysViewDescription);
-        context.SS->SysViews.Set({.Path = sysViewPathId, .Value = sysViewInfo, .Changes = context.MemChanges});
+        context.MemChanges.GrabNewSysView(context.SS, sysViewPathId);
+        context.SS->SysViews.Set(sysViewPathId, sysViewInfo);
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateSysView, sysViewPathId);
         txState.State = TTxState::Propose;

@@ -189,6 +189,7 @@ public:
         context.MemChanges.GrabPath(context.SS, pathId);
         context.MemChanges.GrabPath(context.SS, path->ParentPathId);
         context.MemChanges.GrabPath(context.SS, dataSourcePath->PathId);
+        context.MemChanges.GrabExternalDataSource(context.SS, dataSourcePath->PathId);
 
         context.DbChanges.PersistTxState(OperationId);
         context.DbChanges.PersistPath(pathId);

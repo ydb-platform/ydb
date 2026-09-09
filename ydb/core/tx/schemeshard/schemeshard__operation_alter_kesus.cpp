@@ -182,7 +182,7 @@ public:
 
         path->PathState = TPathElement::EPathState::EPathStateNoChanges;
 
-        auto& kesus = context.SS->KesusInfos.UpdateUntracked(pathId);
+        auto& kesus = context.SS->KesusInfos.Update(pathId);
         kesus->FinishAlter();
         context.SS->PersistKesusInfo(db, pathId, kesus);
         context.SS->PersistRemoveKesusAlter(db, pathId);

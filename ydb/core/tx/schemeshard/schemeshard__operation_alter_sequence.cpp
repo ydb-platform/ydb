@@ -198,7 +198,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        context.SS->Sequences.SetUntracked(pathId, alterData);
+        context.SS->Sequences.Set(pathId, alterData);
         context.SS->PersistSequenceAlterRemove(db, pathId);
         context.SS->PersistSequence(db, pathId, *alterData);
 
@@ -491,6 +491,7 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->Sequences.contains(dstPath->PathId));
+        context.MemChanges.GrabSequence(context.SS, dstPath->PathId);
         auto sequenceInfo = context.SS->Sequences.Update(dstPath->PathId);
         Y_ABORT_UNLESS(!sequenceInfo->AlterData);
 
@@ -503,9 +504,6 @@ public:
             return result;
         }
 
-        context.MemChanges.RecordUndo([sequenceInfo, previous = sequenceInfo->AlterData]() {
-            sequenceInfo->AlterData = previous;
-        });
         TSequenceInfo::TPtr alterData = sequenceInfo->CreateNextVersion();
         Y_ABORT_UNLESS(alterData);
         alterData->Description = *description;

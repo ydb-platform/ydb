@@ -286,7 +286,7 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        context.SS->Replications.SetUntracked(pathId, alterData);
+        context.SS->Replications.Set(pathId, alterData);
         context.SS->PersistReplicationAlterRemove(db, pathId);
         context.SS->PersistReplication(db, pathId, *alterData);
 
@@ -480,7 +480,8 @@ public:
 
         desc.MutableState()->MutableStandBy();
         auto replication = TReplicationInfo::Create(std::move(desc));
-        context.SS->Replications.Set({.Path = path->PathId, .Value = replication, .Changes = context.MemChanges});
+        context.MemChanges.GrabNewReplication(context.SS, path->PathId);
+        context.SS->Replications.Set(path->PathId, replication);
         context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Add(1);
 
         replication->AlterData->ControllerShardIdx = context.SS->RegisterShardInfo(

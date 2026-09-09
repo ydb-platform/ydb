@@ -509,7 +509,8 @@ public:
         emptyGroup->Shards.swap(pqGroup->Shards);
 
         emptyGroup->AlterData = pqGroup;
-        context.SS->Topics.Set({.Path = pathId, .Value = emptyGroup, .Changes = context.MemChanges});
+        context.MemChanges.GrabNewTopic(context.SS, pathId);
+        context.SS->Topics.Set(pathId, emptyGroup);
 
         context.DbChanges.PersistPersQueueGroup(pathId, emptyGroup);
         context.DbChanges.PersistAddPersQueueGroupAlter(pathId, pqGroup);

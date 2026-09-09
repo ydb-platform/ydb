@@ -56,7 +56,8 @@ TTxState& PrepareChanges(TOperationId operationId, TPathElement::TPtr parentDir,
         item->ApplyACL(acl);
     }
     context.SS->PersistPath(db, item->PathId);
-    context.SS->KesusInfos.Set({.Path = pathId, .Value = kesus, .Changes = context.MemChanges});
+    context.MemChanges.GrabNewKesusInfo(context.SS, pathId);
+    context.SS->KesusInfos.Set(pathId, kesus);
     context.SS->PersistKesusInfo(db, pathId, kesus);
 
     context.SS->PersistTxState(db, operationId);
@@ -139,7 +140,7 @@ public:
 
         txState->ClearShardsInProgress();
 
-        auto& kesus = context.SS->KesusInfos.UpdateUntracked(txState->TargetPathId);
+        auto& kesus = context.SS->KesusInfos.Update(txState->TargetPathId);
         Y_VERIFY_S(kesus, "kesus is null. PathId: " << txState->TargetPathId);
 
 
@@ -205,7 +206,7 @@ public:
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
         Y_VERIFY_S(context.SS->KesusInfos.contains(pathId), "kesus has not found. PathId: " << pathId);
-        auto& kesus = context.SS->KesusInfos.UpdateUntracked(pathId);
+        auto& kesus = context.SS->KesusInfos.Update(pathId);
         Y_VERIFY_S(kesus, "kesus is null. PathId: " << pathId);
 
         NIceDb::TNiceDb db(context.GetDB());

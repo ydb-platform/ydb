@@ -20,7 +20,7 @@ class TSchemeShard;
 class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TPathState = std::pair<TPathId, TPathElement::TPtr>;
     // Holds both GrabPath snapshots (non-null elem) and GrabNewPath markers (null elem).
-    // Subclassed to expose the underlying container for the debug-only scan below.
+    // Subclassed to check the snapshot required by a new reference-owning entry.
     struct TPathStack : TStack<TPathState> {
         bool Contains(const TPathId& id) const {
             for (const auto& [pid, elem] : this->c) {
@@ -72,35 +72,59 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TSharedShardEntry = std::tuple<TShardIdx, TPathId, std::optional<TTxId>>;
     TStack<TSharedShardEntry> SharedShardEntries;
 
-    // Common LIFO stack for map membership changes and explicit field undo.
+    // Common LIFO stack for typed snapshots, new-entry markers and field undo.
     TStack<std::function<void()>> UndoActions;
 
     // Only the propose tx can roll back (UnDo runs only from AbortOperationPropose),
     // so only it records undos; other txs would just accumulate dead weight.
     bool Armed = false;
 
-    // Set by Arm(): the shard this armed instance is registered with, so the
-    // registration can be withdrawn on destruction.
-    TSchemeShard* SS = nullptr;
-
 public:
-    // Withdraws the armed registration; see Arm().
-    ~TMemoryChanges();
-
-    // Called from IgniteOperation. Publishes the armed window on the shard so
-    // undo-less mutators (TDbRefMap::erase) can assert they run outside it.
+    // The proposal coordinator scopes registration; containers do not know it.
     void Arm(TSchemeShard* ss);
-
-    // Ends the armed window at the close of IgniteOperation, so the rest of the
-    // propose tx (side effects, Persist*) is not mistaken for the mutation phase.
     void Disarm();
 
-    // True only inside an armed propose; tracked Set/Update are legal only then.
+    // Snapshot/undo registration is legal only inside a proposal.
     bool IsArmed() const { return Armed; }
 
-    // Debug: was this path grabbed (GrabPath/GrabNewPath) in this tx? A tracked Set()
-    // that acquires a ref on an ungrabbed path can't fully roll back.
+    // New membership requires a Paths snapshot to restore its reference count.
     bool IsPathTracked(const TPathId& id) const { return Paths.Contains(id); }
+
+    void GrabNewTable(TSchemeShard* ss, const TPathId& pathId);
+    void GrabTable(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewIndex(TSchemeShard* ss, const TPathId& pathId);
+    void GrabIndex(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewSequence(TSchemeShard* ss, const TPathId& pathId);
+    void GrabSequence(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewCdcStream(TSchemeShard* ss, const TPathId& pathId);
+    void GrabCdcStream(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewReplication(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewBlobDepot(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewTopic(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewRtmrVolume(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewSolomonVolume(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewBlockStoreVolume(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewFileStoreInfo(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewKesusInfo(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewOlapStore(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewExternalTable(TSchemeShard* ss, const TPathId& pathId);
+    void GrabExternalTable(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewExternalDataSource(TSchemeShard* ss, const TPathId& pathId);
+    void GrabExternalDataSource(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewView(TSchemeShard* ss, const TPathId& pathId);
+    void GrabView(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewResourcePool(TSchemeShard* ss, const TPathId& pathId);
+    void GrabResourcePool(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewBackupCollection(TSchemeShard* ss, const TPathId& pathId);
+    void GrabBackupCollection(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewSysView(TSchemeShard* ss, const TPathId& pathId);
+    void GrabSysView(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewSecret(TSchemeShard* ss, const TPathId& pathId);
+    void GrabSecret(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewStreamingQuery(TSchemeShard* ss, const TPathId& pathId);
+    void GrabStreamingQuery(TSchemeShard* ss, const TPathId& pathId);
+    void GrabNewTestShardSet(TSchemeShard* ss, const TPathId& pathId);
+    void GrabTestShardSet(TSchemeShard* ss, const TPathId& pathId);
 
     void GrabNewTxState(TSchemeShard* ss, const TOperationId& op);
 
@@ -134,9 +158,8 @@ public:
     // Record map membership changes and explicit field undo on one LIFO stack,
     // so mutations are undone before an earlier insertion/replacement is undone.
     void RecordUndo(std::function<void()> undo) {
-        if (Armed) {
-            UndoActions.push(std::move(undo));
-        }
+        Y_ABORT_UNLESS(Armed, "undo registration outside proposal");
+        UndoActions.push(std::move(undo));
     }
 
     void UnDo(TSchemeShard* ss);

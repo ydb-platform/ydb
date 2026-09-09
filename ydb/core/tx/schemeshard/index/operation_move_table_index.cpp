@@ -68,7 +68,7 @@ public:
 
         auto indexData = context.SS->Indexes.at(dstPath.Base()->PathId);
         context.SS->PersistTableIndex(db, dstPath.Base()->PathId);
-        context.SS->Indexes.SetUntracked(dstPath.Base()->PathId, indexData->AlterData);
+        context.SS->Indexes.Set(dstPath.Base()->PathId, indexData->AlterData);
 
         dstPath->StepCreated = step;
         context.SS->PersistCreateStep(db, dstPath.Base()->PathId, step);
@@ -513,7 +513,8 @@ public:
 
         const auto srcIndexInfo = context.SS->Indexes.at(srcPath.Base()->PathId);
         auto newIndexData = TTableIndexInfo::NotExistedYet(srcIndexInfo->Type);
-        context.SS->Indexes.Set({.Path = dstPath.Base()->PathId, .Value = newIndexData, .Changes = context.MemChanges});
+        context.MemChanges.GrabNewIndex(context.SS, dstPath.Base()->PathId);
+        context.SS->Indexes.Set(dstPath.Base()->PathId, newIndexData);
         newIndexData->AlterData = srcIndexInfo->GetNextVersion();
 
 

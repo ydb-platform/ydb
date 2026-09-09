@@ -93,7 +93,7 @@ public:
         secretPath->StepCreated = step;
         context.SS->PersistCreateStep(db, secretPathId, step);
 
-        context.SS->Secrets.SetUntracked(secretPathId, alterData);
+        context.SS->Secrets.Set(secretPathId, alterData);
         context.SS->PersistSecretAlterRemove(db, secretPathId);
         context.SS->PersistSecret(db, secretPathId, *alterData);
 
@@ -281,7 +281,8 @@ public:
         secretDescription.SetValue(createSecretProto.GetValue());
 
         const auto secretInfo = TSecretInfo::Create(std::move(secretDescription));
-        context.SS->Secrets.Set({.Path = secretPathId, .Value = secretInfo, .Changes = context.MemChanges});
+        context.MemChanges.GrabNewSecret(context.SS, secretPathId);
+        context.SS->Secrets.Set(secretPathId, secretInfo);
 
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistPath(db, dstPath->PathId);

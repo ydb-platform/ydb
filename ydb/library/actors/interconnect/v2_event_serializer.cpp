@@ -71,11 +71,25 @@ namespace NActors {
 
     size_t TEventSerializer::ProduceOutputStream(TRcBuf& buffer, std::vector<TContiguousSpan> *out,
             size_t maxBytesToProduce) {
-        return ProduceOutputStream(buffer, out, nullptr, nullptr, maxBytesToProduce);
+        return ProduceOutputStream(buffer, out, nullptr, nullptr, maxBytesToProduce, 0, maxBytesToProduce);
     }
 
     size_t TEventSerializer::ProduceOutputStream(TRcBuf& buffer, std::vector<TContiguousSpan> *out,
             TRcBuf *xdcBuffer, std::vector<TContiguousSpan> *xdcOut, size_t maxBytesToProduce) {
+        return ProduceOutputStream(buffer, out, xdcBuffer, xdcOut, maxBytesToProduce,
+            xdcOut ? maxBytesToProduce : 0, maxBytesToProduce);
+    }
+
+    size_t TEventSerializer::ProduceOutputStream(TRcBuf& buffer, std::vector<TContiguousSpan> *out,
+            TRcBuf *xdcBuffer, std::vector<TContiguousSpan> *xdcOut, size_t maxMainBytes, size_t maxXdcBytes) {
+        const size_t maxTotalBytes = maxMainBytes > Max<size_t>() - maxXdcBytes
+            ? Max<size_t>() : maxMainBytes + maxXdcBytes;
+        return ProduceOutputStream(buffer, out, xdcBuffer, xdcOut, maxMainBytes, maxXdcBytes, maxTotalBytes);
+    }
+
+    size_t TEventSerializer::ProduceOutputStream(TRcBuf& buffer, std::vector<TContiguousSpan> *out,
+            TRcBuf *xdcBuffer, std::vector<TContiguousSpan> *xdcOut, size_t maxMainBytes, size_t maxXdcBytes,
+            size_t maxTotalBytes) {
         size_t totalBytesProduced = 0;
         ui64 mainBufferProduced = 0;
         ui64 xdcBufferProduced = 0;
@@ -112,7 +126,7 @@ namespace NActors {
             xdc = &xdcState;
         }
 
-        while (!PerChannelQuotaHeap.empty()) {
+        while (!PerChannelQuotaHeap.empty() && maxTotalBytes) {
             if (PerChannelQuotaHeap.front().Quota < MinUsefulQuota) {
                 for (auto& item : PerChannelQuotaHeap) {
                     Y_ABORT_UNLESS(item.Channel != TChunkHeader::SystemChannel);
@@ -124,13 +138,13 @@ namespace NActors {
             TPerChannelQueue& queue = GetQueue(q.Channel);
             const bool isSystemChannel = q.Channel == TChunkHeader::SystemChannel;
             const size_t numBytesProduced = ProduceOutputStreamForQueue(q.Channel, queue,
-                Min<size_t>(maxBytesToProduce, q.Quota), main, xdc);
+                Min<size_t>(maxTotalBytes, q.Quota), maxMainBytes, maxXdcBytes, main, xdc);
             if (!numBytesProduced) {
                 break;
             }
             Y_ABORT_UNLESS(numBytesProduced <= q.Quota);
             totalBytesProduced += numBytesProduced;
-            maxBytesToProduce -= numBytesProduced;
+            maxTotalBytes -= numBytesProduced;
 
             std::ranges::pop_heap(PerChannelQuotaHeap, std::less<ui16>{}, &TPerChannelQuota::Quota);
             if (!queue.Events.Peek() && queue.SystemRequests.empty()) {
@@ -264,13 +278,20 @@ namespace NActors {
     }
 
     size_t TEventSerializer::ProduceOutputStreamForQueue(ui16 channel, TPerChannelQueue& queue, size_t maxBytesToProduce,
-            TStreamState& main, TStreamState *xdc) {
+            size_t& maxMainBytes, size_t& maxXdcBytes, TStreamState& main, TStreamState *xdc) {
         size_t numBytesProduced = 0;
 
         main.EventEnd = &queue.EventMainEnd;
         if (xdc) {
             xdc->EventEnd = &queue.EventXdcEnd;
         }
+
+        auto streamBudget = [&](TStreamState& st) -> size_t& {
+            return &st == &main ? maxMainBytes : maxXdcBytes;
+        };
+        auto remainingAfter = [](size_t budget, size_t cost) -> size_t {
+            return budget > cost ? budget - cost : 0;
+        };
 
         auto produceOutputSpan = [&](TStreamState& st, TContiguousSpan span, bool addToChecksum) {
             if (Y_UNLIKELY(addToChecksum)) {
@@ -289,7 +310,9 @@ namespace NActors {
             }
 
             Y_ABORT_UNLESS(span.size() <= maxBytesToProduce);
+            Y_ABORT_UNLESS(span.size() <= streamBudget(st));
             maxBytesToProduce -= span.size();
+            streamBudget(st) -= span.size();
             numBytesProduced += span.size();
             *st.CumulativeProduced += span.size();
             *st.EventEnd = *st.CumulativeProduced;
@@ -312,6 +335,7 @@ namespace NActors {
 
         auto takeInBuffer = [&](size_t numBytes) -> void* {
             Y_ABORT_UNLESS(numBytes <= maxBytesToProduce);
+            Y_ABORT_UNLESS(numBytes <= maxMainBytes);
             Y_ABORT_UNLESS(numBytes <= main.Buffer.size());
             TMutableContiguousSpan res(main.Buffer.data(), numBytes);
             main.Buffer = main.Buffer.SubSpan(numBytes, Max<size_t>());
@@ -321,7 +345,9 @@ namespace NActors {
 
         while (Y_UNLIKELY(!queue.SystemRequests.empty())) {
             auto& request = queue.SystemRequests.front();
-            if (maxBytesToProduce < sizeof(TChunkHeader) + request.size() || main.Buffer.size() < sizeof(TChunkHeader)) {
+            if (maxMainBytes < sizeof(TChunkHeader) + request.size()
+                    || maxBytesToProduce < sizeof(TChunkHeader) + request.size()
+                    || main.Buffer.size() < sizeof(TChunkHeader)) {
                 break;
             }
             *static_cast<TChunkHeader*>(takeInBuffer(sizeof(TChunkHeader))) = {
@@ -338,7 +364,8 @@ namespace NActors {
             queue.SystemRequests.pop_front();
         }
 
-        while (Min(main.Buffer.size(), maxBytesToProduce) >= MinUsefulQuota && queue.Events.Peek()) {
+        while (queue.Events.Peek()
+                && Min(main.Buffer.size(), maxMainBytes, maxBytesToProduce) >= MinUsefulQuota) {
             IEventHandle& ev = *queue.Events.Peek();
 
             TChunkHeader *header = nullptr;
@@ -434,12 +461,14 @@ namespace NActors {
                 case ESerializeStage::kXdcDeclare: {
                     const auto& sections = queue.EvSerInfo->Sections;
                     while (queue.XdcDeclareIndex < sections.size()) {
-                        if (maxBytesToProduce < sizeof(TChunkHeader) + sizeof(TXdcSection)
+                        if (maxMainBytes < sizeof(TChunkHeader) + sizeof(TXdcSection)
+                                || maxBytesToProduce < sizeof(TChunkHeader) + sizeof(TXdcSection)
                                 || main.Buffer.size() < sizeof(TChunkHeader) + sizeof(TXdcSection)) {
                             break;
                         }
                         const size_t remain = (sections.size() - queue.XdcDeclareIndex) * sizeof(TXdcSection);
-                        size_t n = Min(remain, maxBytesToProduce - sizeof(TChunkHeader),
+                        size_t n = Min(remain, remainingAfter(maxMainBytes, sizeof(TChunkHeader)),
+                            remainingAfter(maxBytesToProduce, sizeof(TChunkHeader)),
                             main.Buffer.size() - sizeof(TChunkHeader), size_t(Max<ui16>()));
                         n = n / sizeof(TXdcSection) * sizeof(TXdcSection);
                         if (!n) {
@@ -486,8 +515,16 @@ namespace NActors {
                         break;
                     }
                     while (queue.Iter.Valid() && queue.SectionBytesRemain) {
+                        const bool toXdc = !queue.CurrentIsInline;
+                        const size_t headerCost = header ? 0 : sizeof(TChunkHeader);
+                        if (maxMainBytes < headerCost || maxBytesToProduce < headerCost) {
+                            break;
+                        }
+                        const size_t payloadBudget = toXdc
+                            ? Min(maxXdcBytes, remainingAfter(maxBytesToProduce, headerCost))
+                            : Min(remainingAfter(maxMainBytes, headerCost), remainingAfter(maxBytesToProduce, headerCost));
                         const size_t numBytes = Min(
-                            static_cast<size_t>(maxBytesToProduce - (header ? 0 : sizeof(TChunkHeader))),
+                            payloadBudget,
                             queue.Iter.ContiguousSize(),
                             queue.SectionBytesRemain,
                             static_cast<size_t>(Max<ui16>() - (header ? header->Length : 0))
@@ -522,10 +559,20 @@ namespace NActors {
                     }
 
                     TMutableContiguousSpan span = queue.CurrentIsInline
-                        ? main.Buffer.SubSpan(sizeof(TChunkHeader), Max<size_t>())
-                        : xdc->Buffer;
+                        ? (main.Buffer.size() > sizeof(TChunkHeader)
+                            ? main.Buffer.SubSpan(sizeof(TChunkHeader), Max<size_t>())
+                            : TMutableContiguousSpan())
+                        : (xdc ? xdc->Buffer : TMutableContiguousSpan());
 
-                    if (const size_t payloadLimit = Min(maxBytesToProduce - sizeof(TChunkHeader), queue.SectionBytesRemain)) {
+                    const bool toXdc = !queue.CurrentIsInline;
+                    const size_t headerCost = sizeof(TChunkHeader);
+                    size_t payloadBudget = 0;
+                    if (maxMainBytes >= headerCost && maxBytesToProduce >= headerCost) {
+                        payloadBudget = toXdc
+                            ? Min(maxXdcBytes, remainingAfter(maxBytesToProduce, headerCost))
+                            : Min(remainingAfter(maxMainBytes, headerCost), remainingAfter(maxBytesToProduce, headerCost));
+                    }
+                    if (const size_t payloadLimit = Min(payloadBudget, queue.SectionBytesRemain, span.size())) {
                         auto chunks = queue.CoroutineChunkSerializer.FeedBuf(&span, payloadLimit);
                         if (queue.CurrentIsInline) {
                             Y_DEBUG_ABORT_UNLESS(main.Buffer.data() + main.Buffer.size() == span.data() + span.size());
@@ -569,11 +616,14 @@ namespace NActors {
                     }
 
                     const size_t numDataBytes = Min(
-                        main.Buffer.size() - sizeof(TChunkHeader),
-                        maxBytesToProduce - sizeof(TChunkHeader),
+                        remainingAfter(main.Buffer.size(), sizeof(TChunkHeader)),
+                        remainingAfter(maxMainBytes, sizeof(TChunkHeader)),
+                        remainingAfter(maxBytesToProduce, sizeof(TChunkHeader)),
                         sizeof(TEventHeader) - queue.EventHeaderOffset
                     );
-                    Y_DEBUG_ABORT_UNLESS(numDataBytes);
+                    if (!numDataBytes) {
+                        break;
+                    }
                     *static_cast<TChunkHeader*>(takeInBuffer(sizeof(TChunkHeader))) = {
                         .Length = static_cast<ui16>(numDataBytes),
                         .TypeChannel = static_cast<ui16>(channel | TChunkHeader::kEventHeader),

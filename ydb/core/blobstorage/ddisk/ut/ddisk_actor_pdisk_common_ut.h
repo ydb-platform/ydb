@@ -202,12 +202,14 @@ public:
     }
 
     void StopDDisk(ui32 diskIdx) {
+        const auto wardenEdge = Runtime->AllocateEdgeActor();
+        Runtime->RegisterService(MakeBlobStorageNodeWardenID(NodeId), wardenEdge);
         Runtime->Send(new IEventHandle(Disks[diskIdx].DDiskServiceId, Edge,
             new TEvents::TEvPoison()));
-        Runtime->Send(new IEventHandle(Disks[diskIdx].DDiskServiceId, Edge,
-            new NDDisk::TEvRead(), IEventHandle::FlagTrackDelivery));
-        auto undelivered = Grab<TEvents::TEvUndelivered>();
-        Y_ABORT_UNLESS(undelivered);
+        // Router callbacks can keep the actor in Stopping after poison. Gone
+        // marks completed shutdown without racing it with a client probe.
+        auto gone = Runtime->GrabEdgeEventRethrow<TEvents::TEvGone>(wardenEdge, TDuration::Seconds(30));
+        UNIT_ASSERT(gone);
     }
 
     void RestartDDisk(ui32 diskIdx) {

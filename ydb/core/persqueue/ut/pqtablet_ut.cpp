@@ -3556,13 +3556,9 @@ Y_UNIT_TEST_F(PlanStepAccepted_Order_Unknown_Before_Executed_Retransmit, TPQTabl
     WaitPlanStepAccepted({.Step=200});
 
     // Keep tx in Txs (EXECUTED / waiting RS acks) so a retransmit still hits the known path.
-    TVector<ui64> acceptedSteps;
     TVector<TAutoPtr<IEventHandle>> heldRequests;
     bool holdWriteTx = true;
     auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
-        if (auto* msg = event->CastAsLocal<TEvTxProcessing::TEvPlanStepAccepted>()) {
-            acceptedSteps.push_back(msg->Record.GetStep());
-        }
         if (holdWriteTx) {
             if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
                 if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
@@ -3574,30 +3570,21 @@ Y_UNIT_TEST_F(PlanStepAccepted_Order_Unknown_Before_Executed_Retransmit, TPQTabl
         return TTestActorRuntimeBase::EEventAction::PROCESS;
     });
 
-    // Lower all-unknown step first, then retransmit of the higher EXECUTED step.
+    // Both steps are in flight before we wait: unknown lower step, then EXECUTED retransmit.
     SendPlanStep({.Step=100, .TxIds={unknownTxId}});
     SendPlanStep({.Step=200, .TxIds={txId}});
 
-    {
-        TDispatchOptions options;
-        options.CustomFinalCondition = [&]() {
-            return acceptedSteps.size() >= 2;
-        };
-        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
-    }
+    // GrabEdgeEvent yields Accepteds in delivery order — 100 must come before 200.
+    WaitPlanStepAccepted({.Step=100});
+    WaitPlanStepAccepted({.Step=200});
+    WaitPlanStepAck({.Step=100, .TxIds={unknownTxId}});
+    WaitPlanStepAck({.Step=200, .TxIds={txId}});
 
-    UNIT_ASSERT_VALUES_EQUAL(acceptedSteps.size(), 2u);
-    UNIT_ASSERT_VALUES_EQUAL(acceptedSteps[0], 100u);
-    UNIT_ASSERT_VALUES_EQUAL(acceptedSteps[1], 200u);
-
-    // Both accepteds must arrive without a successful WRITE_TX cycle.
+    // Accepteds must arrive without a successful WRITE_TX cycle.
     UNIT_ASSERT(heldRequests.empty());
 
     holdWriteTx = false;
     Ctx->Runtime->SetObserverFunc(prev);
-
-    WaitPlanStepAck({.Step=100, .TxIds={unknownTxId}});
-    WaitPlanStepAck({.Step=200, .TxIds={txId}});
 }
 
 Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_After_Timeout, TPQTabletFixture)

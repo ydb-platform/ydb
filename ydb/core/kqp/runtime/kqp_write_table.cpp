@@ -456,11 +456,7 @@ public:
             , Alloc(std::move(alloc)) {
         AFL_ENSURE(MaxOperationBytes > 0);
 #ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK
-        AFL_VERIFY(TargetShardIds.has_value())
-            ("targetShardIdsHasValue", TargetShardIds.has_value())
-            ("targetShardIdsSize", TargetShardIds.has_value() ? TargetShardIds->size() : 0)
-            ("schemeEntryHasColumnTableInfo", schemeEntry.ColumnTableInfo != nullptr)
-            ("msg", "TargetShardIds must be set for OLAP writes with CS Write Affinity");
+        AFL_VERIFY(TargetShardIds.has_value());
 #endif
 #ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_EXPECTED_COUNT
         if (TargetShardIds.has_value()) {
@@ -484,6 +480,7 @@ public:
         AFL_ENSURE(shardingConclusion.GetResult() != nullptr);
         Sharding = shardingConclusion.DetachResult();
 
+#ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK
         // Invariant: IShardingBase::OrderedShardIds must match GetColumnShards() order.
         // kqp_tasks_graph.cpp assigns TargetShardIds[task_i] = GetColumnShards()[i],
         // and IShardingBase::MakeSharding maps bucket i → OrderedShardIds[i].
@@ -508,21 +505,21 @@ public:
                             " but IShardingBase::MakeSharding uses OrderedShardIds order; routing is broken");
             }
         }
+#endif
     }
 
     ~TColumnShardPayloadSerializer() {
         TGuard guard(*Alloc);
         UnpreparedBatches.clear();
         Batches.clear();
+#ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK
         if (TargetShardIds.has_value()) {
-            // ActualShardIds must be a subset of TargetShardIds: a task may
-            // receive no rows (empty ActualShardIds is allowed), but it must
-            // never receive rows for a shard it does not own.
-            AFL_VERIFY(std::all_of(ActualShardIds.begin(), ActualShardIds.end(),
+            AFL_VERIFY(std::all_of(ShardIds.begin(), ShardIds.end(),
                 [&](ui64 shardId) { return TargetShardIds->contains(shardId); }))
                 ("expected", GetTargetShardIdsDebugString())
-                ("actual", GetActualShardIdsDebugString());
+                ("actual", GetShardIdsDebugString(ShardIds));
         }
+#endif
     }
 
     void AddData(IDataBatchPtr&& batch) override {
@@ -543,36 +540,36 @@ public:
     }
 
     static TString GetShardIdsDebugString(const THashSet<ui64>& shardIds) {
-        TString result;
-        result += "{";
-        for (auto shardId : shardIds) {
-            if (result.size() > 1) {
-                result += ", ";
-            }
-            result += ToString(shardId);
-        }
-        result += "}";
-        return result;
+        return JoinSeq(", ", shardIds);
     }
-
-    TString GetActualShardIdsDebugString() const {
-        return GetShardIdsDebugString(ActualShardIds);
-    }
-
     TString GetTargetShardIdsDebugString() const {
-        TString result;
         if (!TargetShardIds.has_value()) {
-            return result;
+            return {};
         }
         return GetShardIdsDebugString(*TargetShardIds);
     }
 
-    void ShardAndFlushBatch(TRecordBatchPtr&& unshardedBatch, bool force) {
-        auto splitResult = Sharding->SplitByShardsToArrowBatches(unshardedBatch, NKikimr::NMiniKQL::GetArrowMemoryPool());
-        for (auto [shardId, shardBatch] : splitResult) {
+    THashMap<ui64, TRecordBatchPtr> SplitByShards(const TRecordBatchPtr& unshardedBatch) {
+        if (TargetShardIds.has_value() && TargetShardIds->size() == 1) {
+#ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK
+            auto splitResult = Sharding->SplitByShardsToArrowBatches(unshardedBatch, NKikimr::NMiniKQL::GetArrowMemoryPool());
+            AFL_VERIFY(splitResult.size() == 1)("actual", splitResult.size());
+            return splitResult;
+#else
+            THashMap<ui64, TRecordBatchPtr> result;
+            result[*TargetShardIds->begin()] = unshardedBatch;
+            return result;
+#endif
+        } else {
+            return Sharding->SplitByShardsToArrowBatches(unshardedBatch, NKikimr::NMiniKQL::GetArrowMemoryPool());
+        }
+    }
 
+    void ShardAndFlushBatch(TRecordBatchPtr&& unshardedBatch, bool force) {
+        auto splitResult = SplitByShards(unshardedBatch);
+        for (auto [shardId, shardBatch] : splitResult) {
+#ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK
             if (TargetShardIds.has_value()) {
-                //DO NOT REMOVE THESE CHECKS
                 AFL_VERIFY(TargetShardIds->contains(shardId))
                     ("shard_id", shardId)
                     ("target_shard_ids", GetTargetShardIdsDebugString())
@@ -587,9 +584,7 @@ public:
                     }())
                     ("msg", "row routed to wrong task — shard not in TargetShardIds");
             }
-
-            ActualShardIds.insert(shardId);
-
+#endif
             const i64 shardBatchMemory = NArrow::GetBatchDataSize(shardBatch);
             AFL_ENSURE(shardBatchMemory != 0);
 
@@ -734,8 +729,6 @@ public:
 private:
     std::shared_ptr<NSharding::IShardingBase> Sharding;
     std::optional<THashSet<ui64>> TargetShardIds;
-    THashSet<ui64> ActualShardIds;
-
 
     const TVector<TSysTables::TTableColumnInfo> Columns;
     const std::vector<ui32> WriteColumnIds;
@@ -1910,16 +1903,6 @@ public:
     void OnPartitioningChanged(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) override {
         IsOlap = true;
         SchemeEntry = schemeEntry;
-//DO NOT REMOVE THESE CHECKS
-#ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK
-        // Diagnostic: Verify TargetShardIds is set before creating serializer.
-        AFL_VERIFY(Settings.TargetShardIds.has_value())
-            ("targetShardIdsHasValue", Settings.TargetShardIds.has_value())
-            ("targetShardIdsSize", Settings.TargetShardIds.has_value() ? Settings.TargetShardIds->size() : 0)
-            ("schemeEntryHasColumnTableInfo", schemeEntry.ColumnTableInfo != nullptr)
-            ("hasSharding", schemeEntry.ColumnTableInfo && schemeEntry.ColumnTableInfo->Description.HasSharding())
-            ("msg", "TargetShardIds must be populated before OnPartitioningChanged for OLAP writes");
-#endif
         BeforePartitioningChanged();
         for (auto& [_, writeInfo] : WriteInfos) {
             writeInfo.Serializer = CreateColumnShardPayloadSerializer(

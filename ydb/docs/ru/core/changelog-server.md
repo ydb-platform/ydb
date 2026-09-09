@@ -19,7 +19,7 @@
 * Добавлен запуск принудительной [компакции таблицы](./yql/reference/syntax/alter_table/compact.md?version=main) с помощью `ALTER TABLE ... COMPACT`.
 * Добавлена автоматическая балансировка хранилища между группами и фоновая проверка корректности размещения дисков.
 * Ускорено изменение схемы партиционирования таблиц.
-* Добавлено аудитное логирование операций с топиками.
+* Добавлено [аудитное логирование](./security/audit-log.md?version=v26.2) операций с топиками.
 * Добавлен [встроенный сбор минидампов на базе Google Breakpad](./devops/observability/minidumps.md?version=v26.2) для узлов Linux.
 * Добавлена подкоманда [`ydb-dstool pdisk populate`](./reference/ydb-dstool/pdisk-populate.md?version=v26.2) для воспроизведения нагрузки PDisk на другом устройстве.
 

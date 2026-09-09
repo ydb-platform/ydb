@@ -19,7 +19,7 @@ Release date: September 2, 2026.
 * Added forced [table compaction](./yql/reference/syntax/alter_table/compact.md?version=main) using `ALTER TABLE ... COMPACT`.
 * Added automatic storage balancing between groups and background validation of disk placement.
 * Table partitioning schema changes are faster.
-* Added audit logging for topic operations.
+* Added [audit logging](./security/audit-log.md?version=v26.2) for topic operations.
 * Added [built-in minidump collection based on Google Breakpad](./devops/observability/minidumps.md?version=v26.2) for Linux nodes.
 * Added the [`ydb-dstool pdisk populate`](./reference/ydb-dstool/pdisk-populate.md?version=v26.2) subcommand for reproducing a PDisk workload on another device.
 

@@ -270,32 +270,6 @@ struct TTableAndSomeData {
 };
 
 namespace NJoinPackedTuples {
-
-// Walks a probe pack from resumeIndex. matchOne returns false to stay on this probe;
-// isFull after a finished probe moves to the next. Returns false if the pack is not done
-bool MatchProbePack(std::optional<TPackResult>& pack, ui32& resumeIndex, size_t& buildCursor, auto matchOne,
-                    auto isFull) {
-    MKQL_ENSURE(pack.has_value(), "probe pack is missing");
-    ui32 idx = 0;
-    for (TSingleTuple probe : *pack) {
-        if (idx++ < resumeIndex) {
-            continue;
-        }
-        if (!matchOne(probe, buildCursor)) {
-            resumeIndex = idx - 1;
-            return false;
-        }
-        if (isFull()) {
-            resumeIndex = idx;
-            return false;
-        }
-    }
-    pack = std::nullopt;
-    resumeIndex = 0;
-    buildCursor = 0;
-    return true;
-}
-
 template <typename Source> class TInMemoryHashJoin {
   public:
     using TTable = NJoinTable::TNeumannJoinTable;
@@ -339,33 +313,61 @@ template <typename Source> class TInMemoryHashJoin {
             return EFetchResult::Finish;
         }
 
-        auto lookupOne = [&](TSingleTuple probeTuple, size_t& buildCursor) {
-            return Table_.Lookup(probeTuple, buildCursor,
+        auto lookupOne = [&](TSingleTuple probeTuple) {
+            return Table_.Lookup(probeTuple, BuildCursor_,
                                  [&](TSingleTuple buildTuple) {
-                                     consumeOneOrTwoTuples(
-                                         TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
+                                     consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
+                                     return true;
                                  },
                                  isFull);
         };
 
-        if (!FetchedPack_.has_value()) {
-            if (Sources_.Probe.Finished()) {
-                return EFetchResult::Finish;
+        if (FetchedPack_.has_value()) {
+            ui32 idx = 0;
+            for (TSingleTuple probeTuple : *FetchedPack_) {
+                if (idx++ < ResumeIndex_) {
+                    continue;
+                }
+                if (!lookupOne(probeTuple)) {
+                    ResumeIndex_ = idx - 1;
+                    return EFetchResult::One;
+                }
+                if (isFull()) {
+                    ResumeIndex_ = idx;
+                    return EFetchResult::One;
+                }
             }
-            FetchResult<IBlockLayoutConverter::TPackResult> var = Sources_.Probe.FetchRow();
-            const NKikimr::NMiniKQL::EFetchResult resEnum = AsResult(var);
-            if (resEnum != EFetchResult::One) {
-                return resEnum;
-            }
-            FetchedPack_ = std::move(GetPayload(var));
+            FetchedPack_ = std::nullopt;
             ResumeIndex_ = 0;
-            BuildCursor_ = 0;
         }
 
-        if (!MatchProbePack(FetchedPack_, ResumeIndex_, BuildCursor_, lookupOne, isFull)) {
-            return EFetchResult::One;
+        if (!Sources_.Probe.Finished()) {
+            FetchResult<IBlockLayoutConverter::TPackResult> var = Sources_.Probe.FetchRow();
+            const NKikimr::NMiniKQL::EFetchResult resEnum = AsResult(var);
+
+            if (resEnum == EFetchResult::One) {
+                FetchedPack_ = std::move(GetPayload(var));
+                ResumeIndex_ = 0;
+                BuildCursor_ = 0;
+                ui32 idx = 0;
+                for (TSingleTuple probeTuple : *FetchedPack_) {
+                    idx++;
+                    if (!lookupOne(probeTuple)) {
+                        ResumeIndex_ = idx - 1;
+                        return EFetchResult::One;
+                    }
+                    if (isFull()) {
+                        ResumeIndex_ = idx;
+                        return EFetchResult::One;
+                    }
+                }
+                FetchedPack_ = std::nullopt;
+            }
+
+            return resEnum;
         }
-        return Sources_.Probe.Finished() ? EFetchResult::Finish : EFetchResult::One;
+
+        return EFetchResult::Finish;
     }
 
   private:
@@ -613,7 +615,6 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
             if constexpr (HasFilter) {
                 filter->StartProbeRow(probeRow);
             }
-            // A non-zero cursor means this probe already produced a match on a previous call
             [[maybe_unused]] bool found = buildCursor > 0;
             auto onMatch = [&](TSingleTuple tableMatch) -> bool {
                 if constexpr (HasFilter) {
@@ -810,24 +811,37 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                 default:
                     MKQL_ENSURE(false, "unhandled ESpillResult case");
                 }
-                auto matchOne = [&](TSingleTuple tuple, size_t& buildCursor) {
+                ui32 idx = 0;
+                for (TSingleTuple tuple : *state.FetchedPack) {
+                    if (idx++ < state.ResumeIndex) {
+                        continue;
+                    }
                     if constexpr (IsGrid) {
-                        return MatchGridRowInMemory(state, tuple, lookupToTable, isFull);
+                        if (!MatchGridRowInMemory(state, tuple, lookupToTable, isFull)) {
+                            state.ResumeIndex = idx - 1;
+                            return EFetchResult::One;
+                        }
                     } else {
                         int bucketIndex = Settings.BucketIndex(tuple);
-                        if (state.Spiller.IsBucketSpilled(bucketIndex)) {
-                            state.Spiller.AddRow(
-                                {.Val = tuple, .Side = ESide::Probe, .BucketIndex = bucketIndex});
-                            return true;
+                        bool thisBucketSpilled = state.Spiller.IsBucketSpilled(bucketIndex);
+                        if (thisBucketSpilled) {
+                            state.Spiller.AddRow({.Val = tuple, .Side = ESide::Probe, .BucketIndex = bucketIndex});
+                        } else {
+                            TTable* thisTable = std::get_if<TTable>(&state.Spiller.GetState().Buckets[bucketIndex]);
+                            MKQL_ENSURE(thisTable, "sanity check");
+                            if (!lookupToTable(*thisTable, tuple, state.BuildCursor)) {
+                                state.ResumeIndex = idx - 1;
+                                return EFetchResult::One;
+                            }
                         }
-                        TTable* thisTable = std::get_if<TTable>(&state.Spiller.GetState().Buckets[bucketIndex]);
-                        MKQL_ENSURE(thisTable, "sanity check");
-                        return lookupToTable(*thisTable, tuple, buildCursor);
                     }
-                };
-                if (!MatchProbePack(state.FetchedPack, state.ResumeIndex, state.BuildCursor, matchOne, isFull)) {
-                    return EFetchResult::One;
+                    if (isFull()) {
+                        state.ResumeIndex = idx;
+                        return EFetchResult::One;
+                    }
                 }
+                state.FetchedPack = std::nullopt;
+                state.ResumeIndex = 0;
             }
         } else if (auto* s = std::get_if<DumpRestOfPages>(&State_)) {
             DumpRestOfPages& state = *s;
@@ -887,13 +901,22 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                         table->Futures.push_back(keepProbeBlobs ? Spiller_->Get(key) : Spiller_->Extract(key));
                     }
                     if (table->CurrentProbePack.has_value()) {
-                        auto matchOne = [&](TSingleTuple probeTuple, size_t& buildCursor) {
-                            return lookupToTable(table->Table, probeTuple, buildCursor);
-                        };
-                        if (!MatchProbePack(table->CurrentProbePack, table->ProbeResumeIndex, table->BuildCursor,
-                                            matchOne, isFull)) {
-                            return EFetchResult::One;
+                        ui32 idx = 0;
+                        for (TSingleTuple probeTuple : *table->CurrentProbePack) {
+                            if (idx++ < table->ProbeResumeIndex) {
+                                continue;
+                            }
+                            if (!lookupToTable(table->Table, probeTuple, table->BuildCursor)) {
+                                table->ProbeResumeIndex = idx - 1;
+                                return EFetchResult::One;
+                            }
+                            if (isFull()) {
+                                table->ProbeResumeIndex = idx;
+                                return EFetchResult::One;
+                            }
                         }
+                        table->CurrentProbePack = std::nullopt;
+                        table->ProbeResumeIndex = 0;
                     } else if (table->Futures.empty()) {
                         MKQL_ENSURE(currentProbe.empty(), "sanity check");
                         if constexpr (PreservedRowsInBuildTable() && Join.Kind != EJoinKind::LeftSemi) {
@@ -906,7 +929,6 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                         if (table->Futures.front().IsReady()) {
                             table->CurrentProbePack = GetPage(*GetFrontOrNull(table->Futures), ESide::Probe);
                             table->ProbeResumeIndex = 0;
-                            table->BuildCursor = 0;
                         } else {
                             return WaitWhileSpilling();
                         }

@@ -455,8 +455,14 @@ class TNeumannHashTable {
         return Buffer_.empty();
     }
 
-    // Void onMatch visits every match. If onMatch returns bool, false stops the scan
     void Apply(const ui8 *const row, const ui8 *const overflow, auto onMatch) const {
+        size_t slot = 0;
+        Apply(row, overflow, slot, onMatch);
+    }
+
+    // slot is the next directory slot of this key. If onMatch returns bool, false stops
+    // the scan and leaves slot at the next slot to visit
+    void Apply(const ui8 *const row, const ui8 *const overflow, size_t& slot, auto onMatch) const {
         MKQL_ENSURE(Layout_ != nullptr, "sanity check");
         MKQL_ENSURE(!Directories_.empty() && Tuples_ != nullptr, "lookup to empty table?");
 
@@ -489,8 +495,11 @@ class TNeumannHashTable {
         };
 
         if constexpr (!ConsecutiveDuplicates) {
-            for (auto it = begin; it != end; it += BufferSlotSize_) {
+            const ui8* it = begin + slot * BufferSlotSize_;
+            MKQL_ENSURE(it <= end, "Apply resume past the end of the directory");
+            for (; it != end; it += BufferSlotSize_) {
                 if (GetRowMatch(it, row, overflow, &matchedRow) && !visit(matchedRow)) {
+                    slot = (it - begin) / BufferSlotSize_ + 1;
                     return;
                 }
             }

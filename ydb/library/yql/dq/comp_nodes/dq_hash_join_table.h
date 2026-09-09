@@ -4,8 +4,6 @@
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/neumann_hash_table.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_rh_hash.h>
 
-#include <type_traits>
-
 namespace NKikimr::NMiniKQL::NJoinTable {
 
 using TTuple = const NYql::NUdf::TUnboxedValue*;
@@ -122,29 +120,21 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
 
     void Lookup(TSingleTuple row, std::invocable<TSingleTuple> auto consume) {
         size_t resumeIndex = 0;
-        Lookup(row, resumeIndex, consume, [] { return false; });
+        Lookup(row, resumeIndex, [&](TSingleTuple match) {
+            consume(match);
+            return true;
+        }, [] { return false; });
     }
 
-    // resumeIndex is how many matches of this probe were already consumed
+    // resumeIndex is the next directory slot of this probe
     bool Lookup(TSingleTuple row, size_t& resumeIndex, auto consume, std::predicate auto isFull) {
         if (Empty()) {
             resumeIndex = 0;
             return true;
         }
         bool full = false;
-        size_t seen = 0;
-        Table_.Apply(row.PackedData, row.OverflowBegin, [&](const ui8* packed) {
-            if (seen++ < resumeIndex) {
-                return true;
-            }
-            const TSingleTuple match{packed, BuildData_.Overflow.data()};
-            bool keep = true;
-            if constexpr (std::is_void_v<decltype(consume(match))>) {
-                consume(match);
-            } else {
-                keep = bool(consume(match));
-            }
-            resumeIndex = seen;
+        Table_.Apply(row.PackedData, row.OverflowBegin, resumeIndex, [&](const ui8* packed) {
+            const bool keep = consume(TSingleTuple{packed, BuildData_.Overflow.data()});
             full = isFull();
             return keep && !full;
         });

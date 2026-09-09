@@ -176,6 +176,7 @@ public:
         context.MemChanges.GrabNewPath(context.SS, allocatedPathId);
         context.MemChanges.GrabPath(context.SS, rootPath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
+        context.MemChanges.GrabNewBackupCollection(context.SS, allocatedPathId);
         context.MemChanges.GrabDomain(context.SS, rootPath.GetPathIdForDomain());
 
         context.DbChanges.PersistPath(allocatedPathId);
@@ -190,7 +191,6 @@ public:
         }
 
         auto backupCollection = TBackupCollectionInfo::Create(desc);
-        context.MemChanges.GrabNewBackupCollection(context.SS, allocatedPathId);
         context.SS->BackupCollections.Set(allocatedPathId, backupCollection);
         context.SS->RegisterBackupCollectionTables(backupCollection);
 

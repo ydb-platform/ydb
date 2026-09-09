@@ -315,6 +315,7 @@ public:
             return result;
         }
 
+        context.MemChanges.GrabKesusInfo(context.SS, path.Base()->PathId);
         auto kesus = context.SS->KesusInfos.Update(path.Base()->PathId);
         Y_ABORT_UNLESS(kesus);
         Y_ABORT_UNLESS(path.Base()->IsCreateFinished()); // checks.NotUnderOperation checks that path not under creation
@@ -331,10 +332,6 @@ public:
             return result;
         }
 
-        context.MemChanges.RecordUndo([kesus, version = kesus->AlterVersion]() {
-            kesus->AlterConfig.Reset();
-            kesus->AlterVersion = version;
-        });
         kesus->AlterConfig.Reset(new Ydb::Coordination::Config);
         kesus->AlterConfig->CopyFrom(kesus->Config);
         kesus->AlterConfig->MergeFrom(*alterConfig);

@@ -303,6 +303,7 @@ public:
         context.MemChanges.GrabPath(context.SS, tablePath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
         context.MemChanges.GrabDomain(context.SS, streamPath.GetPathIdForDomain());
+        context.MemChanges.GrabNewCdcStream(context.SS, pathId);
 
         context.DbChanges.PersistPath(pathId);
         context.DbChanges.PersistPath(tablePath.Base()->PathId);
@@ -330,7 +331,6 @@ public:
         streamPath.Base()->PathType = TPathElement::EPathType::EPathTypeCdcStream;
         streamPath.Base()->UserAttrs->AlterData = userAttrs;
 
-        context.MemChanges.GrabNewCdcStream(context.SS, pathId);
         context.SS->CdcStreams.Set(pathId, stream);
 
         streamPath.DomainInfo()->IncPathsInside(context.SS);

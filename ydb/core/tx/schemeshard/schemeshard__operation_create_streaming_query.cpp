@@ -157,6 +157,7 @@ class TCreateStreamingQuery : public TSubOperation {
 
     void PersistCreateStreamingQuery(const TPathId& parentPathId, const TPathId& streamingQueryPathId, const TOperationContext& context) const {
         context.MemChanges.GrabNewPath(context.SS, streamingQueryPathId);
+        context.MemChanges.GrabNewStreamingQuery(context.SS, streamingQueryPathId);
         context.MemChanges.GrabPath(context.SS, parentPathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
@@ -205,7 +206,6 @@ class TCreateStreamingQuery : public TSubOperation {
             .AlterVersion = 1,
             .Properties = Transaction.GetCreateStreamingQuery().GetProperties(),
         });
-        context.MemChanges.GrabNewStreamingQuery(context.SS, dstPath.Base()->PathId);
         context.SS->StreamingQueries.Set(dstPath.Base()->PathId, streamingQueryInfo);
     }
 

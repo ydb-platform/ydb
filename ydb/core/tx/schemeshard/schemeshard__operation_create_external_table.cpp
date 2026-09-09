@@ -288,6 +288,7 @@ public:
         context.MemChanges.GrabNewPath(context.SS, newPathId);
         context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
         context.MemChanges.GrabPath(context.SS, dataSourcePath.Base()->PathId);
+        context.MemChanges.GrabNewExternalTable(context.SS, newPathId);
         context.MemChanges.GrabExternalDataSource(context.SS, dataSourcePath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
@@ -310,7 +311,6 @@ public:
                                                 externalTable,
                                                 dstPath);
 
-        context.MemChanges.GrabNewExternalTable(context.SS, newPathId);
         context.SS->ExternalTables.Set(newPathId, externalTableInfo);
         if (!acl.empty()) {
             externalTable->ApplyACL(acl);

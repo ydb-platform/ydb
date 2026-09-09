@@ -227,6 +227,7 @@ public:
         context.MemChanges.GrabNewPath(context.SS, allocatedPathId);
         context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
+        context.MemChanges.GrabNewIndex(context.SS, allocatedPathId);
 
         context.DbChanges.PersistPath(allocatedPathId);
         context.DbChanges.PersistPath(parentPath.Base()->PathId);
@@ -249,7 +250,6 @@ public:
         newIndexPath->LastTxId = OperationId.GetTxId();
         newIndexPath->PathType = TPathElement::EPathType::EPathTypeTableIndex;
 
-        context.MemChanges.GrabNewIndex(context.SS, newIndexPath->PathId);
         context.SS->Indexes.Set(newIndexPath->PathId, newIndexData);
 
         if (!acl.empty()) {

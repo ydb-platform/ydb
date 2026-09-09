@@ -142,6 +142,7 @@ public:
 
                 // Get coordinated version from source table's AlterData (shared across both drop and create)
                 auto& srcTable = context.SS->Tables.Update(txState->SourcePathId);
+                context.MemChanges.GrabTable(context.SS, txState->SourcePathId);
                 srcTable->InitAlterData(OperationId);
                 ui64 coordVersion = srcTable->AlterData->CoordinatedSchemaVersion.GetOrElse(srcTable->AlterVersion + 1);
 
@@ -305,6 +306,7 @@ public:
 
             if (hasCdcChanges && context.SS->Tables.contains(srcPathId)) {
                 auto& srcTable = context.SS->Tables.Update(srcPathId);
+                context.MemChanges.GrabTable(context.SS, srcPathId);
 
                 // Don't call InitAlterData() here - it was already called in ConfigureParts,
                 // and calling it again after another subop's Done() updated AlterVersion
@@ -326,6 +328,7 @@ public:
                     auto parentPath = context.SS->PathsById.at(parentPathId);
                     if (parentPath->IsTableIndex() && context.SS->Indexes.contains(parentPathId)) {
                         auto& index = context.SS->Indexes.Update(parentPathId);
+                        context.MemChanges.GrabIndex(context.SS, parentPathId);
                         if (index->AlterVersion < srcTable->AlterVersion) {
                             index->AlterVersion = srcTable->AlterVersion;
                             if (index->AlterData && index->AlterData->AlterVersion < srcTable->AlterVersion) {
@@ -349,6 +352,7 @@ public:
                     }
                     if (context.SS->Indexes.contains(childPathId)) {
                         auto& index = context.SS->Indexes.Update(childPathId);
+                        context.MemChanges.GrabIndex(context.SS, childPathId);
                         if (index->AlterVersion < srcTable->AlterVersion) {
                             index->AlterVersion = srcTable->AlterVersion;
                             if (index->AlterData && index->AlterData->AlterVersion < srcTable->AlterVersion) {
@@ -367,6 +371,7 @@ public:
 
             if (txState->CdcPathId != InvalidPathId && context.SS->CdcStreams.contains(txState->CdcPathId)) {
                 auto& stream = context.SS->CdcStreams.Update(txState->CdcPathId);
+                context.MemChanges.GrabCdcStream(context.SS, txState->CdcPathId);
                 if (stream->AlterData) {
                     stream->FinishAlter();
                     context.SS->PersistCdcStream(db, txState->CdcPathId);
@@ -383,6 +388,7 @@ public:
                         streamPath->PathState == TPathElement::EPathState::EPathStateDrop &&
                         streamPath->DropTxId == OperationId.GetTxId()) {
 
+                        context.MemChanges.GrabCdcStream(context.SS, id);
 
                         context.SS->PersistRemoveCdcStream(db, id);
                         context.SS->CdcStreams.erase(id);
@@ -709,6 +715,7 @@ public:
                 }
 
                 context.MemChanges.GrabPath(context.SS, oldStreamPath.Base()->PathId);
+                context.MemChanges.GrabCdcStream(context.SS, oldStreamPath.Base()->PathId);
 
                 oldStreamPath.Base()->PathState = TPathElement::EPathState::EPathStateDrop;
                 oldStreamPath.Base()->LastTxId = OperationId.GetTxId();
@@ -806,6 +813,7 @@ public:
         context.MemChanges.GrabPath(context.SS, srcPath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
         context.MemChanges.GrabDomain(context.SS, parent.GetPathIdForDomain());
+        context.MemChanges.GrabNewTable(context.SS, allocatedPathId);
 
         context.DbChanges.PersistPath(allocatedPathId);
         context.DbChanges.PersistPath(parent.Base()->PathId);
@@ -864,7 +872,6 @@ public:
 
         Y_ABORT_UNLESS(tableInfo->GetPartitions().back()->EndOfRange.empty(), "End of last range must be +INF");
 
-        context.MemChanges.GrabNewTable(context.SS, newTable->PathId);
         context.SS->Tables.Set(newTable->PathId, tableInfo);
 
         if (parent.Base()->HasActiveChanges()) {

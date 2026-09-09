@@ -221,7 +221,6 @@ public:
 
 
         Y_ABORT_UNLESS(context.SS->CdcStreams.contains(oldStreamPath.Base()->PathId));
-        context.MemChanges.GrabCdcStream(context.SS, oldStreamPath.Base()->PathId);
         auto oldStream = context.SS->CdcStreams.Update(oldStreamPath.Base()->PathId);
 
         TCdcStreamInfo::EState requiredState = TCdcStreamInfo::EState::ECdcStreamStateDisabled;
@@ -355,6 +354,7 @@ public:
 
         auto guard = context.DbGuard();
         context.MemChanges.GrabPath(context.SS, oldStreamPath.Base()->PathId);
+        context.MemChanges.GrabCdcStream(context.SS, oldStreamPath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         const auto pathId = context.SS->AllocatePathId();
@@ -362,6 +362,7 @@ public:
         context.MemChanges.GrabPath(context.SS, tablePath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
         context.MemChanges.GrabDomain(context.SS, newStreamPath.GetPathIdForDomain());
+        context.MemChanges.GrabNewCdcStream(context.SS, pathId);
 
         context.DbChanges.PersistPath(oldStreamPath.Base()->PathId);
         context.DbChanges.PersistAlterCdcStream(oldStreamPath.Base()->PathId);
@@ -398,7 +399,6 @@ public:
         newStreamPath.Base()->PathType = TPathElement::EPathType::EPathTypeCdcStream;
         newStreamPath.Base()->UserAttrs->AlterData = userAttrs;
 
-        context.MemChanges.GrabNewCdcStream(context.SS, pathId);
         context.SS->CdcStreams.Set(pathId, newStream);
 
         newStreamPath.DomainInfo()->IncPathsInside(context.SS);

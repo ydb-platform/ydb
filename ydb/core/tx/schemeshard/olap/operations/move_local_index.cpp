@@ -329,6 +329,7 @@ public:
         context.MemChanges.GrabPath(context.SS, mainTablePath.Base()->PathId);
         context.MemChanges.GrabPath(context.SS, srcPath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
+        context.MemChanges.GrabNewIndex(context.SS, allocatedPathId);
 
         context.DbChanges.PersistPath(allocatedPathId);
         context.DbChanges.PersistPath(mainTablePath.Base()->PathId);
@@ -354,7 +355,6 @@ public:
         srcPath.Base()->DropTxId = OperationId.GetTxId();
         srcPath.Base()->LastTxId = OperationId.GetTxId();
 
-        context.MemChanges.GrabNewIndex(context.SS, newIndexPath->PathId);
         context.SS->Indexes.Set(newIndexPath->PathId, newIndexData);
 
         context.OnComplete.ActivateTx(OperationId);

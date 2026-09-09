@@ -203,6 +203,7 @@ public:
 
         context.MemChanges.GrabNewPath(context.SS, newPathId);
         context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        context.MemChanges.GrabNewExternalDataSource(context.SS, newPathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         context.DbChanges.PersistPath(newPathId);
@@ -219,7 +220,6 @@ public:
         externalDataSource->PathState = TPathElement::EPathState::EPathStateCreate;
         externalDataSource->LastTxId  = OperationId.GetTxId();
 
-        context.MemChanges.GrabNewExternalDataSource(context.SS, newPathId);
         context.SS->ExternalDataSources.Set(newPathId, externalDataSourceInfo);
         if (!acl.empty()) {
             externalDataSource->ApplyACL(acl);

@@ -152,7 +152,6 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->Secrets.contains(secretPath.Base()->PathId));
-        context.MemChanges.GrabSecret(context.SS, secretPath.Base()->PathId);
         auto secretInfo = context.SS->Secrets.Update(secretPath.Base()->PathId);
 
         if (secretInfo->AlterVersion == 0) {
@@ -172,6 +171,7 @@ public:
         }
 
         context.MemChanges.GrabPath(context.SS, secretPath.Base()->PathId);
+        context.MemChanges.GrabSecret(context.SS, secretPath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         context.DbChanges.PersistPath(secretPath.Base()->PathId);

@@ -188,6 +188,7 @@ public:
         const auto viewPathId = context.SS->AllocatePathId();
         context.MemChanges.GrabNewPath(context.SS, viewPathId);
         context.MemChanges.GrabPath(context.SS, parentPath->PathId);
+        context.MemChanges.GrabNewView(context.SS, viewPathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         context.DbChanges.PersistPath(viewPathId);
@@ -215,7 +216,6 @@ public:
             result->SetStatus(NKikimrScheme::StatusInvalidParameter);
             return result;
         }
-        context.MemChanges.GrabNewView(context.SS, viewPathId);
         context.SS->Views.Set(viewPathId, viewInfo);
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateView, viewPathId);

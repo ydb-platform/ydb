@@ -230,6 +230,7 @@ public:
         const auto secretPathId = context.SS->AllocatePathId();
         context.MemChanges.GrabNewPath(context.SS, secretPathId);
         context.MemChanges.GrabPath(context.SS, parentPath->PathId);
+        context.MemChanges.GrabNewSecret(context.SS, secretPathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         context.DbChanges.PersistPath(secretPathId);
@@ -281,7 +282,6 @@ public:
         secretDescription.SetValue(createSecretProto.GetValue());
 
         const auto secretInfo = TSecretInfo::Create(std::move(secretDescription));
-        context.MemChanges.GrabNewSecret(context.SS, secretPathId);
         context.SS->Secrets.Set(secretPathId, secretInfo);
 
         NIceDb::TNiceDb db(context.GetDB());

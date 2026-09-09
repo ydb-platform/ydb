@@ -161,7 +161,6 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->CdcStreams.contains(streamPath.Base()->PathId));
-        context.MemChanges.GrabCdcStream(context.SS, streamPath.Base()->PathId);
         auto stream = context.SS->CdcStreams.Update(streamPath.Base()->PathId);
 
         TCdcStreamInfo::EState requiredState = TCdcStreamInfo::EState::ECdcStreamStateInvalid;
@@ -196,6 +195,7 @@ public:
 
         auto guard = context.DbGuard();
         context.MemChanges.GrabPath(context.SS, streamPath.Base()->PathId);
+        context.MemChanges.GrabCdcStream(context.SS, streamPath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         context.DbChanges.PersistPath(streamPath.Base()->PathId);

@@ -88,22 +88,22 @@ Y_UNIT_TEST_SUITE(TDbRefMapTest) {
             second->AlterVersion = 20;
 
             TMemoryChanges changes;
-            changes.Arm(&ss);
+
             changes.GrabPath(&ss, pathId);
             changes.GrabNewTable(&ss, pathId);
             ss.Tables.Set(pathId, first);
-            changes.RecordUndo([first]() { first->AlterVersion = 10; });
+            changes.GrabTable(&ss, pathId);
             first->AlterVersion = 11;
             changes.GrabTable(&ss, pathId);
             ss.Tables.Set(pathId, second);
-            changes.RecordUndo([second]() { second->AlterVersion = 20; });
+            changes.GrabTable(&ss, pathId);
             second->AlterVersion = 21;
             UNIT_ASSERT_VALUES_EQUAL(ss.PathsById.at(pathId)->DbRefCount, initialRefs + 1);
 
             changes.UnDo(&ss);
-            changes.Disarm();
+
             // Paths restore the count first. Undoing the insertion must not
-            // decrement it again; mutation callbacks restore their own objects.
+            // decrement it again; typed snapshots restore their own objects.
             UNIT_ASSERT(!ss.Tables.contains(pathId));
             UNIT_ASSERT_VALUES_EQUAL(ss.PathsById.at(pathId)->DbRefCount, initialRefs);
             UNIT_ASSERT_VALUES_EQUAL(first->AlterVersion, 10);
@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(TDbRefMapTest) {
         });
     }
 
-    Y_UNIT_TEST(ReplacementAndFieldUndoShareReverseOrder) {
+    Y_UNIT_TEST(ReplacementAndSnapshotsShareReverseOrder) {
         WithSchemeShard([](TSchemeShard& ss, const TPathId& pathId) {
             auto first = MakeIntrusive<TTableInfo>();
             auto second = MakeIntrusive<TTableInfo>();
@@ -121,17 +121,17 @@ Y_UNIT_TEST_SUITE(TDbRefMapTest) {
             const auto initialRefs = ss.PathsById.at(pathId)->DbRefCount;
 
             TMemoryChanges changes;
-            changes.Arm(&ss);
+
             changes.GrabPath(&ss, pathId);
-            changes.RecordUndo([first]() { first->AlterVersion = 10; });
+            changes.GrabTable(&ss, pathId);
             ss.Tables.Update(pathId)->AlterVersion = 11;
             changes.GrabTable(&ss, pathId);
             ss.Tables.Set(pathId, second);
-            changes.RecordUndo([second]() { second->AlterVersion = 20; });
+            changes.GrabTable(&ss, pathId);
             ss.Tables.Update(pathId)->AlterVersion = 21;
 
             changes.UnDo(&ss);
-            changes.Disarm();
+
             UNIT_ASSERT_EQUAL(ss.Tables.at(pathId).Get(), first.Get());
             UNIT_ASSERT_VALUES_EQUAL(first->AlterVersion, 10);
             UNIT_ASSERT_VALUES_EQUAL(second->AlterVersion, 20);
@@ -148,26 +148,21 @@ Y_UNIT_TEST_SUITE(TDbRefMapTest) {
             table->AlterData = previous;
             ss.Tables.Set(pathId, table);
             const auto* alias = table.Get();
-            const auto* partition = table->GetPartitions().front();
-            const auto* stats = &table->GetStats().PartitionStats.at(partition->ShardIdx);
-
             TMemoryChanges changes;
-            changes.Arm(&ss);
+
             auto writable = ss.Tables.Update(pathId);
-            changes.RecordUndo([writable, previous = writable->AlterData]() {
-                writable->AlterData = previous;
-            });
+            changes.GrabTable(&ss, pathId);
             auto candidate = MakeIntrusive<TTableInfo::TAlterTableInfo>();
             candidate->AlterVersion = table->AlterVersion + 1;
             writable->PrepareAlter(candidate);
             UNIT_ASSERT_EQUAL(table->AlterData.Get(), candidate.Get());
 
             changes.UnDo(&ss);
-            changes.Disarm();
+
             UNIT_ASSERT_EQUAL(ss.Tables.at(pathId).Get(), alias);
             UNIT_ASSERT_EQUAL(alias->AlterData.Get(), previous.Get());
-            UNIT_ASSERT_EQUAL(alias->GetPartitions().front(), partition);
-            UNIT_ASSERT_EQUAL(&alias->GetStats().PartitionStats.at(partition->ShardIdx), stats);
+            UNIT_ASSERT_VALUES_EQUAL(alias->GetPartitions().size(), 2);
+            alias->VerifyConsistency();
             ss.Tables.erase(pathId);
         });
     }
@@ -185,7 +180,7 @@ Y_UNIT_TEST_SUITE(TDbRefMapTest) {
             const auto initialOwners = table.RefCount();
 
             TMemoryChanges changes;
-            changes.Arm(&ss);
+
             changes.GrabTable(&ss, pathId);
             table->AlterVersion = 20;
             table->AlterData = MakeIntrusive<TTableInfo::TAlterTableInfo>();
@@ -194,7 +189,7 @@ Y_UNIT_TEST_SUITE(TDbRefMapTest) {
             table->SetPartitioning(MakeShards(2, 2));
             ss.Tables.Set(pathId, MakeIntrusive<TTableInfo>());
             changes.UnDo(&ss);
-            changes.Disarm();
+
 
             UNIT_ASSERT_EQUAL(ss.Tables.at(pathId).Get(), table.Get());
             UNIT_ASSERT_EQUAL(ss.TTLEnabledTables.at(pathId).Get(), table.Get());
@@ -221,18 +216,150 @@ Y_UNIT_TEST_SUITE(TDbRefMapTest) {
             ss.Tables.Set(pathId, table);
 
             TMemoryChanges changes;
-            changes.Arm(&ss);
+
             changes.GrabTable(&ss, pathId);
             table->AlterVersion = 20;
             changes.GrabTable(&ss, pathId);
             table->AlterVersion = 30;
             changes.UnDo(&ss);
-            changes.Disarm();
+
 
             UNIT_ASSERT_EQUAL(ss.Tables.at(pathId).Get(), table.Get());
             UNIT_ASSERT_VALUES_EQUAL(table->AlterVersion, 10);
             table->VerifyConsistency();
             ss.Tables.erase(pathId);
+        });
+    }
+
+    Y_UNIT_TEST(TopicSnapshotOwnsPartitionsAndRestoresGraph) {
+        WithSchemeShard([](TSchemeShard& ss, const TPathId& pathId) {
+            const TShardIdx shardId(1, 1);
+            auto topic = MakeIntrusive<TTopicInfo>();
+            for (ui32 id = 0; id < 2; ++id) {
+                auto part = MakeHolder<TTopicTabletInfo::TTopicPartitionInfo>();
+                part->PqId = id;
+                part->CreateVersion = 1;
+                part->AlterVersion = 1;
+                if (id == 1) {
+                    part->ParentPartitionIds.insert(0);
+                }
+                topic->AddPartition(shardId, part.Release());
+            }
+            topic->InitSplitMergeGraph();
+            topic->Partitions.at(0)->KeyRange.ConstructInPlace();
+            topic->Partitions.at(0)->KeyRange->FromBound = "before";
+            ss.Topics.Set(pathId, topic);
+            const auto initialRefs = ss.PathsById.at(pathId)->DbRefCount;
+
+            TMemoryChanges changes;
+            changes.GrabTopic(&ss, pathId);
+            topic->Partitions.at(0)->KeyRange->FromBound = "after";
+            topic->Partitions.at(0)->Status = NKikimrPQ::ETopicPartitionStatus::Inactive;
+            topic->Partitions.at(0)->ChildPartitionIds.clear();
+            topic->Partitions.at(1)->ParentPartitionIds.clear();
+            topic->AlterData = MakeIntrusive<TTopicInfo>();
+            auto added = MakeHolder<TTopicTabletInfo::TTopicPartitionInfo>();
+            added->PqId = 2;
+            added->CreateVersion = 2;
+            topic->AddPartition(TShardIdx(1, 2), added.Release());
+            // Release every original partition before restoring the snapshot.
+            topic->Partitions.clear();
+            topic->Shards.clear();
+            changes.UnDo(&ss);
+
+            auto restored = ss.Topics.at(pathId);
+            UNIT_ASSERT_VALUES_EQUAL(restored->Shards.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(restored->Partitions.size(), 2);
+            UNIT_ASSERT(!restored->AlterData);
+            const auto* parent = restored->Partitions.at(0);
+            UNIT_ASSERT_VALUES_EQUAL(*parent->KeyRange->FromBound, "before");
+            UNIT_ASSERT_EQUAL(parent->Status, NKikimrPQ::ETopicPartitionStatus::Active);
+            UNIT_ASSERT(parent->ChildPartitionIds.contains(1));
+            UNIT_ASSERT(restored->Partitions.at(1)->ParentPartitionIds.contains(0));
+            for (const auto& part : restored->Shards.at(shardId)->Partitions) {
+                UNIT_ASSERT_EQUAL(restored->Partitions.at(part->PqId), part.Get());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(ss.PathsById.at(pathId)->DbRefCount, initialRefs);
+            ss.Topics.erase(pathId);
+        });
+    }
+
+    Y_UNIT_TEST(VolumeSnapshotsRestoreTokensAndOwnedPartitions) {
+        WithSchemeShard([](TSchemeShard& ss, const TPathId& pathId) {
+            const TShardIdx shardId(1, 1);
+            auto volume = MakeIntrusive<TBlockStoreVolumeInfo>();
+            volume->MountToken = "before";
+            volume->TokenVersion = 3;
+            volume->Shards[shardId] = MakeIntrusive<TBlockStorePartitionInfo>();
+            volume->Shards.at(shardId)->PartitionId = 7;
+            auto solomon = MakeIntrusive<TSolomonVolumeInfo>(4);
+            solomon->Partitions[shardId] = MakeIntrusive<TSolomonPartitionInfo>(8);
+            ss.BlockStoreVolumes.Set(pathId, volume);
+            ss.SolomonVolumes.Set(pathId, solomon);
+
+            TMemoryChanges changes;
+            changes.GrabBlockStoreVolume(&ss, pathId);
+            changes.GrabSolomonVolume(&ss, pathId);
+            volume->MountToken = "after";
+            ++volume->TokenVersion;
+            volume->Shards.at(shardId)->PartitionId = 99;
+            volume->Shards[TShardIdx(1, 2)] = MakeIntrusive<TBlockStorePartitionInfo>();
+            volume->AlterData = MakeIntrusive<TBlockStoreVolumeInfo>();
+            solomon->Partitions.at(shardId)->PartitionId = 99;
+            solomon->AlterData = solomon->CreateAlter();
+            changes.UnDo(&ss);
+
+            auto restored = ss.BlockStoreVolumes.at(pathId);
+            UNIT_ASSERT_VALUES_EQUAL(restored->MountToken, "before");
+            UNIT_ASSERT_VALUES_EQUAL(restored->TokenVersion, 3);
+            UNIT_ASSERT_VALUES_EQUAL(restored->Shards.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(restored->Shards.at(shardId)->PartitionId, 7);
+            UNIT_ASSERT(!restored->AlterData);
+            UNIT_ASSERT_VALUES_EQUAL(ss.SolomonVolumes.at(pathId)->Partitions.at(shardId)->PartitionId, 8);
+            UNIT_ASSERT(!ss.SolomonVolumes.at(pathId)->AlterData);
+            ss.BlockStoreVolumes.erase(pathId);
+            ss.SolomonVolumes.erase(pathId);
+        });
+    }
+
+    Y_UNIT_TEST(ConfigSnapshotsCopyOwnedAlterConfigs) {
+        WithSchemeShard([](TSchemeShard& ss, const TPathId& pathId) {
+            auto fs = MakeIntrusive<TFileStoreInfo>();
+            fs->Version = 4;
+            fs->AlterVersion = 5;
+            fs->AlterConfig = MakeHolder<NKikimrFileStore::TConfig>();
+            fs->AlterConfig->SetBlockSize(4096);
+            auto kesus = MakeIntrusive<TKesusInfo>();
+            kesus->Version = 6;
+            kesus->AlterVersion = 7;
+            kesus->AlterConfig = MakeHolder<Ydb::Coordination::Config>();
+            kesus->AlterConfig->set_path("before");
+            auto replication = MakeIntrusive<TReplicationInfo>(8);
+            ss.FileStoreInfos.Set(pathId, fs);
+            ss.KesusInfos.Set(pathId, kesus);
+            ss.Replications.Set(pathId, replication);
+
+            TMemoryChanges changes;
+            changes.GrabFileStoreInfo(&ss, pathId);
+            changes.GrabKesusInfo(&ss, pathId);
+            changes.GrabReplication(&ss, pathId);
+            UNIT_ASSERT(fs->AlterConfig);
+            UNIT_ASSERT(kesus->AlterConfig);
+            fs->AlterConfig->SetBlockSize(8192);
+            ++fs->AlterVersion;
+            kesus->AlterConfig->set_path("after");
+            ++kesus->AlterVersion;
+            replication->CreateNextVersion();
+            changes.UnDo(&ss);
+
+            UNIT_ASSERT_VALUES_EQUAL(ss.FileStoreInfos.at(pathId)->AlterConfig->GetBlockSize(), 4096);
+            UNIT_ASSERT_VALUES_EQUAL(ss.FileStoreInfos.at(pathId)->AlterVersion, 5);
+            UNIT_ASSERT_VALUES_EQUAL(ss.KesusInfos.at(pathId)->AlterConfig->path(), "before");
+            UNIT_ASSERT_VALUES_EQUAL(ss.KesusInfos.at(pathId)->AlterVersion, 7);
+            UNIT_ASSERT(!ss.Replications.at(pathId)->AlterData);
+            ss.FileStoreInfos.erase(pathId);
+            ss.KesusInfos.erase(pathId);
+            ss.Replications.erase(pathId);
         });
     }
 
@@ -249,7 +376,7 @@ Y_UNIT_TEST_SUITE(TDbRefMapTest) {
             const auto alterOwners = table->AlterData.RefCount();
 
             TMemoryChanges changes;
-            changes.Arm(&ss);
+
             for (ui32 i = 0; i < 256; ++i) {
                 const auto& writable = ss.Tables.Update(pathId);
                 UNIT_ASSERT_EQUAL(writable.Get(), table.Get());
@@ -259,7 +386,7 @@ Y_UNIT_TEST_SUITE(TDbRefMapTest) {
                 UNIT_ASSERT_VALUES_EQUAL(writable->AlterData.RefCount(), alterOwners);
             }
             changes.UnDo(&ss);
-            changes.Disarm();
+
             UNIT_ASSERT_EQUAL(ss.Tables.at(pathId).Get(), table.Get());
             UNIT_ASSERT_EQUAL(table->GetPartitions().front(), partition);
             UNIT_ASSERT_EQUAL(&table->GetStats().PartitionStats.at(partition->ShardIdx), stats);

@@ -219,6 +219,7 @@ public:
 
         context.MemChanges.GrabPath(context.SS, externalDataSource->PathId);
         context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        context.MemChanges.GrabExternalDataSource(context.SS, externalDataSource->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         context.DbChanges.PersistPath(externalDataSource->PathId);
@@ -226,7 +227,6 @@ public:
         context.DbChanges.PersistExternalDataSource(externalDataSource->PathId);
         context.DbChanges.PersistTxState(OperationId);
 
-        context.MemChanges.GrabExternalDataSource(context.SS, externalDataSource->PathId);
         context.SS->ExternalDataSources.Set(externalDataSource->PathId, externalDataSourceInfo);
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterExternalDataSource, externalDataSource->PathId);

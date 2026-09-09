@@ -559,6 +559,7 @@ public:
         context.MemChanges.GrabPath(context.SS, srcPath.Base()->PathId);
         context.MemChanges.GrabPath(context.SS, srcPath.Base()->ParentPathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
+        context.MemChanges.GrabNewIndex(context.SS, allocatedPathId);
         context.MemChanges.GrabNewColumnTable(context.SS, allocatedPathId);
 
         context.DbChanges.PersistPath(allocatedPathId);

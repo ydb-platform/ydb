@@ -161,6 +161,7 @@ public:
 
         context.MemChanges.GrabNewPath(context.SS, newPathId);
         context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        context.MemChanges.GrabNewResourcePool(context.SS, newPathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         context.DbChanges.PersistPath(newPathId);
@@ -177,7 +178,6 @@ public:
         resourcePool->PathState = TPathElement::EPathState::EPathStateCreate;
         resourcePool->LastTxId  = OperationId.GetTxId();
 
-        context.MemChanges.GrabNewResourcePool(context.SS, newPathId);
         context.SS->ResourcePools.Set(newPathId, resourcePoolInfo);
         if (!acl.empty()) {
             resourcePool->ApplyACL(acl);

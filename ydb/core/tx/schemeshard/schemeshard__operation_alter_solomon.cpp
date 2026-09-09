@@ -225,6 +225,7 @@ public:
             }
         }
 
+        context.MemChanges.GrabSolomonVolume(context.SS, path.Base()->PathId);
         auto solomon = context.SS->SolomonVolumes.Update(path.Base()->PathId);
 
         if (!alter.HasPartitionCount() && !alter.GetUpdateChannelsBinding()) {
@@ -322,9 +323,6 @@ public:
             path.Base()->IncShardsInside(shardsToCreate);
         }
 
-        context.MemChanges.RecordUndo([solomon, previous = solomon->AlterData]() {
-            solomon->AlterData = previous;
-        });
         solomon->AlterData = alterSolomon;
         context.SS->PersistAlterSolomonVolume(db, path.Base()->PathId, solomon);
 

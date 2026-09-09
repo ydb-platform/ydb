@@ -365,6 +365,7 @@ public:
         const auto pathId = context.SS->AllocatePathId();
         context.MemChanges.GrabNewPath(context.SS, pathId);
         context.MemChanges.GrabPath(context.SS, parentPath->PathId);
+        context.MemChanges.GrabNewTestShardSet(context.SS, pathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         context.DbChanges.PersistPath(pathId);
@@ -388,7 +389,6 @@ public:
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateTestShardSet, newPath->PathId);
 
         auto testShardInfo = CreateTestShardSet(op, txState, context.SS);
-        context.MemChanges.GrabNewTestShardSet(context.SS, newPath->PathId);
         context.SS->TestShardSets.Set(newPath->PathId, testShardInfo);
         context.SS->TabletCounters->Simple()[COUNTER_TEST_SHARD_SET_COUNT].Add(1); // Count TestShardSet objects, not tablets
 

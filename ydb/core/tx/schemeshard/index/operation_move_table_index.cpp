@@ -484,6 +484,7 @@ public:
         context.MemChanges.GrabPath(context.SS, dstParentPath.Base()->PathId);
         context.MemChanges.GrabPath(context.SS, srcPath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
+        context.MemChanges.GrabNewIndex(context.SS, allocatedPathId);
 
         context.DbChanges.PersistPath(allocatedPathId);
         context.DbChanges.PersistPath(dstParentPath.Base()->PathId);
@@ -513,7 +514,6 @@ public:
 
         const auto srcIndexInfo = context.SS->Indexes.at(srcPath.Base()->PathId);
         auto newIndexData = TTableIndexInfo::NotExistedYet(srcIndexInfo->Type);
-        context.MemChanges.GrabNewIndex(context.SS, dstPath.Base()->PathId);
         context.SS->Indexes.Set(dstPath.Base()->PathId, newIndexData);
         newIndexData->AlterData = srcIndexInfo->GetNextVersion();
 

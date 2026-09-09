@@ -944,6 +944,7 @@ public:
         context.MemChanges.GrabPath(context.SS, srcPath.Base()->PathId);
         context.MemChanges.GrabPath(context.SS, srcPath.Base()->ParentPathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
+        context.MemChanges.GrabNewSequence(context.SS, allocatedPathId);
 
         context.DbChanges.PersistPath(allocatedPathId);
         context.DbChanges.PersistPath(dstParentPath.Base()->PathId);
@@ -1000,7 +1001,6 @@ public:
             p->SetLocalId(ui64(sequenceShard.GetLocalId()));
         }
 
-        context.MemChanges.GrabNewSequence(context.SS, dstPath.Base()->PathId);
         context.SS->Sequences.Set(dstPath.Base()->PathId, sequenceInfo);
 
 

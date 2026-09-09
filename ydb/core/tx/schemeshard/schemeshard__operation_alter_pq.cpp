@@ -413,9 +413,6 @@ public:
             TString prevBound;
             for (size_t i = 0; i < partitions.size(); ++i) {
                 auto* partitionInfo = partitions[i].second;
-                context.MemChanges.RecordUndo([pqGroup, id = partitionInfo->PqId, previous = partitionInfo->KeyRange]() {
-                    pqGroup->Partitions.at(id)->KeyRange = previous;
-                });
                 if (i) {
                     partitionInfo->KeyRange.ConstructInPlace();
                     partitionInfo->KeyRange->FromBound = prevBound;
@@ -435,24 +432,12 @@ public:
             for (auto& [shardIdx, tabletInfo] : pqGroup->Shards) {
                 for (const auto& partitionInfo : tabletInfo->Partitions) {
                     if (splitMergeWasDisabled) {
-                        context.MemChanges.RecordUndo([pqGroup, id = partitionInfo->PqId,
-                            status = partitionInfo->Status, keyRange = partitionInfo->KeyRange,
-                            parents = partitionInfo->ParentPartitionIds, children = partitionInfo->ChildPartitionIds]() {
-                            auto* partition = pqGroup->Partitions.at(id);
-                            partition->Status = status;
-                            partition->KeyRange = keyRange;
-                            partition->ParentPartitionIds = parents;
-                            partition->ChildPartitionIds = children;
-                        });
                         // clear all splitmerge fields
                         partitionInfo->Status = NKikimrPQ::ETopicPartitionStatus::Active;
                         partitionInfo->KeyRange.Clear();
                         partitionInfo->ParentPartitionIds.clear();
                         partitionInfo->ChildPartitionIds.clear();
                     } else if (const auto* range = pqGroup->AlterData->KeyRangesToChange.FindPtr(partitionInfo->PqId)) {
-                        context.MemChanges.RecordUndo([pqGroup, id = partitionInfo->PqId, previous = partitionInfo->KeyRange]() {
-                            pqGroup->Partitions.at(id)->KeyRange = previous;
-                        });
                         partitionInfo->KeyRange = *range;
                     }
                     context.SS->PersistPersQueue(db, item->PathId, shardIdx, *partitionInfo.Get());
@@ -569,17 +554,11 @@ public:
             txState.Shards.emplace_back(idx, ETabletType::PersQueue, TTxState::CreateParts);
 
             context.SS->RegisterShardInfo(idx, defaultShardInfo);
-            context.MemChanges.RecordUndo([pqGroup, idx]() {
-                pqGroup->Shards.erase(idx);
-            });
             pqGroup->Shards[idx] = new TTopicTabletInfo();
         }
 
         if (!hasBalancer) {
             const auto idx = context.SS->NextShardIdx(startShardIdx, pqShardsToCreate);
-            context.MemChanges.RecordUndo([pqGroup, previous = pqGroup->BalancerShardIdx]() {
-                pqGroup->BalancerShardIdx = previous;
-            });
             pqGroup->BalancerShardIdx = idx;
             txState.Shards.emplace_back(idx, ETabletType::PersQueueReadBalancer, TTxState::CreateParts);
             context.SS->RegisterShardInfo(idx,
@@ -633,33 +612,11 @@ public:
 
             for (const auto parentId : partition->ParentPartitionIds) {
                 auto* parent = pqGroup->Partitions[parentId];
-                context.MemChanges.RecordUndo([pqGroup, parentId, status = parent->Status, version = parent->AlterVersion]() {
-                    auto* parent = pqGroup->Partitions.at(parentId);
-                    parent->Status = status;
-                    parent->AlterVersion = version;
-                });
                 parent->Status = NKikimrPQ::ETopicPartitionStatus::Inactive;
                 parent->AlterVersion = alterVersion;
             }
 
-            context.MemChanges.RecordUndo([pqGroup, tablet = it->second,
-                id = partition->PqId, size = it->second->Partitions.size()]() {
-                pqGroup->Partitions.erase(id);
-                tablet->Partitions.resize(size);
-            });
             pqGroup->AddPartition(it->first, partition.Release());
-        }
-        // InitSplitMergeGraph adds reverse edges, including edges on existing
-        // partition objects shared by the topic's lookup structures.
-        for (const auto& [id, partition] : pqGroup->Partitions) {
-            for (const auto parentId : partition->ParentPartitionIds) {
-                auto* parent = pqGroup->Partitions.at(parentId);
-                if (!parent->ChildPartitionIds.contains(id)) {
-                    context.MemChanges.RecordUndo([pqGroup, parentId, id]() {
-                        pqGroup->Partitions.at(parentId)->ChildPartitionIds.erase(id);
-                    });
-                }
-            }
         }
         pqGroup->InitSplitMergeGraph();
     }
@@ -716,6 +673,7 @@ public:
             }
         }
 
+        context.MemChanges.GrabTopic(context.SS, path.Base()->PathId);
         auto topic = context.SS->Topics.Update(path.Base()->PathId);
         Y_ABORT_UNLESS(topic);
 
@@ -1271,9 +1229,6 @@ public:
             pqChannelsBinding = tabletChannelsBinding;
         }
 
-        context.MemChanges.RecordUndo([topic, previous = topic->AlterData]() {
-            topic->AlterData = previous;
-        });
         topic->PrepareAlter(alterData);
         const TTxState& txState = PrepareChanges(OperationId, path, topic, shardsToCreate, tabletChannelsBinding,
                 pqChannelsBinding, context, tabletConfig, newTabletConfig);

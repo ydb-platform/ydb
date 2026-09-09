@@ -188,12 +188,12 @@ public:
         context.MemChanges.GrabPath(context.SS, indexPath->PathId);
         context.MemChanges.GrabPath(context.SS, indexPath->ParentPathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
+        context.MemChanges.GrabIndex(context.SS, indexPath->PathId);
 
         context.DbChanges.PersistPath(indexPath->PathId);
         context.DbChanges.PersistAlterIndex(indexPath->PathId);
         context.DbChanges.PersistTxState(OperationId);
 
-        context.MemChanges.GrabIndex(context.SS, indexPath->PathId);
         auto indexData = context.SS->Indexes.Update(indexPath->PathId);
         TTableIndexInfo::TPtr newIndexData = indexData->CreateNextVersion();
         Y_ABORT_UNLESS(newIndexData);

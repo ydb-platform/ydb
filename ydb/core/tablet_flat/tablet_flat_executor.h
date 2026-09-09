@@ -678,7 +678,8 @@ namespace NFlatExecutorSetup {
         virtual void StartVacuum(TVacuumTag tag) = 0;
         virtual void VacuumComplete(TVacuumGeneration generation, const TActorContext& ctx) = 0;
         virtual void MoveData(TEvTablet::TEvMoveData::TPtr&) = 0; // TEvMoveData is handled by basic executor
-        virtual void StartMoveDataVacuumFromOwner() = 0; // TEvMoveData is handled by tablet
+        // TEvMoveData is handled by tablet, groups are expected to be already validated
+        virtual void StartMoveDataVacuumFromOwner(const TSet<ui32>& groups) = 0;
 
         ui32 Generation() const { return Generation0; }
         ui32 Step() const { return Step0; }

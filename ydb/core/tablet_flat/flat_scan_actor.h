@@ -268,6 +268,7 @@ namespace NOps {
 
             conf.Trace = Args.Trace;
             conf.Edge = Conf.LargeEdge;
+            conf.ForceMaterializeGroups = Conf.ForceMaterializeGroups;
             conf.Tablet = Args.Tablet;
 
             Cache = new TEnv(conf, Subset);

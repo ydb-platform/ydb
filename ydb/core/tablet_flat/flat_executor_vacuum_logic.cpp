@@ -78,6 +78,16 @@ void TVacuumLogic::WaitCompaction() {
     }
 }
 
+bool TVacuumLogic::IsCompacting(ui32 tableId) const {
+    switch (State) {
+        case EVacuumState::PendingCompaction:
+        case EVacuumState::WaitCompaction:
+            return CompactingTables.contains(tableId);
+        default:
+            return false;
+    }
+}
+
 void TVacuumLogic::OnCompleteCompaction(
     ui32 tableId,
     const TFinishedCompactionInfo& finishedCompactionInfo)

@@ -549,6 +549,7 @@ namespace NTabletFlatExecutor {
 
             conf.NoErased = false; /* emit erase markers */
             conf.LargeEdge = Conf->Layout.LargeEdge;
+            conf.ForceMaterializeGroups = Conf->MoveDataGroups;
 
             return { EScan::Feed, conf };
         }

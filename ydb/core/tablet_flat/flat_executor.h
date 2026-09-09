@@ -518,6 +518,9 @@ class TExecutor
 
     THashSet<TActorId> MoveDataSubscribers;
     bool MoveDataVacuumInProgress = false;
+    // BlobStorage groups the pending MoveData has to drag external blobs out of,
+    // null unless a MoveData is in progress
+    std::shared_ptr<const THashSet<ui32>> MoveDataGroups;
 
     ui64 Stamp() const noexcept;
     void Registered(TActorSystem*, const TActorId&) override;
@@ -719,7 +722,9 @@ public:
     void StartVacuum(TVacuumTag tag) override;
     void VacuumComplete(TVacuumGeneration generation, const TActorContext& ctx) override;
     void MoveData(TEvTablet::TEvMoveData::TPtr &ev) override;
-    void StartMoveDataVacuumFromOwner() override;
+    void StartMoveDataVacuumFromOwner(const TSet<ui32>& groups) override;
+    bool ValidateMoveDataGroups(const THashSet<ui32>& groups, const TActorId& sender);
+    void StartMoveDataVacuum(const THashSet<ui32>& groups);
 
     void Handle(NMemory::TEvMemTableRegistered::TPtr &ev);
     void Handle(NMemory::TEvMemTableCompact::TPtr &ev);

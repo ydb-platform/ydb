@@ -57,4 +57,18 @@ TString PrintHostAndNodeId(THostIndex hostIndex, ui32 nodeId)
     return result;
 }
 
+TString PrintDbgId(ui32 dbgId)
+{
+    TStringBuilder result;
+    result << "DBG" << dbgId;
+    return result;
+}
+
+TString PrintVChunkId(ui32 vChunkId)
+{
+    TStringBuilder result;
+    result << "V" << vChunkId;
+    return result;
+}
+
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

@@ -203,7 +203,7 @@ std::pair<ui64, ui64> MeasureOld() {
     timer.Reset();
     for (size_t n = 0; n < rowCount; ++n) {
         TPresortOps<Desc> ops{settings, values.begin()};
-        auto str = stream.Str();
+        const auto& str = stream.Str();
         NPresort::Decode(ops, TStringBuf(str.data(), str.size()));
     }
     auto decodeTime = timer.Get().MicroSeconds();

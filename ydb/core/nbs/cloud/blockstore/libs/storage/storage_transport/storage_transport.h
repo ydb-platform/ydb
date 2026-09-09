@@ -1,5 +1,9 @@
 #pragma once
 
+#include "public.h"
+
+#include <ydb/core/nbs/cloud/blockstore/libs/common/pbuffer_key.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/common/guarded_sglist.h>
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
@@ -7,6 +11,13 @@
 #include <ydb/core/protos/blobstorage_ddisk.pb.h>
 
 #include <functional>
+#include <memory>
+
+namespace NYdb::NBS {
+
+struct TDiskDescription;
+
+}   // namespace NYdb::NBS
 
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
@@ -59,8 +70,6 @@ public:
         const TEvWriteToManyPersistentBuffersResult& result,
         std::shared_ptr<NWilson::TSpan> span)>;
 
-    IStorageTransport() = default;
-
     virtual ~IStorageTransport() = default;
 
     struct TConnectResultFutures
@@ -75,7 +84,7 @@ public:
     virtual NThreading::TFuture<TEvReadPersistentBufferResult> ReadFromPBuffer(
         const THostConnection& connection,
         const NKikimr::NDDisk::TBlockSelector& selector,
-        const ui64 lsn,
+        const TPBufferKey pBufferKey,
         const NKikimr::NDDisk::TReadInstruction instruction,
         const TGuardedSgList& data,
         NWilson::TSpan* span) = 0;
@@ -120,13 +129,13 @@ public:
         const THostConnection& pbufferConnection,
         const THostConnection& ddiskConnection,
         TVector<NKikimr::NDDisk::TBlockSelector> selectors,
-        TVector<ui64> lsns,
+        TVector<TPBufferKey> pBufferKeys,
         NWilson::TSpan* span) = 0;
 
     virtual NThreading::TFuture<TEvErasePersistentBufferResult>
     BatchEraseFromPBuffer(
         const THostConnection& connection,
-        TVector<ui64> lsns,
+        TVector<TPBufferKey> pBufferKeys,
         NWilson::TSpan* span) = 0;
 
     virtual NThreading::TFuture<TEvErasePersistentBufferResult>
@@ -141,6 +150,45 @@ public:
     virtual NThreading::TFuture<TEvDeleteTabletChunksResult> DeleteTabletChunks(
         const THostConnection& connection) = 0;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Controls node availability for failure simulation.
+class IChaosInjectorControl
+{
+public:
+    virtual ~IChaosInjectorControl() = default;
+
+    // Makes subsequent requests to nodeId fail with an undelivery error.
+    virtual void DisableNode(ui32 nodeId) = 0;
+
+    // Makes subsequent requests to nodeId use the underlying transport.
+    virtual void EnableNode(ui32 nodeId) = 0;
+
+    // Returns true when requests to nodeId are configured to fail.
+    [[nodiscard]] virtual bool IsNodeDisabled(ui32 nodeId) const = 0;
+};
+
+// Combines storage transport operations with node-failure controls.
+class ITransportWithChaosInjectorControl
+    : public IStorageTransport
+    , public IChaosInjectorControl
+{
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Creates either a direct-session or actor-based storage transport.
+[[nodiscard]] TStorageTransportPtr CreateStorageTransport(
+    NActors::TActorSystem* actorSystem,
+    const TDiskDescription& diskDescription,
+    ui32 dbgIndex,
+    bool useDirectSessionTransport,
+    bool enableChecksums);
+
+// Wraps a storage transport with a node-failure simulation layer.
+[[nodiscard]] TTransportWithChaosInjectorControlPtr
+CreateTransportChaosInjector(TStorageTransportPtr underlyingTransport);
 
 ////////////////////////////////////////////////////////////////////////////////
 

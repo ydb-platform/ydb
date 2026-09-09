@@ -20,4 +20,6 @@ void SetGlobalColorsMode(EGlobalColorsMode mode);
 // Get colors instance respecting global mode
 NColorizer::TColors& AutoColors(IOutputStream& out);
 
+TString HttpsLink(const TString& fqdnAndUri, const NColorizer::TColors& colors);
+
 } // namespace NYdb::NConsoleClient

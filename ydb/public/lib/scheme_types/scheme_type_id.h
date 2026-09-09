@@ -103,6 +103,18 @@ constexpr bool IsYqlType(TTypeId typeId) {
     return IsYqlTypeImpl(typeId, 0);
 }
 
+// Json/Yson/JsonDocument are YQL types but have no TPresortEncoder::Encode() case.
+constexpr bool IsPresortEncodable(TTypeId typeId) {
+    switch (typeId) {
+    case Json:
+    case Yson:
+    case JsonDocument:
+        return false;
+    default:
+        return IsYqlType(typeId);
+    }
+}
+
 constexpr bool IsParametrizedType(TTypeId typeId) {
     return typeId == Pg
         || typeId == Decimal

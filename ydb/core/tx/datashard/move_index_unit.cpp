@@ -89,7 +89,7 @@ public:
         YDB_LOG_DEBUG("TMoveIndexUnit Execute changeRecords",
             {"schemeTx", schemeTx.DebugString()},
             {"size", op->ChangeRecords().size()},
-            {"tablet", DataShard.TabletID()});
+            {"tabletId", DataShard.TabletID()});
 
         DataShard.SuspendChangeSender(ctx);
 
@@ -116,3 +116,7 @@ THolder<TExecutionUnit> CreateMoveIndexUnit(TDataShard& dataShard, TPipeline& pi
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

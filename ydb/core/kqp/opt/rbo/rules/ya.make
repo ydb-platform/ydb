@@ -7,12 +7,14 @@ SRCS(
     map/push_map_elements_through_input.cpp
     map/push_map_elements_through_union_all.cpp
     propagate_topsort_through_stage.cpp
+    pull_up_map_over_cbo.cpp
 )
 
 JOIN_SRCS(
     all_expand.cpp
     expand_cbo_tree.cpp
     expand_distinct_aggregation.cpp
+    expand_grouping_sets.cpp
 )
 
 JOIN_SRCS(
@@ -75,7 +77,7 @@ JOIN_SRCS(
     assign_stages.cpp
     build_initial_cbo_tree.cpp
     constant_folding_stage.cpp
-    correlated_filter_pullup.cpp
+    decorrelation/dependent_join_pushdown.cpp
     disable_blocks_on_columns_limit.cpp
     eliminate_left_join.cpp
     fuse_filters.cpp

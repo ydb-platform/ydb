@@ -2607,23 +2607,6 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    bool EnsureDecimalListFromRangeTypes(
-        const TExprNode::TPtr& input, const TDataExprType* beginType,
-        const TDataExprType* endType, const TDataExprType* stepType, TExtContext& ctx)
-    {
-        if (!EnsureAvailable(input->Pos(), NFeature::DecimalListFromRange, ctx.Expr, ctx.Types)) {
-            return false;
-        }
-        if (!IsDataTypeDecimal(beginType->GetSlot()) || !IsDataTypeDecimal(endType->GetSlot()) ||
-            (stepType && !IsDataTypeDecimal(stepType->GetSlot())))
-        {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                "ListFromRange over Decimal requires Decimal Start, End, and Step arguments"));
-            return false;
-        }
-        return true;
-    }
-
     IGraphTransformer::TStatus ListFromRangeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureMinMaxArgsCount(*input, 2U, 3U, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -2743,9 +2726,7 @@ namespace {
             (stepItemType && IsDataTypeDecimal(stepItemType->GetSlot()));
         const TTypeAnnotationNode* commonType = nullptr;
         if (hasDecimalArgument) {
-            if (!EnsureDecimalListFromRangeTypes(
-                    input, beginItemType, endItemType, stepItemType, ctx))
-            {
+            if (!EnsureAvailable(input->Pos(), NFeature::DecimalListFromRange, ctx.Expr, ctx.Types)) {
                 return IGraphTransformer::TStatus::Error;
             }
             commonType = CommonTypeForChildren(*input, ctx.Expr, ctx.Types);

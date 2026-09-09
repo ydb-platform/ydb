@@ -62,6 +62,24 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         CheckScriptResults(scriptExecutionOperation, readyOp, db);
     }
 
+    Y_UNIT_TEST_TWIN(ExecuteScriptOnlyCommentsRejected, PerStatementExecution) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableAstCache(true);
+        app.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(PerStatementExecution);
+        auto kikimr = DefaultKikimrRunner({}, app);
+        auto db = kikimr.GetQueryClient();
+
+        for (const auto& query : {"-- empty query", "/* Multi-line\n   comment */"}) {
+            auto operation = db.ExecuteScript(query).ExtractValueSync();
+            UNIT_ASSERT_C(operation.Status().IsSuccess(), query << ": " << operation.Status().GetIssues().ToString());
+
+            auto readyOp = WaitScriptExecutionOperation(operation.Id(), kikimr.GetDriver());
+            UNIT_ASSERT_C(!readyOp.Status().IsSuccess(), query << ": " << readyOp.Status().GetIssues().ToString());
+            UNIT_ASSERT_C(HasIssue(readyOp.Status().GetIssues(), NYql::TIssuesIds::YQL_NO_STATEMENTS),
+                query << ": " << readyOp.Status().GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(ExecuteMultiScript) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
@@ -96,6 +114,33 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
             UNIT_ASSERT(resultSet.TryNextRow());
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), 101);
         }
+    }
+
+    Y_UNIT_TEST(SyntaxV0ReturnsBadRequestWithPerStatementExecution) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
+        auto db = kikimr.GetQueryClient();
+
+        auto scriptExecutionOperation = db.ExecuteScript(R"(
+            --!syntax_v0
+            SELECT 42;
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            scriptExecutionOperation.Status().GetStatus(),
+            EStatus::SUCCESS,
+            scriptExecutionOperation.Status().GetIssues().ToString());
+
+        auto readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            readyOp.Status().GetStatus(),
+            EStatus::BAD_REQUEST,
+            readyOp.Status().GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(
+            readyOp.Status().GetIssues().ToString(),
+            "V0 syntax is disabled",
+            readyOp.Status().GetIssues().ToString());
     }
 
     void ValidatePlan(const std::optional<std::string>& plan) {
@@ -289,6 +334,15 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         }
         UNIT_ASSERT_VALUES_EQUAL(listed, ScriptExecutionsCount);
         UNIT_ASSERT_EQUAL(ops, listedOps);
+    }
+
+    Y_UNIT_TEST(ListScriptExecutionsInvalidPageToken) {
+        auto kikimr = DefaultKikimrRunner();
+
+        NYdb::NOperation::TOperationClient client(kikimr.GetDriver());
+        auto list = client.List<NYdb::NQuery::TScriptExecutionOperation>(42, "invalid-page-token").ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(list.GetStatus(), EStatus::BAD_REQUEST, list.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(ForgetScriptExecution) {

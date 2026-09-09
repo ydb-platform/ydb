@@ -21,7 +21,7 @@ public:
     virtual ~ISessionUpdater() = default;
 
     virtual void SetRequestState(EState state, TInstant timestamp) = 0;
-    virtual void SetPoolId(TString poolId) = 0;
+    virtual void SetPoolContext(TString poolId, TString classifiedBy) = 0;
 };
 
 } // namespace NKikimr::NWorkloadManager

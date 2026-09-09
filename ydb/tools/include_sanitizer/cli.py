@@ -46,7 +46,7 @@ SUBCOMMANDS = (
     "compdb", "analyze", "aggregate", "report", "all",
     "pilot", "doctor", "selfcheck", "selfcontain",
     "timetrace", "timing", "worklist", "bench", "buildbench",
-    "cost", "unity",
+    "cost", "unity", "fanout",
 )
 
 
@@ -75,6 +75,9 @@ def _help() -> str:
         "                fixed per-TU header tax from the frontend/backend split\n"
         "  unity       - plan and apply JOIN_SRCS unity builds: rank libraries by\n"
         "                estimated saving, census one-include TUs, rewrite a ya.make\n"
+        "  fanout      - rank headers by rebuild impact (how many TUs recompile\n"
+        "                when the header / proto changes); classify protobuf include\n"
+        "                sites as unused, forward-declarable, or keep\n"
         "  all         - run analyze -> aggregate -> report in order\n"
         "  pilot       - exercise the pipeline WITHOUT clang-include-cleaner using\n"
         "                synthesized verdicts; for tool development and CI smoke tests\n"
@@ -103,6 +106,7 @@ def run_selfcheck(rest: Sequence[str]) -> int:
         "aggregate.run",
         "analysis.cost",
         "analysis.unity",
+        "analysis.fanout",
         "report.diff_preview",
         "report.formats",
         "report.run",
@@ -263,6 +267,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "buildbench": "buildbench.run",
         "cost": "analysis.cost",
         "unity": "analysis.unity",
+        "fanout": "analysis.fanout",
         "pilot": "pilot",
         "doctor": "doctor",
     }

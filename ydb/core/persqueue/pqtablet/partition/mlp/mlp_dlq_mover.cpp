@@ -80,7 +80,7 @@ void TDLQMoverActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     auto& topic = topics[TopicName];
 
     switch (topic.Status) {
-        case NDescriber::EStatus::SUCCESS:
+        case NDescriber::EStatus::Success:
             TopicInfo = std::move(topic);
             return CreateWriter();
 

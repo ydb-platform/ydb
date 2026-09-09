@@ -520,6 +520,18 @@ private:
                 ctx.AddError(TIssue(pos, TStringBuilder() << err.AsStrBuf() << ", available modes: " << NKikimr::NUdf::ValidateModeAvailables()));
                 return false;
             }
+        } else if (name == "UdfBridge") {
+            if (!args.empty()) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                return false;
+            }
+
+            if (Types_.UdfBridgeBinaryPath.empty()) {
+                ctx.AddError(TIssue(pos, "udf_bridge is not available"));
+                return false;
+            }
+
+            Types_.BridgeMode = NKikimr::NUdf::EBridgeMode::OutProcess;
         } else if (name == "LLVM_OFF") {
             if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
@@ -783,6 +795,10 @@ private:
             if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
+            }
+
+            if (ForPartialTypeCheck_) {
+                return true;
             }
 
             if (!Types_.UdfIndex) {

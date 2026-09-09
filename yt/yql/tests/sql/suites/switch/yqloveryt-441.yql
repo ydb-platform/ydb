@@ -1,0 +1,55 @@
+USE plato;
+PRAGMA yt.FuseMapToMapReduce = 'late';
+
+INSERT INTO @tmp1 WITH truncate
+SELECT
+    1 AS x
+LIMIT 1;
+
+INSERT INTO @tmp2 WITH truncate
+SELECT
+    Yson(@@#@@) AS y
+LIMIT 1;
+
+COMMIT;
+
+$main = (
+    SELECT
+        WeakField(y, Yson) AS res,
+        Yson::ConvertToList(Yson::Parse('[]')) AS l
+    FROM
+        CONCAT(@tmp1, @tmp2)
+);
+
+$flatten_table = (
+    SELECT
+        'abc' AS value
+    FROM
+        $main
+        FLATTEN BY l
+);
+
+SELECT
+    ROW_NUMBER() OVER w,
+FROM (
+    SELECT
+        *
+    FROM
+        $main
+    UNION ALL
+    SELECT
+        value AS res
+    FROM
+        $flatten_table
+    UNION ALL
+    SELECT
+        'abc' AS res
+    FROM
+        $flatten_table
+)
+WINDOW
+    w AS (
+        PARTITION BY
+            res
+    )
+;

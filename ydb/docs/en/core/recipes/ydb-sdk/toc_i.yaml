@@ -1,7 +1,7 @@
 items:
 - name: Overview
   href: index.md
-- name: Initialize the driver
+- name: Driver initialization
   href: init.md
 - name: Authentication
   items:
@@ -17,31 +17,31 @@ items:
     href: auth-metadata.md
   - name: Using environment variables
     href: auth-env.md
-  - name: Username and password based
+  - name: Using login and password
     href: auth-static.md
 - name: Balancing
   items:
   - name: Overview
     href: balancing.md
-  - name: Random choice
+  - name: Uniform random selection
     href: balancing-random-choice.md
-  - name: Prefer the nearest data center
+  - name: Prefer nearest data center
     href: balancing-prefer-local.md
-  - name: Prefer the specific availability zone
+  - name: Prefer specific availability zone
     href: balancing-prefer-location.md
   - name: Prefer a pile with a specific state
     href: balancing-prefer-pile.md
-- name: Running repeat queries
+- name: Retry queries
   href: retry.md
-- name: Setting the session pool size
+- name: Set session pool size
   href: session-pool-limit.md
-- name: Upserting data
+- name: Data insertion
   href: upsert.md
-- name: Bulk-upserting data
+- name: Batch data insertion
   href: bulk-upsert.md
 - name: Setting up the transaction execution mode
   href: tx-control.md
-- name: Configuring time to live (TTL)
+- name: TTL configuration
   href: ttl.md
 - name: Vector search
   href: vector-search.md

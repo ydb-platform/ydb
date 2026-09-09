@@ -1178,7 +1178,7 @@ public:
     IMergeAlgorithm(std::vector<std::unique_ptr<TTokenStream<TDocId>>>&& streams, ui64 minShouldMatch, bool withFrequencies, const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes)
         : Streams(std::move(streams))
         , TokenCount(Streams.size())
-        , MinShouldMatch(minShouldMatch)
+        , MinShouldMatch(minShouldMatch > Streams.size() ? Streams.size() : minShouldMatch)
         , DocIdEquals(typename THeapEntry::TEquals(keyColumnTypes))
         , DocIdCompare(typename THeapEntry::TCompare(keyColumnTypes))
         , WithFrequencies(withFrequencies)
@@ -1261,7 +1261,7 @@ class TAndOptimizedMergeAlgorithm : public IMergeAlgorithm<TDocId> {
 
 public:
     TAndOptimizedMergeAlgorithm(std::vector<std::unique_ptr<TTokenStream<TDocId>>>&& streams, bool withFrequencies, const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes)
-        : TBase(std::move(streams), streams.size(), withFrequencies, keyColumnTypes)
+        : TBase(std::move(streams), std::numeric_limits<ui64>::max(), withFrequencies, keyColumnTypes)
     {
     }
 
@@ -1651,6 +1651,7 @@ public:
  */
 class TStatsTableReader : public TTableReader<TStatsTableReader> {
     NKqpProto::EKqpFullTextIndexType IndexType;
+    TConstArrayRef<TCell> PrefixCells;
 public:
     TStatsTableReader(const NKqpProto::EKqpFullTextIndexType& indexType,
         const TIntrusivePtr<TKqpCounters>& counters,
@@ -1662,9 +1663,11 @@ public:
         const TString& poolId,
         const TVector<NScheme::TTypeInfo>& keyColumnTypes,
         const TVector<NScheme::TTypeInfo>& resultColumnTypes,
-        const TVector<i32>& resultColumnIds)
+        const TVector<i32>& resultColumnIds,
+        TConstArrayRef<TCell> prefixCells)
         : TTableReader(counters, tableId, tablePath, snapshot, logPrefix, database, poolId, keyColumnTypes, resultColumnTypes, resultColumnIds)
         , IndexType(indexType)
+        , PrefixCells(prefixCells)
     {}
 
     static TIntrusivePtr<TStatsTableReader> FromSettings(
@@ -1672,7 +1675,8 @@ public:
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
         const NKikimrKqp::TKqpFullTextSourceSettings* settings,
-        bool withRelevance)
+        bool withRelevance,
+        TConstArrayRef<TCell> prefixCells)
     {
         if (!withRelevance) {
             return nullptr;
@@ -1696,7 +1700,6 @@ public:
         NScheme::TTypeInfo sumDocLengthColumnType;
 
         for (const auto& column : columns) {
-
             if (column.GetName() == DocCountColumn) {
                 statsColumnIndex = column.GetId();
                 statsColumnType = NScheme::TypeInfoFromProto(
@@ -1728,7 +1731,7 @@ public:
             settings->GetIndexType(), counters,
             FromProto(info.GetTable()), info.GetTable().GetPath(), snapshot, logPrefix,
                 settings->GetDatabase(), settings->GetPoolId(),
-                keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
+                keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds, prefixCells);
     }
 
     ui64 GetDocCount(const TConstArrayRef<TCell>& row) const {
@@ -1742,19 +1745,11 @@ public:
     }
 
     std::pair<ui64, std::unique_ptr<TEvDataShard::TEvRead>> GetTotalStatsRequest(ui64 readId) {
-        TCell tokenCell = TCell::Make<ui32>(0);
-        std::vector <TCell> fromCells;
-        fromCells.insert(fromCells.begin(), tokenCell);
-
-        TCell maxCell = TCell::Make<ui32>(std::numeric_limits<ui32>::max());
-        std::vector <TCell> toCells;
-        toCells.insert(toCells.begin(), maxCell);
-
-        bool fromInclusive = true;
-        bool toInclusive = false;
-        auto tcellVector = TTableRange(fromCells, fromInclusive, toCells, toInclusive);
-
-        auto partitioning = GetRangePartitioning(tcellVector);
+        TVector<TCell> zero = {TCell::Make<ui32>(0)};
+        TTableRange rng = PrefixCells.size()
+            ? TTableRange(PrefixCells, true, PrefixCells, true)
+            : TTableRange(zero, true, zero, true);
+        auto partitioning = GetRangePartitioning(rng);
         YQL_ENSURE(partitioning.size() == 1);
         auto [shardId, range] = partitioning[0];
         return std::make_pair(shardId, GetReadRequest(readId, range));
@@ -2476,6 +2471,10 @@ private:
     ui64 DocCount = 0;
     ui64 SumDocLength = 0;
 
+    // Leading prefix key values of the posting table (a per-query binding; empty for a non-prefixed
+    // index). Owned here for the source's lifetime and referenced by each per-token read.
+    TOwnedCellVec PrefixCells;
+
     // Table readers -- one per involved table.  Null readers indicate that the
     // table is not needed (e.g., docs/stats are null for plain indexes).
     TIntrusivePtr<TMainTableReader> MainTableReader;
@@ -2483,10 +2482,6 @@ private:
     TIntrusivePtr<TDocsTableReader> DocsTableReader;
     TIntrusivePtr<TStatsTableReader> StatsTableReader;
     TIntrusivePtr<TUniqueIndexReader> UniqueIndexReader;  // Resolves __ydb_row_id -> PK via unique secondary index
-
-    // Leading prefix key values of the posting table (a per-query binding; empty for a non-prefixed
-    // index). Owned here for the source's lifetime and referenced by each per-token read.
-    TOwnedCellVec PrefixCells;
 
     // True when the fulltext index uses __ydb_row_id as the synthetic doc_id, and the
     // primary key must be resolved through UniqueIndexReader before main-table reads.
@@ -2883,12 +2878,12 @@ public:
         , LogPrefix(TStringBuilder() << "TxId: " << txId << ", task: " << taskId << ", CA Id " << computeActorId << ". ")
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
         , PipeCacheId(NKikimr::MakePipePerNodeCacheID(false))
+        , PrefixCells(TIndexTableImplReader::ParsePrefixCells(Settings))
         , MainTableReader(TMainTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings))
         , IndexTableReader(TIndexTableImplReader::FromSettings(Counters, Snapshot, LogPrefix, Settings, MainTableReader->GetWithRelevance()))
         , DocsTableReader(TDocsTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings, MainTableReader->GetWithRelevance()))
-        , StatsTableReader(TStatsTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings, MainTableReader->GetWithRelevance()))
+        , StatsTableReader(TStatsTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings, MainTableReader->GetWithRelevance(), PrefixCells))
         , UniqueIndexReader(TUniqueIndexReader::FromSettings(Counters, Snapshot, LogPrefix, Settings))
-        , PrefixCells(TIndexTableImplReader::ParsePrefixCells(Settings))
         , UseRowIdAsDocId(UniqueIndexReader != nullptr)
         , ReadsState(Counters, LogPrefix)
         , DocsReadingQueue(this->SelfId(), ReadsState)

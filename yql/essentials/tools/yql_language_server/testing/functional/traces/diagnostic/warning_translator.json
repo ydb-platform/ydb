@@ -43,22 +43,6 @@
           },
           "severity": 2,
           "source": "translator"
-        },
-        {
-          "code": "YQL_ORDER_BY_WITHOUT_LIMIT_IN_SUBQUERY",
-          "message": "ORDER BY without LIMIT in subquery will be ignored",
-          "range": {
-            "end": {
-              "character": 5,
-              "line": 3
-            },
-            "start": {
-              "character": 4,
-              "line": 3
-            }
-          },
-          "severity": 2,
-          "source": "typecheck"
         }
       ],
       "kind": "full",

@@ -8,6 +8,7 @@
 #include "kqp_rbo_physical_lookup_join_builder.h"
 #include "kqp_rbo_physical_filter_builder.h"
 #include "kqp_rbo_physical_source_builder.h"
+#include "kqp_rbo_physical_table_effect_builder.h"
 #include "kqp_rbo_physical_query_builder.h"
 
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
@@ -265,7 +266,10 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
                 memLimit = -i64(*memLimitSetting);
             }
 
-            currentStageBody = Build<TPhysicalAggregationBuilder>(aggregate, ctx, op->Pos, currentStageBody, memLimit);
+            // The full physical-stage peephole performs this pruning later.
+            const bool pruneUnusedOutputs = !rboCtx.KqpCtx.Config->GetEnableNewRBOPhysicalStagePeephole();
+            currentStageBody = TPhysicalAggregationBuilder(aggregate, ctx, op->Pos, pruneUnusedOutputs)
+                .BuildPhysicalOp(currentStageBody, memLimit);
             if (!aggregate->IsSingleConsumer()) {
                 currentStageBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, aggregate->GetNumOfConsumers(), ctx, op->Pos);
             }
@@ -321,7 +325,22 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;
             YQL_CLOG(TRACE, CoreDq) << "Converted IndexLookupJoin " << opStageId;
-        } else {
+        } else if (op->Kind == EOperator::TableEffect) {
+            auto tableEffect = CastOperator<TOpTableEffect>(op);
+
+            if (!currentStageBody) {
+                auto [stageArg, stageInput] = graph.GenerateStageInput(stageInputCounter, op->Pos, ctx);
+                stageArgs[opStageId].push_back(stageArg);
+                currentStageBody = stageInput;
+            }
+
+            currentStageBody = Build<TPhysicalTableEffectBuilder>(tableEffect, ctx, op->Pos, currentStageBody);
+
+            stages[opStageId] = currentStageBody;
+            stagePos[opStageId] = op->Pos;
+            YQL_CLOG(TRACE, CoreDq) << "Converted TableEffect " << opStageId;
+        }
+        else {
             Y_ENSURE(false, "Could not generate physical plan");
         }
     }

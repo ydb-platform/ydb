@@ -13,6 +13,7 @@ PEERDIR(
     library/cpp/testing/common
     library/cpp/testing/gtest
     ydb/public/api/grpc
+    ydb/public/api/protos
     ydb/public/sdk/cpp/src/client/table
 )
 

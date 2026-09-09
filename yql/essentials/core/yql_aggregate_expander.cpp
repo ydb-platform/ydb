@@ -38,7 +38,10 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregateWithFullOutput()
     auto settings = Node_->Child(3);
 
     bool allTraitsCollected = CollectTraits();
-    YQL_ENSURE(!HasSetting(*settings, "hopping"), "Aggregate with hopping unsupported here.");
+    if (HasSetting(*settings, "hopping")) {
+        Ctx_.AddError(TIssue(Ctx_.GetPosition(settings->Pos()), "Aggregate with hopping is not supported"));
+        return nullptr;
+    }
 
     HaveDistinct_ = AnyOf(AggregatedColumns_->ChildrenList(),
         [](const auto& child) { return child->ChildrenSize() == 3; });

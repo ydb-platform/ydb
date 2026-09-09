@@ -203,12 +203,17 @@ namespace NActors {
         semaphore.CurrentThreadCount = ThreadCount;
         Semaphore = semaphore.ConvertToI64();
 
-        DefaultThreadCount = DefaultFullThreadCount + HasOwnSharedThread;
-        MinThreadCount = MinFullThreadCount + HasOwnSharedThread;
-        MaxThreadCount = MaxFullThreadCount + HasOwnSharedThread;
+        const i16 ownSharedThreadCount = cfg.AllThreadsAreShared
+            ? cfg.DefaultThreadCount
+            : HasOwnSharedThread;
+        DefaultThreadCount = DefaultFullThreadCount + ownSharedThreadCount;
+        MinThreadCount = MinFullThreadCount + ownSharedThreadCount;
+        MaxThreadCount = cfg.AllThreadsAreShared
+            ? Max(cfg.MaxThreadCount, cfg.DefaultThreadCount)
+            : MaxFullThreadCount + ownSharedThreadCount;
 
         if (SharedOnly) {
-            MaxThreadCount = cfg.ForcedForeignSlotCount + 1;
+            MaxThreadCount = cfg.ForcedForeignSlotCount + ownSharedThreadCount;
         }
 
         Threads.Reset(new NThreading::TPadded<TExecutorThreadCtx>[MaxFullThreadCount]);
@@ -876,8 +881,12 @@ namespace NActors {
             EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "need to wake up");
             WakeUpLoop(semaphore.CurrentThreadCount);
         } else if (SharedPool) {
-            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "shared pool wake up global threads");
-            SharedPool->WakeUpGlobalThreads(PoolId);
+            if (SharedPool->WakeUpAdjacentOwner(PoolId)) {
+                EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "shared pool wake up adjacent owner");
+            } else {
+                EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "shared pool wake up global threads");
+                SharedPool->WakeUpGlobalThreads(PoolId);
+            }
         }
     }
 

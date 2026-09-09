@@ -116,7 +116,7 @@ public:
 
     bool IsAcquired() const override
     {
-        return IsAcquired_;
+        return IsAcquired_.load();
     }
 
     i64 GetNeedResourcesCount() const override
@@ -139,7 +139,7 @@ public:
         auto result = ResourceHolder_->AcquireResource(NeedResources_);
 
         if (result) {
-            IsAcquired_ = true;
+            IsAcquired_.store(true);
             return TError();
         }
 
@@ -148,16 +148,15 @@ public:
 
     void ReleaseResource() override
     {
-        if (IsAcquired_) {
+        if (IsAcquired_.exchange(false)) {
             ResourceHolder_->ReleaseResource(NeedResources_);
-            IsAcquired_ = false;
         }
     }
 
 private:
     TResourceHolderPtr ResourceHolder_;
     i64 NeedResources_;
-    bool IsAcquired_ = false;
+    std::atomic<bool> IsAcquired_ = false;
 };
 
 TEST_F(TFairShareHierarchicalSlotQueueTest, EnqueueDequeue)
@@ -430,12 +429,13 @@ TEST_P(TFairShareHierarchicalSlotQueueStressTest, StressTest)
 
     const NLogging::TLogger Logger("StressTest");
 
-    TSpinLock SlotToStatLock;
-    THashMap<TGuid, TGuid> SlotIdToStatId;
+    constexpr int seedBase = 142857;
+    std::mt19937 controlThreadRandomGenerator(seedBase);
+    auto createThreadRandomGenerator = [] (int threadIndex) {
+        return std::mt19937(seedBase + threadIndex + 1);
+    };
 
-    std::mt19937 randomGenerator(142857);
-
-    auto splitSegment = [&] (int n, int m) {
+    auto splitSegment = [] (int n, int m, std::mt19937& randomGenerator) {
         std::uniform_int_distribution<> dist(1, n - 1);
 
         std::vector<int> points;
@@ -491,7 +491,7 @@ TEST_P(TFairShareHierarchicalSlotQueueStressTest, StressTest)
     THashMap<int, THashMap<TTestTag, double>> tagHierarchy;
 
     for (int i = 0; i < std::ssize(tagHierarchyCounts); ++i) {
-        std::vector<int> lengths = splitSegment(100, tagHierarchyCounts[i]);
+        std::vector<int> lengths = splitSegment(100, tagHierarchyCounts[i], controlThreadRandomGenerator);
         for (int j = 0; j < tagHierarchyCounts[i]; ++j) {
             auto tag = Format("tag_%v_%v", i, j);
             tagHierarchy[i].emplace(tag, lengths[j]);
@@ -543,6 +543,7 @@ TEST_P(TFairShareHierarchicalSlotQueueStressTest, StressTest)
         THashMap<TGuid, int> SlotIdToRequestCount;
         THashSet<TGuid> SlotIds;
         THashMap<TGuid, i64> SlotIdToRequestSize;
+        THashMap<TGuid, TGuid> SlotIdToStatId;
     };
 
     std::vector<TFairShareHierarchicalSlotQueuePtr<TTestTag>> rawQueues;
@@ -560,7 +561,7 @@ TEST_P(TFairShareHierarchicalSlotQueueStressTest, StressTest)
     const std::vector<TFairShareHierarchicalSlotQueuePtr<TTestTag>> queues = rawQueues;
 
     auto keys = GetKeys(stats);
-    auto createRandomRequest = [&] (int queueIndex) mutable {
+    auto createRandomRequest = [&] (int queueIndex, std::mt19937& randomGenerator) mutable {
         auto queue = queues[queueIndex];
         size_t tagListIndex = randomGenerator() % keys.size();
         auto tagsKey = keys[tagListIndex];
@@ -594,17 +595,13 @@ TEST_P(TFairShareHierarchicalSlotQueueStressTest, StressTest)
             stat.SlotCount++;
 
             {
-                auto guard = Guard(SlotToStatLock);
-                EmplaceOrCrash(SlotIdToStatId, slotId, tagsKey);
-            }
-
-            {
                 auto& requests = queueRequests[queueIndex];
                 auto guard = Guard(requests.Lock);
                 int requestCount = splitRequests.value_or(1);
                 i64 requestSize = size / requestCount;
                 EmplaceOrCrash(requests.SlotIdToRequestCount, slotId, requestCount);
                 EmplaceOrCrash(requests.SlotIdToRequestSize, slotId, requestSize);
+                EmplaceOrCrash(requests.SlotIdToStatId, slotId, tagsKey);
                 EmplaceOrCrash(requests.SlotIds, slotId);
             };
 
@@ -624,6 +621,7 @@ TEST_P(TFairShareHierarchicalSlotQueueStressTest, StressTest)
                     requests.SlotIds.erase(slotId);
                     requests.SlotIdToRequestCount.erase(slotId);
                     requests.SlotIdToRequestSize.erase(slotId);
+                    requests.SlotIdToStatId.erase(slotId);
                 };
             }));
 
@@ -641,6 +639,7 @@ TEST_P(TFairShareHierarchicalSlotQueueStressTest, StressTest)
         TFairShareHierarchicalSlotQueueSlotPtr<TTestTag> slot;
         auto queue = queues[queueIndex];
         i64 requestSize = 0;
+        TGuid statId;
         bool dequeued = false;
 
         if (queue->IsEmpty()) {
@@ -656,6 +655,7 @@ TEST_P(TFairShareHierarchicalSlotQueueStressTest, StressTest)
             }
 
             requestSize = queueRequests[queueIndex].SlotIdToRequestSize[slot->GetSlotId()];
+            statId = GetOrCrash(queueRequests[queueIndex].SlotIdToStatId, slot->GetSlotId());
             queueRequests[queueIndex].SlotIdToRequestCount[slot->GetSlotId()]--;
 
             if (queueRequests[queueIndex].SlotIdToRequestCount[slot->GetSlotId()] == 0) {
@@ -663,17 +663,12 @@ TEST_P(TFairShareHierarchicalSlotQueueStressTest, StressTest)
                 queueRequests[queueIndex].SlotIds.erase(slot->GetSlotId());
                 queueRequests[queueIndex].SlotIdToRequestSize.erase(slot->GetSlotId());
                 queueRequests[queueIndex].SlotIdToRequestCount.erase(slot->GetSlotId());
+                queueRequests[queueIndex].SlotIdToStatId.erase(slot->GetSlotId());
                 dequeued = true;
             }
         }
 
         queue->AccountSlot(slot, requestSize);
-
-        TGuid statId;
-        {
-            auto guard = Guard(SlotToStatLock);
-            statId = GetOrCrash(SlotIdToStatId, slot->GetSlotId());
-        }
 
         auto& stat = stats[statId];
         stat.RequestBandwidth += requestSize;
@@ -696,11 +691,11 @@ TEST_P(TFairShareHierarchicalSlotQueueStressTest, StressTest)
     std::vector<TFuture<void>> futures;
     for (int i = 0; i < numQueues; ++i) {
         for (int j = 0; j < numThreadsPerQueue; ++j) {
-            auto future = BIND([&, index = i, queue = queues[i]] {
+            auto future = BIND([&, index = i, queue = queues[i]](std::mt19937 randomGenerator) {
                 for (int k = 0; k < numRequestsPerThread; ++k) {
                     int action = randomGenerator() % 100;
                     if (action < enqueuePercent) {
-                        createRandomRequest(index);
+                        createRandomRequest(index, randomGenerator);
                     } else {
                         dequeueFromQueue(index);
                     }
@@ -718,7 +713,9 @@ TEST_P(TFairShareHierarchicalSlotQueueStressTest, StressTest)
                             .With("Orchid", NYson::TYsonString(output.Str(), NYson::EYsonType::MapFragment));
                     }
                 }
-            }).AsyncVia(threadPool->GetInvoker()).Run();
+            })
+                .AsyncVia(threadPool->GetInvoker())
+                .Run(createThreadRandomGenerator(i * numThreadsPerQueue + j));
             futures.push_back(future);
         }
     }

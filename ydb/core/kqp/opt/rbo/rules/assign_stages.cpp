@@ -215,10 +215,10 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
 
         const auto newStageId = props.StageGraph.AddStage();
         aggregate->Props.StageId = newStageId;
-        if (!aggregate->KeyColumns.empty()) {
-            auto connection = MakeIntrusive<TShuffleConnection>(aggregate->KeyColumns, outputIndex);
-
-            props.StageGraph.Connect(inputStageId, newStageId, std::move(connection));
+        if (CanEliminateAggregateShuffle(*aggregate, ctx)) {
+            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TMapConnection>(outputIndex));
+        } else if (!aggregate->KeyColumns.empty()) {
+            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TShuffleConnection>(aggregate->KeyColumns, outputIndex));
         } else {
             props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TUnionAllConnection>(outputIndex));
         }
@@ -271,8 +271,20 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         Y_ENSURE(lookup->IsSingleConsumer(), "A table lookup in join mode must feed only its lookup join");
         input->Props.StageId = *lookup->Props.StageId;
         YQL_CLOG(TRACE, CoreDq) << "Assign stages index lookup join";
-    } else {
-        Y_ENSURE(false, "Unknown operator encountered");
+    } else if (input->Kind == EOperator::TableEffect) {
+        auto tableEffect = CastOperator<TOpTableEffect>(input);
+
+        const auto newStageId = props.StageGraph.AddSinkStage(tableEffect->BuildSettings(ctx.ExprCtx));
+        const auto inputStageId = *(tableEffect->GetInput()->Props.StageId);
+        const auto outputIndex = props.StageGraph.GetOutputIndex(inputStageId);
+
+        input->Props.StageId = newStageId;
+        props.StageGraph.Connect(inputStageId, newStageId,
+                                 MakeIntrusive<TUnionAllConnection>(outputIndex));
+        YQL_CLOG(TRACE, CoreDq) << "Assign stages table effects";
+    }
+    else {
+        Y_ENSURE(false, TStringBuilder() << "Unknown operator encountered: " << input->GetExplainName());
     }
 
     return true;

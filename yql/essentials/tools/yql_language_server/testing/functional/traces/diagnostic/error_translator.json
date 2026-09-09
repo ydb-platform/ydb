@@ -43,22 +43,6 @@
           },
           "severity": 1,
           "source": "translator"
-        },
-        {
-          "code": "DEFAULT_ERROR",
-          "message": "Column a is not in source column set. Did you mean b?",
-          "range": {
-            "end": {
-              "character": 5,
-              "line": 1
-            },
-            "start": {
-              "character": 4,
-              "line": 1
-            }
-          },
-          "severity": 1,
-          "source": "typecheck"
         }
       ],
       "kind": "full",

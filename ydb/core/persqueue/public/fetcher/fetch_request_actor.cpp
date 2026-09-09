@@ -13,6 +13,8 @@
 
 #include <library/cpp/containers/absl/flat_hash_set.h>
 
+#include <optional>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_FETCH_REQUEST
 
 #define LOG_PREFIX TStringBuilder() << "[" << NActors::TlsActivationContext->AsActorContext().SelfID << "] "
@@ -66,7 +68,7 @@ private:
     THashMap<ui64, TTabletInfo> TabletInfo;
 
     TActorId RequesterId;
-    ui64 PendingQuotaAmount;
+    std::optional<ui64> PendingQuotaAmount;
 
     TActorId YdbProxy;
     TActorId LongTimer;
@@ -137,12 +139,15 @@ public:
         switch (tag) {
             case EWakeupTag::RlAllowed:
                 ProceedFetchRequest(ctx);
-                PendingQuotaAmount = 0;
+                PendingQuotaAmount.reset();
                 break;
 
             case EWakeupTag::RlNoResource:
-                // Re-requesting the quota. We do this until we get a quota.
-                RequestDataQuota(PendingQuotaAmount, ctx);
+                // Ignore until a quota amount is known. Otherwise a wakeup in StateDescribe
+                // would acquire with a dummy amount and ProceedFetchRequest too early.
+                if (PendingQuotaAmount) {
+                    RequestDataQuota(*PendingQuotaAmount, ctx);
+                }
                 break;
 
             default:
@@ -189,7 +194,7 @@ public:
 
         for (auto& [topicPath, info] : ev->Get()->Topics) {
             switch (info.Status) {
-                case NDescriber::EStatus::SUCCESS: {
+                case NDescriber::EStatus::Success: {
                     // Describer keys responses by the original request path; TopicInfo is keyed by CanonizePath.
                     auto& topicInfo = TopicInfo[CanonizePath(topicPath)];
                     topicInfo.PQInfo = info.Info;
@@ -199,9 +204,9 @@ public:
                 default:
                     return SendReplyAndDie(
                         CreateErrorReply(
-                            info.Status == NDescriber::EStatus::UNAUTHORIZED
+                            info.Status == NDescriber::EStatus::Unauthorized
                                 ? Ydb::StatusIds::UNAUTHORIZED
-                                : (info.Status == NDescriber::EStatus::BAD_REQUEST
+                                : (info.Status == NDescriber::EStatus::BadRequest
                                     ? Ydb::StatusIds::BAD_REQUEST
                                     : Ydb::StatusIds::SCHEME_ERROR),
                             NDescriber::Description(topicPath, info.Status)
@@ -449,7 +454,7 @@ public:
         } else if (IsQuotaRequired()) {
             PendingQuotaAmount = CalcRuConsumption(GetPayloadSize(record)) + (Settings.RuPerRequest ? 1 : 0);
             Settings.RuPerRequest = false;
-            RequestDataQuota(PendingQuotaAmount, ctx);
+            RequestDataQuota(*PendingQuotaAmount, ctx);
         } else {
             ProceedFetchRequest(ctx);
         }

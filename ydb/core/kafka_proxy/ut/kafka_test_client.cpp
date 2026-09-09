@@ -579,6 +579,15 @@ TMessagePtr<TDescribeGroupsResponseData> TKafkaTestClient::DescribeGroups(const 
     return WriteAndRead<TDescribeGroupsResponseData>(header, request);
 }
 
+TMessagePtr<TFindCoordinatorResponseData> TKafkaTestClient::FindCoordinator(const TString& key, i8 keyType) {
+    Cerr << ">>>>> TFindCoordinatorRequestData\n";
+    TRequestHeaderData header = Header(NKafka::EApiKey::FIND_COORDINATOR, 3);
+    TFindCoordinatorRequestData request;
+    request.Key = key;
+    request.KeyType = keyType;
+    return WriteAndRead<TFindCoordinatorResponseData>(header, request);
+}
+
 TMessagePtr<TFetchResponseData> TKafkaTestClient::Fetch(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset) {
     Cerr << ">>>>> TFetchRequestData\n";
 
@@ -636,7 +645,8 @@ void TKafkaTestClient::ValidateNoDataInTopics(const std::vector<std::pair<TStrin
     UNIT_ASSERT_VALUES_EQUAL(fetchResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
     for (ui32 topicIndex = 0; topicIndex < topics.size(); topicIndex++) {
         for (ui32 partitionIndex = 0; partitionIndex < topics[topicIndex].second.size(); partitionIndex++) {
-            UNIT_ASSERT(!fetchResponse->Responses[topicIndex].Partitions[partitionIndex].Records.has_value());
+            UNIT_ASSERT(fetchResponse->Responses[topicIndex].Partitions[partitionIndex].Records.has_value());
+            UNIT_ASSERT_VALUES_EQUAL(fetchResponse->Responses[topicIndex].Partitions[partitionIndex].Records->size(), 0);
         }
     }
 }

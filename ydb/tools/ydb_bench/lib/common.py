@@ -48,7 +48,11 @@ def atomic_write_text(path, text):
 
 
 def atomic_write_json(path, value):
-    atomic_write_text(path, json.dumps(value, indent=2, sort_keys=True) + "\n")
+    try:
+        text = json.dumps(value, allow_nan=False, indent=2, sort_keys=True) + "\n"
+    except (TypeError, ValueError) as error:
+        raise BenchmarkError("cannot serialize JSON with only finite values") from error
+    atomic_write_text(path, text)
 
 
 def atomic_copy_file(source, destination, mode=None):

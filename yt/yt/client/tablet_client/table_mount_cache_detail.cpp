@@ -242,7 +242,9 @@ void TTableMountCacheBase::InvalidateTablet(TTabletId tabletId)
     }
 }
 
-TTabletInfoPtr TTableMountCacheBase::FindTabletInfo(TTabletId tabletId)
+TTabletInfoPtr TTableMountCacheBase::FindTabletInfo(
+    TTabletId tabletId,
+    std::optional<TRevision> mountRevision)
 {
     TTabletInfoPtr result;
 
@@ -253,7 +255,9 @@ TTabletInfoPtr TTableMountCacheBase::FindTabletInfo(TTabletId tabletId)
         }
 
         for (const auto& tabletInfo : owner->Tablets) {
-            if (tabletInfo->TabletId == tabletId) {
+            if (tabletInfo->TabletId == tabletId &&
+                (!mountRevision || tabletInfo->MountRevision == *mountRevision))
+            {
                 if (!result ||
                     tabletInfo->MountRevision > result->MountRevision ||
                     tabletInfo->MountRevision == result->MountRevision && tabletInfo->UpdateTime > result->UpdateTime)
@@ -289,8 +293,7 @@ auto TTableMountCacheBase::TryHandleRedirectionError(const TError& error)
     };
 
     std::vector<std::pair<TSmoothMovementRedirectionHint, TTabletInfoPtr>> smoothMovementRedirectionHints;
-    TReshardRedirectionHintPtr reshardRedirectionHint;
-    TTabletInfoPtr reshardTabletInfo;
+    std::vector<std::pair<TReshardRedirectionHintPtr, TTabletInfoPtr>> reshardRedirectionHints;
     bool retryInplace = false;
 
     auto onError = [&] (const TError& error, auto&& self) {
@@ -319,8 +322,7 @@ auto TTableMountCacheBase::TryHandleRedirectionError(const TError& error)
             }
 
             if (error.GetCode() == NTabletClient::EErrorCode::TabletResharded) {
-                reshardTabletInfo = tabletInfo;
-                reshardRedirectionHint = redirectionHint->ReshardRedirectionHint;
+                reshardRedirectionHints.emplace_back(redirectionHint->ReshardRedirectionHint, tabletInfo);
             } else {
                 smoothMovementRedirectionHints.emplace_back(redirectionHint->SmoothMovementRedirectionHint, tabletInfo);
             }
@@ -335,11 +337,11 @@ auto TTableMountCacheBase::TryHandleRedirectionError(const TError& error)
 
     if (retryInplace) {
         YT_TLOG_ALERT_UNLESS(
-            smoothMovementRedirectionHints.empty() && !reshardRedirectionHint,
+            smoothMovementRedirectionHints.empty() && reshardRedirectionHints.empty(),
             "In-place retry is combined with tablet redirection hints within a single request; "
             "redirection hints are ignored in favor of in-place retry")
             .With("HasSmoothMovementRedirectionHints", !smoothMovementRedirectionHints.empty())
-            .With("HasReshardRedirectionHint", static_cast<bool>(reshardRedirectionHint))
+            .With("HasReshardRedirectionHints", !reshardRedirectionHints.empty())
             .With(error);
 
         return {{
@@ -347,15 +349,26 @@ auto TTableMountCacheBase::TryHandleRedirectionError(const TError& error)
             .ErrorCode = NTabletClient::EErrorCode::ReadOnlySmoothMovementStage,
             .TableInfoUpdatedFromError = true,
         }};
-    } else if (reshardRedirectionHint) {
-        // TODO(ifsmirnov, atalmenev): process multiple reshard redirection hints
-        // at once similar to smooth movement hints.
-        return TryHandleTabletReshardedError(reshardRedirectionHint, reshardTabletInfo);
-    } else if (!smoothMovementRedirectionHints.empty()) {
-        return TryHandleServantNotActiveError(std::move(smoothMovementRedirectionHints));
     }
 
-    return {};
+    std::optional<TInvalidationResult> result;
+    for (const auto& [reshardRedirectionHint, tabletInfo] : reshardRedirectionHints) {
+        auto reshardResult = TryHandleTabletReshardedError(reshardRedirectionHint, tabletInfo);
+        if (!reshardResult) {
+            return {};
+        }
+        result = std::move(reshardResult);
+    }
+
+    if (!smoothMovementRedirectionHints.empty()) {
+        auto smoothMovementResult = TryHandleServantNotActiveError(std::move(smoothMovementRedirectionHints));
+        if (!smoothMovementResult) {
+            return {};
+        }
+        result = std::move(smoothMovementResult);
+    }
+
+    return result;
 }
 
 auto TTableMountCacheBase::TryHandleServantNotActiveError(
@@ -378,8 +391,12 @@ auto TTableMountCacheBase::TryHandleServantNotActiveError(
         if (tabletInfo->MountRevision == hint.OldMountRevision) {
             filteredHints.emplace_back(std::move(hint), std::move(tabletInfo));
         } else if (tabletInfo->MountRevision == hint.NewMountRevision) {
-            // Recent mount info already contains the new tablet.
-            continue;
+            // This tablet info is up-to-date, but other owners may still have stale tablet infos
+            // that we want to update.
+            auto oldTabletInfo = FindTabletInfo(tabletInfo->TabletId, hint.OldMountRevision);
+            if (oldTabletInfo) {
+                filteredHints.emplace_back(std::move(hint), std::move(oldTabletInfo));
+            }
         } else {
             return {};
         }

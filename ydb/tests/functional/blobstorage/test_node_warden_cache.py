@@ -48,7 +48,7 @@ class CacheTestBase(object):
 
     def assert_cluster_operational(self):
         driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database='/Root')
-        driver.wait(timeout=60, fail_fast=True)
+        driver.wait(timeout=60)
         try:
             with ydb.QuerySessionPool(driver) as pool:
                 rows = pool.execute_with_retries("SELECT 1 AS value")[0].rows

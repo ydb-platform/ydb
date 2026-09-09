@@ -140,16 +140,17 @@ protected:
 
 private:
     TPartialValue EvaluateNode(const TNamedNodeRef& ref) {
-        const TNamedNode* node = Nodes_->Resolve(ref);
-        if (!node) {
+        INamedNodeDef::TPtr definition = Nodes_->Definition(ref);
+        if (!definition) {
             return std::monostate();
         }
+        const TNamedNode& node = definition->Value();
 
-        if (std::holds_alternative<NYT::TNode>(*node)) {
-            return std::get<NYT::TNode>(*node);
+        if (std::holds_alternative<NYT::TNode>(node)) {
+            return std::get<NYT::TNode>(node);
         }
 
-        if (std::holds_alternative<SQLv1::ExprContext*>(*node)) {
+        if (std::holds_alternative<SQLv1::ExprContext*>(node)) {
             if (Resolving_.contains(ref)) {
                 return std::monostate();
             }
@@ -159,7 +160,7 @@ private:
                 Resolving_.erase(ref);
             };
 
-            std::any any = visit(std::get<SQLv1::ExprContext*>(*node));
+            std::any any = visit(std::get<SQLv1::ExprContext*>(node));
             return std::any_cast<TPartialValue>(std::move(any));
         }
 

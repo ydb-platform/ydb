@@ -39,6 +39,7 @@ using namespace std::literals::string_view_literals;
 
 class TPqDqIntegration : public TDqIntegrationBase {
     static constexpr ui64 DefaultMaxPartitions = 10000;
+    static constexpr ui64 AveragePartitionsPerTask = 5;
 
 public:
     explicit TPqDqIntegration(const TPqState::TPtr& state)
@@ -59,6 +60,7 @@ public:
             }
         }
         YQL_ENSURE(topicPartitionsCount > 0);
+        const bool groupPartitions = !maxPartitions;
         if (!streamingTopicRead && !maxPartitions) {
             maxPartitions = 1;      // Reading in table mode - 1 task by default.
         }
@@ -67,7 +69,9 @@ public:
         }
 
         if (predicatePartitions.empty()) {      // read all partitions
-            const size_t tasks = Min(maxPartitions, topicPartitionsCount);
+            const size_t tasks = groupPartitions
+                ? (topicPartitionsCount + AveragePartitionsPerTask - 1) / AveragePartitionsPerTask
+                : Min(maxPartitions, topicPartitionsCount);
             partitions.reserve(tasks);
             for (size_t i = 0; i < tasks; ++i) {
                 NPq::NProto::TDqReadTaskParams params;
@@ -82,7 +86,9 @@ public:
                 partitions.emplace_back(std::move(serializedParams));
             }
         } else {    // read only predicate partitions
-            const size_t tasks = Min(maxPartitions, predicatePartitions.size());
+            const size_t tasks = groupPartitions
+                ? (predicatePartitions.size() + AveragePartitionsPerTask - 1) / AveragePartitionsPerTask
+                : Min(maxPartitions, predicatePartitions.size());
             auto predicatePartitionIt = predicatePartitions.begin();
             partitions.reserve(tasks);
             size_t allocatedPartitions = 0;
@@ -472,6 +478,7 @@ public:
                 bool sharedReading = false;
                 bool skipErrors = false;
                 bool streamingTopicRead = State_->StreamingTopicsReadByDefault;
+                bool usedPartitionPredicate = false;
                 TString format;
                 const TExprNode* userSchemaColumnsSetting = nullptr;
                 size_t const settingsCount = topicSource.Settings().Size();
@@ -514,6 +521,8 @@ public:
                         if (TMaybeNode<TExprBase> maybeList = setting.Value()) {
                             userSchemaColumnsSetting = maybeList.Cast().Raw();
                         }
+                    } else if (name == UsedPartitionPredicateSetting) {
+                        usedPartitionPredicate = FromString<bool>(Value(setting));
                     }
                 }
 
@@ -606,6 +615,9 @@ public:
                     srcDesc.SetSharedReading(true);
                 }
                 srcDesc.SetSkipJsonErrors(skipErrors);
+                if (usedPartitionPredicate) {
+                    srcDesc.SetUsedPartitionPredicate(true);
+                }
 
                 if (!streamingTopicRead) {
                     srcDesc.MutableDisposition()->mutable_oldest();
@@ -698,7 +710,7 @@ public:
                     } else if (name == NDeliveryGuaranteeSetting::Name) {
                         if (Value(setting) == NDeliveryGuaranteeSetting::ExactlyOnceValue) {
                             YQL_ENSURE(State_->EnableExactlyOnceDeliveryGuaranty && State_->DeferredPublicationExtIdPrefix, "Deferred publication is not enabled");
-                            YQL_ENSURE(!maybeEnableDeduplication.GetOrElse(false), "Deferred publication can not be used with enabled deduplication");
+                            YQL_ENSURE(!maybeEnableDeduplication.GetOrElse(false), "Deferred publication cannot be used with enabled deduplication");
                             sinkDesc.SetDeferredPublicationExtIdPrefix(State_->DeferredPublicationExtIdPrefix);
                         }
                     }

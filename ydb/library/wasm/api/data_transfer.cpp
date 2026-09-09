@@ -31,6 +31,9 @@ TCopyGuard::TCopyGuard(IWebAssemblyCompartment* compartment, uintptr_t offset)
     , CopiedOffset_(offset)
 { }
 
+// Y_WEAK is a no-op on Windows (COFF); omitting the stub avoids duplicate
+// symbols with the strong override in library/wasm/engine.
+#if defined(__GNUC__)
 Y_WEAK TCopyGuard::~TCopyGuard()
 {
     if (Compartment_ != nullptr && CopiedOffset_ != 0) {
@@ -41,6 +44,7 @@ Y_WEAK TCopyGuard::~TCopyGuard()
         }
     }
 }
+#endif
 
 TCopyGuard::TCopyGuard(TCopyGuard&& other) noexcept
 {

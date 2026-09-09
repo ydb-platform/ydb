@@ -124,11 +124,18 @@ class Validator {
     }
 
     _sendToggle() {
-        var url = 'cms/api/json/toggleconfigvalidator?';
-        url += 'name=' + this.name;
-        url += '&enable=' + (+this.enabled);
+        var url = 'cms/api/json/toggleconfigvalidator?' + $.param({
+            name: this.name,
+            enable: +this.enabled,
+        });
+        var csrfTokenMatch = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
+        var csrfToken = csrfTokenMatch ? csrfTokenMatch[1] : '';
         var _this = this;
-        $.get(url)
+        $.ajax({
+            url: url,
+            type: 'POST',
+            headers: {'X-CSRF-Token': csrfToken},
+        })
             .done(function(data) {
                 _this._onToggleFinished(data);
             })

@@ -34,7 +34,7 @@ TUnboxedValue TProtobufValue::Run(
         if (result == nullptr) {
             return TUnboxedValue();
         }
-        auto proto(result);
+        const auto& proto = result;
         return FillValueFromProto(*proto.Get(), valueBuilder, Info_);
     } catch (const std::exception& e) {
         UdfTerminate(e.what());

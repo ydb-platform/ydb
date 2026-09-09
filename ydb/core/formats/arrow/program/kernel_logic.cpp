@@ -55,10 +55,13 @@ std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(const std::shared_ptr<
         accessor = accessorResult.DetachResult();
     }
 
-    if (!accessor) {
-        return NAccessor::TTrivialArray::BuildEmpty(std::make_shared<arrow::StringType>());
+    if (!accessor || !accessor->IsValid()) {
+        return NAccessor::TTrivialArray::MakeBuilderUtf8().Finish(jsonAcc->GetRecordsCount());
     }
 
+    if (auto result = accessor->GetNativeStringArray()) {
+        return result;
+    }
 
     ui32 recordIndex = 0;
     auto builder = NAccessor::TTrivialArray::MakeBuilderUtf8(accessor->GetRecordsCount());

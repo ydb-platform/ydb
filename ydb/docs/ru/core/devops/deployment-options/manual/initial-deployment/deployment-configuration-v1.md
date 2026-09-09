@@ -7,7 +7,7 @@
 ## Подготовьте конфигурационные файлы {#config}
 
 Подготовьте конфигурационный файл {{ ydb-short-name }} в зависимости от выбранной вами топологии (см. [выбор топологии](../../../deployment-options/ansible/initial-deployment/deployment-preparation.md#topology-select)). Примеры для каждой поддерживаемой топологии приведены ниже во вкладках — выберите и используйте подходящий для вашего случая.
-Также при необходимости включить работу по Kafka API с топиками, добавьте в конфигурационный файл секцию kafka_proxy_config (см. [конфигурирование Kafka API](../../../reference/configuration/kafka_proxy_config)).
+Также при необходимости включить работу по Kafka API с топиками, добавьте в конфигурационный файл секцию kafka_proxy_config (см. [конфигурирование Kafka API](../../../../reference/configuration/kafka_proxy_config.md)).
 
 {% list tabs %}
 
@@ -83,8 +83,6 @@
         node: [1, 2, 3]
         nto_select: 3
       ssid: 1
-  table_service_config:
-    sql_version: 1
   actor_system_config:
     executor:
     - name: System
@@ -288,8 +286,6 @@
         node: [1, 2, 3, 4, 5, 6, 7, 8, 9]
         nto_select: 9
       ssid: 1
-  table_service_config:
-    sql_version: 1
   actor_system_config:
     executor:
     - name: System
@@ -488,8 +484,6 @@
         node: [1, 2, 3, 4, 5, 6, 7, 8]
         nto_select: 5
       ssid: 1
-  table_service_config:
-    sql_version: 1
   actor_system_config:
     executor:
     - name: System

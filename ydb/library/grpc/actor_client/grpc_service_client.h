@@ -76,6 +76,7 @@ public:
         using TRequestType = decltype(typename TCallType::TRequestEventType().Request);
         using TResponseType = decltype(typename TCallType::TResponseEventType().Response);
         const auto& requestId = ev->Get()->RequestId;
+        const auto& peerName = ev->Get()->PeerName;
         if (!Connection) {
             TString schema;
             if (!Config.UseXds) {
@@ -96,6 +97,9 @@ public:
         }
         if (requestId) {
             meta.Aux.push_back({"x-request-id", requestId});
+        }
+        if (peerName) {
+            meta.Aux.push_back({"x-user-ip", peerName});
         }
         for (const auto& [k, v] : ev->Get()->Headers) {
             meta.Aux.push_back({k, v});

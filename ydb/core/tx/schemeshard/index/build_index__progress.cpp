@@ -596,6 +596,20 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextPropose(
         std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&buildInfo.SpecializedIndexDescription),
         buildInfo.IndexType, prefixColumns, true);
 
+    // Set a low SizeToSplit so the build table quickly ramps up shard count during data upload.
+    auto& policy = *op.MutablePartitionConfig()->MutablePartitioningPolicy();
+    policy.SetSizeToSplit(100*1024*1024);
+    const auto maxShardsInPath = path.DomainInfo()->GetSchemeLimits().MaxShardsInPath;
+    ui32 fulltextShards = tableInfo->GetPartitionStore().size();
+    if (fulltextShards < buildInfo.MaxInProgressShards) {
+        fulltextShards = buildInfo.MaxInProgressShards;
+    }
+    if (fulltextShards > maxShardsInPath) {
+        fulltextShards = maxShardsInPath;
+    }
+    policy.SetMinPartitionsCount(fulltextShards);
+    policy.SetMaxPartitionsCount(fulltextShards);
+
     op.SetName(TString::Join(NTableIndex::ImplTable, NTableIndex::NKMeans::BuildSuffix0));
 
     InheritDetailedMetricsSettings(tableInfo, op);
@@ -632,6 +646,19 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextRowIdSrcP
     op = CalcFulltextRowIdSrcImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
         dataColumns, buildInfo.IndexColumns, NKikimrSchemeOp::TTableDescription(),
         std::get<NKikimrSchemeOp::TFulltextIndexDescription>(buildInfo.SpecializedIndexDescription));
+    const auto maxShardsInPath = path.DomainInfo()->GetSchemeLimits().MaxShardsInPath;
+    ui32 fulltextShards = tableInfo->GetPartitionStore().size();
+    if (fulltextShards < buildInfo.MaxInProgressShards) {
+        fulltextShards = buildInfo.MaxInProgressShards;
+    }
+    if (fulltextShards > maxShardsInPath) {
+        fulltextShards = maxShardsInPath;
+    }
+    // rowid is bitreverse-sequential, so it uses the whole uint64 range, so we can use uniform partitioning
+    op.SetUniformPartitionsCount(fulltextShards);
+    auto& policy = *op.MutablePartitionConfig()->MutablePartitioningPolicy();
+    policy.SetMinPartitionsCount(fulltextShards);
+    policy.SetMaxPartitionsCount(fulltextShards);
 
     op.SetName(TString::Join(NTableIndex::ImplTable, NTableIndex::NFulltext::RowIdSrcBuildSuffix));
 
@@ -640,6 +667,55 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextRowIdSrcP
     LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
         "CreateBuildFulltextRowIdSrcPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
+    return propose;
+}
+
+// Copy compact fulltext index table partition boundaries from the 0build table
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterIndexPartitioningPropose(
+    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+{
+    Y_ENSURE(buildInfo.IsBuildFulltextCompact(), "Unknown operation kind while building AlterIndexPartitioningPropose");
+
+    auto implPath = GetBuildPath(ss, buildInfo, NTableIndex::ImplTable);
+    TTableInfo::TPtr implTable = ss->Tables.at(implPath->PathId);
+    auto buildPath = GetBuildPath(ss, buildInfo, TString::Join(NTableIndex::ImplTable, NTableIndex::NKMeans::BuildSuffix0));
+    TTableInfo::TPtr buildTable = ss->Tables.at(buildPath->PathId);
+
+    if (implTable->GetPartitions().size() > 1 ||
+        buildTable->GetPartitions().size() <= 1) {
+        return nullptr;
+    }
+
+    auto implShardIdx = implTable->GetPartitions()[0]->ShardIdx;
+    auto implTabletId = ss->ShardInfos.at(implShardIdx).TabletID;
+
+    if (!implTable->GetStats().PartitionStats.contains(implShardIdx) ||
+        implTable->GetStats().PartitionStats.at(implShardIdx).ShardState != NKikimrTxDataShard::Ready) {
+        // implTable shard is not Ready - the index is likely so small that
+        // the datashard didn't even have time to report its first PeriodicTableStats
+        // just skip pre-sharding in this case too
+        return nullptr;
+    }
+
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    propose->Record.SetFailOnExist(true);
+
+    NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
+
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions);
+    modifyScheme.SetInternal(true);
+
+    auto& splitMerge = *modifyScheme.MutableSplitMergeTablePartitions();
+    splitMerge.SetTablePath(implPath.PathString());
+    splitMerge.AddSourceTabletId(ui64(implTabletId));
+
+    const auto& parts = buildTable->GetPartitions();
+    for (size_t i = 0; i < parts.size() - 1; i++) {
+        splitMerge.AddSplitBoundary()->SetSerializedKeyPrefix(parts[i]->EndOfRange);
+    }
+
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "AlterIndexPartitioningPropose " << buildInfo.Id << " " << propose->Record.ShortDebugString());
     return propose;
 }
 
@@ -1578,20 +1654,35 @@ private:
             ev->Record.SetDictTableName(path.PathString());
         }
 
+        const auto& shardStatus = buildInfo.Shards.at(shardIdx);
+
         // Fulltext index columns are [prefix..., text]; all but the last are prefix key columns.
         // The dict scan needs them to skip prefix cells and compact segments per (prefix, token).
+        ui32 prefixColumnCount = 0;
         if (buildInfo.IndexColumns.size() > 1) {
+            prefixColumnCount = buildInfo.IndexColumns.size() - 1;
             for (size_t i = 0; i + 1 < buildInfo.IndexColumns.size(); ++i) {
                 ev->Record.AddPrefixColumns(buildInfo.IndexColumns[i]);
             }
+            if (buildInfo.IsBuildFulltextRelevance()) {
+                auto path = GetBuildPath(Self, buildInfo, NTableIndex::NFulltext::StatsTable);
+                ev->Record.SetStatsTableName(path.PathString());
+                if (shardStatus.Range.From.GetCells().size() > prefixColumnCount) {
+                    // Range start is possibly split in the middle of a prefix
+                    ev->Record.SetSkipFirstPrefix(true);
+                }
+                if (shardStatus.Range.To.GetCells().size() > prefixColumnCount) {
+                    // Range end is possibly split in the middle of a prefix
+                    ev->Record.SetSkipLastPrefix(true);
+                }
+            }
         }
 
-        const auto& shardStatus = buildInfo.Shards.at(shardIdx);
-        if (shardStatus.Range.From.GetCells().size() > 1) {
+        if (shardStatus.Range.From.GetCells().size() > prefixColumnCount + 1) {
             // Range start is possibly split in the middle of a token
             ev->Record.SetSkipFirstToken(true);
         }
-        if (shardStatus.Range.To.GetCells().size() > 1) {
+        if (shardStatus.Range.To.GetCells().size() > prefixColumnCount + 1) {
             // Range end is possibly split in the middle of a token
             ev->Record.SetSkipLastToken(true);
         }
@@ -1643,10 +1734,16 @@ private:
             }
         }
 
+        ui32 prefixColumns = buildInfo.IndexColumns.size() - 1;
         TVector<std::pair<TSerializedCellVec, TSerializedCellVec>> uploadRows;
         for (auto& [token, docCount]: borders) {
-            uploadRows.emplace_back(TSerializedCellVec{TVector<TCell>{TCell(token)}},
-                TSerializedCellVec{TVector<TCell>{TCell::Make(docCount)}});
+            if (prefixColumns > 0) {
+                uploadRows.emplace_back(TSerializedCellVec(token),
+                    TSerializedCellVec{TVector<TCell>{TCell::Make(docCount)}});
+            } else {
+                uploadRows.emplace_back(TSerializedCellVec{TVector<TCell>{TCell(token)}},
+                    TSerializedCellVec{TVector<TCell>{TCell::Make(docCount)}});
+            }
         }
 
         auto mainTablePath = TPath::Init(buildInfo.TablePathId, Self);
@@ -1672,7 +1769,61 @@ private:
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
 
-        LOG_N("TTxBuildProgress: TUploadFulltextStats: " << buildInfo);
+        LOG_N("TTxBuildProgress: TUploadFulltextBorders: " << buildInfo);
+    }
+
+    struct TDocStats {
+        NTableIndex::NFulltext::TDocCount DocCount = 0;
+        NTableIndex::NFulltext::TDocCount SumDocLength = 0;
+    };
+
+    void SendUploadFulltextPrefixBordersRequest(TIndexBuildInfo& buildInfo) {
+        TMap<TString, TDocStats> borders;
+        for (auto& [shardIdx, shardStatus]: buildInfo.Shards) {
+            if (shardStatus.FirstPrefixDocCount) {
+                auto& b = borders[shardStatus.FirstPrefix];
+                b.DocCount += shardStatus.FirstPrefixDocCount;
+                b.SumDocLength += shardStatus.FirstPrefixSumDocLength;
+            }
+            if (shardStatus.LastPrefixDocCount) {
+                auto& b = borders[shardStatus.LastPrefix];
+                b.DocCount += shardStatus.LastPrefixDocCount;
+                b.SumDocLength += shardStatus.LastPrefixSumDocLength;
+            }
+        }
+
+        TVector<std::pair<TSerializedCellVec, TSerializedCellVec>> uploadRows;
+        for (auto& [prefix, stat]: borders) {
+            uploadRows.emplace_back(TSerializedCellVec(prefix),
+                TSerializedCellVec{TVector<TCell>{TCell::Make(stat.DocCount), TCell::Make(stat.SumDocLength)}});
+        }
+
+        auto mainTablePath = TPath::Init(buildInfo.TablePathId, Self);
+        const auto& mainTableInfo = Self->Tables.at(mainTablePath->PathId);
+
+        auto types = std::make_shared<NTxProxy::TUploadTypes>();
+        TColumnTypes baseColumnTypes;
+        TString error;
+        Y_ENSURE(ExtractTypes(mainTableInfo, baseColumnTypes, error), error);
+        Y_ENSURE(buildInfo.IndexColumns.size() > 1);
+        for (size_t i = 0; i < buildInfo.IndexColumns.size() - 1; i++) {
+            Ydb::Type type;
+            NScheme::ProtoFromTypeInfo(baseColumnTypes.at(buildInfo.IndexColumns[i]), type);
+            types->emplace_back(buildInfo.IndexColumns[i], type);
+        }
+
+        Ydb::Type type;
+        type.set_type_id(NTableIndex::NFulltext::DocCountType);
+        types->emplace_back(NTableIndex::NFulltext::DocCountColumn, type);
+        types->emplace_back(NTableIndex::NFulltext::SumDocLengthColumn, type);
+
+        auto path = GetBuildPath(Self, buildInfo, NTableIndex::NFulltext::StatsTable);
+        auto actor = new TUploadSampleK(CanonizePath(Self->RootPathElements), path.PathString(),
+            buildInfo.ScanSettings, Self->SelfId(), BuildId, types, std::move(uploadRows));
+
+        TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
+
+        LOG_N("TTxBuildProgress: TUploadFulltextPrefixBorders: " << buildInfo);
     }
 
     void ClearAfterFill(const TActorContext& ctx, TIndexBuildInfo& buildInfo) {
@@ -2408,7 +2559,44 @@ private:
         return true;
     }
 
+    void ChangeToFulltextDictionary(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
+        ClearDoneShards(txc, buildInfo);
+        NIceDb::TNiceDb db{txc.DB};
+        buildInfo.SubState = TIndexBuildInfo::ESubState::FulltextIndexDictionary;
+        Self->PersistBuildIndexState(db, buildInfo);
+        Self->PersistBuildIndexShardStatusReset(db, buildInfo);
+        ChangeState(BuildId, TIndexBuildInfo::EState::LockBuild);
+        Progress(BuildId);
+    }
+
+    void ChangeToFulltextDone(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
+        ClearDoneShards(txc, buildInfo);
+        NIceDb::TNiceDb db{txc.DB};
+        buildInfo.SubState = TIndexBuildInfo::ESubState::None;
+        Self->PersistBuildIndexState(db, buildInfo);
+        Self->PersistBuildIndexShardStatusReset(db, buildInfo);
+    }
+
     bool FillFulltextIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
+        // SubState flow:
+        // ("None" = "Posting")
+        // - GlobalFulltextPlain / GlobalJson:
+        //   None -> END
+        // - GlobalFulltextRelevance:
+        //   None -> Stats -> Dict -> Borders -> END
+        // - GlobalFulltextCompact / GlobalJsonCompact:
+        //   None -> Dict -> END
+        // - rowid GlobalFulltextCompact / rowid GlobalJsonCompact:
+        //   RowIdSrc -> None -> Dict -> END
+        // - GlobalFulltextCompactRelevance:
+        //   None -> Stats -> Dict -> END
+        // - rowid GlobalFulltextCompactRelevance:
+        //   RowIdSrc -> None -> Stats -> Dict -> END
+        // - prefixed GlobalFulltextCompactRelevance:
+        //   None -> Dict -> PrefixBorders -> END
+        // - prefixed rowid GlobalFulltextCompactRelevance:
+        //   RowIdSrc -> None -> Dict -> PrefixBorders -> END
+
         bool done = false;
 
         switch (buildInfo.SubState) {
@@ -2435,7 +2623,7 @@ private:
             }
             break;
         case TIndexBuildInfo::ESubState::None:
-            // Stage 1 for FulltextRelevance - build "posting" table (token-documents)
+            // Build "posting" table (token-documents)
             LOG_D("FillFulltextIndex Posting");
             if (NoShardsAdded(buildInfo)) {
                 AddAllShards(buildInfo);
@@ -2444,27 +2632,21 @@ private:
                 buildInfo.DoneShards.size() == buildInfo.Shards.size();
             if (done) {
                 LOG_D("FillFulltextIndex Posting Done");
-                if (buildInfo.IsBuildFulltextRelevance()) {
+                if (buildInfo.IsBuildFulltextRelevance() && !buildInfo.IsBuildFulltextPrefixedRelevance()) {
                     NIceDb::TNiceDb db{txc.DB};
                     buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Collect;
                     buildInfo.SubState = TIndexBuildInfo::ESubState::FulltextIndexStats;
                     Self->PersistBuildIndexState(db, buildInfo);
                     Progress(BuildId);
                     done = false;
-                } else if (buildInfo.IsBuildFulltextCompact()) {
-                    ClearDoneShards(txc, buildInfo);
-                    NIceDb::TNiceDb db{txc.DB};
-                    buildInfo.SubState = TIndexBuildInfo::ESubState::FulltextIndexDictionary;
-                    Self->PersistBuildIndexState(db, buildInfo);
-                    Self->PersistBuildIndexShardStatusReset(db, buildInfo);
-                    ChangeState(BuildId, TIndexBuildInfo::EState::LockBuild);
-                    Progress(BuildId);
+                } else if (buildInfo.IsBuildFulltextCompact() || buildInfo.IsBuildFulltextPrefixedRelevance()) {
+                    ChangeToFulltextDictionary(txc, buildInfo);
                     done = false;
                 }
             }
             break;
         case TIndexBuildInfo::ESubState::FulltextIndexStats:
-            // Stage 2 for FulltextRelevance/FulltextCompactRelevance - build statistics table (DocCount & TotalDocLength)
+            // Non-prefixed with relevance - index statistics table (DocCount & TotalDocLength)
             if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
                 LOG_D("FillFulltextIndex SendUploadStats " << buildInfo.DebugString());
                 buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
@@ -2472,18 +2654,13 @@ private:
                 Progress(BuildId);
             } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
                 LOG_D("FillFulltextIndex UploadStats Done " << buildInfo.DebugString());
-                ClearDoneShards(txc, buildInfo);
-                NIceDb::TNiceDb db{txc.DB};
-                buildInfo.SubState = TIndexBuildInfo::ESubState::FulltextIndexDictionary;
-                Self->PersistBuildIndexState(db, buildInfo);
-                Self->PersistBuildIndexShardStatusReset(db, buildInfo);
-                ChangeState(BuildId, TIndexBuildInfo::EState::LockBuild);
-                Progress(BuildId);
+                ChangeToFulltextDictionary(txc, buildInfo);
             }
             break;
         case TIndexBuildInfo::ESubState::FulltextIndexDictionary:
-            // Stage 3 for FulltextRelevance - build dictionary table
-            // And/or stage 2 for FulltextCompact - compact token table
+            // FulltextRelevance - build dictionary table
+            // FulltextCompact - compact token table
+            // Prefixed with relevance - per-prefix statistics table
             LOG_D("FillFulltextIndex Dictionary");
             if (NoShardsAdded(buildInfo)) {
                 AddAllShards(buildInfo);
@@ -2497,6 +2674,10 @@ private:
                     buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Collect;
                     buildInfo.SubState = TIndexBuildInfo::ESubState::FulltextIndexBorders;
                     done = false;
+                } else if (buildInfo.IsBuildFulltextPrefixedRelevance()) {
+                    buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Collect;
+                    buildInfo.SubState = TIndexBuildInfo::ESubState::FulltextIndexPrefixBorders;
+                    done = false;
                 } else {
                     buildInfo.SubState = TIndexBuildInfo::ESubState::None;
                     Self->PersistBuildIndexShardStatusReset(db, buildInfo);
@@ -2507,7 +2688,7 @@ private:
             }
             break;
         case TIndexBuildInfo::ESubState::FulltextIndexBorders:
-            // Stage 4 for FulltextRelevance - fill border values for dictionary
+            // FulltextRelevance - aggregate border values for token dictionary
             if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
                 LOG_D("FillFulltextIndex SendUploadBorders " << buildInfo.DebugString());
                 buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
@@ -2515,11 +2696,28 @@ private:
                 Progress(BuildId);
             } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
                 LOG_D("FillFulltextIndex UploadBorders Done " << buildInfo.DebugString());
-                ClearDoneShards(txc, buildInfo);
-                NIceDb::TNiceDb db{txc.DB};
-                buildInfo.SubState = TIndexBuildInfo::ESubState::None;
-                Self->PersistBuildIndexState(db, buildInfo);
-                Self->PersistBuildIndexShardStatusReset(db, buildInfo);
+                if (buildInfo.IsBuildFulltextPrefixedRelevance()) {
+                    buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Collect;
+                    buildInfo.SubState = TIndexBuildInfo::ESubState::FulltextIndexPrefixBorders;
+                    NIceDb::TNiceDb db{txc.DB};
+                    Self->PersistBuildIndexState(db, buildInfo);
+                    Progress(BuildId);
+                } else {
+                    ChangeToFulltextDone(txc, buildInfo);
+                    done = true;
+                }
+            }
+            break;
+        case TIndexBuildInfo::ESubState::FulltextIndexPrefixBorders:
+            // Prefixed with relevance - aggregate border values for per-prefix statistics
+            if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
+                LOG_D("FillFulltextIndex SendUploadPrefixBorders " << buildInfo.DebugString());
+                buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
+                SendUploadFulltextPrefixBordersRequest(buildInfo);
+                Progress(BuildId);
+            } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
+                LOG_D("FillFulltextIndex UploadPrefixBorders Done " << buildInfo.DebugString());
+                ChangeToFulltextDone(txc, buildInfo);
                 done = true;
             }
             break;
@@ -2706,6 +2904,35 @@ public:
                 Progress(BuildId);
             }
             break;
+        case TIndexBuildInfo::EState::AlterIndexTable: {
+            Y_ENSURE(buildInfo.IsBuildFulltextCompact());
+            if (buildInfo.ApplyTxId == InvalidTxId) {
+                AllocateTxId(BuildId);
+                break;
+            } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
+                auto ev = AlterIndexPartitioningPropose(Self, buildInfo);
+                if (ev) {
+                    buildInfo.ApplyTxStatus = NKikimrScheme::StatusAccepted;
+                    Send(Self->SelfId(), std::move(ev), 0, ui64(BuildId));
+                    break;
+                }
+            } else if (!buildInfo.ApplyTxDone) {
+                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
+                break;
+            }
+
+            buildInfo.ApplyTxId = {};
+            buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
+            buildInfo.ApplyTxDone = false;
+
+            NIceDb::TNiceDb db(txc.DB);
+            Self->PersistBuildIndexApplyTx(db, buildInfo);
+
+            // Next step is FulltextDictionary, previous was LockBuild
+            ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
+            Progress(BuildId);
+            break;
+        }
         case TIndexBuildInfo::EState::ProvisioningRowIdColumn: {
             if (!buildInfo.RowIdColumnBuildId) {
                 // Mint the child build id (assigned + child created in the AllocateResult handler).
@@ -2928,7 +3155,11 @@ public:
                 NIceDb::TNiceDb db(txc.DB);
                 Self->PersistBuildIndexApplyTx(db, buildInfo);
 
-                ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
+                if (buildInfo.IsBuildFulltextCompact()) {
+                    ChangeState(BuildId, TIndexBuildInfo::EState::AlterIndexTable);
+                } else {
+                    ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
+                }
                 Progress(BuildId);
             }
             break;
@@ -3856,7 +4087,8 @@ struct TSchemeShard::TIndexBuilder::TTxReplyFulltextDict: public TTxShardReply<T
     void HandleDone(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) override {
         const auto& record = Response->Get()->Record;
 
-        if (record.GetFirstTokenRows() || record.GetLastTokenRows()) {
+        if (record.GetFirstTokenRows() || record.GetLastTokenRows() ||
+            record.GetFirstPrefixDocCount() || record.GetLastPrefixDocCount()) {
             TTabletId shardId = TTabletId(record.GetTabletId());
             TShardIdx shardIdx = Self->GetShardIdx(shardId);
             TIndexBuildShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
@@ -3865,6 +4097,13 @@ struct TSchemeShard::TIndexBuilder::TTxReplyFulltextDict: public TTxShardReply<T
             shardStatus.FirstTokenRows = record.GetFirstTokenRows();
             shardStatus.LastToken = record.GetLastToken();
             shardStatus.LastTokenRows = record.GetLastTokenRows();
+
+            shardStatus.FirstPrefix = record.GetFirstPrefix();
+            shardStatus.FirstPrefixDocCount = record.GetFirstPrefixDocCount();
+            shardStatus.FirstPrefixSumDocLength = record.GetFirstPrefixSumDocLength();
+            shardStatus.LastPrefix = record.GetLastPrefix();
+            shardStatus.LastPrefixDocCount = record.GetLastPrefixDocCount();
+            shardStatus.LastPrefixSumDocLength = record.GetLastPrefixSumDocLength();
 
             Self->PersistBuildIndexShardStatusFulltext(db, BuildId, shardIdx, shardStatus);
         }
@@ -3987,6 +4226,7 @@ public:
         case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::LockBuild:
         case TIndexBuildInfo::EState::AlterSequence:
+        case TIndexBuildInfo::EState::AlterIndexTable:
         case TIndexBuildInfo::EState::PrepareValidation:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Cancellation_Applying:
@@ -4200,13 +4440,31 @@ public:
             }
             break;
         }
+        case TIndexBuildInfo::EState::AlterIndexTable: {
+            Y_ENSURE(txId == buildInfo.ApplyTxId, state);
+
+            if (record.GetStatus() != NKikimrScheme::StatusAccepted &&
+                record.GetStatus() != NKikimrScheme::StatusAlreadyExists) {
+                // Failure to pre-shard the final index table is non-critical, we just proceed as is
+                buildInfo.ApplyTxStatus = NKikimrScheme::StatusAccepted;
+                buildInfo.ApplyTxDone = true;
+                Self->PersistBuildIndexAddIssue(db, buildInfo, TStringBuilder()
+                    << "At " << state << " state got unsuccess propose result"
+                    << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
+                    << ", reason: " << record.GetReason());
+            } else {
+                buildInfo.ApplyTxStatus = record.GetStatus();
+            }
+            Self->PersistBuildIndexApplyTx(db, buildInfo);
+            break;
+        }
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::LockBuild:
         case TIndexBuildInfo::EState::AlterSequence:
         case TIndexBuildInfo::EState::PrepareValidation:
         {
-            Y_ENSURE(txId == buildInfo.ApplyTxId);
+            Y_ENSURE(txId == buildInfo.ApplyTxId, state);
 
             if (shouldRetry()) {
                 buildInfo.ApplyTxId = InvalidTxId;
@@ -4466,6 +4724,7 @@ public:
         case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::LockBuild:
         case TIndexBuildInfo::EState::AlterSequence:
+        case TIndexBuildInfo::EState::AlterIndexTable:
         case TIndexBuildInfo::EState::PrepareValidation:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Cancellation_Applying:

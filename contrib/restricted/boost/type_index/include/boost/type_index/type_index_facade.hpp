@@ -14,10 +14,12 @@
 #if !defined(BOOST_USE_MODULES) || defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
 
 #if !defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
+#ifndef BOOST_TYPE_INDEX_USE_STD_MODULE
 #include <string>
 #include <cstring>
 #include <type_traits>
 #include <iosfwd>               // for std::basic_ostream
+#endif
 
 #include <boost/config.hpp>
 #include <boost/container_hash/hash_fwd.hpp>

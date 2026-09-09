@@ -339,12 +339,42 @@ public:
         auto& record = ev->Get()->Record;
         Y_ABORT_UNLESS(VDiskIDFromVDiskID(record.GetVDiskID()) == VDiskId);
 
-        ui32& gen = Blocks[record.GetTabletId()];
-        gen = Max(gen, record.GetGeneration());
-        TEvBlobStorage::TEvVBlockResult::TTabletActGen actual(record.GetTabletId(), record.GetGeneration());
-        auto response = std::make_unique<TEvBlobStorage::TEvVBlockResult>(NKikimrProto::OK, &actual,
+        const ui64 tabletId = record.GetTabletId();
+        const auto writeSource = WriteSourceFromProto(record.GetWriteSourceOp());
+        const bool raw = writeSource == TWriteSource::SyncerMergeBlock
+            || writeSource == TWriteSource::SkeletonForceBlock;
+        NKikimrProto::EReplyStatus status = NKikimrProto::OK;
+        bool obsoleteVersion = false;
+        if (!raw) {
+            if (!tabletId || tabletId >> 63) {
+                status = NKikimrProto::ERROR;
+            } else {
+                const auto versionIt = Blocks.find(~tabletId);
+                const ui32 version = versionIt != Blocks.end() ? versionIt->second : 0;
+                if (record.GetVersion() < version) {
+                    status = NKikimrProto::ERROR;
+                    obsoleteVersion = true;
+                } else if (const auto it = Blocks.find(tabletId); record.GetVersion() > version
+                        && it != Blocks.end() && it->second >= record.GetGeneration()) {
+                    status = NKikimrProto::ERROR;
+                } else if (record.GetVersion() > version) {
+                    Blocks[~tabletId] = record.GetVersion();
+                }
+            }
+        }
+        if (status == NKikimrProto::OK) {
+            ui32& gen = Blocks[tabletId];
+            gen = Max(gen, record.GetGeneration());
+        }
+        const auto it = Blocks.find(tabletId);
+        TEvBlobStorage::TEvVBlockResult::TTabletActGen actual(tabletId,
+            it != Blocks.end() ? it->second : record.GetGeneration());
+        auto response = std::make_unique<TEvBlobStorage::TEvVBlockResult>(status, &actual,
                 VDiskIDFromVDiskID(record.GetVDiskID()), TAppData::TimeProvider->Now(),
                 (ui32)ev->Get()->GetCachedByteSize(), &record, nullptr, nullptr, nullptr, 0);
+        if (obsoleteVersion) {
+            response->Record.SetIsTabletStorageInfoVersionObsolete(true);
+        }
         FinalizeAndSend(std::move(response), ctx, ev->Sender);
     }
 

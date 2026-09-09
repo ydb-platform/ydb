@@ -6,36 +6,20 @@
 
 #include <library/cpp/yt/threading/execution_stack.h>
 
-#include <util/generic/size_literals.h>
-
 #include <util/system/sanitizers.h>
 
 namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Stack sizes.
-#if defined(_asan_enabled_) || defined(_msan_enabled_)
-    static constexpr size_t SmallExecutionStackSize = 2_MB;
-    static constexpr size_t LargeExecutionStackSize = 64_MB;
-    static constexpr size_t HugeExecutionStackSize = 64_MB;
-#else
-    static constexpr size_t SmallExecutionStackSize = 256_KB;
-    static constexpr size_t LargeExecutionStackSize = 8_MB;
-    static constexpr size_t HugeExecutionStackSize = 64_MB;
-#endif
-
-
-////////////////////////////////////////////////////////////////////////////////
-
-template <EExecutionStackKind Kind, size_t Size>
+template <EExecutionStackKind Kind>
 class TPooledExecutionStack
     : public NThreading::TExecutionStack
-    , public TRefTracked<TPooledExecutionStack<Kind, Size>>
+    , public TRefTracked<TPooledExecutionStack<Kind>>
 {
 public:
     TPooledExecutionStack()
-        : TExecutionStack(Size)
+        : TExecutionStack(TFiberManager::GetFiberStackSize(Kind))
     { }
 };
 
@@ -44,7 +28,7 @@ std::shared_ptr<NThreading::TExecutionStack> GetPooledExecutionStack(EExecutionS
     switch (kind) {
 #define XX(kind) \
         case EExecutionStackKind::kind: \
-            return ObjectPool<TPooledExecutionStack<EExecutionStackKind::kind, kind ## ExecutionStackSize>>().Allocate();
+            return ObjectPool<TPooledExecutionStack<EExecutionStackKind::kind>>().Allocate();
         XX(Small)
         XX(Large)
         XX(Huge)
@@ -60,11 +44,11 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <NConcurrency::EExecutionStackKind Kind, size_t Size>
-struct TPooledObjectTraits<NConcurrency::TPooledExecutionStack<Kind, Size>, void>
-    : public TPooledObjectTraitsBase<NConcurrency::TPooledExecutionStack<Kind, Size>>
+template <NConcurrency::EExecutionStackKind Kind>
+struct TPooledObjectTraits<NConcurrency::TPooledExecutionStack<Kind>, void>
+    : public TPooledObjectTraitsBase<NConcurrency::TPooledExecutionStack<Kind>>
 {
-    using TStack = NConcurrency::TPooledExecutionStack<Kind, Size>;
+    using TStack = NConcurrency::TPooledExecutionStack<Kind>;
 
     static void Clean(TStack* stack)
     {
@@ -75,6 +59,11 @@ struct TPooledObjectTraits<NConcurrency::TPooledExecutionStack<Kind, Size>, void
 #else
         Y_UNUSED(stack);
 #endif
+    }
+
+    static bool IsReusable(const TStack* stack)
+    {
+        return stack->GetSize() == NConcurrency::TFiberManager::GetFiberStackSize(Kind);
     }
 
     static int GetMaxPoolSize()

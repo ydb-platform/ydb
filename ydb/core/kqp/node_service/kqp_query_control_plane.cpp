@@ -124,8 +124,10 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
         return true;
     }
 
+    // Node level memory pressure signal, see NRm::TTxState::IsReasonableToStartSpilling.
+    // Channels do not spill on it, but propagate it as back pressure, see TInputDescriptor::MemoryPressure
     bool IsReasonableToUseSpilling() const override {
-        return false;
+        return Tx->IsReasonableToStartSpilling();
     }
 
     void FreeQuota(ui64 memorySize) override {

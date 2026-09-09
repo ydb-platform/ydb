@@ -48,7 +48,7 @@ private:
         DescriberActorId_ = {};
 
         const auto it = ev->Get()->Topics.find(TopicPath_);
-        if (it == ev->Get()->Topics.end() || it->second.Status != NPQ::NDescriber::EStatus::SUCCESS || !it->second.Info) {
+        if (it == ev->Get()->Topics.end() || it->second.Status != NPQ::NDescriber::EStatus::Success || !it->second.Info) {
             PassAway();
             return;
         }

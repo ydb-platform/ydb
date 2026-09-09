@@ -3199,11 +3199,13 @@ bool TPersQueue::CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& ope
     if (IsKafkaWriteOperation(operation) || IsDeferredPublicationFinalizeOperation(operation)) {
         auto txWriteInfoIt = TxWrites.find(writeId);
         if (txWriteInfoIt == TxWrites.end()) {
-            return false;
+            // Apache Kafka allows EndTxn after AddPartitionsToTxn with no Produce.
+            // Kafka Streams EOS does this on empty commits; Java treats BROKER_NOT_AVAILABLE as fatal.
+            return writeId.IsKafkaApiTransaction();
         }
         auto it = txWriteInfoIt->second.Partitions.find(operation.GetPartitionId());
         if (it == txWriteInfoIt->second.Partitions.end()) {
-            return false;
+            return writeId.IsKafkaApiTransaction();
         } else {
             partitionId = it->second;
         }
@@ -3444,37 +3446,43 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
     if (txBody.HasWriteId()) {
         const TWriteId writeId = GetWriteId(txBody);
         if (!TxWrites.contains(writeId)) {
-            YDB_LOG_WARN_COMP(NKikimrServices::PQ_TX, "TxId unknown WriteId",
+            if (!writeId.IsKafkaApiTransaction()) {
+                YDB_LOG_WARN_COMP(NKikimrServices::PQ_TX, "TxId unknown WriteId",
+                    {"logPrefix", LogPrefix()},
+                    {"txId", event.GetTxId()},
+                    {"writeId", writeId});
+                SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                            event.GetTxId(),
+                                            NKikimrPQ::TError::BAD_REQUEST,
+                                            "unknown WriteId",
+                                            ctx);
+                return;
+            }
+            YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "TxId Kafka commit with no writes for WriteId",
                 {"logPrefix", LogPrefix()},
                 {"txId", event.GetTxId()},
                 {"writeId", writeId});
-            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
-                                        event.GetTxId(),
-                                        NKikimrPQ::TError::BAD_REQUEST,
-                                        "unknown WriteId",
-                                        ctx);
-            return;
-        }
+        } else {
+            TTxWriteInfo& writeInfo = TxWrites.at(writeId);
+            if (writeInfo.Deleting) {
+                YDB_LOG_WARN_COMP(NKikimrServices::PQ_TX, "TxId WriteId will be deleted",
+                    {"logPrefix", LogPrefix()},
+                    {"txId", event.GetTxId()},
+                    {"writeId", writeId});
+                SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                            event.GetTxId(),
+                                            NKikimrPQ::TError::BAD_REQUEST,
+                                            "WriteId will be deleted",
+                                            ctx);
+                return;
+            }
 
-        TTxWriteInfo& writeInfo = TxWrites.at(writeId);
-        if (writeInfo.Deleting) {
-            YDB_LOG_WARN_COMP(NKikimrServices::PQ_TX, "TxId WriteId will be deleted",
+            writeInfo.TxId = event.GetTxId();
+            YDB_LOG_INFO_COMP(NKikimrServices::PQ_TX, "TxId has WriteId",
                 {"logPrefix", LogPrefix()},
                 {"txId", event.GetTxId()},
                 {"writeId", writeId});
-            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
-                                        event.GetTxId(),
-                                        NKikimrPQ::TError::BAD_REQUEST,
-                                        "WriteId will be deleted",
-                                        ctx);
-            return;
         }
-
-        writeInfo.TxId = event.GetTxId();
-        YDB_LOG_INFO_COMP(NKikimrServices::PQ_TX, "TxId has WriteId",
-            {"logPrefix", LogPrefix()},
-            {"txId", event.GetTxId()},
-            {"writeId", writeId});
     }
 
     TMaybe<TPartitionId> partitionId = FindPartitionId(txBody);
@@ -3796,7 +3804,7 @@ void TPersQueue::SubscribeWriteId(const TWriteId& writeId,
     YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Send TEvSubscribeLock for WriteId",
         {"logPrefix", LogPrefix()},
         {"writeId", writeId});
-    ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.GetNodeId()),
+    ctx.Send(NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId()),
              new NLongTxService::TEvLongTxService::TEvSubscribeLock(writeId.GetKeyId(), writeId.GetNodeId()));
 }
 
@@ -3806,7 +3814,7 @@ void TPersQueue::UnsubscribeWriteId(const TWriteId& writeId,
     YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Send TEvUnsubscribeLock for WriteId",
         {"logPrefix", LogPrefix()},
         {"writeId", writeId});
-    ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.GetNodeId()),
+    ctx.Send(NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId()),
              new NLongTxService::TEvLongTxService::TEvUnsubscribeLock(writeId.GetKeyId(), writeId.GetNodeId()));
 }
 
@@ -3943,13 +3951,21 @@ void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx,
 
             if (tx.WriteId.Defined()) {
                 const TWriteId& writeId = *tx.WriteId;
-                PQ_ENSURE(TxWrites.contains(writeId))("TxId", tx.TxId)("WriteId", writeId.ToString());
-                TTxWriteInfo& writeInfo = TxWrites.at(writeId);
-                YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Link TxId with WriteId",
-                    {"logPrefix", LogPrefix()},
-                    {"txId", tx.TxId},
-                    {"writeId", writeId});
-                writeInfo.TxId = tx.TxId;
+                if (TxWrites.contains(writeId)) {
+                    TTxWriteInfo& writeInfo = TxWrites.at(writeId);
+                    YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Link TxId with WriteId",
+                        {"logPrefix", LogPrefix()},
+                        {"txId", tx.TxId},
+                        {"writeId", writeId});
+                    writeInfo.TxId = tx.TxId;
+                } else {
+                    PQ_ENSURE(writeId.IsKafkaApiTransaction())
+                        ("TxId", tx.TxId)("WriteId", writeId.ToString());
+                    YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Kafka commit with no writes; skip WriteId link",
+                        {"logPrefix", LogPrefix()},
+                        {"txId", tx.TxId},
+                        {"writeId", writeId});
+                }
             }
 
             TryExecuteTxs(ctx, tx);
@@ -4028,7 +4044,7 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
         TDistributedTransaction& tx = p->second;
 
         // таблетка координатора могла перезапуститься надо обновить информацию
-        tx.SendPlanStepAcksAfterCompletion(sender, std::move(ev));
+        tx.AddPlanStepSender(sender, std::move(ev));
 
         if (tx.State >= NKikimrPQ::TTransaction::EXECUTED) {
             // таблетка PQ могла отправить подтвержение, но координатор перезапустился и его не получил
@@ -4063,11 +4079,13 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
 void TPersQueue::SendPlanStepAcks(const TActorContext& ctx,
                                   const TDistributedTransaction& tx)
 {
-    if (!tx.PlanStepSender) {
+    if (tx.PlanStepSenders.empty()) {
         return;
     }
 
-    SendPlanStepAcks(ctx, tx.PlanStepSender, *tx.PlanStepEvent);
+    for (const auto& [receiver, event] : tx.PlanStepSenders) {
+        SendPlanStepAcks(ctx, receiver, *event);
+    }
 }
 
 void TPersQueue::SendPlanStepAcks(const TActorContext& ctx,
@@ -4350,6 +4368,9 @@ TMaybe<TPartitionId> TPersQueue::FindPartitionId(const NKikimrPQ::TDataTransacti
     if (txBody.HasWriteId() && hasWriteOperation(txBody)) {
         const TWriteId writeId = GetWriteId(txBody);
         if (!TxWrites.contains(writeId)) {
+            if (writeId.IsKafkaApiTransaction()) {
+                return TPartitionId(partitionId);
+            }
             YDB_LOG_WARN_COMP(NKikimrServices::PQ_TX, "Unknown WriteId",
                 {"logPrefix", LogPrefix()},
                 {"writeId", writeId});
@@ -4358,6 +4379,9 @@ TMaybe<TPartitionId> TPersQueue::FindPartitionId(const NKikimrPQ::TDataTransacti
 
         const TTxWriteInfo& writeInfo = TxWrites.at(writeId);
         if (!writeInfo.Partitions.contains(partitionId)) {
+            if (writeId.IsKafkaApiTransaction()) {
+                return TPartitionId(partitionId);
+            }
             YDB_LOG_WARN_COMP(NKikimrServices::PQ_TX, "Unknown partition for WriteId",
                 {"logPrefix", LogPrefix()},
                 {"partitionId", partitionId},
@@ -4448,12 +4472,17 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
                 event->SupportivePartitionActor = partition.Actor;
                 event->SetSkipSrcIdInfo(tx.GetSkipSrcIdInfo());
             }
-        } else {
+        } else if (!writeId.IsKafkaApiTransaction()) {
             YDB_LOG_WARN_COMP(NKikimrServices::PQ_TX, "Unknown WriteId for TxId",
                 {"logPrefix", LogPrefix()},
                 {"writeId", writeId},
                 {"txId", tx.TxId});
             forcePredicateFalse = true;
+        } else {
+            YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Kafka commit with no writes for TxId",
+                {"logPrefix", LogPrefix()},
+                {"writeId", writeId},
+                {"txId", tx.TxId});
         }
     }
 
@@ -4992,11 +5021,10 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
 bool TPersQueue::AllSupportivePartitionsHaveBeenDeleted(const TMaybe<TWriteId>& writeId) const
 {
-    if (!writeId.Defined()) {
+    if (!writeId.Defined() || !TxWrites.contains(*writeId)) {
         return true;
     }
 
-    PQ_ENSURE(TxWrites.contains(*writeId))("WriteId", writeId->ToString());
     const TTxWriteInfo& writeInfo = TxWrites.at(*writeId);
 
     YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "WriteId",

@@ -59,6 +59,14 @@ class BenchmarkDefinition:
     render_worker_metrics: object = None
     test_filter: str = ""
     process_measurement_count: object = _single_process_measurement
+    resource_names: tuple = ()
+    profile_kind: str = "process"
+    executor: str = "process"
+    builder_supported: bool = True
+
+    @property
+    def resources(self):
+        return self.resource_names or (self.resource_name,)
 
     @property
     def csv_columns(self):
@@ -72,10 +80,12 @@ class BenchmarkDefinition:
     def parameter_name(self):
         """Compatibility for older discovery/UI clients."""
         varying = [item for item in self.parameters if item.name != "actor-pairs"]
-        return varying[0].name if varying else self.parameters[0].name
+        return varying[0].name if varying else self.parameters[0].name if self.parameters else None
 
     @property
     def parameter_description(self):
+        if self.parameter_name is None:
+            return ""
         return next(item.description for item in self.parameters if item.name == self.parameter_name)
 
     @property

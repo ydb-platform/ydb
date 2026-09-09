@@ -3,6 +3,7 @@
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/internal/plain_status/status.h>
+#include <ydb/public/sdk/cpp/src/client/impl/session/session_pool.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
@@ -91,7 +92,10 @@ void TSession::TImpl::StartAsyncRead(TStreamProcessorPtr ptr, std::weak_ptr<ISes
             default: {
                 auto impl = holder->TrySharedOwning();
                 if (impl) {
-                    impl->CloseFromServer(client);
+                    const auto& closeCommand = grpcStatus.GRpcStatusCode == grpc::StatusCode::OUT_OF_RANGE
+                        ? NSessionPool::NSessionCloseCommands::AttachClosed
+                        : NSessionPool::NSessionCloseCommands::TransportError;
+                    impl->CloseFromServer(client, closeCommand.Reason);
                     holder->Release();
                 }
             }
@@ -102,16 +106,21 @@ void TSession::TImpl::StartAsyncRead(TStreamProcessorPtr ptr, std::weak_ptr<ISes
 TSession::TImpl::TImpl(TStreamProcessorPtr ptr, const std::string& sessionId, const std::string& endpoint, std::weak_ptr<ISessionClient> client)
     : TKqpSessionCommon(sessionId, endpoint, true)
     , StreamProcessor_(ptr)
+    , SessionClient_(client)
     , SessionHolder(std::make_shared<TSafeTSessionImplHolder>(this))
 {
     if (ptr) {
         MarkActive();
         SetNeedUpdateActiveCounter(true);
-        StartAsyncRead(StreamProcessor_, client, SessionHolder);
+        StartAsyncRead(StreamProcessor_, SessionClient_, SessionHolder);
     } else {
         MarkBroken();
         SetNeedUpdateActiveCounter(true);
     }
+}
+
+std::shared_ptr<ISessionClient> TSession::TImpl::GetSessionClient() const {
+    return SessionClient_.lock();
 }
 
 TSession::TImpl::~TImpl() {

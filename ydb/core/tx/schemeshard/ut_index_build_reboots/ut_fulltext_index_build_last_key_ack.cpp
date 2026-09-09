@@ -95,6 +95,11 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildLastKeyAckTests) {
 
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
 
+        if (runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()) {
+            // Skip for now - compact indexes don't support resume
+            return;
+        }
+
         SetupTextTable(runtime, env, txId);
 
         TBlockEvents<TEvDataShard::TEvBuildFulltextIndexResponse> blocker(runtime,

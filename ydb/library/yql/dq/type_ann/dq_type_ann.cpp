@@ -1392,12 +1392,22 @@ TStatus AnnotateDqPhyLength(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 2, ctx)) {
         return TStatus::Error;
     }
-    auto* input = node->Child(TDqPhyLength::idx_Input);
-    auto* aggName = node->Child(TDqPhyLength::idx_Name);
 
-    TVector<const TItemExprType*> aggTypes;
-    if (!EnsureAtom(*aggName, ctx)) {
+    auto* input = node->Child(TDqPhyLength::idx_Input);
+    if (input->GetTypeAnn() && input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        node->SetTypeAnn(input->GetTypeAnn());
+        return TStatus::Ok;
+    }
+    if (!EnsureAnySeqType(*input, ctx)) {
         return TStatus::Error;
+    }
+
+    auto* aggName = node->Child(TDqPhyLength::idx_Name);
+    if (bool isUniversal; !EnsureAtomOrUniversal(*aggName, ctx, isUniversal)) {
+        return TStatus::Error;
+    } else if (isUniversal) {
+        node->SetTypeAnn(ctx.MakeType<TUniversalExprType>());
+        return TStatus::Ok;
     }
 
     TVector<const TItemExprType*> structItems;

@@ -42,7 +42,11 @@ public:
     [[nodiscard]] ui64 GetPBufferCleanupLsnStep() const;
     [[nodiscard]] bool GetUseDirectSessionTransport() const;
     [[nodiscard]] bool GetEnableChecksums() const;
+    [[nodiscard]] bool GetCheckChecksumBeforeWrite() const;
+    [[nodiscard]] bool GetCheckChecksumWhenRead() const;
+    [[nodiscard]] ui32 GetIdleSpinUs() const;
     [[nodiscard]] ui32 GetCopyRangeBandwidthMbs() const;
+    [[nodiscard]] TDuration GetVChunkCountersUpdateInterval() const;
 
     [[nodiscard]] TString Dump() const;
 

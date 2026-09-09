@@ -20,12 +20,12 @@ namespace {
 using TRenameMap = THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>;
 
 bool CanRewriteResidualTopMap(const TIntrusivePtr<TOpMap>& topMap, size_t renameIdx, const TInfoUnit& from, const TInfoUnit& to) {
-    for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
+    for (size_t idx = 0; idx < topMap->GetMapElements().size(); ++idx) {
         if (idx == renameIdx) {
             continue;
         }
 
-        const auto& element = topMap->MapElements[idx];
+        const auto& element = topMap->GetMapElements()[idx];
         // A residual semantic rename from either name would hide the pushed output.
         if (element.IsRename() && (element.GetRename() == from || element.GetRename() == to)) {
             return false;
@@ -39,13 +39,13 @@ TVector<TMapElement> BuildResidualTopMapElements(const TIntrusivePtr<TOpMap>& to
     const TRenameMap renameMap{{from, to}};
 
     TVector<TMapElement> residualElements;
-    residualElements.reserve(topMap->MapElements.size() - 1);
-    for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
+    residualElements.reserve(topMap->GetMapElements().size() - 1);
+    for (size_t idx = 0; idx < topMap->GetMapElements().size(); ++idx) {
         if (idx == renameIdx) {
             continue;
         }
 
-        auto element = topMap->MapElements[idx];
+        auto element = topMap->GetMapElements()[idx];
         if (!element.IsRename()) {
             element.SetExpression(element.GetExpression().ApplyRenames(renameMap));
         }
@@ -137,8 +137,8 @@ bool TPushRenameIntoProducerRule::MatchAndApply(TIntrusivePtr<IOperator>& input,
     const auto& liveOut = GetLiveOut(topMap.get());
     const auto& forbidden = GetForbidden(topMap.get());
 
-    for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
-        const auto& element = topMap->MapElements[idx];
+    for (size_t idx = 0; idx < topMap->GetMapElements().size(); ++idx) {
+        const auto& element = topMap->GetMapElements()[idx];
         const auto to = element.GetElementName();
         TInfoUnit from;
 
@@ -164,9 +164,9 @@ bool TPushRenameIntoProducerRule::MatchAndApply(TIntrusivePtr<IOperator>& input,
             continue;
         }
 
-        topMap->MapElements = BuildResidualTopMapElements(topMap, idx, from, to);
-        props.Subplans.RenameReferences({{from, to}}, ctx.ExprCtx);
-        if (topMap->MapElements.empty()) {
+        topMap->SetMapElements(BuildResidualTopMapElements(topMap, idx, from, to));
+        props.Subplans.RenameExternalReferences({{from, to}}, ctx.ExprCtx);
+        if (topMap->GetMapElements().empty()) {
             input = topMap->GetInput();
         }
         return true;

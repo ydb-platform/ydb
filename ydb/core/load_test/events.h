@@ -104,8 +104,8 @@ struct TEvLoad {
         // TNbsLoadTabletListPageActor -> TLoadActor with rendered HTML.
         EvNbsTabletListPageReady,
 
-        // In-process (load-actor <-> worker, worker <-> tablet) events.
-        // See spec §12.1.
+        // Load-worker/tablet I/O and configuration, plus local readiness events.
+        // See rfc/nbs_dbg_like/architecture.md for the load-tablet protocol.
         EvNbsWrite,
         EvNbsWriteResult,
         EvNbsRead,
@@ -138,6 +138,8 @@ struct TEvLoad {
         ui32 InFlight;
         TVector<ui64> RwSpeedBps;
         ELoadType LoadType;
+        ui64 MeasuredReadsSent = 0;
+        ui64 BackgroundWritesSent = 0;
         NMonitoring::TPercentileTrackerLg<10, 4, 1> LatencyUs; // Upper threshold of this tracker is ~134 seconds, size is 256kB
 
         double GetAverageSpeed() const {
@@ -247,14 +249,13 @@ struct TEvLoad {
         TString HtmlFragment;
     };
 
-    // ---- In-process load-actor <-> worker contract (spec §12.1) -------
+    // ---- Load-worker <-> load-tablet I/O contract --------------------
     //
-    // These messages travel between actors registered on the same node
-    // (the per-Run load actor and the long-lived worker that lives on the
-    // parent tablet's mailbox). The load actor times every request itself
-    // from its own Send/receive timestamps and keys its in-flight map by
-    // the event cookie; the worker's reply carries only Status. The read
-    // payload travels as a TRope attached to TEvNbsReadResult.
+    // Load workers send these serializable messages through a tablet pipe,
+    // potentially across nodes. The tablet forwards to its per-DBG actor while
+    // preserving sender and cookie. The load worker times requests using its
+    // cookie-keyed in-flight map. Results carry status/reason and, for reads,
+    // an attached TRope payload. See rfc/nbs_dbg_like/architecture.md.
 
     struct TEvNbsWrite : public TEventPB<TEvNbsWrite,
         NKikimr::TEvLoadTestRequest::TNbsDbgLikeLoad::TNbsWrite, EvNbsWrite>

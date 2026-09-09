@@ -51,7 +51,7 @@ void TWriteRequestBundle::Reply(
             shared_from_this(),
             TWriteRequestResponse{
                 .Error = std::move(error),
-                .Lsn = Lsn,
+                .PBufferKey = PBufferKey,
                 .RequestedWrites = requestedWrites,
                 .CompletedWrites = completedWrites});
     } else {
@@ -96,14 +96,14 @@ TBlockRange64 TWriteRequestBundle::GetVChunkRange() const
     return VChunkRange;
 }
 
-void TWriteRequestBundle::SetLsn(ui64 lsn)
+void TWriteRequestBundle::SetPBufferKey(TPBufferKey pBufferKey)
 {
-    Lsn = lsn;
+    PBufferKey = pBufferKey;
 }
 
-ui64 TWriteRequestBundle::GetLsn() const
+TPBufferKey TWriteRequestBundle::GetPBufferKey() const
 {
-    return Lsn;
+    return PBufferKey;
 }
 
 TGuardedSgList& TWriteRequestBundle::GetSgList()

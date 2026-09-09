@@ -20,9 +20,10 @@ const TStringBuf Scheme = "yt";
 
 class TYtUrlLister: public IUrlLister {
 public:
-    TYtUrlLister() = default;
+    explicit TYtUrlLister(TConfigClusters::TPtr clusters)
+        : Clusters_(std::move(clusters))
+    {}
 
-public:
     bool Accept(const TString& url) const override {
         auto httpUrl = ParseURL(url);
         auto rawScheme = httpUrl.GetField(NUri::TField::FieldScheme);
@@ -41,19 +42,23 @@ public:
             createOpts.Token(token);
         }
 
-        auto host = httpUrl.PrintS(NUri::TField::FlagHostPort);
+        auto clusterYtName = httpUrl.PrintS(NUri::TField::FlagHostPort);
+        auto clusterServer = Clusters_ ? Clusters_->TryResolveServerByYtName(clusterYtName) : TString{};
+        if (!clusterServer) {
+            clusterServer = clusterYtName;
+        }
 
         auto path = params.Has("path")
             ? params.Get("path")
             : TString(TStringBuf(httpUrl.GetField(NUri::TField::FieldPath)).Skip(1));
 
-        auto client = NYT::CreateClient(host, createOpts);
+        auto client = NYT::CreateClient(clusterServer, createOpts);
         NYT::IClientBasePtr tx = client;
         TString txId = params.Get("transaction_id");
         if (!txId) {
             txId = params.Get("t");
         }
-        YQL_LOG(INFO) << "YtUrlLister: host=" << host << ", path='" << path << "', tx=" << txId;
+        YQL_LOG(INFO) << "YtUrlLister: clusterYtName=" << clusterYtName << ", clusterServer=" << clusterServer << ", path='" << path << "', tx=" << txId;
         if (txId) {
             TGUID guid;
             if (!GetGuid(txId, guid)) {
@@ -64,7 +69,7 @@ public:
         auto composeUrl = [&](auto name) {
             THttpURL url;
             url.Set(NUri::TField::FieldScheme, Scheme);
-            url.Set(NUri::TField::FieldHost, host);
+            url.Set(NUri::TField::FieldHost, clusterYtName);
             url.Set(NUri::TField::FieldPath, TStringBuilder() << Sep << path << Sep << name);
             if (txId) {
                 url.Set(NUri::TField::FieldQuery, TStringBuilder() << "transaction_id=" << txId);
@@ -90,14 +95,17 @@ public:
         }
         return entries;
     }
+
+private:
+    const TConfigClusters::TPtr Clusters_;
 };
 
 }
 
 namespace NYql {
 
-IUrlListerPtr MakeYtUrlLister() {
-    return MakeIntrusive<NPrivate::TYtUrlLister>();
+IUrlListerPtr MakeYtUrlLister(TConfigClusters::TPtr clusters) {
+    return MakeIntrusive<NPrivate::TYtUrlLister>(std::move(clusters));
 }
 
 }

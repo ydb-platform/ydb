@@ -2,6 +2,7 @@
 #include "json_pipe_req.h"
 #include "log.h"
 #include "viewer_helper.h"
+#include <ydb/core/blobstorage/vdisk/common/vdisk_outofspace.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr::NViewer {
@@ -110,6 +111,7 @@ enum class EGroupFields : ui8 {
     MaxVDiskRawUsage,
     MaxNormalizedOccupancy,
     CapacityAlert,
+    GroupSizeInUnits,
     COUNT
 };
 
@@ -214,6 +216,7 @@ public:
         ui32 NumActiveSlots = 0;
         ui64 Category = 0;
         TString DecommitStatus;
+        TString MaintenanceStatus;
         NKikimrViewer::EFlag DiskSpace = NKikimrViewer::EFlag::Grey;
         float PDiskUsage = 0;
 
@@ -699,7 +702,8 @@ public:
     const TFieldsType FieldsAll = TFieldsType().set();
     const TFieldsType FieldsBsGroups = TFieldsType().set(+EGroupFields::GroupId)
                                                     .set(+EGroupFields::Erasure)
-                                                    .set(+EGroupFields::Latency);
+                                                    .set(+EGroupFields::Latency)
+                                                    .set(+EGroupFields::GroupSizeInUnits);
     const TFieldsType FieldsBsPools = TFieldsType().set(+EGroupFields::PoolName)
                                                    .set(+EGroupFields::Kind)
                                                    .set(+EGroupFields::MediaType)
@@ -724,7 +728,8 @@ public:
     const TFieldsType FieldsWbGroups = TFieldsType().set(+EGroupFields::GroupId)
                                                     .set(+EGroupFields::Erasure)
                                                     .set(+EGroupFields::PoolName)
-                                                    .set(+EGroupFields::Encryption);
+                                                    .set(+EGroupFields::Encryption)
+                                                    .set(+EGroupFields::GroupSizeInUnits);
     const TFieldsType FieldsWbDisks = TFieldsType().set(+EGroupFields::NodeId)
                                                    .set(+EGroupFields::PDiskId)
                                                    .set(+EGroupFields::VDisk)
@@ -833,6 +838,8 @@ public:
             result = EGroupFields::MaxNormalizedOccupancy;
         } else if (field == "MaxVDiskRawUsage") {
             result = EGroupFields::MaxVDiskRawUsage;
+        } else if (field == "GroupSizeInUnits") {
+            result = EGroupFields::GroupSizeInUnits;
         }
         return result;
     }
@@ -1336,6 +1343,7 @@ public:
                 case EGroupFields::MaxVDiskSlotUsage:
                 case EGroupFields::MaxNormalizedOccupancy:
                 case EGroupFields::MaxVDiskRawUsage:
+                case EGroupFields::GroupSizeInUnits:
                     break;
             }
         }
@@ -1410,6 +1418,9 @@ public:
                     break;
                 case EGroupFields::MaxVDiskRawUsage:
                     SortCollection(GroupView, [](const TGroup* group) { return group->MaxVDiskRawUsage; }, ReverseSort);
+                    break;
+                case EGroupFields::GroupSizeInUnits:
+                    SortCollection(GroupView, [](const TGroup* group) { return group->GroupSizeInUnits; }, ReverseSort);
                     break;
                 case EGroupFields::PDiskId:
                 case EGroupFields::NodeId:
@@ -1733,6 +1744,7 @@ public:
                     pDisk.NumActiveSlots = info.GetNumActiveSlots();
                     pDisk.Category = info.GetCategory();
                     pDisk.DecommitStatus = info.GetDecommitStatus();
+                    pDisk.MaintenanceStatus = info.GetMaintenanceStatus();
                 }
                 FieldsAvailable |= FieldsBsPDisks;
                 ApplyEverything();
@@ -2119,17 +2131,10 @@ public:
                     }
                     pDisk.SlotSizeInUnits = info.GetSlotSizeInUnits();
                     pDisk.SetCategory(info.GetCategory());
-                    //pDisk.DecommitStatus = info.GetDecommitStatus();
-                    float usage = pDisk.TotalSize ? 100.0 * (pDisk.TotalSize - pDisk.AvailableSize) / pDisk.TotalSize : 0;
-                    if (usage >= 95) {
-                        pDisk.DiskSpace = NKikimrViewer::EFlag::Red;
-                    } else if (usage >= 90) {
-                        pDisk.DiskSpace = NKikimrViewer::EFlag::Orange;
-                    } else if (usage >= 85) {
-                        pDisk.DiskSpace = NKikimrViewer::EFlag::Yellow;
-                    } else {
-                        pDisk.DiskSpace = NKikimrViewer::EFlag::Green;
+                    if (info.HasPDiskCapacityAlert()) {
+                        pDisk.DiskSpace = GetViewerFlag(TOutOfSpaceState::ToWhiteboardFlag(info.GetPDiskCapacityAlert()));
                     }
+                    // DecommitStatus and MaintenanceStatus are absent in Whiteboard because it's BSC-level info only
                 }
             }
         }
@@ -2183,7 +2188,10 @@ public:
             return;
         }
         if (BSGroupStateResponse.count(nodeId) == 0) {
-            BSGroupStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, new TEvWhiteboard::TEvBSGroupStateRequest()));
+            auto groupRequest = new TEvWhiteboard::TEvBSGroupStateRequest();
+            groupRequest->Record.MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TBSGroupStateInfo>());
+            groupRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TBSGroupStateInfo::kGroupSizeInUnitsFieldNumber);
+            BSGroupStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, groupRequest));
             ++BSGroupStateRequestsInFlight;
         }
     }
@@ -2199,6 +2207,7 @@ public:
             vdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kNormalizedOccupancyFieldNumber);
             vdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kVDiskRawUsageFieldNumber);
             vdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kCapacityAlertFieldNumber);
+            vdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kGroupSizeInUnitsFieldNumber);
             VDiskStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, vdiskRequest));
             ++VDiskStateRequestsInFlight;
         }
@@ -2206,6 +2215,8 @@ public:
             auto pdiskRequest = new TEvWhiteboard::TEvPDiskStateRequest();
             pdiskRequest->Record.MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TPDiskStateInfo>());
             pdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kPDiskUsageFieldNumber);
+            pdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kSlotSizeInUnitsFieldNumber);
+            pdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kPDiskCapacityAlertFieldNumber);
             PDiskStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, pdiskRequest));
             ++PDiskStateRequestsInFlight;
         }
@@ -2385,6 +2396,7 @@ public:
                 jsonPDisk.SetAvailableSize(pdisk.AvailableSize);
                 jsonPDisk.SetStatus(pdisk.Status);
                 jsonPDisk.SetDecommitStatus(pdisk.DecommitStatus);
+                jsonPDisk.SetMaintenanceStatus(pdisk.MaintenanceStatus);
                 jsonPDisk.SetSlotSize(pdisk.GetSlotTotalSize());
                 jsonPDisk.SetSlotCount(pdisk.SlotCount);
                 if (pdisk.DiskSpace != NKikimrViewer::Grey) {
@@ -2540,6 +2552,9 @@ public:
                 if (FieldsAvailable.test(+EGroupFields::CapacityAlert) && FieldsRequested.test(+EGroupFields::CapacityAlert)) {
                     jsonGroup.SetCapacityAlert(NKikimrBlobStorage::TPDiskSpaceColor::E_Name(group->CapacityAlert));
                 }
+                if (FieldsAvailable.test(+EGroupFields::GroupSizeInUnits) && FieldsRequested.test(+EGroupFields::GroupSizeInUnits)) {
+                    jsonGroup.SetGroupSizeInUnits(group->GroupSizeInUnits);
+                }
             }
         } else {
             for (TGroupGroup& groupGroup : GroupGroups) {
@@ -2648,6 +2663,7 @@ public:
                           * `MaxVDiskSlotUsage `
                           * `MaxNormalizedOccupancy`
                           * `MaxVDiskRawUsage`
+                          * `GroupSizeInUnits`
                     required: false
                     type: string
                   - name: group
@@ -2722,6 +2738,7 @@ public:
                           * `MaxNormalizedOccupancy`
                           * `MaxVDiskRawUsage`
                           * `CapacityAlert`
+                          * `GroupSizeInUnits`
                     required: false
                     type: string
                   - name: offset

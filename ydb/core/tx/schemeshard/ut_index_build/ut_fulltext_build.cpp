@@ -87,35 +87,59 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
     void DoCheckPlainIndexTable(TTestBasicRuntime& runtime, const TString& index) {
         auto rows = ReadShards(runtime, TTestTxConfig::SchemeShard, index+"/indexImplTable").at(0);
         Cerr << index << "/indexImplTable rows: " << rows << "\n";
-        UNIT_ASSERT_VALUES_EQUAL("[[[["
-            R"(["and";["two"];["2"]];)"
-            R"(["apple";["one"];["1"]];)"
-            R"(["apple";["two"];["2"]];)"
-            R"(["apple";["three"];["3"]];)"
-            R"(["blue";["two"];["2"]];)"
-            R"(["car";["four"];["4"]];)"
-            R"(["green";["one"];["1"]];)"
-            R"(["red";["two"];["2"]];)"
-            R"(["red";["four"];["4"]];)"
-            R"(["yellow";["three"];["3"]]];)"
-        "%false]]]", rows);
+        if (runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()) {
+            UNIT_ASSERT_VALUES_EQUAL("[[[["
+                R"([%true;"18446744073709551615";"2";"\2";"and"];)"
+                R"([%true;"18446744073709551615";"3";"\1\1\1";"apple"];)"
+                R"([%true;"18446744073709551615";"2";"\2";"blue"];)"
+                R"([%true;"18446744073709551615";"4";"\4";"car"];)"
+                R"([%true;"18446744073709551615";"1";"\1";"green"];)"
+                R"([%true;"18446744073709551615";"4";"\2\2";"red"];)"
+                R"([%true;"18446744073709551615";"3";"\3";"yellow"])"
+            "];%false]]]", rows);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL("[[[["
+                R"(["and";["two"];["2"]];)"
+                R"(["apple";["one"];["1"]];)"
+                R"(["apple";["two"];["2"]];)"
+                R"(["apple";["three"];["3"]];)"
+                R"(["blue";["two"];["2"]];)"
+                R"(["car";["four"];["4"]];)"
+                R"(["green";["one"];["1"]];)"
+                R"(["red";["two"];["2"]];)"
+                R"(["red";["four"];["4"]];)"
+                R"(["yellow";["three"];["3"]]];)"
+            "%false]]]", rows);
+        }
     }
 
     void DoCheckRelevanceIndexTables(TTestBasicRuntime& runtime, const TString& index) {
         auto rows = ReadShards(runtime, TTestTxConfig::SchemeShard, index+"/indexImplTable").at(0);
         Cerr << index << "/indexImplTable rows: " << rows << "\n";
-        UNIT_ASSERT_VALUES_EQUAL("[[[["
-            R"(["1";"and";["2"]];)"
-            R"(["1";"apple";["1"]];)"
-            R"(["2";"apple";["2"]];)"
-            R"(["1";"apple";["3"]];)"
-            R"(["1";"blue";["2"]];)"
-            R"(["1";"car";["4"]];)"
-            R"(["1";"green";["1"]];)"
-            R"(["1";"red";["2"]];)"
-            R"(["1";"red";["4"]];)"
-            R"(["1";"yellow";["3"]]];)"
-        "%false]]]", rows);
+        if (runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()) {
+            UNIT_ASSERT_VALUES_EQUAL("[[[["
+                R"([%true;"18446744073709551615";"2";"\2";"and"];)"
+                R"([%true;"18446744073709551615";"3";"\1A\2\1";"apple"];)"
+                R"([%true;"18446744073709551615";"2";"\2";"blue"];)"
+                R"([%true;"18446744073709551615";"4";"\4";"car"];)"
+                R"([%true;"18446744073709551615";"1";"\1";"green"];)"
+                R"([%true;"18446744073709551615";"4";"\2\2";"red"];)"
+                R"([%true;"18446744073709551615";"3";"\3";"yellow"])"
+            "];%false]]]", rows);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL("[[[["
+                R"(["1";"and";["2"]];)"
+                R"(["1";"apple";["1"]];)"
+                R"(["2";"apple";["2"]];)"
+                R"(["1";"apple";["3"]];)"
+                R"(["1";"blue";["2"]];)"
+                R"(["1";"car";["4"]];)"
+                R"(["1";"green";["1"]];)"
+                R"(["1";"red";["2"]];)"
+                R"(["1";"red";["4"]];)"
+                R"(["1";"yellow";["3"]]];)"
+            "%false]]]", rows);
+        }
 
         rows = ReadShards(runtime, TTestTxConfig::SchemeShard, index+"/indexImplDocsTable").at(0);
         Cerr << index << "/indexImplDocsTable rows: " << rows << "\n";
@@ -235,14 +259,12 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         return index;
     }
 
-    /*
     // Regression test for the crash at build_index__progress.cpp SendUploadFulltextBordersRequest:
     // building a *prefixed* relevance index (e.g. ALTER TABLE ... ADD INDEX ... ON (lang, text))
     // hit `Y_ENSURE(buildInfo.IndexColumns.size() == 1)` because IndexColumns is [lang, text].
     Y_UNIT_TEST(PrefixedRelevanceBuilds) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableFulltextIndexPrefix(true);
+        TTestEnv env(runtime, TTestEnvOptions().EnableCompactFulltextIndex(true).EnableFulltextIndexPrefix(true));
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -268,7 +290,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
             NLs::PathExist,
         });
     }
-    */
 
     Y_UNIT_TEST(DropTableWithFlatRelevance) {
         TTestBasicRuntime runtime;
@@ -302,23 +323,25 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         auto curShards = describe.GetPathDescription().GetDomainDescription().GetShardsInside();
 
         Ydb::Table::TableIndex index = FulltextIndexConfig(true);
+        const ui32 requiredPaths = runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex() ? 6 : 5;
+        const ui32 requiredShards = runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex() ? 5 : 4;
 
         TSchemeLimits lowLimits;
 
-        lowLimits.MaxPaths = 6;
-        lowLimits.MaxShards = curShards + 3;
+        lowLimits.MaxPaths = 1 + requiredPaths;
+        lowLimits.MaxShards = curShards + requiredShards - 1;
         SetSchemeshardSchemaLimits(runtime, lowLimits);
         TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index, Ydb::StatusIds::PRECONDITION_FAILED);
         env.TestWaitNotification(runtime, txId);
 
         lowLimits.MaxPaths = 5;
-        lowLimits.MaxShards = curShards + 4;
+        lowLimits.MaxShards = curShards + requiredShards;
         SetSchemeshardSchemaLimits(runtime, lowLimits);
         TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index, Ydb::StatusIds::PRECONDITION_FAILED);
         env.TestWaitNotification(runtime, txId);
 
-        lowLimits.MaxPaths = 6;
-        lowLimits.MaxShards = curShards + 4;
+        lowLimits.MaxPaths = 1 + requiredPaths;
+        lowLimits.MaxShards = curShards + requiredShards;
         SetSchemeshardSchemaLimits(runtime, lowLimits);
         TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index, Ydb::StatusIds::SUCCESS);
         env.TestWaitNotification(runtime, txId);
@@ -424,15 +447,16 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
                 op.DebugString());
         }
 
-        // posting impl-table must be keyed by [__ydb_token, __ydb_row_id], not by [__ydb_token, pk].
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_idx/indexImplTable"), {
-            NLs::PathExist,
-            NLs::CheckColumns("indexImplTable",
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                {},
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                /*ensureNoOther=*/ true),
-        });
+        if (!runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()) {
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_idx/indexImplTable"), {
+                NLs::PathExist,
+                NLs::CheckColumns("indexImplTable",
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    /*ensureNoOther=*/ true),
+            });
+        }
     }
 
     Y_UNIT_TEST(RowIdOptIn_RelevanceBuildsAndKeysByRowId) {
@@ -661,24 +685,38 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
     // Helpers for the auto-provisioning tests below: a table with a custom (Utf8) PK and NO __ydb_row_id
     // column / unique index - the schemeshard provisions both when the fulltext index is built.
 
-    void DoCreateCustomPkTextTable(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId) {
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+    void DoCreateCustomPkTextTable(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, bool split = false) {
+        TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             Name: "texts"
             Columns { Name: "pk" Type: "Utf8" NotNull: true }
             Columns { Name: "text" Type: "String" }
             Columns { Name: "data" Type: "String" }
             KeyColumnNames: ["pk"]
-        )");
+            %s
+        )", split ? R"(SplitBoundary { KeyPrefix { Tuple { Optional { Bytes: "ptw" } } } })" : ""));
         env.TestWaitNotification(runtime, txId);
     }
 
     void DoWriteRowsCustomPk(TTestBasicRuntime& runtime) {
         auto tableDesc = DescribePath(runtime, "/MyRoot/texts", /*returnPartitioning*/ true, /*returnBoundaries*/ true);
         const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
-        UNIT_ASSERT(!tablePartitions.empty());
-        const ui64 textsTabletId = tablePartitions[0].GetDatashardId();
+        UNIT_ASSERT(tablePartitions.size() > 0);
+        TVector<TString> boundary;
+        for (auto& part: tablePartitions) {
+            if (part.GetEndOfRangeKeyPrefix().empty()) {
+                boundary.emplace_back();
+            } else {
+                TSerializedCellVec key(part.GetEndOfRangeKeyPrefix());
+                boundary.emplace_back(key.GetCells().at(0).AsBuf());
+            }
+        }
 
-        auto fnWriteRow = [&] (TString pk, TString text, TString data) {
+        auto fnWriteRow = [&](TString pk, TString text, TString data) {
+            size_t part;
+            for (part = 0; part < boundary.size()-1 && pk >= boundary[part]; part++) {
+            }
+            const ui64 textsTabletId = tablePartitions[part].GetDatashardId();
+
             TString writeQuery = Sprintf(R"(
                 (
                     (let key   '( '('pk     (Utf8 '%s) ) ) )
@@ -738,15 +776,18 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
         });
 
-        // The fulltext posting impl-table is keyed by [__ydb_token, __ydb_row_id].
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_idx/indexImplTable"), {
-            NLs::PathExist,
-            NLs::CheckColumns("indexImplTable",
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                {},
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                /*ensureNoOther=*/ true),
-        });
+        if (!runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()) {
+            // The fulltext posting impl-table is keyed by [__ydb_token, __ydb_row_id].
+            // But with the compact index, it doesn't differ.
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_idx/indexImplTable"), {
+                NLs::PathExist,
+                NLs::CheckColumns("indexImplTable",
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    /*ensureNoOther=*/ true),
+            });
+        }
     }
 
     Y_UNIT_TEST(RejectDropRowIdUniqueIndexUsedByFulltext) {
@@ -911,15 +952,18 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
             NLs::PathExist,
             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
         });
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_two/indexImplTable"), {
-            NLs::PathExist,
-            NLs::CheckColumns("indexImplTable",
-                // Relevance posting table also carries the __ydb_freq value column.
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn, NTableIndex::NFulltext::FreqColumn },
-                {},
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                /*ensureNoOther=*/ true),
-        });
+
+        if (!runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()) {
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_two/indexImplTable"), {
+                NLs::PathExist,
+                NLs::CheckColumns("indexImplTable",
+                    // Relevance posting table also carries the __ydb_freq value column.
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn, NTableIndex::NFulltext::FreqColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    /*ensureNoOther=*/ true),
+            });
+        }
     }
 
     Y_UNIT_TEST(AutoProvision_SingleIntegerPkUnaffected) {
@@ -984,9 +1028,13 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
             for (const auto& idx: d.GetPathDescription().GetTable().GetTableIndexes()) {
                 found.insert(idx.GetName());
                 if (idx.GetName() == "fulltext_idx") {
-                    UNIT_ASSERT_VALUES_EQUAL(idx.GetType(), NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain);
+                    UNIT_ASSERT_VALUES_EQUAL(idx.GetType(), runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()
+                        ? NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
+                        : NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain);
                 } else if (idx.GetName() == "fulltext_rel_idx") {
-                    UNIT_ASSERT_VALUES_EQUAL(idx.GetType(), NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance);
+                    UNIT_ASSERT_VALUES_EQUAL(idx.GetType(), runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()
+                        ? NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance
+                        : NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance);
                 }
             }
             UNIT_ASSERT_C(found.contains("fulltext_idx"), "missing fulltext_idx on " << path);
@@ -1035,19 +1083,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         NKikimr::ShutdownAwsAPI();
     }
 
-    // TTestEnv already enables EnableFulltextIndex / EnableAddUniqueIndex by default; we only need the
-    // compact-index flag so a fulltext_plain build proto is materialized as a compact (rowid-mode) index.
-    // The schemeshard caches EnableCompactFulltextIndex at activation (it read appData before this runs),
-    // so reboot it to pick up the updated value.
-    void EnableCompactAutoProvisionFlags(TTestActorRuntime& runtime) {
-        auto& appData = runtime.GetAppData();
-        appData.FeatureFlags.SetEnableFulltextIndex(true);
-        appData.FeatureFlags.SetEnableCompactFulltextIndex(true);
-        appData.FeatureFlags.SetEnableAddUniqueIndex(true);
-        appData.FeatureFlags.SetEnableUniqConstraint(true);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-    }
-
     TString RowIdSrcTablePath(const TString& indexPath) {
         return TStringBuilder() << indexPath << "/"
             << NTableIndex::ImplTable << NTableIndex::NFulltext::RowIdSrcBuildSuffix;
@@ -1057,8 +1092,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         // Compact rowid-mode build over a custom (Utf8) PK: it runs the row-id source prepass, builds the
         // compact posting tables and, on completion, the transient "rowidsrc" build table is dropped.
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        EnableCompactAutoProvisionFlags(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableCompactFulltextIndex(true));
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
@@ -1111,8 +1145,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         // The compact build adds a new prepass step (FulltextRowIdSrc substate). Reboot the schemeshard
         // while it is running the prepass and verify the persisted state lets the build resume and finish.
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        EnableCompactAutoProvisionFlags(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableCompactFulltextIndex(true));
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
@@ -1165,5 +1198,98 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         TestDescribeResult(DescribePrivatePath(runtime, RowIdSrcTablePath("/MyRoot/texts/fulltext_idx")), {
             NLs::PathNotExist,
         });
+    }
+
+    Y_UNIT_TEST(BuildPartitioning) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableCompactFulltextIndex(true).DataShardStatsReportIntervalSeconds(1).DisableStatsBatching(true));
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        DoCreateCustomPkTextTable(runtime, env, txId, true);
+        DoWriteRowsCustomPk(runtime);
+
+        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> prepassBlocker(runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetTargetName().EndsWith(NTableIndex::NFulltext::RowIdSrcBuildSuffix);
+        });
+
+        const ui64 buildIndexTx = ++txId;
+        {
+            Ydb::Table::TableIndex index = FulltextIndexConfig(/*relevance*/ false);
+            NKikimrIndexBuilder::TIndexBuildSettings settings;
+            settings.set_source_path("/MyRoot/texts");
+            settings.MutableScanSettings()->SetMaxBatchRows(1);
+            settings.set_max_shards_in_flight(4);
+            *settings.mutable_index() = index;
+            auto request = new TEvIndexBuilder::TEvCreateRequest(buildIndexTx, "/MyRoot", std::move(settings));
+            auto sender = runtime.AllocateEdgeActor();
+            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
+        }
+
+        runtime.WaitFor("row-id source prepass scan request", [&]{ return prepassBlocker.size() > 0; });
+
+        // Check rowidsrc partitioning - 4 partitions (same as max_shards_in_flight)
+        {
+            auto tableDesc = DescribePath(runtime, "/MyRoot/texts/fulltext_idx/indexImplTablerowidsrc", /*returnPartitioning*/ true, /*returnBoundaries*/ true);
+            const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
+            UNIT_ASSERT_VALUES_EQUAL(tablePartitions.size(), 4);
+        }
+
+        // Check indexImplTable partitioning - minParts = 2 (same as the main table) but actually 1 partition
+        ui64 implTabletId = 0;
+        {
+            auto tableDesc = DescribePath(runtime, "/MyRoot/texts/fulltext_idx/indexImplTable", /*returnPartitioning*/ true, /*returnBoundaries*/ true);
+            const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
+            UNIT_ASSERT_VALUES_EQUAL(tablePartitions.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(tableDesc.GetPathDescription().GetTable().GetPartitionConfig().GetPartitioningPolicy().GetMinPartitionsCount(), 2);
+            implTabletId = tablePartitions[0].GetDatashardId();
+        }
+
+        // Wait for the first PeriodicTableStats so schemeshard records Ready state
+        TBlockEvents<TEvDataShard::TEvPeriodicTableStats> periodicStatsBlocker(runtime, [implTabletId](const auto& ev) {
+            if (ev->Get()->Record.GetDatashardId() == implTabletId) {
+                return true;
+            }
+            return false;
+        });
+        runtime.SimulateSleep(TDuration::Seconds(6));
+        runtime.WaitFor("indexImplTable periodic stats", [&]{ return periodicStatsBlocker.size() > 0; });
+        periodicStatsBlocker.Stop().Unblock();
+
+        TBlockEvents<TEvDataShard::TEvBuildFulltextIndexRequest> fulltextBlocker(runtime, [](const auto&) {
+            return true;
+        });
+        prepassBlocker.Stop().Unblock();
+        runtime.WaitFor("fill 0build request", [&]{ return fulltextBlocker.size() > 0; });
+
+        // Check indexImplTable0build partitioning policy - size to split = 100 MB, max parts = 4 (same as max_shards_in_flight)
+        {
+            auto buildTable = "/MyRoot/texts/fulltext_idx/indexImplTable0build";
+            auto tableDesc = DescribePath(runtime, buildTable, /*returnPartitioning*/ true, /*returnBoundaries*/ true);
+            const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
+            UNIT_ASSERT_VALUES_EQUAL(tablePartitions.size(), 1);
+            const auto& policy = tableDesc.GetPathDescription().GetTable().GetPartitionConfig().GetPartitioningPolicy();
+            UNIT_ASSERT_VALUES_EQUAL(policy.GetMaxPartitionsCount(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(policy.GetSizeToSplit(), 100 * 1024 * 1024);
+
+            // Re-partition it manually (100 MB isn't enough for auto-partitioning during the test)
+            TestSplitTable(runtime, ++txId, buildTable, Sprintf(R"(
+                SourceTabletId: %lu
+                SplitBoundary { KeyPrefix { Tuple { Optional: { Bytes: "ptw" } } } }
+            )", tablePartitions[0].GetDatashardId()));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        fulltextBlocker.Stop().Unblock();
+
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        // Check final indexImplTable partitioning
+        {
+            auto tableDesc = DescribePath(runtime, "/MyRoot/texts/fulltext_idx/indexImplTable", /*returnPartitioning*/ true, /*returnBoundaries*/ true);
+            const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
+            UNIT_ASSERT_VALUES_EQUAL(tablePartitions.size(), 2);
+        }
     }
 }

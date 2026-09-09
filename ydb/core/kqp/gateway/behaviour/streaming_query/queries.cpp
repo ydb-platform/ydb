@@ -5,6 +5,8 @@
 #include <library/cpp/retry/retry_policy.h>
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
@@ -408,7 +410,7 @@ protected:
             YDB_LOG_DEBUG("[StreamingQueries] Successfully finished",
                 {"logPrefix", LogPrefix()});
         } else {
-            YDB_LOG_WARN("[StreamingQueries] Operation failed with errors",
+            YDB_LOG_WARN("[StreamingQueries] Operation failed",
                 {"logPrefix", LogPrefix()},
                 {"status", status},
                 {"issues", Issues.ToOneLineString()});
@@ -879,14 +881,14 @@ private:
             .MaxRetryTime = TDuration::Seconds(5),
         }));
 
-        Y_VALIDATE(TxId, "Can not subscribe on completion without tx id");
+        Y_VALIDATE(TxId, "Cannot subscribe on completion without tx id");
         NTabletPipe::SendData(SelfId(), SchemePipeActorId, new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(TxId));
 
         YDB_LOG_DEBUG("[StreamingQueries] Subscribing to scheme transaction completion on scheme pipe",
             {"logPrefix", LogPrefix()},
             {"tx", TxId},
-            {"shard", SchemeShardTabletId},
-            {"id", SchemePipeActorId});
+            {"schemeShardTabletId", SchemeShardTabletId},
+            {"schemePipeActorId", SchemePipeActorId});
     }
 
     void ClosePipeClient() {
@@ -1570,7 +1572,7 @@ public:
             YDB_LOG_ERROR("[StreamingQueries] Streaming query lock owner changed during operation",
                 {"logPrefix", LogPrefix()},
                 {"currentOwner", currentOwner},
-                {"owner", previousOwner});
+                {"previousOwner", previousOwner});
             Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Streaming query was changed during operation");
             return;
         }
@@ -1770,7 +1772,7 @@ public:
             {"query", State.GetQueryText()});
 
         if (State.HasCurrentExecutionId()) {
-            FatalError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Can not start query, already started: " << State.GetCurrentExecutionId());
+            FatalError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Cannot start query, already started: " << State.GetCurrentExecutionId());
             return;
         }
 
@@ -2170,6 +2172,7 @@ public:
         hFunc(TEvPrivate::TEvCleanupStreamingQueryResult, HandleRemove);
         hFunc(TEvPrivate::TEvExecuteSchemeTransactionResult, HandleRemove);
         hFunc(TEvPrivate::TEvUpdateStreamingQueryResult, HandleRemove);
+        hFunc(NFq::TEvCheckpointStorage::TEvDeleteGraphResponse, HandleRemove);
     )
 
     void HandleRemove(TEvPrivate::TEvCleanupStreamingQueryResult::TPtr& ev) {
@@ -2193,6 +2196,14 @@ public:
 
     void HandleRemove(TEvPrivate::TEvUpdateStreamingQueryResult::TPtr& ev) {
         if (HandleResult(ev, "Update streaming query state (remove query)")) {
+            return;
+        }
+
+        RemoveQuery();
+    }
+
+    void HandleRemove(NFq::TEvCheckpointStorage::TEvDeleteGraphResponse::TPtr& ev) {
+        if (HandleResult(ev, "Delete checkpoints (recovery path)")) {
             return;
         }
 
@@ -2294,6 +2305,16 @@ private:
             return;
         }
 
+        if (State.HasCheckpointId() && !CheckpointDeletionRequested) {
+            CheckpointDeletionRequested = true;
+            YDB_LOG_DEBUG("[StreamingQueries] Sending TEvDeleteGraphRequest (recovery path)",
+                {"logPrefix", LogPrefix()},
+                {"graphId", State.GetCheckpointId()});
+            Send(NYql::NDq::MakeCheckpointStorageID(),
+                 new NFq::TEvCheckpointStorage::TEvDeleteGraphRequest(State.GetCheckpointId()));
+            return;
+        }
+
         if (ExistsInSS) {
             // Remove query from SS
             std::pair<TString, TString> pathPair;
@@ -2367,7 +2388,7 @@ private:
 
     void StartQuery() {
         if (State.HasCurrentExecutionId()) {
-            FatalError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Can not start query, already started: " << State.GetCurrentExecutionId());
+            FatalError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Cannot start query, already started: " << State.GetCurrentExecutionId());
             return;
         }
 
@@ -2420,6 +2441,7 @@ private:
     const TSettings Settings;
     NKikimrKqp::TStreamingQueryState State;
     bool ExistsInSS = false;
+    bool CheckpointDeletionRequested = false;
 
     // Current settings from scheme shard
     TSchemeInfo SchemeInfo;
@@ -2668,9 +2690,9 @@ public:
         }
 
         TBase::SchemeInfo = ev->Get()->Info;
-        YDB_LOG_DEBUG("[StreamingQueries] Describe streaming query success, scheme",
+        YDB_LOG_DEBUG("[StreamingQueries] Describe streaming query success",
             {"logPrefix", LogPrefix()},
-            {"info", (TBase::SchemeInfo ? TBase::SchemeInfo->DebugString() : "null")});
+            {"schemeInfo", (TBase::SchemeInfo ? TBase::SchemeInfo->DebugString() : "null")});
 
         const auto& syncActorId = TBase::Register(new TSyncStreamingQueryTableActor(TBase::Context, TBase::QueryPath, {
             .InitialState = TBase::QueryState,
@@ -2773,7 +2795,7 @@ public:
             SchemeInfo = std::nullopt;
         }
 
-        YDB_LOG_DEBUG("[StreamingQueries] Sync with scheme shard succeeded",
+        YDB_LOG_DEBUG("[StreamingQueries] Sync with scheme shard after creation succeeded",
             {"logPrefix", LogPrefix()},
             {"state", LogQueryState(QueryState)});
         Finish(Ydb::StatusIds::SUCCESS);
@@ -2899,7 +2921,7 @@ public:
         }
 
         if (!SchemeInfo) {
-            FatalError(Ydb::StatusIds::INTERNAL_ERROR, "Can not continue alter without query state");
+            FatalError(Ydb::StatusIds::INTERNAL_ERROR, "Cannot continue alter without query state");
         } else {
             const auto& syncActorId = Register(new TSyncStreamingQueryTableActor(Context, QueryPath, {
                 .InitialState = QueryState,
@@ -2926,7 +2948,7 @@ public:
             SchemeInfo = std::nullopt;
         }
 
-        YDB_LOG_DEBUG("[StreamingQueries] Sync with scheme shard succeeded",
+        YDB_LOG_DEBUG("[StreamingQueries] Sync with scheme shard after alter succeeded",
             {"logPrefix", LogPrefix()},
             {"state", LogQueryState(QueryState)});
         Finish(Ydb::StatusIds::SUCCESS);
@@ -3027,6 +3049,7 @@ public:
             hFunc(TEvPrivate::TEvCleanupStreamingQueryResult, Handle);
             hFunc(TEvPrivate::TEvExecuteSchemeTransactionResult, Handle);
             hFunc(TEvPrivate::TEvUpdateStreamingQueryResult, Handle);
+            hFunc(NFq::TEvCheckpointStorage::TEvDeleteGraphResponse, Handle);
             default:
                 StateFuncBase(ev);
         }
@@ -3040,6 +3063,13 @@ public:
         }
 
         QueryExistsInTable = false;
+        CleanupQuery();
+    }
+
+    void Handle(NFq::TEvCheckpointStorage::TEvDeleteGraphResponse::TPtr& ev) {
+        if (HandleResult(ev, "Delete checkpoints")) {
+            return;
+        }
         CleanupQuery();
     }
 
@@ -3078,6 +3108,12 @@ protected:
             return;
         }
 
+        // Checkpoint storage uses CheckpointId as graphId (set once on first execution start
+        // and reused across all restarts for the same query).
+        if (QueryExistsInTable && QueryState.HasCheckpointId()) {
+            CheckpointIdToDelete = QueryState.GetCheckpointId();
+        }
+
         CleanupQuery();
     }
 
@@ -3089,6 +3125,17 @@ private:
             YDB_LOG_DEBUG("[StreamingQueries] Start TCleanupStreamingQueryStateTableActor",
                 {"logPrefix", LogPrefix()},
                 {"cleanupActorId", cleanupActorId});
+            return;
+        }
+
+        if (CheckpointIdToDelete) {
+            // Delete checkpoints
+            YDB_LOG_DEBUG("[StreamingQueries] Sending TEvDeleteGraphRequest",
+                {"logPrefix", LogPrefix()},
+                {"graphId", *CheckpointIdToDelete});
+            Send(NYql::NDq::MakeCheckpointStorageID(),
+                 new NFq::TEvCheckpointStorage::TEvDeleteGraphRequest(*CheckpointIdToDelete));
+            CheckpointIdToDelete = std::nullopt;
             return;
         }
 
@@ -3123,6 +3170,7 @@ private:
     const bool SuccessOnNotExist = false;
     bool QueryExistsInSS = false;
     bool QueryExistsInTable = false;
+    std::optional<TString> CheckpointIdToDelete;
 };
 
 }  // anonymous namespace

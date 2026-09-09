@@ -5,6 +5,7 @@
 #ifndef BOOST_CHARCONV_DETAIL_FROM_CHARS_RESULT_HPP
 #define BOOST_CHARCONV_DETAIL_FROM_CHARS_RESULT_HPP
 
+#include <boost/charconv/detail/config.hpp>
 #include <system_error>
 
 namespace boost { namespace charconv {
@@ -22,17 +23,17 @@ struct from_chars_result_t
     // ERANGE = result_out_of_range
     std::errc ec;
 
-    friend constexpr bool operator==(const from_chars_result_t<UC>& lhs, const from_chars_result_t<UC>& rhs) noexcept
+    BOOST_CHARCONV_HOST_DEVICE friend constexpr bool operator==(const from_chars_result_t<UC>& lhs, const from_chars_result_t<UC>& rhs) noexcept
     {
         return lhs.ptr == rhs.ptr && lhs.ec == rhs.ec;
     }
 
-    friend constexpr bool operator!=(const from_chars_result_t<UC>& lhs, const from_chars_result_t<UC>& rhs) noexcept
+    BOOST_CHARCONV_HOST_DEVICE friend constexpr bool operator!=(const from_chars_result_t<UC>& lhs, const from_chars_result_t<UC>& rhs) noexcept
     {
         return !(lhs == rhs); // NOLINT : Expression can not be simplified since this is the definition
     }
 
-    constexpr explicit operator bool() const noexcept { return ec == std::errc{}; }
+    BOOST_CHARCONV_HOST_DEVICE constexpr explicit operator bool() const noexcept { return ec == std::errc{}; }
 };
 using from_chars_result = from_chars_result_t<char>;
 

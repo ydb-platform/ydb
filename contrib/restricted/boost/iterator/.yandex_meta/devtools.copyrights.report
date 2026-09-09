@@ -315,7 +315,7 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/iterator/advance.hpp [1:1]
-        include/boost/iterator/distance.hpp [1:1]
+        include/boost/iterator/distance.hpp [1:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 8f8a6ade4e24b15fc1746528d7ea1943
 BELONGS ya.make
@@ -386,6 +386,18 @@ BELONGS ya.make
         include/boost/iterator/detail/type_traits/conjunction.hpp [6:6]
         include/boost/iterator/detail/type_traits/disjunction.hpp [6:6]
         include/boost/iterator/detail/type_traits/negation.hpp [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ee285306e8cd75ebf5414991d95c8be5
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2017 Michel Morin.
+        // Copyright (C) 2026 Jeremy W. Murphy
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/iterator/distance.hpp [1:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f737ed06addb0e3798f6d97ca33809b1
 BELONGS ya.make

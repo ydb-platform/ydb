@@ -1114,13 +1114,13 @@ private:
 
             const auto operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
             if (!operationStatus) {
-                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Can not restart execution without final status");
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Cannot restart execution without final status");
                 return;
             }
 
             const auto finalizationStatus = result.ColumnParser("finalization_status").GetOptionalInt32();
             if (finalizationStatus) {
-                Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Can not restart execution while finalization is not finished, current status: " << *finalizationStatus);
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Cannot restart execution while finalization is not finished, current status: " << *finalizationStatus);
                 return;
             }
 
@@ -1577,7 +1577,7 @@ public:
         , Counters(std::move(counters))
         , Settings(std::move(settings))
     {
-        Y_VALIDATE(!Settings.AllowRestart || Settings.FailOnNotFound, "Can not handle setting FailOnNotFound when restart allowed");
+        Y_VALIDATE(!Settings.AllowRestart || Settings.FailOnNotFound, "Cannot handle setting FailOnNotFound when restart allowed");
     }
 
     void Bootstrap() {
@@ -1654,10 +1654,10 @@ private:
         if (event.RetryRequired) {
             if (Settings.AllowRestart) {
                 const auto& restartActorId = Register(TRestartScriptOperationQuery::MakeRetry(SelfId(), Database, ExecutionId, event.LeaseGeneration, QueryServiceConfig, Counters));
-                YDB_LOG_NOTICE("[ScriptExecutions] Restarting script execution lease",
+                YDB_LOG_NOTICE("[ScriptExecutions] Restarting script execution",
                     {"logPrefix", LogPrefix()},
                     {"restartActorId", restartActorId},
-                    {"generation", event.LeaseGeneration});
+                    {"leaseGeneration", event.LeaseGeneration});
             } else {
                 YDB_LOG_NOTICE("[ScriptExecutions] Lease finalization skipped because script execution is waiting for retry",
                     {"logPrefix", LogPrefix()});
@@ -2535,14 +2535,14 @@ public:
     {}
 
 private:
-    static std::pair<TInstant, TString> ParsePageToken(const TString& token) {
+    static std::optional<std::pair<TInstant, TString>> ParsePageToken(const TString& token) {
         const size_t p = token.find('|');
-        if (p == TString::npos) {
-            throw std::runtime_error("Invalid page token");
+        ui64 ts = 0;
+        if (p == TString::npos || p + 1 == token.size() || !TryFromString(TStringBuf(token).SubString(0, p), ts)) {
+            return std::nullopt;
         }
 
-        const ui64 ts = FromString(TStringBuf(token).SubString(0, p));
-        return {TInstant::MicroSeconds(ts), token.substr(p + 1)};
+        return std::make_pair(TInstant::MicroSeconds(ts), token.substr(p + 1));
     }
 
     static TString MakePageToken(const TInstant ts, const std::string& executionId) {
@@ -2615,12 +2615,16 @@ private:
 
         if (PageToken) {
             auto pageTokenParts = ParsePageToken(PageToken);
+            if (!pageTokenParts) {
+                Finish(Ydb::StatusIds::BAD_REQUEST, "Invalid page token");
+                return;
+            }
             params
                 .AddParam("$ts")
-                    .Timestamp(pageTokenParts.first)
+                    .Timestamp(pageTokenParts->first)
                     .Build()
                 .AddParam("$execution_id")
-                    .Utf8(pageTokenParts.second)
+                    .Utf8(pageTokenParts->second)
                     .Build();
         }
 
@@ -2868,7 +2872,7 @@ private:
 // Script execution cancellation with handling runtime and retry cancellation
 // *Assumptions*:
 // 1. Retry backoff large enough to cancel script execution operation between retries
-// 2. System not under high load so data transaction can not be executed during backoff period
+// 2. System not under high load so data transaction cannot be executed during backoff period
 
 class TCancelScriptExecutionOperationActor final : public TActorBootstrapped<TCancelScriptExecutionOperationActor> {
     using TBase = TActorBootstrapped<TCancelScriptExecutionOperationActor>;
@@ -3666,7 +3670,8 @@ private:
             {"resultSetIndex", ResultSetIndex},
             {"offset", Offset},
             {"rowsLimit", RowsLimit},
-            {"savedRowCount", NumberOfSavedRows});
+            {"savedRowCount", NumberOfSavedRows},
+            {"hasMoreResults", HasMoreResults});
 
         constexpr char sql[] = R"(
             -- TGetScriptExecutionResultQuery::FetchScriptResults
@@ -3771,7 +3776,8 @@ private:
         if (status == Ydb::StatusIds::SUCCESS) {
             YDB_LOG_DEBUG("[ScriptExecutions] Successfully fetched rows",
                 {"logPrefix", LogPrefix()},
-                {"rowCount", ResultSet.rows_size()});
+                {"rowCount", ResultSet.rows_size()},
+                {"hasMoreResults", HasMoreResults});
             Send(Owner, new TEvFetchScriptResultsResponse(status, std::move(ResultSet), HasMoreResults, std::move(issues)));
         } else {
             Send(Owner, new TEvFetchScriptResultsResponse(status, std::nullopt, true, std::move(issues)));
@@ -3779,6 +3785,8 @@ private:
     }
 
     void CancelFetchQuery() {
+        YDB_LOG_DEBUG("[ScriptExecutions] Cancelling fetch query",
+            {"logPrefix", LogPrefix()});
         HasMoreResults = true;
         CancelStreamQuery();
     }
@@ -4319,7 +4327,7 @@ private:
 
     void OnFinish(const Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
         if (!Response->FinalStatusAlreadySaved) {
-            YDB_LOG_DEBUG("[ScriptExecutions] Finished saving script execution operation status",
+            YDB_LOG_DEBUG("[ScriptExecutions] Finished saving script execution operation final status",
                 {"logPrefix", LogPrefix()},
                 {"status", Ydb::StatusIds::StatusCode_Name(Request.OperationStatus)},
                 {"issues", Request.Issues.ToOneLineString()});
@@ -4806,7 +4814,7 @@ private:
 
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             const auto& issues = ev->Get()->Issues;
-            YDB_LOG_WARN("[ScriptExecutions] Lease check failed",
+            YDB_LOG_WARN("[ScriptExecutions] Lease finalization failed",
                 {"logPrefix", LogPrefix()},
                 {"cookie", ev->Cookie},
                 {"sender", ev->Sender},
@@ -4815,9 +4823,9 @@ private:
                 {"operationsToCheck", OperationsToCheck});
 
             Success = false;
-            Issues.AddIssues(AddRootIssue(TStringBuilder() << "Lease check failed #" << ev->Cookie << " (" << status << ")", issues, true));
+            Issues.AddIssues(AddRootIssue(TStringBuilder() << "Lease finalization failed #" << ev->Cookie << " (" << status << ")", issues, true));
         } else {
-            YDB_LOG_DEBUG("[ScriptExecutions] Lease check successfully completed",
+            YDB_LOG_DEBUG("[ScriptExecutions] Lease finalization successfully completed",
                 {"logPrefix", LogPrefix()},
                 {"cookie", ev->Cookie},
                 {"sender", ev->Sender},

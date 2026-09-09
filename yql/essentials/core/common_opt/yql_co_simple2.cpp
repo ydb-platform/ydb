@@ -895,7 +895,7 @@ TExprNode::TPtr ApplyOrDistributive(const TExprNode::TPtr& node, TExprContext& c
 
                 TExprNodeList newGroup;
                 for (auto& idx : group) {
-                    auto childAnd = children[idx];
+                    const auto& childAnd = children[idx];
                     TExprNodeList preds = childAnd->ChildrenList();
                     EraseIf(preds, [&](const TExprNode::TPtr& p) { return commonSet.contains(IsNoPush(*p) ? p->Child(0) : p.Get()); });
                     if (preds.empty()) {

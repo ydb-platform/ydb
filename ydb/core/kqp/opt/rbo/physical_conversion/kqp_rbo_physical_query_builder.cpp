@@ -1,4 +1,5 @@
 #include "kqp_rbo_physical_query_builder.h"
+#include "kqp_rbo_compatibility.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
@@ -124,13 +125,57 @@ TPhysicalQueryBuilder::TPhysicalQueryBuilder(TOpRoot& root, TStageGraph&& graph,
 TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery() {
     auto phyStages = BuildPhysicalStageGraph();
     SubmitPhysicalStagesTrace(RBOCtx, "After physical stage graph build", phyStages);
-    phyStages = EnableWideChannelsPhysicalStages(std::move(phyStages));
-    SubmitPhysicalStagesTrace(RBOCtx, "After wide channel rewrite", phyStages);
-    phyStages = PeepHoleOptimizePhysicalStages(std::move(phyStages));
-    SubmitPhysicalStagesTrace(RBOCtx, "After physical peephole", phyStages);
+    const bool fullPeephole = RBOCtx.KqpCtx.Config->GetEnableNewRBOPhysicalStagePeephole();
+    phyStages = PreparePhysicalStages(std::move(phyStages), fullPeephole);
+    SubmitPhysicalStagesTrace(RBOCtx, "After physical stage preparation", phyStages);
+    if (!fullPeephole) {
+        phyStages = LowerPhysicalStageCompatibility(std::move(phyStages));
+        SubmitPhysicalStagesTrace(RBOCtx, "After compatibility lowering", phyStages);
+    } else {
+        phyStages = PeepHoleOptimizePhysicalStages(std::move(phyStages));
+        SubmitPhysicalStagesTrace(RBOCtx, "After physical peephole", phyStages);
+    }
     auto physicalQuery = BuildPhysicalQuery(std::move(phyStages));
     SubmitPhysicalExprTrace(RBOCtx, "Final physical query", physicalQuery);
     return physicalQuery;
+}
+
+TVector<TExprNode::TPtr> TPhysicalQueryBuilder::LowerPhysicalStageCompatibility(TVector<TExprNode::TPtr>&& physicalStages) {
+    Y_ENSURE(!physicalStages.empty());
+    auto root = physicalStages.back();
+    if (!NeedsRboCompatibilityLowering(root)) {
+        return std::move(physicalStages);
+    }
+
+    TOptimizeExprSettings settings(&RBOCtx.TypeCtx);
+    settings.CustomInstantTypeTransformer = RBOCtx.TypeCtx.CustomInstantTypeTransformer.Get();
+    constexpr size_t MaxPasses = 64;
+    for (size_t pass = 0; pass < MaxPasses && NeedsRboCompatibilityLowering(root); ++pass) {
+        TExprNode::TPtr output;
+        const auto status = OptimizeExpr(
+            root,
+            output,
+            [&](const TExprNode::TPtr& node, TExprContext& ctx) {
+                return RewriteRboCompatibilityNode(node, ctx, RBOCtx.TypeCtx);
+            },
+            RBOCtx.ExprCtx,
+            settings);
+        YQL_ENSURE(status != IGraphTransformer::TStatus::Error,
+            "Failed to lower execution-incompatible callables in new RBO physical stages");
+        if (status == IGraphTransformer::TStatus::Ok) {
+            break;
+        }
+
+        YQL_ENSURE(status == IGraphTransformer::TStatus::Repeat);
+        YQL_ENSURE(output != root, "RBO compatibility lowering made no progress");
+        root = std::move(output);
+        TypeAnnotate(root);
+    }
+
+    EnsureRboCompatibilityLowered(root);
+    TVector<TExprNode::TPtr> stagesTopSorted;
+    TopologicalSort(TDqPhyStage(root), stagesTopSorted);
+    return stagesTopSorted;
 }
 
 TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
@@ -194,8 +239,14 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
             }
 
             auto stageGUID = Graph.StageGUIDs.at(id);
-            stage = BuildDqPhyStage(stageInputConnections, stageInputArgs, Stages.at(id), NYql::NDq::TDqStageSettings().New(stageGUID).BuildNode(ctx, StagePos.at(id)),
+            if (Graph.IsSinkStage(id)) {
+                stage = BuildDqPhySinkStage(stageInputConnections, stageInputArgs, Stages.at(id), NYql::NDq::TDqStageSettings().New(stageGUID).BuildNode(ctx, StagePos.at(id)),
+                                    Graph.GetSinkSettings(id), ctx, StagePos.at(id));
+            }
+            else {
+                stage = BuildDqPhyStage(stageInputConnections, stageInputArgs, Stages.at(id), NYql::NDq::TDqStageSettings().New(stageGUID).BuildNode(ctx, StagePos.at(id)),
                                     ctx, StagePos.at(id));
+            }
             phyStages.emplace_back(stage);
             YQL_CLOG(TRACE, CoreDq) << "Added stage " << stage->UniqueId();
         }
@@ -479,6 +530,8 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPt
     }
     const auto columnOrder = Build<TCoAtomList>(ctx, Root.Pos).Add(columnAtomList).Done().Ptr();
 
+    TExprNode::TPtr mainTx;
+
     // clang-format off
     // wrap in DqResult
     auto dqResult = Build<TDqCnResult>(ctx, Root.Pos)
@@ -494,20 +547,38 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPt
     YQL_CLOG(TRACE, CoreDq) << "Inferred final type: " << *dqResult->GetTypeAnn();
 
     auto phyTxSettings = GetPhysicalTxSettings();
-    // Build PhysicalTx
-    auto mainTx = Build<TKqpPhysicalTx>(ctx, Root.Pos)
-        .Stages()
-            .Add(physicalStages)
-        .Build()
-        .Results()
-            .Add({dqResult})
-        .Build()
-        .ParamBindings()
-            .Add(paramBindingsMainTx)
-        .Build()
-        .Settings(phyTxSettings.BuildNode(ctx, Root.Pos))
-    .Done().Ptr();
-    // clang-format on
+    if (Root.PlanProps.WithEffects && !Root.PlanProps.WithReturning) {
+        // clang-format off
+        // Build PhysicalTx
+        mainTx = Build<TKqpPhysicalTx>(ctx, Root.Pos)
+                .Stages()
+                    .Add(physicalStages)
+                .Build()
+                .Results().Build()
+                .ParamBindings()
+                    .Add(paramBindingsMainTx)
+                .Build()
+                .Settings(phyTxSettings.BuildNode(ctx, Root.Pos))
+            .Done().Ptr();
+        // clang-format on
+    }
+    else {
+        // clang-format off
+        // Build PhysicalTx
+        mainTx = Build<TKqpPhysicalTx>(ctx, Root.Pos)
+                .Stages()
+                    .Add(physicalStages)
+                .Build()
+                .Results()
+                    .Add({dqResult})
+                .Build()
+                .ParamBindings()
+                    .Add(paramBindingsMainTx)
+                .Build()
+                .Settings(phyTxSettings.BuildNode(ctx, Root.Pos))
+            .Done().Ptr();
+        // clang-format on
+    }
     phyTxs.emplace_back(mainTx);
 
     // If we have materialize tx, main tx is next.
@@ -522,17 +593,29 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPt
 
     auto phyQuerySettings = GetPhysicalQuerySettings();
     // Build Physical query
-    // clang-format off
-    return Build<TKqpPhysicalQuery>(ctx, Root.Pos)
-        .Transactions()
-            .Add(phyTxs)
-        .Build()
-        .Results()
-            .Add({mainTxResultBinding})
-        .Build()
-        .Settings(phyQuerySettings.BuildNode(ctx, Root.Pos))
-    .Done().Ptr();
-    // clang-format on
+    if (Root.PlanProps.WithEffects && !Root.PlanProps.WithReturning) {
+        // clang-format off
+        return Build<TKqpPhysicalQuery>(ctx, Root.Pos)
+            .Transactions()
+                .Add(phyTxs)
+            .Build()
+            .Results().Build()
+            .Settings(phyQuerySettings.BuildNode(ctx, Root.Pos))
+        .Done().Ptr();
+        // clang-format on
+    } else {
+        // clang-format off
+        return Build<TKqpPhysicalQuery>(ctx, Root.Pos)
+            .Transactions()
+                .Add(phyTxs)
+            .Build()
+            .Results()
+                .Add({mainTxResultBinding})
+            .Build()
+            .Settings(phyQuerySettings.BuildNode(ctx, Root.Pos))
+        .Done().Ptr();
+        // clang-format on
+    }
 }
 
 TKqpPhyQuerySettings TPhysicalQueryBuilder::GetPhysicalQuerySettings() const {
@@ -562,6 +645,8 @@ TKqpPhyQuerySettings TPhysicalQueryBuilder::GetPhysicalQuerySettings() const {
 TKqpPhyTxSettings TPhysicalQueryBuilder::GetPhysicalTxSettings() const {
     auto& kqpCtx = RBOCtx.KqpCtx;
     TKqpPhyTxSettings txSettings;
+    txSettings.WithEffects = Root.PlanProps.WithEffects;
+
     switch (kqpCtx.QueryCtx->Type) {
         case EKikimrQueryType::Dml: {
             txSettings.Type = EPhysicalTxType::Compute;
@@ -595,6 +680,36 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildDqPhyStage(const TVector<TExprNode::
             .Body(physicalStageBody)
         .Build()
         .Settings(settings)
+    .Done().Ptr();
+    // clang-format on
+}
+
+TExprNode::TPtr TPhysicalQueryBuilder::BuildDqPhySinkStage(const TVector<TExprNode::TPtr>& inputs, const TVector<TExprNode::TPtr>& args,
+                                                       TExprNode::TPtr physicalStageBody, NNodes::TCoNameValueTupleList&& settings, 
+                                                       const TExprNode::TPtr& sinkSettings, TExprContext& ctx, TPositionHandle pos) const {
+
+    TVector<TExprNode::TPtr> outputs;
+    auto dataSink = ctx.NewCallable(pos, "DataSink", {ctx.NewAtom(pos, "KqpTableSink"), ctx.NewAtom(pos, "db")});
+    outputs.push_back(Build<TDqSink>(ctx, pos)
+                        .Index().Value("0").Build()
+                        .DataSink(dataSink)
+                        .Settings(sinkSettings)
+                        .Done().Ptr()
+    );
+
+    // clang-format off
+    return Build<TDqPhyStage>(ctx, pos)
+        .Inputs()
+            .Add(inputs)
+        .Build()
+        .Program()
+            .Args(args)
+            .Body(physicalStageBody)
+        .Build()
+        .Settings(settings)
+        .Outputs()
+            .Add(outputs)
+        .Build()
     .Done().Ptr();
     // clang-format on
 }
@@ -638,7 +753,7 @@ void TPhysicalQueryBuilder::KeepTypeAnnotationForStageAndFirstLevelChilds(TDqPhy
     }
 }
 
-TVector<TExprNode::TPtr> TPhysicalQueryBuilder::EnableWideChannelsPhysicalStages(TVector<TExprNode::TPtr>&& physicalStages) {
+TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PreparePhysicalStages(TVector<TExprNode::TPtr>&& physicalStages, bool enableWideChannels) {
     Y_ENSURE(physicalStages.size());
     auto root = physicalStages.back();
     if (!root->GetTypeAnn()) {
@@ -660,12 +775,14 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::EnableWideChannelsPhysicalStages
         // clang-format on
 
         TypeAnnotate(newStage);
-        rootStage = NYql::NDq::RebuildStageInputsAsWide(TDqPhyStage(newStage), ctx).Ptr();
+        rootStage = enableWideChannels
+            ? NYql::NDq::RebuildStageInputsAsWide(TDqPhyStage(newStage), ctx).Ptr()
+            : newStage;
         replaces[dqPhyStage.Raw()] = rootStage;
     }
 
     TypeAnnotate(rootStage);
-    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Wide channels] " << KqpExprToPrettyString(TExprBase(rootStage), ctx);
+    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical stages] " << KqpExprToPrettyString(TExprBase(rootStage), ctx);
 
     TVector<TExprNode::TPtr> stagesTopSorted;
     TopologicalSort(TDqPhyStage(rootStage), stagesTopSorted);

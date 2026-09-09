@@ -2954,7 +2954,7 @@ TExprNode::TPtr ExpandNonCompactFullFrames(TPositionHandle pos, const TExprNode:
     } else {
         YQL_ENSURE(!sessionKey);
         preprocessLambda = MakeIdentityLambda(pos, ctx);
-        auto groupKeySelector = keySelector;
+        const auto& groupKeySelector = keySelector;
 
         condenseSwitch = ctx.Builder(pos)
             .Lambda()

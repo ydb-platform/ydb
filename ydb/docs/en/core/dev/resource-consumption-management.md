@@ -237,12 +237,8 @@ If necessary, the user can explicitly specify in which pool a given query should
 - **YDB CLI ([interactive mode](../reference/ydb-cli/interactive-cli.md))** — using the [command](../reference/ydb-cli/interactive-cli.md#internal-vars) `SET resource_pool = my_pool`, where `my_pool` is the name of the resource pool.
 - **YDB CPP SDK** — in the query launch settings via the [ResourcePool](https://github.com/ydb-platform/ydb/blob/fb05a8472be6b2770528b3e90093e67a7bca8f0e/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h#L111) parameter.
 - **YDB GO SDK** — in the query launch settings `ExecuteOption` via the [WithResourcePool](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3@v3.133.1/query#WithResourcePool) call.
-
-{% note warning %}
-
-The current version of **YDB Python SDK** does not allow specifying the resource pool in which the query should be executed.
-
-{% endnote %}
+- **YDB Java SDK** — in the query launch settings `ExecuteQuerySettings` via the [withResourcePool](https://github.com/ydb-platform/ydb-java-sdk/blob/v2.3.12/query/src/main/java/tech/ydb/query/settings/ExecuteQuerySettings.java#L65) call, available since version 2.3.12.
+- **YDB Python SDK** — via the [pool_id](https://github.com/ydb-platform/ydb-python-sdk/blob/3.31.2/ydb/query/session.py#L478) parameter of the `QuerySession.execute()`, `QueryTxContext.execute()` and `QuerySessionPool.execute_with_retries()` methods, available since version 3.31.2.
 
 ## Diagnostics
 

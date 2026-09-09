@@ -34,7 +34,7 @@ private:
         Y_UNUSED(request);
         TCheckResponse res{.CheckName = GetCheckName()};
 
-        const auto* astResult = state.TranslateSExpr(res.Issues);
+        const auto* astResult = state.TranslateSExpr(&res.Issues);
         res.Success = astResult && astResult->IsOk();
 
         return res;
@@ -44,7 +44,7 @@ private:
         Y_UNUSED(request);
         TCheckResponse res{.CheckName = GetCheckName()};
 
-        const auto* astResult = state.TranslatePg(res.Issues);
+        const auto* astResult = state.TranslatePg(&res.Issues);
         res.Success = astResult && astResult->IsOk();
 
         return res;
@@ -54,7 +54,7 @@ private:
         Y_UNUSED(request);
         TCheckResponse res{.CheckName = GetCheckName()};
 
-        const auto* astResult = state.TranslateSql(res.Issues);
+        const auto* astResult = state.TranslateSql(&res.Issues);
         res.Success = astResult && astResult->IsOk();
 
         return res;

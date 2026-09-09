@@ -39,10 +39,7 @@ class TableContext:
         self.order_by = self.column_names[0] if order_by is None else order_by
 
     def __enter__(self):
-        if self.client.min_version("19"):
-            self.client.command(f"DROP TABLE IF EXISTS {self.table}")
-        else:
-            self.client.command(f"DROP TABLE IF EXISTS {self.table} SYNC")
+        self.client.command(f"DROP TABLE IF EXISTS {self.table}")
         col_defs = ",".join(f"{quote_identifier(name)} {col_type}" for name, col_type in zip(self.column_names, self.column_types))
         create_cmd = f"CREATE TABLE {self.table} ({col_defs}) ENGINE {self.engine} ORDER BY {self.order_by}"
         if self.settings:

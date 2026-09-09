@@ -7,6 +7,7 @@ PY_SRCS(
 )
 
 PEERDIR(
+    ydb/public/sdk/python
     ydb/public/api/grpc/draft
     ydb/public/api/protos
 )

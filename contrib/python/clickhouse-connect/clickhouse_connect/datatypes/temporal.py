@@ -6,11 +6,13 @@ import zoneinfo
 from abc import abstractmethod
 from collections.abc import Callable, MutableSequence, Sequence
 from datetime import date, datetime, time, timedelta, tzinfo
+from math import floor
 from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 if TYPE_CHECKING:
     import numpy
 
+from clickhouse_connect import common
 from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef
 from clickhouse_connect.driver import ctypes as driver_ctypes
 from clickhouse_connect.driver import options, tzutil
@@ -23,6 +25,12 @@ from clickhouse_connect.driver.types import ByteSource
 
 epoch_start_date = date(1970, 1, 1)
 epoch_start_datetime = datetime(1970, 1, 1)
+
+
+def _localized_timestamp(value: datetime, target_tz: tzinfo) -> float:
+    if value.utcoffset() is None:
+        value = value.replace(tzinfo=target_tz)
+    return value.timestamp()
 
 
 class Date(ClickHouseType):
@@ -193,6 +201,12 @@ class DateTime(DateTimeBase):
         if isinstance(first, int) or self.write_format(ctx) == "int":
             if self.nullable:
                 column = [x if x else 0 for x in column]
+        elif common.get_setting("naive_datetime_insert") == "server":
+            active_tz = self.tzinfo or ctx.server_tz
+            if self.nullable:
+                column = [int(_localized_timestamp(x, active_tz)) if x else 0 for x in column]
+            else:
+                column = [int(_localized_timestamp(x, active_tz)) for x in column]
         else:
             if self.nullable:
                 column = [int(x.timestamp()) if x else 0 for x in column]
@@ -265,24 +279,35 @@ class DateTime64(DateTimeBase):
         if isinstance(first, int) or self.write_format(ctx) == "int":
             if self.nullable:
                 column = [x if x else 0 for x in column]
-        elif isinstance(first, str):
-            original_column = column
-            column = []
-
-            for x in original_column:
-                if not x and self.nullable:
-                    v = 0
-                else:
-                    dt = datetime.fromisoformat(x)
-                    v = ((int(dt.timestamp()) * 1000000 + dt.microsecond) * self.prec) // 1000000
-
-                column.append(v)
         else:
             prec = self.prec
-            if self.nullable:
-                column = [((int(x.timestamp()) * 1000000 + x.microsecond) * prec) // 1000000 if x else 0 for x in column]
+            server_mode = common.get_setting("naive_datetime_insert") == "server"
+            active_tz = (self.tzinfo or ctx.server_tz) if server_mode else None
+            if isinstance(first, str):
+                original_column = column
+                column = []
+
+                for x in original_column:
+                    if not x and self.nullable:
+                        v = 0
+                    else:
+                        dt = datetime.fromisoformat(x)
+                        timestamp = _localized_timestamp(dt, active_tz) if active_tz is not None else dt.timestamp()
+                        v = ((floor(timestamp) * 1000000 + dt.microsecond) * prec) // 1000000
+
+                    column.append(v)
+            elif active_tz is not None:
+                if self.nullable:
+                    column = [
+                        ((floor(_localized_timestamp(x, active_tz)) * 1000000 + x.microsecond) * prec) // 1000000 if x else 0
+                        for x in column
+                    ]
+                else:
+                    column = [((floor(_localized_timestamp(x, active_tz)) * 1000000 + x.microsecond) * prec) // 1000000 for x in column]
+            elif self.nullable:
+                column = [((floor(x.timestamp()) * 1000000 + x.microsecond) * prec) // 1000000 if x else 0 for x in column]
             else:
-                column = [((int(x.timestamp()) * 1000000 + x.microsecond) * prec) // 1000000 for x in column]
+                column = [((floor(x.timestamp()) * 1000000 + x.microsecond) * prec) // 1000000 for x in column]
         write_array("q", column, dest, ctx.column_name)
 
 

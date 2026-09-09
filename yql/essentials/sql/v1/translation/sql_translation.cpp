@@ -1990,7 +1990,7 @@ TNodePtr TSqlTranslation::SerialTypeNode(const TRule_type_name_or_bind& node) {
         return nullptr;
     }
 
-    auto alt = typeNameNode.GetAlt_type_name2();
+    const auto& alt = typeNameNode.GetAlt_type_name2();
     auto& block = alt.GetBlock1();
     if (block.Alt_case() != TRule_type_name::TAlt2::TBlock1::kAlt2) {
         return nullptr;
@@ -2316,6 +2316,24 @@ bool StoreInt(const TRule_table_setting_value& from, TNodePtr& to, TContext& ctx
             return false;
     }
     return true;
+}
+
+bool StoreStringOrInt(const TNodePtr& from, TResetableSetting<TNodePtr, void>& to) {
+    if (!from) {
+        return false;
+    }
+    const bool nonEmptyString = from->IsLiteral() && from->GetLiteralType() == "String" && !from->GetLiteralValue().empty();
+    if (!from->IsIntegerLiteral() && !nonEmptyString) {
+        return false;
+    }
+    to.Set(from);
+    return true;
+}
+
+bool StoreStringOrInt(const TRule_table_setting_value& from, TResetableSetting<TNodePtr, void>& to,
+                      TContext& ctx) {
+    TNodePtr node;
+    return (StoreString(from, node, ctx) || StoreInt(from, node, ctx)) && StoreStringOrInt(/*from=*/node, to);
 }
 
 bool StoreInt(const TRule_table_setting_value& from, TDeferredAtom& to, TContext& ctx, const TString& errorPrefix = {}) {
@@ -2787,6 +2805,13 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
             Ctx_.Error() << to_upper(id.Name) << " value should be an integer";
             return false;
         }
+    } else if (to_lower(id.Name) == "metrics_level") {
+        if (reset) {
+            settings.MetricsLevel.Reset();
+        } else if (!StoreStringOrInt(*value, settings.MetricsLevel, Ctx_)) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be an integer or a string";
+            return false;
+        }
     } else {
         Ctx_.Error() << "Unknown table setting: " << id.Name;
         return false;
@@ -3250,12 +3275,9 @@ bool StoreTopicSettingsEntry(
     } else if (to_lower(id.Name) == "metrics_level") {
         if (reset) {
             settings.MetricsLevel.Reset();
-        } else {
-            if (!valueExprNode->IsIntegerLiteral()) {
-                ctx.Error() << to_upper(id.Name) << " value should be an integer";
-                return false;
-            }
-            settings.MetricsLevel.Set(valueExprNode);
+        } else if (!StoreStringOrInt(valueExprNode, settings.MetricsLevel)) {
+            ctx.Error() << to_upper(id.Name) << " value should be an integer or a string";
+            return false;
         }
     } else if (to_lower(id.Name) == "content_based_deduplication") {
         if (reset) {
@@ -4123,18 +4145,6 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
             const auto& alt = rule.GetAlt_table_hint4();
             const auto pos = Ctx_.TokenPosition(alt.GetToken1());
             TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-            TNodePtr expr = Unwrap(TSqlExpression(*this).Build(alt.GetRule_expr4()));
-            if (!expr) {
-                return false;
-            }
-            hints["watermark"] = {BuildLambda(pos, BuildList(pos, {BuildAtom(pos, "row")}), std::move(expr))};
-            break;
-        }
-
-        case TRule_table_hint::kAltTableHint5: {
-            const auto& alt = rule.GetAlt_table_hint5();
-            const auto pos = Ctx_.TokenPosition(alt.GetToken1());
-            TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
             TNodePtr expr = Unwrap(TSqlExpression(*this).Build(alt.GetRule_expr3()));
             if (!expr) {
                 return false;
@@ -4768,151 +4778,6 @@ bool TSqlTranslation::PermissionNameClause(const TRule_permission_name_target& n
     return true;
 }
 
-bool TSqlTranslation::StoreStringSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result) {
-    YQL_ENSURE(value);
-
-    const TString key = to_lower(id.Name);
-    if (result.find(key) != result.end()) {
-        Ctx_.Error() << to_upper(key) << " duplicate keys";
-        return false;
-    }
-
-    switch (value->Alt_case()) {
-        case TRule_table_setting_value::kAltTableSettingValue2:
-            return StoreString(*value, result[key], Ctx_, to_upper(key));
-
-        default:
-            Ctx_.Error() << to_upper(key) << " value should be a string literal";
-            return false;
-    }
-
-    return true;
-}
-
-bool TSqlTranslation::StoreStringSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result) {
-    const TIdentifier id = IdEx(entry.GetRule_an_id1(), *this);
-    return StoreStringSettingsEntry(id, &entry.GetRule_table_setting_value3(), result);
-}
-
-bool TSqlTranslation::ParseBackupCollectionSettings(std::map<TString, TDeferredAtom>& result, const TRule_backup_collection_settings& settings) {
-    const auto& firstEntry = settings.GetRule_backup_collection_settings_entry1();
-    if (!StoreStringSettingsEntry(IdEx(firstEntry.GetRule_an_id1(), *this), &firstEntry.GetRule_table_setting_value3(), result)) {
-        return false;
-    }
-    for (const auto& block : settings.GetBlock2()) {
-        const auto& entry = block.GetRule_backup_collection_settings_entry2();
-        if (!StoreStringSettingsEntry(IdEx(entry.GetRule_an_id1(), *this), &entry.GetRule_table_setting_value3(), result)) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool TSqlTranslation::ParseBackupCollectionSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_backup_collection_actions& actions) {
-    auto parseAction = [&](auto& actionVariant) {
-        switch (actionVariant.Alt_case()) {
-            case TRule_alter_backup_collection_action::kAltAlterBackupCollectionAction1: {
-                const auto& action = actionVariant.GetAlt_alter_backup_collection_action1().GetRule_alter_table_set_table_setting_compat1();
-                if (!StoreStringSettingsEntry(action.GetRule_alter_table_setting_entry3(), result)) {
-                    return false;
-                }
-                for (const auto& entry : action.GetBlock4()) {
-                    if (!StoreStringSettingsEntry(entry.GetRule_alter_table_setting_entry2(), result)) {
-                        return false;
-                    }
-                }
-                return true;
-            }
-            case TRule_alter_backup_collection_action::kAltAlterBackupCollectionAction2: {
-                const auto& action = actionVariant.GetAlt_alter_backup_collection_action2().GetRule_alter_table_reset_table_setting1();
-                const TString firstKey = to_lower(IdEx(action.GetRule_an_id3(), *this).Name);
-                toReset.insert(firstKey);
-                for (const auto& key : action.GetBlock4()) {
-                    toReset.insert(to_lower(IdEx(key.GetRule_an_id2(), *this).Name));
-                }
-                return true;
-            }
-            case TRule_alter_backup_collection_action::ALT_NOT_SET:
-                YQL_ENSURE(false, "Unreachable");
-        }
-    };
-
-    const auto& firstAction = actions.GetRule_alter_backup_collection_action1();
-    if (!parseAction(firstAction)) {
-        return false;
-    }
-
-    for (const auto& action : actions.GetBlock2()) {
-        if (!parseAction(action.GetRule_alter_backup_collection_action2())) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool TSqlTranslation::ParseBackupCollectionTables(TVector<TDeferredAtom>& result, const TRule_table_list& tables) {
-    const auto& firstEntry = tables.GetRule_an_id_table2();
-    result.push_back(TDeferredAtom(Ctx_.Pos(), Id(firstEntry, *this)));
-    for (const auto& block : tables.GetBlock3()) {
-        const auto& entry = block.GetRule_an_id_table3();
-        result.push_back(TDeferredAtom(Ctx_.Pos(), Id(entry, *this)));
-    }
-    return true;
-}
-
-bool TSqlTranslation::ParseBackupCollectionEntry(
-    bool& addDatabase,
-    bool& removeDatabase,
-    TVector<TDeferredAtom>& addTables,
-    TVector<TDeferredAtom>& removeTables,
-    const TRule_alter_backup_collection_entry& entry)
-{
-    switch (entry.Alt_case()) {
-        case TRule_alter_backup_collection_entry::kAltAlterBackupCollectionEntry1: {
-            addDatabase = true;
-            return true;
-        }
-        case TRule_alter_backup_collection_entry::kAltAlterBackupCollectionEntry2: {
-            removeDatabase = true;
-            return true;
-        }
-        case TRule_alter_backup_collection_entry::kAltAlterBackupCollectionEntry3: {
-            auto table = entry.GetAlt_alter_backup_collection_entry3().GetRule_an_id_table3();
-            addTables.push_back(TDeferredAtom(Ctx_.Pos(), Id(table, *this)));
-            return true;
-        }
-        case TRule_alter_backup_collection_entry::kAltAlterBackupCollectionEntry4: {
-            auto table = entry.GetAlt_alter_backup_collection_entry4().GetRule_an_id_table3();
-            removeTables.push_back(TDeferredAtom(Ctx_.Pos(), Id(table, *this)));
-            return true;
-        }
-        case TRule_alter_backup_collection_entry::ALT_NOT_SET:
-            YQL_ENSURE(false, "Unreachable");
-    }
-    return true;
-}
-
-bool TSqlTranslation::ParseBackupCollectionEntries(
-    bool& addDatabase,
-    bool& removeDatabase,
-    TVector<TDeferredAtom>& addTables,
-    TVector<TDeferredAtom>& removeTables,
-    const TRule_alter_backup_collection_entries& entries)
-{
-    const auto& firstEntry = entries.GetRule_alter_backup_collection_entry1();
-    if (!ParseBackupCollectionEntry(addDatabase, removeDatabase, addTables, removeTables, firstEntry)) {
-        return false;
-    }
-    for (const auto& block : entries.GetBlock2()) {
-        const auto& entry = block.GetRule_alter_backup_collection_entry2();
-        if (!ParseBackupCollectionEntry(addDatabase, removeDatabase, addTables, removeTables, entry)) {
-            return false;
-        }
-    }
-    return true;
-}
-
 TString TSqlTranslation::FrameSettingsToString(EFrameSettings settings, bool isUnbounded) {
     TString result;
     switch (settings) {
@@ -5082,7 +4947,7 @@ bool TSqlTranslation::FrameClause(const TRule_window_frame_clause& node, TFrameS
         frameSpec->FrameType = EFrameType::FrameByGroups;
     }
 
-    auto frameExtent = node.GetRule_window_frame_extent2();
+    const auto& frameExtent = node.GetRule_window_frame_extent2();
     // window_frame_extent: window_frame_bound | window_frame_between;
     switch (frameExtent.Alt_case()) {
         case TRule_window_frame_extent::kAltWindowFrameExtent1: {

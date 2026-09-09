@@ -1,5 +1,7 @@
 #include "processor_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
+
 namespace NKikimr {
 namespace NSysView {
 
@@ -11,7 +13,8 @@ struct TSysViewProcessor::TTxCollect : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_COLLECT; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        SVLOG_D("[" << Self->TabletID() << "] TTxCollect::Execute");
+        YDB_LOG_DEBUG("TTxCollect::Execute",
+            {"tabletId", Self->TabletID()});
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -26,7 +29,8 @@ struct TSysViewProcessor::TTxCollect : public TTxBase {
     }
 
     void Complete(const TActorContext&) override {
-        SVLOG_D("[" << Self->TabletID() << "] TTxCollect::Complete");
+        YDB_LOG_DEBUG("TTxCollect::Complete",
+            {"tabletId", Self->TabletID()});
 
         Self->ScheduleAggregate();
     }

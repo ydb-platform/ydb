@@ -285,6 +285,10 @@ public:
         NChaosClient::TChaosLeaseId /*chaosLeaseId*/,
         const TChaosLeaseAttachOptions& /*options*/));
 
+    UNIMPLEMENTED_METHOD(TFuture<void>, PingChaosLease, (
+        NChaosClient::TChaosLeaseId /*chaosLeaseId*/,
+        const TChaosLeasePingOptions& /*options*/));
+
     UNIMPLEMENTED_METHOD(TFuture<void>, SetUserBanned, (
         const std::string& /*user*/,
         bool /*isBanned*/,
@@ -380,6 +384,15 @@ public:
         const NYPath::TYPath& /*path*/,
         const std::string& /*expectedMD5*/,
         const TPutFileToCacheOptions& /*options*/))
+
+    UNIMPLEMENTED_METHOD(TFuture<TFilePartitions>, PartitionFile, (
+        const NYPath::TYPath& /*path*/,
+        const std::vector<TFileReadRange>& /*ranges*/,
+        const TPartitionFileOptions& /*options*/))
+
+    UNIMPLEMENTED_METHOD(TFuture<IFileReaderPtr>, CreateFilePartitionReader, (
+        const TFilePartitionCookiePtr& /*cookie*/,
+        const TReadFilePartitionOptions& /*options*/))
 
     // Security
     UNIMPLEMENTED_METHOD(TFuture<void>, AddMember, (

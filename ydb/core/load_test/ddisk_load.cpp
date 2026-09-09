@@ -12,6 +12,7 @@
 #include <util/random/fast.h>
 #include <util/random/shuffle.h>
 #include <util/generic/queue.h>
+#include <util/generic/ymath.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -25,6 +26,20 @@ namespace {
 
 constexpr size_t SimulatedBufferSizeBytes = 128ull << 20; // 128 MiB
 constexpr size_t SimulatedBufferAlignment = 4096;
+
+using TAreaProto = NKikimr::TEvLoadTestRequest::TDDiskLoad::TArea;
+
+TAreaProto::EAreaInit ResolveAreaInitType(bool isReadLoad, const TAreaProto& area) {
+    if (!isReadLoad) {
+        return area.GetInitType();
+    }
+    if (!area.HasInitType() || area.GetInitType() == TAreaProto::INIT_ZEROES_FULL) {
+        return TAreaProto::INIT_ZEROES_FULL;
+    }
+    ythrow TLoadActorException()
+        << "read load requires InitType INIT_ZEROES_FULL (omit InitType to use it); "
+        << "INIT_NONE and INIT_ZEROES_FIRST_BLOCK leave unread slots as in-memory zeros";
+}
 
 class TAlignedPayloadChunk : public IContiguousChunk {
     std::unique_ptr<char, decltype(&free)> Owner;
@@ -145,8 +160,9 @@ private:
 
 class TDDiskLoadTestActor : public TActorBootstrapped<TDDiskLoadTestActor> {
     struct TAreaInfo {
-        // write positions as indices for every IoSizeBytes
+        // Request positions, with separate queues for measured I/O and background-write sizes.
         TDeque<ui32> IOQueue;
+        TDeque<ui32> BackgroundWriteIOQueue;
         ui32 AreaSizeBytes = 0;
         ui32 Weight = 1;
         bool Sequential = true;
@@ -163,6 +179,7 @@ class TDDiskLoadTestActor : public TActorBootstrapped<TDDiskLoadTestActor> {
         ui32 Size;
         TInstant StartTime;
         bool IsInit = false;
+        bool IsBackground = false;
     };
 
     struct TRequestStat {
@@ -214,6 +231,8 @@ class TDDiskLoadTestActor : public TActorBootstrapped<TDDiskLoadTestActor> {
     bool IsReadLoad = false;
     bool EnableChecksums = true;
     ui32 IoSizeBytes = 4096;
+    float BackgroundWriteRatio = 0;
+    ui32 BackgroundWriteSizeBytes = 4096;
 
     TString IOSizeInfo = ToString(IoSizeBytes);
     TString SequentialInfo = "unknown";
@@ -226,6 +245,8 @@ class TDDiskLoadTestActor : public TActorBootstrapped<TDDiskLoadTestActor> {
     ui64 RequestsSent = 0;
     ui64 RequestsOK = 0;
     ui64 RequestsError = 0;
+    ui64 MeasuredReadsSent = 0;
+    ui64 BackgroundWritesSent = 0;
 
     // Monitoring
     TIntrusivePtr<::NMonitoring::TDynamicCounters> LoadCounters;
@@ -258,6 +279,14 @@ public:
 
         IsReadLoad = cmd.GetIsReadLoad();
         Report->LoadType = IsReadLoad ? TEvLoad::TLoadReport::LOAD_READ : TEvLoad::TLoadReport::LOAD_WRITE;
+        BackgroundWriteRatio = cmd.GetBackgroundWriteRatio();
+        if (!IsValidFloat(BackgroundWriteRatio) || BackgroundWriteRatio < 0 || BackgroundWriteRatio > 1) {
+            ythrow TLoadActorException()
+                << "BackgroundWriteRatio must be a finite value in [0, 1] (writes per measured read)";
+        }
+        if (!IsReadLoad && BackgroundWriteRatio != 0) {
+            ythrow TLoadActorException() << "BackgroundWriteRatio may only be used with IsReadLoad";
+        }
 
         VERIFY_PARAM(InFlight);
         MaxInFlight = cmd.GetInFlight();
@@ -291,6 +320,18 @@ public:
         Y_ABORT_UNLESS(ExpectedChunkSizeBytes <= Max<ui32>(), "ExpectedChunkSize must fit into 32-bit offset");
         Y_ABORT_UNLESS(ExpectedChunkSizeBytes % IoSizeBytes == 0,
             "ExpectedChunkSize must be divisible by IoSizeBytes");
+        if (BackgroundWriteRatio > 0) {
+            const ui64 backgroundWriteSizeBytes = static_cast<ui64>(cmd.GetBackgroundWriteSizeKiB()) << 10;
+            if (!(backgroundWriteSizeBytes >= 4096 && backgroundWriteSizeBytes <= Max<ui32>()
+                    && (backgroundWriteSizeBytes & (backgroundWriteSizeBytes - 1)) == 0)) {
+                ythrow TLoadActorException()
+                    << "BackgroundWriteSizeKiB must specify a power-of-two size of at least 4 KiB";
+            }
+            BackgroundWriteSizeBytes = static_cast<ui32>(backgroundWriteSizeBytes);
+            if (ExpectedChunkSizeBytes % BackgroundWriteSizeBytes != 0) {
+                ythrow TLoadActorException() << "ExpectedChunkSize must be divisible by background write size";
+            }
+        }
 
         Simulate = cmd.HasSimulate() ? cmd.GetSimulate() : false;
         SimulateActorsCount = cmd.GetSimulateActorsCount();
@@ -308,14 +349,18 @@ public:
             if (areaSize % IoSizeBytes != 0) {
                 ythrow TLoadActorException() << "area.AreaSize must be divisible by IoSizeBytes";
             }
+            if (BackgroundWriteRatio > 0 && areaSize % BackgroundWriteSizeBytes != 0) {
+                ythrow TLoadActorException() << "area.AreaSize must be divisible by background write size";
+            }
             Y_ABORT_UNLESS(area.GetWeight(), "area.Weight must be non-zero");
             const ui32 numChunks = (areaSize + ExpectedChunkSizeBytes - 1) / ExpectedChunkSizeBytes;
             Areas.push_back(TAreaInfo{
                 {},
+                {},
                 areaSize,
                 area.GetWeight(),
                 area.GetSequential(),
-                area.GetInitType(),
+                ResolveAreaInitType(IsReadLoad, area),
                 nextBaseChunk,
                 numChunks,
                 0,
@@ -390,10 +435,10 @@ public:
     }
 
     void PrepareDataAndStart(const TActorContext& ctx) {
-        if (!IsReadLoad) {
-            RandomData = BuildPayload(false);
+        if (!IsReadLoad || BackgroundWriteRatio > 0) {
+            RandomData = BuildPayload(IsReadLoad ? BackgroundWriteSizeBytes : IoSizeBytes, false);
         }
-        ZeroData = BuildPayload(true);
+        ZeroData = BuildPayload(IoSizeBytes, true);
 
         for (auto& area : Areas) {
             const ui32 positions = area.AreaSizeBytes / IoSizeBytes;
@@ -402,6 +447,10 @@ public:
                 Initializing = true;
             }
             FillPositions(area.IOQueue, positions, area.Sequential);
+            if (BackgroundWriteRatio > 0) {
+                FillPositions(area.BackgroundWriteIOQueue,
+                    area.AreaSizeBytes / BackgroundWriteSizeBytes, area.Sequential);
+            }
         }
         SendRequests(ctx);
     }
@@ -428,8 +477,7 @@ public:
         }
     }
 
-    TRope BuildPayload(bool zeroFill) {
-        const size_t size = IoSizeBytes;
+    TRope BuildPayload(ui32 size, bool zeroFill) {
         const size_t allocSize = size + SimulatedBufferAlignment;
         auto storage = std::unique_ptr<char, decltype(&free)>(static_cast<char*>(std::malloc(allocSize)), &free);
         Y_ABORT_UNLESS(storage, "Failed to allocate payload buffer");
@@ -490,6 +538,8 @@ public:
             return;
         }
         Finished = true;
+        Report->MeasuredReadsSent = MeasuredReadsSent;
+        Report->BackgroundWritesSent = BackgroundWritesSent;
         ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, Report, status));
         Die(ctx);
     }
@@ -590,27 +640,36 @@ public:
                 IntervalMs = 0; // To enforce regeneration of new random interval
             }
 
-            TAreaInfo& area = PickAreaByWeight();
-            if (area.IOQueue.empty()) {
-                const ui32 positions = area.AreaSizeBytes / IoSizeBytes;
-                Y_ABORT_UNLESS(positions, "IoSizeBytes must be smaller than AreaSizeBytes");
-                FillPositions(area.IOQueue, positions, area.Sequential);
-            }
-            const ui32 ioIndex = area.IOQueue.front();
-            area.IOQueue.pop_front();
-            area.IOQueue.push_back(ioIndex);
+            const bool isBackgroundWrite = IsReadLoad
+                && BackgroundWriteRatio > 0
+                && MeasuredReadsSent > 0
+                && static_cast<double>(BackgroundWritesSent)
+                    < static_cast<double>(MeasuredReadsSent) * BackgroundWriteRatio;
+            const ui32 size = isBackgroundWrite ? BackgroundWriteSizeBytes : IoSizeBytes;
 
-            const ui32 offset = ioIndex * IoSizeBytes;
-            const ui32 size = IoSizeBytes;
-            Report->Size = size;
+            TAreaInfo& area = PickAreaByWeight();
+            TDeque<ui32>& ioQueue = isBackgroundWrite ? area.BackgroundWriteIOQueue : area.IOQueue;
+            if (ioQueue.empty()) {
+                const ui32 positions = area.AreaSizeBytes / size;
+                Y_ABORT_UNLESS(positions, "request size must be smaller than AreaSizeBytes");
+                FillPositions(ioQueue, positions, area.Sequential);
+            }
+            const ui32 ioIndex = ioQueue.front();
+            ioQueue.pop_front();
+            ioQueue.push_back(ioIndex);
+
+            const ui32 offset = ioIndex * size;
+            if (!isBackgroundWrite) {
+                Report->Size = size;
+            }
 
             const TInstant now = TAppData::TimeProvider->Now();
             const ui64 vChunkIndex = area.BaseChunkIndex + offset / ExpectedChunkSizeBytes;
             const ui32 offsetInChunk = offset % ExpectedChunkSizeBytes;
 
-            const ui64 requestIdx = NewTRequestInfo(size, now, false);
+            const ui64 requestIdx = NewTRequestInfo(size, now, false, isBackgroundWrite);
 
-            if (IsReadLoad) {
+            if (IsReadLoad && !isBackgroundWrite) {
                 auto ev = std::make_unique<NDDisk::TEvRead>(Credentials,
                     NDDisk::TBlockSelector(vChunkIndex, offsetInChunk, size), NDDisk::TReadInstruction(false));
                 SendRequest(ctx, std::move(ev), requestIdx);
@@ -624,7 +683,14 @@ public:
                 }
                 SendRequest(ctx, std::move(ev), requestIdx);
             }
-            ++RequestsSent;
+            if (isBackgroundWrite) {
+                ++BackgroundWritesSent;
+            } else {
+                ++RequestsSent;
+                if (IsReadLoad) {
+                    ++MeasuredReadsSent;
+                }
+            }
             ++InFlight;
         }
 
@@ -731,9 +797,9 @@ public:
         CheckDie(ctx);
     }
 
-    ui64 NewTRequestInfo(ui32 size, TInstant startTime, bool isInit) {
+    ui64 NewTRequestInfo(ui32 size, TInstant startTime, bool isInit, bool isBackground = false) {
         const ui64 requestIdx = NextRequestIdx++;
-        RequestInfo.emplace(requestIdx, TRequestInfo{size, startTime, isInit});
+        RequestInfo.emplace(requestIdx, TRequestInfo{size, startTime, isInit, isBackground});
         return requestIdx;
     }
 
@@ -745,7 +811,7 @@ public:
         }
         const TRequestInfo& request = it->second;
 
-        if (!request.IsInit) {
+        if (!request.IsInit && !request.IsBackground) {
             if (ok) {
                 ++RequestsOK;
             } else {
@@ -812,6 +878,12 @@ public:
                     PARAM("DDiskId", Sprintf("%" PRIu32 ":%" PRIu32 ":%" PRIu32, DDiskNodeId, DDiskPDiskId, DDiskSlotId));
                     PARAM("I/O size", IOSizeInfo);
                     PARAM("Sequential", SequentialInfo);
+                    if (BackgroundWriteRatio > 0) {
+                        PARAM("Background write ratio", BackgroundWriteRatio);
+                        PARAM("Background write size", BackgroundWriteSizeBytes);
+                        PARAM("Measured reads sent", MeasuredReadsSent);
+                        PARAM("Background writes sent", BackgroundWritesSent);
+                    }
 
                     for (ui32 dt : {5, 10, 15, 20, 60}) {
                         TInstant now = TAppData::TimeProvider->Now();

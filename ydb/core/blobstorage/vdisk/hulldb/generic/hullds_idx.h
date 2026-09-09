@@ -381,6 +381,20 @@ namespace NKikimr {
             CurSlice->GetOwnedChunks(chunks);
         }
 
+        void ResolveStripeSsts(const THashSet<TChunkIdx>& stripeChunks) {
+            CurSlice->ResolveStripeSsts(stripeChunks);
+        }
+
+        template<typename TCallback>
+        void ForEachStripeExtent(const THashSet<TChunkIdx>& stripeChunks, TCallback&& callback) const {
+            Fresh.ForEachHugeBlob([&](const TDiskPart& part) {
+                if (stripeChunks.contains(part.ChunkIdx)) {
+                    callback(part);
+                }
+            });
+            CurSlice->ForEachStripeExtent(stripeChunks, callback);
+        }
+
         void SerializeToProto(NKikimrVDiskData::TLevelIndex &pb) const {
             static_assert(sizeof(Signature) == sizeof(ui32),
                           "incorrect signature size");

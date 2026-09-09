@@ -30,41 +30,16 @@ private:
         Y_UNUSED(request);
         TCheckResponse res{.CheckName = GetCheckName()};
 
-        const auto* astResult = state.ParseSExpr(res.Issues);
+        const auto* astResult = state.ParseSExpr(&res.Issues);
         res.Success = astResult && astResult->IsOk();
 
         return res;
     }
 
-    class TPGParseEventsHandler: public IPGParseEvents {
-    public:
-        explicit TPGParseEventsHandler(TCheckResponse& res)
-            : Res_(res)
-        {
-        }
-
-        void OnResult(const List* raw) final {
-            Y_UNUSED(raw);
-            Res_.Success = true;
-        }
-
-        void OnError(const TIssue& issue) final {
-            Res_.Issues.AddIssue(issue);
-        }
-
-    private:
-        TCheckResponse& Res_;
-    };
-
     TCheckResponse RunPg(const TChecksRequest& request, TCheckState& state) {
         Y_UNUSED(request);
         TCheckResponse res{.CheckName = GetCheckName()};
-
-        const auto* pgResult = state.ParsePg(res.Issues);
-        if (pgResult) {
-            TPGParseEventsHandler handler(res);
-            pgResult->Visit(handler);
-        }
+        res.Success = state.ParsePg(&res.Issues) != nullptr;
 
         return res;
     }
@@ -73,7 +48,7 @@ private:
         Y_UNUSED(request);
         TCheckResponse res{.CheckName = GetCheckName()};
 
-        auto* msg = state.ParseSql(res.Issues);
+        auto* msg = state.ParseSql(&res.Issues);
         if (msg) {
             res.Success = true;
         }

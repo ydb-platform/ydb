@@ -1,0 +1,9 @@
+PRAGMA YqlSelect = 'force';
+
+$ts = ListMap(ListFromRange(0, 2), ($i) -> {
+    $s = CAST($i AS String);
+    $s = If($s == "0", "", $s);
+    RETURN "Input" || $s;
+});
+
+SELECT * FROM plato.EACH($ts);

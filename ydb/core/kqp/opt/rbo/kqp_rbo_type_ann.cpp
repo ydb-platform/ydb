@@ -146,7 +146,7 @@ const TStructExprType* AddSubplanTypes(const TStructExprType* itemType, TVector<
 
     for (const auto& iu : subplanContextIUs) {
         const TTypeAnnotationNode* subplanType;
-        auto subplanEntry = props.Subplans.PlanMap.at(iu);
+        const auto& subplanEntry = props.Subplans.At(iu);
         if (subplanEntry.Type == ESubplanType::EXPR) {
             auto subplan = CastOperator<IOperator>(subplanEntry.Plan);
             const auto resultIUs = GetSubplanResultIUs(subplan);
@@ -187,7 +187,8 @@ TStatus ComputeTypes(TIntrusivePtr<TOpFilter> filter, TRBOContext& ctx, TPlanPro
     YQL_CLOG(TRACE, CoreDq) << "Type annotation for Filter, itemType after scalars: " << *(TTypeAnnotationNode*)itemType;
 
 
-    auto& lambda = filter->FilterExpr.Node;
+    auto filterExpression = filter->GetFilterExpression();
+    auto lambda = filterExpression.Node;
 
     if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx.ExprCtx)) {
         YQL_CLOG(TRACE, CoreDq) << "Could not update lambda arg types";
@@ -226,6 +227,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpFilter> filter, TRBOContext& ctx, TPlanPro
         return IGraphTransformer::TStatus::Error;
     }
 
+    filter->SetFilterExpression(TExpression(std::move(lambda), filterExpression.Ctx, filterExpression.PlanProps));
     filter->Type = inputType;
 
     return TStatus::Ok;
@@ -237,7 +239,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
     auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     THashSet<TInfoUnit, TInfoUnit::THashFunction> renameSources;
 
-    for (const auto& mapElement : map->MapElements) {
+    for (const auto& mapElement : map->GetMapElements()) {
         if (mapElement.IsRename()) {
             Y_ENSURE(mapElement.IsColumnAccess(), "Rename map element must be a plain column access");
             renameSources.insert(mapElement.GetRename());
@@ -250,9 +252,11 @@ TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
         }
     }
 
-    for (auto& mapElement : map->MapElements) {
+    for (size_t index = 0; index < map->GetMapElements().size(); ++index) {
+        const auto& mapElement = map->GetMapElements()[index];
         // This is type annotation update inplace, which is different comparing to yql type annotation.
-        auto& lambda = mapElement.GetExpressionRef().Node;
+        auto expression = mapElement.GetExpression();
+        auto lambda = expression.Node;
         if (!UpdateLambdaAllArgumentsTypes(lambda, {structType}, ctx.ExprCtx)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -272,6 +276,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
         Y_ENSURE(lambdaType);
         auto mapLambdaType = ctx.ExprCtx.MakeType<TItemExprType>(mapElement.GetElementName().GetFullName(), lambdaType);
         resStructItemTypes.push_back(mapLambdaType);
+        map->SetMapElementExpression(index, TExpression(std::move(lambda), expression.Ctx, expression.PlanProps));
     }
 
     auto resultItemType = ctx.ExprCtx.MakeType<TStructExprType>(resStructItemTypes);
@@ -406,6 +411,57 @@ TStatus ComputeTypes(TIntrusivePtr<TOpAggregate> aggregate, TRBOContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus ComputeTypes(TIntrusivePtr<TOpGroupingSets> groupingSets, TRBOContext& ctx) {
+    const auto aggregate = CastOperator<TOpAggregate>(groupingSets->GetInput());
+    const auto* structType = aggregate->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> keysPresentInEverySet;
+    bool first = true;
+    bool hasEmptySet = false;
+    for (const auto& groupingSet : groupingSets->GetGroupingSets()) {
+        THashSet<TInfoUnit, TInfoUnit::THashFunction> currentKeys(groupingSet.begin(), groupingSet.end());
+        hasEmptySet = hasEmptySet || groupingSet.empty();
+        if (first) {
+            keysPresentInEverySet = std::move(currentKeys);
+            first = false;
+        } else {
+            THashSet<TInfoUnit, TInfoUnit::THashFunction> intersection;
+            for (const auto& key : keysPresentInEverySet) {
+                if (currentKeys.contains(key)) {
+                    intersection.insert(key);
+                }
+            }
+            keysPresentInEverySet = std::move(intersection);
+        }
+    }
+
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> keyColumns(aggregate->KeyColumns.begin(), aggregate->KeyColumns.end());
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> scalarOptionalResults;
+    if (hasEmptySet) {
+        for (const auto& traits : aggregate->AggregationTraitsList) {
+            if (traits.AggFunction == "min" || traits.AggFunction == "max" || traits.AggFunction == "sum" || traits.AggFunction == "avg" ||
+                traits.AggFunction == "variance_1_1") {
+                scalarOptionalResults.insert(traits.ResultColName);
+            }
+        }
+    }
+
+    TVector<const TItemExprType*> resultItems;
+    resultItems.reserve(structType->GetSize());
+    for (const auto* item : structType->GetItems()) {
+        const TInfoUnit iu(TString(item->GetName()));
+        const auto* itemType = item->GetItemType();
+        const bool nonCommonKey = keyColumns.contains(iu) && !keysPresentInEverySet.contains(iu);
+        if ((nonCommonKey || scalarOptionalResults.contains(iu)) && !itemType->IsOptionalOrNull()) {
+            itemType = ctx.ExprCtx.MakeType<TOptionalExprType>(itemType);
+        }
+        resultItems.push_back(ctx.ExprCtx.MakeType<TItemExprType>(item->GetName(), itemType));
+    }
+
+    groupingSets->Type = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TStructExprType>(resultItems));
+    return TStatus::Ok;
+}
+
 TVector<const TItemExprType*> AddOptional(const TVector<const TItemExprType*>& types, TRBOContext& rboCtx) {
     auto& ctx = rboCtx.ExprCtx;
     TVector<const TItemExprType*> optionalTypes;
@@ -473,6 +529,26 @@ TStatus ComputeTypes(TIntrusivePtr<TOpJoin> join, TRBOContext& ctx) {
     const TTypeAnnotationNode* resultAnn = ctx.ExprCtx.MakeType<TListExprType>(resultStructType);
     join->Type = resultAnn;
 
+    return TStatus::Ok;
+}
+
+TStatus ComputeTypes(TIntrusivePtr<TOpDependentJoin> dependentJoin, TRBOContext& ctx) {
+    const auto* domainItemType = dependentJoin->GetDomain()->Type->Cast<TListExprType>()->GetItemType();
+    const auto* inputItemType = dependentJoin->GetInput()->Type->Cast<TListExprType>()->GetItemType();
+
+    TVector<const TItemExprType*> structItemTypes = domainItemType->Cast<TStructExprType>()->GetItems();
+    THashSet<TStringBuf> domainNames;
+    for (const auto* item : structItemTypes) {
+        domainNames.insert(item->GetName());
+    }
+
+    for (const auto* item : inputItemType->Cast<TStructExprType>()->GetItems()) {
+        if (!domainNames.contains(item->GetName())) {
+            structItemTypes.push_back(item);
+        }
+    }
+
+    dependentJoin->Type = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TStructExprType>(structItemTypes));
     return TStatus::Ok;
 }
 
@@ -615,6 +691,12 @@ TStatus ComputeTypes(TIntrusivePtr<TOpCBOTree> cboTree, TRBOContext& ctx, TPlanP
     return TStatus::Ok;
 }
 
+TStatus ComputeTypes(TIntrusivePtr<TOpTableEffect> tableEffect, TRBOContext& ctx, TPlanProps& props) {
+    Y_UNUSED(props);
+    tableEffect->Type = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TResourceExprType>(KqpEffectTag));
+    return TStatus::Ok;
+}
+
 TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& props) {
     if (MatchOperator<TOpEmptySource>(op)) {
         return ComputeTypes(CastOperator<TOpEmptySource>(op), ctx);
@@ -634,6 +716,9 @@ TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& 
     else if(MatchOperator<TOpJoin>(op)) {
         return ComputeTypes(CastOperator<TOpJoin>(op), ctx);
     }
+    else if(MatchOperator<TOpDependentJoin>(op)) {
+        return ComputeTypes(CastOperator<TOpDependentJoin>(op), ctx);
+    }
     else if(MatchOperator<TOpUnionAll>(op)) {
         return ComputeTypes(CastOperator<TOpUnionAll>(op), ctx);
     }
@@ -649,11 +734,16 @@ TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& 
     else if (MatchOperator<TOpIndexLookupJoin>(op)) {
         return ComputeTypes(CastOperator<TOpIndexLookupJoin>(op), ctx);
     }
+    else if (MatchOperator<TOpGroupingSets>(op)) {
+        return ComputeTypes(CastOperator<TOpGroupingSets>(op), ctx);
+    }
     else if(MatchOperator<TOpAggregate>(op)) {
         return ComputeTypes(CastOperator<TOpAggregate>(op), ctx);
     }
     else if (MatchOperator<TOpCBOTree>(op)) {
         return ComputeTypes(CastOperator<TOpCBOTree>(op), ctx, props);
+    } else if (MatchOperator<TOpTableEffect>(op)) {
+        return ComputeTypes(CastOperator<TOpTableEffect>(op), ctx, props);
     }
     else {
         Y_ENSURE(false, "Invalid operator type in RBO type inference");

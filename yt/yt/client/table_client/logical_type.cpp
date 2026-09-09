@@ -1,4 +1,6 @@
 #include "logical_type.h"
+
+#include "private.h"
 #include "schema.h"
 #include "helpers.h"
 
@@ -1635,17 +1637,7 @@ bool TAggregateStateLogicalType::IsNullable() const
     return GetElement()->IsNullable();
 }
 
-namespace {
-
 ////////////////////////////////////////////////////////////////////////////////
-
-struct TTypeV3Info
-{
-    ESimpleLogicalValueType V1Type;
-    EValueType WireType;
-    bool Required;
-    bool IsPureV1Type;
-};
 
 TTypeV3Info GetTypeV3Info(const TLogicalTypePtr& logicalType)
 {
@@ -1680,10 +1672,6 @@ TTypeV3Info GetTypeV3Info(const TLogicalTypePtr& logicalType)
     }
     YT_ABORT();
 }
-
-////////////////////////////////////////////////////////////////////////////////
-
-} // namespace
 
 std::pair<ESimpleLogicalValueType, bool> CastToV1Type(const TLogicalTypePtr& logicalType)
 {

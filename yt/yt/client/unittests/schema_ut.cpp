@@ -480,6 +480,31 @@ TEST(TTableSchemaTest, ValidateTableSchemaTest)
     expectBad("[{name=x;type=int64;sort_order=ascending;expression=\"uint64(y)\"}; {name=y;type=uint64;sort_order=ascending}; {name=a;type=int64}]");
 }
 
+TEST(TTableSchemaTest, ValidateShuffleColumns)
+{
+    auto makeSchema = [] (ESimpleLogicalValueType producerIdType) {
+        return TTableSchema({
+            TColumnSchema("key", SimpleLogicalType(ESimpleLogicalValueType::String), ESortOrder::Ascending),
+            TColumnSchema(ShuffleProducerIdColumnName, SimpleLogicalType(producerIdType), ESortOrder::Ascending),
+            TColumnSchema(ShuffleRowIdColumnName, SimpleLogicalType(ESimpleLogicalValueType::Int64), ESortOrder::Ascending),
+        });
+    };
+
+    auto schema = makeSchema(ESimpleLogicalValueType::Int64);
+    EXPECT_THROW(ValidateTableSchema(schema), std::exception);
+    EXPECT_NO_THROW(ValidateTableSchema(
+        schema,
+        /*isTableDynamic*/ false,
+        TSchemaValidationOptions{.AllowShuffleColumns = true}));
+
+    EXPECT_THROW(
+        ValidateTableSchema(
+            makeSchema(ESimpleLogicalValueType::String),
+            /*isTableDynamic*/ false,
+            TSchemaValidationOptions{.AllowShuffleColumns = true}),
+        std::exception);
+}
+
 TEST(TTableSchemaTest, ColumnSchemaProtobufBackwardCompatibility)
 {
     NProto::TColumnSchema columnSchemaProto;
@@ -522,6 +547,192 @@ TEST(TTableSchemaTest, EqualIgnoringRequiredness)
     EXPECT_TRUE(schema1 != schema2);
     EXPECT_TRUE(IsEqualIgnoringRequiredness(schema1, schema2));
     EXPECT_FALSE(IsEqualIgnoringRequiredness(schema1, schema3));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessEmpty)
+{
+    auto empty1 = TTableSchema();
+    auto empty2 = TTableSchema();
+    EXPECT_TRUE(IsEqualIgnoringRequiredness(empty1, empty2));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessSameInstance)
+{
+    auto schema = TTableSchema({
+        TColumnSchema("foo", Optional(Int64())),
+        TColumnSchema("bar", String()),
+    });
+    EXPECT_TRUE(IsEqualIgnoringRequiredness(schema, schema));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessBothRequired)
+{
+    auto schema1 = TTableSchema({
+        TColumnSchema("foo", Int64()),
+        TColumnSchema("bar", String()),
+    });
+
+    auto schema2 = TTableSchema({
+        TColumnSchema("foo", Int64()),
+        TColumnSchema("bar", String()),
+    });
+
+    EXPECT_TRUE(IsEqualIgnoringRequiredness(schema1, schema2));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessBothOptional)
+{
+    auto schema1 = TTableSchema({
+        TColumnSchema("foo", Optional(Int64())),
+    });
+
+    auto schema2 = TTableSchema({
+        TColumnSchema("foo", Optional(Int64())),
+    });
+
+    EXPECT_TRUE(IsEqualIgnoringRequiredness(schema1, schema2));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessColumnCountMismatch)
+{
+    auto schema1 = TTableSchema({
+        TColumnSchema("foo", Int64()),
+    });
+
+    auto schema2 = TTableSchema({
+        TColumnSchema("foo", Int64()),
+        TColumnSchema("bar", String()),
+    });
+
+    EXPECT_FALSE(IsEqualIgnoringRequiredness(schema1, schema2));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessNameMismatch)
+{
+    auto schema1 = TTableSchema({
+        TColumnSchema("foo", Optional(Int64())),
+    });
+
+    auto schema2 = TTableSchema({
+        TColumnSchema("bar", Int64()),
+    });
+
+    EXPECT_FALSE(IsEqualIgnoringRequiredness(schema1, schema2));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessStrictMismatch)
+{
+    auto schema1 = TTableSchema({
+        TColumnSchema("foo", Optional(Int64())),
+    }, /*strict*/ true);
+
+    auto schema2 = TTableSchema({
+        TColumnSchema("foo", Int64()),
+    }, /*strict*/ false);
+
+    EXPECT_FALSE(IsEqualIgnoringRequiredness(schema1, schema2));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessUniqueKeysMismatch)
+{
+    auto schema1 = TTableSchema({
+        TColumnSchema("foo", Optional(Int64()), ESortOrder::Ascending),
+    }, /*strict*/ true, /*uniqueKeys*/ true);
+
+    auto schema2 = TTableSchema({
+        TColumnSchema("foo", Int64(), ESortOrder::Ascending),
+    }, /*strict*/ true, /*uniqueKeys*/ false);
+
+    EXPECT_FALSE(IsEqualIgnoringRequiredness(schema1, schema2));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessSortOrderMismatch)
+{
+    auto schema1 = TTableSchema({
+        TColumnSchema("foo", Optional(Int64()), ESortOrder::Ascending),
+    });
+
+    auto schema2 = TTableSchema({
+        TColumnSchema("foo", Int64()),
+    });
+
+    EXPECT_FALSE(IsEqualIgnoringRequiredness(schema1, schema2));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessMultipleColumnsMix)
+{
+    auto schema1 = TTableSchema({
+        TColumnSchema("k", Int64(), ESortOrder::Ascending),
+        TColumnSchema("v1", Optional(String())),
+        TColumnSchema("v2", Optional(Int64())),
+    }, /*strict*/ true, /*uniqueKeys*/ true);
+
+    auto schema2 = TTableSchema({
+        TColumnSchema("k", Optional(Int64()), ESortOrder::Ascending),
+        TColumnSchema("v1", String()),
+        TColumnSchema("v2", Int64()),
+    }, /*strict*/ true, /*uniqueKeys*/ true);
+
+    EXPECT_TRUE(schema1 != schema2);
+    EXPECT_TRUE(IsEqualIgnoringRequiredness(schema1, schema2));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessNestedOptionalDropsOnlyOuter)
+{
+    auto schema1 = TTableSchema({
+        TColumnSchema("foo", Optional(Optional(Int64()))),
+    });
+
+    auto schema2 = TTableSchema({
+        TColumnSchema("foo", Optional(Int64())),
+    });
+
+    // Only outer Optional is stripped: schema1 becomes Optional(Int64()), schema2 becomes Int64().
+    EXPECT_FALSE(IsEqualIgnoringRequiredness(schema1, schema2));
+
+    auto schema3 = TTableSchema({
+        TColumnSchema("foo", Optional(Optional(Int64()))),
+    });
+
+    EXPECT_TRUE(IsEqualIgnoringRequiredness(schema1, schema3));
+
+    auto schema4 = TTableSchema({
+        TColumnSchema("foo", Int64()),
+    });
+
+    EXPECT_TRUE(IsEqualIgnoringRequiredness(schema2, schema4));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessCompositeTypes)
+{
+    auto schema1 = TTableSchema({
+        TColumnSchema("foo", Optional(List(Int64()))),
+    });
+
+    auto schema2 = TTableSchema({
+        TColumnSchema("foo", List(Int64())),
+    });
+
+    EXPECT_TRUE(IsEqualIgnoringRequiredness(schema1, schema2));
+
+    auto schema3 = TTableSchema({
+        TColumnSchema("foo", List(Optional(Int64()))),
+    });
+
+    EXPECT_FALSE(IsEqualIgnoringRequiredness(schema1, schema3));
+}
+
+TEST(TTableSchemaTest, EqualIgnoringRequirednessDifferentInnerType)
+{
+    auto schema1 = TTableSchema({
+        TColumnSchema("foo", Optional(Int64())),
+    });
+
+    auto schema2 = TTableSchema({
+        TColumnSchema("foo", Optional(Uint64())),
+    });
+
+    EXPECT_FALSE(IsEqualIgnoringRequiredness(schema1, schema2));
 }
 
 TEST(TTableSchemaTest, ValidateTableSchemaNestedColumns)

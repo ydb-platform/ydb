@@ -3,7 +3,10 @@
 #include <ydb/core/base/defs.h>
 #include <ydb/core/util/tuples.h>
 #include <ydb/core/util/metrics.h>
-#include <ydb/core/protos/tablet.pb.h>
+
+namespace NKikimrTabletBase {
+    class TMetrics;
+}
 
 namespace NKikimr {
 namespace NMetrics {

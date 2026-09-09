@@ -92,7 +92,10 @@ public:
     }
 
     ~TImpl() {
-        // TODO: Drain sessions.
+        auto sessions = SessionPool_.GetCurrentPoolSize();
+        while (sessions-- > 0) {
+            SessionPool_.RecordSessionClosed(NSessionPool::NSessionCloseCommands::PoolGracefulShutdown.Reason);
+        }
     }
 
     void SetStatCollector(const NSdkStats::TStatCollector::TClientStatCollector& collector) {
@@ -443,13 +446,17 @@ public:
     }
 
     bool ReturnSession(TKqpSessionCommon* sessionImpl) override {
-        Y_ABORT_UNLESS(sessionImpl->GetState() == TSession::TImpl::S_ACTIVE ||
-            sessionImpl->GetState() == TSession::TImpl::S_IDLE);
+        const auto state = sessionImpl->GetState();
+        if (state != TSession::TImpl::S_ACTIVE && state != TSession::TImpl::S_IDLE) {
+            return false;
+        }
 
         //TODO: Remove this copy-paste from table client
         bool needUpdateCounter = sessionImpl->NeedUpdateActiveCounter();
         // Also removes NeedUpdateActiveCounter flag
-        sessionImpl->MarkIdle();
+        if (!sessionImpl->MarkIdle()) {
+            return false;
+        }
         if (!SessionPool_.ReturnSession(sessionImpl, needUpdateCounter)) {
             sessionImpl->SetNeedUpdateActiveCounter(needUpdateCounter);
             return false;
@@ -459,6 +466,10 @@ public:
 
     void PessimizeNode(std::uint64_t nodeId) override {
         DbDriverState_->EndpointPool.BanNodeId(nodeId);
+    }
+
+    void RecordSessionClosed(std::string_view reason) override {
+        SessionPool_.RecordSessionClosed(reason);
     }
 
     void DoAttachSession(Ydb::Query::CreateSessionResponse* resp

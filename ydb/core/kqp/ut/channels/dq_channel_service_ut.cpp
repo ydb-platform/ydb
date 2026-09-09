@@ -82,8 +82,9 @@ struct TTestQuotaManager : public IMemoryQuotaManager {
         return Limit;
     }
 
+    // stands for the node level memory pressure signal, see NRm::TTxState::IsReasonableToStartSpilling
     bool IsReasonableToUseSpilling() const override {
-        return false;
+        return MemoryPressure.load();
     }
 
     TString MemoryConsumptionDetails() const override {
@@ -91,6 +92,7 @@ struct TTestQuotaManager : public IMemoryQuotaManager {
     }
 
     static constexpr ui64 Limit = 1ull << 30; // large enough to never be exceeded by the tests
+    std::atomic<bool> MemoryPressure = false;
     std::atomic<i64> Quota = 0;
     std::atomic<ui64> Allocated = 0;
     std::atomic<ui64> Freed = 0;
@@ -419,6 +421,122 @@ struct TLoadTest {
     int FinishCount[2][2] = {{0, 0}, {0, 0}};
 };
 
+// Keeps the consumer node under permanent memory pressure, so every channel is throttled down to the
+// cold inflight window. The transfer must still complete - cold inflight is never zero.
+struct TMemoryPressureTest : public TLoadTest {
+
+    void Prepare() override {
+        TLoadTest::Prepare();
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableSpillingChannelBackpressure(true);
+    }
+
+    void Run() override {
+        Prepare();
+        Init();
+        // a local buffer keeps whichever quota manager reached GetOrCreateLocalBuffer first, and both
+        // roles run on real threads - set the pressure on both so the 1n case is not racy
+        InputQuotaManager->MemoryPressure = true;
+        OutputQuotaManager->MemoryPressure = true;
+        Start();
+        Wait();
+        Check();
+        Destroy();
+        CheckQuota();
+    }
+};
+
+// Single channel, the consumer pops a few messages (so the channel gets warm) and then stalls.
+// While it stalls the producer must be blocked at the cold inflight window rather than at the
+// full RemoteChannelInflightBytes one - but only when EnableSpillingChannelBackpressure is set.
+struct TThrottleTest : public TLoadTest {
+
+    void Prepare() override {
+        TLoadTest::Prepare();
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableSpillingChannelBackpressure(Enabled);
+    }
+
+    void Run() override {
+        Prepare();
+        Init();
+        InputQuotaManager->MemoryPressure = true;
+        Start();
+        CheckThrottled();
+        InputQuotaManager->MemoryPressure = false;
+        Wait();
+        Check();
+        Destroy();
+        CheckQuota();
+    }
+
+    // The only output descriptor of this single channel test, on the producer (node 0) side.
+    // Locks in the same order as the channel service itself: service Mutex, then session Mutex.
+    std::shared_ptr<TOutputDescriptor> FindOutputDescriptor() {
+        std::lock_guard lock(Service0->Mutex);
+        for (auto& [nodeId, state] : Service0->NodeStates) {
+            std::lock_guard stateLock(state->Mutex);
+            for (auto& [info, descriptor] : state->OutputDescriptors) {
+                return descriptor;
+            }
+        }
+        return {};
+    }
+
+    // Polls until the predicate holds, so that nothing depends on how fast the actors got scheduled.
+    // The consumer sleeps for PauseDelayMs after PauseMessageIndex pops, that is the budget here.
+    bool WaitFor(const std::function<bool(const std::shared_ptr<TOutputDescriptor>&)>& predicate,
+        std::shared_ptr<TOutputDescriptor>& descriptor) {
+        auto deadline = TInstant::Now() + TDuration::MilliSeconds(ConsumerSettings.PauseDelayMs / 4);
+        do {
+            if (auto current = FindOutputDescriptor()) {
+                descriptor = current;
+                if (predicate(current)) {
+                    return true;
+                }
+            }
+            Sleep(TDuration::MilliSeconds(10));
+        } while (TInstant::Now() < deadline);
+        return false;
+    }
+
+    void CheckThrottled() {
+        std::shared_ptr<TOutputDescriptor> descriptor;
+
+        // the producer is only warm once the consumer has popped something, wait for that first
+        auto warm = WaitFor([](const auto& d) { return d->RemotePopBytes.load() > 0; }, descriptor);
+
+        UNIT_ASSERT_C(descriptor, "output descriptor of the channel not found");
+
+        // one chunk may always overshoot the window, it is pushed before the level is recomputed
+        auto coldBytes = descriptor->ColdInflightBytes + ProducerSettings.MaxMessageSize;
+
+        auto details = [&]() {
+            return TStringBuilder() << "Enabled=" << Enabled << ", Warm=" << warm
+                << ", PushBytes=" << descriptor->PushBytes.load()
+                << ", RemotePopBytes=" << descriptor->RemotePopBytes.load()
+                << ", PeerMemoryPressure=" << descriptor->PeerMemoryPressure.load()
+                << ", MaxInflightBytes=" << descriptor->MaxInflightBytes
+                << ", ColdInflightBytes=" << descriptor->ColdInflightBytes;
+        };
+
+        UNIT_ASSERT_C(warm, details());
+
+        if (Enabled) {
+            // the bound holds at every moment, but the pressure needs one update to reach the sender
+            UNIT_ASSERT_C(WaitFor([](const auto& d) { return d->PeerMemoryPressure.load(); }, descriptor), details());
+            UNIT_ASSERT_LE_C(descriptor->PushBytes.load() - descriptor->RemotePopBytes.load(), coldBytes, details());
+            UNIT_ASSERT_LT_C(descriptor->PushBytes.load() - descriptor->RemotePopBytes.load(),
+                descriptor->MaxInflightBytes, details());
+        } else {
+            // nothing throttles the producer, it pushes far past the cold window while the consumer sleeps
+            UNIT_ASSERT_C(WaitFor([&](const auto& d) {
+                return d->PushBytes.load() - d->RemotePopBytes.load() > coldBytes; }, descriptor), details());
+            UNIT_ASSERT_C(!descriptor->PeerMemoryPressure.load(), details());
+        }
+    }
+
+    bool Enabled = true;
+};
+
 struct TReconTest : public TLoadTest {
 
     void Prepare() override {
@@ -513,6 +631,51 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
     Y_UNIT_TEST(MissedData) {
         LoadTest(100, false, TWorkerSettings{ .MessageCount = 100 }, TWorkerSettings{ .MessageCount = 100 }, TFailureSettings{ .Data = 10 });
+    }
+
+    void MemoryPressureTest(int count, bool local) {
+        TMemoryPressureTest test;
+
+        test.Count = count;
+        test.Local = local;
+        test.ProducerSettings = TWorkerSettings{ .MessageCount = 100 };
+        test.ConsumerSettings = TWorkerSettings{ .MessageCount = 100 };
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(MemoryPressure2n) {
+        MemoryPressureTest(50, false);
+    }
+
+    Y_UNIT_TEST(MemoryPressure1n) {
+        MemoryPressureTest(50, true);
+    }
+
+    void ThrottleTest(bool enabled) {
+        TThrottleTest test;
+
+        test.Enabled = enabled;
+        test.Count = 1;
+        test.Local = false;
+        // 200 * ~64KB is way above the cold inflight window and still below RemoteChannelInflightBytes,
+        // so an unthrottled producer would push all of it while the consumer sleeps
+        test.ProducerSettings = TWorkerSettings{
+            .MessageCount = 200, .MinMessageSize = 60000, .MaxMessageSize = 70000 };
+        test.ConsumerSettings = TWorkerSettings{
+            .MessageCount = 200, .MinMessageSize = 60000, .MaxMessageSize = 70000,
+            .PauseMessageIndex = 5, .PauseDelayMs = 6000 };
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(MemoryPressureThrottles2n) {
+        ThrottleTest(true);
+    }
+
+    // the very same scenario must not throttle anything while the feature flag is off
+    Y_UNIT_TEST(MemoryPressureDisabled2n) {
+        ThrottleTest(false);
     }
 
     Y_UNIT_TEST(Reconciliation) {

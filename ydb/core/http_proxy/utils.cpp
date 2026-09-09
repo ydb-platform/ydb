@@ -3,6 +3,7 @@
 #include "http_req.h"
 
 #include <library/cpp/string_utils/url/url.h>
+#include <ydb/core/base/path.h>
 #include <ydb/library/http/rfc7239_forwarded.h>
 
 #include <util/generic/maybe.h>
@@ -211,6 +212,10 @@ TString MakeSqsRequestEndpoint(const THttpRequestContext& httpContext) {
     const auto& request = *httpContext.Request;
     const bool tlsSecure = request.Endpoint && request.Endpoint->Secure;
     return MakeSqsRequestEndpoint(request.Host, request.Headers, tlsSecure);
+}
+
+TString ParseDatabasePathFromRequestUrl(TStringBuf url) {
+    return CanonizePath(TString{url.Before('?')});
 }
 
 } // namespace NKikimr::NHttpProxy

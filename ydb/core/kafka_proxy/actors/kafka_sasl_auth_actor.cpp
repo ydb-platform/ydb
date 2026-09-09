@@ -32,8 +32,8 @@ void AuditLogLogin(const NRawSocket::TNetworkConfig::TSocketAddressType& address
 
 const TDuration TKafkaSaslAuthActor::Timeout = TDuration::MilliSeconds(60000);
 
-NActors::IActor* CreateKafkaSaslAuthActor(const TContext::TPtr context, const NRawSocket::TSocketDescriptor::TSocketAddressType address) {
-    return new TKafkaSaslAuthActor(context, address);
+NActors::IActor* CreateKafkaSaslAuthActor(const TContext::TPtr context, const NRawSocket::TSocketDescriptor::TSocketAddressType address, TString requestId) {
+    return new TKafkaSaslAuthActor(context, address, std::move(requestId));
 }
 
 void TKafkaSaslAuthActor::Bootstrap() {
@@ -225,7 +225,7 @@ void TKafkaSaslAuthActor::SendTicketParserRequest() {
     Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = Ticket,
         .Database = AuthDatabasePath,
-        .PeerName = TStringBuilder() << Address,
+        .TraceContext = {TStringBuilder() << Address, RequestId},
         .Entries = TicketParserEntries,
     }));
 
@@ -297,7 +297,9 @@ void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, Ydb::Status
         auto evResponse = std::make_shared<TEvKafka::TEvResponse>(CorrelationId, responseToClient, errorCode);
         auto authResult = new TEvKafka::TEvAuthResult(EAuthSteps::SUCCESS, evResponse, UserToken, DatabasePath,
                                                         DatabaseId, FolderId, CloudId, ServiceAccountId, Coordinator,
-                                                        ResourcePath, IsServerless, errorMessage, ResourseDatabasePath);
+                                                        ResourcePath, IsServerless, errorMessage, ResourseDatabasePath,
+                                                        Ticket, TicketParserEntries, AuthDatabasePath,
+                                                        TStringBuilder() << Address);
         Send(Context->ConnectionId, authResult);
     }
 
@@ -364,9 +366,11 @@ void TKafkaSaslAuthActor::SendScramLoginRequest(const NActors::TActorContext& ct
 }
 
 void TKafkaSaslAuthActor::SendMtlsAuthRequest(const NActors::TActorContext&) {
-    Send(NKikimr::MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({.Ticket = ClientCert,
-                                                                                                     .Database = DatabasePath,
-                                                                                                     .PeerName = TStringBuilder() << Address}));
+    Send(NKikimr::MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
+        .Ticket = ClientCert,
+        .Database = DatabasePath,
+        .TraceContext = {TStringBuilder() << Address, RequestId},
+    }));
     Become(&TKafkaSaslAuthActor::StateTicketResolve);
 }
 

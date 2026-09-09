@@ -7,8 +7,8 @@ namespace NKikimr::NPDisk {
 // A raw, source-agnostic sample of a single completed device I/O operation.
 //
 // Produced by every path that talks directly to a physical device (PDisk's own
-// block device thread, DDisk's io_uring completion poller, PersistentBuffer's
-// io_uring completion poller). Carries just enough information for a downstream
+// block device thread, DDisk's io_uring I/O thread, PersistentBuffer's
+// io_uring I/O thread). Carries just enough information for a downstream
 // aggregator to recompute, for a globally completion-ordered merge of samples
 // from multiple sources sharing one physical device:
 //   - the actual duration of the operation (via a parallelism-1 model), and

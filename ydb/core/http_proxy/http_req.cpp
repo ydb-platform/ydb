@@ -7,6 +7,7 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/http_proxy/authorization/auth_helpers.h>
 #include <ydb/library/http_proxy/error/error.h>
+#include <ydb/library/net/source_address.h>
 
 #include <library/cpp/cgiparam/cgiparam.h>
 #include <library/cpp/http/misc/parsed_request.h>
@@ -75,17 +76,10 @@ namespace NKikimr::NHttpProxy {
         , Sender(sender)
         , Driver(driver)
         , ServiceAccountCredentialsProvider(serviceAccountCredentialsProvider) {
-        char address[INET6_ADDRSTRLEN];
-        if (inet_ntop(AF_INET6, &(Request->Address), address, INET6_ADDRSTRLEN) == nullptr) {
-            SourceAddress = "unknown";
-        } else {
-            SourceAddress = address;
-        }
+        SourceAddress = NKikimr::NNet::FormatSourceAddress(
+            Request->Address ? Request->Address->SockAddr() : nullptr);
 
-        DatabasePath = Request->URL.Before('?');
-        if (DatabasePath == "/") {
-           DatabasePath = "";
-        }
+        DatabasePath = ParseDatabasePathFromRequestUrl(Request->URL);
         CgiParameters = TCgiParameters(Request->URL.After('?'));
         if (auto it = CgiParameters.Find("folderId"); it != CgiParameters.end()) {
             FolderId = it->second;
@@ -200,7 +194,9 @@ namespace NKikimr::NHttpProxy {
             } else if (AsciiEqualsIgnoreCase(header.first, REQUEST_ID_HEADER)) {
                 sourceReqId = header.second;
             } else if (AsciiEqualsIgnoreCase(header.first, REQUEST_FORWARDED_FOR)) {
-                SourceAddress = header.second;
+                if (TString sourceAddress = NKikimr::NNet::ExtractFirstForwardedForAddress(header.second)) {
+                    SourceAddress = std::move(sourceAddress);
+                }
             } else if (AsciiEqualsIgnoreCase(header.first, REQUEST_TARGET_HEADER)) {
                 TString requestTarget = TString(header.second);
                 TVector<TString> parts = SplitString(requestTarget, ".");

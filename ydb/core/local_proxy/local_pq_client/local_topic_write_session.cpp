@@ -217,7 +217,7 @@ private:
         YDB_LOG_INFO("Got get init seq no event",
             {"logPrefix", LogPrefix()});
 
-        Y_VALIDATE(!SeqNoPromise, "Can not handle get init seq no twice");
+        Y_VALIDATE(!SeqNoPromise, "Cannot handle get init seq no twice");
         SeqNoPromise = std::move(ev->Get()->SeqNoPromise);
         SendInitSeqNo();
     }
@@ -236,7 +236,7 @@ private:
     }
 
     void ComputeSessionMessage(const Ydb::Topic::StreamWriteMessage::InitResponse& message) {
-        YDB_LOG_INFO("Session initialized with used",
+        YDB_LOG_INFO("Session initialized",
             {"logPrefix", LogPrefix()},
             {"id", message.session_id()},
             {"partition", message.partition_id()});
@@ -344,7 +344,7 @@ private:
             return;
         }
 
-        YDB_LOG_TRACE("Adding continuation event,",
+        YDB_LOG_TRACE("Adding continuation token",
             {"logPrefix", LogPrefix()},
             {"inflightMemory", InflightMemory},
             {"inflightMessages", InflightMessages.size()});
@@ -436,14 +436,14 @@ public:
     }
 
     NThreading::TFuture<uint64_t> GetInitSeqNo() final {
-        Y_VALIDATE(DeduplicationEnabled, "Can not get init seq no, deduplication is not enabled");
+        Y_VALIDATE(DeduplicationEnabled, "Cannot get init seq no, deduplication is not enabled");
 
         UseManualSeqNo();
 
         if (!InitSeqNoPromise) {
             InitSeqNoPromise = NThreading::NewPromise<uint64_t>();
 
-            Y_VALIDATE(WriteSessionActor, "Can not get init seq no, session already closed");
+            Y_VALIDATE(WriteSessionActor, "Cannot get init seq no, session already closed");
             ActorSystem->Send(WriteSessionActor, new TWriteEvents::TEvGetInitSeqNo(*InitSeqNoPromise));
         }
 
@@ -454,7 +454,7 @@ public:
         Y_VALIDATE(!tx && !message.Tx_, "Transaction is not supported for local topic write session");
         Y_VALIDATE(!message.GetPartition(), "Partition is not supported for local topic write session");
         Y_VALIDATE(!message.GetKey(), "Key is not supported for local topic write session");
-        Y_VALIDATE(WriteSessionActor, "Can not write message, session already closed");
+        Y_VALIDATE(WriteSessionActor, "Cannot write message, session already closed");
 
         if (message.SeqNo_) {
             UseManualSeqNo();

@@ -65,6 +65,7 @@ private:
 };
 
 YT_DEFINE_LEAKY_GLOBAL(TFlsSlot<TPropagatingStorage>, PropagatingStorageSlot);
+YT_DEFINE_LEAKY_GLOBAL(const TPropagatingStorage, EmptyPropagatingStorage);
 
 class TPropagatingStorageManager
 {
@@ -109,8 +110,7 @@ inline const TPropagatingStorage& GetCurrentPropagatingStorage()
     if (auto& slot = NDetail::PropagatingStorageSlot(); slot.IsInitialized()) {
         return *slot;
     } else {
-        static const TPropagatingStorage Empty;
-        return Empty;
+        return NDetail::EmptyPropagatingStorage();
     }
 }
 

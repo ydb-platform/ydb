@@ -3090,6 +3090,12 @@ TFulltextIndexSettings::TAnalyzers FromProto(const Ydb::Table::FulltextIndexSett
     if (proto.has_filter_length_max()) {
         result.FilterLengthMax = proto.filter_length_max();
     }
+    if (proto.has_use_filter_snowball()) {
+        result.UseFilterSnowball = proto.use_filter_snowball();
+    }
+    if (proto.has_use_filter_superlemmer()) {
+        result.UseFilterSuperLemmer = proto.use_filter_superlemmer();
+    }
 
     return result;
 }
@@ -3147,8 +3153,42 @@ Ydb::Table::FulltextIndexSettings::Analyzers ToProto(const TFulltextIndexSetting
     if (analyzers.FilterLengthMax.has_value()) {
         proto.set_filter_length_max(*analyzers.FilterLengthMax);
     }
+    if (analyzers.UseFilterSnowball.has_value()) {
+        proto.set_use_filter_snowball(*analyzers.UseFilterSnowball);
+    }
+    if (analyzers.UseFilterSuperLemmer.has_value()) {
+        proto.set_use_filter_superlemmer(*analyzers.UseFilterSuperLemmer);
+    }
 
     return proto;
+}
+
+TFulltextIndexSettings::TAnalyzers TFulltextIndexSettings::TAnalyzers::Standard() {
+    TAnalyzers result;
+    result.Tokenizer = ETokenizer::Standard;
+    result.UseFilterLowercase = true;
+    result.UseFilterStopwords = true;
+    return result;
+}
+
+TFulltextIndexSettings::TAnalyzers TFulltextIndexSettings::TAnalyzers::Snowball(std::string language) {
+    TAnalyzers result = Standard();
+    result.Language = std::move(language);
+    result.UseFilterSnowball = true;
+    return result;
+}
+
+TFulltextIndexSettings::TAnalyzers TFulltextIndexSettings::TAnalyzers::SuperLemmer(std::string language) {
+    TAnalyzers result = Standard();
+    result.Language = std::move(language);
+    result.UseFilterSuperLemmer = true;
+    return result;
+}
+
+TFulltextIndexSettings::TAnalyzers TFulltextIndexSettings::TAnalyzers::Keyword() {
+    TAnalyzers result;
+    result.Tokenizer = ETokenizer::Keyword;
+    return result;
 }
 
 TFulltextIndexSettings::TColumnAnalyzers FromProto(const Ydb::Table::FulltextIndexSettings::ColumnAnalyzers& proto) {
@@ -3476,6 +3516,9 @@ TMultiColumnStatisticsDescription TMultiColumnStatisticsDescription::FromProto(c
         case Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH:
             types.push_back(EMultiColumnStatisticsType::CountMinSketch);
             break;
+        case Ydb::Table::TableMultiColumnStatistics::EQ_HEIGHT_HISTOGRAM:
+            types.push_back(EMultiColumnStatisticsType::EqHeightHistogram);
+            break;
         default:
             types.push_back(EMultiColumnStatisticsType::Unknown);
             break;
@@ -3505,6 +3548,9 @@ void TMultiColumnStatisticsDescription::SerializeTo(Ydb::Table::TableMultiColumn
         switch (type) {
         case EMultiColumnStatisticsType::CountMinSketch:
             proto.add_types(Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH);
+            break;
+        case EMultiColumnStatisticsType::EqHeightHistogram:
+            proto.add_types(Ydb::Table::TableMultiColumnStatistics::EQ_HEIGHT_HISTOGRAM);
             break;
         case EMultiColumnStatisticsType::Unknown:
             proto.add_types(Ydb::Table::TableMultiColumnStatistics::STATISTIC_TYPE_UNSPECIFIED);

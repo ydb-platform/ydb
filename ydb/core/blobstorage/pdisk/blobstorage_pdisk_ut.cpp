@@ -1395,8 +1395,15 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
 
         TActorTestContext testCtx{{ .EnablePDiskSpaceColorOverride = true }};
-        TVDiskMock vdisk(&testCtx);
+        TVDiskMock vdisk(&testCtx, false, testCtx.Sender);
         vdisk.InitFull();
+
+        // Register the node whiteboard service on the test sender so that
+        // TEvPDiskStateUpdate messages (carrying PDiskCapacityAlert) are
+        // delivered to the test and can be inspected.
+        const ui32 firstNodeId = testCtx.GetRuntime()->GetFirstNodeId();
+        testCtx.GetRuntime()->SetDispatchTimeout(10 * TDuration::MilliSeconds(testCtx.GetPDiskConfig()->StatisticsUpdateIntervalMs));
+        testCtx.GetRuntime()->RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(firstNodeId), testCtx.Sender);
 
         auto& appData = testCtx.GetRuntime()->GetAppData();
         const ui32 pdiskId = testCtx.GetPDisk()->PCtx->PDiskId;
@@ -1414,16 +1421,64 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             UNIT_ASSERT_VALUES_EQUAL(StatusFlagToSpaceColor(space->StatusFlags), expected);
         };
 
+        auto checkPDiskCapacityAlert = [&](TColor::E expected) {
+            Cerr << (TStringBuilder() << "... Awaiting TEvPDiskStateUpdate"
+                << " PDiskCapacityAlert# " << TColor::E_Name(expected)
+                << Endl);
+            bool found = false;
+            for (int numInspect = 10; numInspect > 0; --numInspect) {
+                const auto ev = testCtx.Recv<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>();
+                Cerr << (TStringBuilder() << "Got TEvPDiskStateUpdate# " << ev->ToString() << Endl);
+                const auto& pdiskInfo = ev->Record;
+                if (pdiskInfo.HasPDiskCapacityAlert() && pdiskInfo.GetPDiskCapacityAlert() == expected) {
+                    found = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(found, "No TEvPDiskStateUpdate with expected PDiskCapacityAlert received");
+        };
+
+        auto checkVDiskCapacityAlert = [&](TColor::E expected) {
+            Cerr << (TStringBuilder() << "... Awaiting TEvVDiskStateUpdate"
+                << " CapacityAlert# " << TColor::E_Name(expected)
+                << Endl);
+            bool found = false;
+            for (int numInspect = 10; numInspect > 0; --numInspect) {
+                const auto ev = testCtx.Recv<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>();
+                Cerr << (TStringBuilder() << "Got TEvVDiskStateUpdate# " << ev->ToString() << Endl);
+                const auto& vdiskInfo = ev->Record;
+                if (vdiskInfo.HasCapacityAlert() && vdiskInfo.GetCapacityAlert() == expected) {
+                    found = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(found, "No TEvVDiskStateUpdate with expected CapacityAlert received");
+        };
+
+        auto checkCapacityAlerts = [&](TColor::E expected) {
+            testCtx.Send(new TEvents::TEvWakeup());
+            checkPDiskCapacityAlert(expected);
+            checkVDiskCapacityAlert(expected);
+        };
+
         checkColor(TColor::GREEN);
 
         setColor(TColor::YELLOW);
         checkColor(TColor::YELLOW);
+        // The PDiskCapacityAlert and VDisk CapacityAlert reported to the
+        // whiteboard/UI must also respect the ForcedPDiskSpaceColor ICB
+        // override. A single wakeup triggers a whiteboard report that emits
+        // both TEvPDiskStateUpdate and TEvVDiskStateUpdate; each check grabs
+        // its own event type from the edge, so they don't interfere.
+        checkCapacityAlerts(TColor::YELLOW);
 
         setColor(TColor::RED);
         checkColor(TColor::RED);
+        checkCapacityAlerts(TColor::RED);
 
         setColor(TColor::GREEN);
         checkColor(TColor::GREEN);
+        checkCapacityAlerts(TColor::GREEN);
 
         setColor(0);
         checkColor(TColor::GREEN);
@@ -2170,33 +2225,33 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         staticVDisk.InitFull();
         dynamicVDisk.InitFull();
 
-        // Let the neighbour from the dynamic group take everything it can
+        auto checkSpace = [&](TVDiskMock &vdisk) {
+            return testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+                new NPDisk::TEvCheckSpace(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound),
+                NKikimrProto::OK);
+        };
+
+        // The neighbour from the dynamic group takes chunks until it is told to stop taking user writes
         ui32 dynamicChunks = 0;
-        for (;;) {
-            const auto reserveResult = testCtx.TestResponse<NPDisk::TEvChunkReserveResult>(
-                new NPDisk::TEvChunkReserve(dynamicVDisk.PDiskParams->Owner, dynamicVDisk.PDiskParams->OwnerRound, 1));
-            if (reserveResult->Status != NKikimrProto::OK) {
-                UNIT_ASSERT_VALUES_EQUAL(reserveResult->Status, NKikimrProto::OUT_OF_SPACE);
-                break;
-            }
+        while (StatusFlagToSpaceColor(checkSpace(dynamicVDisk)->StatusFlags) < TColor::YELLOW) {
+            testCtx.TestResponse<NPDisk::TEvChunkReserveResult>(
+                new NPDisk::TEvChunkReserve(dynamicVDisk.PDiskParams->Owner, dynamicVDisk.PDiskParams->OwnerRound, 1),
+                NKikimrProto::OK);
             ++dynamicChunks;
         }
         UNIT_ASSERT_GT(dynamicChunks, 0);
 
-        auto dynamicSpace = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
-            new NPDisk::TEvCheckSpace(dynamicVDisk.PDiskParams->Owner, dynamicVDisk.PDiskParams->OwnerRound),
-            NKikimrProto::OK);
-        UNIT_ASSERT_GE(StatusFlagToSpaceColor(dynamicSpace->StatusFlags), TColor::ORANGE);
+        // The reserve of the static group VDisk is not reported to the neighbour, so it gives up while the reserve
+        // is still there and the static group VDisk is still allowed to write
+        auto dynamicSpace = checkSpace(dynamicVDisk);
+        auto staticSpace = checkSpace(staticVDisk);
+        UNIT_ASSERT_GT(staticSpace->FreeChunks, dynamicSpace->FreeChunks);
+        UNIT_ASSERT_LT(StatusFlagToSpaceColor(staticSpace->StatusFlags), TColor::YELLOW);
 
-        // The VDisk of the static group keeps allocating and committing chunks and still reports free space
+        // And it can indeed allocate and commit chunks
         staticVDisk.ReserveChunk();
         staticVDisk.CommitReservedChunks();
-
-        auto staticSpace = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
-            new NPDisk::TEvCheckSpace(staticVDisk.PDiskParams->Owner, staticVDisk.PDiskParams->OwnerRound),
-            NKikimrProto::OK);
-        UNIT_ASSERT_VALUES_EQUAL(StatusFlagToSpaceColor(staticSpace->StatusFlags), TColor::GREEN);
-        UNIT_ASSERT_GT(staticSpace->FreeChunks, 0);
+        UNIT_ASSERT_GT(checkSpace(staticVDisk)->FreeChunks, 0);
     }
 
     Y_UNIT_TEST(SlotSizeBytesUsesFormulaUnlessExpectedSlotSizeIsSet) {

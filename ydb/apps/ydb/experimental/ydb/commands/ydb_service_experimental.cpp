@@ -393,8 +393,8 @@ void TCommandExplain::DotPrintPlan(IOutputStream* out, const TString& planJson) 
 }
 
 void TCommandExplain::SvgPrintPlan(IOutputStream* out, const TString& planJson) {
-    TPlanVisualizer planviz;
-    planviz.LoadPlans(planJson);
+    NPlan2Svg::TPlanVisualizer planviz;
+    planviz.LoadPlansSafe(planJson);
     *out << planviz.PrintSvgSafe();
 }
 
@@ -591,7 +591,7 @@ int TCommandJson2Svg::Run(TConfig&) {
         planJson = Cin.ReadAll();
     }
 
-    TPlanVisualizer planviz;
+    NPlan2Svg::TPlanVisualizer planviz;
 
     NJson::TJsonReaderConfig jsonConfig;
     NJson::TJsonValue jsonNode;
@@ -602,7 +602,7 @@ int TCommandJson2Svg::Run(TConfig&) {
             topNode = jsonNode.GetValueByPath("plan.Plan");
         }
         if (topNode) {
-            planviz.LoadPlans(*topNode);
+            planviz.LoadPlansSafe(*topNode);
         }
     }
 

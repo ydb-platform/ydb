@@ -322,8 +322,8 @@ IGraphTransformer::TStatus TryToUsingEntry(
     const TStringBuf lhsName = lhsRef->Tail().Content();
     const TStringBuf rhsName = rhsRef->Tail().Content();
 
-    auto lhsInput = groupInputs[lhsIdx];
-    auto rhsInput = groupInputs[rhsIdx];
+    const auto& lhsInput = groupInputs[lhsIdx];
+    const auto& rhsInput = groupInputs[rhsIdx];
 
     ui32 rhsPos;
     if (auto status = TryToFindItemI(rhsRef->Pos(), rhsInput, rhsName, rhsPos, ctx);

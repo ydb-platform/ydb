@@ -191,6 +191,10 @@ public:
         REGISTER_ALL(TGetFileFromCacheCommand,             "get_file_from_cache",             Null,       Structured, false, false);
         REGISTER_ALL(TPutFileToCacheCommand,               "put_file_to_cache",               Null,       Structured, true,  false);
 
+        REGISTER_ALL(TPartitionFileCommand,                "partition_file",                  Null,       Structured, false, false);
+
+        REGISTER    (TReadFilePartitionCommand,            "read_file_partition",             Null,       Binary,     false, true , ApiVersion4);
+
         REGISTER    (TWriteTableCommand,                   "write_table",                     Tabular,    Null,       true,  true , ApiVersion3);
         REGISTER    (TWriteTableCommand,                   "write_table",                     Tabular,    Structured, true,  true , ApiVersion4);
         REGISTER_ALL(TGetTableColumnarStatisticsCommand,   "get_table_columnar_statistics",   Null,       Structured, false, true);

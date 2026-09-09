@@ -113,6 +113,10 @@ const TString& TAwsRequestSignV4::GetRegion() const {
     return AwsRegion_;
 }
 
+const TString& TAwsRequestSignV4::GetService() const {
+    return AwsService_;
+}
+
 const TString& TAwsRequestSignV4::GetAccessKeyId() const {
     return AccessKeyId_;
 }

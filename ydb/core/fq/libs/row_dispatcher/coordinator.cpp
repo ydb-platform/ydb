@@ -291,7 +291,7 @@ void TActorCoordinator::Bootstrap() {
     if (PrintStateEnabled) {
         Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
     }
-    YDB_LOG_DEBUG("Successfully bootstrapped coordinator, id NodesManagerId rebalancing timeout",
+    YDB_LOG_DEBUG("Successfully bootstrapped coordinator",
         {"logPrefix", LogPrefix},
         {"selfId", SelfId()},
         {"nodesManagerId", NodesManagerId},
@@ -336,7 +336,7 @@ void TActorCoordinator::UpdateKnownRowDispatchers(NActors::TActorId actorId, boo
         nodeState = ENodeState::Started;
     }
 
-    YDB_LOG_TRACE("Add new row dispatcher to map (state",
+    YDB_LOG_TRACE("Add new row dispatcher to map",
         {"logPrefix", LogPrefix},
         {"nodeState", static_cast<int>(nodeState)});
     RowDispatchers.emplace(actorId, TRowDispatcherInfo{true, nodeState, isLocal});
@@ -404,14 +404,14 @@ void TActorCoordinator::PrintInternalState() {
     auto str = GetInternalState();
     auto buf = TStringBuf(str);
     for (ui64 offset = 0; offset < buf.size(); offset += PrintStateToLogSplitSize) {
-        YDB_LOG_DEBUG("Dump logPrefix, state",
+        YDB_LOG_DEBUG("Dump state",
             {"logPrefix", LogPrefix},
             {"state", buf.SubString(offset, PrintStateToLogSplitSize)});
     }
 }
 
 void TActorCoordinator::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
-    YDB_LOG_DEBUG("EvNodeConnected",
+    YDB_LOG_DEBUG("TEvNodeConnected",
         {"logPrefix", LogPrefix},
         {"nodeId", ev->Get()->NodeId});
     // Dont set Connected = true.
@@ -419,7 +419,7 @@ void TActorCoordinator::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr&
 }
 
 void TActorCoordinator::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
-    YDB_LOG_DEBUG("TEvNodeDisconnected, node id",
+    YDB_LOG_DEBUG("TEvNodeDisconnected",
         {"logPrefix", LogPrefix},
         {"nodeId", ev->Get()->NodeId});
 
@@ -469,7 +469,7 @@ void TActorCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
 }
 
 void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
-    YDB_LOG_DEBUG("New leader SelfId",
+    YDB_LOG_DEBUG("New leader found",
         {"logPrefix", LogPrefix},
         {"coordinatorActorId", ev->Get()->CoordinatorActorId},
         {"selfId", SelfId()});
@@ -550,7 +550,7 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPt
     if (ComputeCoordinatorRequest(ev->Sender, request)) {
         PendingReadActors.erase(ev->Sender);
     } else {
-        YDB_LOG_INFO("Not all nodes connected, known add request into pending queue",
+        YDB_LOG_INFO("Not all nodes connected, add request into pending queue",
             {"logPrefix", LogPrefix},
             {"nodesCount", NodesCount},
             {"rdCount", RowDispatchers.size()});
@@ -633,7 +633,7 @@ void TActorCoordinator::Handle(NKikimr::TEvTenantNodeEnumerator::TEvLookupResult
         ScheduleNodeInfoRequest();
         return;
     }
-    YDB_LOG_INFO("Updated node info, node",
+    YDB_LOG_INFO("Updated node info",
         {"logPrefix", LogPrefix},
         {"count", ev->Get()->AssignedNodes.size()},
         {"assignedNodes", JoinSeq(", ", ev->Get()->AssignedNodes)});
@@ -663,11 +663,11 @@ void TActorCoordinator::Handle(TEvPrivate::TEvRebalancing::TPtr&) {
     TSet<TActorId> toDelete;
 
     auto printState = [&](const TString& str){
-        YDB_LOG_DEBUG("Dump logPrefix, str",
+        YDB_LOG_DEBUG("Dump state",
             {"logPrefix", LogPrefix},
             {"str", str});
         for (auto& [actorId, info] : RowDispatchers) {
-            YDB_LOG_DEBUG("Node state connected partitions count",
+            YDB_LOG_DEBUG("Node state",
                 {"logPrefix", LogPrefix},
                 {"nodeId", actorId.NodeId()},
                 {"actorId", actorId},
@@ -753,9 +753,9 @@ void TActorCoordinator::ScheduleNodeInfoRequest() const {
 
 void TActorCoordinator::Handle(NFq::TEvNodesManager::TEvGetNodesResponse::TPtr& ev) {
     NodesCount = ev->Get()->NodeIds.size();
-    YDB_LOG_INFO("Updated node info, node",
+    YDB_LOG_INFO("Updated node info",
         {"logPrefix", LogPrefix},
-        {"count", NodesCount});
+        {"nodesCount", NodesCount});
     UpdateGlobalState();
     if (!NodesCount) {
         ScheduleNodeInfoRequest();

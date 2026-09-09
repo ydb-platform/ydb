@@ -1,5 +1,7 @@
 #include "args.h"
 
+#include "message_capture.h"
+
 #include <yql/essentials/tools/yql_language_server/api/api.h>
 #include <yql/essentials/tools/yql_language_server/service/layer.h>
 #include <yql/essentials/tools/yql_language_server/lsp/server/server.h>
@@ -7,9 +9,12 @@
 namespace NLsp::NYql {
 
 int Main(TArgs args) {
+    auto [mout, fmout] = OpenMessageCapture(std::move(args.MessageCapturePath));
+    Y_UNUSED(fmout, "holder");
+
     auto service = MakeServiceLayer();
     auto api = MakeYqlLspApi(std::move(service));
-    LspServe(Cin, Cout, {.Threads = args.Threads}, std::move(api));
+    LspServe(Cin, Cout, *mout, {.Threads = args.Threads}, std::move(api));
     return 0;
 }
 

@@ -13,6 +13,7 @@ Y_UNIT_TEST_SUITE(TBlockBlobStorageTest) {
 
         THashSet<ui32> groups;
         TIntrusivePtr<TTabletStorageInfo> info = CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy);
+        info->Version = 42;
         for (size_t channel = 0; channel < info->Channels.size(); ++channel) {
             // use non-existant groups for all channels >= 2
             if (channel >= 2) {
@@ -25,10 +26,15 @@ Y_UNIT_TEST_SUITE(TBlockBlobStorageTest) {
         size_t passed = 0;
         auto blockErrors = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
+                case TEvBlobStorage::TEvBlock::EventType: {
+                    UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvBlobStorage::TEvBlock>()->Version, info->Version);
+                    break;
+                }
                 case TEvBlobStorage::TEvBlockResult::EventType: {
                     auto* msg = ev->Get<TEvBlobStorage::TEvBlockResult>();
                     auto target = ev->GetRecipientRewrite();
                     if (msg->Status != NKikimrProto::OK) {
+                        msg->ActualGeneration = 123;
                         Cerr << "... blocking block result " << msg->Status << " for " << target << Endl;
                         blocked.emplace_back(ev.Release());
                         return TTestActorRuntime::EEventAction::DROP;
@@ -69,6 +75,7 @@ Y_UNIT_TEST_SUITE(TBlockBlobStorageTest) {
 
         auto ev = runtime.GrabEdgeEventRethrow<TEvTabletBase::TEvBlockBlobStorageResult>(owner);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrProto::NO_GROUP);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->ActualGeneration, 123);
     }
 
 } // Y_UNIT_TEST_SUITE(TBlockBlobStorageTest)

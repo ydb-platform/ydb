@@ -10,8 +10,18 @@
 #include <util/datetime/base.h>
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
+#include <util/system/mutex.h>
 
 namespace NKikimr {
+
+/**
+ * Guards the VALUES published into the detailed metrics counter tree, so that a reader
+ * never observes an aggregate midway through being republished.
+ *
+ * A reader MUST hold it across its whole traversal. Locking from inside a traversal
+ * deadlocks.
+ */
+TMutex& DetailedMetricsLock();
 
 /**
  * The per-table detailed metrics settings, as stored in the schema.
@@ -47,15 +57,14 @@ struct TDetailedMetricsTableInfo {
  * scoped to the role of its Tablet Counters Aggregator actor:
  *
  *     ydb_detailed_raw                        (private, created by the caller)
- *       role=leader | role=follower           (created by the caller)
- *         |
- *         +-- the target group of this instance
- *             database=<database path>
- *               table=<table path relative to the database>
- *                 Table level:     the collapsed counters of the table
- *                 Partition level: detailed_metrics=per_partition
- *                                    tablet_id=<id>
- *                                      follower_id=<n>
+ *       |
+ *       +-- the target group of BOTH instances
+ *           database=<database path>
+ *             table=<table path relative to the database>
+ *               Table level:     the collapsed counters of the table (leaders only)
+ *               Partition level: detailed_metrics=per_partition
+ *                                  tablet_id=<id>
+ *                                    follower_id=<n>
  *
  * Every group, which holds counters above, holds them as a
  * type=<tablet type>/category=executor|app subtree of low level counter aggregates,
@@ -71,7 +80,8 @@ public:
      *          series in every bucket, so the caller decides the cardinality
      */
     virtual void AddCounters(
-        const TDetailedMetricsTableInfo& table,
+        const TString& tablePath,
+        EDetailedMetricsLevel metricsLevel,
         ui64 tabletId,
         ui32 followerId,
         TTabletTypes::EType tabletType,

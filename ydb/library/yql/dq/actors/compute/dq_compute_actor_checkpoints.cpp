@@ -304,7 +304,7 @@ bool TDqComputeActorCheckpoints::ShouldIgnoreOldCoordinator(const E& ev, bool ve
 }
 
 void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvNewCheckpointCoordinator::TPtr& ev) {
-    if (ShouldIgnoreOldCoordinator(ev, false)) {
+    if (ShouldIgnoreOldCoordinator(ev, /* verifyOnGenerationFromFuture */ false)) {
         return;
     }
     const ui64 newGeneration = ev->Get()->Record.GetGeneration();
@@ -432,7 +432,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvGetTaskStateResult::TPt
         return;
     }
 
-    auto& checkpoint = ev->Get()->Checkpoint;
+    const auto& checkpoint = ev->Get()->Checkpoint;
     std::vector<ui64> taskIds;
     size_t taskIdsSize = 1;
     if (StateLoadPlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN) {
@@ -459,10 +459,10 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvGetTaskStateResult::TPt
     RestoringTaskRunnerForCheckpoint = checkpoint;
     RestoringTaskRunnerForEvent = ev->Cookie;
     if (StateLoadPlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_OWN) {
-        ComputeActor->LoadState(std::move(ev->Get()->States[0]));
+        ComputeActor->LoadState(std::move(ev->Get()->States[0]), checkpoint);
     } else if (StateLoadPlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN) {
         TComputeActorState state = CombineForeignState(StateLoadPlan, ev->Get()->States, taskIds);
-        ComputeActor->LoadState(std::move(state));
+        ComputeActor->LoadState(std::move(state), checkpoint);
     } else {
         Y_ABORT("Unprocessed state type %s (%d)",
             NDqProto::NDqStateLoadPlan::EStateType_Name(StateLoadPlan.GetStateType()).c_str(),
@@ -538,7 +538,7 @@ void TDqComputeActorCheckpoints::Handle(TEvRetryQueuePrivate::TEvRetry::TPtr& ev
 }
 
 void TDqComputeActorCheckpoints::Handle(NActors::TEvents::TEvWakeup::TPtr&) {
-    const auto buildDiagnostics = [task = &Task, ca = ComputeActor](const TPendingCheckpointBase& checkpoint, const TString& type) -> TString {
+    const auto buildDiagnostics = [task = &Task, ca = ComputeActor, id = SelfId()](const TPendingCheckpointBase& checkpoint, const TString& type) -> TString {
         TString diagnostics;
         if (!checkpoint.IsSlowCheckpoint(diagnostics)) {
             return "";
@@ -546,6 +546,7 @@ void TDqComputeActorCheckpoints::Handle(NActors::TEvents::TEvWakeup::TPtr&) {
 
         return TStringBuilder()
             << " Stage: " << task->GetStageId()
+            << ". Self id: " << id
             << ". Channels version: " << task->GetDqChannelVersion()
             << ". Pending checkpoint type: " << type
             << ". " << diagnostics
@@ -665,14 +666,17 @@ void TDqComputeActorCheckpoints::OnSinkStateSaved(TSinkState&& state, ui64 outpu
 
 void TDqComputeActorCheckpoints::OnSinkStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) {
     Y_ABORT_UNLESS(CheckpointCoordinator);
-    Y_ABORT_UNLESS(checkpoint.GetGeneration() <= CheckpointCoordinator->Generation);
-    if (checkpoint.GetGeneration() < CheckpointCoordinator->Generation) {
+    Y_ABORT_UNLESS(checkpoint.GetGeneration() <= CheckpointCoordinator->Generation); // It is ok to recommit state for previous checkpoints during restore
+
+    if (!PendingCommitCheckpoint || checkpoint.GetGeneration() < PendingCommitCheckpoint.Checkpoint->GetGeneration()) {
+        // Stale sink commit from previous coordinator
+        Y_ABORT_UNLESS(checkpoint.GetGeneration() < CheckpointCoordinator->Generation);
         LOG_W("Ignoring sink[" << outputIndex << "] commit state event from previous coordinator: "
-            << checkpoint.GetGeneration() << " < " << CheckpointCoordinator->Generation);
+            << checkpoint.GetGeneration() << " < " << CheckpointCoordinator->Generation << " because pending checkpoint "
+            << (PendingCommitCheckpoint ? TStringBuilder() << "already has generation " << PendingCommitCheckpoint.Checkpoint->GetGeneration() : TStringBuilder() << "is not set"));
         return;
     }
 
-    Y_ABORT_UNLESS(PendingCommitCheckpoint);
     Y_ABORT_UNLESS(PendingCommitCheckpoint.Checkpoint->GetId() == checkpoint.GetId(),
         "Expected pending commit checkpoint id %lu, but got %lu", PendingCommitCheckpoint.Checkpoint->GetId(), checkpoint.GetId());
 
@@ -773,11 +777,17 @@ bool IsIngress(const TDqTaskSettings& task) {
 }
 
 bool IsEgress(const TDqTaskSettings& task) {
-    for (const auto& output : task.GetOutputs()) {
+    const auto& outputs = task.GetOutputs();
+    if (outputs.empty()) {
+        return true;
+    }
+
+    for (const auto& output : outputs) {
         if (output.HasSink()) {
             return true;
         }
     }
+
     return false;
 }
 

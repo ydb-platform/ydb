@@ -27,6 +27,14 @@ struct TChaosLeaseAttachOptions
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TChaosLeasePingOptions
+    : public TTimeoutOptions
+{
+    bool PingAncestors = false;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct IChaosClient
 {
     virtual ~IChaosClient() = default;
@@ -36,6 +44,10 @@ struct IChaosClient
     virtual TFuture<IPrerequisitePtr> AttachChaosLease(
         NChaosClient::TChaosLeaseId chaosLeaseId,
         const TChaosLeaseAttachOptions& options = {}) = 0;
+
+    virtual TFuture<void> PingChaosLease(
+        NChaosClient::TChaosLeaseId chaosLeaseId,
+        const TChaosLeasePingOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

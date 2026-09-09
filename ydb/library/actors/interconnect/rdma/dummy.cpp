@@ -27,6 +27,8 @@ ui32 TQueuePair::GetMinMtuIndex(ui32) const noexcept { return 0; }
 
 size_t TQueuePair::GetDeviceIndex() const noexcept { return 0; }
 
+TRdmaCtx* TQueuePair::GetCtx() const noexcept { return nullptr; }
+
 ui32 TQueuePair::GetQpNum() const noexcept { return 0; }
 
 int TQueuePair::ToRtsState(const THandshakeData&) noexcept { return 0; }
@@ -44,6 +46,8 @@ int TQueuePair::ToErrorState() noexcept {
 THandshakeData TQueuePair::GetHandshakeData() const noexcept {
     return THandshakeData {0, 0, 0, 0};
 }
+
+int TRdmaCtx::GetMaxSge() const noexcept { return 0; }
 
 namespace NLinkMgr {
     TRdmaCtx* GetCtx(NInterconnect::TAddress const&) { return nullptr; }

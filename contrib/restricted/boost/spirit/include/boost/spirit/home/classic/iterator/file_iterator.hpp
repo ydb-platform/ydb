@@ -2,6 +2,7 @@
     Copyright (c) 2003 Giovanni Bajo
     Copyright (c) 2003 Thomas Witt
     Copyright (c) 2003 Hartmut Kaiser
+    Copyright (c) 2025 Joaquin M Lopez Munoz
     http://spirit.sourceforge.net/
 
   Distributed under the Boost Software License, Version 1.0. (See accompanying
@@ -181,6 +182,12 @@ public:
     //   to interfere with arithmetic operations.
     bool operator_bool(void) const
     { return this->base(); }
+
+    // boost::iterator_facade::operator[] return type not C++20-concepts compliant.
+    typename base_t::reference operator[](typename base_t::difference_type n) const
+    {
+      return *(*this+n); 
+    }
 
 private:
     friend class ::boost::iterator_core_access;

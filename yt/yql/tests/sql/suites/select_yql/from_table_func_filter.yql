@@ -1,0 +1,5 @@
+PRAGMA YqlSelect = 'force';
+
+$p = ($s) -> (($s == 'Input') OR ($s == 'Input1'));
+
+SELECT * FROM plato.FILTER(``, $p);

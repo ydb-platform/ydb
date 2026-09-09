@@ -160,6 +160,8 @@ DEFINE_REFCOUNTED_TYPE(TPrefetchingThrottlerConfig)
 struct TFiberManagerConfig
     : public NYTree::TYsonStruct
 {
+    //! Overrides fiber stack sizes.
+    THashMap<EExecutionStackKind, size_t> FiberStackSizes;
     THashMap<EExecutionStackKind, int> FiberStackPoolSizes;
     int MaxIdleFibers;
 
@@ -177,6 +179,7 @@ DEFINE_REFCOUNTED_TYPE(TFiberManagerConfig)
 struct TFiberManagerDynamicConfig
     : public NYTree::TYsonStruct
 {
+    THashMap<EExecutionStackKind, size_t> FiberStackSizes;
     THashMap<EExecutionStackKind, int> FiberStackPoolSizes;
     std::optional<int> MaxIdleFibers;
 

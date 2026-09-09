@@ -24,7 +24,7 @@ bool TSqlWindow::Build(const TRule_window_definition& node, TWinSpecs& winSpecs)
 }
 
 bool TSqlWindow::Build(const TRule_window_clause& node, TWinSpecs& winSpecs) {
-    auto windowList = node.GetRule_window_definition_list2();
+    const auto& windowList = node.GetRule_window_definition_list2();
 
     if (!Build(windowList.GetRule_window_definition1(), winSpecs)) {
         return false;

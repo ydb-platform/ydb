@@ -46,6 +46,7 @@ class StreamingResponseSource(Closable):
         # Multiple accesses to .gen must return the same generator, not create new ones
         self._gen_cache: Iterator[bytes] | None = None
 
+        self._loop: asyncio.AbstractEventLoop | None = None
         self._producer_task: asyncio.Task | None = None
         self._producer_started = threading.Event()
         self._producer_error: Exception | None = None
@@ -90,6 +91,7 @@ class StreamingResponseSource(Closable):
                 self.queue.shutdown()
                 self._release_lease()
 
+        self._loop = loop
         self._producer_task = loop.create_task(producer())
         self._producer_started.set()
 
@@ -196,12 +198,22 @@ class StreamingResponseSource(Closable):
         """Synchronous cleanup resources"""
         self.queue.shutdown()
 
-        if self._producer_task and not self._producer_task.done():
-            self._producer_task.cancel()
+        def cleanup():
+            if self._producer_task and not self._producer_task.done():
+                self._producer_task.cancel()
+            if self.response and not self.response.closed:
+                if not self._producer_completed:
+                    self.response.close()
 
-        if self.response and not self.response.closed:
-            if not self._producer_completed:
-                self.response.close()
+        # Task cancellation and aiohttp response teardown must run on the event
+        # loop thread. close() is normally called from an executor thread.
+        if self._loop is not None and not self._loop.is_closed():
+            try:
+                self._loop.call_soon_threadsafe(cleanup)
+            except RuntimeError:
+                cleanup()
+        else:
+            cleanup()
         self._release_lease()
 
 

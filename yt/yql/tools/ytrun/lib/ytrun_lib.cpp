@@ -187,7 +187,7 @@ TYtRunTool::TYtRunTool(TString name)
 
         FillClusterMapping(*ytConfig, TString{YtProviderName});
 
-        DefYtServer_ = NYql::TConfigClusters::GetDefaultYtServer(*ytConfig);
+        YtClusters_ = MakeIntrusive<TConfigClusters>(*ytConfig);
 
         if (GetRunOptions().GatewayTypes.contains(NFmr::FastMapReduceGatewayName)) {
             GetRunOptions().GatewayTypes.emplace(YtProviderName);
@@ -198,11 +198,11 @@ TYtRunTool::TYtRunTool(TString name)
     GetRunOptions().GatewayTypes.emplace(YtProviderName);
 
     AddFsDownloadFactory([this]() -> NFS::IDownloaderPtr {
-        return MakeYtDownloader(*GetRunOptions().FsConfig, DefYtServer_);
+        return MakeYtDownloader(*GetRunOptions().FsConfig, YtClusters_);
     });
 
-    AddUrlListerFactory([]() -> IUrlListerPtr {
-        return MakeYtUrlLister();
+    AddUrlListerFactory([this]() -> IUrlListerPtr {
+        return MakeYtUrlLister(YtClusters_);
     });
 
     AddProviderFactory([this]() -> NYql::TDataProviderInitializer {

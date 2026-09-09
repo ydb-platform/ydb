@@ -217,7 +217,7 @@ class flat_map
    typedef std::pair<Key, T>                                                        value_type;
    typedef typename BOOST_CONTAINER_IMPDEF(tree_t::sequence_type)                   sequence_type;
    typedef typename sequence_type::allocator_type                                   allocator_type;
-   typedef ::boost::container::allocator_traits<allocator_type>                     allocator_traits_type;
+   typedef boost::container::allocator_traits<allocator_type>                     allocator_traits_type;
    typedef typename sequence_type::pointer                                          pointer;
    typedef typename sequence_type::const_pointer                                    const_pointer;
    typedef typename sequence_type::reference                                        reference;
@@ -503,7 +503,7 @@ class flat_map
    //! <b>Effects</b>: Copy constructs a flat_map using the specified allocator.
    //!
    //! <b>Complexity</b>: Linear in x.size().
-   inline flat_map(const flat_map& x, const allocator_type &a)
+   inline flat_map(const flat_map& x, const BOOST_CONTAINER_DOC1ST(allocator_type, typename dtl::type_identity<allocator_type>::type) &a)
       : m_flat_tree(x.m_flat_tree, BOOST_CONTAINER_FORCE(const impl_allocator_type, a))
    {}
 
@@ -511,7 +511,7 @@ class flat_map
    //!   Constructs *this using x's resources.
    //!
    //! <b>Complexity</b>: Constant if x.get_allocator() == a, linear otherwise.
-   inline flat_map(BOOST_RV_REF(flat_map) x, const allocator_type &a)
+   inline flat_map(BOOST_RV_REF(flat_map) x, const BOOST_CONTAINER_DOC1ST(allocator_type, typename dtl::type_identity<allocator_type>::type) &a)
       : m_flat_tree(boost::move(x.m_flat_tree), BOOST_CONTAINER_FORCE(const impl_allocator_type, a))
    {}
 
@@ -1900,11 +1900,18 @@ inline typename flat_map<K, M, C, A>::size_type erase_if(flat_map<K, M, C, A>& c
 
 #ifndef BOOST_CONTAINER_NO_CXX17_CTAD
 
+//! <b>Deduction guide</b>: allows a `flat_map` to be constructed from the iterator
+//! range <code>[first, last)</code>, deducing the key and mapped types from the pair
+//! value type of `InputIterator` and using the default comparator and allocator.
 template <typename InputIterator>
 flat_map(InputIterator, InputIterator) ->
    flat_map< it_based_non_const_first_type_t<InputIterator>
            , it_based_second_type_t<InputIterator>>;
 
+//! <b>Deduction guide</b>: allows a `flat_map` to be constructed from the iterator
+//! range <code>[first, last)</code>, deducing the key and mapped types from
+//! `InputIterator`. The trailing argument is used as the allocator if it is an
+//! allocator type, otherwise it is used as the comparator.
 template < typename InputIterator, typename AllocatorOrCompare>
     flat_map(InputIterator, InputIterator, AllocatorOrCompare const&) ->
     flat_map< it_based_non_const_first_type_t<InputIterator>
@@ -1921,6 +1928,10 @@ template < typename InputIterator, typename AllocatorOrCompare>
                 >::type
             >;
 
+//! <b>Deduction guide</b>: allows a `flat_map` to be constructed from the iterator
+//! range <code>[first, last)</code>, deducing the key and mapped types from
+//! `InputIterator` and taking the comparator and allocator types from the supplied
+//! arguments.
 template < typename InputIterator, typename Compare, typename Allocator
          , typename = dtl::require_nonallocator_t<Compare>
          , typename = dtl::require_allocator_t<Allocator>>
@@ -1930,11 +1941,18 @@ flat_map(InputIterator, InputIterator, Compare const&, Allocator const&) ->
            , Compare
            , Allocator>;
 
+//! <b>Deduction guide</b>: allows a `flat_map` to be constructed from an already
+//! ordered, unique iterator range <code>[first, last)</code>, deducing the key and
+//! mapped types from `InputIterator` and using the default comparator and allocator.
 template <typename InputIterator>
 flat_map(ordered_unique_range_t, InputIterator, InputIterator) ->
    flat_map< it_based_non_const_first_type_t<InputIterator>
            , it_based_second_type_t<InputIterator>>;
 
+//! <b>Deduction guide</b>: allows a `flat_map` to be constructed from an already
+//! ordered, unique iterator range <code>[first, last)</code>, deducing the key and
+//! mapped types from `InputIterator`. The trailing argument is used as the allocator
+//! if it is an allocator type, otherwise it is used as the comparator.
 template < typename InputIterator, typename AllocatorOrCompare>
 flat_map(ordered_unique_range_t, InputIterator, InputIterator, AllocatorOrCompare const&) ->
    flat_map< it_based_non_const_first_type_t<InputIterator>
@@ -1951,6 +1969,10 @@ flat_map(ordered_unique_range_t, InputIterator, InputIterator, AllocatorOrCompar
                >::type
            >;
 
+//! <b>Deduction guide</b>: allows a `flat_map` to be constructed from an already
+//! ordered, unique iterator range <code>[first, last)</code>, deducing the key and
+//! mapped types from `InputIterator` and taking the comparator and allocator types
+//! from the supplied arguments.
 template < typename InputIterator, typename Compare, typename Allocator
          , typename = dtl::require_nonallocator_t<Compare>
          , typename = dtl::require_allocator_t<Allocator>>
@@ -2091,7 +2113,7 @@ class flat_multimap
    typedef std::pair<Key, T>                                                        value_type;
    typedef typename BOOST_CONTAINER_IMPDEF(tree_t::sequence_type)                   sequence_type;
    typedef typename sequence_type::allocator_type                                   allocator_type;
-   typedef ::boost::container::allocator_traits<allocator_type>                     allocator_traits_type;
+   typedef boost::container::allocator_traits<allocator_type>                     allocator_traits_type;
    typedef typename sequence_type::pointer                                          pointer;
    typedef typename sequence_type::const_pointer                                    const_pointer;
    typedef typename sequence_type::reference                                        reference;
@@ -2384,7 +2406,7 @@ class flat_multimap
    //!
    //! <b>Complexity</b>: Linear in x.size().
    inline
-   flat_multimap(const flat_multimap& x, const allocator_type &a)
+   flat_multimap(const flat_multimap& x, const BOOST_CONTAINER_DOC1ST(allocator_type, typename dtl::type_identity<allocator_type>::type) &a)
       : m_flat_tree(x.m_flat_tree, BOOST_CONTAINER_FORCE(const impl_allocator_type, a))
    {}
 
@@ -2393,7 +2415,7 @@ class flat_multimap
    //!
    //! <b>Complexity</b>: Constant if a == x.get_allocator(), linear otherwise.
    inline
-   flat_multimap(BOOST_RV_REF(flat_multimap) x, const allocator_type &a)
+   flat_multimap(BOOST_RV_REF(flat_multimap) x, const BOOST_CONTAINER_DOC1ST(allocator_type, typename dtl::type_identity<allocator_type>::type) &a)
       : m_flat_tree(boost::move(x.m_flat_tree), BOOST_CONTAINER_FORCE(const impl_allocator_type, a))
    {}
 
@@ -3273,11 +3295,18 @@ inline typename flat_multimap<K, M, C, A>::size_type erase_if(flat_multimap<K, M
 
 #ifndef BOOST_CONTAINER_NO_CXX17_CTAD
 
+//! <b>Deduction guide</b>: allows a `flat_multimap` to be constructed from the
+//! iterator range <code>[first, last)</code>, deducing the key and mapped types from
+//! the pair value type of `InputIterator` and using the default comparator and allocator.
 template <typename InputIterator>
 flat_multimap(InputIterator, InputIterator) ->
    flat_multimap< it_based_non_const_first_type_t<InputIterator>
                 , it_based_second_type_t<InputIterator>>;
 
+//! <b>Deduction guide</b>: allows a `flat_multimap` to be constructed from the
+//! iterator range <code>[first, last)</code>, deducing the key and mapped types from
+//! `InputIterator`. The trailing argument is used as the allocator if it is an
+//! allocator type, otherwise it is used as the comparator.
 template < typename InputIterator, typename AllocatorOrCompare>
 flat_multimap(InputIterator, InputIterator, AllocatorOrCompare const&) ->
    flat_multimap< it_based_non_const_first_type_t<InputIterator>
@@ -3294,6 +3323,10 @@ flat_multimap(InputIterator, InputIterator, AllocatorOrCompare const&) ->
                     >::type
                 >;
 
+//! <b>Deduction guide</b>: allows a `flat_multimap` to be constructed from the
+//! iterator range <code>[first, last)</code>, deducing the key and mapped types from
+//! `InputIterator` and taking the comparator and allocator types from the supplied
+//! arguments.
 template < typename InputIterator, typename Compare, typename Allocator
          , typename = dtl::require_nonallocator_t<Compare>
          , typename = dtl::require_allocator_t<Allocator>>
@@ -3303,11 +3336,18 @@ flat_multimap(InputIterator, InputIterator, Compare const&, Allocator const&) ->
                 , Compare
                 , Allocator>;
 
+//! <b>Deduction guide</b>: allows a `flat_multimap` to be constructed from an already
+//! ordered iterator range <code>[first, last)</code>, deducing the key and mapped
+//! types from `InputIterator` and using the default comparator and allocator.
 template <typename InputIterator>
 flat_multimap(ordered_range_t, InputIterator, InputIterator) ->
    flat_multimap< it_based_non_const_first_type_t<InputIterator>
                 , it_based_second_type_t<InputIterator>>;
 
+//! <b>Deduction guide</b>: allows a `flat_multimap` to be constructed from an already
+//! ordered iterator range <code>[first, last)</code>, deducing the key and mapped
+//! types from `InputIterator`. The trailing argument is used as the allocator if it
+//! is an allocator type, otherwise it is used as the comparator.
 template < typename InputIterator, typename AllocatorOrCompare>
 flat_multimap(ordered_range_t, InputIterator, InputIterator, AllocatorOrCompare const&) ->
    flat_multimap< it_based_non_const_first_type_t<InputIterator>
@@ -3324,6 +3364,10 @@ flat_multimap(ordered_range_t, InputIterator, InputIterator, AllocatorOrCompare 
                     >::type
                 >;
 
+//! <b>Deduction guide</b>: allows a `flat_multimap` to be constructed from an already
+//! ordered iterator range <code>[first, last)</code>, deducing the key and mapped
+//! types from `InputIterator` and taking the comparator and allocator types from the
+//! supplied arguments.
 template < typename InputIterator, typename Compare, typename Allocator
          , typename = dtl::require_nonallocator_t<Compare>
          , typename = dtl::require_allocator_t<Allocator>>

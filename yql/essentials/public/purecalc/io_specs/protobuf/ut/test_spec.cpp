@@ -413,15 +413,18 @@ void CheckMessageIsInvalid(const TString& expectedExceptionMessage) {
 
     UNIT_ASSERT_EXCEPTION_CONTAINS([&]() {
         factory->MakePushStreamProgram(TProtobufInputSpec<T>(), TProtobufOutputSpec<T>(), "SELECT * FROM Input", ETranslationMode::SQL);
-    }(), yexception, expectedExceptionMessage);
+    }(), yexception,
+                                   TStringBuf{expectedExceptionMessage});
 
     UNIT_ASSERT_EXCEPTION_CONTAINS([&]() {
         factory->MakePullStreamProgram(TProtobufInputSpec<T>(), TProtobufOutputSpec<T>(), "SELECT * FROM Input", ETranslationMode::SQL);
-    }(), yexception, expectedExceptionMessage);
+    }(), yexception,
+                                   TStringBuf{expectedExceptionMessage});
 
     UNIT_ASSERT_EXCEPTION_CONTAINS([&]() {
         factory->MakePullListProgram(TProtobufInputSpec<T>(), TProtobufOutputSpec<T>(), "SELECT * FROM Input", ETranslationMode::SQL);
-    }(), yexception, expectedExceptionMessage);
+    }(), yexception,
+                                   TStringBuf{expectedExceptionMessage});
 }
 
 Y_UNIT_TEST(TestSimpleNested) {

@@ -88,6 +88,7 @@ JOIN_SRCS(
     generic/bitops.cpp
     generic/buffer.cpp
     generic/cast.cpp
+    generic/constant_evaluation.cpp
     generic/deque.cpp
     generic/enum_cast.cpp
     generic/explicit_type.cpp

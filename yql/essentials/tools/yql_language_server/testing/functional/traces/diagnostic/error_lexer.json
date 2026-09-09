@@ -59,54 +59,6 @@
           },
           "severity": 1,
           "source": "lexer"
-        },
-        {
-          "code": "DEFAULT_ERROR",
-          "message": "token recognition error at: '''",
-          "range": {
-            "end": {
-              "character": 1,
-              "line": 0
-            },
-            "start": {
-              "character": 0,
-              "line": 0
-            }
-          },
-          "severity": 1,
-          "source": "parser"
-        },
-        {
-          "code": "DEFAULT_ERROR",
-          "message": "token recognition error at: '''",
-          "range": {
-            "end": {
-              "character": 1,
-              "line": 0
-            },
-            "start": {
-              "character": 0,
-              "line": 0
-            }
-          },
-          "severity": 1,
-          "source": "translator"
-        },
-        {
-          "code": "DEFAULT_ERROR",
-          "message": "token recognition error at: '''",
-          "range": {
-            "end": {
-              "character": 1,
-              "line": 0
-            },
-            "start": {
-              "character": 0,
-              "line": 0
-            }
-          },
-          "severity": 1,
-          "source": "typecheck"
         }
       ],
       "kind": "full",

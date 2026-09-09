@@ -338,6 +338,7 @@ bool TIndexBuildInfo::IsValidState(EState value)
         case EState::Applying:
         case EState::Unlocking:
         case EState::AlterSequence:
+        case EState::AlterIndexTable:
         case EState::PrepareValidation:
         case EState::Done:
         case EState::Cancellation_Applying:
@@ -364,6 +365,7 @@ bool TIndexBuildInfo::IsValidSubState(ESubState value)
         case ESubState::FulltextIndexDictionary:
         case ESubState::FulltextIndexBorders:
         case ESubState::FulltextRowIdSrc:
+        case ESubState::FulltextIndexPrefixBorders:
             return true;
     }
     return false;

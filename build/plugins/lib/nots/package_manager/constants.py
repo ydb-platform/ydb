@@ -17,8 +17,9 @@ PNPM_BUILD_BACKUP_LOCKFILE_FILENAME = "build.bkp.pnpm-lock.yaml"
 
 # File is to store the last install status hash to avoid installing the same thing
 LOCAL_PNPM_INSTALL_HASH_FILENAME = ".__install_hash__"
-# File is to syncronize processes using the local nm_store for the project simultaneously
+# Files used to limit concurrent pnpm installs sharing the local store
 LOCAL_PNPM_INSTALL_MUTEX_FILENAME = ".__install_mutex__"
+LOCAL_PNPM_INSTALL_CONCURRENCY = 4
 
 STORE_DIRNAME = "pnpm_store"
 VIRTUAL_STORE_DIRNAME = ".pnpm"

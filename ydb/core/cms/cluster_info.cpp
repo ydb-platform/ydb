@@ -21,6 +21,43 @@ namespace NKikimr::NCms {
 using namespace NNodeWhiteboard;
 using namespace NKikimrCms;
 
+namespace {
+
+bool IsSystemTablet(TTabletTypes::EType type) {
+    // Keep this allowlist closed so that new shard types are not treated as
+    // system tablets until their cluster-wide role is known.
+    switch (type) {
+    case TTabletTypes::Coordinator:
+    case TTabletTypes::Mediator:
+    case TTabletTypes::Hive:
+    case TTabletTypes::BSController:
+    case TTabletTypes::SchemeShard:
+    case TTabletTypes::Cms:
+    case TTabletTypes::NodeBroker:
+    case TTabletTypes::TxAllocator:
+    case TTabletTypes::TenantSlotBroker:
+    case TTabletTypes::Console:
+    case TTabletTypes::SysViewProcessor:
+    case TTabletTypes::StatisticsAggregator:
+    case TTabletTypes::GraphShard:
+    case TTabletTypes::BackupController:
+    case TTabletTypes::DbsController:
+        return true;
+    // New tablet types are introduced by renaming one of these reserved
+    // values. Keep them explicit so that such a change fails to compile here
+    // until the new type is classified.
+    case TTabletTypes::Reserved47:
+    case TTabletTypes::Reserved48:
+    case TTabletTypes::Reserved49:
+    case TTabletTypes::Reserved50:
+        return false;
+    default:
+        return false;
+    }
+}
+
+} // namespace
+
 bool TLockableItem::IsLocked(TErrorInfo &error, TDuration defaultRetryTime,
                              TInstant now, TDuration duration) const
 {
@@ -430,6 +467,7 @@ void TClusterInfo::ClearNode(ui32 nodeId)
         return;
 
     auto &node = NodeRef(nodeId);
+    RunningSystemTabletsByNode.erase(nodeId);
     for (auto tablet : node.Tablets)
         Tablets.erase(tablet);
     node.Tablets.clear();
@@ -472,6 +510,18 @@ void TClusterInfo::AddTablet(ui32 nodeId, const NKikimrWhiteboard::TTabletStateI
     tablet.Leader = info.GetLeader();
     tablet.NodeId = nodeId;
 
+    if (tablet.Leader
+        && tablet.State == NKikimrWhiteboard::TTabletStateInfo::Active
+        && IsSystemTablet(tablet.Type))
+    {
+        RunningSystemTabletsByNode[nodeId].insert(tablet.TabletId);
+    } else if (auto it = RunningSystemTabletsByNode.find(nodeId); it != RunningSystemTabletsByNode.end()) {
+        it->second.erase(tablet.TabletId);
+        if (it->second.empty()) {
+            RunningSystemTabletsByNode.erase(it);
+        }
+    }
+
     auto &node = NodeRef(nodeId);
     node.Tablets.insert(tablet.TabletId);
 }
@@ -510,7 +560,14 @@ void TClusterInfo::UpdatePDiskState(const TPDiskID &id, const NKikimrWhiteboard:
     }
 
     auto &pdisk = PDiskRef(id);
+    // NOTE: this coarse State (used for general CMS maintenance/locking logic,
+    // e.g. IsDown/IsLocked and host/device state reporting) intentionally only
+    // treats the fully-up Normal state as UP; consumers that need to
+    // distinguish "still starting up" from "genuinely broken" (e.g. the NBS
+    // 2.0 DDisk availability check) should use IsPDiskStateUp(RawState)
+    // instead, see IsDDiskAvailable()/GetDDiskStateName().
     pdisk.State = info.GetState() == NKikimrBlobStorage::TPDiskState::Normal ? UP : DOWN;
+    pdisk.RawState = info.GetState();
 }
 
 void TClusterInfo::AddVDisk(const NKikimrBlobStorage::TBaseConfig::TVSlot &info)
@@ -1029,6 +1086,19 @@ void TClusterInfo::GenerateSysTabletsNodesCheckers() {
             NodeRef(nodeId).AddNodeGroup(sysNodesChecker);
         }
     }
+}
+
+bool TClusterInfo::NodeHasRunningSystemTablet(ui32 nodeId) const {
+    return RunningSystemTabletsByNode.contains(nodeId);
+}
+
+bool TClusterInfo::HostHasRunningSystemTablet(const TString &hostName) const {
+    for (const auto *node : HostNodes(hostName)) {
+        if (NodeHasRunningSystemTablet(node->NodeId)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void TClusterInfo::GenerateClusterNodesCheckers() {

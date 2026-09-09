@@ -632,6 +632,22 @@ private:
             return Q(std::move(x));
         };
 
+        if (ISource* x = source.Node->GetSource()) {
+            TTableList tableList;
+            x->GetInputTables(tableList);
+
+            TNodePtr block = BuildInputTables(
+                x->GetPos(),
+                tableList,
+                /*inSubquery=*/false,
+                ctx.Scoped,
+                /*emitToCurrentBlock=*/true);
+
+            if (!block->Init(ctx, /*src=*/nullptr)) {
+                return Nothing();
+            }
+        }
+
         if (!source.Alias) {
             return build(source.Node, ctx.MakeName("_yql_source_"), /*columns=*/{});
         }

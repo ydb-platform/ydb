@@ -956,6 +956,10 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     }
     if (!upsertSettings.IsUpdate) {
         for (auto& [name, meta] : table.second->Metadata->Columns) {
+            if (meta.IsDefaultFromExpression() && !meta.DefaultExpression->Stored) {
+                continue;
+            }
+
             if ((meta.NotNull || meta.SetNotNullInProgress) && !rowType->FindItem(name)) {
                 if (meta.SetNotNullInProgress) {
                     ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
@@ -1041,6 +1045,10 @@ TStatus AnnotateInsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     }
 
     for (auto& [name, meta] : table.second->Metadata->Columns) {
+        if (meta.IsDefaultFromExpression() && !meta.DefaultExpression->Stored) {
+            continue;
+        }
+
         if ((meta.NotNull || meta.SetNotNullInProgress) && !rowType->FindItem(name)) {
             if (meta.SetNotNullInProgress) {
                 ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
@@ -1805,8 +1813,6 @@ TStatus AnnotateKqpPhysicalTx(const TExprNode::TPtr& node, TExprContext& ctx) {
         return TStatus::Error;
     }
 
-    // TODO: ???
-
     node->SetTypeAnn(ctx.MakeType<TVoidExprType>());
     return TStatus::Ok;
 }
@@ -1819,8 +1825,23 @@ TStatus AnnotateKqpPhysicalQuery(const TExprNode::TPtr& node, TExprContext& ctx,
     // We need to infer the type of physical query for RBO at this time
     if (enableRBO) {
         TKqpPhysicalQuery query(node);
-        auto type = query.Results().Item(0).Ptr()->GetTypeAnn();
-        node->SetTypeAnn(type);
+
+        // Check the transactions, if any of them has effects, return the list of effects type
+        bool hasEffects = false;
+
+        for (auto tx : query.Transactions()) {
+            auto settings = TKqpPhyTxSettings::Parse(tx);
+            if (settings.WithEffects) {
+                hasEffects = true;
+            }
+        }
+
+        if (!hasEffects && query.Results().Size()){
+            auto type = query.Results().Item(0).Ptr()->GetTypeAnn();
+            node->SetTypeAnn(type);
+        } else {
+            node->SetTypeAnn(ctx.MakeType<TListExprType>(MakeKqpEffectType(ctx)));
+        }
     }
     else {
         node->SetTypeAnn(ctx.MakeType<TVoidExprType>());
@@ -2976,6 +2997,24 @@ TStatus AnnotateOpReplaceAlias(const TExprNode::TPtr& input, TExprContext& ctx) 
     return TStatus::Ok;
 }
 
+TStatus AnnotateOpReplaceColumns(const TExprNode::TPtr& input, TExprContext& ctx) {
+    auto structType = input->ChildPtr(TKqpOpReplaceColumns::idx_Input)->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    TVector<const TItemExprType*> structItemTypes;
+    auto typeItems = structType->GetItems();
+    auto columns = input->ChildPtr(TKqpOpReplaceColumns::idx_Columns);
+
+    for (size_t i=0; i<typeItems.size(); i++) {
+        auto item = typeItems[i];
+        auto newName = columns->ChildPtr(i)->Content();
+        structItemTypes.push_back(ctx.MakeType<TItemExprType>(newName, item->GetItemType()));
+    }
+
+    auto resultItemType = ctx.MakeType<TStructExprType>(structItemTypes);
+    const TTypeAnnotationNode* resultAnn = ctx.MakeType<TListExprType>(resultItemType);
+    input->SetTypeAnn(resultAnn);
+    return TStatus::Ok;    
+}
+
 TStatus AnnotateOpFilter(const TExprNode::TPtr& input, TExprContext& ctx) {
 
     const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpFilter::idx_Input)->GetTypeAnn();
@@ -3218,10 +3257,80 @@ TStatus AnnotateOpAggregate(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateOpGroupingSets(const TExprNode::TPtr& input, TExprContext& ctx) {
+    const auto groupingSets = TKqpOpGroupingSets(input);
+    const auto inputType = groupingSets.Input().Ptr()->GetTypeAnn();
+    const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    const auto aggregate = groupingSets.Input();
+
+    Y_ENSURE(!groupingSets.GroupingSets().Empty(), "Grouping sets list must not be empty");
+
+    THashSet<TString> keysPresentInEverySet;
+    bool first = true;
+    bool hasEmptySet = false;
+    for (const auto& groupingSet : groupingSets.GroupingSets()) {
+        THashSet<TString> currentKeys;
+        for (const auto& key : groupingSet) {
+            currentKeys.insert(key.StringValue());
+        }
+        hasEmptySet = hasEmptySet || currentKeys.empty();
+
+        if (first) {
+            keysPresentInEverySet = std::move(currentKeys);
+            first = false;
+        } else {
+            THashSet<TString> intersection;
+            for (const auto& key : keysPresentInEverySet) {
+                if (currentKeys.contains(key)) {
+                    intersection.insert(key);
+                }
+            }
+            keysPresentInEverySet = std::move(intersection);
+        }
+    }
+
+    THashSet<TString> keyColumns;
+    for (const auto& key : aggregate.KeyColumns()) {
+        keyColumns.insert(key.StringValue());
+    }
+
+    THashSet<TString> scalarOptionalResults;
+    if (hasEmptySet) {
+        for (const auto& traits : aggregate.AggregationTraitsList()) {
+            const auto function = traits.AggregationFunction().StringValue();
+            // For empty keys column may become optional.
+            if (function == "min" || function == "max" || function == "sum" || function == "avg" || function == "variance_1_1") {
+                scalarOptionalResults.insert(traits.ResultColName().StringValue());
+            }
+        }
+    }
+
+    TVector<const TItemExprType*> resultItems;
+    resultItems.reserve(structType->GetSize());
+    for (const auto* item : structType->GetItems()) {
+        const TString name(item->GetName());
+        const auto* itemType = item->GetItemType();
+        const bool nonCommonKey = keyColumns.contains(name) && !keysPresentInEverySet.contains(name);
+        if ((nonCommonKey || scalarOptionalResults.contains(name)) && !itemType->IsOptionalOrNull()) {
+            itemType = ctx.MakeType<TOptionalExprType>(itemType);
+        }
+        resultItems.push_back(ctx.MakeType<TItemExprType>(item->GetName(), itemType));
+    }
+
+    input->SetTypeAnn(ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(resultItems)));
+    return TStatus::Ok;
+}
+
 TStatus AnnotateOpRoot(const TExprNode::TPtr& input, TExprContext& ctx) {
     Y_UNUSED(ctx);
     const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpRoot::idx_Input)->GetTypeAnn();
     input->SetTypeAnn(inputType);
+    return TStatus::Ok;
+}
+
+TStatus AnnotateOpTableEffect(const TExprNode::TPtr& input, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    input->SetTypeAnn(ctx.MakeType<TListExprType>(MakeKqpEffectType(ctx)));
     return TStatus::Ok;
 }
 
@@ -3344,8 +3453,12 @@ public:
         AddHandler({TKqpOpSortElement::CallableName()}, Hndl(&AnnotateOpSortElement));
         AddHandler({TKqpOpSort::CallableName()}, Hndl(&AnnotateOpSort));
         AddHandler({TKqpOpReplaceAlias::CallableName()}, Hndl(&AnnotateOpReplaceAlias));
+        AddHandler({TKqpOpReplaceColumns::CallableName()}, Hndl(&AnnotateOpReplaceColumns));
         AddHandler({TKqpOpAggregate::CallableName()}, Hndl(&AnnotateOpAggregate));
+        AddHandler({TKqpOpGroupingSets::CallableName()}, Hndl(&AnnotateOpGroupingSets));
         AddHandler({TKqpOpRoot::CallableName()}, Hndl(&AnnotateOpRoot));
+        AddHandler({TKqpOpTableEffect::CallableName()}, Hndl(&AnnotateOpTableEffect));
+
     }
 
 private:

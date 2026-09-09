@@ -89,12 +89,12 @@ void TBaseFixture::Init()
     DirectBlockGroup->ReadBlocksFromPBufferHandler = [&]   //
         (ui32 vChunkIndex,
          THostIndex hostIndex,
-         ui64 lsn,
+         TPBufferKey pBufferKey,
          TBlockRange64 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
-        Y_UNUSED(lsn);
+        Y_UNUSED(pBufferKey);
         Y_UNUSED(traceId);
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(THostIndex{0}, hostIndex);
@@ -117,14 +117,14 @@ void TBaseFixture::Init()
     DirectBlockGroup->WriteBlocksToPBufferHandler = [&]   //
         (ui32 vChunkIndex,
          THostIndex hostIndex,
-         ui64 lsn,
+         TPBufferKey pBufferKey,
          TBlockRange64 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
         Y_UNUSED(traceId);
         Y_UNUSED(hostIndex);
-        Y_UNUSED(lsn);
+        Y_UNUSED(pBufferKey);
 
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
@@ -163,15 +163,15 @@ void TBaseFixture::Init()
         UNIT_ASSERT_VALUES_EQUAL(FreshDDisk, hostIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
+        const ui64 sizeBytes = range.Size() * BlockSize;
         TString copiedData;
-        copiedData.resize(CopyRangeSize);
+        copiedData.resize(sizeBytes);
         SgListCopy(
             guardedSglist.Acquire().Get(),
             TBlockDataRef{copiedData.data(), copiedData.size()});
 
         const ui64 offsetBlocks = range.Start - ExpectedRange.Start;
         const ui64 offsetBytes = offsetBlocks * BlockSize;
-        const ui64 sizeBytes = range.Size() * BlockSize;
         TString expectedData =
             TString(RangeData.data() + offsetBytes, sizeBytes);
         UNIT_ASSERT_VALUES_EQUAL(expectedData, copiedData);

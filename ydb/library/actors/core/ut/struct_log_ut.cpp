@@ -568,46 +568,36 @@ Y_UNIT_TEST_SUITE(StructLog) {
         );
     }
 
-    #define TEST_MESSAGE_TO_STRING(M, S)                                  \
+    #define TEST_MESSAGE_EXTRACT_TO_STRING(M, S)                                  \
         {                                                                 \
             TStringValueExtractor extractor;                              \
-            auto stringValue = extractor.ExtractValue(M, 0);              \
+            auto stringValue = extractor.ExtractValue(M, "value");        \
             UNIT_ASSERT(stringValue.has_value());                         \
             UNIT_ASSERT_STRINGS_EQUAL(stringValue.value(), S);            \
         }
 
     Y_UNIT_TEST(NativeTypesToString) {
-        // Native type values
-        /* auto msg = YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui16>(1)});
-        TStringValueExtractor extractor;
-        auto stringValue = extractor.ExtractValue(msg, 0);
-        Cerr << "Extracted " << stringValue.value_or("<Empty>") << Endl; */
 
-        TEST_MESSAGE_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui16>(3)}), "3");
-
-        /* TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui8>('a')}), "value=a");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i8>('a')}), "value=a");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui16>(3)}), "value=3");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i16>(4)}), "value=4");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui32>(5)}), "value=5");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i32>(6)}), "value=6");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui64>(7)}), "value=7");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i64>(8)}), "value=8");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", true}), "value=true");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TString("abc")}), "value=abc");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", "abc"}), "value=abc");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), "value=1.123");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), "value=1.123");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), "value=1.123");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui16>(3)}), "3");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i16>(4)}), "4");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui32>(5)}), "5");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i32>(6)}), "6");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui64>(7)}), "7");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i64>(8)}), "8");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", true}), "true");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", false}), "false");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", TString("abc")}), "abc");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", "abc"}), "abc");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), "1.123");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), "1.123");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), "1.123");
 
         int i = 0;
         auto ptr = static_cast<void*>(&i);
-
-        UNIT_ASSERT_STRINGS_EQUAL(TStringBuilder() << "value=" << ptr, GetMessageString(YDB_LOG_CREATE_MESSAGE({"value", ptr})));
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", ptr}), TStringBuilder() << ptr);
 
         ptr = nullptr;
-        UNIT_ASSERT_STRINGS_EQUAL(TStringBuilder() << "value=" << ptr, GetMessageString(YDB_LOG_CREATE_MESSAGE({"value", ptr})));
-        UNIT_ASSERT_STRINGS_EQUAL(TStringBuilder() << "value=" << nullptr, GetMessageString(YDB_LOG_CREATE_MESSAGE({"value", nullptr}))); */
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", ptr}), TStringBuilder() << ptr);
     }
 }
 }  // namespace NActors::NStructuredLog

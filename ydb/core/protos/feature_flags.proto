@@ -385,4 +385,5 @@ message TFeatureFlags {
     optional bool EnableDataShardLocksTransferOnSplit = 326 [default = false];
     optional bool EnableDqSourceStreamLookupJoinLocalLookups = 327 [default = false];
     optional bool EnableStreamingAggregation = 328 [default = false];
+    optional bool EnableTableBackupAsSql = 329 [default = false];
 }

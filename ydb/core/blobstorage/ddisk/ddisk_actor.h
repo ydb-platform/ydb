@@ -232,6 +232,11 @@ namespace NKikimr::NDDisk {
 
         // Separate from the shared monitoring counters: only this actor's router
         // callbacks contribute, until their last access to actor-owned state.
+    private:
+        friend class TDDiskActorTestPeer;
+        std::function<TMonotonic()> DestructionNow;
+        std::function<void()> DestructionSleep;
+    public:
         static constexpr ui64 DirectIoStopping = ui64{1} << 63;
         std::atomic<ui64> DirectIoState{0};
         ui64 GetDirectIoInflight() const {
@@ -264,8 +269,17 @@ namespace NKikimr::NDDisk {
                 EvChunkFormatIoResult,
                 EvFinishStopping,
                 EvStopIoTimeout,
+                EvBeginStopping,
+                EvCompleteStop,
+                EvRetryIODelayed,
             };
 
+            struct TEvCompleteStop : TEventLocal<TEvCompleteStop, EvCompleteStop> {};
+            struct TEvBeginStopping : TEventLocal<TEvBeginStopping, EvBeginStopping> {};
+            struct TEvRetryIODelayed : TEventLocal<TEvRetryIODelayed, EvRetryIODelayed> {
+                ui64 Id;
+                explicit TEvRetryIODelayed(ui64 id) : Id(id) {}
+            };
             struct TEvFinishStopping : TEventLocal<TEvFinishStopping, EvFinishStopping> {};
             struct TEvStopIoTimeout : TEventLocal<TEvStopIoTimeout, EvStopIoTimeout> {};
 
@@ -507,6 +521,20 @@ namespace NKikimr::NDDisk {
         static constexpr TStringBuf StoppingReason = "DDisk is stopping";
         bool Stopping = false;
         bool IoStalled = false;
+        bool PoisonReceived = false;
+        bool OwnDrainComplete = false;
+        bool OwnDrainFinishing = false;
+        void CompleteStop();
+        bool PersistentBufferGone = true;
+        TActorId ParentDDiskId;
+        static constexpr ui64 PBShutdownCookie = Max<ui64>();
+        void BeginStopping(TString reason);
+        void HandleBeginStopping();
+        void TryCompleteStop();
+        void HandleGone(TEvents::TEvGone::TPtr ev);
+        void CancelPendingIo(std::unique_ptr<TDirectIoOpBase> op);
+        void CancelRetries();
+        void HandleRetryIODelayed(TEvPrivate::TEvRetryIODelayed::TPtr ev);
 
         void RejectQueryWhenStopping(IEventHandle& ev);
         void RejectQuery(IEventHandle& ev,
@@ -545,12 +573,11 @@ namespace NKikimr::NDDisk {
         void Bootstrap();
         STFUNC(StateFuncDDisk);
         STFUNC(StateFuncPersistentBuffer);
-        STFUNC(StateFuncTerminate);
         STFUNC(StateFuncStopping);
         void PassAway() override;
 
         // Mirrors TVDiskContext::CheckPDiskResponse: returns true on OK, returns false and
-        // switches to StateFuncTerminate on session-loss statuses (ERROR / INVALID_OWNER /
+        // switches to StateFuncStopping on session-loss statuses (ERROR / INVALID_OWNER /
         // INVALID_ROUND) and device-error statuses (CORRUPTED / OUT_OF_SPACE), Y_ABORTs on
         // anything else. Caller must `return` immediately on false because the actor's
         // state has changed.
@@ -663,6 +690,8 @@ namespace NKikimr::NDDisk {
 
         THashMap<ui64, TPendingIoOp> WriteCallbacks;
         THashMap<ui64, TPendingIoOp> ReadCallbacks;
+        THashMap<ui64, TPendingIoOp> DelayedRetries;
+        ui64 NextRetryId = 0;
 
         void IssueChunkAllocation(ui64 tabletId, ui64 vChunkIndex);
         void Handle(NPDisk::TEvChunkReserveResult::TPtr ev);

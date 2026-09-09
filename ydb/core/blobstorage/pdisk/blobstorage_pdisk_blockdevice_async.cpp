@@ -543,7 +543,7 @@ class TRealBlockDevice : public IBlockDevice {
                     sample.Size = opSize;
                     sample.IsWrite = (op->GetType() != IAsyncIoOperation::EType::PRead);
                     sample.BaseCostNs = completionAction->CostNs;
-                    Device.Mon.DeviceOverestimationMerged.Push(sample);
+                    Device.Mon.DeviceOverestimationMerged->Push(sample);
                 }
 
                 double duration = HPMilliSecondsFloat(HPNow() - completionAction->SubmitTime);
@@ -611,14 +611,14 @@ class TRealBlockDevice : public IBlockDevice {
                 // any samples received from IO_URING sources sharing this physical
                 // device) and derive the same overestimation ratio for the merged
                 // stream. See blobstorage_pdisk_device_overestimation.h.
-                auto windowResult = Device.Mon.DeviceOverestimationMerged.ComputeAndReset(Device.SeekCostNs);
+                auto windowResult = Device.Mon.DeviceOverestimationMerged->ComputeAndReset(Device.SeekCostNs);
                 MergedEstimatedNs += windowResult.EstimatedNs;
                 MergedActualNs += windowResult.ActualNs + OverestimationActualCostBiasNs;
                 const TOverestimationRatioResult mergedRatioResult =
                     ComputeOverestimationRatio(MergedEstimatedNs, MergedActualNs);
                 *Device.Mon.DeviceOverestimationRatioMerged = mergedRatioResult.OverestimationRatio;
                 *Device.Mon.DeviceNonperformanceMsMerged = mergedRatioResult.NonperformanceMs;
-                *Device.Mon.DeviceOverestimationDroppedSamples = Device.Mon.DeviceOverestimationMerged.GetDroppedSamples();
+                *Device.Mon.DeviceOverestimationDroppedSamples = Device.Mon.DeviceOverestimationMerged->GetDroppedSamples();
                 // Reset accumulators each window (unlike the legacy PDisk-only
                 // counters above, which are cumulative device-lifetime counters we
                 // diff against Prev*): this makes MergedEstimatedNs/MergedActualNs

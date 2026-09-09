@@ -34,6 +34,7 @@
 #include <util/system/mutex.h>
 
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <queue>
 
@@ -53,6 +54,12 @@ class TCompletionEventSender;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 class TPDisk : public IPDisk {
+#if defined(__linux__)
+    friend class TPDiskTestPeer;
+    // Configured under StateMutex before the first router creation attempt.
+    std::function<void(TUringRouter&)> ConfigureRouterForTest;
+#endif
+
 public:
 #ifdef ENABLE_PDISK_SHRED
     static constexpr bool IS_SHRED_ENABLED = true;
@@ -235,7 +242,6 @@ public:
     // it during Stop() only when no clients remain; otherwise the final owner
     // destroys the router, drains accepted I/O, and closes the duplicated fd.
     std::shared_ptr<TUringRouter> SharedUringRouter;
-    std::shared_ptr<std::atomic<TDeviceOverestimationAggregator*>> UringSampleAggregator;
 #endif
     bool SharedUringCreateAttempted = false;
     bool SharedUringFailureReported = false;
@@ -415,6 +421,9 @@ public:
     bool YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner);
     void AttachSharedUringRouter(const TYardInit& evYardInit, TEvYardInitResult& result);
     void EnsureSharedUringRouter(ui32 idleSpinUs);
+#if defined(__linux__)
+    TDeviceIoSampleSink MakeUringSampleSink() const;
+#endif
     void CheckSharedUringRouter(); // Called by the PDisk worker
     void YardResize(TYardResize &evYardResize);
     void ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request);

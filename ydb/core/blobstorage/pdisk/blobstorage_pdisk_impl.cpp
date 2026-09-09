@@ -369,15 +369,8 @@ void TPDisk::Stop() {
         {"ownerInfo", StartupOwnerInfo()});
 
 #if defined(__linux__)
-    if (UringSampleAggregator) {
-        UringSampleAggregator->store(nullptr, std::memory_order_release);
-    }
-    // Do not close admission while DDisk/PB clients still own the shared
-    // router: a zombie DDisk may continue direct I/O until its owner-stamped
-    // PDisk request detects the stale round. The last shared owner performs
-    // the blocking drain in TUringRouter's destructor.
-    if (SharedUringRouter && SharedUringRouter.use_count() == 1) {
-        SharedUringRouter->StopAsync();
+    if (SharedUringRouter) {
+        SharedUringRouter->StopSync();
         SharedUringRouter.reset();
     }
 #endif
@@ -2104,31 +2097,18 @@ void TPDisk::EnsureSharedUringRouter(ui32 idleSpinUs) {
         PCtx->ActorSystem,
         config,
         std::move(counters));
+    if (ConfigureRouterForTest) {
+        ConfigureRouterForTest(*router);
+    }
     router->RegisterFile();
 
-    const ui64 readBps = DriveModel.Speed(TDriveModel::OP_TYPE_READ);
-    const ui64 writeBps = DriveModel.Speed(TDriveModel::OP_TYPE_WRITE);
-    UringSampleAggregator = std::make_shared<std::atomic<TDeviceOverestimationAggregator*>>(
-        &Mon.DeviceOverestimationMerged);
-    auto sampleAgg = UringSampleAggregator;
-    router->SetSampleSink([readBps, writeBps, sampleAgg](const TDeviceIoSample& sample) {
-        auto* agg = sampleAgg->load(std::memory_order_acquire);
-        if (!agg) {
-            return;
-        }
-        TDeviceIoSample s = sample;
-        const ui64 speed = s.IsWrite ? writeBps : readBps;
-        s.BaseCostNs = speed ? s.Size * 1'000'000'000ull / speed : 0;
-        agg->Push(s);
-    });
+    router->SetSampleSink(MakeUringSampleSink());
 
     router->Start();
 
     if (router->IsBroken()) {
         YDB_LOG_P_LOG(PRI_WARN, "Shared UringRouter not created: startup failed, falling back to PDisk I/O",
             {"marker", "BPD99"});
-        UringSampleAggregator->store(nullptr, std::memory_order_release);
-        UringSampleAggregator.reset();
         Mon.FallbackPDiskCount->Inc();
         return;
     }
@@ -2157,6 +2137,20 @@ void TPDisk::EnsureSharedUringRouter(ui32 idleSpinUs) {
     Mon.FallbackPDiskCount->Inc();
 #endif
 }
+
+#if defined(__linux__)
+TDeviceIoSampleSink TPDisk::MakeUringSampleSink() const {
+    const ui64 readBps = DriveModel.Speed(TDriveModel::OP_TYPE_READ);
+    const ui64 writeBps = DriveModel.Speed(TDriveModel::OP_TYPE_WRITE);
+    auto sampleAgg = Mon.DeviceOverestimationMerged;
+    return [readBps, writeBps, sampleAgg](const TDeviceIoSample& sample) {
+        TDeviceIoSample s = sample;
+        const ui64 speed = s.IsWrite ? writeBps : readBps;
+        s.BaseCostNs = speed ? s.Size * 1'000'000'000ull / speed : 0;
+        sampleAgg->Push(s);
+    };
+}
+#endif
 
 void TPDisk::CheckSharedUringRouter() {
 #if defined(__linux__)

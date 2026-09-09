@@ -103,7 +103,9 @@ void TDDiskActor::TDirectIoOpBase::OnComplete(NActors::TActorSystem* actorSystem
     // (buffers still owned here) through the actor retry path. Defer Done() until the retry
     // completes or a hard error is reported.
     if (Y_UNLIKELY(result < 0 && IsCriticalDDiskIo()
-            && UringErrorToStatus(result, opType) == TReplyStatus::OVERLOADED)) {
+            && UringErrorToStatus(result, opType) == TReplyStatus::OVERLOADED
+            && RetryCount < MaxResubmissions)) {
+        ++RetryCount;
         auto ev = std::make_unique<TDDiskActor::TEvPrivate::TEvRetryIO>(guard.Release());
         actorSystem->Send(new IEventHandle(DDiskId, {}, ev.release()));
         return;
@@ -137,7 +139,12 @@ void TDDiskActor::TDirectIoOpBase::OnComplete(NActors::TActorSystem* actorSystem
             << " chunkOffset=" << ChunkOffsetInBytes
             << " DDiskId=" << DDiskId;
         YDB_LOG_ERROR_CTX(*actorSystem, reason);
-        Reply(actorSystem, UringErrorToStatus(result, opType), std::move(reason));
+        const bool exhausted = IsCriticalDDiskIo()
+            && UringErrorToStatus(result, opType) == TReplyStatus::OVERLOADED;
+        if (exhausted) {
+            reason += TStringBuilder() << " retry exhausted: attempts=" << (RetryCount + 1);
+        }
+        Reply(actorSystem, exhausted ? TReplyStatus::ERROR : UringErrorToStatus(result, opType), std::move(reason));
         return;
     }
 
@@ -345,7 +352,7 @@ void TDDiskActor::TPersistentBufferPartIoOp::Reply(NActors::TActorSystem* actorS
 
     switch (opType) {
         case TUringOperationBase::EREAD: {
-            TRope data = ExtractData();
+            TRope data = status == TReplyStatus::OK ? ExtractData() : TRope();
             reply = std::make_unique<TEvPrivate::TEvReadPersistentBufferPart>(
                 GetCookie(), PartCookie, status, std::move(reason), std::move(data), IsRestore);
             break;
@@ -380,6 +387,7 @@ void TDDiskActor::TDirectIoOpBase::Reinit(const IEventHandle* ev) {
     ChunkIdx = 0;
     ChunkOffsetInBytes = 0;
     ReadUsedBlocksMask.reset();
+    RetryCount = 0;
 }
 
 void TDDiskActor::TDirectIoOpBase::ClearForRecycle() noexcept {
@@ -387,6 +395,7 @@ void TDDiskActor::TDirectIoOpBase::ClearForRecycle() noexcept {
     Data.reset();
     Span = {};
     ReadUsedBlocksMask.reset();
+    RetryCount = 0;
 }
 
 void TDDiskActor::TDDiskIoOp::SelfRecycle() noexcept {

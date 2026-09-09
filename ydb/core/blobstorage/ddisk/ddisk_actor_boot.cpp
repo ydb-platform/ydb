@@ -251,6 +251,7 @@ namespace NKikimr::NDDisk {
             , UringRouter
 #endif
             );
+        pbActor->ParentDDiskId = SelfId();
         auto *as = TActivationContext::ActorSystem();
         PersistentBufferActorId = as->Register(pbActor.release(), TMailboxType::Revolving, AppData()->SystemPoolId);
         auto pbServiceId = MakeBlobStoragePersistentBufferId(BaseInfo.PDiskActorID.NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);

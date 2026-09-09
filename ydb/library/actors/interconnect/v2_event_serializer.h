@@ -235,11 +235,16 @@ namespace NActors {
         // Generates output for transmission. Returns total bytes added to main and (if provided) XDC spans.
         // Quota is charged for both media so logical channels stay fair regardless of which socket carries
         // the payload. xdcBuffer/xdcOut may be null when XDC is not in use.
+        // The 5-argument form shares one combined byte cap across both streams. The 6-argument form
+        // caps each stream independently (session serialize windows).
         size_t ProduceOutputStream(TRcBuf& buffer, std::vector<TContiguousSpan> *out,
             size_t maxBytesToProduce = Max<size_t>());
         size_t ProduceOutputStream(TRcBuf& buffer, std::vector<TContiguousSpan> *out,
             TRcBuf *xdcBuffer, std::vector<TContiguousSpan> *xdcOut,
             size_t maxBytesToProduce = Max<size_t>());
+        size_t ProduceOutputStream(TRcBuf& buffer, std::vector<TContiguousSpan> *out,
+            TRcBuf *xdcBuffer, std::vector<TContiguousSpan> *xdcOut,
+            size_t maxMainBytes, size_t maxXdcBytes);
 
         // Notification issued when produced bytes have been sent. Pass XDC bytes as the second argument
         // when that socket completed a write; existing single-stream callers can omit it (defaults to 0).
@@ -286,8 +291,11 @@ namespace NActors {
             bool Enabled = false;
         };
 
+        size_t ProduceOutputStream(TRcBuf& buffer, std::vector<TContiguousSpan> *out,
+            TRcBuf *xdcBuffer, std::vector<TContiguousSpan> *xdcOut,
+            size_t maxMainBytes, size_t maxXdcBytes, size_t maxTotalBytes);
         size_t ProduceOutputStreamForQueue(ui16 channel, TPerChannelQueue& queue, size_t maxBytesToProduce,
-            TStreamState& main, TStreamState *xdc);
+            size_t& maxMainBytes, size_t& maxXdcBytes, TStreamState& main, TStreamState *xdc);
 
         ui64 UpdateTimestamp();
         static bool HasExternalSections(const TEventSerializationInfo *info);

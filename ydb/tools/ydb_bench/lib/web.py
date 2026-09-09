@@ -209,6 +209,7 @@ padding:.6rem;border:1px solid #d0d5dd;min-width:8rem;flex-direction:column}.den
 .dense-run-id::after{content:"";position:absolute;inset:0}
 .dense-run-id:focus-visible::after{outline:2px solid var(--accent);outline-offset:2px}
 .dense-run-select,.dense-run-actions{position:relative;z-index:1}
+.dense-run-actions[open]{z-index:2}
 @media(max-width:900px){.local-live{grid-template-columns:1fr 1fr}.local-charts{grid-template-columns:1fr}}
 """
     '.status.queued{color:var(--warn)}\n'

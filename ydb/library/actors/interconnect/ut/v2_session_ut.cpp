@@ -1019,6 +1019,8 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
             return;
         }
         auto cluster = MakeV2Cluster();
+        // Establish the session before sending an untracked, single-shot payload.
+        UNIT_ASSERT(GrabDirectSession(*cluster, 1, 2));
         auto* collector = new TPayloadCollectorActor;
         const TActorId collectorId = cluster->RegisterActor(collector, 2);
 
@@ -1042,6 +1044,9 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
             }
         }, "XDC bytes observed on both sides");
         UNIT_ASSERT_VALUES_EQUAL(SessionHtmlCounter(*cluster, 1, 2, "Params.UseExternalDataChannel"), 1);
+        // A large payload fills many batches. Successful writes on both sockets must grow the shared
+        // window beyond its initial 4 KiB; per-socket feedback used to cancel that growth every batch.
+        UNIT_ASSERT_GT(SessionHtmlCounter(*cluster, 1, 2, "SerializeWindowSize"), 8192);
     }
 
     Y_UNIT_TEST(XdcDisabledStaysOnMain) {
@@ -1059,6 +1064,7 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
             TTestICCluster::EMPTY, /*checkerFactory=*/TTestICCluster::TCheckerFactory{},
             TDuration::Seconds(2), /*inflight=*/TNode::DefaultInflight(), customizer);
 
+        UNIT_ASSERT(GrabDirectSession(*cluster, 1, 2));
         auto* collector = new TPayloadCollectorActor;
         const TActorId collectorId = cluster->RegisterActor(collector, 2);
 

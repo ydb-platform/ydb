@@ -1,7 +1,6 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_field.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/count_size.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range_field.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
 
 #include <util/generic/string.h>
@@ -45,12 +44,15 @@ public:
         Missed,      // Data not flushed to DDisk
     };
 
+    // Creates DDisk state with the specified allocator and maximum block count.
+    TDDiskState(IArenaAllocatorPtr arenaAllocator, ui16 maxBlockCount);
+
     // Enables the use of DDisk. If the operational blocks count less then total
     // block count, then the DDisk is only partially filled (fresh).
     void Init(
         IBehindAheadMonitor* behindAheadMonitor,
-        ui64 totalBlockCount,
-        ui64 operationalBlockCount);
+        ui16 totalBlockCount,
+        ui16 operationalBlockCount);
 
     // Save ahead and behind maps to proto.
     void Save(TDDiskStateProto* proto) const;
@@ -72,19 +74,25 @@ public:
     // passed to the OnRangeFlushed() method.
     [[nodiscard]] bool IsTrackingEnabled() const;
     // Updates the BehindField and the Ahead Field if required.
-    void OnRangeFlushed(TBlockRange64 range, EFlushCompletion flush);
+    void OnRangeFlushed(TBlockRange16 range, EFlushCompletion flush);
 
     [[nodiscard]] EState GetState() const;
-    [[nodiscard]] bool CanReadFromDDisk(TBlockRange64 range) const;
-    [[nodiscard]] bool HasBehindOverlapping(TBlockRange64 range) const;
+    [[nodiscard]] bool CanReadFromDDisk(TBlockRange16 range) const;
+    [[nodiscard]] bool HasBehindOverlapping(TBlockRange16 range) const;
 
-    [[nodiscard]] std::optional<TBlockRange64> GetFreshRange() const;
-    void RangeSynced(TBlockRange64 range);
+    [[nodiscard]] std::optional<TBlockRange16> GetFreshRange() const;
+    void RangeSynced(TBlockRange16 range);
 
-    [[nodiscard]] TCountAndSize GetAheadSegmentsStat() const;
-    [[nodiscard]] TCountAndSize GetBehindSegmentsStat() const;
+    // Returns the number of up-to-date blocks while the disk is not lagging.
+    [[nodiscard]] ui16 GetFreshBlockCount() const;
+    // Returns the number of outdated blocks while the disk is lagging.
+    [[nodiscard]] ui16 GetRottenBlockCount() const;
 
-    void UpdateWatermarkDebugOnly(ui64 blockCount);
+    // Memory usage.
+    [[nodiscard]] size_t GetAllocatedSize() const;
+    [[nodiscard]] size_t GetUsedSize() const;
+
+    void UpdateWatermarkDebugOnly(ui16 blockCount);
     [[nodiscard]] TString DebugPrint() const;
     [[nodiscard]] TString DebugPrintAhead() const;
     [[nodiscard]] TString DebugPrintBehind() const;
@@ -94,18 +102,21 @@ private:
     void CheckInvariants() const;
     [[nodiscard]] bool IsFresh() const;
     void UpdateState(bool force);
-    void AddAhead(TBlockRange64 range);
-    void AddBehind(TBlockRange64 range);
+    void AddAhead(TBlockRange16 range);
+    void AddBehind(TBlockRange16 range);
 
     IBehindAheadMonitor* BehindAheadMonitor = nullptr;
 
+    const IArenaAllocatorPtr ArenaAllocator;
+    const ui16 MaxBlockCount;
+
     EState State = EState::Disabled;
 
-    ui64 TotalBlockCount = 0;
+    ui16 TotalBlockCount = 0;
 
     // If the block address below OperationalBlockCount, then it can be read
     // from DDisk (except BehindField).
-    ui64 OperationalBlockCount = 0;
+    ui16 OperationalBlockCount = 0;
 
     // Lagging means that flush operations are not performed and DDisk has
     // outdated data in the ranges listed in the BehindField.

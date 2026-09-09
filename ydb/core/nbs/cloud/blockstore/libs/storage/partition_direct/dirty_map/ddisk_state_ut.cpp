@@ -11,6 +11,9 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace {
+
+constexpr ui16 TestBlockCount = 32768;
+
 struct TTestBlockFieldMonitor: public IBehindAheadMonitor
 {
     void OnBehindAheadChanged() override
@@ -33,7 +36,7 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
     Y_UNIT_TEST(ShouldMoveRangeFromBehindToAheadOnLateFlush)
     {
         TTestBlockFieldMonitor testBlockFieldMonitor;
-        TDDiskState ddisk;
+        TDDiskState ddisk(CreateArenaAllocator(), TestBlockCount);
         // Fresh DDisk (operational 5 < total 100) => tracking enabled.
         ddisk.Init(
             &testBlockFieldMonitor,
@@ -42,7 +45,7 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
         UNIT_ASSERT_VALUES_EQUAL(true, ddisk.IsTrackingEnabled());
         UNIT_ASSERT_VALUES_EQUAL("[40..99]", ddisk.DebugPrintBehind());
 
-        const auto range = TBlockRange64::WithLength(50, 10);
+        const auto range = TBlockRange16::WithLength(50, 10);
         ddisk.RangeSynced(range);
         UNIT_ASSERT_VALUES_EQUAL("[40..49][60..99]", ddisk.DebugPrintBehind());
 
@@ -63,13 +66,13 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
     Y_UNIT_TEST(ShouldMoveRangeFromAheadToBehindOnMissedFlush)
     {
         TTestBlockFieldMonitor monitor;
-        TDDiskState ddisk;
+        TDDiskState ddisk(CreateArenaAllocator(), TestBlockCount);
         ddisk.Init(
             &monitor,
             /*totalBlockCount=*/100,
             /*operationalBlockCount=*/40);
 
-        const auto range = TBlockRange64::WithLength(50, 10);
+        const auto range = TBlockRange16::WithLength(50, 10);
         ddisk.RangeSynced(range);
         ddisk.OnRangeFlushed(range, TDDiskState::EFlushCompletion::Completed);
         UNIT_ASSERT_VALUES_EQUAL("[50..59]", ddisk.DebugPrintAhead());
@@ -87,7 +90,7 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
     Y_UNIT_TEST(ShouldSaveAndLoadAheadAndBehind)
     {
         TTestBlockFieldMonitor monitor;
-        TDDiskState source;
+        TDDiskState source(CreateArenaAllocator(), TestBlockCount);
         source.Init(
             &monitor,
             /*totalBlockCount=*/100,
@@ -96,13 +99,13 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
         // Populate Behind via a missed flush while lagging.
         source.StartLagging();
         source.OnRangeFlushed(
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             TDDiskState::EFlushCompletion::Missed);   // Behind = [10..19]
 
         // Populate Ahead via a successful flush after stopping lagging.
         source.StopLagging();
         source.OnRangeFlushed(
-            TBlockRange64::WithLength(30, 5),
+            TBlockRange16::WithLength(30, 5),
             TDDiskState::EFlushCompletion::Completed);   // Ahead = [30..34]
 
         // --- Save ---
@@ -111,7 +114,7 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
 
         // --- Load into a fresh DDisk ---
         TTestBlockFieldMonitor monitor2;
-        TDDiskState target;
+        TDDiskState target(CreateArenaAllocator(), TestBlockCount);
         target.Init(
             &monitor2,
             /*totalBlockCount=*/100,
@@ -127,7 +130,7 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
 
         // --- Empty DDisk round-trip ---
         TTestBlockFieldMonitor monitor3;
-        TDDiskState empty;
+        TDDiskState empty(CreateArenaAllocator(), TestBlockCount);
         empty.Init(
             &monitor3,
             /*totalBlockCount=*/100,
@@ -143,7 +146,7 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
             TBlockFieldProto::ENCODING_NOT_SET);
 
         TTestBlockFieldMonitor monitor4;
-        TDDiskState loaded;
+        TDDiskState loaded(CreateArenaAllocator(), TestBlockCount);
         loaded.Init(
             &monitor4,
             /*totalBlockCount=*/100,
@@ -155,18 +158,18 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
 
     Y_UNIT_TEST(ShouldPreferLoadedBehindState)
     {
-        TBlockRangeField ahead;
-        ahead.Add(TBlockRange64::WithLength(50, 10));
+        TBlockRangeField ahead(CreateArenaAllocator(), TestBlockCount);
+        ahead.Add(TBlockRange16::WithLength(50, 10));
 
-        TBlockRangeField behind;
-        behind.Add(TBlockRange64::WithLength(10, 10));
+        TBlockRangeField behind(CreateArenaAllocator(), TestBlockCount);
+        behind.Add(TBlockRange16::WithLength(10, 10));
 
         TDDiskStateProto proto;
-        SaveBlockField(ahead, 100, proto.MutableAhead());
-        SaveBlockField(behind, 100, proto.MutableBehind());
+        SaveBlockField(ahead, proto.MutableAhead());
+        SaveBlockField(behind, proto.MutableBehind());
 
         TTestBlockFieldMonitor monitor;
-        TDDiskState ddisk;
+        TDDiskState ddisk(CreateArenaAllocator(), TestBlockCount);
         ddisk.Init(
             &monitor,
             /*totalBlockCount=*/100,
@@ -179,14 +182,14 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
 
     Y_UNIT_TEST(ShouldKeepFreshTailWhenLoadedBehindIsEmpty)
     {
-        TBlockRangeField ahead;
-        ahead.Add(TBlockRange64::WithLength(50, 10));
+        TBlockRangeField ahead(CreateArenaAllocator(), TestBlockCount);
+        ahead.Add(TBlockRange16::WithLength(50, 10));
 
         TDDiskStateProto proto;
-        SaveBlockField(ahead, 100, proto.MutableAhead());
+        SaveBlockField(ahead, proto.MutableAhead());
 
         TTestBlockFieldMonitor monitor;
-        TDDiskState ddisk;
+        TDDiskState ddisk(CreateArenaAllocator(), TestBlockCount);
         ddisk.Init(
             &monitor,
             /*totalBlockCount=*/100,
@@ -200,7 +203,7 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
     Y_UNIT_TEST(ShouldClearAheadAndBehindWhenSwitchedOffline)
     {
         TTestBlockFieldMonitor monitor;
-        TDDiskState ddisk;
+        TDDiskState ddisk(CreateArenaAllocator(), TestBlockCount);
         ddisk.Init(
             &monitor,
             /*totalBlockCount=*/100,
@@ -208,11 +211,11 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
 
         ddisk.StartLagging();
         ddisk.OnRangeFlushed(
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             TDDiskState::EFlushCompletion::Missed);
         ddisk.StopLagging();
         ddisk.OnRangeFlushed(
-            TBlockRange64::WithLength(30, 5),
+            TBlockRange16::WithLength(30, 5),
             TDDiskState::EFlushCompletion::Completed);
 
         UNIT_ASSERT_VALUES_EQUAL("[5..29][35..99]", ddisk.DebugPrintBehind());
@@ -226,8 +229,35 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
         UNIT_ASSERT_VALUES_EQUAL(false, ddisk.IsTrackingEnabled());
         UNIT_ASSERT_VALUES_EQUAL("", ddisk.DebugPrintBehind());
         UNIT_ASSERT_VALUES_EQUAL("", ddisk.DebugPrintAhead());
-        UNIT_ASSERT_VALUES_EQUAL(0, ddisk.GetBehindSegmentsStat().Count);
-        UNIT_ASSERT_VALUES_EQUAL(0, ddisk.GetAheadSegmentsStat().Count);
+        UNIT_ASSERT_VALUES_EQUAL(0, ddisk.GetFreshBlockCount());
+        UNIT_ASSERT_VALUES_EQUAL(0, ddisk.GetRottenBlockCount());
+    }
+
+    Y_UNIT_TEST(ShouldReportFreshAndRottenBlocksByLaggingState)
+    {
+        TTestBlockFieldMonitor monitor;
+        TDDiskState ddisk(CreateArenaAllocator(), TestBlockCount);
+        ddisk.Init(
+            &monitor,
+            /*totalBlockCount=*/100,
+            /*operationalBlockCount=*/40);
+
+        UNIT_ASSERT_VALUES_EQUAL(40, ddisk.GetFreshBlockCount());
+        UNIT_ASSERT_VALUES_EQUAL(0, ddisk.GetRottenBlockCount());
+
+        ddisk.OnRangeFlushed(
+            TBlockRange16::WithLength(50, 10),
+            TDDiskState::EFlushCompletion::Completed);
+        UNIT_ASSERT_VALUES_EQUAL(50, ddisk.GetFreshBlockCount());
+
+        ddisk.StartLagging();
+        UNIT_ASSERT_VALUES_EQUAL(0, ddisk.GetFreshBlockCount());
+        UNIT_ASSERT_VALUES_EQUAL(50, ddisk.GetRottenBlockCount());
+
+        ddisk.OnRangeFlushed(
+            TBlockRange16::WithLength(50, 10),
+            TDDiskState::EFlushCompletion::Missed);
+        UNIT_ASSERT_VALUES_EQUAL(60, ddisk.GetRottenBlockCount());
     }
 
     // HasBehindOverlapping: false when empty, true when the query overlaps
@@ -235,7 +265,7 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
     Y_UNIT_TEST(HasBehindOverlapping)
     {
         TTestBlockFieldMonitor monitor;
-        TDDiskState ddisk;
+        TDDiskState ddisk(CreateArenaAllocator(), TestBlockCount);
         ddisk.Init(
             &monitor,
             /*totalBlockCount=*/100,
@@ -244,37 +274,37 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
         // Empty Behind – always false.
         UNIT_ASSERT_VALUES_EQUAL(
             false,
-            ddisk.HasBehindOverlapping(TBlockRange64::WithLength(0, 20)));
+            ddisk.HasBehindOverlapping(TBlockRange16::WithLength(0, 20)));
 
         // Populate Behind = [10..19].
         ddisk.StartLagging();
         ddisk.OnRangeFlushed(
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             TDDiskState::EFlushCompletion::Missed);
 
         // Ranges that DO overlap.
         UNIT_ASSERT_VALUES_EQUAL(
             true,
             ddisk.HasBehindOverlapping(
-                TBlockRange64::WithLength(12, 5)));   // fully inside
+                TBlockRange16::WithLength(12, 5)));   // fully inside
         UNIT_ASSERT_VALUES_EQUAL(
             true,
             ddisk.HasBehindOverlapping(
-                TBlockRange64::WithLength(5, 10)));   // overlaps left edge
+                TBlockRange16::WithLength(5, 10)));   // overlaps left edge
         UNIT_ASSERT_VALUES_EQUAL(
             true,
             ddisk.HasBehindOverlapping(
-                TBlockRange64::WithLength(15, 10)));   // overlaps right edge
+                TBlockRange16::WithLength(15, 10)));   // overlaps right edge
 
         // Ranges that do NOT overlap.
         UNIT_ASSERT_VALUES_EQUAL(
             false,
             ddisk.HasBehindOverlapping(
-                TBlockRange64::WithLength(0, 10)));   // before Behind
+                TBlockRange16::WithLength(0, 10)));   // before Behind
         UNIT_ASSERT_VALUES_EQUAL(
             false,
             ddisk.HasBehindOverlapping(
-                TBlockRange64::WithLength(20, 5)));   // after Behind
+                TBlockRange16::WithLength(20, 5)));   // after Behind
     }
 
     // IBehindAheadMonitor is notified on Behind/Ahead changes and NOT notified
@@ -282,7 +312,7 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
     Y_UNIT_TEST(MonitorNotifications)
     {
         TTestBlockFieldMonitor monitor;
-        TDDiskState ddisk;
+        TDDiskState ddisk(CreateArenaAllocator(), TestBlockCount);
         ddisk.Init(
             &monitor,
             /*totalBlockCount=*/100,
@@ -293,23 +323,23 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
         // First missed flush → Behind changes → monitor called.
         ddisk.StartLagging();
         ddisk.OnRangeFlushed(
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             TDDiskState::EFlushCompletion::Missed);
         UNIT_ASSERT_VALUES_EQUAL(1u, monitor.BehindAheadGeneration);
 
         // Identical range already covered → no change → monitor NOT called.
         ddisk.OnRangeFlushed(
-            TBlockRange64::WithLength(10, 10),
+            TBlockRange16::WithLength(10, 10),
             TDDiskState::EFlushCompletion::Missed);
         UNIT_ASSERT_VALUES_EQUAL(1u, monitor.BehindAheadGeneration);
 
         // RangeSynced removes the range from Behind → monitor called.
-        ddisk.RangeSynced(TBlockRange64::WithLength(10, 10));
+        ddisk.RangeSynced(TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(2u, monitor.BehindAheadGeneration);
         UNIT_ASSERT_VALUES_EQUAL("", ddisk.DebugPrintBehind());
 
         // Syncing an empty field → no change → monitor NOT called.
-        ddisk.RangeSynced(TBlockRange64::WithLength(0, 10));
+        ddisk.RangeSynced(TBlockRange16::WithLength(0, 10));
         UNIT_ASSERT_VALUES_EQUAL(2u, monitor.BehindAheadGeneration);
     }
 }

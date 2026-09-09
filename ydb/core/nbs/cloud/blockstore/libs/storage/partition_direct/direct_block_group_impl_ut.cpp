@@ -1330,7 +1330,8 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             dbg,
             3,
             DefaultBlockSize,
-            vChunkSize);
+            vChunkSize,
+            CreateArenaAllocator());
 
         TString oracleDump;
         TString configBefore;

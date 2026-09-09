@@ -2479,8 +2479,9 @@ TProducer::THashPartitionChooser::THashPartitionChooser(std::vector<std::uint32_
 
 std::pair<std::uint32_t, std::string> TProducer::THashPartitionChooser::ChoosePartition(const std::string_view key) {
     constexpr auto mask = 0x7FFFFFFF;
+    constexpr auto seed = 0x9747b28c;
     // Partitions is guaranteed non-empty by the constructor invariant.
-    auto hash = MurmurHash<std::uint32_t>(key.data(), key.size()) & mask;
+    auto hash = MurmurHash<std::uint32_t>(key.data(), key.size(), seed) & mask;
     return {Partitions[hash % Partitions.size()], ""};
 }
 

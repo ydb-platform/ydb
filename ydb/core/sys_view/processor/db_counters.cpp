@@ -1,5 +1,6 @@
 #include "processor_impl.h"
 
+#include <ydb/core/sys_view/service/db_counters_codec.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/feature_flags.h>
@@ -14,81 +15,6 @@
 
 namespace NKikimr {
 namespace NSysView {
-
-template <bool IsMax>
-struct TAggregateCumulative {
-    static void Apply(NKikimrSysView::TDbCounters* dst, const NKikimrSysView::TDbCounters& src) {
-        auto cumulativeSize = src.GetCumulativeCount();
-        auto histogramSize = src.HistogramSize();
-
-        if (dst->CumulativeSize() < cumulativeSize) {
-            dst->MutableCumulative()->Resize(cumulativeSize, 0);
-        }
-        if (dst->HistogramSize() < histogramSize) {
-            auto missing = histogramSize - dst->HistogramSize();
-            for (; missing > 0; --missing) {
-                dst->AddHistogram();
-            }
-        }
-
-        const auto& from = src.GetCumulative();
-        auto* to = dst->MutableCumulative();
-        auto doubleDiffSize = from.size() / 2 * 2;
-        for (int i = 0; i < doubleDiffSize; ) {
-            auto index = from[i++];
-            auto value = from[i++];
-            if (index >= cumulativeSize) {
-                continue;
-            }
-            if constexpr (!IsMax) {
-                (*to)[index] += value;
-            } else {
-                (*to)[index] = std::max(value, (*to)[index]);
-            }
-        }
-        for (size_t i = 0; i < histogramSize; ++i) {
-            const auto& histogram = src.GetHistogram(i);
-            const auto& from = histogram.GetBuckets();
-            auto* to = dst->MutableHistogram(i)->MutableBuckets();
-            auto bucketCount = histogram.GetBucketsCount();
-            if (to->size() < (int)bucketCount) {
-                to->Resize(bucketCount, 0);
-            }
-            auto doubleDiffSize = from.size();
-            for (int b = 0; b < doubleDiffSize; ) {
-                auto index = from[b++];
-                auto value = from[b++];
-                if (index >= bucketCount) {
-                    continue;
-                }
-                if constexpr (!IsMax) {
-                    (*to)[index] += value;
-                } else {
-                    (*to)[index] = std::max(value, (*to)[index]);
-                }
-            }
-        }
-    }
-};
-
-template <bool IsMax>
-struct TAggregateSimple {
-    static void Apply(NKikimrSysView::TDbCounters* dst, const NKikimrSysView::TDbCounters& src) {
-        auto simpleSize = src.SimpleSize();
-        if (dst->SimpleSize() < simpleSize) {
-            dst->MutableSimple()->Resize(simpleSize, 0);
-        }
-        const auto& from = src.GetSimple();
-        auto* to = dst->MutableSimple();
-        for (size_t i = 0; i < simpleSize; ++i) {
-            if constexpr (!IsMax) {
-                (*to)[i] += from[i];
-            } else {
-                (*to)[i] = std::max(from[i], (*to)[i]);
-            }
-        }
-    }
-};
 
 struct TAggregateIncrementalSum {
     static void Apply(NKikimrSysView::TDbCounters* dst, const NKikimrSysView::TDbCounters& src) {
@@ -127,23 +53,6 @@ static void SwapMaxCounters(NKikimrSysView::TDbCounters* dst, NKikimrSysView::TD
 static void SwapLabeledCounters(NKikimrLabeledCounters::TTabletLabeledCounters* dst, NKikimrLabeledCounters::TTabletLabeledCounters& src) {
     dst->MutableLabeledCounter()->Swap(src.MutableLabeledCounter());
 };
-
-static void ResetSimpleCounters(NKikimrSysView::TDbCounters* dst) {
-    auto simpleSize = dst->SimpleSize();
-    auto* to = dst->MutableSimple();
-    for (size_t i = 0; i < simpleSize; ++i) {
-        (*to)[i] = 0;
-    }
-}
-
-static void ResetMaxCounters(NKikimrSysView::TDbCounters* dst) {
-    ResetSimpleCounters(dst);
-    auto cumulativeSize = dst->CumulativeSize();
-    auto* to = dst->MutableCumulative();
-    for (size_t i = 0; i < cumulativeSize; ++i) {
-        (*to)[i] = 0;
-    }
-}
 
 static void ResetLabeledCounters(NKikimrLabeledCounters::TTabletLabeledCounters* dst) {
     auto labeledSize = dst->LabeledCounterSize();

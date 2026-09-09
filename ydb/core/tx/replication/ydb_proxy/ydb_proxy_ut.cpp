@@ -698,6 +698,22 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         }
     }
 
+    Y_UNIT_TEST(StartsTopicSessionWithoutReadRequest) {
+        TEnv env;
+
+        auto settings = NYdb::NTopic::TCreateTopicSettings()
+            .BeginAddConsumer()
+                .ConsumerName("consumer")
+            .EndAddConsumer();
+        auto create = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(
+            new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", settings));
+        UNIT_ASSERT(create->Get()->Result.IsSuccess());
+
+        const auto reader = CreateTopicReader(env, "/Root/topic");
+        auto started = env.GetRuntime().GrabEdgeEventRethrow<TEvYdbProxy::TEvStartTopicReadingSession>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(started->Sender, reader);
+    }
+
     Y_UNIT_TEST(ReadNonExistentTopic) {
         TEnv env;
 

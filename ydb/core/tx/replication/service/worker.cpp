@@ -41,6 +41,17 @@ TString TEvWorker::TEvCommit::ToString() const {
     << " }";
 }
 
+TEvWorker::TEvCommitResult::TEvCommitResult(size_t offset)
+    : Offset(offset)
+{
+}
+
+TString TEvWorker::TEvCommitResult::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " Offset: " << Offset
+    << " }";
+}
+
 TEvWorker::TEvData::TEvData(ui32 partitionId, const TString& source, const TVector<TTopicMessage>& records)
     : PartitionId(partitionId)
     , Source(source)

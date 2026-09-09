@@ -185,6 +185,7 @@ struct TResource {
     TInstant StartStarvationTime = TInstant::Zero();
 
     struct {
+        ::NMonitoring::TDynamicCounterPtr ResourceCounters;
         ::NMonitoring::TDynamicCounters::TCounterPtr Consumed;
         ::NMonitoring::TDynamicCounters::TCounterPtr Requested;
         ::NMonitoring::TDynamicCounters::TCounterPtr RequestsCount;
@@ -200,13 +201,26 @@ struct TResource {
         , Resource(resource)
         , QuoterServiceConfig(quoterServiceConfig)
     {
-        auto counters = quoterCounters->GetSubgroup(RESOURCE_COUNTER_SENSOR_NAME, resource ? resource : "__StaticRatedResource");
+        Counters.ResourceCounters = quoterCounters->GetSubgroup(RESOURCE_COUNTER_SENSOR_NAME, resource ? resource : "__StaticRatedResource");
+        const auto& counters = Counters.ResourceCounters;
         Counters.Consumed = counters->GetCounter(CONSUMED_COUNTER_NAME, true);
         Counters.Requested = counters->GetCounter(REQUESTED_COUNTER_NAME, true);
         Counters.RequestQueueTime = counters->GetHistogram(REQUEST_QUEUE_TIME_SENSOR_NAME, GetLatencyHistogramBuckets());
         Counters.RequestTime = counters->GetHistogram(REQUEST_TIME_SENSOR_NAME, GetLatencyHistogramBuckets());
         Counters.RequestsCount = counters->GetCounter(REQUESTS_COUNT_SENSOR_NAME, true);
         Counters.ElapsedMicrosecInStarvation = counters->GetCounter(ELAPSED_MICROSEC_IN_STARVATION_SENSOR_NAME, true);
+    }
+
+    ~TResource() {
+        if (!Counters.ResourceCounters) {
+            return;
+        }
+        Counters.ResourceCounters->RemoveCounter(CONSUMED_COUNTER_NAME);
+        Counters.ResourceCounters->RemoveCounter(REQUESTED_COUNTER_NAME);
+        Counters.ResourceCounters->RemoveCounter(REQUESTS_COUNT_SENSOR_NAME);
+        Counters.ResourceCounters->RemoveCounter(ELAPSED_MICROSEC_IN_STARVATION_SENSOR_NAME);
+        Counters.ResourceCounters->RemoveHistogram(REQUEST_QUEUE_TIME_SENSOR_NAME);
+        Counters.ResourceCounters->RemoveHistogram(REQUEST_TIME_SENSOR_NAME);
     }
 
     void ApplyQuotaChannel(const TEvQuota::TUpdateTick &tick);

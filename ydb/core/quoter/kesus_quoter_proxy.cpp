@@ -107,6 +107,7 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
             };
 
             std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> ParentConsumed; // Aggregated consumed counters for parent resources.
+            ::NMonitoring::TDynamicCounterPtr ResourceCounters;
             ::NMonitoring::TDynamicCounters::TCounterPtr QueueSize;
             ::NMonitoring::TDynamicCounters::TCounterPtr QueueWeight;
             ::NMonitoring::TDynamicCounters::TCounterPtr Dropped;
@@ -128,13 +129,25 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
                     ParentConsumed.emplace_back(resourceCounters->GetCounter(CONSUMED_COUNTER_NAME, true));
                 }
 
-                const auto resourceCounters = quoterCounters->GetSubgroup(RESOURCE_COUNTER_SENSOR_NAME, NKesus::CanonizeQuoterResourcePath(splittedPath));
-                QueueSize = resourceCounters->GetExpiringCounter(RESOURCE_QUEUE_SIZE_COUNTER_SENSOR_NAME, false);
-                QueueWeight = resourceCounters->GetExpiringCounter(RESOURCE_QUEUE_WEIGHT_COUNTER_SENSOR_NAME, false);
-                AllocatedOffline = resourceCounters->GetCounter(RESOURCE_ALLOCATED_OFFLINE_COUNTER_SENSOR_NAME, true);
-                Dropped = resourceCounters->GetCounter(RESOURCE_DROPPED_COUNTER_SENSOR_NAME, true);
-                Accumulated = resourceCounters->GetExpiringCounter(RESOURCE_ACCUMULATED_COUNTER_SENSOR_NAME, false);
-                ReceivedFromKesus = resourceCounters->GetCounter(RESOURCE_RECEIVED_FROM_KESUS_COUNTER_SENSOR_NAME, true);
+                ResourceCounters = quoterCounters->GetSubgroup(RESOURCE_COUNTER_SENSOR_NAME, NKesus::CanonizeQuoterResourcePath(splittedPath));
+                QueueSize = ResourceCounters->GetCounter(RESOURCE_QUEUE_SIZE_COUNTER_SENSOR_NAME, false);
+                QueueWeight = ResourceCounters->GetCounter(RESOURCE_QUEUE_WEIGHT_COUNTER_SENSOR_NAME, false);
+                AllocatedOffline = ResourceCounters->GetCounter(RESOURCE_ALLOCATED_OFFLINE_COUNTER_SENSOR_NAME, true);
+                Dropped = ResourceCounters->GetCounter(RESOURCE_DROPPED_COUNTER_SENSOR_NAME, true);
+                Accumulated = ResourceCounters->GetCounter(RESOURCE_ACCUMULATED_COUNTER_SENSOR_NAME, false);
+                ReceivedFromKesus = ResourceCounters->GetCounter(RESOURCE_RECEIVED_FROM_KESUS_COUNTER_SENSOR_NAME, true);
+            }
+
+            ~TCounters() {
+                if (!ResourceCounters) {
+                    return;
+                }
+                ResourceCounters->RemoveCounter(RESOURCE_QUEUE_SIZE_COUNTER_SENSOR_NAME);
+                ResourceCounters->RemoveCounter(RESOURCE_QUEUE_WEIGHT_COUNTER_SENSOR_NAME);
+                ResourceCounters->RemoveCounter(RESOURCE_ALLOCATED_OFFLINE_COUNTER_SENSOR_NAME);
+                ResourceCounters->RemoveCounter(RESOURCE_DROPPED_COUNTER_SENSOR_NAME);
+                ResourceCounters->RemoveCounter(RESOURCE_ACCUMULATED_COUNTER_SENSOR_NAME);
+                ResourceCounters->RemoveCounter(RESOURCE_RECEIVED_FROM_KESUS_COUNTER_SENSOR_NAME);
             }
 
             void AddConsumed(ui64 consumed) {

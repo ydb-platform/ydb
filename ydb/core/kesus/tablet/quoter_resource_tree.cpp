@@ -1257,6 +1257,10 @@ bool TQuoterResources::DeleteResource(TQuoterResourceTree* resource, TString& er
     Y_ABORT_UNLESS(resByPathIt->second == resource);
     ResourcesByPath.erase(resByPathIt);
 
+    if (Counters.QuoterCounters) {
+        Counters.QuoterCounters->RemoveSubgroup(RESOURCE_COUNTERS_LABEL, resource->GetProps().GetResourcePath());
+    }
+
     const auto resByIdIt = ResourcesById.find(resource->GetResourceId());
     Y_ABORT_UNLESS(resByIdIt != ResourcesById.end());
     Y_ABORT_UNLESS(resByIdIt->second.Get() == resource);

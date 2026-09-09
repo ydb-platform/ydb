@@ -1,6 +1,10 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/interconnect/events_local.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect_stream.h>
+#include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
+#include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
+#include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 #include <ydb/library/actors/interconnect/rdma/ctx.h>
 #include <ydb/library/actors/interconnect/rdma/link_manager.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
@@ -8,6 +12,7 @@
 #include <ydb/library/actors/interconnect/rdma_sync_actor.h>
 #include <ydb/library/actors/interconnect/rdma/ut/utils/utils.h>
 #include <ydb/library/actors/interconnect/ut/lib/ic_test_cluster.h>
+#include <ydb/library/actors/interconnect/ut/lib/port_manager.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <library/cpp/testing/gtest/gtest.h>
@@ -94,6 +99,45 @@ static TInterconnectProxyCommon::TPtr CreateSyncCommon() {
     common->RdmaMemPool = CreateSlotMemPool(nullptr, {});
     common->Settings.EnableRdmaSendReceive = true;
     return common;
+}
+
+class TRdmaHandshakeLifecycleRuntime : public TTestActorRuntimeBase {
+public:
+    static constexpr ui32 NodeCount = 2;
+
+    TRdmaHandshakeLifecycleRuntime()
+        : TTestActorRuntimeBase(NodeCount, false)
+    {
+        for (ui32 nodeIndex = 0; nodeIndex < NodeCount; ++nodeIndex) {
+            RdmaMemPools.emplace_back(CreateDummyMemPool());
+        }
+    }
+
+    const std::shared_ptr<IMemPool>& GetRdmaMemPool(ui32 nodeIndex) const {
+        return RdmaMemPools.at(nodeIndex);
+    }
+
+private:
+    void InitActorSystemSetup(TActorSystemSetup& setup, TNodeDataBase*) override {
+        const ui32 nodeIndex = setup.NodeId - GetNodeId();
+        Y_ABORT_UNLESS(nodeIndex < RdmaMemPools.size());
+        setup.RcBufAllocator = std::make_shared<TRdmaAllocatorWithFallback>(RdmaMemPools[nodeIndex]);
+    }
+
+private:
+    TVector<std::shared_ptr<IMemPool>> RdmaMemPools;
+};
+
+static void ConfigureRdmaHandshakeCommon(
+        const TInterconnectProxyCommon::TPtr& common,
+        std::shared_ptr<IMemPool> rdmaMemPool)
+{
+    common->ClusterUUID = "rdma-handshake-lifecycle-test";
+    common->AcceptUUID = {common->ClusterUUID};
+    common->TechnicalSelfHostName = "::1";
+    common->RdmaMemPool = std::move(rdmaMemPool);
+    common->Settings.EnableRdmaSendReceive = true;
+    common->Settings.Handshake = TDuration::Max();
 }
 
 class TRunRdmaSyncActor : public TActorBootstrapped<TRunRdmaSyncActor> {
@@ -347,6 +391,119 @@ TEST(RdmaSyncActorLifecycleTest, StopsAndReleasesSocketWhenOwnerDiesWhileSession
     char byte;
     TString error;
     EXPECT_EQ(peerSocket->Recv(&byte, sizeof(byte), &error), 0) << error;
+}
+
+TEST_P(TRdmaSyncActorTest, HandshakeStopsSyncActorWhenProxyDisconnects) {
+    TRdmaHandshakeLifecycleRuntime runtime;
+    runtime.SetUseRealInterconnect();
+
+    auto portManager = NInterconnectTest::CreatePortmanager();
+    auto names = MakeIntrusive<TTableNameserverSetup>();
+    ui32 readyListeners = 0;
+    for (ui32 nodeIndex = 0; nodeIndex < runtime.NodeCount; ++nodeIndex) {
+        names->StaticNodeTable[runtime.GetNodeId(nodeIndex)] = TTableNameserverSetup::TNodeInfo(
+            "::1", "::1", portManager->GetPort());
+    }
+
+    runtime.SetICCommonSetupper([&runtime](ui32 nodeIndex, TInterconnectProxyCommon::TPtr common) {
+        ConfigureRdmaHandshakeCommon(common, runtime.GetRdmaMemPool(nodeIndex));
+    });
+
+    for (ui32 nodeIndex = 0; nodeIndex < runtime.NodeCount; ++nodeIndex) {
+        auto common = MakeIntrusive<TInterconnectProxyCommon>();
+        common->NameserviceId = GetNameserviceActorId();
+        common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        common->InitWhiteboard = [&readyListeners](ui16, TActorSystem*) {
+            ++readyListeners;
+        };
+        ConfigureRdmaHandshakeCommon(common, runtime.GetRdmaMemPool(nodeIndex));
+
+        const auto& node = names->StaticNodeTable.at(runtime.GetNodeId(nodeIndex));
+        runtime.AddLocalService(
+            MakeInterconnectListenerActorId(false),
+            TActorSetupCmd(
+                new TInterconnectListenerTCP(node.Address, node.Port, std::move(common)),
+                TMailboxType::Simple,
+                runtime.InterconnectPoolId()),
+            nodeIndex);
+        runtime.AddLocalService(
+            GetNameserviceActorId(),
+            TActorSetupCmd(CreateNameserverTable(names), TMailboxType::ReadAsFilled, runtime.InterconnectPoolId()),
+            nodeIndex);
+        runtime.AddLocalService(
+            MakeCqActorId(),
+            TActorSetupCmd(
+                CreateCqActor(CreateRdmaRuntimeParams(16, true), GetParam(), nullptr),
+                TMailboxType::ReadAsFilled,
+                runtime.InterconnectPoolId()),
+            nodeIndex);
+    }
+
+    runtime.Initialize();
+
+    // The listener is bootstrapped through the deterministic event queue. Do
+    // not let the outgoing handshake race with bind(): a refused connection is
+    // retried using a scheduled event, while Quiet dispatch intentionally does
+    // not advance scheduled events.
+    TDispatchOptions waitForListeners;
+    waitForListeners.CustomFinalCondition = [&] {
+        return readyListeners == runtime.NodeCount;
+    };
+    waitForListeners.Quiet = true;
+    ASSERT_TRUE(runtime.DispatchEvents(waitForListeners, TDuration::Seconds(1)));
+
+    const TActorId proxyId = runtime.GetInterconnectProxy(0, 1);
+    const TActorId peerProxyId = runtime.GetInterconnectProxy(1, 0);
+    TActorId outgoingHandshakeId;
+    TActorId syncActorId;
+    THashMap<TActorId, TActorId> parents;
+    runtime.SetRegistrationObserverFunc([&](TTestActorRuntimeBase&, const TActorId& parentId, const TActorId& actorId) {
+        parents.emplace(actorId, parentId);
+    });
+
+    bool peerSessionCreationBlocked = false;
+    bool localSessionCreated = false;
+    runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->Recipient == proxyId && ev->GetTypeRewrite() == TEvProxyCall::EventType) {
+            syncActorId = ev->Sender;
+            outgoingHandshakeId = parents.at(syncActorId);
+        } else if (ev->Recipient == peerProxyId && ev->GetTypeRewrite() == TEvProxyCall::EventType) {
+            // Do not let the peer create its preinitialized session, so it cannot
+            // send StartSync back over the real TCP connection.
+            peerSessionCreationBlocked = true;
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        } else if (syncActorId && ev->Recipient == syncActorId && ev->GetTypeRewrite() == TEvProxyCall::EventType) {
+            // The local sync actor will process this response, send StartSync and
+            // suspend waiting for the peer's StartSync.
+            localSessionCreated = true;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    const TActorId edge = runtime.AllocateEdgeActor(0);
+    runtime.Send(new IEventHandle(proxyId, edge, new TEvInterconnect::TEvConnectNode), 0, true);
+
+    TDispatchOptions waitForSessionCreation;
+    waitForSessionCreation.CustomFinalCondition = [&] {
+        return peerSessionCreationBlocked && localSessionCreated;
+    };
+    waitForSessionCreation.Quiet = true;
+    ASSERT_TRUE(runtime.DispatchEvents(waitForSessionCreation, TDuration::Seconds(30)));
+    ASSERT_TRUE(outgoingHandshakeId);
+    ASSERT_TRUE(syncActorId);
+    ASSERT_NE(runtime.FindActor(outgoingHandshakeId), nullptr);
+    ASSERT_NE(runtime.FindActor(syncActorId), nullptr);
+
+    // Exercise the production ownership chain: proxy -> handshake -> RDMA sync actor.
+    runtime.Send(new IEventHandle(proxyId, edge, new TEvInterconnect::TEvDisconnect), 0, true);
+
+    TDispatchOptions waitForActorsTermination;
+    waitForActorsTermination.CustomFinalCondition = [&] {
+        return runtime.FindActor(outgoingHandshakeId) == nullptr
+            && runtime.FindActor(syncActorId) == nullptr;
+    };
+    waitForActorsTermination.Quiet = true;
+    ASSERT_TRUE(runtime.DispatchEvents(waitForActorsTermination, TDuration::Seconds(1)));
 }
 
 TEST_P(TRdmaSyncActorTest, CompletesSyncProtocol) {

@@ -5871,6 +5871,21 @@ void TPersQueue::Handle(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr& 
     ForwardToPartition(ev->Get()->GetPartitionId(), ev);
 }
 
+void TPersQueue::Handle(TEvPQ::TEvSetOffsetsRequest::TPtr& ev) {
+    const ui32 partitionId = ev->Get()->GetPartitionId();
+    auto it = Partitions.find(TPartitionId{partitionId});
+    if (it == Partitions.end()) {
+        const ui64 cookie = ev->Get()->Record.HasCookie() ? ev->Get()->Record.GetCookie() : ev->Cookie;
+        Send(ev->Sender, new TEvPQ::TEvSetOffsetsResponse(
+            partitionId,
+            Ydb::StatusIds::SCHEME_ERROR,
+            TStringBuilder() << "Partition " << partitionId << " not found",
+            cookie), 0, cookie);
+        return;
+    }
+    Forward(ev, it->second.Actor);
+}
+
 void TPersQueue::Handle(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest::TPtr& ev) {
     auto& record = ev->Get()->Record;
     auto partitionId = record.GetPartitionId();
@@ -5989,6 +6004,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         hFuncTraced(TEvPQ::TEvMLPConsumerStatus, Handle);
         hFuncTraced(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId, Handle);
+        hFuncTraced(TEvPQ::TEvSetOffsetsRequest, Handle);
         hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
             return false;

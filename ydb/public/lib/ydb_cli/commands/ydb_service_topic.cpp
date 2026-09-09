@@ -691,6 +691,7 @@ namespace NYdb::NConsoleClient {
     TCommandTopicConsumerOffset::TCommandTopicConsumerOffset()
         : TClientCommandTree("offset", {}, "Consumer offset operations") {
         AddCommand(std::make_unique<TCommandTopicConsumerCommitOffset>());
+        AddCommand(std::make_unique<TCommandTopicConsumerSetOffsets>());
     }
 
 
@@ -967,6 +968,59 @@ namespace NYdb::NConsoleClient {
 
         TStatus status = topicClient.CommitOffset(TopicName, PartitionId_, ConsumerName_, Offset_).GetValueSync();
         NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
+        return EXIT_SUCCESS;
+    }
+
+    TCommandTopicConsumerSetOffsets::TCommandTopicConsumerSetOffsets()
+        : TYdbCommand("set", {}, "Set consumer offsets on all topic partitions") {
+    }
+
+    void TCommandTopicConsumerSetOffsets::Config(TConfig& config) {
+        TYdbCommand::Config(config);
+        config.Opts->AddLongOption('c', "consumer", "Consumer whose offsets will be set")
+            .Required()
+            .StoreResult(&ConsumerName_);
+
+        config.Opts->AddLongOption("position", "Target position: earliest, latest, or a timestamp. " TIMESTAMP_FORMAT_OPTION_DESCRIPTION)
+            .Required()
+            .RequiredArgument("POSITION")
+            .Handler([this](const TString& opt) {
+                Position_ = opt;
+                if (opt == "earliest" || opt == "latest") {
+                    return;
+                }
+                TimestampOptionHandler(&FromWrittenAt_)(opt);
+            });
+
+        config.Opts->SetFreeArgsNum(1);
+        SetFreeArgTitle(0, "<topic-path>", "Topic path");
+        SetSchemePathCompletionForTopics(config.Opts->GetOpts().GetFreeArgSpec(0));
+    }
+
+    void TCommandTopicConsumerSetOffsets::Parse(TConfig& config) {
+        TYdbCommand::Parse(config);
+        ParseTopicName(config, 0);
+    }
+
+    int TCommandTopicConsumerSetOffsets::Run(TConfig& config) {
+        auto driver = CreateDriver(config);
+        NYdb::NTopic::TTopicClient topicClient(driver);
+
+        NYdb::NTopic::TSetOffsetsSettings settings;
+        if (Position_ == "earliest") {
+            settings.Earliest();
+        } else if (Position_ == "latest") {
+            settings.Latest();
+        } else if (FromWrittenAt_) {
+            settings.FromWrittenAt(*FromWrittenAt_);
+        } else {
+            throw TMisuseException() << "Invalid --position value '" << Position_
+                << "'. It must be earliest, latest, or a timestamp.";
+        }
+
+        TStatus status = topicClient.SetOffsets(TopicName, ConsumerName_, settings).GetValueSync();
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
+        Cout << "OK" << Endl;
         return EXIT_SUCCESS;
     }
 

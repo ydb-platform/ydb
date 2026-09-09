@@ -634,6 +634,11 @@ TAsyncStatus TTopicClient::CommitOffset(const std::string& path, uint64_t partit
     return Impl_->CommitOffset(path, partitionId, consumerName, offset, settings);
 }
 
+TAsyncStatus TTopicClient::SetOffsets(const std::string& path, const std::string& consumerName,
+    const TSetOffsetsSettings& settings) {
+    return Impl_->SetOffsets(path, consumerName, settings);
+}
+
 namespace {
 
 Ydb::Topic::SupportedCodecs SerializeCodecs(const std::vector<ECodec>& codecs) {

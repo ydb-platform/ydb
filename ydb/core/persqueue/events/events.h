@@ -13,6 +13,7 @@ enum class EServices {
     MLP = 4,
     CLOUD_EVENTS = 6,
     SCHEMA = 7,
+    SET_OFFSETS = 8,
     END
 };
 

@@ -66,6 +66,10 @@ public:
     TAsyncStatus CommitOffset(const std::string& path, uint64_t partitionId, const std::string& consumerName, uint64_t offset,
         const TCommitOffsetSettings& settings = {});
 
+    // Set committed offsets for a consumer on all topic partitions.
+    TAsyncStatus SetOffsets(const std::string& path, const std::string& consumerName,
+        const TSetOffsetsSettings& settings);
+
 protected:
     void OverrideCodec(ECodec codecId, std::unique_ptr<ICodec>&& codecImpl);
 

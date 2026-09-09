@@ -230,3 +230,28 @@ message TEvTopicSqsActionMetrics {
         TTopicSqsProxyActionMetrics GetQueueUrl = 15;
     }
 }
+
+// To PQTablet: set a consumer committed offset on a partition.
+message TEvSetOffsetsRequest {
+    optional string Topic = 1;
+    optional string Consumer = 2;
+    optional uint32 PartitionId = 3;
+
+    enum EPosition {
+        POSITION_UNSPECIFIED = 0;
+        EARLIEST = 1;
+        LATEST = 2;
+        FROM_WRITTEN_AT = 3;
+    }
+    optional EPosition Position = 4;
+    optional uint64 TimestampMs = 5;
+    optional uint64 Cookie = 6;
+}
+
+// From PQTablet
+message TEvSetOffsetsResponse {
+    optional uint32 PartitionId = 1;
+    optional Ydb.StatusIds.StatusCode Status = 2;
+    optional string ErrorMessage = 3;
+    optional uint64 Cookie = 4;
+}

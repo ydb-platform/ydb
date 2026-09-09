@@ -25,6 +25,7 @@ SRCS(
     sql_resource_pool.cpp
     supported_codecs.cpp
     supported_codecs_fixture.cpp
+    topic_set_offsets.cpp
     workload-topic.cpp
     workload-transfer-topic-to-table.cpp
     ydb-dump.cpp

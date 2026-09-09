@@ -13,6 +13,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
+#include <google/protobuf/util/time_util.h>
 
 namespace NYdb::inline Dev::NTopic {
 struct TOffsetsRange {
@@ -285,6 +286,32 @@ public:
         return RunSimple<Ydb::Topic::V1::TopicService, Ydb::Topic::CommitOffsetRequest, Ydb::Topic::CommitOffsetResponse>(
             std::move(request),
             &Ydb::Topic::V1::TopicService::Stub::AsyncCommitOffset,
+            TRpcRequestSettings::Make(settings));
+    }
+
+    TAsyncStatus SetOffsets(const std::string& path, const std::string& consumerName,
+        const TSetOffsetsSettings& settings)
+    {
+        Ydb::Topic::SetOffsetsRequest request = MakeOperationRequest<Ydb::Topic::SetOffsetsRequest>(settings);
+        request.set_path(TStringType{path});
+        request.set_consumer(TStringType{consumerName});
+        switch (settings.Position_) {
+            case TSetOffsetsSettings::EPosition::Earliest:
+                request.mutable_earliest();
+                break;
+            case TSetOffsetsSettings::EPosition::Latest:
+                request.mutable_latest();
+                break;
+            case TSetOffsetsSettings::EPosition::FromWrittenAt:
+                *request.mutable_from_written_at()->mutable_written_at() =
+                    ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(settings.FromWrittenAt_.MilliSeconds());
+                break;
+            case TSetOffsetsSettings::EPosition::Unspecified:
+                break;
+        }
+        return RunSimple<Ydb::Topic::V1::TopicService, Ydb::Topic::SetOffsetsRequest, Ydb::Topic::SetOffsetsResponse>(
+            std::move(request),
+            &Ydb::Topic::V1::TopicService::Stub::AsyncSetOffsets,
             TRpcRequestSettings::Make(settings));
     }
 

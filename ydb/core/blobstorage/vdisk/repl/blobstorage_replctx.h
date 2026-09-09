@@ -54,7 +54,7 @@ namespace NKikimr {
             Y_ABORT_UNLESS(MinHugeBlobInBytes);
         }
 
-        bool GetAddHeader() const { return !HullCtx || HullCtx->AddHeader; }
+        bool GetAddHeader() const { return HullCtx ? HullCtx->AddHeader : VCtx->EffectiveAddHeader; }
     };
 
 } // NKikimr

@@ -67,7 +67,7 @@ namespace NKikimr {
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
             auto vctx = MakeIntrusive<TVDiskContext>(TActorId(), info->PickTopology(), counters, TVDiskID(TGroupId::FromValue(0), 1, 0, 0, 0),
                 nullptr, NPDisk::DEVICE_TYPE_UNKNOWN);
-            auto hugeBlobCtx = std::make_shared<THugeBlobCtx>(nullptr, true);
+            auto hugeBlobCtx = std::make_shared<THugeBlobCtx>(nullptr, vctx->EffectiveAddHeader);
             auto replCtx = std::make_shared<TReplCtx>(
                 vctx,
                 nullptr, // HullCtx
@@ -83,10 +83,10 @@ namespace NKikimr {
             return replCtx;
         }
 
-        Y_UNIT_TEST(BasicFunctionality) {
+        void BasicFunctionality(TBlobStorageGroupType::EErasureSpecies species) {
             TRopeArena arena(&TRopeArenaBackend::Allocate);
             TVector<TVDiskID> vdisks;
-            auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::Erasure4Plus2Block);
+            auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(species);
             auto replCtx = CreateReplCtx(vdisks, groupInfo);
             auto info = MakeIntrusive<TEvReplFinished::TInfo>();
             info->WorkUnitsPlanned = Max<ui64>();
@@ -175,10 +175,17 @@ namespace NKikimr {
                 auto& item = rbq.front();
                 UNIT_ASSERT_EQUAL(item.Id, id);
 
-                TRope buf = TDiskBlob::Create(id.BlobSize(), partIndex + 1, groupInfo->Type.TotalPartCount(), TRope(v[0]), arena, true);
+                TRope buf = TDiskBlob::Create(id.BlobSize(), partIndex + 1, groupInfo->Type.TotalPartCount(), TRope(v[0]), arena, replCtx->GetAddHeader());
 
                 UNIT_ASSERT_EQUAL(item.Data, buf);
             }
+        }
+        Y_UNIT_TEST(BasicFunctionality) {
+            BasicFunctionality(TBlobStorageGroupType::Erasure4Plus2Block);
+        }
+
+        Y_UNIT_TEST(BasicFunctionalityBlock82) {
+            BasicFunctionality(TBlobStorageGroupType::Erasure8Plus2Block);
         }
     }
 

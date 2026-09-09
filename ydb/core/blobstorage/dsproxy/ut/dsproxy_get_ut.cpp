@@ -59,7 +59,7 @@ void TestIntervalsAndCrcAllOk(TErasureType::EErasureSpecies erasureSpecies, bool
                 q.Id = blobSet.Get(queryIdx % blobCount).Id;
                 if (checkCrc) {
                     q.Shift = (queryIdx % groupType.DataParts()) * groupType.PartUserSize(q.Id.BlobSize());
-                    q.Shift = q.Shift <= q.Id.BlobSize() ? q.Shift : 0;
+                    q.Shift = q.Shift < q.Id.BlobSize() ? q.Shift : 0;
                     q.Size = Max((ui64)16, (ui64)(queryIdx * 177) % (q.Id.BlobSize() - q.Shift));
                 } else {
                     q.Shift = (queryIdx * 177) % q.Id.BlobSize();
@@ -118,7 +118,10 @@ void TestIntervalsAndCrcAllOk(TErasureType::EErasureSpecies erasureSpecies, bool
                 UNIT_ASSERT_VALUES_EQUAL(a.Status, NKikimrProto::OK);
                 UNIT_ASSERT_VALUES_EQUAL(q.Shift, a.Shift);
                 UNIT_ASSERT_VALUES_EQUAL(q.Size, a.RequestedSize);
-                blobSet.Check(queryIdx % blobCount, q.Id, q.Shift, q.Size, a.Buffer.ConvertToString());
+                // RequestedSize remains the original request; payload is clipped
+                // at EOF, including short tails in the wider block geometry.
+                blobSet.Check(queryIdx % blobCount, q.Id, q.Shift,
+                    Min(q.Size, q.Id.BlobSize() - q.Shift), a.Buffer.ConvertToString());
             }
         }
     }
@@ -128,6 +131,10 @@ void TestIntervalsAndCrcAllOk(TErasureType::EErasureSpecies erasureSpecies, bool
 // Without CRC
 Y_UNIT_TEST(TestBlock42GetIntervalsAllOk) {
     TestIntervalsAndCrcAllOk(TErasureType::Erasure4Plus2Block, false, false);
+}
+
+Y_UNIT_TEST(TestBlock82GetIntervalsAllOk) {
+    TestIntervalsAndCrcAllOk(TErasureType::Erasure8Plus2Block, false, false);
 }
 
 //Y_UNIT_TEST(TestBlock42GetIntervalsAllOkVerbose) {
@@ -141,6 +148,10 @@ Y_UNIT_TEST(TestMirror32GetIntervalsAllOk) {
 // With CRC
 Y_UNIT_TEST(TestBlock42GetBlobCrcCheck) {
     TestIntervalsAndCrcAllOk(TErasureType::Erasure4Plus2Block, false, true);
+}
+
+Y_UNIT_TEST(TestBlock82GetBlobCrcCheck) {
+    TestIntervalsAndCrcAllOk(TErasureType::Erasure8Plus2Block, false, true);
 }
 
 //Y_UNIT_TEST(TestBlock42GetBlobCrcCheckVerbose) {
@@ -390,7 +401,8 @@ void TestIntervalsWipedAllOk(TErasureType::EErasureSpecies erasureSpecies, bool 
     TBlobStorageGroupType groupType(erasureSpecies);
     const ui32 domainCount = groupType.BlobSubgroupSize();
 
-    TVector<ui64> queryCounts = {1, 2, 3, 13, 34, 55};
+    TVector<ui64> queryCounts = erasureSpecies == TErasureType::Erasure8Plus2Block
+        ? TVector<ui64>{1, 3, 13} : TVector<ui64>{1, 2, 3, 13, 34, 55};
 
     for (bool isRestore : {false, true}) {
         for (ui32 generateMode = 0; generateMode < 2; ++generateMode) {
@@ -505,14 +517,12 @@ public:
     }
 
 };
-
-Y_UNIT_TEST(TestBlock42VGetCountWithErasure) {
+void RunTestParityBlockVGetCountWithErasure(TErasureType::EErasureSpecies erasureSpecies) {
     bool isVerboseNoDataEnabled = false;
-    TErasureType::EErasureSpecies erasureSpecies = TErasureType::Erasure4Plus2Block;
     TActorSystemStub actorSystemStub;
 
     TVector<TLogoBlobID> blobIDs = {
-        TLogoBlobID(72075186224047637, 1, 863, 1, 786, 24576),
+        TLogoBlobID(72075186224047637, 1, 863, 1, erasureSpecies == TErasureType::Erasure8Plus2Block ? 1024 : 786, 24576),
     };
 
     TVector<TBlobTestSet::TBlob> blobs;
@@ -541,9 +551,10 @@ Y_UNIT_TEST(TestBlock42VGetCountWithErasure) {
     for (ui32 idx = 0; idx < domainCount; ++idx) {
         group.SetPredictedDelayNs(idx, 1);
     }
-    group.SetPredictedDelayNs(7, 10);
+    group.SetPredictedDelayNs(domainCount - 1, 10);
 
-    group.SetNotYetBlob(0, TLogoBlobID(blobIDs[0], 1));
+    group.SetNotYetBlob(erasureSpecies == TErasureType::Erasure8Plus2Block
+        ? group.DomainIdxForBlobSubgroupIdx(blobIDs[0], 0) : 0, TLogoBlobID(blobIDs[0], 1));
 
     ui64 blobCount = queryCount;
     TArrayHolder<TEvBlobStorage::TEvGet::TQuery> queriesA(
@@ -569,10 +580,13 @@ Y_UNIT_TEST(TestBlock42VGetCountWithErasure) {
     TLogContext logCtx(NKikimrServices::BS_PROXY_GET, false);
     logCtx.LogAcc.IsLogEnabled = false;
     getImpl.GenerateInitialRequests(logCtx, vGets);
+    ui32 emittedVGets = vGets.size();
+    ui32 deferredSlots = 0;
 
     for (ui64 vGetIdx = 0; vGetIdx < vGets.size(); ++vGetIdx) {
         if (vGetIdx == 3) {
             vGets.push_back(std::move(vGets[3]));
+            ++deferredSlots;
             continue;
         }
         bool isLast = (vGetIdx == vGets.size() - 1);
@@ -586,6 +600,7 @@ Y_UNIT_TEST(TestBlock42VGetCountWithErasure) {
 
         getImpl.OnVGetResult(logCtx, vGetResult, nextVGets, nextVPuts, getResult);
 
+        emittedVGets += nextVGets.size();
         std::move(nextVGets.begin(), nextVGets.end(), std::back_inserter(vGets));
         if (ev.MustRestoreFirst) {
             std::move(nextVPuts.begin(), nextVPuts.end(), std::back_inserter(vPuts));
@@ -603,6 +618,7 @@ Y_UNIT_TEST(TestBlock42VGetCountWithErasure) {
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> nextVGets;
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> nextVPuts;
             getImpl.OnVPutResult(logCtx, vPutResult, nextVGets, nextVPuts, getResult);
+            emittedVGets += nextVGets.size();
             std::move(nextVGets.begin(), nextVGets.end(), std::back_inserter(vGets));
             std::move(nextVPuts.begin(), nextVPuts.end(), std::back_inserter(vPuts));
             if (getResult) {
@@ -618,7 +634,13 @@ Y_UNIT_TEST(TestBlock42VGetCountWithErasure) {
         }
     }
 
-    UNIT_ASSERT_VALUES_EQUAL(vGets.size(), 8);
+    // Count issued requests separately from the null slot left when delaying a
+    // reply. The fixed slow/NOT_YET scenario issues additional restoration
+    // rounds; its request count is not the number of VDisks in the subgroup.
+    const ui32 expectedVGets = erasureSpecies == TErasureType::Erasure8Plus2Block ? 15 : 7;
+    UNIT_ASSERT_VALUES_EQUAL_C(emittedVGets, expectedVGets, getImpl.PrintHistory());
+    UNIT_ASSERT_VALUES_EQUAL(deferredSlots, 1);
+    UNIT_ASSERT_VALUES_EQUAL(vGets.size(), emittedVGets + deferredSlots);
 
     UNIT_ASSERT(getResult);
     UNIT_ASSERT_VALUES_EQUAL(getResult->ResponseSz, queryCount);
@@ -644,13 +666,14 @@ Y_UNIT_TEST(TestBlock42VGetCountWithErasure) {
     return;
 }
 
-Y_UNIT_TEST(TestBlock42WipedOneDiskAndErrorDurringGet) {
+Y_UNIT_TEST(TestBlock42VGetCountWithErasure) { RunTestParityBlockVGetCountWithErasure(TErasureType::Erasure4Plus2Block); }
+Y_UNIT_TEST(TestBlock82VGetCountWithErasure) { RunTestParityBlockVGetCountWithErasure(TErasureType::Erasure8Plus2Block); }
+void RunTestParityBlockWipedOneDiskAndErrorDurringGet(TErasureType::EErasureSpecies erasureSpecies) {
     bool isVerboseNoDataEnabled = false;
-    TErasureType::EErasureSpecies erasureSpecies = TErasureType::Erasure4Plus2Block;
     TActorSystemStub actorSystemStub;
 
     TVector<TLogoBlobID> blobIDs = {
-        TLogoBlobID(72075186224047637, 1, 863, 1, 786, 24576),
+        TLogoBlobID(72075186224047637, 1, 863, 1, erasureSpecies == TErasureType::Erasure8Plus2Block ? 1024 : 786, 24576),
         // TLogoBlobID(72075186224047637, 1, 2194, 1, 142, 12288)
     };
 
@@ -681,9 +704,10 @@ Y_UNIT_TEST(TestBlock42WipedOneDiskAndErrorDurringGet) {
     for (ui32 idx = 0; idx < domainCount; ++idx) {
         group.SetPredictedDelayNs(idx, 1);
     }
-    group.SetPredictedDelayNs(7, 10);
+    group.SetPredictedDelayNs(domainCount - 1, 10);
 
-    group.SetNotYetBlob(0, TLogoBlobID(blobIDs[0], 1));
+    group.SetNotYetBlob(erasureSpecies == TErasureType::Erasure8Plus2Block
+        ? group.DomainIdxForBlobSubgroupIdx(blobIDs[0], 0) : 0, TLogoBlobID(blobIDs[0], 1));
 
     ui64 blobCount = queryCount;
     TArrayHolder<TEvBlobStorage::TEvGet::TQuery> queriesA(
@@ -785,6 +809,9 @@ Y_UNIT_TEST(TestBlock42WipedOneDiskAndErrorDurringGet) {
     return;
 }
 
+Y_UNIT_TEST(TestBlock42WipedOneDiskAndErrorDurringGet) { RunTestParityBlockWipedOneDiskAndErrorDurringGet(TErasureType::Erasure4Plus2Block); }
+Y_UNIT_TEST(TestBlock82WipedOneDiskAndErrorDurringGet) { RunTestParityBlockWipedOneDiskAndErrorDurringGet(TErasureType::Erasure8Plus2Block); }
+
 void ApplyError(TGetSimulator &simulator, ui64 idx, ui64 error) {
     switch (error) {
         case 0:
@@ -826,6 +853,10 @@ void TestIntervalsWipedError(TErasureType::EErasureSpecies erasureSpecies, bool 
                             }
                             ui64 maxErrorMask = 15;
                             for (ui64 errorMask = 0; errorMask <= maxErrorMask; ++errorMask) {
+                                if (erasureSpecies == TErasureType::Erasure8Plus2Block &&
+                                        (wiped1 * 1009 + wiped2 * 101 + error3 * 17 + error4 * 7 + errorMask) % 31) {
+                                    continue;
+                                }
                                 TGetSimulator simulator(groupId, erasureSpecies, domainCount, 1);
                                 simulator.GenerateBlobSet(setIdx, maxQueryCount);
 
@@ -937,7 +968,7 @@ void TestWipedErrorWithTwoBlobs(TErasureType::EErasureSpecies erasureSpecies, bo
                         continue;
                     }
 
-                    for (ui64 it = 0; it < 100; ++it, ++seed) {
+                    for (ui64 it = 0; it < (erasureSpecies == TErasureType::Erasure8Plus2Block ? 4u : 100u); ++it, ++seed) {
                         SetRandomSeed(seed);
                         TGroupMock group(groupId, erasureSpecies, domainCount, 1, 1);
                         TIntrusivePtr<TGroupQueues> groupQueues = group.MakeGroupQueues();
@@ -1064,21 +1095,33 @@ Y_UNIT_TEST(TestBlock42GetIntervalsWipedAllOk) {
     TestIntervalsWipedAllOk(TErasureType::Erasure4Plus2Block, false);
 }
 
+Y_UNIT_TEST(TestBlock82GetIntervalsWipedAllOk) {
+    TestIntervalsWipedAllOk(TErasureType::Erasure8Plus2Block, false);
+}
+
 Y_UNIT_TEST(TestBlock42GetIntervalsWipedError) {
     TestIntervalsWipedError(TErasureType::Erasure4Plus2Block);
+}
+
+Y_UNIT_TEST(TestBlock82GetIntervalsWipedError) {
+    TestIntervalsWipedError(TErasureType::Erasure8Plus2Block);
 }
 
 Y_UNIT_TEST(TestBlock42WipedErrorWithTwoBlobs) {
     TestWipedErrorWithTwoBlobs(TErasureType::Erasure4Plus2Block);
 }
 
+Y_UNIT_TEST(TestBlock82WipedErrorWithTwoBlobs) {
+    TestWipedErrorWithTwoBlobs(TErasureType::Erasure8Plus2Block);
+}
+
 Y_UNIT_TEST(TestMirror32GetIntervalsWipedAllOk) {
     TestIntervalsWipedAllOk(TErasureType::ErasureMirror3Plus2, false);
 }
 
-void SpecificTest(ui32 badA, ui32 badB, ui32 blobSize, TMap<i64, i64> sizeForOffset) {
+void SpecificTest(ui32 badA, ui32 badB, ui32 blobSize, TMap<i64, i64> sizeForOffset,
+        TErasureType::EErasureSpecies erasureSpecies = TErasureType::Erasure4Plus2Block) {
     TActorSystemStub actorSystemStub;
-    TErasureType::EErasureSpecies erasureSpecies = TErasureType::Erasure4Plus2Block;
 
 
     const ui32 groupId = 0;
@@ -1140,10 +1183,22 @@ Y_UNIT_TEST(TestBlock42GetSpecific) {
     SpecificTest(5, 6, 8000000, sizeForOffset);
 }
 
+Y_UNIT_TEST(TestBlock82GetSpecific) {
+    TMap<i64, i64> sizeForOffset;
+    sizeForOffset[999000] = 7000;
+    SpecificTest(9, 10, 8000000, sizeForOffset, TErasureType::Erasure8Plus2Block);
+}
+
 Y_UNIT_TEST(TestBlock42GetSpecific2) {
     TMap<i64, i64> sizeForOffset;
     sizeForOffset[0] = 267;
     SpecificTest(6, 7, 267, sizeForOffset);
+}
+
+Y_UNIT_TEST(TestBlock82GetSpecific2) {
+    TMap<i64, i64> sizeForOffset;
+    sizeForOffset[0] = 267;
+    SpecificTest(10, 11, 267, sizeForOffset, TErasureType::Erasure8Plus2Block);
 }
 
 Y_UNIT_TEST(TestBlock42GetSpecific3) {
@@ -1152,6 +1207,14 @@ Y_UNIT_TEST(TestBlock42GetSpecific3) {
         sizeForOffset[i * 14000] = 7000;
     }
     SpecificTest(5, 6, 8000000, sizeForOffset);
+}
+
+Y_UNIT_TEST(TestBlock82GetSpecific3) {
+    TMap<i64, i64> sizeForOffset;
+    for (i64 i = 0; i < 570; ++i) {
+        sizeForOffset[i * 14000] = 7000;
+    }
+    SpecificTest(9, 10, 8000000, sizeForOffset, TErasureType::Erasure8Plus2Block);
 }
 
 }
@@ -1341,6 +1404,18 @@ public:
     }
 
     void Run() {
+        if (ErasureSpecies == TErasureType::Erasure8Plus2Block) {
+            SetRandomSeed(0x82422026);
+            do {
+                NKikimrProto::EReplyStatus previous;
+                TVector<NKikimrProto::EReplyStatus> previousItems(MaxQueryCount);
+                for (ui32 iteration = 0; iteration < 64; ++iteration) {
+                    Shuffle(RequestsOrder.begin(), RequestsOrder.end());
+                    TestStep(previous, previousItems, iteration == 0);
+                }
+            } while (std::next_permutation(ErroneousVDisks.begin(), ErroneousVDisks.end()));
+            return;
+        }
         do { // while(std::next_permutation(ErroneousVDisks.begin(), ErroneousVDisks.end()));
             NKikimrProto::EReplyStatus gotResultPrevStatus;
             TVector<NKikimrProto::EReplyStatus> gotResultPrevBlobStatus(MaxQueryCount);
@@ -1366,6 +1441,14 @@ Y_UNIT_TEST(TDSProxyLooksLikeLostTheBlobBlock42) {
     }
 }
 
+Y_UNIT_TEST(TDSProxyLooksLikeLostTheBlobBlock82) {
+    const ui64 blobSize = 128;
+    for (ui32 i = 1; i < 3; ++i) {
+        TTestPossibleBlobLost test(TErasureType::Erasure8Plus2Block, blobSize, i, {NKikimrProto::ERROR, NKikimrProto::ERROR});
+        test.Run();
+    }
+}
+
 
 
 
@@ -1376,7 +1459,7 @@ public:
         ReadAndWriteErrors = 1
     };
 protected:
-    TErasureType::EErasureSpecies ErasureSpecies = TErasureType::Erasure4Plus2Block;
+    TErasureType::EErasureSpecies ErasureSpecies;
     TBlobStorageGroupType GroupType;
     const ui32 DomainCount;
     const ui64 MaxQueryCount = 1;
@@ -1412,8 +1495,9 @@ protected:
 
 
 public:
-    TTestNoDataRegression(EMode mode)
-        : GroupType(ErasureSpecies)
+    TTestNoDataRegression(EMode mode, TErasureType::EErasureSpecies species = TErasureType::Erasure4Plus2Block)
+        : ErasureSpecies(species)
+        , GroupType(ErasureSpecies)
         , DomainCount(GroupType.BlobSubgroupSize())
         , Group(0, ErasureSpecies, DomainCount, 1, 1)
         , Mode(mode)
@@ -1429,19 +1513,19 @@ public:
     void Run() {
         TLogoBlobID id = BlobSet.Get(0).Id;
         ui32 readError = Group.DomainIdxForBlobSubgroupIdx(id, 1);
-        ui32 readError2= Group.DomainIdxForBlobSubgroupIdx(id, 5);
+        ui32 readError2= Group.DomainIdxForBlobSubgroupIdx(id, GroupType.TotalPartCount() - 1);
 
         TVector<ui32> requestOrder; // fail domian idx
         requestOrder.reserve(8);
         requestOrder.push_back(Group.DomainIdxForBlobSubgroupIdx(id, 0)); // no data (was offilne)
-        requestOrder.push_back(Group.DomainIdxForBlobSubgroupIdx(id, 7)); // no data (empty handoff)
-        requestOrder.push_back(Group.DomainIdxForBlobSubgroupIdx(id, 5)); // readError2
-        requestOrder.push_back(Group.DomainIdxForBlobSubgroupIdx(id, 2)); // p2
-        requestOrder.push_back(Group.DomainIdxForBlobSubgroupIdx(id, 3)); // p3
-        requestOrder.push_back(Group.DomainIdxForBlobSubgroupIdx(id, 4)); // p4
-        requestOrder.push_back(Group.DomainIdxForBlobSubgroupIdx(id, 6)); // handoff p0
+        requestOrder.push_back(Group.DomainIdxForBlobSubgroupIdx(id, GroupType.BlobSubgroupSize() - 1)); // no data (empty handoff)
+        requestOrder.push_back(Group.DomainIdxForBlobSubgroupIdx(id, GroupType.TotalPartCount() - 1)); // readError2
+        for (ui32 part = 2; part + 1 < GroupType.TotalPartCount(); ++part) {
+            requestOrder.push_back(Group.DomainIdxForBlobSubgroupIdx(id, part));
+        }
+        requestOrder.push_back(Group.DomainIdxForBlobSubgroupIdx(id, GroupType.TotalPartCount())); // handoff p0
 
-        ui32 firstPutReplyErrorDomainIdx = Group.DomainIdxForBlobSubgroupIdx(id, 6);
+        ui32 firstPutReplyErrorDomainIdx = Group.DomainIdxForBlobSubgroupIdx(id, GroupType.TotalPartCount());
 
         if (Mode == TwoReadErrors) {
             requestOrder.push_back(Group.DomainIdxForBlobSubgroupIdx(id, 1)); // readError
@@ -1556,8 +1640,18 @@ public:
     }
 };
 
+Y_UNIT_TEST(TDSProxyNoDataRegressionBlock82) {
+    TTestNoDataRegression test(TTestNoDataRegression::ReadAndWriteErrors, TErasureType::Erasure8Plus2Block);
+    test.Run();
+}
+
 Y_UNIT_TEST(TDSProxyNoDataRegressionBlock42) {
     TTestNoDataRegression test(TTestNoDataRegression::ReadAndWriteErrors);
+    test.Run();
+}
+
+Y_UNIT_TEST(TDSProxyErrorRegressionBlock82) {
+    TTestNoDataRegression test(TTestNoDataRegression::TwoReadErrors, TErasureType::Erasure8Plus2Block);
     test.Run();
 }
 

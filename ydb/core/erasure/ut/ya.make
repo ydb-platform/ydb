@@ -17,6 +17,8 @@ PEERDIR(
 SET(_YASM_PREDEFINED_FLAGS_VALUE "")
 
 SRCS(
+    erasure_isa_backend_ut.cpp
+    erasure_block82_ut.cpp
     erasure_ut.cpp
     erasure_new_ut.cpp
 )

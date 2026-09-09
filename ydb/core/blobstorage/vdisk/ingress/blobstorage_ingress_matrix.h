@@ -38,17 +38,17 @@ namespace NKikimr {
         //////////////////////////////////////////////////////////////////////////////////
         class TVectorType {
         public:
+            using TRaw = ui16;
+
             TVectorType()
                 : Vec(0)
                 , Size(0)
             {}
 
-            TVectorType(ui8 vec, ui8 size)
-                : Vec(vec & EmptyMask[size])
+            TVectorType(TRaw vec, ui8 size)
+                : Vec(vec & ValidMask(size))
                 , Size(size)
-            {
-                Y_DEBUG_ABORT_UNLESS(size <= 8);
-            }
+            {}
 
             TVectorType(const TVectorType &v)
                 : Vec(v.Vec)
@@ -56,15 +56,13 @@ namespace NKikimr {
             {}
 
             void Set(ui8 i) {
-                Y_DEBUG_ABORT_UNLESS(i < Size);
-                ui8 mask = 0x80 >> i;
-                Vec |= mask;
+                Y_ABORT_UNLESS(i < Size);
+                Vec |= BitMask(i);
             }
 
             void Clear(ui8 i) {
-                Y_DEBUG_ABORT_UNLESS(i < Size);
-                ui8 mask = 0x80 >> i;
-                Vec &= ~mask;
+                Y_ABORT_UNLESS(i < Size);
+                Vec &= ~BitMask(i);
             }
 
             void Clear() {
@@ -72,16 +70,13 @@ namespace NKikimr {
             }
 
             bool Get(ui8 i) const {
-                Y_DEBUG_ABORT_UNLESS(i < Size);
-                ui8 mask = 0x80 >> i;
-                return Vec & mask;
+                Y_ABORT_UNLESS(i < Size);
+                return Vec & BitMask(i);
             }
 
             ui8 BitsBefore(ui8 i) const {
-                ui8 shift = 8 - i;
-                ui8 mask = 0xFF >> shift << shift;
-                unsigned v = Vec & mask;
-                return ::std::popcount(v);
+                Y_ABORT_UNLESS(i <= Size);
+                return ::std::popcount(TRaw(Vec & ValidMask(i)));
             }
 
             ui8 FirstPosition() const {
@@ -89,18 +84,22 @@ namespace NKikimr {
             }
 
             ui8 NextPosition(ui8 i) const {
-                Y_DEBUG_ABORT_UNLESS(i < 8);
-                unsigned shift = 8 - i - 1;
-                unsigned mask = unsigned(-1) >> shift << shift;
-                unsigned v = (unsigned)Vec & ~mask;
-                return FirstSetBit(v);
+                Y_ABORT_UNLESS(i < Size);
+                return FirstSetBit(Vec & ~ValidMask(i + 1));
             }
 
             ui8 CountBits() const {
                 return ::std::popcount(Vec);
             }
 
-            ui8 Raw() const {
+            TRaw Raw() const {
+                return Vec;
+            }
+
+            ui8 Raw8() const {
+                // The size is part of this boundary: even an empty wide vector
+                // cannot be represented by the legacy one-byte disk header.
+                Y_ABORT_UNLESS(Size <= 8);
                 return Vec;
             }
 
@@ -132,6 +131,12 @@ namespace NKikimr {
                 return *this;
             }
 
+            TVectorType &operator -=(const TVectorType &v) {
+                Y_DEBUG_ABORT_UNLESS(Size == v.Size);
+                Vec &= ~v.Vec;
+                return *this;
+            }
+
             TVectorType operator ~() const {
                 return TVectorType(~Vec, Size);
             }
@@ -147,9 +152,12 @@ namespace NKikimr {
 
             TString ToString() const {
                 TStringStream s;
-                s << (Get(0) ? "1" : "0");
-                for (ui8 i = 1; i < Size; i++)
-                    s << " " << (Get(i) ? "1" : "0");
+                for (ui8 i = 0; i < Size; i++) {
+                    if (i) {
+                        s << " ";
+                    }
+                    s << (Get(i) ? "1" : "0");
+                }
                 return s.Str();
             }
 
@@ -201,21 +209,30 @@ namespace NKikimr {
             TIterator end() const { return {*this, true}; }
 
         private:
-            ui8 Vec;
+            TRaw Vec;
             ui8 Size;
 
-            const static ui8 EmptyMask[];
+            // Keep old raw masks in the low byte. Logical parts 8..15 occupy
+            // the high byte with the same most-significant-bit-first order.
+            static TRaw BitMask(ui8 i) {
+                return (0x80u >> (i & 7)) << (i & 8);
+            }
+
+            static TRaw SwapBytes(TRaw vec) {
+                return (vec << 8) | (vec >> 8);
+            }
+
+            static TRaw ValidMask(ui8 size) {
+                Y_ABORT_UNLESS(size <= 16);
+                return SwapBytes(TRaw(0xffffu << (16 - size)));
+            }
 
             friend TVectorType operator -(const TVectorType &v1, const TVectorType &v2);
             friend TVectorType operator &(const TVectorType &v1, const TVectorType &v2);
             friend TVectorType operator |(const TVectorType &v1, const TVectorType &v2);
 
-            ui8 FirstSetBit(ui8 vec) const {
-                const static unsigned shift = std::numeric_limits<unsigned int>::digits - std::numeric_limits<ui8>::digits;
-                unsigned mask = unsigned(-1) >> unsigned(Size);
-                unsigned t = (unsigned(vec) << shift) | mask;
-                Y_DEBUG_ABORT_UNLESS(t != 0);
-                return Clz(t);
+            ui8 FirstSetBit(TRaw vec) const {
+                return vec ? std::countl_zero(SwapBytes(vec)) : Size;
             }
         };
 
@@ -355,16 +372,17 @@ namespace NKikimr {
             }
 
             TVectorType ToVector() const {
-                Y_DEBUG_ABORT_UNLESS(End - Beg <= 8);
-                ui8 vec = 0;
+                TVectorType vec(0, End - Beg);
                 TIterator it = Begin();
+                ui8 pos = 0;
                 while (!it.IsEnd()) {
-                    vec <<= 1;
-                    vec |= ui8(it.Get());
+                    if (it.Get()) {
+                        vec.Set(pos);
+                    }
+                    ++pos;
                     it.Next();
                 }
-                vec <<= 8 - (End - Beg);
-                return TVectorType(vec, End - Beg);
+                return vec;
             }
         };
 
@@ -416,37 +434,23 @@ namespace NKikimr {
             }
 
             TVectorType DeletedPartsVector() const {
-                Y_DEBUG_ABORT_UNLESS(End - Beg <= 2 * 8);
-                ui8 vec = 0;
-                TIterator it = Begin();
-                while (!it.IsEnd()) {
-                    bool firstBit = it.Get();
-                    vec <<= 1;
-                    vec |= ui8(firstBit);
-
-                    it.Next();
-                    Y_DEBUG_ABORT_UNLESS(!it.IsEnd());
-                    it.Next();
+                TVectorType vec(0, (End - Beg) / 2);
+                for (ui8 i = 0; i < vec.GetSize(); ++i) {
+                    if (TShiftedBitVecBase::Get(i * 2)) {
+                        vec.Set(i);
+                    }
                 }
-                vec <<= 8 - ((End - Beg) >> 1);
-                return TVectorType(vec, (End - Beg) >> 1);
+                return vec;
             }
 
             TVectorType ToVector() const {
-                Y_DEBUG_ABORT_UNLESS(End - Beg <= 2 * 8);
-                ui8 vec = 0;
-                TIterator it = Begin();
-                while (!it.IsEnd()) {
-                    vec <<= 1;
-                    bool firstBit = it.Get();
-                    it.Next();
-                    Y_DEBUG_ABORT_UNLESS(!it.IsEnd());
-                    bool secondBit = it.Get();
-                    it.Next();
-                    vec |= ui8(!firstBit && secondBit);
+                TVectorType vec(0, (End - Beg) / 2);
+                for (ui8 i = 0; i < vec.GetSize(); ++i) {
+                    if (Get(i)) {
+                        vec.Set(i);
+                    }
                 }
-                vec <<= 8 - ((End - Beg) >> 1);
-                return TVectorType(vec, (End - Beg) >> 1);
+                return vec;
             }
         };
 

@@ -192,5 +192,8 @@ Y_UNIT_TEST_SUITE(Deadlines) {
     TEST_DEADLINE(Get, 4Plus2Block);
     TEST_DEADLINE(Get, Mirror3of4);
 
+    Y_UNIT_TEST(TestPutBlock82) { TestPut(TBlobStorageGroupType::Erasure8Plus2Block, TDuration::Seconds(50), TDuration::Seconds(40)); }
+    Y_UNIT_TEST(TestGetBlock82) { TestGet(TBlobStorageGroupType::Erasure8Plus2Block, TDuration::Seconds(50), TDuration::Seconds(40)); }
+
     #undef TEST_DEADLINE
 }

@@ -105,7 +105,7 @@ TArrayBuilder StoragePoolTypesConfigBuilder() {
           .Range(0, 1)
           .Optional();
         })
-        .Enum("erasure_species", {"none", "block-4-2", "mirror-3-dc", "mirror-3dc-3-nodes"})
+        .Enum("erasure_species", {"none", "block-4-2", "block-8-2", "mirror-3-dc", "mirror-3dc-3-nodes"})
         .String("kind")
         .Array("pdisk_filter", [](auto& pdiskFilter){
           pdiskFilter
@@ -394,7 +394,7 @@ NYamlConfig::NValidator::TMapBuilder BlobStorageConfigBuilder() {
         groups
         .MapItem([](auto& group){
           group
-          .Enum("erasure_species", {"none", "block-4-2", "mirror-3-dc", "mirror-3dc-3-nodes"})
+          .Enum("erasure_species", {"none", "block-4-2", "block-8-2", "mirror-3-dc", "mirror-3dc-3-nodes"})
           .Array("rings", [](auto& rings){
             rings
             .MapItem([](auto& ring){
@@ -433,7 +433,7 @@ NYamlConfig::NValidator::TMapBuilder ChannelProfileConfigBuilder() {
           channel
           .MapItem([](auto& channelItem){
             channelItem
-            .Enum("erasure_species", {"none", "block-4-2", "mirror-3-dc", "mirror-3dc-3-nodes"})
+            .Enum("erasure_species", {"none", "block-4-2", "block-8-2", "mirror-3-dc", "mirror-3dc-3-nodes"})
             .Int64("pdisk_category")
             .Enum("storage_pool_kind", {"nvme", "ssd", "rot"});
           });
@@ -449,7 +449,7 @@ NYamlConfig::NValidator::TMapBuilder StaticConfigBuilder() {
     staticConfig
     .Enum("static_erasure", [](auto& staticErasure){
       staticErasure
-      .SetItems({"none", "block-4-2", "mirror-3-dc", "mirror-3dc-3-nodes"})
+      .SetItems({"none", "block-4-2", "block-8-2", "mirror-3-dc", "mirror-3dc-3-nodes"})
       .Optional();
     })
     .Field("host_configs", HostConfigBuilder())

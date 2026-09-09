@@ -1,4 +1,5 @@
 #include "erasure.h"
+#include "erasure_block82.h"
 #include <util/string/printf.h>
 
 #include <bit>
@@ -387,6 +388,36 @@ namespace NKikimr {
         }
     }
 
+    // Internal benchmark adapter: invoke the production kernel with already
+    // allocated output parts. Kept out of erasure.h and the public codec API.
+    void ErasureRestoreBlock42ForBenchmark(std::span<TRope> parts, ui32 missingMask) {
+        Y_ABORT_UNLESS(parts.size() == 6);
+        switch (missingMask) {
+            case 1: ErasureRestoreBlock42Do<1>(parts); return;
+            case 2: ErasureRestoreBlock42Do<2>(parts); return;
+            case 4: ErasureRestoreBlock42Do<4>(parts); return;
+            case 8: ErasureRestoreBlock42Do<8>(parts); return;
+            case 16: ErasureRestoreBlock42Do<16>(parts); return;
+            case 32: ErasureRestoreBlock42Do<32>(parts); return;
+            case 3: ErasureRestoreBlock42Do<3>(parts); return;
+            case 5: ErasureRestoreBlock42Do<5>(parts); return;
+            case 9: ErasureRestoreBlock42Do<9>(parts); return;
+            case 17: ErasureRestoreBlock42Do<17>(parts); return;
+            case 33: ErasureRestoreBlock42Do<33>(parts); return;
+            case 6: ErasureRestoreBlock42Do<6>(parts); return;
+            case 10: ErasureRestoreBlock42Do<10>(parts); return;
+            case 18: ErasureRestoreBlock42Do<18>(parts); return;
+            case 34: ErasureRestoreBlock42Do<34>(parts); return;
+            case 12: ErasureRestoreBlock42Do<12>(parts); return;
+            case 20: ErasureRestoreBlock42Do<20>(parts); return;
+            case 36: ErasureRestoreBlock42Do<36>(parts); return;
+            case 24: ErasureRestoreBlock42Do<24>(parts); return;
+            case 40: ErasureRestoreBlock42Do<40>(parts); return;
+            case 48: ErasureRestoreBlock42Do<48>(parts); return;
+            default: Y_ABORT("invalid benchmark loss mask");
+        }
+    }
+
     void ErasureRestoreBlock42(ui32 fullSize, TRope *whole, std::span<TRope> parts, ui32 restoreMask) {
         const ui32 blockSize = 32;
         const ui32 fullBlockSize = 4 * blockSize;
@@ -553,6 +584,10 @@ namespace NKikimr {
 
     void ErasureRestore(TErasureType::ECrcMode crcMode, TErasureType erasure, ui32 fullSize, TRope *whole,
             std::span<TRope> parts, ui32 restoreMask, ui32 offset, bool isFragment) {
+        if (erasure.GetErasure() == TErasureType::Erasure8Plus2Block) {
+            ErasureRestoreBlock82(crcMode, fullSize, whole, parts, restoreMask, offset, isFragment);
+            return;
+        }
         if (crcMode == TErasureType::CrcModeNone && erasure.GetErasure() == TErasureType::Erasure4Plus2Block) {
             Y_ABORT_UNLESS(parts.size() == erasure.TotalPartCount());
             Y_ABORT_UNLESS(!isFragment || !whole);

@@ -1,9 +1,10 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 
 Y_UNIT_TEST_SUITE(GarbageCollection) {
-    Y_UNIT_TEST(EmptyGcCmd) {
+    void RunEmptyGcCmd(TBlobStorageGroupType erasure) {
         TEnvironmentSetup env({
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .NodeCount = Max(9u, erasure.BlobSubgroupSize()),
+            .Erasure = erasure,
         });
         auto& runtime = env.Runtime;
 
@@ -19,4 +20,7 @@ Y_UNIT_TEST_SUITE(GarbageCollection) {
         auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(edge);
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::ERROR);
     }
+
+    Y_UNIT_TEST(EmptyGcCmd) { RunEmptyGcCmd(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(EmptyGcCmdBlock82) { RunEmptyGcCmd(TBlobStorageGroupType::Erasure8Plus2Block); }
 }

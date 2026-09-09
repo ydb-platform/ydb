@@ -48,7 +48,9 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
             diffArr[idx] = diffs[idx];
         }
         std::unique_ptr<IEventBase> ev = std::make_unique<TEvBlobStorage::TEvPatch>(test.Info->GroupID.GetRawId(), originalBlobId, patchedBlobId,
-                mask, std::move(diffArr), diffs.size(), TInstant::Max());
+                mask, std::move(diffArr), diffs.size(),
+                test.Info->Type.GetErasure() == TBlobStorageGroupType::Erasure8Plus2Block
+                    ? TAppData::TimeProvider->Now() + TDuration::Seconds(30) : TInstant::Max());
         test.Runtime->WrapInActorContext(test.Edge, [&] {
             SendToBSProxy(test.Edge, test.Info->GroupID, ev.release());
         });
@@ -105,6 +107,9 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
         UNIT_ASSERT(patchedBlobId3 != truePatchedBlobId3);
         NKikimrProto::EReplyStatus statusWhenNotMatchingCookie = (erasure == "block-4-2" ? NKikimrProto::ERROR : NKikimrProto::OK);
         SendPatch(test, originalBlobId, patchedBlobId3, TLogoBlobID::MaxCookie, diffs2, statusWhenNotMatchingCookie);
+        if (erasure == "block-8-2") {
+            SendGet(test, patchedBlobId3, patchedData2, NKikimrProto::OK);
+        }
         SendPatch(test, originalBlobId, truePatchedBlobId3, TLogoBlobID::MaxCookie, diffs2, NKikimrProto::OK);
         SendGet(test, truePatchedBlobId3, patchedData2, NKikimrProto::OK);
     }
@@ -150,6 +155,8 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
         MakePatchingTest("mirror-3");
     }
 
+    Y_UNIT_TEST(Block82) { MakePatchingTest("block-8-2"); }
+
     Y_UNIT_TEST(Block42) {
         MakePatchingTest("block-4-2");
     }
@@ -170,6 +177,8 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
     Y_UNIT_TEST(StressMirror3) {
         MakeStressPatchingTest("mirror-3");
     }
+
+    Y_UNIT_TEST(StressBlock82) { MakeStressPatchingTest("block-8-2"); }
 
     Y_UNIT_TEST(StressBlock42) {
         MakeStressPatchingTest("block-4-2");
@@ -204,11 +213,10 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
             }
         });
     }
-
-    Y_UNIT_TEST(PatchBlock42) {
+    void RunPatchParityBlock(TBlobStorageGroupType::EErasureSpecies erasure) {
         TEnvironmentSetup env{{
-            .NodeCount = 8,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block
+            .NodeCount = TBlobStorageGroupType(erasure).BlobSubgroupSize(),
+            .Erasure = erasure
         }};
         auto& runtime = env.Runtime;
         env.CreateBoxAndPool(1, 2);
@@ -500,5 +508,7 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
             checkBlob(id);
         }
     }
-}
 
+    Y_UNIT_TEST(PatchBlock42) { RunPatchParityBlock(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(PatchBlock82) { RunPatchParityBlock(TBlobStorageGroupType::Erasure8Plus2Block); }
+}

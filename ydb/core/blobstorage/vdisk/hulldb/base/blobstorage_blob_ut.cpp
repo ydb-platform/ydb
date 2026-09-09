@@ -16,7 +16,7 @@ namespace NKikimr {
         Y_UNIT_TEST(CreateFromDistinctParts) {
             for (bool addHeader1 : {true, false}) {
                 for (bool addHeader2 : {true, false}) {
-                    const ui8 totalParts = MaxTotalPartCount;
+                    const ui8 totalParts = 7; // Preserve the seven-part legacy header corpus.
                     const ui32 partSize = 6;
                     const ui64 fullDataSize = partSize;
                     const char *data[totalParts] = {

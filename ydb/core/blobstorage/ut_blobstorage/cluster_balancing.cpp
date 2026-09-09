@@ -21,19 +21,21 @@ struct TTestEnv {
         ui32 pdiskPerNode,
         ui32 groupCount,
         ui32 maxReassignAttemptsPerBucketPerIteration = 10,
-        TDuration iterationInterval = TDuration::Seconds(1)
+        TDuration iterationInterval = TDuration::Seconds(1),
+        ui32 maxReplicatingPDisks = 100,
+        ui32 maxReplicatingVDisks = 800
     )
     : Env({
         .NodeCount = nodeCount,
         .VDiskReplPausedAtStart = false,
         .Erasure = erasure,
-        .ConfigPreprocessor = [maxReassignAttemptsPerBucketPerIteration, iterationInterval](ui32, TNodeWardenConfig& conf) {
+        .ConfigPreprocessor = [maxReassignAttemptsPerBucketPerIteration, iterationInterval, maxReplicatingPDisks, maxReplicatingVDisks](ui32, TNodeWardenConfig& conf) {
             auto* bscSettings = conf.BlobStorageConfig.MutableBscSettings();
             auto* clusterBalancingSettings = bscSettings->MutableClusterBalancingSettings();
 
             clusterBalancingSettings->SetEnable(true);
-            clusterBalancingSettings->SetMaxReplicatingPDisks(100);
-            clusterBalancingSettings->SetMaxReplicatingVDisks(800);
+            clusterBalancingSettings->SetMaxReplicatingPDisks(maxReplicatingPDisks);
+            clusterBalancingSettings->SetMaxReplicatingVDisks(maxReplicatingVDisks);
             clusterBalancingSettings->SetIterationIntervalMs(iterationInterval.MilliSeconds());
             clusterBalancingSettings->SetMaxReassignAttemptsPerBucketPerIteration(maxReassignAttemptsPerBucketPerIteration);
             clusterBalancingSettings->SetPreferLessOccupiedRack(true);
@@ -253,14 +255,58 @@ struct TTestEnv {
 
 Y_UNIT_TEST_SUITE(ClusterBalancing) {
 
-    Y_UNIT_TEST(ClusterBalancingEvenDistribution) {
-        TTestEnv env(8, TBlobStorageGroupType::Erasure4Plus2Block, 1, 2, 10, TDuration::MilliSeconds(100));
+    Y_UNIT_TEST(Block82ReplicationLimitsAndUnreadyGroups) {
+        for (ui32 scenario = 0; scenario != 3; ++scenario) {
+            TTestEnv env(12, TBlobStorageGroupType::Erasure8Plus2Block, 1, 2, 10, TDuration::MilliSeconds(100),
+                scenario == 0 ? 1 : 100, scenario == 1 ? 1 : 800);
+            bool inject = true;
+            ui32 attempts = 0;
+            env->Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (inject && ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigResponse::EventType) {
+                    auto* response = ev->Get<TEvBlobStorage::TEvControllerConfigResponse>()->Record.MutableResponse();
+                    // The balancing actor reads base config and pools together.
+                    if (response->StatusSize() == 2 && response->GetStatus(0).HasBaseConfig()) {
+                        auto* config = response->MutableStatus(0)->MutableBaseConfig();
+                        if (config->GroupSize()) {
+                            const ui32 group = config->GetGroup(0).GetGroupId();
+                            for (auto& slot : *config->MutableVSlot()) {
+                                if (slot.GetFailDomainIdx() >= 10 && (scenario == 2 || slot.GetGroupId() == group)) {
+                                    slot.SetStatus(scenario == 2 ? "ERROR" : "REPLICATING");
+                                    slot.SetReady(false);
+                                }
+                            }
+                        }
+                    }
+                }
+                if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
+                    const auto& request = ev->Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record.GetRequest();
+                    for (const auto& command : request.GetCommand()) {
+                        if (command.HasReassignGroupDisk()) {
+                            ++attempts;
+                            env.SendReassignNotViable(*ev);
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            };
+            env->AlterBox(1, 2);
+            env->Sim(TDuration::Seconds(30));
+            UNIT_ASSERT_VALUES_EQUAL_C(attempts, 0, "scenario=" << scenario);
+            inject = false;
+            UNIT_ASSERT_C(env.WaitFor([&] { return attempts > 0; }, 30), "scenario=" << scenario);
+        }
+    }
+
+    void RunClusterBalancingEvenDistribution(TBlobStorageGroupType erasure) {
+        TTestEnv env(erasure.BlobSubgroupSize(), erasure, 1, 2, 10, TDuration::MilliSeconds(100));
 
         UNIT_ASSERT(env.EachPDiskHasNVDisks(2));
 
         env->AlterBox(1, 2);
 
         bool seenParameters = false;
+        std::set<ui32> movedDomains;
 
         auto catchReassigns = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) { 
             if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
@@ -268,6 +314,7 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
                 for (const auto& command : request.GetCommand()) {
                     if (command.GetCommandCase() == NKikimrBlobStorage::TConfigRequest::TCommand::kReassignGroupDisk) {
                         auto& reassignCommand = command.GetReassignGroupDisk();
+                        movedDomains.insert(reassignCommand.GetFailDomainIdx());
                         if (reassignCommand.GetPreferLessOccupiedRack() && reassignCommand.GetWithAttentionToReplication()) {
                             seenParameters = true;
                         }
@@ -281,14 +328,18 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
 
         bool success = env.WaitFor([&] {
             return env.EachPDiskHasNVDisks(1);
-        }, 60);
+        }, 10 * erasure.BlobSubgroupSize()); // Reassignments wait for each moved VDisk to become stably ready.
 
         UNIT_ASSERT(seenParameters);
         UNIT_ASSERT(success);
+        if (erasure.GetErasure() == TBlobStorageGroupType::Erasure8Plus2Block) {
+            UNIT_ASSERT(movedDomains.contains(10));
+            UNIT_ASSERT(movedDomains.contains(11));
+        }
     }
 
-    Y_UNIT_TEST(ClusterBalancingEvenDistributionNotPossible) {
-        TTestEnv env(8, TBlobStorageGroupType::Erasure4Plus2Block, 1, 3, 10, TDuration::MilliSeconds(100));
+    void RunClusterBalancingEvenDistributionNotPossible(TBlobStorageGroupType erasure) {
+        TTestEnv env(erasure.BlobSubgroupSize(), erasure, 1, 3, 10, TDuration::MilliSeconds(100));
 
         UNIT_ASSERT(env.EachPDiskHasNVDisks(3));
 
@@ -302,7 +353,7 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
             }
             // There is now total of 16 PDisks, 8 of them should be used by 2 VDisks and 8 of them should be used by 1 VDisk.
             // This is the best distribution possible.
-            return countByUsage[1] == 8 && countByUsage[2] == 8;
+            return countByUsage[1] == erasure.BlobSubgroupSize() && countByUsage[2] == erasure.BlobSubgroupSize();
         };
 
         bool success = env.WaitFor(check, 60);
@@ -333,11 +384,9 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
         UNIT_ASSERT(usageMap1 == usageMap2);
     }
 
-    Y_UNIT_TEST(ClusterBalancingMaxReassignAttemptsArePerSourceBucket) {
-        // 3 Erasure4Plus2Block groups make 24 dynamic VSlots. Spread over 9 source
-        // PDisks, this gives at least two source usage buckets before new PDisks
-        // are added as balancing targets.
-        TTestEnv env(9, TBlobStorageGroupType::Erasure4Plus2Block, 1, 3, 1);
+    void RunMaxReassignAttemptsArePerSourceBucket(TBlobStorageGroupType erasure) {
+        // One spare domain creates distinct source usage buckets.
+        TTestEnv env(erasure.BlobSubgroupSize() + 1, erasure, 1, 3, 1);
 
         std::map<TTestEnv::TVDiskPositionKey, ui32> sourceUsageByVDisk;
         ui32 maxSourceUsage = 0;
@@ -402,10 +451,10 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
             << " blockedTopBucketAttempts# " << blockedTopBucketAttempts);
     }
 
-    Y_UNIT_TEST(ClusterBalancingSkipsNonImprovableStoragePool) {
+    void RunSkipsNonImprovableStoragePool(TBlobStorageGroupType erasure) {
         constexpr ui64 SsdPoolId = 2;
 
-        TTestEnv env(8, TBlobStorageGroupType::Erasure4Plus2Block, 1, 2, 100);
+        TTestEnv env(erasure.BlobSubgroupSize(), erasure, 1, 2, 100);
 
         env.DefineBoxWithDrives(1, {
             NKikimrBlobStorage::EPDiskType::ROT,
@@ -477,4 +526,12 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
             << " ssdPoolReassigns# " << ssdPoolReassigns
             << " rotPoolReassigns# " << rotPoolReassigns);
     }
+    Y_UNIT_TEST(ClusterBalancingEvenDistribution) { RunClusterBalancingEvenDistribution(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(ClusterBalancingMaxReassignAttemptsArePerSourceBucket) { RunMaxReassignAttemptsArePerSourceBucket(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(ClusterBalancingMaxReassignAttemptsArePerSourceBucketBlock82) { RunMaxReassignAttemptsArePerSourceBucket(TBlobStorageGroupType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(ClusterBalancingSkipsNonImprovableStoragePool) { RunSkipsNonImprovableStoragePool(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(ClusterBalancingSkipsNonImprovableStoragePoolBlock82) { RunSkipsNonImprovableStoragePool(TBlobStorageGroupType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(ClusterBalancingEvenDistributionBlock82) { RunClusterBalancingEvenDistribution(TBlobStorageGroupType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(ClusterBalancingEvenDistributionNotPossible) { RunClusterBalancingEvenDistributionNotPossible(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(ClusterBalancingEvenDistributionNotPossibleBlock82) { RunClusterBalancingEvenDistributionNotPossible(TBlobStorageGroupType::Erasure8Plus2Block); }
 }

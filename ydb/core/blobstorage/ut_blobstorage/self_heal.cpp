@@ -130,8 +130,9 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
         UNIT_ASSERT_VALUES_EQUAL(base.GroupSize(), 1);
 
         std::optional<TBlobStorageGroupInfo::TTopology> topology;
-        if (erasure.GetErasure() == TBlobStorageGroupType::Erasure4Plus2Block) {
-            topology.emplace(erasure, 1, 8, 1, true);
+        if (erasure.GetErasure() == TBlobStorageGroupType::Erasure4Plus2Block
+                || erasure.GetErasure() == TBlobStorageGroupType::Erasure8Plus2Block) {
+            topology.emplace(erasure, 1, erasure.BlobSubgroupSize(), 1, true);
         } else if (erasure.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
             topology.emplace(erasure, 3, 3, 1, true);
         }
@@ -209,6 +210,22 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
 
     SELF_HEAL_MAINTENANCE_TEST(OneFaultyMaintenanceRequestOneMaintenanceRequest, Mirror3dc, TPDisks({ Active, Active, Active, Active, Active, FaultyMaintenance, Active, ActiveMaintenance, Active }));
     SELF_HEAL_MAINTENANCE_TEST(OneFaultyMaintenanceRequestOneMaintenanceRequest, 4Plus2Block, TPDisks({ ActiveMaintenance, Active, Active, Active, Active, Active, FaultyMaintenance, Active }));
+
+    Y_UNIT_TEST(HighDomainMaintenanceBlock82) {
+        for (ui32 domain : {10, 11}) {
+            TPDisks disks(12, Active);
+            disks[domain] = ActiveMaintenance;
+            TestMaintenanceRequest(TBlobStorageGroupType::Erasure8Plus2Block, disks);
+        }
+    }
+
+    Y_UNIT_TEST(HighDomainsMaintenanceWithFaultyBlock82) {
+        TPDisks disks(12, Active);
+        disks[9] = Faulty;
+        disks[10] = ActiveMaintenance;
+        disks[11] = ActiveMaintenance;
+        TestMaintenanceRequest(TBlobStorageGroupType::Erasure8Plus2Block, disks);
+    }
 
     Y_UNIT_TEST(DefaultMaintenanceStatusValue) {
         const TBlobStorageGroupType erasure = TBlobStorageGroupType::ErasureMirror3dc;

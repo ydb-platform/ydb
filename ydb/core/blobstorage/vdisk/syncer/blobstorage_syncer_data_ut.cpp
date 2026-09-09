@@ -59,4 +59,12 @@ Y_UNIT_TEST_SUITE(TSyncNeighborsTests) {
     Y_UNIT_TEST(SerDes3) {
         SerDes(TBlobStorageGroupType::Erasure4Plus2Block, 2U, 8U);
     }
+    Y_UNIT_TEST(SerDesOneDiskPerDomainBlock82) {
+        SerDes(TBlobStorageGroupType::Erasure8Plus2Block, 1U, 12U);
+    }
+
+    Y_UNIT_TEST(SerDesTwoDisksPerDomainBlock82) {
+        SerDes(TBlobStorageGroupType::Erasure8Plus2Block, 2U, 12U);
+    }
+
 }

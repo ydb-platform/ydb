@@ -912,7 +912,8 @@ bool TCms::TryToLockVDisk(const TActionOptions& opts,
         const auto &group = ClusterInfo->BSGroup(groupId);
         TInstant defaultDeadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
 
-        if (group.Erasure.GetErasure() == TErasureType::ErasureSpeciesCount) {
+        auto counters = CreateErasureCounter(group.Erasure.GetErasure(), vdisk, groupId, TabletCounters);
+        if (!counters) {
             error.Code = TStatus::ERROR;
             error.Reason = Sprintf("Affected group %u has unknown erasure type", groupId);
             error.Deadline = defaultDeadline;
@@ -927,7 +928,6 @@ bool TCms::TryToLockVDisk(const TActionOptions& opts,
             return false;
         }
 
-        auto counters = CreateErasureCounter(ClusterInfo->BSGroup(groupId).Erasure.GetErasure(), vdisk, groupId, TabletCounters);
         counters->CountGroupState(ClusterInfo, State->Config.DefaultRetryTime, duration, error);
 
         switch (opts.AvailabilityMode) {

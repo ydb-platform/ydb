@@ -64,16 +64,18 @@ namespace NKikimr {
 
 #define SETUP_VECTORS(data, gtype) \
     ui32 totalParts = (gtype).TotalPartCount(); \
+    ui32 handoffNum = (gtype).Handoff(); \
+    Y_ABORT_UNLESS(totalParts && totalParts <= 16); \
+    Y_ABORT_UNLESS(handoffNum <= MaxHandoffNodes); \
+    Y_ABORT_UNLESS(2 + 2 * totalParts * (1 + handoffNum) <= sizeof(data) * NMatrix::BitsInByte, \
+        "generic ingress does not fit its persistent 64-bit representation"); \
     ui32 start = 2; \
     ui8* const dataPtr = (ui8*)(&(data));\
     TShiftedMainBitVec main(dataPtr, start, (start + totalParts)); \
     start += totalParts;    \
     TShiftedMainBitVec local(dataPtr, start, (start + totalParts)); \
     start += totalParts;    \
-    ui32 handoffNum = (gtype).Handoff(); \
-    Y_DEBUG_ABORT_UNLESS(handoffNum <= MaxHandoffNodes); \
     const ui32 handoffVectorBits = totalParts * 2; \
-    Y_DEBUG_ABORT_UNLESS(start + handoffNum * handoffVectorBits <= sizeof(data) * NMatrix::BitsInByte); \
     TShiftedHandoffBitVec handoff[MaxHandoffNodes]; \
     { \
         for (unsigned i = 0; i < handoffNum; i++) { \
@@ -189,9 +191,9 @@ namespace NKikimr {
                 const auto& v = NMatrix::TVectorType::MakeOneHot(partIdx, gtype.TotalPartCount());
                 ui64 raw = 0;
                 if (setUpLocalBits) {
-                    raw |= static_cast<ui64>(v.Raw()) << (62 - 8);
+                    raw |= static_cast<ui64>(v.Raw8()) << (62 - 8);
                 }
-                raw |= static_cast<ui64>(v.Raw()) << (62 - 8 - gtype.TotalPartCount() * (1 + nodeId));
+                raw |= static_cast<ui64>(v.Raw8()) << (62 - 8 - gtype.TotalPartCount() * (1 + nodeId));
                 return TIngress(raw);
             }
         }
@@ -341,6 +343,7 @@ namespace NKikimr {
     }
 
     TIngress TIngress::ReplaceLocal(TBlobStorageGroupType gtype, NMatrix::TVectorType parts) const {
+        Y_ABORT_UNLESS(parts.GetSize() == gtype.TotalPartCount());
         switch (IngressMode(gtype)) {
             case EMode::GENERIC: {
                 TIngress res;
@@ -359,7 +362,7 @@ namespace NKikimr {
             }
             case EMode::MIRROR3OF4: {
                 const ui64 mask = ((static_cast<ui64>(1) << gtype.TotalPartCount()) - 1) << (62 - gtype.TotalPartCount());
-                return TIngress((Data & ~mask) | static_cast<ui64>(parts.Raw()) << (62 - 8));
+                return TIngress((Data & ~mask) | static_cast<ui64>(parts.Raw8()) << (62 - 8));
             }
         }
     }
@@ -453,6 +456,7 @@ namespace NKikimr {
                                       NMatrix::TVectorType recoveredParts) {
         TIngress res;
         Y_ABORT_UNLESS(id.PartId() == 0);
+        Y_ABORT_UNLESS(recoveredParts.GetSize() == top->GType.TotalPartCount());
         for (ui8 i = recoveredParts.FirstPosition(); i != recoveredParts.GetSize(); i = recoveredParts.NextPosition(i)) {
             res.Merge(*CreateIngressWithLocal(top, vdisk, TLogoBlobID(id, i + 1)));
         }

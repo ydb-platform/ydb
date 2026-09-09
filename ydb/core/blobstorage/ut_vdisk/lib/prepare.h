@@ -163,6 +163,9 @@ struct TConfiguration {
     std::unique_ptr<TAllVDisks> VDisks;
     TIntrusivePtr<NKikimr::TBlobStorageGroupInfo> GroupInfo;
 
+    // Optional instrumentation of prepared services, before any actor starts.
+    std::function<void(NActors::TActorSystemSetup&)> BeforeActorSystemStart;
+
     TAtomic DoneCounter = 0;
     TSystemEvent DoneEvent { TSystemEvent::rAuto };
     TSystemEvent DbInitEvent { TSystemEvent::rAuto };

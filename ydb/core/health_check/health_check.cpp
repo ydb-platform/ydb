@@ -2624,7 +2624,7 @@ public:
                 } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0 || DisksColors[Ydb::Monitoring::StatusFlag::ORANGE] > 0) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 }
-            } else if (ErasureSpecies == BLOCK_4_2) {
+            } else if (ErasureSpecies == BLOCK_4_2 || ErasureSpecies == BLOCK_8_2) {
                 if (FailedDisks > 2) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", ETags::GroupState, {ETags::VDiskState});
                 } else if (FailedDisks > 1) {
@@ -2652,6 +2652,8 @@ public:
                 } else if (DisksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0 || DisksColors[Ydb::Monitoring::StatusFlag::ORANGE] > 0) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 }
+            } else {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Unknown erasure species", ETags::GroupState);
             }
         }
     };
@@ -2699,6 +2701,7 @@ public:
 
     static const inline TString NONE = "none";
     static const inline TString BLOCK_4_2 = "block-4-2";
+    static const inline TString BLOCK_8_2 = "block-8-2";
     static const inline TString MIRROR_3_DC = "mirror-3-dc";
     static const int MERGING_IGNORE_SIZE = 4;
 

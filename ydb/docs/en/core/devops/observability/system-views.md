@@ -1,5 +1,7 @@
 # Cluster System Views
 
+`ErasureSpecies` can be `block-8-2`; its ordinary group has twelve VSlots. Filter groups by storage pool when comparing mixed erasure configurations. BSC also publishes separate `GroupErasureInfo` and `StoragePoolErasureInfo` gauges; `DskUsedBytes` retains physical-byte units. See [mapping labels and resource factors](../../concepts/block-8-2.md#capacity-metadata).
+
 For internal introspection of cluster state, users can query special service views (system views). These views are available from the cluster root directory and use the system path prefix `.sys`.
 
 Cloud database users typically do not have access to cluster system views, as the cloud team is responsible for their maintenance and timely diagnostics.
@@ -68,7 +70,7 @@ Note that the tuple (NodeId, PDiskId) forms a foreign key to the `ds_pdisks` vie
 |---------------------|----------|---------|-----------------------------------------------------------------------------------------------------------|
 | GroupId             | Uint32   | 0       | Storage group number in the cluster                                                                       |
 | Generation          | Uint32   |         | Storage group configuration generation                                                                     |
-| ErasureSpecies      | String   |         | Redundancy encoding mode for the group (block-4-2, mirror-3-dc, mirror-3of4, ...)                        |
+| ErasureSpecies      | String   |         | Redundancy encoding mode for the group (block-4-2, block-8-2, mirror-3-dc, mirror-3of4, ...)                        |
 | BoxId               | Uint64   |         | Identifier of the Box in which this group was created                                                     |
 | StoragePoolId       | Uint64   |         | Storage pool identifier within the Box where this group operates                                          |
 | EncryptionMode      | Uint32   |         | Presence of data encryption in the group and encryption algorithm if enabled                              |

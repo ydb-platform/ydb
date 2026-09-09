@@ -12,7 +12,7 @@ void RunCheckFailModel(TBlobStorageGroupType::EErasureSpecies erasure) {
     TBlobStorageGroupInfo info(erasure, numVDisksPerFailDomain, numFailDomainsPerFailRealm, numFailRealms);
 
     const ui32 numDisks = info.GetTotalVDisksNum();
-    for (ui64 failedMask = 0; failedMask != (ui64)1 << numDisks; ++failedMask) {
+    auto check = [&](ui64 failedMask) {
         TGroupQuorumTracker tracker(&info);
 
         NKikimrProto::EReplyStatus status = NKikimrProto::UNKNOWN;
@@ -29,6 +29,30 @@ void RunCheckFailModel(TBlobStorageGroupType::EErasureSpecies erasure) {
             : NKikimrProto::ERROR;
 
         UNIT_ASSERT_VALUES_EQUAL(status, expectedStatus);
+    };
+    if (erasure == TBlobStorageGroupType::Erasure8Plus2Block) {
+        // Whole-domain losses exercise both VDisks of each ordinary failure domain.
+        check(0);
+        for (ui32 first = 0; first < numFailDomainsPerFailRealm; ++first) {
+            const ui64 a = ui64{3} << (2 * first);
+            check(a);
+            for (ui32 second = 0; second < first; ++second) {
+                check(a | (ui64{3} << (2 * second)));
+            }
+        }
+        check(0x3f);
+        check(ui64{0x3f} << (numDisks - 6));
+        ui64 seed = 0x82422026;
+        for (ui32 i = 0; i < 1024; ++i) {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            check(seed & ((ui64{1} << numDisks) - 1));
+        }
+    } else {
+        for (ui64 mask = 0; mask != (ui64{1} << numDisks); ++mask) {
+            check(mask);
+        }
     }
 }
 
@@ -44,6 +68,7 @@ Y_UNIT_TEST_SUITE(TDsProxyQuorumTracker) {
     UNIT_TEST_FOR_ERASURE(Erasure3Plus1Block)
     UNIT_TEST_FOR_ERASURE(Erasure3Plus1Stripe)
     UNIT_TEST_FOR_ERASURE(Erasure4Plus2Block)
+    Y_UNIT_TEST(CheckFailModelBlock82) { RunCheckFailModel(TBlobStorageGroupType::Erasure8Plus2Block); }
     UNIT_TEST_FOR_ERASURE(Erasure3Plus2Block)
     UNIT_TEST_FOR_ERASURE(Erasure4Plus2Stripe)
     UNIT_TEST_FOR_ERASURE(Erasure3Plus2Stripe)

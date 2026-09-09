@@ -11,6 +11,7 @@ namespace NKikimr {
         const TPDiskCtxPtr PDiskCtx;
         const TInstant Deadline;
         std::vector<TEvRecoverBlobResult::TItem> Items;
+        std::vector<NMatrix::TVectorType> HugeParts;
         const bool WriteRestoredParts;
         const bool ReportNonrestoredParts;
         const TActorId Sender;
@@ -43,11 +44,13 @@ namespace NKikimr {
             std::vector<TReadCmd>& ReadQ;
             const TBlobStorageGroupType GType;
             TEvRestoreCorruptedBlobResult::TItem *Item = nullptr;
+            NMatrix::TVectorType *HugeParts = nullptr;
 
             static constexpr bool HaveToMergeData() { return true; }
 
-            void Begin(TEvRestoreCorruptedBlobResult::TItem *item) {
+            void Begin(TEvRestoreCorruptedBlobResult::TItem *item, NMatrix::TVectorType *hugeParts) {
                 Item = item;
+                HugeParts = hugeParts;
             }
 
             void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& /*key*/,
@@ -60,11 +63,16 @@ namespace NKikimr {
                 memRec.GetDiskData(&extr, outbound);
                 switch (extr.BlobType) {
                     case TBlobType::DiskBlob:
+                        ReadQ.emplace_back(extr.SwearOne(), Item, local);
+                        break;
+
                     case TBlobType::HugeBlob:
+                        *HugeParts |= local;
                         ReadQ.emplace_back(extr.SwearOne(), Item, local);
                         break;
 
                     case TBlobType::ManyHugeBlobs:
+                        *HugeParts |= local;
                         for (ui32 i = local.FirstPosition(); i != local.GetSize(); i = local.NextPosition(i), ++extr.Begin) {
                             if (Item->Needed.Get(i)) {
                                 ReadQ.emplace_back(*extr.Begin, Item, NMatrix::TVectorType::MakeOneHot(i, local.GetSize()));
@@ -113,6 +121,7 @@ namespace NKikimr {
             for (auto& item : items) {
                 Items.push_back(std::move(item));
             }
+            HugeParts.resize(Items.size(), NMatrix::TVectorType(0, Info->Type.TotalPartCount()));
         }
 
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -133,10 +142,11 @@ namespace NKikimr {
             using TLevelIndexSnapshot = NKikimr::TLevelIndexSnapshot<TKeyLogoBlob, TMemRecLogoBlob>;
             TLevelIndexSnapshot::TForwardIterator iter(Snap->HullCtx, &Snap->LogoBlobsSnap);
             TDataExtractorMerger merger{ReadQ, Info->Type};
-            for (auto& item : Items) {
+            for (size_t i = 0; i < Items.size(); ++i) {
+                auto& item = Items[i];
                 iter.Seek(item.BlobId);
                 if (iter.Valid() && iter.GetCurKey() == item.BlobId) { // item found, process through merger to extract data parts
-                    merger.Begin(&item);
+                    merger.Begin(&item, &HugeParts[i]);
                     iter.PutToMerger(&merger);
                 } else { // item not found in local metabase -- report error for this one
                     item.Status = NKikimrProto::ERROR;
@@ -207,7 +217,7 @@ namespace NKikimr {
                         ev.reset(new TEvRecoverBlob);
                         ev->Deadline = Deadline;
                     }
-                    ev->Items.emplace_back(item.BlobId, TStackVec<TRope, 8>(item.Parts), item.PartsMask, item.Needed, TDiskPart(), i);
+                    ev->Items.emplace_back(item.BlobId, TStackVec<TRope, MaxTotalPartCount>(item.Parts), item.PartsMask, item.Needed, TDiskPart(), i);
                     STLOG(PRI_DEBUG, BS_VDISK_SCRUB, VDS17, VDISKP(LogPrefix, "IssueQuery item"), (SelfId, SelfId()),
                         (BlobId, item.BlobId), (PartsMask, item.PartsMask), (Needed, item.Needed));
                 }
@@ -261,6 +271,7 @@ namespace NKikimr {
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(blobId, buffer, vdiskId, true, &index, Deadline,
                     NKikimrBlobStorage::EPutHandleClass::AsyncBlob, TWriteSource::RestoredCorruptedBlob);
                 ev->RewriteBlob = true;
+                ev->RewriteHugeBlob = HugeParts[index].Get(i);
                 Send(SkeletonId, ev.release());
                 ++WritesPending;
             }

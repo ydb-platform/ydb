@@ -790,7 +790,7 @@ namespace NKikimr {
             VCtx = MakeIntrusive<TVDiskContext>(ctx.SelfID, GInfo->PickTopology(), VDiskCounters, SelfVDiskId,
                         TActivationContext::ActorSystem(), baseInfo.DeviceType, baseInfo.DonorMode,
                         baseInfo.ReplPDiskReadQuoter, baseInfo.ReplPDiskWriteQuoter, baseInfo.ReplNodeRequestQuoter,
-                        baseInfo.ReplNodeResponseQuoter);
+                        baseInfo.ReplNodeResponseQuoter, Config->AddHeader);
 
             // create IntQueues
             IntQueueAsyncGets = std::make_unique<TIntQueueClass>(
@@ -887,7 +887,7 @@ namespace NKikimr {
                         TBlobStorageGroupType type = (GInfo ? GInfo->Type : TErasureType::ErasureNone);
                         VCtx->UpdateCostModel(std::make_unique<TCostModel>(msg->Dsk->SeekTimeUs, msg->Dsk->ReadSpeedBps,
                             msg->Dsk->WriteSpeedBps, msg->Dsk->ReadBlockSize, msg->Dsk->WriteBlockSize,
-                            msg->MinHugeBlobInBytes, type));
+                            msg->MinHugeBlobInBytes, type, VCtx->EffectiveAddHeader));
                         break;
                     }
                     case TEvFrontRecoveryStatus::SyncGuidRecoveryDone:
@@ -903,7 +903,7 @@ namespace NKikimr {
         void Handle(TEvMinHugeBlobSizeUpdate::TPtr &ev) {
             VCtx->UpdateCostModel(std::make_unique<TCostModel>(VCtx->CostModel->SeekTimeUs, VCtx->CostModel->ReadSpeedBps,
                 VCtx->CostModel->WriteSpeedBps, VCtx->CostModel->ReadBlockSize, VCtx->CostModel->WriteBlockSize,
-                ev->Get()->MinHugeBlobInBytes, VCtx->CostModel->GType));
+                ev->Get()->MinHugeBlobInBytes, VCtx->CostModel->GType, VCtx->EffectiveAddHeader));
         }
 
         static NKikimrWhiteboard::EFlag ToLightSignal(NKikimrWhiteboard::EVDiskState st) {
@@ -1706,11 +1706,6 @@ namespace NKikimr {
             }
             if (VCtx->CostModel && status == NKikimrProto::OK) {
                 VCtx->CostModel->FillInSettings(*record.MutableCostSettings());
-                ui32 minHugeBlobInBytes = record.MutableCostSettings()->GetMinHugeBlobInBytes();
-                // We account header size here, since DSProxy doesn't know about it
-                // and can try to send smaller blobs (which VDisk would consider huge) in a MultiPut request.
-                ui32 onVDiskMinHugeBlobInBytes = minHugeBlobInBytes > TDiskBlob::HeaderSize ? (minHugeBlobInBytes - TDiskBlob::HeaderSize) : 0;
-                record.MutableCostSettings()->SetMinHugeBlobInBytes(onVDiskMinHugeBlobInBytes);
             }
             ctx.Send(ev->Sender, res.release(), flags, ev->Cookie);
         }

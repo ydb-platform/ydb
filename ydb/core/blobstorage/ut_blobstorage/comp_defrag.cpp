@@ -1,5 +1,6 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/lifecycle_checks.h>
 #include <ydb/core/load_test/service_actor.h>
 #include <ydb/core/util/lz4_data_generator.h>
 #include <ydb/core/blobstorage/vdisk/defrag/defrag_quantum.h>
@@ -183,10 +184,10 @@ struct TTetsEnvBase {
 
 struct TTetsEnvCompThrottler : TTetsEnvBase {
     using TTetsEnvBase::TTetsEnvBase;
-    TTetsEnvCompThrottler() : TTetsEnvBase({
-        .NodeCount = 8,
+    TTetsEnvCompThrottler(TBlobStorageGroupType::EErasureSpecies erasure) : TTetsEnvBase({
+        .NodeCount = TBlobStorageGroupType(erasure).BlobSubgroupSize(),
         .VDiskReplPausedAtStart = false,
-        .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        .Erasure = erasure,
     }) {
         Data = FastGenDataForLZ4(128 * 1024, 0);
     }
@@ -234,8 +235,10 @@ struct TCompStatPerNode {
 };
 
 struct TCompStat {
-    TCompStat() {
-        for (ui32 i = 1; i <= 8; i++) {
+    explicit TCompStat(ui32 nodeCount)
+        : NodeCount(nodeCount)
+    {
+        for (ui32 i = 1; i <= NodeCount; i++) {
             NodeCompStats[i] = TCompStatPerNode();
         }
     }
@@ -250,7 +253,7 @@ struct TCompStat {
 
     ui64 GetSumWrittenBytes() {
         ui64 result = 0;
-        for (ui32 i = 1; i <= 8; i++) {
+        for (ui32 i = 1; i <= NodeCount; i++) {
             result += NodeCompStats[i].BytesWritten;
         }
         return result;
@@ -258,7 +261,7 @@ struct TCompStat {
 
     ui64 GetSumReadBytes() {
         ui64 result = 0;
-        for (ui32 i = 1; i <= 8; i++) {
+        for (ui32 i = 1; i <= NodeCount; i++) {
             result += NodeCompStats[i].BytesRead;
         }
         return result;
@@ -269,11 +272,12 @@ struct TCompStat {
     }
 
     void Clear() {
-        for (ui32 i = 1; i <= 8; i++) {
+        for (ui32 i = 1; i <= NodeCount; i++) {
             NodeCompStats[i].Clear();
         }
     }
 
+    const ui32 NodeCount;
     THashMap<ui32, TCompStatPerNode> NodeCompStats;
 };
 
@@ -284,14 +288,20 @@ void CheckCompStat(TDuration duration, TCompStatPerNode& nodeStat, ui32 rate) {
     UNIT_ASSERT(nodeStat.BytesWritten + nodeStat.BytesRead <= (duration.Seconds() + 1) * rate);
 }
 
+#define COMPACTION_ERASURE_TEST(name) \
+    void name(TBlobStorageGroupType::EErasureSpecies erasure); \
+    Y_UNIT_TEST(name) { name(TBlobStorageGroupType::Erasure4Plus2Block); } \
+    Y_UNIT_TEST(name##Block82) { name(TBlobStorageGroupType::Erasure8Plus2Block); } \
+    void name(TBlobStorageGroupType::EErasureSpecies erasure)
+
 Y_UNIT_TEST_SUITE(CompactionThrottler) {
 
-    Y_UNIT_TEST(CompactionLoad) {
-        TTetsEnvCompThrottler env;
+    COMPACTION_ERASURE_TEST(CompactionLoad) {
+        TTetsEnvCompThrottler env(erasure);
         ui32 N = 7000;
         ui32 batchSize = 1000;
 
-        TCompStat compStats;
+        TCompStat compStats(env.Env.Settings.NodeCount);
         ui64 compactionBytesWritten = 0, compactionBytesRead = 0;
         ui64 expectedCompactionBytesWritten = 0;
 
@@ -401,11 +411,12 @@ struct TTestEnvCompDefragIndependent : TTetsEnvBase {
     static constexpr ui64 MAX_DEFRAG_INFLIGHT = 2;
 
     using TTetsEnvBase::TTetsEnvBase;
-    TTestEnvCompDefragIndependent(double garbageThresholdToRunCompaction = 0.0)
+    TTestEnvCompDefragIndependent(double garbageThresholdToRunCompaction = 0.0,
+            TBlobStorageGroupType::EErasureSpecies erasure = TBlobStorageGroupType::Erasure4Plus2Block)
         : TTetsEnvBase({
-            .NodeCount = 8,
+            .NodeCount = TBlobStorageGroupType(erasure).BlobSubgroupSize(),
             .VDiskReplPausedAtStart = false,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .Erasure = erasure,
             .DiskType = NPDisk::EDeviceType::DEVICE_TYPE_ROT,
             .MinHugeBlobInBytes = MIN_HUGE_BLOB_SIZE,
             .PDiskSize = 20_GB,
@@ -413,7 +424,8 @@ struct TTestEnvCompDefragIndependent : TTetsEnvBase {
         })
     {
         DataSmall = FastGenDataForLZ4(32_KB, 0);
-        DataLarge = FastGenDataForLZ4(1_MB, 0);
+        // Keep 256 KiB per part, above the aligned Huge threshold plus one byte.
+        DataLarge = FastGenDataForLZ4(256_KB * GroupInfo->Type.DataParts(), 0);
 
         SetIcbControl("VDiskControls.MaxChunksToDefragInflight", MAX_DEFRAG_INFLIGHT);
         SetIcbControl("VDiskControls.DefaultHugeGarbagePerMille", 50);
@@ -464,6 +476,44 @@ struct TTestEnvCompDefragIndependent : TTetsEnvBase {
 
     TString DataSmall, DataLarge;
 
+    void CheckWideLiveData(bool restart = false) {
+        if (GroupInfo->Type.GetErasure() != TBlobStorageGroupType::Erasure8Plus2Block) {
+            return;
+        }
+        if (restart) {
+            Env.Cleanup();
+            Env.Initialize();
+            Env.Sim(TDuration::Minutes(1));
+        }
+        // Both belong to tablet 2, whose live inline/Huge records survive the GC corpus.
+        for (ui32 index : {1, 11}) {
+            const auto blob = GetData(index);
+            const TString data(blob->Buffer.data(), blob->Buffer.size());
+            NBlobStorageLifecycle::CheckGroupBlob(Env, GroupInfo, blob->Id, data);
+            NBlobStorageLifecycle::CheckMainParts(Env, GroupInfo, blob->Id, data, true);
+            using TLayout = TEvBlobStorage::TEvCaptureVDiskLayoutResult;
+            const auto expected = index == 1 ? TLayout::ERecordType::HugeBlob : TLayout::ERecordType::InplaceBlob;
+            for (ui32 partIdx = GroupInfo->Type.DataParts(); partIdx < GroupInfo->Type.TotalPartCount(); ++partIdx) {
+                const auto disk = NBlobStorageLifecycle::SubgroupDisk(GroupInfo, blob->Id, partIdx);
+                auto layout = Env.SyncQuery<TLayout, TEvBlobStorage::TEvCaptureVDiskLayout>(GroupInfo->GetActorId(disk));
+                bool found = false;
+                for (const auto& record : layout->Layout) {
+                    if (record.Database == TLayout::EDatabase::LogoBlobs && record.BlobId.FullID() == blob->Id &&
+                            record.RecordType != TLayout::ERecordType::IndexRecord) {
+                        UNIT_ASSERT_C(record.RecordType == expected, record.ToString());
+                        found = true;
+                    }
+                }
+                UNIT_ASSERT(found);
+            }
+        }
+    }
+
+    void RunFullCompaction() {
+        TTetsEnvBase::RunFullCompaction();
+        CheckWideLiveData();
+    }
+
     ui64 BytesWrittenSmall = 0, BytesWrittenLarge = 0;
     std::unordered_map<ui32, ui32> CompactionsPerNode;
     std::unordered_map<ui32, ui32> ChunksFreedByDefragPerNode;
@@ -476,7 +526,7 @@ void DeleteHugeBlobsOfTablet(TTetsEnvBase& env, ui32 N, ui32 tabletId) {
     auto keep = std::make_unique<TVector<TLogoBlobID>>();
     for (ui32 i = 0; i < N; ++i) {
         auto ev = env.GetData(i);
-        if (ev->Id.TabletID() == tabletId && ev->Buffer.size() < TTestEnvCompDefragIndependent::MIN_HUGE_BLOB_SIZE * 4) {
+        if (ev->Id.TabletID() == tabletId && env.GroupInfo->Type.MaxPartSize(ev->Id) < TTestEnvCompDefragIndependent::MIN_HUGE_BLOB_SIZE) {
             keep->push_back(ev->Id);
         }
     }
@@ -598,13 +648,14 @@ struct TEvDefragStartQuantum : TEventLocal<TEvDefragStartQuantum, TEvBlobStorage
 };
 
 struct TTestEnvCompBroker {
-    TTestEnvCompBroker(ui32 numGroups = 3, ui32 nodeCount = 8, ui32 maxCompactionsLimit = 2)
+    TTestEnvCompBroker(ui32 numGroups = 3, ui32 nodeCount = 8, ui32 maxCompactionsLimit = 2,
+            TBlobStorageGroupType::EErasureSpecies erasure = TBlobStorageGroupType::Erasure4Plus2Block)
         : NumGroups(numGroups)
         , MaxCompactionsLimit(maxCompactionsLimit)
         , Env({
             .NodeCount = nodeCount,
             .VDiskReplPausedAtStart = false,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .Erasure = erasure,
         })
     {
         Env.CreateBoxAndPool(1, NumGroups);
@@ -698,8 +749,39 @@ struct TTestEnvCompBroker {
 
 Y_UNIT_TEST_SUITE(CompDefrag) {
 
-    Y_UNIT_TEST(DoesItWork) {
-        TTestEnvCompDefragIndependent env(0.01);
+    Y_UNIT_TEST(HeaderlessCompactionDefragSmokeBlock82) {
+        TTestEnvCompDefragIndependent env(0.01, TBlobStorageGroupType::Erasure8Plus2Block);
+        // The scheduler requires more than nine reclaimable chunks per VDisk.
+        // Half of this corpus becomes garbage, leaving enough real Huge chunks
+        // to cross that minimum on all twelve disks.
+        constexpr ui32 count = 40000;
+        env.WriteData(count, 1000);
+        env.RunFullCompaction();
+        UNIT_ASSERT_GT(env.GetMetrics().HugeUsedChunks, 20u * env.Env.Settings.NodeCount);
+
+        ui32 rewrittenParts = 0;
+        auto previous = env.SetFilterFunction(TEvBlobStorage::EvVPut, nullptr);
+        env.SetFilterFunction(TEvBlobStorage::EvVPut,
+            [&](ui32 node, std::unique_ptr<IEventHandle>& event) {
+                const auto* put = event->Get<TEvBlobStorage::TEvVPut>();
+                if (put->RewriteBlob) {
+                    const TLogoBlobID id = LogoBlobIDFromLogoBlobID(put->Record.GetBlobID());
+                    UNIT_ASSERT(id.PartId());
+                    rewrittenParts |= 1u << (id.PartId() - 1);
+                    UNIT_ASSERT_VALUES_EQUAL(put->GetBufferBytes(), env.GroupInfo->Type.PartSize(id));
+                }
+                return previous ? previous(node, event) : true;
+            });
+        DeleteHugeBlobsOfTablet(env, count, 1);
+        env.Env.Sim(TDuration::Minutes(30));
+        UNIT_ASSERT_GT(env.GetMetrics().DefragBytesRewritten, 0);
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenParts & 0x300, 0x300);
+        env.CheckWideLiveData();
+        env.CheckWideLiveData(true);
+    }
+
+    COMPACTION_ERASURE_TEST(DoesItWork) {
+        TTestEnvCompDefragIndependent env(0.01, erasure);
         ui32 N = 50000;
         ui32 batchSize = 1000;
 
@@ -712,8 +794,8 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
             Cerr << "Bytes written (small): " << env.BytesWrittenSmall << Endl
                 << "Bytes written (large): " << env.BytesWrittenLarge << Endl;
             auto metrics = env.PrintMetrics();
-            UNIT_ASSERT_VALUE_IN(N * 6, metrics.Level0 + metrics.Level1 + metrics.Level2 + metrics.Level3, N * 8);
-            UNIT_ASSERT_VALUE_IN(N * 6, metrics.Level2, N * 8); // everything should be on level 2
+            UNIT_ASSERT_VALUE_IN(N * env.GroupInfo->Type.TotalPartCount(), metrics.Level0 + metrics.Level1 + metrics.Level2 + metrics.Level3, N * env.GroupInfo->Type.BlobSubgroupSize());
+            UNIT_ASSERT_VALUE_IN(N * env.GroupInfo->Type.TotalPartCount(), metrics.Level2, N * env.GroupInfo->Type.BlobSubgroupSize()); // everything should be on level 2
             UNIT_ASSERT_VALUE_IN(env.BytesWrittenLarge / TTestEnvCompDefragIndependent::CHUNK_SIZE, metrics.HugeUsedChunks, std::ceil(env.BytesWrittenLarge * 1.125 / TTestEnvCompDefragIndependent::CHUNK_SIZE));
 
             compactionBytesWritten = metrics.CompactionBytesWritten;
@@ -745,10 +827,12 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
             UNIT_ASSERT_VALUES_EQUAL(metrics.HugeChunksCanBeFreed, 0);
             UNIT_ASSERT_LT(env.GetMetrics().HugeUsedChunks, totalHugeChunks);
         }
+        env.CheckWideLiveData();
+        env.CheckWideLiveData(true);
     }
 
-    Y_UNIT_TEST(DelayedCompaction) {
-        TTestEnvCompDefragIndependent env(0.01);
+    COMPACTION_ERASURE_TEST(DelayedCompaction) {
+        TTestEnvCompDefragIndependent env(0.01, erasure);
         ui32 N = 50000;
         ui32 batchSize = 1000;
 
@@ -794,8 +878,8 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
 
     }
 
-    Y_UNIT_TEST(NoCompactionRequestsUntilPreviousFinishes) {
-        TTestEnvCompDefragIndependent env(0.01);
+    COMPACTION_ERASURE_TEST(NoCompactionRequestsUntilPreviousFinishes) {
+        TTestEnvCompDefragIndependent env(0.01, erasure);
         ui32 N = 50000;
         ui32 batchSize = 1000;
 
@@ -1026,8 +1110,8 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
             << " noProgressQuantums# " << noProgressQuantums);
     }
 
-    Y_UNIT_TEST(ZeroThresholdDefragWithCompaction) {
-        TTestEnvCompDefragIndependent env(0.0); // Zero threshold - compaction should run immediately
+    COMPACTION_ERASURE_TEST(ZeroThresholdDefragWithCompaction) {
+        TTestEnvCompDefragIndependent env(0.0, erasure); // Zero threshold - compaction should run immediately
         ui32 N = 50000;
         ui32 batchSize = 1000;
 
@@ -1070,8 +1154,8 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         Cerr << "Total compactions: " << totalCompactions << ", Total defrag quantums: " << totalDefragQuanta << Endl;
     }
 
-    Y_UNIT_TEST(DynamicThresholdChange) {
-        TTestEnvCompDefragIndependent env(0.0); // Start with zero threshold
+    COMPACTION_ERASURE_TEST(DynamicThresholdChange) {
+        TTestEnvCompDefragIndependent env(0.0, erasure); // Start with zero threshold
         ui32 N = 75000; // Increased from 50000 to create more data
         ui32 batchSize = 1000;
 
@@ -1153,8 +1237,8 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         UNIT_ASSERT_VALUES_EQUAL(metrics.HugeChunksCanBeFreed, 0);
     }
 
-    Y_UNIT_TEST(ChunksSoftLocking) {
-        TTestEnvCompDefragIndependent env(0.01);
+    COMPACTION_ERASURE_TEST(ChunksSoftLocking) {
+        TTestEnvCompDefragIndependent env(0.01, erasure);
         ui32 N = 50000;
         ui32 batchSize = 1000;
 
@@ -1214,10 +1298,10 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         env.Env.Sim(TDuration::Minutes(10));
     }
 
-    Y_UNIT_TEST(DefragThrottling) {
+    COMPACTION_ERASURE_TEST(DefragThrottling) {
         ui64 totalBytesToDefrag = 0;
         { // without throttling
-            TTestEnvCompDefragIndependent env(0.01);
+            TTestEnvCompDefragIndependent env(0.01, erasure);
             ui32 N = 50000;
             ui32 batchSize = 1000;
             
@@ -1235,7 +1319,7 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         UNIT_ASSERT_GT(totalBytesToDefrag, 512_MB);
 
         { // with throttling
-            TTestEnvCompDefragIndependent env(0.01);
+            TTestEnvCompDefragIndependent env(0.01, erasure);
             ui32 N = 50000;
             ui32 batchSize = 1000;
             
@@ -1247,7 +1331,7 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
             DeleteHugeBlobsOfTablet(env, N, 1);
 
             env.SetIcbControl("VDiskControls.DefragThrottlerBytesRate", 1_MB);
-            TDuration maxThrottlingDuration = TDuration::Minutes(6) + totalBytesToDefrag / 1_MB / 8 * TDuration::Seconds(1) * 2; // 2 is a factor of safety
+            TDuration maxThrottlingDuration = TDuration::Minutes(6) + totalBytesToDefrag / 1_MB / env.Env.Settings.NodeCount * TDuration::Seconds(1) * 2; // 2 is a factor of safety
             Cerr << "Max throttling duration: " << maxThrottlingDuration.ToString() << Endl;
 
             ui64 defragBytesRewrittenBefore = env.PrintMetrics().DefragBytesRewritten;
@@ -1255,7 +1339,7 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
                 env.Env.Sim(TDuration::Seconds(1));
                 ui64 cur = env.GetMetrics().DefragBytesRewritten;
                 ui64 defragBytesRewritten = cur - defragBytesRewrittenBefore;
-                UNIT_ASSERT_LE(defragBytesRewritten, 1_MB * 8);
+                UNIT_ASSERT_LE(defragBytesRewritten, 1_MB * env.Env.Settings.NodeCount);
                 defragBytesRewrittenBefore = cur;
             }
 
@@ -1264,8 +1348,8 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         }
     }
 
-    Y_UNIT_TEST(CompBrokerMaxCompactionsPerPDisk) {
-        TTestEnvCompBroker env(3, 8, 2);
+    COMPACTION_ERASURE_TEST(CompBrokerMaxCompactionsPerPDisk) {
+        TTestEnvCompBroker env(3, TBlobStorageGroupType(erasure).BlobSubgroupSize(), 2, erasure);
         
         env.WriteDataToAllGroups(3000, 100_KB);
         env.StabilizeWithCompaction();
@@ -1347,8 +1431,8 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         }
     }
 
-    Y_UNIT_TEST(CompBrokerPriorityScheduling) {
-        TTestEnvCompBroker env(3, 8, 1);
+    COMPACTION_ERASURE_TEST(CompBrokerPriorityScheduling) {
+        TTestEnvCompBroker env(3, TBlobStorageGroupType(erasure).BlobSubgroupSize(), 1, erasure);
         
         env.WriteDataToAllGroups(3000, 100_KB);
         env.StabilizeWithCompaction();
@@ -1435,9 +1519,9 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         UNIT_ASSERT(compactionGroupIdxOrderPerNode == expectedGroupIdxOrder);
     }
 
-    Y_UNIT_TEST(CompBrokerSecondRequestCancelsFirst) {
+    COMPACTION_ERASURE_TEST(CompBrokerSecondRequestCancelsFirst) {
         // Check release compaction token during stopping vdisk actor
-        TTestEnvCompBroker env(2, 8, 1);
+        TTestEnvCompBroker env(2, TBlobStorageGroupType(erasure).BlobSubgroupSize(), 1, erasure);
         
         env.WriteDataToAllGroups(3000, 100_KB);
         env.StabilizeWithCompaction();
@@ -1536,8 +1620,8 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         UNIT_ASSERT(tokenRequestsPerVDisk[group1VDisk0Key] == 2); // level0 + PartlySorted compactions
     }
 
-    Y_UNIT_TEST(CompBrokerUpdateTokenRequest) {
-        TTestEnvCompBroker env(1, 8, 1);
+    COMPACTION_ERASURE_TEST(CompBrokerUpdateTokenRequest) {
+        TTestEnvCompBroker env(1, TBlobStorageGroupType(erasure).BlobSubgroupSize(), 1, erasure);
         
         env.WriteDataToAllGroups(3000, 100_KB);
         env.StabilizeWithCompaction();
@@ -1600,8 +1684,8 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         UNIT_ASSERT(edge0Result && edge0Result->GetTypeRewrite() == TEvBlobStorage::EvCompactVDiskResult);
     }
 
-    Y_UNIT_TEST(CompBrokerReleasesTokenWhenResultIsUndelivered) {
-        TTestEnvCompBroker env(1, 8, 1);
+    COMPACTION_ERASURE_TEST(CompBrokerReleasesTokenWhenResultIsUndelivered) {
+        TTestEnvCompBroker env(1, TBlobStorageGroupType(erasure).BlobSubgroupSize(), 1, erasure);
 
         constexpr ui32 pdiskId = Max<ui32>() - 1;
         const TGroupId groupId = env.GroupInfos[0]->GroupID;
@@ -1626,8 +1710,8 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
             new TEvReleaseCompactionToken(pdiskId, groupId, vdiskId, true)), nextOwner.NodeId());
     }
 
-    Y_UNIT_TEST(CompactionContinuesWhenCompBrokerIsUnavailable) {
-        TTestEnvCompBroker env(1, 8, 1);
+    COMPACTION_ERASURE_TEST(CompactionContinuesWhenCompBrokerIsUnavailable) {
+        TTestEnvCompBroker env(1, TBlobStorageGroupType(erasure).BlobSubgroupSize(), 1, erasure);
 
         env.WriteDataToAllGroups(3000, 100_KB);
 
@@ -1671,3 +1755,5 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
     }
 
 }
+
+#undef COMPACTION_ERASURE_TEST

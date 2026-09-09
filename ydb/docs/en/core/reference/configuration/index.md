@@ -1,5 +1,7 @@
 # {{ ydb-short-name }} cluster configuration
 
+The static erasure and pool/channel `erasure_species` fields also accept `block-8-2` (species 19). Use at least twelve independent failure domains and a supporting build on every process. Static group geometry cannot be changed in place; dynamic pools can use a different species. See [Block82 configuration and capacity metadata](../../concepts/block-8-2.md).
+
 The cluster configuration is specified in the YAML file passed in the `--yaml-config` parameter when the cluster nodes are run.
 
 This article describes the main groups of configurable parameters in this file.

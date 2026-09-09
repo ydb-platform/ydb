@@ -4,11 +4,11 @@
 #define Ctest Cnull
 
 Y_UNIT_TEST_SUITE(NodeDisconnected) {
-    Y_UNIT_TEST(BsQueueRetries) {
-        ui32 nodeCount = 8;
+    void RunBsQueueRetries(TBlobStorageGroupType::EErasureSpecies erasure) {
+        ui32 nodeCount = TBlobStorageGroupType(erasure).BlobSubgroupSize();
         TEnvironmentSetup env{{
             .NodeCount = nodeCount,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block
+            .Erasure = erasure
         }};
         env.CreateBoxAndPool(1, 1);
         env.Sim(TDuration::Seconds(60));
@@ -63,4 +63,7 @@ Y_UNIT_TEST_SUITE(NodeDisconnected) {
 
         UNIT_ASSERT(ctr < queuesCount * simSeconds / 10);
     }
+
+    Y_UNIT_TEST(BsQueueRetries) { RunBsQueueRetries(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(BsQueueRetriesBlock82) { RunBsQueueRetries(TBlobStorageGroupType::Erasure8Plus2Block); }
 }

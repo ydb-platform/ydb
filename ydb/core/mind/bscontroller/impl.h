@@ -10,6 +10,7 @@
 #include "indir.h"
 #include "self_heal.h"
 #include "storage_pool_stat.h"
+#include "erasure_counters.h"
 
 #include <util/generic/hash_multi_map.h>
 
@@ -1612,13 +1613,15 @@ private:
     THashMap<TPDiskId, std::reference_wrapper<const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk>> StaticPDiskMap;
     THashMap<TPDiskId, ui32> StaticPDiskSlotUsage;
     std::unique_ptr<TStoragePoolStat> StoragePoolStat;
+    std::unique_ptr<TStorageErasureCounters> ErasureCounters;
+    std::set<ui32> StaticErasureGroups;
     bool StopGivingGroups = false;
     bool GroupLayoutSanitizerEnabled = false;
     bool AllowMultipleRealmsOccupation = true;
     bool StorageConfigObtained = false;
     bool Loaded = false;
     bool EnableConfigV2 = false;
-    std::shared_ptr<TControlWrapper> EnableSelfHealWithDegraded;
+    std::shared_ptr<TControlWrapper> EnableSelfHealWithDegraded = std::make_shared<TControlWrapper>(0, 0, 1);
 
     struct TLifetimeToken {};
     std::shared_ptr<TLifetimeToken> LifetimeToken = std::make_shared<TLifetimeToken>();
@@ -1699,6 +1702,9 @@ private:
     void CommitSelfHealUpdates(TConfigState& state);
     void CommitScrubUpdates(TConfigState& state, TTransactionContext& txc);
     void CommitStoragePoolStatUpdates(TConfigState& state);
+    void CommitErasureCounterUpdates(TConfigState& state);
+    void UpdateGroupErasureCounter(TGroupId groupId, const TGroupInfo* group, const TMap<TBoxStoragePoolId, TStoragePoolInfo>& pools);
+    void UpdateStaticErasureCounters();
     void CommitSysViewUpdates(TConfigState& state);
     void CommitShredUpdates(TConfigState& state);
 
@@ -2234,6 +2240,13 @@ public:
         UpdateSelfHealCounters();
         SignalTabletActive(TActivationContext::AsActorContext());
         Loaded = true;
+        for (const auto& [id, pool] : StoragePools) {
+            ErasureCounters->SetPool(TStoragePoolStat::ConvertId(id), pool.Name, pool.ErasureSpecies);
+        }
+        for (const auto& [id, group] : GroupMap) {
+            UpdateGroupErasureCounter(id, group.Get(), StoragePools);
+        }
+        UpdateStaticErasureCounters();
         ApplyStorageConfig();
 
         for (const auto& [id, info] : GroupMap) {

@@ -2,10 +2,10 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 
 Y_UNIT_TEST_SUITE(IndexRestoreGet) {
-    Y_UNIT_TEST(BlobRecovery) {
+    void RunBlobRecovery(TBlobStorageGroupType::EErasureSpecies erasure) {
         TEnvironmentSetup env(TEnvironmentSetup::TSettings{
-            .NodeCount = 8,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .NodeCount = TBlobStorageGroupType(erasure).BlobSubgroupSize(),
+            .Erasure = erasure,
         });
 
         env.CreateBoxAndPool(1, 1);
@@ -24,12 +24,16 @@ Y_UNIT_TEST_SUITE(IndexRestoreGet) {
         TDataPartSet parts;
         info->Type.SplitData((TErasureType::ECrcMode)id.CrcMode(), data, parts);
 
-        TBlobStorageGroupInfo::TOrderNums nums{5, 6, 7, 0, 1, 2, 3, 4};
+        TBlobStorageGroupInfo::TOrderNums nums;
+        info->GetTopology().PickSubgroup(id.Hash(), nums);
+        const ui32 partCount = info->Type.TotalPartCount();
+        const ui32 subgroupSize = info->Type.BlobSubgroupSize();
+        const ui32 missingPart = info->Type.DataParts();
 
-        for (ui32 i = 0; i < 6; ++i) {
+        for (ui32 i = 0; i < partCount; ++i) {
             const ui32 partId = i + 1;
             const ui32 orderNumber = nums[i];
-            if (i != 4) {
+            if (i != missingPart) {
                 env.PutBlob(info->GetVDiskId(orderNumber), TLogoBlobID(id, partId), parts.Parts[i].OwnedString.ConvertToString());
             }
         }
@@ -47,26 +51,23 @@ Y_UNIT_TEST_SUITE(IndexRestoreGet) {
 
         env.Sim(TDuration::Minutes(1));
 
-        for (ui32 idx = 0; idx < 8; ++idx) {
+        for (ui32 idx = 0; idx < subgroupSize; ++idx) {
             const ui32 orderNumber = nums[idx];
             Cerr << idx << ' ' << orderNumber << Endl;
 
             std::vector<ui32> v;
-            if (idx < 6) {
+            if (idx < partCount) {
                 v.push_back(idx + 1);
             } else {
-                v.push_back(1);
-                v.push_back(2);
-                v.push_back(3);
-                v.push_back(4);
-                v.push_back(5);
-                v.push_back(6);
+                for (ui32 partId = 1; partId <= partCount; ++partId) {
+                    v.push_back(partId);
+                }
             }
 
             for (ui32 partId : v) {
                 env.CheckBlob(info->GetActorId(orderNumber), info->GetVDiskId(orderNumber), TLogoBlobID(id, partId),
                     parts.Parts[partId - 1].OwnedString.ConvertToString(),
-                    idx == 4 || idx == 6 || idx == 7 ? NKikimrProto::NODATA : NKikimrProto::OK);
+                    idx == missingPart || idx >= partCount ? NKikimrProto::NODATA : NKikimrProto::OK);
             }
         }
 
@@ -84,27 +85,27 @@ Y_UNIT_TEST_SUITE(IndexRestoreGet) {
 //        UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, 1);
 //        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Status, NKikimrProto::OK);
 
-        for (ui32 idx = 0; idx < 8; ++idx) {
+        for (ui32 idx = 0; idx < subgroupSize; ++idx) {
             const ui32 orderNumber = nums[idx];
             Cerr << idx << ' ' << orderNumber << Endl;
 
             std::vector<ui32> v;
-            if (idx < 6) {
+            if (idx < partCount) {
                 v.push_back(idx + 1);
             } else {
-                v.push_back(1);
-                v.push_back(2);
-                v.push_back(3);
-                v.push_back(4);
-                v.push_back(5);
-                v.push_back(6);
+                for (ui32 partId = 1; partId <= partCount; ++partId) {
+                    v.push_back(partId);
+                }
             }
 
             for (ui32 partId : v) {
                 env.CheckBlob(info->GetActorId(orderNumber), info->GetVDiskId(orderNumber), TLogoBlobID(id, partId),
                     parts.Parts[partId - 1].OwnedString.ConvertToString(),
-                    idx == 6 || idx == 7 ? NKikimrProto::NODATA : NKikimrProto::OK);
+                    idx >= partCount ? NKikimrProto::NODATA : NKikimrProto::OK);
             }
         }
     }
+
+    Y_UNIT_TEST(BlobRecovery) { RunBlobRecovery(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(BlobRecoveryBlock82) { RunBlobRecovery(TBlobStorageGroupType::Erasure8Plus2Block); }
 }

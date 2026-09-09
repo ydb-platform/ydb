@@ -38,11 +38,14 @@ RESOURCE(
     kube/templates/common/database.yaml /ydbd_slice/templates/common/database.yaml
     kube/templates/common/dynconfig.yaml /ydbd_slice/templates/common/dynconfig.yaml
     kube/templates/common/obliterate.yaml /ydbd_slice/templates/common/obliterate.yaml
+    kube/templates/12-node-block-8-2/nodeclaim.yaml /ydbd_slice/templates/12-node-block-8-2/nodeclaim.yaml
+    kube/templates/12-node-block-8-2/storage.yaml /ydbd_slice/templates/12-node-block-8-2/storage.yaml
     kube/templates/8-node-block-4-2/nodeclaim.yaml /ydbd_slice/templates/8-node-block-4-2/nodeclaim.yaml
     kube/templates/8-node-block-4-2/storage.yaml /ydbd_slice/templates/8-node-block-4-2/storage.yaml
     kube/templates/legacy-cms-config-items/table-profile.txt /ydbd_slice/templates/legacy-cms-config-items/table-profile.txt
     kube/templates/legacy-cms-config-items/unified-agent.txt /ydbd_slice/templates/legacy-cms-config-items/unified-agent.txt
 
+    baremetal/templates/block-8-2-12-nodes.yaml /ydbd_slice/baremetal/templates/block-8-2-12-nodes.yaml
     baremetal/templates/block-4-2-8-nodes.yaml /ydbd_slice/baremetal/templates/block-4-2-8-nodes.yaml
     baremetal/templates/block-4-2-4-nodes.yaml /ydbd_slice/baremetal/templates/block-4-2-4-nodes.yaml
     baremetal/templates/block-4-2-2-nodes.yaml /ydbd_slice/baremetal/templates/block-4-2-2-nodes.yaml

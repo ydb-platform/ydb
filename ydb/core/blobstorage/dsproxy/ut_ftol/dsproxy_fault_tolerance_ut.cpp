@@ -60,6 +60,16 @@ Y_UNIT_TEST_SUITE(TBsProxyFaultToleranceTest) {
     //ERASURE_TEST(Erasure3Plus1Block)
     //ERASURE_TEST(Erasure3Plus1Stripe)
     ERASURE_TEST(Erasure4Plus2Block)
+    Y_UNIT_TEST(CheckTGetWithRecoverFaultToleranceTestBlock82) { RunTest<TGetWithRecoverFaultToleranceTest>(TBlobStorageGroupType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(CheckTRangeFaultToleranceTestBlock82) { RunTest<TRangeFaultToleranceTest>(TBlobStorageGroupType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(CheckTDiscoverFaultToleranceTestBlock82) { RunTest<TDiscoverFaultToleranceTest>(TBlobStorageGroupType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(CheckTPutFaultToleranceTestBlock82) { RunTest<TPutFaultToleranceTest>(TBlobStorageGroupType::Erasure8Plus2Block); }
+    Y_UNIT_TEST(CheckGetHardenedErasureBlock82Count6Idx0) { RunTest<TGetHardenedFaultToleranceTest>(TBlobStorageGroupType::Erasure8Plus2Block, true, 6, 0); }
+    Y_UNIT_TEST(CheckGetHardenedErasureBlock82Count6Idx1) { RunTest<TGetHardenedFaultToleranceTest>(TBlobStorageGroupType::Erasure8Plus2Block, true, 6, 1); }
+    Y_UNIT_TEST(CheckGetHardenedErasureBlock82Count6Idx2) { RunTest<TGetHardenedFaultToleranceTest>(TBlobStorageGroupType::Erasure8Plus2Block, true, 6, 2); }
+    Y_UNIT_TEST(CheckGetHardenedErasureBlock82Count6Idx3) { RunTest<TGetHardenedFaultToleranceTest>(TBlobStorageGroupType::Erasure8Plus2Block, true, 6, 3); }
+    Y_UNIT_TEST(CheckGetHardenedErasureBlock82Count6Idx4) { RunTest<TGetHardenedFaultToleranceTest>(TBlobStorageGroupType::Erasure8Plus2Block, true, 6, 4); }
+    Y_UNIT_TEST(CheckGetHardenedErasureBlock82Count6Idx5) { RunTest<TGetHardenedFaultToleranceTest>(TBlobStorageGroupType::Erasure8Plus2Block, true, 6, 5); }
     //ERASURE_TEST(Erasure3Plus2Block)
     //ERASURE_TEST(Erasure4Plus2Stripe)
     //ERASURE_TEST(Erasure3Plus2Stripe)

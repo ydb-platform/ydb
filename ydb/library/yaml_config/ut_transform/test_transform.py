@@ -81,3 +81,41 @@ class TestYamlConfigTransformations(object):
     @pytest.mark.parametrize('binary', [('dump', dump_bin()), ('dump_ds_init', dump_ds_init_bin())], ids=lambda binary: binary[0])
     def test_domains_config(self, binary):
         return self.execute_test("ydb/library/yaml_config/ut_transform/domains_configs", binary[1])
+
+
+@pytest.mark.parametrize("directory", ["configs", "simplified_configs"])
+def test_block82_geometry(directory):
+    filename = yatest.common.source_path("ydb/library/yaml_config/ut_transform/%s/block-8-2.yaml" % directory)
+    with open(filename) as config:
+        result = yatest.common.execute([dump_bin()], stdin=config)
+    proto = json.loads(result.std_out)
+    group = proto["BlobStorageConfig"]["ServiceSet"]["Groups"][0]
+    assert group["ErasureSpecies"] == 19
+    assert len(group["Rings"]) == 1
+    domains = group["Rings"][0]["FailDomains"]
+    assert len(domains) == 12
+    assert len({domain["VDiskLocations"][0]["NodeID"] for domain in domains}) == 12
+
+
+@pytest.mark.parametrize("top_level_pools", [False, True])
+def test_block82_compose_config(top_level_pools):
+    filename = yatest.common.source_path("ydb/deploy/local/block-8-2/config.yaml")
+    with open(filename) as stream:
+        config = json.load(stream)["config"]
+    if top_level_pools:
+        config["storage_pool_types"] = config.pop("domains_config")["domain"][0]["storage_pool_types"]
+    input_path = yatest.common.output_path("compose-input.json")
+    with open(input_path, "w") as stream:
+        json.dump(config, stream)
+    with open(input_path) as stream:
+        result = yatest.common.execute([dump_bin()], stdin=stream)
+    proto = json.loads(result.std_out)
+    group = proto["BlobStorageConfig"]["ServiceSet"]["Groups"][0]
+    assert group["GroupID"] == 0 and group["ErasureSpecies"] == 19
+    assert len(group["Rings"]) == 1
+    assert {d["VDiskLocations"][0]["NodeID"] for d in group["Rings"][0]["FailDomains"]} == set(range(1, 13))
+    assert len(proto["NameserviceConfig"]["Node"]) == 13
+    domain = proto["DomainsConfig"]["Domain"][0]
+    assert {p["Kind"]: p["PoolConfig"]["ErasureSpecies"] for p in domain["StoragePoolTypes"]} == {
+        "ssd-block42": "block-4-2", "ssd-block82": "block-8-2",
+    }

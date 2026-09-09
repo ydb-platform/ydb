@@ -570,6 +570,38 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(TGroupMapperTest) {
+    Y_UNIT_TEST(Block82MinimumGeometryAndAllocation) {
+        for (const ui32 domains : {11, 12, 13}) {
+            TTestContext context(1, 1, domains, 1, 1);
+            auto geometry = TTestContext::CreateGroupGeometry(TBlobStorageGroupType::Erasure8Plus2Block);
+            UNIT_ASSERT_VALUES_EQUAL(geometry.GetNumFailRealms(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(geometry.GetNumFailDomainsPerFailRealm(), 12);
+            UNIT_ASSERT_VALUES_EQUAL(geometry.GetNumVDisksPerFailDomain(), 1);
+            TGroupMapper mapper(geometry);
+            context.PopulateGroupMapper(mapper, 12);
+            TGroupMapper::TGroupDefinition group;
+            if (domains < 12) {
+                TGroupMapperError error;
+                context.AllocateGroupCatchingError(mapper, group, error);
+                UNIT_ASSERT(!error.ErrorMessage.empty());
+            } else {
+                const ui32 id = context.AllocateGroup(mapper, group);
+                context.CheckGroupErasure(group);
+                UNIT_ASSERT_VALUES_EQUAL(group.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(group[0].size(), 12);
+                if (domains == 13) {
+                    for (ui32 domain : {10, 11}) {
+                        const auto oldDisk = group[0][domain][0];
+                        group = context.ReallocateGroup(mapper, id, {oldDisk}, true);
+                        UNIT_ASSERT(group[0][domain][0] != oldDisk);
+                        context.CheckGroupErasure(group);
+                    }
+                }
+            }
+        }
+        UNIT_ASSERT_EXCEPTION(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::Erasure8Plus2Block, 1, 11, 1), TExFitGroupError);
+    }
+
 
     Y_UNIT_TEST(SlotSizeInBytesLimitsRequiredSpace) {
         NActorsInterconnect::TNodeLocation locationProto;

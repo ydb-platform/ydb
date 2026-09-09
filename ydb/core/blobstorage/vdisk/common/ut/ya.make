@@ -13,6 +13,7 @@ PEERDIR(
 )
 
 SRCS(
+    vdisk_block82_cost_ut.cpp
     circlebufresize_ut.cpp
     circlebufstream_ut.cpp
     circlebuf_ut.cpp

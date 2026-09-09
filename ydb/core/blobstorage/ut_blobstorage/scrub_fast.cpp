@@ -1,11 +1,13 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/lifecycle_checks.h>
 #include <ydb/core/blobstorage/vdisk/scrub/scrub_actor.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-void Test() {
+void Test(TBlobStorageGroupType erasure = TBlobStorageGroupType::Erasure4Plus2Block) {
     SetRandomSeed(1);
     TEnvironmentSetup env{{
-        .Erasure = TBlobStorageGroupType::Erasure4Plus2Block
+        .NodeCount = Max(9u, erasure.BlobSubgroupSize()),
+        .Erasure = erasure
     }};
     auto& runtime = env.Runtime;
     env.CreateBoxAndPool();
@@ -134,10 +136,24 @@ void Test() {
 
             UNIT_ASSERT(anyPartReadable);
         }
+        if (erasure.TotalPartCount() > 8) {
+            NBlobStorageLifecycle::CheckMainParts(env, info, id, data, true);
+            if (step == 1) {
+                env.Cleanup();
+                env.Initialize();
+                env.Sim(TDuration::Minutes(1));
+                NBlobStorageLifecycle::CheckGroupBlob(env, info, id, data);
+                NBlobStorageLifecycle::CheckMainParts(env, info, id, data, true);
+            }
+        }
     }
 }
 
 Y_UNIT_TEST_SUITE(ScrubFast) {
+    Y_UNIT_TEST(SingleBlobBlock82) {
+        Test(TBlobStorageGroupType::Erasure8Plus2Block);
+    }
+
     Y_UNIT_TEST(SingleBlob) {
         Test();
     }

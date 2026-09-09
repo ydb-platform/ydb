@@ -1,9 +1,10 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 
 Y_UNIT_TEST_SUITE(GetBlock) {
-    Y_UNIT_TEST(EmptyGetBlockCmd) {
+    void RunEmptyGetBlockCmd(TBlobStorageGroupType::EErasureSpecies erasure) {
         TEnvironmentSetup env({
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .NodeCount = Max<ui32>(9, TBlobStorageGroupType(erasure).BlobSubgroupSize()),
+            .Erasure = erasure,
         });
         auto& runtime = env.Runtime;
         env.CreateBoxAndPool(1, 1);
@@ -16,4 +17,7 @@ Y_UNIT_TEST_SUITE(GetBlock) {
         auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetBlockResult>(edge);
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
     }
+
+    Y_UNIT_TEST(EmptyGetBlockCmd) { RunEmptyGetBlockCmd(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(EmptyGetBlockCmdBlock82) { RunEmptyGetBlockCmd(TBlobStorageGroupType::Erasure8Plus2Block); }
 }

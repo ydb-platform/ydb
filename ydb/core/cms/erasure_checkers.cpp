@@ -262,6 +262,7 @@ TSimpleSharedPtr<IErasureCounter> CreateErasureCounter(TErasureType::EErasureSpe
         case TErasureType::Erasure3Plus1Block:
         case TErasureType::Erasure3Plus1Stripe:
         case TErasureType::Erasure4Plus2Block:
+        case TErasureType::Erasure8Plus2Block:
         case TErasureType::Erasure3Plus2Block:
         case TErasureType::Erasure4Plus2Stripe:
         case TErasureType::Erasure3Plus2Stripe:
@@ -279,7 +280,7 @@ TSimpleSharedPtr<IErasureCounter> CreateErasureCounter(TErasureType::EErasureSpe
         case TErasureType::ErasureMirror3dc:
             return TSimpleSharedPtr<IErasureCounter>(new TMirror3dcCounter(vdisk, groupId, cmsCounters));
         default:
-            Y_ABORT("Unknown erasure type: %d", es);
+            return nullptr;
     }
 }
 

@@ -14,7 +14,7 @@ namespace NKikimr {
 
     Y_UNIT_TEST_SUITE(TBlobStorageHullHugeKeeperPersState) {
 
-        Y_UNIT_TEST(SerializeParse) {
+        void SerializeParse(TBlobStorageGroupType::EErasureSpecies species) {
             ui32 chunkSize = 134274560u;
             ui32 appendBlockSize = 56896u;
             ui32 milestoneHugeBlobInBytes = 512u << 10u;
@@ -24,7 +24,7 @@ namespace NKikimr {
 
             auto logf = [] (const TString &state) { STR << state; };
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
-            auto info = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::Erasure4Plus2Block);
+            auto info = MakeIntrusive<TBlobStorageGroupInfo>(species);
             auto vctx = MakeIntrusive<TVDiskContext>(TActorId(), info->PickTopology(), counters, TVDiskID(0, 1, 0, 0, 0),
                 nullptr, NPDisk::DEVICE_TYPE_UNKNOWN);
             std::unique_ptr<THullHugeKeeperPersState> state(
@@ -36,6 +36,13 @@ namespace NKikimr {
 
             TString serialized(state->Serialize());
             UNIT_ASSERT(THullHugeKeeperPersState::CheckEntryPoint(serialized));
+        }
+        Y_UNIT_TEST(SerializeParse) {
+            SerializeParse(TBlobStorageGroupType::Erasure4Plus2Block);
+        }
+
+        Y_UNIT_TEST(SerializeParseBlock82) {
+            SerializeParse(TBlobStorageGroupType::Erasure8Plus2Block);
         }
     }
 

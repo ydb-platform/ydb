@@ -133,6 +133,13 @@ protected:
             return;
         }
         YDB_LOG_WARN("Failed to init - retrying...");
+        if (event->Get()->PreboundSocket) {
+            // A prebound listener must not outlive a failed security context: it would go on
+            // accepting connections that are never served. Releasing our reference closes the
+            // socket unless its caller kept one of its own.
+            event->Get()->PreboundSocket.Reset();
+            YDB_LOG_WARN("Released the prebound listening socket");
+        }
         NActors::TActivationContext::Schedule(TDuration::Seconds(1), event.Release());
     }
 

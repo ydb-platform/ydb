@@ -221,8 +221,9 @@ Y_UNIT_TEST_SUITE(HttpProxyTlsInitialization) {
         AssertHttpsRequestSucceeds(runtime, proxyId, port);
     }
 
-    // A caller-owned prebound socket stays owned by its caller when TLS initialization
-    // fails: the acceptor neither confirms the listener nor closes somebody else's socket.
+    // The acceptor drops its own claim on a failed endpoint, but it never closes a descriptor
+    // somebody else still holds. Here the caller keeps its reference, so the socket goes on
+    // listening and closes only when that last reference goes away.
     Y_UNIT_TEST(InvalidPemPreservesPreboundSocket) {
         TIntrusivePtr<NHttp::TSocketDescriptor> socket = NHttp::TryBindListeningSocket(TString(), 0);
         UNIT_ASSERT(socket);
@@ -248,6 +249,33 @@ Y_UNIT_TEST_SUITE(HttpProxyTlsInitialization) {
 
         socket.Reset();
         UNIT_ASSERT_EQUAL(ProbeTcp(host, port), EProbeResult::Refused);
+    }
+
+    // The ownership the production caller actually has: ydb/core/http_proxy binds the port in
+    // its constructor and then moves its only reference into the event, so once the acceptor
+    // fails to build a context nothing outside the actor system keeps that listener alive.
+    // Holding it across retries would leave exactly the endpoint this suite is about: open to
+    // connect(), never able to serve one.
+    Y_UNIT_TEST(PreboundSocketStopsListeningAfterTlsFailure) {
+        TIntrusivePtr<NHttp::TSocketDescriptor> socket = NHttp::TryBindListeningSocket(TString(), 0);
+        UNIT_ASSERT(socket);
+        const auto [host, port] = BoundHostAndPort(socket);
+        UNIT_ASSERT(port != 0);
+        UNIT_ASSERT_EQUAL_C(ProbeTcp(host, port), EProbeResult::Connected,
+            "The prebound socket must be listening before the acceptor sees it");
+
+        TSimulatedProxy proxy;
+        THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
+        add->Secure = true;
+        add->SslCertificatePem = MALFORMED_PEM;
+        add->PreboundSocket = socket;
+        proxy.AddListeningPort(std::move(add));
+        socket.Reset(); // the caller keeps nothing, exactly as the production proxy does
+
+        UNIT_ASSERT(proxy.NoConfirmListenWithin(TDuration::Seconds(2)));
+        UNIT_ASSERT_GE(proxy.Retries, 1u);
+        UNIT_ASSERT_EQUAL_C(ProbeTcp(host, port), EProbeResult::Refused,
+            "A prebound secure socket keeps accepting connections after the TLS context failed");
     }
 
     // Valid TLS with an unavailable port keeps the retry path working: the acceptor must

@@ -505,7 +505,7 @@ class TNeumannHashTable {
                 }
 
                 for (; size; --size, it += BufferSlotSize_) {
-                    if (!onMatch(it)) {
+                    if (!onMatch(GetRow(it))) {
                         return;
                     }
                 }

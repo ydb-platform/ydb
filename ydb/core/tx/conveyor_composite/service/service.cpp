@@ -64,6 +64,9 @@ TConclusion<NConfig::TConfig> TDistributor::ParseAndValidateConfig(const NKikimr
 }
 
 void TDistributor::HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    // Acknowledge receipt; applying the config may wait for in-flight tasks.
+    ReplyConfigNotification(ev);
+
     const auto& record = ev->Get()->Record;
     const auto& appConfig = record.GetConfig();
 
@@ -77,7 +80,6 @@ void TDistributor::HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest
             {"actorId", SelfId()},
             {"action", "composite_conveyor_config_rejected"},
             {"error", "config deletion not supported in runtime updates"});
-        ReplyConfigNotification(ev);
         return;
     }
 
@@ -88,14 +90,10 @@ void TDistributor::HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest
             {"actorId", SelfId()},
             {"action", "composite_conveyor_config_rejected"},
             {"error", parsedConfig.GetErrorMessage()});
-        ReplyConfigNotification(ev);
         return;
     }
-    auto reply = MakeHolder<NActors::IEventHandle>(ev->Sender, SelfId(),
-        new NConsole::TEvConsole::TEvConfigNotificationResponse(record),
-        NActors::IEventHandle::FlagTrackDelivery, ev->Cookie);
     Config = parsedConfig.DetachResult();
-    PendingConfigReply = std::move(reply);
+    IsUpdateInProcess = true;
     TryApplyUpdate();
     Y_UNUSED(Manager->DrainTasks());
 }
@@ -106,7 +104,7 @@ void TDistributor::ReplyConfigNotification(const NConsole::TEvConsole::TEvConfig
 }
 
 void TDistributor::TryApplyUpdate() {
-    if (!PendingConfigReply) {
+    if (!IsUpdateInProcess) {
         return;
     }
 
@@ -116,7 +114,7 @@ void TDistributor::TryApplyUpdate() {
     }
 
     Manager->ApplyConfigUpdate(Config, SelfId(), Counters);
-    Send(PendingConfigReply.Release());
+    IsUpdateInProcess = false;
 }
 
 void TDistributor::HandleMain(NActors::TEvents::TEvUndelivered::TPtr& ev) {

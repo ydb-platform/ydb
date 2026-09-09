@@ -98,6 +98,7 @@ class TFakeConfigsDispatcher: public NActors::TActorBootstrapped<TFakeConfigsDis
 private:
     const NActors::TActorId Sink;
     std::vector<ui64>& Responses;
+    const NKikimrConfig::TCompositeConveyorConfig InitialConfig;
 
     void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr& ev, const NActors::TActorContext& ctx) {
         ctx.Send(Sink, new NActors::TEvents::TEvWakeup(ev->Get()->ConfigItemKinds.front()));
@@ -106,6 +107,7 @@ private:
         auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         notification->Record.SetSubscriptionId(InitialSubscriptionId);
         notification->Record.AddItemKinds(ev->Get()->ConfigItemKinds.front());
+        notification->Record.MutableConfig()->MutableCompositeConveyorConfig()->CopyFrom(InitialConfig);
         ctx.Send(ev->Sender, notification.Release(), 0, InitialNotificationCookie);
     }
 
@@ -115,9 +117,11 @@ private:
     }
 
 public:
-    TFakeConfigsDispatcher(const NActors::TActorId& sink, std::vector<ui64>& responses)
+    TFakeConfigsDispatcher(const NActors::TActorId& sink, std::vector<ui64>& responses,
+        const NKikimrConfig::TCompositeConveyorConfig& initialConfig)
         : Sink(sink)
-        , Responses(responses) {
+        , Responses(responses)
+        , InitialConfig(initialConfig) {
     }
 
     void Bootstrap() {
@@ -147,7 +151,7 @@ public:
     explicit TRuntimeFixture(const NKikimrConfig::TCompositeConveyorConfig& proto) {
         Runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
         Sink = Runtime.AllocateEdgeActor();
-        Dispatcher = Runtime.Register(new TFakeConfigsDispatcher(Sink, Responses));
+        Dispatcher = Runtime.Register(new TFakeConfigsDispatcher(Sink, Responses, proto));
         Runtime.RegisterService(NConsole::MakeConfigsDispatcherID(Runtime.GetNodeId(0)), Dispatcher);
 
         auto config = NConfig::TConfig::BuildFromProto(proto);
@@ -159,7 +163,7 @@ public:
         const auto subscription = Runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(Sink);
         UNIT_ASSERT_VALUES_EQUAL(
             subscription->Get()->Tag, (ui32)NKikimrConsole::TConfigItem::CompositeConveyorConfigItem);
-        WaitForUpdate(InitialSubscriptionId, InitialNotificationCookie);
+        WaitForAck(InitialSubscriptionId, InitialNotificationCookie);
         Responses.clear();
     }
 
@@ -177,7 +181,7 @@ public:
         return {id, cookie};
     }
 
-    void WaitForUpdate(const ui64 id, const ui64 cookie) {
+    void WaitForAck(const ui64 id, const ui64 cookie) {
         const auto response = Runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(Sink);
         UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetSubscriptionId(), id);
         UNIT_ASSERT_VALUES_EQUAL(response->Cookie, cookie);
@@ -190,9 +194,18 @@ public:
         }
     }
 
+    // Receipt is acknowledged even when applying the config is still pending.
     void Update(const NKikimrConfig::TCompositeConveyorConfig& config) {
         const auto [id, cookie] = SendUpdate(config);
-        WaitForUpdate(id, cookie);
+        WaitForAck(id, cookie);
+    }
+
+    template <class TPredicate>
+    void WaitFor(TPredicate&& predicate) {
+        for (ui32 attempt = 0; attempt < 1000 && !predicate(); ++attempt) {
+            Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        }
+        UNIT_ASSERT_C(predicate(), "expected runtime state was not reached");
     }
 
     void RegisterProcess(const ESpecialTaskCategory category, const TString& scopeId, const ui64 processId) {
@@ -579,8 +592,10 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         });
         const auto [id, cookie] = fixture.SendUpdate(candidate);
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
+        fixture.WaitForAck(id, cookie);
         UNIT_ASSERT_VALUES_EQUAL(poisonEvents, 0);
+        UNIT_ASSERT_VALUES_EQUAL(oldCounter.Val(), 0);
 
         std::optional<ui64> oldResultPool;
         auto resultObserver = fixture.Runtime.AddObserver<TEvInternal::TEvTaskProcessedResult>([&](auto& ev) {
@@ -597,8 +612,8 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         }
         UNIT_ASSERT_VALUES_EQUAL(oldCounter.Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(oldResultPool, 2);
-        fixture.WaitForUpdate(id, cookie);
-        UNIT_ASSERT(!responses.empty());
+        fixture.WaitFor([&] { return poisonEvents == 1; });
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(poisonEvents, 1);
         fixture.Runtime.SetObserverFunc(previousObserver);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Insert), 0);
@@ -816,7 +831,8 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         const auto& responses = fixture.Responses;
         const auto [id, cookie] = fixture.SendUpdate(withoutScan);
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
+        fixture.WaitForAck(id, cookie);
         UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Scan), 1);
         fixture.Runtime.SetObserverFunc(previousObserver);
 
@@ -838,8 +854,9 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         UNIT_ASSERT_VALUES_EQUAL(completedPool, 1);
         UNIT_ASSERT(completedCategories.contains(ESpecialTaskCategory::Scan));
         UNIT_ASSERT(completedCategories.contains(ESpecialTaskCategory::Insert));
-        fixture.WaitForUpdate(id, cookie);
+        fixture.WaitFor([&] { return GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Scan) == 0; });
         UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 0);
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
     }
 
     Y_UNIT_TEST(LatestTopologySupersedesPrepare) {
@@ -863,16 +880,20 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         UNIT_ASSERT_VALUES_EQUAL(heldTasks.size(), 2);
 
         const auto& responses = fixture.Responses;
-        fixture.SendUpdate(BuildTopologyConfig(
+        const auto [firstId, firstCookie] = fixture.SendUpdate(BuildTopologyConfig(
             {{{ESpecialTaskCategory::Normalizer, 1}},
                 {{ESpecialTaskCategory::Scan, 1}, {ESpecialTaskCategory::Insert, 1}}}));
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        UNIT_ASSERT(responses.empty());
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
+        fixture.WaitForAck(firstId, firstCookie);
         const auto [id, cookie] = fixture.SendUpdate(BuildTopologyConfig(
             {{{ESpecialTaskCategory::Scan, 1}, {ESpecialTaskCategory::Normalizer, 1}},
                 {{ESpecialTaskCategory::Insert, 1}}}));
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        UNIT_ASSERT(responses.empty());
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 2);
+        fixture.WaitForAck(id, cookie);
+        UNIT_ASSERT_VALUES_EQUAL(counter.Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-2", ESpecialTaskCategory::Scan), 1);
         fixture.Runtime.SetObserverFunc(previousObserver);
 
         std::set<ui64> oldPools;
@@ -886,9 +907,10 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         // The second pool's result is sufficient; the first batch can remain assigned across apply.
         fixture.Runtime.EnableScheduleForActor(heldTasks[1]->Recipient, true);
         fixture.Runtime.Send(heldTasks[1].Release(), 0, true);
-        fixture.WaitForUpdate(id, cookie);
-        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(responses.front(), id);
+        fixture.WaitFor([&] { return GetWeightCounter(fixture, "pool-2", ESpecialTaskCategory::Scan) == 0; });
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(responses.front(), firstId);
+        UNIT_ASSERT_VALUES_EQUAL(responses.back(), id);
         UNIT_ASSERT_VALUES_EQUAL(counter.Val(), 1);
         heldTasks.resize(1);
         RunHeldTasks(fixture, heldTasks, counter, 2);
@@ -896,6 +918,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         UNIT_ASSERT(oldPools.contains(1));
         UNIT_ASSERT(oldPools.contains(2));
         UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 1);
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 2);
     }
 
     Y_UNIT_TEST(BusyWorkerLimitUpdateIsNonBlocking) {
@@ -920,7 +943,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
     }
 
     Y_UNIT_TEST(BusyShrinkWaitsForTaskResult) {
-        // shrink ACK waits until an assigned batch finishes; actor stop itself needs no acknowledgement.
+        // ACK confirms receipt immediately; shrinking still waits for the assigned batch's result.
         TRuntimeFixture fixture(BuildSinglePoolConfig(2.4));
         TAtomicCounter counter;
         TAutoPtr<NActors::IEventHandle> heldTask;
@@ -939,7 +962,10 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         const auto& responses = fixture.Responses;
         const auto [id, cookie] = fixture.SendUpdate(BuildSinglePoolConfig(1.4));
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
+        fixture.WaitForAck(id, cookie);
+        UNIT_ASSERT_VALUES_EQUAL(counter.Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetWorkersCountLimitCounter(fixture, "pool-1"), 3);
 
         blockEvents = false;
         fixture.Runtime.EnableScheduleForActor(heldTask->Recipient, true);
@@ -948,8 +974,8 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
             fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
         }
         UNIT_ASSERT_VALUES_EQUAL(counter.Val(), 1);
-        fixture.WaitForUpdate(id, cookie);
-        UNIT_ASSERT(!responses.empty());
+        fixture.WaitFor([&] { return GetWorkersCountLimitCounter(fixture, "pool-1") == 2; });
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
         fixture.Runtime.SetObserverFunc(previousObserver);
     }
 
@@ -972,12 +998,15 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         const auto& responses = fixture.Responses;
         const auto [firstId, firstCookie] = fixture.SendUpdate(BuildSinglePoolConfig(1.4));
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        UNIT_ASSERT(responses.empty());
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
+        fixture.WaitForAck(firstId, firstCookie);
 
         auto intermediateConfig = BuildTopologyConfig({{{ESpecialTaskCategory::Insert, 1}}}, {1.4});
         const auto [intermediateId, intermediateCookie] = fixture.SendUpdate(intermediateConfig);
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        UNIT_ASSERT(responses.empty());
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 2);
+        fixture.WaitForAck(intermediateId, intermediateCookie);
+        UNIT_ASSERT_VALUES_EQUAL(GetWorkersCountLimitCounter(fixture, "pool-1"), 3);
 
         auto latestConfig = BuildSinglePoolConfig(3.4);
         ui32 poisonEvents = 0;
@@ -985,7 +1014,8 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
             ++poisonEvents;
         });
         const auto [latestId, latestCookie] = fixture.SendUpdate(latestConfig);
-        fixture.WaitForUpdate(latestId, latestCookie);
+        fixture.WaitForAck(latestId, latestCookie);
+        fixture.WaitFor([&] { return GetWorkersCountLimitCounter(fixture, "pool-1") == 4; });
         UNIT_ASSERT_VALUES_EQUAL(counter.Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(poisonEvents, 0);
         UNIT_ASSERT_VALUES_EQUAL(GetWorkersCountLimitCounter(fixture, "pool-1"), 4);
@@ -997,11 +1027,10 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
             fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
         }
         UNIT_ASSERT_VALUES_EQUAL(counter.Val(), 1);
-        UNIT_ASSERT(std::find(responses.begin(), responses.end(), latestId) != responses.end());
-        UNIT_ASSERT(std::find(responses.begin(), responses.end(), firstId) == responses.end());
-        UNIT_ASSERT(std::find(responses.begin(), responses.end(), intermediateId) == responses.end());
-        Y_UNUSED(firstCookie);
-        Y_UNUSED(intermediateCookie);
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(responses[0], firstId);
+        UNIT_ASSERT_VALUES_EQUAL(responses[1], intermediateId);
+        UNIT_ASSERT_VALUES_EQUAL(responses[2], latestId);
 
         fixture.Runtime.SetObserverFunc(previousObserver);
         UNIT_ASSERT_VALUES_EQUAL(GetWorkersCountLimitCounter(fixture, "pool-1"), 4);
@@ -1042,6 +1071,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
             {0.8, 1});
         const auto [id, cookie] = fixture.SendUpdate(candidate);
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        fixture.WaitForAck(id, cookie);
         UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Scan), 1);
         fixture.Runtime.SetObserverFunc(previousObserver);
 
@@ -1056,7 +1086,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         fixture.Runtime.Send(heldWakeup.Release(), 0, true);
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
         UNIT_ASSERT_VALUES_EQUAL(oldResultPool, 1);
-        fixture.WaitForUpdate(id, cookie);
+        fixture.WaitFor([&] { return GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Scan) == 0; });
         UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 2);
 
         std::optional<double> nextTaskLimit;
@@ -1101,15 +1131,16 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         const auto& responses = fixture.Responses;
         const auto [id, cookie] = fixture.SendUpdate(candidate);
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
+        fixture.WaitForAck(id, cookie);
         UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Scan), 1);
         UNIT_ASSERT_VALUES_EQUAL(GetWorkersCountLimitCounter(fixture, "pool-1"), 2);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Normalizer), 1);
 
         fixture.Runtime.SetObserverFunc(previousObserver);
         fixture.Runtime.Send(heldWakeup.Release(), 0, true);
-        fixture.WaitForUpdate(id, cookie);
-        UNIT_ASSERT(!responses.empty());
+        fixture.WaitFor([&] { return GetWorkersCountLimitCounter(fixture, "pool-1") == 1; });
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 2);
     }
 
@@ -1157,7 +1188,8 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         });
         const auto [id, cookie] = fixture.SendUpdate(target);
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
+        fixture.WaitForAck(id, cookie);
         UNIT_ASSERT_VALUES_EQUAL(poisonEvents, 0);
         UNIT_ASSERT_VALUES_EQUAL(GetWorkersCountLimitCounter(fixture, "pool-1"), 2);
         UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Scan), 7);
@@ -1181,7 +1213,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
             UNIT_ASSERT_VALUES_EQUAL(*taskLimit, 1);
             UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Insert), 2);
         }
-        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(poisonEvents, 0);
         UNIT_ASSERT_VALUES_EQUAL(queuedTask.Val(), 0);
 
@@ -1194,7 +1226,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
             }
         });
         fixture.Runtime.Send(held.Release(), 0, true);
-        fixture.WaitForUpdate(id, cookie);
+        fixture.WaitFor([&] { return GetWorkersCountLimitCounter(fixture, "pool-1") == 1; });
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(10));
         UNIT_ASSERT_VALUES_EQUAL(oldTask.Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(queuedTask.Val(), 1);
@@ -1223,13 +1255,14 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         auto poisonObserver = fixture.Runtime.AddObserver<NActors::TEvents::TEvPoisonPill>([&](auto&) {
             ++poisonEvents;
         });
-        fixture.SendUpdate(BuildSinglePoolConfig(1));
+        fixture.Update(BuildSinglePoolConfig(1));
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
         UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 1);
         UNIT_ASSERT_VALUES_EQUAL(workerIdx, 0);
 
         const auto [id, cookie] = fixture.SendUpdate(BuildSinglePoolConfig(2));
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        fixture.WaitForAck(id, cookie);
         for (ui32 i = 0; i < 3; ++i) {
             UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 1);
             UNIT_ASSERT_VALUES_EQUAL(workerIdx, 1);
@@ -1237,7 +1270,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         UNIT_ASSERT_VALUES_EQUAL(poisonEvents, 0);
         UNIT_ASSERT_VALUES_EQUAL(GetWorkersCountLimitCounter(fixture, "pool-1"), 3);
         fixture.Runtime.Send(held.Release(), 0, true);
-        fixture.WaitForUpdate(id, cookie);
+        fixture.WaitFor([&] { return GetWorkersCountLimitCounter(fixture, "pool-1") == 2; });
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
         UNIT_ASSERT_VALUES_EQUAL(oldTask.Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(poisonEvents, 1);
@@ -1250,10 +1283,11 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         TAtomicCounter restoredTask;
         auto removed = HoldTask(fixture, removedTask, ESpecialTaskCategory::Scan);
         auto restored = HoldTask(fixture, restoredTask, ESpecialTaskCategory::Scan);
-        fixture.SendUpdate(BuildSinglePoolConfig(2));
+        fixture.Update(BuildSinglePoolConfig(2));
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
         const auto [id, cookie] = fixture.SendUpdate(BuildSinglePoolConfig(3));
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        fixture.WaitForAck(id, cookie);
         fixture.Runtime.Send(restored.Release(), 0, true);
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
         UNIT_ASSERT_VALUES_EQUAL(restoredTask.Val(), 1);
@@ -1267,7 +1301,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         UNIT_ASSERT_VALUES_EQUAL(workerIdx, 2);
         UNIT_ASSERT_VALUES_EQUAL(GetWorkersCountLimitCounter(fixture, "pool-1"), 4);
         fixture.Runtime.Send(removed.Release(), 0, true);
-        fixture.WaitForUpdate(id, cookie);
+        fixture.WaitFor([&] { return GetWorkersCountLimitCounter(fixture, "pool-1") == 3; });
         UNIT_ASSERT_VALUES_EQUAL(removedTask.Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(GetWorkersCountLimitCounter(fixture, "pool-1"), 3);
     }
@@ -1285,16 +1319,16 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         });
 
         auto removeScan = BuildTopologyConfig({{{ESpecialTaskCategory::Insert, 1}}}, {1});
-        fixture.SendUpdate(removeScan);
+        fixture.Update(removeScan);
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        UNIT_ASSERT(responses.empty());
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
         TAtomicCounter queuedTask;
         fixture.Submit(queuedTask, ESpecialTaskCategory::Scan);
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
         UNIT_ASSERT_VALUES_EQUAL(queuedTask.Val(), 0);
 
         const auto [id, cookie] = fixture.SendUpdate(initial);
-        fixture.WaitForUpdate(id, cookie);
+        fixture.WaitForAck(id, cookie);
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
         UNIT_ASSERT_VALUES_EQUAL(queuedTask.Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(oldTask.Val(), 0);
@@ -1309,8 +1343,8 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         });
         UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 1);
         UNIT_ASSERT_VALUES_EQUAL(executingWorker, workerId);
-        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(responses.front(), id);
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(responses.back(), id);
         UNIT_ASSERT_VALUES_EQUAL(poisonEvents, 0);
     }
 
@@ -1376,6 +1410,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         const auto target = BuildTopologyConfig({{{ESpecialTaskCategory::Insert, 1}}});
         const auto [id, cookie] = fixture.SendUpdate(target);
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        fixture.WaitForAck(id, cookie);
         auto invalid = initial;
         invalid.MutableWorkerPools(0)->MutableLinks(0)->SetWeight(0);
         fixture.Update(invalid);
@@ -1390,7 +1425,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         unsupported.SetEnabled(false);
         fixture.Update(unsupported);
         UNIT_ASSERT_VALUES_EQUAL(GetBadConfigNotificationsCounter(fixture), 3);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Responses.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Responses.size(), 4);
         UNIT_ASSERT_VALUES_EQUAL(GetWorkersCountLimitCounter(fixture, "pool-1"), 1);
 
         TAtomicCounter queuedTask;
@@ -1399,7 +1434,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         UNIT_ASSERT_VALUES_EQUAL(queuedTask.Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Scan), 1);
         fixture.Runtime.Send(held.Release(), 0, true);
-        fixture.WaitForUpdate(id, cookie);
+        fixture.WaitFor([&] { return GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Scan) == 0; });
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(10));
         UNIT_ASSERT_VALUES_EQUAL(oldTask.Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(queuedTask.Val(), 1);
@@ -1429,7 +1464,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
             const auto [id, cookie] = fixture.SendUpdate(target);
             fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
             UNIT_ASSERT_VALUES_EQUAL(fixture.Responses.size(), 1);
-            fixture.WaitForUpdate(id, cookie);
+            fixture.WaitForAck(id, cookie);
             UNIT_ASSERT_VALUES_EQUAL(GetBadConfigNotificationsCounter(fixture), 1);
             UNIT_ASSERT_VALUES_EQUAL(oldTask.Val(), 0);
             UNIT_ASSERT_VALUES_EQUAL(TServiceOperator::IsEnabled(), enabled);
@@ -1476,7 +1511,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         });
         auto removed = initial;
         removed.ClearWorkerPools();
-        fixture.SendUpdate(removed);
+        fixture.Update(removed);
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
 
         auto restored = initial;
@@ -1510,7 +1545,8 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         const auto [id, cookie] = fixture.SendUpdate(BuildTopologyConfig({{{ESpecialTaskCategory::Scan, 1}}}));
         fixture.Submit(queuedTask, ESpecialTaskCategory::Scan, 101);
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
+        fixture.WaitForAck(id, cookie);
         UNIT_ASSERT_VALUES_EQUAL(queuedTask.Val(), 0);
 
         std::optional<ui64> oldPool;
@@ -1523,13 +1559,14 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
             }
         });
         fixture.Runtime.Send(held.Release(), 0, true);
-        fixture.WaitForUpdate(id, cookie);
+        fixture.WaitFor([&] { return queuedTask.Val() == 1; });
         fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(10));
         UNIT_ASSERT_VALUES_EQUAL(oldTask.Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(queuedTask.Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(oldPool, 0);
         UNIT_ASSERT_VALUES_EQUAL(queuedPool, 1);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 1);
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
     }
 
 }

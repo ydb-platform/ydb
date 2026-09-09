@@ -28,7 +28,7 @@ private:
     std::shared_ptr<TTasksManager> Manager;
     TCounters Counters;
 
-    THolder<NActors::IEventHandle> PendingConfigReply;
+    bool IsUpdateInProcess = false;
 
     void HandleMain(TEvExecution::TEvNewTask::TPtr& ev);
     void HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev);

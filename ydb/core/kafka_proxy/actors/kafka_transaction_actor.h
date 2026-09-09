@@ -41,6 +41,8 @@ namespace NKafka {
                 COMMIT
             };
 
+            // Cap in-flight EndTxn(commit) retries. When full, fail the oldest with
+            // COORDINATOR_NOT_AVAILABLE so the client's latest correlation id stays queued.
             static constexpr size_t MaxPendingEndTxnRequests = 8;
 
             // we need to exlplicitly specify kqpActorId and txnCoordinatorActorId for unit tests

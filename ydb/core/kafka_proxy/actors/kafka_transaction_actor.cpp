@@ -127,13 +127,14 @@ namespace NKafka {
                 return;
             }
             if (PendingEndTxnRequests.size() >= MaxPendingEndTxnRequests) {
-                YDB_LOG_WARN("EndTxn retry queue is full; rejecting extra retry",
+                auto& oldest = PendingEndTxnRequests.front();
+                YDB_LOG_WARN("EndTxn retry queue is full; rejecting oldest retry",
                     {LogPrefix()},
-                    {"correlationId", ev->Get()->CorrelationId},
+                    {"correlationId", oldest->Get()->CorrelationId},
                     {"pending", PendingEndTxnRequests.size()});
-                SendFailResponse<TEndTxnResponseData>(ev, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
+                SendFailResponse<TEndTxnResponseData>(oldest, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
                     "Too many EndTxn retries while commit is in progress");
-                return;
+                PendingEndTxnRequests.erase(PendingEndTxnRequests.begin());
             }
             YDB_LOG_DEBUG("EndTxn commit already in progress; attaching retry",
                 {LogPrefix()},
@@ -155,6 +156,7 @@ namespace NKafka {
     }
 
     void TTransactionActor::Handle(TEvents::TEvPoison::TPtr&, const TActorContext& ctx) {
+        ReplyPendingEndTxn(EKafkaErrors::PRODUCER_FENCED, "Transaction actor poisoned");
         Die(ctx);
     }
 
@@ -286,6 +288,7 @@ namespace NKafka {
     void TTransactionActor::Die(const TActorContext &ctx) {
         YDB_LOG_DEBUG("Dying",
             {LogPrefix()});
+        ReplyPendingEndTxn(EKafkaErrors::COORDINATOR_NOT_AVAILABLE, "Transaction actor is stopping");
         if (Kqp) {
             Kqp->CloseKqpSession(ctx);
         }

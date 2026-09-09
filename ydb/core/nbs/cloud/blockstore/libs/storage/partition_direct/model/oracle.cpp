@@ -460,8 +460,7 @@ void TOracle::MaybeQueryAddHost()
     if (GetAliveHostCount(HostStates) < DirectBlockGroupHostCount &&
         GetHostCount() < MaxHostCount)
     {
-        const THostIndex newHostIndex = GetHostCount();
-        HostStateController->QueryAddHost(newHostIndex);
+        HostStateController->QueryAddHost();
     }
 }
 

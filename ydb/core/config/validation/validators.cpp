@@ -262,6 +262,29 @@ EValidationResult ValidateDatabaseConfig(const NKikimrConfig::TAppConfig& config
 }
 
 EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::vector<TString>& msg) {
+    if (config.GetNbsConfig().GetNbsFrontendConfig().GetEnabled()) {
+        CHECK_ERR(
+            config.GetNbsConfig().GetEnabled(),
+            "NbsConfig.Enabled: expected true when "
+            "NbsConfig.NbsFrontendConfig.Enabled=true, got false");
+        CHECK_ERR(
+            config.HasGRpcConfig(),
+            "GRpcConfig: required when "
+            "NbsConfig.NbsFrontendConfig.Enabled=true, got missing");
+
+        const auto& grpcConfig = config.GetGRpcConfig();
+        CHECK_ERR(
+            grpcConfig.GetStartGRpcProxy(),
+            "GRpcConfig.StartGRpcProxy: expected true when "
+            "NbsConfig.NbsFrontendConfig.Enabled=true, got false");
+        CHECK_ERR(
+            grpcConfig.GetPort() >= 1 && grpcConfig.GetPort() <= 65535,
+            TStringBuilder()
+                << "GRpcConfig.Port: expected 1..65535 when "
+                   "NbsConfig.NbsFrontendConfig.Enabled=true, got "
+                << grpcConfig.GetPort());
+    }
+
     if (config.HasAuthConfig()) {
         NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateAuthConfig(config.GetAuthConfig(), msg);
         if (result == NKikimr::NConfig::EValidationResult::Error) {

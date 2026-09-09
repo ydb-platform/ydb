@@ -47,6 +47,9 @@ TStorageConfig::TStorageConfig(
     xxx(PBufferCleanupLsnStep,              ui64,     3000                    )\
     xxx(UseDirectSessionTransport,          bool,     false                   )\
     xxx(EnableChecksums,                    bool,     true                    )\
+    xxx(CheckChecksumBeforeWrite,           bool,     false                   )\
+    xxx(CheckChecksumWhenRead,              bool,     false                   )\
+    xxx(IdleSpinUs,                         ui32,     10                      )\
     xxx(CopyRangeBandwidthMbs,              ui32,     200                     )\
     xxx(VChunkCountersUpdateInterval,       TDuration, TDuration::Seconds(15) )\
 

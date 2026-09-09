@@ -206,7 +206,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
         UNIT_ASSERT(topics.contains("/Root/topic1"));
         auto& topicInfo = topics["/Root/topic1"];
-        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, "/Root/topic1");
     }
 
@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
         UNIT_ASSERT(topics.contains("/Root/topic_not_exists"));
         auto& topicInfo = topics["/Root/topic_not_exists"];
-        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::NotFound);
     }
 
     Y_UNIT_TEST(TopicNotTopic) {
@@ -235,7 +235,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
         UNIT_ASSERT(topics.contains("/Root/table1"));
         auto& topicInfo = topics["/Root/table1"];
-        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::NOT_TOPIC);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::NotTopic);
     }
 
     Y_UNIT_TEST(CDC) {
@@ -251,7 +251,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
         UNIT_ASSERT(topics.contains("/Root/table1/feed"));
         auto& topicInfo = topics["/Root/table1/feed"];
-        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, "/Root/table1/feed/streamImpl");
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.CdcStream, true);
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.CdcStreamName, "feed");
@@ -269,7 +269,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
         UNIT_ASSERT(topics.contains("topic1"));
         auto& topicInfo = topics["topic1"];
-        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, "/Root/topic1");
     }
 
@@ -285,7 +285,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
         UNIT_ASSERT(topics.contains("Root/topic1"));
         auto& topicInfo = topics["Root/topic1"];
-        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, "/Root/topic1");
     }
 
@@ -313,7 +313,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
         UNIT_ASSERT(topics.contains("/Root/topic1"));
         auto& topicInfo = topics["/Root/topic1"];
-        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::Success);
         UNIT_ASSERT(topicInfo.Info);
         UNIT_ASSERT(topicInfo.Self);
         UNIT_ASSERT(topicInfo.SecurityObject);
@@ -334,7 +334,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         auto topics = WaitResult(runtime);
 
         UNIT_ASSERT(topics.contains("/Root/topic1"));
-        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/topic1"].Status, NDescriber::EStatus::UNAUTHORIZED);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/topic1"].Status, NDescriber::EStatus::Unauthorized);
     }
 
     Y_UNIT_TEST(UnauthorizedWithDescribe) {
@@ -356,7 +356,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         auto topics = WaitResult(runtime);
 
         UNIT_ASSERT(topics.contains("/Root/topic1"));
-        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/topic1"].Status, NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/topic1"].Status, NDescriber::EStatus::UnauthorizedWithDescribeAccess);
     }
 
     Y_UNIT_TEST(AccessOrAllows) {
@@ -378,7 +378,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         auto topics = WaitResult(runtime);
 
         UNIT_ASSERT(topics.contains("/Root/topic1"));
-        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/topic1"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/topic1"].Status, NDescriber::EStatus::Success);
     }
 
     Y_UNIT_TEST(AccessOrDenied) {
@@ -396,7 +396,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         auto topics = WaitResult(runtime);
 
         UNIT_ASSERT(topics.contains("/Root/topic1"));
-        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/topic1"].Status, NDescriber::EStatus::UNAUTHORIZED);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/topic1"].Status, NDescriber::EStatus::Unauthorized);
     }
 
     Y_UNIT_TEST(NotTopicWithoutDescribe) {
@@ -414,7 +414,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         auto topics = WaitResult(runtime);
 
         UNIT_ASSERT(topics.contains("/Root/table1"));
-        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1"].Status, NDescriber::EStatus::UNAUTHORIZED);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1"].Status, NDescriber::EStatus::Unauthorized);
     }
 
     Y_UNIT_TEST(CustomAccessRightsAlterSchema) {
@@ -436,7 +436,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         auto topics = WaitResult(runtime);
 
         UNIT_ASSERT(topics.contains("/Root/topic1"));
-        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/topic1"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/topic1"].Status, NDescriber::EStatus::Success);
     }
 
     // -------------------------------------------------------------------------
@@ -458,7 +458,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
         UNIT_ASSERT(ev->UsedSyncVersion);
         UNIT_ASSERT(ev->Topics.contains("/Root/topic1"));
-        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["/Root/topic1"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Topics["/Root/topic1"].Status, NDescriber::EStatus::Success);
     }
 
     // Scheme-cache error / incomplete-topic branches that need a controllable
@@ -470,31 +470,31 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
     // -------------------------------------------------------------------------
 
     Y_UNIT_TEST(ConvertStatuses) {
-        UNIT_ASSERT_VALUES_EQUAL(NDescriber::Convert(NDescriber::EStatus::SUCCESS), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(NDescriber::Convert(NDescriber::EStatus::NOT_FOUND), Ydb::StatusIds::NOT_FOUND);
-        UNIT_ASSERT_VALUES_EQUAL(NDescriber::Convert(NDescriber::EStatus::NOT_TOPIC), Ydb::StatusIds::NOT_FOUND);
-        UNIT_ASSERT_VALUES_EQUAL(NDescriber::Convert(NDescriber::EStatus::UNAUTHORIZED), Ydb::StatusIds::UNAUTHORIZED);
+        UNIT_ASSERT_VALUES_EQUAL(NDescriber::Convert(NDescriber::EStatus::Success), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(NDescriber::Convert(NDescriber::EStatus::NotFound), Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(NDescriber::Convert(NDescriber::EStatus::NotTopic), Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(NDescriber::Convert(NDescriber::EStatus::Unauthorized), Ydb::StatusIds::UNAUTHORIZED);
         UNIT_ASSERT_VALUES_EQUAL(
-            NDescriber::Convert(NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS),
+            NDescriber::Convert(NDescriber::EStatus::UnauthorizedWithDescribeAccess),
             Ydb::StatusIds::UNAUTHORIZED
         );
-        UNIT_ASSERT_VALUES_EQUAL(NDescriber::Convert(NDescriber::EStatus::UNKNOWN_ERROR), Ydb::StatusIds::INTERNAL_ERROR);
-        UNIT_ASSERT_VALUES_EQUAL(NDescriber::Convert(NDescriber::EStatus::BAD_REQUEST), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(NDescriber::Convert(NDescriber::EStatus::UnknownError), Ydb::StatusIds::INTERNAL_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(NDescriber::Convert(NDescriber::EStatus::BadRequest), Ydb::StatusIds::BAD_REQUEST);
     }
 
     Y_UNIT_TEST(DescriptionMessages) {
         const TString path = "/Root/topic1";
 
-        UNIT_ASSERT(NDescriber::Description(path, NDescriber::EStatus::SUCCESS).Contains("successfully described"));
-        UNIT_ASSERT(NDescriber::Description(path, NDescriber::EStatus::NOT_FOUND).Contains("does not exist"));
-        UNIT_ASSERT(NDescriber::Description(path, NDescriber::EStatus::UNAUTHORIZED).Contains("does not exist"));
-        UNIT_ASSERT(NDescriber::Description(path, NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS)
+        UNIT_ASSERT(NDescriber::Description(path, NDescriber::EStatus::Success).Contains("successfully described"));
+        UNIT_ASSERT(NDescriber::Description(path, NDescriber::EStatus::NotFound).Contains("does not exist"));
+        UNIT_ASSERT(NDescriber::Description(path, NDescriber::EStatus::Unauthorized).Contains("does not exist"));
+        UNIT_ASSERT(NDescriber::Description(path, NDescriber::EStatus::UnauthorizedWithDescribeAccess)
             .Contains("do not have access permissions to"));
-        UNIT_ASSERT(!NDescriber::Description(path, NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS)
+        UNIT_ASSERT(!NDescriber::Description(path, NDescriber::EStatus::UnauthorizedWithDescribeAccess)
             .Contains("does not exist"));
-        UNIT_ASSERT(NDescriber::Description(path, NDescriber::EStatus::NOT_TOPIC).Contains("is not a topic"));
-        UNIT_ASSERT(NDescriber::Description(path, NDescriber::EStatus::BAD_REQUEST).Contains("Invalid topic name"));
-        UNIT_ASSERT(NDescriber::Description(path, NDescriber::EStatus::UNKNOWN_ERROR).Contains("Error describing"));
+        UNIT_ASSERT(NDescriber::Description(path, NDescriber::EStatus::NotTopic).Contains("is not a topic"));
+        UNIT_ASSERT(NDescriber::Description(path, NDescriber::EStatus::BadRequest).Contains("Invalid topic name"));
+        UNIT_ASSERT(NDescriber::Description(path, NDescriber::EStatus::UnknownError).Contains("Error describing"));
     }
 
     // -------------------------------------------------------------------------
@@ -513,9 +513,9 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         auto topics = WaitResult(runtime);
 
         UNIT_ASSERT_VALUES_EQUAL(topics.size(), 3u);
-        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/topic1"].Status, NDescriber::EStatus::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/missing"].Status, NDescriber::EStatus::NOT_FOUND);
-        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1"].Status, NDescriber::EStatus::NOT_TOPIC);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/topic1"].Status, NDescriber::EStatus::Success);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/missing"].Status, NDescriber::EStatus::NotFound);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1"].Status, NDescriber::EStatus::NotTopic);
     }
 
     Y_UNIT_TEST(MultipleWithCDC) {
@@ -531,9 +531,9 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         auto topics = WaitResult(runtime);
 
         UNIT_ASSERT_VALUES_EQUAL(topics.size(), 2u);
-        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/topic1"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/topic1"].Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(topics["/Root/topic1"].CdcStream, false);
-        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/feed"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/feed"].Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/feed"].CdcStream, true);
         UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/feed"].RealPath, "/Root/table1/feed/streamImpl");
     }
@@ -549,7 +549,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         auto topics = WaitResult(runtime);
 
         UNIT_ASSERT(topics.contains("/Root/table1/missing_feed"));
-        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/missing_feed"].Status, NDescriber::EStatus::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/missing_feed"].Status, NDescriber::EStatus::NotFound);
     }
 
     Y_UNIT_TEST(CDCUnauthorized) {
@@ -570,8 +570,8 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         UNIT_ASSERT(topics.contains("/Root/table1/feed"));
         auto status = topics["/Root/table1/feed"].Status;
         UNIT_ASSERT_C(
-            status == NDescriber::EStatus::UNAUTHORIZED ||
-                status == NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS,
+            status == NDescriber::EStatus::Unauthorized ||
+                status == NDescriber::EStatus::UnauthorizedWithDescribeAccess,
             static_cast<int>(status)
         );
     }
@@ -600,7 +600,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
         UNIT_ASSERT(topics.contains("/Root/topic1"));
         auto& topicInfo = topics["/Root/topic1"];
-        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, "/Root/topic1");
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.CdcStream, false);
         UNIT_ASSERT(topicInfo.CdcStreamName.empty());
@@ -623,7 +623,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         auto topics = WaitResult(runtime);
 
         UNIT_ASSERT(topics.contains("/Root"));
-        UNIT_ASSERT_VALUES_EQUAL(topics["/Root"].Status, NDescriber::EStatus::NOT_TOPIC);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root"].Status, NDescriber::EStatus::NotTopic);
     }
 
     Y_UNIT_TEST(DoubleSlashPath) {
@@ -637,7 +637,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         auto topics = WaitResult(runtime);
 
         UNIT_ASSERT(topics.contains("/Root//topic1"));
-        UNIT_ASSERT_VALUES_EQUAL(topics["/Root//topic1"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root//topic1"].Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(topics["/Root//topic1"].RealPath, "/Root/topic1");
     }
 
@@ -652,7 +652,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         auto topics = WaitResult(runtime);
 
         UNIT_ASSERT(topics.contains("/Root/topic1/"));
-        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/topic1/"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/topic1/"].Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(topics["/Root/topic1/"].RealPath, "/Root/topic1");
     }
 
@@ -693,7 +693,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
         UNIT_ASSERT(topics.contains(shortTopicName));
         auto& topicInfo = topics[shortTopicName];
-        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, fullTopicPath);
     }
 
@@ -718,7 +718,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
         UNIT_ASSERT(topics.contains(absoluteTopicName));
         auto& topicInfo = topics[absoluteTopicName];
-        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, fullTopicPath);
     }
 
@@ -741,7 +741,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
         UNIT_ASSERT(topics.contains(shortTopicName));
         auto& topicInfo = topics[shortTopicName];
-        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, fullTopicPath);
     }
 
@@ -758,7 +758,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
         UNIT_ASSERT(topics.contains("account/topic_not_exists"));
         auto& topicInfo = topics["account/topic_not_exists"];
-        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::NotFound);
     }
 
     Y_UNIT_TEST(TopicWithFederationRootIgnoredForFirstClassCitizen) {
@@ -779,7 +779,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
         UNIT_ASSERT(topics.contains(shortTopicName));
         auto& topicInfo = topics[shortTopicName];
-        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::NotFound);
     }
 
     Y_UNIT_TEST(TopicWithFederationRootMultipleAccounts) {
@@ -822,11 +822,11 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         UNIT_ASSERT_VALUES_EQUAL(topics.size(), 2);
 
         UNIT_ASSERT(topics.contains("account1/topic"));
-        UNIT_ASSERT_VALUES_EQUAL(topics["account1/topic"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topics["account1/topic"].Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(topics["account1/topic"].RealPath, "/Root/account1/topic");
 
         UNIT_ASSERT(topics.contains("account2/topic"));
-        UNIT_ASSERT_VALUES_EQUAL(topics["account2/topic"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topics["account2/topic"].Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(topics["account2/topic"].RealPath, "/Root/account2/topic");
     }
 
@@ -846,7 +846,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         auto topics = WaitResult(runtime);
 
         UNIT_ASSERT(topics.contains("topic1"));
-        UNIT_ASSERT_VALUES_EQUAL(topics["topic1"].Status, NDescriber::EStatus::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(topics["topic1"].Status, NDescriber::EStatus::NotFound);
     }
 
     Y_UNIT_TEST(CDCWithFederationRoot) {
@@ -865,7 +865,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
         UNIT_ASSERT(topics.contains("account/table1/feed"));
         auto& topicInfo = topics["account/table1/feed"];
-        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.CdcStream, true);
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.CdcStreamName, "feed");
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, "/Root/Federation/account/table1/feed/streamImpl");
@@ -885,7 +885,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
         UNIT_ASSERT(topics.contains("/Root/table1/feed"));
         auto& topicInfo = topics["/Root/table1/feed"];
-        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, "/Root/table1/feed/streamImpl");
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.CdcStream, true);
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.CdcStreamName, "feed");
@@ -902,7 +902,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         auto topics = WaitResult(runtime);
 
         UNIT_ASSERT(topics.contains("/Root/topic1"));
-        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/topic1"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/topic1"].Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(topics["/Root/topic1"].RealPath, "/Root/topic1");
     }
 
@@ -925,7 +925,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         auto topics = WaitResult(runtime);
 
         UNIT_ASSERT(topics.contains("/Root/table1"));
-        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1"].Status, NDescriber::EStatus::NOT_TOPIC);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1"].Status, NDescriber::EStatus::NotTopic);
     }
 
     Y_UNIT_TEST(MultipleCDC) {
@@ -941,10 +941,10 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         auto topics = WaitResult(runtime);
 
         UNIT_ASSERT_VALUES_EQUAL(topics.size(), 2u);
-        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/feed1"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/feed1"].Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/feed1"].CdcStream, true);
         UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/feed1"].RealPath, "/Root/table1/feed1/streamImpl");
-        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/feed2"].Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/feed2"].Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/feed2"].CdcStream, true);
         UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/feed2"].RealPath, "/Root/table1/feed2/streamImpl");
     }
@@ -969,7 +969,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
         UNIT_ASSERT(topics.contains("rt3.dc1--account--topic1"));
         auto& topicInfo = topics["rt3.dc1--account--topic1"];
-        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, federationRoot + "/account/topic1");
     }
 
@@ -989,7 +989,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
         UNIT_ASSERT(topics.contains("account--topic1"));
         auto& topicInfo = topics["account--topic1"];
-        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, federationRoot + "/account/topic1");
     }
 
@@ -1010,7 +1010,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
         UNIT_ASSERT(topics.contains("rt3.dc1--account@table1--feed"));
         auto& topicInfo = topics["rt3.dc1--account@table1--feed"];
-        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.CdcStream, true);
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.CdcStreamName, "feed");
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, "/Root/Federation/account/table1/feed/streamImpl");
@@ -1028,7 +1028,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         auto topics = WaitResult(runtime);
 
         UNIT_ASSERT(topics.contains("rt3.bad"));
-        UNIT_ASSERT_VALUES_EQUAL(topics["rt3.bad"].Status, NDescriber::EStatus::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(topics["rt3.bad"].Status, NDescriber::EStatus::BadRequest);
     }
 
     Y_UNIT_TEST(TopicInDatabaseWithSlashInName) {
@@ -1065,7 +1065,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
             StartDescribe(runtime, {"my-topic"}, {}, dbPath);
             auto topics = WaitResult(runtime);
             UNIT_ASSERT(topics.contains("my-topic"));
-            UNIT_ASSERT_VALUES_EQUAL(topics["my-topic"].Status, NDescriber::EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(topics["my-topic"].Status, NDescriber::EStatus::Success);
             UNIT_ASSERT_VALUES_EQUAL(topics["my-topic"].RealPath, "/Root/my/db/my-topic");
         }
 
@@ -1075,7 +1075,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
             StartDescribe(runtime, {topic}, {}, dbPath);
             auto topics = WaitResult(runtime);
             UNIT_ASSERT(topics.contains(topic));
-            UNIT_ASSERT_VALUES_EQUAL(topics[topic].Status, NDescriber::EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(topics[topic].Status, NDescriber::EStatus::Success);
             UNIT_ASSERT_VALUES_EQUAL(topics[topic].RealPath, "/Root/my/db/my-topic");
         }
 
@@ -1087,7 +1087,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
             StartDescribe(runtime, {topic}, {}, "/Root");
             auto topics = WaitResult(runtime);
             UNIT_ASSERT(topics.contains(topic));
-            UNIT_ASSERT_VALUES_EQUAL(topics[topic].Status, NDescriber::EStatus::NOT_FOUND);
+            UNIT_ASSERT_VALUES_EQUAL(topics[topic].Status, NDescriber::EStatus::NotFound);
         }
 
         // Topic in a subdirectory; DatabaseName points at that subdirectory
@@ -1097,7 +1097,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
             StartDescribe(runtime, {"my-topic"}, {}, "/Root/my/db/my-dir");
             auto topics = WaitResult(runtime);
             UNIT_ASSERT(topics.contains("my-topic"));
-            UNIT_ASSERT_VALUES_EQUAL(topics["my-topic"].Status, NDescriber::EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(topics["my-topic"].Status, NDescriber::EStatus::Success);
             UNIT_ASSERT_VALUES_EQUAL(topics["my-topic"].RealPath, "/Root/my/db/my-dir/my-topic");
         }
     }

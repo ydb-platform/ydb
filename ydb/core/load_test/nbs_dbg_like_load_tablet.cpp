@@ -750,7 +750,7 @@ public:
     // shutdown path (poison vs sys-tablet-driven TEvTabletDead vs direct
     // PassAway) took us out. Idempotent so the natural chain
     // OnDetach/OnTabletDead -> HandleDie -> Die -> PassAway can call it
-    // from each step without doubling up. Spec §15.2.
+    // from each step without doubling up.
     void Cleanup() {
         if (CleanedUp_) {
             return;
@@ -1174,7 +1174,6 @@ public:
         for (const auto& d : Self->Dbgs) {
             db.Table<Schema::Dbgs>().Key(d.DbgIndex).Delete();
         }
-        // Note: keep Runs around as historical records.
         return true;
     }
 
@@ -1260,14 +1259,14 @@ void TNbsDbgLikeLoadTablet::Handle(TEvLoad::TEvNbsLoadTabletAllocateGroups::TPtr
 
     AllocConfig = ev->Get()->Record.GetAllocConfig();
 
-    // Storage namespace owner must be unique per load tablet; the PB dedup key
-    // is {TabletId, Generation, Lsn}. A shared/user-supplied id makes two load
+    // Storage namespace owner must be unique per load tablet. A shared id with
+    // matching generation, DBG index, and LSN makes two load
     // tablets collide ("duplicate record with incorrect data"). Always use our
     // own (Hive-assigned) TabletID() as the BSC allocation owner and PB/DD
     // credential TabletId.
     AllocConfig.SetTabletId(TabletID());
 
-    // Input validation (spec §23.10 / Phase 2.6).
+    // Validate the persisted allocation geometry.
     if (AllocConfig.GetNumDirectBlockGroups() == 0) {
         return reply(NBSLT_INTERNAL_ERROR, "NumDirectBlockGroups must be > 0");
     }
@@ -2229,14 +2228,10 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
     }
 
     auto& dbg = Dbg;
-    // LSNs must be unique per {TabletId, Generation}: when PB slots are scarce
-    // the BSC packs several DBGs of this tablet onto the SAME persistent-buffer
-    // slot instance (AllocatePersistentBuffer refcounts and reuses slots; there
-    // is no cross-DBG exclusion). A PB record is deduped by {TabletId,
-    // Generation, Lsn} only -- the per-DBG DDiskInstanceGuid identifies the slot
-    // instance (identical for two DBGs on one slot) and is not part of the key.
-    // Stride the per-worker sequence by DbgIndex so two DBG workers never emit
-    // the same Lsn against a shared PB slot. Single-DBG layout is unchanged
+    // Preserve unique LSNs across DBGs of this tablet generation, including
+    // DBGs placed on the same PB slot. PB record identity also includes the
+    // DBG index, but striding keeps the load's LSNs disjoint independently of
+    // placement. Single-DBG layout is unchanged
     // (stride 1, index 0 -> 1, 2, 3, ...).
     const ui64 lsnStride = Max<ui64>(1, NumDbgsTotal);
     const ui64 lsn = (SequenceGenerator++) * lsnStride + MyDbgIndex + 1;

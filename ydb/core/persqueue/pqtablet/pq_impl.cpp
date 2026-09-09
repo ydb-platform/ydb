@@ -4107,7 +4107,9 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
             SendPlanStepAcks(ctx, tx);
         }
     } else {
-        // таблетка PQ успела выполнить и удалить все транзакции этого шага. надо отправить подтверждение
+        // No TxId from this PlanStep is in Txs: empty Transactions, unknown/future ids,
+        // or a retransmit after the step's txs were already executed and deleted.
+        // Ack immediately so the mediator sees steps in order.
         SendPlanStepAcks(ctx, sender, *ev);
     }
 

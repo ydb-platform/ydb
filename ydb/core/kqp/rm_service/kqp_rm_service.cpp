@@ -17,6 +17,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <yql/essentials/utils/yql_panic.h>
@@ -1001,6 +1002,38 @@ private:
                     }
                  }
             } // PRE()
+
+            struct TPoolRow {
+                TString Database;
+                TString Pool;
+                ui64 Limit;
+                ui64 Used;
+                ui64 DeniedRequests;
+            };
+
+            TVector<TPoolRow> pools;
+            with_lock (ResourceManager->Lock) {
+                pools.reserve(ResourceManager->MemoryNamedPools.size());
+                for (const auto& [key, pool] : ResourceManager->MemoryNamedPools) {
+                    pools.push_back({key.first, key.second, pool->GetLimit(), pool->GetUsed(), pool->GetDeniedRequests()});
+                }
+            }
+
+            if (!pools.empty()) {
+                str << "<h3>Memory Pools</h3>";
+                str << "<table border='1' cellpadding='4'>";
+                str << "<tr><th>Database</th><th>Pool</th><th>Limit</th><th>Allocated</th><th>DeniedRequests</th></tr>";
+                for (const auto& row : pools) {
+                    str << "<tr>"
+                        << "<td>" << EncodeHtmlPcdata(row.Database) << "</td>"
+                        << "<td>" << EncodeHtmlPcdata(row.Pool) << "</td>"
+                        << "<td>" << row.Limit << "</td>"
+                        << "<td>" << row.Used << "</td>"
+                        << "<td>" << row.DeniedRequests << "</td>"
+                        << "</tr>";
+                }
+                str << "</table>";
+            }
         }
 
         Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));

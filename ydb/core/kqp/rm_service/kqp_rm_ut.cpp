@@ -10,6 +10,7 @@
 #include <ydb/core/kqp/node_service/kqp_query_control_plane.h>
 
 #include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -99,6 +100,24 @@ TResourceBrokerConfig MakeResourceBrokerTestConfig() {
 
     return config;
 }
+
+struct TMockMonRequest : public NMonitoring::IMonHttpRequest {
+    IOutputStream& Output() override { Y_ABORT("Not implemented"); }
+    HTTP_METHOD GetMethod() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPath() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPathInfo() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetUri() const override { Y_ABORT("Not implemented"); }
+    const TCgiParameters& GetParams() const override { Y_ABORT("Not implemented"); }
+    const TCgiParameters& GetPostParams() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPostContent() const override { Y_ABORT("Not implemented"); }
+    const THttpHeaders& GetHeaders() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetHeader(TStringBuf) const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetCookie(TStringBuf) const override { Y_ABORT("Not implemented"); }
+    TString GetRemoteAddr() const override { Y_ABORT("Not implemented"); }
+    TString GetServiceTitle() const override { Y_ABORT("Not implemented"); }
+    NMonitoring::IMonPage* GetPage() const override { Y_ABORT("Not implemented"); }
+    NMonitoring::IMonHttpRequest* MakeChild(NMonitoring::IMonPage*, const TString&) const override { Y_ABORT("Not implemented"); }
+};
 
 NKikimrConfig::TTableServiceConfig::TResourceManager MakeKqpResourceManagerConfig() {
     NKikimrConfig::TTableServiceConfig::TResourceManager config;
@@ -232,6 +251,17 @@ public:
         return group;
     }
 
+    TString RenderRmMonPage() {
+        TMockMonRequest request;
+        auto edge = Runtime->AllocateEdgeActor();
+        Runtime->Send(new IEventHandle(ResourceManagers.front(), edge, new NMon::TEvHttpInfo(request)), 0, true);
+
+        TAutoPtr<IEventHandle> handle;
+        auto* response = Runtime->GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        UNIT_ASSERT(response);
+        return response->Answer;
+    }
+
     void AssertResourceManagerStats(
             std::shared_ptr<NRm::IKqpResourceManager> rm, ui64 scanQueryMemory, ui32 executionUnits) {
         Y_UNUSED(executionUnits);
@@ -328,6 +358,7 @@ public:
         UNIT_TEST(P11PoolDenied);
         UNIT_TEST(P14PoolSensorsPersistAcrossIdle);
         UNIT_TEST(P15PoolSensorsAppearAfterFlagEnabled);
+        UNIT_TEST(P16MonPageListsIdlePool);
     UNIT_TEST_SUITE_END();
 
     void SingleTask();
@@ -356,6 +387,7 @@ public:
     void P11PoolDenied();
     void P14PoolSensorsPersistAcrossIdle();
     void P15PoolSensorsAppearAfterFlagEnabled();
+    void P16MonPageListsIdlePool();
 
 private:
     THolder<TTestBasicRuntime> Runtime;
@@ -1052,6 +1084,27 @@ void KqpRm::P15PoolSensorsAppearAfterFlagEnabled() {
         UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryLimit", false)->Val(), 100);
         UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryAllocated", false)->Val(), 40);
     }
+}
+
+void KqpRm::P16MonPageListsIdlePool() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    NRm::TKqpResourcesRequest request{.Memory = 40};
+
+    {
+        auto tx = MakeTx(1, rm, "pool_idle", 10, "db1");
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, request));
+        rm->FreeResources(*tx, 1, request);
+    }
+
+    auto liveTx = MakeTx(2, rm, "pool_live", 10, "db1");
+    UNIT_ASSERT(rm->AllocateResources(*liveTx, 1, request));
+
+    const TString page = RenderRmMonPage();
+    UNIT_ASSERT_STRING_CONTAINS(page, "<td>db1</td><td>pool_idle</td><td>100</td><td>0</td><td>0</td>");
+    UNIT_ASSERT_STRING_CONTAINS(page, "<td>db1</td><td>pool_live</td><td>100</td><td>40</td><td>0</td>");
 }
 
 } // namespace NKqp

@@ -8,6 +8,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/html/pcdata
     ydb/library/actors/core
     ydb/library/actors/interconnect
     ydb/core/actorlib_impl

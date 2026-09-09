@@ -430,7 +430,7 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
         TPath tenantRoot = TPath::Init(pathId, ss);
         Y_ABORT_UNLESS(tenantRoot.Base()->IsExternalSubDomainRoot());
 
-        TSubDomainInfo::TPtr& subDomain = ss->SubDomains.at(pathId);
+        const TSubDomainInfo::TPtr& subDomain = ss->SubDomains.at(pathId);
 
         if (!ss->SubDomainsLinks.IsActive(pathId)) {
             LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

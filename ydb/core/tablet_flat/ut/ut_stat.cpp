@@ -2,11 +2,15 @@
 #include "flat_stat_table.h"
 #include "flat_stat_table_mixed_index.h"
 #include "flat_stat_table_btree_index.h"
+#include "flat_stat_part.h"
 #include <test/libs/table/wrap_iter.h>
 #include <test/libs/table/wrap_part.h>
+#include <ydb/core/tablet_flat/test/libs/rows/layout.h>
 #include <ydb/core/tablet_flat/test/libs/table/model/large.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_make.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_mixer.h>
+#include <ydb/core/tablet_flat/test/libs/table/test_part.h>
+#include <ydb/core/tablet_flat/test/libs/table/test_writer.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -35,7 +39,7 @@ namespace {
                         TouchedRows += dataPage->Count;
                     }
                 }
-                if (type == EPage::FlatIndex || type == EPage::BTreeIndex) {
+                if (type == EPage::FlatIndex || type == EPage::BTreeIndex || type == EPage::BTreeIndexV2) {
                     TouchedIndexPages++;
                     TouchedIndexBytes += page->size();
                 }
@@ -69,6 +73,7 @@ namespace {
 
         conf.CutIndexKeys = false;
         conf.WriteBTreeIndex = writeBTreeIndex;
+        conf.WriteBTreeIndexV2 = false;
 
         return conf;
     }
@@ -1150,6 +1155,281 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
 
             Check(*subset, mode, 10, false, false);
         }
+    }
+}
+
+// ========================================================================
+// Section 3.4: V2 twin stats tests
+// ========================================================================
+
+Y_UNIT_TEST_SUITE(BuildStatsBTreeIndexV2) {
+    using namespace NTest;
+
+    // Shared twin-conf builder: V1 and V2 differ only in WriteBTreeIndexV2 and
+    // whether a V1 shadow root is kept, so deriving both from one helper keeps
+    // the twin comparison apples-to-apples as knobs are added.
+    NPage::TConf MakeTwinConf(size_t groups, bool writeBTreeIndexV2, bool keepV1Shadow) {
+        NPage::TConf conf{ true, 2 * 1024 };
+
+        conf.Groups.resize(groups);
+        for (size_t group : xrange(groups)) {
+            conf.Group(group).IndexMin = 1024;
+            conf.Group(group).BTreeIndexNodeTargetSize = 512;
+        }
+        conf.SmallEdge = 19;
+        conf.LargeEdge = 29;
+        conf.CutIndexKeys = false;
+        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV2 = writeBTreeIndexV2;
+        conf.WriteFlatIndex = false;
+        conf.BTreeIndexV2KeepV1Shadow = keepV1Shadow;
+
+        return conf;
+    }
+
+    // keepV1Shadow=false selects true V2-only parts (byte-offset root, no V1
+    // shadow root) — a distinct mode that has had correctness issues.
+    NPage::TConf PageConfV2(size_t groups, bool keepV1Shadow = true) {
+        return MakeTwinConf(groups, /* writeBTreeIndexV2 = */ true, keepV1Shadow);
+    }
+
+    void AssertHistogramValid(const THistogram& histogram, ui64 total,
+            ui32 histogramBucketsCount, TStringBuf name) {
+        UNIT_ASSERT_VALUES_EQUAL_C(histogram.size(), histogramBucketsCount - 1,
+            name << " bucket count");
+
+        ui64 prevValue = 0;
+        for (size_t i = 0; i < histogram.size(); i++) {
+            UNIT_ASSERT_GT_C(histogram[i].Value, prevValue,
+                name << " value at bucket " << i << " must increase");
+            UNIT_ASSERT_LE_C(histogram[i].Value, total,
+                name << " value at bucket " << i << " exceeds total");
+            UNIT_ASSERT_LE_C((histogram[i].Value - prevValue) * 100, total * 20,
+                name << " bucket " << i << " covers more than 20% of total");
+            prevValue = histogram[i].Value;
+        }
+        UNIT_ASSERT_LE_C((total - prevValue) * 100, total * 20,
+            name << " final bucket covers more than 20% of total");
+    }
+
+    void CheckBTreeIndexV2(const TSubset& subset, ui64 expectedRows, ui64 expectedData, ui64 expectedIndex, ui32 histogramBucketsCount = 10) {
+        TStats stats;
+        TTouchEnv env;
+
+        const ui32 attempts = 25;
+        for (ui32 attempt : xrange(attempts)) {
+            if (NTable::BuildStatsBTreeIndex(subset, stats, histogramBucketsCount, &env, [](){})) {
+                break;
+            }
+            UNIT_ASSERT_C(attempt + 1 < attempts, "Too many attempts");
+        }
+
+        if (subset.Flatten.begin()->Slices->size() == 1) {
+            ui64 byIndexBytes = 0;
+            for (const auto& part : subset.Flatten) {
+                auto &root = part->IndexPages.GetBTree({});
+                byIndexBytes += root.GetDataSize() + root.GetGroupDataSize();
+            }
+            UNIT_ASSERT_VALUES_EQUAL(byIndexBytes, expectedData);
+        }
+
+        Cerr << "V2 Got     : " << stats.RowCount << " " << stats.DataSize.Size << " " << stats.IndexSize.Size << " " << stats.DataSizeHistogram.size() << " " << stats.RowCountHistogram.size() << Endl;
+        Cerr << "V2 Expected: " << expectedRows << " " << expectedData << " " << expectedIndex << " " << stats.DataSizeHistogram.size() << " " << stats.RowCountHistogram.size() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(stats.RowCount, expectedRows);
+        UNIT_ASSERT_VALUES_EQUAL(stats.DataSize.Size, expectedData);
+        UNIT_ASSERT_VALUES_EQUAL(stats.IndexSize.Size, expectedIndex);
+        AssertHistogramValid(stats.RowCountHistogram, stats.RowCount,
+            histogramBucketsCount, "row-count histogram");
+        AssertHistogramValid(stats.DataSizeHistogram, stats.DataSize.Size,
+            histogramBucketsCount, "data-size histogram");
+    }
+
+    // V1 conf for twin tests
+    NPage::TConf PageConfV1(size_t groups) {
+        return MakeTwinConf(groups, /* writeBTreeIndexV2 = */ false, /* keepV1Shadow = */ false);
+    }
+
+    // Twin test: write same data in v1 and v2, compare stats.
+    // The v2 side is forced to true V2-only (no V1 shadow root) so the twin
+    // covers the distinct V2-only read mode, not just the shadowed V2 layout.
+    void CheckTwin(const NTest::TMass& mass, ui32 partsCount, bool history = false) {
+        auto v1Conf = PageConfV1(mass.Model->Scheme->Families.size());
+        auto v2Conf = PageConfV2(mass.Model->Scheme->Families.size(), /* keepV1Shadow = */ false);
+
+        auto v1Subset = TMake(mass, v1Conf).Mixed(0, partsCount, TMixerOne{ }, history ? 0.3 : 0);
+        auto v2Subset = TMake(mass, v2Conf).Mixed(0, partsCount, TMixerOne{ }, history ? 0.3 : 0);
+
+        TStats v1Stats, v2Stats;
+        TTouchEnv v1Env, v2Env;
+
+        const ui32 attempts = 50;
+        for (ui32 attempt : xrange(attempts)) {
+            bool v1Ready = NTable::BuildStatsBTreeIndex(*v1Subset, v1Stats, 10, &v1Env, [](){});
+            bool v2Ready = NTable::BuildStatsBTreeIndex(*v2Subset, v2Stats, 10, &v2Env, [](){});
+            if (v1Ready && v2Ready) break;
+            UNIT_ASSERT_C(attempt + 1 < attempts, "Too many attempts");
+        }
+
+        // Row count must match between v1 and v2
+        UNIT_ASSERT_VALUES_EQUAL(v1Stats.RowCount, v2Stats.RowCount);
+
+        // Data size must match between v1 and v2
+        UNIT_ASSERT_VALUES_EQUAL(v1Stats.DataSize.Size, v2Stats.DataSize.Size);
+
+        AssertHistogramValid(v1Stats.RowCountHistogram, v1Stats.RowCount, 10,
+            "V1 row-count histogram");
+        AssertHistogramValid(v2Stats.RowCountHistogram, v2Stats.RowCount, 10,
+            "V2 row-count histogram");
+        AssertHistogramValid(v1Stats.DataSizeHistogram, v1Stats.DataSize.Size, 10,
+            "V1 data-size histogram");
+        AssertHistogramValid(v2Stats.DataSizeHistogram, v2Stats.DataSize.Size, 10,
+            "V2 data-size histogram");
+    }
+
+    Y_UNIT_TEST(Single_V2) {
+        auto subset = TMake(Mass0, PageConfV2(Mass0.Model->Scheme->Families.size())).Mixed(0, 1, TMixerOne{ });
+        CheckBTreeIndexV2(*subset, 24000, 2106439, 115620);
+    }
+
+    Y_UNIT_TEST(Single_Slices_V2) {
+        auto subset = TMake(Mass0, PageConfV2(Mass0.Model->Scheme->Families.size())).Mixed(0, 1, TMixerOne{ }, 0, 13);
+        subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
+        CheckBTreeIndexV2(*subset, 12816, 1121048, 115620);
+    }
+
+    Y_UNIT_TEST(Single_History_V2) {
+        auto subset = TMake(Mass0, PageConfV2(Mass0.Model->Scheme->Families.size())).Mixed(0, 1, TMixerOne{ }, 0.3);
+        CheckBTreeIndexV2(*subset, 24000, 3547100, 192508);
+    }
+
+    Y_UNIT_TEST(Single_Groups_V2) {
+        auto subset = TMake(Mass1, PageConfV2(Mass1.Model->Scheme->Families.size())).Mixed(0, 1, TMixerOne{ });
+        CheckBTreeIndexV2(*subset, 24000, 2460139, 57579);
+    }
+
+    Y_UNIT_TEST(Single_Groups_History_V2) {
+        auto subset = TMake(Mass1, PageConfV2(Mass1.Model->Scheme->Families.size())).Mixed(0, 1, TMixerOne{ }, 0.3);
+        CheckBTreeIndexV2(*subset, 24000, 4054050, 112601);
+    }
+
+    Y_UNIT_TEST(Mixed_V2) {
+        auto subset = TMake(Mass0, PageConfV2(Mass0.Model->Scheme->Families.size())).Mixed(0, 4, TMixerRnd(4));
+        CheckBTreeIndexV2(*subset, 24000, 2106459, 115482);
+    }
+
+    Y_UNIT_TEST(Mixed_Groups_V2) {
+        auto subset = TMake(Mass1, PageConfV2(Mass1.Model->Scheme->Families.size())).Mixed(0, 4, TMixerRnd(4));
+        CheckBTreeIndexV2(*subset, 24000, 2460219, 56654);
+    }
+
+    Y_UNIT_TEST(Mixed_Groups_History_V2) {
+        auto subset = TMake(Mass1, PageConfV2(Mass1.Model->Scheme->Families.size())).Mixed(0, 4, TMixerRnd(4), 0.3);
+        CheckBTreeIndexV2(*subset, 24000, 4054270, 112277);
+    }
+
+    Y_UNIT_TEST(Single_History_Slices_V2) {
+        auto subset = TMake(Mass0, PageConfV2(Mass0.Model->Scheme->Families.size())).Mixed(0, 1, TMixerOne{ }, 0.3, 13);
+        subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
+        CheckBTreeIndexV2(*subset, 9582, 1425282, 192508);
+    }
+
+    Y_UNIT_TEST(Single_Groups_Slices_V2) {
+        auto subset = TMake(Mass1, PageConfV2(Mass1.Model->Scheme->Families.size())).Mixed(0, 1, TMixerOne{ }, 0, 13);
+        subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
+        CheckBTreeIndexV2(*subset, 10440, 1060767, 57579);
+    }
+
+    Y_UNIT_TEST(Single_Groups_History_Slices_V2) {
+        auto subset = TMake(Mass1, PageConfV2(Mass1.Model->Scheme->Families.size())).Mixed(0, 1, TMixerOne{ }, 0.3, 13);
+        subset->Flatten.begin()->Slices->Describe(Cerr); Cerr << Endl;
+        CheckBTreeIndexV2(*subset, 13570, 2273213, 112601);
+    }
+
+    Y_UNIT_TEST(Single_Twin_V2) {
+        // Twin: v1 and v2 produce same stats
+        CheckTwin(Mass0, 1);
+    }
+
+    Y_UNIT_TEST(Single_Groups_History_Twin_V2) {
+        CheckTwin(Mass1, 1, true);
+    }
+
+    // Drives TStatsScreenedPartIterator -> CreateStatsPartGroupIterator ->
+    // TStatsPartGroupBtreeIndexIter on a part built with the given conf.
+    // Returns (rowCount, dataSize) accumulated over the full scan.
+    static std::pair<ui64, ui64> StatsScanBtreeIndex(
+            TIntrusiveConstPtr<TPartStore> part, TIntrusiveConstPtr<TRowScheme> scheme) {
+        TDataStats stats = { };
+        TTestEnv env;
+        TStatsScreenedPartIterator idxIter(TPartView{part, nullptr, nullptr}, &env,
+            scheme->Keys, nullptr, nullptr, 0, 0);
+
+        UNIT_ASSERT_VALUES_EQUAL(idxIter.Start(), EReady::Data);
+        while (idxIter.IsValid()) {
+            UNIT_ASSERT(idxIter.Next(stats) != EReady::Page);
+        }
+        return {stats.RowCount, stats.DataSize.Size};
+    }
+
+    // V2 twin of the b-tree group stats iterator: same data written as V1 and V2
+    // b-tree parts must yield identical row count and data size. Exercises
+    // TStatsPartGroupBtreeIndexIter on a V2-only part (byte-offset root +
+    // inline child locations), which previously crashed on RootPageIdV1().
+    Y_UNIT_TEST(StatsBtreeIndexV2Iter) {
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint64)
+            .Col(0, 1,  NScheme::NTypeIds::Uint32)
+            .Col(0, 2,  NScheme::NTypeIds::Uint32)
+            .Key({ 0, 1 });
+
+        auto makeConf = [&](bool v2) {
+            NPage::TConf conf(true, 4096);
+            conf.Group(0).BTreeIndexNodeTargetSize = 512; // force a multi-level tree
+            conf.Group(0).BTreeIndexNodeKeysMin = 2;
+            conf.Group(0).BTreeIndexNodeKeysMax = 4;
+            conf.WriteBTreeIndex = true;
+            conf.WriteBTreeIndexV2 = v2;
+            if (v2) {
+                conf.BTreeIndexV2KeepV1Shadow = false; // true V2-only: no V1 shadow root
+            }
+            conf.WriteFlatIndex = false; // b-tree only -> selects the btree group iter
+            return conf;
+        };
+
+        const ui64 X1 = 0, X2 = 3000;
+
+        TPartCook cookV1(lay, makeConf(false));
+        TPartCook cookV2(lay, makeConf(true));
+        for (ui64 key1 = X1; key1 <= X2; key1++) {
+            ui32 key2 = 3333;
+            cookV1.AddN(key1, key2, key2);
+            cookV2.AddN(key1, key2, key2);
+        }
+
+        TPartEggs eggsV1 = cookV1.Finish();
+        TPartEggs eggsV2 = cookV2.Finish();
+        UNIT_ASSERT_C(eggsV1.Parts.size() == 1, "Unexpected " << eggsV1.Parts.size() << " V1 results");
+        UNIT_ASSERT_C(eggsV2.Parts.size() == 1, "Unexpected " << eggsV2.Parts.size() << " V2 results");
+
+        // sanity: the V2 part really is a V2-only b-tree (byte-offset root)
+        const auto& metaV2 = eggsV2.At(0)->IndexPages.GetBTree({});
+        const auto& metaV1 = eggsV1.At(0)->IndexPages.GetBTree({});
+        UNIT_ASSERT_C(metaV2.HasRootV2(), "V2 part must carry a byte-offset root");
+        UNIT_ASSERT_C(!metaV2.HasRootV1(), "V2-only part must not carry a V1 root");
+        // the tree must have index levels so Start() actually walks children
+        UNIT_ASSERT_C(metaV1.LevelCount() > 0,
+            "need a multi-level V1 tree to exercise child traversal, got LevelCount=" << metaV1.LevelCount());
+        UNIT_ASSERT_C(metaV2.LevelCount() > 0,
+            "need a multi-level tree to exercise child traversal, got LevelCount=" << metaV2.LevelCount());
+
+        auto [rowsV1, sizeV1] = StatsScanBtreeIndex(eggsV1.At(0), eggsV1.Scheme);
+        auto [rowsV2, sizeV2] = StatsScanBtreeIndex(eggsV2.At(0), eggsV2.Scheme);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(rowsV2, rowsV1,
+            "V2 row count " << rowsV2 << " must match V1 " << rowsV1);
+        UNIT_ASSERT_VALUES_EQUAL_C(sizeV2, sizeV1,
+            "V2 data size " << sizeV2 << " must match V1 " << sizeV1);
     }
 }
 

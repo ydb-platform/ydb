@@ -41,6 +41,7 @@ private:
 
     void SubscribeToCompositeConveyorConfig();
     void ScheduleConfigSubscriptionRetry();
+    TConclusion<NConfig::TConfig> ParseAndValidateConfig(const NKikimrConfig::TCompositeConveyorConfig& config) const;
     void ReplyConfigNotification(const NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
     void TryApplyUpdate();
 

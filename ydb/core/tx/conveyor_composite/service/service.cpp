@@ -51,52 +51,50 @@ void TDistributor::HandleMain(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscr
         {"action", "subscribed_for_composite_conveyor_config"});
 }
 
-void TDistributor::HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
-    auto& record = ev->Get()->Record;
-    const auto& appConfig = record.GetConfig();
-
-    if (!appConfig.HasCompositeConveyorConfig()) {
-        ReplyConfigNotification(ev);
-        return;
+TConclusion<NConfig::TConfig> TDistributor::ParseAndValidateConfig(const NKikimrConfig::TCompositeConveyorConfig& config) const {
+    std::vector<TString> validationErrors;
+    if (NKikimr::NConfig::ValidateCompositeConveyorConfig(config, validationErrors) == NKikimr::NConfig::EValidationResult::Error) {
+        return TConclusionStatus::Fail(JoinSeq("; ", validationErrors));
     }
+    if (config.GetEnabled() != Config.IsEnabled()) {
+        return TConclusionStatus::Fail("runtime Enabled update is not supported: requested=" + ::ToString(config.GetEnabled())
+            + ", effective=" + ::ToString(Config.IsEnabled()));
+    }
+    return NConfig::TConfig::BuildFromProto(config);
+}
+
+void TDistributor::HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    const auto& record = ev->Get()->Record;
+    const auto& appConfig = record.GetConfig();
 
     YDB_LOG_INFO("",
         {"name", ConveyorName},
-        {"action", "composite_conveyor_config_received"},
-        {"hasConfig", true});
+        {"action", "composite_conveyor_config_received"});
 
-    auto& candidateProto = *record.MutableConfig()->MutableCompositeConveyorConfig();
-    std::vector<TString> validationErrors;
-    if (NKikimr::NConfig::ValidateCompositeConveyorConfig(candidateProto, validationErrors) ==
-        NKikimr::NConfig::EValidationResult::Error) {
+    if (!appConfig.HasCompositeConveyorConfig()) {
+        Counters.BadConfigNotifications->Inc();
         YDB_LOG_ERROR("",
+            {"actorId", SelfId()},
             {"action", "composite_conveyor_config_rejected"},
-            {"error", JoinSeq("; ", validationErrors)});
+            {"error", "config deletion not supported in runtime updates"});
         ReplyConfigNotification(ev);
         return;
     }
-    if (candidateProto.GetEnabled() != Config.IsEnabled()) {
-        YDB_LOG_WARN("",
-            {"action", "composite_conveyor_enabled_update_ignored"},
-            {"reason", "runtime Enabled update is not supported"},
-            {"requested_enabled", candidateProto.GetEnabled()},
-            {"effective_enabled", Config.IsEnabled()});
-        candidateProto.SetEnabled(Config.IsEnabled());
-    }
-    auto parsedConfig = NConfig::TConfig::BuildFromProto(candidateProto);
+
+    auto parsedConfig = ParseAndValidateConfig(appConfig.GetCompositeConveyorConfig());
     if (parsedConfig.IsFail()) {
+        Counters.BadConfigNotifications->Inc();
         YDB_LOG_ERROR("",
+            {"actorId", SelfId()},
             {"action", "composite_conveyor_config_rejected"},
             {"error", parsedConfig.GetErrorMessage()});
         ReplyConfigNotification(ev);
         return;
     }
-    auto desiredConfig = parsedConfig.DetachResult();
-
     auto reply = MakeHolder<NActors::IEventHandle>(ev->Sender, SelfId(),
         new NConsole::TEvConsole::TEvConfigNotificationResponse(record),
         NActors::IEventHandle::FlagTrackDelivery, ev->Cookie);
-    Config = std::move(desiredConfig);
+    Config = parsedConfig.DetachResult();
     PendingConfigReply = std::move(reply);
     TryApplyUpdate();
     Y_UNUSED(Manager->DrainTasks());

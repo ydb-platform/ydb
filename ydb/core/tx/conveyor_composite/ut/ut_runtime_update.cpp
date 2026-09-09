@@ -282,6 +282,13 @@ ui64 GetWorkersCountLimitCounter(const TRuntimeFixture& fixture, const TString& 
         ->Val();
 }
 
+ui64 GetBadConfigNotificationsCounter(const TRuntimeFixture& fixture) {
+    auto counter = fixture.Counters->GetSubgroup("module_id", "COMPOSITE_CONVEYOR")
+        ->FindCounter("Deriviative/BadConfigNotifications");
+    UNIT_ASSERT(counter);
+    return counter->Val();
+}
+
 std::pair<ui32, ui32> RunWeightedPhase(TRuntimeFixture& fixture, const ESpecialTaskCategory blockerCategory) {
     TAtomicCounter counter;
     TAutoPtr<NActors::IEventHandle> heldTask;
@@ -1307,10 +1314,63 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         UNIT_ASSERT_VALUES_EQUAL(poisonEvents, 0);
     }
 
+    Y_UNIT_TEST(InvalidUpdatePreservesAppliedConfig) {
+        auto initial = BuildTopologyConfig(
+            {{{ESpecialTaskCategory::Scan, 3}, {ESpecialTaskCategory::Insert, 5}}}, {2});
+        auto* initialCategory = initial.AddCategories();
+        initialCategory->SetName(::ToString(ESpecialTaskCategory::Insert));
+        initialCategory->SetQueueSizeLimit(23);
+        TRuntimeFixture fixture(initial);
+        UNIT_ASSERT_VALUES_EQUAL(GetBadConfigNotificationsCounter(fixture), 0);
+
+        auto target = BuildTopologyConfig(
+            {{{ESpecialTaskCategory::Insert, 7}, {ESpecialTaskCategory::Normalizer, 11}}}, {1});
+        auto* targetCategory = target.AddCategories();
+        targetCategory->SetName(::ToString(ESpecialTaskCategory::Insert));
+        targetCategory->SetQueueSizeLimit(17);
+
+        auto invalidWeight = target;
+        invalidWeight.MutableWorkerPools(0)->MutableLinks(0)->SetWeight(0);
+        auto invalidWorkersCount = target;
+        invalidWorkersCount.MutableWorkerPools(0)->SetWorkersCount(NActors::MaxWorkers + 1);
+        auto invalidCategory = target;
+        invalidCategory.MutableWorkerPools(0)->MutableLinks(0)->SetCategory("unknown-category");
+
+        ui64 rejectedCount = 0;
+        ui32 poisonEvents = 0;
+        auto poisonObserver = fixture.Runtime.AddObserver<NActors::TEvents::TEvPoisonPill>([&](auto&) {
+            ++poisonEvents;
+        });
+        for (const auto& invalid : {invalidWeight, invalidWorkersCount, invalidCategory, invalidWeight}) {
+            fixture.Update(invalid);
+            ++rejectedCount;
+            UNIT_ASSERT_VALUES_EQUAL(GetBadConfigNotificationsCounter(fixture), rejectedCount);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Responses.size(), rejectedCount);
+            UNIT_ASSERT_VALUES_EQUAL(GetWorkersCountLimitCounter(fixture, "pool-1"), 2);
+            UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Scan), 3);
+            UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Insert), 5);
+            UNIT_ASSERT_VALUES_EQUAL(GetQueueSizeLimitCounter(fixture, ESpecialTaskCategory::Insert), 23);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 1);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Insert), 1);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Normalizer), 0);
+            UNIT_ASSERT_VALUES_EQUAL(poisonEvents, 0);
+        }
+
+        fixture.Update(target);
+        UNIT_ASSERT_VALUES_EQUAL(GetBadConfigNotificationsCounter(fixture), rejectedCount);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Responses.size(), rejectedCount + 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetWorkersCountLimitCounter(fixture, "pool-1"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Insert), 7);
+        UNIT_ASSERT_VALUES_EQUAL(GetQueueSizeLimitCounter(fixture, ESpecialTaskCategory::Insert), 17);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Normalizer), 1);
+    }
+
     Y_UNIT_TEST(InvalidUpdatePreservesPreparedTarget) {
         const auto initial = BuildTopologyConfig(
             {{{ESpecialTaskCategory::Scan, 1}, {ESpecialTaskCategory::Insert, 1}}});
         TRuntimeFixture fixture(initial);
+        UNIT_ASSERT_VALUES_EQUAL(GetBadConfigNotificationsCounter(fixture), 0);
         TAtomicCounter oldTask;
         auto held = HoldTask(fixture, oldTask, ESpecialTaskCategory::Scan);
         const auto target = BuildTopologyConfig({{{ESpecialTaskCategory::Insert, 1}}});
@@ -1319,10 +1379,18 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         auto invalid = initial;
         invalid.MutableWorkerPools(0)->MutableLinks(0)->SetWeight(0);
         fixture.Update(invalid);
+        UNIT_ASSERT_VALUES_EQUAL(GetBadConfigNotificationsCounter(fixture), 1);
 
         auto excessive = initial;
         excessive.MutableWorkerPools(0)->SetWorkersCount(NActors::MaxWorkers + 1);
         fixture.Update(excessive);
+        UNIT_ASSERT_VALUES_EQUAL(GetBadConfigNotificationsCounter(fixture), 2);
+
+        auto unsupported = initial;
+        unsupported.SetEnabled(false);
+        fixture.Update(unsupported);
+        UNIT_ASSERT_VALUES_EQUAL(GetBadConfigNotificationsCounter(fixture), 3);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Responses.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(GetWorkersCountLimitCounter(fixture, "pool-1"), 1);
 
         TAtomicCounter queuedTask;
@@ -1336,15 +1404,19 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         UNIT_ASSERT_VALUES_EQUAL(oldTask.Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(queuedTask.Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetBadConfigNotificationsCounter(fixture), 3);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Responses.size(), 4);
     }
 
-    Y_UNIT_TEST(EnabledChangeIsIgnoredWhileOtherSettingsApply) {
+    Y_UNIT_TEST(EnabledChangeRejectsEntireUpdate) {
         for (const bool enabled : {true, false}) {
             auto initial = BuildTopologyConfig(
                 {{{ESpecialTaskCategory::Scan, 1}, {ESpecialTaskCategory::Insert, 1}}}, {2});
             initial.SetEnabled(enabled);
             TRuntimeFixture fixture(initial);
             UNIT_ASSERT_VALUES_EQUAL(TServiceOperator::IsEnabled(), enabled);
+            UNIT_ASSERT_VALUES_EQUAL(GetBadConfigNotificationsCounter(fixture), 0);
+            const auto initialQueueLimit = GetQueueSizeLimitCounter(fixture, ESpecialTaskCategory::Insert);
             TAtomicCounter oldTask;
             auto held = HoldTask(fixture, oldTask, ESpecialTaskCategory::Scan);
 
@@ -1356,13 +1428,26 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
             category->SetQueueSizeLimit(17);
             const auto [id, cookie] = fixture.SendUpdate(target);
             fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
-            UNIT_ASSERT(fixture.Responses.empty());
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Responses.size(), 1);
+            fixture.WaitForUpdate(id, cookie);
+            UNIT_ASSERT_VALUES_EQUAL(GetBadConfigNotificationsCounter(fixture), 1);
+            UNIT_ASSERT_VALUES_EQUAL(oldTask.Val(), 0);
             UNIT_ASSERT_VALUES_EQUAL(TServiceOperator::IsEnabled(), enabled);
             UNIT_ASSERT_VALUES_EQUAL(GetWorkersCountLimitCounter(fixture, "pool-1"), 2);
+            UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Insert), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetQueueSizeLimitCounter(fixture, ESpecialTaskCategory::Insert), initialQueueLimit);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 1);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Normalizer), 0);
 
             fixture.Runtime.Send(held.Release(), 0, true);
-            fixture.WaitForUpdate(id, cookie);
+            fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
             UNIT_ASSERT_VALUES_EQUAL(oldTask.Val(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetWorkersCountLimitCounter(fixture, "pool-1"), 2);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 1);
+
+            target.SetEnabled(enabled);
+            fixture.Update(target);
+            UNIT_ASSERT_VALUES_EQUAL(GetBadConfigNotificationsCounter(fixture), 1);
             UNIT_ASSERT_VALUES_EQUAL(TServiceOperator::IsEnabled(), enabled);
             UNIT_ASSERT_VALUES_EQUAL(GetWorkersCountLimitCounter(fixture, "pool-1"), 1);
             UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Insert), 3);
@@ -1372,6 +1457,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
 
             target.MutableWorkerPools(0)->MutableLinks(0)->SetWeight(4);
             fixture.Update(target);
+            UNIT_ASSERT_VALUES_EQUAL(GetBadConfigNotificationsCounter(fixture), 1);
             UNIT_ASSERT_VALUES_EQUAL(TServiceOperator::IsEnabled(), enabled);
             UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Insert), 4);
             UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Insert), 1);

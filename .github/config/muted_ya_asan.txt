@@ -208,6 +208,7 @@ ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerFailsWithou
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerSucceedsWithAlterSchemaAndUpdateRowOnDlqTopic
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerSucceedsWithOnlyAlterSchemaOnDlqTopic
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerSucceedsWithOnlyUpdateRowOnDlqTopic
+ydb/core/persqueue/public/schema/ut SchemaOps.AlterIfExistsMissingIsSuccess
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterMissingWithoutIfExistsIsSchemeError
 ydb/core/persqueue/public/schema/ut TCheckDlqTopicsActor.SucceedsWithOnlyAlterSchema
 ydb/core/persqueue/public/schema/ut TCheckDlqTopicsActor.SucceedsWithOnlyUpdateRow
@@ -280,9 +281,11 @@ ydb/core/viewer/tests test.py.TestViewer.test_viewer_acl_write
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_query_long_multipart
 ydb/core/ymq/actor/cloud_events/cloud_events_ut unittest.sole chunk
 ydb/core/ymq/actor/yc_search_ut TIndexProcesorTests.TestSingleCreateQueueEvent
+ydb/library/actors/interconnect/ut DynamicProxy.RaceCheck10
 ydb/library/actors/interconnect/ut InterconnectSessionV2.ActorSystemRoundTrip
 ydb/library/actors/interconnect/ut InterconnectSessionV2.DirectSessionRoundTrip
 ydb/library/actors/interconnect/ut InterconnectSessionV2.LoadLikeRoundTripWithBackpressure
+ydb/library/actors/interconnect/ut InterconnectSessionV2.XdcDisabledStaysOnMain
 ydb/library/actors/interconnect/ut Sticking.Check
 ydb/library/actors/interconnect/ut unittest.sole chunk
 ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]

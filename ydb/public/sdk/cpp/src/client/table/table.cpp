@@ -1714,45 +1714,13 @@ TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, TValue
         return Impl_->BulkUpsert(table, std::move(rows), settings);
     }
 
-    auto state = std::make_shared<NRetry::TBulkUpsertRetryState>(retrySettings);
-    auto opSettings = settings;
-    opSettings.RetryRowsState_ = retryEnabled ? state : nullptr;
-    const auto startedAt = TInstant::Now();
-
-    auto firstAttemptSettings = retrySettings;
-    firstAttemptSettings.MaxRetries(0);
-    return NRetry::RunUnaryWithRetry(*this, firstAttemptSettings,
-        [this, table, rows = std::move(rows), opSettings = std::move(opSettings)](TDuration) mutable {
-            return Impl_->BulkUpsert(table, std::move(rows), opSettings);
-        }).Apply(
-        [this, table, settings, retrySettings, retryEnabled, state, startedAt](const TAsyncBulkUpsertResult& f) {
-            const auto result = f.GetValue();
-            if (!retryEnabled || result.IsSuccess()
-                || !NRetry::ShouldRetryStatus(result.GetStatus(), retrySettings)) {
-                return NThreading::MakeFuture(result);
-            }
-            Y_ABORT_UNLESS(state->HasBackup());
-
-            const auto elapsed = TInstant::Now() - startedAt;
-            if (retrySettings.MaxTimeout_ != TDuration::Max() && elapsed >= retrySettings.MaxTimeout_) {
-                return NThreading::MakeFuture(result);
-            }
-
-            auto remaining = retrySettings;
-            remaining.MaxRetries(retrySettings.MaxRetries_ - 1);
-            if (retrySettings.MaxTimeout_ != TDuration::Max()) {
-                remaining.MaxTimeout(retrySettings.MaxTimeout_ - elapsed);
-            }
-
-            return NRetry::RunUnaryWithRetry(*this, remaining,
-                [this, table, state, settings](TDuration timeout) {
-                    auto op = settings;
-                    op.RetryRowsState_.reset();
-                    if (timeout != TDuration::Max()) {
-                        op.ClientTimeout(timeout);
-                    }
-                    return Impl_->BulkUpsert(table, state->GetBackupCopy(), op);
-                });
+    auto state = retryEnabled ? std::make_shared<NRetry::TBulkUpsertRetryState>(retrySettings) : nullptr;
+    return NRetry::RunUnaryWithRetry(*this, retrySettings, settings,
+        [impl = Impl_, table, rows = std::move(rows), state, firstAttempt = true](TBulkUpsertSettings& opSettings) mutable {
+            opSettings.RetryRowsState_ = firstAttempt ? state : nullptr;
+            auto requestRows = firstAttempt ? std::move(rows) : state->GetBackupCopy();
+            firstAttempt = false;
+            return impl->BulkUpsert(table, std::move(requestRows), opSettings);
         });
 }
 
@@ -1768,13 +1736,16 @@ TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, EDataF
         return Impl_->BulkUpsert(table, format, data, schema, settings);
     }
 
-    return NRetry::RunUnaryWithRetry(*this, retrySettings,
-        [this, table, format, data, schema, settings](TDuration timeout) {
-            auto opSettings = settings;
-            if (timeout != TDuration::Max()) {
-                opSettings.ClientTimeout(timeout);
-            }
+    if (!NRetry::IsRetryEnabled(retrySettings) || GetInRetryOperationContext()) {
+        // A single attempt runs synchronously, so its inputs need no retry copies.
+        return NRetry::RunUnaryWithRetry(*this, retrySettings, settings, [&](const TBulkUpsertSettings& opSettings) {
             return Impl_->BulkUpsert(table, format, data, schema, opSettings);
+        });
+    }
+
+    return NRetry::RunUnaryWithRetry(*this, retrySettings, settings,
+        [impl = Impl_, table, format, data, schema](const TBulkUpsertSettings& opSettings) {
+            return impl->BulkUpsert(table, format, data, schema, opSettings);
         });
 }
 
@@ -1789,15 +1760,12 @@ TAsyncReadRowsResult TTableClient::ReadRows(const std::string& table, TValue&& r
     if (!NRetry::ShouldUseUnaryRetryContext(*this, retrySettings)) {
         return Impl_->ReadRows(table, std::move(rows), columns, settings);
     }
-    TValue keysCopy = std::move(rows);
+    const bool retryEnabled = NRetry::IsRetryEnabled(retrySettings) && !GetInRetryOperationContext();
 
-    return NRetry::RunUnaryWithRetry(*this, retrySettings,
-        [this, table, keysCopy = std::move(keysCopy), columns, settings](TDuration timeout) {
-            auto opSettings = settings;
-            if (timeout != TDuration::Max()) {
-                opSettings.ClientTimeout(timeout);
-            }
-            return Impl_->ReadRows(table, TValue{keysCopy}, columns, opSettings);
+    return NRetry::RunUnaryWithRetry(*this, retrySettings, settings,
+        [impl = Impl_, table, keys = std::move(rows), columns, retryEnabled](const TReadRowsSettings& opSettings) mutable {
+            auto requestKeys = retryEnabled ? keys : std::move(keys);
+            return impl->ReadRows(table, std::move(requestKeys), columns, opSettings);
         });
 }
 

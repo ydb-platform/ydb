@@ -1,9 +1,12 @@
 #include "ydb_common_ut.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <library/cpp/threading/future/future.h>
+
+#include <stop_token>
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/iface.h>
@@ -17,10 +20,6 @@ namespace {
 
 class TMockUnaryRetryClientImpl : public IClientImplCommon {
 public:
-    void PostToResponseQueue(std::function<void()>&& fn) {
-        fn();
-    }
-
     void ScheduleTask(const std::function<void()>& fn, TDeadline::Duration) override {
         fn();
     }
@@ -154,17 +153,23 @@ Y_UNIT_TEST_SUITE(YdbUnaryRetrySettings) {
         TMockUnaryRetryClient client;
         client.SetInRetryOperationContext(true);
 
+        std::stop_source stopSource;
+        const auto requestSettings = NYdb::NTable::TBulkUpsertSettings().ClientTimeout(TDuration::Seconds(10));
+        for (const auto& settings : {
+            FastUnaryRetrySettings(5).MaxTimeout(TDuration::Seconds(1)),
+            FastUnaryRetrySettings(5).MaxTimeout(TDuration::Seconds(1)).CancellationToken(stopSource.get_token())})
+        {
+            ui32 callCount = 0;
+            const auto result = RunUnaryWithRetry(client, settings, requestSettings,
+                [&callCount, &requestSettings](const NYdb::NTable::TBulkUpsertSettings& attemptSettings) {
+                    ++callCount;
+                    UNIT_ASSERT_VALUES_EQUAL(attemptSettings.ClientTimeout_, requestSettings.ClientTimeout_);
+                    return NThreading::MakeFuture(TStatus(EStatus::UNAVAILABLE, NYdb::NIssue::TIssues()));
+                }).GetValueSync();
 
-        ui32 callCount = 0;
-        const auto settings = FastUnaryRetrySettings(5);
-
-        const auto result = RunUnaryWithRetry(client, settings, [&callCount](TDuration) {
-            ++callCount;
-            return NThreading::MakeFuture(TStatus(EStatus::UNAVAILABLE, NYdb::NIssue::TIssues()));
-        }).GetValueSync();
-
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAVAILABLE);
-        UNIT_ASSERT_VALUES_EQUAL(callCount, 1u);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAVAILABLE);
+            UNIT_ASSERT_VALUES_EQUAL(callCount, 1u);
+        }
         client.SetInRetryOperationContext(false);
     }
 
@@ -173,17 +178,21 @@ Y_UNIT_TEST_SUITE(YdbUnaryRetrySettings) {
 
         ui32 callCount = 0;
         const ui32 failCount = 2;
-        const auto settings = FastUnaryRetrySettings(5);
+        const auto settings = FastUnaryRetrySettings(5).MaxTimeout(TDuration::Seconds(10));
+        const auto requestSettings = NYdb::NTable::TBulkUpsertSettings().ClientTimeout(TDuration::Seconds(30));
 
-        const auto result = RunUnaryWithRetry(client, settings, [&callCount](TDuration) {
-            ++callCount;
-            if (callCount <= failCount) {
-                return NThreading::MakeFuture(TStatus(EStatus::UNAVAILABLE, NYdb::NIssue::TIssues()));
-            }
-            return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues()));
-        }).GetValueSync();
+        const auto result = RunUnaryWithRetry(client, settings, requestSettings,
+            [&callCount, &settings](const NYdb::NTable::TBulkUpsertSettings& attemptSettings) {
+                ++callCount;
+                UNIT_ASSERT(attemptSettings.ClientTimeout_ <= settings.MaxTimeout_);
+                if (callCount <= failCount) {
+                    return NThreading::MakeFuture(TStatus(EStatus::UNAVAILABLE, NYdb::NIssue::TIssues()));
+                }
+                return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues()));
+            }).GetValueSync();
 
         UNIT_ASSERT(result.IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(callCount, failCount + 1);
+        UNIT_ASSERT_VALUES_EQUAL(requestSettings.ClientTimeout_, TDuration::Seconds(30));
     }
 }

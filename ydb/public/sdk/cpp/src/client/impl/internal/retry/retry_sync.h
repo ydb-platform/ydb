@@ -7,11 +7,8 @@
 #include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry.h>
 #include <ydb/public/sdk/cpp/src/client/impl/observability/span.h>
 
-#include <util/system/type_name.h>
-
 #include <exception>
 #include <memory>
-#include <typeinfo>
 
 namespace NYdb::inline Dev::NRetry::Sync {
 
@@ -25,26 +22,12 @@ public:
         ParentSpan_ = Client_.Impl_->CreateRetryRootSpan();
 
         [[maybe_unused]] auto parentScope = ParentSpan_ ? ParentSpan_->Activate() : nullptr;
-        auto& parentSpan = ParentSpan_;
-
         try {
             auto status = ExecuteImpl();
-            if (parentSpan) {
-                parentSpan->SetRetryCount(this->RetryNumber_);
-                parentSpan->End(status.GetStatus());
-            }
+            EndRetrySpan(status.GetStatus());
             return status;
         } catch (...) {
-            if (parentSpan) {
-                parentSpan->SetRetryCount(this->RetryNumber_);
-                try {
-                    std::rethrow_exception(std::current_exception());
-                } catch (const std::exception& e) {
-                    parentSpan->EndWithException(TypeName(e).c_str(), e.what());
-                } catch (...) {
-                    parentSpan->EndWithException("unknown", "unknown exception");
-                }
-            }
+            EndRetrySpan(std::current_exception());
             throw;
         }
     }
@@ -123,7 +106,6 @@ private:
         return status;
     }
 
-    std::shared_ptr<NObservability::TRequestSpan> ParentSpan_;
 };
 
 template<typename TClient, typename TOperation, typename TStatusType = TFunctionResult<TOperation>>
@@ -144,12 +126,7 @@ protected:
 
     TStatusType RunOperation() override {
         return InvokeWithRangeErrorCatch<TStatusType>([&]() -> TStatusType {
-            TInRetryOperationContextClientGuard guard(this->Client_);
-            if constexpr (TFunctionArgs<TOperation>::Length == 1) {
-                return Operation_(this->Client_);
-            } else {
-                return Operation_(this->Client_, this->GetRemainingTimeout());
-            }
+            return this->InvokeOperation(this->Client_, Operation_, this->Client_);
         });
     }
 };
@@ -173,42 +150,28 @@ public:
 
 protected:
     TStatusType Retry() override {
-        std::optional<TStatusType> status;
-
         if (!Session_) {
             auto settings = TCreateSessionSettings()
                 .ClientTimeout(this->Settings_.GetSessionClientTimeout_)
                 .Deadline(Deadline_);
 
             auto sessionResult = this->Client_.GetSession(settings).GetValueSync();
-            if (this->IsCancellationRequested()) {
-                return MakeRetryCancelledResult<TStatusType>();
+            if (!sessionResult.IsSuccess()) {
+                return MakeRetryResultFromStatus<TStatusType>(TStatus(sessionResult));
             }
-            if (sessionResult.IsSuccess()) {
-                Session_ = sessionResult.GetSession();
-                TRetryDeadlineHelper<TClient>::SetDeadline(*Session_, Deadline_);
-            }
-            status = MakeRetryResultFromStatus<TStatusType>(TStatus(sessionResult));
+            Session_ = sessionResult.GetSession();
+            TRetryDeadlineHelper<TClient>::SetDeadline(*Session_, Deadline_);
         }
 
-        if (Session_) {
-            if (this->IsCancellationRequested()) {
-                return MakeRetryCancelledResult<TStatusType>();
-            }
-            status = RunOperation();
+        if (this->IsCancellationRequested()) {
+            return MakeRetryCancelledResult<TStatusType>();
         }
-
-        return *status;
+        return RunOperation();
     }
 
     TStatusType RunOperation() override {
         return InvokeWithRangeErrorCatch<TStatusType>([&]() -> TStatusType {
-            TInRetryOperationContextClientGuard guard(this->Client_);
-            if constexpr (TFunctionArgs<TOperation>::Length == 1) {
-                return Operation_(this->Session_.value());
-            } else {
-                return Operation_(this->Session_.value(), this->GetRemainingTimeout());
-            }
+            return this->InvokeOperation(this->Client_, Operation_, this->Session_.value());
         });
     }
 

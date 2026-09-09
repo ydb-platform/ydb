@@ -3,8 +3,10 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
 
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/iface.h>
+#include <ydb/public/sdk/cpp/src/client/impl/observability/span.h>
 
 #include <util/random/random.h>
+#include <util/system/type_name.h>
 
 #include <thread>
 
@@ -13,6 +15,26 @@ namespace NYdb::inline Dev::NRetry {
 using TBackoffDuration = std::chrono::duration<double, std::micro>;
 
 constexpr TBackoffDuration MAX_BACKOFF_DURATION = std::chrono::hours(1);
+
+void TRetryContextBase::EndRetrySpan(EStatus status) {
+    if (ParentSpan_) {
+        ParentSpan_->SetRetryCount(RetryNumber_);
+        ParentSpan_->End(status);
+    }
+}
+
+void TRetryContextBase::EndRetrySpan(std::exception_ptr exception) {
+    if (ParentSpan_) {
+        ParentSpan_->SetRetryCount(RetryNumber_);
+        try {
+            std::rethrow_exception(exception);
+        } catch (const std::exception& e) {
+            ParentSpan_->EndWithException(TypeName(e).c_str(), e.what());
+        } catch (...) {
+            ParentSpan_->EndWithException("unknown", "unknown exception");
+        }
+    }
+}
 
 namespace {
 

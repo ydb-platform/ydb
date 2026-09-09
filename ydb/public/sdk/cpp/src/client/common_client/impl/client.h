@@ -53,10 +53,6 @@ public:
         return DbDriverState_->DiscoveryCompleted();
     }
 
-    void PostToResponseQueue(std::function<void()>&& fn) {
-        Connections_->PostToResponseQueue(std::move(fn));
-    }
-
     void ScheduleTask(const std::function<void()>& fn, TDeadline::Duration delay) override {
         std::weak_ptr<IClientImplCommon> weak = this->shared_from_this();
         auto cbGuard = [weak, fn]() {

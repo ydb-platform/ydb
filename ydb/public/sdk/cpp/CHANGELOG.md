@@ -1,6 +1,8 @@
 * Added `EQ_HEIGHT_HISTOGRAM` to `EMultiColumnStatisticsType`.
 
-* Added `std::stop_token` cancellation to C++ SDK retry operations through `TRetryOperationSettings::CancellationToken`. Cancellation does not stop an in-flight RPC or roll back its effects; `CLIENT_CANCELLED` may replace a successful result.
+* Added `std::stop_token` cancellation to C++ SDK retry operations through `TRetryOperationSettings::CancellationToken`. Cancellation does not stop an in-flight RPC or roll back its effects; `CLIENT_CANCELLED` may replace a successful result. `CLIENT_CANCELLED` is terminal even with `RetryUndefined(true)`. Synchronous exceptions while starting an asynchronous retry attempt are reported through its returned future.
+
+* Fixed built-in `BulkUpsert` retries to apply timeout and backoff settings starting with the first attempt. Unlimited retry timeouts no longer produce a finite operation timeout.
 
 # v3.22.0
 

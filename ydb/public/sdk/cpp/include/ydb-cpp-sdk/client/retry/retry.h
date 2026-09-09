@@ -32,6 +32,7 @@ struct TRetryOperationSettings {
         return static_cast<TSelf&>(*this);
     }
     FLUENT_SETTING_FLAG(Verbose);
+    // CLIENT_CANCELLED is always terminal, including when RetryUndefined is enabled.
     FLUENT_SETTING_FLAG(RetryUndefined);
     // Stops retry orchestration without cancelling an already running RPC.
     // CLIENT_CANCELLED may replace a successful result; it does not imply rollback.

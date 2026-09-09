@@ -4,7 +4,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/rows.h>
 #include <ydb/public/sdk/cpp/src/client/row_ranges/rows_stream_drain.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
-#include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry_sync.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry.h>
 #include <ydb/public/sdk/cpp/tests/common/fake_trace_provider.h>
 
 #include <ydb/public/api/protos/ydb_value.pb.h>
@@ -24,6 +24,7 @@
 #include <grpcpp/server_builder.h>
 #include <grpcpp/server_context.h>
 
+#include <atomic>
 #include <deque>
 #include <functional>
 #include <stdexcept>
@@ -94,6 +95,7 @@ void SimulateScanDrainFailure() {
 class TMockTableService : public Ydb::Table::V1::TableService::Service {
 public:
     std::function<void()> OnCreateSession;
+    std::function<Ydb::StatusIds::StatusCode(const Ydb::Table::BulkUpsertRequest&)> OnBulkUpsert;
 
     grpc::Status CreateSession(
         grpc::ServerContext*,
@@ -110,6 +112,15 @@ public:
         op->set_ready(true);
         op->set_status(Ydb::StatusIds::SUCCESS);
         op->mutable_result()->PackFrom(result);
+        return grpc::Status::OK;
+    }
+
+    grpc::Status BulkUpsert(grpc::ServerContext*, const Ydb::Table::BulkUpsertRequest* request,
+        Ydb::Table::BulkUpsertResponse* response) override
+    {
+        auto* op = response->mutable_operation();
+        op->set_ready(true);
+        op->set_status(OnBulkUpsert(*request));
         return grpc::Status::OK;
     }
 };
@@ -305,7 +316,55 @@ Y_UNIT_TEST_SUITE(TTableRangeErrorRetryTest) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TRetryPolicyTest) {
+    Y_UNIT_TEST(TerminalStatusesAndSessionReset) {
+        for (bool idempotent : {false, true}) {
+            for (bool retryUndefined : {false, true}) {
+                const auto settings = FastRetrySettings().Idempotent(idempotent).RetryUndefined(retryUndefined);
+                UNIT_ASSERT(!NRetry::ShouldRetryStatus(EStatus::SUCCESS, settings));
+                UNIT_ASSERT(!NRetry::ShouldRetryStatus(EStatus::CLIENT_CANCELLED, settings));
+                const auto transport = NRetry::GetRetryDecision(EStatus::TRANSPORT_UNAVAILABLE, settings);
+                const auto undetermined = NRetry::GetRetryDecision(EStatus::UNDETERMINED, settings);
+                UNIT_ASSERT(transport.Step == (idempotent ? NRetry::NextStep::RetryFastBackoff : NRetry::NextStep::Finish));
+                UNIT_ASSERT(undetermined.Step == transport.Step);
+                UNIT_ASSERT_VALUES_EQUAL(transport.ResetSession, idempotent);
+                UNIT_ASSERT(!undetermined.ResetSession);
+                const auto deadline = NRetry::GetRetryDecision(EStatus::CLIENT_DEADLINE_EXCEEDED, settings);
+                UNIT_ASSERT(deadline.Step == (retryUndefined ? NRetry::NextStep::RetrySlowBackoff : NRetry::NextStep::Finish));
+                UNIT_ASSERT(deadline.ResetSession);
+            }
+        }
+    }
+}
+
 Y_UNIT_TEST_SUITE(TRetryCancellationTest) {
+    Y_UNIT_TEST(CancellationAfterAttemptFutureIsAbandoned) {
+        TTableClientFixture fixture;
+        std::stop_source stopSource;
+        auto result = fixture.Client->RetryOperation(
+            [](NTable::TTableClient&) { return NThreading::NewPromise<TStatus>().GetFuture(); },
+            FastRetrySettings().CancellationToken(stopSource.get_token()));
+        UNIT_ASSERT(!result.Wait(TDuration::Zero()));
+        stopSource.request_stop();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetValue(TDuration::Seconds(5)).GetStatus(), EStatus::CLIENT_CANCELLED);
+    }
+
+    Y_UNIT_TEST(CancellationDuringBackoff) {
+        TTableClientFixture fixture;
+        std::stop_source stopSource;
+        size_t attempts = 0;
+        auto settings = FastRetrySettings().CancellationToken(stopSource.get_token());
+        settings.FastBackoffSettings_.SlotDuration(TDuration::Hours(1)).UncertainRatio(0);
+        auto result = fixture.Client->RetryOperation([&](NTable::TTableClient&) {
+            ++attempts;
+            return NThreading::MakeFuture(UnavailableStatus());
+        }, settings);
+        // The ready failure has scheduled backoff before RetryOperation returns.
+        stopSource.request_stop();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetValue(TDuration::Seconds(5)).GetStatus(), EStatus::CLIENT_CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(attempts, 1u);
+    }
+
     Y_UNIT_TEST(AsyncCancellationCompletesBeforeLateResult) {
         for (bool lateException : {false, true}) {
             auto traces = std::make_shared<NTests::TFakeTraceProvider>();
@@ -345,10 +404,11 @@ Y_UNIT_TEST_SUITE(TRetryCancellationTest) {
             auto attemptResult = NThreading::NewPromise<TStatus>();
             auto result = fixture.Client->RetryOperation(
                 [&](NTable::TTableClient&) { return attemptResult.GetFuture(); },
-                FastRetrySettings().CancellationToken(stopSource.get_token()));
+                FastRetrySettings().RetryUndefined(true).CancellationToken(stopSource.get_token()));
             auto checked = result.Apply([&](const TAsyncStatus& future) {
                 UNIT_ASSERT_VALUES_EQUAL(future.GetValue().GetStatus(), status);
                 stopSource.request_stop();
+                UNIT_ASSERT_VALUES_EQUAL(traces->GetFakeTracer("ydb-cpp-sdk-table")->GetSpans().size(), 2u);
                 for (const auto& span : traces->GetFakeTracer("ydb-cpp-sdk-table")->GetSpans()) {
                     UNIT_ASSERT(span.Span->IsEnded());
                 }
@@ -358,32 +418,17 @@ Y_UNIT_TEST_SUITE(TRetryCancellationTest) {
         }
     }
 
-    Y_UNIT_TEST(PreStoppedTokenSkipsBackoff) {
-        TTableClientFixture fixture;
-        std::stop_source stopSource;
-        stopSource.request_stop();
-        auto operation = [](NTable::TTableClient&) { return OkStatus(); };
-        struct TRetryContext : NRetry::Sync::TRetryWithoutSession<NTable::TTableClient, decltype(operation)> {
-            using TBase = NRetry::Sync::TRetryWithoutSession<NTable::TTableClient, decltype(operation)>;
-            using TBase::TBase;
-            using TBase::DoBackoff;
-        };
-        TRetryContext retry(*fixture.Client, operation,
-            FastRetrySettings().CancellationToken(stopSource.get_token()));
-        UNIT_ASSERT_VALUES_EQUAL(retry.DoBackoff(true).count(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(retry.DoBackoff(false).count(), 0);
-    }
-
     Y_UNIT_TEST(SyncCancellationStopsAfterAttempt) {
-        TTableClientFixture fixture;
-        std::stop_source stopSource;
-
-        auto result = fixture.Client->RetryOperationSync(
-            [&](NTable::TSession) {
-                stopSource.request_stop();
-                return OkStatus();
-            }, FastRetrySettings().CancellationToken(stopSource.get_token()));
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CLIENT_CANCELLED);
+        for (auto status : {EStatus::SUCCESS, EStatus::UNAVAILABLE, EStatus::OVERLOADED}) {
+            TTableClientFixture fixture;
+            std::stop_source stopSource;
+            auto result = fixture.Client->RetryOperationSync(
+                [&](NTable::TSession) {
+                    stopSource.request_stop();
+                    return TStatus(status, NIssue::TIssues{});
+                }, FastRetrySettings().CancellationToken(stopSource.get_token()));
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CLIENT_CANCELLED);
+        }
     }
 
     Y_UNIT_TEST(PreStoppedTokenSkipsAttempts) {
@@ -445,6 +490,34 @@ Y_UNIT_TEST_SUITE(TRetryCancellationTest) {
             NQuery::TQueryClient queryClient(*fixture.Driver);
             checkCancelled(queryClient.ExecuteQuery("SELECT 1", NQuery::TTxControl::NoTx(),
                 NQuery::TExecuteQuerySettings().RetrySettings(settings)));
+        }
+    }
+}
+
+Y_UNIT_TEST_SUITE(TUnaryBulkUpsertRetryTest) {
+    Y_UNIT_TEST(RetriesPreserveRowsAndApplyTimeout) {
+        for (auto timeout : {TDuration::Max(), TDuration::Seconds(30)}) {
+            TTableClientFixture fixture;
+            std::atomic<size_t> attempts = 0;
+            auto rows = TValueBuilder().BeginList().AddListItem().BeginStruct()
+                .AddMember("key").Uint64(42).EndStruct().EndList().Build();
+            const auto expected = rows.GetProto().SerializeAsString();
+            const auto expectedType = rows.GetType().GetProto().SerializeAsString();
+            fixture.TableService.OnBulkUpsert = [&](const auto& request) {
+                const auto& params = request.operation_params();
+                const bool validTimeout = timeout == TDuration::Max() ? !params.has_operation_timeout()
+                    : params.has_operation_timeout() && params.operation_timeout().seconds() <= 30;
+                if (request.rows().value().SerializeAsString() != expected
+                    || request.rows().type().SerializeAsString() != expectedType || !validTimeout)
+                {
+                    return Ydb::StatusIds::BAD_REQUEST;
+                }
+                return ++attempts == 1 ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::SUCCESS;
+            };
+            auto result = fixture.Client->BulkUpsert("/unused", std::move(rows),
+                NTable::TBulkUpsertSettings().RetrySettings(FastRetrySettings().MaxRetries(1).MaxTimeout(timeout)));
+            UNIT_ASSERT(result.GetValue(TDuration::Seconds(5)).IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(attempts.load(), 2u);
         }
     }
 }

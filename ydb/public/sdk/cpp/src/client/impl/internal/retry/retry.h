@@ -8,16 +8,21 @@
 
 #include <library/cpp/threading/future/core/fwd.h>
 #include <util/datetime/base.h>
+#include <util/generic/function.h>
 #include <util/generic/ptr.h>
 #include <util/system/types.h>
 #include <util/string/cast.h>
 
+#include <exception>
 #include <functional>
 #include <memory>
 #include <type_traits>
 
 namespace NYdb::inline Dev {
 class IClientImplCommon;
+namespace NObservability {
+class TRequestSpan;
+}
 }
 
 namespace NYdb::inline Dev::NRetry {
@@ -33,32 +38,52 @@ enum class NextStep {
     Finish,
 };
 
-inline bool ShouldRetryStatus(EStatus status, const TRetryOperationSettings& settings) {
+struct TRetryDecision {
+    NextStep Step;
+    bool ResetSession = false;
+};
+
+inline TRetryDecision GetRetryDecision(EStatus status, const TRetryOperationSettings& settings) {
     switch (status) {
+        case EStatus::SUCCESS:
+        case EStatus::CLIENT_CANCELLED:
+            return {NextStep::Finish};
         case EStatus::ABORTED:
+            return {NextStep::RetryImmediately};
         case EStatus::OVERLOADED:
         case EStatus::CLIENT_RESOURCE_EXHAUSTED:
+            return {NextStep::RetrySlowBackoff};
         case EStatus::UNAVAILABLE:
+            return {NextStep::RetryFastBackoff};
         case EStatus::BAD_SESSION:
         case EStatus::SESSION_BUSY:
-            return true;
+            return {NextStep::RetryImmediately, true};
         case EStatus::NOT_FOUND:
-            return settings.RetryNotFound_;
+            return {settings.RetryNotFound_ ? NextStep::RetryImmediately : NextStep::Finish};
         case EStatus::UNDETERMINED:
+            return {settings.Idempotent_ ? NextStep::RetryFastBackoff : NextStep::Finish};
         case EStatus::TRANSPORT_UNAVAILABLE:
-            return settings.Idempotent_;
-        case EStatus::CLIENT_CANCELLED:
-            return false;
+            return {settings.Idempotent_ ? NextStep::RetryFastBackoff : NextStep::Finish, settings.Idempotent_};
+        case EStatus::CLIENT_DEADLINE_EXCEEDED:
+            return {settings.RetryUndefined_ ? NextStep::RetrySlowBackoff : NextStep::Finish, true};
         default:
-            return settings.RetryUndefined_;
+            return {settings.RetryUndefined_ ? NextStep::RetrySlowBackoff : NextStep::Finish};
     }
 }
+
+inline bool ShouldRetryStatus(EStatus status, const TRetryOperationSettings& settings) {
+    return GetRetryDecision(status, settings).Step != NextStep::Finish;
+}
+
+template <typename TClient>
+class TInRetryOperationContextClientGuard;
 
 class TRetryContextBase : TNonCopyable {
 protected:
     TRetryOperationSettings Settings_;
     std::uint32_t RetryNumber_;
     TInstant RetryStartTime_;
+    std::shared_ptr<NObservability::TRequestSpan> ParentSpan_;
 
 protected:
     TRetryContextBase(const TRetryOperationSettings& settings)
@@ -82,63 +107,35 @@ protected:
     }
 
     NextStep GetNextStep(const TStatus& status) {
-        if (status.IsSuccess() || status.GetStatus() == EStatus::CLIENT_CANCELLED) {
+        const auto decision = GetRetryDecision(status.GetStatus(), Settings_);
+        if ((decision.Step == NextStep::Finish && !decision.ResetSession)
+            || RetryNumber_ >= Settings_.MaxRetries_
+            || TInstant::Now() - RetryStartTime_ >= Settings_.MaxTimeout_)
+        {
             return NextStep::Finish;
         }
-        if (RetryNumber_ >= Settings_.MaxRetries_) {
-            return NextStep::Finish;
+        if (decision.ResetSession) {
+            Reset();
         }
-        if (TInstant::Now() - RetryStartTime_ >= Settings_.MaxTimeout_) {
-            return NextStep::Finish;
-        }
-        switch (status.GetStatus()) {
-            case EStatus::ABORTED:
-                return NextStep::RetryImmediately;
-
-            case EStatus::OVERLOADED:
-            case EStatus::CLIENT_RESOURCE_EXHAUSTED:
-                return NextStep::RetrySlowBackoff;
-
-            case EStatus::UNAVAILABLE:
-                return NextStep::RetryFastBackoff;
-
-            case EStatus::BAD_SESSION:
-            case EStatus::SESSION_BUSY:
-                Reset();
-                return NextStep::RetryImmediately;
-
-            case EStatus::NOT_FOUND:
-                if (Settings_.RetryNotFound_) {
-                    return NextStep::RetryImmediately;
-                } else {
-                    return NextStep::Finish;
-                }
-
-            case EStatus::UNDETERMINED:
-                if (Settings_.Idempotent_) {
-                    return NextStep::RetryFastBackoff;
-                } else {
-                    return NextStep::Finish;
-                }
-
-            case EStatus::TRANSPORT_UNAVAILABLE:
-                if (Settings_.Idempotent_) {
-                    Reset();
-                    return NextStep::RetryFastBackoff;
-                } else {
-                    return NextStep::Finish;
-                }
-
-            case EStatus::CLIENT_DEADLINE_EXCEEDED:
-                Reset();
-                [[fallthrough]];
-            default:
-                return Settings_.RetryUndefined_ ? NextStep::RetrySlowBackoff : NextStep::Finish;
-        }
+        return decision.Step;
     }
 
     TDuration GetRemainingTimeout() {
-        return Settings_.MaxTimeout_ - (TInstant::Now() - RetryStartTime_);
+        return Settings_.MaxTimeout_ == TDuration::Max()
+            ? TDuration::Max() : Settings_.MaxTimeout_ - (TInstant::Now() - RetryStartTime_);
+    }
+
+    void EndRetrySpan(EStatus status);
+    void EndRetrySpan(std::exception_ptr exception);
+
+    template <typename TClient, typename TOperation, typename TTarget>
+    auto InvokeOperation(TClient& client, TOperation& operation, TTarget& target) {
+        TInRetryOperationContextClientGuard<TClient> guard(client);
+        if constexpr (TFunctionArgs<TOperation>::Length == 1) {
+            return operation(target);
+        } else {
+            return operation(target, GetRemainingTimeout());
+        }
     }
 };
 

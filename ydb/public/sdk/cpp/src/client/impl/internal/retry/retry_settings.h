@@ -58,24 +58,30 @@ bool ShouldUseUnaryRetryContext(TClient& client, const TRetryOperationSettings& 
         || (IsRetryEnabled(settings) && !client.GetInRetryOperationContext());
 }
 
-template <typename TClient, typename TRunOnce>
-auto RunUnaryWithRetry(TClient& client, TRetryOperationSettings settings, TRunOnce&& runOnce)
-    -> decltype(runOnce(TDuration::Max()))
+template <typename TClient, typename TRequestSettings, typename TRunOnce>
+auto RunUnaryWithRetry(TClient& client, TRetryOperationSettings settings,
+    const TRequestSettings& requestSettings, TRunOnce&& runOnce)
+    -> decltype(runOnce(std::declval<TRequestSettings&>()))
 {
     const bool nested = client.GetInRetryOperationContext();
+    const bool retryEnabled = IsRetryEnabled(settings) && !nested;
+    using TResult = decltype(runOnce(std::declval<TRequestSettings&>()));
+
+    auto operation = [requestSettings = requestSettings, runOnce = std::forward<TRunOnce>(runOnce), nested, retryEnabled]
+        (TClient& /*clientRef*/, TDuration remainingTimeout) mutable -> TResult {
+        auto attemptSettings = retryEnabled ? requestSettings : std::move(requestSettings);
+        if (!nested && remainingTimeout != TDuration::Max()) {
+            attemptSettings.ClientTimeout(remainingTimeout);
+        }
+        return runOnce(attemptSettings);
+    };
+
     if (!ShouldUseUnaryRetryContext(client, settings)) {
-        return runOnce(nested ? TDuration::Max() : settings.MaxTimeout_);
+        return operation(client, settings.MaxTimeout_);
     }
     if (nested) {
         settings.MaxRetries(0);
     }
-
-    using TResult = decltype(runOnce(TDuration::Max()));
-
-    auto operation = [runOnce = std::forward<TRunOnce>(runOnce), nested]
-        (TClient& /*clientRef*/, TDuration remainingTimeout) mutable -> TResult {
-        return runOnce(nested ? TDuration::Max() : remainingTimeout);
-    };
 
     using TRetryAsync = Async::TRetryWithoutSession<TClient, decltype(operation), TResult>;
     using TRetryContextAsync = Async::TRetryContext<TClient, TResult>;

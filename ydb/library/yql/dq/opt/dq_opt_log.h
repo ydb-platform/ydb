@@ -22,7 +22,12 @@ NNodes::TExprBase DqRewriteTakeSortToTopSort(NNodes::TExprBase node, TExprContex
 
 NNodes::TExprBase DqEnforceCompactPartition(NNodes::TExprBase node, NNodes::TExprList frames, TExprContext& ctx);
 
-NNodes::TExprBase DqExpandWindowFunctions(NNodes::TExprBase node, TExprContext& ctx, TTypeAnnotationContext& typesCtx, bool enforceCompact);
+NNodes::TExprBase DqExpandWindowFunctions(
+    NNodes::TExprBase node,
+    TExprContext& ctx,
+    TTypeAnnotationContext& typesCtx,
+    bool enforceCompact,
+    bool expandNonCompactFullAggregates = false);
 
 NNodes::TExprBase DqMergeQueriesWithSinks(NNodes::TExprBase dqQueryNode, TExprContext& ctx);
 

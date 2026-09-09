@@ -7,7 +7,12 @@ using namespace NYdb::NTable;
 
 namespace {
 
-void CheckWindowFunctionAst(const TString& selectBody, bool useSortForPartitionsByKeys) {
+void CheckWindowFunctionAst(
+    const TString& selectBody,
+    bool useSortForPartitionsByKeys,
+    bool rejectSqueezeToList = false,
+    bool allowSqueezeToDict = false)
+{
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(useSortForPartitionsByKeys);
     TKikimrRunner kikimr(appConfig);
@@ -29,7 +34,12 @@ void CheckWindowFunctionAst(const TString& selectBody, bool useSortForPartitions
         UNIT_ASSERT_C(ast.Contains("WideSort"), ast);
         UNIT_ASSERT_C(ast.Contains("Chopper"), ast);
         UNIT_ASSERT_C(ast.Contains("HashShuffle"), ast);
-        UNIT_ASSERT_C(!ast.Contains("SqueezeToDict"), ast);
+        if (!allowSqueezeToDict) {
+            UNIT_ASSERT_C(!ast.Contains("SqueezeToDict"), ast);
+        }
+        if (rejectSqueezeToList) {
+            UNIT_ASSERT_C(!ast.Contains("SqueezeToList"), ast);
+        }
     } else {
         UNIT_ASSERT_C(ast.Contains("SqueezeToDict"), ast);
     }
@@ -128,6 +138,29 @@ Y_UNIT_TEST_SUITE(KqpPartitionsByKeysSort) {
 
     Y_UNIT_TEST_TWIN(WindowFunctionCumeDistAst, UseSortForPartitionsByKeys) {
         CheckStandardWindowFunctionAst("CUME_DIST() OVER w AS dist", UseSortForPartitionsByKeys);
+    }
+
+    Y_UNIT_TEST_TWIN(WindowFunctionFullFrameAfterRowNumbersAst, UseSortForPartitionsByKeys) {
+        CheckWindowFunctionAst(
+            "SELECT Key, Text, Data,\n"
+            "    ROW_NUMBER() OVER (PARTITION BY Text ORDER BY Key) AS rn1,\n"
+            "    ROW_NUMBER() OVER (PARTITION BY Data ORDER BY Key) AS rn2,\n"
+            "    SUM(Data) OVER (PARTITION BY Text) AS total\n"
+            "FROM `/Root/EightShard`;\n",
+            UseSortForPartitionsByKeys,
+            true,
+            true);
+    }
+
+    Y_UNIT_TEST_TWIN(WindowFunctionComputedSortKeyWithFullFrameAst, UseSortForPartitionsByKeys) {
+        CheckWindowFunctionAst(
+            "SELECT Key, Text, Data,\n"
+            "    SUM(Data) OVER (PARTITION BY Text) AS total,\n"
+            "    ROW_NUMBER() OVER (PARTITION BY Text ORDER BY Abs(Data) DESC, Key) AS rn\n"
+            "FROM `/Root/EightShard`;\n",
+            UseSortForPartitionsByKeys,
+            true,
+            true);
     }
 }
 

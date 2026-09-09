@@ -381,6 +381,7 @@ public:
 
         Connected = true;
         Credentials.DDiskInstanceGuid = msg.GetDDiskInstanceGuid();
+        Credentials.ConnectionToken.emplace(msg.GetConnectionToken());
 
         PrepareDataAndStart(ctx);
     }
@@ -505,7 +506,7 @@ public:
             if (Connected && !DisconnectSent) {
                 DisconnectSent = true;
                 auto ev = std::make_unique<NDDisk::TEvDisconnect>();
-                Credentials.Serialize(ev->Record.MutableCredentials());
+                Credentials.SerializeForRequest(ev->Record.MutableCredentials());
                 SendRequest(ctx, std::move(ev));
             } else {
                 FinishAndDie(ctx);
@@ -613,7 +614,7 @@ public:
             } else {
                 auto ev = std::make_unique<NDDisk::TEvWrite>(Credentials,
                     NDDisk::TBlockSelector(vChunkIndex, offsetInChunk, size), NDDisk::TWriteInstruction(0));
-                ev->AddPayload(TRope(RandomData));
+                ev->AddPayloadThenChecksum(TRope(RandomData));
                 SendRequest(ctx, std::move(ev), requestIdx);
             }
             ++RequestsSent;
@@ -659,7 +660,7 @@ public:
                 const ui64 requestIdx = NewTRequestInfo(size, now, true);
                 auto ev = std::make_unique<NDDisk::TEvWrite>(Credentials,
                     NDDisk::TBlockSelector(vChunkIndex, offsetInChunk, size), NDDisk::TWriteInstruction(0));
-                ev->AddPayload(TRope(ZeroData));
+                ev->AddPayloadThenChecksum(TRope(ZeroData));
                 SendRequest(ctx, std::move(ev), requestIdx);
                 ++InFlight;
 

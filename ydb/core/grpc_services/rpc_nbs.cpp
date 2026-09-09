@@ -14,6 +14,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/ss_proxy.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/request_info.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/volume_label.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -141,30 +142,167 @@ public:
     void Bootstrap() {
         const auto& ctx = TActivationContext::AsActorContext();
 
-        Become(&TThis::StateWork);
+        Become(&TThis::StateDescribeScheme);
 
-        auto tabletIdStr = GetProtoRequest()->GetTabletId();
+        const auto* request = GetProtoRequest();
+        const TString diskId = request->GetDiskId();
 
-        // Parse the string to create a TActorId
-        NActors::TActorId tabletId;
-        tabletId.Parse(tabletIdStr.data(), tabletIdStr.size());
+        LOG_DEBUG(ctx, NKikimrServices::NBS_PARTITION,
+            "DeletePartition: sending DescribeScheme request for disk %s",
+            diskId.data());
 
-        // Send poison pill to partition actor
-        ctx.Send(tabletId, new TEvents::TEvPoisonPill);
+        auto describeRequest = std::make_unique<TEvSSProxy::TEvDescribeSchemeRequest>(diskId);
 
-        LOG_INFO(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
-            "Grpc service: sent poison event to partition actor with id: %s",
-            tabletId.ToString().data());
-
-        Ydb::Nbs::DeletePartitionResult result;
-        result.SetTabletId(tabletIdStr);
-        ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ActorContext());
+        NYdb::NBS::Send(
+            ctx,
+            MakeSSProxyServiceId(),
+            std::move(describeRequest),
+            0);
     }
 
 private:
+    NActors::TActorId PipeClient;
+    TString DiskId;
+
+    STFUNC(StateDescribeScheme) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvSSProxy::TEvDescribeSchemeResponse, HandleDescribeScheme);
+            default:
+                break;
+        }
+    }
+
     STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NYdb::NBS::NBlockStore::TEvService::TEvDeletePartitionResponse, Handle);
+            hFunc(TEvTabletPipe::TEvClientConnected, HandleConnect);
+            hFunc(TEvTabletPipe::TEvClientDestroyed, HandleDisconnect);
+            default:
+                break;
+        }
+    }
+
+    void HandleDescribeScheme(TEvSSProxy::TEvDescribeSchemeResponse::TPtr& ev) {
+        const auto& ctx = TActivationContext::AsActorContext();
+        const auto& response = *ev->Get();
+
+        LOG_DEBUG(ctx, NKikimrServices::NBS_PARTITION,
+            "DeletePartition: received DescribeScheme response: %s", response.ToString().data());
+
+        const auto& error = response.GetError();
+        if (NYdb::NBS::HasError(error)) {
+            LOG_ERROR(ctx, NKikimrServices::NBS_PARTITION,
+                "DeletePartition: DescribeScheme failed: %s",
+                NYdb::NBS::FormatError(error).data());
+            auto issue = NYql::TIssue(
+                error.GetMessage().empty()
+                    ? NYdb::NBS::FormatError(error)
+                    : error.GetMessage());
+            Request_->RaiseIssue(issue);
+
+            auto status = Ydb::StatusIds::GENERIC_ERROR;
+            if (FACILITY_FROM_CODE(error.GetCode()) == NYdb::NBS::FACILITY_SCHEMESHARD) {
+                const auto schemeStatus = static_cast<NKikimrScheme::EStatus>(
+                    STATUS_FROM_CODE(error.GetCode()));
+                if (schemeStatus == NKikimrScheme::StatusPathDoesNotExist) {
+                    status = Ydb::StatusIds::NOT_FOUND;
+                }
+            }
+            Reply(status, ActorContext());
+            return;
+        }
+
+        const auto& pathDescription = response.PathDescription;
+        const auto pathType = pathDescription.GetSelf().GetPathType();
+
+        if (pathType != NKikimrSchemeOp::EPathTypeBlockStoreVolume) {
+            LOG_ERROR(ctx, NKikimrServices::NBS_PARTITION,
+                "DeletePartition: path is not a BlockStoreVolume (type=%d)",
+                static_cast<int>(pathType));
+            auto issue = NYql::TIssue("Path is not a BlockStoreVolume");
+            Request_->RaiseIssue(issue);
+            Reply(Ydb::StatusIds::BAD_REQUEST, ActorContext());
+            return;
+        }
+
+        const auto& volumeDescription = pathDescription.GetBlockStoreVolumeDescription();
+
+        if (volumeDescription.PartitionsSize() == 0) {
+            LOG_ERROR(ctx, NKikimrServices::NBS_PARTITION,
+                "DeletePartition: volume has no partitions");
+            auto issue = NYql::TIssue("Volume has no partitions");
+            Request_->RaiseIssue(issue);
+            Reply(Ydb::StatusIds::BAD_REQUEST, ActorContext());
+            return;
+        }
+
+        DiskId = GetProtoRequest()->GetDiskId();
+        const auto& partition = volumeDescription.GetPartitions(0);
+        const ui64 tabletId = partition.GetTabletId();
+
+        LOG_DEBUG(ctx, NKikimrServices::NBS_PARTITION,
+            "DeletePartition: extracted partition tablet id %lu for disk %s, creating pipe",
+            tabletId,
+            DiskId.data());
+
+        Become(&TThis::StateWork);
+
+        PipeClient = CreatePipeClient(tabletId, ctx);
+
+        auto request = MakeHolder<NYdb::NBS::NBlockStore::TEvService::TEvDeletePartitionRequest>();
+        NTabletPipe::SendData(
+            ctx,
+            PipeClient,
+            request.Release());
+    }
+
+    void HandleConnect(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+        const auto& ctx = TActivationContext::AsActorContext();
+
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            LOG_ERROR(ctx, NKikimrServices::NBS_PARTITION,
+                "DeletePartition: failed to connect to partition tablet");
+            auto issue = NYql::TIssue("Failed to connect to partition tablet");
+            Request_->RaiseIssue(issue);
+            Reply(Ydb::StatusIds::UNAVAILABLE, ActorContext());
+            return;
+        }
+
+        LOG_DEBUG(ctx, NKikimrServices::NBS_PARTITION,
+            "DeletePartition: connected to partition tablet");
+    }
+
+    void HandleDisconnect(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
         Y_UNUSED(ev);
-        // TODO
+        const auto& ctx = TActivationContext::AsActorContext();
+
+        LOG_ERROR(ctx, NKikimrServices::NBS_PARTITION,
+            "DeletePartition: pipe to partition tablet destroyed before response");
+        auto issue = NYql::TIssue("Pipe to partition tablet destroyed");
+        Request_->RaiseIssue(issue);
+        Reply(Ydb::StatusIds::UNAVAILABLE, ActorContext());
+    }
+
+    void Handle(NYdb::NBS::NBlockStore::TEvService::TEvDeletePartitionResponse::TPtr& ev) {
+        const auto& ctx = TActivationContext::AsActorContext();
+
+        LOG_DEBUG(ctx, NKikimrServices::NBS_PARTITION,
+            "DeletePartition: received response from partition tablet");
+
+        if (PipeClient) {
+            NTabletPipe::CloseClient(ctx, PipeClient);
+        }
+
+        if (ev->Get()->GetError().GetCode() != 0) {
+            auto issue = NYql::TIssue(ev->Get()->GetErrorReason());
+            Request_->RaiseIssue(issue);
+            Reply(Ydb::StatusIds::GENERIC_ERROR, ActorContext());
+            return;
+        }
+
+        Ydb::Nbs::DeletePartitionResult result;
+        result.SetDiskId(DiskId);
+        ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ActorContext());
     }
 };
 

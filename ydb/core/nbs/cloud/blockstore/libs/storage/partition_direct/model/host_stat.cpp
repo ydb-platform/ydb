@@ -9,6 +9,16 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool IsDDiskOperation(EOperation operation)
+{
+    return operation == EOperation::ReadFromDDisk ||
+           operation == EOperation::WriteToDDisk ||
+           operation == EOperation::Flush ||
+           operation == EOperation::FlushCrossNode;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void THostStat::OnRequest(EOperation operation)
 {
     ++AccessInflightCount(operation);

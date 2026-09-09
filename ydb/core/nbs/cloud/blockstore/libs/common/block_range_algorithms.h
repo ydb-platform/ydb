@@ -1,16 +1,19 @@
 #pragma once
 
 #include "block_range.h"
-
-#include <util/system/types.h>
+#include "pbuffer_key.h"
 
 #include <span>
 
 namespace NYdb::NBS::NBlockStore {
 
+// A block range tagged with a PBuffer record id.
+// SplitOnNonOverlappingContinuousRanges keeps the greatest key on overlaps. A
+// default-constructed key marks a hole (no overlapping record; callers treat it
+// as DDisk).
 struct TWeightedRange
 {
-    ui64 Key{};
+    TPBufferKey Key{};
     TBlockRange64 Range;
 
     bool operator<(const TWeightedRange& other) const
@@ -19,10 +22,8 @@ struct TWeightedRange
     }
 };
 
-// The function splits overlapping ranges into non-overlapping ranges
-//   and returns their in a container.
-// Result is continuous range's sequence, where original 'holes' are
-//   fullfilled with ranges with a key == 0.
+// Splits overlapping ranges into a continuous sequence of non-overlapping
+// ranges covering fullRange. Holes are filled with a default-constructed key.
 TVector<TWeightedRange> SplitOnNonOverlappingContinuousRanges(
     TBlockRange64 fullRange,
     std::span<const TWeightedRange> overlappingRanges);

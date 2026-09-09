@@ -55,6 +55,7 @@ private:
     void OnRequestTimeout();
 
     TString ExtendedDebugState() const;
+    TString PrintHostAndNode(THostIndex host) const;
 
     NActors::TActorSystem const* ActorSystem;
     const TChildLogTitle LogTitle;
@@ -66,6 +67,7 @@ private:
     const TDuration RequestTimeout;
 
     TInstant StartAt;
+    TGuardedSgList SgList;
     TReadRangeHint ReadHint;
     THostMask Requested;
     THostMask Failed;

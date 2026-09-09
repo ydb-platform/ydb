@@ -99,30 +99,30 @@ ILoggingServicePtr CreateUnifiedAgentLoggingService(
 // TODO: move to util/system/defaults.h
 
 // https://stackoverflow.com/questions/9183993/msvc-variadic-macro-expansion
-#define Y_VA_SIZE_IMPL(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, TOTAL, ...) \
+#define Y_VA_SIZE_IMPL(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, TOTAL, ...)    \
     TOTAL
 #define Y_VA_SIZE_EXPAND(args) Y_VA_SIZE_IMPL args
-#define Y_VA_SIZE(...) \
+#define Y_VA_SIZE(...)                                                         \
     Y_VA_SIZE_EXPAND((__VA_ARGS__, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1))
 
 #define Y_VA_MACRO(MACRO, ...) Y_CAT(MACRO, Y_VA_SIZE(__VA_ARGS__))(__VA_ARGS__)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define STORAGE_LOG_S(priority, stream)                                    \
-    if (Log.IsOpen() && priority <= Log.FiltrationLevel()) {               \
-        Log << static_cast<ELogPriority>(priority) << __LOCATION__ << ": " \
-            << stream;                                                     \
-    }                                                                      \
+#define STORAGE_LOG_S(priority, stream)                                        \
+    if (Log.IsOpen() && priority <= Log.FiltrationLevel()) {                   \
+        Log << static_cast<ELogPriority>(priority) << __LOCATION__ << ": "     \
+            << stream;                                                         \
+    }                                                                          \
     // STORAGE_LOG_S
 
-#define STORAGE_LOG_F(priority, ...)                                   \
-    if (Log.IsOpen() && priority <= Log.FiltrationLevel()) {           \
-        Printf(                                                        \
-            Log << static_cast<ELogPriority>(priority) << __LOCATION__ \
-                << ": ",                                               \
-            __VA_ARGS__);                                              \
-    }                                                                  \
+#define STORAGE_LOG_F(priority, ...)                                           \
+    if (Log.IsOpen() && priority <= Log.FiltrationLevel()) {                   \
+        Printf(                                                                \
+            Log << static_cast<ELogPriority>(priority) << __LOCATION__         \
+                << ": ",                                                       \
+            __VA_ARGS__);                                                      \
+    }                                                                          \
     // STORAGE_LOG_F
 
 #define STORAGE_LOG2 STORAGE_LOG_S
@@ -145,27 +145,27 @@ ILoggingServicePtr CreateUnifiedAgentLoggingService(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define STORAGE_LOG_THROTTLED(throttler, ...) \
-    do {                                      \
-        if ((throttler).Kick()) {             \
-            STORAGE_LOG(__VA_ARGS__);         \
-        }                                     \
+#define STORAGE_LOG_THROTTLED(throttler, ...)                                  \
+    do {                                                                       \
+        if ((throttler).Kick()) {                                              \
+            STORAGE_LOG(__VA_ARGS__);                                          \
+        }                                                                      \
     } while (0);
 // STORAGE_LOG_THROTTLED
 
-#define STORAGE_ERROR_T(throttler, ...) \
+#define STORAGE_ERROR_T(throttler, ...)                                        \
     STORAGE_LOG_THROTTLED(throttler, TLOG_ERR, __VA_ARGS__)
 
-#define STORAGE_WARN_T(throttler, ...) \
+#define STORAGE_WARN_T(throttler, ...)                                         \
     STORAGE_LOG_THROTTLED(throttler, TLOG_WARNING, __VA_ARGS__)
 
-#define STORAGE_INFO_T(throttler, ...) \
+#define STORAGE_INFO_T(throttler, ...)                                         \
     STORAGE_LOG_THROTTLED(throttler, TLOG_INFO, __VA_ARGS__)
 
-#define STORAGE_DEBUG_T(throttler, ...) \
+#define STORAGE_DEBUG_T(throttler, ...)                                        \
     STORAGE_LOG_THROTTLED(throttler, TLOG_DEBUG, __VA_ARGS__)
 
-#define STORAGE_TRACE_T(throttler, ...) \
+#define STORAGE_TRACE_T(throttler, ...)                                        \
     STORAGE_LOG_THROTTLED(throttler, TLOG_RESOURCES, __VA_ARGS__)
 
 }   // namespace NYdb::NBS

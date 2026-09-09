@@ -75,7 +75,8 @@ namespace NKikimr::NDDisk {
             sourceInfo->Creds = TQueryCredentials::ForInternal(
                 creds.TabletId,
                 creds.Generation,
-                std::make_optional(source.GetDDiskInstanceGuid()));
+                std::make_optional(source.GetDDiskInstanceGuid()),
+                creds.DirectBlockGroupIndex);
             return true;
         };
 
@@ -199,7 +200,8 @@ namespace NKikimr::NDDisk {
                     }
                 }
 
-                Y_DEBUG_ABORT_UNLESS(SyncReadCookiesInFlight.emplace(requestId).second);
+                const bool inserted = SyncReadCookiesInFlight.emplace(requestId).second;
+                Y_DEBUG_ABORT_UNLESS(inserted);
                 const TActorId& sourceActorId = fromPersistentBuffer
                     ? sourceInfo.PersistentBufferActorId
                     : sourceInfo.DDiskActorId;

@@ -14,9 +14,11 @@ PEERDIR(
     library/cpp/svnversion
     ydb/core/base
     ydb/core/blobstorage/dsproxy/mock
+    ydb/core/testlib/actors
 )
 
 SRCS(
+    common_ut.cpp
     queue_backpressure_client_ut.cpp
     queue_backpressure_server_ut.cpp
 )

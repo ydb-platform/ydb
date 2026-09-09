@@ -599,12 +599,12 @@ namespace {
             TLookupState::TPtr State;
         };
 
-        // SessionHolder is std::shared_ptr<TString, [actorSystem]() {
+        // SessionInfo::TPtr is std::unique_ptr<TSessionInfo, [actorSystem]() {
         //      actorSystem->Send(ServiceActorId(), TEvRelease);
         // }
         //
-        // Lookup
-        //              Pool
+        // LookupActor
+        //              PoolActor
         // SendRequest->EvAcquireSession
         //              Handle(AcquireSession):
         //              1) has session in pool: move to BusySessions & <- EvSessionAcquired with TSessionInfo
@@ -613,6 +613,7 @@ namespace {
         //
         //              Handle(EvCreate): fill State->Id, attach it
         //              Handle(EvSessionInfo): if State->Sender is not false, <- EvSessionAcquired, put to BusySession, clear State->Sender
+        //
         // Handle(EvSessionAcquired): keep SessionInfo in State, start request, etc;
         //  1) Finished: release SessionInfo (will call back Send(TEvRelease))
         //  2) Error: release SessionInfo, optionally set Invalidate on *SESSION* errors (will call back Send(TEvRelease))

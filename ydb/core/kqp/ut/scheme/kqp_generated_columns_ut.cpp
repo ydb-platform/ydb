@@ -13,11 +13,11 @@ using namespace NYdb::NQuery;
 
 namespace {
 
-static NKikimrConfig::TAppConfig GeneratedColumnsAppConfig() {
+static NKikimrConfig::TAppConfig GeneratedColumnsAppConfig(bool enableIndexStreamWrite = true) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableFeatureFlags()->SetEnableGeneratedStored(true);
     appConfig.MutableFeatureFlags()->SetEnableGeneratedVirtual(true);
-    appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+    appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(enableIndexStreamWrite);
     return appConfig;
 }
 
@@ -219,6 +219,26 @@ constexpr const char* IndexedGeneratedTableDDL = R"(
     );
 )";
 
+constexpr const char* VirtualReadTableDDL = R"(
+    CREATE TABLE VRead (
+        a Int32,
+        b Int32,
+        grp Int32 NOT NULL,
+        k Int32 NOT NULL,
+        stored_sum Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + COALESCE(b, 0)) STORED,
+        v Int32 GENERATED ALWAYS AS (COALESCE(a, 0) * 10 + COALESCE(b, 0)) VIRTUAL,
+        PRIMARY KEY (k),
+        INDEX idx_grp GLOBAL ON (grp)
+    );
+)";
+
+constexpr const char* VirtualReadSeed = R"(
+    UPSERT INTO VRead (k, grp, a, b) VALUES
+        (1, 1, 1, 1),
+        (2, 1, 2, 2),
+        (3, 2, NULL, 3);
+)";
+
 TString RowsYson(std::initializer_list<const char*> rows) {
     TStringBuilder result;
     result << "[";
@@ -234,8 +254,9 @@ TString RowsYson(std::initializer_list<const char*> rows) {
 
 class TTestFixture {
 public:
-    explicit TTestFixture(const std::string& createTable, const std::string& seed = "")
-        : Kikimr(TKikimrSettings(GeneratedColumnsAppConfig()).SetWithSampleTables(false))
+    explicit TTestFixture(const std::string& createTable, const std::string& seed = "",
+        bool enableIndexStreamWrite = true)
+        : Kikimr(TKikimrSettings(GeneratedColumnsAppConfig(enableIndexStreamWrite)).SetWithSampleTables(false))
         , Db(Kikimr.GetQueryClient())
         , Session(Db.GetSession().GetValueSync().GetSession())
     {
@@ -347,6 +368,81 @@ private:
     NYdb::NQuery::TQueryClient Db;
     NYdb::NQuery::TSession Session;
 };
+
+void CheckVirtualGeneratedReturning(bool enableIndexStreamWrite) {
+    TTestFixture fixture(R"(
+        CREATE TABLE VReturning (
+            a Int32,
+            b Int32,
+            k Int32 NOT NULL,
+            v Int32 GENERATED ALWAYS AS (COALESCE(a, 0) * 10 + COALESCE(b, 0)) VIRTUAL,
+            PRIMARY KEY (k),
+            INDEX idx_b GLOBAL ON (b)
+        );
+    )", "", enableIndexStreamWrite);
+
+    fixture.CheckReturning(
+        "INSERT INTO VReturning (k, a, b) VALUES (1, 1, 2) RETURNING k, v;",
+        "SELECT k, v FROM VReturning WHERE k = 1;",
+        "[[1;[12]]]");
+    fixture.CheckReturning(
+        "UPSERT INTO VReturning (k, a) VALUES (1, 3) RETURNING k, a, b, v;",
+        "SELECT k, a, b, v FROM VReturning WHERE k = 1;",
+        "[[1;[3];[2];[32]]]");
+    fixture.CheckReturning(
+        "REPLACE INTO VReturning (k, a) VALUES (2, 4) RETURNING k, a, b, v;",
+        "SELECT k, a, b, v FROM VReturning WHERE k = 2;",
+        "[[2;[4];#;[40]]]");
+    fixture.CheckReturning(
+        "UPDATE VReturning SET b = 5 WHERE v = 32 RETURNING k, v;",
+        "SELECT k, v FROM VReturning WHERE k = 1;",
+        "[[1;[35]]]");
+    fixture.CheckReturning(
+        "UPDATE VReturning SET a = 8 WHERE v = 35 RETURNING *;",
+        "SELECT a, b, k, v FROM VReturning WHERE k = 1;",
+        "[[[8];[5];1;[85]]]");
+    CompareYson("[[1;[85]]]",
+        fixture.QueryYson("DELETE FROM VReturning WHERE v = 85 RETURNING k, v;"));
+    fixture.Check("SELECT k FROM VReturning WHERE k = 1;", "[]");
+
+    fixture.CheckReturning(
+        "INSERT INTO VReturning (k, a, b) VALUES (3, 6, 7) RETURNING *;",
+        "SELECT a, b, k, v FROM VReturning WHERE k = 3;",
+        "[[[6];[7];3;[67]]]");
+    fixture.CheckReturning(
+        "UPDATE VReturning ON (k, a) VALUES (3, 9) RETURNING k, b, v;",
+        "SELECT k, b, v FROM VReturning WHERE k = 3;",
+        "[[3;[7];[97]]]");
+    CompareYson("[[3;[97]]]",
+        fixture.QueryYson("DELETE FROM VReturning ON (k) VALUES (3) RETURNING k, v;"));
+    fixture.Check("SELECT k FROM VReturning WHERE k = 3;", "[]");
+
+    fixture.Exec(R"(
+        CREATE TABLE VReturningConst (
+            c Int32 GENERATED ALWAYS AS (5) VIRTUAL,
+            k Int32 NOT NULL,
+            PRIMARY KEY (k)
+        );
+    )");
+    fixture.CheckReturning(
+        "INSERT INTO VReturningConst (k) VALUES (10) RETURNING c, k;",
+        "SELECT c, k FROM VReturningConst WHERE k = 10;",
+        "[[[5];10]]");
+
+    fixture.Exec(R"(
+        CREATE TABLE VReturningNamedNewOld (
+            `new` Int32,
+            `old` Int32,
+            k Int32 NOT NULL,
+            v Int32 GENERATED ALWAYS AS (COALESCE(`new`, 0) + COALESCE(`old`, 0)) VIRTUAL,
+            PRIMARY KEY (k)
+        );
+    )");
+    fixture.CheckReturning(
+        "INSERT INTO VReturningNamedNewOld (k, `new`, `old`) VALUES (20, 4, 6) RETURNING `new`, `old`, v;",
+        "SELECT `new`, `old`, v FROM VReturningNamedNewOld WHERE k = 20;",
+        "[[[4];[6];[10]]]");
+}
 
 }   // namespace
 
@@ -2239,6 +2335,88 @@ Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
 }
 
     Y_UNIT_TEST_SUITE(GeneratedVirtual) {
+        Y_UNIT_TEST(ReturningWithIndexStreamWrite) {
+            CheckVirtualGeneratedReturning(true);
+        }
+
+        Y_UNIT_TEST(ReturningWithoutIndexStreamWrite) {
+            CheckVirtualGeneratedReturning(false);
+        }
+
+        Y_UNIT_TEST(ReadProjectionAndStar) {
+            TTestFixture fixture(VirtualReadTableDDL, VirtualReadSeed);
+
+            fixture.Check("SELECT k, v FROM VRead ORDER BY k;",
+                          "[[1;[11]];[2;[22]];[3;[3]]]");
+            fixture.Check("SELECT * FROM VRead ORDER BY k;",
+                          "[[[1];[1];1;1;[2];[11]];[[2];[2];1;2;[4];[22]];[#;[3];2;3;[3];[3]]]");
+        }
+
+        Y_UNIT_TEST(ReadFilterGroupHavingAndOrder) {
+            TTestFixture fixture(VirtualReadTableDDL, VirtualReadSeed);
+
+            fixture.Check("SELECT k FROM VRead WHERE v = 22;", "[[2]]");
+            fixture.Check("SELECT k FROM VRead ORDER BY v;", "[[3];[1];[2]]");
+            fixture.Check("SELECT grp, SUM(v) FROM VRead GROUP BY grp ORDER BY grp;",
+                          "[[1;[33]];[2;[3]]]");
+            fixture.Check("SELECT grp FROM VRead GROUP BY grp HAVING SUM(v) > 10 ORDER BY grp;",
+                          "[[1]]");
+        }
+
+        Y_UNIT_TEST(ReadWindowAndSubquery) {
+            TTestFixture fixture(VirtualReadTableDDL, VirtualReadSeed);
+
+            fixture.Check(R"(
+                SELECT k, ROW_NUMBER() OVER (ORDER BY v) AS rn
+                FROM VRead
+                ORDER BY k;
+            )", "[[1;2u];[2;3u];[3;1u]]");
+
+            fixture.Check(R"(
+                SELECT k
+                FROM VRead
+                WHERE v IN (SELECT v FROM VRead WHERE grp = 1)
+                ORDER BY k;
+            )", "[[1];[2]]");
+        }
+
+        Y_UNIT_TEST(ReadJoinAndConditionalDml) {
+            TTestFixture fixture(VirtualReadTableDDL, VirtualReadSeed);
+
+            fixture.Check(R"(
+                SELECT l.k, r.k
+                FROM VRead AS l
+                INNER JOIN VRead AS r ON l.v = r.v
+                WHERE l.k = 1;
+            )", "[[1;1]]");
+
+            fixture.Exec("UPDATE VRead SET b = v WHERE v = 11;");
+            fixture.Check("SELECT k, b, v FROM VRead WHERE k = 1;", "[[1;[11];[21]]]");
+
+            fixture.Exec("DELETE FROM VRead WHERE v = 22;");
+            fixture.Check("SELECT k FROM VRead ORDER BY k;", "[[1];[3]]");
+        }
+
+        Y_UNIT_TEST(ReadDependencyFreeVirtualColumn) {
+            TTestFixture fixture(R"(
+                CREATE TABLE VConst (
+                    c Int32 GENERATED ALWAYS AS (5) VIRTUAL,
+                    k Int32 NOT NULL,
+                    PRIMARY KEY (k)
+                );
+            )");
+
+            fixture.Exec("UPSERT INTO VConst (k) VALUES (1), (2);");
+            fixture.Check("SELECT c FROM VConst ORDER BY k;", "[[[5]];[[5]]]");
+        }
+
+        Y_UNIT_TEST(ReadVirtualColumnThroughSecondaryIndex) {
+            TTestFixture fixture(VirtualReadTableDDL, VirtualReadSeed);
+
+            fixture.Check("SELECT k, v FROM VRead VIEW idx_grp WHERE grp = 1 ORDER BY k;",
+                          "[[1;[11]];[2;[22]]]");
+        }
+
         Y_UNIT_TEST(DmlAndSchemaChangesIgnoreVirtualColumn) {
             TTestFixture fixture(R"(
             CREATE TABLE TestTable (

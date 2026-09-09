@@ -21,7 +21,7 @@
 - No force rebuild
 - Use `2>&1 | tail` for test output
 
-- Test name formats for `-F`: [`ydb/agents/TESTS.md`](ydb/agents/TESTS.md)
+- Test name formats for `-F`: ydb/agents/TESTS.md
 
 ## C++
 

@@ -225,8 +225,6 @@ Y_UNIT_TEST_SUITE(KqpService) {
         }
     }
 
-    // A final cleanup may have to close the legacy worker used by Table
-    // ExecuteSchemeQuery. The final intent must survive that asynchronous wait.
     Y_UNIT_TEST(FinalCleanupIntentIsPreservedWhileClosingLegacyWorker) {
         TKikimrSettings settings;
         settings.SetUseRealThreads(false);
@@ -248,13 +246,10 @@ Y_UNIT_TEST_SUITE(KqpService) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
             if (!proxyId) {
-                // The first hop is RPC actor -> the dynamically registered KQP proxy.
                 proxyId = ev->GetRecipientRewrite();
             } else if (ev->Sender == proxyId) {
-                // The second hop is KQP proxy -> this Table session actor.
                 sessionActorId = ev->GetRecipientRewrite();
             } else if (sessionActorId && ev->Sender == sessionActorId) {
-                // The third hop is session actor -> legacy DDL worker.
                 workerRequestDropped = true;
                 return TTestActorRuntime::EEventAction::DROP;
             }
@@ -276,9 +271,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
         }
         UNIT_ASSERT(sessionActorId);
 
-        // Force the session's fatal-error cleanup while its legacy worker is
-        // alive. Without propagating isFinal to TKqpCleanupCtx, the worker close
-        // response incorrectly returns the session actor to ReadyState.
+        // An unexpected event starts final cleanup while the legacy worker is alive.
         runtime->Send(new IEventHandle(
             sessionActorId, TActorId(), new TEvents::TEvWakeup()));
 
@@ -324,8 +317,6 @@ Y_UNIT_TEST_SUITE(KqpService) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-        // Let the proxy remove the session from IdleSessions and attempt the
-        // tracked close, but emulate an actor-system delivery failure.
         runtime->SimulateSleep(TDuration::Seconds(3));
         {
             TDispatchOptions opts;
@@ -337,8 +328,6 @@ Y_UNIT_TEST_SUITE(KqpService) {
         UNIT_ASSERT(proxyId);
         UNIT_ASSERT(sessionActorId);
 
-        // Until nondelivery is handled, the orphan registry entry still owns
-        // the only per-database quota slot.
         auto atLimit = kikimr.RunCall([&] { return db.CreateSession().GetValueSync(); });
         UNIT_ASSERT_VALUES_EQUAL(atLimit.GetStatus(), EStatus::OVERLOADED);
 
@@ -350,15 +339,11 @@ Y_UNIT_TEST_SUITE(KqpService) {
                 TEvKqp::TEvCloseSessionRequest::EventType,
                 TEvents::TEvUndelivered::ReasonActorUnknown)));
 
-        // The undelivered handler removes the entry by target actor id, so a
-        // new Table session can be admitted without any limit-time eviction.
         auto afterUndelivered = kikimr.RunCall([&] { return db.CreateSession().GetValueSync(); });
         UNIT_ASSERT_C(afterUndelivered.IsSuccess(), afterUndelivered.GetIssues().ToString());
     }
 
-    // A commit can finish in the buffer actor just before the executer's timeout.
-    // Delay its result to exercise that ordering without losing any messages or
-    // killing actors: cleanup must handle rollback to the already finished buffer.
+    // Delay the completed commit's response until timeout starts cleanup rollback.
     Y_UNIT_TEST(TableCommitTimeoutAfterBufferCompletionReleasesSession) {
         TStringStream logs;
         TKikimrSettings settings;
@@ -415,12 +400,10 @@ Y_UNIT_TEST_SUITE(KqpService) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::TIMEOUT, result.GetIssues().ToString());
         UNIT_ASSERT_C(rollbackUndelivered, logs.Str());
 
-        // The delayed result is delivered too, after the timeout has won.
         runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
         runtime->Send(heldCommitResult.Release());
         kikimr.RunCall([&] { return session.Close().GetValueSync(); });
 
-        // A local nondelivery must finish cleanup promptly.
         {
             TDispatchOptions opts;
             opts.FinalEvents.emplace_back([&](IEventHandle&) {
@@ -433,9 +416,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
         UNIT_ASSERT_C(nextCreate.IsSuccess(), nextCreate.GetIssues().ToString());
     }
 
-    // A write query with no matching rows finishes by rolling back its read
-    // locks. If that overlaps a timeout, cleanup sends another rollback to the
-    // same live buffer actor, with a new executer waiting for its result.
+    // A no-op write rolls back read locks; timeout starts a second rollback.
     Y_UNIT_TEST(TableNoOpWriteTimeoutDuringRollbackReleasesSession) {
         TStringStream logs;
         TKikimrSettings settings;
@@ -495,8 +476,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::TIMEOUT, result.GetIssues().ToString());
         UNIT_ASSERT_C(rollbackExecuterId && rollbackExecuterId != commitExecuterId, logs.Str());
 
-        // Deliver every delayed shard response. The buffer must now reply to
-        // the cleanup executer, even though rollback began for the old commit.
+        // The pending rollback result must reach the new cleanup executer.
         holdShardResults = false;
         for (auto& ev : heldShardResults) {
             runtime->Send(ev.Release());

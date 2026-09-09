@@ -83,6 +83,9 @@ template<> struct TNativeTypeSupport<i32> : public TNativePlainTypeSupport<i32>{
 template<> struct TNativeTypeSupport<ui32> : public TNativePlainTypeSupport<ui32>{};
 template<> struct TNativeTypeSupport<i64> : public TNativePlainTypeSupport<i64>{};
 template<> struct TNativeTypeSupport<ui64> : public TNativePlainTypeSupport<ui64>{};
+template<> struct TNativeTypeSupport<float> : public TNativePlainTypeSupport<float>{};
+template<> struct TNativeTypeSupport<double> : public TNativePlainTypeSupport<double>{};
+template<> struct TNativeTypeSupport<long double> : public TNativePlainTypeSupport<long double>{};
 
 template<> struct TNativeTypeSupport<bool> : public TNativePlainTypeSupport<bool>
 {

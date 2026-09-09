@@ -105,11 +105,16 @@ protected:
             JsonWriter.WriteLongLong(value);
         } else if constexpr (std::is_same_v<T, bool>) {
             JsonWriter.WriteBool(value);
+        } else if constexpr (std::is_same_v<T, float>) {
+            JsonWriter.WriteFloat(value);
+        } else if constexpr (std::is_same_v<T, double>) {
+            JsonWriter.WriteDouble(value);
+        } else if constexpr (std::is_same_v<T, long double> ) {
+            JsonWriter.WriteDouble(static_cast<double>(value));
         } else {
             static_assert(false, "Attempt to serialize unsupported type");
         }
     }
-
 };
 
 class TJsonWriter {

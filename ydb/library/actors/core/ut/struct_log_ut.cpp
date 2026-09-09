@@ -215,14 +215,14 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), "value=1.123");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), "value=1.123");
 
-        /* int i = 0;
+        int i = 0;
         auto ptr = static_cast<void*>(&i);
 
         UNIT_ASSERT_STRINGS_EQUAL(TStringBuilder() << "value=" << ptr, GetMessageString(YDB_LOG_CREATE_MESSAGE({"value", ptr})));
 
         ptr = nullptr;
         UNIT_ASSERT_STRINGS_EQUAL(TStringBuilder() << "value=" << ptr, GetMessageString(YDB_LOG_CREATE_MESSAGE({"value", ptr})));
-        UNIT_ASSERT_STRINGS_EQUAL(TStringBuilder() << "value=" << nullptr, GetMessageString(YDB_LOG_CREATE_MESSAGE({"value", nullptr}))); */
+        UNIT_ASSERT_STRINGS_EQUAL(TStringBuilder() << "value=" << nullptr, GetMessageString(YDB_LOG_CREATE_MESSAGE({"value", nullptr})));
     }
 
     Y_UNIT_TEST(CreateMessageOptionalTypes) {
@@ -508,8 +508,8 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}, {}), R"({"v1":1})");
 
         // Support types
-        // @todo TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui8>('a')}), R"({"value":"a"})");
-        // @todo TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i8>('a')}), R"({"value":"a"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui8>(1)}), R"({"value":1})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i8>('a')}), R"({"value":"a"})");
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui16>(3)}), R"({"value":3})");
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i16>(4)}), R"({"value":4})");
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui32>(5)}), R"({"value":5})");

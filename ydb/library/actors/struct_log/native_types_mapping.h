@@ -21,6 +21,9 @@ enum class TNativeTypeCode : std::uint8_t {
     UInt32,
     Int64,
     UInt64,
+    Float,
+    Double,
+    LongDouble,
     Bool,
 };
 
@@ -179,6 +182,10 @@ using TTypesMapping = TNativeTypeCodeMapping<
     TNativeTypeCodePair<i32, TNativeTypeCode::Int32>,
     TNativeTypeCodePair<ui64, TNativeTypeCode::UInt64>,
     TNativeTypeCodePair<i64, TNativeTypeCode::Int64>,
-    TNativeTypeCodePair<bool, TNativeTypeCode::Bool> >;
+    TNativeTypeCodePair<bool, TNativeTypeCode::Bool>,
+    TNativeTypeCodePair<float, TNativeTypeCode::Float>,
+    TNativeTypeCodePair<double, TNativeTypeCode::Double>,
+    TNativeTypeCodePair<long double, TNativeTypeCode::LongDouble>
+    >;
 
 }  // namespace NActors::NStructuredLog

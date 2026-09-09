@@ -384,4 +384,6 @@ message TFeatureFlags {
     optional bool EnableCheckpointsCompression = 325 [default = false];
     optional bool EnableDataShardLocksTransferOnSplit = 326 [default = false];
     optional bool EnableDqSourceStreamLookupJoinLocalLookups = 327 [default = false];
+    // Stores table definitions in backups as SHOW CREATE TABLE SQL instead of CreateTableRequest.
+    optional bool EnableTableBackupAsSql = 328 [default = false];
 }

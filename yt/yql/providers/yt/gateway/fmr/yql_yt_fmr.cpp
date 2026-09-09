@@ -1768,7 +1768,15 @@ public:
         Coordinator_->OpenSession(openRequest).GetValueSync();
 
         with_lock(Mutex_) {
-            Sessions_[sessionId] = MakeIntrusive<TFmrSession>(sessionId, options.UserName(), options.RandomProvider(), options.TimeProvider(), options.OperationOptions(), options.ProgressWriter(), options.UseSecureTmp());
+            Sessions_[sessionId] = MakeIntrusive<TFmrSession>(
+                sessionId,
+                options.UserName(),
+                options.RandomProvider(),
+                options.TimeProvider(),
+                options.OperationOptions(),
+                options.Credentials(),
+                options.ProgressWriter(),
+                options.UseSecureTmp());
         }
         YQL_CLOG(INFO, FastMapReduce) << "Registered session " << sessionId << " with coordinator";
 

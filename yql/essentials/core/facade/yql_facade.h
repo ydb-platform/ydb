@@ -129,6 +129,7 @@ public:
     void SetVolatileResults();
 
     void AddCredentials(const TVector<std::pair<TString, TCredential>>& credentials);
+    void SetUserCredentials(const TUserCredentials& userCredentials);
     void ClearCredentials();
 
     void AddUserDataTable(const TUserDataTable& userDataTable);

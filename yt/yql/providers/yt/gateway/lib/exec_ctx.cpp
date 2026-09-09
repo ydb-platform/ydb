@@ -379,7 +379,7 @@ TString TExecContextBaseSimple::GetAuth(const TYtSettings::TConstPtr& config) co
             if (!ytName) {
                 ythrow yexception() << "Unknown cluster name: " << Cluster_;
             }
-            auth = ytTokenResolver->ResolveClusterToken(ytName);
+            auth = ytTokenResolver->ResolveClusterToken(ytName, *BaseSession_->Credentials_);
         }
     }
 

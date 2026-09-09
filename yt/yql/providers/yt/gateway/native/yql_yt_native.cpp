@@ -6067,13 +6067,15 @@ private:
                     auth = Clusters_->GetAuth(options.Cluster());
                 }
 
-                if (!auth && Services_.YtTokenResolver) {
-                    auto ytName = Clusters_->TryGetYtName(options.Cluster());
-                    if (!ytName) {
-                        ythrow yexception() << "Unknown cluster name: " << options.Cluster();
-                    }
-                    if (auto token = Services_.YtTokenResolver->ResolveClusterToken(ytName)) {
-                        auth = *token;
+                if (!auth || auth->empty()) {
+                    if (Services_.YtTokenResolver) {
+                        auto ytName = Clusters_->TryGetYtName(options.Cluster());
+                        if (!ytName) {
+                            ythrow yexception() << "Unknown cluster name: " << options.Cluster();
+                        }
+                        if (auto token = Services_.YtTokenResolver->ResolveClusterToken(ytName, *session->Credentials_)) {
+                            auth = *token;
+                        }
                     }
                 }
 

@@ -110,6 +110,7 @@ public:
         OPTION_FIELD(TString, UserName)
         OPTION_FIELD(TOperationProgressWriter, ProgressWriter)
         OPTION_FIELD(TYqlOperationOptions, OperationOptions)
+        OPTION_FIELD(TCredentials::TPtr, Credentials)
         OPTION_FIELD(TIntrusivePtr<IRandomProvider>, RandomProvider)
         OPTION_FIELD(TIntrusivePtr<ITimeProvider>, TimeProvider)
         OPTION_FIELD(TStatWriter, StatWriter)

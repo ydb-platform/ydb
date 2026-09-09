@@ -749,6 +749,11 @@ void TProgram::AddCredentials(const TVector<std::pair<TString, TCredential>>& cr
     }
 }
 
+void TProgram::SetUserCredentials(const TUserCredentials& userCredentials) {
+    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+    Credentials_->SetUserCredentials(userCredentials);
+}
+
 void TProgram::ClearCredentials() {
     Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
 

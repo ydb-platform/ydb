@@ -465,15 +465,17 @@ bool TModuleResolver::AddFromFile(const std::string_view& file, TExprContext& ct
             case EUserDataType::PATH:
                 body = TFileInput(block->Data).ReadAll();
                 break;
-            case EUserDataType::URL:
+            case EUserDataType::URL: {
                 if (!UrlLoader_) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Unable to load file \"" << file
                                                               << "\" from url, because url loader is not available"));
                     return false;
                 }
 
-                body = UrlLoader_->Load(block->Data, block->UrlToken);
+                auto blockForDownload = UserData_->GetUserDataBlockForDownload(UserData_->ComposeUserDataKey(fullName));
+                body = UrlLoader_->Load(blockForDownload.Data, blockForDownload.UrlToken);
                 break;
+            }
             default:
                 throw yexception() << "Unknown block type " << block->Type;
         }

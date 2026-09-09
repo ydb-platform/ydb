@@ -6,7 +6,6 @@
 #include "scheduler_queue.h"
 #include <ydb/library/actors/queues/activation_queue.h>
 #include <ydb/library/actors/util/affinity.h>
-#include <ydb/library/actors/util/unordered_cache.h>
 #include <ydb/library/actors/util/threadparkpad.h>
 
 //#define RING_ACTIVATION_QUEUE
@@ -50,23 +49,18 @@ namespace NActors {
 
     class TExecutorPoolBase: public TExecutorPoolBaseMailboxed {
     protected:
-        using TUnorderedCacheActivationQueue = TUnorderedCache<ui32, 512, 4>;
-
         const i16 PoolThreads;
-        const bool UseRingQueueValue;
         alignas(64) TIntrusivePtr<TAffinity> ThreadsAffinity;
         alignas(64) TAtomic Semaphore = 0;
-        alignas(64) std::variant<TUnorderedCacheActivationQueue, TRingActivationQueueV4> Activations;
-        TAtomic ActivationsRevolvingCounter = 0;
+        alignas(64) TRingActivationQueueV4 Activations;
         std::atomic_bool StopFlag = false;
     public:
-        TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, bool useRingQueue);
+        TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity);
         ~TExecutorPoolBase();
         void ScheduleActivation(TMailbox* mailbox) override;
         void SpecificScheduleActivation(TMailbox* mailbox) override;
         TAffinity* Affinity() const override;
         ui32 GetThreads() const override;
-        bool UseRingQueue() const;
     };
 
     void DoActorInit(TActorSystem*, IActor*, const TActorId&, const TActorId&);

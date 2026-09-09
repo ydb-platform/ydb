@@ -2,6 +2,7 @@
 
 #include "common.h"
 #include <ydb/library/actors/async/cancellation.h>
+#include <ydb/library/actors/async/timeout.h>
 
 namespace NAsyncTest {
 
@@ -167,7 +168,8 @@ namespace NAsyncTest {
 
                 auto ev = co_await ActorWaitForEvent<TEvents::TEvWakeup>([&](IActor& self, ui64 cookie) {
                     seen = cookie;
-                    // Reply from the starter itself: the waiter must already be registered
+                    // The starter replies to self with the cookie it was given: the reply is a mailbox
+                    // event and is handled on the next step, by the waiter
                     TActivationContext::Send(new IEventHandle(self.SelfId(), self.SelfId(), new TEvents::TEvWakeup, 0, cookie));
                 });
 
@@ -222,9 +224,10 @@ namespace NAsyncTest {
                 TActorId Sender;
             };
 
-            TEchoPeer(TRecorded& recorded)
+            TEchoPeer(TRecorded& recorded, bool reply = true)
                 : TActor(&TThis::StateWork)
                 , Recorded(recorded)
+                , Reply(reply)
             {}
 
             STFUNC(StateWork) {
@@ -232,11 +235,14 @@ namespace NAsyncTest {
                 Recorded.Type = ev->GetTypeRewrite();
                 Recorded.Cookie = ev->Cookie;
                 Recorded.Sender = ev->Sender;
-                Send(ev->Sender, new TEvents::TEvWakeup, 0, ev->Cookie);
+                if (Reply) {
+                    Send(ev->Sender, new TEvents::TEvWakeup, 0, ev->Cookie);
+                }
             }
 
         private:
             TRecorded& Recorded;
+            const bool Reply;
         };
 
         Y_UNIT_TEST(ActorRequestRoundTrip) {
@@ -273,6 +279,49 @@ namespace NAsyncTest {
             UNIT_ASSERT_VALUES_EQUAL(recorded.Type, ui32(TEvents::TEvGone::EventType));
             UNIT_ASSERT(recorded.Cookie != 0);
             UNIT_ASSERT(!state.Destroyed);
+        }
+
+        Y_UNIT_TEST(ActorRequestTimeoutThenLateReply) {
+            TVector<TString> sequence;
+            TEchoPeer::TRecorded recorded;
+
+            TAsyncTestActor::TState state;
+            TAsyncTestActorRuntime runtime;
+
+            // the peer records the request but never replies
+            auto peer = runtime.Register(new TEchoPeer(recorded, /* reply */ false));
+
+            auto handler = [&](IEventHandle::TPtr& ev) {
+                sequence.push_back(TStringBuilder() << "received event " << Hex(ev->GetTypeRewrite()));
+                return true;
+            };
+
+            auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
+
+                // the documented way to bound an ActorRequest
+                auto reply = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<TEvents::TEvWakeup::TPtr> {
+                    co_return co_await ActorRequest<TEvents::TEvWakeup>(peer, new TEvents::TEvGone);
+                });
+
+                if (!reply) {
+                    sequence.push_back("timeout");
+                    co_return;
+                }
+                sequence.push_back("reply");
+            }, handler);
+
+            ASYNC_ASSERT_SEQUENCE(sequence, "started");
+
+            runtime.SimulateSleep(TDuration::MilliSeconds(15));
+            ASYNC_ASSERT_SEQUENCE(sequence, "timeout", "finished");
+            UNIT_ASSERT_VALUES_EQUAL(recorded.Count, 1u);
+            UNIT_ASSERT(!state.Destroyed);
+
+            // a reply after the timeout is no longer intercepted and reaches the state function
+            actor.Receive(new TEvents::TEvWakeup, recorded.Cookie);
+            ASYNC_ASSERT_SEQUENCE(sequence, "received event 0x00010002");
         }
 
         Y_UNIT_TEST(ActorRequestUndeliveredWithTrackDelivery) {

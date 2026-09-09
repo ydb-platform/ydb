@@ -97,11 +97,12 @@ namespace NActors {
         };
 
         /**
-         * Waits for an event with the given cookie which is produced by a request started only after
-         * the waiter has been registered. The starter is called from await_suspend as
-         * starter(IActor& self, ui64 cookie): whatever it triggers (a Send, an external callback that
-         * sends back to self) cannot deliver the reply before the coroutine is ready to receive it,
-         * so there is no window in which the reply could fall through to the state function.
+         * Waits for an event with the given cookie and starts the request that produces it from
+         * await_suspend: starter(IActor& self, ui64 cookie) is called right after the waiter has been
+         * registered. Registration and start are one step, the cookie is handed to the starter, and
+         * the request is only started when the wait is actually awaited (an already cancelled
+         * coroutine never starts it). The order is not needed for correctness: a reply is a mailbox
+         * event and cannot be handled before the current turn ends, whoever sends it.
          */
         template<class TEvent, class TStarter>
         class [[nodiscard]] TActorStartedEventAwaiter : public TActorSpecificEventAwaiter<TEvent> {
@@ -148,10 +149,11 @@ namespace NActors {
     }
 
     /**
-     * Registers a waiter for TEvent with a fresh unique cookie and then calls
-     * starter(IActor& self, ui64 cookie) to start the request. Use it whenever the request is
-     * started by something other than a plain Send in the same turn (an external callback, a
-     * future subscription, a helper that may reply synchronously).
+     * Registers a waiter for TEvent with a fresh unique cookie and calls
+     * starter(IActor& self, ui64 cookie) to start the request, both from await_suspend. Use it when
+     * the request is started by something other than a plain Send (an external callback, a future
+     * subscription, a helper that needs the cookie): the cookie is allocated for you, and the
+     * request is not started unless the wait is awaited.
      */
     template<class TEvent, class TStarter>
     inline auto ActorWaitForEvent(TStarter&& starter)
@@ -163,8 +165,14 @@ namespace NActors {
     /**
      * Request/reply in one step: allocates a unique cookie, registers the waiter for TEvent, sends
      * the request to the recipient with that cookie and resumes with the reply (TEvent::TPtr).
-     * Combine with WithTimeout / WithDeadline for a bounded wait; a late reply after a timeout is
-     * no longer intercepted and reaches the state function.
+     *
+     * The result is an awaiter, not an async<T>, so to bound the wait wrap it in a coroutine:
+     *
+     *     auto reply = co_await WithTimeout(timeout, [&]() -> async<TEvReply::TPtr> {
+     *         co_return co_await ActorRequest<TEvReply>(recipient, new TEvRequest);
+     *     });
+     *
+     * A reply that arrives after the timeout is no longer intercepted and reaches the state function.
      */
     template<class TEvent>
     inline auto ActorRequest(const TActorId& recipient, IEventBase* request, ui32 flags = 0) {

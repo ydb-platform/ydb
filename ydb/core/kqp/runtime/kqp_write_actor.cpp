@@ -2606,12 +2606,7 @@ private:
 
     void FlushFulltextRelevanceAuxTables(TPathWriteInfo& actorInfo,
             IFulltextTokenizeProjection* ft, bool isDelete) {
-        // Only called for FulltextCompactRelevance (see FlushProjectionToActor),
-        // where DictTableId is always set by the query compiler.
-        YQL_ENSURE(actorInfo.FulltextDictTableId != TPathId(),
-            "FlushFulltextRelevanceAuxTables: FulltextDictTableId is not set");
         auto& docs = PathWriteInfo.at(actorInfo.FulltextDocsTableId);
-        auto& dict = PathWriteInfo.at(actorInfo.FulltextDictTableId);
         auto& stats = PathWriteInfo.at(actorInfo.FulltextStatsTableId);
         if (isDelete) {
             docs.WriteActor->Write(DeleteCookie, ft->FlushDocs());
@@ -2620,10 +2615,13 @@ private:
             docs.WriteActor->Write(Cookie, ft->FlushDocs());
             docs.WriteActor->FlushBuffer(Cookie);
         }
-        dict.WriteActor->Write(Cookie, ft->FlushDict());
-        dict.WriteActor->FlushBuffer(Cookie);
         stats.WriteActor->Write(Cookie, ft->FlushStats());
         stats.WriteActor->FlushBuffer(Cookie);
+        if (actorInfo.FulltextDictTableId != TPathId()) {
+            auto& dict = PathWriteInfo.at(actorInfo.FulltextDictTableId);
+            dict.WriteActor->Write(Cookie, ft->FlushDict());
+            dict.WriteActor->FlushBuffer(Cookie);
+        }
     }
 
     IDataBatchProjectionPtr CreateWriteProjection(TPathWriteInfo& info, bool added,
@@ -3089,11 +3087,6 @@ private:
     virtual ~TKqpDirectWriteActor() {
     }
 
-    // Direct-write actors do not persist any DQ state: all data is written
-    // directly to the table via the write controller, and there is no
-    // intermediate buffer to checkpoint. The checkpoint is a no-op, but we
-    // must still notify the DQ framework that the (empty) state has been
-    // committed so that checkpoint completion tracking can proceed.
     void CommitState(const NYql::NDqProto::TCheckpoint& checkpoint) final {
         Callbacks->OnAsyncOutputStateCommitted(OutputIndex, checkpoint);
     }
@@ -3903,14 +3896,16 @@ public:
                     indexSettings.DocsTableId, indexSettings.DocsTablePath)) {
                     return false;
                 }
-                if (!writeInfo.Actors.contains(indexSettings.DictTableId.PathId)) {
-                    if (!EnsureWriteActor(settings, writeInfo, indexSettings.DictTableId,
-                            indexSettings.DictTablePath, {indexSettings.DictColumns.at(0)})) {
+                if (indexSettings.DictTableId.PathId != TPathId()) {
+                    if (!writeInfo.Actors.contains(indexSettings.DictTableId.PathId)) {
+                        if (!EnsureWriteActor(settings, writeInfo, indexSettings.DictTableId,
+                                indexSettings.DictTablePath, {indexSettings.DictColumns.at(0)})) {
+                            return false;
+                        }
+                    } else if (!CheckSchemaVersion(writeInfo.Actors.at(indexSettings.DictTableId.PathId).WriteActor,
+                        indexSettings.DictTableId, indexSettings.DictTablePath)) {
                         return false;
                     }
-                } else if (!CheckSchemaVersion(writeInfo.Actors.at(indexSettings.DictTableId.PathId).WriteActor,
-                    indexSettings.DictTableId, indexSettings.DictTablePath)) {
-                    return false;
                 }
                 if (!writeInfo.Actors.contains(indexSettings.StatsTableId.PathId)) {
                     if (!EnsureWriteActor(settings, writeInfo, indexSettings.StatsTableId,
@@ -6720,14 +6715,16 @@ private:
                     idx.DocsTablePath = indexSettings.GetDocsTable().GetPath();
                     idx.DocsColumns = TVector<NKikimrKqp::TKqpColumnMetadataProto>(
                         indexSettings.GetDocsColumns().begin(),
-                        indexSettings.GetDocsColumns().end()),
-                    idx.DictTableId = TTableId(indexSettings.GetDictTable().GetOwnerId(),
-                        indexSettings.GetDictTable().GetTableId(),
-                        indexSettings.GetDictTable().GetVersion());
-                    idx.DictTablePath = indexSettings.GetDictTable().GetPath();
-                    idx.DictColumns = TVector<NKikimrKqp::TKqpColumnMetadataProto>(
-                        indexSettings.GetDictColumns().begin(),
-                        indexSettings.GetDictColumns().end()),
+                        indexSettings.GetDocsColumns().end());
+                    if (indexSettings.HasDictTable()) {
+                        idx.DictTableId = TTableId(indexSettings.GetDictTable().GetOwnerId(),
+                            indexSettings.GetDictTable().GetTableId(),
+                            indexSettings.GetDictTable().GetVersion());
+                        idx.DictTablePath = indexSettings.GetDictTable().GetPath();
+                        idx.DictColumns = TVector<NKikimrKqp::TKqpColumnMetadataProto>(
+                            indexSettings.GetDictColumns().begin(),
+                            indexSettings.GetDictColumns().end());
+                    }
                     idx.StatsTableId = TTableId(indexSettings.GetStatsTable().GetOwnerId(),
                         indexSettings.GetStatsTable().GetTableId(),
                         indexSettings.GetStatsTable().GetVersion());

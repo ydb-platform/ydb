@@ -228,6 +228,7 @@ ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_P
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_PKInt64
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_PKUInt32
 ydb/core/tx/columnshard/ut_rw unittest.[*/*] chunk
+ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.BuildToBuild
 ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.BuildToBuildWithKeyRange
 ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.BuildToBuildWithOverlap
 ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.BuildToBuild_Ranges

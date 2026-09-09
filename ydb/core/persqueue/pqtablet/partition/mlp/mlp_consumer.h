@@ -35,7 +35,7 @@ public:
     void PassAway() override;
 
 protected:
-    TString BuildLogPrefix() const override;
+    TLogPrefix BuildLogPrefix() const override;
 
 private:
     void Queue(TEvPQ::TEvMLPReadRequest::TPtr&);

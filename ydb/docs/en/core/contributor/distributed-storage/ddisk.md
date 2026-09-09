@@ -8,7 +8,9 @@ DDisk shares PDisk and slot-management infrastructure with VDisk, but implements
 
 [NodeWarden](node-warden.md) creates a DDisk actor for a slot configured as DDisk. The actor initializes its PDisk owner, restores chunk-map snapshots and log increments, restores integrity mappings, and creates its [PersistentBuffer](persistent-buffer.md) child. The child has its own service ID and event handlers but shares the parent's PDisk ownership and PB resource lifecycle.
 
-Data I/O uses `TUringRouter` when the device handle, platform, and probe allow it. `ForcePDiskFallback` selects the PDisk raw-event path, and unavailable io_uring support also falls back. In that path, `TEvChunkReadRaw` and `TEvChunkWriteRaw` carry PDisk owner and owner round. Logging and chunk management continue to use PDisk services with either data-I/O backend.
+Unless `ForcePDiskFallback` is set, DDisk asks for a submit-only io_uring client in `TEvYardInit` and passes its configured `IdleSpinUs`. On the first such request, PDisk duplicates its device handle and creates and starts one `TUringRouter` shared by the DDisk slots and their PB children. The first requester therefore selects `IdleSpinUs` for the shared router for that PDisk incarnation; later requesters use the existing setting. DDisk and PB hold shared `IUringRouterClient` references and cannot control the router lifecycle.
+
+`ForcePDiskFallback` opts out of the shared router and selects the PDisk raw-event path. An unavailable device handle, unsupported platform, or failed io_uring probe also falls back. In that path, `TEvChunkReadRaw` and `TEvChunkWriteRaw` carry PDisk owner and owner round. Logging and chunk management continue to use PDisk services with either data-I/O backend.
 
 ## Sessions {#sessions}
 
@@ -53,6 +55,32 @@ The operation reports `TEvSyncResult` after processing its destination work. It 
 Chunk-map snapshots and PDisk log increments restore ownership and integrity-extent mappings. PB then performs its own chunk scan and record recovery. Connection state must be re-established by clients after service replacement.
 
 Fatal PDisk or integrity failures can put the actor into its broken/termination path and fail parked work. Review failure handling alongside normal completions: pending chunk allocation, serialized writes, sync reads, and PB operations can all outlive the event that initiated shutdown.
+
+On stop, DDisk and PB reject new requests with `SESSION_MISMATCH` and independently
+wait for their own submitted router I/O. Existing completions may finish requests,
+but shutdown does not start further I/O or retries, and a write still requires its
+integrity and allocation-log durability conditions before success. PDisk fallback
+I/O does not delay actor shutdown. Callback cleanup and queued completion events
+finish before the actor dies. After one minute of outstanding direct I/O, the actor
+marks itself stalled and contributes one to the non-derivative `ddisks/io_stalled`
+gauge; completing the drain removes that contribution.
+
+Router callback ownership and the stopping flag share one atomic state. A single
+completion guard recycles the operation or transfers it to a retry event before
+`OnDirectIODone` retires the running count and router callback ownership. Rejected
+submissions retire through the same method after error handling and destruction;
+PDisk fallback only retires the running count. `OnComplete` and `OnDrop` use the
+supplied actor system, including outside actor activation. Only shutdown publishes
+`TEvFinishStopping`: stop sends it if no callbacks remain, otherwise the last
+callback sends it. This final mailbox turn processes already-published results
+before destruction. A timeout observing zero callbacks does nothing.
+
+PDisk does not unconditionally stop the shared router when PDisk itself stops.
+If PDisk is its sole owner, it closes admission with `StopAsync()` and releases
+the router. If DDisk or PB clients remain, PDisk leaves admission open and does
+not wait; the last shared-owner release drops work not submitted to the kernel,
+drains submitted I/O, joins the I/O thread, and closes the duplicated device
+handle.
 
 `TEvDeleteTabletChunks` retires a tablet's data chunk mappings. While deletion is in flight, writes and sync requests for that tablet can return `BUSY`. Controller claim removal and local chunk deletion are separate operations; callers must arrange their order and retire outstanding client work.
 

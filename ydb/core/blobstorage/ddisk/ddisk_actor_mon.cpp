@@ -111,6 +111,8 @@ void TDDiskActor::Handle(NMon::TEvHttpInfo::TPtr ev) {
                 TABLER() { TABLED() { str << "Uptime"; } TABLED() { str << FormatDuration(TInstant::Now() - StartedAt); } }
                 TABLER() { TABLED() { str << "HandlingQueries"; } TABLED() { str << (HandlingQueries ? "true" : "false"); } }
                 TABLER() { TABLED() { str << "Stopping"; } TABLED() { str << (Stopping ? "true" : "false"); } }
+                TABLER() { TABLED() { str << "Waiting for PersistentBuffer"; } TABLED() { str << (Stopping && !PersistentBufferGone); } }
+                TABLER() { TABLED() { str << "Own I/O drained"; } TABLED() { str << OwnDrainComplete; } }
                 TABLER() { TABLED() { str << "I/O stalled"; } TABLED() { str << (IoStalled ? "true" : "false"); } }
                 TABLER() { TABLED() { str << "Router I/O in flight"; } TABLED() { str << GetDirectIoInflight(); } }
                 TABLER() { TABLED() { str << "PendingQueries"; } TABLED() { str << PendingQueries.size(); } }

@@ -285,6 +285,19 @@ namespace {
         // destroyed here, where the type is complete. sizeof fails the build otherwise.
         [[maybe_unused]] constexpr size_t CompleteTypeGuard = sizeof(TDirectIoOpBase);
 
+        // Forced runtime teardown only; normal stopping drains before destruction.
+        const auto now = [&] { return DestructionNow ? DestructionNow() : TMonotonic::Now(); };
+        const TMonotonic deadline = now() + TDuration::Seconds(10);
+        while (GetDirectIoInflight()) {
+            Y_ABORT_UNLESS(now() < deadline,
+                "DDisk %s destroyed with unresolved I/O callbacks", DDiskId.c_str());
+            if (DestructionSleep) {
+                DestructionSleep();
+            } else {
+                Sleep(TDuration::MilliSeconds(1));
+            }
+        }
+
         ClearIoStalled();
     }
 
@@ -356,11 +369,19 @@ namespace {
         BrokenReason = reason
             ? std::move(reason)
             : TString("DDisk is broken");
+        CancelRetries();
 
         YDB_LOG_ERROR("TDDiskActor entered Broken state",
             {"marker", "BSDD54"},
             {"DDiskId", DDiskId},
             {"errorReason", GetBrokenReason()});
+
+        *Counters.PersistentBuffer.PendingEventsQueueSize -= PendingPersistentBufferEvents.size();
+        while (!PendingPersistentBufferEvents.empty()) {
+            auto ev = PendingPersistentBufferEvents.front().Release();
+            PendingPersistentBufferEvents.pop();
+            RejectQuery(*ev, NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, GetBrokenReason());
+        }
 
         // Complete actor-owned fallback operations immediately. Submitted io_uring operations
         // post their result events later; the actor normalizes those to ERROR because Broken is
@@ -455,6 +476,12 @@ namespace {
 
     void TDDiskActor::Handle(TEvents::TEvUndelivered::TPtr ev) {
         auto sourceType = ev->Get()->SourceType;
+        if (Stopping && !PersistentBufferGone && sourceType == TEvents::TSystem::Poison
+                && ev->Cookie == PBShutdownCookie && ev->Sender == PersistentBufferActorId) {
+            PersistentBufferGone = true;
+            TryCompleteStop();
+            return;
+        }
         if (sourceType == TEv::EvRead || sourceType == TEv::EvReadPersistentBuffer) {
             SyncReadCookiesInFlight.erase(ev->Cookie);
             std::vector<TSegmentManager::TSegment> segments;
@@ -514,6 +541,7 @@ namespace {
             hFunc(TEvPrivate::TEvDeallocatePersistentBufferChunk, Handle)
 
             hFunc(TEvents::TEvUndelivered, Handle)
+            hFunc(TEvents::TEvGone, HandleGone)
 
             hFunc(TEvReadResult, Handle)
             hFunc(TEvPrivate::TEvInternalSyncWriteResult, Handle)
@@ -534,6 +562,7 @@ namespace {
             hFunc(NPDisk::TEvChunkReadRawResult, Handle)
 #if defined(__linux__)
             hFunc(TEvPrivate::TEvRetryIO, HandleRetryIO)
+            hFunc(TEvPrivate::TEvRetryIODelayed, HandleRetryIODelayed)
 #endif
 
             hFunc(NPDisk::TEvCheckSpaceResult, Handle);
@@ -544,10 +573,26 @@ namespace {
 
             hFunc(TEvents::TEvWakeup, HandleWakeup);
             cFunc(TEvents::TSystem::Poison, PassAway)
+            cFunc(TEvPrivate::EvBeginStopping, HandleBeginStopping)
         )
     }
 
     STFUNC(TDDiskActor::StateFuncPersistentBuffer) {
+        if (IsBroken()) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvConnect::EventType:
+            case TEvDisconnect::EventType:
+            case TEvWritePersistentBuffer::EventType:
+            case TEvReadPersistentBuffer::EventType:
+            case TEvErasePersistentBuffer::EventType:
+            case TEvBatchErasePersistentBuffer::EventType:
+            case TEvListPersistentBuffer::EventType:
+            case TEvWritePersistentBuffers::EventType:
+            case TEvReadThenWritePersistentBuffers::EventType:
+                RejectQuery(*ev, NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, GetBrokenReason());
+                return;
+            }
+        }
         STRICT_STFUNC_BODY(
             hFunc(TEvConnect, Handle)
             hFunc(TEvDisconnect, Handle)
@@ -571,6 +616,7 @@ namespace {
             hFunc(NPDisk::TEvChunkReadRawResult, Handle)
 #if defined(__linux__)
             hFunc(TEvPrivate::TEvRetryIO, HandleRetryIO)
+            hFunc(TEvPrivate::TEvRetryIODelayed, HandleRetryIODelayed)
 #endif
 
             hFunc(NPDisk::TEvCheckSpaceResult, Handle);
@@ -579,22 +625,11 @@ namespace {
 
             hFunc(TEvents::TEvWakeup, HandleWakeup);
             cFunc(TEvents::TSystem::Poison, PassAway)
+            cFunc(TEvPrivate::EvBeginStopping, HandleBeginStopping)
 
             hFunc(TEvReadThenWritePersistentBuffers, Handle)
             hFunc(TEvWritePersistentBuffers, Handle)
         )
-    }
-
-    STFUNC(TDDiskActor::StateFuncTerminate) {
-        // Mirrors VDisk's PDISK_TERMINATE_STATE_FUNC_DEF: ignore everything except poison.
-        // Reaching this state means PDisk's session for our owner is gone (INVALID_ROUND etc).
-        // The owning environment (warden in production, test scaffolding in tests) is expected
-        // to send TEvPoison and start a replacement DDisk actor with a fresh OwnerRound.
-        switch (ev->GetTypeRewrite()) {
-            cFunc(TEvents::TSystem::Poison, PassAway)
-            default:
-                break;
-        }
     }
 
     bool TDDiskActor::CheckPDiskReply(NKikimrProto::EReplyStatus status,
@@ -607,13 +642,13 @@ namespace {
         case NKikimrProto::INVALID_ROUND:
         case NKikimrProto::CORRUPTED:
         case NKikimrProto::OUT_OF_SPACE:
-            YDB_LOG_NOTICE("TDDiskActor: PDisk session lost, switching to terminate state",
+            YDB_LOG_NOTICE("TDDiskActor: PDisk session lost, beginning shutdown",
                 {"marker", "BSDD44"},
                 {"DDiskId", DDiskId},
                 {"source", source},
                 {"status", NKikimrProto::EReplyStatus_Name(status)},
                 {"errorReason", errorReason});
-            Become(&TThis::StateFuncTerminate);
+            BeginStopping(errorReason);
             return false;
         default:
             Y_ABORT("Unexpected PDisk status %s in %.*s: %s",
@@ -784,8 +819,13 @@ namespace {
             hFunc(TEvPrivate::TEvWritePersistentBufferPart, Handle)
 #if defined(__linux__)
             hFunc(TEvPrivate::TEvRetryIO, HandleRetryIO)
+            hFunc(TEvPrivate::TEvRetryIODelayed, HandleRetryIODelayed)
 #endif
+            cFunc(TEvents::TSystem::Poison, PassAway)
+            hFunc(TEvents::TEvGone, HandleGone)
+            hFunc(TEvents::TEvUndelivered, Handle)
             cFunc(TEvPrivate::EvFinishStopping, FinishStopping)
+            cFunc(TEvPrivate::EvCompleteStop, CompleteStop)
             cFunc(TEvPrivate::EvStopIoTimeout, HandleStopIoTimeout)
             hFunc(NMon::TEvHttpInfo, Handle)
             hFunc(TEvGetPersistentBufferInfo, Handle)
@@ -797,32 +837,73 @@ namespace {
     }
 
     void TDDiskActor::PassAway() {
+        PoisonReceived = true;
+        BeginStopping(TString(StoppingReason));
+        TryCompleteStop();
+    }
+
+    void TDDiskActor::HandleBeginStopping() {
+        BeginStopping("io_uring router rejected submission");
+    }
+
+    void TDDiskActor::BeginStopping(TString reason) {
         if (Stopping) {
             return;
         }
         Stopping = true;
         Become(&TThis::StateFuncStopping);
+        YDB_LOG_NOTICE("DDisk stopping", {"DDiskId", DDiskId}, {"reason", reason});
         if (IsPersistentBufferActor) {
-            Send(WritePersistentBuffersActor, new NActors::TEvents::TEvPoison());
-        } else {
-            Send(PersistentBufferActorId, new NActors::TEvents::TEvPoison());
+            Send(WritePersistentBuffersActor, new TEvents::TEvPoison());
+        } else if (PersistentBufferActorId) {
+            PersistentBufferGone = false;
+            Send(PersistentBufferActorId, new TEvents::TEvPoison(),
+                IEventHandle::FlagTrackDelivery, PBShutdownCookie);
         }
         RejectQueuedQueries();
-#if defined(__linux__)
-        if (UringRouter) {
-            const ui64 previous = DirectIoState.fetch_or(DirectIoStopping, std::memory_order_acq_rel);
-            if (previous) {
-                Schedule(StopIoTimeout, new TEvPrivate::TEvStopIoTimeout);
-            } else {
-                // Callbacks have published their results, but those events may
-                // still be queued. Finish in a later mailbox turn to process them.
-                Send(SelfId(), new TEvPrivate::TEvFinishStopping);
+        CancelRetries();
+        for (auto* callbacks : {&ReadCallbacks, &WriteCallbacks}) {
+            while (!callbacks->empty()) {
+                auto it = callbacks->begin();
+                auto op = std::move(it->second.Op);
+                callbacks->erase(it);
+                CancelPendingIo(std::move(op));
+                Counters.DirectIO.RunningCount->Dec();
             }
+        }
+        const ui64 previous = DirectIoState.fetch_or(DirectIoStopping, std::memory_order_acq_rel);
+        if (!previous) {
+            // Includes fallback: cancellation results must precede destruction.
+            Send(SelfId(), new TEvPrivate::TEvFinishStopping);
+        }
+        if (previous || !PersistentBufferGone) {
+            Schedule(StopIoTimeout, new TEvPrivate::TEvStopIoTimeout);
+        }
+    }
+
+    void TDDiskActor::HandleGone(TEvents::TEvGone::TPtr ev) {
+        if (ev->Sender == PersistentBufferActorId) {
+            PersistentBufferGone = true;
+            TryCompleteStop();
+        }
+    }
+
+    void TDDiskActor::TryCompleteStop() {
+        if (!PoisonReceived || !OwnDrainComplete || !PersistentBufferGone) {
             return;
         }
+#if defined(__linux__)
+        UringRouter.reset();
 #endif
-        // PDisk owns fallback buffers; it is safe to restart without its replies.
-        FinishStopping();
+        CountersBase->RemoveSubgroupChain(CountersChain);
+        if (IsPersistentBufferActor) {
+            if (ParentDDiskId) {
+                Send(ParentDDiskId, new TEvents::TEvGone());
+            }
+        } else {
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvents::TEvGone());
+        }
+        TActorBootstrapped::PassAway();
     }
 
     void TDDiskActor::OnDirectIODone(NActors::TActorSystem* actorSystem) {
@@ -852,6 +933,10 @@ namespace {
             YDB_LOG_ERROR("TDDiskActor I/O stalled during shutdown",
                 {"DDiskId", DDiskId}, {"persistentBuffer", IsPersistentBufferActor});
         }
+        if (!PersistentBufferGone) {
+            YDB_LOG_ERROR("DDisk waiting for PersistentBuffer shutdown", {"DDiskId", DDiskId},
+                {"child", PersistentBufferActorId});
+        }
     }
 
     void TDDiskActor::ClearIoStalled() {
@@ -862,6 +947,9 @@ namespace {
 
     void TDDiskActor::FinishStopping() {
         Y_ABORT_UNLESS(Stopping && !GetDirectIoInflight());
+        if (std::exchange(OwnDrainFinishing, true)) {
+            return;
+        }
         using TStatus = NKikimrBlobStorage::NDDisk::TReplyStatus;
         // Results whose integrity work or allocation log could not finish are
         // already represented here; no separate registry of client replies is needed.
@@ -883,11 +971,14 @@ namespace {
             FlushParkedAllocationReplies(allocation);
         }
         ClearIoStalled();
-        CountersBase->RemoveSubgroupChain(CountersChain);
-        if (!IsPersistentBufferActor) {
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvents::TEvGone());
-        }
-        TActorBootstrapped::PassAway();
+        // A queued retry can have posted a cancellation result ahead of this
+        // barrier. Do not let child Gone bypass that final result turn.
+        Send(SelfId(), new TEvPrivate::TEvCompleteStop);
+    }
+
+    void TDDiskActor::CompleteStop() {
+        OwnDrainComplete = true;
+        TryCompleteStop();
     }
 
     IActor *CreateDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,

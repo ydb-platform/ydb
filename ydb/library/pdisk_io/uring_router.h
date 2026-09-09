@@ -18,6 +18,7 @@
 #include <deque>
 #include <functional>
 #include <memory>
+#include <mutex>
 
 struct io_uring;
 struct io_uring_sqe;
@@ -30,6 +31,18 @@ namespace NKikimr::NPDisk {
 
 namespace NUringPrivate {
     class IUringRouterBackend;
+
+    // Installed by the test peer before Start; immutable throughout concurrent use.
+    struct TRouterHooks {
+        std::function<void()> AfterAdmission;
+        std::function<void()> AfterPublication;
+        std::function<void()> AfterWake;
+        std::function<void()> WaitingForPublishers;
+        std::function<void()> BeforeTerminalCallback;
+        std::function<void()> BeforeJoin;
+        std::function<void()> Retired;
+        std::function<void()> BeforeFinalStopCas;
+    };
 }
 
 enum class EUringFavor {
@@ -63,38 +76,24 @@ struct TUringCounters {
 //
 // RegisterFile(), RegisterBuffers(), SetSampleSink(), and Start() are setup
 // operations and must be called by one thread before concurrent submission.
-// StopAsync() closes admission without waiting; that is the non-blocking path
-// to stop PDisk.
+// StopAsync() closes admission without waiting. StopSync() is the owner-side
+// retirement barrier: it waits for publishers through queue publication and
+// wake, joins the issuer, destroys the ring, and closes the duplicated device
+// fd even if IUringRouterClient references survive. Concurrent StopSync calls
+// are serialized. Keep the router alive throughout every client call.
 //
-// DDisk and PersistentBuffer should hold IUringRouterClient, not TUringRouter,
-// so they cannot start or stop a shared ring. PDisk is the logical owner and
-// is the entity responsible for constructing, starting, and stopping a
-// TUringRouter instance.
+// PDisk owns lifecycle; DDisk and PersistentBuffer hold only IUringRouterClient.
+// For requested PDisk restarts, Warden first waits for every DDisk incarnation
+// and its PB child to drain. PDisk then calls StopSync before replacement.
+// The wake descriptor survives StopSync until object destruction so concurrent
+// rejected submissions and StopAsync calls cannot wake a reused descriptor.
 //
-// If PDisk is being restarted, then all TUringRouters must also be restarted.
-// It is safe to restart them after PDisk:
-// 1. A restarted PDisk instance doesn't wait for I/O to be completed.
-// 2. The next PDisk reincarnation must take an exclusive lock on the device,
-//    thus it waits for all the previous I/O (the previous lock will be held
-//    until I/O is completed, even when the process is reaped).
-// This means that PDisk can safely restart without waiting for slots that use
-// a shared TUringRouter.
-//
-// TUringRouter is responsible for detecting device and I/O issues and switching
-// to the Broken state. A fatal ring failure closes admission and freezes
-// submission. It is up to PDisk to see this and initiate restart (itself and
-// slots).
-//
-// When a TUringRouter client is requested to stop, it is always responsible
-// for waiting for its own I/O. Even if the router is in the Broken state, the
-// client waits for completions. This allows completions to safely reference
-// the actors that started I/O. Client must set timer and if I/O is not completed
-// within assumed timeout, client should report itself as broken.
-//
-// The last owner of the shared router instance destroys the router.
-// Its destructor drops accepted operations (calls their OnDrop() method),
-// that have not reached the kernel, drains submitted operations, and stops
-// the I/O thread.
+// Accepted operations receive exactly one terminal callback. Clients retain
+// their callback state and buffers until retirement, including on Broken rings.
+// StopAsync alone never times out stalled I/O. During explicit teardown a fatal
+// ring gets 200 ms to retire late data, published SQ entries and control CQEs;
+// unresolved ownership aborts the process before any of that storage is freed.
+// Unpublished operations are dropped during teardown.
 //
 // Optional device I/O sample sink: if set via SetSampleSink() before Start(),
 // the I/O thread invokes it once per successfully completed Read/Write CQE.
@@ -141,19 +140,20 @@ public:
     // Required initialization failures leave IsBroken() true and admission closed.
     void Start();
 
-    // Close admission without waiting for accepted operations. A Submit() that
-    // already observed Running may still be accepted; it will receive exactly
-    // one terminal callback. The duplicated device fd remains open until the
-    // last owner destroys the router, so a replacement PDisk waits for the old
-    // I/O at flock acquisition.
+    // Close admission without waiting for accepted operations. An in-progress
+    // publisher may still be accepted and gets exactly one terminal callback.
+    // Call StopSync to retire resources independently of surviving client refs.
     void StopAsync(bool makeBroken = false);
 
-private:
-    // Called only by the destructor. Close admission and post the stop sentinel.
+    // Owner-side synchronous retirement, also used by the destructor. Client
+    // references may survive; subsequent submissions are rejected.
+    // Close admission and post the stop sentinel.
     // HandleStop drops unsubmitted operations and drains submitted I/O before
     // Join returns. Abort if any operations remain unresolved, then tear down
     // the ring.
     void StopSync();
+
+private:
 
     // Test-only. Blocks until every accepted operation has received its
     // terminal callback. Unlike StopSync() it does not close admission, so a
@@ -178,10 +178,8 @@ public:
     // callback: OnComplete() after kernel submission, or OnDrop() if shutdown
     // reaches it first.
     //
-    // Concurrent callers must keep the router alive for the entire call. With
-    // shared ownership, each submitting component therefore retains its own
-    // shared_ptr. Destruction cannot race a Submit() that observed Running and
-    // will see its queue publication without a separate submitter counter.
+    // Concurrent callers must keep the router alive for the entire call.
+    // Accepted publishers are fenced through publication and wake by StopSync.
     [[nodiscard]] bool Submit(TUringOperationBase* op);
 
     [[nodiscard]] bool Read(TUringOperationBase* op) override;
@@ -229,6 +227,7 @@ private:
     void HandleStop();
 
 private:
+    std::unique_ptr<const NUringPrivate::TRouterHooks> TestHooks;
     TFileHandle Fd;
     NActors::TActorSystem* ActorSystem;
     TUringRouterConfig Config;
@@ -271,8 +270,10 @@ private:
 
     NThreading::TObstructiveConsumerQueue<TUringOperationBase, /*DeleteItems=*/false> Queue;
 
-    // Lifetime ownership makes destruction the synchronization point after the
-    // last possible queue publication; State only controls admission.
+    // Publishers remain counted through queue publication and wake. StopSync
+    // closes admission before waiting for this count and serializes join/exit.
+    std::mutex StopMutex;
+    std::atomic<ui64> Publishers{0};
     alignas(64) std::atomic<EUringRouterState> State{EUringRouterState::Created};
     alignas(64) std::atomic<ui64> InFlightCount{0};
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/system/types.h>
+#include <chrono>
 
 struct io_uring;
 struct io_uring_params;
@@ -15,6 +16,7 @@ namespace NKikimr::NPDisk::NUringPrivate {
 class IUringRouterBackend {
 public:
     virtual ~IUringRouterBackend() = default;
+    virtual std::chrono::steady_clock::time_point Now() const { return std::chrono::steady_clock::now(); }
     virtual int Init(unsigned entries, io_uring* ring, io_uring_params* params) = 0;
     virtual int Enable(io_uring* ring) = 0;
     virtual int RegisterFiles(io_uring* ring, const int* files, unsigned count) = 0;

@@ -988,7 +988,7 @@ public:
     // the block device thread is doing concurrently.
     void Handle(NPDisk::TEvDeviceOverestimationSamples::TPtr &ev) {
         for (const auto& sample : ev->Get()->Samples) {
-            PDisk->Mon.DeviceOverestimationMerged.Push(sample);
+            PDisk->Mon.DeviceOverestimationMerged->Push(sample);
         }
     }
 

@@ -33,6 +33,9 @@ public:
     virtual void Reply(
         NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
         TString reason = {}) noexcept = 0;
+    ui32 RetryCount = 0;
+    static constexpr ui32 MaxResubmissions = 20;
+    virtual bool IsRestoreIo() const noexcept { return false; }
     virtual bool IsIntegrityIo() const noexcept { return false; }
     virtual bool IsChunkFormatIo() const noexcept { return false; }
     bool IsCriticalDDiskIo() const noexcept { return IsIntegrityIo() || IsChunkFormatIo(); }
@@ -169,6 +172,8 @@ public:
     void SetIsErase(bool isErase) {
         IsErase = isErase;
     }
+
+    bool IsRestoreIo() const noexcept override { return IsRestore; }
 
     void SetIsRestore(bool isRestore) {
         IsRestore = isRestore;

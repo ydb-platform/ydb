@@ -47,12 +47,12 @@ void RegisterDiskResponders(TTestActorSystem& runtime, const TIntrusivePtr<TBlob
     }
 }
 
-TIntrusivePtr<TBlobStorageGroupInfo> CreateGroup() {
+TIntrusivePtr<TBlobStorageGroupInfo> CreateGroup(TBlobStorageGroupType type = TBlobStorageGroupType::Erasure4Plus2Block) {
     TVector<TActorId> actorIds;
-    for (ui32 i = 0; i < 8; ++i) {
+    for (ui32 i = 0; i < type.BlobSubgroupSize(); ++i) {
         actorIds.push_back(MakeBlobStorageVDiskID(1, 1000 + i, 1000));
     }
-    return MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::Erasure4Plus2Block, 1u, 0u, 1u, &actorIds,
+    return MakeIntrusive<TBlobStorageGroupInfo>(type, 1u, 0u, 1u, &actorIds,
         TBlobStorageGroupInfo::EEM_NONE, TBlobStorageGroupInfo::ELCP_INITIAL, TCypherKey(), TGroupId::FromValue(0x82000000));
 }
 
@@ -61,7 +61,7 @@ TEvControllerUpdateSelfHealInfo::TGroupContent Convert(const TIntrusivePtr<TBlob
     TEvControllerUpdateSelfHealInfo::TGroupContent res;
     res.Generation = info->GroupGeneration;
     res.Type = info->Type;
-    res.Geometry = std::make_shared<TGroupGeometryInfo>(CreateGroupGeometry(TBlobStorageGroupType::Erasure4Plus2Block));
+    res.Geometry = std::make_shared<TGroupGeometryInfo>(CreateGroupGeometry(info->Type));
     for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
         auto& x = res.VDisks[info->GetVDiskId(i)];
         x.Location = {1, 1000 + i, 1000};
@@ -95,6 +95,51 @@ void ValidateCmd(const TActorId& parentId, TTestActorSystem& runtime, ui32 group
 }
 
 Y_UNIT_TEST_SUITE(SelfHealActorTest) {
+    Y_UNIT_TEST(Block82HighDomainsAndFailureModel) {
+        for (const auto& faulty : {std::set<ui32>{10}, std::set<ui32>{11}, std::set<ui32>{10, 11}, std::set<ui32>{9, 10, 11}}) {
+            RunTestCase([&](const TActorId& selfHealId, const TActorId& parentId, TTestActorSystem& runtime) {
+                auto info = CreateGroup(TBlobStorageGroupType::Erasure8Plus2Block);
+                RegisterDiskResponders(runtime, info);
+                std::vector<E> statuses(info->GetTotalVDisksNum(), E::READY);
+                for (ui32 disk : faulty) {
+                    statuses[disk] = E::ERROR;
+                }
+                auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+                ev->GroupsToUpdate[info->GroupID] = Convert(info, faulty, statuses);
+                runtime.Send(new IEventHandle(selfHealId, parentId, ev.release()), 1);
+                runtime.Schedule(TDuration::Minutes(30), new IEventHandle(TEvents::TSystem::Wakeup, 0, parentId, {}, nullptr, 0), nullptr, 1);
+                auto result = runtime.WaitForEdgeActorEvent({parentId});
+                if (faulty.size() == 3) {
+                    UNIT_ASSERT_EQUAL(result->GetTypeRewrite(), TEvents::TSystem::Wakeup);
+                } else {
+                    UNIT_ASSERT_EQUAL(result->GetTypeRewrite(), TEvBlobStorage::TEvControllerConfigRequest::EventType);
+                    auto* request = result->Get<TEvBlobStorage::TEvControllerConfigRequest>();
+                    UNIT_ASSERT(request->SelfHeal);
+                    UNIT_ASSERT_VALUES_EQUAL(request->Record.GetRequest().CommandSize(), 1);
+                    const auto& move = request->Record.GetRequest().GetCommand(0).GetReassignGroupDisk();
+                    UNIT_ASSERT_VALUES_EQUAL(move.GetGroupId(), 0x82000000);
+                    UNIT_ASSERT_VALUES_EQUAL(move.GetGroupGeneration(), 1);
+                    UNIT_ASSERT(faulty.contains(move.GetFailDomainIdx()));
+                }
+            });
+        }
+    }
+
+    Y_UNIT_TEST(Block82WaitsForHighDomainReplication) {
+        RunTestCase([&](const TActorId& selfHealId, const TActorId& parentId, TTestActorSystem& runtime) {
+            auto info = CreateGroup(TBlobStorageGroupType::Erasure8Plus2Block);
+            RegisterDiskResponders(runtime, info);
+            std::vector<E> statuses(info->GetTotalVDisksNum(), E::READY);
+            statuses[10] = E::REPLICATING;
+            statuses[11] = E::ERROR;
+            auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+            ev->GroupsToUpdate[info->GroupID] = Convert(info, {11}, statuses);
+            runtime.Send(new IEventHandle(selfHealId, parentId, ev.release()), 1);
+            runtime.Schedule(TDuration::Minutes(30), new IEventHandle(TEvents::TSystem::Wakeup, 0, parentId, {}, nullptr, 0), nullptr, 1);
+            auto result = runtime.WaitForEdgeActorEvent({parentId});
+            UNIT_ASSERT_EQUAL(result->GetTypeRewrite(), TEvents::TSystem::Wakeup);
+        });
+    }
 
     Y_UNIT_TEST(SingleErrorDisk) {
         RunTestCase([&](const TActorId& selfHealId, const TActorId& parentId, TTestActorSystem& runtime) {

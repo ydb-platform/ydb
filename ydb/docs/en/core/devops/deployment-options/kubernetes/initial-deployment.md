@@ -1,5 +1,7 @@
 # Getting Started with {{ ydb-short-name }} in {{ k8s }}
 
+For `block-8-2`, use twelve independently placed storage nodes and a supporting YDB image on both Storage and Database resources. The in-repository `ydbd_slice` template is `12-node-block-8-2`; supply `ydb_image` explicitly. External operator samples and validation must support this scheme before applying them. See [Block82 prerequisites](../../../concepts/block-8-2.md).
+
 Deploying {{ ydb-short-name }} in {{ k8s }} is a simple way to set up and run a {{ ydb-short-name }} cluster. {{ k8s }} allows to use an universal approach to managing your application in any cloud service provider. This guide provides instructions on how to deploy {{ ydb-short-name }} in [AWS EKS](https://aws.amazon.com/eks/) or [{{ managed-k8s-full-name }}](https://cloud.yandex.com/services/managed-kubernetes).
 
 ## Prerequisites

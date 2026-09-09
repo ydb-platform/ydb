@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
     };
 
-    void AddGroupVSlotInControllerConfigResponse(TEvBlobStorage::TEvControllerConfigResponse::TPtr* ev, const int groupCount, const int vslotCount) {
+    void AddGroupVSlotInControllerConfigResponse(TEvBlobStorage::TEvControllerConfigResponse::TPtr* ev, const int groupCount, const int vslotCount, const TString& erasure = "block-4-2") {
         auto& pbRecord = (*ev)->Get()->Record;
         auto pbConfig = pbRecord.mutable_response()->mutable_status(0)->mutable_baseconfig();
 
@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             auto group = pbConfig->add_group();
             group->CopyFrom(groupSample);
             group->set_groupid(groupId);
-            group->set_erasurespecies(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
+            group->set_erasurespecies(erasure);
             group->set_operatingstatus(NKikimrBlobStorage::TGroupStatus::DEGRADED);
 
             group->clear_vslotid();
@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
     };
 
-    void AddGroupsToSysViewResponse(NSysView::TEvSysView::TEvGetGroupsResponse::TPtr* ev, size_t groupCount = 1, bool addStatic = true) {
+    void AddGroupsToSysViewResponse(NSysView::TEvSysView::TEvGetGroupsResponse::TPtr* ev, size_t groupCount = 1, bool addStatic = true, const TString& erasure = "block-4-2") {
         auto& record = (*ev)->Get()->Record;
         auto entrySample = record.entries(0);
         record.clear_entries();
@@ -182,7 +182,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             auto* entry = record.add_entries();
             entry->CopyFrom(entrySample);
             entry->mutable_key()->set_groupid(groupId);
-            entry->mutable_info()->set_erasurespeciesv2(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
+            entry->mutable_info()->set_erasurespeciesv2(erasure);
             entry->mutable_info()->set_storagepoolid(poolId);
             entry->mutable_info()->set_generation(DEFAULT_GROUP_GENERATION);
         };
@@ -267,7 +267,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     }
 
     void AddGroupVSlotInControllerConfigResponseWithStaticGroup(TEvBlobStorage::TEvControllerConfigResponse::TPtr* ev,
-        const NKikimrBlobStorage::TGroupStatus::E groupStatus, const TVDisks& vslots)
+        const NKikimrBlobStorage::TGroupStatus::E groupStatus, const TVDisks& vslots, const TString& erasure = "block-4-2")
     {
         auto& pbRecord = (*ev)->Get()->Record;
         auto pbConfig = pbRecord.mutable_response()->mutable_status(0)->mutable_baseconfig();
@@ -287,7 +287,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         staticGroup->set_groupid(0);
         staticGroup->set_storagepoolid(0);
         staticGroup->set_operatingstatus(groupStatus);
-        staticGroup->set_erasurespecies(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
+        staticGroup->set_erasurespecies(erasure);
         staticGroup->set_groupgeneration(DEFAULT_GROUP_GENERATION);
 
         auto group = pbConfig->add_group();
@@ -295,7 +295,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         group->set_groupid(GROUP_START_ID);
         group->set_storagepoolid(1);
         group->set_operatingstatus(groupStatus);
-        group->set_erasurespecies(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
+        group->set_erasurespecies(erasure);
         group->set_groupgeneration(DEFAULT_GROUP_GENERATION);
 
         group->clear_vslotid();
@@ -359,9 +359,9 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
     }
 
-    void ChangeGroupStateResponse(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateResponse::TPtr* ev) {
+    void ChangeGroupStateResponse(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateResponse::TPtr* ev, const TString& erasure = "block-4-2") {
         for (auto& groupInfo : *(*ev)->Get()->Record.mutable_bsgroupstateinfo()) {
-            groupInfo.set_erasurespecies(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
+            groupInfo.set_erasurespecies(erasure);
         }
     }
 
@@ -490,7 +490,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     Ydb::Monitoring::SelfCheckResult RequestHcWithVdisks(const NKikimrBlobStorage::TGroupStatus::E groupStatus, const TVDisks& vdisks,
                                                          bool forStaticGroup = false, double occupancy = 0, bool withPhantomOnly = true,
-                                                         bool returnHints = false) {
+                                                         bool returnHints = false, const TString& erasure = "block-4-2") {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -520,7 +520,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 }
                 case TEvBlobStorage::EvControllerConfigResponse: {
                     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
-                    AddGroupVSlotInControllerConfigResponseWithStaticGroup(x, groupStatus, vdisks);
+                    AddGroupVSlotInControllerConfigResponseWithStaticGroup(x, groupStatus, vdisks, erasure);
                     break;
                 }
                 case NSysView::TEvSysView::EvGetVSlotsResponse: {
@@ -539,7 +539,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 }
                 case NSysView::TEvSysView::EvGetGroupsResponse: {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
-                    AddGroupsToSysViewResponse(x);
+                    AddGroupsToSysViewResponse(x, 1, true, erasure);
                     break;
                 }
                 case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
@@ -558,7 +558,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 }
                 case NNodeWhiteboard::TEvWhiteboard::EvBSGroupStateResponse: {
                     auto* x = reinterpret_cast<NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateResponse::TPtr*>(&ev);
-                    ChangeGroupStateResponse(x);
+                    ChangeGroupStateResponse(x, erasure);
                 }
             }
 
@@ -719,6 +719,63 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     Y_UNIT_TEST(Issues100Groups100VCardMerging) {
         ListingTest(100, 100, true);
+    }
+
+    Y_UNIT_TEST(Block82GroupStatusMatrix) {
+        using TCheck = NHealthCheck::TSelfCheckRequest;
+        using TFlag = Ydb::Monitoring::StatusFlag;
+        const std::array expected{TFlag::GREEN, TFlag::YELLOW, TFlag::ORANGE, TFlag::RED};
+        for (const bool layoutCorrect : {true, false}) {
+            for (ui32 failed = 0; failed <= 3; ++failed) {
+                for (const auto missingStatus : {TFlag::RED, TFlag::GREY, TFlag::BLUE}) {
+                    TCheck::TGroupChecker checker("block-8-2", layoutCorrect);
+                    for (ui32 disk = 0; disk != 12; ++disk) {
+                        checker.AddVDiskStatus(disk >= 12 - failed ? missingStatus : TFlag::GREEN, 0);
+                    }
+                    TCheck::TSelfCheckContext context(nullptr);
+                    checker.ReportStatus(context);
+                    auto status = failed == 1 && missingStatus == TFlag::BLUE ? TFlag::BLUE : expected[failed];
+                    if (!layoutCorrect) {
+                        status = Max(status, TFlag::ORANGE);
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(context.GetOverallStatus(), status);
+                }
+            }
+        }
+        for (const auto spaceStatus : {TFlag::YELLOW, TFlag::ORANGE}) {
+            TCheck::TGroupChecker checker("block-8-2");
+            for (ui32 disk = 0; disk != 12; ++disk) {
+                checker.AddVDiskStatus(disk == 11 ? spaceStatus : TFlag::GREEN, 0);
+            }
+            TCheck::TSelfCheckContext context(nullptr);
+            checker.ReportStatus(context);
+            UNIT_ASSERT_VALUES_EQUAL(context.GetOverallStatus(), TFlag::YELLOW);
+        }
+        for (const TString erasure : {"", "future-erasure"}) {
+            TCheck::TGroupChecker checker(erasure);
+            TCheck::TSelfCheckContext context(nullptr);
+            checker.ReportStatus(context);
+            UNIT_ASSERT_VALUES_EQUAL(context.GetOverallStatus(), TFlag::RED);
+        }
+    }
+
+    Y_UNIT_TEST(Block82HealthCheckSysView) {
+        const std::array groupStatuses{NKikimrBlobStorage::TGroupStatus::FULL, NKikimrBlobStorage::TGroupStatus::PARTIAL,
+            NKikimrBlobStorage::TGroupStatus::DEGRADED, NKikimrBlobStorage::TGroupStatus::DISINTEGRATED};
+        const std::array flags{Ydb::Monitoring::StatusFlag::GREEN, Ydb::Monitoring::StatusFlag::YELLOW,
+            Ydb::Monitoring::StatusFlag::ORANGE, Ydb::Monitoring::StatusFlag::RED};
+        for (ui32 failed = 0; failed <= 3; ++failed) {
+            TVDisks disks(12, NKikimrBlobStorage::READY);
+            for (ui32 disk = 12 - failed; disk < 12; ++disk) {
+                disks[disk] = NKikimrBlobStorage::ERROR;
+            }
+            auto result = RequestHcWithVdisks(groupStatuses[failed], disks, false, 0, true, false, "block-8-2");
+            if (failed) {
+                CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", flags[failed], 1, TLocationFilter().Pool("/Root:test"));
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
+            }
+        }
     }
 
     Y_UNIT_TEST(YellowGroupIssueWhenPartialGroupStatus) {

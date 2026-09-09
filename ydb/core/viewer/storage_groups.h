@@ -361,7 +361,7 @@ public:
             static_assert(sizeof(TVDiskID::FailRealm) == 1, "expecting byte");
             std::vector<ui8> failedDomainsPerRealm;
             for (const TVDisk& vdisk : VDisks) {
-                if (vdisk.VDiskStatus && *vdisk.VDiskStatus != NKikimrBlobStorage::EVDiskStatus::READY) {
+                if (!vdisk.Present || (vdisk.VDiskStatus && *vdisk.VDiskStatus != NKikimrBlobStorage::EVDiskStatus::READY)) {
                     if (ErasureSpecies == TErasureType::ErasureMirror3dc) {
                         if (failedDomainsPerRealm.size() <= vdisk.VDiskId.FailRealm) {
                             failedDomainsPerRealm.resize(vdisk.VDiskId.FailRealm + 1);
@@ -369,21 +369,25 @@ public:
                         failedDomainsPerRealm[vdisk.VDiskId.FailRealm]++;
                     }
                     ++MissingDisks;
-                    if (*vdisk.VDiskStatus == NKikimrBlobStorage::EVDiskStatus::INIT_PENDING) {
+                    if (vdisk.Present && vdisk.VDiskStatus == NKikimrBlobStorage::EVDiskStatus::INIT_PENDING) {
                         ++startingDisks;
                     }
-                    if (*vdisk.VDiskStatus == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
+                    if (vdisk.Present && vdisk.VDiskStatus == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
                         ++replicatingDisks;
                     }
-                }
-                if (!vdisk.Present) { // no data about disk
-                    ++MissingDisks;
                 }
                 allocated += vdisk.AllocatedSize;
                 limit += vdisk.AllocatedSize + vdisk.AvailableSize;
                 DiskSpace = std::max(DiskSpace, vdisk.DiskSpace);
             }
-            if (MissingDisks == 0) {
+            if (ErasureSpecies != TErasureType::ErasureNone
+                    && ErasureSpecies != TErasureType::Erasure4Plus2Block
+                    && ErasureSpecies != TErasureType::Erasure8Plus2Block
+                    && ErasureSpecies != TErasureType::ErasureMirror3dc) {
+                Overall = NKikimrViewer::EFlag::Red;
+                State = "unknown erasure";
+                StateSortKey = 100;
+            } else if (MissingDisks == 0) {
                 Overall = NKikimrViewer::EFlag::Green;
                 State = "ok";
                 StateSortKey = 0;
@@ -399,7 +403,8 @@ public:
                         StateSortKey = 100;
                     }
                     State = TStringBuilder() << state << ':' << MissingDisks;
-                } else if (ErasureSpecies == TErasureType::Erasure4Plus2Block) {
+                } else if (ErasureSpecies == TErasureType::Erasure4Plus2Block
+                        || ErasureSpecies == TErasureType::Erasure8Plus2Block) {
                     TString state;
                     if (MissingDisks > 2) {
                         Overall = NKikimrViewer::EFlag::Red;

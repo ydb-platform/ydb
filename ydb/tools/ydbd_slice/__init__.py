@@ -551,6 +551,7 @@ def cluster_type_args():
     args = argparse.ArgumentParser(add_help=False)
     available_erasure_types = [
         "block-4-2-8-nodes",
+        "block-8-2-12-nodes",
         "block-4-2-4-nodes",
         "block-4-2-2-nodes",
         "mirror-3-dc-3-nodes",
@@ -832,6 +833,8 @@ def add_sample_config_mode(modes):
         template_path = ""
         if cluster_type == "block-4-2-8-nodes":
             template_path = "/ydbd_slice/baremetal/templates/block-4-2-8-nodes.yaml"
+        elif cluster_type == "block-8-2-12-nodes":
+            template_path = "/ydbd_slice/baremetal/templates/block-8-2-12-nodes.yaml"
         elif cluster_type == "block-4-2-4-nodes":
             template_path = "/ydbd_slice/baremetal/templates/block-4-2-4-nodes.yaml"
         elif cluster_type == "block-4-2-2-nodes":
@@ -1013,7 +1016,7 @@ def add_kube_generate_mode(modes):
     mode.add_argument(
         '-t', '--template',
         help='Slice manifest templates for quick start.',
-        choices=('8-node-block-4-2',),
+        choices=('8-node-block-4-2', '12-node-block-8-2'),
         default='8-node-block-4-2',
     )
     mode.add_argument(

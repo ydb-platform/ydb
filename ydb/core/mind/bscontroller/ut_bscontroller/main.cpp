@@ -291,6 +291,156 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(BsControllerConfig) {
+    Y_UNIT_TEST(Block82ResourceAccountingAndStatus) {
+        using TBsc = TBlobStorageController;
+        const auto id = TGroupId::FromValue(0x82000000);
+        TBsc::TGroupInfo group(id, 1, 0, TErasureType::Erasure8Plus2Block,
+            {}, NKikimrBlobStorage::TVDiskKind::Default, 0, 0, {}, {}, 0, 0, false, true, {1, 1}, 1, 12, 1);
+        TBsc::TVSlotReadyTimestampQ readyQueue;
+        std::vector<std::unique_ptr<TBsc::TPDiskInfo>> pdisks;
+        std::vector<std::unique_ptr<TBsc::TVSlotInfo>> slots;
+        for (ui32 disk = 0; disk != 12; ++disk) {
+            auto pdisk = std::make_unique<TBsc::TPDiskInfo>(TBsc::THostId(ToString(disk), 1), "/dev/disk", 0, disk + 1,
+                TMaybe<bool>(), TMaybe<bool>(), 1, TString(), 1, 1, NKikimrBlobStorage::ACTIVE, TInstant::Zero(),
+                NKikimrBlobStorage::DECOMMIT_NONE, TPDiskMood::Normal, TString(), TString(), TString(), 0, true,
+                NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST);
+            pdisk->Metrics.SetTotalSize(1000);
+            pdisk->Metrics.SetMaxReadThroughput(100);
+            pdisk->Metrics.SetMaxWriteThroughput(50);
+            pdisk->Metrics.SetMaxIOPS(100);
+            auto slot = std::make_unique<TBsc::TVSlotInfo>(TVSlotId(disk + 1, 1, 1000), pdisk.get(), id,
+                0, 1, NKikimrBlobStorage::TVDiskKind::Default, 0, disk, 0, TMood::Normal, &group,
+                &readyQueue, TInstant::Zero(), TDuration::Zero());
+            slot->IsReady = true;
+            slot->Metrics.SetAllocatedSize(100);
+            slot->Metrics.SetAvailableSize(900);
+            pdisks.push_back(std::move(pdisk));
+            slots.push_back(std::move(slot));
+        }
+        NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters params;
+        group.FillInGroupParameters(&params);
+        for (const auto* resources : {&params.GetAssuredResources(), &params.GetCurrentResources()}) {
+            UNIT_ASSERT_VALUES_EQUAL(resources->GetSpace(), 9600); // 12 * 8 / 10, without integer truncation
+            UNIT_ASSERT_VALUES_EQUAL(resources->GetReadThroughput(), 960);
+            UNIT_ASSERT_VALUES_EQUAL(resources->GetWriteThroughput(), 480);
+            UNIT_ASSERT_DOUBLES_EQUAL(resources->GetIOPS(), 120, 0.001);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(params.GetAllocatedSize(), 960);
+        UNIT_ASSERT_VALUES_EQUAL(params.GetAvailableSize(), 8640);
+        const std::array expected{NKikimrBlobStorage::TGroupStatus::FULL, NKikimrBlobStorage::TGroupStatus::PARTIAL,
+            NKikimrBlobStorage::TGroupStatus::DEGRADED, NKikimrBlobStorage::TGroupStatus::DISINTEGRATED};
+        for (ui32 failed = 0; failed <= 3; ++failed) {
+            for (ui32 disk = 0; disk != slots.size(); ++disk) {
+                slots[disk]->IsReady = disk < 12 - failed; // exercises handoffs 10 and 11
+            }
+            group.CalculateGroupStatus();
+            UNIT_ASSERT_VALUES_EQUAL(group.Status.OperatingStatus, expected[failed]);
+            UNIT_ASSERT_VALUES_EQUAL(group.Status.ExpectedStatus, expected[failed]);
+        }
+    }
+
+    Y_UNIT_TEST(Block82PoolLifecycleAndErasureMapping) {
+        TEnvironmentSetup env(13, 1);
+        bool activeZone;
+        env.Prepare("", [](TTestActorRuntime&) {}, activeZone);
+        env.DisableLogging();
+        NKikimrBlobStorage::TConfigRequest request;
+        env.DefineBox(1, "wide box", {{"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0}}, env.GetNodes(), request);
+        env.DefineStoragePool(1, 1, "block82 pool", 2, NKikimrBlobStorage::ROT, false, request, "block-8-2");
+        env.DefineStoragePool(1, 2, "block42 pool", 2, NKikimrBlobStorage::ROT, false, request, "block-4-2");
+        env.DefineStoragePool(1, 3, "empty pool", 0, NKikimrBlobStorage::ROT, false, request, "block-8-2");
+        auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+
+        auto query = [&] {
+            NKikimrBlobStorage::TConfigRequest request;
+            request.AddCommand()->MutableQueryBaseConfig();
+            auto response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+            return response.GetStatus(0).GetBaseConfig();
+        };
+        auto verify = [&](const TString& widePoolName) {
+            const auto config = query();
+            UNIT_ASSERT_VALUES_EQUAL(config.GroupSize(), 4);
+            const auto mapping = GetServiceCounters(env.Runtime->GetAppData().Counters, "storage_pool_stat")
+                ->FindSubgroup("subsystem", "erasureMapping");
+            UNIT_ASSERT(mapping);
+            std::map<ui64, ui32> poolCounts;
+            for (const auto& group : config.GetGroup()) {
+                const bool wide = group.GetStoragePoolId() == 1;
+                UNIT_ASSERT_VALUES_EQUAL(group.GetErasureSpecies(), wide ? "block-8-2" : "block-4-2");
+                UNIT_ASSERT_VALUES_EQUAL(group.VSlotIdSize(), wide ? 12 : 8);
+                std::set<ui32> nodes;
+                for (const auto& slot : group.GetVSlotId()) {
+                    UNIT_ASSERT(nodes.insert(slot.GetNodeId()).second);
+                }
+                const auto byGroup = mapping->FindSubgroup("group", TStorageErasureCounters::GroupLabel(group.GetGroupId()));
+                UNIT_ASSERT(byGroup);
+                const auto byPool = byGroup->FindSubgroup("storagePool", wide ? widePoolName : "block42 pool");
+                UNIT_ASSERT(byPool);
+                const auto byErasure = byPool->FindSubgroup("erasureSpecies", group.GetErasureSpecies());
+                UNIT_ASSERT(byErasure);
+                UNIT_ASSERT_VALUES_EQUAL(byErasure->FindCounter("GroupErasureInfo")->Val(), 1);
+                ++poolCounts[group.GetStoragePoolId()];
+            }
+            UNIT_ASSERT_VALUES_EQUAL(poolCounts[1], 2);
+            UNIT_ASSERT_VALUES_EQUAL(poolCounts[2], 2);
+            const auto emptyPool = mapping->FindSubgroup("storagePoolId", "1:3")
+                ->FindSubgroup("storagePool", "empty pool")->FindSubgroup("erasureSpecies", "block-8-2");
+            UNIT_ASSERT_VALUES_EQUAL(emptyPool->FindCounter("StoragePoolErasureInfo")->Val(), 1);
+            return config;
+        };
+        const auto original = verify("block82 pool");
+        NKikimrBlobStorage::TEvControllerSelectGroups select;
+        select.SetReturnAllMatchingGroups(true);
+        auto* parameters = select.AddGroupParameters();
+        parameters->SetErasureSpecies(TErasureType::Erasure8Plus2Block);
+        parameters->SetDesiredPDiskCategory(0);
+        parameters->SetDesiredVDiskCategory(0);
+        const auto selected = env.SelectGroups(select);
+        UNIT_ASSERT_VALUES_EQUAL(selected.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(selected.GetMatchingGroups(0).GroupsSize(), 2);
+
+        request.Clear();
+        env.DefineStoragePool(1, 1, "block82 pool", 2, NKikimrBlobStorage::ROT, false, request, "block-4-2", 1);
+        response = env.Invoke(request);
+        UNIT_ASSERT(!response.GetSuccess());
+        verify("block82 pool");
+
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        const auto reloaded = verify("block82 pool");
+        for (size_t i = 0; i != original.GroupSize(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(original.GetGroup(i).SerializeAsString(), reloaded.GetGroup(i).SerializeAsString());
+        }
+
+        request.Clear();
+        env.DefineStoragePool(1, 1, "renamed block82 pool", 2, NKikimrBlobStorage::ROT, false, request, "block-8-2", 1);
+        response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        verify("renamed block82 pool");
+        request.Clear();
+        auto* remove = request.AddCommand()->MutableDeleteStoragePool();
+        remove->SetBoxId(1);
+        remove->SetStoragePoolId(1);
+        remove->SetItemConfigGeneration(2);
+        response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        for (bool reboot : {false, true}) {
+            if (reboot) {
+                RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(query().GroupSize(), 2);
+            const auto mapping = GetServiceCounters(env.Runtime->GetAppData().Counters, "storage_pool_stat")
+                ->FindSubgroup("subsystem", "erasureMapping");
+            UNIT_ASSERT(!mapping->FindSubgroup("storagePoolId", "1:1"));
+            for (const auto& oldGroup : original.GetGroup()) {
+                if (oldGroup.GetStoragePoolId() == 1) {
+                    UNIT_ASSERT(!mapping->FindSubgroup("group", TStorageErasureCounters::GroupLabel(oldGroup.GetGroupId())));
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(Basic) {
         TEnvironmentSetup env(10, 1);
         RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {

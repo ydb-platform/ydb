@@ -2,7 +2,7 @@
 
 Y_UNIT_TEST_SUITE(SpaceCheckForDiskReassign) {
 
-    Y_UNIT_TEST(Basic) {
+    void Test(TBlobStorageGroupType erasure) {
         using TPDiskId = TNodeWardenMockActor::TPDiskId;
         using TVSlotId = TNodeWardenMockActor::TVSlotId;
 
@@ -90,19 +90,19 @@ Y_UNIT_TEST_SUITE(SpaceCheckForDiskReassign) {
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
         env.Sim(TDuration::Minutes(1));
 
-        const ui32 numGroups = numDrives * 6 / 8;
+        const ui32 numGroups = numDrives * 6 / erasure.BlobSubgroupSize();
 
         request.Clear();
         auto *cmd2 = request.AddCommand()->MutableDefineStoragePool();
         cmd2->SetBoxId(1);
         cmd2->SetStoragePoolId(1);
         cmd2->SetName("storage-pool-1");
-        cmd2->SetErasureSpecies("block-4-2");
+        cmd2->SetErasureSpecies(TErasureType::ErasureSpeciesName(erasure.GetErasure()));
         cmd2->SetVDiskKind("Default");
         cmd2->SetNumGroups(numGroups);
         cmd2->AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::EPDiskType::ROT);
 
-        const ui32 numSlots = numGroups * 8;
+        const ui32 numSlots = numGroups * erasure.BlobSubgroupSize();
         totalSize *= (ui64)1000000000000;
 
         const ui64 maxSlotSize = totalSize / numSlots;
@@ -202,4 +202,6 @@ Y_UNIT_TEST_SUITE(SpaceCheckForDiskReassign) {
         }
     }
 
+    Y_UNIT_TEST(Basic) { Test(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(Block82) { Test(TBlobStorageGroupType::Erasure8Plus2Block); }
 }

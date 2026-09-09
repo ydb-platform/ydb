@@ -1,5 +1,7 @@
 # {{ ydb-short-name }} distributed storage
 
+For `block-8-2`, PartId 1..8 contains data and PartId 9..10 parity; main positions are 0..9 and handoffs are 10..11. Ten encoded parts occupy a twelve-VDisk subgroup. The minimum is twelve independent failure domains; choose additional spares for the deployment. See [Block82 layout, versions and capacity units](../concepts/block-8-2.md).
+
 {{ ydb-short-name }} distributed storage is a subsystem of {{ ydb-short-name }} that ensures reliable data storage.
 
 It allows you to store *blobs* (binary fragments ranging from 1 byte to 10 megabytes in size) with a unique identifier.

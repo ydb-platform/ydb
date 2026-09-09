@@ -78,8 +78,9 @@ def generate_obliterate(project_path, namespace_name, nodeclaim_name, ydb_image,
         )
 
 
-def generate_8_node_block_4_2(project_path, user, namespace_name, nodeclaim_name, node_flavor,
-                              storage_name, database_name, cluster_uuid=''):
+def generate_block_erasure(project_path, user, namespace_name, nodeclaim_name, node_flavor,
+                              storage_name, database_name, cluster_uuid='', template='8-node-block-4-2',
+                              ydb_image='cr.yandex/crpl7ipeu79oseqhcgn2/ydb:23.2.9'):
     generate_file(
         project_path=project_path,
         filename=f'namespace-{namespace_name}.yaml',
@@ -91,7 +92,7 @@ def generate_8_node_block_4_2(project_path, user, namespace_name, nodeclaim_name
     generate_file(
         project_path=project_path,
         filename=f'nodeclaim-{nodeclaim_name}.yaml',
-        template='/ydbd_slice/templates/8-node-block-4-2/nodeclaim.yaml',
+        template=f'/ydbd_slice/templates/{template}/nodeclaim.yaml',
         template_kwargs=dict(
             nodeclaim_namespace=namespace_name,
             nodeclaim_name=nodeclaim_name,
@@ -102,8 +103,9 @@ def generate_8_node_block_4_2(project_path, user, namespace_name, nodeclaim_name
     generate_file(
         project_path=project_path,
         filename=f'storage-{storage_name}.yaml',
-        template='/ydbd_slice/templates/8-node-block-4-2/storage.yaml',
+        template=f'/ydbd_slice/templates/{template}/storage.yaml',
         template_kwargs=dict(
+            ydb_image=ydb_image,
             storage_name=storage_name,
             storage_namespace=namespace_name,
             nodeclaim_name=nodeclaim_name,
@@ -117,6 +119,7 @@ def generate_8_node_block_4_2(project_path, user, namespace_name, nodeclaim_name
         template_kwargs=dict(
             database_name=database_name,
             database_namespace=namespace_name,
+            ydb_image=ydb_image,
             storage_name=storage_name,
             nodeclaim_name=nodeclaim_name,
             nodeclaim_namespace=namespace_name,

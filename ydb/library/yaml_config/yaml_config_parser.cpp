@@ -190,10 +190,21 @@ namespace NKikimr::NYaml {
                 .StoragePoolType = ids[1],
             };
 
+            const auto& pool = node["pool_config"]; // Iterate's final field names its containing object.
             ctx.PoolConfigInfo[key] = TPoolConfigInfo{
-                .HasErasureSpecies = node.Has("erasure_species"),
-                .HasKind = node.Has("kind"),
-                .HasVDiskKind = node.Has("vdisk_kind"),
+                .HasErasureSpecies = pool.Has("erasure_species"),
+                .HasKind = pool.Has("kind"),
+                .HasVDiskKind = pool.Has("vdisk_kind"),
+            };
+        });
+
+        Iterate(json, "/storage_pool_types/*/pool_config", [&ctx](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
+            Y_ENSURE_BT(ids.size() == 1);
+            const auto& pool = node["pool_config"];
+            ctx.PoolConfigInfo[{0, ids[0]}] = {
+                .HasErasureSpecies = pool.Has("erasure_species"),
+                .HasKind = pool.Has("kind"),
+                .HasVDiskKind = pool.Has("vdisk_kind"),
             };
         });
 
@@ -268,6 +279,7 @@ namespace NKikimr::NYaml {
     ui32 ErasureStrToNum(const TString& info) {
         ui32 result = 0;
         if (TryFromString(info, result)) {
+            Y_ENSURE_BT(result < TErasureType::ErasureSpeciesCount, "unknown erasure " << info);
             return result;
         }
         TErasureType::EErasureSpecies species = TErasureType::ErasureSpeciesByName(info);

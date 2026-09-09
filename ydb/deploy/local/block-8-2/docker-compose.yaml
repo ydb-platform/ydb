@@ -1,0 +1,710 @@
+{
+  "version": "3.8",
+  "services": {
+    "storage-1": {
+      "image": "${BLOCK82_IMAGE:?Run build-image.sh first}",
+      "restart": "unless-stopped",
+      "stop_grace_period": "60s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "20m",
+          "max-file": "3"
+        }
+      },
+      "ulimits": {
+        "nofile": {
+          "soft": 65536,
+          "hard": 65536
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python3",
+          "/fixture/control.py",
+          "ping"
+        ],
+        "interval": "15s",
+        "timeout": "5s",
+        "retries": 60,
+        "start_period": "60s"
+      },
+      "hostname": "storage-1",
+      "command": [
+        "storage",
+        "1"
+      ],
+      "volumes": [
+        "pdisk-1:/data"
+      ],
+      "mem_limit": "6g",
+      "ports": [
+        "127.0.0.1:8765:8765"
+      ]
+    },
+    "storage-2": {
+      "image": "${BLOCK82_IMAGE:?Run build-image.sh first}",
+      "restart": "unless-stopped",
+      "stop_grace_period": "60s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "20m",
+          "max-file": "3"
+        }
+      },
+      "ulimits": {
+        "nofile": {
+          "soft": 65536,
+          "hard": 65536
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python3",
+          "/fixture/control.py",
+          "ping"
+        ],
+        "interval": "15s",
+        "timeout": "5s",
+        "retries": 60,
+        "start_period": "60s"
+      },
+      "hostname": "storage-2",
+      "command": [
+        "storage",
+        "2"
+      ],
+      "volumes": [
+        "pdisk-2:/data"
+      ],
+      "mem_limit": "6g"
+    },
+    "storage-3": {
+      "image": "${BLOCK82_IMAGE:?Run build-image.sh first}",
+      "restart": "unless-stopped",
+      "stop_grace_period": "60s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "20m",
+          "max-file": "3"
+        }
+      },
+      "ulimits": {
+        "nofile": {
+          "soft": 65536,
+          "hard": 65536
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python3",
+          "/fixture/control.py",
+          "ping"
+        ],
+        "interval": "15s",
+        "timeout": "5s",
+        "retries": 60,
+        "start_period": "60s"
+      },
+      "hostname": "storage-3",
+      "command": [
+        "storage",
+        "3"
+      ],
+      "volumes": [
+        "pdisk-3:/data"
+      ],
+      "mem_limit": "6g"
+    },
+    "storage-4": {
+      "image": "${BLOCK82_IMAGE:?Run build-image.sh first}",
+      "restart": "unless-stopped",
+      "stop_grace_period": "60s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "20m",
+          "max-file": "3"
+        }
+      },
+      "ulimits": {
+        "nofile": {
+          "soft": 65536,
+          "hard": 65536
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python3",
+          "/fixture/control.py",
+          "ping"
+        ],
+        "interval": "15s",
+        "timeout": "5s",
+        "retries": 60,
+        "start_period": "60s"
+      },
+      "hostname": "storage-4",
+      "command": [
+        "storage",
+        "4"
+      ],
+      "volumes": [
+        "pdisk-4:/data"
+      ],
+      "mem_limit": "6g"
+    },
+    "storage-5": {
+      "image": "${BLOCK82_IMAGE:?Run build-image.sh first}",
+      "restart": "unless-stopped",
+      "stop_grace_period": "60s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "20m",
+          "max-file": "3"
+        }
+      },
+      "ulimits": {
+        "nofile": {
+          "soft": 65536,
+          "hard": 65536
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python3",
+          "/fixture/control.py",
+          "ping"
+        ],
+        "interval": "15s",
+        "timeout": "5s",
+        "retries": 60,
+        "start_period": "60s"
+      },
+      "hostname": "storage-5",
+      "command": [
+        "storage",
+        "5"
+      ],
+      "volumes": [
+        "pdisk-5:/data"
+      ],
+      "mem_limit": "6g"
+    },
+    "storage-6": {
+      "image": "${BLOCK82_IMAGE:?Run build-image.sh first}",
+      "restart": "unless-stopped",
+      "stop_grace_period": "60s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "20m",
+          "max-file": "3"
+        }
+      },
+      "ulimits": {
+        "nofile": {
+          "soft": 65536,
+          "hard": 65536
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python3",
+          "/fixture/control.py",
+          "ping"
+        ],
+        "interval": "15s",
+        "timeout": "5s",
+        "retries": 60,
+        "start_period": "60s"
+      },
+      "hostname": "storage-6",
+      "command": [
+        "storage",
+        "6"
+      ],
+      "volumes": [
+        "pdisk-6:/data"
+      ],
+      "mem_limit": "6g"
+    },
+    "storage-7": {
+      "image": "${BLOCK82_IMAGE:?Run build-image.sh first}",
+      "restart": "unless-stopped",
+      "stop_grace_period": "60s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "20m",
+          "max-file": "3"
+        }
+      },
+      "ulimits": {
+        "nofile": {
+          "soft": 65536,
+          "hard": 65536
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python3",
+          "/fixture/control.py",
+          "ping"
+        ],
+        "interval": "15s",
+        "timeout": "5s",
+        "retries": 60,
+        "start_period": "60s"
+      },
+      "hostname": "storage-7",
+      "command": [
+        "storage",
+        "7"
+      ],
+      "volumes": [
+        "pdisk-7:/data"
+      ],
+      "mem_limit": "6g"
+    },
+    "storage-8": {
+      "image": "${BLOCK82_IMAGE:?Run build-image.sh first}",
+      "restart": "unless-stopped",
+      "stop_grace_period": "60s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "20m",
+          "max-file": "3"
+        }
+      },
+      "ulimits": {
+        "nofile": {
+          "soft": 65536,
+          "hard": 65536
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python3",
+          "/fixture/control.py",
+          "ping"
+        ],
+        "interval": "15s",
+        "timeout": "5s",
+        "retries": 60,
+        "start_period": "60s"
+      },
+      "hostname": "storage-8",
+      "command": [
+        "storage",
+        "8"
+      ],
+      "volumes": [
+        "pdisk-8:/data"
+      ],
+      "mem_limit": "6g"
+    },
+    "storage-9": {
+      "image": "${BLOCK82_IMAGE:?Run build-image.sh first}",
+      "restart": "unless-stopped",
+      "stop_grace_period": "60s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "20m",
+          "max-file": "3"
+        }
+      },
+      "ulimits": {
+        "nofile": {
+          "soft": 65536,
+          "hard": 65536
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python3",
+          "/fixture/control.py",
+          "ping"
+        ],
+        "interval": "15s",
+        "timeout": "5s",
+        "retries": 60,
+        "start_period": "60s"
+      },
+      "hostname": "storage-9",
+      "command": [
+        "storage",
+        "9"
+      ],
+      "volumes": [
+        "pdisk-9:/data"
+      ],
+      "mem_limit": "6g"
+    },
+    "storage-10": {
+      "image": "${BLOCK82_IMAGE:?Run build-image.sh first}",
+      "restart": "unless-stopped",
+      "stop_grace_period": "60s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "20m",
+          "max-file": "3"
+        }
+      },
+      "ulimits": {
+        "nofile": {
+          "soft": 65536,
+          "hard": 65536
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python3",
+          "/fixture/control.py",
+          "ping"
+        ],
+        "interval": "15s",
+        "timeout": "5s",
+        "retries": 60,
+        "start_period": "60s"
+      },
+      "hostname": "storage-10",
+      "command": [
+        "storage",
+        "10"
+      ],
+      "volumes": [
+        "pdisk-10:/data"
+      ],
+      "mem_limit": "6g"
+    },
+    "storage-11": {
+      "image": "${BLOCK82_IMAGE:?Run build-image.sh first}",
+      "restart": "unless-stopped",
+      "stop_grace_period": "60s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "20m",
+          "max-file": "3"
+        }
+      },
+      "ulimits": {
+        "nofile": {
+          "soft": 65536,
+          "hard": 65536
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python3",
+          "/fixture/control.py",
+          "ping"
+        ],
+        "interval": "15s",
+        "timeout": "5s",
+        "retries": 60,
+        "start_period": "60s"
+      },
+      "hostname": "storage-11",
+      "command": [
+        "storage",
+        "11"
+      ],
+      "volumes": [
+        "pdisk-11:/data"
+      ],
+      "mem_limit": "6g"
+    },
+    "storage-12": {
+      "image": "${BLOCK82_IMAGE:?Run build-image.sh first}",
+      "restart": "unless-stopped",
+      "stop_grace_period": "60s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "20m",
+          "max-file": "3"
+        }
+      },
+      "ulimits": {
+        "nofile": {
+          "soft": 65536,
+          "hard": 65536
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python3",
+          "/fixture/control.py",
+          "ping"
+        ],
+        "interval": "15s",
+        "timeout": "5s",
+        "retries": 60,
+        "start_period": "60s"
+      },
+      "hostname": "storage-12",
+      "command": [
+        "storage",
+        "12"
+      ],
+      "volumes": [
+        "pdisk-12:/data"
+      ],
+      "mem_limit": "6g"
+    },
+    "storage-13": {
+      "image": "${BLOCK82_IMAGE:?Run build-image.sh first}",
+      "restart": "unless-stopped",
+      "stop_grace_period": "60s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "20m",
+          "max-file": "3"
+        }
+      },
+      "ulimits": {
+        "nofile": {
+          "soft": 65536,
+          "hard": 65536
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python3",
+          "/fixture/control.py",
+          "ping"
+        ],
+        "interval": "15s",
+        "timeout": "5s",
+        "retries": 60,
+        "start_period": "60s"
+      },
+      "hostname": "storage-13",
+      "command": [
+        "storage",
+        "13"
+      ],
+      "volumes": [
+        "pdisk-13:/data"
+      ],
+      "mem_limit": "6g"
+    },
+    "bootstrap-storage": {
+      "image": "${BLOCK82_IMAGE:?Run build-image.sh first}",
+      "entrypoint": [
+        "python3",
+        "/fixture/control.py"
+      ],
+      "command": [
+        "bootstrap-storage"
+      ],
+      "network_mode": "service:storage-1",
+      "volumes": [
+        "bootstrap-state-storage:/state"
+      ],
+      "depends_on": {
+        "storage-1": {
+          "condition": "service_started"
+        }
+      },
+      "restart": "on-failure",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "20m",
+          "max-file": "3"
+        }
+      }
+    },
+    "compute42": {
+      "image": "${BLOCK82_IMAGE:?Run build-image.sh first}",
+      "restart": "unless-stopped",
+      "stop_grace_period": "60s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "20m",
+          "max-file": "3"
+        }
+      },
+      "ulimits": {
+        "nofile": {
+          "soft": 65536,
+          "hard": 65536
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python3",
+          "/fixture/control.py",
+          "check-row",
+          "42",
+          "2136"
+        ],
+        "interval": "20s",
+        "timeout": "15s",
+        "retries": 60,
+        "start_period": "60s"
+      },
+      "hostname": "compute42",
+      "command": [
+        "compute",
+        "42",
+        "2136"
+      ],
+      "ports": [
+        "127.0.0.1:2136:2136",
+        "127.0.0.1:8766:8765"
+      ],
+      "mem_limit": "6g"
+    },
+    "bootstrap42": {
+      "image": "${BLOCK82_IMAGE:?Run build-image.sh first}",
+      "entrypoint": [
+        "python3",
+        "/fixture/control.py"
+      ],
+      "command": [
+        "bootstrap",
+        "42",
+        "2136"
+      ],
+      "network_mode": "service:compute42",
+      "volumes": [
+        "bootstrap-state-42:/state"
+      ],
+      "depends_on": {
+        "compute42": {
+          "condition": "service_started"
+        },
+        "bootstrap-storage": {
+          "condition": "service_completed_successfully"
+        }
+      },
+      "restart": "on-failure",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "20m",
+          "max-file": "3"
+        }
+      }
+    },
+    "compute82": {
+      "image": "${BLOCK82_IMAGE:?Run build-image.sh first}",
+      "restart": "unless-stopped",
+      "stop_grace_period": "60s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "20m",
+          "max-file": "3"
+        }
+      },
+      "ulimits": {
+        "nofile": {
+          "soft": 65536,
+          "hard": 65536
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python3",
+          "/fixture/control.py",
+          "check-row",
+          "82",
+          "2137"
+        ],
+        "interval": "20s",
+        "timeout": "15s",
+        "retries": 60,
+        "start_period": "60s"
+      },
+      "hostname": "compute82",
+      "command": [
+        "compute",
+        "82",
+        "2137"
+      ],
+      "ports": [
+        "127.0.0.1:2137:2137",
+        "127.0.0.1:8767:8765"
+      ],
+      "mem_limit": "6g"
+    },
+    "bootstrap82": {
+      "image": "${BLOCK82_IMAGE:?Run build-image.sh first}",
+      "entrypoint": [
+        "python3",
+        "/fixture/control.py"
+      ],
+      "command": [
+        "bootstrap",
+        "82",
+        "2137"
+      ],
+      "network_mode": "service:compute82",
+      "volumes": [
+        "bootstrap-state-82:/state"
+      ],
+      "depends_on": {
+        "compute82": {
+          "condition": "service_started"
+        },
+        "bootstrap-storage": {
+          "condition": "service_completed_successfully"
+        }
+      },
+      "restart": "on-failure",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "20m",
+          "max-file": "3"
+        }
+      }
+    }
+  },
+  "volumes": {
+    "pdisk-1": {},
+    "pdisk-2": {},
+    "pdisk-3": {},
+    "pdisk-4": {},
+    "pdisk-5": {},
+    "pdisk-6": {},
+    "pdisk-7": {},
+    "pdisk-8": {},
+    "pdisk-9": {},
+    "pdisk-10": {},
+    "pdisk-11": {},
+    "pdisk-12": {},
+    "pdisk-13": {},
+    "bootstrap-state-42": {},
+    "bootstrap-state-82": {},
+    "bootstrap-state-storage": {}
+  }
+}

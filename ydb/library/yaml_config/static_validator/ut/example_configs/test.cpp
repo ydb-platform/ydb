@@ -1,6 +1,8 @@
 #include <ydb/library/yaml_config/static_validator/builders.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/algorithm.h>
+#include <util/string/subst.h>
 #include <ydb/library/yaml_config/validator/validator.h>
 #include <ydb/library/yaml_config/validator/validator_builder.h>
 #include <ydb/library/yaml_config/static_validator/builders.h>
@@ -137,9 +139,9 @@ Y_UNIT_TEST_SUITE(StaticConfigExamples) {
         Y_ENSURE(Valid(v.Validate(yaml)));
     }
 
-    Y_UNIT_TEST(BLOCK42) {
+    void TestBlockErasureSchema(bool wide) {
         auto v = StaticConfigBuilder().CreateValidator();
-        const char* yaml = 
+        TString yaml =
         "static_erasure: block-4-2\n"
         "host_configs:\n"
         "- drive:\n"
@@ -308,8 +310,23 @@ Y_UNIT_TEST_SUITE(StaticConfigExamples) {
         "  services_enabled:\n"
         "    - legacy\n";
 
-        Y_ENSURE(Valid(v.Validate(yaml)));
+        if (wide) {
+            SubstGlobal(yaml, "block-4-2", "block-8-2");
+        }
+        UNIT_ASSERT(Valid(v.Validate(yaml)));
+        SubstGlobal(yaml, wide ? "block-8-2" : "block-4-2", "unsupported-erasure");
+        auto invalid = v.Validate(yaml);
+        UNIT_ASSERT(!invalid.Ok());
+        // Reject an unknown scheme at all four admission surfaces.
+        for (const TString path : {"/static_erasure", "/domains_config/", "/blob_storage_config/", "/channel_profile_config/"}) {
+            UNIT_ASSERT_C(AnyOf(invalid.Issues, [&](const auto& issue) {
+                return issue.NodePath.StartsWith(path);
+            }), path);
+        }
     }
+
+    Y_UNIT_TEST(BLOCK42) { TestBlockErasureSchema(false); }
+    Y_UNIT_TEST(BLOCK82) { TestBlockErasureSchema(true); }
 
     Y_UNIT_TEST(MIRROR_3_DC_NODES) {
         auto v = StaticConfigBuilder().CreateValidator();

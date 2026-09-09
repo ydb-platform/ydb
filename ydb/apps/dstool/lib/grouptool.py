@@ -8,6 +8,10 @@ import re
 import sys
 
 
+class UnsupportedErasureError(ValueError):
+    """Refuse operations whose failure model is unknown."""
+
+
 def decompose_location_map_by_levels(levels, locations):
     if levels == (0,) * len(levels):
         levels = 10, 20, 10, 40
@@ -60,7 +64,7 @@ def check_fail_model(coord_to_status, erasure):
         status_per_fdom[key[:2]] = status_per_fdom.get(key[:2], True) and value
     if erasure == 'none':
         return all(status_per_fdom.values())
-    elif erasure in ['block-4-2', 'mirror-3of4']:
+    elif erasure in ['block-4-2', 'block-8-2', 'mirror-3of4']:
         return sum(status_per_fdom.values()) >= len(status_per_fdom) - 2
     elif erasure == 'mirror-3-dc':
         nwdom = defaultdict(int)
@@ -71,7 +75,7 @@ def check_fail_model(coord_to_status, erasure):
     elif erasure == 'mirror-3':
         return sum(status_per_fdom.values()) >= len(status_per_fdom) - 1
     else:
-        assert False, 'unexpected erasure type %s' % erasure
+        raise UnsupportedErasureError('unsupported erasure type %s' % erasure)
 
 
 def vdisk_id_from_json(j):
@@ -122,6 +126,7 @@ class GroupMapper(object):
     _geom_for_erasure = {
         'mirror-3-dc': (3, 3, 1),
         'block-4-2': (1, 8, 1),
+        'block-8-2': (1, 12, 1),
         'mirror-3': (1, 4, 1),
         'none': (1, 1, 1),
         'mirror-3of4': (1, 8, 1),
@@ -270,6 +275,8 @@ class GroupMapper(object):
         assert False, 'failed to allocate group'
 
     def get_geometry(self):
+        if self.sp.ErasureSpecies not in self._geom_for_erasure:
+            raise UnsupportedErasureError('unsupported erasure type %s' % self.sp.ErasureSpecies)
         g = self.sp.Geometry
         geom = g.NumFailRealms, g.NumFailDomainsPerFailRealm, g.NumVDisksPerFailDomain
         if not any(geom):

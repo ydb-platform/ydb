@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
         const ui32 slotsPerDisk = 3;
 
         env->Runtime->FilterFunction = CatchSanitizeRequests;
-        env->CreateBoxAndPool(disksPerNode, numNodes * disksPerNode * slotsPerDisk / 9);
+        env->CreateBoxAndPool(disksPerNode, numNodes * disksPerNode * slotsPerDisk / groupType.BlobSubgroupSize());
         env->Runtime->FilterFunction = {};
     }
 
@@ -102,6 +102,10 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
 
     Y_UNIT_TEST(TestBlock4Plus2) {
         Test(TBlobStorageGroupType::Erasure4Plus2Block, 1, 10, 2);
+    }
+
+    Y_UNIT_TEST(TestBlock82) {
+        Test(TBlobStorageGroupType::Erasure8Plus2Block, 1, 14, 2);
     }
 
     Y_UNIT_TEST(TestMirror3of4) {

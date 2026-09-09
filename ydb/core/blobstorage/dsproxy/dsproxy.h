@@ -553,7 +553,8 @@ struct TBlobStorageGroupAssimilateParameters {
 };
 IActor* CreateBlobStorageGroupAssimilateRequest(TBlobStorageGroupAssimilateParameters params);
 
-IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon);
+IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
+    const TControlWrapper& dormantTimeoutMinutes = DormantTimeoutDefaultControl);
 
 struct TBlobStorageProxyControlWrappers {
     TMemorizableControlWrapper EnablePutBatching;
@@ -561,6 +562,7 @@ struct TBlobStorageProxyControlWrappers {
 
     TMemorizableControlWrapper LongRequestThresholdMs = LongRequestThresholdDefaultControl;
     TMemorizableControlWrapper MaxPutTimeoutSeconds = MaxPutTimeoutDefaultControl;
+    TMemorizableControlWrapper DormantTimeoutMinutes = DormantTimeoutDefaultControl;
 
     TMemorizableControlWrapper EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGenerationDefaultControl;
     TMemorizableControlWrapper EnableStorageRetroTraceCollectionSlowRequests =

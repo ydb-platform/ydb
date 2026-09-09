@@ -773,7 +773,6 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
     std::optional<ui64> minOffset;
     for (const auto& [_, info] : Self.Clients) {
         if (info->NextMessageOffset && *info->NextMessageOffset > event.GetEndOffset()) {
-            event.Confirm(event.GetEndOffset());
             Self.ThrowFatalError(TStatus::Fail(
                 EStatusId::BAD_REQUEST,
                 TStringBuilder() << "Requested offsets do not exist in the topic \"" << Self.TopicPath

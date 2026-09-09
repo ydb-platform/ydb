@@ -1196,7 +1196,6 @@ private:
                     << " exceeds the end offset " << event.GetEndOffset()
                     << ". The topic may have been recreated. Recreate or restart the streaming query.";
                 SRC_LOG_E("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " " << message);
-                event.Confirm(event.GetEndOffset());
                 Self.Send(Self.ComputeActorId, new TEvAsyncInputError(
                     Self.InputIndex,
                     TIssues({TIssue(message)}),

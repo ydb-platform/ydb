@@ -1476,6 +1476,10 @@ TType* TProtoImporter::ImportTypeFromProto(const Ydb::Type& input) {
             }
             break;
         }
+        case Ydb::Type::TYPE_NOT_SET:
+            ythrow yexception() << "Protobuf type is not set (TYPE_NOT_SET). "
+                "Possible cause: an empty list [] was passed as a query parameter without an explicit type declaration. "
+                "Use DECLARE $param AS List<SomeType> to specify the parameter type.";
         default: {
             ythrow yexception() << "Unknown protobuf type: "
                                 << input.DebugString();

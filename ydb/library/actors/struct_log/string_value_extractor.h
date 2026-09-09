@@ -24,10 +24,11 @@ public:
         return ExtractedValue;
     }
 
-    std::optional<TString> ExtractValue(const TStructuredMessage& message, const TString& name) {
+    const std::optional<TString>& ExtractValue(const TStructuredMessage& message, const TString& name) {
         auto index = message.GetValueIndex(name);
         if (!index.has_value()) {
-            return {};
+            static std::optional<TString> empty;
+            return empty;
         }
         return ExtractValue(message, index.value());
     }
@@ -41,7 +42,6 @@ public:
 protected:
     std::optional<TString> ExtractedValue;
     TInvokerMap TypeValueMap = TTypesMapping::CreateInvokerMap(*this);
-
 };
 
 }

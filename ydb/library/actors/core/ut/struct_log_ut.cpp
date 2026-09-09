@@ -3,6 +3,7 @@
 #include <ydb/library/actors/struct_log/json_writer.h>
 #include <ydb/library/actors/struct_log/key_name.h>
 #include <ydb/library/actors/struct_log/log_stack.h>
+#include <ydb/library/actors/struct_log/native_value_extractor.h>
 #include <ydb/library/actors/struct_log/native_types_mapping.h>
 #include <ydb/library/actors/struct_log/native_types_support.h>
 #include <ydb/library/actors/struct_log/string_value_extractor.h>
@@ -598,6 +599,24 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
         ptr = nullptr;
         TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", ptr}), TStringBuilder() << ptr);
+    }
+
+    Y_UNIT_TEST(NativeTypesToNative) {
+        auto msg = YDB_LOG_CREATE_MESSAGE({"value", "3"});
+
+        using TExtractorType = TNativeValueExtractor<TString>;
+        TExtractorType extractor;
+
+        auto result = extractor.ExtractValue(msg, "value");
+        Cerr << "ResultKind=" << static_cast<unsigned>(result.first) << Endl;
+        UNIT_ASSERT_EQUAL(result.first, TExtractorType::TResultKind::Ok);
+        UNIT_ASSERT(result.second.has_value());
+        UNIT_ASSERT_EQUAL(result.second.value(), "3");
+
+        result = extractor.ExtractValue(msg, "value1");
+        Cerr << "ResultKind=" << static_cast<unsigned>(result.first) << Endl;
+        UNIT_ASSERT_EQUAL(result.first, TExtractorType::TResultKind::NoValue);
+        UNIT_ASSERT(!result.second.has_value());
     }
 }
 }  // namespace NActors::NStructuredLog

@@ -13,6 +13,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/library/actors/core/executor_thread.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/table_creator/table_creator.h>
 #include <ydb/library/testlib/pq_helpers/mock_pq_gateway.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
@@ -62,11 +63,12 @@ struct TContinuationTest {
     static constexpr TStringBuf QueryName = "ContinuedQuery";
     static constexpr TStringBuf QueryPath = "/Root/ContinuedQuery";
 
-    static std::shared_ptr<TKikimrRunner> CreateRunner(const TIntrusivePtr<NTestUtils::IMockPqGateway>& gateway) {
+    static std::shared_ptr<TKikimrRunner> CreateRunner(const TIntrusivePtr<NTestUtils::IMockPqGateway>& gateway, ui32 nodeCount) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableStreamingQueries(true);
         config.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
         return NFederatedQueryTest::MakeKikimrRunner(false, nullptr, nullptr, config, NYql::NDq::CreateS3ActorsFactory(), {
+            .NodeCount = nodeCount,
             .PqGateway = gateway,
             .UseLocalCheckpointsInStreamingQueries = true,
             .UseRealThreads = false,
@@ -74,7 +76,7 @@ struct TContinuationTest {
     }
 
     TIntrusivePtr<NTestUtils::IMockPqGateway> Gateway = NTestUtils::CreateMockPqGateway();
-    std::shared_ptr<TKikimrRunner> Runner = CreateRunner(Gateway);
+    std::shared_ptr<TKikimrRunner> Runner;
     TTestActorRuntime& Runtime = *Runner->GetTestServer().GetRuntime();
     TQueryClient Client = Runner->GetQueryClient(TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
     TQueryClient MetadataClient = Runner->GetQueryClient(TClientSettings().AuthToken(BUILTIN_ACL_METADATA));
@@ -83,13 +85,17 @@ struct TContinuationTest {
     TTestActorRuntime::TEventObserverHolder TrackingObserver;
     TTestActorRuntime::TEventObserverHolder FinishedObserver;
 
-    explicit TContinuationTest(bool initializeMetadata = true) {
-        Runtime.GetAppData().FeatureFlags.SetEnableStreamingQueries(true);
+    explicit TContinuationTest(bool initializeMetadata = true, ui32 nodeCount = 1)
+        : Runner(CreateRunner(Gateway, nodeCount))
+    {
         Runtime.SetRegistrationObserverFunc([](auto& runtime, const TActorId&, const TActorId& actor) {
             runtime.EnableScheduleForActor(actor);
         });
-        Runtime.EnableScheduleForActor(Runtime.GetActorSystem(0)->LookupLocalService(
-            NMetadata::NProvider::MakeServiceId(Runtime.GetNodeId())));
+        for (ui32 node = 0; node < nodeCount; ++node) {
+            Runtime.GetAppData(node).FeatureFlags.SetEnableStreamingQueries(true);
+            Runtime.EnableScheduleForActor(Runtime.GetActorSystem(node)->LookupLocalService(
+                NMetadata::NProvider::MakeServiceId(Runtime.GetNodeId(node))));
+        }
         TrackingObserver = Runtime.AddObserver<TEvTrackOperationCompletion>([this](auto& ev) {
             if (ev->Get()->GetObjectId() == QueryName) {
                 Tracking.push_back(CopyTracking(*ev->Get()));
@@ -122,6 +128,26 @@ struct TContinuationTest {
     auto Start(const TString& query) {
         return Client.ExecuteQuery(query, TTxControl::NoTx(),
             TExecuteQuerySettings().RetrySettings(NYdb::NRetry::TRetryOperationSettings().MaxRetries(0)));
+    }
+
+    ui32 RemoteOwnerNode() {
+        const auto schemeShard = ResolveTablet(Runtime, Tests::SchemeRoot);
+        return schemeShard.NodeId() == Runtime.GetNodeId(0) ? 1 : 0;
+    }
+
+    TActorId StartOnNode(const TString& query, ui32 node) {
+        const auto edge = Runtime.AllocateEdgeActor(node);
+        auto request = MakeHolder<TEvKqp::TEvQueryRequest>();
+        ActorIdToProto(edge, request->Record.MutableRequestActorId());
+        request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+        request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+        request->Record.MutableRequest()->SetDatabase("/Root");
+        request->Record.MutableRequest()->SetQuery(query);
+        NACLib::TUserToken token(BUILTIN_ACL_ROOT, TVector<NACLib::TSID>{});
+        token.SaveSerializationInfo();
+        request->Record.SetUserToken(token.GetSerializedToken());
+        Runtime.Send(new IEventHandle(MakeKqpProxyID(Runtime.GetNodeId(node)), edge, request.Release()), node);
+        return edge;
     }
 
     TExecuteQueryResult Exec(const TString& query, EStatus status = EStatus::SUCCESS) {
@@ -213,8 +239,9 @@ struct TContinuationTest {
     void CrashOwner(TActorId owner) {
         // Simulate owner loss without running operation cleanup or acknowledging the client.
         UNIT_ASSERT(Runtime.FindActor(owner));
-        Runtime.Send(new IEventHandle(owner, Runtime.AllocateEdgeActor(),
-            new TEvents::TEvResumeRunnable(new TOwnerCrash()), TEvents::TEvResumeRunnable::EventFlags));
+        const auto node = owner.NodeId() - Runtime.GetFirstNodeId();
+        Runtime.Send(new IEventHandle(owner, Runtime.AllocateEdgeActor(node),
+            new TEvents::TEvResumeRunnable(new TOwnerCrash()), TEvents::TEvResumeRunnable::EventFlags), node);
         WaitFor("operation owner unregistered", [&] { return !Runtime.FindActor(owner); });
     }
 
@@ -492,6 +519,105 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
         const auto requests = tracking.size();
         tracking.Unblock().Stop();
         f.WaitFinished(requests);
+        f.CheckSettled();
+        f.Exec("DROP STREAMING QUERY ContinuedQuery;");
+        f.CheckDropped();
+    }
+
+    Y_UNIT_TEST_TWIN(MultiNodeSchemeShardContinuesAfterOwnerStops, Reboot) {
+        TContinuationTest f(true, 2);
+        for (const auto& query : {TContinuationTest::CreateQuery(), TString("ALTER STREAMING QUERY ContinuedQuery SET (RUN = FALSE);"),
+                TString("DROP STREAMING QUERY ContinuedQuery;")}) {
+            const auto finished = f.Finished;
+            const auto node = f.RemoteOwnerNode();
+            TBlockEvents<TEvTrackOperationCompletion> tracking(f.Runtime);
+            TBlockEvents<TEvKqp::TEvQueryRequest> locking(f.Runtime, IsLockRequest);
+            f.StartOnNode(query, node);
+            f.WaitFor("remote operation registered before locking", [&] { return !tracking.empty() && !locking.empty(); });
+            const auto request = CopyTracking(*tracking.front()->Get());
+            const auto owner = request->GetOperationOwner();
+            UNIT_ASSERT_VALUES_EQUAL(owner.NodeId(), f.Runtime.GetNodeId(node));
+            UNIT_ASSERT_VALUES_UNEQUAL(tracking.front()->Sender.NodeId(), owner.NodeId());
+            // Tracking is local to SchemeShard; only the owner checks cross Interconnect.
+            UNIT_ASSERT_VALUES_EQUAL(tracking.front()->Sender.NodeId(), tracking.front()->Recipient.NodeId());
+
+            f.CrashOwner(owner);
+            locking.Stop().clear();
+            if constexpr (Reboot) {
+                RebootTablet(f.Runtime, request->GetPathId().OwnerId, f.Runtime.AllocateEdgeActor());
+                f.WaitFor("SchemeShard restored the remote owner's operation", [&] { return tracking.size() >= 2; });
+                UNIT_ASSERT(tracking.back()->Get()->GetRequestGeneration() > request->GetRequestGeneration());
+            }
+
+            ui64 remoteNondeliveries = 0;
+            auto undelivered = f.Runtime.AddObserver<TEvents::TEvUndelivered>([&](auto& ev) {
+                if (ev->Sender == owner && ev->Get()->SourceType == TMainCheckAliveRequest::EventType) {
+                    UNIT_ASSERT_VALUES_UNEQUAL(ev->Sender.NodeId(), ev->Recipient.NodeId());
+                    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Reason, TEvents::TEvUndelivered::ReasonActorUnknown);
+                    ++remoteNondeliveries;
+                }
+            });
+            const auto requests = tracking.size();
+            tracking.Unblock().Stop();
+            f.WaitFinished(finished + requests);
+            UNIT_ASSERT(remoteNondeliveries);
+            if (query.StartsWith("DROP")) {
+                f.CheckDropped();
+            } else {
+                f.CheckSettled();
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(MultiNodeTrackerRetriesAfterDisconnect, StopOwner) {
+        TContinuationTest f(true, 2);
+        const auto node = f.RemoteOwnerNode();
+        TBlockEvents<TEvTrackOperationCompletion> tracking(f.Runtime);
+        TBlockEvents<TEvKqp::TEvQueryRequest> locking(f.Runtime, IsLockRequest);
+        const auto edge = f.StartOnNode(TContinuationTest::CreateQuery(), node);
+        f.WaitFor("remote owner waiting for its lock", [&] { return !tracking.empty() && !locking.empty(); });
+        const auto owner = tracking.front()->Get()->GetOperationOwner();
+        UNIT_ASSERT_VALUES_EQUAL(owner.NodeId(), f.Runtime.GetNodeId(node));
+        UNIT_ASSERT_VALUES_UNEQUAL(tracking.front()->Sender.NodeId(), owner.NodeId());
+
+        TActorId checker;
+        ui64 replies = 0;
+        bool disconnected = false;
+        auto checks = f.Runtime.AddObserver([&](auto& ev) {
+            if (ev->Sender == owner && ev->GetTypeRewrite() == TMainCheckAliveResponse::EventType) {
+                UNIT_ASSERT_VALUES_UNEQUAL(ev->Sender.NodeId(), ev->Recipient.NodeId());
+                UNIT_ASSERT(ev->InterconnectSession);
+                if (++replies == 1) {
+                    checker = ev->Recipient;
+                    // Lose the first reply with the session so the same checker must retry.
+                    ev.Reset();
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(ev->Recipient, checker);
+                }
+            } else if (ev->Recipient == checker && ev->GetTypeRewrite() == TEvInterconnect::TEvNodeDisconnected::EventType) {
+                disconnected = true;
+            }
+        });
+        tracking.Unblock().Stop();
+        f.WaitFor("remote owner answered the first probe", [&] { return replies; });
+        f.Runtime.DisconnectNodes(checker.NodeId() - f.Runtime.GetFirstNodeId(), node);
+        f.WaitFor("owner checker observed the disconnected session", [&] { return disconnected; });
+        UNIT_ASSERT_VALUES_EQUAL(f.Finished, 0);
+
+        if constexpr (StopOwner) {
+            f.CrashOwner(owner);
+            locking.Stop().clear();
+        } else {
+            f.WaitFor("owner checker retried after reconnection", [&] { return replies >= 2; });
+            UNIT_ASSERT_VALUES_EQUAL(f.Finished, 0);
+            checks.Remove();
+            locking.Unblock().Stop();
+            const auto response = f.Runtime.GrabEdgeEvent<TEvKqp::TEvQueryResponse>(edge, TDuration::Seconds(60));
+            UNIT_ASSERT(response);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS,
+                response->Get()->Record.DebugString());
+        }
+        f.WaitFinished(1);
         f.CheckSettled();
         f.Exec("DROP STREAMING QUERY ContinuedQuery;");
         f.CheckDropped();
@@ -1587,15 +1713,23 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
         f.CheckDropped();
     }
 
-    Y_UNIT_TEST_TWIN(ContinuesPartiallyStartedStreamingExecution, ScriptError) {
-        TContinuationTest f;
+    Y_UNIT_TEST_QUAD(ContinuesPartiallyStartedStreamingExecution, ScriptError, RemoteOwner) {
+        TContinuationTest f(true, RemoteOwner ? 2 : 1);
         TBlockEvents<TEvTrackOperationCompletion> tracking(f.Runtime);
         TBlockEvents<TEvKqp::TEvScriptRequest> starting(f.Runtime);
-        f.Start("CREATE STREAMING QUERY ContinuedQuery AS DO BEGIN INSERT INTO Source.output SELECT value "
-            "FROM Source.input WITH (FORMAT = 'raw', SCHEMA (value String NOT NULL)); END DO;");
+        const TString query = "CREATE STREAMING QUERY ContinuedQuery AS DO BEGIN INSERT INTO Source.output SELECT value "
+            "FROM Source.input WITH (FORMAT = 'raw', SCHEMA (value String NOT NULL)); END DO;";
+        if constexpr (RemoteOwner) {
+            f.StartOnNode(query, f.RemoteOwnerNode());
+        } else {
+            f.Start(query);
+        }
         f.WaitFor("execution allocated before script creation", [&] { return !tracking.empty() && !starting.empty(); });
         const auto abandonedExecution = f.CheckRow().GetCurrentExecutionId();
         UNIT_ASSERT(abandonedExecution);
+        if constexpr (RemoteOwner) {
+            UNIT_ASSERT_VALUES_UNEQUAL(tracking.front()->Sender.NodeId(), tracking.front()->Get()->GetOperationOwner().NodeId());
+        }
         f.CrashOwner(tracking.front()->Get()->GetOperationOwner());
         starting.Stop().clear();
         TTestActorRuntime::TEventObserverHolder failure;

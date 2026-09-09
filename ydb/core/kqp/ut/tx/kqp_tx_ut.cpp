@@ -1331,6 +1331,9 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         AddIndex,
         DropIndex,
         DropIndexWithIndexRead,
+        AlterIndexWithIndexRead,
+        AlterTableWithIndexRead,
+        MoveTable,
         AddChangefeed,
         DropChangefeed,
         SetFamily,
@@ -1349,6 +1352,9 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         ESchemeOp::AddIndex,
         ESchemeOp::DropIndex,
         ESchemeOp::DropIndexWithIndexRead,
+        ESchemeOp::AlterIndexWithIndexRead,
+        ESchemeOp::AlterTableWithIndexRead,
+        ESchemeOp::MoveTable,
         ESchemeOp::AddChangefeed,
         ESchemeOp::DropChangefeed,
         ESchemeOp::SetFamily,
@@ -1358,6 +1364,29 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         ESchemeOp::ViewRecreate,
         ESchemeOp::ViewDrop,
     };
+
+    TStringBuf ToString(ESchemeOp op) {
+        switch (op) {
+            case ESchemeOp::AddColumn: return "AddColumn";
+            case ESchemeOp::DropReadColumn: return "DropReadColumn";
+            case ESchemeOp::DropUnreadColumn: return "DropUnreadColumn";
+            case ESchemeOp::TruncateTable: return "TruncateTable";
+            case ESchemeOp::AddIndex: return "AddIndex";
+            case ESchemeOp::DropIndex: return "DropIndex";
+            case ESchemeOp::DropIndexWithIndexRead: return "DropIndexWithIndexRead";
+            case ESchemeOp::AlterIndexWithIndexRead: return "AlterIndexWithIndexRead";
+            case ESchemeOp::AlterTableWithIndexRead: return "AlterTableWithIndexRead";
+            case ESchemeOp::MoveTable: return "MoveTable";
+            case ESchemeOp::AddChangefeed: return "AddChangefeed";
+            case ESchemeOp::DropChangefeed: return "DropChangefeed";
+            case ESchemeOp::SetFamily: return "SetFamily";
+            case ESchemeOp::SetDefault: return "SetDefault";
+            case ESchemeOp::DropCreateTable: return "DropCreateTable";
+            case ESchemeOp::ViewReadAddColumn: return "ViewReadAddColumn";
+            case ESchemeOp::ViewRecreate: return "ViewRecreate";
+            case ESchemeOp::ViewDrop: return "ViewDrop";
+        }
+    }
 
     struct TSchemeOpSpec {
         TString Create = R"(
@@ -1424,6 +1453,40 @@ Y_UNIT_TEST_SUITE(KqpTx) {
                 spec.Setup = "ALTER TABLE `/Root/SchemeOpsTable` ADD INDEX ValueIndex GLOBAL SYNC ON (`Value`);";
                 spec.Operation = "ALTER TABLE `/Root/SchemeOpsTable` DROP INDEX ValueIndex;";
                 spec.Read = R"(SELECT Key, Value FROM `/Root/SchemeOpsTable` VIEW ValueIndex WHERE Value = "One";)";
+                spec.RepeatableReadStatus = EStatus::SCHEME_ERROR;
+                spec.RelaxedStatus = EStatus::SCHEME_ERROR;
+                break;
+
+            case ESchemeOp::AlterIndexWithIndexRead:
+                // Only the index's partitioning changes, which is storage layout: the rows the
+                // index returns are the same, so the transaction has nothing to be saved from.
+                spec.Setup = "ALTER TABLE `/Root/SchemeOpsTable` ADD INDEX ValueIndex GLOBAL SYNC ON (`Value`);";
+                spec.Operation = "ALTER TABLE `/Root/SchemeOpsTable` ALTER INDEX ValueIndex SET AUTO_PARTITIONING_MIN_PARTITIONS_COUNT 10;";
+                spec.Read = R"(SELECT Key, Value FROM `/Root/SchemeOpsTable` VIEW ValueIndex WHERE Value = "One";)";
+                spec.RepeatableReadStatus = EStatus::SUCCESS;
+                break;
+
+            case ESchemeOp::AlterTableWithIndexRead:
+                // The read goes through the index but asks for a column the index does not
+                // cover, so it has to reach the table that then gains a column. Reading only
+                // covered columns is served from the index alone and is a different case.
+                spec.Create = R"(
+                    CREATE TABLE `/Root/SchemeOpsTable` (
+                        Key Uint64,
+                        Value String,
+                        Payload String,
+                        PRIMARY KEY (Key)
+                    );
+                )";
+                spec.Setup = "ALTER TABLE `/Root/SchemeOpsTable` ADD INDEX ValueIndex GLOBAL SYNC ON (`Value`);";
+                spec.Operation = "ALTER TABLE `/Root/SchemeOpsTable` ADD COLUMN Extra Uint64;";
+                spec.Read = R"(SELECT Key, Payload FROM `/Root/SchemeOpsTable` VIEW ValueIndex WHERE Value = "One";)";
+                break;
+
+            case ESchemeOp::MoveTable:
+                // Renaming allocates a new path id and drops the old path, so the statement
+                // cannot resolve the table at all and never reaches the schema version check.
+                spec.Operation = "ALTER TABLE `/Root/SchemeOpsTable` RENAME TO `/Root/SchemeOpsTableMoved`;";
                 spec.RepeatableReadStatus = EStatus::SCHEME_ERROR;
                 spec.RelaxedStatus = EStatus::SCHEME_ERROR;
                 break;
@@ -1521,12 +1584,13 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
         void Execute() const {
             const auto spec = MakeSchemeOpSpec(Operation);
+            const TString op = TStringBuilder() << "operation " << ToString(Operation);
 
             TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
             auto db = kikimr.GetTableClient();
-            auto createSession = [&db]() {
+            auto createSession = [&]() {
                 auto result = db.CreateSession().GetValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, op << ": " << result.GetIssues().ToString());
                 return result.GetSession();
             };
             auto schemeSession = createSession();
@@ -1539,7 +1603,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
             auto result = session.ExecuteDataQuery(Q_(R"(
                 REPLACE INTO `/Root/SchemeOpsTable` (Key, Value) VALUES (1u, "One"), (2u, "Two");
             )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, op << ": " << result.GetIssues().ToString());
 
             if (spec.Setup) {
                 schemeResult = schemeSession.ExecuteSchemeQuery(spec.Setup).ExtractValueSync();
@@ -1549,10 +1613,10 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
             result = session.ExecuteDataQuery(Q_(spec.Read),
                 TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, op << ": " << result.GetIssues().ToString());
 
             auto tx = result.GetTransaction();
-            UNIT_ASSERT(tx);
+            UNIT_ASSERT_C(tx, op);
 
             schemeResult = schemeSession.ExecuteSchemeQuery(spec.Operation).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(schemeResult.GetStatus(), EStatus::SUCCESS,
@@ -1562,7 +1626,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), spec.RepeatableReadStatus,
                 result.GetIssues().ToString());
             if (spec.RepeatableReadStatus == EStatus::ABORTED) {
-                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Scheme changed for");
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Scheme changed for", op);
             }
 
             // A failed statement releases the transaction; a tolerated change leaves it usable.
@@ -1612,6 +1676,24 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     Y_UNIT_TEST(SchemeChangeDropIndexWithIndexRead) {
         TSchemeChangeInTxTester tester;
         tester.Operation = ESchemeOp::DropIndexWithIndexRead;
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeAlterIndexWithIndexRead) {
+        TSchemeChangeInTxTester tester;
+        tester.Operation = ESchemeOp::AlterIndexWithIndexRead;
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeAlterTableWithIndexRead) {
+        TSchemeChangeInTxTester tester;
+        tester.Operation = ESchemeOp::AlterTableWithIndexRead;
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeMoveTable) {
+        TSchemeChangeInTxTester tester;
+        tester.Operation = ESchemeOp::MoveTable;
         tester.Execute();
     }
 
@@ -1675,6 +1757,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
         void Execute() const {
             const auto spec = MakeSchemeOpSpec(Operation);
+            const TString op = TStringBuilder() << "operation " << ToString(Operation);
 
             TKikimrSettings settings;
             settings.SetWithSampleTables(false);
@@ -1683,9 +1766,9 @@ Y_UNIT_TEST_SUITE(KqpTx) {
             TKikimrRunner kikimr(settings);
 
             auto db = kikimr.GetQueryClient();
-            auto createSession = [&db]() {
+            auto createSession = [&]() {
                 auto result = db.GetSession().GetValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, op << ": " << result.GetIssues().ToString());
                 return result.GetSession();
             };
             auto session = createSession();
@@ -1700,7 +1783,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
                 REPLACE INTO `/Root/SchemeOpsTable` (Key, Value) VALUES (1u, "One"), (2u, "Two");
             )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, op << ": " << result.GetIssues().ToString());
 
             if (spec.Setup) {
                 schemeResult = schemeSession.ExecuteQuery(spec.Setup,
@@ -1711,10 +1794,10 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
             result = session.ExecuteQuery(spec.Read,
                 NYdb::NQuery::TTxControl::BeginTx(TxSettings)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, op << ": " << result.GetIssues().ToString());
 
             auto tx = result.GetTransaction();
-            UNIT_ASSERT(tx);
+            UNIT_ASSERT_C(tx, op);
 
             schemeResult = schemeSession.ExecuteQuery(spec.Operation,
                 NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -1726,9 +1809,9 @@ Y_UNIT_TEST_SUITE(KqpTx) {
                 : spec.RelaxedStatus;
 
             result = session.ExecuteQuery(spec.Read, NYdb::NQuery::TTxControl::Tx(*tx)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, op << ": " << result.GetIssues().ToString());
             if (expectedStatus == EStatus::ABORTED) {
-                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Scheme changed for");
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Scheme changed for", op);
             }
 
             // A mode that keeps reading past the scheme change keeps a usable transaction,

@@ -2060,11 +2060,17 @@ private:
         auto counters = Counters->GetKqpCounters()->GetSubgroup("subsystem", "row_dispatcher");
 
         const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
+        NFq::TRowDispatcherSettings settings(
+            streamingQueries.GetExternalStorage(),
+            FeatureFlags.GetEnableSharedReadingStructuredJsonParsing()
+        );
+
+        if (FeatureFlags.GetEnableRowDispatcherMemoryLimiting()) {
+            settings.SetMemoryQuotaManager(NRm::CreateMemoryQuotaManager(ResourceManager_));
+        }
+
         auto rowDispatcher = NFq::NewRowDispatcherService(
-            NFq::TRowDispatcherSettings(
-                streamingQueries.GetExternalStorage(),
-                FeatureFlags.GetEnableSharedReadingStructuredJsonParsing()
-            ).SetMemoryQuotaManager(NRm::CreateMemoryQuotaManager(ResourceManager_)),
+            settings,
             NKikimr::CreateYdbCredentialsProviderFactory,
             FederatedQuerySetup->CredentialsFactory,
             AppData()->FunctionRegistry,

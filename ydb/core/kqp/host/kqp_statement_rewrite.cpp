@@ -231,9 +231,16 @@ std::optional<TCreateTableAsResult> RewriteCreateTableAs(
     }
 
     auto primaryKey = create->Child(4)->Child(2)->Child(1);
-    THashSet<TStringBuf> primariKeyColumns;
+    // IMPORTANT: preserve the DDL primary key column order. The order of
+    // CtasShardingColumns below must match the target table's hash sharding
+    // columns (schemeshard derives them from the PK in DDL order when there is
+    // no PARTITION BY). The runtime hashes rows on these columns in order
+    // (sender: DQ ColumnShardHashV1, receiver: TConsistencySharding64), so a
+    // permuted order makes the hashes uncorrelated and routes rows to wrong
+    // shards. Do NOT use a hash set here.
+    TVector<TStringBuf> primariKeyColumns;
     primaryKey->ForEachChild([&](const auto& child) {
-        primariKeyColumns.insert(child.Content());
+        primariKeyColumns.push_back(child.Content());
     });
 
     std::vector<NYql::TExprNodePtr> columnNodes;

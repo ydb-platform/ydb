@@ -47,12 +47,14 @@ struct TEvStreamingQueryNodesManager {
 //   graphParams  – serialized DQ task graph snapshot
 //   checkPeriod  – how often to repeat the check (default 1 minute)
 //   startDelay   – time to wait for initial compute states before first check
+//   maxTasksPerStage – resolved KQP MaxTasksPerStage pragma value
 NActors::IActor* CreateStreamingQueryNodesManager(
     NActors::TActorId runActorId,
     TString tenantName,
     TString queryId,
     const NProto::TGraphParams& graphParams,
     TDuration checkPeriod = TDuration::Minutes(1),
-    TDuration startDelay = TDuration::Minutes(1));
+    TDuration startDelay = TDuration::Minutes(1),
+    ui64 maxTasksPerStage = 0);
 
 } // namespace NFq

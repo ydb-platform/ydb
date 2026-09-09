@@ -57,7 +57,13 @@ NProto::TGraphParams MakeTopicSourceGraph(ui64 taskCount, ui64 topicPartitionsCo
     return graphParams;
 }
 
-TActorId CreateManager(TTestActorRuntime& runtime, TActorId edgeActor, ui64 taskCount, ui64 partitionsCount) {
+TActorId CreateManager(
+    TTestActorRuntime& runtime,
+    TActorId edgeActor,
+    ui64 taskCount,
+    ui64 partitionsCount,
+    ui64 maxTasksPerStage = 0)
+{
     runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_TRACE);
     const auto manager = runtime.Register(CreateStreamingQueryNodesManager(
         edgeActor,
@@ -65,7 +71,8 @@ TActorId CreateManager(TTestActorRuntime& runtime, TActorId edgeActor, ui64 task
         "query",
         MakeTopicSourceGraph(taskCount, partitionsCount),
         TDuration::Seconds(1),
-        TDuration::Zero()));
+        TDuration::Zero(),
+        maxTasksPerStage));
     runtime.EnableScheduleForActor(manager, true);
     runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
     return manager;
@@ -144,6 +151,20 @@ Y_UNIT_TEST(NoAbortWhenNodesExceedExpectedTasksAndQueryUsesExpectedNodes) {
     UNIT_ASSERT(!GrabAbort(runtime, handle));
 }
 
+Y_UNIT_TEST(NoAbortWhenMaxTasksPerStageLimitsTopicReaderTasks) {
+    TTestActorRuntime runtime(1, false);
+    runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+    const TActorId edgeActor = runtime.AllocateEdgeActor();
+
+    // 100 partitions would require 20 tasks, but MaxTasksPerStage limits the query to one task.
+    const TActorId manager = CreateManager(runtime, edgeActor, 1, 100, 1);
+    InjectTaskStates(runtime, manager, {1});
+    TriggerCheck(runtime, manager, edgeActor, {1, 2, 3, 4});
+
+    TAutoPtr<IEventHandle> handle;
+    UNIT_ASSERT(!GrabAbort(runtime, handle));
+}
+
 Y_UNIT_TEST(FailedLookupDoesNotAbort) {
     TTestActorRuntime runtime(1, false);
     runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
@@ -180,3 +201,4 @@ Y_UNIT_TEST(AbortIsSentOnlyOnce) {
 } // Y_UNIT_TEST_SUITE
 
 } // namespace NFq
+

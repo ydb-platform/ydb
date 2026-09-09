@@ -1319,7 +1319,8 @@ private:
                     context->StreamingQueryPath,
                     graphParams,
                     TDuration::Seconds(10),
-                    TDuration::Seconds(10)));
+                    TDuration::Seconds(10),
+                    Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetMaxTasksPerStage()));
             YDB_LOG_DEBUG("Created new StreamingQueryNodesManager",
                 {"marker", "KQPDATA"},
                 {"actorId", SelfId()},

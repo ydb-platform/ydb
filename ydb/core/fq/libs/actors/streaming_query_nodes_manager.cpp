@@ -15,10 +15,9 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
 
-#define LOG_T(msg, ...) YDB_LOG_TRACE(msg, {"queryId", QueryId}, ##__VA_ARGS__)
 #define LOG_D(msg, ...) YDB_LOG_DEBUG(msg, {"queryId", QueryId}, ##__VA_ARGS__)
+#define LOG_I(msg, ...) YDB_LOG_INFO(msg, {"queryId", QueryId}, ##__VA_ARGS__)
 #define LOG_W(msg, ...) YDB_LOG_WARN(msg, {"queryId", QueryId}, ##__VA_ARGS__)
-#define LOG_E(msg, ...) YDB_LOG_ERROR(msg, {"queryId", QueryId}, ##__VA_ARGS__)
 
 namespace NFq {
 
@@ -99,13 +98,15 @@ public:
         TString queryId,
         const NProto::TGraphParams& graphParams,
         TDuration checkPeriod,
-        TDuration startDelay)
+        TDuration startDelay,
+        ui64 maxTasksPerStage)
         : RunActorId(runActorId)
         , TenantName(std::move(tenantName))
         , QueryId(std::move(queryId))
         , GraphParams(graphParams)
         , CheckPeriod(checkPeriod)
         , StartDelay(startDelay)
+        , MaxTasksPerStage(maxTasksPerStage)
     {
         for (const auto& task : GraphParams.GetTasks()) {
             if (IsTopicSourceTask(task)) {
@@ -208,7 +209,8 @@ private:
         }
 
         const ui64 nodesWithQuery = QueryNodes.size();
-        const ui64 expectedTasks = (TopicPartitionsCount + 5 - 1) / 5;
+        const ui64 expectedTasks = NYql::NDq::GetExpectedTopicReadTasks(
+            TopicPartitionsCount, MaxTasksPerStage, !MaxTasksPerStage);
         const ui64 expectedNodesWithQuery = Min(totalNodes, expectedTasks);
 
         if (nodesWithQuery < expectedNodesWithQuery) {
@@ -250,6 +252,7 @@ private:
     const NProto::TGraphParams GraphParams;
     const TDuration CheckPeriod;
     const TDuration StartDelay;
+    const ui64 MaxTasksPerStage;
 
     // Contains topic-source tasks and their latest known node, when reported.
     THashMap<ui64, TMaybe<ui32>> TopicSourceTaskNodes;
@@ -273,7 +276,8 @@ IActor* CreateStreamingQueryNodesManager(
     TString queryId,
     const NProto::TGraphParams& graphParams,
     TDuration checkPeriod,
-    TDuration startDelay)
+    TDuration startDelay,
+    ui64 maxTasksPerStage)
 {
     return new TStreamingQueryNodesManager(
         runActorId,
@@ -281,7 +285,8 @@ IActor* CreateStreamingQueryNodesManager(
         std::move(queryId),
         graphParams,
         checkPeriod,
-        startDelay);
+        startDelay,
+        maxTasksPerStage);
 }
 
 } // namespace NFq

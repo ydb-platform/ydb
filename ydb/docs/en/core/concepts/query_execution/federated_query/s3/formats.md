@@ -294,8 +294,6 @@ Parquet format records will be written using the [Snappy](https://en.wikipedia.o
 
 {% endnote %}
 
-[Schema](external_data_source.md#schema) columns are matched with file columns by name. If a column declared as optional in the schema (without `NOT NULL`) is absent in the file, it is read as `NULL`. This allows reading files with different sets of columns in a single query, for example, after a new column has been added to the data schema. A missing column declared as `NOT NULL` results in a read error.
-
 {% cut "Example query" %}
 
 ```yql

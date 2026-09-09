@@ -104,6 +104,10 @@ public:
         return partition.CleanUpBlobs(nullptr, ctx);
     }
 
+    static TInstant GetWriteTimeEstimate(TPartition& partition, ui64 offset) {
+        return partition.GetWriteTimeEstimate(offset);
+    }
+
 private:
     TInitMetaStep* MetaStep;
 };
@@ -5146,116 +5150,6 @@ private:
     std::function<void(const TActorContext&)> Body;
 };
 
-<<<<<<< HEAD
-=======
-Y_UNIT_TEST_F(InitWithMetaOffsetsButNoDataKeysNormalizesEmptyPartition, TPartitionFixture) {
-    // Regression for #49507: meta says [0, 3804) but data range is NODATA.
-    // Without normalization InitComplete → ReportCounters → GetWriteTimeEstimate crashes.
-    UNIT_ASSERT(Ctx.Defined());
-
-    constexpr ui64 metaEnd = 3804;
-    TPartition* partition = CreatePartition({
-        .Partition = TPartitionId{1},
-        .Begin = 0,
-        .End = metaEnd,
-        .Config = {
-            // Offset within stale meta range: before normalize AnyCommits would be true
-            // (Offset > BlobEncoder.StartOffset == 0); after normalize StartOffset == metaEnd.
-            .Consumers = {{.Consumer = "user", .Offset = 100}},
-        },
-        .EndWriteTimestamp = TInstant::Seconds(1),
-        .NoDataKeys = true,
-    });
-
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), metaEnd);
-
-    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
-    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
-    UNIT_ASSERT_VALUES_EQUAL(cz.StartOffset, metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(cz.EndOffset, metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(fwz.StartOffset, metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(fwz.EndOffset, metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(cz.Head.Offset, metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(fwz.Head.Offset, metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(cz.NewHead.Offset, metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(fwz.NewHead.Offset, metaEnd);
-    UNIT_ASSERT(cz.IsEmpty());
-    UNIT_ASSERT(fwz.IsEmpty());
-
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 0), TInstant::Zero());
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, metaEnd), TInstant::Zero());
-    UNIT_ASSERT(!TPartitionTestWrapper::GetAnyCommits(*partition, "user"));
-}
-
-Y_UNIT_TEST_F(InitWithMetaOffsetsEmptyOkDataRangeNormalizesEmptyPartition, TPartitionFixture) {
-    // Same inconsistent meta as #49507, but data range returns OK with zero pairs —
-    // hits FormHeadAndProceed empty-keys → NormalizeOffsetsForEmptyData.
-    UNIT_ASSERT(Ctx.Defined());
-
-    constexpr ui64 metaEnd = 3804;
-    TPartition* partition = CreatePartition({
-        .Partition = TPartitionId{1},
-        .Begin = 0,
-        .End = metaEnd,
-        .EndWriteTimestamp = TInstant::Seconds(1),
-        .EmptyDataRangeOk = true,
-    });
-
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), metaEnd);
-    UNIT_ASSERT(TPartitionTestWrapper::CompactionBlobEncoder(*partition).IsEmpty());
-    UNIT_ASSERT(TPartitionTestWrapper::BlobEncoder(*partition).IsEmpty());
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 0), TInstant::Zero());
-}
-
-Y_UNIT_TEST_F(InitWithNonZeroMetaStartAndNoDataKeysNormalizesToEnd, TPartitionFixture) {
-    // Retention advanced StartOffset; meta [100, 3804) but blobs are gone.
-    UNIT_ASSERT(Ctx.Defined());
-
-    constexpr ui64 metaStart = 100;
-    constexpr ui64 metaEnd = 3804;
-    TPartition* partition = CreatePartition({
-        .Partition = TPartitionId{1},
-        .Begin = metaStart,
-        .End = metaEnd,
-        .EndWriteTimestamp = TInstant::Seconds(1),
-        .NoDataKeys = true,
-    });
-
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), metaEnd);
-
-    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
-    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
-    UNIT_ASSERT_VALUES_EQUAL(cz.StartOffset, metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(cz.EndOffset, metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(fwz.StartOffset, metaEnd);
-    UNIT_ASSERT_VALUES_EQUAL(fwz.EndOffset, metaEnd);
-}
-
-Y_UNIT_TEST_F(GetWriteTimeEstimateReturnsTimestampFromBodyKeys, TPartitionFixture) {
-    UNIT_ASSERT(Ctx.Defined());
-
-    constexpr ui64 begin = 0;
-    constexpr ui64 end = 10;
-    TPartition* partition = CreatePartition({
-        .Partition = TPartitionId{1},
-        .Begin = begin,
-        .End = end,
-        .EndWriteTimestamp = TInstant::Seconds(1),
-    });
-
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), begin);
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), end);
-    UNIT_ASSERT(!TPartitionTestWrapper::CompactionBlobEncoder(*partition).IsEmpty() ||
-                !TPartitionTestWrapper::BlobEncoder(*partition).IsEmpty());
-
-    const TInstant ts = TPartitionTestWrapper::GetWriteTimeEstimate(*partition, begin);
-    UNIT_ASSERT_GT(ts, TInstant::Zero());
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetWriteTimeEstimate(*partition, end), TInstant::Zero());
-}
-
 Y_UNIT_TEST_F(GetWriteTimeEstimateEmptyCompactionZoneUsesFastWriteHead, TPartitionFixture) {
     // YDBBUGS-824: compacted zone reports [0, End) with no keys after body compaction,
     // fast-write zone keeps data only in HeadKeys. GetWriteTimeEstimate used to pick the
@@ -5478,29 +5372,6 @@ Y_UNIT_TEST_F(GetWriteTimeEstimateFirstKeyWithPartNoDoesNotAbort, TPartitionFixt
         TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 272449), ts);
 }
 
-Y_UNIT_TEST_F(GetClientOffsetSurvivesInitWithMetaButNoDataKeys, TPartitionFixture) {
-    // E2E: InitComplete → ReportCounters and later GetClientOffset must not crash
-    // when meta offsets exist without data keys (#49507).
-    UNIT_ASSERT(Ctx.Defined());
-
-    constexpr ui64 metaEnd = 3804;
-    const TString client = "user";
-    CreatePartition({
-        .Partition = TPartitionId{1},
-        .Begin = 0,
-        .End = metaEnd,
-        .Config = {
-            .Consumers = {{.Consumer = client, .Offset = 0}},
-        },
-        .EndWriteTimestamp = TInstant::Seconds(1),
-        .NoDataKeys = true,
-    });
-
-    SendGetOffset(1, client);
-    WaitProxyResponse({.Cookie = 1, .Status = NMsgBusProxy::MSTATUS_OK, .Offset = 0});
-}
-
->>>>>>> fd11cc7cf21 ([PQ] Do not abort GetWriteTimeEstimate on empty compaction zone (YDBBUGS-824) (#52640))
 Y_UNIT_TEST_F(FinalizeEmptyBlobEncoderResetsHeadPartNo, TPartitionFixture) {
     UNIT_ASSERT(Ctx.Defined());
     TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});

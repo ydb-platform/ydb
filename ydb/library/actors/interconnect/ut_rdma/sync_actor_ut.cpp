@@ -8,6 +8,7 @@
 #include <ydb/library/actors/interconnect/rdma_sync_actor.h>
 #include <ydb/library/actors/interconnect/rdma/ut/utils/utils.h>
 #include <ydb/library/actors/interconnect/ut/lib/ic_test_cluster.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <library/cpp/testing/gtest/gtest.h>
 #include <ydb/library/testlib/unittest_gtest_macro_subst.h>
@@ -168,6 +169,44 @@ private:
     NThreading::TPromise<TResult> Promise;
 };
 
+class TPoisonableRdmaSyncOwner : public TActorBootstrapped<TPoisonableRdmaSyncOwner> {
+public:
+    TPoisonableRdmaSyncOwner(
+            TInterconnectProxyCommon::TPtr common,
+            ui32 peerNodeId,
+            TIntrusivePtr<NInterconnect::TStreamSocket> socket)
+        : Common(std::move(common))
+        , PeerNodeId(peerNodeId)
+        , Socket(std::move(socket))
+    {}
+
+    void Bootstrap() {
+        const TActorId selfVirtualId(SelfId().NodeId(), 0, 1, 1);
+        const TActorId peerVirtualId(PeerNodeId, 0, 1, 2);
+        SyncActor = Register(CreateRdmaOutgoingSyncActor(
+            Common, selfVirtualId, peerVirtualId, PeerNodeId, std::move(Socket), {}, {}));
+        Become(&TPoisonableRdmaSyncOwner::StateFunc);
+    }
+
+private:
+    void HandlePoison() {
+        if (SyncActor) {
+            Send(SyncActor, new TEvents::TEvPoisonPill);
+        }
+        PassAway();
+    }
+
+    STRICT_STFUNC(StateFunc,
+        cFunc(TEvents::TSystem::Poison, HandlePoison);
+    )
+
+private:
+    TInterconnectProxyCommon::TPtr Common;
+    const ui32 PeerNodeId;
+    TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
+    TActorId SyncActor;
+};
+
 struct TSyncRunResult {
     TString Error1;
     TString Error2;
@@ -259,6 +298,56 @@ static void RunSyncActors(
 }
 
 } // namespace
+
+TEST(RdmaSyncActorLifecycleTest, StopsAndReleasesSocketWhenOwnerDiesWhileSessionIsBeingCreated) {
+    TTestActorRuntimeBase runtime;
+    runtime.Initialize();
+
+    TActorId ownerId;
+    TActorId syncActorId;
+    runtime.SetRegistrationObserverFunc([&](TTestActorRuntimeBase&, const TActorId& parentId, const TActorId& actorId) {
+        if (parentId == ownerId && !syncActorId) {
+            syncActorId = actorId;
+        }
+    });
+
+    bool sessionCreationRequested = false;
+    runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvProxyCall::EventType) {
+            sessionCreationRequested = true;
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    auto [syncSocket, peerSocket] = CreateSocketPair();
+    auto common = CreateSyncCommon();
+    const ui32 peerNodeId = runtime.GetNodeId() + 1;
+    ownerId = runtime.Register(new TPoisonableRdmaSyncOwner(
+        std::move(common), peerNodeId, std::move(syncSocket)));
+
+    TDispatchOptions waitForSessionCreation;
+    waitForSessionCreation.CustomFinalCondition = [&] {
+        return sessionCreationRequested;
+    };
+    waitForSessionCreation.Quiet = true;
+    ASSERT_TRUE(runtime.DispatchEvents(waitForSessionCreation, TDuration::Seconds(1)));
+    ASSERT_TRUE(syncActorId);
+    ASSERT_NE(runtime.FindActor(syncActorId), nullptr);
+
+    runtime.Send(ownerId, {}, new TEvents::TEvPoisonPill);
+
+    TDispatchOptions waitForSyncActorTermination;
+    waitForSyncActorTermination.CustomFinalCondition = [&] {
+        return runtime.FindActor(syncActorId) == nullptr;
+    };
+    waitForSyncActorTermination.Quiet = true;
+    ASSERT_TRUE(runtime.DispatchEvents(waitForSyncActorTermination, TDuration::Seconds(1)));
+
+    char byte;
+    TString error;
+    EXPECT_EQ(peerSocket->Recv(&byte, sizeof(byte), &error), 0) << error;
+}
 
 TEST_P(TRdmaSyncActorTest, CompletesSyncProtocol) {
     const TActorId virtualId1(1, 0, 1, 1);

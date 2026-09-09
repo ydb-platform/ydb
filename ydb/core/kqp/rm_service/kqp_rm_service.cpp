@@ -154,7 +154,9 @@ public:
     }
 
     void SetNewLimit(ui64 baseLimit, double memoryPoolPercent, double overPercent) {
-        if (baseLimit == BaseLimit && abs(memoryPoolPercent - MemoryPoolPercent) < MYEPS && abs(overPercent - OverPercent) < MYEPS) {
+        // std::fabs, not abs: unqualified abs may resolve to int abs(int) and truncate, and both percents are
+        // legitimately fractional (SpillingPercent in particular), so a sub-1.0 change must not compare equal
+        if (baseLimit == BaseLimit && std::fabs(memoryPoolPercent - MemoryPoolPercent) < MYEPS && std::fabs(overPercent - OverPercent) < MYEPS) {
             return;
         }
 

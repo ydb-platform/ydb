@@ -48,7 +48,7 @@ public:
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_INDEXES_COUNT].Add(1);
 
         Y_ABORT_UNLESS(context.SS->Indexes.contains(path->PathId));
-        auto indexData = context.SS->Indexes.at(path->PathId);
+        TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(path->PathId);
         context.SS->PersistTableIndex(db, path->PathId);
         context.SS->Indexes.Set(path->PathId, indexData->AlterData);
 

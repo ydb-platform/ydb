@@ -381,7 +381,7 @@ public:
 
 private:
     bool Prepare(TIndexBuildInfo& buildInfo, const NKikimrIndexBuilder::TIndexBuildSettings& settings,
-                 TTableInfo::TCPtr tableInfo, TString& explain) {
+                 TTableInfo::TPtr tableInfo, TString& explain) {
         Y_ASSERT(settings.has_index());
         const auto& index = settings.index();
 

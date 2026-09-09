@@ -94,7 +94,7 @@ public:
             << " at tabletId# " << ssId);
 
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterOlapStore);
-        auto storeInfo = context.SS->OlapStores.at(txState->TargetPathId);
+        TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(txState->TargetPathId);
         Y_ABORT_UNLESS(storeInfo);
         TOlapStoreInfo::TPtr alterData = storeInfo->AlterData;
         Y_ABORT_UNLESS(alterData);
@@ -204,7 +204,7 @@ public:
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
-        auto storeInfo = context.SS->OlapStores.at(pathId);
+        TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(pathId);
         Y_ABORT_UNLESS(storeInfo);
         TOlapStoreInfo::TPtr alterData = storeInfo->AlterData;
         Y_ABORT_UNLESS(alterData);
@@ -338,7 +338,7 @@ public:
         if (!TablesInitialized) {
             TPathId pathId = txState->TargetPathId;
 
-            auto storeInfo = context.SS->OlapStores.at(pathId);
+            TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(pathId);
             Y_ABORT_UNLESS(storeInfo);
 
             for (TPathId tablePathId : storeInfo->ColumnTables) {
@@ -514,7 +514,7 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->OlapStores.contains(path->PathId));
-        auto storeInfo = context.SS->OlapStores.Update(path->PathId);
+        TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(path->PathId);
 
         if (!storeInfo->ColumnTablesUnderOperation.empty()) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, "Store has unfinished table operations");

@@ -185,7 +185,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        auto kesus = context.SS->KesusInfos.at(path.Base()->PathId);
+        TKesusInfo::TPtr kesus = context.SS->KesusInfos.at(path.Base()->PathId);
         Y_ABORT_UNLESS(kesus);
 
         {

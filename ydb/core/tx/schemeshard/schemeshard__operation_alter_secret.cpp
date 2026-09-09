@@ -152,7 +152,7 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->Secrets.contains(secretPath.Base()->PathId));
-        auto secretInfo = context.SS->Secrets.Update(secretPath.Base()->PathId);
+        auto secretInfo = context.SS->Secrets.at(secretPath.Base()->PathId);
 
         if (secretInfo->AlterVersion == 0) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, "Secret is not created yet");

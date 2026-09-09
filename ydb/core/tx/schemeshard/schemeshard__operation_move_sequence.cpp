@@ -186,7 +186,7 @@ public:
         TPathId pathId = txState->TargetPathId;
 
         Y_VERIFY_S(context.SS->Sequences.contains(pathId), "Sequence not found. PathId: " << pathId);
-        auto sequenceInfo = context.SS->Sequences.at(pathId);
+        TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
         Y_ABORT_UNLESS(sequenceInfo);
         TSequenceInfo::TPtr alterData = sequenceInfo->AlterData;
         Y_ABORT_UNLESS(alterData);
@@ -435,7 +435,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        auto& sequenceInfo = context.SS->Sequences.Update(pathId);
+        auto sequenceInfo = context.SS->Sequences.at(pathId);
         UpdateSequenceDescription(sequenceInfo->Description);
 
         context.SS->PersistSequence(db, pathId, *sequenceInfo);
@@ -979,7 +979,7 @@ public:
         txState.State = TTxState::CreateParts;
 
         Y_ABORT_UNLESS(context.SS->Sequences.contains(srcPath.Base()->PathId));
-        auto srcSequence = context.SS->Sequences.Update(srcPath.Base()->PathId);
+        TSequenceInfo::TPtr srcSequence = context.SS->Sequences.at(srcPath.Base()->PathId);
         Y_ABORT_UNLESS(!srcSequence->Sharding.GetSequenceShards().empty());
 
         const auto& protoSequenceShard = *srcSequence->Sharding.GetSequenceShards().rbegin();

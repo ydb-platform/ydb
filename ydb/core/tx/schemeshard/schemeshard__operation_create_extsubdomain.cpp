@@ -218,7 +218,7 @@ public:
         alter->SetSchemeLimits(parentPath.DomainInfo()->GetSchemeLimits()); //inherit from root
 
         if (resourcesDomainId) {
-            auto resourcesDomain = context.SS->SubDomains.at(resourcesDomainId);
+            TSubDomainInfo::TPtr resourcesDomain = context.SS->SubDomains.at(resourcesDomainId);
             TTabletId sharedHive = context.SS->GetGlobalHive();
             if (resourcesDomain->GetTenantHiveID()) {
                 sharedHive = resourcesDomain->GetTenantHiveID();

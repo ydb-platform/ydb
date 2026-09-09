@@ -10,18 +10,10 @@
 #include <util/system/yassert.h>
 
 #include <functional>
-#include <memory>
 
 namespace NKikimr::NSchemeShard {
 
 class TSchemeShard;
-
-namespace NDbRefDetail {
-    template <class P> struct TConstView;
-    template <class T> struct TConstView<TIntrusivePtr<T>> { using type = TIntrusiveConstPtr<T>; };
-    template <class T> struct TConstView<TIntrusiveConstPtr<T>> { using type = TIntrusiveConstPtr<T>; };
-    template <class T> struct TConstView<std::shared_ptr<T>> { using type = std::shared_ptr<const T>; };
-}
 
 // Teardown interface: maps self-register so Clear() iterates one registry.
 class IDbRefMap {
@@ -48,7 +40,6 @@ public:
     using iterator = typename TInner::iterator;
     using const_iterator = typename TInner::const_iterator;
     using value_type = typename TInner::value_type;
-    using TConstView = typename NDbRefDetail::TConstView<V>::type;
 
     // Self-registers at construction (registration can't be missed); `reason`
     // is the map's name, logged on each DbRefCount change.
@@ -94,12 +85,6 @@ public:
         return it->second;
     }
 
-    // Mutable pointee access. Snapshotting is the caller's responsibility.
-    // The slot cannot be replaced through this reference.
-    const V& Update(const TPathId& id) {
-        return Map.at(id);
-    }
-
     // Remove membership and release its reference.
     size_t erase(const TPathId& id) {
         if (Map.contains(id)) {
@@ -108,13 +93,9 @@ public:
         return Map.erase(id);
     }
 
-    // Read-only: const pointee, so at(id)->Mutate() won't compile; mutate via Update().
-    TConstView at(const TPathId& id) const { return Map.at(id); }
+    // Protect container slots while retaining ordinary mutable pointee access.
+    const V& at(const TPathId& id) const { return Map.at(id); }
 
-    // Read accessors are const-only: they never hand out a mutable slot, so a caller
-    // can't reseat an entry (it->second = newPtr) and desync the self-ref. The
-    // const_iterator/const V* still permit pointee mutation (->Field); the sanctioned
-    // mutation gates are Set/Update.
     const_iterator find(const TPathId& id) const { return Map.find(id); }
     const V* FindPtr(const TPathId& id) const { return Map.FindPtr(id); }
     V Value(const TPathId& id, const V& def) const { return Map.Value(id, def); }

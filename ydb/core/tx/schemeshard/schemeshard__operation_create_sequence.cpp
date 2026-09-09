@@ -100,7 +100,7 @@ public:
 
         txState->ClearShardsInProgress();
 
-        auto sequenceInfo = context.SS->Sequences.at(txState->TargetPathId);
+        TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(txState->TargetPathId);
         Y_ABORT_UNLESS(sequenceInfo);
         TSequenceInfo::TPtr alterData = sequenceInfo->AlterData;
         Y_ABORT_UNLESS(alterData);
@@ -202,7 +202,7 @@ public:
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
         Y_VERIFY_S(context.SS->Sequences.contains(pathId), "Sequence not found. PathId: " << pathId);
-        auto sequenceInfo = context.SS->Sequences.at(pathId);
+        TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
         Y_ABORT_UNLESS(sequenceInfo);
         TSequenceInfo::TPtr alterData = sequenceInfo->AlterData;
         Y_ABORT_UNLESS(alterData);

@@ -139,7 +139,7 @@ public:
 
         txState->ClearShardsInProgress();
 
-        auto& kesus = context.SS->KesusInfos.Update(txState->TargetPathId);
+        TKesusInfo::TPtr kesus = context.SS->KesusInfos.at(txState->TargetPathId);
         Y_VERIFY_S(kesus, "kesus is null. PathId: " << txState->TargetPathId);
 
 
@@ -205,7 +205,7 @@ public:
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
         Y_VERIFY_S(context.SS->KesusInfos.contains(pathId), "kesus has not found. PathId: " << pathId);
-        auto& kesus = context.SS->KesusInfos.Update(pathId);
+        TKesusInfo::TPtr kesus = context.SS->KesusInfos.at(pathId);
         Y_VERIFY_S(kesus, "kesus is null. PathId: " << pathId);
 
         NIceDb::TNiceDb db(context.GetDB());

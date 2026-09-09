@@ -23,7 +23,7 @@ namespace NKikimr::NSchemeShard {
 bool CreateIncrementalBackupPathStateOps(
     TOperationId opId,
     const TTxTransaction& tx,
-    const TIntrusiveConstPtr<TBackupCollectionInfo>& bc,
+    const TBackupCollectionInfo::TPtr& bc,
     const TPath& bcPath,
     const TVector<TString>& incrBackupNames,
     TOperationContext& context,

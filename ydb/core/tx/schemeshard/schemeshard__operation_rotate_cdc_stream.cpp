@@ -73,7 +73,7 @@ public:
         context.SS->TabletCounters->Simple()[COUNTER_CDC_STREAMS_COUNT].Add(1);
 
         context.SS->PersistCdcStream(db, oldStreamPathId);
-        context.SS->CdcStreams.Update(oldStreamPathId)->FinishAlter();
+        context.SS->CdcStreams.at(oldStreamPathId)->FinishAlter();
 
         context.SS->ClearDescribePathCaches(oldStreamPath);
         context.SS->ClearDescribePathCaches(newStreamPath);
@@ -221,7 +221,7 @@ public:
 
 
         Y_ABORT_UNLESS(context.SS->CdcStreams.contains(oldStreamPath.Base()->PathId));
-        auto oldStream = context.SS->CdcStreams.Update(oldStreamPath.Base()->PathId);
+        auto oldStream = context.SS->CdcStreams.at(oldStreamPath.Base()->PathId);
 
         TCdcStreamInfo::EState requiredState = TCdcStreamInfo::EState::ECdcStreamStateDisabled;
         TCdcStreamInfo::EState newState = TCdcStreamInfo::EState::ECdcStreamStateInvalid;
@@ -431,7 +431,7 @@ protected:
         auto path = context.SS->PathsById.at(pathId);
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        auto& table = context.SS->Tables.Update(pathId);
+        auto table = context.SS->Tables.at(pathId);
 
         auto& notice = *tx.MutableRotateCdcStreamNotice();
         pathId.ToProto(notice.MutablePathId());

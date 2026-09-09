@@ -364,7 +364,7 @@ protected:
 
         // Override table schema version with coordinated version from AlterData
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        auto& table = context.SS->Tables.Update(pathId);
+        auto table = context.SS->Tables.at(pathId);
         table->InitAlterData(OperationId);
         notice.SetTableSchemaVersion(*table->AlterData->CoordinatedSchemaVersion);
 

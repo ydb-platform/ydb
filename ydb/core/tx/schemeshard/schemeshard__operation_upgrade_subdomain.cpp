@@ -204,7 +204,7 @@ public:
     NKikimrScheme::TMigrateTable DescribeTable(TOperationContext& context, TPathId pathId) {
         NKikimrScheme::TMigrateTable descr;
 
-        auto tableInfo = context.SS->Tables.at(pathId);
+        TTableInfo::TPtr tableInfo = context.SS->Tables.at(pathId);
         descr.SetNextColId(tableInfo->NextColumnId);
 
         TString partitionConfig;
@@ -260,7 +260,7 @@ public:
     NKikimrScheme::TMigrateTableIndex DescribeTableIndex(TOperationContext& context, TPathId pathId) {
         NKikimrScheme::TMigrateTableIndex descr;
 
-        auto indexInfo = context.SS->Indexes.at(pathId);
+        TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
         descr.SetAlterVersion(indexInfo->AlterVersion);
         descr.SetType(indexInfo->Type);
         descr.SetState(indexInfo->State);
@@ -275,7 +275,7 @@ public:
     NKikimrScheme::TMigrateKesus DescribeKesus(TOperationContext& context, TPathId pathId) {
         NKikimrScheme::TMigrateKesus descr;
 
-        auto kesusInfo = context.SS->KesusInfos.at(pathId);
+        TKesusInfo::TPtr kesusInfo = context.SS->KesusInfos.at(pathId);
 
         descr.MutablePathId()->SetOwnerId(pathId.OwnerId);
         descr.MutablePathId()->SetLocalId(pathId.LocalPathId);
@@ -326,7 +326,7 @@ public:
 
                 *event->Record.MutableTable() = DescribeTable(context, pathId);
 
-                auto tableInfo = context.SS->Tables.at(pathId);
+                TTableInfo::TPtr tableInfo = context.SS->Tables.at(pathId);
                 for (const auto* part: tableInfo->GetPartitions()) {
                     TShardIdx shardIdx = part->ShardIdx;
                     *migrateShards->Add() = DescribeShard(context, shardIdx);
@@ -349,7 +349,7 @@ public:
                 Y_ABORT_UNLESS(context.SS->KesusInfos.contains(pathId));
                 *event->Record.MutableKesus() = DescribeKesus(context, pathId);
 
-                auto kesusInfo = context.SS->KesusInfos.at(pathId);
+                TKesusInfo::TPtr kesusInfo = context.SS->KesusInfos.at(pathId);
                 Y_ABORT_UNLESS(kesusInfo->KesusShardIdx);
                 Y_ABORT_UNLESS(context.SS->ShardInfos.contains(kesusInfo->KesusShardIdx));
                 *migrateShards->Add() = DescribeShard(context, kesusInfo->KesusShardIdx);
@@ -578,7 +578,7 @@ public:
         context.SS->PersistPath(db, path->PathId);
         context.SS->ClearDescribePathCaches(path);
 
-        auto subDomain = context.SS->SubDomains.Update(pathId);
+        auto subDomain = context.SS->SubDomains.at(pathId);
         subDomain->SetAlterPrivate(nullptr);
         context.SS->PersistSubDomain(db, pathId, *subDomain);
         context.SS->PersistSubDomainSchemeQuotas(db, pathId, *subDomain);
@@ -610,9 +610,7 @@ public:
         item->SwapChildren(HiddenChildren); //return back children
         item->PreSerializedChildrenListing.clear();
 
-        // Copy, not a reference: the Set below reseats this slot, and
-        // *subDomain must still see the original object at PersistDeleteSubDomainAlter.
-        auto subDomain = context.SS->SubDomains.Update(pathId);
+        auto subDomain = context.SS->SubDomains.at(pathId);
         Y_ABORT_UNLESS(subDomain);
         auto alterData = subDomain->GetAlter();
         Y_ABORT_UNLESS(alterData);
@@ -669,7 +667,7 @@ public:
 
         item->PathType = TPathElement::EPathType::EPathTypeExtSubDomain;
 
-        auto subDomain = context.SS->SubDomains.Update(pathId);
+        auto subDomain = context.SS->SubDomains.at(pathId);
         auto alterData = subDomain->GetAlter();
         Y_ABORT_UNLESS(alterData);
         Y_ABORT_UNLESS(subDomain->GetVersion() < alterData->GetVersion());
@@ -858,7 +856,7 @@ public:
                 case NKikimrSchemeOp::EPathType::EPathTypeTable:
                 {
                     Y_ABORT_UNLESS(context.SS->Tables.contains(pId));
-                    auto table = context.SS->Tables.at(pId);
+                    TTableInfo::TPtr table = context.SS->Tables.at(pId);
                     for (const auto* item: table->GetPartitions()) {
                         auto shardIdx = item->ShardIdx;
                         const auto& shardInfo = context.SS->ShardInfos.at(shardIdx);
@@ -1164,7 +1162,7 @@ public:
         auto pathId = path.Base()->PathId;
 
         Y_ABORT_UNLESS(context.SS->SubDomains.contains(pathId));
-        auto subDomain = context.SS->SubDomains.Update(pathId);
+        TSubDomainInfo::TPtr subDomain = context.SS->SubDomains.at(pathId);
         if (!subDomain->IsSupportTransactions()) {
             result->SetError(NKikimrScheme::StatusSchemeError, "There are no sense to upgrade subdomain with out transactions support (NBS?).");
             return result;

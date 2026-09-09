@@ -315,7 +315,7 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        auto& table = context.SS->Tables.Update(pathId);
+        TTableInfo::TPtr table = context.SS->Tables.at(pathId);
         Y_ABORT_UNLESS(table);
         table->AlterVersion = NEW_TABLE_ALTER_VERSION;
 

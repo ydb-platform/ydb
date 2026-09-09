@@ -40,7 +40,7 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterSolomonVolume);
 
-        auto& solomon = context.SS->SolomonVolumes.Update(txState->TargetPathId);
+        auto solomon = context.SS->SolomonVolumes.at(txState->TargetPathId);
         Y_VERIFY_S(solomon, "solomon volume is null. PathId: " << txState->TargetPathId);
         Y_VERIFY_S(solomon->AlterData, "solomon volume alter data is null. PathId: " << txState->TargetPathId);
 
@@ -208,7 +208,7 @@ public:
                 .IsCommonSensePath();
 
             if (checks) {
-                auto solomon = context.SS->SolomonVolumes.at(path.Base()->PathId);
+                TSolomonVolumeInfo::TPtr solomon = context.SS->SolomonVolumes.at(path.Base()->PathId);
                 if (alter.GetPartitionCount() > solomon->Partitions.size()) {
                     const ui64 shardsToCreate = alter.GetPartitionCount() - solomon->Partitions.size();
 
@@ -225,7 +225,7 @@ public:
             }
         }
 
-        auto solomon = context.SS->SolomonVolumes.Update(path.Base()->PathId);
+        TSolomonVolumeInfo::TPtr solomon = context.SS->SolomonVolumes.at(path.Base()->PathId);
 
         if (!alter.HasPartitionCount() && !alter.GetUpdateChannelsBinding()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Empty alter");

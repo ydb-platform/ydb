@@ -127,12 +127,10 @@ struct TTxState {
         , StartTime(::Now())
     {}
 
-    // `sourceExists` is false only for an orphaned in-flight tx whose source path
-    // is gone: reference the target, not the missing source.
-    void AcquirePathRefs(TSchemeShard* ss, bool sourceExists = true) {
+    void AcquirePathRefs(TSchemeShard* ss) {
         Y_ABORT_UNLESS(!TargetPathRef && !SourcePathRef);
         TargetPathRef.Reset(ss, TargetPathId, "transaction target path");
-        if (SourcePathId && sourceExists) {
+        if (SourcePathId) {
             SourcePathRef.Reset(ss, SourcePathId, "transaction source path");
         }
     }

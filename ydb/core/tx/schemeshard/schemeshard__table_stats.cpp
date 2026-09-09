@@ -363,7 +363,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             return true;
         }
 
-        table = Self->Tables.Update(pathId);
+        table = Self->Tables.at(pathId);
         table->UpdateShardStatsForFollower(followerId, shardIdx, newStats);
 
         // NOTE: For split-by-size and merge-by-load cases it is sufficient
@@ -435,7 +435,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             return true;
         }
 
-        table = Self->Tables.Update(pathId);
+        table = Self->Tables.at(pathId);
         table->UpdateShardStats(&diskSpaceUsageDelta, shardIdx, newStats, now);
 
         if (!table->IsBackup) {
@@ -462,7 +462,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             return true;
         }
 
-        auto olapStore = Self->OlapStores.Update(pathId);
+        TOlapStoreInfo::TPtr olapStore = Self->OlapStores.at(pathId);
         const ui64 prevSmallBlobsBytes = olapStore->Stats.Aggregated.SmallBlobsVolumeBytes;
         const ui64 prevSmallBlobsCount = olapStore->Stats.Aggregated.SmallBlobsCount;
         olapStore->UpdateShardStats(&diskSpaceUsageDelta, shardIdx, newStats, now);

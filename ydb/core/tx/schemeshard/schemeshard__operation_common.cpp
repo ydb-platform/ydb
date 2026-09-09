@@ -51,7 +51,7 @@ THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr target
     }
 
     Y_ABORT_UNLESS(ss->SubDomains.contains(domainId));
-    auto subDomain = ss->SubDomains.at(domainId);
+    TSubDomainInfo::TPtr subDomain = ss->SubDomains.at(domainId);
 
     TPathId resourcesDomainId;
     if (subDomain->GetResourcesDomainId()) {
@@ -489,7 +489,7 @@ bool TDone::Process(TOperationContext& context) {
         if (!tableInfo->IsStandalone()) {
             const auto storePathId = tableInfo->GetOlapStorePathIdVerified();
             if (context.SS->OlapStores.contains(storePathId)) {
-                auto& storeInfo = context.SS->OlapStores.Update(storePathId);
+                auto storeInfo = context.SS->OlapStores.at(storePathId);
                 storeInfo->ColumnTablesUnderOperation.erase(pathId);
             }
         }
@@ -740,7 +740,7 @@ void AckAllSchemaChanges(const TOperationId &operationId, TTxState &txState, TOp
 
 bool CheckPartitioningChangedForTableModificationImpl(TTxState &txState, TOperationContext &context) {
     Y_ABORT_UNLESS(context.SS->Tables.contains(txState.TargetPathId));
-    auto table = context.SS->Tables.at(txState.TargetPathId);
+    TTableInfo::TPtr table = context.SS->Tables.at(txState.TargetPathId);
 
     THashSet<TShardIdx> shardIdxsLeft;
     for (const auto* shard : table->GetPartitions()) {
@@ -804,7 +804,7 @@ void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &
     Y_ABORT_UNLESS(txState.ShardsInProgress.empty());
 
     Y_ABORT_UNLESS(context.SS->Tables.contains(txState.TargetPathId));
-    TTableInfo::TPtr table = context.SS->Tables.Update(txState.TargetPathId);
+    TTableInfo::TPtr table = context.SS->Tables.at(txState.TargetPathId);
     TTxState::ETxState commonShardOp = TTxState::CreateParts;
 
     if (txState.TxType == TTxState::TxAlterTable) {
@@ -943,10 +943,10 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
     Y_ABORT_UNLESS(context.SS->PathsById.at(txState.SourcePathId)->PathState == TPathElement::EPathState::EPathStateCopying);
     Y_ABORT_UNLESS(context.SS->PathsById.contains(txState.TargetPathId));
     auto dstPath = context.SS->PathsById.at(txState.TargetPathId);
-    auto& domainInfo = context.SS->SubDomains.Update(dstPath->DomainPathId);
+    auto domainInfo = context.SS->SubDomains.at(dstPath->DomainPathId);
 
-    auto& srcTableInfo = context.SS->Tables.Update(txState.SourcePathId);
-    auto& dstTableInfo = context.SS->Tables.Update(txState.TargetPathId);
+    auto srcTableInfo = context.SS->Tables.at(txState.SourcePathId);
+    auto dstTableInfo = context.SS->Tables.at(txState.TargetPathId);
 
     NIceDb::TNiceDb db(context.GetDB());
 
@@ -1044,7 +1044,7 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
     txState.TxShardsListFinalized = true;
 }
 
-TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo &templateDatashardInfo, TTableInfo::TCPtr srcTableInfo, TTxState &txState, TSchemeShard *ss) {
+TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo &templateDatashardInfo, TTableInfo::TPtr srcTableInfo, TTxState &txState, TSchemeShard *ss) {
     // Build a mutable copy of src partitions for the dst table.
     TVector<TTableShardInfo> dstPartitions;
     {
@@ -1455,7 +1455,7 @@ TVector<TPathId> SyncChildIndexVersions(
         if (!context.SS->Indexes.contains(childPathId)) {
             continue;
         }
-        auto& index = context.SS->Indexes.Update(childPathId);
+        auto index = context.SS->Indexes.at(childPathId);
         if (index->AlterVersion < targetVersion) {
             index->AlterVersion = targetVersion;
             // If there's ongoing alter operation, also update alterData version to converge

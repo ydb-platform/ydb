@@ -349,7 +349,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropRebuildImplPropose(
 // flag: the base table's setting may have been persisted while the flag was on, and an
 // unguarded copy would make the impl table's TCreateTable reject the whole build.
 static void InheritDetailedMetricsSettings(
-    const TTableInfo::TCPtr& tableInfo, NKikimrSchemeOp::TTableDescription& implTableDesc)
+    const TTableInfo::TPtr& tableInfo, NKikimrSchemeOp::TTableDescription& implTableDesc)
 {
     if (AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics() && tableInfo->HasDetailedMetricsSettings()) {
         *implTableDesc.MutableDetailedMetricsSettings()->MutableConfigured() = tableInfo->GetDetailedMetricsSettings();
@@ -1351,7 +1351,7 @@ private:
         auto& indexShardStatus = buildInfo.Shards.at(shardIdx);
 
         auto path = GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
-        auto table = Self->Tables.at(path->PathId);
+        TTableInfo::TPtr table = Self->Tables.at(path->PathId);
 
         record.SetOwnerId(path->PathId.OwnerId);
         record.SetPathId(path->PathId.LocalPathId);
@@ -2700,7 +2700,7 @@ private:
         LOG_N("TTxBuildProgress: Performing cross shard unique index validation: " << BuildId << " " << buildInfo.State);
 
         auto path = GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
-        auto table = Self->Tables.at(path->PathId);
+        TTableInfo::TPtr table = Self->Tables.at(path->PathId);
 
         // Make index columns type info
         std::vector<NScheme::TTypeInfoOrder> indexColumnTypeInfos;
@@ -3320,7 +3320,7 @@ public:
         Y_ENSURE(path.LockedBy() == buildInfo.LockTxId);
         LOG_D("InitiateShards table: " << path.PathString());
 
-        auto table = Self->Tables.at(path->PathId);
+        TTableInfo::TPtr table = Self->Tables.at(path->PathId);
 
         auto tableColumns = NTableIndex::ExtractInfo(table); // skip dropped columns
         static constexpr std::string_view LogPrefix = "";

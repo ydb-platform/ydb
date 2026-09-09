@@ -56,7 +56,7 @@ public:
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        const auto tableInfo = context.SS->Tables.at(pathId);
+        const TTableInfo::TPtr tableInfo = context.SS->Tables.at(pathId);
 
         NKikimrTxDataShard::TFlatSchemeTransaction txTemplate;
         auto initiate = txTemplate.MutableInitiateBuildIndex();
@@ -173,7 +173,7 @@ public:
         context.SS->SnapshotsStepIds[OperationId.GetTxId()] = step;
         context.SS->PersistSnapshotStepId(db, OperationId.GetTxId(), step);
 
-        auto& tableInfo = context.SS->Tables.Update(txState->TargetPathId);
+        const TTableInfo::TPtr tableInfo = context.SS->Tables.at(txState->TargetPathId);
         tableInfo->AlterVersion += 1;
         context.SS->PersistTableAlterVersion(db, txState->TargetPathId, tableInfo);
 
@@ -379,7 +379,7 @@ public:
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxInitializeBuildIndex, tablePathId);
         txState.State = TTxState::CreateParts;
 
-        auto table = context.SS->Tables.at(tablePathId);
+        TTableInfo::TPtr table = context.SS->Tables.at(tablePathId);
         for (auto splitTx: table->GetSplitOpsInFlight()) {
             context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
         }

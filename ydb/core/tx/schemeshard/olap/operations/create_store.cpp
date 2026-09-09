@@ -67,7 +67,7 @@ public:
                    << " at tabletId# " << ssId);
 
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateOlapStore);
-        auto pendingInfo = context.SS->OlapStores.at(txState->TargetPathId);
+        TOlapStoreInfo::TPtr pendingInfo = context.SS->OlapStores.at(txState->TargetPathId);
         Y_ABORT_UNLESS(pendingInfo);
         Y_ABORT_UNLESS(pendingInfo->AlterData);
         TOlapStoreInfo::TPtr storeInfo = pendingInfo->AlterData;
@@ -160,7 +160,7 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        auto pending = context.SS->OlapStores.at(pathId);
+        TOlapStoreInfo::TPtr pending = context.SS->OlapStores.at(pathId);
         Y_ABORT_UNLESS(pending);
         TOlapStoreInfo::TPtr store = pending->AlterData;
         Y_ABORT_UNLESS(store);

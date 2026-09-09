@@ -55,7 +55,7 @@ public:
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxPrepareIndexValidation);
 
         TPathId pathId = txState->TargetPathId;
-        auto table = context.SS->Tables.at(pathId);
+        TTableInfo::TPtr table = context.SS->Tables.at(pathId);
 
         txState->ClearShardsInProgress();
 
@@ -140,7 +140,7 @@ public:
         context.SS->SnapshotsStepIds[OperationId.GetTxId()] = step;
         context.SS->PersistSnapshotStepId(db, OperationId.GetTxId(), step);
 
-        auto& tableInfo = context.SS->Tables.Update(txState->TargetPathId);
+        const TTableInfo::TPtr tableInfo = context.SS->Tables.at(txState->TargetPathId);
         tableInfo->AlterVersion += 1;
         tableInfo->MutablePartitionConfig().ClearShadowData();
         tableInfo->MutablePartitionConfig().MutableCompactionPolicy()->SetKeepEraseMarkers(false);
@@ -340,7 +340,7 @@ public:
 
         {
             Y_ABORT_UNLESS(context.SS->Tables.contains(tablePathId));
-            auto tableInfo = context.SS->Tables.at(tablePathId);
+            TTableInfo::TPtr tableInfo = context.SS->Tables.at(tablePathId);
             const NKikimrSchemeOp::TPartitionConfig &srcPartitionConfig = tableInfo->PartitionConfig();
             if (!srcPartitionConfig.GetShadowData()) {
                 errStr = TStringBuilder()
@@ -370,7 +370,7 @@ public:
 
         context.SS->PersistTxState(db, OperationId);
 
-        auto table = context.SS->Tables.at(tablePathId);
+        TTableInfo::TPtr table = context.SS->Tables.at(tablePathId);
         Y_ABORT_UNLESS(table->GetSplitOpsInFlight().empty());
 
         context.SS->ChangeTxState(db, OperationId, TTxState::CreateParts);

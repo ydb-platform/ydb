@@ -83,7 +83,7 @@ void AckAllSchemaChanges(const TOperationId& operationId, TTxState& txState, TOp
 bool CheckPartitioningChangedForTableModification(TTxState& txState, TOperationContext& context);
 void UpdatePartitioningForTableModification(TOperationId txId, TTxState& txState, TOperationContext& context);
 
-TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo& templateDatashardInfo, TTableInfo::TCPtr srcTableInfo, TTxState& txState, TSchemeShard* ss);
+TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo& templateDatashardInfo, TTableInfo::TPtr srcTableInfo, TTxState& txState, TSchemeShard* ss);
 
 bool SourceTablePartitioningChangedForCopyTable(const TTxState& txState, TOperationContext& context);
 void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState& txState, TOperationContext& context);

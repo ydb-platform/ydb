@@ -24,7 +24,7 @@ TConclusionStatus TInStoreTable::InitializeWithTableInfo(const TEntityInitializa
     }
 
     Y_ABORT_UNLESS(context.GetSSOperationContext()->SS->OlapStores.contains(storePathId));
-    StoreInfo = context.GetSSOperationContext()->SS->OlapStores.Update(storePathId);
+    StoreInfo = context.GetSSOperationContext()->SS->OlapStores.at(storePathId);
     TOlapSchema schema;
     schema.ParseFromLocalDB(GetTableSchemaProto().DetachResult());
     TableSchema = std::move(schema);

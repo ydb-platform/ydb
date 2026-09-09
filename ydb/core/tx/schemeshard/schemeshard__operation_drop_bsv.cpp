@@ -62,7 +62,7 @@ public:
             context.OnComplete.DeleteShard(shard.Idx);
         }
 
-        auto volume = context.SS->BlockStoreVolumes.at(pathId);
+        TBlockStoreVolumeInfo::TPtr volume = context.SS->BlockStoreVolumes.at(pathId);
 
         auto volumeSpace = volume->GetVolumeSpace();
         auto domainDir = context.SS->PathsById.at(context.SS->ResolvePathIdForDomain(path));
@@ -180,7 +180,7 @@ public:
             }
         }
 
-        auto volume = context.SS->BlockStoreVolumes.at(path.Base()->PathId);
+        TBlockStoreVolumeInfo::TPtr volume = context.SS->BlockStoreVolumes.at(path.Base()->PathId);
         Y_ABORT_UNLESS(volume);
 
         {

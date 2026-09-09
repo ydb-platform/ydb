@@ -32,7 +32,7 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxForceDropExtSubDomain);
 
-        auto& subdomain = context.SS->SubDomains.Update(txState->TargetPathId);
+        auto subdomain = context.SS->SubDomains.at(txState->TargetPathId);
         Y_ABORT_UNLESS(subdomain);
 
         // Initiate asynchronous deletion of system shards
@@ -140,7 +140,7 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxForceDropExtSubDomain);
 
-        auto& domainInfo = context.SS->SubDomains.Update(txState->TargetPathId);
+        TSubDomainInfo::TPtr domainInfo = context.SS->SubDomains.at(txState->TargetPathId);
         domainInfo->Initialize(context.SS->ShardInfos);
 
         TTabletId tenantSchemeshard = domainInfo->GetTenantSchemeShardID();

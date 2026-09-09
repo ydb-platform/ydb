@@ -313,7 +313,7 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // No copy, simple pointer replacement.
     for (const auto& [id, savedState] : SubDomains) {
         ss->SubDomains.RestoreMembershipWithoutRefcount(id, savedState);
-        const auto& subdomain = ss->SubDomains.Update(id);
+        const auto& subdomain = ss->SubDomains.at(id);
         if (ss->GetCurrentSubDomainPathId() == id) {
             subdomain->UpdateCounters(ss);
         }

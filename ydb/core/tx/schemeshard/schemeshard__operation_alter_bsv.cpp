@@ -439,7 +439,7 @@ public:
             }
         }
 
-        auto volume = context.SS->BlockStoreVolumes.Update(path.Base()->PathId);
+        TBlockStoreVolumeInfo::TPtr volume = context.SS->BlockStoreVolumes.at(path.Base()->PathId);
         Y_ABORT_UNLESS(volume);
 
         const auto* alterVolumeConfig = ParseParams(volume->VolumeConfig, alter, errStr);

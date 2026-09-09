@@ -47,7 +47,7 @@ struct TParamsDelta {
 };
 
 std::tuple<NKikimrScheme::EStatus, TString>
-VerifyParams(TParamsDelta* delta, const TPathId pathId, const TIntrusiveConstPtr<TSubDomainInfo>& current,
+VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TPtr& current,
              const NKikimrSubDomains::TSubDomainSettings& input, const bool isServerlessExclusiveDynamicNodesEnabled) {
     auto paramError = [](const TStringBuf& msg) {
         return std::make_tuple(NKikimrScheme::EStatus::StatusInvalidParameter,
@@ -342,7 +342,7 @@ VerifyParams(TParamsDelta* delta, const TPathId pathId, const TIntrusiveConstPtr
 }
 
 void VerifyParams(TProposeResponse* result, TParamsDelta* delta, const TPathId pathId,
-                  const TIntrusiveConstPtr<TSubDomainInfo>& current, const NKikimrSubDomains::TSubDomainSettings& input,
+                  const TSubDomainInfo::TPtr& current, const NKikimrSubDomains::TSubDomainSettings& input,
                   const bool isServerlessExclusiveDynamicNodesEnabled) {
     // TProposeRespose should come in assuming positive outcome (status NKikimrScheme::StatusAccepted, no errors)
     Y_ABORT_UNLESS(result->IsAccepted());
@@ -350,7 +350,7 @@ void VerifyParams(TProposeResponse* result, TParamsDelta* delta, const TPathId p
     result->SetStatus(status, reason);
 }
 
-void RegisterChanges(const TTxState& txState, const TTxId operationTxId, TOperationContext& context, TPath& path, const TSubDomainInfo::TPtr& subdomainInfo, TSubDomainInfo::TPtr& alter) {
+void RegisterChanges(const TTxState& txState, const TTxId operationTxId, TOperationContext& context, TPath& path, TSubDomainInfo::TPtr& subdomainInfo, TSubDomainInfo::TPtr& alter) {
     const auto& basenameId = path.Base()->PathId;
 
     context.MemChanges.GrabPath(context.SS, basenameId);
@@ -502,7 +502,7 @@ public:
         // so that next stages would get extsubdomain's hive tablet id
         // by requesting on extsubdomain's path
         {
-            auto& subdomain = context.SS->SubDomains.Update(txState->TargetPathId);
+            auto subdomain = context.SS->SubDomains.at(txState->TargetPathId);
             subdomain->AddPrivateShard(shardIdx);
             subdomain->AddInternalShard(shardIdx, context.SS);
 
@@ -620,7 +620,7 @@ public:
 
         // Get existing extsubdomain
         Y_ABORT_UNLESS(context.SS->SubDomains.contains(basenameId));
-        auto subdomainInfo = context.SS->SubDomains.Update(basenameId);
+        auto subdomainInfo = context.SS->SubDomains.at(basenameId);
         Y_ABORT_UNLESS(subdomainInfo);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
@@ -872,7 +872,7 @@ public:
 
         // Get existing extsubdomain
         Y_ABORT_UNLESS(context.SS->SubDomains.contains(basenameId));
-        auto subdomainInfo = context.SS->SubDomains.Update(basenameId);
+        auto subdomainInfo = context.SS->SubDomains.at(basenameId);
         Y_ABORT_UNLESS(subdomainInfo);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));

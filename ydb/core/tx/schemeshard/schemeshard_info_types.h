@@ -1460,7 +1460,7 @@ public:
         p->LastCondEraseLag = TDuration::Zero();
     }
 
-    bool IsUsingSequence(const TString& name) const {
+    bool IsUsingSequence(const TString& name) {
         for (const auto& pr : Columns) {
             if (pr.second.DefaultKind == ETableColumnDefaultKind::FromSequence &&
                 pr.second.DefaultValue == name)

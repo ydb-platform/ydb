@@ -577,12 +577,12 @@ public:
                     << " hasBalancer " << hasBalancer);
 
         if (!pqGroup->AlterData->PartitionsToAdd.empty()) {
-            ReassignIds(pqGroup, context);
+            ReassignIds(pqGroup);
         }
         return shardsToCreate > 0;
     }
 
-    void ReassignIds(TTopicInfo::TPtr pqGroup, TOperationContext& context) {
+    void ReassignIds(TTopicInfo::TPtr pqGroup) {
         Y_ABORT_UNLESS(pqGroup->TotalPartitionCount >= pqGroup->TotalGroupCount);
         ui32 numOld = pqGroup->TotalPartitionCount;
         ui32 numNew = pqGroup->AlterData->PartitionsToAdd.size() + numOld;
@@ -673,7 +673,7 @@ public:
             }
         }
 
-        auto topic = context.SS->Topics.Update(path.Base()->PathId);
+        TTopicInfo::TPtr topic = context.SS->Topics.at(path.Base()->PathId);
         Y_ABORT_UNLESS(topic);
 
         if (topic->AlterVersion == 0) {

@@ -1018,12 +1018,12 @@ void TSchemeShard::ClearDescribePathCaches(const TPathElement::TPtr node, bool f
 
     if (node->PathType == NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup) {
         Y_ABORT_UNLESS(Topics.contains(node->PathId));
-        auto& pqGroup = Topics.Update(node->PathId);
+        TTopicInfo::TPtr pqGroup = Topics.at(node->PathId);
         pqGroup->PreSerializedPathDescription.clear();
         pqGroup->PreSerializedPartitionsDescription.clear();
     } else if (node->PathType == NKikimrSchemeOp::EPathType::EPathTypeTable) {
         Y_ABORT_UNLESS(Tables.contains(node->PathId));
-        auto& tabletInfo = Tables.Update(node->PathId);
+        TTableInfo::TPtr tabletInfo = Tables.at(node->PathId);
         tabletInfo->PreserializedTablePartitions.clear();
         tabletInfo->PreserializedTablePartitionsNoKeys.clear();
         tabletInfo->PreserializedTableSplitBoundaries.clear();
@@ -1061,7 +1061,7 @@ bool TSchemeShard::GetBindingsRooms(
     }
     Y_ABORT_UNLESS(pFamily && pFamily->HasStorageConfig());
 
-    auto domainInfo = SubDomains.at(domainId);
+    TSubDomainInfo::TPtr domainInfo = SubDomains.at(domainId);
     auto& storagePools = domainInfo->EffectiveStoragePools();
 
     if (!storagePools) {
@@ -1217,7 +1217,7 @@ bool TSchemeShard::GetOlapChannelsBindings(
         return false;
     }
 
-    auto domainInfo = SubDomains.at(domainId);
+    TSubDomainInfo::TPtr domainInfo = SubDomains.at(domainId);
     auto& storagePools = domainInfo->EffectiveStoragePools();
     if (!storagePools) {
         errStr = "Database has no configured storage pools";
@@ -1327,7 +1327,7 @@ bool TSchemeShard::GetChannelsBindings(const TPathId domainId, const TTableInfo:
 
     TChannelProfiles::TProfile& profile = ChannelProfiles->Profiles.at(profileId);
 
-    auto domainInfo = SubDomains.at(domainId);
+    TSubDomainInfo::TPtr domainInfo = SubDomains.at(domainId);
     const TStoragePools& storagePools = domainInfo->EffectiveStoragePools();
 
     if (storagePools.empty()) {
@@ -1355,7 +1355,7 @@ bool TSchemeShard::ResolveRtmrChannels(const TPathId domainId, TChannelsBindings
 
 bool TSchemeShard::ResolveSolomonChannels(const NKikimrSchemeOp::TKeyValueStorageConfig &config, const TPathId domainId, TChannelsBindings& channelsBinding) const
 {
-    auto domainInfo = SubDomains.at(domainId);
+    TSubDomainInfo::TPtr domainInfo = SubDomains.at(domainId);
     auto& storagePools = domainInfo->EffectiveStoragePools();
 
     if (!storagePools) {
@@ -1391,7 +1391,7 @@ bool TSchemeShard::ResolveChannelsByPoolKinds(
     const TPathId domainId,
     TChannelsBindings &channelsBinding) const
 {
-    auto domainInfo = SubDomains.at(domainId);
+    TSubDomainInfo::TPtr domainInfo = SubDomains.at(domainId);
     auto& storagePools = domainInfo->EffectiveStoragePools();
 
     if (!storagePools || !channelPoolKinds) {
@@ -1499,7 +1499,7 @@ bool TSchemeShard::ResolveChannelCommon(ui32 profileId, const TPathId domainId, 
     const auto& profile = ChannelProfiles->Profiles[profileId];
     Y_ABORT_UNLESS(profile.Channels.size() > 0);
 
-    auto domainInfo = SubDomains.at(domainId);
+    TSubDomainInfo::TPtr domainInfo = SubDomains.at(domainId);
     auto& storagePools = domainInfo->EffectiveStoragePools();
 
     if (!storagePools) {
@@ -1594,10 +1594,10 @@ TSubDomainInfo::TPtr TSchemeShard::ResolveDomainInfo(TPathId pathId) const {
 
 TSubDomainInfo::TPtr TSchemeShard::ResolveDomainInfo(TPathElement::TPtr pathEl) const {
     TPathId domainId = ResolvePathIdForDomain(pathEl);
-    // const getter hands out a mutable handle (pre-existing contract)
-    const auto* info = SubDomains.FindPtr(domainId);
-    Y_ABORT_UNLESS(info && *info);
-    return *info;
+    Y_ABORT_UNLESS(SubDomains.contains(domainId));
+    auto info = SubDomains.at(domainId);
+    Y_ABORT_UNLESS(info);
+    return info;
 }
 
 TPathId TSchemeShard::GetDomainKey(TPathElement::TPtr pathEl) const {
@@ -2185,7 +2185,7 @@ void TSchemeShard::PersistTableIndex(NIceDb::TNiceDb& db, const TPathId& pathId)
     TPathElement::TPtr element = PathsById.at(pathId);
 
     Y_ABORT_UNLESS(Indexes.contains(pathId));
-    auto index = Indexes.at(pathId);
+    TTableIndexInfo::TPtr index = Indexes.at(pathId);
 
     Y_ABORT_UNLESS(IsLocalId(element->PathId));
     Y_ABORT_UNLESS(element->IsTableIndex());
@@ -2223,7 +2223,7 @@ void TSchemeShard::PersistTableIndexAlterData(NIceDb::TNiceDb& db, const TPathId
     TPathElement::TPtr elem = PathsById.at(pathId);
 
     Y_ABORT_UNLESS(Indexes.contains(pathId));
-    auto index = Indexes.at(pathId);
+    TTableIndexInfo::TPtr index = Indexes.at(pathId);
 
     Y_ABORT_UNLESS(IsLocalId(pathId));
     Y_ABORT_UNLESS(elem->IsTableIndex());
@@ -2248,7 +2248,7 @@ void TSchemeShard::PersistTableIndexAlterData(NIceDb::TNiceDb& db, const TPathId
     }
 }
 
-void TSchemeShard::PersistTableIndexAlterVersion(NIceDb::TNiceDb& db, const TPathId& pathId, const TIntrusiveConstPtr<TTableIndexInfo>& indexInfo) {
+void TSchemeShard::PersistTableIndexAlterVersion(NIceDb::TNiceDb& db, const TPathId& pathId, const TTableIndexInfo::TPtr indexInfo) {
     if (IsLocalId(pathId)) {
         db.Table<Schema::TableIndex>().Key(pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::TableIndex::AlterVersion>(indexInfo->AlterVersion)
@@ -2972,7 +2972,7 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
         Y_VERIFY_S(PathsById.at(pathId)->IsTable(), "Path id " << pathId << " is not a table");
         Y_VERIFY_S(Tables.FindPtr(pathId), "Table " << pathId << " doesn't exist");
 
-        auto tableInfo = Tables.at(pathId);
+        TTableInfo::TPtr tableInfo = Tables.at(pathId);
         extraData = tableInfo->SerializeAlterExtraData();
     } else if (txState.TxType == TTxState::TxCopyTable || txState.TxType == TTxState::TxReadOnlyCopyColumnTable) {
         NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
@@ -3069,7 +3069,7 @@ void TSchemeShard::PersistRemoveTx(NIceDb::TNiceDb& db, const TOperationId opId,
 
 void TSchemeShard::PersistTable(NIceDb::TNiceDb& db, const TPathId tableId) {
     Y_ABORT_UNLESS(Tables.contains(tableId));
-    const auto tableInfo = Tables.Update(tableId);
+    const TTableInfo::TPtr tableInfo = Tables.at(tableId);
 
     PersistTableAltered(db, tableId, tableInfo);
     PersistTablePartitioning(db, tableId, tableInfo);
@@ -3979,7 +3979,7 @@ void TSchemeShard::PersistBackupCollection(NIceDb::TNiceDb& db, TPathId pathId, 
 void TSchemeShard::PersistRemoveBackupCollection(NIceDb::TNiceDb& db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
     if (BackupCollections.contains(pathId)) {
-        UnregisterBackupCollectionTables(BackupCollections.Update(pathId));
+        UnregisterBackupCollectionTables(BackupCollections.at(pathId));
         BackupCollections.erase(pathId);
     }
 
@@ -4024,7 +4024,7 @@ void TSchemeShard::PersistSecret(NIceDb::TNiceDb& db, TPathId pathId) {
     TPathElement::TPtr elem = PathsById.at(pathId);
 
     Y_ABORT_UNLESS(Secrets.contains(pathId));
-    auto& secretInfo = Secrets.Update(pathId);
+    TSecretInfo::TPtr secretInfo = Secrets.at(pathId);
 
     Y_ABORT_UNLESS(elem->IsSecret());
 
@@ -4040,8 +4040,7 @@ void TSchemeShard::PersistSecretRemove(NIceDb::TNiceDb& db, TPathId pathId) {
         return;
     }
 
-    // Copy, not a reference: Secrets.erase(pathId) below destroys the slot.
-    auto secretInfo = Secrets.Update(pathId);
+    auto secretInfo = Secrets.at(pathId);
     if (secretInfo->AlterData) {
         secretInfo->AlterData = nullptr;
         PersistSecretAlterRemove(db, pathId);
@@ -4067,7 +4066,7 @@ void TSchemeShard::PersistSecretAlter(NIceDb::TNiceDb& db, TPathId pathId) {
     TPathElement::TPtr elem = PathsById.at(pathId);
 
     Y_ABORT_UNLESS(Secrets.contains(pathId));
-    auto& secretInfo = Secrets.Update(pathId);
+    TSecretInfo::TPtr secretInfo = Secrets.at(pathId);
 
     Y_ABORT_UNLESS(elem->IsSecret());
 
@@ -4673,7 +4672,7 @@ void TSchemeShard::PersistOlapStoreRemove(NIceDb::TNiceDb& db, TPathId pathId, b
         return;
     }
 
-    auto& storeInfo = OlapStores.Update(pathId);
+    auto storeInfo = OlapStores.at(pathId);
     if (storeInfo->AlterData) {
         PersistOlapStoreAlterRemove(db, pathId);
     }
@@ -4785,7 +4784,7 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId,
     // Unlink table from olap store
     if (!tableInfo.IsStandalone() && tableInfo.GetOlapStorePathIdVerified()) {
         Y_ABORT_UNLESS(OlapStores.contains(tableInfo.GetOlapStorePathIdVerified()));
-        auto& storeInfo = OlapStores.Update(tableInfo.GetOlapStorePathIdVerified());
+        auto storeInfo = OlapStores.at(tableInfo.GetOlapStorePathIdVerified());
         storeInfo->ColumnTablesUnderOperation.erase(pathId);
         storeInfo->ColumnTables.erase(pathId);
     }
@@ -4842,7 +4841,7 @@ void TSchemeShard::PersistSequence(NIceDb::TNiceDb& db, TPathId pathId)
     TPathElement::TPtr elem = PathsById.at(pathId);
 
     Y_ABORT_UNLESS(Sequences.contains(pathId));
-    auto& sequenceInfo = Sequences.Update(pathId);
+    TSequenceInfo::TPtr sequenceInfo = Sequences.at(pathId);
 
     Y_ABORT_UNLESS(elem->IsSequence());
 
@@ -4859,7 +4858,7 @@ void TSchemeShard::PersistSequenceRemove(NIceDb::TNiceDb& db, TPathId pathId)
         return;
     }
 
-    auto& sequenceInfo = Sequences.Update(pathId);
+    auto sequenceInfo = Sequences.at(pathId);
     if (sequenceInfo->AlterData) {
         PersistSequenceAlterRemove(db, pathId);
         sequenceInfo->AlterData = nullptr;
@@ -4890,7 +4889,7 @@ void TSchemeShard::PersistSequenceAlter(NIceDb::TNiceDb& db, TPathId pathId)
     TPathElement::TPtr elem = PathsById.at(pathId);
 
     Y_ABORT_UNLESS(Sequences.contains(pathId));
-    auto& sequenceInfo = Sequences.Update(pathId);
+    TSequenceInfo::TPtr sequenceInfo = Sequences.at(pathId);
 
     Y_ABORT_UNLESS(elem->IsSequence());
 
@@ -4925,7 +4924,7 @@ void TSchemeShard::PersistReplicationRemove(NIceDb::TNiceDb& db, TPathId pathId)
         return;
     }
 
-    auto& replicationInfo = Replications.Update(pathId);
+    auto replicationInfo = Replications.at(pathId);
     if (replicationInfo->AlterData) {
         replicationInfo->AlterData = nullptr;
         PersistReplicationAlterRemove(db, pathId);
@@ -5067,7 +5066,7 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
     if (!Tables.contains(pathId)) {
         return;
     }
-    const auto tableInfo = Tables.at(pathId);
+    const TTableInfo::TPtr tableInfo = Tables.at(pathId);
 
     ClearBackupRestoreHistory(db, pathId, tableInfo->BackupHistory);
     ClearBackupRestoreHistory(db, pathId, tableInfo->RestoreHistory);
@@ -5183,7 +5182,7 @@ void TSchemeShard::PersistRemoveTableIndex(NIceDb::TNiceDb &db, TPathId pathId)
         return;
     }
 
-    const auto index = Indexes.at(pathId);
+    const TTableIndexInfo::TPtr index = Indexes.at(pathId);
     for (ui32 kNo = 0; kNo < index->IndexKeys.size(); ++kNo) {
         if (IsLocalId(pathId)) {
             db.Table<Schema::TableIndexKeys>().Key(pathId.LocalPathId, kNo).Delete();
@@ -5368,7 +5367,7 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
         switch(pathEl->PathType) {
             case NKikimrSchemeOp::EPathType::EPathTypeDir:
                 if (pathEl->IsRoot() && IsDomainSchemeShard) {
-                    auto subDomain = SubDomains.at(pathId);
+                    TSubDomainInfo::TPtr subDomain = SubDomains.at(pathId);
                     Y_ABORT_UNLESS(SubDomains.contains(pathId));
                     result.SetSubDomainVersion(subDomain->GetVersion());
                     result.SetSecurityStateVersion(subDomain->GetSecurityStateVersion());
@@ -5386,7 +5385,7 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 Y_ABORT_UNLESS(!(pathEl->IsRoot() && IsDomainSchemeShard));
 
                 Y_ABORT_UNLESS(SubDomains.contains(pathId));
-                auto subDomain = SubDomains.at(pathId);
+                TSubDomainInfo::TPtr subDomain = SubDomains.at(pathId);
                 result.SetSubDomainVersion(subDomain->GetVersion());
                 result.SetSecurityStateVersion(subDomain->GetSecurityStateVersion());
                 generalVersion += result.GetSubDomainVersion();
@@ -5458,9 +5457,9 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 if (tableInfo->Description.HasSchema()) {
                     result.SetColumnTableSchemaVersion(tableInfo->Description.GetSchema().GetVersion());
                 } else if (tableInfo->Description.HasSchemaPresetId() && tableInfo->GetOlapStorePathIdVerified()) {
-                    const auto* storeInfo = OlapStores.FindPtr(tableInfo->GetOlapStorePathIdVerified());
-                    Y_ABORT_UNLESS(storeInfo);
-                    const auto& preset = (*storeInfo)->SchemaPresets.at(tableInfo->Description.GetSchemaPresetId());
+                    Y_ABORT_UNLESS(OlapStores.contains(tableInfo->GetOlapStorePathIdVerified()));
+                    auto& storeInfo = OlapStores.at(tableInfo->GetOlapStorePathIdVerified());
+                    auto& preset = storeInfo->SchemaPresets.at(tableInfo->Description.GetSchemaPresetId());
                     result.SetColumnTableSchemaVersion(tableInfo->Description.GetSchemaPresetVersionAdj() + preset.GetVersion());
                 } else {
                     result.SetColumnTableSchemaVersion(tableInfo->Description.GetSchemaPresetVersionAdj());
@@ -6443,7 +6442,7 @@ THashSet<TShardIdx> TSchemeShard::CollectAllShards(const THashSet<TPathId> &path
         if (!path->IsSubDomainRoot()) {
             continue;
         }
-        auto domainInfo = SubDomains.at(pathId);
+        TSubDomainInfo::TPtr domainInfo = SubDomains.at(pathId);
         const auto& domainShards = domainInfo->GetInternalShards();
         shards.insert(domainShards.begin(), domainShards.end());
     }
@@ -8206,7 +8205,7 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
     Y_VERIFY_S(PathsById.contains(pathId), "Unknown path " << pathId);
 
     TPathElement::TPtr path = PathsById.at(pathId);
-    auto tableInfo = Tables.at(pathId);
+    TTableInfo::TPtr tableInfo = Tables.at(pathId);
     TTableInfo::TAlterDataPtr alterData = tableInfo->AlterData;
 
     Y_VERIFY_S(alterData, "No alter data for table " << pathId);
@@ -8367,7 +8366,7 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
         bool rangeBeginInclusive, bool rangeEndInclusive, bool newTable)
 {
     Y_VERIFY_S(Tables.contains(tableId), "Unknown table id " << tableId);
-    auto& tinfo = Tables.Update(tableId);
+    const TTableInfo::TPtr tinfo = Tables.at(tableId);
     TPathElement::TPtr pinfo = *PathsById.FindPtr(tableId);
 
     TVector<ui32> keyColumnIds = tinfo->FillDescriptionCache(pinfo);
@@ -8429,7 +8428,7 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
         switch (childPath->PathType) {
             case NKikimrSchemeOp::EPathTypeTableIndex: {
                 Y_ABORT_UNLESS(Indexes.contains(childPathId));
-                auto& info = Indexes.Update(childPathId);
+                auto info = Indexes.at(childPathId);
                 DescribeTableIndex(childPathId, childName, newTable ? info->AlterData : info, false, false,
                     *tableDescr->MutableTableIndexes()->Add()
                 );
@@ -8440,7 +8439,7 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
                 Y_VERIFY_S(CdcStreams.contains(childPathId), "Cdc stream not found"
                     << ": pathId# " << childPathId
                     << ", name# " << childName);
-                auto& info = CdcStreams.Update(childPathId);
+                auto info = CdcStreams.at(childPathId);
                 DescribeCdcStream(childPathId, childName, info, *tableDescr->MutableCdcStreams()->Add());
                 break;
             }
@@ -8449,7 +8448,7 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
                 Y_VERIFY_S(Sequences.contains(childPathId), "Sequence not found"
                     << ": path#d# " << childPathId
                     << ", name# " << childName);
-                auto& info = Sequences.Update(childPathId);
+                auto info = Sequences.at(childPathId);
                 DescribeSequence(childPathId, childName, info, *tableDescr->MutableSequences()->Add());
                 break;
             }
@@ -8474,7 +8473,7 @@ void TSchemeShard::FillTableDescription(TPathId tableId, ui32 partitionIdx, ui64
     NKikimrSchemeOp::TTableDescription* tableDescr)
 {
     Y_VERIFY_S(Tables.contains(tableId), "Unknown table id " << tableId);
-    const auto tinfo = Tables.at(tableId);
+    const TTableInfo::TPtr tinfo = Tables.at(tableId);
 
     TString rangeBegin = (partitionIdx != 0)
         ? tinfo->GetPartitions()[partitionIdx-1]->EndOfRange
@@ -9471,7 +9470,7 @@ void TSchemeShard::InitializeStatistics(const TActorContext& ctx) {
 }
 
 void TSchemeShard::ResolveSA() {
-    auto& subDomainInfo = SubDomains.Update(RootPathId());
+    auto subDomainInfo = SubDomains.at(RootPathId());
     if (IsServerlessDomain(subDomainInfo)) {
         auto resourcesDomainId = subDomainInfo->GetResourcesDomainId();
 
@@ -9627,7 +9626,7 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         << ", paths with incomplete stats: " << incompleteCount
         << ", at schemeshard: " << TabletID());
 
-    if (IsServerlessDomain(SubDomains.Update(RootPathId()))) {
+    if (IsServerlessDomain(SubDomains.at(RootPathId()))) {
         // In serverless subdomains several schemeshards send stats to a single SA
         // so we use a bigger interval with jitter.
         const auto max = TDuration::Seconds(SendStatsIntervalSecondsServerless);

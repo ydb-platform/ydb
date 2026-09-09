@@ -66,7 +66,7 @@ public:
         txState->PlanStep = step;
         context.SS->PersistTxPlanStep(db, OperationId, step);
 
-        auto indexData = context.SS->Indexes.at(dstPath.Base()->PathId);
+        TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(dstPath.Base()->PathId);
         context.SS->PersistTableIndex(db, dstPath.Base()->PathId);
         context.SS->Indexes.Set(dstPath.Base()->PathId, indexData->AlterData);
 

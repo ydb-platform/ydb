@@ -97,8 +97,6 @@ extern ui64 gVectorIndexSeed; // for tests only
 // Forward declaration for incremental restore context
 struct TIncrementalRestoreState;
 
-class TMemoryChanges;
-
 // Forward declaration for index build info
 struct TIndexBuildInfo;
 struct TSetColumnConstraintOperationInfo;
@@ -321,7 +319,6 @@ public:
     TDbRefMap<TTopicInfo::TPtr> Topics{"Topics", this, DbRefMaps};
     TDbRefMap<TRtmrVolumeInfo::TPtr> RtmrVolumes{"RtmrVolumes", this, DbRefMaps};
     TDbRefMap<TSolomonVolumeInfo::TPtr> SolomonVolumes{"SolomonVolumes", this, DbRefMaps};
-    // Domain snapshots are coordinated separately by GrabDomain.
     TDbRefMap<TSubDomainInfo::TPtr> SubDomains{"SubDomains", this, DbRefMaps};
     TDbRefMap<TBlockStoreVolumeInfo::TPtr> BlockStoreVolumes{"BlockStoreVolumes", this, DbRefMaps};
     TDbRefMap<TFileStoreInfo::TPtr> FileStoreInfos{"FileStoreInfos", this, DbRefMaps};
@@ -534,7 +531,7 @@ public:
         return pId == RootPathId();
     }
 
-    bool IsServerlessDomain(const TSubDomainInfo::TConstPtr& domainInfo) const {
+    bool IsServerlessDomain(TSubDomainInfo::TPtr domainInfo) const {
         const auto& resourcesDomainId = domainInfo->GetResourcesDomainId();
         return !IsDomainSchemeShard && resourcesDomainId && resourcesDomainId != ParentDomainId;
     }
@@ -848,7 +845,7 @@ public:
     // table index
     void PersistTableIndex(NIceDb::TNiceDb& db, const TPathId& pathId);
     void PersistTableIndexAlterData(NIceDb::TNiceDb& db, const TPathId& pathId);
-    void PersistTableIndexAlterVersion(NIceDb::TNiceDb& db, const TPathId& pathId, const TIntrusiveConstPtr<TTableIndexInfo>& indexInfo);
+    void PersistTableIndexAlterVersion(NIceDb::TNiceDb& db, const TPathId& pathId, const TTableIndexInfo::TPtr indexInfo);
 
     // cdc stream
     void PersistCdcStream(NIceDb::TNiceDb& db, const TPathId& pathId);
@@ -1349,14 +1346,14 @@ public:
     void DescribeTableIndex(const TPathId& pathId, const TString& name,
         bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TIndexDescription& entry
     ) const;
-    void DescribeTableIndex(const TPathId& pathId, const TString& name, const TIntrusiveConstPtr<TTableIndexInfo>& indexInfo,
+    void DescribeTableIndex(const TPathId& pathId, const TString& name, TTableIndexInfo::TPtr indexInfo,
         bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TIndexDescription& entry
     ) const;
     void DescribeCdcStream(const TPathId& pathId, const TString& name, NKikimrSchemeOp::TCdcStreamDescription& desc);
-    void DescribeCdcStream(const TPathId& pathId, const TString& name, const TIntrusiveConstPtr<TCdcStreamInfo>& info, NKikimrSchemeOp::TCdcStreamDescription& desc);
+    void DescribeCdcStream(const TPathId& pathId, const TString& name, TCdcStreamInfo::TPtr info, NKikimrSchemeOp::TCdcStreamDescription& desc);
     void DescribeSequence(const TPathId& pathId, const TString& name,
         NKikimrSchemeOp::TSequenceDescription& desc, bool fillSetVal = false);
-    void DescribeSequence(const TPathId& pathId, const TString& name, const TIntrusiveConstPtr<TSequenceInfo>& info,
+    void DescribeSequence(const TPathId& pathId, const TString& name, TSequenceInfo::TPtr info,
         NKikimrSchemeOp::TSequenceDescription& desc, bool fillSetVal = false);
     void DescribeReplication(const TPathId& pathId, const TString& name, NKikimrSchemeOp::TReplicationDescription& desc);
     void DescribeReplication(const TPathId& pathId, const TString& name, TReplicationInfo::TPtr info, NKikimrSchemeOp::TReplicationDescription& desc);

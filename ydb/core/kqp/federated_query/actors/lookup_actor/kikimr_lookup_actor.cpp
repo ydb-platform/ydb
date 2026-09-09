@@ -312,12 +312,13 @@ namespace {
         }
 
         void SendSession(const NActors::TActorId& sender, TSessionState::TPtr session) {
-            auto& sessionId = session->SessionId;
+            const auto& sessionId = session->SessionId;
             YDB_LOG_TRACE("Sent waiting session",
                     {"senderId", sender},
                     {"sessionId", sessionId},
                     {"database", session->Database});
-            auto& databaseState = DatabaseStates[session->Database];
+            const auto& database = session->Database;
+            auto& databaseState = DatabaseStates[database];
             databaseState.ExpireTime = TInstant::Now() + DatabaseStatesCleanupPeriod;
             auto [_, inserted] = databaseState.BusySessions.emplace(sessionId, std::move(session));
             if (!inserted) {
@@ -325,7 +326,7 @@ namespace {
                 Y_VALIDATE(inserted, "BusySession already contains session " << sessionId);
             }
             Send(sender, new TEvSessionAcquired(TSessionInfo::TPtr(new TSessionInfo {
-                .Database = session->Database,
+                .Database = database,
                 .SessionId = sessionId,
             })));
         }

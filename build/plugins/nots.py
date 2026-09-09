@@ -1204,6 +1204,10 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
     has_deps = pj.has_dependencies()
+    prod_bundle = unit.get("_WITH_NODE_MODULES_PROD") == "yes"
+    if prod_bundle and unit.get("_INJECT_PEERS") != "yes":
+        ymake.report_configure_error("WITH_NODE_MODULES(PROD) requires injected workspace dependencies")
+        return
     if _use_hermetic_node_modules(unit):
         _configure_hermetic_node_modules(unit)
 
@@ -1211,7 +1215,10 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
         unit.onpeerdir(pm.get_local_peers_from_package_json())
         nm_bundle_needed = _node_modules_bundle_needed(unit, pm.module_path)
         if nm_bundle_needed:
-            unit.set(["_NODE_MODULES_BUNDLE_ARG", "--nm-bundle yes"])
+            bundle_args = "--nm-bundle yes"
+            if prod_bundle:
+                bundle_args += " --nm-bundle-prod yes"
+            unit.set(["_NODE_MODULES_BUNDLE_ARG", bundle_args])
 
         ins, outs = pm.calc_node_modules_inouts(nm_bundle_needed)
 
@@ -1224,8 +1231,8 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
         }
         ins = [path for path in ins if path not in source_manifests]
 
-        if not _use_hermetic_node_modules(unit):
-            # Legacy builders materialize node_modules in the build action and
+        if not _use_hermetic_node_modules(unit) or prod_bundle:
+            # Legacy and production-bundle builders materialize node_modules in the build action and
             # copy pnpm patches from the source tree there. Declare those files
             # explicitly so they are available in a distbuild sandbox.
             ins.extend(

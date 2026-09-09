@@ -353,6 +353,7 @@ class PackageManager(object):
         local_cli=False,
         node_modules_path=None,
         store_dir=None,
+        prod=False,
     ):
         """
         Creates node_modules directory according to the lockfile.
@@ -381,11 +382,32 @@ class PackageManager(object):
             virtual_store_dir,
             self.inject_peers,
             node_modules_path,
+            prod=prod,
         )
 
         self._run_apply_addons_if_need(yatool_prebuilder_path, virtual_store_dir or global_virtual_store_dir)
 
         return ws
+
+    @timeit
+    def prune_node_modules(self, yatool_prebuilder_path=None, local_cli=False):
+        """Reinstall only production dependencies before bundling injected node_modules."""
+        if not self.inject_peers:
+            raise PackageManagerError("Production-only bundling requires injected workspace dependencies")
+
+        node_modules_path = build_nm_path(self.build_path)
+        # A restored layer can live on a RAM disk behind this symlink.
+        real_node_modules_path = os.path.realpath(node_modules_path)
+        if os.path.isdir(real_node_modules_path):
+            shutil.rmtree(real_node_modules_path)
+        if os.path.islink(node_modules_path):
+            os.unlink(node_modules_path)
+
+        self.create_node_modules(
+            yatool_prebuilder_path=yatool_prebuilder_path,
+            local_cli=local_cli,
+            prod=True,
+        )
 
     """
     Runs pnpm install command with specified parameters in an exclusive and hashed manner.
@@ -412,6 +434,7 @@ class PackageManager(object):
         virtual_store_dir: str | None,
         inject_peers: bool,
         node_modules_path: str,
+        prod: bool = False,
     ):
         # Use fcntl to lock a temp file
 
@@ -437,6 +460,9 @@ class PackageManager(object):
                 store_dir,
                 "--strict-peer-dependencies",
             ]
+
+            if prod:
+                install_cmd.append("--prod")
 
             if custom_node_modules_path:
                 install_cmd.extend(["--modules-dir", os.path.relpath(node_modules_path, cwd)])

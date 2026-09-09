@@ -216,8 +216,12 @@ bool TDeclaredResultShape::Accepts(
         return true;
     }
     // An Optional the host registered for a declared Optional<container>: the
-    // value is the container itself, and there is nothing cheap to look at.
-    if (family == EBridgeKindFamily::Optional) {
+    // value is the container itself, so the kind stopped at the wrapper and
+    // there is nothing cheap to look at. A scalar or a string under an
+    // Optional keeps a representation of its own, so a wrapper over one of
+    // those always carries the payload kind -- a node that does not is not
+    // one of them, and cannot pass for a declared scalar or string.
+    if (family == EBridgeKindFamily::Optional && IsBridgeBoxedFamily(Family)) {
         return true;
     }
     return family == EBridgeKindFamily::Null && Optional;

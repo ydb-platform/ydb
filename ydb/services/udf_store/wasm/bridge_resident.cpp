@@ -139,17 +139,16 @@ ui64 TCompartmentResidentCache::AllocGuest(ui64 length) {
             << "Bridge: BridgeAllocResident of " << length
             << " bytes is larger than the whole resident budget (" << Budget_ << ")";
     }
-    const ui64 blockSize = BlockSizeFor(length);
-    if (ResidentBytes() + blockSize > Budget_) {
+    if (ResidentBytes() + length > Budget_) {
         ythrow yexception()
             << "Bridge: BridgeAllocResident of " << length
             << " bytes would exceed the resident budget ("
-            << ResidentBytes() << " + " << blockSize << " > " << Budget_ << ")";
+            << ResidentBytes() << " + " << length << " > " << Budget_ << ")";
     }
     const ui64 offset = Alloc(length);
     if (offset != 0) {
-        GuestBlocks_.insert(offset);
-        GuestBytes_ += blockSize;
+        GuestBlocks_.emplace(offset, length);
+        GuestBytes_ += length;
     }
     return offset;
 }
@@ -158,19 +157,19 @@ void TCompartmentResidentCache::FreeGuest(ui64 offset) {
     if (offset == 0) {
         return;
     }
-    if (!GuestBlocks_.contains(offset)) {
+    auto guest = GuestBlocks_.find(offset);
+    if (guest == GuestBlocks_.end()) {
         ythrow yexception()
             << "Bridge: BridgeFreeResident on offset " << offset
             << ", which was not returned by BridgeAllocResident";
     }
-    auto it = Blocks_.find(offset);
-    if (it == Blocks_.end()) {
+    if (!Blocks_.contains(offset)) {
         ythrow yexception()
             << "Bridge: resident free of unknown or already freed offset " << offset;
     }
-    Y_ENSURE(GuestBytes_ >= it->second);
-    GuestBytes_ -= it->second;
-    GuestBlocks_.erase(offset);
+    Y_ENSURE(GuestBytes_ >= guest->second);
+    GuestBytes_ -= guest->second;
+    GuestBlocks_.erase(guest);
     Free(offset);
 }
 
@@ -198,7 +197,10 @@ void TCompartmentResidentCache::EvictFor(ui64 length) {
             continue;
         }
         Free(pin->Offset);
-        PinnedBytes_ -= pin->BlockSize;
+        PinnedBytes_ -= pin->Length;
+        if (pin->Length > Budget_) {
+            OversizedBytes_ -= pin->Length;
+        }
         ++Evictions_;
         // The guest keyed its own state on the same identity, and that state
         // usually points into the block that just went away. Hand it back the
@@ -224,33 +226,49 @@ ui64 TCompartmentResidentCache::Pin(
         return existing->Offset;
     }
 
-    const ui64 blockSize = BlockSizeFor(bytes.Size());
-    // Budget is tracked in BlockSize units, so compare like with like.
-    EvictFor(blockSize);
-    // Eviction leaves alone every pin the current Run touched -- their offsets
-    // are live -- so a Run that keeps pinning finds nothing to give back and
-    // has to be refused here, or the budget would not hold within a row.
-    // A value larger than the whole budget is still pinned: the guest has no
-    // other way to see it.
-    if (blockSize <= Budget_ && ResidentBytes() + blockSize > Budget_) {
-        ythrow yexception()
-            << "Bridge: pin of " << bytes.Size()
-            << " bytes would exceed the resident budget ("
-            << ResidentBytes() << " + " << blockSize << " > " << Budget_ << ")";
+    const ui64 length = bytes.Size();
+    if (length > Budget_) {
+        // A value larger than the whole budget is pinned regardless -- the
+        // guest has no other way to see it -- and stays out of the budget
+        // counter, or every later pin of the same Run would be refused for a
+        // limit that was already blown. Only one at a time: nothing else
+        // bounds what such pins put in linear memory.
+        if (OversizedBytes_ != 0) {
+            ythrow yexception()
+                << "Bridge: pin of " << length
+                << " bytes is larger than the whole resident budget (" << Budget_
+                << ") and another such pin is still resident";
+        }
+    } else {
+        // Real bytes, not the size class they land in: the budget is what the
+        // caller asked for, and rounding every length up would spend it early.
+        EvictFor(length);
+        // Eviction leaves alone every pin the current Run touched -- their
+        // offsets are live -- so a Run that keeps pinning finds nothing to
+        // give back and has to be refused here, or the budget would not hold
+        // within a row.
+        if (ResidentBytes() + length > Budget_) {
+            ythrow yexception()
+                << "Bridge: pin of " << length
+                << " bytes would exceed the resident budget ("
+                << ResidentBytes() << " + " << length << " > " << Budget_ << ")";
+        }
     }
 
     TPin pin;
     pin.Owner = owner;
-    pin.Offset = AllocBlock(bytes.Size());
-    pin.Length = bytes.Size();
-    pin.BlockSize = blockSize;
+    pin.Offset = AllocBlock(length);
+    pin.Length = length;
     pin.LastRun = CurrentRun_;
     WriteBytes(pin.Offset, bytes);
 
     const ui64 offset = pin.Offset;
     Lru_.push_back(key);
     pin.LruIt = std::prev(Lru_.end());
-    PinnedBytes_ += pin.BlockSize;
+    PinnedBytes_ += length;
+    if (length > Budget_) {
+        OversizedBytes_ += length;
+    }
     Pins_.emplace(key, std::move(pin));
     return offset;
 }
@@ -259,16 +277,16 @@ ui64 TCompartmentResidentCache::PinScratch(TStringRef bytes) {
     if (bytes.Size() == 0) {
         return 0;
     }
-    const ui64 blockSize = BlockSizeFor(bytes.Size());
-    if (ResidentBytes() + blockSize > Budget_) {
+    const ui64 length = bytes.Size();
+    if (ResidentBytes() + length > Budget_) {
         ythrow yexception()
-            << "Bridge: scratch pin of " << bytes.Size()
+            << "Bridge: scratch pin of " << length
             << " bytes would exceed the resident budget ("
-            << ResidentBytes() << " + " << blockSize << " > " << Budget_ << ")";
+            << ResidentBytes() << " + " << length << " > " << Budget_ << ")";
     }
-    const ui64 offset = AllocBlock(bytes.Size());
+    const ui64 offset = AllocBlock(length);
     ScratchBlocks_.push_back(offset);
-    ScratchBytes_ += blockSize;
+    ScratchBytes_ += length;
     WriteBytes(offset, bytes);
     return offset;
 }

@@ -24,6 +24,7 @@ SRCS(
     bridge_dict_ut.cpp
     bridge_leak_ut.cpp
     bridge_node_table_ut.cpp
+    bridge_typecheck_ut.cpp
     compartment_manager_ut.cpp
     object_framework_ut.cpp
     objects_abi_ut.cpp

@@ -1169,6 +1169,81 @@ Y_UNIT_TEST(ResidentBudgetHoldsWithinOneRun) {
     UNIT_ASSERT(resident.Pin(hugeKey, hugeValue, hugeValue.AsStringRef()) != 0);
 }
 
+Y_UNIT_TEST(OversizedPinLeavesTheBudgetToTheRest) {
+    // The one value too large for the budget is pinned regardless, and used to
+    // be charged for it: the Run that had to look at such a value then got
+    // nothing else pinned, down to a 64 byte string.
+    TMiniKqlEnv mkql;
+
+    auto compartment = CreateEmptyImage();
+    compartment->AddSdk(MakeNamedLibrary("sdk", SdkStubWast).Bytecode);
+
+    constexpr ui64 kBudget = 4ull << 20;
+    TCompartmentResidentCache resident(compartment.get(), kBudget);
+    resident.BeginRun();
+
+    const TString huge(2 * kBudget, 'H');
+    auto hugeValue = mkql.ValueBuilder.NewString(TStringRef(huge.data(), huge.size()));
+    const TBridgeIdentity hugeKey = BridgeIdentityKey(hugeValue);
+    UNIT_ASSERT(hugeKey);
+    UNIT_ASSERT(resident.Pin(hugeKey, hugeValue, hugeValue.AsStringRef()) != 0);
+
+    const TString small(64, 's');
+    auto smallValue = mkql.ValueBuilder.NewString(TStringRef(small.data(), small.size()));
+    const TBridgeIdentity smallKey = BridgeIdentityKey(smallValue);
+    UNIT_ASSERT(smallKey);
+    UNIT_ASSERT(resident.Pin(smallKey, smallValue, smallValue.AsStringRef()) != 0);
+
+    // Only one at a time, though: nothing else bounds what such pins put in
+    // linear memory.
+    const TString second(2 * kBudget, 'S');
+    auto secondValue = mkql.ValueBuilder.NewString(TStringRef(second.data(), second.size()));
+    const TBridgeIdentity secondKey = BridgeIdentityKey(secondValue);
+    UNIT_ASSERT(secondKey);
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        resident.Pin(secondKey, secondValue, secondValue.AsStringRef()),
+        yexception,
+        "still resident");
+}
+
+Y_UNIT_TEST(ResidentBudgetCountsTheBytesItWasAsked) {
+    // Blocks are rounded up to a size class for reuse, but the budget is what
+    // the caller asked for: counting the rounding too left a 64 MiB budget
+    // holding little more than half of that in strings.
+    TMiniKqlEnv mkql;
+
+    auto compartment = CreateEmptyImage();
+    compartment->AddSdk(MakeNamedLibrary("sdk", SdkStubWast).Bytecode);
+
+    constexpr ui64 kBudget = 4ull << 20;
+    // Just over half a size class, so rounding up nearly doubles it.
+    constexpr size_t kBlob = 600ull << 10;
+    TCompartmentResidentCache resident(compartment.get(), kBudget);
+    resident.BeginRun();
+
+    TVector<TUnboxedValue> blobs;
+    for (int i = 0; i < 7; ++i) {
+        TString payload(kBlob, static_cast<char>('a' + i));
+        blobs.push_back(mkql.ValueBuilder.NewString(TStringRef(payload.data(), payload.size())));
+    }
+
+    // Six fit in the budget, and none of them is evictable within the Run.
+    for (int i = 0; i < 6; ++i) {
+        const TBridgeIdentity key = BridgeIdentityKey(blobs[i]);
+        UNIT_ASSERT(key);
+        UNIT_ASSERT_C(
+            resident.Pin(key, blobs[i], blobs[i].AsStringRef()) != 0,
+            TStringBuilder() << "pin " << i << " of " << kBlob << " bytes was refused");
+    }
+    UNIT_ASSERT_VALUES_EQUAL(resident.PinnedBytes(), 6 * kBlob);
+
+    const TBridgeIdentity seventh = BridgeIdentityKey(blobs[6]);
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        resident.Pin(seventh, blobs[6], blobs[6].AsStringRef()),
+        yexception,
+        "resident budget");
+}
+
 Y_UNIT_TEST(EvictedPinHandsBackItsUserData) {
     TMiniKqlEnv mkql;
 
@@ -1430,6 +1505,16 @@ Y_UNIT_TEST(DeclaredResultShapeLooksUnderOptional) {
     UNIT_ASSERT(!optionalScalar.Accepts(EBridgeValueKind::String));
     UNIT_ASSERT(optionalScalar.Accepts(EBridgeValueKind::Optional, EBridgeValueKind::Uint32));
     UNIT_ASSERT(!optionalScalar.Accepts(EBridgeValueKind::Optional, EBridgeValueKind::List));
+
+    // An Optional whose payload nobody named is a container: a scalar or a
+    // string keeps its own representation under an Optional and is registered
+    // with the payload kind, so a nameless one is neither.
+    UNIT_ASSERT(!optionalScalar.Accepts(EBridgeValueKind::Optional));
+    const auto optionalString = shapeOf(
+        NKikimr::NMiniKQL::TOptionalType::Create(stringType, mkql.Env));
+    UNIT_ASSERT(optionalString.Family == EBridgeKindFamily::String);
+    UNIT_ASSERT(!optionalString.Accepts(EBridgeValueKind::Optional));
+    UNIT_ASSERT(optionalString.Accepts(EBridgeValueKind::Optional, EBridgeValueKind::Utf8));
 }
 
 Y_UNIT_TEST(UserDataSurvivesNodeDeath) {

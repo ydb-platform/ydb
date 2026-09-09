@@ -144,6 +144,24 @@ inline EBridgeKindFamily BridgeKindFamily(EBridgeValueKind kind) {
     return EBridgeKindFamily::Null;
 }
 
+//! Families MiniKQL keeps in a box. An Optional over one of these is
+//! represented as the payload itself, so the two cannot be told apart; every
+//! other family keeps its own representation under an Optional.
+inline bool IsBridgeBoxedFamily(EBridgeKindFamily family) {
+    switch (family) {
+        case EBridgeKindFamily::List:
+        case EBridgeKindFamily::Dict:
+        case EBridgeKindFamily::Tuple:
+        case EBridgeKindFamily::Struct:
+        case EBridgeKindFamily::Variant:
+        case EBridgeKindFamily::Resource:
+        case EBridgeKindFamily::Callable:
+            return true;
+        default:
+            return false;
+    }
+}
+
 inline const char* BridgeKindFamilyAsStr(EBridgeKindFamily family) {
     switch (family) {
         case EBridgeKindFamily::Null:

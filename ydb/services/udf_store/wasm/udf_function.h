@@ -50,9 +50,10 @@ struct TDeclaredResultShape {
 
     //! `kind` is the kind of the returned node, `payload` the kind of the
     //! value inside it when that node is an Optional the guest built. An
-    //! Optional over an unknown payload passes: MiniKQL represents an
-    //! Optional container as the container itself, so there is nothing left
-    //! to compare.
+    //! Optional over an unknown payload passes only for a declared container:
+    //! MiniKQL represents an Optional container as the container itself, so
+    //! there is nothing left to compare, while an optional scalar or string
+    //! always arrives with its payload named.
     bool Accepts(
         EBridgeValueKind kind,
         std::optional<EBridgeValueKind> payload = std::nullopt) const;

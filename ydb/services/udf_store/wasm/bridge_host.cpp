@@ -38,6 +38,10 @@ using namespace NYdb::NWasm;
 using namespace NYql::NUdf;
 
 constexpr ui32 MaxBridgeRunDepth = 64;
+//! Optional layers stripped when naming the family of a declared type. Sibling
+//! walkers over type wrappers stop at 8; a well-formed type never nests that
+//! deep, and the bound only keeps a broken one from looping.
+constexpr ui32 MaxOptionalDepth = 8;
 
 TQueryCompartmentHandle& CurrentQueryOrThrow() {
     auto* query = GetCurrentQueryCompartment();
@@ -121,6 +125,22 @@ const TType* OptionalItemTypeOf(const TType* type) {
     }
     const TOptionalTypeInspector optional(*helper, type);
     return optional ? optional.GetItemType() : nullptr;
+}
+
+//! The type whose family a value of `type` will present to MiniKQL. An
+//! Optional over a container or a string is represented as the payload
+//! itself, so the wrappers say nothing about what the value is; only
+//! Optional<Data> gets its own representation, and BridgeKindsFromType
+//! already looks through that one.
+const TType* PeelOptional(const TType* type) {
+    for (ui32 depth = 0; depth < MaxOptionalDepth; ++depth) {
+        const TType* item = OptionalItemTypeOf(type);
+        if (!item) {
+            break;
+        }
+        type = item;
+    }
+    return type;
 }
 
 const TType* ListItemTypeOf(const TType* type) {
@@ -257,21 +277,24 @@ void EnsureStringKind(const TWasmBridgeNodeTable::TNode& node, const char* what)
     }
 }
 
-//! What the pod itself can be read as, whatever kind its node carries. The
-//! last word for nodes whose kind is not the declared truth: an Optional keeps
-//! the representation of what it wraps, and an untyped node only ever guessed
-//! its kind from the representation in the first place.
-bool ValueFitsFamily(const TUnboxedValuePod& value, EBridgeKindFamily family) {
-    switch (family) {
-        case EBridgeKindFamily::Null:
-            return true;
-        case EBridgeKindFamily::Number:
-            return !value.IsBoxed() && !value.IsString();
-        case EBridgeKindFamily::String:
-            return value.IsString() || value.IsEmbedded();
-        default:
-            return value.IsBoxed();
+//! Family the node's value will present to MiniKQL, which is not always the
+//! family of its own kind: an Optional node is a wrapper, and MiniKQL reads
+//! what the guest put inside it. Nothing when the payload has no name here --
+//! an Optional built over a handle whose kind was never recorded.
+std::optional<EBridgeKindFamily> NodeValueFamily(const TWasmBridgeNodeTable::TNode& node) {
+    const auto family = BridgeKindFamily(node.ValueKind);
+    if (family != EBridgeKindFamily::Optional) {
+        return family;
     }
+    if (node.InnerValueKind) {
+        return BridgeKindFamily(*node.InnerValueKind);
+    }
+    if (const auto* helper = CurrentTypeHelper(); helper && node.Type) {
+        // Registered from a declared Optional<container>: the kind stopped at
+        // the wrapper, the type names the payload.
+        return BridgeKindFamily(BridgeKindsFromType(PeelOptional(node.Type), helper).Value);
+    }
+    return std::nullopt;
 }
 
 //! Guard for a guest handle the host is about to hand to MiniKQL as a value of
@@ -280,6 +303,11 @@ bool ValueFitsFamily(const TUnboxedValuePod& value, EBridgeKindFamily family) {
 //! value accessors (hashing a boxed pod as a string key, say), which takes the
 //! whole node down. Compare families -- the same grouping BridgeGetKind shows
 //! the guest -- and throw the way EnsureKind does.
+//!
+//! The node's kind is the only evidence used. It comes either from a declared
+//! type or from the intrinsic the guest built the value with, both of which
+//! know more than the representation does: every boxed value looks alike in
+//! the pod, and so do a string and an eight-byte integer once embedded.
 void EnsureNodeMatchesType(
     const TWasmBridgeNodeTable::TNode& node,
     const TType* expected,
@@ -290,7 +318,8 @@ void EnsureNodeMatchesType(
         // Untyped slot: nothing declared to check against.
         return;
     }
-    const auto expectedFamily = BridgeKindFamily(BridgeKindsFromType(expected, helper).Value);
+    const auto expectedFamily =
+        BridgeKindFamily(BridgeKindsFromType(PeelOptional(expected), helper).Value);
     if (expectedFamily == EBridgeKindFamily::Null) {
         return;
     }
@@ -299,22 +328,18 @@ void EnsureNodeMatchesType(
         // payload type is, and the hashers answer for it without looking in.
         return;
     }
-    const auto family = BridgeKindFamily(node.ValueKind);
-    if (family == expectedFamily) {
+    const auto family = NodeValueFamily(node);
+    if (!family || *family == expectedFamily) {
+        // An unnamed payload leaves nothing to compare.
         return;
     }
-    // An Optional node is a wrapper around a payload the host cannot see, and
-    // an untyped node took its kind from the representation (every boxed value
-    // reads as Callable there). Neither says what the value really is, so fall
-    // back to what MiniKQL will be able to read out of the pod.
-    const bool kindFollowsADeclaredType =
-        node.Type != nullptr && family != EBridgeKindFamily::Optional;
-    if (!kindFollowsADeclaredType && ValueFitsFamily(node.Value, expectedFamily)) {
-        return;
-    }
+    // A value the guest made optional twice -- Just(null), Just(Just(x)) --
+    // lands here as an Optional over an Optional or over the Null family. Only
+    // a doubly optional slot can read one, a depth the bridge does not track,
+    // so refuse it: a guest that means a null passes the null handle itself.
     ythrow yexception()
         << "Bridge: " << what << " expected a " << BridgeKindFamilyAsStr(expectedFamily)
-        << " value, got " << BridgeKindFamilyAsStr(family);
+        << " value, got " << BridgeKindFamilyAsStr(*family);
 }
 
 //! Integral getters widen: the guest asks for i64/ui64 whatever the declared
@@ -846,13 +871,6 @@ TVector<TUnboxedValue> ResolveHandleArray(
 }
 
 ui64 MakeArrayLike(ui64 elemsOff, i32 n, EBridgeNodeKind kind, EBridgeValueKind valueKind, const char* what) {
-    auto values = ResolveHandleArray(elemsOff, n, what);
-    auto* builder = CurrentValueBuilderOrThrow();
-    TUnboxedValue* items = nullptr;
-    auto result = builder->NewArray(static_cast<ui32>(n), items);
-    for (i32 i = 0; i < n; ++i) {
-        items[i] = std::move(values[i]);
-    }
     // Untyped the guest cannot read back what it just built: GetMemberCount,
     // GetElement and GetMemberIndex all need a type. Take the one from the
     // declared result type, but only when the arity agrees -- a nested
@@ -863,6 +881,23 @@ ui64 MakeArrayLike(ui64 elemsOff, i32 n, EBridgeNodeKind kind, EBridgeValueKind 
         : nullptr;
     if (const auto arity = MemberCountOfType(type); !arity || *arity != static_cast<ui32>(n)) {
         type = nullptr;
+    }
+    // Every member lands in a declared slot and will be read as that slot's
+    // type, so each is checked against its own.
+    TVector<const TType*> memberTypes;
+    if (type) {
+        memberTypes.reserve(static_cast<size_t>(n));
+        for (i32 i = 0; i < n; ++i) {
+            memberTypes.push_back(ElementTypeOf(type, static_cast<ui32>(i)));
+        }
+    }
+
+    auto values = ResolveHandleArray(elemsOff, n, what, memberTypes);
+    auto* builder = CurrentValueBuilderOrThrow();
+    TUnboxedValue* items = nullptr;
+    auto result = builder->NewArray(static_cast<ui32>(n), items);
+    for (i32 i = 0; i < n; ++i) {
+        items[i] = std::move(values[i]);
     }
     return RegisterOwned(kind, valueKind, std::move(result), type);
 }
@@ -911,15 +946,23 @@ ui64 BridgeMakeVariantHost(i32 index, ui64 itemHandle) {
     auto* builder = CurrentValueBuilderOrThrow();
     TUnboxedValue item;
     if (itemHandle != NullBridgeHandle) {
+        const auto& itemNode = table.Resolve(itemHandle);
+        // The alternative is read back as the type the underlying Tuple or
+        // Struct declares at this index.
+        EnsureNodeMatchesType(
+            itemNode,
+            ElementTypeOf(variant.GetUnderlyingType(), static_cast<ui32>(index)),
+            "BridgeMakeVariant item");
         // Not consumed: the copy takes its own MiniKQL ref and the guest keeps
         // the handle it passed in, same as every other Make*.
-        item = table.Resolve(itemHandle).Value;
+        item = itemNode.Value;
     }
     auto result = builder->NewVariant(static_cast<ui32>(index), std::move(item));
     return RegisterOwned(
         EBridgeNodeKind::Variant,
         EBridgeValueKind::Variant,
-        std::move(result));
+        std::move(result),
+        variantType);
 }
 
 //! Type of the value the running UDF has to return, as a value-less node.
@@ -946,9 +989,7 @@ ui64 BridgeMakeDictHost(ui64 typeHandle, ui64 pairsOff, i32 n) {
         ythrow yexception() << "Bridge: BridgeMakeDict needs a typed dict node";
     }
     // The type may be Optional<Dict<..>> when it comes from a result type.
-    if (const TType* item = OptionalItemTypeOf(dictType)) {
-        dictType = item;
-    }
+    dictType = PeelOptional(dictType);
     if (!TDictTypeInspector(*helper, dictType)) {
         ythrow yexception() << "Bridge: BridgeMakeDict expected a Dict type";
     }
@@ -965,7 +1006,14 @@ ui64 BridgeMakeDictHost(ui64 typeHandle, ui64 pairsOff, i32 n) {
         const size_t pair = static_cast<size_t>(i) * 2;
         dictBuilder->Add(std::move(values[pair]), std::move(values[pair + 1]));
     }
-    return RegisterOwned(EBridgeNodeKind::Dict, EBridgeValueKind::Dict, dictBuilder->Build());
+    // Typed: a dict the guest built is looked into later on -- by itself
+    // through DictLookup, or by the host as a result -- and the key check
+    // there has nothing to compare against without the type.
+    return RegisterOwned(
+        EBridgeNodeKind::Dict,
+        EBridgeValueKind::Dict,
+        dictBuilder->Build(),
+        dictType);
 }
 
 ui64 BridgeRunHost(ui64 callableHandle, ui64 argsOff, i32 n) {
@@ -1021,6 +1069,18 @@ ui64 BridgeRunHost(ui64 callableHandle, ui64 argsOff, i32 n) {
                 inspector.GetArgType(static_cast<ui32>(i)),
                 "BridgeRun argument");
             argsStorage[i] = argNode.Value;
+        }
+        if (!argsStorage[i]
+            && static_cast<ui32>(i) < required
+            && !OptionalItemTypeOf(inspector.GetArgType(static_cast<ui32>(i))))
+        {
+            // An empty slot is how an argument is left out, and the callee
+            // only tolerates that where the declaration lets it: a mandatory
+            // argument is read without a check, and reading an absent value
+            // as a string or a container aborts inside the accessor.
+            ythrow yexception()
+                << "Bridge: BridgeRun argument " << i
+                << " is null, but the callable declares it mandatory";
         }
         argsPod[i] = argsStorage[i];
     }

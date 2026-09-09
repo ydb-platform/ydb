@@ -7,7 +7,6 @@
 #include <yql/essentials/public/udf/udf_value.h>
 
 #include <util/generic/hash.h>
-#include <util/generic/hash_set.h>
 #include <util/generic/list.h>
 #include <util/generic/noncopyable.h>
 #include <util/generic/vector.h>
@@ -15,11 +14,13 @@
 
 namespace NKikimr::NUdfStore::NWasm {
 
-//! Cap on bytes the bridge keeps resident in compartment linear memory.
+//! Cap on the bytes the bridge keeps resident in compartment linear memory,
+//! counted as asked for and not as the size class they land in.
 //! Exceeding it evicts pins untouched by the current Run, and fails the call
 //! when that frees too little -- pins the current Run holds are not evictable,
 //! so the cap has to hold within one Run too. A single value larger than the
-//! budget is still pinned (the guest has to see it).
+//! budget is still pinned (the guest has to see it) and does not count
+//! against the cap, so the rest of the Run still gets its own budget.
 //! Guest AllocResident and per-Run scratch share the same budget so a guest
 //! cannot grow the arena without bound by looping BridgeAllocResident.
 inline constexpr ui64 DefaultResidentBudgetBytes = 64ull << 20;
@@ -118,7 +119,6 @@ private:
         NYql::NUdf::TUnboxedValue Owner;
         ui64 Offset = 0;
         ui64 Length = 0;
-        ui64 BlockSize = 0;
         ui64 LastRun = 0;
         TList<TBridgeIdentity>::iterator LruIt;
     };
@@ -129,10 +129,12 @@ private:
         TList<TBridgeIdentity>::iterator LruIt;
     };
 
-    //! Everything the cache keeps in linear memory right now: pins, per-Run
-    //! scratch and guest-owned blocks all draw on the one budget.
+    //! What the cache keeps in linear memory right now and charges to the
+    //! budget: pins, per-Run scratch and guest-owned blocks draw on the one
+    //! budget. Pins of values too large for the budget are left out -- they
+    //! are taken anyway, and charging them would refuse everything after.
     ui64 ResidentBytes() const {
-        return PinnedBytes_ + ScratchBytes_ + GuestBytes_;
+        return (PinnedBytes_ - OversizedBytes_) + ScratchBytes_ + GuestBytes_;
     }
 
     ui64 AllocBlock(ui64 length);
@@ -153,6 +155,9 @@ private:
     //! Front is the least recently used pin.
     TList<TBridgeIdentity> Lru_;
     ui64 PinnedBytes_ = 0;
+    //! Part of PinnedBytes_ held by pins of values larger than the whole
+    //! budget, which the budget does not count. At most one is resident.
+    ui64 OversizedBytes_ = 0;
     ui64 Evictions_ = 0;
     ui64 CurrentRun_ = 1;
 
@@ -160,7 +165,9 @@ private:
     //! Blocks_ holds the live blocks only; a freed offset moves to FreeBlocks_.
     THashMap<ui64 /*offset*/, ui64 /*block size*/> Blocks_;
     THashMap<ui64 /*block size*/, TVector<ui64 /*offset*/>> FreeBlocks_;
-    THashSet<ui64 /*offset*/> GuestBlocks_;
+    //! Offsets handed out through AllocGuest, with the length each was asked
+    //! for: the block they live in is wider, and the budget counts lengths.
+    THashMap<ui64 /*offset*/, ui64 /*length*/> GuestBlocks_;
     //! Live bytes handed out through AllocGuest; counted against Budget_.
     ui64 GuestBytes_ = 0;
     //! Live bytes in ScratchBlocks_; counted against Budget_ until BeginRun.

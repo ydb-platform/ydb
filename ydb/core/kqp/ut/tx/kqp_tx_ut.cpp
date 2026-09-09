@@ -1342,6 +1342,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         DropCreateTable,
         ViewReadAddColumn,
         ViewRecreate,
+        TwoViewsRecreateOne,
         ViewDrop,
     };
 
@@ -1364,6 +1365,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         ESchemeOp::DropCreateTable,
         ESchemeOp::ViewReadAddColumn,
         ESchemeOp::ViewRecreate,
+        ESchemeOp::TwoViewsRecreateOne,
         ESchemeOp::ViewDrop,
     };
 
@@ -1387,6 +1389,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
             case ESchemeOp::DropCreateTable: return "DropCreateTable";
             case ESchemeOp::ViewReadAddColumn: return "ViewReadAddColumn";
             case ESchemeOp::ViewRecreate: return "ViewRecreate";
+            case ESchemeOp::TwoViewsRecreateOne: return "TwoViewsRecreateOne";
             case ESchemeOp::ViewDrop: return "ViewDrop";
         }
     }
@@ -1575,6 +1578,26 @@ Y_UNIT_TEST_SUITE(KqpTx) {
                 spec.Read = "SELECT * FROM `/Root/SchemeOpsView` ORDER BY Key;";
                 break;
 
+            case ESchemeOp::TwoViewsRecreateOne:
+                // Two views in one query, one of them redefined. Guards the identity of each
+                // object: if they were not told apart, the very first read would already fail.
+                spec.Setup = R"(
+                    CREATE VIEW `/Root/SchemeOpsView1` WITH (security_invoker = TRUE) AS
+                        SELECT Key, Value FROM `/Root/SchemeOpsTable`;
+                    CREATE VIEW `/Root/SchemeOpsView2` WITH (security_invoker = TRUE) AS
+                        SELECT Key, Value FROM `/Root/SchemeOpsTable`;
+                )";
+                spec.Operation = R"(
+                    DROP VIEW `/Root/SchemeOpsView2`;
+                    CREATE VIEW `/Root/SchemeOpsView2` WITH (security_invoker = TRUE) AS
+                        SELECT Key, Value FROM `/Root/SchemeOpsTable` WHERE Key > 0;
+                )";
+                spec.Read = R"(
+                    SELECT v1.Key AS K FROM `/Root/SchemeOpsView1` AS v1
+                    JOIN `/Root/SchemeOpsView2` AS v2 ON v1.Key = v2.Key ORDER BY K;
+                )";
+                break;
+
             case ESchemeOp::ViewDrop:
                 spec.Setup = R"(
                     CREATE VIEW `/Root/SchemeOpsView` WITH (security_invoker = TRUE) AS
@@ -1754,6 +1777,12 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     Y_UNIT_TEST(SchemeChangeViewRecreate) {
         TSchemeChangeInTxTester tester;
         tester.Operation = ESchemeOp::ViewRecreate;
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(SchemeChangeTwoViewsRecreateOne) {
+        TSchemeChangeInTxTester tester;
+        tester.Operation = ESchemeOp::TwoViewsRecreateOne;
         tester.Execute();
     }
 

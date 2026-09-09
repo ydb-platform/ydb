@@ -32,4 +32,4 @@ Test filters should include part of full test name. Full test name format depend
 
 ## Agent instructions
 
-- Before you add or change instructions for AI agents (`AGENTS.md`, `CLAUDE.md`, skills, rules), read ydb/agents/.agents/skills/ydb-agent-instructions/SKILL.md.
+Before you add or change `AGENTS.md`, `CLAUDE.md`, skills or rules, read ydb/agents/.agents/skills/ydb-agent-instructions/SKILL.md.

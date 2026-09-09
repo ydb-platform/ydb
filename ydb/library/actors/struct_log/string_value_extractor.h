@@ -27,8 +27,8 @@ public:
     const std::optional<TString>& ExtractValue(const TStructuredMessage& message, const TString& name) {
         auto index = message.GetValueIndex(name);
         if (!index.has_value()) {
-            static std::optional<TString> empty;
-            return empty;
+            ExtractedValue.reset();
+            return ExtractedValue;
         }
         return ExtractValue(message, index.value());
     }

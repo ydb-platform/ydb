@@ -822,7 +822,7 @@ Y_UNIT_TEST_SUITE(TWriteJsonValuesInJsonLogTest) {
         env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
 
         YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message");
-        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", 1});
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with data", {"value", "1"});
         env.FetchMessage(R"({"@timestamp":"1970-01-01T23:59:50.000000Z","@log_type":"debug","microseconds":86390000000,"host":"",)"
                          R"("cluster":"","database":"static","node_id":0,"priority":"DEBUG","npriority":7,"component":"FAKE","tag":"KIKIMR",)"
                          R"("revision":-1,"location":"log_ut.cpp:824","message":"Test message"})");

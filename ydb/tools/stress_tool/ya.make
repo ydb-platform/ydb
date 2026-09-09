@@ -8,7 +8,9 @@ IF (OS_LINUX)
         ydb/core/blobstorage/crypto
         ydb/core/blobstorage/lwtrace_probes
         ydb/core/blobstorage/pdisk
-        ydb/core/load_test
+        ydb/core/load_test/blobstorage
+        ydb/core/load_test/ddisk
+        ydb/core/load_test/interconnect
         ydb/core/node_whiteboard
         ydb/core/tablet
         ydb/library/actors/dnsresolver

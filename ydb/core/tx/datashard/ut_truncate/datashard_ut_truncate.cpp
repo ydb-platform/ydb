@@ -299,10 +299,10 @@ Y_UNIT_TEST_SUITE(DataShardTruncate) {
         {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(commitResponse.operation().issues(), issues);
-            // TRUNCATE TABLE changes the table schema version (AlterVersion+1), so a transaction
-            // that has a pending UPSERT detects a scheme mismatch (KIKIMR_SCHEME_MISMATCH) rather
-            // than a broken lock (KIKIMR_LOCKS_INVALIDATED / TLI), because the datashard rejects
-            // the write due to the schema version change before it even checks locks.
+            // TRUNCATE TABLE changes the table schema version (AlterVersion+1), so the commit is
+            // compiled against a version the transaction has not seen and KQP aborts it with
+            // KIKIMR_SCHEME_MISMATCH, rather than the transaction reaching the datashard and
+            // failing there on a broken lock (KIKIMR_LOCKS_INVALIDATED / TLI).
             UNIT_ASSERT_C(
                 NKqp::HasIssue(issues, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH),
                 "Expected KIKIMR_SCHEME_MISMATCH issue, got: " << issues.ToString()

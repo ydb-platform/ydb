@@ -191,7 +191,7 @@ public:
         HasTableRead = false;
         NeedUncommittedChangesFlush = false;
         QueryTextCollector.Clear();
-        TableSchemaVersions.clear();
+        SchemaObjects.clear();
     }
 
     TKqpTransactionInfo GetInfo() const;
@@ -337,8 +337,17 @@ public:
 
     TShardIdToTableInfoPtr ShardIdToTableInfo = std::make_shared<TShardIdToTableInfo>();
 
-    // Schema version of every table seen at compilation time of the queries in this tx.
-    THashMap<NYql::TKikimrPathId, ui64> TableSchemaVersions;
+    struct TSchemaIdentity {
+        NYql::TKikimrPathId PathId;
+        ui64 SchemaVersion = 0;
+
+        bool operator==(const TSchemaIdentity& other) const = default;
+    };
+
+    // Identity of every schema object, as the statements of this tx were compiled against it.
+    // Keyed by path rather than by path id: an object dropped and created anew under the same
+    // name is a different object, and the transaction must not read it as if nothing happened.
+    THashMap<TString, TSchemaIdentity> SchemaObjects;
 
     NDataIntegrity::TQueryTextCollector QueryTextCollector;
 };

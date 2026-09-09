@@ -1576,22 +1576,38 @@ public:
         // observe newer data between statements.
         if (QueryState->TxCtx->EffectiveIsolationLevel
                 && HasRepeatableReads(*QueryState->TxCtx->EffectiveIsolationLevel)) {
-            for (const auto& tableInfo : phyQuery.GetTableInfos()) {
-                const ui64 schemaVersion = tableInfo.GetSchemaVersion();
-                if (!schemaVersion) {
-                    continue;
-                }
+            const NKqpProto::TKqpTableInfo* changed = nullptr;
 
-                const NYql::TKikimrPathId pathId(
-                    tableInfo.GetTableId().GetOwnerId(), tableInfo.GetTableId().GetTableId());
-                const auto [it, inserted] = QueryState->TxCtx->TableSchemaVersions.emplace(pathId, schemaVersion);
-                if (!inserted && it->second != schemaVersion) {
-                    ReplyQueryError(Ydb::StatusIds::ABORTED, TStringBuilder()
-                        << "Scheme changed for table '" << tableInfo.GetTableName()
-                        << "' during transaction execution, schema version "
-                        << it->second << " -> " << schemaVersion << ".");
-                    return false;
+            auto rememberOrCompare = [&](const auto& infos) {
+                for (const auto& info : infos) {
+                    if (!info.GetSchemaVersion()) {
+                        continue;
+                    }
+
+                    const TKqpTransactionContext::TSchemaIdentity identity{
+                        .PathId = NYql::TKikimrPathId(
+                            info.GetTableId().GetOwnerId(), info.GetTableId().GetTableId()),
+                        .SchemaVersion = info.GetSchemaVersion(),
+                    };
+
+                    const auto [it, inserted] =
+                        QueryState->TxCtx->SchemaObjects.emplace(info.GetTableName(), identity);
+                    if (!inserted && it->second != identity) {
+                        changed = &info;
+                        return false;
+                    }
                 }
+                return true;
+            };
+
+            // Views carry their own version and their own path, so a view redefined over an
+            // untouched table has to be caught here as well.
+            if (!rememberOrCompare(phyQuery.GetTableInfos()) || !rememberOrCompare(phyQuery.GetViewInfos())) {
+                std::vector<TIssue> issues{YqlIssue({}, TIssuesIds::KIKIMR_SCHEME_MISMATCH,
+                    TStringBuilder() << "Scheme changed for '" << changed->GetTableName()
+                        << "' during transaction execution.")};
+                ReplyQueryError(Ydb::StatusIds::ABORTED, "", MessageFromIssues(issues));
+                return false;
             }
         }
 

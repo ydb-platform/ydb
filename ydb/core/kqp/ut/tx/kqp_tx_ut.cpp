@@ -1335,6 +1335,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         DropChangefeed,
         SetFamily,
         SetDefault,
+        DropCreateTable,
         ViewReadAddColumn,
         ViewRecreate,
         ViewDrop,
@@ -1352,6 +1353,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         ESchemeOp::DropChangefeed,
         ESchemeOp::SetFamily,
         ESchemeOp::SetDefault,
+        ESchemeOp::DropCreateTable,
         ESchemeOp::ViewReadAddColumn,
         ESchemeOp::ViewRecreate,
         ESchemeOp::ViewDrop,
@@ -1458,6 +1460,20 @@ Y_UNIT_TEST_SUITE(KqpTx) {
                 spec.Operation = R"(ALTER TABLE `/Root/SchemeOpsTable` ALTER COLUMN Value SET DEFAULT "def"u;)";
                 break;
 
+            case ESchemeOp::DropCreateTable:
+                // The table is replaced by a brand new, empty one under the same path. The
+                // path id changes while the path does not, so only a check that compares
+                // both notices that the transaction is now reading a different object.
+                spec.Operation = R"(
+                    DROP TABLE `/Root/SchemeOpsTable`;
+                    CREATE TABLE `/Root/SchemeOpsTable` (
+                        Key Uint64,
+                        Value String,
+                        PRIMARY KEY (Key)
+                    );
+                )";
+                break;
+
             case ESchemeOp::ViewReadAddColumn:
                 // The transaction reads the table through a view, and the table changes.
                 spec.Setup = R"(
@@ -1470,9 +1486,8 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
             case ESchemeOp::ViewRecreate:
                 // The table is untouched; the view is redefined to select fewer columns.
-                // The transaction reads through the new definition instead of aborting: view
-                // versions travel in ViewInfos, which the check does not look at. Fixed by the
-                // next commit.
+                // Dropping and creating the view makes a new object under the same path, so
+                // the check has to notice the path id changing, not just the version.
                 spec.Setup = R"(
                     CREATE VIEW `/Root/SchemeOpsView` WITH (security_invoker = TRUE) AS
                         SELECT Key, Value FROM `/Root/SchemeOpsTable`;
@@ -1483,7 +1498,6 @@ Y_UNIT_TEST_SUITE(KqpTx) {
                         SELECT Key FROM `/Root/SchemeOpsTable`;
                 )";
                 spec.Read = "SELECT * FROM `/Root/SchemeOpsView` ORDER BY Key;";
-                spec.RepeatableReadStatus = EStatus::SUCCESS;
                 break;
 
             case ESchemeOp::ViewDrop:
@@ -1510,8 +1524,13 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
             TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
             auto db = kikimr.GetTableClient();
-            auto schemeSession = db.CreateSession().GetValueSync().GetSession();
-            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto createSession = [&db]() {
+                auto result = db.CreateSession().GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                return result.GetSession();
+            };
+            auto schemeSession = createSession();
+            auto session = createSession();
 
             auto schemeResult = schemeSession.ExecuteSchemeQuery(spec.Create).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(schemeResult.GetStatus(), EStatus::SUCCESS,
@@ -1543,7 +1562,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), spec.RepeatableReadStatus,
                 result.GetIssues().ToString());
             if (spec.RepeatableReadStatus == EStatus::ABORTED) {
-                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Scheme changed for table");
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Scheme changed for");
             }
 
             // A failed statement releases the transaction; a tolerated change leaves it usable.
@@ -1620,6 +1639,12 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         tester.Execute();
     }
 
+    Y_UNIT_TEST(SchemeChangeDropCreateTable) {
+        TSchemeChangeInTxTester tester;
+        tester.Operation = ESchemeOp::DropCreateTable;
+        tester.Execute();
+    }
+
     Y_UNIT_TEST(SchemeChangeViewReadAddColumn) {
         TSchemeChangeInTxTester tester;
         tester.Operation = ESchemeOp::ViewReadAddColumn;
@@ -1658,8 +1683,13 @@ Y_UNIT_TEST_SUITE(KqpTx) {
             TKikimrRunner kikimr(settings);
 
             auto db = kikimr.GetQueryClient();
-            auto session = db.GetSession().GetValueSync().GetSession();
-            auto schemeSession = db.GetSession().GetValueSync().GetSession();
+            auto createSession = [&db]() {
+                auto result = db.GetSession().GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                return result.GetSession();
+            };
+            auto session = createSession();
+            auto schemeSession = createSession();
 
             auto schemeResult = schemeSession.ExecuteQuery(spec.Create,
                 NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -1698,7 +1728,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
             result = session.ExecuteQuery(spec.Read, NYdb::NQuery::TTxControl::Tx(*tx)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToString());
             if (expectedStatus == EStatus::ABORTED) {
-                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Scheme changed for table");
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Scheme changed for");
             }
 
             // A mode that keeps reading past the scheme change keeps a usable transaction,

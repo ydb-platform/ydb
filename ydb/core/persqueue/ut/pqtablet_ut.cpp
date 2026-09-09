@@ -3640,8 +3640,8 @@ Y_UNIT_TEST_F(Immediate_PlanStepAck_For_Unknown_Without_WriteTx, TPQTabletFixtur
 Y_UNIT_TEST_F(PlanStepAccepted_Order_Unknown_Before_Executed_Retransmit, TPQTabletFixture)
 {
     // Mediator contract: PlanStepAccepted must arrive in ascending step order.
-    // Regression: deferred all-unknown ack after an immediate EXECUTED retransmit
-    // inverted the order and stalled the mediator head.
+    // All-unknown step waits for a WRITE_TX fence; known EXECUTED retransmit is Ready
+    // immediately but must not overtake the not-yet-Ready lower step in the queue.
     const ui64 txId = 67890;
     const ui64 unknownTxId = 424302;
     const ui64 mockTabletId = 22222;
@@ -3690,17 +3690,34 @@ Y_UNIT_TEST_F(PlanStepAccepted_Order_Unknown_Before_Executed_Retransmit, TPQTabl
     SendPlanStep({.Step=100, .TxIds={unknownTxId}});
     SendPlanStep({.Step=200, .TxIds={txId}});
 
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return !heldRequests.empty();
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
+
+    // While the fence WRITE_TX is in flight, neither Accepted may leave (100 blocks the
+    // ready prefix; 200 is Ready but stuck behind it).
+    {
+        auto premature = Ctx->Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAccepted>(
+            TDuration::Seconds(1));
+        UNIT_ASSERT(premature == nullptr);
+    }
+
+    holdWriteTx = false;
+    for (auto& held : heldRequests) {
+        Ctx->Runtime->Send(held.Release());
+    }
+    heldRequests.clear();
+    Ctx->Runtime->SetObserverFunc(prev);
+
     // GrabEdgeEvent yields Accepteds in delivery order — 100 must come before 200.
     WaitPlanStepAccepted({.Step=100});
     WaitPlanStepAccepted({.Step=200});
     WaitPlanStepAck({.Step=100, .TxIds={unknownTxId}});
     WaitPlanStepAck({.Step=200, .TxIds={txId}});
-
-    // Accepteds must arrive without a successful WRITE_TX cycle.
-    UNIT_ASSERT(heldRequests.empty());
-
-    holdWriteTx = false;
-    Ctx->Runtime->SetObserverFunc(prev);
 }
 
 Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_After_Timeout, TPQTabletFixture)

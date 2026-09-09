@@ -9,7 +9,7 @@
 #include <ydb/core/protos/shared_cache.pb.h>
 
 #include <ydb/library/actors/testlib/test_runtime.h>
-#include <library/cpp/testing/unittest/tests_data.h>
+#include <library/cpp/testing/common/network.h>
 #include <library/cpp/threading/future/future.h>
 
 #include <ydb/core/protos/key.pb.h>
@@ -31,7 +31,7 @@ namespace NActors {
 
 
     class TTestActorRuntime
-        : private TPortManager
+        : private NTesting::TPortManager
         , public TTestActorRuntimeBase
     {
     private:
@@ -118,7 +118,7 @@ namespace NActors {
         NKikimr::TAppData& GetAppData(ui32 nodeIndex = 0);
         ui32 GetFirstNodeId();
 
-        TPortManager& GetPortManager() {
+        NTesting::TPortManager& GetPortManager() {
             return *this;
         }
 

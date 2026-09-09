@@ -13,6 +13,7 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 
 #include <cmath>
 

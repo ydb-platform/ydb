@@ -13,6 +13,7 @@
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 
 #include <util/system/compiler.h>
 #include <util/system/valgrind.h>

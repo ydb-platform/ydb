@@ -109,6 +109,60 @@ TEST_F(NetworkTest, GetPortNonRandom) {
     }
 }
 
+TEST_F(NetworkTest, PortManagerHoldsPortsUntilDestroyed) {
+    NTesting::TScopedEnvironment envGuard("PORT_SYNC_PATH", TmpDir->Name());
+    NTesting::InitPortManagerFromEnv();
+
+    ui16 port = 0;
+    ui16 rangeStart = 0;
+    {
+        NTesting::TPortManager portManager;
+        port = portManager.GetPort();
+        rangeStart = portManager.GetPortsRange(0, 3);
+
+        ASSERT_TRUE(NFs::Exists(TmpDir->Path() / ToString(port)));
+        for (ui16 i = 0; i < 3; ++i) {
+            ASSERT_TRUE(NFs::Exists(TmpDir->Path() / ToString(static_cast<ui16>(rangeStart + i))));
+        }
+    }
+
+    ASSERT_FALSE(NFs::Exists(TmpDir->Path() / ToString(port)));
+    for (ui16 i = 0; i < 3; ++i) {
+        ASSERT_FALSE(NFs::Exists(TmpDir->Path() / ToString(static_cast<ui16>(rangeStart + i))));
+    }
+}
+
+TEST_F(NetworkTest, PortManagerIgnoresRequestedPort) {
+    NTesting::TScopedEnvironment envGuard("PORT_SYNC_PATH", TmpDir->Name());
+    NTesting::InitPortManagerFromEnv();
+
+    NTesting::TPortManager portManager;
+    constexpr ui16 requested = 4285;
+    ASSERT_NE(requested, portManager.GetPort(requested));
+}
+
+TEST_F(NetworkTest, PortManagerNonRandom) {
+    NTesting::TScopedEnvironment envGuard{{
+        {"PORT_SYNC_PATH", TmpDir->Name()},
+        {"NO_RANDOM_PORTS", "1"},
+    }};
+    NTesting::InitPortManagerFromEnv();
+
+    NTesting::TPortManager portManager;
+    constexpr ui16 requested = 4285;
+    // The requested port is handed out as is and is not reserved, so that
+    // several managers may ask for the very same port. This matches the legacy
+    // unittest TPortManager, which tests with fixed ports rely upon.
+    ASSERT_EQ(requested, portManager.GetPort(requested));
+    ASSERT_FALSE(NFs::Exists(TmpDir->Path() / ToString(requested)));
+
+    NTesting::TPortManager other;
+    ASSERT_EQ(requested, other.GetPort(requested));
+
+    // A port is still allocated when none was requested.
+    ASSERT_NE(0u, portManager.GetPort());
+}
+
 TEST_F(NetworkTest, Permissions) {
     constexpr ui16 loPort = 3456;
     constexpr ui16 hiPort = 7654;

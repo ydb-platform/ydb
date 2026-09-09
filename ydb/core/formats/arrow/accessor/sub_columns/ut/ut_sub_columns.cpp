@@ -606,6 +606,25 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         UNIT_ASSERT(!partial.HasSubColumnData(R"("a"."b")"));
     }
 
+    Y_UNIT_TEST(JsonPathAccessorReturnsNullForMissingPath) {
+        auto array = BuildArrayWithStoredPaths({ { R"("a")", R"("columns")" } }, R"("b")", R"("others")");
+        auto accessorResult = array->GetPathAccessor("$.missing", 1);
+        UNIT_ASSERT_C(accessorResult.IsSuccess(), accessorResult.GetErrorMessage());
+        accessorResult.DetachResult()->VisitValues([](const std::optional<TStringBuf>& value) {
+            UNIT_ASSERT(!value);
+        });
+
+        auto header = NSubColumns::TSubColumnsHeader(
+            BuildStats({ { R"("a")", NSubColumns::EValueType::BinaryJson } }), NSubColumns::TDictStats::BuildEmpty(),
+            NKikimrArrowAccessorProto::TSubColumnsAccessor(), 0);
+        TSubColumnsPartialArray partial(std::move(header), 1, arrow::binary(), NSubColumns::TSettings());
+        accessorResult = partial.GetPathAccessor("$.missing", 1);
+        UNIT_ASSERT_C(accessorResult.IsSuccess(), accessorResult.GetErrorMessage());
+        accessorResult.DetachResult()->VisitValues([](const std::optional<TStringBuf>& value) {
+            UNIT_ASSERT(!value);
+        });
+    }
+
     Y_UNIT_TEST(JsonPathAccessorPreferBestMatchOthers) {
         // Others have an exact match while separated only a prefix
         CheckMostSpecificStoredPath({ { R"("a")", R"({"b":"columns"})" }, { R"("a"."b"."c")", R"("descendant")" } }, R"("a"."b")",

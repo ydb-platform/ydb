@@ -175,6 +175,8 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
     // Complex JSON paths are processed on compaction and query. The second portion encodes `a`
     // and `slash/key` differently to verify both decode to the first portion's keys.
     TString scriptComplexPathVariants = R"(
+        STOP_COMPACTION
+        ------
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             Col1 Uint64 NOT NULL,

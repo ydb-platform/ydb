@@ -12,7 +12,7 @@ std::optional<NArrow::NAccessor::NSubColumns::TResolvedPathMatch> ResolveIndexPa
         subColumns.GetColumnsData().GetStats(), subColumns.GetOthersData().GetStats(), NArrow::NAccessor::NSubColumns::ToJsonPath(keyName));
     AFL_VERIFY(result.IsSuccess())("key", keyName)("error", result.GetErrorMessage());
     auto path = result.DetachResult();
-    if (!path || path->Path.RemainingPath) {
+    if (!path || !path->Path.RemainingPath.empty()) {
         return std::nullopt;
     }
     return path;

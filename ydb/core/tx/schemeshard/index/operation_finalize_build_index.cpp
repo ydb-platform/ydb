@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/schemeshard__affected_paths_traits.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -423,6 +424,26 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpFinalizeBuildIndexMainTable = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpFinalizeBuildIndexMainTable>(
+    TAffectedESchemeOpFinalizeBuildIndexMainTable,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // Synthesized by ApplyBuildIndex/CancelBuildIndex (index/operation_apply_build_index.cpp)
+    // with WorkingDir == the target table's parent and op->SetTableName(<leaf name>), for
+    // both the main table and, in the impl-table loop, an index impl table by the same field.
+    // TFinalizeBuildIndex::Propose (above) resolves WorkingDir + GetTableName() the same way.
+    const auto& finalizeMainTable = tx.GetFinalizeBuildIndexMainTable();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), finalizeMainTable.GetTableName(), 0);
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateFinalizeBuildIndexMainTable(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TFinalizeBuildIndex>(id, tx);

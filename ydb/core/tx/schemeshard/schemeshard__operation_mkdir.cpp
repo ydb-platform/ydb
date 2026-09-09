@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
@@ -305,6 +306,7 @@ public:
 namespace NKikimr::NSchemeShard {
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpMkDir>;
+using TAffectedTag = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpMkDir>;
 
 namespace NOperation {
 
@@ -324,6 +326,15 @@ bool SetName<TTag>(
 {
     tx.MutableMkDir()->SetName(name);
     return true;
+}
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedTag>(
+    TAffectedTag,
+    const TTxTransaction& tx,
+    const TOperationContext&)
+{
+    return DeclareChildOfWorkingDir(tx.GetWorkingDir(), tx.GetMkDir().GetName());
 }
 
 } // namespace NOperation

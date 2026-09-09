@@ -11,6 +11,8 @@
 #include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard_svp_migration.h"
 
+#include <util/system/env.h>
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
@@ -2311,6 +2313,7 @@ void TSchemeShard::ApplyAndPersistUserAttrs(NIceDb::TNiceDb& db, const TPathId& 
 
 void TSchemeShard::PersistUserAttributes(NIceDb::TNiceDb& db, TPathId pathId,
                                              TUserAttributes::TPtr oldAttrs, TUserAttributes::TPtr alterAttrs) {
+    ObservePathTouched(pathId, "PersistUserAttributes");
     //remove old version
     if (oldAttrs) {
         for (auto& item: oldAttrs->Attrs) {
@@ -2367,6 +2370,7 @@ void TSchemeShard::PersistRemoveUserAttributesAlter(NIceDb::TNiceDb& db, TPathEl
 }
 
 void TSchemeShard::PersistLastTxId(NIceDb::TNiceDb& db, const TPathElement::TPtr path) {
+    ObservePathTouched(path->PathId, "PersistLastTxId");
     if (path->PathId.OwnerId == TabletID()) {
         db.Table<Schema::Paths>().Key(path->PathId.LocalPathId).Update(
                     NIceDb::TUpdate<Schema::Paths::LastTxId>(path->LastTxId));
@@ -2376,7 +2380,54 @@ void TSchemeShard::PersistLastTxId(NIceDb::TNiceDb& db, const TPathElement::TPtr
     }
 }
 
+// Compares against the paths the proposing operation declared, rather than accumulating
+// an observed set, so the cost when nothing is declaring is a single null check. Paths
+// rather than ids: a create allocates its id during propose, so an id declared up front
+// would never match.
+void TSchemeShard::ObservePathTouched(const TPathId& pathId, const char* writeSite) {
+    if (!CurrentDeclaredPaths) {
+        return;
+    }
+    const TPath path = TPath::Init(pathId, this);
+    if (!path.IsResolved()) {
+        return;
+    }
+    const TString pathString = path.PathString();
+    if (CurrentDeclaredPaths->contains(pathString)) {
+        // Only the intersection is recorded. The reverse check asks whether each declared
+        // MustWrite got a write, so a write to something outside the declaration adds
+        // nothing to the answer -- and the branch below is already about to report it.
+        if (CurrentObservedPaths) {
+            CurrentObservedPaths->insert(pathString);
+        }
+        return;
+    }
+    // Every create and drop rewrites the domain row as path-count bookkeeping, whatever
+    // it actually affected. Requiring all 136 operations to declare it would add a line
+    // that says nothing about the change, so it is excluded here instead. Narrow on
+    // purpose: only the domain row itself, so a genuine miss that happens to land on a
+    // subdomain is still reported.
+    if (path.Base()->IsDomainRoot()) {
+        return;
+    }
+    TabletCounters->Cumulative()[COUNTER_UNDECLARED_PATH_TOUCH].Increment(1);
+    // Opt-in, and deliberately fatal rather than a counter the harness polls. Polling cost
+    // one edge-event round trip per modification, which timed out the reboot suites and
+    // perturbed any test asserting on event ordering. Failing here instead costs nothing
+    // when off, and when on it stops at the offending write with the path and the Persist*
+    // that made it -- which is the information needed to fix the declaration anyway.
+    Y_ABORT_UNLESS(!PathCheckModes.UndeclaredTouchIsFatal,
+        "operation wrote path row it had not declared: %s, writeSite: %s",
+        path.PathString().c_str(), writeSite);
+    LOG_WARN_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "undeclared path touch"
+            << ", path: " << path.PathString()
+            << ", pathId: " << pathId
+            << ", writeSite: " << writeSite);
+}
+
 void TSchemeShard::PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId) {
+    ObservePathTouched(pathId, "PersistPath");
     Y_ABORT_UNLESS(PathsById.contains(pathId));
     TPathElement::TPtr elem = PathsById.at(pathId);
     if (IsLocalId(pathId)) {
@@ -2419,6 +2470,7 @@ void TSchemeShard::PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId) {
 }
 
 void TSchemeShard::PersistRemovePath(NIceDb::TNiceDb& db, const TPathElement::TPtr path) {
+    ObservePathTouched(path->PathId, "PersistRemovePath");
     Y_ABORT_UNLESS(path->Dropped() && path->DbRefCount == 0);
 
     // Make sure to cleanup any leftover user attributes for this path
@@ -2458,6 +2510,7 @@ void TSchemeShard::PersistRemovePath(NIceDb::TNiceDb& db, const TPathElement::TP
 }
 
 void TSchemeShard::PersistPathDirAlterVersion(NIceDb::TNiceDb& db, const TPathElement::TPtr path) {
+    ObservePathTouched(path->PathId, "PersistPathDirAlterVersion");
     if (path->PathId.OwnerId == TabletID()) {
         db.Table<Schema::Paths>().Key(path->PathId.LocalPathId).Update(
                 NIceDb::TUpdate<Schema::Paths::DirAlterVersion>(path->DirAlterVersion));
@@ -2801,6 +2854,7 @@ void TSchemeShard::PersistSubDomainTablesMetricsLevelAlter(NIceDb::TNiceDb& db, 
 }
 
 void TSchemeShard::PersistACL(NIceDb::TNiceDb& db, const TPathElement::TPtr path) {
+    ObservePathTouched(path->PathId, "PersistACL");
     if (path->PathId.OwnerId == TabletID()) {
         db.Table<Schema::Paths>().Key(path->PathId.LocalPathId).Update(
                 NIceDb::TUpdate<Schema::Paths::ACL>(path->ACL),
@@ -2814,6 +2868,7 @@ void TSchemeShard::PersistACL(NIceDb::TNiceDb& db, const TPathElement::TPtr path
 
 
 void TSchemeShard::PersistOwner(NIceDb::TNiceDb& db, const TPathElement::TPtr path) {
+    ObservePathTouched(path->PathId, "PersistOwner");
     if (path->PathId.OwnerId == TabletID()) {
         db.Table<Schema::Paths>().Key(path->PathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::Paths::Owner>(path->Owner));
@@ -2824,6 +2879,7 @@ void TSchemeShard::PersistOwner(NIceDb::TNiceDb& db, const TPathElement::TPtr pa
 }
 
 void TSchemeShard::PersistCreateTxId(NIceDb::TNiceDb& db, const TPathId pathId, TTxId txId) {
+    ObservePathTouched(pathId, "PersistCreateTxId");
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
     db.Table<Schema::Paths>().Key(pathId.LocalPathId).Update(
@@ -2831,6 +2887,7 @@ void TSchemeShard::PersistCreateTxId(NIceDb::TNiceDb& db, const TPathId pathId, 
 }
 
 void TSchemeShard::PersistCreateStep(NIceDb::TNiceDb& db, const TPathId pathId, TStepId step) {
+    ObservePathTouched(pathId, "PersistCreateStep");
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
     // CreateTxId is saved in PersistPath
@@ -2861,6 +2918,7 @@ void TSchemeShard::PersistUnLock(NIceDb::TNiceDb& db, const TPathId pathId) {
 }
 
 void TSchemeShard::PersistDropStep(NIceDb::TNiceDb& db, const TPathId pathId, TStepId step, TOperationId opId) {
+    ObservePathTouched(pathId, "PersistDropStep");
     Y_ABORT_UNLESS(step, "Drop step must be valid (not 0)");
     if (pathId.OwnerId == TabletID()) {
         db.Table<Schema::Paths>().Key(pathId.LocalPathId).Update(
@@ -5621,6 +5679,15 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
             .AttemptResetDuration = AppData()->AuthConfig.GetAccountLockout().GetAttemptResetDuration()
         })
 {
+    // Read once, so the process-wide switches are only a default and each tablet then owns
+    // its own answer. A test that wants two schemeshards to differ assigns to this member on
+    // the one it cares about; no check consults the globals again after this point.
+    PathCheckModes = {
+        .UndeclaredTouchIsFatal = NSchemeShard::UndeclaredPathTouchIsFatal,
+        .UnfulfilledDeclarationIsFatal = NSchemeShard::UnfulfilledPathDeclarationIsFatal,
+        .DivergenceIsFatal = NSchemeShard::PlanDivergenceIsFatal,
+    };
+
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
                             ESimpleCounters_descriptor,
                             ECumulativeCounters_descriptor,
@@ -6230,6 +6297,47 @@ bool TSchemeShard::ShardIsUnderSplitMergeOp(const TShardIdx& idx) const {
 TTxState &TSchemeShard::CreateTx(TOperationId opId, TTxState::ETxType txType, TPathId targetPath, TPathId sourcePath) {
     Y_VERIFY_S(!TxInFlight.contains(opId),
                "Trying to create duplicate Tx " << opId);
+    // Every family that creates tx state passes through here with both its operation id and
+    // the target it resolved, which makes this the one place the plan can be checked against
+    // all of them at once rather than a Propose body at a time.
+    //
+    // The test is membership, not equality, and that distinction was measured rather than
+    // guessed. Equality against the part's declared Target aborts 5 tests -- the indexed-table
+    // and migrated-table families -- because an "*AtTable" part deliberately creates tx state
+    // on the *main table* while declaring the index or stream it modifies. Those are two
+    // different objects on purpose, so equality is the wrong invariant.
+    //
+    // What must hold is weaker and actually true: an operation may not act on a path it never
+    // declared at all. Same shape as the write cross-check, one step earlier -- it catches a
+    // target the plan never mentioned, which is what would make the outbox record describe a
+    // different object than the operation touched.
+    if (PathCheckModes.UndeclaredTouchIsFatal || PathCheckModes.DivergenceIsFatal) {
+        if (const auto operation = Operations.find(opId.GetTxId()); operation != Operations.end()
+            && operation->second->DeclaredPathsUsable
+            && !operation->second->DeclaredPathSet.empty())
+        {
+            const TString targetStr = TPath::Init(targetPath, this).PathString();
+            if (!operation->second->DeclaredPathSet.contains(targetStr)) {
+                // Reports, does not abort -- deliberately, and this is the one check on this
+                // branch that is not armed. It found 22 violations; 20 were the extsubdomain
+                // root and are fixed (see drop_extsubdomain). Two are not yet understood:
+                //
+                //   TIncrementalRestoreTests::BackupCollectionRestoreOpApiMultipleOperationsListing
+                //   TIncrementalRestoreTests::PathStatesNormalizedAfterPartialFailure
+                //     -> /MyRoot/.backups/collections/FailCollection, internal txId
+                //
+                // Arming it now would either turn the branch red or invite someone to silence
+                // it, and a check made fatal before its last findings are explained is how a
+                // real signal gets a suppression written around it. Explain those two, then
+                // arm from TTestEnv beside the others.
+                LOG_WARN_S(TActivationContext::AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "undeclared tx target"
+                        << ", target: " << targetStr
+                        << ", opId: " << opId);
+            }
+        }
+    }
+
     TTxState& txState = TxInFlight[opId];
     txState = TTxState(txType, targetPath, sourcePath);
     TabletCounters->Simple()[TxTypeInFlightCounter(txType)].Add(1);

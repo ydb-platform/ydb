@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
@@ -321,9 +322,9 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
         return result;
     }
 
-    TPath path = operation.HasPathId()
-        ? TPath::Init(pathId, context.SS)
-        : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+    TPath path = TPath::ResolveTarget(
+        pathId,
+        parentPathStr, name, context.SS);
 
     {
         auto checks = path.Check();
@@ -572,6 +573,23 @@ void TAlterFileStore::ApplyChannelBindings(
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpAlterFileStore = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpAlterFileStore>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpAlterFileStore>(
+    TAffectedESchemeOpAlterFileStore,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    const auto& operation = tx.GetAlterFileStore();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), operation.GetName(),
+        operation.HasPathId() ? operation.GetPathId() : 0);
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateAlterFileStore(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterFileStore>(id, tx);

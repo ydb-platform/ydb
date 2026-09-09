@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
@@ -169,6 +170,44 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpModifyACL = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpModifyACL>(
+    TAffectedESchemeOpModifyACL,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // No pathId field on TModifyACL; TModifyACL::Propose (this file) resolves by name only.
+    const auto& op = tx.GetModifyACL();
+    TAffectedPaths result =
+        DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), op.GetName(), 0);
+
+    // Setting an owner on a table rewrites the owner and DirAlterVersion of every path in
+    // its subtree: Propose gets that set from ListSubTree at :98 and writes a row per member
+    // at :131 and :134. That walk runs at propose, on the in-memory tree, so it can be run
+    // here too -- the declaration then names exactly the set the loop will write, rather
+    // than switching the cross-check off for the operation.
+    //
+    // Effect::Alter: an owner change is a real change to each descendant, and nothing is
+    // created or dropped by it. The ACL branch is different and needs none of this -- it
+    // only republishes the subtree, persisting a row for the named path alone.
+    if (!result.Unresolved && !op.GetNewOwner().empty()) {
+        const TPath target = TPath::Resolve(
+            JoinPath({tx.GetWorkingDir(), op.GetName()}), context.SS);
+        if (target.IsResolved() && target.Base()->IsTable()) {
+            // includeRoot: the loop at :122 iterates the subtree including the table itself.
+            return DeclareSubTree(context.SS, target.Base()->PathId, /*includeRoot=*/true,
+                TAffectedPath::EEffect::Alter);
+        }
+    }
+    return result;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateModifyACL(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TModifyACL>(id, tx);

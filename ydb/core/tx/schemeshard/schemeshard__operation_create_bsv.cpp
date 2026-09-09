@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
@@ -405,6 +406,22 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpCreateBlockStoreVolume = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlockStoreVolume>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateBlockStoreVolume>(
+    TAffectedESchemeOpCreateBlockStoreVolume,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    return DeclareChildOfWorkingDir(tx.GetWorkingDir(), tx.GetCreateBlockStoreVolume().GetName());
+}
+
+} // namespace NOperation
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlockStoreVolume>;
 

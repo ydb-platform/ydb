@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
@@ -265,6 +266,24 @@ private:
 }  // anonymous namespace
 
 }  // namespace NStreamingQuery
+
+using TAffectedESchemeOpAlterStreamingQuery = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpAlterStreamingQuery>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpAlterStreamingQuery>(
+    TAffectedESchemeOpAlterStreamingQuery,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // No pathId field; TAlterStreamingQuery::Propose (this file) resolves by Name only,
+    // reusing the CreateStreamingQuery proto (there is no separate AlterStreamingQuery message).
+    const auto& streamingQueryDescription = tx.GetCreateStreamingQuery();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), streamingQueryDescription.GetName(), 0);
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateAlterStreamingQuery(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<NStreamingQuery::TAlterStreamingQuery>(id, tx);

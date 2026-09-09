@@ -1,5 +1,6 @@
 #include "schemeshard__operation_create_cdc_stream.h"
 
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_cdc_stream_common.h"
@@ -919,6 +920,81 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
 } // namespace NCdc
 
 using namespace NCdc;
+
+using TAffectedESchemeOpCreateCdcStream = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateCdcStream>(
+    TAffectedESchemeOpCreateCdcStream,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    // CreateNewCdcStream (above) expands into a lock, CreateCdcStreamImpl/AtTable, and a
+    // CreatePersQueueGroup sub-tx. Those are constructed at propose and IgniteOperation asks
+    // each for its own declaration, so the PQ topic and the AlterTableIndex touch are covered
+    // by the parts that make them. Name the stream itself, which the request does give us.
+    const auto& op = tx.GetCreateCdcStream();
+    return DeclareChildOfWorkingDir(
+        JoinPath({tx.GetWorkingDir(), op.GetTableName()}),
+        op.GetStreamDescription().GetName());
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpCreateCdcStreamImpl = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamImpl>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateCdcStreamImpl>(
+    TAffectedESchemeOpCreateCdcStreamImpl,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    // DoCreateStreamImpl (above) synthesizes this part with WorkingDir == the table path,
+    // so the stream sits directly under it: TNewCdcStream::Propose resolves
+    // tablePath.Child(streamName), the same field used here.
+    const auto& op = tx.GetCreateCdcStream();
+    return DeclareChildOfWorkingDir(tx.GetWorkingDir(), op.GetStreamDescription().GetName());
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpCreateCdcStreamAtTable = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamAtTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateCdcStreamAtTable>(
+    TAffectedESchemeOpCreateCdcStreamAtTable,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // DoCreateStream (above) synthesizes this part with WorkingDir == the table's parent,
+    // so it alters the table itself: TNewCdcStreamAtTable::Propose resolves
+    // workingDirPath.Child(tableName), the same field used here.
+    //
+    // The table alone is enough, and this is the reasoning for all four *AtTable ops, which
+    // share TProposeAtTable::HandleReply (schemeshard__operation_common_cdc_stream.cpp).
+    // That handler does walk the table's index children, but what it writes for them is
+    // PersistTableIndexAlterData (:188, :236) and PersistTableIndexAlterVersion (:190, :238)
+    // -- rows in TableIndexes, not in Schema::Paths, so they never reach ObservePathTouched
+    // and are not ours to declare. The only instrumented writes in that handler are
+    // PersistPathDirAlterVersion at :197 on the index path and :209 on the main table, both
+    // on the index-impl-table branch, and both already covered: the index path is this
+    // declaration's Container, and the cross-check admits the parent of a declared Container.
+    //
+    // These ops carried Incomplete on the belief that the index fan-out was a path-row write.
+    // It is not. Verified by removing all five markers and running the cdc suites clean.
+    const auto& op = tx.GetCreateCdcStream();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), op.GetTableName(), 0);
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewCdcStreamImpl(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TNewCdcStream>(id, tx);

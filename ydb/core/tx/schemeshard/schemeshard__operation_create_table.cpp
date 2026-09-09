@@ -1,8 +1,11 @@
+#include "schemeshard__affected_paths_traits.h"
+#include "schemeshard_operation_plan.h"
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/protos/datashard_config.pb.h>
@@ -465,7 +468,21 @@ public:
             return result;
         }
 
-        NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
+        // No path derivation in this Propose. A part that IgniteOperation did not hand a plan
+        // -- one built by another part's decomposition -- plans itself from its own
+        // transaction, through the same planner. That is not a second computation: it is the
+        // one implementation, called later.
+        if (!HasPlan()) {
+            auto planned = NSchemeShard::PlanCreateTableEffects(Transaction, context);
+            if (planned.IsFail()) {
+                result->SetError(NKikimrScheme::StatusSchemeError, planned.GetErrorMessage());
+                return result;
+            }
+            auto plan = planned.DetachResult();
+            SetPlannedEffects(plan.EffectsOfPart(0), plan.GetDatabaseRoot());
+        }
+
+        NSchemeShard::TPath parentPath = PlannedPath(NSchemeShard::EPlanRole::Container, context);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
             checks
@@ -505,6 +522,12 @@ public:
         ui32 shardsToCreate = TTableInfo::ShardsToCreate(schema);
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
 
+        // Composed, not resolved, and deliberately so. The plan holds this path too, but
+        // taking it from there means resolving the joined string -- which for an empty or
+        // malformed Name collapses onto the parent and returns it *resolved*, so the leaf
+        // checks below report "unexpected path type" instead of naming the bad component.
+        // Child() keeps the leaf a separate component that can be validated. This is not a
+        // path derivation: the object does not exist, and nothing here resolves anything.
         NSchemeShard::TPath dstPath = parentPath.Child(name);
         {
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
@@ -855,6 +878,231 @@ bool SetName<TTag>(
 }
 
 } // namespace NOperation
+
+using TAffectedESchemeOpCreateTable = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateTable>(
+    TAffectedESchemeOpCreateTable,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    const auto& create = tx.GetCreateTable();
+    TAffectedPaths result = DeclareChildOfWorkingDir(tx.GetWorkingDir(), create.GetName());
+
+    // A copy-from-table create reaches this declaration two ways, and they used to be
+    // conflated. As a top-level request it is re-dispatched to CreateCopyTable
+    // (the HasCopyFromTable branch in MakeOperationParts), and the rows are written by the
+    // part below -- which is why returning nullopt here looked harmless. But
+    // CreateConsistentCopyTables expands INLINE into its caller's part list, so for a
+    // backup or restore of a collection the part admitParts asks *is* this one, and nullopt
+    // left the whole copy undeclared.
+    //
+    // TCopyTable::Propose persists the new table, its parent and the source
+    // (schemeshard__operation_copy_table.cpp:819-821). The first two come from
+    // DeclareChildOfWorkingDir above; the source is added here. On the top-level path those
+    // rows are written too, just by a lower part, so naming them is not an over-declaration.
+    if (create.HasCopyFromTable()) {
+        // Absolute, and resolved as such -- TPath::Resolve(GetCopyFromTable()) at
+        // schemeshard__operation_copy_table.cpp:568, never joined with WorkingDir.
+        const TString source = CanonizePath(create.GetCopyFromTable());
+        result.Paths.push_back(TAffectedPath{
+            .Role = TAffectedPath::ERole::Source,
+            .Path = source,
+        });
+
+        // And a fourth row, easy to miss because it is 100 lines above the other three:
+        // a copy that carries DropSrcCdcStream marks each named stream under the SOURCE
+        // table as dropped and persists its path row (copy_table.cpp:696-726). Those are
+        // children of the source, not of the new table, and they are named in the request,
+        // so they are exactly derivable here.
+        //
+        // Found by attributing a queued write to its part: DbChanges.PersistPath only
+        // enqueues, and the whole queue flushes at TStorageChanges::Apply after every part
+        // has proposed -- so an abort at flush time names no part, and reading the three
+        // adjacent Persist calls at :819-821 missed this one entirely.
+        if (create.HasDropSrcCdcStream()) {
+            for (const auto& streamName : create.GetDropSrcCdcStream().GetStreamName()) {
+                result.Paths.push_back(TAffectedPath{
+                    .Role = TAffectedPath::ERole::Source,
+                    .Path = CanonizePath(JoinPath({source, streamName})),
+                    .Effect = TAffectedPath::EEffect::Drop,
+                });
+            }
+        }
+    }
+    return result;
+}
+
+} // namespace NOperation
+
+// Pilot (AP M3's first entry): the same operation planned under the new model.
+//
+// Reads as three cases because it is three cases. Every field is stated -- nothing inherited
+// from a default, which is what stops an operation quietly asserting something about a path.
+//
+// Not listed: the operation's own domain. Creating a table consumes quota and bumps
+// PathsInside, but that writes SubDomains rather than a path row, and nothing about the
+// database is logically changed. It is also identical for all 123 operations and derivable
+// from any effect's path, so recording it per-operation would be noise a consumer can compute.
+static TVector<TPlanEffectId> AllEffectIds(const TLogicalOperationPlan& plan) {
+    TVector<TPlanEffectId> ids;
+    for (const auto& effect : plan.GetEffects()) {
+        ids.push_back(effect.Id);
+    }
+    return ids;
+}
+
+TConclusion<TLogicalOperationPlan> PlanCreateTableEffects(
+        const TTxTransaction& tx, TOperationContext& context)
+{
+    const auto& create = tx.GetCreateTable();
+    const TString& workingDir = tx.GetWorkingDir();
+
+    // The database root comes from the parent, which exists. The target does not exist yet, so
+    // it cannot supply its own domain -- that ordering is forced, not chosen.
+    // The database root has to come from a path that exists. WorkingDir may not: the auto-mkdir
+    // split rewrites it to a directory this same operation is about to create, so resolving it
+    // directly fails for every nested create.
+    //
+    // This is GP E36's overlay question, narrowed. E36 concluded no overlay was needed, and
+    // that was right *while declarations were pure string arithmetic*. A planner that resolves
+    // anything real meets it again. Walking up to the nearest existing ancestor is enough here,
+    // because domain membership is inherited -- a full namespace overlay would buy nothing.
+    TString probe = workingDir;
+    TPath parentForDomain = TPath::Resolve(probe, context.SS);
+    while (!parentForDomain.IsResolved() && probe != "/" && !probe.empty()) {
+        probe = TString(ExtractParent(probe));
+        parentForDomain = TPath::Resolve(probe, context.SS);
+    }
+    if (!parentForDomain.IsResolved()) {
+        // Total, deliberately. A create under a directory that does not exist must still be
+        // planned: refusing here made Propose return SchemeError before its own checks could
+        // report PathDoesNotExist, which is the status the request actually earns. The
+        // schemeshard root always resolves, so this terminates.
+        parentForDomain = TPath::Init(context.SS->RootPathId(), context.SS);
+    }
+    const TString dbRoot = parentForDomain.GetDomainPathString();
+    const TString targetAbs = CanonizePath(JoinPath({workingDir, create.GetName()}));
+    const TString containerAbsStr = CanonizePath(workingDir);
+
+    // The source of a copy, needed here because it participates in choosing the plan's root.
+    const TString sourceAbs = create.HasCopyFromTable()
+        ? CanonizePath(create.GetCopyFromTable())
+        : TString();
+
+    // A request may name paths outside this database: "/NotMyRoot/...", or a copy whose source
+    // lives in another subdomain (TSchemeShardSubDomainTest::CopyRejects). A
+    // database-relative path cannot express those, and failing here would pre-empt Propose's
+    // own rejection with a worse status -- so such a plan is rooted at "/" and describes its
+    // paths absolutely.
+    //
+    // The root is per *operation*, not per effect (AP Q6), so it has to satisfy every path the
+    // plan will hold -- checking only the target is what let the cross-subdomain copy through.
+    const auto expressible = [&](const TString& absolute) {
+        return absolute.empty()
+            || TDatabaseRelativePath::FromAbsolute(dbRoot, absolute).IsSuccess();
+    };
+    const TString planRoot =
+        (expressible(targetAbs) && expressible(containerAbsStr) && expressible(sourceAbs))
+            ? dbRoot
+            : TString("/");
+
+    TLogicalOperationPlan plan;
+    plan.SetDatabaseRoot(planRoot);
+    auto relative = [&planRoot](const TString& absolute) {
+        return TDatabaseRelativePath::FromAbsolute(planRoot, absolute);
+    };
+
+    // --- 1. the table this DDL creates ------------------------------------------------
+    auto target = relative(targetAbs);
+    if (target.IsFail()) {
+        return target;
+    }
+    plan.Add(target.DetachResult(), std::nullopt,   // no PathId: it does not exist yet
+        EPlanEffectClass::SchemaEffect, EPlanEffect::Create, EPlanRole::Target,
+        EPlanOrigin::RequestNamed, EPlanObservation::MustWrite);
+
+    // --- 2. the directory that gains it -----------------------------------------------
+    // Derived from the target's parent, not from WorkingDir: a create may name a relative
+    // path, and then the directory gaining the child is deeper than WorkingDir.
+    // The container is WorkingDir. Always -- no ExtractParent, no special case for a relative
+    // Name. This planner runs on the *post-split* transaction list, and SplitIntoTransactions
+    // has already rewritten WorkingDir to the directory that gains the child; Propose reads the
+    // same field. Deriving it from the target's parent instead was wrong twice over: for an
+    // empty Name the join collapses to WorkingDir and its parent is the grandparent, and for a
+    // create beneath a non-directory it named the target itself, so the parent checks reported
+    // "path does not exist" where the test expects "path is not a directory".
+
+    if (const TStringBuf containerAbs = containerAbsStr; !containerAbs.empty()) {
+        const TPath container = TPath::Resolve(TString(containerAbs), context.SS);
+
+        // MustWrite only where the row is actually bumped: :785 does that for a directory or a
+        // domain root and nothing else -- which is why creating a vector index's impl table
+        // leaves the index's own row untouched. The predicate, not a guess from a failing test.
+        const bool bumpsDirAlterVersion = container.IsResolved()
+            && (container.Base()->IsDirectory() || container.Base()->IsDomainRoot());
+
+        auto containerRel = relative(TString(containerAbs));
+        if (containerRel.IsFail()) {
+            return containerRel;
+        }
+        plan.Add(containerRel.DetachResult(),
+            container.IsResolved() ? std::make_optional(container.Base()->PathId) : std::nullopt,
+            EPlanEffectClass::SchemaEffect, EPlanEffect::ChildrenChanged, EPlanRole::Container,
+            EPlanOrigin::RequestNamed,
+            bumpsDirAlterVersion ? EPlanObservation::MustWrite : EPlanObservation::MayWrite);
+    }
+
+    if (!create.HasCopyFromTable()) {
+        // The primary part is index 0 of what ConstructParts returns; a bare create makes only
+        // that one. Naming it explicitly is what stops a derived part later matching by role.
+        plan.AddPart(0, AllEffectIds(plan));
+        return plan;
+    }
+
+    // --- 3. copy-from-table: the source, and drops beneath it -------------------------
+    // sourceAbs was computed above, where it took part in choosing the plan's root. Absolute,
+    // never joined with WorkingDir (schemeshard__operation_copy_table.cpp:568).
+    const TPath source = TPath::Resolve(sourceAbs, context.SS);
+
+    auto sourceRel = relative(sourceAbs);
+    if (sourceRel.IsFail()) {
+        return sourceRel;
+    }
+    // Altered, not merely referenced: the copy moves it to EPathStateCopying and writes its
+    // row, so it is observably changed for the duration (copy_table.cpp:821, :840).
+    plan.Add(sourceRel.DetachResult(),
+        source.IsResolved() ? std::make_optional(source.Base()->PathId) : std::nullopt,
+        EPlanEffectClass::SchemaEffect, EPlanEffect::Alter, EPlanRole::Source,
+        EPlanOrigin::RequestNamed, EPlanObservation::MustWrite);
+
+    // A create that drops things, beneath a table it is only reading from. Easy to miss: that
+    // write sits ~95 lines above every other Persist* in the copy's Propose (:697-727).
+    for (const auto& streamName : create.GetDropSrcCdcStream().GetStreamName()) {
+        const TString streamAbs = CanonizePath(JoinPath({sourceAbs, streamName}));
+        const TPath stream = TPath::Resolve(streamAbs, context.SS);
+        auto streamRel = relative(streamAbs);
+        if (streamRel.IsFail()) {
+            return streamRel;
+        }
+        plan.Add(streamRel.DetachResult(),
+            stream.IsResolved() ? std::make_optional(stream.Base()->PathId) : std::nullopt,
+            EPlanEffectClass::SchemaEffect, EPlanEffect::Drop, EPlanRole::Source,
+            EPlanOrigin::RequestNamed, EPlanObservation::MustWrite);
+    }
+
+    // Only the primary copy part is described here. CreateCopyTable also builds one part per
+    // index impl table and per sequence (schemeshard__operation_copy_table.cpp:1117-1150);
+    // those are its own decomposition and this planner does not model them, so they are given
+    // no effects and resolve for themselves. Modelling them is what M7 means by "the planner
+    // owns the decomposition".
+    plan.AddPart(0, AllEffectIds(plan));
+    return plan;
+}
 
 ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences) {
     auto obj = MakeSubOperation<TCreateTable>(id, tx);

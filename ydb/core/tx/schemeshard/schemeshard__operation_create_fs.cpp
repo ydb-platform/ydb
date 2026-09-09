@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
@@ -534,6 +535,22 @@ TTxState& TCreateFileStore::PrepareChanges(
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpCreateFileStore = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateFileStore>(
+    TAffectedESchemeOpCreateFileStore,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    return DeclareChildOfWorkingDir(tx.GetWorkingDir(), tx.GetCreateFileStore().GetName());
+}
+
+} // namespace NOperation
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore>;
 

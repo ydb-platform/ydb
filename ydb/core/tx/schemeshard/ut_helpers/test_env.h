@@ -40,6 +40,12 @@ namespace NSchemeShardUT_Private {
         OPTION(bool, EnablePipeRetries, true);
         OPTION(bool, RunFakeConfigDispatcher, false);
         OPTION(bool, InitYdbDriver, false);
+        // On by default: an operation that writes a path row it never declared aborts the
+        // tablet, naming the path and the Persist* that wrote it. Turn it off only for a
+        // suite that provably cannot satisfy it yet, and say why at the call site -- an
+        // opt-out visible in the test source is the point of putting it here rather than in
+        // an env var or a ya.make line nobody reads.
+        OPTION(bool, CheckDeclaredPaths, true);
         OPTION(bool, EnableFulltextIndexPrefix, true);
         OPTION(bool, EnableFulltextIndexRowId, true);
         OPTION(std::optional<bool>, EnableCompactFulltextIndex, std::nullopt);

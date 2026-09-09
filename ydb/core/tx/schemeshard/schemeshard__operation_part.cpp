@@ -221,4 +221,48 @@ ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& resul
     return nullptr;
 }
 
+
+TPath TSubOperationBase::PlannedPath(EPlanRole role, TOperationContext& context) const {
+    Y_ABORT_UNLESS(PlannedEffects,
+        "PlannedPath on a part with no plan; callers must check HasPlan() first");
+    for (const auto& effect : *PlannedEffects) {
+        if (effect.Role != role) {
+            continue;
+        }
+        if (effect.PathId) {
+            return TPath::Init(*effect.PathId, context.SS);
+        }
+        // No id yet -- the object does not exist. The plan still knows its path, so resolving
+        // that is not a fallback: it is the other arm of the same answer.
+        const TStringBuf relative = effect.Path.Value();
+        const TString absolute = relative == "/"
+            ? PlannedDatabaseRoot
+            : PlannedDatabaseRoot + relative;
+        return TPath::Resolve(absolute, context.SS);
+    }
+    Y_ABORT("part is planned but its plan does not mention the role it needs");
+}
+
+TVector<TPath> TSubOperationBase::PlannedPaths(EPlanRole role, EPlanEffect effect,
+        TOperationContext& context) const
+{
+    Y_ABORT_UNLESS(PlannedEffects,
+        "PlannedPaths on a part with no plan; callers must check HasPlan() first");
+    TVector<TPath> paths;
+    for (const auto& planned : *PlannedEffects) {
+        if (planned.Role != role || planned.Effect != effect) {
+            continue;
+        }
+        if (planned.PathId) {
+            paths.push_back(TPath::Init(*planned.PathId, context.SS));
+            continue;
+        }
+        const TStringBuf relative = planned.Path.Value();
+        paths.push_back(TPath::Resolve(relative == "/"
+            ? PlannedDatabaseRoot
+            : PlannedDatabaseRoot + relative, context.SS));
+    }
+    return paths;
+}
+
 }

@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
@@ -1026,6 +1027,46 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpMoveTable = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpMoveTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpMoveTable>(
+    TAffectedESchemeOpMoveTable,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    Y_UNUSED(context);
+    const auto& move = tx.GetMoveTable();
+    TAffectedPaths result;
+    result.Paths.push_back(TAffectedPath{
+        .Role = TAffectedPath::ERole::Source,
+        .Path = move.GetSrcPath(),
+    });
+    result.Paths.push_back(TAffectedPath{
+        .Role = TAffectedPath::ERole::Container,
+        .Path = TString(ExtractParent(move.GetSrcPath())),
+    });
+    result.Paths.push_back(TAffectedPath{
+        .Role = TAffectedPath::ERole::Target,
+        .Path = move.GetDstPath(),
+    });
+    result.Paths.push_back(TAffectedPath{
+        .Role = TAffectedPath::ERole::Container,
+        .Path = TString(ExtractParent(move.GetDstPath())),
+    });
+
+    // Complete as it stands. TMoveTable::Propose PersistPath's exactly the four rows
+    // declared above -- the allocated dst leaf, its parent, the src path, and the src
+    // parent. The source's index children are remapped in ConfigureParts, at execution
+    // time, and each child rename is proposed as its own ESchemeOpMoveIndex part whose
+    // declaration covers it.
+    return result;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateMoveTable(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TMoveTable>(id, tx);

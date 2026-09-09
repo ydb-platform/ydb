@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
@@ -354,6 +355,23 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpAlterSolomonVolume = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpAlterSolomonVolume>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpAlterSolomonVolume>(
+    TAffectedESchemeOpAlterSolomonVolume,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // No pathId field; TAlterSolomon::Propose (this file) resolves by Name only.
+    const auto& alter = tx.GetAlterSolomonVolume();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), alter.GetName(), 0);
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateAlterSolomon(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterSolomon>(id, tx);

@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__backup_collection_common.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
@@ -532,6 +533,28 @@ private:
 };
 
 }  // anonymous namespace
+
+using TAffectedESchemeOpDropBackupCollection = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropBackupCollection>(
+    TAffectedESchemeOpDropBackupCollection,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // CollectExternalObjects walks the whole subtree under the collection (BFS over
+    // children) plus scans every CDC stream on the schemeshard for ones feeding it -- but it
+    // runs at propose, from CreateDropBackupCollectionCascade (:632), which turns the plan
+    // into DropCdcStream (:643) and DropTable (:651) parts before any of it is proposed. Only
+    // the writes land at execution. Those parts declare their own paths, so this declaration
+    // is just the collection the name resolves to; the request carries no id field.
+    const auto& drop = tx.GetDropBackupCollection();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(), 0);
+}
+
+} // namespace NOperation
 
 // Create multiple suboperations for dropping backup collection
 TVector<ISubOperation::TPtr> CreateDropBackupCollectionCascade(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {

@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
@@ -134,9 +135,9 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        TPath path = drop.HasId()
-            ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath path = TPath::ResolveTarget(
+            drop.HasId() ? context.SS->MakeLocalId(drop.GetId()) : TPathId(),
+            parentPathStr, name, context.SS);
 
         {
             TPath::TChecker checks = path.Check();
@@ -221,6 +222,27 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpDropSubDomain = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpDropSubDomain>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropSubDomain>(
+    TAffectedESchemeOpDropSubDomain,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // Not a cascade at all, despite the name: Propose refuses a subdomain that still has
+    // children (.NotChildren(), :154), and HandleReply asserts the subtree it drops is the
+    // single path it was given (Y_ABORT_UNLESS(paths.size() == 1), :59). A subdomain with
+    // contents has to be emptied first, so the target is the only path this can touch.
+    const auto& drop = tx.GetDrop();
+    return DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(), drop.GetName(),
+        drop.HasId() ? drop.GetId() : 0);
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateDropSubdomain(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropSubdomain>(id, tx);

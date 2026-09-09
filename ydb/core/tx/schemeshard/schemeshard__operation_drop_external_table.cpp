@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
@@ -230,6 +231,53 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TAffectedESchemeOpDropExternalTable = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpDropExternalTable>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpDropExternalTable>(
+    TAffectedESchemeOpDropExternalTable,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    const auto& drop = tx.GetDrop();
+    const ui64 localPathId = drop.HasId() ? drop.GetId() : 0;
+    TAffectedPaths result = DeclareTargetByIdOrName(context.SS, tx.GetWorkingDir(),
+        drop.GetName(), localPathId);
+
+    // Dropping the table also rewrites the row of the data source it points at: the source
+    // keeps a reference list of its external tables, and Propose erases this table's entry
+    // then PersistPath's the source (:199). The source is named nowhere in the request --
+    // it comes off the existing table's info -- so a declaration built from the request
+    // alone misses an object the operation demonstrably writes.
+    if (!result.Unresolved) {
+        // Not ResolveTarget with MakeLocalId(0): InvalidLocalPathId is Max<ui64>, not zero,
+        // so a zero local id still tests truthy as a TPathId and would send the resolver
+        // down the by-id branch to a path that does not exist. DeclareTargetByIdOrName
+        // guards this by checking the id before building one; mirror that here.
+        const TPath table = localPathId
+            ? TPath::Init(context.SS->MakeLocalId(localPathId), context.SS)
+            : TPath::Resolve(JoinPath({tx.GetWorkingDir(), drop.GetName()}), context.SS);
+        if (table.IsResolved()) {
+            if (const auto info = context.SS->ExternalTables.Value(table.Base()->PathId, nullptr)) {
+                const TPath dataSource = TPath::Resolve(info->DataSourcePath, context.SS);
+                if (dataSource.IsResolved()) {
+                    result.Paths.push_back(TAffectedPath{
+                        .Locator = TAffectedPath::ELocator::ByPathId,
+                        .Role = TAffectedPath::ERole::Source,
+                        .Path = dataSource.PathString(),
+                        .PathId = dataSource.Base()->PathId,
+                    });
+                }
+            }
+        }
+    }
+    return result;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateDropExternalTable(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropExternalTable>(id, tx);

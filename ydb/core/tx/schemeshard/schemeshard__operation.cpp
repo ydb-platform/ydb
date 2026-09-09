@@ -10,6 +10,7 @@
 #include "schemeshard_operation_factory.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
@@ -18,6 +19,8 @@
 #include <ydb/core/test_tablet/events.h>
 
 #include <ydb/library/protobuf_printer/security_printer.h>
+
+#include <util/generic/scope.h>
 
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
@@ -49,6 +52,29 @@ TString FormatSourceLocationInfo(const NKikimr::NCompat::TSourceLocation& locati
     }
     return locationInfo;
 }
+
+// Arms ObservePathTouched for the lifetime of one transaction. Every phase that runs
+// operation parts needs one: path rows are written at propose, at plan and during
+// progress, and a declaration is only checked in the phases that are armed.
+class TDeclaredPathsGuard {
+public:
+    TDeclaredPathsGuard(TSchemeShard* ss, const TOperation::TPtr& operation)
+        : SS(ss)
+    {
+        if (operation && operation->DeclaredPathsUsable && !operation->DeclaredPathSet.empty()) {
+            SS->CurrentDeclaredPaths = &operation->DeclaredPathSet;
+            SS->CurrentObservedPaths = &operation->ObservedPathSet;
+        }
+    }
+
+    ~TDeclaredPathsGuard() {
+        SS->CurrentDeclaredPaths = nullptr;
+        SS->CurrentObservedPaths = nullptr;
+    }
+
+private:
+    TSchemeShard* const SS;
+};
 
 struct TSchemeShard::TTxOperationProposeCancelTx: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     TEvSchemeShard::TEvCancelTx::TPtr Ev;
@@ -266,7 +292,176 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         }
     }
 
+    // Declared here, before Operations[txId] below, because that is the last point at
+    // which a refusal costs nothing to unwind: AbortOperationPropose opens with
+    // Y_ABORT_UNLESS(Operations.contains(txId)), so until that line it is not callable,
+    // and no part has proposed. Declaring on rewrittenTransactions rather than the
+    // post-split list is deliberate -- the split rewrites WorkingDir to a directory that
+    // does not exist yet, while the absolute path it names is unchanged by the split.
+    operation->DeclaredAffectedPaths.reserve(rewrittenTransactions.size());
+    for (const auto& transaction : rewrittenTransactions) {
+        operation->DeclaredAffectedPaths.push_back(
+            DispatchAffectedPaths(transaction, [&](auto traits) {
+                return GetAffectedPaths(traits, transaction, context);
+            }));
+    }
+
+    // Pilot: build the new-model plan for the whole operation, before anything is constructed
+    // or proposed. Bound to the operation *type*, not to a sub-operation class -- a top-level
+    // CreateTable carrying CopyFromTable is re-dispatched to TCopyTable, so a planner called
+    // from TCreateTable::Propose never runs for that shape. Found by a test asserting the plan
+    // for a copy and getting an empty source.
+    // Built over the post-split list, because that is what parts are constructed from and the
+    // binding below has to line up with it. Still before Phase Two, so the whole plan exists
+    // before anything proposes.
+    operation->PilotPlans.resize(transactions.size());
+    for (size_t i = 0; i < transactions.size(); ++i) {
+        if (transactions[i].GetOperationType() != NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable) {
+            continue;
+        }
+        auto planned = PlanCreateTableEffects(transactions[i], context);
+        if (planned.IsSuccess()) {
+            operation->PilotPlans[i] = planned.DetachResult();
+            if (LastPlannedOperation) {
+                *LastPlannedOperation = *operation->PilotPlans[i];
+            }
+        }
+    }
+
+    // Refusing here rather than later is the whole point of declaring this early: nothing
+    // has proposed, Operations does not yet contain txId, and so AbortOperationPropose --
+    // whose per-operation stubs are Y_ABORT in 52 files -- is not callable. The refusal is
+    // an ordinary error return, exactly like the ones above at Rewrite and Split.
+    for (ui32 i = 0; i < operation->DeclaredAffectedPaths.size(); ++i) {
+        const auto& declared = operation->DeclaredAffectedPaths[i];
+        if (!declared || !declared->Unresolved) {
+            continue;
+        }
+        const auto status = NKikimrScheme::StatusPreconditionFailed;
+        response.Reset(new TProposeResponse(status, ui64(txId), ui64(selfId)));
+        response->SetError(status, TStringBuilder()
+            << "cannot resolve the paths affected by operation type "
+            << NKikimrSchemeOp::EOperationType_Name(rewrittenTransactions[i].GetOperationType()));
+        return response;
+    }
+
+    // A cascade drop, or a backup collection expanded over its contents, used to say it could
+    // not enumerate its subtree and switch the cross-check off for itself. That escape hatch
+    // is gone: a cascade drop walks the same ListSubTree the operation itself calls, and a
+    // backup collection's fan-out happens at propose, so both are enumerable and both are
+    // now checked like everything else.
     //
+    // A directory that gains its first child, or loses its last, flips its ChildrenExist
+    // property, and that property is part of its *parent's* description -- so both
+    // IncAliveChildrenSafeWithUndo and DecAliveChildren bump the grandparent's
+    // DirAlterVersion and persist its path row (schemeshard__operation_common.cpp:1316
+    // and :1352). That write belongs to no operation's declaration: it is bookkeeping about
+    // the shape of the tree, not about the object the request named, and requiring all 136
+    // operations to declare a grandparent they never mention would add a line to each of
+    // them that says nothing about the change. So the cross-check set deliberately admits
+    // the parent of every declared container. The declaration itself -- what the outbox
+    // records -- stays exactly what the operation asked for.
+    const auto admit = [&](const TAffectedPaths& declared) {
+        for (const auto& affected : declared.Paths) {
+            operation->DeclaredPathSet.insert(affected.Path);
+            if (affected.Role == TAffectedPath::ERole::Container) {
+                const TStringBuf grandparent = ExtractParent(affected.Path);
+                if (!grandparent.empty()) {
+                    operation->DeclaredPathSet.insert(TString(grandparent));
+                }
+            }
+        }
+    };
+
+    bool anyRequestedPartDeclared = false;
+    for (const auto& declared : operation->DeclaredAffectedPaths) {
+        if (!declared) {
+            continue;
+        }
+        anyRequestedPartDeclared = true;
+        admit(*declared);
+    }
+
+    // The auto-mkdir split moves intermediate directories into generatedTransactions, and
+    // those write path rows of their own. They get no outbox record -- the record follows
+    // the request, not the directories conjured to satisfy it -- but the observation set
+    // has to cover them, or every nested create reports paths nobody declared.
+    for (const auto& generated : generatedTransactions) {
+        const auto declared = DispatchAffectedPaths(generated, [&](auto traits) {
+            return GetAffectedPaths(traits, generated, context);
+        });
+        if (declared) {
+            admit(*declared);
+        }
+    }
+    // Deliberately left null when nothing was declared. Pointing it at an empty set would
+    // make every path write by an exempt operation read as undeclared. Cleared by the
+    // caller, not here: the writes this is meant to observe outlive IgniteOperation.
+    //
+    // The generated MkDirs above declare even when the operation they were split out of does
+    // not, and arming on those alone would check an exempt operation against a set holding
+    // only its intermediate directories -- so every path the operation itself wrote would be
+    // reported. What the generated declarations are for is the opposite: keeping the
+    // intermediate directories from being reported when the requested operation *has*
+    // declared. So the requested parts decide whether to arm; the generated ones only widen.
+    if (!anyRequestedPartDeclared) {
+        operation->DeclaredPathsUsable = false;
+        operation->DeclaredPathSet.clear();
+    }
+    if (!operation->DeclaredPathSet.empty()) {
+        CurrentDeclaredPaths = &operation->DeclaredPathSet;
+        CurrentObservedPaths = &operation->ObservedPathSet;
+    }
+
+    // Parts constructed inside an operation write path rows of their own, and they are built
+    // from synthesized transactions that never pass through the declaration above -- only
+    // the request's own transactions do. Each part carries that transaction, so it can be
+    // asked the same question, at construction time and before ProcessOperationParts
+    // proposes any of it. That is what lets a fan-out operation keep its cross-check instead
+    // of giving it up wholesale as Incomplete, which switches the check off exactly where
+    // the paths are least obvious. Like the generated MkDirs, these widen the observation
+    // set only: the outbox record follows the request, not the parts conjured to serve it.
+    // Hand each part the effects the plan says it owns -- once, here, where parts are made.
+    // Per part, not per operation: a shared list would let any part match any role, which is
+    // how an index-impl copy part bound the main table's source.
+    const auto bindPlanToParts = [&](const TVector<ISubOperation::TPtr>& parts, size_t txIndex) {
+        if (txIndex >= operation->PilotPlans.size() || !operation->PilotPlans[txIndex]) {
+            return;
+        }
+        const auto& plan = *operation->PilotPlans[txIndex];
+        for (const auto& partPlan : plan.GetParts()) {
+            if (partPlan.PartIdx >= parts.size()) {
+                continue;
+            }
+            if (auto* base = dynamic_cast<TSubOperationBase*>(parts[partPlan.PartIdx].Get())) {
+                base->SetPlannedEffects(plan.EffectsOfPart(partPlan.PartIdx));
+            }
+        }
+    };
+
+    const auto admitParts = [&](const TVector<ISubOperation::TPtr>& parts) {
+        for (const auto& part : parts) {
+            const auto& partTx = part->GetTransaction();
+            const auto declared = DispatchAffectedPaths(partTx, [&](auto traits) {
+                return GetAffectedPaths(traits, partTx, context);
+            });
+            // An unresolved part declaration is not a refusal here: the request-level check
+            // above already ran, and by this point the operation is committed to proposing.
+            // Widening with nothing is the safe reading.
+            if (!declared || declared->Unresolved) {
+                continue;
+            }
+            // Keep the per-part declaration before flattening it away. admit() folds it into
+            // a set of strings, which is all the write cross-check needs but loses which part
+            // claimed what -- and that is exactly what a part needs to resolve from the plan
+            // instead of alongside it. Stored unconditionally: it describes what the part
+            // declared, independent of whether the cross-check is armed.
+            operation->DeclaredPartPaths[part->GetOperationId().GetSubTxId()] = *declared;
+            if (operation->DeclaredPathsUsable) {
+                admit(*declared);
+            }
+        }
+    };
 
     Operations[txId] = operation; //record is erased at ApplyOnExecute if all parts are done at propose
     bool prevProposeUndoSafe = true;
@@ -278,6 +473,8 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     for (const auto& transaction : generatedTransactions) {
         auto parts = operation->ConstructParts(transaction, context);
         operation->PreparedParts += parts.size();
+        // Generated MkDirs have no plan of their own; they resolve for themselves.
+        admitParts(parts);
 
         if (!ProcessOperationParts(parts, txId, record, prevProposeUndoSafe, operation, response, context)) {
             return response;
@@ -287,9 +484,12 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     // # Phase Three
     // For all initial transactions parts are constructed and proposed
 
-    for (const auto& transaction : transactions) {
+    for (size_t txIndex = 0; txIndex < transactions.size(); ++txIndex) {
+        const auto& transaction = transactions[txIndex];
         auto parts = operation->ConstructParts(transaction, context);
         operation->PreparedParts += parts.size();
+        bindPlanToParts(parts, txIndex);
+        admitParts(parts);
 
         if (!ProcessOperationParts(parts, txId, record, prevProposeUndoSafe, operation, response, context)) {
             return response;
@@ -410,6 +610,14 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
         TOperationContext context{Self, txc, ctx, OnComplete, memChanges, dbChanges, std::move(userToken)};
         context.PeerName = PeerName;
 
+        // Held open across dbChanges.Apply below: writes routed through TStorageChanges are
+        // not made until then, so clearing this when IgniteOperation returns would leave
+        // the operation's own path writes unobserved.
+        Y_DEFER {
+            Self->CurrentDeclaredPaths = nullptr;
+            Self->CurrentObservedPaths = nullptr;
+        };
+
         //NOTE: Successful IgniteOperation will leave created operation in Self->Operations and accumulated changes in the context.
         // Unsuccessful IgniteOperation will leave no operation and context will also be clean.
         Response = Self->IgniteOperation(*Request->Get(), context);
@@ -528,6 +736,8 @@ struct TSchemeShard::TTxOperationProgress: public NTabletFlatExecutor::TTransact
 
         TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
 
+        TDeclaredPathsGuard declaredPaths(Self, operation);
+
         part->ProgressState(context);
 
         OnComplete.ApplyOnExecute(Self, txc, ctx);
@@ -635,6 +845,12 @@ struct TTxOperationReply : public NTabletFlatExecutor::TTransactionBase<TSchemeS
 
         ISubOperation::TPtr part = findActiveSubOperation(OperationId);
 
+        TOperation::TPtr operation;
+        if (auto found = Self->Operations.find(OperationId.GetTxId()); found != Self->Operations.cend()) {
+            operation = found->second;
+        }
+        TDeclaredPathsGuard declaredPaths(Self, operation);
+
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxOperationReply<" <<  EvReply->GetTypeName() << "> execute"
             << ", operationId: " << OperationId
             << ", at schemeshard: " << Self->TabletID()
@@ -718,6 +934,11 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
             }
 
             TOperation::TPtr operation = Self->Operations.at(txId);
+
+            // Scoped to one txId: DbChanges below is shared by every operation in this
+            // step, so writes routed through it cannot be attributed to a single
+            // declaration. Direct GetDB writes made inside HandleReply are covered.
+            TDeclaredPathsGuard declaredPaths(Self, operation);
 
             for (ui32 partIdx = 0; partIdx < operation->Parts.size(); ++partIdx) {
                 auto opId = TOperationId(txId, partIdx);

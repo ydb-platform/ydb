@@ -1,3 +1,4 @@
+#include "schemeshard__affected_paths_traits.h"
 #include "schemeshard__backup_collection_common.h"
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
@@ -257,6 +258,46 @@ bool SetName<TTag>(
 {
     tx.MutableCreateBackupCollection()->SetName(name);
     return true;
+}
+
+} // namespace NOperation
+
+using TAffectedESchemeOpCreateBackupCollection = TAffectedPathsTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection>;
+
+namespace NOperation {
+
+template <>
+std::optional<TAffectedPaths> GetAffectedPaths<TAffectedESchemeOpCreateBackupCollection>(
+    TAffectedESchemeOpCreateBackupCollection,
+    const TTxTransaction& tx,
+    const TOperationContext& context)
+{
+    // Unlike a plain create, the collection does not live under WorkingDir: Propose resolves
+    // it via NBackup::ResolveBackupCollectionPaths into <domain>/.backups/collections/<name>,
+    // where <domain> is WorkingDir's owning domain, not WorkingDir itself. Mirror that
+    // resolution rather than reusing DeclareChildOfWorkingDir, which would name the wrong
+    // parent. An unresolved WorkingDir is reported the same way DeclareTargetByIdOrName does.
+    const TPath workingDir = TPath::Resolve(tx.GetWorkingDir(), context.SS);
+    if (!workingDir.IsResolved()) {
+        TAffectedPaths unresolved;
+        unresolved.Unresolved = true;
+        return unresolved;
+    }
+
+    const TString backupCollectionsDir = JoinPath({workingDir.GetDomainPathString(), ".backups/collections"});
+
+    // The name may itself be an absolute path, in which case the resolver places the
+    // collection there and takes the parent from the name rather than from
+    // backupCollectionsDir (schemeshard__backup_collection_common.cpp:61 and :85). Joining
+    // unconditionally would append the whole absolute name to backupCollectionsDir and
+    // declare a path nothing ever writes.
+    const TString& name = tx.GetCreateBackupCollection().GetName();
+    const TPathSplitUnix nameSplit(name);
+    if (nameSplit.size() > 1 && nameSplit.IsAbsolute) {
+        const TString parent = "/" + JoinRange("/", nameSplit.begin(), nameSplit.end() - 1);
+        return DeclareChildOfWorkingDir(parent, TString(nameSplit.back()));
+    }
+    return DeclareChildOfWorkingDir(backupCollectionsDir, name);
 }
 
 } // namespace NOperation

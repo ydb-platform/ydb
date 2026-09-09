@@ -8,7 +8,7 @@ from typing import Callable
 
 import ydb
 
-from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient, max_json_depth
+from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient, get_sensors, max_json_depth
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.test_meta import link_test_case
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule, create_stream, delete_stream
@@ -1127,26 +1127,14 @@ FROM `{table_name}`"""
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         self.wait_completed_checkpoints(kikimr, query_name)
 
-        def restart_node():
-            restart_node_id = None
-            for node_id in kikimr.cluster.slots:
-                count = self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
-                if count:
-                    restart_node_id = node_id
-            assert restart_node_id is not None
-            logger.debug(f"Restart node {restart_node_id}")
-            node = kikimr.cluster.slots[restart_node_id]
-            node.stop()
-            node.start()
-
-        restart_node()
+        self.restart_streaming_node(kikimr)
         self.write_stream(['{"value": "value2"}'], endpoint=endpoint)
         expected_data = ['value2']
         self.wait_completed_checkpoints(kikimr, query_name)
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         self.wait_completed_checkpoints(kikimr, query_name)
 
-        restart_node()
+        self.restart_streaming_node(kikimr)
         self.write_stream(['{"value": "value3"}'], endpoint=endpoint)
         expected_data = ['value3']
         self.wait_completed_checkpoints(kikimr, query_name)
@@ -1544,10 +1532,12 @@ FROM `{table_name}`"""
             ):
                 self.create_source(kikimr, source_name, shared=True)
 
-    @pytest.mark.parametrize("local_topics", [True, False])
-    @pytest.mark.parametrize("kikimr", [{"enable_streaming_queries": False}], indirect=["kikimr"])
-    def test_table_mode(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
-        input_name, endpoint = self.get_input_name(kikimr, f"test_table_mode{local_topics!s:.1}", local_topics, entity_name)
+    @pytest.mark.parametrize(
+        "kikimr", [{"enable_streaming_queries": False, "enable_external_data_sources": False, "enable_shared_reading_in_streaming_queries": False}],
+        indirect=["kikimr"],
+    )
+    def test_table_mode(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str]) -> None:
+        input_name, endpoint = self.get_input_name(kikimr, "test_table_mode", True, entity_name)
 
         message = b'{"time": "lunch time"}'
         self.write_stream([message], endpoint=endpoint)
@@ -2308,7 +2298,8 @@ FROM `{table_name}`"""
         self.wait_completed_checkpoints(kikimr, entity_name(f'test_issues_after_restart_query_{local_topics!s:.1}'))
         logger.info("Query checked")
 
-        def check_issues(substring: str = "", client=None):
+        def get_issues(client=None):
+            """Fetch issues from .sys/streaming_queries"""
             if client is None:
                 client = kikimr.ydb_client
 
@@ -2321,20 +2312,18 @@ FROM `{table_name}`"""
             assert len(result_sets) == 1
             result_set_rows = result_sets[0].rows
             assert len(result_set_rows) == 1
-            query_issues = result_set_rows[0].Issues
+            return result_set_rows[0].Issues
 
-            if substring:
-                assert substring in query_issues, query_issues
-                assert query_issues.count("Previous query retries") == 1, query_issues
-            else:
-                assert query_issues.count("Previous query retries") <= 1, query_issues
-
-            assert max_json_depth(json.loads(query_issues)) <= 10, query_issues
-            return query_issues
+        def check_issues(query_issues: str, substring: str):
+            """Validate issues structure and content."""
+            assert substring in query_issues, query_issues
+            assert query_issues.count("Previous query retries") == 1, query_issues
+            depth = max_json_depth(json.loads(query_issues))
+            assert depth <= 10, f"Issues JSON depth {depth} exceeds limit: {query_issues}"
 
         self.write_stream(["2"], endpoint=endpoint)
-        wait_for(lambda: "Previous query retries" in check_issues(), timeout_seconds=60, step_seconds=1)
-        check_issues("Failed to unwrap")
+        assert wait_for(lambda: "Previous query retries" in get_issues(), timeout_seconds=60, step_seconds=1), "Failed to wait for Previous query retries"
+        check_issues(get_issues(), "Failed to unwrap")
 
         kikimr.ydb_client.query(f"""
             UPSERT INTO `{join_table}`
@@ -2348,14 +2337,12 @@ FROM `{table_name}`"""
         logger.info("Query fixed")
 
         kikimr.ydb_client.stop()
-        kikimr.first_node.stop()
-        kikimr.first_node.set_log_file_prefix("logfile_restarted_")
-        kikimr.first_node.start()
-        logger.info("Node with query restarted")
+        # Restart the node hosting the streaming query to trigger lease expiration.
+        self.restart_streaming_node(kikimr)
         kikimr.ydb_client = kikimr._setup_ydb_client(kikimr.endpoint, enable_discovery=False)
-
         time.sleep(5)
-        assert wait_for(lambda: "Lease expired" in check_issues(), timeout_seconds=120, step_seconds=1), "Failed to wait for script execution restart"
+        assert wait_for(lambda: "Lease expired" in get_issues(), timeout_seconds=30, step_seconds=1), \
+            "Failed to trigger lease expiration after restarting streaming node"
 
         self.write_stream(["3"], endpoint=endpoint)
         assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint) == ["value-third"]
@@ -2363,66 +2350,7 @@ FROM `{table_name}`"""
 
         second_node = list(kikimr.cluster.slots.values())[1]
         second_ydb_client = YdbClient.from_driver_config(database=kikimr.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
-        check_issues("Lease expired", client=second_ydb_client)
-
-    @pytest.mark.parametrize("local_topics", [True, False])
-    def test_restart_query_after_partition_increase(
-        self: StreamingTestBase,
-        kikimr: Kikimr,
-        entity_name: Callable[[str], str],
-        local_topics: bool,
-    ) -> None:
-        inp, out, endpoint = self.get_io_names(
-            kikimr,
-            f"test_restart_after_part_inc{local_topics!s:.1}",
-            local_topics,
-            entity_name,
-            partitions_count=1,
-        )
-
-        name = f"test_restart_after_part_inc_{local_topics!s:.1}"
-        sql = R'''
-            CREATE STREAMING QUERY `{query_name}` AS
-            DO BEGIN
-                $in = SELECT value FROM {inp}
-                WITH (
-                    FORMAT="json_each_row",
-                    SCHEMA=(value String NOT NULL))
-                WHERE value LIKE "%data%";
-                INSERT INTO {out} SELECT value FROM $in;
-            END DO;'''
-
-        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
-        self.wait_completed_checkpoints(kikimr, name)
-
-        # Stop the query before altering the topic partition count
-        logger.debug(f"stopping query {name}")
-        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
-        time.sleep(0.5)
-
-        logger.debug(f"altering topic {self.input_topic} partition count to 20")
-        self.get_ydb_client(kikimr, local_topics).driver.topic_client.alter_topic(
-            self.input_topic, set_min_active_partitions=20
-        )
-
-        logger.debug(f"restarting query {name} without recompilation")
-        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = TRUE);")
-        self.wait_completed_checkpoints(kikimr, name, timeout=30)
-
-        # Write data with random partition keys so messages land on different partitions
-        message_count = 20
-        for _ in range(message_count):
-            self.write_stream(
-                ['{"value": "my_data"}'],
-                topic_path=None,
-                partition_key=''.join(random.choices(string.digits, k=8)),
-                endpoint=endpoint,
-            )
-
-        expected_data = ["my_data" for _ in range(message_count)]
-        assert self.read_stream(message_count, topic_path=self.output_topic, endpoint=endpoint) == expected_data
-
-        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
+        check_issues(get_issues(client=second_ydb_client), "Lease expired")
 
     @pytest.mark.parametrize(
         "local_topics, shared_reading",
@@ -2490,3 +2418,113 @@ FROM `{table_name}`"""
             assert wait_for(has_missing_offsets_issue, timeout_seconds=60, step_seconds=1), get_query_issues()
         finally:
             kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_restart_query_after_partition_increase(
+        self: StreamingTestBase,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        local_topics: bool,
+    ) -> None:
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"test_restart_after_part_inc{local_topics!s:.1}",
+            local_topics,
+            entity_name,
+            partitions_count=1,
+        )
+
+        name = f"test_restart_after_part_inc_{local_topics!s:.1}"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT value FROM {inp}
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(value String NOT NULL))
+                WHERE value LIKE "%data%";
+                INSERT INTO {out} SELECT value FROM $in;
+            END DO;'''
+
+        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
+        self.wait_completed_checkpoints(kikimr, name)
+
+        # Stop the query before altering the topic partition count
+        logger.debug(f"stopping query {name}")
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
+        time.sleep(0.5)
+
+        logger.debug(f"altering topic {self.input_topic} partition count to 20")
+        self.get_ydb_client(kikimr, local_topics).driver.topic_client.alter_topic(
+            self.input_topic, set_min_active_partitions=20
+        )
+
+        logger.debug(f"restarting query {name} without recompilation")
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = TRUE);")
+        self.wait_completed_checkpoints(kikimr, name, timeout=30)
+
+        # Write data with random partition keys so messages land on different partitions
+        message_count = 20
+        for _ in range(message_count):
+            self.write_stream(
+                ['{"value": "my_data"}'],
+                topic_path=None,
+                partition_key=''.join(random.choices(string.digits, k=8)),
+                endpoint=endpoint,
+            )
+
+        expected_data = ["my_data" for _ in range(message_count)]
+        assert self.read_stream(message_count, topic_path=self.output_topic, endpoint=endpoint) == expected_data
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
+
+    @pytest.mark.parametrize(
+        "max_tasks_per_stage, expected_actor_count",
+        [(1, 1), (0, 6), (5, 5)],
+        ids=["max_tasks_1", "default", "max_tasks_50"],
+    )
+    def test_pq_source_actor_count(
+        self: StreamingTestBase,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        max_tasks_per_stage: int,
+        expected_actor_count: int,
+    ) -> None:
+
+        partitions_count = 100
+        test_name = f"test_pq_source_actor_count_{max_tasks_per_stage or 'default'}"
+        inp, out, _ = self.get_io_names(
+            kikimr,
+            test_name,
+            True,
+            entity_name,
+            partitions_count=partitions_count,
+        )
+        query_name = test_name
+        path = f"{kikimr.get_database_name()}/{query_name}"
+
+        kikimr.ydb_client.query(
+            f"""
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                {f'PRAGMA ydb.MaxTasksPerStage = "{max_tasks_per_stage}";' if max_tasks_per_stage else ''}
+                INSERT INTO {out} SELECT Data FROM {inp};
+            END DO;
+            """
+        )
+        self.wait_completed_checkpoints(kikimr, query_name)
+
+        def streaming_query_tasks_count():
+            return sum(
+                get_sensors(kikimr.cluster, node_id, "kqp").find_sensor(
+                    {"path": path, "subsystem": "streaming_queries", "sensor": "streaming.query.tasks.count"}
+                )
+                or 0
+                for node_id in kikimr.cluster.slots
+            )
+
+        assert wait_for(lambda: streaming_query_tasks_count() == expected_actor_count, timeout_seconds=60, step_seconds=1), (
+            f"Expected {expected_actor_count} streaming query tasks, got {streaming_query_tasks_count()}"
+        )
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")

@@ -10,6 +10,12 @@ message TDDiskConfig
     reserved "UseSQPoll", "UseIOPoll";
     optional bool ForcePDiskFallback = 3;
     optional bool EnableChecksums = 4;
+    optional bool CheckChecksumBeforeWrite = 5;
+    optional bool CheckChecksumWhenRead = 6;
+
+    // How long (in microseconds) the DDisk io_uring thread busy-polls before
+    // parking when idle. Defaults to 10.
+    optional uint32 IdleSpinUs = 7;
 }
 
 message TPBufferConfig
@@ -69,4 +75,5 @@ message TPBufferConfig
     // replying with an OVERLOADED error to avoid returning a potentially-stale view.
     optional uint32 ListPersistentBufferMaxRetries = 16;
     optional uint32 ListPersistentBufferRetryPeriodMilliseconds = 17;
+    optional bool EnableChecksums = 18;
 }

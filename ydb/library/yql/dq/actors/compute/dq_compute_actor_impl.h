@@ -385,7 +385,7 @@ protected:
         return MemoryQuota->GetMkqlMemoryLimit();
     }
 
-    virtual IDqSchedulerContextPtr GetSchedulerContext() const {
+    virtual IDqSchedulableWorkFactoryPtr GetSchedulableWorkFactory() const {
         return nullptr;
     }
 
@@ -2096,7 +2096,7 @@ protected:
                         .Arena = Task.GetArena(),
                         .TraceId = ComputeActorSpan.GetTraceId(),
                         .DatumValidationMode = CoreRuntimeSettings->DatumValidation.Get(),
-                        .SchedulerContext = GetSchedulerContext(),
+                        .SchedulableWorkFactory = GetSchedulableWorkFactory(),
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create source " << inputDesc.GetSource().GetType() << ": " << ex.what();

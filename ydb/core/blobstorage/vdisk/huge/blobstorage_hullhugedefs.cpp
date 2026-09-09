@@ -196,7 +196,8 @@ namespace NKikimr {
 
         TString TPutRecoveryLogRec::ToString() const {
             TStringStream str;
-            str << "{LogoBlobID# " << LogoBlobID.ToString() << " DiskAddr# " << DiskAddr.ToString() << "}";
+            str << "{LogoBlobID# " << LogoBlobID.ToString() << " DiskAddr# " << DiskAddr.ToString()
+                << " IsStripe# " << (IsStripe ? "true" : "false") << "}";
             return str.Str();
         }
 

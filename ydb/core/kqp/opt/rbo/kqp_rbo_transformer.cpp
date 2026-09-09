@@ -121,7 +121,7 @@ IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::
             }  else if (TCoTake::Match(node.Get())) {
                 return PushTakeIntoPlan(node, ctx, TypeCtx);
             } else if (TKqlTableEffect::Match(node.Get())) {
-                Y_ENSURE(false, "DML functionality not yet supported in new optimizer");
+                return RewriteTableEffect(node, ctx, KqpCtx);
             } else {
                 return node;
             }
@@ -451,9 +451,9 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     earlyPruningRules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>(/*pruneKeyColumns=*/true));
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Early pruning", std::move(earlyPruningRules)));
 
-    // Initial stages.
     // Expand aggregation.
     TVector<std::unique_ptr<IRule>> expandAggregationRules;
+    expandAggregationRules.emplace_back(std::make_unique<TExpandGroupingSetsRule>());
     expandAggregationRules.emplace_back(std::make_unique<TExpandDistinctAggregationRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Expand aggregation", std::move(expandAggregationRules)));
 

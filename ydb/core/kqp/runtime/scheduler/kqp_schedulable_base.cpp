@@ -4,7 +4,12 @@
 
 #include <ydb/core/kqp/runtime/scheduler/tree/dynamic.h>
 
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/log.h>
+
 #include <util/generic/scope.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE_SCHEDULER
 
 namespace NKikimr::NKqp::NScheduler {
 
@@ -12,24 +17,8 @@ static constexpr TDuration AverageExecutionTime = TDuration::MicroSeconds(100); 
 
 using namespace NHdrf::NDynamic;
 
-namespace {
-    NYql::NDq::TWorkScope ExtractScope(const NHdrf::NDynamic::TQueryPtr& query) {
-        NYql::NDq::TWorkScope scope;
-        if (!query) {
-            return scope;
-        }
-        if (auto* pool = query->GetParent()) {
-            scope.Name = std::get<NHdrf::TPoolId>(pool->GetId());
-            if (auto* database = pool->GetParent()) {
-                scope.Namespace = std::get<NHdrf::TDatabaseId>(database->GetId());
-            }
-        }
-        return scope;
-    }
-} // namespace
-
 TSchedulableBase::TSchedulableBase(const TOptions& options)
-    : Scope(ExtractScope(options.Query))
+    : FullPoolId(options.Query ? options.Query->GetFullPoolId() : NHdrf::TFullPoolId{})
     , IsSchedulable(options.IsSchedulable)
     , LastExecutionTime(AverageExecutionTime)
 {
@@ -38,6 +27,23 @@ TSchedulableBase::TSchedulableBase(const TOptions& options)
     }
 
     Y_ENSURE(!IsSchedulable || IsAccountable());
+}
+
+TSchedulableBase::~TSchedulableBase() {
+    if (!Executed && !Throttled) {
+        return;
+    }
+
+    Y_DEBUG_ABORT_UNLESS(false, "Schedulable work is destroyed while still holding the quota");
+
+    YDB_LOG_WARN("Schedulable work is destroyed without StopExecution",
+        {"database", FullPoolId.DatabaseId},
+        {"pool", FullPoolId.PoolId},
+        {"executed", Executed},
+        {"throttled", Throttled});
+
+    // TODO: should we set a safety net here?
+    // StopExecution();
 }
 
 void TSchedulableBase::RegisterForResume(const NActors::TActorId& actorId) {
@@ -52,17 +58,25 @@ std::optional<TDuration> TSchedulableBase::TryStartExecution(TMonotonic now) {
     if (StartExecution(now)) {
         return std::nullopt;
     }
+
     return CalculateDelay(now);
 }
 
-void TSchedulableBase::StopExecution() {
-    bool forced = false;
-    StopExecution(forced);
+void TSchedulableBase::NotifyResumed(bool byScheduler) {
+    ForcedResume = byScheduler;
 }
 
 bool TSchedulableBase::StartExecution(TMonotonic now) {
     Y_ASSERT(SchedulableTask);
-    Y_ASSERT(!Executed);
+
+    if (Executed) {
+        Y_DEBUG_ABORT_UNLESS(false, "Re-entrant StartExecution: the quota slot is already held");
+
+        YDB_LOG_WARN("Re-entrant StartExecution",
+            {"database", FullPoolId.DatabaseId},
+            {"pool", FullPoolId.PoolId},
+            {"throttled", Throttled});
+    }
 
     Y_DEFER {
         if (Throttled) {
@@ -98,8 +112,16 @@ bool TSchedulableBase::StartExecution(TMonotonic now) {
     return Executed;
 }
 
-void TSchedulableBase::StopExecution(bool& forcedResume) {
+void TSchedulableBase::StopExecution() {
     Y_ASSERT(SchedulableTask);
+
+    if (!Executed && !Throttled) {
+        Y_DEBUG_ABORT_UNLESS(false, "StopExecution without a matching start");
+
+        YDB_LOG_WARN("StopExecution without a matching start",
+            {"database", FullPoolId.DatabaseId},
+            {"pool", FullPoolId.PoolId});
+    }
 
     if (Executed) {
         Y_ASSERT(!Throttled);
@@ -107,12 +129,15 @@ void TSchedulableBase::StopExecution(bool& forcedResume) {
         TDuration timePassed = TDuration::MicroSeconds(Timer.Passed() * 1'000'000);
         SchedulableTask->Query->CurrentTasksTime -= LastExecutionTime.MicroSeconds();
         LastExecutionTime = timePassed;
-        SchedulableTask->DecreaseUsage(timePassed, forcedResume ? TSchedulableTask::CPU_RESUMED : TSchedulableTask::CPU_DEFAULT);
-        forcedResume = false;
+        SchedulableTask->DecreaseUsage(timePassed, ForcedResume ? TSchedulableTask::CPU_RESUMED : TSchedulableTask::CPU_DEFAULT);
+        ForcedResume = false;
         Executed = false;
 
         if (auto spareUsage = SchedulableTask->GetSpareUsage()) {
-            SchedulableTask->Query->ResumeTasks(spareUsage);
+            // Waking up peers is optional work and needs an actor context.
+            if (NActors::TlsActivationContext) {
+                SchedulableTask->Query->ResumeTasks(spareUsage);
+            }
         }
         // TODO: resume tasks for all queries from parent leaf pool
     } else if (Throttled) {

@@ -1169,17 +1169,21 @@ Y_UNIT_TEST_SUITE(DDisk) {
             auto info = f.GetPBInfo(false, true);
             auto& b = info->Get()->EraseBarriers;
             UNIT_ASSERT(b.size() == 3);
-            UNIT_ASSERT((b[{f.PBCreds[6].TabletId, static_cast<ui8>(f.PBCreds[6].DirectBlockGroupIndex)}] == 300)); // Hole
-            UNIT_ASSERT((b[{f.PBCreds[4].TabletId, static_cast<ui8>(f.PBCreds[4].DirectBlockGroupIndex)}] == 100)); // Hole
+            // Barriers survive recovery even without live records for the namespace.
+            UNIT_ASSERT((b[{f.PBCreds[6].TabletId, static_cast<ui8>(f.PBCreds[6].DirectBlockGroupIndex)}] == 300));
+            UNIT_ASSERT((b[{f.PBCreds[4].TabletId, static_cast<ui8>(f.PBCreds[4].DirectBlockGroupIndex)}] == 100));
             UNIT_ASSERT((b[{f.PBCreds[1].TabletId, static_cast<ui8>(f.PBCreds[1].DirectBlockGroupIndex)}] == 5));
         }
         f.ErasePB(2000, 7); // clear PB space to write more
         {
             auto info = f.GetPBInfo(false, true);
             auto& b = info->Get()->EraseBarriers;
-            UNIT_ASSERT(b.size() == 3);
-            UNIT_ASSERT((b[{f.PBCreds[7].TabletId, static_cast<ui8>(f.PBCreds[7].DirectBlockGroupIndex)}] == 2000)); // Hole replaced
-            UNIT_ASSERT((b[{f.PBCreds[4].TabletId, static_cast<ui8>(f.PBCreds[4].DirectBlockGroupIndex)}] == 100)); // Hole
+            // Preserved barriers are not reused by other tablets, so a new barrier
+            // slot is allocated for tablet7 rather than replacing tablet6's/tablet4's.
+            UNIT_ASSERT(b.size() == 4);
+            UNIT_ASSERT((b[{f.PBCreds[7].TabletId, static_cast<ui8>(f.PBCreds[7].DirectBlockGroupIndex)}] == 2000)); // New
+            UNIT_ASSERT((b[{f.PBCreds[6].TabletId, static_cast<ui8>(f.PBCreds[6].DirectBlockGroupIndex)}] == 300));
+            UNIT_ASSERT((b[{f.PBCreds[4].TabletId, static_cast<ui8>(f.PBCreds[4].DirectBlockGroupIndex)}] == 100));
             UNIT_ASSERT((b[{f.PBCreds[1].TabletId, static_cast<ui8>(f.PBCreds[1].DirectBlockGroupIndex)}] == 5));
         }
         f.WritePB(0, 128, 8);
@@ -1189,9 +1193,11 @@ Y_UNIT_TEST_SUITE(DDisk) {
         {
             auto info = f.GetPBInfo(false, true);
             auto& b = info->Get()->EraseBarriers;
-            UNIT_ASSERT(b.size() == 3);
+            UNIT_ASSERT(b.size() == 5);
             UNIT_ASSERT((b[{f.PBCreds[7].TabletId, static_cast<ui8>(f.PBCreds[7].DirectBlockGroupIndex)}] == 2000));
-            UNIT_ASSERT((b[{f.PBCreds[8].TabletId, static_cast<ui8>(f.PBCreds[8].DirectBlockGroupIndex)}] == 2551)); // Hole replaced
+            UNIT_ASSERT((b[{f.PBCreds[8].TabletId, static_cast<ui8>(f.PBCreds[8].DirectBlockGroupIndex)}] == 2551)); // New
+            UNIT_ASSERT((b[{f.PBCreds[6].TabletId, static_cast<ui8>(f.PBCreds[6].DirectBlockGroupIndex)}] == 300));
+            UNIT_ASSERT((b[{f.PBCreds[4].TabletId, static_cast<ui8>(f.PBCreds[4].DirectBlockGroupIndex)}] == 100));
             UNIT_ASSERT((b[{f.PBCreds[1].TabletId, static_cast<ui8>(f.PBCreds[1].DirectBlockGroupIndex)}] == 5));
         }
         f.WritePB(0, 128, 8);
@@ -1200,9 +1206,11 @@ Y_UNIT_TEST_SUITE(DDisk) {
         {
             auto info = f.GetPBInfo(false, true);
             auto& b = info->Get()->EraseBarriers;
-            UNIT_ASSERT(b.size() == 3);
+            UNIT_ASSERT(b.size() == 5);
             UNIT_ASSERT((b[{f.PBCreds[7].TabletId, static_cast<ui8>(f.PBCreds[7].DirectBlockGroupIndex)}] == 2000));
-            UNIT_ASSERT((b[{f.PBCreds[8].TabletId, static_cast<ui8>(f.PBCreds[8].DirectBlockGroupIndex)}] == 3500)); // Same place used
+            UNIT_ASSERT((b[{f.PBCreds[8].TabletId, static_cast<ui8>(f.PBCreds[8].DirectBlockGroupIndex)}] == 3500)); // Same place used (own barrier updated)
+            UNIT_ASSERT((b[{f.PBCreds[6].TabletId, static_cast<ui8>(f.PBCreds[6].DirectBlockGroupIndex)}] == 300));
+            UNIT_ASSERT((b[{f.PBCreds[4].TabletId, static_cast<ui8>(f.PBCreds[4].DirectBlockGroupIndex)}] == 100));
             UNIT_ASSERT((b[{f.PBCreds[1].TabletId, static_cast<ui8>(f.PBCreds[1].DirectBlockGroupIndex)}] == 5));
         }
         f.WritePB(0, 128, 9);
@@ -1211,21 +1219,82 @@ Y_UNIT_TEST_SUITE(DDisk) {
         {
             auto info = f.GetPBInfo(false, true);
             auto& b = info->Get()->EraseBarriers;
-            UNIT_ASSERT(b.size() == 4);
+            UNIT_ASSERT(b.size() == 6);
             UNIT_ASSERT((b[{f.PBCreds[9].TabletId, static_cast<ui8>(f.PBCreds[9].DirectBlockGroupIndex)}] == 6000)); // One new
-            UNIT_ASSERT((b[{f.PBCreds[7].TabletId, static_cast<ui8>(f.PBCreds[7].DirectBlockGroupIndex)}] == 2000));
             UNIT_ASSERT((b[{f.PBCreds[8].TabletId, static_cast<ui8>(f.PBCreds[8].DirectBlockGroupIndex)}] == 3500));
+            UNIT_ASSERT((b[{f.PBCreds[7].TabletId, static_cast<ui8>(f.PBCreds[7].DirectBlockGroupIndex)}] == 2000));
+            UNIT_ASSERT((b[{f.PBCreds[6].TabletId, static_cast<ui8>(f.PBCreds[6].DirectBlockGroupIndex)}] == 300));
+            UNIT_ASSERT((b[{f.PBCreds[4].TabletId, static_cast<ui8>(f.PBCreds[4].DirectBlockGroupIndex)}] == 100));
             UNIT_ASSERT((b[{f.PBCreds[1].TabletId, static_cast<ui8>(f.PBCreds[1].DirectBlockGroupIndex)}] == 5));
         }
         f.RestartNode();
         {
             auto info = f.GetPBInfo(false, true);
             auto& b = info->Get()->EraseBarriers;
-            UNIT_ASSERT(b.size() == 4);
+            UNIT_ASSERT(b.size() == 6);
             UNIT_ASSERT((b[{f.PBCreds[9].TabletId, static_cast<ui8>(f.PBCreds[9].DirectBlockGroupIndex)}] == 6000));
-            UNIT_ASSERT((b[{f.PBCreds[7].TabletId, static_cast<ui8>(f.PBCreds[7].DirectBlockGroupIndex)}] == 2000));
             UNIT_ASSERT((b[{f.PBCreds[8].TabletId, static_cast<ui8>(f.PBCreds[8].DirectBlockGroupIndex)}] == 3500));
+            UNIT_ASSERT((b[{f.PBCreds[7].TabletId, static_cast<ui8>(f.PBCreds[7].DirectBlockGroupIndex)}] == 2000));
+            UNIT_ASSERT((b[{f.PBCreds[6].TabletId, static_cast<ui8>(f.PBCreds[6].DirectBlockGroupIndex)}] == 300));
+            UNIT_ASSERT((b[{f.PBCreds[4].TabletId, static_cast<ui8>(f.PBCreds[4].DirectBlockGroupIndex)}] == 100));
             UNIT_ASSERT((b[{f.PBCreds[1].TabletId, static_cast<ui8>(f.PBCreds[1].DirectBlockGroupIndex)}] == 5));
+        }
+    }
+
+    // End-to-end regression test for the barrier-preservation fix: a write that
+    // was already covered by a barrier (and whose underlying record was erased
+    // by the barrier move) must keep being rejected as OUTDATED even after the
+    // namespace has no live records and the node is restarted more than once.
+    // With the previous (buggy) behavior the barrier slot was dropped by
+    // RestoreBarriers on the second restart (since after the first restart the
+    // namespace had no live persistent-buffer records left), and the replayed
+    // write would have been incorrectly accepted, breaking the exact-once
+    // write guarantee.
+    Y_UNIT_TEST(PersistentBufferReplayedWriteOutdatedAfterRestarts) {
+        TDDiskTestContext f(1_MB);
+        auto groups = f.AllocateDDiskBlockGroup();
+        auto& node = groups.begin()->GetNodes(0);
+        f.ChangeTestingNode(node);
+
+        const ui32 offset = 0;
+        const ui32 numBlocks = 4;
+        const ui32 size = numBlocks * f.BlockSize;
+        auto makePayload = [&] {
+            TString update = TString::Uninitialized(size);
+            memset(update.Detach(), 'X', update.size());
+            return update;
+        };
+
+        const ui64 lsn = f.NextLsn++;
+
+        // Original write.
+        {
+            std::unique_ptr<NDDisk::TEvWritePersistentBuffer> ev(new NDDisk::TEvWritePersistentBuffer(
+                f.PBCreds[0], {f.VChunkIndex, offset, size}, lsn, {0}));
+            ev->AddPayloadThenChecksum(TRope(makePayload()));
+            f.Env.Runtime->Send(new IEventHandle(f.PBServiceId, f.Edge, ev.release()), f.Edge.NodeId());
+            auto res = f.Env.WaitForEdgeActorEvent<NDDisk::TEvWritePersistentBufferResult>(f.Edge, false);
+            UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+        }
+
+        // Move the barrier past this LSN: the (only) record for this namespace
+        // is erased, leaving the namespace with no live records but a barrier
+        // that must still be honored.
+        f.ErasePB(lsn);
+
+        // Restart twice in a row: this is the exact scenario that used to lose
+        // the barrier on the second restart.
+        f.RestartNode();
+        f.RestartNode();
+
+        // Replaying the exact same write must be rejected as OUTDATED.
+        {
+            std::unique_ptr<NDDisk::TEvWritePersistentBuffer> ev(new NDDisk::TEvWritePersistentBuffer(
+                f.PBCreds[0], {f.VChunkIndex, offset, size}, lsn, {0}));
+            ev->AddPayloadThenChecksum(TRope(makePayload()));
+            f.Env.Runtime->Send(new IEventHandle(f.PBServiceId, f.Edge, ev.release()), f.Edge.NodeId());
+            auto res = f.Env.WaitForEdgeActorEvent<NDDisk::TEvWritePersistentBufferResult>(f.Edge, false);
+            UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED);
         }
     }
 

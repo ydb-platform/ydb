@@ -124,6 +124,7 @@ message TEvBlockResult {
     optional string ErrorReason = 2;
     optional uint32 TimeToLiveMs = 3;
     optional bool IsTabletStorageInfoVersionObsolete = 4 [default = false];
+    optional uint32 ActualGeneration = 5;
 }
 
 message TEvPushNotify {

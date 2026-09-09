@@ -554,18 +554,20 @@ namespace NKikimr {
         void Apply(TEvHugeAllocateSlotsResult *msg) {
             Y_DEBUG_ABORT_UNLESS(State == EState::WaitForSlotAllocation);
             State = EState::TryProcessItem;
-            const bool stripeAlloc = UseStripeAllocator();
+            Y_VERIFY_S(msg->Locations.size() == msg->IsStripe.size(), HullCtx->VCtx->VDiskLogPrefix);
             if constexpr (LogoBlobs) {
-                for (const TDiskPart& p : msg->Locations) {
-                    if (stripeAlloc) {
-                        AllocatedStripeBlobs.PushBack(p);
+                for (size_t i = 0; i < msg->Locations.size(); ++i) {
+                    if (msg->IsStripe[i]) {
+                        AllocatedStripeBlobs.PushBack(msg->Locations[i]);
                     } else {
-                        AllocatedHugeBlobs.PushBack(p);
+                        AllocatedHugeBlobs.PushBack(msg->Locations[i]);
                     }
                 }
                 IndexMerger.GetDataMerger().ApplyAllocatedSlots(msg->Locations);
             } else {
                 Y_VERIFY_S(msg->Locations.size() == 1, HullCtx->VCtx->VDiskLogPrefix);
+                Y_VERIFY_S(msg->IsStripe.front(), HullCtx->VCtx->VDiskLogPrefix
+                    << " Blocks/Barriers SST requested a stripe, but the huge keeper allocated a slot");
                 StripeSstLocation = msg->Locations.front();
                 AllocatedStripeBlobs.PushBack(StripeSstLocation);
             }

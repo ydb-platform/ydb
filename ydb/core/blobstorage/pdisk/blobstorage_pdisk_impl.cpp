@@ -47,12 +47,13 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     , OwnerData(OwnerCount)
     , Keeper(Mon, cfg)
     , CostLimitNs(cfg->CostLimitNs)
-    , PDiskThread(*this)
+    , PDiskThread(*this, cfg->BlobStorageExecutorPoolAffinity)
     , BlockDevice(CreateRealBlockDevice(cfg->GetDevicePath(), Mon,
                     HPCyclesMs(ReorderingMs), DriveModel.SeekTimeNs(), cfg->DeviceInFlight,
                     TDeviceMode::LockFile | (cfg->UseSpdkNvmeDriver ? TDeviceMode::UseSpdk : 0),
                     cfg->MaxQueuedCompletionActions, cfg->CompletionThreadsCount, cfg->SectorMap,
-                    cfg->BufferPoolBufferSizeBytes, this, cfg->ReadOnly, cfg->UseBytesFlightControl))
+                    cfg->BufferPoolBufferSizeBytes, this, cfg->ReadOnly, cfg->UseBytesFlightControl,
+                    cfg->BlobStorageExecutorPoolAffinity))
     , Cfg(cfg)
     , CreationTime(TInstant::Now())
     , ExpectedSlotCount(cfg->ExpectedSlotCount)
@@ -666,15 +667,8 @@ NPDisk::TStatusFlags TPDisk::GetStatusFlags(TOwner ownerId, const EOwnerGroupTyp
         res = Keeper.GetSpaceStatusFlags(keeperOwner, &occupancy_);
     }
 
-    if (i64 forcedColor = ForcedPDiskSpaceColor; forcedColor != 0) {
-        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
-        if (NKikimrBlobStorage::TPDiskSpaceColor_E_IsValid(static_cast<int>(forcedColor))) {
-            res = SpaceColorToStatusFlag(static_cast<TColor::E>(forcedColor));
-        } else {
-            YDB_LOG_P_LOG(PRI_ERROR, "ForcedPDiskSpaceColor has invalid value, ignoring",
-                {"marker", "BPD01"},
-                {"forcedPDiskSpaceColor", forcedColor});
-        }
+    if (auto forcedColor = GetForcedPDiskSpaceColorIcb()) {
+        res = SpaceColorToStatusFlag(*forcedColor);
     }
 
     if (occupancy) {
@@ -1755,6 +1749,10 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
             double occupancy;
             NPDisk::TStatusFlags statusFlags = Keeper.GetSpaceStatusFlags(owner, &occupancy);
             NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor = StatusFlagToSpaceColor(statusFlags);
+            if (auto forcedColor = GetForcedPDiskSpaceColorIcb()) {
+                spaceColor = *forcedColor;
+                statusFlags = SpaceColorToStatusFlag(spaceColor);
+            }
             double vdiskSlotUsage = Keeper.GetVDiskSlotUsage(owner);
             double vdiskRawUsage = Keeper.GetVDiskRawUsage(owner);
             vdiskMetrics->SetStatusFlags(statusFlags);
@@ -1806,6 +1804,9 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pdiskState.SetPDiskUsage(pdiskUsage);
 
         auto pdiskCapacityAlert = Keeper.GetPDiskCapacityAlert();
+        if (auto forcedColor = GetForcedPDiskSpaceColorIcb()) {
+            pdiskCapacityAlert = *forcedColor;
+        }
         pDiskMetrics.SetPDiskCapacityAlert(pdiskCapacityAlert);
         pdiskState.SetPDiskCapacityAlert(pdiskCapacityAlert);
     }

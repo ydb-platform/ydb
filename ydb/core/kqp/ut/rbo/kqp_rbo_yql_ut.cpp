@@ -597,6 +597,107 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TestFilter(ColumnStore);
     }
 
+    Y_UNIT_TEST(InsertUpdate) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto dbSession = db.CreateSession().GetValueSync().GetSession();
+
+        TString schemaQ = R"(
+            CREATE TABLE src (
+                id Uint64 NOT NULL,
+                v Int64,
+                PRIMARY KEY (id)
+            );
+
+            CREATE TABLE dst (
+                id Uint64 NOT NULL,
+                v Int64,
+                PRIMARY KEY (id)
+            );
+
+            ALTER TABLE `/Root/dst` ADD INDEX Index1 GLOBAL ON (id, v);
+            ALTER TABLE `/Root/dst` ADD INDEX Index12 GLOBAL ON (v);
+
+        )";
+
+        auto schemaResult = dbSession.ExecuteSchemeQuery(schemaQ).GetValueSync();
+        UNIT_ASSERT_C(schemaResult.IsSuccess(), schemaResult.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+        auto dbSession2 = client.GetSession().GetValueSync().GetSession();
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        rows.AddListItem()
+            .BeginStruct()
+            .AddMember("id").Uint64(1)
+            .AddMember("v").Int64(10)
+            .EndStruct();
+        rows.AddListItem()
+            .BeginStruct()
+            .AddMember("id").Uint64(2)
+            .AddMember("v").Int64(20)
+            .EndStruct();
+        rows.EndList();
+
+        auto result = db.BulkUpsert("/Root/src", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto insertSelectRes = dbSession2.ExecuteQuery(R"(
+            --PRAGMA YqlSelect = "disable";
+            INSERT INTO dst (id, v)
+            SELECT id, v
+            FROM src;
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+        UNIT_ASSERT(insertSelectRes.IsSuccess());
+
+        auto selectRes = dbSession2.ExecuteQuery(R"(
+            SELECT id, v
+            FROM dst;
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(selectRes.GetResultSet(0)), R"([[1u;[10]];[2u;[20]]])");
+
+        auto updateSelectRes = dbSession2.ExecuteQuery(R"(
+            --PRAGMA YqlSelect = "disable";
+            UPDATE dst ON
+            SELECT id, v
+            FROM src;
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+        UNIT_ASSERT(updateSelectRes.IsSuccess());
+
+        selectRes = dbSession2.ExecuteQuery(R"(
+            SELECT id, v
+            FROM dst;
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(selectRes.GetResultSet(0)), R"([[1u;[10]];[2u;[20]]])");
+
+        auto deleteRes = dbSession2.ExecuteQuery(R"(
+            --PRAGMA YqlSelect = "disable";
+            DELETE FROM dst ON
+            SELECT id, v
+            FROM src;
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+        UNIT_ASSERT(deleteRes.IsSuccess());
+
+        selectRes = dbSession2.ExecuteQuery(R"(
+            SELECT id, v
+            FROM dst;
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(selectRes.GetResultSet(0)), R"([])");
+
+    }
+
     NKikimrConfig::TAppConfig CreateExplainPlanTestAppConfig(bool inlineJoinFiltersAfterCBO = true) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -12719,6 +12820,11 @@ foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.
                 group by rollup(t1.b)
                 order by b;
             )",
+            R"(
+                SELECT count(distinct t1.c), t1.b as b FROM `/Root/t1` as t1
+                group by rollup(t1.b)
+                order by b;
+            )",
         };
 
         const std::vector<std::string> results = {
@@ -12729,6 +12835,7 @@ foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.
             R"([[4u;#;#;#;#];[1u;[1];#;#;#];[1u;[1];[2];#;#];[1u;[1];[2];[3];#];[1u;[1];[2];[3];[4]];[1u;[2];#;#;#];[1u;[2];[3];#;#];[1u;[2];[3];[4];#];[1u;[2];[3];[4];[5]];[1u;[3];#;#;#];[1u;[3];[4];#;#];[1u;[3];[4];[5];#];[1u;[3];[4];[5];[6]];[1u;[4];#;#;#];[1u;[4];[5];#;#];[1u;[4];[5];[6];#];[1u;[4];[5];[6];[7]]])",
             R"([[[10];[1];[4];[2.5];#;#];[[1];[1];[1];[1.];[0];#];[[1];[1];[1];[1.];[0];[2]];[[2];[2];[2];[2.];[1];#];[[2];[2];[2];[2.];[1];[3]];[[3];[3];[3];[3.];[2];#];[[3];[3];[3];[3.];[2];[4]];[[4];[4];[4];[4.];[3];#];[[4];[4];[4];[4.];[3];[5]]])",
             R"([[6u;#];[3u;[1]];[3u;[2]];[3u;[3]];[3u;[4]]])",
+            R"([[4u;#];[1u;[1]];[1u;[2]];[1u;[3]];[1u;[4]]])",
         };
 
         auto queryClient = kikimr.GetQueryClient();

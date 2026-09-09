@@ -39,7 +39,8 @@ namespace NKikimr::NSqsTopic {
         const TString& topicPath,
         const TString& consumer,
         const TString& method,
-        TVector<std::pair<TString, TString>>&& labels
+        TVector<std::pair<TString, TString>>&& labels,
+        const TString& databaseId = {}
     );
 
     TVector<std::pair<TString, TString>> GetRequestMessageCountMetricsLabels(

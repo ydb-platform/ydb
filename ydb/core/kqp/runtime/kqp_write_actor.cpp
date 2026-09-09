@@ -471,7 +471,7 @@ public:
         TIntrusivePtr<NACLib::TUserContext> userCtx)
         : MessageSettings(GetWriteActorSettings())
         , Alloc(alloc)
-        , MvccSnapshot(mvccSnapshot)
+        , CommitMvccSnapshot(mvccSnapshot)
         , LockMode(lockMode)
         , CollectAffectedRows(collectAffectedRows)
         , Database(database)
@@ -492,10 +492,12 @@ public:
         , Counters(counters)
         , UserCtx(userCtx)
     {
+        AFL_ENSURE(lockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION || !CommitMvccSnapshot);
         LogPrefix = TStringBuilder() << "Table: `" << TablePath << "` (" << TableId << "), " << "SessionActorId: " << sessionActorId;
         ShardedWriteController = CreateShardedWriteController(
             TShardedWriteControllerSettings {
                 .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
+                .ColumnShardMaxOperationBytes = MessageSettings.ColumnShardMaxOperationBytes,
                 .Inconsistent = InconsistentTx,
             },
             Alloc);
@@ -511,6 +513,13 @@ public:
     // This ensures UpdateShards/AddAction passes the correct per-query SpanId to TxManager.
     void SetCurrentQuerySpanId(ui64 querySpanId) {
         CurrentQuerySpanId = querySpanId;
+    }
+
+    // Set collect_affected_rows for the current batch. The write actor may be
+    // reused across statements of an interactive tx (via the buffer actor),
+    // where each statement may have its own CollectAffectedRows setting.
+    void SetCollectAffectedRows(bool collectAffectedRows) {
+        CollectAffectedRows = collectAffectedRows;
     }
 
     void Bootstrap() {
@@ -584,7 +593,8 @@ public:
         TVector<NKikimrKqp::TKqpColumnMetadataProto> keyColumnsMetadata,
         TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata,
         ui32 defaultColumnsCount,
-        i64 priority) {
+        i64 priority,
+        const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot) {
         YQL_ENSURE(!Closed);
         ShardedWriteController->Open(
             token,
@@ -593,7 +603,8 @@ public:
             std::move(keyColumnsMetadata),
             std::move(columnsMetadata),
             defaultColumnsCount,
-            priority);
+            priority,
+            mvccSnapshot);
 
         // At current time only insert operation can fail.
         NeedToFlushBeforeCommit |= (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT);
@@ -1335,6 +1346,19 @@ public:
         const bool isPrepare = metadata->IsFinal && Mode == EMode::PREPARE;
         const bool isImmediateCommit = metadata->IsFinal && Mode == EMode::IMMEDIATE_COMMIT;
 
+        // In-flight data batches carry the snapshot of the operation that produced
+        // them, and all batches of one message must share it (enforced by
+        // GetMessageMvccSnapshot). A covering-only message contains no data batches
+        // and thus no batch snapshot; for it, fall back to CommitMvccSnapshot
+        // (set only for snapshot isolation).
+        const std::optional<NKikimrDataEvents::TMvccSnapshot> messageMvccSnapshot = [&]() {
+            if (auto batchSnapshot = ShardedWriteController->GetMessageMvccSnapshot(shardId)) {
+                return batchSnapshot;
+            }
+            AFL_ENSURE(!CommitMvccSnapshot || LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
+            return CommitMvccSnapshot;
+        }();
+
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>();
 
         evWrite->Record.SetTxMode(isPrepare
@@ -1355,8 +1379,8 @@ public:
         } else if (!InconsistentTx) {
             evWrite->SetLockId(LockTxId, LockNodeId);
 
-            if (MvccSnapshot && LockMode != NKikimrDataEvents::PESSIMISTIC_NONE) {
-                *evWrite->Record.MutableMvccSnapshot() = *MvccSnapshot;
+            if (messageMvccSnapshot && LockMode != NKikimrDataEvents::PESSIMISTIC_NONE) {
+                *evWrite->Record.MutableMvccSnapshot() = *messageMvccSnapshot;
             }
         }
 
@@ -1417,7 +1441,7 @@ public:
             Counters->WriteActorImmediateWritesRetries->Inc();
         }
 
-        if (MvccSnapshot && (isPrepare || isImmediateCommit)) {
+        if (messageMvccSnapshot && (isPrepare || isImmediateCommit)) {
             // Commit in snapshot isolation must validate writes against a snapshot
             bool needMvccSnapshot = LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
             if (!needMvccSnapshot && isPrepare && LockMode != NKikimrDataEvents::PESSIMISTIC_NONE) {
@@ -1431,7 +1455,7 @@ public:
             }
             if (needMvccSnapshot) {
                 AFL_ENSURE(LockMode != NKikimrDataEvents::PESSIMISTIC_NONE);
-                *evWrite->Record.MutableMvccSnapshot() = *MvccSnapshot;
+                *evWrite->Record.MutableMvccSnapshot() = *messageMvccSnapshot;
             }
         }
 
@@ -1719,9 +1743,14 @@ private:
     TWriteActorSettings MessageSettings;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
-    const std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
+    // Snapshot used as a fallback for covering-only commit/prepare messages,
+    // which carry no data batches and thus no per-batch snapshot. Set only for
+    // snapshot isolation (SnapshotRW): its commit must validate the writes
+    // against the operation's snapshot. Nullopt for all other tx modes.
+    const std::optional<NKikimrDataEvents::TMvccSnapshot> CommitMvccSnapshot;
+
     const NKikimrDataEvents::ELockMode LockMode;
-    const bool CollectAffectedRows;
+    bool CollectAffectedRows;
 
     const TString Database;
     const TTableId TableId;
@@ -2970,7 +2999,9 @@ public:
                 Settings.GetIsOlap(),
                 std::move(keyColumnTypes),
                 Alloc,
-                GetOptionalMvccSnapshot(Settings),
+                (Settings.GetLockMode() == NKikimrDataEvents::ELockMode::OPTIMISTIC_SNAPSHOT_ISOLATION
+                    ? GetOptionalMvccSnapshot(Settings)
+                    : std::nullopt),
                 Settings.GetLockMode(),
                 Settings.GetCollectAffectedRows(),
                 nullptr,
@@ -2998,7 +3029,8 @@ public:
                 std::move(keyColumnsMetadata),
                 std::move(columnsMetadata),
                 0,
-                Settings.GetPriority());
+                Settings.GetPriority(),
+                GetOptionalMvccSnapshot(Settings));
             WaitingForTableActor = true;
         } catch (const TMemoryLimitExceededException&) {
             RuntimeError(
@@ -3636,6 +3668,7 @@ public:
             if (!CheckSchemaVersion(actor, tableId, tablePath)) {
                 return nullptr;
             }
+            actor->SetCollectAffectedRows(settings.TransactionSettings.CollectAffectedRows);
             return actor;
         }
 
@@ -3651,7 +3684,9 @@ public:
             settings.IsOlap,
             std::move(keyColumnTypes),
             Alloc,
-            settings.TransactionSettings.MvccSnapshot,
+            (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::OPTIMISTIC_SNAPSHOT_ISOLATION
+                ? settings.TransactionSettings.MvccSnapshot
+                : std::nullopt),
             settings.TransactionSettings.LockMode,
             settings.TransactionSettings.CollectAffectedRows,
             TxManager,
@@ -3695,9 +3730,6 @@ public:
             .LockNodeId = LockNodeId,
             .LockMode = settings.TransactionSettings.LockMode,
             .QuerySpanId = QuerySpanId,
-            .MvccSnapshot = settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
-                ? std::nullopt // Locked (pessimistic) rows must be read using last version, not snapshot.
-                : settings.TransactionSettings.MvccSnapshot,
 
             .TxManager = TxManager,
             .Alloc = Alloc,
@@ -3747,7 +3779,6 @@ public:
             .LockNodeId = LockNodeId,
             .LockMode = NKikimrDataEvents::ELockMode::PESSIMISTIC_EXCLUSIVE, // Writes always need EXCLUSIVE lock
             .QuerySpanId = QuerySpanId,
-            .MvccSnapshot = settings.TransactionSettings.MvccSnapshot,
 
             .TxManager = TxManager,
             .Alloc = Alloc,
@@ -3898,7 +3929,8 @@ public:
                     indexSettings.KeyColumns,
                     indexSettings.ImplColumns,
                     0,
-                    settings.Priority);
+                    settings.Priority,
+                    settings.TransactionSettings.MvccSnapshot);
                 if (isRelevance) {
                     // Fulltext index with relevance requires writing to 3 additional tables
                     auto docsActor = writeInfo.Actors.at(indexSettings.DocsTableId.PathId).WriteActor;
@@ -3916,7 +3948,8 @@ public:
                             ? TVector<NKikimrKqp::TKqpColumnMetadataProto>{indexSettings.DocsColumns.at(0)}
                             : indexSettings.DocsColumns),
                         0,
-                        settings.Priority);
+                        settings.Priority,
+                        settings.TransactionSettings.MvccSnapshot);
                     if (indexSettings.NeedDeleteOldRows) {
                         docsActor->Open(
                             deleteCookie,
@@ -3924,7 +3957,8 @@ public:
                             {indexSettings.DocsColumns.at(0)},
                             {indexSettings.DocsColumns.at(0)},
                             0,
-                            settings.Priority);
+                            settings.Priority,
+                            settings.TransactionSettings.MvccSnapshot);
                     }
 
                     if (indexSettings.DictTableId.PathId != TPathId()) {
@@ -3938,7 +3972,8 @@ public:
                             {indexSettings.DictColumns.at(0)},
                             indexSettings.DictColumns,
                             0,
-                            settings.Priority);
+                            settings.Priority,
+                            settings.TransactionSettings.MvccSnapshot);
                     }
 
                     writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
@@ -3953,7 +3988,8 @@ public:
                             indexSettings.StatsColumns.end() - 2),
                         indexSettings.StatsColumns,
                         0,
-                        settings.Priority);
+                        settings.Priority,
+                        settings.TransactionSettings.MvccSnapshot);
                 }
             } else {
                 writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->Open(
@@ -3965,7 +4001,8 @@ public:
                         settings.DefaultColumns,
                         indexSettings.Columns,
                         settings.LookupColumns),
-                    settings.Priority);
+                    settings.Priority,
+                    settings.TransactionSettings.MvccSnapshot);
             }
 
             if (indexSettings.NeedDeleteOldRows && !isCompact) {
@@ -3975,7 +4012,8 @@ public:
                     indexSettings.KeyColumns,
                     indexSettings.KeyColumns,
                     0, // DELETE doesn't need DEFAULT values
-                    settings.Priority);
+                    settings.Priority,
+                    settings.TransactionSettings.MvccSnapshot);
             }
 
             writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
@@ -4027,10 +4065,12 @@ public:
                         .LockActor = lockActor,
                     });
 
+                    AFL_ENSURE(settings.TransactionSettings.MvccSnapshot);
                     lockActor->SetLockSettings(
                         token.Cookie,
                         indexSettings.KeyColumns,
-                        /* skipAbsent */ false);
+                        /* skipAbsent */ false,
+                        *settings.TransactionSettings.MvccSnapshot);
                 }
 
                 {
@@ -4076,7 +4116,10 @@ public:
                         token.Cookie,
                         indexSettings.KeyPrefixSize,
                         indexSettings.KeyColumns,
-                        {});
+                        {},
+                        settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
+                            ? std::nullopt // Locked (pessimistic) rows must be read using last version, not snapshot.
+                            : settings.TransactionSettings.MvccSnapshot);
                 }
             }
         }
@@ -4103,7 +4146,8 @@ public:
                 settings.DefaultColumns,
                 settings.Columns,
                 settings.LookupColumns),
-            settings.Priority);
+            settings.Priority,
+            settings.TransactionSettings.MvccSnapshot);
 
         AFL_ENSURE(settings.KeyColumns.size() <= settings.Columns.size());
         writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
@@ -4135,10 +4179,12 @@ public:
             const bool skipAbsent = settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE
                 || settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE;
 
+            AFL_ENSURE(settings.TransactionSettings.MvccSnapshot);
             lockActor->SetLockSettings(
                 token.Cookie,
                 settings.KeyColumns,
-                skipAbsent);
+                skipAbsent,
+                *settings.TransactionSettings.MvccSnapshot);
         }
 
         // Main table lookup
@@ -4159,7 +4205,10 @@ public:
                 token.Cookie,
                 settings.KeyColumns.size(),
                 settings.KeyColumns,
-                settings.LookupColumns);
+                settings.LookupColumns,
+                settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
+                    ? std::nullopt // Locked (pessimistic) rows must be read using last version, not snapshot.
+                    : settings.TransactionSettings.MvccSnapshot);
         }
 
         // Returning info
@@ -4221,6 +4270,8 @@ public:
                     settings.TablePath)) {
                 return std::nullopt;
             }
+            writeInfo.Actors.at(settings.TableId.PathId).WriteActor
+                ->SetCollectAffectedRows(settings.TransactionSettings.CollectAffectedRows);
         }
 
         // Ensure lock actor for main table (pessimistic_none only)

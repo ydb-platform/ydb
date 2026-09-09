@@ -42,7 +42,7 @@ struct TUringRouterConfig {
     // How long (in microseconds) the dedicated I/O thread busy-polls the
     // submission queue and completion ring before parking when idle. Lower
     // values trade CPU for submit-wakeup latency.
-    ui32 IdleSpinUs = 200;
+    ui32 IdleSpinUs = 10;
 
     TString ToString() const;
 };

@@ -293,9 +293,9 @@ TUnboxedValue TWasmConfiguredCallable::Run(
         }
         switch (Descriptor_.Result) {
             case EUdfValueType::Int64:
-                return TUnboxedValuePod(result.Data.Int64);
+                return TUnboxedValuePod(static_cast<i64>(result.Data.Int64));
             case EUdfValueType::Uint64:
-                return TUnboxedValuePod(result.Data.Uint64);
+                return TUnboxedValuePod(static_cast<ui64>(result.Data.Uint64));
             case EUdfValueType::Double:
                 return TUnboxedValuePod(result.Data.Double);
             case EUdfValueType::Boolean:

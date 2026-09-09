@@ -34,7 +34,7 @@ TTableAccessStats::TTableAccessStats(const Ydb::TableStats::TableAccessStats& pr
     , Updates_(proto.updates())
     , Deletes_(proto.deletes())
     , PartitionsCount_(proto.partitions_count())
-    , AffectedRows_(proto.affected_rows())
+    , AffectedRows_(proto.has_affected_rows() ? std::optional<uint64_t>(proto.affected_rows()) : std::nullopt)
 {}
 
 const std::string& TTableAccessStats::GetName() const {
@@ -57,7 +57,7 @@ uint64_t TTableAccessStats::GetPartitionsCount() const {
     return PartitionsCount_;
 }
 
-uint64_t TTableAccessStats::GetAffectedRows() const {
+std::optional<uint64_t> TTableAccessStats::GetAffectedRows() const {
     return AffectedRows_;
 }
 

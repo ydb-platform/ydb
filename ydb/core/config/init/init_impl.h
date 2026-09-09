@@ -1494,6 +1494,7 @@ public:
             cf.NodeResolveHost = cf.NodeHost;
         }
 
+        const auto& authConfig = AppConfig.GetAuthConfig();
         const TNodeRegistrationSettings settings {
             domainName,
             cf.NodeHost,
@@ -1503,7 +1504,7 @@ public:
             cf.FixedNodeID,
             cf.InterconnectPort,
             cf.CreateNodeLocation(),
-            AppConfig.GetAuthConfig().GetNodeRegistrationToken(),
+            authConfig.HasNodeRegistrationToken() ? authConfig.GetNodeRegistrationToken() : TString{},
         };
 
         auto result = NodeBrokerClient.RegisterDynamicNode(cf.GrpcSslSettings, addrs, settings, Env, Logger);

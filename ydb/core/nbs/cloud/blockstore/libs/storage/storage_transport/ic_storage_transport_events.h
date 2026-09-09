@@ -30,6 +30,9 @@ struct TEvTransportPrivate
             NThreading::NewPromise<TResult>();
         NThreading::TPromise<ui32> DisconnectPromise =
             NThreading::NewPromise<ui32>();
+        // The sender timestamp for TEvRegisterPersistentBuffer. Fixed on the
+        // first send and must not be refreshed on BUSY/OVERLOADED retries.
+        TInstant RegistrationTimestamp;
 
         TConnect(
             const NActors::TActorId& serviceId,

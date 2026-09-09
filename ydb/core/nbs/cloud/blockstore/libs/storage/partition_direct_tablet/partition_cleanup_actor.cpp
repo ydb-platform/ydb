@@ -338,7 +338,9 @@ private:
         // Cleanup may be retried after a lost reply or target registrations may
         // never have been made. Their absence already satisfies cleanup.
         if (record.GetStatus() ==
-            NKikimrBlobStorage::NDDisk::TReplyStatus::BUSY)
+                NKikimrBlobStorage::NDDisk::TReplyStatus::BUSY ||
+            record.GetStatus() ==
+                NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED)
         {
             ctx.Schedule(
                 TDuration::MilliSeconds(100),

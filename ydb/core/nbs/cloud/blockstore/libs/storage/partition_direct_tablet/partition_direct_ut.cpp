@@ -2744,7 +2744,8 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             0,
             NUnitTest::RandomString(DefaultBlockSize, 7));
 
-        // Each allocated PB registration is retired before deallocating the DBG.
+        // Each allocated PB registration is retired before deallocating the
+        // DBG.
         UNIT_ASSERT_VALUES_EQUAL_C(
             allocatedPBuffers.size(),
             wipeBarrierOks.size(),
@@ -2912,7 +2913,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_VALUES_EQUAL_C(0u, error2.GetCode(), FormatError(error2));
     }
 
-    Y_UNIT_TEST(ShouldFailDeleteWhenPBufferEraseIsOverloaded)
+    Y_UNIT_TEST(ShouldSucceedDeleteWhenPBufferEraseIsOverloaded)
     {
         TEnvironmentSetup env{{
             .NodeCount = 8,
@@ -2966,14 +2967,10 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             __LINE__);
         Y_UNUSED(GetLoadActorAdapterActorId(env, partition, edge));
 
+        // A single OVERLOADED reply is transparently retried by the cleanup
+        // actor, so the delete must still succeed on the first call.
         const auto error = DeletePartition(env, partition, edge);
-        UNIT_ASSERT_VALUES_EQUAL_C(
-            E_REJECTED,
-            error.GetCode(),
-            FormatError(error));
-
-        const auto error2 = DeletePartition(env, partition, edge);
-        UNIT_ASSERT_VALUES_EQUAL_C(0u, error2.GetCode(), FormatError(error2));
+        UNIT_ASSERT_VALUES_EQUAL_C(0u, error.GetCode(), FormatError(error));
     }
 
     Y_UNIT_TEST(ShouldFailDeleteWhenDDiskDeleteChunksIsUndelivered)

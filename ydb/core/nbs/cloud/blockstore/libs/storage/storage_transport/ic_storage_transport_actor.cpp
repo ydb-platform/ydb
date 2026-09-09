@@ -316,18 +316,23 @@ void TICStorageTransportActor::SendPBufferRegistration(
     const TActorContext& ctx)
 {
     if (auto* r = ConnectRequests.FindPtr(requestId)) {
-        const auto& request = **r;
+        auto& request = **r;
         auto credentials = request.Credentials;
         credentials.DDiskInstanceGuid =
             request.ConnectionResult.GetDDiskInstanceGuid();
         credentials.ConnectionToken.emplace(
             request.ConnectionResult.GetConnectionToken());
+        // The registration timestamp must be fixed on the first send and
+        // must not be refreshed on BUSY/OVERLOADED retries.
+        if (!request.RegistrationTimestamp) {
+            request.RegistrationTimestamp = ctx.Now();
+        }
         SendWithUndeliveryTracking(
             ctx,
             request.ServiceId,
             std::make_unique<NDDisk::TEvRegisterPersistentBuffer>(
                 credentials,
-                ctx.Now()),
+                request.RegistrationTimestamp),
             requestId,
             NWilson::TTraceId(),
             ESubscribeOnSession::No);
@@ -374,8 +379,9 @@ void TICStorageTransportActor::HandleRegisterPersistentBufferResult(
         request.ConnectionResult.GetDDiskInstanceGuid();
     credentials.ConnectionToken.emplace(
         request.ConnectionResult.GetConnectionToken());
-    // A duplicate registration is rejected. Verify that the existing registration
-    // is still served before publishing the connected session to the partition.
+    // A duplicate registration is rejected. Verify that the existing
+    // registration is still served before publishing the connected session to
+    // the partition.
     SendWithUndeliveryTracking(
         ctx,
         request.ServiceId,

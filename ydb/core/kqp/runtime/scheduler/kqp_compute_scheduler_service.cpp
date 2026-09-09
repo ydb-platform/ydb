@@ -1,6 +1,6 @@
 #include "kqp_compute_scheduler_service.h"
 
-#include "log.h"
+#include <ydb/library/actors/core/log.h>
 #include "tree/dynamic.h"
 
 #include <ydb/core/base/appdata_fwd.h>
@@ -15,6 +15,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/subsystems/stats.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE_SCHEDULER
 
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
@@ -40,9 +42,9 @@ public:
         );
 
         if (Scheduler->IsEnabled()) {
-            LOG_I("Enabled on start");
+            YDB_LOG_INFO("Enabled on start");
         } else {
-            LOG_I("Disabled on start");
+            YDB_LOG_INFO("Disabled on start");
         }
 
         Scheduler->SetTotalCpuLimit(CalculateTotalCpuLimit()); // TODO: take total cpu limit from outside
@@ -67,12 +69,13 @@ public:
             hFunc(NActors::TEvents::TEvWakeup, Handle);
 
             default:
-                LOG_E("Unexpected event: " << ev->GetTypeRewrite());
+                YDB_LOG_ERROR("Unexpected",
+                    {"event", ev->GetTypeRewrite()});
         }
     }
 
     void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
-        LOG_D("Subscribed to config changes");
+        YDB_LOG_DEBUG("Subscribed to config changes");
     }
 
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
@@ -80,9 +83,9 @@ public:
 
         Scheduler->ToggleEnabled(event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsScheduler());
         if (Scheduler->IsEnabled()) {
-            LOG_I("Become enabled");
+            YDB_LOG_INFO("Become enabled");
         } else {
-            LOG_I("Become disabled");
+            YDB_LOG_INFO("Become disabled");
         }
 
         auto responseEvent = std::make_unique<NKikimr::NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
@@ -95,7 +98,9 @@ public:
         };
         Scheduler->AddOrUpdateDatabase(ev->Get()->DatabaseId, attrs);
 
-        LOG_D("Add database: " << ev->Get()->DatabaseId << " (" << attrs.ToString() << ")");
+        YDB_LOG_DEBUG("Add",
+            {"database", ev->Get()->DatabaseId},
+            {"attrs", attrs});
     }
 
     void Handle(TEvRemoveDatabase::TPtr&) {
@@ -122,9 +127,12 @@ public:
 
         Y_ASSERT(!poolId.empty());
 
-        LOG_D("Add pool: " << databaseId << "/" << poolId << " (" << attrs.ToString() << ")");
+        YDB_LOG_DEBUG("Add",
+            {"pool", databaseId},
+            {"poolId", poolId},
+            {"attrs", attrs});
 
-        if (PoolSubscribtions.insert({std::make_pair(databaseId, poolId), {.IsFirstRemoval=false, .ExternalWeight=resourceWeight}}).second) {
+        if (PoolSubscribtions.insert({NHdrf::TFullPoolId{databaseId, poolId}, {.IsFirstRemoval=false, .ExternalWeight=resourceWeight}}).second) {
             PoolExternalWeightSum += resourceWeight;
             Scheduler->AddOrUpdatePool(databaseId, poolId, attrs);
             Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvSubscribeOnPoolChanges(databaseId, poolId));
@@ -141,7 +149,7 @@ public:
     void Handle(NWorkloadManager::TEvUpdatePoolInfo::TPtr& ev) {
         const auto& databaseId = ev->Get()->DatabaseId;
         const auto& poolId = ev->Get()->PoolId;
-        auto poolIt = PoolSubscribtions.find(std::make_pair(databaseId, poolId));
+        auto poolIt = PoolSubscribtions.find(NHdrf::TFullPoolId{databaseId, poolId});
 
         if (ev->Get()->Config) {
             Y_ENSURE(poolIt != PoolSubscribtions.end());
@@ -168,7 +176,10 @@ public:
 
             Scheduler->AddOrUpdatePool(databaseId, poolId, attrs);
 
-            LOG_D("Update pool: " << databaseId << "/" << poolId << " (" << attrs.ToString() << ")");
+            YDB_LOG_DEBUG("Update",
+                {"pool", databaseId},
+                {"poolId", poolId},
+                {"attrs", attrs});
         } else if (poolIt != PoolSubscribtions.end()) {
             if (!poolIt->second.IsFirstRemoval) {
                 // The first removal - try to re-subscribe in case it's just the pool removal from cache.
@@ -181,7 +192,9 @@ public:
                 // TODO: Scheduler->UpdatePool(…);
             }
         } else {
-            LOG_E("Trying to remove unknown pool: " << databaseId << "/" << poolId);
+            YDB_LOG_ERROR("Trying to remove unknown",
+                {"pool", databaseId},
+                {"poolId", poolId});
             // TODO: the removing message for unknown pool - should we check?
         }
     }
@@ -198,7 +211,10 @@ public:
         if (Scheduler->IsEnabled()) {
             auto query = Scheduler->AddOrUpdateQuery(databaseId, poolId.empty() ? NKikimr::NResourcePool::DEFAULT_POOL_ID : poolId, queryId, attrs);
             response->Query = query;
-            LOG_D("Add query: " << databaseId << "/" << poolId << ", TxId: " << queryId);
+            YDB_LOG_DEBUG("Add",
+                {"query", databaseId},
+                {"poolId", poolId},
+                {"txId", queryId});
         }
         Send(ev->Sender, response.Release(), 0, queryId);
     }
@@ -206,9 +222,11 @@ public:
     void Handle(TEvRemoveQuery::TPtr& ev) {
         const auto& queryId = ev->Get()->QueryId;
         if (!Scheduler->RemoveQuery(queryId)) {
-            LOG_E("Trying to remove unknown query: " << queryId);
+            YDB_LOG_ERROR("Trying to remove unknown",
+                {"query", queryId});
         } else {
-            LOG_D("Remove query: TxId: " << queryId);
+            YDB_LOG_DEBUG("Remove query",
+                {"txId", queryId});
         }
     }
 
@@ -228,12 +246,12 @@ private:
 
     void UpdatePoolsGuarantee() {
         if (PoolExternalWeightSum <= Epsilon) {
-            for (const auto& [key, _] : PoolSubscribtions) {
-                Scheduler->AddOrUpdatePool(key.first, key.second, {.CpuGuarantee = 0});
+            for (const auto& [fullPoolId, _] : PoolSubscribtions) {
+                Scheduler->AddOrUpdatePool(fullPoolId.DatabaseId, fullPoolId.PoolId, {.CpuGuarantee = 0});
             }
         } else {
-            for (const auto& [key, params] : PoolSubscribtions) {
-                Scheduler->AddOrUpdatePool(key.first, key.second,
+            for (const auto& [fullPoolId, params] : PoolSubscribtions) {
+                Scheduler->AddOrUpdatePool(fullPoolId.DatabaseId, fullPoolId.PoolId,
                     {.CpuGuarantee = params.ExternalWeight / PoolExternalWeightSum * Scheduler->GetTotalCpuLimit()});
             }
         }
@@ -247,7 +265,7 @@ private:
         bool IsFirstRemoval = false;
         double ExternalWeight = 0.0;
     };
-    THashMap<std::pair<TString /* databaseId */, TString /* poolId */>, TPoolParams> PoolSubscribtions;
+    THashMap<NHdrf::TFullPoolId, TPoolParams> PoolSubscribtions;
     double PoolExternalWeightSum = 0.0;
 };
 
@@ -311,7 +329,7 @@ void TComputeScheduler::AddOrUpdatePool(const TString& databaseId, const TString
         pool->AddQuery(query);
 
         // Add read query
-        ReadQueries.emplace(std::make_pair(databaseId, poolId), query);
+        ReadQueries.emplace(NHdrf::TFullPoolId{databaseId, poolId}, query);
     }
 }
 
@@ -348,8 +366,7 @@ NHdrf::NDynamic::TQueryPtr TComputeScheduler::GetReadQuery(const NHdrf::TDatabas
 
     TReadGuard lock(Mutex);
 
-    auto databaseAndPoolId = std::make_pair(databaseId, poolId);
-    if (auto queryIt = ReadQueries.find(databaseAndPoolId); queryIt != ReadQueries.end()) {
+    if (auto queryIt = ReadQueries.find(NHdrf::TFullPoolId{databaseId, poolId}); queryIt != ReadQueries.end()) {
         return queryIt->second;
     }
 
@@ -366,6 +383,37 @@ bool TComputeScheduler::RemoveQuery(const NHdrf::TQueryId& queryId) {
     }
 
     return false;
+}
+
+THashMap<NHdrf::TFullPoolId, double> TComputeScheduler::GetLeafPoolFairShares() const {
+    THashMap<NHdrf::TFullPoolId, double> result;
+    const auto totalCpu = GetTotalCpuLimit();
+    if (!totalCpu) {
+        return result;
+    }
+    auto snapshot = Root->GetSnapshot();
+    if (!snapshot) {
+        return result;
+    }
+
+    auto visitPool = [&](auto self, const NHdrf::TDatabaseId& databaseId, const auto* pool) -> void {
+        if (pool->IsLeaf()) {
+            NHdrf::TFullPoolId fullPoolId{databaseId, std::get<NHdrf::TPoolId>(pool->GetId())};
+            result[fullPoolId] = double(pool->FairShare) / totalCpu;
+        } else {
+            pool->template ForEachChild<NHdrf::NSnapshot::TPool>([&](auto* child, size_t) {
+                self(self, databaseId, child);
+            });
+        }
+    };
+
+    snapshot->ForEachChild<NHdrf::NSnapshot::TDatabase>([&](auto* database, size_t) {
+        const auto& databaseId = std::get<NHdrf::TDatabaseId>(database->GetId());
+        database->template ForEachChild<NHdrf::NSnapshot::TPool>([&](auto* pool, size_t) {
+            visitPool(visitPool, databaseId, pool);
+        });
+    });
+    return result;
 }
 
 void TComputeScheduler::UpdateFairShare() {

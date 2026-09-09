@@ -4,7 +4,21 @@
 
 namespace NKikimr {
 namespace NKqp {
-    
+
+bool TInlineScalarSubplanRule::QuickMatch(const TIntrusivePtr<IOperator>& input, TPlanProps& props) const {
+    if (props.Subplans.PlanMap.empty()) {
+        return false;
+    }
+
+    for (const auto& iu : input->GetSubplanIUs(props)) {
+        if (props.Subplans.PlanMap.at(iu).Type == ESubplanType::EXPR) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // Rewrite a single scalar subplan into a cross-join for uncorrelated queries
 // or into a left join for correlated (assuming at most one tuple in the output of each subquery)
 // FIXME: Need to do correct general case decorellation in the future

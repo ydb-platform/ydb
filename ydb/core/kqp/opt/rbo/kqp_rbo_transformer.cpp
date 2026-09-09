@@ -434,6 +434,14 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
         rules.emplace_back(std::make_unique<TPruneDeadAggregateTraitsRule>());
     };
 
+    // Prune unused outputs before any rules that require type information.
+    TVector<std::unique_ptr<IRule>> earlyPruningRules;
+    earlyPruningRules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>(/*pruneKeyColumns=*/false));
+    earlyPruningRules.emplace_back(std::make_unique<TPruneDeadAggregateTraitsRule>());
+    earlyPruningRules.emplace_back(std::make_unique<TPruneDeadUnionAllColumnsRule>());
+    earlyPruningRules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>(/*pruneKeyColumns=*/false));
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Early pruning", std::move(earlyPruningRules)));
+
     // Initial stages.
     // Expand aggregation.
     TVector<std::unique_ptr<IRule>> expandAggregationRules;

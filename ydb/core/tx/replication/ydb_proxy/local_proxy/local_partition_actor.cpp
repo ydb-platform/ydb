@@ -1,5 +1,7 @@
 #include "local_partition_actor.h"
-#include "logging.h"
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_YDB_PROXY
 
 namespace NKikimr::NReplication {
 
@@ -17,6 +19,7 @@ TBaseLocalTopicPartitionActor::TBaseLocalTopicPartitionActor(
 
 void TBaseLocalTopicPartitionActor::Bootstrap() {
     LogPrefix = MakeLogPrefix();
+    YDB_LOG_CREATE_CONTEXT(LogPrefix);
     DoDescribe(TopicPath);
 }
 
@@ -34,7 +37,8 @@ TString TBaseLocalTopicPartitionActor::MakeAbsolutePath(TString path) const {
 
 void TBaseLocalTopicPartitionActor::DoDescribe(const TString& topicPath) {
     auto path = MakeAbsolutePath(topicPath);
-    LOG_D("Describe topic '" << path << "'");
+    YDB_LOG_DEBUG("Describe topic",
+        {"path", path});
 
     auto request = MakeHolder<TNavigate>();
     request->DatabaseName = Database;
@@ -45,7 +49,8 @@ void TBaseLocalTopicPartitionActor::DoDescribe(const TString& topicPath) {
 }
 
 void TBaseLocalTopicPartitionActor::Handle(TEvNavigateResult::TPtr& ev) {
-    LOG_T("Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE("Handle",
+        {"ev", ev->Get()->ToString()});
 
     auto& result = ev->Get()->Request;
     static const TString errorMarker = "LocalYdbProxy";
@@ -108,6 +113,8 @@ TSchemeCacheHelpers::TCheckFailFunc TBaseLocalTopicPartitionActor::LeaveOnError(
 }
 
 STATEFN(TBaseLocalTopicPartitionActor::StateDescribe) {
+    YDB_LOG_CREATE_CONTEXT(LogPrefix,
+        {"actorState", "StateDescribe"});
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvNavigateResult, Handle);
         hFunc(TEvents::TEvWakeup, HandleOnDescribe);
@@ -119,7 +126,8 @@ STATEFN(TBaseLocalTopicPartitionActor::StateDescribe) {
 }
 
 void TBaseLocalTopicPartitionActor::DoCreatePipe() {
-    LOG_T("Create pipe to " << PartitionTabletId);
+    YDB_LOG_TRACE("Create pipe",
+        {"partitionTabletId", PartitionTabletId});
 
     Attempt = 0;
     CreatePipe();
@@ -133,7 +141,8 @@ void TBaseLocalTopicPartitionActor::CreatePipe() {
 }
 
 void TBaseLocalTopicPartitionActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
-    LOG_T("Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE("Handle",
+        {"ev", ev->Get()->ToString()});
 
     auto& msg = *ev->Get();
     if (msg.Status != NKikimrProto::OK) {
@@ -143,17 +152,20 @@ void TBaseLocalTopicPartitionActor::Handle(TEvTabletPipe::TEvClientConnected::TP
         return CreatePipe();
     }
 
-    LOG_T("Pipe has been connected");
+    YDB_LOG_TRACE("Pipe has been connected");
 
     OnDescribeFinished();
 }
 
 void TBaseLocalTopicPartitionActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
-    LOG_T("Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE("Handle",
+        {"ev", ev->Get()->ToString()});
     OnError("Pipe destroyed");
 }
 
 STATEFN(TBaseLocalTopicPartitionActor::StateCreatePipe) {
+    YDB_LOG_CREATE_CONTEXT(LogPrefix,
+        {"actorState", "StateCreatePipe"});
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvTabletPipe::TEvClientConnected, Handle);
         hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);

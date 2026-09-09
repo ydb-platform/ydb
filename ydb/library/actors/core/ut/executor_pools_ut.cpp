@@ -2,6 +2,7 @@
 #include "debug.h"
 #include "executor_pool_basic.h"
 #include "executor_pool_shared.h"
+#include "harmonizer/harmonizer.h"
 #include "hfunc.h"
 #include "scheduler_basic.h"
 #include "thread_context.h"
@@ -219,6 +220,59 @@ void TieBasicPoolsAndSharedPool(const std::vector<std::unique_ptr<TBasicExecutor
 ////////////////////////////////////////////////////////////////////////////////
 
 Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
+
+    Y_UNIT_TEST(UnitedPoolSlotLimitIncludesOwnedAndForeignSlots) {
+        auto harmonizer = MakeHarmonizer(0);
+        auto sharedPool = std::make_unique<TSharedExecutorPool>(TSharedExecutorPoolConfig{
+            .United = true,
+        }, std::vector<TPoolShortInfo>{
+            TPoolShortInfo{
+                .PoolId = 0,
+                .SharedThreadCount = 4,
+                .InPriorityOrder = true,
+                .PoolName = "User",
+            },
+            TPoolShortInfo{
+                .PoolId = 1,
+                .SharedThreadCount = 4,
+                .InPriorityOrder = true,
+                .PoolName = "Other",
+            },
+        });
+        harmonizer->SetSharedPool(sharedPool.get());
+
+        TBasicExecutorPool pool(TBasicExecutorPoolConfig{
+            .PoolId = 0,
+            .PoolName = "User",
+            .Threads = 8,
+            .MaxThreadCount = 8,
+            .DefaultThreadCount = 4,
+            .HasSharedThread = true,
+            .AllThreadsAreShared = true,
+        }, harmonizer.get());
+        harmonizer->AddPool(&pool);
+
+        std::vector<i16> ownedThreads;
+        std::vector<i16> foreignThreadsAllowed;
+        sharedPool->FillOwnedThreads(ownedThreads);
+        sharedPool->FillForeignThreadsAllowed(foreignThreadsAllowed);
+
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetFullThreadCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetDefaultThreadCount(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetMinThreadCount(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetMaxThreadCount(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(ownedThreads[0], 4);
+        UNIT_ASSERT_VALUES_EQUAL(foreignThreadsAllowed[0], 4);
+
+        pool.SetSharedCpuQuota(4);
+        TExecutorPoolState state;
+        pool.GetExecutorPoolState(state);
+        UNIT_ASSERT_VALUES_EQUAL(state.CurrentLimit, 4);
+        UNIT_ASSERT_VALUES_EQUAL(state.MaxLimit, 8);
+        UNIT_ASSERT_VALUES_EQUAL(state.PossibleMaxLimit, 8);
+        UNIT_ASSERT_LE(state.CurrentLimit, state.MaxLimit);
+        UNIT_ASSERT_LE(state.PossibleMaxLimit, state.MaxLimit);
+    }
 
     Y_UNIT_TEST(SharedPoolReportsUnitedMode) {
         for (const bool united : {false, true}) {

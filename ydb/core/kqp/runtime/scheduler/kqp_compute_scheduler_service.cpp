@@ -332,6 +332,9 @@ TComputeScheduler::TComputeScheduler(const TIntrusivePtr<TKqpCounters>& counters
     Counters.UpdateFairShare = group->GetCounter("scheduler/UpdateFairShare", true);
 }
 
+// TODO: recalculate the guarantees of the whole tree here once the total limit becomes changeable.
+//       A guarantee is converted from percents to cores when the configuration arrives and is kept
+//       as an absolute value afterwards, so a changed total limit makes every one of them stale.
 void TComputeScheduler::SetTotalCpuLimit(ui64 cpu) {
     Root->TotalLimit = cpu;
     Root->CpuGuarantee = cpu;

@@ -26,6 +26,9 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
         virtual void AccountSnapshotDuration(const TDuration& period);
         virtual void UpdateBottomUp(ui64 totalLimit);
         void UpdateTopDown(ELeafFairShare fairShareMode);
+
+    private:
+        void DistributeFairShare();
     };
 
     class TQuery : public TTreeElement, public NHdrf::TQuery<ETreeType::SNAPSHOT>, public std::enable_shared_from_this<TQuery> {

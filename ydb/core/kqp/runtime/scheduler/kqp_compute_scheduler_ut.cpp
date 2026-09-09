@@ -356,11 +356,13 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         /*
             Scenario:
             - 3 databases with different weights, each one with 1 pool and 1 query
-            - FairShare is distributed with weight coefficients, in this case TotalDemand is 12, so it's (demand * weight)/TotalWeightedDemand * TotalDemand = 6/18 * 12 = 4
-            - Each database gets it's requested weighted FairShare, but some queries can underutilize it due to low Demand
+            - The demand exceeds the CPU limit, so the leftover is distributed by the weights - but
+              db2 is able to use only 3, so it takes exactly that and the rest is split between the
+              two remaining databases as 1:2, giving 3 and 6
+            - Nobody is given more than it demands: an unusable share would idle instead of working
         */
         constexpr ui64 kCpuLimit = 12;
-        constexpr ui64 kWeightedFairShare = 4;
+        const std::vector<ui64> kFairShares = {3, 3, 6};
 
         auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
         TOptions options{
@@ -383,7 +385,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         std::vector<std::vector<TSchedulableTaskPtr>> tasks;
-        std::vector<ui64> queryDemands = {6, 3, 3};
+        std::vector<ui64> queryDemands = {6, 3, 7};
 
         for (size_t i = 0; i < databaseIds.size(); ++i) {
             const TString poolId = "pool" + ToString(i + 1);
@@ -399,20 +401,17 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
             const auto& query = queries[i];
             auto querySnapshot = query->GetSnapshot();
             UNIT_ASSERT(querySnapshot);
-            UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, !DefaultFairShareMode
-                ? Min(kWeightedFairShare, queryDemands[i])
-                : kWeightedFairShare
-            );
+            UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, kFairShares[i]);
 
             auto* poolSnapshot = querySnapshot->GetParent();
             UNIT_ASSERT(poolSnapshot);
-            UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, kWeightedFairShare);
+            UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, kFairShares[i]);
         }
 
         for (size_t i = 0; i < databaseIds.size(); ++i) {
             auto* databaseSnapshot = queries[i]->GetSnapshot()->GetParent()->GetParent();
             UNIT_ASSERT(databaseSnapshot);
-            UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, kWeightedFairShare);
+            UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, kFairShares[i]);
         }
     }
 
@@ -420,13 +419,14 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         /*
             Scenario:
             - 1 database with 3 pools with different weights, each one having 1 query
-            - FairShare is distributed with weight coefficients, in this case TotalDemand is 12, so it's (demand * weight)/TotalWeightedDemand * TotalDemand = 6/18 * 12 = 4
-            - Each pool gets it's requested weighted FairShare, but some queries can underutilize it
+            - The demand exceeds the CPU limit, so the leftover is distributed by the weights - but
+              pool2 is able to use only 3, so it takes exactly that and the rest is split between the
+              two remaining pools as 1:2, giving 3 and 6
             The test is almost the same as previous, but checks weight distribution for pools
         */
         constexpr ui64 kCpuLimit = 12;
         constexpr size_t kNQueries = 3;
-        constexpr ui64 kWeightedFairShare = 4;
+        const std::vector<ui64> kFairShares = {3, 3, 6};
 
         auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
         TOptions options{
@@ -454,7 +454,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         std::vector<std::vector<TSchedulableTaskPtr>> tasks;
 
-        std::vector<ui64> queryDemands = {6, 3, 3};
+        std::vector<ui64> queryDemands = {6, 3, 7};
 
         for (NHdrf::TQueryId queryId = 0; queryId < kNQueries; ++queryId) {
             auto query = queries.emplace_back(
@@ -469,19 +469,53 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
             const auto& query = queries[queryId];
             auto querySnapshot = query->GetSnapshot();
             UNIT_ASSERT(querySnapshot);
-            UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, !DefaultFairShareMode
-                ? Min(kWeightedFairShare, queryDemands[queryId])
-                : kWeightedFairShare
-            );
+            UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, kFairShares[queryId]);
 
             auto* poolSnapshot = querySnapshot->GetParent();
             UNIT_ASSERT(poolSnapshot);
-            UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, kWeightedFairShare);
+            UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, kFairShares[queryId]);
         }
 
         auto* databaseSnapshot = queries[0]->GetSnapshot()->GetParent()->GetParent();
         UNIT_ASSERT(databaseSnapshot);
         UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, kCpuLimit);
+    }
+
+    Y_UNIT_TEST(FairShareIsCappedByDemand) {
+        /*
+            Scenario:
+            - 1 database with 2 pools, the demand exceeds the CPU limit
+            - The weight of the first pool entitles it to 4 * 8 / 5 = 6, which is way above its demand
+            - It takes exactly its demand instead, and the surplus is given to the second pool, so
+              the whole CPU limit is put to work rather than idling inside an unusable share
+        */
+        constexpr ui64 kCpuLimit = 8;
+
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        const TOptions options{
+            .DelayParams = kDefaultDelayParams,
+        };
+        TComputeScheduler scheduler(counters, options);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
+
+        const TString databaseId = "db1";
+        scheduler.AddOrUpdateDatabase(databaseId, {});
+        scheduler.AddOrUpdatePool(databaseId, "pool1", {.Weight = 4});
+        scheduler.AddOrUpdatePool(databaseId, "pool2", {.Weight = 1});
+
+        auto query1 = scheduler.AddOrUpdateQuery(databaseId, "pool1", 1, {});
+        auto query2 = scheduler.AddOrUpdateQuery(databaseId, "pool2", 2, {});
+        auto tasks1 = CreateDemandTasks(query1, 2);
+        auto tasks2 = CreateDemandTasks(query2, 10);
+
+        scheduler.UpdateFairShare();
+
+        auto* pool1 = query1->GetSnapshot()->GetParent();
+        auto* pool2 = query2->GetSnapshot()->GetParent();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(pool1->FairShare, 2, "Nobody gets more than it demands");
+        UNIT_ASSERT_VALUES_EQUAL_C(pool2->FairShare, 6, "The surplus is redistributed");
+        UNIT_ASSERT_VALUES_EQUAL_C(pool1->FairShare + pool2->FairShare, kCpuLimit, "Nothing is left idling");
     }
 
     // RIGHT NOW TEST IS FAILING, NEED TO IMPLEMENT TODO tree/snapshot.cpp:79
@@ -963,6 +997,146 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery(databaseId, "pool3", 2, {.CpuGuarantee = 1}), TCpuGuaranteeError);
     }
 
+    Y_UNIT_TEST(GuaranteeLiftsWeightedFairShare) {
+        /*
+            Scenario:
+            - 1 database with 2 pools, the demand exceeds the CPU limit
+            - Without any guarantees the fair-share is distributed by the weights 3:1, so 6 and 2
+            - The guarantee of the second pool is satisfied first, and only the rest is distributed by
+              the demand, so the pools get 4 and 4
+        */
+        constexpr ui64 kCpuLimit = 8;
+        constexpr ui64 kGuarantee = 4;
+
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        const TOptions options{
+            .DelayParams = kDefaultDelayParams,
+        };
+        TComputeScheduler scheduler(counters, options);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
+
+        const TString databaseId = "db1";
+        scheduler.AddOrUpdateDatabase(databaseId, {});
+        scheduler.AddOrUpdatePool(databaseId, "pool1", {.Weight = 3});
+        scheduler.AddOrUpdatePool(databaseId, "pool2", {});
+
+        auto query1 = scheduler.AddOrUpdateQuery(databaseId, "pool1", 1, {});
+        auto query2 = scheduler.AddOrUpdateQuery(databaseId, "pool2", 2, {});
+        auto tasks1 = CreateDemandTasks(query1, 8);
+        auto tasks2 = CreateDemandTasks(query2, 4);
+
+        scheduler.UpdateFairShare();
+
+        auto* pool1 = query1->GetSnapshot()->GetParent();
+        auto* pool2 = query2->GetSnapshot()->GetParent();
+        UNIT_ASSERT_VALUES_EQUAL(pool1->GetCpuGuarantee(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(pool2->GetCpuGuarantee(), 0);
+        UNIT_ASSERT_VALUES_EQUAL_C(pool1->FairShare, 6, "3 * 8 / 4");
+        UNIT_ASSERT_VALUES_EQUAL_C(pool2->FairShare, 2, "1 * 8 / 4");
+
+        scheduler.AddOrUpdatePool(databaseId, "pool2", {.CpuGuarantee = kGuarantee});
+        scheduler.UpdateFairShare();
+
+        pool1 = query1->GetSnapshot()->GetParent();
+        pool2 = query2->GetSnapshot()->GetParent();
+        UNIT_ASSERT_VALUES_EQUAL(pool2->GetCpuGuarantee(), kGuarantee);
+        UNIT_ASSERT_VALUES_EQUAL_C(pool2->FairShare, kGuarantee, "The whole guarantee is satisfied first");
+        UNIT_ASSERT_VALUES_EQUAL_C(pool1->FairShare, kCpuLimit - kGuarantee, "The rest is left for the demand");
+
+        // The database reserves exactly what its pools reserve
+        auto* database = pool1->GetParent();
+        UNIT_ASSERT_VALUES_EQUAL(database->GetCpuGuarantee(), kGuarantee);
+        UNIT_ASSERT_VALUES_EQUAL(database->FairShare, kCpuLimit);
+        UNIT_ASSERT_GE_C(pool2->FairShare, pool2->GetCpuGuarantee(), "The reservation is satisfied");
+    }
+
+    Y_UNIT_TEST(GuaranteeIsCappedByDemand) {
+        /*
+            Scenario:
+            - 1 database with 2 pools, the first one is guaranteed more than it demands
+            - The unused part of the guarantee is given to the second pool instead of idling
+        */
+        constexpr ui64 kCpuLimit = 8;
+
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        const TOptions options{
+            .DelayParams = kDefaultDelayParams,
+        };
+        TComputeScheduler scheduler(counters, options);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
+
+        const TString databaseId = "db1";
+        scheduler.AddOrUpdateDatabase(databaseId, {});
+        scheduler.AddOrUpdatePool(databaseId, "pool1", {.CpuGuarantee = 6});
+        scheduler.AddOrUpdatePool(databaseId, "pool2", {});
+
+        auto query1 = scheduler.AddOrUpdateQuery(databaseId, "pool1", 1, {});
+        auto query2 = scheduler.AddOrUpdateQuery(databaseId, "pool2", 2, {});
+        auto tasks1 = CreateDemandTasks(query1, 2);
+        auto tasks2 = CreateDemandTasks(query2, 8);
+
+        scheduler.UpdateFairShare();
+
+        auto* pool1 = query1->GetSnapshot()->GetParent();
+        auto* pool2 = query2->GetSnapshot()->GetParent();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(pool1->GetCpuGuarantee(), 2, "The guarantee is capped by the demand");
+        UNIT_ASSERT_VALUES_EQUAL(pool1->FairShare, 2);
+        UNIT_ASSERT_VALUES_EQUAL_C(pool2->FairShare, 6, "The unused guarantee is given away");
+    }
+
+    Y_UNIT_TEST(GuaranteesOverflowIsSplitProportionally) {
+        /*
+            Scenario:
+            - 2 databases with 1 guaranteed pool each - the guarantees are not validated across the
+              databases, so together they exceed the CPU limit of the node
+            - The fair-share is split proportionally to the guarantees, and the deficit cascades down:
+              the pools don't get their whole guarantees either
+        */
+        constexpr ui64 kCpuLimit = 8;
+        constexpr ui64 kGuarantee = 6;
+        constexpr ui64 kDemand = 6;
+
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        const TOptions options{
+            .DelayParams = kDefaultDelayParams,
+        };
+        TComputeScheduler scheduler(counters, options);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
+
+        const std::vector<TString> databaseIds = {"db1", "db2"};
+        std::vector<NHdrf::NDynamic::TQueryPtr> queries;
+        std::vector<std::vector<TSchedulableTaskPtr>> tasks;
+
+        for (size_t i = 0; i < databaseIds.size(); ++i) {
+            scheduler.AddOrUpdateDatabase(databaseIds[i], {});
+            scheduler.AddOrUpdatePool(databaseIds[i], "pool1", {.CpuGuarantee = kGuarantee});
+
+            auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseIds[i], "pool1", i, {}));
+            tasks.emplace_back(CreateDemandTasks(query, kDemand));
+        }
+
+        scheduler.UpdateFairShare();
+
+        for (const auto& query : queries) {
+            auto* pool = query->GetSnapshot()->GetParent();
+            auto* database = pool->GetParent();
+
+            UNIT_ASSERT_VALUES_EQUAL(database->GetCpuGuarantee(), kGuarantee);
+            UNIT_ASSERT_VALUES_EQUAL_C(database->FairShare, 4, "6 * 8 / 12");
+
+            // The database itself got less than it reserved, so its pool cannot get the whole guarantee
+            UNIT_ASSERT_VALUES_EQUAL(pool->GetCpuGuarantee(), kGuarantee);
+            UNIT_ASSERT_VALUES_EQUAL(pool->FairShare, 4);
+            UNIT_ASSERT_LT_C(pool->FairShare, pool->GetCpuGuarantee(), "The deficit cascades down to the pool");
+        }
+
+        auto* root = queries[0]->GetSnapshot()->GetParent()->GetParent()->GetParent();
+        UNIT_ASSERT(root);
+        UNIT_ASSERT_VALUES_EQUAL_C(root->GetCpuGuarantee(), kCpuLimit,
+            "The reservation of the root is capped by what the node has");
+    }
+
     Y_UNIT_TEST_TWIN(AddUpdateQueries, DefaultFairShareMode) {
         /*
             Scenario:
@@ -1133,7 +1307,9 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
             - 1 database with 3 pool, each having 1 query with demand 3
             - With 3 pool total demand is under CPU limit so FairShare equals demand
             - Adding one more pool with query with demand 3 should redistribute FairShares with everyone getting 3/12 * 10 = 5/2 = 2(rounded down)
-            - Updating the first pool's weight to 2 once again redistribute FairShares, but now it gets FairShare 6/15 * 10 = 4 and others 3/15 * 10 = 2. And first query underutilize this FairShare
+            - Updating the first pool's weight to 2 once again redistribute FairShares: its proportion
+              2/5 * 10 = 4 exceeds its demand, so it takes exactly 3 and the remaining 7 is split
+              between the other three pools, giving 7/3 = 2 (rounded down) to each
         */
         constexpr ui64 kCpuLimit = 10;
         constexpr size_t kNQueries = 3;
@@ -1212,7 +1388,7 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
         scheduler->UpdateFairShare();
 
-        const std::vector<ui64> poolsFairShares = {4, 2, 2, 2};
+        const std::vector<ui64> poolsFairShares = {3, 2, 2, 2};
         for (size_t queryId = 0; queryId < queries.size(); ++queryId) {
             const auto& query = queries[queryId];
             auto querySnapshot = query->GetSnapshot();

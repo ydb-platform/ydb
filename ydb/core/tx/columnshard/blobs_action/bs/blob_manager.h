@@ -18,9 +18,14 @@
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 class TGCTask;
-}
+class THistoryCutterWrapper;
+}   // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage
 
 namespace NKikimr::NOlap {
+
+namespace NDataSharing {
+class TStorageSharedBlobsManager;
+}   // namespace NDataSharing
 
 using NKikimrTxColumnShard::TEvictMetadata;
 
@@ -144,6 +149,8 @@ private:
     const ui32 CurrentGen;
     ui32 CurrentStep;
     std::optional<TGenStep> CollectGenStepInFlight;
+    // Blobs handed to the task are in no queue below until it commits.
+    bool GCTaskInFlight = false;
     // Lists of blobs that need Keep flag to be set
     TBlobsByGenStep BlobsToKeep;
     // Lists of blobs that need DoNotKeep flag to be set
@@ -177,6 +184,7 @@ private:
 
 public:
     TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, const ui32 gen, const TTabletId selfTabletId);
+    ~TBlobManager();
 
     bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) const {
         return BlobsToDelete.Contains(tabletId, blobId) || BlobsToDeleteDelayed.Contains(tabletId, blobId);
@@ -238,7 +246,20 @@ public:
     virtual void DeleteBlobOnExecute(const TTabletId tabletId, const TUnifiedBlobId& blobId, IBlobManagerDb& db) override;
     virtual void DeleteBlobOnComplete(const TTabletId tabletId, const TUnifiedBlobId& blobId) override;
 
+    // Scans BlobsToKeep, BlobsToDelete and BlobsToDeleteDelayed.
+    bool HasNoBlobsInRange(ui32 channel, ui32 fromGen, ui32 nextFromGen) const;
+
+    // Shared by regular GC and CutHistory barriers alike; pass PerGenerationCounterStepSize().
+    static ui32 AllocateGCPerGenerationCounter(ui32 step);
+
+    NBlobOperations::NBlobStorage::THistoryCutterWrapper* GetHistoryCutter();
+
+    // Takes the owning shared_ptr so the cutter can hold the manager weakly (no raw this).
+    void InitHistoryCutter(const std::shared_ptr<TBlobManager>& self,
+        const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs, const TActorId& tabletActorId);
+
 private:
+    std::unique_ptr<NBlobOperations::NBlobStorage::THistoryCutterWrapper> HistoryCutter;
     std::deque<TGenStep> FindNewGCBarriers();
     void PopGCBarriers(const TGenStep gs);
     void PopGCBarriers(const ui32 count);

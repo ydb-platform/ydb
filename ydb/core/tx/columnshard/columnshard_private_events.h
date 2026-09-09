@@ -94,6 +94,10 @@ struct TEvPrivate {
 
         EvRetryConfigSubscription,
 
+        EvStartCutHistorySweep,
+        EvCutHistoryBarrierDone,
+        EvCutHistorySweepBatchDone,
+
         EvEnd
     };
 
@@ -515,6 +519,32 @@ struct TEvPrivate {
     };
 
     struct TEvRetryConfigSubscription: public TEventLocal<TEvRetryConfigSubscription, EvRetryConfigSubscription> {};
+
+    struct TEvStartCutHistorySweep: public TEventLocal<TEvStartCutHistorySweep, EvStartCutHistorySweep> {};
+
+    struct TEvCutHistoryBarrierDone: public TEventLocal<TEvCutHistoryBarrierDone, EvCutHistoryBarrierDone> {
+        ui32 Channel;
+        ui32 FromGeneration;
+        bool Ok;
+
+        TEvCutHistoryBarrierDone(ui32 channel, ui32 fromGeneration, bool ok)
+            : Channel(channel)
+            , FromGeneration(fromGeneration)
+            , Ok(ok)
+        {
+        }
+    };
+
+    struct TEvCutHistorySweepBatchDone: public TEventLocal<TEvCutHistorySweepBatchDone, EvCutHistorySweepBatchDone> {
+        TVector<std::pair<ui32, ui32>> Disproved;
+        bool Exhausted;
+
+        TEvCutHistorySweepBatchDone(TVector<std::pair<ui32, ui32>>&& disproved, bool exhausted)
+            : Disproved(std::move(disproved))
+            , Exhausted(exhausted)
+        {
+        }
+    };
 };
 
 }   // namespace NKikimr::NColumnShard

@@ -1,4 +1,5 @@
 #include "gc.h"
+#include "history_cutter.h"
 #include "storage.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
@@ -23,6 +24,9 @@ void TGCTask::DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, T
 
 bool TGCTask::DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, const std::shared_ptr<IBlobsGCAction>& /*taskAction*/) {
     Manager->OnGCFinishedOnComplete(CollectGenStepInFlight);
+    if (auto* cutter = Manager->GetHistoryCutter()) {
+        cutter->TryNominate(NActors::TActivationContext::AsActorContext());
+    }
     return true;
 }
 
@@ -58,10 +62,6 @@ void TGCTask::OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev) {
     ListsByGroupId.erase(itGroup);
 }
 
-namespace {
-static TAtomicCounter PerGenerationCounter = 1;
-}
-
 std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> TGCTask::BuildRequest(const TBlobAddress& address) const {
     auto it = ListsByGroupId.find(address);
     AFL_VERIFY(it != ListsByGroupId.end());
@@ -80,14 +80,14 @@ std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> TGCTask::BuildRequest(const T
         {"currentGen", CurrentGen},
         {"gen", CollectGenStepInFlight},
         {"count", it->second.RequestsCount});
-    auto result = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletId, CurrentGen, PerGenerationCounter.Val(), address.GetChannelId(),
+    auto keep = std::make_unique<TVector<TLogoBlobID>>(it->second.KeepList.begin(), it->second.KeepList.end());
+    auto doNotKeep = std::make_unique<TVector<TLogoBlobID>>(it->second.DontKeepList.begin(), it->second.DontKeepList.end());
+    const ui32 perGenerationCounter = TBlobManager::AllocateGCPerGenerationCounter(
+        TEvBlobStorage::TEvCollectGarbage::PerGenerationCounterStepSize(keep.get(), doNotKeep.get()));
+    return std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletId, CurrentGen, perGenerationCounter, address.GetChannelId(),
         !!CollectGenStepInFlight, CollectGenStepInFlight ? CollectGenStepInFlight->Generation() : 0,
-        CollectGenStepInFlight ? CollectGenStepInFlight->Step() : 0,
-        new TVector<TLogoBlobID>(it->second.KeepList.begin(), it->second.KeepList.end()),
-        new TVector<TLogoBlobID>(it->second.DontKeepList.begin(), it->second.DontKeepList.end()), TInstant::Max(), true,
+        CollectGenStepInFlight ? CollectGenStepInFlight->Step() : 0, keep.release(), doNotKeep.release(), TInstant::Max(), true,
         TWriteSource::ColumnShardGC);
-    result->PerGenerationCounter = PerGenerationCounter.Add(result->PerGenerationCounterStepSize());
-    return std::move(result);
 }
 
 }   // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage

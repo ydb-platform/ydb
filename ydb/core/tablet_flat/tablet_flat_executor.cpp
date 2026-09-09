@@ -52,6 +52,10 @@ namespace NFlatExecutorSetup {
         return true;
     }
 
+    bool ITablet::HasExternallyWrittenBlobs(ui32 /*channel*/) const {
+        return false;
+    }
+
     void ITablet::OnYellowChannelsChanged() {
         // nothing by default
     }

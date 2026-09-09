@@ -1,7 +1,7 @@
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/replication/service/worker.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_incremental_restore.h>
 #include <ydb/core/tx/datashard/incr_restore_scan.h>
 #include <ydb/core/tx/schemeshard/schemeshard_incremental_restore_classify.h>
 #include <ydb/core/tx/datashard/scan_common.h>

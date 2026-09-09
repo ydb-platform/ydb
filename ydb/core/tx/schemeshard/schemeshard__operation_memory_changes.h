@@ -1,7 +1,23 @@
 #pragma once
 
 #include "schemeshard_identificators.h"
-#include "schemeshard_info_types.h"
+#include "schemeshard_info_types_backup_collection.h"
+#include "schemeshard_info_types_base.h"
+#include "schemeshard_info_types_cdc_stream.h"
+#include "schemeshard_info_types_external_data_source.h"
+#include "schemeshard_info_types_external_table.h"
+#include "schemeshard_info_types_full_backup.h"
+#include "schemeshard_info_types_incremental_backup.h"
+#include "schemeshard_info_types_resource_pool.h"
+#include "schemeshard_info_types_secret.h"
+#include "schemeshard_info_types_sequence.h"
+#include "schemeshard_info_types_streaming_query.h"
+#include "schemeshard_info_types_subdomain.h"
+#include "schemeshard_info_types_sys_view.h"
+#include "schemeshard_info_types_table.h"
+#include "schemeshard_info_types_table_index.h"
+#include "schemeshard_info_types_test_shard_set.h"
+#include "schemeshard_info_types_view.h"
 #include "schemeshard_path_element.h"
 
 #include <ydb/core/tx/schemeshard/olap/table/table.h>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "schemeshard_info_types.h"
+#include "schemeshard_info_types_subdomain.h"
 #include "schemeshard_path_element.h"
 
 #include <ydb/core/protos/flat_tx_scheme.pb.h>

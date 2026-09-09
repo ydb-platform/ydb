@@ -298,7 +298,35 @@ SRCS(
     schemeshard_import_flow_proposals.cpp
     schemeshard_import_scheme_query_executor.cpp
     schemeshard_info_types.cpp
-    schemeshard_info_types.h
+    schemeshard_info_types_backup_collection.h
+    schemeshard_info_types_base.h
+    schemeshard_info_types_blob_depot.h
+    schemeshard_info_types_blockstore_volume.h
+    schemeshard_info_types_cdc_stream.h
+    schemeshard_info_types_export.h
+    schemeshard_info_types_external_data_source.h
+    schemeshard_info_types_external_table.h
+    schemeshard_info_types_filestore.h
+    schemeshard_info_types_forced_compaction.h
+    schemeshard_info_types_full_backup.h
+    schemeshard_info_types_import.h
+    schemeshard_info_types_incremental_backup.h
+    schemeshard_info_types_incremental_restore.h
+    schemeshard_info_types_kesus.h
+    schemeshard_info_types_replication.h
+    schemeshard_info_types_resource_pool.h
+    schemeshard_info_types_rtmr_volume.h
+    schemeshard_info_types_secret.h
+    schemeshard_info_types_sequence.h
+    schemeshard_info_types_solomon_volume.h
+    schemeshard_info_types_streaming_query.h
+    schemeshard_info_types_subdomain.h
+    schemeshard_info_types_sys_view.h
+    schemeshard_info_types_table.h
+    schemeshard_info_types_table_index.h
+    schemeshard_info_types_test_shard_set.h
+    schemeshard_info_types_topic.h
+    schemeshard_info_types_view.h
     schemeshard_path.cpp
     schemeshard_path.h
     schemeshard_path_describer.cpp
@@ -340,7 +368,21 @@ SRCS(
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_subop_state_types.h)
 
-GENERATE_ENUM_SERIALIZATION(schemeshard_info_types.h)
+GENERATE_ENUM_SERIALIZATION(schemeshard_info_types_export.h)
+
+GENERATE_ENUM_SERIALIZATION(schemeshard_info_types_forced_compaction.h)
+
+GENERATE_ENUM_SERIALIZATION(schemeshard_info_types_full_backup.h)
+
+GENERATE_ENUM_SERIALIZATION(schemeshard_info_types_import.h)
+
+GENERATE_ENUM_SERIALIZATION(schemeshard_info_types_incremental_backup.h)
+
+GENERATE_ENUM_SERIALIZATION(schemeshard_info_types_incremental_restore.h)
+
+GENERATE_ENUM_SERIALIZATION(schemeshard_info_types_subdomain.h)
+
+GENERATE_ENUM_SERIALIZATION(schemeshard_info_types_table.h)
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_types.h)
 

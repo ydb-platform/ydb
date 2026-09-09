@@ -3,7 +3,8 @@
 #include <ydb/core/base/auth.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_export.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_import.h>
 
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>

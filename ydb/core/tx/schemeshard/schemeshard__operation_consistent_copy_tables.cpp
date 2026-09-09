@@ -1,6 +1,8 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
-#include "schemeshard_info_types.h"
+#include "schemeshard_info_types_sequence.h"
+#include "schemeshard_info_types_table.h"
+#include "schemeshard_info_types_table_index.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>

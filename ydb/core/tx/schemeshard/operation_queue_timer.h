@@ -1,7 +1,7 @@
 #pragma once
 
 #include "schemeshard_identificators.h"
-#include "schemeshard_info_types.h"
+#include "schemeshard_info_types_table.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>

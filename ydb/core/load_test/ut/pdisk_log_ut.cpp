@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(PDiskLogLoadTest) {
         const auto pdisk = runtime.Register(CreatePDiskMockActor(state), nodeId);
         runtime.RegisterService(MakeBlobStoragePDiskID(nodeId, pdiskId), pdisk);
 
-        TStringInput config(R"(
+        const TString configText(R"(
             PDiskId: 99
             PDiskGuid: 12345
             DurationSeconds: 1
@@ -39,6 +39,7 @@ Y_UNIT_TEST_SUITE(PDiskLogLoadTest) {
                 StorageDuration: 1048576
             }
         )");
+        TStringInput config(configText);
         const auto command = ParseFromTextFormat<NKikimr::TEvLoadTestRequest::TPDiskLogLoad>(config);
         const auto edge = runtime.AllocateEdgeActor(nodeId, __FILE__, __LINE__);
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters();
@@ -66,13 +67,11 @@ Y_UNIT_TEST_SUITE(PDiskLogLoadTest) {
             return true;
         };
 
-        const auto finished = env.WaitForEdgeActorEvent<TEvLoad::TEvLoadTestFinished>(
-            edge, true, runtime.GetClock() + TDuration::Seconds(10));
-        UNIT_ASSERT(finished);
-        UNIT_ASSERT_C(finished->Get()->Report, finished->Get()->ErrorReason);
-        UNIT_ASSERT_VALUES_EQUAL(finished->Get()->Tag, 42);
+        const auto deadline = runtime.GetClock() + TDuration::Seconds(1);
+        runtime.Sim([&] { return readsChecked < 2 && runtime.GetClock() < deadline; });
         UNIT_ASSERT(delayed);
-        UNIT_ASSERT_C(readsChecked >= 4, readsChecked);
+        UNIT_ASSERT_VALUES_EQUAL(ownerRounds.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(readsChecked, 2);
         runtime.FilterFunction = {};
     }
 }

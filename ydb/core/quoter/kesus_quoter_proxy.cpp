@@ -895,6 +895,22 @@ private:
         }
     }
 
+    // Ask Kesus to destroy the session for this resource so idle resources don't
+    // accumulate sessions on the tablet. The Kesus-side session is created on
+    // subscribe (ResId assigned), so close it regardless of whether it was
+    // actively consuming. When disconnected there is nothing to do: Kesus drops
+    // all sessions of this proxy's pipe on pipe-server disconnect.
+    void CloseSessionOnKesus(TResourceState& res) {
+        if (Connected && res.ResId != Max<ui64>()) {
+            InitUpdateEv();
+            auto* resInfo = UpdateEv->Record.AddResourcesInfo();
+            resInfo->SetResourceId(res.ResId);
+            resInfo->SetConsumeResource(false);
+            resInfo->SetCloseSession(true);
+        }
+        res.SessionIsActive = false;
+    }
+
     void DeleteResourceInfo(const TString& resource, const ui64 resourceId) {
         auto indexIt = ResIndex.find(resourceId);
         if (indexIt != ResIndex.end()) {
@@ -904,9 +920,7 @@ private:
                 if (res.ProxyRequestSpan) {
                     res.ProxyRequestSpan.EndError("Deleted");
                 }
-                if (res.SessionIsActive) {
-                    ActivateSession(res, false);
-                }
+                CloseSessionOnKesus(res);
                 Resources.erase(resIt);
             }
             ResIndex.erase(indexIt);
@@ -919,9 +933,7 @@ private:
             if (res.ProxyRequestSpan) {
                 res.ProxyRequestSpan.EndError("Deleted");
             }
-            if (res.SessionIsActive) {
-                ActivateSession(res, false);
-            }
+            CloseSessionOnKesus(res);
             if (res.ResId != Max<ui64>()) {
                 ResIndex.erase(res.ResId);
             }

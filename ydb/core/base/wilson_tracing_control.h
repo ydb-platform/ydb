@@ -9,8 +9,6 @@ namespace NKikimr::NJaegerTracing {
 // Can be called from actor system threads.
 NWilson::TTraceId HandleTracing(const TRequestDiscriminator& discriminator, const TMaybe<TString>& traceparent);
 
-NWilson::TTraceId HandleUserFacingTracing(const TRequestDiscriminator& discriminator, const TMaybe<TString>& traceparent);
-
 // For test purposes
 void ClearTracingControl();
 

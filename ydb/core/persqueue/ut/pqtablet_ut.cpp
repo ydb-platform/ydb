@@ -3605,9 +3605,9 @@ Y_UNIT_TEST_F(Deferred_ReadSetAck_From_Silent_Peer_Without_Propose, TPQTabletFix
                              .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
 }
 
-Y_UNIT_TEST_F(Immediate_PlanStepAck_For_Unknown_Without_WriteTx, TPQTabletFixture)
+Y_UNIT_TEST_F(Deferred_PlanStepAck_For_Unknown_Waits_WriteTx, TPQTabletFixture)
 {
-    // All-unknown PlanStep is acked immediately; must not wait for a WRITE_TX cycle.
+    // All-unknown PlanStep is fenced by WRITE_TX: ack only after a successful KV write.
     const ui64 unknownTxId = 424301;
 
     PQTabletPrepare({.partitions=1}, {}, *Ctx);
@@ -3628,13 +3628,29 @@ Y_UNIT_TEST_F(Immediate_PlanStepAck_For_Unknown_Without_WriteTx, TPQTabletFixtur
 
     SendPlanStep({.Step=100, .TxIds={unknownTxId}});
 
-    WaitPlanStepAck({.Step=100, .TxIds={unknownTxId}});
-    WaitPlanStepAccepted({.Step=100});
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return !heldRequests.empty();
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
 
-    UNIT_ASSERT(heldRequests.empty());
+    {
+        auto premature = Ctx->Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAccepted>(
+            TDuration::Seconds(1));
+        UNIT_ASSERT(premature == nullptr);
+    }
 
     holdWriteTx = false;
+    for (auto& held : heldRequests) {
+        Ctx->Runtime->Send(held.Release());
+    }
+    heldRequests.clear();
     Ctx->Runtime->SetObserverFunc(prev);
+
+    WaitPlanStepAck({.Step=100, .TxIds={unknownTxId}});
+    WaitPlanStepAccepted({.Step=100});
 }
 
 Y_UNIT_TEST_F(PlanStepAccepted_Order_Unknown_Before_Executed_Retransmit, TPQTabletFixture)

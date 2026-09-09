@@ -1318,27 +1318,11 @@ void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageIn
     }
 }
 
-// Returns true if the stage receives data via a HashShuffle connection,
-// i.e. the optimizer emitted the CS write affinity plan
-// (Transform → HashShuffle(ColumnShardHashV1) → Sink). Per-shard task layout
-// and TargetShardIds routing are only valid for such plans. Non-affinity CTAS
-// plans use a Map connection (table source) or no inputs at all (pure expr /
-// generated data inlined into a single stage); there the sink stage must
-// inherit the upstream task count and no per-shard routing is applied.
-static bool HasHashShuffleInput(const TStageInfo& stageInfo) {
-    const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
-    for (const auto& input : stage.GetInputs()) {
-        if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kHashShuffle) {
-            return true;
-        }
-    }
-    return false;
-}
-
 // Returns true if the stage has a HashShuffle input with ColumnShardHashV1 hash function.
-// This is the specific indicator of the CTAS write affinity plan (BuildCsWriteAffinitySinkStage).
-// Regular HashShuffle connections (e.g., for aggregation) use different hash functions
-// and should NOT trigger the affinity path.
+// NOTE: this alone is NOT sufficient to identify the CTAS write affinity plan
+// (BuildCsWriteAffinitySinkStage): the shuffle elimination feature
+// (OptShuffleElimination) also emits ColumnShardHashV1 HashShuffle connections
+// for pure OLAP read queries. Use IsCsWriteAffinitySinkStage() for detection.
 static bool HasColumnShardHashV1Input(const TStageInfo& stageInfo) {
     const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
     for (const auto& input : stage.GetInputs()) {
@@ -1412,6 +1396,144 @@ static TVector<ui64> GetCsShardingOrderedShardIds(const NKikimrSchemeOp::TColumn
         }
     }
     return orderedShardIds;
+}
+
+// Returns true if the stage is a genuine CS write affinity sink stage, i.e. the
+// optimizer emitted the affinity plan for it:
+//   Transform → HashShuffle(ColumnShardHashV1) → Sink(OLAP table).
+//
+// All three conditions below are required because ColumnShardHashV1 HashShuffle
+// connections are ALSO emitted by the shuffle elimination feature
+// (OptShuffleElimination) for regular OLAP read queries:
+//  1. The stage has a HashShuffle(ColumnShardHashV1) input.
+//  2. The stage writes to an OLAP table via an internal table sink. Read and
+//     intermediate stages of shuffle-eliminated queries never have table sinks.
+//  3. The shuffle key columns match the target table's hash sharding columns.
+//     Affinity routing hashes rows on the shuffle key columns and maps them
+//     onto the target table's shards; that is only correct when the key
+//     columns are the target's sharding columns. A shuffle-eliminated
+//     INSERT ... SELECT may hash on the SOURCE table's sharding columns
+//     instead, which must not be treated as affinity.
+static bool IsCsWriteAffinitySinkStage(const TStageInfo& stageInfo) {
+    if (!HasColumnShardHashV1Input(stageInfo)) {
+        return false;
+    }
+
+    const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+
+    // Condition 2: an internal table sink writing to an OLAP table.
+    NKikimrKqp::TKqpTableSinkSettings sinkSettings;
+    bool hasOlapSink = false;
+    auto inspectSink = [&stageInfo, &sinkSettings, &hasOlapSink](const NKqpProto::TKqpInternalSink& intSink) {
+        if (hasOlapSink || !intSink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+            return;
+        }
+        NKikimrKqp::TKqpTableSinkSettings settings;
+        if (stageInfo.Meta.ResolvedSinkSettings) {
+            settings = *stageInfo.Meta.ResolvedSinkSettings;
+        } else if (!intSink.GetSettings().UnpackTo(&settings)) {
+            return;
+        }
+        if (settings.GetIsOlap()) {
+            hasOlapSink = true;
+            sinkSettings = std::move(settings);
+        }
+    };
+    for (const auto& sink : stage.GetSinks()) {
+        if (sink.HasInternalSink()) {
+            inspectSink(sink.GetInternalSink());
+        }
+    }
+    for (const auto& transform : stage.GetOutputTransforms()) {
+        if (transform.HasInternalSink()) {
+            inspectSink(transform.GetInternalSink());
+        }
+    }
+    if (!hasOlapSink) {
+        return false;
+    }
+
+    // Condition 3: the target table must use hash sharding, and the shuffle key
+    // columns should match its sharding columns (in order).
+    // This condition is only enforced when ColumnTableInfoPtr is available (i.e.,
+    // the table exists). For CTAS, the table doesn't exist yet at compile time,
+    // so we trust the optimizer's plan (conditions 1 and 2 are sufficient).
+    //
+    // NOTE: We use a lenient approach here - we only reject if we can definitively
+    // prove a mismatch. If column resolution fails or names don't match due to
+    // aliasing/transformations, we trust the optimizer rather than reject.
+    if (stageInfo.Meta.ColumnTableInfoPtr
+            && stageInfo.Meta.ColumnTableInfoPtr->Description.HasSharding()) {
+        const auto& sharding = stageInfo.Meta.ColumnTableInfoPtr->Description.GetSharding();
+        if (!sharding.HasHashSharding()) {
+            // Table exists but doesn't use hash sharding - definite mismatch.
+            return false;
+        }
+
+        std::vector<TString> shardingColumnsFallback;
+        const auto& shuffleKeyColumns = GetEffectiveShardingColumns(stageInfo, shardingColumnsFallback);
+        const auto& targetShardingColumns = sharding.GetHashSharding().GetColumns();
+
+        // Only reject if we have shuffle key columns and they clearly don't match.
+        // If shuffleKeyColumns is empty, trust the optimizer (it may populate later).
+        if (!shuffleKeyColumns.empty() &&
+            shuffleKeyColumns.size() != static_cast<size_t>(targetShardingColumns.size())) {
+            YDB_LOG_DEBUG("CS Write Affinity: IsCsWriteAffinitySinkStage returning false - column count mismatch",
+                {"stageId", stageInfo.Id},
+                {"shuffleKeyColumnsSize", shuffleKeyColumns.size()},
+                {"targetShardingColumnsSize", targetShardingColumns.size()});
+            return false;
+        }
+
+        // Verify column names match if we can resolve them.
+        if (!shuffleKeyColumns.empty()) {
+            THashMap<TString, ui32> columnNameToIndex;
+            for (ui32 i = 0; i < static_cast<ui32>(sinkSettings.GetColumns().size()); ++i) {
+                columnNameToIndex[sinkSettings.GetColumns(i).GetName()] = i;
+            }
+
+            for (size_t i = 0; i < shuffleKeyColumns.size(); ++i) {
+                TString columnName = shuffleKeyColumns[i];
+                if (!columnNameToIndex.contains(columnName)) {
+                    // Try interpreting as a numeric index into the sink's Columns list
+                    // (HashShuffle proto KeyColumns are numeric for wide channels), the
+                    // same resolution BuildColumnShardHashV1ForWriteAffinity uses.
+                    ui32 columnIndex = 0;
+                    try {
+                        columnIndex = static_cast<ui32>(std::stoul(columnName));
+                    } catch (...) {
+                        // Can't parse as index - might be an alias or transformation.
+                        // Trust the optimizer rather than reject.
+                        YDB_LOG_DEBUG("CS Write Affinity: IsCsWriteAffinitySinkStage trusting optimizer - column name not in sink",
+                            {"stageId", stageInfo.Id},
+                            {"columnName", columnName},
+                            {"index", i});
+                        continue;
+                    }
+                    if (columnIndex >= static_cast<ui32>(sinkSettings.GetColumns().size())) {
+                        // Index out of range - trust optimizer.
+                        YDB_LOG_DEBUG("CS Write Affinity: IsCsWriteAffinitySinkStage trusting optimizer - column index out of range",
+                            {"stageId", stageInfo.Id},
+                            {"columnIndex", columnIndex},
+                            {"sinkColumnsSize", sinkSettings.GetColumns().size()});
+                        continue;
+                    }
+                    columnName = sinkSettings.GetColumns(columnIndex).GetName();
+                }
+                if (columnName != targetShardingColumns[static_cast<int>(i)]) {
+                    // Definite mismatch - reject.
+                    YDB_LOG_DEBUG("CS Write Affinity: IsCsWriteAffinitySinkStage returning false - column name mismatch",
+                        {"stageId", stageInfo.Id},
+                        {"index", i},
+                        {"shuffleKeyColumn", columnName},
+                        {"targetShardingColumn", targetShardingColumns[static_cast<int>(i)]});
+                    return false;
+                }
+            }
+        }
+    }
+
+    return true;
 }
 
 // Build ColumnShardHashV1 params for a CS write-affinity Sink Stage and return the
@@ -1797,7 +1919,7 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
     // as SourceShardCount, which reflects the upstream source table's shard count,
     // not the destination table's shard count. This causes hash bucket mismatch
     // between DQ ColumnShardHashV1 routing and runtime TConsistencySharding64.
-    const bool isCsWriteAffinitySink = HasHashShuffleInput(stageInfo);
+    const bool isCsWriteAffinitySink = IsCsWriteAffinitySinkStage(stageInfo);
     if (enableShuffleElimination && !isCsWriteAffinitySink && !isFusedWithScanStage) { // taskIdHash can be already set if it is a fused stage, so hashpartition will derive columnv1 parameters from there
         for (ui32 inputIndex = 0; inputIndex < stage.InputsSize(); ++inputIndex) {
             const auto& input = stage.GetInputs(inputIndex);
@@ -1894,7 +2016,7 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
                         //    (from the target table's PK). columnShardHashV1Params must be
                         //    built from CsShardingColumns at runtime via the shared helper,
                         //    because shard info is not available at optimization time.
-                        const bool isWriteAffinity = HasHashShuffleInput(stageInfo);
+                        const bool isWriteAffinity = isCsWriteAffinitySink;
                         const bool hasShuffleEliminationParams =
                             columnShardHashV1Params.SourceTableKeyColumnTypes
                             && !columnShardHashV1Params.SourceTableKeyColumnTypes->empty();
@@ -3929,11 +4051,13 @@ void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const T
         // where the target table does not exist at compile time.
         std::vector<TString> shardingColumnsFallback;
         const auto& effectiveShardingColumns = GetEffectiveShardingColumns(stageInfo, shardingColumnsFallback);
-        // Affinity is detected from the DQ graph: if the stage has a ColumnShardHashV1
-        // HashShuffle input and effective sharding columns, the optimizer emitted the
-        // affinity plan.
+        // Affinity is detected from the DQ graph: IsCsWriteAffinitySinkStage verifies
+        // the stage is an OLAP table sink fed by a ColumnShardHashV1 HashShuffle whose
+        // key columns match the target table's sharding columns (the optimizer's
+        // affinity plan). Shuffle-eliminated OLAP reads and inserts also use
+        // ColumnShardHashV1 shuffles but must keep the standard behavior.
         if (!effectiveShardingColumns.empty()
-                && HasColumnShardHashV1Input(stageInfo)) {
+                && IsCsWriteAffinitySinkStage(stageInfo)) {
             // Collect all target shards. Use GetCsShardingOrderedShardIds to match
             // IShardingBase::GetOrderedShardIds() / SplitByShardsToArrowBatches order.
             TVector<ui64> resolvedShardIds;
@@ -4756,23 +4880,27 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
         }
     }
 
-    // Per-Shard CTAS Write: if this stage has a HashShuffle input, create one task
-    // per target shard, each pinned to the node that hosts that shard. Data arrives
-    // via ColumnShardHashV1 which routes rows to the correct shard task. Each task
-    // writes its own shard using TargetShardIds.
+    // Per-Shard CTAS Write: if this stage is a CS write affinity OLAP sink, create
+    // one task per target shard, each pinned to the node that hosts that shard.
+    // Data arrives via ColumnShardHashV1 which routes rows to the correct shard
+    // task. Each task writes its own shard using TargetShardIds.
     //
-    // Affinity is detected from the DQ graph: HasColumnShardHashV1Input means the
-    // optimizer emitted the affinity plan (Transform → HashShuffle(ColumnShardHashV1) → Sink).
+    // Affinity is detected by IsCsWriteAffinitySinkStage: the stage must be an
+    // OLAP table sink fed by a HashShuffle(ColumnShardHashV1) whose key columns
+    // match the target table's sharding columns (the optimizer's affinity plan:
+    // Transform → HashShuffle(ColumnShardHashV1) → Sink). A ColumnShardHashV1
+    // input alone is NOT sufficient: shuffle elimination emits such connections
+    // for pure OLAP read queries.
     //
     // Invariants (all must hold, otherwise this is a bug):
     //  - Not a pure stage (has inputs, so HashShuffle channel exists)
-    //  - HasHashShuffleInput (affinity plan layout)
-    //  - ColumnTableInfo or ShardKey available (shard list resolvable)
+    //  - ColumnTableInfo with hash sharding or ShardKey available (shard list
+    //    resolvable; the detector is lenient for CTAS, so this is checked below)
     //  - All target shards present in ShardIdToNodeId (resolved by ResolveShards)
     {
         const bool isPureStage = stage.InputsSize() == 0;
         if (!isPureStage
-                && HasColumnShardHashV1Input(stageInfo)) {
+                && IsCsWriteAffinitySinkStage(stageInfo)) {
             // Collect (shardId, nodeId) pairs. One task per shard, pinned to the
             // node hosting that shard.
             TVector<std::pair<ui64 /* shardId */, ui64 /* nodeId */>> shardNodes;

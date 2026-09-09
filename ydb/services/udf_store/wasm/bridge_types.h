@@ -26,6 +26,44 @@ struct TBridgeIdentity {
     bool operator==(const TBridgeIdentity& other) const = default;
 };
 
+namespace NPrivate {
+
+inline bool& InsideGuestCallbackFlag() {
+    static thread_local bool inside = false;
+    return inside;
+}
+
+} // namespace NPrivate
+
+//! Whether this thread is inside a call the host itself made into guest code.
+//! The one such call is moving the guest allocator break through its "sbrk"
+//! export while the resident arena grows.
+inline bool IsInsideGuestCallback() {
+    return NPrivate::InsideGuestCallbackFlag();
+}
+
+//! RAII: mark guest code the host invoked. What runs under it sees the host
+//! mid-update -- bookkeeping unfinished, references into live values held --
+//! so host intrinsics refuse to serve it.
+class TGuestCallbackGuard {
+public:
+    TGuestCallbackGuard()
+        : Previous_(NPrivate::InsideGuestCallbackFlag())
+    {
+        NPrivate::InsideGuestCallbackFlag() = true;
+    }
+
+    ~TGuestCallbackGuard() {
+        NPrivate::InsideGuestCallbackFlag() = Previous_;
+    }
+
+    TGuestCallbackGuard(const TGuestCallbackGuard&) = delete;
+    TGuestCallbackGuard& operator=(const TGuestCallbackGuard&) = delete;
+
+private:
+    const bool Previous_;
+};
+
 //! Kind of a node stored in TWasmBridgeNodeTable (host-side).
 enum class EBridgeNodeKind: ui8 {
     Unknown = 0,

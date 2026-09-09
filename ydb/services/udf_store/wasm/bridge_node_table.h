@@ -38,6 +38,19 @@ TBridgeKinds BridgeKindsFromType(
 //! the runtime representation.
 TBridgeKinds BridgeKindsFromValue(const NYql::NUdf::TUnboxedValuePod& value);
 
+//! Optional layers stripped when naming the family of a declared type. A
+//! well-formed type never nests that deep; the bound only keeps a broken one
+//! from looping.
+constexpr ui32 MaxBridgeOptionalDepth = 8;
+
+//! The type whose family a value of `type` presents to MiniKQL. An Optional
+//! over a container or a string is represented as the payload itself, so the
+//! wrappers say nothing about what the value is; only Optional<Data> gets its
+//! own representation, and BridgeKindsFromType already looks through that one.
+const NYql::NUdf::TType* BridgePeelOptional(
+    const NYql::NUdf::TType* type,
+    const NYql::NUdf::ITypeInfoHelper* helper);
+
 //! Per-query-compartment table of host TUnboxedValue nodes exposed to WASM
 //! as ui64 bridge handles. Lifetime equals the query compartment generation.
 class TWasmBridgeNodeTable: public TNonCopyable {
@@ -165,6 +178,14 @@ private:
     const NYql::NUdf::IValueBuilder* ValueBuilder_ = nullptr;
     NYql::NUdf::ITypeInfoHelper::TPtr TypeInfoHelper_;
 };
+
+//! Family the node's value will present to MiniKQL, which is not always the
+//! family of its own kind: an Optional node is a wrapper, and MiniKQL reads
+//! what the guest put inside it. Nothing when the payload has no name here --
+//! an Optional built over a handle whose kind was never recorded.
+std::optional<EBridgeKindFamily> BridgeNodeValueFamily(
+    const TWasmBridgeNodeTable::TNode& node,
+    const NYql::NUdf::ITypeInfoHelper* helper);
 
 //! Offset of the node's String bytes in compartment linear memory, copying
 //! them there on first use. Values with identity (refcounted strings) are

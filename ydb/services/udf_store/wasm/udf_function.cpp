@@ -200,10 +200,6 @@ bool TDeclaredResultShape::Accepts(
     EBridgeValueKind kind,
     std::optional<EBridgeValueKind> payload) const
 {
-    if (Family == EBridgeKindFamily::Null) {
-        // The declared type told us nothing to check against.
-        return true;
-    }
     auto family = BridgeKindFamily(kind);
     // BridgeMakeOptional registers an Optional node whenever the payload has
     // no identity of its own to reuse. Such a node is a wrapper: MiniKQL reads
@@ -212,7 +208,21 @@ bool TDeclaredResultShape::Accepts(
     if (family == EBridgeKindFamily::Optional && payload) {
         family = BridgeKindFamily(*payload);
     }
-    if (family == Family) {
+    return AcceptsFamily(family);
+}
+
+bool TDeclaredResultShape::AcceptsFamily(std::optional<EBridgeKindFamily> family) const {
+    if (Family == EBridgeKindFamily::Null) {
+        // The declared type told us nothing to check against.
+        return true;
+    }
+    if (!family) {
+        // Nothing named to compare against, which only happens for an Optional
+        // over a payload no one recorded -- readable as a declared container
+        // and nothing else.
+        return IsBridgeBoxedFamily(Family);
+    }
+    if (*family == Family) {
         return true;
     }
     // An Optional the host registered for a declared Optional<container>: the
@@ -221,10 +231,24 @@ bool TDeclaredResultShape::Accepts(
     // Optional keeps a representation of its own, so a wrapper over one of
     // those always carries the payload kind -- a node that does not is not
     // one of them, and cannot pass for a declared scalar or string.
-    if (family == EBridgeKindFamily::Optional && IsBridgeBoxedFamily(Family)) {
+    if (*family == EBridgeKindFamily::Optional && IsBridgeBoxedFamily(Family)) {
         return true;
     }
-    return family == EBridgeKindFamily::Null && Optional;
+    return *family == EBridgeKindFamily::Null && Optional;
+}
+
+//! Alternatives of a Variant, counted on the Tuple or Struct underneath it.
+ui32 AlternativeCountOf(const TType* underlying, const ITypeInfoHelper* helper) {
+    if (!underlying || !helper) {
+        return 0;
+    }
+    if (const TStructTypeInspector members(*helper, underlying); members) {
+        return members.GetMembersCount();
+    }
+    if (const TTupleTypeInspector elements(*helper, underlying); elements) {
+        return elements.GetElementsCount();
+    }
+    return 0;
 }
 
 TDeclaredResultShape DeclaredResultShape(const TType* type, const ITypeInfoHelper* helper) {
@@ -246,6 +270,13 @@ TDeclaredResultShape DeclaredResultShape(const TType* type, const ITypeInfoHelpe
                 continue;
             default:
                 shape.Family = BridgeKindFamily(BridgeKindsFromType(payload, helper).Value);
+                if (const TVariantTypeInspector variant(*helper, payload); variant) {
+                    shape.VariantAlternatives = AlternativeCountOf(variant.GetUnderlyingType(), helper);
+                }
+                if (const TResourceTypeInspector resource(*helper, payload); resource) {
+                    const TStringRef tag = resource.GetTag();
+                    shape.ResourceTag.assign(tag.Data(), tag.Size());
+                }
                 return shape;
         }
     }
@@ -680,20 +711,43 @@ TWasmBridgeFunction::TWasmBridgeFunction(
 
 void TWasmBridgeFunction::EnsureResultFamily(const TWasmBridgeNodeTable::TNode& node) const {
     // An empty value is a null whatever kind the node it came in carries.
-    const auto kind = node.Value ? node.ValueKind : EBridgeValueKind::Null;
-    const auto payload = node.Value ? node.InnerValueKind : std::nullopt;
-    if (ResultShape_.Accepts(kind, payload)) {
-        return;
+    // Anything else is worth what the node's own type says about it, so that a
+    // UDF handed an optional argument may return it unchanged: such a node
+    // wears the Optional kind and names its payload only in its type.
+    const auto family = node.Value
+        ? BridgeNodeValueFamily(node, TypeInfoHelper_.Get())
+        : std::make_optional(EBridgeKindFamily::Null);
+    if (!ResultShape_.AcceptsFamily(family)) {
+        ythrow yexception()
+            << "Wasm UDF '" << Descriptor_.Name << "' returned a "
+            << (family ? BridgeKindFamilyAsStr(*family) : "optional")
+            << " value, but its result type is "
+            << (ResultShape_.Optional ? "optional " : "")
+            << BridgeKindFamilyAsStr(ResultShape_.Family);
     }
-    const auto family = (kind == EBridgeValueKind::Optional && payload)
-        ? BridgeKindFamily(*payload)
-        : BridgeKindFamily(kind);
-    ythrow yexception()
-        << "Wasm UDF '" << Descriptor_.Name << "' returned a "
-        << BridgeKindFamilyAsStr(family)
-        << " value, but its result type is "
-        << (ResultShape_.Optional ? "optional " : "")
-        << BridgeKindFamilyAsStr(ResultShape_.Family);
+
+    // The family is as far as a kind goes. A Variant and a Resource carry one
+    // more thing MiniKQL reads without a check of its own, and a value that
+    // did not come from BridgeMakeVariant -- an argument returned unchanged,
+    // say -- never passed the check that intrinsic does.
+    if (node.ValueKind == EBridgeValueKind::Variant && ResultShape_.VariantAlternatives != 0) {
+        const ui32 index = node.Value.GetVariantIndex();
+        if (index >= ResultShape_.VariantAlternatives) {
+            ythrow yexception()
+                << "Wasm UDF '" << Descriptor_.Name << "' returned alternative " << index
+                << " of a Variant, but its result type declares only "
+                << ResultShape_.VariantAlternatives;
+        }
+    }
+    if (node.ValueKind == EBridgeValueKind::Resource && !ResultShape_.ResourceTag.empty()) {
+        const TStringRef tag = node.Value.GetResourceTag();
+        if (TStringBuf(tag.Data(), tag.Size()) != ResultShape_.ResourceTag) {
+            ythrow yexception()
+                << "Wasm UDF '" << Descriptor_.Name << "' returned a Resource tagged '"
+                << TStringBuf(tag.Data(), tag.Size())
+                << "', but its result type declares '" << ResultShape_.ResourceTag << "'";
+        }
+    }
 }
 
 TUnboxedValue TWasmBridgeFunction::Run(

@@ -18,13 +18,23 @@ namespace {
 
 constexpr ui64 MinBlockSize = 64;
 //! Below this, round to a power of two (cheap reuse across rows); above it,
-//! round to whole megabytes so a 10 MiB blob does not reserve 16 MiB.
-constexpr ui64 PowerOfTwoLimit = 1ull << 20;
+//! round to whole pages. The budget counts the block and not the length asked
+//! for, so the rounding has to stay small: at a megabyte of granularity a
+//! budget would hold barely half its size in strings just over a size class.
+constexpr ui64 PowerOfTwoLimit = 64ull << 10;
+//! Largest class the tail of a retired arena chunk is carved into.
+constexpr ui64 TailBlockSize = 1ull << 20;
 constexpr ui64 ArenaChunkSize = 4ull << 20;
 constexpr ui64 WasmPageSize = 64ull << 10;
 //! Distinct values whose guest state we remember. Beyond that the oldest one
 //! is dropped and its user-data handed back to the guest to free.
 constexpr size_t MaxUserStates = 1024;
+//! Released user-data the guest has not drained yet. The queue is there so the
+//! guest can free its own allocations, and a guest that never drains it must
+//! not grow the host heap for the rest of the query. Past this many the oldest
+//! entries are dropped: what leaks then is guest memory inside the guest's own
+//! compartment, which the compartment already bounds.
+constexpr size_t MaxReleasedUserData = 4096;
 
 ui64 RoundUpTo(ui64 value, ui64 granularity) {
     return ((value + granularity - 1) / granularity) * granularity;
@@ -69,17 +79,31 @@ void TCompartmentResidentCache::GrowArena(ui64 length) {
     // growMemory hands out pages above the guest allocator break; fence them
     // off or the next guest malloc returns the very same bytes. Refusing to
     // use the arena beats silently sharing it with the guest allocator.
-    if (!Compartment_->ReserveGuestHeapBelow(offset + chunk)) {
-        ythrow yexception()
-            << "Bridge: cannot fence " << chunk << " resident bytes at " << offset
-            << " off the guest heap; the runtime library must export \"sbrk\"";
+    //
+    // Fencing runs the guest's "sbrk", which is guest code however little it
+    // does, and it runs it from the middle of a Pin whose bookkeeping is not
+    // finished and whose bytes are still a reference into a live value. The
+    // guard makes every bridge intrinsic refuse to be called from inside it,
+    // so a module whose sbrk tries to unref that very value is turned away
+    // instead of freeing memory the copy below is about to read.
+    {
+        const TGuestCallbackGuard guestCallback;
+        if (!Compartment_->ReserveGuestHeapBelow(offset + chunk)) {
+            ythrow yexception()
+                << "Bridge: cannot fence " << chunk << " resident bytes at " << offset
+                << " off the guest heap; the runtime library must export \"sbrk\"";
+        }
     }
     // The bump pointer can only live in one chunk, so the tail of the old one
     // is gone unless it goes back through the free lists. Every block is a
     // multiple of MinBlockSize, so the tail is too and it carves into whole
-    // size classes exactly.
+    // size classes exactly. Whole megabytes first: free lists are keyed by
+    // exact size, and a tail carved only into small classes would leave a
+    // megabyte-sized request eating into the fresh chunk.
     while (BumpRemaining_ >= MinBlockSize) {
-        const ui64 blockSize = Min(std::bit_floor(BumpRemaining_), PowerOfTwoLimit);
+        const ui64 blockSize = BumpRemaining_ >= TailBlockSize
+            ? TailBlockSize
+            : Min(std::bit_floor(BumpRemaining_), PowerOfTwoLimit);
         FreeBlocks_[blockSize].push_back(BumpOffset_);
         BumpOffset_ += blockSize;
         BumpRemaining_ -= blockSize;
@@ -134,21 +158,25 @@ ui64 TCompartmentResidentCache::AllocGuest(ui64 length) {
     if (length == 0) {
         return 0;
     }
-    if (length > Budget_) {
+    // What the arena hands out, not what the guest asked for: a block is what
+    // leaves linear memory, and charging the length instead let a loop of
+    // one-byte allocations grow the arena to MinBlockSize times the cap.
+    const ui64 charge = BlockSizeFor(length);
+    if (charge > Budget_) {
         ythrow yexception()
             << "Bridge: BridgeAllocResident of " << length
             << " bytes is larger than the whole resident budget (" << Budget_ << ")";
     }
-    if (ResidentBytes() + length > Budget_) {
+    if (ResidentBytes() + charge > Budget_) {
         ythrow yexception()
             << "Bridge: BridgeAllocResident of " << length
             << " bytes would exceed the resident budget ("
-            << ResidentBytes() << " + " << length << " > " << Budget_ << ")";
+            << ResidentBytes() << " + " << charge << " > " << Budget_ << ")";
     }
     const ui64 offset = Alloc(length);
     if (offset != 0) {
-        GuestBlocks_.emplace(offset, length);
-        GuestBytes_ += length;
+        GuestBlocks_.emplace(offset, charge);
+        GuestBytes_ += charge;
     }
     return offset;
 }
@@ -188,6 +216,26 @@ void TCompartmentResidentCache::Touch(const TBridgeIdentity& key, TPin& pin) {
     pin.LruIt = std::prev(Lru_.end());
 }
 
+TList<TBridgeIdentity>::iterator TCompartmentResidentCache::EvictPin(
+    TList<TBridgeIdentity>::iterator it,
+    TPin& pin)
+{
+    Free(pin.Offset);
+    PinnedBytes_ -= pin.Charge;
+    if (pin.Charge > Budget_) {
+        OversizedBytes_ -= pin.Charge;
+    }
+    ++Evictions_;
+    // The guest keyed its own state on the same identity, and that state
+    // usually points into the block that just went away. Hand it back the
+    // way the user-data LRU does instead of leaving the guest to read an
+    // offset whose bytes now belong to another pin.
+    const TBridgeIdentity key = *it;
+    ReleaseUserState(key);
+    Pins_.erase(key);
+    return Lru_.erase(it);
+}
+
 void TCompartmentResidentCache::EvictFor(ui64 length) {
     for (auto it = Lru_.begin(); it != Lru_.end() && ResidentBytes() + length > Budget_;) {
         auto* pin = Pins_.FindPtr(*it);
@@ -196,20 +244,18 @@ void TCompartmentResidentCache::EvictFor(ui64 length) {
             ++it;
             continue;
         }
-        Free(pin->Offset);
-        PinnedBytes_ -= pin->Length;
-        if (pin->Length > Budget_) {
-            OversizedBytes_ -= pin->Length;
+        it = EvictPin(it, *pin);
+    }
+}
+
+void TCompartmentResidentCache::EvictOversized() {
+    for (auto it = Lru_.begin(); it != Lru_.end() && OversizedBytes_ != 0;) {
+        auto* pin = Pins_.FindPtr(*it);
+        if (!pin || pin->LastRun == CurrentRun_ || pin->Charge <= Budget_) {
+            ++it;
+            continue;
         }
-        ++Evictions_;
-        // The guest keyed its own state on the same identity, and that state
-        // usually points into the block that just went away. Hand it back the
-        // way the user-data LRU does instead of leaving the guest to read an
-        // offset whose bytes now belong to another pin.
-        const TBridgeIdentity key = *it;
-        ReleaseUserState(key);
-        Pins_.erase(key);
-        it = Lru_.erase(it);
+        it = EvictPin(it, *pin);
     }
 }
 
@@ -227,12 +273,22 @@ ui64 TCompartmentResidentCache::Pin(
     }
 
     const ui64 length = bytes.Size();
-    if (length > Budget_) {
+    // The block is what the value occupies in linear memory, so it is what the
+    // budget counts. Size classes are fine enough that the rounding does not
+    // eat into what the budget is meant to hold.
+    const ui64 charge = BlockSizeFor(length);
+    if (charge > Budget_) {
         // A value larger than the whole budget is pinned regardless -- the
         // guest has no other way to see it -- and stays out of the budget
         // counter, or every later pin of the same Run would be refused for a
         // limit that was already blown. Only one at a time: nothing else
         // bounds what such pins put in linear memory.
+        //
+        // EvictFor never reaches one: it stops as soon as the budget fits and
+        // the budget does not count these. Without a pass of its own, the one
+        // an earlier Run left behind would keep every later oversized value
+        // out of linear memory for the rest of the query.
+        EvictOversized();
         if (OversizedBytes_ != 0) {
             ythrow yexception()
                 << "Bridge: pin of " << length
@@ -240,18 +296,16 @@ ui64 TCompartmentResidentCache::Pin(
                 << ") and another such pin is still resident";
         }
     } else {
-        // Real bytes, not the size class they land in: the budget is what the
-        // caller asked for, and rounding every length up would spend it early.
-        EvictFor(length);
+        EvictFor(charge);
         // Eviction leaves alone every pin the current Run touched -- their
         // offsets are live -- so a Run that keeps pinning finds nothing to
         // give back and has to be refused here, or the budget would not hold
         // within a row.
-        if (ResidentBytes() + length > Budget_) {
+        if (ResidentBytes() + charge > Budget_) {
             ythrow yexception()
                 << "Bridge: pin of " << length
                 << " bytes would exceed the resident budget ("
-                << ResidentBytes() << " + " << length << " > " << Budget_ << ")";
+                << ResidentBytes() << " + " << charge << " > " << Budget_ << ")";
         }
     }
 
@@ -259,15 +313,16 @@ ui64 TCompartmentResidentCache::Pin(
     pin.Owner = owner;
     pin.Offset = AllocBlock(length);
     pin.Length = length;
+    pin.Charge = charge;
     pin.LastRun = CurrentRun_;
     WriteBytes(pin.Offset, bytes);
 
     const ui64 offset = pin.Offset;
     Lru_.push_back(key);
     pin.LruIt = std::prev(Lru_.end());
-    PinnedBytes_ += length;
-    if (length > Budget_) {
-        OversizedBytes_ += length;
+    PinnedBytes_ += charge;
+    if (charge > Budget_) {
+        OversizedBytes_ += charge;
     }
     Pins_.emplace(key, std::move(pin));
     return offset;
@@ -278,15 +333,16 @@ ui64 TCompartmentResidentCache::PinScratch(TStringRef bytes) {
         return 0;
     }
     const ui64 length = bytes.Size();
-    if (ResidentBytes() + length > Budget_) {
+    const ui64 charge = BlockSizeFor(length);
+    if (ResidentBytes() + charge > Budget_) {
         ythrow yexception()
             << "Bridge: scratch pin of " << length
             << " bytes would exceed the resident budget ("
-            << ResidentBytes() << " + " << length << " > " << Budget_ << ")";
+            << ResidentBytes() << " + " << charge << " > " << Budget_ << ")";
     }
     const ui64 offset = AllocBlock(length);
     ScratchBlocks_.push_back(offset);
-    ScratchBytes_ += length;
+    ScratchBytes_ += charge;
     WriteBytes(offset, bytes);
     return offset;
 }
@@ -302,8 +358,8 @@ void TCompartmentResidentCache::SetUserData(
     ui64 value)
 {
     if (auto* existing = UserStates_.FindPtr(key)) {
-        if (existing->Value != value && existing->Value != 0) {
-            ReleasedUserData_.push_back(existing->Value);
+        if (existing->Value != value) {
+            QueueReleasedUserData(existing->Value);
         }
         existing->Value = value;
         UserStatesLru_.erase(existing->LruIt);
@@ -331,12 +387,23 @@ bool TCompartmentResidentCache::ReleaseUserState(TBridgeIdentity key) {
     if (!state) {
         return false;
     }
-    if (state->Value != 0) {
-        ReleasedUserData_.push_back(state->Value);
-    }
+    QueueReleasedUserData(state->Value);
     UserStatesLru_.erase(state->LruIt);
     UserStates_.erase(key);
     return true;
+}
+
+void TCompartmentResidentCache::QueueReleasedUserData(ui64 value) {
+    if (value == 0) {
+        return;
+    }
+    ReleasedUserData_.push_back(value);
+    // A guest that never drains the queue would otherwise grow the host heap
+    // for as long as the query lives, one entry per BridgeSetUserData.
+    while (ReleasedUserData_.size() > MaxReleasedUserData) {
+        ReleasedUserData_.pop_front();
+        ++DroppedUserData_;
+    }
 }
 
 bool TCompartmentResidentCache::PopReleasedUserData(ui64& value) {

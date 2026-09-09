@@ -15,7 +15,10 @@
 namespace NKikimr::NUdfStore::NWasm {
 
 //! Cap on the bytes the bridge keeps resident in compartment linear memory,
-//! counted as asked for and not as the size class they land in.
+//! counted as the blocks the arena hands out: a block is what leaves linear
+//! memory, and counting the length asked for instead let a guest looping
+//! one-byte allocations grow the arena to many times the cap. Size classes
+//! are fine enough that the rounding costs little of what the cap is for.
 //! Exceeding it evicts pins untouched by the current Run, and fails the call
 //! when that frees too little -- pins the current Run holds are not evictable,
 //! so the cap has to hold within one Run too. A single value larger than the
@@ -39,7 +42,10 @@ inline constexpr ui64 DefaultResidentBudgetBytes = 64ull << 20;
 //! memory has already been grown by then, so sbrk only moves a break pointer
 //! upward inside linear memory. It allocates nothing, cannot grow memory and
 //! cannot trap, which is why calling it under a live UDF frame is safe where
-//! calling malloc is not.
+//! calling malloc is not. What it is not free to do is call back into the
+//! bridge -- the cache is mid-update and the caller may be holding a reference
+//! into a live value -- so the call runs under TGuestCallbackGuard and every
+//! host intrinsic refuses to be served from inside it.
 //!
 //! Entries are keyed by value identity (BridgeIdentityKey), not by node, so
 //! they survive node death and are reused on the next row even when the guest
@@ -91,6 +97,12 @@ public:
         return UserStates_.size();
     }
 
+    //! Released values dropped because the guest let the queue grow past its
+    //! bound instead of draining it.
+    ui64 DroppedUserDataCount() const {
+        return DroppedUserData_;
+    }
+
     //! A new Run starts: earlier pins become evictable and scratch is reused.
     void BeginRun();
 
@@ -118,7 +130,10 @@ private:
     struct TPin {
         NYql::NUdf::TUnboxedValue Owner;
         ui64 Offset = 0;
+        //! Bytes of the value, for what the messages say.
         ui64 Length = 0;
+        //! Bytes of the block holding it, which is what the budget counts.
+        ui64 Charge = 0;
         ui64 LastRun = 0;
         TList<TBridgeIdentity>::iterator LruIt;
     };
@@ -139,7 +154,17 @@ private:
 
     ui64 AllocBlock(ui64 length);
     void GrowArena(ui64 length);
+    //! Drop one pin and everything keyed on the same identity, answering the
+    //! LRU position after it.
+    TList<TBridgeIdentity>::iterator EvictPin(TList<TBridgeIdentity>::iterator it, TPin& pin);
     void EvictFor(ui64 length);
+    //! Drop pins of values too large for the budget that no longer belong to
+    //! the current Run. They are outside the budget, so EvictFor never reaches
+    //! them and only this gives their bytes back.
+    void EvictOversized();
+    //! Hand a value back to the guest to free, dropping the oldest ones when
+    //! the guest lets the queue grow past MaxReleasedUserData.
+    void QueueReleasedUserData(ui64 value);
     //! Drop the guest state cached for `key` and queue its value for the guest
     //! to free. Returns false when there was nothing cached under that key.
     //! Takes the key by value: callers hand us LRU front()/iterators, and the
@@ -181,6 +206,7 @@ private:
     THashMap<TBridgeIdentity, TUserState> UserStates_;
     TList<TBridgeIdentity> UserStatesLru_;
     TList<ui64> ReleasedUserData_;
+    ui64 DroppedUserData_ = 0;
 };
 
 } // namespace NKikimr::NUdfStore::NWasm

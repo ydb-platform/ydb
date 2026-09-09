@@ -73,6 +73,48 @@ constexpr TStringBuf SdkStubWast = R"(
     )
 )";
 
+//! The same stub, except its "sbrk" calls back into the bridge before moving
+//! the break -- the shape of a hostile module: the host reaches sbrk from the
+//! middle of a pin, and anything the guest does there runs while the cache is
+//! mid-update and the caller still holds a reference into a live value.
+constexpr TStringBuf SdkStubReentrantSbrkWast = R"(
+    (module
+        (import "env" "memory" (memory i64 8 2097152))
+        (import "env" "BridgeMakeNull" (func $make_null (result i64)))
+        (global $break (mut i64) (i64.const 65536))
+        (func $sbrk (param $n i64) (result i64)
+            (local $old i64)
+            (local $new i64)
+            (local $pages i64)
+            (drop (call $make_null))
+            (local.set $old (global.get $break))
+            (local.set $new
+                (i64.and
+                    (i64.add (i64.add (local.get $old) (local.get $n)) (i64.const 7))
+                    (i64.const -8)))
+            (local.set $pages
+                (i64.sub
+                    (i64.shr_u
+                        (i64.add (local.get $new) (i64.const 65535))
+                        (i64.const 16))
+                    (memory.size)))
+            (if (i64.gt_s (local.get $pages) (i64.const 0))
+                (then
+                    (if (i64.eq (memory.grow (local.get $pages)) (i64.const -1))
+                        (then (return (i64.const -1))))))
+            (global.set $break (local.get $new))
+            (local.get $old)
+        )
+        (func $malloc (param $n i64) (result i64)
+            (call $sbrk (local.get $n))
+        )
+        (func $free (param $p i64))
+        (export "sbrk" (func $sbrk))
+        (export "malloc" (func $malloc))
+        (export "free" (func $free))
+    )
+)";
+
 //! A runtime library that keeps its break to itself. The resident cache cannot
 //! fence anything off such a guest, so it must refuse to hand out memory.
 constexpr TStringBuf SdkStubNoSbrkWast = R"(
@@ -1206,18 +1248,137 @@ Y_UNIT_TEST(OversizedPinLeavesTheBudgetToTheRest) {
         "still resident");
 }
 
-Y_UNIT_TEST(ResidentBudgetCountsTheBytesItWasAsked) {
-    // Blocks are rounded up to a size class for reuse, but the budget is what
-    // the caller asked for: counting the rounding too left a 64 MiB budget
-    // holding little more than half of that in strings.
+Y_UNIT_TEST(OversizedPinIsEvictedOnTheNextRun) {
+    // Only one value too large for the budget is resident at a time, and the
+    // one an earlier Run left behind has to give way -- it is outside the
+    // budget, so the eviction that runs for the budget never reaches it, and
+    // a query walking a column of such values used to fail from row two on.
     TMiniKqlEnv mkql;
 
     auto compartment = CreateEmptyImage();
     compartment->AddSdk(MakeNamedLibrary("sdk", SdkStubWast).Bytecode);
 
     constexpr ui64 kBudget = 4ull << 20;
-    // Just over half a size class, so rounding up nearly doubles it.
+    TCompartmentResidentCache resident(compartment.get(), kBudget);
+
+    resident.BeginRun();
+    const TString first(2 * kBudget, 'F');
+    auto firstValue = mkql.ValueBuilder.NewString(TStringRef(first.data(), first.size()));
+    const TBridgeIdentity firstKey = BridgeIdentityKey(firstValue);
+    UNIT_ASSERT(firstKey);
+    UNIT_ASSERT(resident.Pin(firstKey, firstValue, firstValue.AsStringRef()) != 0);
+
+    resident.BeginRun();
+    const TString second(2 * kBudget, 'S');
+    auto secondValue = mkql.ValueBuilder.NewString(TStringRef(second.data(), second.size()));
+    const TBridgeIdentity secondKey = BridgeIdentityKey(secondValue);
+    UNIT_ASSERT(secondKey);
+    UNIT_ASSERT(resident.Pin(secondKey, secondValue, secondValue.AsStringRef()) != 0);
+    UNIT_ASSERT(resident.EvictionCount() > 0);
+
+    // And the row after that one, and every row after it.
+    resident.BeginRun();
+    const TString third(2 * kBudget, 'T');
+    auto thirdValue = mkql.ValueBuilder.NewString(TStringRef(third.data(), third.size()));
+    const TBridgeIdentity thirdKey = BridgeIdentityKey(thirdValue);
+    UNIT_ASSERT(thirdKey);
+    UNIT_ASSERT(resident.Pin(thirdKey, thirdValue, thirdValue.AsStringRef()) != 0);
+}
+
+Y_UNIT_TEST(GuestAllocationsCannotOutgrowTheBudget) {
+    // The arena hands out whole size classes, and the smallest is 64 bytes, so
+    // a guest looping BridgeAllocResident(1) used to grow linear memory to
+    // sixty-four times the cap while the budget counted one byte a time.
+    auto compartment = CreateEmptyImage();
+    compartment->AddSdk(MakeNamedLibrary("sdk", SdkStubWast).Bytecode);
+
+    constexpr ui64 kBudget = 4ull << 20;
+    constexpr ui64 kMinBlock = 64;
+    TCompartmentResidentCache resident(compartment.get(), kBudget);
+    resident.BeginRun();
+
+    ui64 granted = 0;
+    bool refused = false;
+    for (ui64 i = 0; i < kBudget / kMinBlock + 1024; ++i) {
+        try {
+            UNIT_ASSERT(resident.AllocGuest(1) != 0);
+            ++granted;
+        } catch (const yexception&) {
+            refused = true;
+            break;
+        }
+    }
+
+    UNIT_ASSERT_C(refused, "the budget must stop a guest that keeps allocating");
+    UNIT_ASSERT_VALUES_EQUAL(granted, kBudget / kMinBlock);
+    UNIT_ASSERT(resident.ArenaBytes() <= 2 * kBudget);
+}
+
+Y_UNIT_TEST(ReleasedUserDataIsBounded) {
+    // The queue exists so the guest can free its own allocations, and it is
+    // drained only when the guest asks. One that never asks must not grow the
+    // host heap for the rest of the query.
+    TMiniKqlEnv mkql;
+
+    auto compartment = CreateEmptyImage();
+    compartment->AddSdk(MakeNamedLibrary("sdk", SdkStubWast).Bytecode);
+    TCompartmentResidentCache resident(compartment.get());
+
+    const TString payload(64, 'u');
+    auto owner = mkql.ValueBuilder.NewString(TStringRef(payload.data(), payload.size()));
+    const TBridgeIdentity key = BridgeIdentityKey(owner);
+    UNIT_ASSERT(key);
+
+    constexpr ui64 kSets = 20000;
+    for (ui64 i = 1; i <= kSets; ++i) {
+        resident.SetUserData(key, owner, i);
+    }
+
+    ui64 value = 0;
+    ui64 drained = 0;
+    while (resident.PopReleasedUserData(value)) {
+        ++drained;
+    }
+
+    // MaxReleasedUserData in bridge_resident.cpp; the rest were dropped, which
+    // leaks inside the guest's own compartment and not on the host.
+    UNIT_ASSERT_VALUES_EQUAL(drained, 4096u);
+    UNIT_ASSERT_VALUES_EQUAL(resident.DroppedUserDataCount(), kSets - 1 - drained);
+}
+
+Y_UNIT_TEST(GuestSbrkCannotCallBackIntoTheBridge) {
+    // Growing the arena moves the guest break through the module's own "sbrk",
+    // and the host reaches it from the middle of a pin: bookkeeping unfinished
+    // and, for PinScratch, a reference into a live value still held. A module
+    // whose sbrk unrefs that value would have the host copy from memory it
+    // just freed, so a bridge call from in there is refused.
+    EnsureUdfHostIntrinsicsRegistered();
+
+    auto compartment = CreateEmptyImage();
+    compartment->AddSdk(MakeNamedLibrary("sdk", SdkStubReentrantSbrkWast).Bytecode);
+    TCompartmentResidentCache resident(compartment.get());
+
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        resident.Alloc(64),
+        std::exception,
+        "re-entrantly");
+}
+
+Y_UNIT_TEST(ResidentBudgetCountsTheBlocksItHandsOut) {
+    // The budget counts the block a value lands in, because that is what
+    // leaves linear memory -- counting the length asked for instead let a
+    // guest looping tiny allocations grow the arena far past the cap. The
+    // size classes are fine enough that the rounding costs little: six blobs
+    // just over a class still fit in a budget of six of them.
+    TMiniKqlEnv mkql;
+
+    auto compartment = CreateEmptyImage();
+    compartment->AddSdk(MakeNamedLibrary("sdk", SdkStubWast).Bytecode);
+
+    constexpr ui64 kBudget = 4ull << 20;
+    // Not a whole number of classes: the block it lands in is 640 KiB.
     constexpr size_t kBlob = 600ull << 10;
+    constexpr ui64 kBlock = 640ull << 10;
     TCompartmentResidentCache resident(compartment.get(), kBudget);
     resident.BeginRun();
 
@@ -1235,7 +1396,8 @@ Y_UNIT_TEST(ResidentBudgetCountsTheBytesItWasAsked) {
             resident.Pin(key, blobs[i], blobs[i].AsStringRef()) != 0,
             TStringBuilder() << "pin " << i << " of " << kBlob << " bytes was refused");
     }
-    UNIT_ASSERT_VALUES_EQUAL(resident.PinnedBytes(), 6 * kBlob);
+    UNIT_ASSERT_VALUES_EQUAL(resident.PinnedBytes(), 6 * kBlock);
+    UNIT_ASSERT(resident.PinnedBytes() <= kBudget);
 
     const TBridgeIdentity seventh = BridgeIdentityKey(blobs[6]);
     UNIT_ASSERT_EXCEPTION_CONTAINS(
@@ -1515,6 +1677,96 @@ Y_UNIT_TEST(DeclaredResultShapeLooksUnderOptional) {
     UNIT_ASSERT(optionalString.Family == EBridgeKindFamily::String);
     UNIT_ASSERT(!optionalString.Accepts(EBridgeValueKind::Optional));
     UNIT_ASSERT(optionalString.Accepts(EBridgeValueKind::Optional, EBridgeValueKind::Utf8));
+}
+
+Y_UNIT_TEST(ResultShapeReadsTheFamilyOfANodeNotItsKindAlone) {
+    // An optional argument arrives as a node wearing the Optional kind with
+    // nothing recorded inside it -- the type is what names the payload. A UDF
+    // that returns such an argument unchanged used to be refused on every
+    // non-null row and accepted on the null ones.
+    TMiniKqlEnv mkql;
+    NYql::NUdf::ITypeInfoHelper::TPtr helper = new NKikimr::NMiniKQL::TTypeInfoHelper();
+
+    using NKikimr::NMiniKQL::TDataType;
+    auto* stringType = TDataType::Create(NYql::NUdf::TDataType<char*>::Id, mkql.Env);
+    auto* i32Type = TDataType::Create(NYql::NUdf::TDataType<i32>::Id, mkql.Env);
+    auto* optionalStringType = NKikimr::NMiniKQL::TOptionalType::Create(stringType, mkql.Env);
+
+    const auto shape = DeclaredResultShape(
+        static_cast<const NYql::NUdf::TType*>(optionalStringType),
+        helper.Get());
+
+    TWasmBridgeNodeTable::TNode node;
+    node.Kind = EBridgeNodeKind::Optional;
+    node.ValueKind = EBridgeValueKind::Optional;
+    node.Type = static_cast<const NYql::NUdf::TType*>(optionalStringType);
+    node.Value = mkql.ValueBuilder.NewString(TStringRef("abc", 3));
+    UNIT_ASSERT(shape.AcceptsFamily(BridgeNodeValueFamily(node, helper.Get())));
+
+    // The same node with nothing in it is the null row, which an optional
+    // declaration takes as well.
+    node.Value = {};
+    UNIT_ASSERT(shape.AcceptsFamily(EBridgeKindFamily::Null));
+
+    // The type is read, not assumed: an optional list is still not a string.
+    auto* optionalListType = NKikimr::NMiniKQL::TOptionalType::Create(
+        NKikimr::NMiniKQL::TListType::Create(i32Type, mkql.Env),
+        mkql.Env);
+    TWasmBridgeNodeTable::TNode listNode;
+    listNode.Kind = EBridgeNodeKind::Optional;
+    listNode.ValueKind = EBridgeValueKind::Optional;
+    listNode.Type = static_cast<const NYql::NUdf::TType*>(optionalListType);
+    UNIT_ASSERT(!shape.AcceptsFamily(BridgeNodeValueFamily(listNode, helper.Get())));
+
+    // A node that names nothing at all stays readable only as a container.
+    TWasmBridgeNodeTable::TNode namelessNode;
+    namelessNode.Kind = EBridgeNodeKind::Optional;
+    namelessNode.ValueKind = EBridgeValueKind::Optional;
+    UNIT_ASSERT(!BridgeNodeValueFamily(namelessNode, helper.Get()));
+    UNIT_ASSERT(!shape.AcceptsFamily(std::nullopt));
+}
+
+Y_UNIT_TEST(DeclaredResultShapeKeepsTheVariantArityAndTheResourceTag) {
+    // A Variant index and a Resource tag are read by MiniKQL without a check
+    // of its own, and a value that did not come from BridgeMakeVariant never
+    // passed the one that intrinsic does -- so the declaration has to keep
+    // both for the result check to compare against.
+    TMiniKqlEnv mkql;
+    NYql::NUdf::ITypeInfoHelper::TPtr helper = new NKikimr::NMiniKQL::TTypeInfoHelper();
+
+    using NKikimr::NMiniKQL::TDataType;
+    auto* i32Type = TDataType::Create(NYql::NUdf::TDataType<i32>::Id, mkql.Env);
+
+    const auto shapeOf = [&](NKikimr::NMiniKQL::TType* type) {
+        return DeclaredResultShape(static_cast<const NYql::NUdf::TType*>(type), helper.Get());
+    };
+
+    NKikimr::NMiniKQL::TType* alternatives[] = {i32Type, i32Type};
+    auto* underlyingType = NKikimr::NMiniKQL::TTupleType::Create(2, alternatives, mkql.Env);
+    auto* variantType = NKikimr::NMiniKQL::TVariantType::Create(underlyingType, mkql.Env);
+
+    const auto variant = shapeOf(variantType);
+    UNIT_ASSERT(variant.Family == EBridgeKindFamily::Variant);
+    UNIT_ASSERT_VALUES_EQUAL(variant.VariantAlternatives, 2u);
+    UNIT_ASSERT(variant.ResourceTag.empty());
+
+    const auto optionalVariant = shapeOf(
+        NKikimr::NMiniKQL::TOptionalType::Create(variantType, mkql.Env));
+    UNIT_ASSERT_VALUES_EQUAL(optionalVariant.VariantAlternatives, 2u);
+
+    auto* resourceType = NKikimr::NMiniKQL::TResourceType::Create("Trie", mkql.Env);
+    const auto resource = shapeOf(resourceType);
+    UNIT_ASSERT(resource.Family == EBridgeKindFamily::Resource);
+    UNIT_ASSERT_VALUES_EQUAL(resource.ResourceTag, "Trie");
+    UNIT_ASSERT_VALUES_EQUAL(resource.VariantAlternatives, 0u);
+
+    const auto optionalResource = shapeOf(
+        NKikimr::NMiniKQL::TOptionalType::Create(resourceType, mkql.Env));
+    UNIT_ASSERT_VALUES_EQUAL(optionalResource.ResourceTag, "Trie");
+
+    const auto list = shapeOf(NKikimr::NMiniKQL::TListType::Create(i32Type, mkql.Env));
+    UNIT_ASSERT_VALUES_EQUAL(list.VariantAlternatives, 0u);
+    UNIT_ASSERT(list.ResourceTag.empty());
 }
 
 Y_UNIT_TEST(UserDataSurvivesNodeDeath) {

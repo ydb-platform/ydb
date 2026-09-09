@@ -55,7 +55,10 @@ constexpr TStringBuf BridgeTypeCheckWast = R"(
         (import "env" "BridgeDictContains" (func $contains (param i64 i64) (result i32)))
         (import "env" "BridgeDictLookup" (func $lookup (param i64 i64) (result i64)))
         (import "env" "BridgeGetResultType" (func $result_type (result i64)))
+        (import "env" "BridgeMakeArray" (func $make_array (param i64 i32) (result i64)))
         (import "env" "BridgeMakeDict" (func $make_dict (param i64 i64 i32) (result i64)))
+        (import "env" "BridgeMakeList" (func $make_list (param i64 i32) (result i64)))
+        (import "env" "BridgeMakeOptional" (func $make_optional (param i64) (result i64)))
         (import "env" "BridgeRun" (func $run (param i64 i64 i32) (result i64)))
         (import "env" "BridgeUnref" (func $unref (param i64)))
 
@@ -91,6 +94,43 @@ constexpr TStringBuf BridgeTypeCheckWast = R"(
             (call $unref (local.get $dict))
         )
         (export "make_dict_then_lookup" (func $make_dict_then_lookup))
+
+        (func $make_array_one (param $ctx i64) (param $result i64) (param $a i64) (param $elems i64)
+            (i64.store (local.get $elems) (local.get $a))
+            (i64.store (local.get $result) (call $make_array (local.get $elems) (i32.const 1)))
+        )
+        (export "make_array_one" (func $make_array_one))
+
+        (func $make_array_two (param $ctx i64) (param $result i64)
+                (param $a i64) (param $b i64) (param $elems i64)
+            (i64.store (local.get $elems) (local.get $a))
+            (i64.store (i64.add (local.get $elems) (i64.const 8)) (local.get $b))
+            (i64.store (local.get $result) (call $make_array (local.get $elems) (i32.const 2)))
+        )
+        (export "make_array_two" (func $make_array_two))
+
+        (func $make_optional_then_dict (param $ctx i64) (param $result i64)
+                (param $key i64) (param $payload i64) (param $pairs i64)
+            (local $type i64)
+            (local $opt i64)
+            (local.set $opt (call $make_optional (local.get $payload)))
+            (local.set $type (call $result_type))
+            (i64.store (local.get $pairs) (local.get $key))
+            (i64.store (i64.add (local.get $pairs) (i64.const 8)) (local.get $opt))
+            (i64.store (local.get $result)
+                (call $make_dict (local.get $type) (local.get $pairs) (i32.const 1)))
+            (call $unref (local.get $type))
+            (call $unref (local.get $opt))
+        )
+        (export "make_optional_then_dict" (func $make_optional_then_dict))
+
+        (func $make_list_two (param $ctx i64) (param $result i64)
+                (param $a i64) (param $b i64) (param $items i64)
+            (i64.store (local.get $items) (local.get $a))
+            (i64.store (i64.add (local.get $items) (i64.const 8)) (local.get $b))
+            (i64.store (local.get $result) (call $make_list (local.get $items) (i32.const 2)))
+        )
+        (export "make_list_two" (func $make_list_two))
 
         (func $run_one (param $ctx i64) (param $result i64)
                 (param $callable i64) (param $arg i64) (param $argv i64)
@@ -141,6 +181,13 @@ TMkqlType* MkqlStringType(TMiniKqlEnv& mkql) {
 
 TMkqlType* MkqlInt64Type(TMiniKqlEnv& mkql) {
     return NKikimr::NMiniKQL::TDataType::Create(NYql::NUdf::TDataType<i64>::Id, mkql.Env);
+}
+
+TMkqlType* MkqlTupleType(TMiniKqlEnv& mkql, const TVector<TMkqlType*>& elements) {
+    return NKikimr::NMiniKQL::TTupleType::Create(
+        elements.size(),
+        elements.data(),
+        mkql.Env);
 }
 
 //! Callable of one argument returning Int64: the declaration that goes with
@@ -513,6 +560,193 @@ Y_UNIT_TEST(RunTakesANullWhereTheArgumentIsOptional) {
 
     table.Unref(resultHandle);
     table.Unref(callableHandle);
+    UNIT_ASSERT_VALUES_EQUAL(table.DebugSize(), 0u);
+}
+
+Y_UNIT_TEST(MakeArrayRejectsANullInAMandatoryMemberSlot) {
+    // A member the guest leaves null is stored the way an absent value always
+    // is, and the declared String is read back with AsStringRef, which takes
+    // the process down on one.
+    TMiniKqlEnv mkql;
+
+    TTypeCheckUdf udf(mkql, 51, MkqlTupleType(mkql, {MkqlStringType(mkql)}));
+
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        udf.Invoke("make_array_one", {NullBridgeHandle, udf.Scratch(1)}),
+        yexception,
+        "BridgeMakeArray slot 0 is null");
+
+    UNIT_ASSERT_VALUES_EQUAL(udf.Table().DebugSize(), 0u);
+}
+
+Y_UNIT_TEST(MakeArrayTakesANullWhereTheMemberIsOptional) {
+    TMiniKqlEnv mkql;
+
+    auto* memberType = NKikimr::NMiniKQL::TOptionalType::Create(MkqlStringType(mkql), mkql.Env);
+    TTypeCheckUdf udf(mkql, 52, MkqlTupleType(mkql, {memberType}));
+    auto& table = udf.Table();
+
+    const ui64 resultHandle = udf.Invoke("make_array_one", {NullBridgeHandle, udf.Scratch(1)});
+    UNIT_ASSERT(resultHandle != NullBridgeHandle);
+    UNIT_ASSERT(!table.Resolve(resultHandle).Value.GetElement(0));
+
+    table.Unref(resultHandle);
+    UNIT_ASSERT_VALUES_EQUAL(table.DebugSize(), 0u);
+}
+
+Y_UNIT_TEST(MakeArrayRejectsAnArityMismatch) {
+    // A width the declaration does not name used to drop the declared type
+    // and every per-member check with it, so a wrong count was all it took to
+    // get an unchecked member into a declared slot.
+    TMiniKqlEnv mkql;
+
+    TTypeCheckUdf udf(mkql, 53, MkqlTupleType(mkql, {MkqlStringType(mkql)}));
+    auto& table = udf.Table();
+
+    const ui64 textHandle = table.Register(
+        EBridgeNodeKind::String,
+        EBridgeValueKind::String,
+        AsBridgeType(MkqlStringType(mkql)),
+        mkql.ValueBuilder.NewString(TStringRef("a", 1)));
+
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        udf.Invoke("make_array_two", {textHandle, textHandle, udf.Scratch(2)}),
+        yexception,
+        "matches no Tuple in the declared result type");
+
+    table.Unref(textHandle);
+    UNIT_ASSERT_VALUES_EQUAL(table.DebugSize(), 0u);
+}
+
+Y_UNIT_TEST(MakeArrayChecksMembersOfANestedTuple) {
+    // The guest builds a nested container bottom-up, so the width it is
+    // building is what picks the declared type its members are checked
+    // against -- here the inner Tuple, not the one-member outer.
+    TMiniKqlEnv mkql;
+
+    auto* innerType = MkqlTupleType(mkql, {MkqlStringType(mkql), MkqlInt64Type(mkql)});
+    TTypeCheckUdf udf(mkql, 54, MkqlTupleType(mkql, {innerType}));
+    auto& table = udf.Table();
+
+    TUnboxedValue items[] = {TUnboxedValuePod(i64{7})};
+    const ui64 listHandle = table.Register(
+        EBridgeNodeKind::List,
+        EBridgeValueKind::List,
+        nullptr,
+        mkql.ValueBuilder.NewList(items, 1));
+    const ui64 numberHandle = table.Register(
+        EBridgeNodeKind::Scalar,
+        EBridgeValueKind::Int64,
+        AsBridgeType(MkqlInt64Type(mkql)),
+        TUnboxedValuePod(i64{1}));
+
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        udf.Invoke("make_array_two", {listHandle, numberHandle, udf.Scratch(2)}),
+        yexception,
+        "BridgeMakeArray expected a string value, got list");
+
+    table.Unref(numberHandle);
+    table.Unref(listHandle);
+    UNIT_ASSERT_VALUES_EQUAL(table.DebugSize(), 0u);
+}
+
+Y_UNIT_TEST(MakeListRejectsAnItemOfTheWrongKind) {
+    // Items of a declared List<String> are read as strings by whoever reads
+    // the list, the same way a dict payload is.
+    TMiniKqlEnv mkql;
+
+    auto* listType = NKikimr::NMiniKQL::TListType::Create(MkqlStringType(mkql), mkql.Env);
+    TTypeCheckUdf udf(mkql, 55, listType);
+    auto& table = udf.Table();
+
+    TUnboxedValue items[] = {TUnboxedValuePod(i64{7})};
+    const ui64 innerListHandle = table.Register(
+        EBridgeNodeKind::List,
+        EBridgeValueKind::List,
+        nullptr,
+        mkql.ValueBuilder.NewList(items, 1));
+    const ui64 textHandle = table.Register(
+        EBridgeNodeKind::String,
+        EBridgeValueKind::String,
+        AsBridgeType(MkqlStringType(mkql)),
+        mkql.ValueBuilder.NewString(TStringRef("a", 1)));
+
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        udf.Invoke("make_list_two", {innerListHandle, textHandle, udf.Scratch(2)}),
+        yexception,
+        "BridgeMakeList expected a string value, got list");
+
+    table.Unref(textHandle);
+    table.Unref(innerListHandle);
+    UNIT_ASSERT_VALUES_EQUAL(table.DebugSize(), 0u);
+}
+
+Y_UNIT_TEST(MakeListTypesTheNodeItBuilds) {
+    // Untyped, the list the guest just built has nothing for the item check
+    // to compare against the next time it is read.
+    TMiniKqlEnv mkql;
+
+    auto* listType = NKikimr::NMiniKQL::TListType::Create(MkqlStringType(mkql), mkql.Env);
+    TTypeCheckUdf udf(mkql, 56, listType);
+    auto& table = udf.Table();
+
+    const ui64 textHandle = table.Register(
+        EBridgeNodeKind::String,
+        EBridgeValueKind::String,
+        AsBridgeType(MkqlStringType(mkql)),
+        mkql.ValueBuilder.NewString(TStringRef("a", 1)));
+
+    const ui64 resultHandle = udf.Invoke(
+        "make_list_two",
+        {textHandle, textHandle, udf.Scratch(2)});
+    UNIT_ASSERT(resultHandle != NullBridgeHandle);
+    UNIT_ASSERT_VALUES_EQUAL(table.Resolve(resultHandle).Type, AsBridgeType(listType));
+
+    table.Unref(resultHandle);
+    table.Unref(textHandle);
+    UNIT_ASSERT_VALUES_EQUAL(table.DebugSize(), 0u);
+}
+
+Y_UNIT_TEST(MakeOptionalKeepsAReusedContainerReadable) {
+    // The payload came from a declared Optional<List<Int64>>: its kind stopped
+    // at the wrapper and only its type names the list. MiniKQL represents an
+    // Optional over a boxed value as the value itself, so wrapping it again
+    // hands back the very same node -- and writing an inner kind onto that one
+    // used to rename it an optional-over-nothing, closing the slot it came
+    // out of.
+    TMiniKqlEnv mkql;
+
+    auto* listType = NKikimr::NMiniKQL::TListType::Create(MkqlInt64Type(mkql), mkql.Env);
+    auto* payloadType = NKikimr::NMiniKQL::TOptionalType::Create(listType, mkql.Env);
+    auto* dictType = NKikimr::NMiniKQL::TDictType::Create(
+        MkqlStringType(mkql),
+        payloadType,
+        mkql.Env);
+
+    TTypeCheckUdf udf(mkql, 57, dictType);
+    auto& table = udf.Table();
+
+    TUnboxedValue items[] = {TUnboxedValuePod(i64{7})};
+    const ui64 payloadHandle = table.Register(
+        EBridgeNodeKind::Optional,
+        EBridgeValueKind::Optional,
+        AsBridgeType(payloadType),
+        mkql.ValueBuilder.NewList(items, 1));
+    const ui64 keyHandle = table.Register(
+        EBridgeNodeKind::String,
+        EBridgeValueKind::String,
+        AsBridgeType(MkqlStringType(mkql)),
+        mkql.ValueBuilder.NewString(TStringRef("a", 1)));
+
+    const ui64 resultHandle = udf.Invoke(
+        "make_optional_then_dict",
+        {keyHandle, payloadHandle, udf.Scratch(2)});
+    UNIT_ASSERT(resultHandle != NullBridgeHandle);
+    UNIT_ASSERT(!table.Resolve(payloadHandle).InnerValueKind);
+
+    table.Unref(resultHandle);
+    table.Unref(keyHandle);
+    table.Unref(payloadHandle);
     UNIT_ASSERT_VALUES_EQUAL(table.DebugSize(), 0u);
 }
 

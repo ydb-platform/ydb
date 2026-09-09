@@ -47,6 +47,14 @@ struct TDeclaredResultShape {
     EBridgeKindFamily Family = EBridgeKindFamily::Null;
     //! Declared type accepts a null, so the guest may return one.
     bool Optional = false;
+    //! Alternatives of the declared Variant; zero when the payload is not one.
+    //! A returned Variant carries an index MiniKQL indexes the underlying type
+    //! with, without a range check of its own.
+    ui32 VariantAlternatives = 0;
+    //! Tag of the declared Resource; empty when the payload is not one. Two
+    //! Resources differ by nothing else, and what is behind one is a void*
+    //! the next UDF casts to whatever its own tag implies.
+    TString ResourceTag;
 
     //! `kind` is the kind of the returned node, `payload` the kind of the
     //! value inside it when that node is an Optional the guest built. An
@@ -57,6 +65,11 @@ struct TDeclaredResultShape {
     bool Accepts(
         EBridgeValueKind kind,
         std::optional<EBridgeValueKind> payload = std::nullopt) const;
+
+    //! Same question asked of the family a value will present to MiniKQL,
+    //! which is what a node knows once its type is taken into account.
+    //! Nothing means the node names no family at all.
+    bool AcceptsFamily(std::optional<EBridgeKindFamily> family) const;
 };
 
 TDeclaredResultShape DeclaredResultShape(const TType* type, const ITypeInfoHelper* helper);

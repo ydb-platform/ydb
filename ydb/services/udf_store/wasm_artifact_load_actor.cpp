@@ -132,13 +132,25 @@ void TWasmArtifactLoadActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRe
             return;
         }
         case EStep::ReadModuleWasmChunks: {
-            if (!NTableQuery::ParseArtifactChunksResponse(response, PendingWasmChunks_)) {
+            TVector<TString> wasmChunks;
+            if (!NTableQuery::ParseArtifactChunksResponse(response, wasmChunks)) {
                 ReplyError(TStringBuilder() << "Failed to read module wasm_data chunks for name=" << Name_);
                 return;
             }
-            if (PendingWasmChunks_.size() != ModuleArtifact_.WasmDataChunkCount) {
+            // The artifact tables carry no md5, so the size the compile recorded
+            // is all that stands between a truncated chunk and WAVM. Chunks are
+            // 8 MiB, so a short final chunk keeps the count and changes the size.
+            TString joinError;
+            if (!JoinAndVerifyBlobs(
+                    wasmChunks,
+                    ModuleArtifact_.WasmDataChunkCount,
+                    ModuleArtifact_.WasmDataSize,
+                    {},
+                    PendingWasmData_,
+                    joinError))
+            {
                 ReplyError(TStringBuilder()
-                    << "Module wasm_data chunk_count mismatch for name=" << Name_);
+                    << "Module wasm_data is corrupted for name=" << Name_ << ": " << joinError);
                 return;
             }
             Step_ = EStep::ReadModuleObjectChunks;
@@ -151,14 +163,20 @@ void TWasmArtifactLoadActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRe
                 ReplyError(TStringBuilder() << "Failed to read module object_code chunks for name=" << Name_);
                 return;
             }
-            if (objectChunks.size() != ModuleArtifact_.ObjectCodeChunkCount) {
+            TString joinError;
+            if (!JoinAndVerifyBlobs(
+                    objectChunks,
+                    ModuleArtifact_.ObjectCodeChunkCount,
+                    ModuleArtifact_.ObjectCodeSize,
+                    {},
+                    ModuleArtifact_.ObjectCode,
+                    joinError))
+            {
                 ReplyError(TStringBuilder()
-                    << "Module object_code chunk_count mismatch for name=" << Name_);
+                    << "Module object_code is corrupted for name=" << Name_ << ": " << joinError);
                 return;
             }
-            ModuleArtifact_.WasmData = JoinBlobs(PendingWasmChunks_);
-            ModuleArtifact_.ObjectCode = JoinBlobs(objectChunks);
-            PendingWasmChunks_.clear();
+            ModuleArtifact_.WasmData = std::move(PendingWasmData_);
             Step_ = EStep::ReadLibraryArtifact;
             StartNextLibrary();
             return;
@@ -177,14 +195,23 @@ void TWasmArtifactLoadActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRe
             return;
         }
         case EStep::ReadLibraryWasmChunks: {
-            if (!NTableQuery::ParseArtifactChunksResponse(response, PendingWasmChunks_)) {
+            TVector<TString> wasmChunks;
+            if (!NTableQuery::ParseArtifactChunksResponse(response, wasmChunks)) {
                 ReplyError(TStringBuilder()
                     << "Failed to read library wasm_data chunks for '" << PendingLibraryName_ << "'");
                 return;
             }
-            if (PendingWasmChunks_.size() != PendingLibraryArtifact_.WasmDataChunkCount) {
+            TString joinError;
+            if (!JoinAndVerifyBlobs(
+                    wasmChunks,
+                    PendingLibraryArtifact_.WasmDataChunkCount,
+                    PendingLibraryArtifact_.WasmDataSize,
+                    {},
+                    PendingWasmData_,
+                    joinError))
+            {
                 ReplyError(TStringBuilder()
-                    << "Library wasm_data chunk_count mismatch for '" << PendingLibraryName_ << "'");
+                    << "Library '" << PendingLibraryName_ << "' wasm_data is corrupted: " << joinError);
                 return;
             }
             Step_ = EStep::ReadLibraryObjectChunks;
@@ -198,9 +225,18 @@ void TWasmArtifactLoadActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRe
                     << "Failed to read library object_code chunks for '" << PendingLibraryName_ << "'");
                 return;
             }
-            if (objectChunks.size() != PendingLibraryArtifact_.ObjectCodeChunkCount) {
+            TString objectCode;
+            TString joinError;
+            if (!JoinAndVerifyBlobs(
+                    objectChunks,
+                    PendingLibraryArtifact_.ObjectCodeChunkCount,
+                    PendingLibraryArtifact_.ObjectCodeSize,
+                    {},
+                    objectCode,
+                    joinError))
+            {
                 ReplyError(TStringBuilder()
-                    << "Library object_code chunk_count mismatch for '" << PendingLibraryName_ << "'");
+                    << "Library '" << PendingLibraryName_ << "' object_code is corrupted: " << joinError);
                 return;
             }
             const auto format = PendingLibraryArtifact_.Format == "wat" || PendingLibraryArtifact_.Format == "wast"
@@ -208,12 +244,9 @@ void TWasmArtifactLoadActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRe
                 : NYdb::NWasm::EBytecodeFormat::Binary;
             Libraries_.push_back(NWasm::TNamedModuleBytecode{
                 .Name = PendingLibraryName_,
-                .Bytecode = NWasm::MakeModuleBytecode(
-                    JoinBlobs(PendingWasmChunks_),
-                    JoinBlobs(objectChunks),
-                    format),
+                .Bytecode = NWasm::MakeModuleBytecode(PendingWasmData_, objectCode, format),
             });
-            PendingWasmChunks_.clear();
+            PendingWasmData_.clear();
             ++NextLibraryIndex_;
             Step_ = EStep::ReadLibraryArtifact;
             StartNextLibrary();

@@ -150,6 +150,41 @@ TBridgeKinds BridgeKindsFromType(const TType* type, const ITypeInfoHelper* helpe
     }
 }
 
+const TType* BridgePeelOptional(const TType* type, const ITypeInfoHelper* helper) {
+    if (!helper) {
+        return type;
+    }
+    for (ui32 depth = 0; type && depth < MaxBridgeOptionalDepth; ++depth) {
+        const TOptionalTypeInspector optional(*helper, type);
+        if (!optional) {
+            break;
+        }
+        type = optional.GetItemType();
+    }
+    return type;
+}
+
+std::optional<EBridgeKindFamily> BridgeNodeValueFamily(
+    const TWasmBridgeNodeTable::TNode& node,
+    const ITypeInfoHelper* helper)
+{
+    const auto family = BridgeKindFamily(node.ValueKind);
+    if (family != EBridgeKindFamily::Optional) {
+        return family;
+    }
+    if (node.InnerValueKind) {
+        return BridgeKindFamily(*node.InnerValueKind);
+    }
+    if (helper && node.Type) {
+        // Registered from a declared Optional<container>, or handed in as an
+        // optional argument: the kind stopped at the wrapper, the type names
+        // the payload.
+        return BridgeKindFamily(
+            BridgeKindsFromType(BridgePeelOptional(node.Type, helper), helper).Value);
+    }
+    return std::nullopt;
+}
+
 TWasmBridgeNodeTable::TWasmBridgeNodeTable(ui64 generation)
     : Generation_(generation)
 {

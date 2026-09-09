@@ -127,7 +127,7 @@ public:
         if constexpr (MockTopicSession) {
             Runtime.GrabEdgeEvent<TEvMockPqEvents::TEvCreateSession>(PqGatewayNotifier, TDuration::Seconds(GrabTimeoutSec));
             MockReadSession = MockPqGateway->ExtractReadSession(TopicPath);
-            MockReadSession->AddStartSessionEvent();
+            MockReadSession->AddStartSessionEvent(42);
         }
     }
 

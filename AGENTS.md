@@ -21,10 +21,7 @@
 - No force rebuild
 - Use `2>&1 | tail` for test output
 
-Test filters should include part of full test name. Full test name format depends on test framework:
-
-- For C++ unit test: `<suite name>::<test name>`
-- For python pytest: `<file>.<class>.<test name>[<fixture params>]`
+- Test name formats for `-F`: [`ydb/agents/TESTS.md`](ydb/agents/TESTS.md)
 
 ## C++
 

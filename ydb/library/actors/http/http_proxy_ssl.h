@@ -109,7 +109,8 @@ struct TSslHelpers {
         if (cert == nullptr) {
             return false;
         }
-        if (SSL_CTX_use_certificate(ctx.Get(), cert.Release()) <= 0) {
+        // SSL_CTX_use_certificate takes its own reference, so the holder keeps ours.
+        if (SSL_CTX_use_certificate(ctx.Get(), cert.Get()) <= 0) {
             return false;
         }
         SSL_CTX_clear_chain_certs(ctx.Get());
@@ -131,7 +132,8 @@ struct TSslHelpers {
             return false;
         }
         TSslHolder<EVP_PKEY> pkey(PEM_read_bio_PrivateKey(bio.Get(), nullptr, nullptr, nullptr));
-        if (SSL_CTX_use_PrivateKey(ctx.Get(), pkey.Release()) <= 0) {
+        // SSL_CTX_use_PrivateKey takes its own reference, so the holder keeps ours.
+        if (SSL_CTX_use_PrivateKey(ctx.Get(), pkey.Get()) <= 0) {
             return false;
         }
         return true;

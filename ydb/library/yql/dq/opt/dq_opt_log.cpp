@@ -13,6 +13,8 @@
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <yql/essentials/core/dq_integration/yql_dq_optimization.h>
 
+#include <algorithm>
+
 using namespace NYql::NNodes;
 
 namespace NYql::NDq {
@@ -113,6 +115,119 @@ TExprBase DqRewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TP
     return result;
 }
 
+static bool HasNonCompactFullAggregate(const TCoCalcOverWindowTuple& calc, TExprContext& ctx) {
+    if (!calc.SortSpec().Maybe<TCoVoid>() ||
+        !calc.SessionSpec().Maybe<TCoVoid>() ||
+        !calc.SessionColumns().Empty())
+    {
+        return false;
+    }
+
+    for (const auto& frame : calc.Frames()) {
+        if (frame.Maybe<TCoWinFilter>()) {
+            break;
+        }
+
+        const auto settings = TWindowFrameSettings::Parse(frame.Ref(), ctx);
+        if (settings.IsCompact() || !settings.IsFullPartition()) {
+            continue;
+        }
+
+        for (ui32 i = 1; i < frame.Ref().ChildrenSize(); ++i) {
+            const auto item = frame.Ref().Child(i);
+            if (item->Head().Content().StartsWith("_yql_partition_rows_")) {
+                continue;
+            }
+            if (item->Child(1)->IsCallable("WindowTraits")) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+static bool DependsOnlyOnInput(const TCoCalcOverWindowTuple& calc, const TStructExprType& inputItemType) {
+    for (const auto& key : calc.Keys()) {
+        if (!inputItemType.FindItem(key.Value())) {
+            return false;
+        }
+    }
+
+    if (const auto sort = calc.SortSpec().Maybe<TCoSortTraits>()) {
+        const auto& sortItemType = *sort.Cast().ListType().Ref().GetTypeAnn()
+            ->Cast<TTypeExprType>()->GetType()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        if (!IsFieldSubset(sortItemType, inputItemType)) {
+            return false;
+        }
+    }
+
+    for (const auto& frame : calc.Frames()) {
+        if (frame.Maybe<TCoWinFilter>()) {
+            return false;
+        }
+
+        for (ui32 i = 1; i < frame.Ref().ChildrenSize(); ++i) {
+            const auto tuple = frame.Ref().Child(i);
+            const auto traits = tuple->Child(1);
+            if (!traits->IsCallable("WindowTraits")) {
+                continue;
+            }
+
+            if (tuple->ChildrenSize() == 3) {
+                if (!inputItemType.FindItem(tuple->Child(2)->Content())) {
+                    return false;
+                }
+            } else {
+                const auto& traitsItemType = *traits->Head().GetTypeAnn()
+                    ->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                if (!IsFieldSubset(traitsItemType, inputItemType)) {
+                    return false;
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
+static TMaybe<TExprBase> DqExpandNonCompactFullAggregate(
+    TExprBase node,
+    TExprContext& ctx,
+    TTypeAnnotationContext& typesCtx)
+{
+    const auto input = node.Cast<TCoInputBase>().Input();
+    const auto inputItemType = GetSeqItemType(input.Ref().GetTypeAnn());
+    if (!inputItemType || inputItemType->GetKind() != ETypeAnnotationKind::Struct) {
+        return {};
+    }
+
+    auto calcs = ExtractCalcsOverWindow(node.Ptr(), ctx);
+    auto candidate = calcs.end();
+    for (auto it = calcs.begin(); it != calcs.end(); ++it) {
+        const TCoCalcOverWindowTuple calc(*it);
+        if (HasWinFilters(calc)) {
+            break;
+        }
+        if (HasNonCompactFullAggregate(calc, ctx) &&
+            DependsOnlyOnInput(calc, *inputItemType->Cast<TStructExprType>()))
+        {
+            candidate = it;
+            break;
+        }
+    }
+
+    if (candidate == calcs.end()) {
+        return {};
+    }
+
+    std::rotate(calcs.begin(), candidate, candidate + 1);
+    const auto reordered = BuildCalcOverWindowGroup(node.Pos(), input.Ptr(), calcs, ctx);
+    reordered->SetTypeAnn(node.Ref().GetTypeAnn());
+    const auto expanded = ExpandCalcOverWindow(reordered, ctx, typesCtx);
+    return TExprBase(KeepColumnOrder(expanded, node.Ref(), ctx, typesCtx));
+}
+
 /*
  * Enforce PARTITION COMPACT BY as it avoids generating join in favour of Fold1Map.
  */
@@ -155,9 +270,21 @@ TExprBase DqEnforceCompactPartition(TExprBase node, TExprList frames, TExprConte
     return node;
 }
 
-TExprBase DqExpandWindowFunctions(TExprBase node, TExprContext& ctx, TTypeAnnotationContext& typesCtx, bool enforceCompact) {
+TExprBase DqExpandWindowFunctions(
+    TExprBase node,
+    TExprContext& ctx,
+    TTypeAnnotationContext& typesCtx,
+    bool enforceCompact,
+    bool expandNonCompactFullAggregates)
+{
     if (node.Maybe<TCoCalcOverWindowBase>() || node.Maybe<TCoCalcOverWindowGroup>()) {
         if (enforceCompact) {
+            if (expandNonCompactFullAggregates) {
+                if (auto expanded = DqExpandNonCompactFullAggregate(node, ctx, typesCtx)) {
+                    return *expanded;
+                }
+            }
+
             auto calcs = ExtractCalcsOverWindow(node.Ptr(), ctx);
             bool changed = false;
             for (auto& c : calcs) {

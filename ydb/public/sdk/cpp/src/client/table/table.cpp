@@ -3516,6 +3516,9 @@ TMultiColumnStatisticsDescription TMultiColumnStatisticsDescription::FromProto(c
         case Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH:
             types.push_back(EMultiColumnStatisticsType::CountMinSketch);
             break;
+        case Ydb::Table::TableMultiColumnStatistics::EQ_HEIGHT_HISTOGRAM:
+            types.push_back(EMultiColumnStatisticsType::EqHeightHistogram);
+            break;
         default:
             types.push_back(EMultiColumnStatisticsType::Unknown);
             break;
@@ -3545,6 +3548,9 @@ void TMultiColumnStatisticsDescription::SerializeTo(Ydb::Table::TableMultiColumn
         switch (type) {
         case EMultiColumnStatisticsType::CountMinSketch:
             proto.add_types(Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH);
+            break;
+        case EMultiColumnStatisticsType::EqHeightHistogram:
+            proto.add_types(Ydb::Table::TableMultiColumnStatistics::EQ_HEIGHT_HISTOGRAM);
             break;
         case EMultiColumnStatisticsType::Unknown:
             proto.add_types(Ydb::Table::TableMultiColumnStatistics::STATISTIC_TYPE_UNSPECIFIED);

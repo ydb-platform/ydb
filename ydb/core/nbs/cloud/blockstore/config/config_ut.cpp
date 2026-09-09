@@ -28,6 +28,9 @@ Y_UNIT_TEST_SUITE(TStorageConfigTest)
         UNIT_ASSERT_VALUES_EQUAL(4u, config.GetVhostThreadsCount());
         UNIT_ASSERT_VALUES_EQUAL(4u, config.GetVhostQueuesCount());
         UNIT_ASSERT(config.GetEnableChecksums());
+        UNIT_ASSERT(!config.GetCheckChecksumBeforeWrite());
+        UNIT_ASSERT(!config.GetCheckChecksumWhenRead());
+        UNIT_ASSERT_VALUES_EQUAL(10u, config.GetIdleSpinUs());
         UNIT_ASSERT_VALUES_EQUAL(200, config.GetCopyRangeBandwidthMbs());
     }
 
@@ -42,6 +45,9 @@ Y_UNIT_TEST_SUITE(TStorageConfigTest)
         proto.SetVhostThreadsCount(12);
         proto.SetVhostQueuesCount(16);
         proto.SetEnableChecksums(false);
+        proto.SetCheckChecksumBeforeWrite(true);
+        proto.SetCheckChecksumWhenRead(true);
+        proto.SetIdleSpinUs(42);
         proto.SetCopyRangeBandwidthMbs(100);
 
         TStorageConfig config{proto};
@@ -58,6 +64,9 @@ Y_UNIT_TEST_SUITE(TStorageConfigTest)
         UNIT_ASSERT_VALUES_EQUAL(12u, config.GetVhostThreadsCount());
         UNIT_ASSERT_VALUES_EQUAL(16u, config.GetVhostQueuesCount());
         UNIT_ASSERT(!config.GetEnableChecksums());
+        UNIT_ASSERT(config.GetCheckChecksumBeforeWrite());
+        UNIT_ASSERT(config.GetCheckChecksumWhenRead());
+        UNIT_ASSERT_VALUES_EQUAL(42u, config.GetIdleSpinUs());
         UNIT_ASSERT_VALUES_EQUAL(100u, config.GetCopyRangeBandwidthMbs());
     }
 

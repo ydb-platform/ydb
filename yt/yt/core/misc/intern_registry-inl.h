@@ -4,6 +4,8 @@
 #include "intern_registry.h"
 #endif
 
+#include <util/system/yield.h>
+
 #include "serialize.h"
 
 namespace NYT {
@@ -30,15 +32,25 @@ TInternedObject<T> TInternRegistry<T>::Intern(U&& data)
     if (TInternRegistry<T>::GetDefault()->GetData() == data) {
         return TInternedObject<T>();
     }
-    auto guard = Guard(Lock_);
-    typename TProfilerSet::insert_ctx context;
-    if (auto it = Registry_.find(data, context)) {
-        return TInternedObject<T>(MakeStrong(*it));
-    } else {
-        auto internedData = TInternRegistryTraits<T>::ConstructData(this, std::forward<U>(data));
-        it = Registry_.insert_direct(internedData.Get(), context);
-        internedData->Iterator_ = it;
-        return TInternedObject<T>(std::move(internedData));
+
+    // The found entry may be pending destruction; retry until its destructor erases it.
+    while (true) {
+        {
+            auto guard = Guard(Lock_);
+            typename TProfilerSet::insert_ctx context;
+            if (auto it = Registry_.find(data, context)) {
+                if (auto internedData = it->Lock()) {
+                    return TInternedObject<T>(std::move(internedData));
+                }
+            } else {
+                auto internedData = TInternRegistryTraits<T>::ConstructData(this, std::forward<U>(data));
+                it = Registry_.insert_direct(MakeWeak(internedData), context);
+                internedData->Iterator_ = it;
+                return TInternedObject<T>(std::move(internedData));
+            }
+        }
+
+        ThreadYield();
     }
 }
 
@@ -66,9 +78,9 @@ void TInternRegistry<T>::OnInternedDataDestroyed(TInternedObjectData<T>* data)
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-size_t TInternRegistry<T>::THash::operator()(const TInternedObjectData<T>* internedData) const
+size_t TInternRegistry<T>::THash::operator()(const TWeakPtr<TInternedObjectData<T>>& internedData) const
 {
-    return internedData->GetHash();
+    return internedData.Get()->GetHash();
 }
 
 template <class T>
@@ -81,18 +93,18 @@ size_t TInternRegistry<T>::THash::operator()(const T& data) const
 
 template <class T>
 bool TInternRegistry<T>::TEqual::operator()(
-    const TInternedObjectData<T>* lhs,
-    const TInternedObjectData<T>* rhs) const
+    const TWeakPtr<TInternedObjectData<T>>& lhs,
+    const TWeakPtr<TInternedObjectData<T>>& rhs) const
 {
     return lhs == rhs;
 }
 
 template <class T>
 bool TInternRegistry<T>::TEqual::operator()(
-    const TInternedObjectData<T>* lhs,
+    const TWeakPtr<TInternedObjectData<T>>& lhs,
     const T& rhs) const
 {
-    return lhs->GetData() == rhs;
+    return lhs.Get()->GetData() == rhs;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

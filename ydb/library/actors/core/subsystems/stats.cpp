@@ -8,36 +8,45 @@
 
 
 namespace NActors {
+    namespace {
+        class TActorSystemStatsSubSystemImpl final : public TActorSystemStatsSubSystem {
+        public:
+            explicit TActorSystemStatsSubSystemImpl(TCpuManager* cpuManager)
+                : CpuManager(cpuManager)
+            {
+            }
 
-    TActorSystemStatsSubSystem::TActorSystemStatsSubSystem(TCpuManager *cpuManager)
-        : CpuManager(cpuManager)
-    {
-    }
+            void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats,
+                    TVector<TExecutorThreadStats>& statsCopy) const override {
+                CpuManager->GetPoolStats(poolId, poolStats, statsCopy);
+            }
 
-    void TActorSystemStatsSubSystem::GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
-        CpuManager->GetPoolStats(poolId, poolStats, statsCopy);
-    }
+            void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats,
+                    TVector<TExecutorThreadStats>& statsCopy,
+                    TVector<TExecutorThreadStats>& sharedStats) const override {
+                CpuManager->GetPoolStats(poolId, poolStats, statsCopy, sharedStats);
+            }
 
-    void TActorSystemStatsSubSystem::GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy,
-            TVector<TExecutorThreadStats>& sharedStats) const {
-        CpuManager->GetPoolStats(poolId, poolStats, statsCopy, sharedStats);
-    }
+            void GetExecutorPoolState(i16 poolId, TExecutorPoolState& state) const override {
+                CpuManager->GetExecutorPoolState(poolId, state);
+            }
 
-    void TActorSystemStatsSubSystem::GetExecutorPoolState(i16 poolId, TExecutorPoolState& state) const {
-        CpuManager->GetExecutorPoolState(poolId, state);
-    }
+            void GetExecutorPoolStates(std::vector<TExecutorPoolState>& states) const override {
+                CpuManager->GetExecutorPoolStates(states);
+            }
 
-    void TActorSystemStatsSubSystem::GetExecutorPoolStates(std::vector<TExecutorPoolState>& states) const {
-        CpuManager->GetExecutorPoolStates(states);
-    }
+            void GetHarmonizerStats(THarmonizerStats& stats) const override {
+                CpuManager->GetHarmonizerStats(stats);
+            }
 
-    void TActorSystemStatsSubSystem::GetHarmonizerStats(THarmonizerStats &stats) const {
-        return CpuManager->GetHarmonizerStats(stats);
+        private:
+            TCpuManager* const CpuManager;
+        };
     }
 
 
     std::unique_ptr<TActorSystemStatsSubSystem> MakeActorSystemStatsSubSystem(TCpuManager *cpuManager) {
-        return std::make_unique<TActorSystemStatsSubSystem>(cpuManager);
+        return std::make_unique<TActorSystemStatsSubSystemImpl>(cpuManager);
     }
 
     const TActorSystemStatsSubSystem& GetActorSystemStats(const TActorSystem& actorSystem) {

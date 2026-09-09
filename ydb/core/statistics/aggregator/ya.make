@@ -35,6 +35,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/statistics/database
     ydb/library/yql/udfs/statistics_internal
+    yql/essentials/core/histogram
     yql/essentials/core/minsketch
 )
 

@@ -75,8 +75,9 @@ message TNodeFilter {
         TNodeTypeList OnlyTypes = 4;
     }
 
-    // When absent, dynamic nodes are not filtered by tenant. This filter may be
-    // combined with an ID filter and a type filter.
+    // When absent, dynamic nodes are not filtered by tenant. Every dynamic node
+    // is matched against its single tenant path. Serverless databases are out of
+    // scope. This filter may be combined with an ID filter and a type filter.
     oneof TenantFilter {
         // Tenant filters only apply to dynamic nodes.
         // When set action is only applied to dynamic nodes.
@@ -211,7 +212,7 @@ message TClusterWorkloadConfig {
     optional uint64 RandomSeed = 3;
 
     // Rolling aggregate limit across all RestartNode configurations.
-    // The application default is 3.
+    // When absent, node restarts are not rate limited.
     optional uint32 MaxNodeRestartsPerMinute = 4;
 
     TClusterWorkloadActions Actions = 10;

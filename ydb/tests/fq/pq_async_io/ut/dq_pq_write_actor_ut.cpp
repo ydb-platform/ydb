@@ -78,6 +78,7 @@ Y_UNIT_TEST_SUITE(TPqWriterTest) {
         PQCreateStream(topicName);
 
         TSinkState state1;
+        NDqProto::TCheckpoint checkpoint;
         {
             TPqIoTestFixture setup;
             setup.InitAsyncOutput(topicName);
@@ -86,7 +87,7 @@ Y_UNIT_TEST_SUITE(TPqWriterTest) {
             setup.AsyncOutputWrite(data1);
 
             const std::vector<TString> data2 = { "2", "3" };
-            auto checkpoint = CreateCheckpoint();
+            checkpoint = CreateCheckpoint();
             auto future = setup.CaSetup->AsyncOutputPromises->StateSaved.GetFuture();
             setup.AsyncOutputWrite(data2, checkpoint);
 
@@ -97,7 +98,7 @@ Y_UNIT_TEST_SUITE(TPqWriterTest) {
         {
             TPqIoTestFixture setup;
             setup.InitAsyncOutput(topicName);
-            setup.LoadSink(state1);
+            setup.LoadSink(state1, checkpoint);
 
             const std::vector<TString> data3 = { "4", "5" };
             setup.AsyncOutputWrite(data3);
@@ -110,7 +111,7 @@ Y_UNIT_TEST_SUITE(TPqWriterTest) {
         {
             TPqIoTestFixture setup;
             setup.InitAsyncOutput(topicName);
-            setup.LoadSink(state1);
+            setup.LoadSink(state1, checkpoint);
 
             const std::vector<TString> data4 = { "4", "5" };
             setup.AsyncOutputWrite(data4); // This write should be deduplicated

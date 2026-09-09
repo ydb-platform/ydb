@@ -22,7 +22,7 @@ namespace NKqp {
 
 using namespace NYql;
 
-enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, Aggregate, Limit, Sort, UnionAll, TableLookup, IndexLookupJoin, CBOTree, Root };
+enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, DependentJoin, Aggregate, GroupingSets, Limit, Sort, UnionAll, TableLookup, IndexLookupJoin, CBOTree, TableEffect, Root };
 
 // clang-format off
 #define PHASE_ENUM(X) \
@@ -123,7 +123,6 @@ struct TPhysicalOpProps {
     std::optional<int> StageId;
     std::optional<TString> Algorithm;
     std::optional<TOrderEnforcer> OrderEnforcer;
-    bool EnsureAtMostOne = false;
 
     std::optional<TRBOMetadata> Metadata;
     std::optional<TRBOStatistics> Statistics;
@@ -150,7 +149,6 @@ private:
         StageId = other.StageId;
         Algorithm = other.Algorithm;
         OrderEnforcer = other.OrderEnforcer;
-        EnsureAtMostOne = other.EnsureAtMostOne;
         Metadata = other.Metadata;
         Statistics = other.Statistics;
         JoinAlgo = other.JoinAlgo;
@@ -623,6 +621,25 @@ protected:
     void ComputeOutputIUs() override;
 };
 
+class TOpGroupingSets: public IUnaryOperator {
+public:
+    TOpGroupingSets(TIntrusivePtr<TOpAggregate> input, TVector<TVector<TInfoUnit>> groupingSets, TPositionHandle pos);
+
+    const TVector<TVector<TInfoUnit>>& GetGroupingSets() const {
+        return GroupingSets;
+    }
+
+    virtual TString ToString(TExprContext& ctx) override;
+    // This op is not present is explain, but we have to define a function, because it's a pure virtual.
+    virtual TString GetExplainName() const override { return "GroupingSets"; }
+
+protected:
+    void ComputeOutputIUs() override;
+
+private:
+    TVector<TVector<TInfoUnit>> GroupingSets;
+};
+
 class TOpFilter: public IUnaryOperator {
 public:
     TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& filterExpr);
@@ -686,6 +703,40 @@ public:
     TString JoinKind;
     TVector<std::pair<TInfoUnit, TInfoUnit>> JoinKeys;
     TVector<TExpression> JoinFilters;
+
+protected:
+    void ComputeOutputIUs() override;
+};
+
+/**
+ * Dependent join based on Neumann "Unnesting Arbitrary Queries".
+ *
+ */
+class TOpDependentJoin: public IBinaryOperator {
+public:
+    TOpDependentJoin(TIntrusivePtr<IOperator> domain, TIntrusivePtr<IOperator> input, const TVector<TInfoUnit>& dependencies, TPositionHandle pos);
+
+    virtual void PropagateLiveness(ILivenessContext& ctx) override;
+
+    virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
+    virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
+
+    virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "DependentJoin"; }
+
+    TIntrusivePtr<IOperator>& GetDomain() {
+        return GetLeftInput();
+    }
+
+    TIntrusivePtr<IOperator>& GetInput() {
+        return GetRightInput();
+    }
+
+    void SetInput(TIntrusivePtr<IOperator> newInput) {
+        SetRightInput(std::move(newInput));
+    }
+
+    TVector<TInfoUnit> Dependencies;
 
 protected:
     void ComputeOutputIUs() override;
@@ -902,6 +953,55 @@ protected:
 
 private:
     void RebuildChildren();
+};
+
+// Table Effects operator inserts/updates/deletes rows based on input tuples
+
+enum class EEffectType : ui32 {
+    InsertRows,
+    InsertRowsIndex,
+    UpdateRows,
+    UpdateRowsIndex,
+    UpsertRows,
+    UpsertRowsIndex,
+    DeleteRows,
+    DeleteRowsIndex
+};
+
+struct TEffectOptions {
+    std::optional<TVector<TString>> Columns;
+    std::optional<TVector<TString>> ReturningColumns;
+    std::optional<TVector<TString>> DefaultColumns;
+    std::optional<TString> OnConflict;
+    std::optional<bool> IsBatch;
+    std::optional<TVector<TExprNode::TPtr>> Settings;
+};
+
+class TOpTableEffect: public IUnaryOperator {
+
+public:
+    TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table, EEffectType type, TEffectOptions options);
+    virtual TString GetExplainName() const override;
+    virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
+
+    virtual void PropagateLiveness(ILivenessContext& ctx) override;
+    //virtual void RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) override;
+    //virtual void RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) override;
+    virtual TString ToString(TExprContext& ctx) override;
+
+    TExprNode::TPtr BuildSettings(TExprContext& ctx);
+
+    //virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
+    //virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
+
+    TExprNode::TPtr Table;
+    EEffectType EffectType;
+    TEffectOptions Options;
+    TVector<TInfoUnit> OutputIUs;
+    TVector<TInfoUnit> UsedIUs;
+
+protected:
+    void ComputeOutputIUs() override;
 };
 
 // End-of-traversal sentinel for TOpIterator

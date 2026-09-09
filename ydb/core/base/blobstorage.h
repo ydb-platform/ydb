@@ -416,6 +416,8 @@ struct TEvBlobStorage {
         EvRecoveryLogCutDone,
         EvFreshCompactionStarted,
         EvGetLogoBlobIndexStatResponseAck,
+        EvHugeQueryStripeChunks,
+        EvHugeStripeChunks,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -515,6 +517,7 @@ struct TEvBlobStorage {
         EvProxySessionsState,
         EvBunchOfEvents,
         EvDeadline,
+        EvSetProxyDormant,
 
         // blobstorage controller interface
         EvControllerRegisterNode                    = 0x10031602,
@@ -1547,11 +1550,13 @@ struct TEvBlobStorage {
         , TEvResultCommon
     {
         bool IsTabletStorageInfoVersionObsolete = false;
+        ui32 ActualGeneration = 0;
 
         TEvBlockResult(NKikimrProto::EReplyStatus status,
-                bool isTabletStorageInfoVersionObsolete = false)
+                bool isTabletStorageInfoVersionObsolete = false, ui32 actualGeneration = 0)
             : TEvResultCommon(status)
             , IsTabletStorageInfoVersionObsolete(isTabletStorageInfoVersionObsolete)
+            , ActualGeneration(actualGeneration)
         {}
 
         TString Print(bool isFull) const {
@@ -1559,6 +1564,7 @@ struct TEvBlobStorage {
             TStringStream str;
             str << "TEvBlockResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
             str << " IsTabletStorageInfoVersionObsolete# " << IsTabletStorageInfoVersionObsolete;
+            str << " ActualGeneration# " << ActualGeneration;
             if (ErrorReason.size()) {
                 str << " ErrorReason# \"" << ErrorReason << "\"";
             }

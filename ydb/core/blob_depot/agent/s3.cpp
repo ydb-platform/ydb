@@ -1,6 +1,7 @@
 #include "agent_impl.h"
 
 #include <ydb/core/base/services/blobstorage_service_id.h>
+#include <ydb/core/blob_depot/s3_error.h>
 #include <ydb/core/blob_depot/s3_router_events.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/wrappers/abstract.h>
@@ -9,12 +10,6 @@
 #define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 namespace NKikimr::NBlobDepot {
-
-    static bool IsSlowDown(const Aws::S3::S3Error& error) {
-        return error.GetErrorType() == Aws::S3::S3Errors::SLOW_DOWN
-            || error.GetExceptionName() == "SlowDown"
-            || error.GetExceptionName() == "TooManyRequests";
-    }
 
     void TBlobDepotAgent::InitS3(const TString& name) {
         if (S3BackendSettings) {
@@ -30,16 +25,26 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::TQuery::IssueReadS3(const TString& key, ui32 offset, ui32 len, TFinishCallback finish, ui64 readId) {
-        Agent.IssueOrEnqueueS3Read(TPendingS3Read{
+        TPendingS3Read read{
             .Key = key,
             .Offset = offset,
             .Len = len,
             .Finish = std::move(finish),
             .ReadId = readId,
-        });
+            .Span = NWilson::TSpan(TWilsonBlobDepot::AgentInternals, Span.GetTraceId(),
+                "BlobDepotAgent.ReadS3", NWilson::EFlags::AUTO_END),
+        };
+
+        if (read.Span) {
+            read.Span.Attribute("size", static_cast<i64>(len));
+        }
+
+        Agent.IssueOrEnqueueS3Read(std::move(read));
     }
 
     void TBlobDepotAgent::IssueOrEnqueueS3Read(TPendingS3Read&& read) {
+        ApplyMaxS3GetsInFlight();
+
         const TMonotonic now = TActivationContext::Monotonic();
         const bool timeThrottled = now < S3GetThrottleUntil;
         const bool concurrencyThrottled = S3GetsInFlight >= CurrentMaxS3GetsInFlight;
@@ -94,7 +99,7 @@ namespace NKikimr::NBlobDepot {
                     ++*Agent.S3GetsOk;
                     *Agent.S3GetBytesOk += msg.Body.size();
                     const ui64 bytes = msg.Body.size();
-                    Read.Finish(std::move(msg.Body), "");
+                    Read.Complete(std::move(msg.Body), "");
                     Agent.OnS3GetCompleted(/*success=*/true, bytes);
                     PassAway();
                     return;
@@ -104,7 +109,7 @@ namespace NKikimr::NBlobDepot {
                 const auto& error = msg.GetError();
                 Agent.IncS3HttpErrorCounter("Gets", static_cast<int>(error.GetResponseCode()));
 
-                if (IsSlowDown(error)) {
+                if (IsS3SlowDown(error)) {
                     ++*Agent.S3GetsSlowDown;
                     YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "S3_get_slow_down",
                         {"marker", "BDEV43"},
@@ -121,7 +126,7 @@ namespace NKikimr::NBlobDepot {
                     if (Read.SlowDownRetries >= MaxS3GetSlowDownRetries) {
                         const TString reason = TStringBuilder()
                             << "too many S3 SlowDown retries: " << error.GetMessage();
-                        Read.Finish(std::nullopt, reason.c_str());
+                        Read.Complete(std::nullopt, reason.c_str());
                     } else {
                         ++Read.SlowDownRetries;
                         Agent.IssueOrEnqueueS3Read(std::move(Read));
@@ -131,9 +136,9 @@ namespace NKikimr::NBlobDepot {
                 }
 
                 if (error.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_KEY) {
-                    Read.Finish(std::nullopt, "data has disappeared from S3");
+                    Read.Complete(std::nullopt, "data has disappeared from S3");
                 } else {
-                    Read.Finish(std::nullopt, error.GetMessage().c_str());
+                    Read.Complete(std::nullopt, error.GetMessage().c_str());
                 }
                 Agent.OnS3GetCompleted(/*success=*/false, 0);
                 PassAway();
@@ -145,7 +150,7 @@ namespace NKikimr::NBlobDepot {
                     {"agentId", Agent.LogId},
                     {"readId", Read.ReadId});
                 ++*Agent.S3GetsError;
-                Read.Finish(std::nullopt, "wrapper actor terminated");
+                Read.Complete(std::nullopt, "wrapper actor terminated");
                 Agent.OnS3GetCompleted(/*success=*/false, 0);
                 PassAway();
             }
@@ -222,14 +227,16 @@ namespace NKikimr::NBlobDepot {
         --S3GetsInFlight;
         *S3GetsInFlightCounter = S3GetsInFlight;
 
-        if (success && CurrentMaxS3GetsInFlight < MaxS3GetsInFlight) {
+        const ui32 maxS3GetsInFlight = MaxS3GetsInFlight();
+        if (success && CurrentMaxS3GetsInFlight < maxS3GetsInFlight) {
             if (++ConsecutiveSuccessfulGetBatches >= SuccessesPerGetConcurrencyStepUp) {
                 ConsecutiveSuccessfulGetBatches = 0;
                 ++CurrentMaxS3GetsInFlight;
-                if (CurrentMaxS3GetsInFlight >= MaxS3GetsInFlight) {
-                    CurrentMaxS3GetsInFlight = MaxS3GetsInFlight;
+                if (CurrentMaxS3GetsInFlight >= maxS3GetsInFlight) {
+                    CurrentMaxS3GetsInFlight = maxS3GetsInFlight;
                     S3GetBackoff.Reset();
                 }
+
                 *S3GetsMaxInFlightCounter = CurrentMaxS3GetsInFlight;
             }
         }
@@ -247,6 +254,8 @@ namespace NKikimr::NBlobDepot {
             }
             return;
         }
+
+        ApplyMaxS3GetsInFlight();
 
         while (!PendingS3Reads.empty() && S3GetsInFlight < CurrentMaxS3GetsInFlight) {
             auto read = std::move(PendingS3Reads.front());
@@ -283,7 +292,7 @@ namespace NKikimr::NBlobDepot {
                     Finish(std::nullopt, false);
                 } else {
                     const auto& error = msg.GetError();
-                    Finish(std::make_optional<TString>(error.GetMessage()), IsSlowDown(error),
+                    Finish(std::make_optional<TString>(error.GetMessage()), IsS3SlowDown(error),
                         static_cast<int>(error.GetResponseCode()));
                 }
             }

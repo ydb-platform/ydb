@@ -1236,6 +1236,12 @@ class GnuToolchain(Toolchain):
 
         self.env = self.tc.get_env()
 
+        if target.is_tc3xx and self.tc.is_from_arcadia:
+            as_path = self.tc.params.get('as')
+            if as_path:
+                bin_dir = os.path.dirname(as_path)
+                self.env.setdefault('PATH', []).insert(0, bin_dir)
+
         self.env_go = {}
         if self.tc.is_clang and not self.tc.is_system_cxx:
             self.env_go = {'PATH': ['{}/bin'.format(self.tc.name_marker)]}

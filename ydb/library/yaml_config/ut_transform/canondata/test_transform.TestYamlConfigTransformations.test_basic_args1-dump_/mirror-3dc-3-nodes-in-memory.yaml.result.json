@@ -1465,9 +1465,5 @@
               }
           }
         ]
-    },
-  "TableServiceConfig":
-    {
-      "SqlVersion":1
     }
 }

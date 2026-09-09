@@ -314,6 +314,10 @@ void TProgramFactory::SetUdfResolverLogfile(const TString& path) {
     UdfResolverLogfile_ = path;
 }
 
+void TProgramFactory::SetUdfBridgeBinaryPath(const TString& path) {
+    BridgeBinaryPath_ = path;
+}
+
 void TProgramFactory::SetUrlListerManager(IUrlListerManagerPtr urlListerManager) {
     UrlListerManager_ = std::move(urlListerManager);
 }
@@ -354,7 +358,7 @@ TProgramPtr TProgramFactory::Create(
                         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
                         GatewaysConfig_ ? MakeHolder<TGatewaysConfig>(*GatewaysConfig_) : nullptr,
                         filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, AutoUseYqlLibs_, ArrowResolver_, hiddenMode,
-                        qContext, RemoteLayersProviders_);
+                        qContext, RemoteLayersProviders_, BridgeBinaryPath_);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -389,7 +393,8 @@ TProgram::TProgram(
     IArrowResolver::TPtr arrowResolver,
     EHiddenMode hiddenMode,
     const TQContext& qContext,
-    THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders)
+    THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders,
+    TString bridgeBinaryPath)
     : IssueReportTarget_(std::move(issueReportTarget))
     , FunctionRegistry_(functionRegistry)
     , RandomProvider_(std::move(randomProvider))
@@ -419,6 +424,7 @@ TProgram::TProgram(
     , ResultType_(IDataProvider::EResultFormat::Yson)
     , ResultFormat_(NYson::EYsonFormat::Binary)
     , OutputFormat_(NYson::EYsonFormat::Pretty)
+    , BridgeBinaryPath_(std::move(bridgeBinaryPath))
     , EnableRangeComputeFor_(enableRangeComputeFor)
     , ArrowResolver_(std::move(arrowResolver))
     , HiddenMode_(hiddenMode)
@@ -548,6 +554,16 @@ void TProgram::SetUseTableMetaFromGraph(bool use) {
     UseTableMetaFromGraph_ = use;
 }
 
+void TProgram::SetOperationTitle(const TString& title) {
+    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+    if (title.Contains("YQL")) {
+        OperationOptions_.Title = title;
+        return;
+    }
+
+    OperationOptions_.Title = (title.empty() ? "" : title + " ") + "[Powered by YQL]";
+}
+
 TTypeAnnotationContextPtr TProgram::GetAnnotationContext() const {
     Y_ENSURE(TypeCtx_, "TypeCtx_ is not created");
     return TypeCtx_;
@@ -560,6 +576,7 @@ TTypeAnnotationContextPtr TProgram::ProvideAnnotationContext(const TString& user
         TypeCtx_->ValidateMode = ValidateMode_;
         TypeCtx_->DisableNativeUdfSupport = DisableNativeUdfSupport_;
         TypeCtx_->UseTableMetaFromGraph = UseTableMetaFromGraph_;
+        TypeCtx_->UdfBridgeBinaryPath = BridgeBinaryPath_;
     }
 
     return TypeCtx_;

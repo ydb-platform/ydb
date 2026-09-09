@@ -62,6 +62,24 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         CheckScriptResults(scriptExecutionOperation, readyOp, db);
     }
 
+    Y_UNIT_TEST_TWIN(ExecuteScriptOnlyCommentsRejected, PerStatementExecution) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableAstCache(true);
+        app.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(PerStatementExecution);
+        auto kikimr = DefaultKikimrRunner({}, app);
+        auto db = kikimr.GetQueryClient();
+
+        for (const auto& query : {"-- empty query", "/* Multi-line\n   comment */"}) {
+            auto operation = db.ExecuteScript(query).ExtractValueSync();
+            UNIT_ASSERT_C(operation.Status().IsSuccess(), query << ": " << operation.Status().GetIssues().ToString());
+
+            auto readyOp = WaitScriptExecutionOperation(operation.Id(), kikimr.GetDriver());
+            UNIT_ASSERT_C(!readyOp.Status().IsSuccess(), query << ": " << readyOp.Status().GetIssues().ToString());
+            UNIT_ASSERT_C(HasIssue(readyOp.Status().GetIssues(), NYql::TIssuesIds::YQL_NO_STATEMENTS),
+                query << ": " << readyOp.Status().GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(ExecuteMultiScript) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
@@ -316,6 +334,15 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         }
         UNIT_ASSERT_VALUES_EQUAL(listed, ScriptExecutionsCount);
         UNIT_ASSERT_EQUAL(ops, listedOps);
+    }
+
+    Y_UNIT_TEST(ListScriptExecutionsInvalidPageToken) {
+        auto kikimr = DefaultKikimrRunner();
+
+        NYdb::NOperation::TOperationClient client(kikimr.GetDriver());
+        auto list = client.List<NYdb::NQuery::TScriptExecutionOperation>(42, "invalid-page-token").ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(list.GetStatus(), EStatus::BAD_REQUEST, list.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(ForgetScriptExecution) {

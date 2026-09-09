@@ -169,7 +169,6 @@ BELONGS ya.make
         absl/strings/internal/ostringstream.cc [1:1]
         absl/strings/internal/ostringstream.h [1:1]
         absl/strings/internal/resize_uninitialized.h [2:2]
-        absl/strings/internal/stl_type_traits.h [1:1]
         absl/strings/internal/str_format/extension.cc [2:2]
         absl/strings/internal/str_format/extension.h [2:2]
         absl/strings/internal/str_format/output.cc [1:1]
@@ -461,6 +460,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        absl/base/internal/hardening.cc [2:2]
         absl/base/internal/hardening.h [2:2]
         absl/functional/bind_back.h [1:1]
         absl/functional/internal/back_binder.h [1:1]
@@ -528,13 +528,13 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        absl/base/internal/cpu_detect.cc [1:1]
+        absl/base/internal/cpu_detect.h [1:1]
         absl/base/internal/cycleclock_config.h [1:1]
         absl/base/internal/unscaledcycleclock_config.h [1:1]
         absl/container/internal/common_policy_traits.h [1:1]
         absl/crc/crc32c.cc [1:1]
         absl/crc/crc32c.h [1:1]
-        absl/crc/internal/cpu_detect.cc [1:1]
-        absl/crc/internal/cpu_detect.h [1:1]
         absl/crc/internal/crc.cc [1:1]
         absl/crc/internal/crc.h [1:1]
         absl/crc/internal/crc32_x86_arm_combined_simd.h [1:1]
@@ -551,6 +551,7 @@ BELONGS ya.make
         absl/crc/internal/non_temporal_arm_intrinsics.h [1:1]
         absl/crc/internal/non_temporal_memcpy.h [1:1]
         absl/functional/any_invocable.h [1:1]
+        absl/functional/any_invocable_test.h [1:1]
         absl/functional/internal/any_invocable.h [1:1]
         absl/log/absl_check.h [1:1]
         absl/log/absl_log.h [1:1]

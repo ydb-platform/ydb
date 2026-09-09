@@ -251,6 +251,35 @@ void TOpJoin::PropagateLiveness(ILivenessContext& ctx) {
     ctx.AddLiveInput(this, 1, rightLive);
 }
 
+void TOpDependentJoin::PropagateLiveness(ILivenessContext& ctx) {
+    const auto& liveOut = ctx.GetLiveOut(this);
+    const auto domainOutput = MakeInfoUnitSet(GetDomain()->GetOutputIUs());
+    const auto inputOutput = MakeInfoUnitSet(GetInput()->GetOutputIUs());
+
+    TInfoUnitSet domainLive;
+    TInfoUnitSet inputLive;
+
+    for (const auto& iu : liveOut) {
+        if (domainOutput.contains(iu)) {
+            AddInfoUnit(domainLive, iu);
+        }
+        if (inputOutput.contains(iu)) {
+            AddInfoUnit(inputLive, iu);
+        }
+    }
+
+    // Keep domain.
+    for (const auto& iu : Dependencies) {
+        AddInfoUnit(domainLive, iu);
+        if (inputOutput.contains(iu)) {
+            AddInfoUnit(inputLive, iu);
+        }
+    }
+
+    ctx.AddLiveInput(this, 0, domainLive);
+    ctx.AddLiveInput(this, 1, inputLive);
+}
+
 void TOpUnionAll::PropagateLiveness(ILivenessContext& ctx) {
     const auto& liveOut = ctx.GetLiveOut(this);
     TInfoUnitSet inputLive;
@@ -331,6 +360,12 @@ void TOpCBOTree::PropagateLiveness(ILivenessContext& ctx) {
     for (ui32 childIndex = 0; childIndex < Children.size(); ++childIndex) {
         ctx.AddLiveInput(this, childIndex, MakeInfoUnitSet(Children[childIndex]->GetOutputIUs()));
     }
+}
+
+void TOpTableEffect::PropagateLiveness(ILivenessContext& ctx) {
+    TInfoUnitSet inputLive;
+    AddInfoUnits(inputLive, UsedIUs);
+    ctx.AddLiveInput(this, 0, inputLive);
 }
 
 void ComputePlanLiveness(TOpRoot& root) {

@@ -485,6 +485,26 @@ using TPageTableAVX2Pref = TPageHashTableImpl<NSimd::TSimdAVX2Traits, true>;
 
 // -----------------------------------------------------------------
 
+Y_UNIT_TEST_SUITE(NeumannHashTableTest) {
+    Y_UNIT_TEST(RequiredMemoryForBuild) {
+        TColumnDesc key;
+        key.Role = EColumnRole::Key;
+        key.DataSize = sizeof(ui32);
+
+        auto layout = TTupleLayout::Create({key});
+        TNeumannTable table(layout.Get());
+
+        constexpr int nItems = 1024;
+        constexpr ui64 directoryEntries = 2049;
+        const ui64 expected = directoryEntries * sizeof(ui64)
+            + static_cast<ui64>(layout->TotalRowSize) * nItems;
+
+        UNIT_ASSERT_VALUES_EQUAL(table.RequiredMemoryForBuild(nItems), expected);
+    }
+}
+
+// -----------------------------------------------------------------
+
 template <typename... Args> struct TTablesCase {
     template <size_t Batch> using TBenchmark = TBenchmark<Batch, Args...>;
 };

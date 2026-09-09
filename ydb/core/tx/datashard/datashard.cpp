@@ -5237,3 +5237,7 @@ void TEvDataShard::TEvProposeTransactionResult::SetStepOrderId(const std::pair<u
 }
 
 } // NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

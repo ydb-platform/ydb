@@ -249,3 +249,7 @@ void TDataShard::CheckStateChange(const TActorContext& ctx) {
 }
 
 }}
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

@@ -319,3 +319,7 @@ TOperation::TPtr NEvWrite::TConvertor::MakeOperation(EOperationKind kind, const 
     }
 }
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

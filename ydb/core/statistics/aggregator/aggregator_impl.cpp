@@ -627,13 +627,20 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeActorResult::TPtr& e
     case EStatus::TableNotFound:
         DeleteStatisticsFromTable();
         return;
-    case EStatus::InternalError:
+    case EStatus::InternalError: {
+        const auto* table = CurrentForceTraversalTable();
         YDB_LOG_WARN("EvAnalyzeActorResult InternalError",
             {"tabletId", TabletID()},
-            {"pathId", TraversalPathId});
+            {"operationId", ForceTraversalOperationId.Quote()},
+            {"database", TraversalDatabase},
+            {"pathId", TraversalPathId},
+            {"tablePath", table ? table->Path : TString()},
+            {"analyzeActorId", ev->Sender},
+            {"issues", ev->Get()->Issues.ToOneLineString()});
         DispatchFinishTraversalTx(
             NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR, std::move(ev->Get()->Issues));
         return;
+    }
     }
 }
 
@@ -1190,11 +1197,21 @@ void TStatisticsAggregator::PersistTraversal(NIceDb::TNiceDb& db) {
 
 void TStatisticsAggregator::StartAnalyzeActor(const TActorContext& ctx, const TString& operationId,
         const TString& database, const TPathId& pathId, const TVector<ui32>& columnTags) {
+    // Clamp oversample to [1, 256] and maxStateBytes to (0, MaxStatisticSize].
+    const ui32 oversampleFactor = std::max<ui32>(1, std::min<ui32>(
+        StatisticsConfig.GetAnalyzeHistogramOversampleFactor(),
+        TAnalyzeActor::MaxHistogramOversampleFactor));
+    const ui64 maxStateBytes = std::max<ui64>(1, std::min<ui64>(
+        StatisticsConfig.GetAnalyzeHistogramMaxStateBytes(),
+        TAnalyzeActor::MaxStatisticSize));
     auto analyzeActorConfig = TAnalyzeActor::TConfig{
         .MaxTotalScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxTotalScanActorsInFlight(),
         .MaxPerNodeScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxPerNodeScanActorsInFlight(),
         .WholeTableScanMaxBytes = StatisticsConfig.GetAnalyzeWholeTableScanMaxBytes(),
         .TableBytesSize = GetTableBytesSize(pathId),
+        .CollectPrimaryKeyHistogram = StatisticsConfig.GetAnalyzeCollectPrimaryKeyHistogram(),
+        .HistogramOversampleFactor = oversampleFactor,
+        .HistogramMaxStateBytes = maxStateBytes,
     };
     AnalyzeActorId = ctx.Register(new TAnalyzeActor(
         SelfId(), operationId, database, pathId, columnTags, analyzeActorConfig),

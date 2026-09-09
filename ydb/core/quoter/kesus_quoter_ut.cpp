@@ -282,14 +282,14 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         TKesusProxyTestSetup setup;
         auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
         EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
-            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+            .WillOnce([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(record.GetResources(0).GetResourcePath(), "res");
                 UNIT_ASSERT(!record.GetResources(0).GetStartConsuming());
                 NKikimrKesus::TEvSubscribeOnResourcesResult ans;
                 FillResult(ans.AddResults());
                 pipe->SendSubscribeOnResourceResult(ans, cookie);
-            }));
+            });
 
         auto session = setup.ProxyRequest("res");
         UNIT_ASSERT_VALUES_EQUAL(session->Get()->ResourceId, 42);
@@ -301,7 +301,7 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         size_t resCounter = 0;
         EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
             .Times(3)
-            .WillRepeatedly(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+            .WillRepeatedly([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(record.GetResources(0).GetResourcePath(), TStringBuilder() << "res" << resCounter);
                 UNIT_ASSERT(!record.GetResources(0).GetStartConsuming());
@@ -309,7 +309,7 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
                 FillResult(ans.AddResults(), 42 + resCounter, 5.0);
                 pipe->SendSubscribeOnResourceResult(ans, cookie);
                 ++resCounter;
-            }));
+            });
 
         auto session = setup.ProxyRequest("res0");
         UNIT_ASSERT_VALUES_EQUAL(session->Get()->ResourceId, 42);
@@ -319,11 +319,11 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         UNIT_ASSERT_VALUES_EQUAL(session->Get()->ResourceId, 44);
 
         EXPECT_CALL(*pipe, OnUpdateConsumptionState(_, _))
-            .WillOnce(Invoke([&](const NKikimrKesus::TEvUpdateConsumptionState& record, ui64) {
+            .WillOnce([&](const NKikimrKesus::TEvUpdateConsumptionState& record, ui64) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesInfoSize(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(record.GetResourcesInfo(0).GetResourceId(), 43);
                 UNIT_ASSERT(record.GetResourcesInfo(0).GetConsumeResource());
-            }));
+            });
 
         setup.SendProxyStats({TEvQuota::TProxyStat(43, 1, 0, {}, 3, 5.0, 0, 0)});
         setup.WaitEvent<NKesus::TEvKesus::TEvUpdateConsumptionState>();
@@ -334,7 +334,7 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         // second pipe
         auto* pipe2 = setup.GetPipeFactory().ExpectTabletPipeConnection();
         EXPECT_CALL(*pipe2, OnSubscribeOnResources(_, _))
-            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+            .WillOnce([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 3);
                 UNIT_ASSERT_VALUES_EQUAL(record.GetResources(0).GetResourcePath(), "res0");
                 UNIT_ASSERT_VALUES_EQUAL(record.GetResources(1).GetResourcePath(), "res1");
@@ -347,7 +347,7 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
                     FillResult(ans.AddResults(), 42 + res, 5.0);
                 }
                 pipe2->SendSubscribeOnResourceResult(ans, cookie);
-            }));
+            });
 
         setup.WaitEvent<NKesus::TEvKesus::TEvSubscribeOnResources>();
     }
@@ -359,14 +359,14 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         setup.SendProxyRequest("res");
 
         EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
-            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+            .WillOnce([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(record.GetResources(0).GetResourcePath(), "res");
                 UNIT_ASSERT(!record.GetResources(0).GetStartConsuming());
                 NKikimrKesus::TEvSubscribeOnResourcesResult ans;
                 FillResult(ans.AddResults());
                 pipe->SendSubscribeOnResourceResult(ans, cookie);
-            }));
+            });
 
         // Connected
         setup.SendConnected(pipe);
@@ -378,14 +378,14 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         TKesusProxyTestSetup setup;
         auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
         EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
-            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+            .WillOnce([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(record.GetResources(0).GetResourcePath(), "res");
                 UNIT_ASSERT(!record.GetResources(0).GetStartConsuming());
                 NKikimrKesus::TEvSubscribeOnResourcesResult ans;
                 FillResult(ans.AddResults());
                 pipe->SendSubscribeOnResourceResult(ans, cookie);
-            }));
+            });
 
         auto session = setup.ProxyRequest("res");
         UNIT_ASSERT_VALUES_EQUAL(session->Get()->ResourceId, 42);
@@ -394,19 +394,19 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
 
         auto& startSession =
             EXPECT_CALL(*pipe, OnUpdateConsumptionState(_, _))
-                .WillOnce(Invoke([&](const NKikimrKesus::TEvUpdateConsumptionState& record, ui64) {
+                .WillOnce([&](const NKikimrKesus::TEvUpdateConsumptionState& record, ui64) {
                     UNIT_ASSERT_VALUES_EQUAL(record.ResourcesInfoSize(), 1);
                     UNIT_ASSERT_VALUES_EQUAL(record.GetResourcesInfo(0).GetResourceId(), 42);
                     UNIT_ASSERT(record.GetResourcesInfo(0).GetConsumeResource());
-                }));
+                });
 
         EXPECT_CALL(*pipe, OnUpdateConsumptionState(_, _))
             .After(startSession)
-            .WillOnce(Invoke([&](const NKikimrKesus::TEvUpdateConsumptionState& record, ui64) {
+            .WillOnce([&](const NKikimrKesus::TEvUpdateConsumptionState& record, ui64) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesInfoSize(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(record.GetResourcesInfo(0).GetResourceId(), 42);
                 UNIT_ASSERT(!record.GetResourcesInfo(0).GetConsumeResource());
-            }));
+            });
 
         setup.WaitEvent<NKesus::TEvKesus::TEvUpdateConsumptionState>();
         setup.SendCloseSession("res", 42);
@@ -420,24 +420,24 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         TKesusProxyTestSetup setup;
         auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
         EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
-            .WillRepeatedly(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+            .WillRepeatedly([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(record.GetResources(0).GetResourcePath(), "res");
                 UNIT_ASSERT(!record.GetResources(0).GetStartConsuming());
                 NKikimrKesus::TEvSubscribeOnResourcesResult ans;
                 FillResult(ans.AddResults(), 42, 5.0);
                 pipe->SendSubscribeOnResourceResult(ans, cookie);
-            }));
+            });
 
         auto session = setup.ProxyRequest("res");
         UNIT_ASSERT_VALUES_EQUAL(session->Get()->ResourceId, 42);
 
         EXPECT_CALL(*pipe, OnUpdateConsumptionState(_, _))
-            .WillOnce(Invoke([&](const NKikimrKesus::TEvUpdateConsumptionState& record, ui64) {
+            .WillOnce([&](const NKikimrKesus::TEvUpdateConsumptionState& record, ui64) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesInfoSize(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(record.GetResourcesInfo(0).GetResourceId(), 42);
                 UNIT_ASSERT(record.GetResourcesInfo(0).GetConsumeResource());
-            }));
+            });
 
         setup.SendProxyStats({TEvQuota::TProxyStat(42, 1, 0, {}, 3, 5.0, 0, 0)});
         setup.WaitEvent<NKesus::TEvKesus::TEvUpdateConsumptionState>();
@@ -448,7 +448,7 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         // second pipe
         auto* pipe2 = setup.GetPipeFactory().ExpectTabletPipeConnection();
         EXPECT_CALL(*pipe2, OnSubscribeOnResources(_, _))
-            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+            .WillOnce([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(record.GetResources(0).GetResourcePath(), "res");
                 UNIT_ASSERT(record.GetResources(0).GetStartConsuming());
@@ -459,7 +459,7 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
                     FillResultNotFound(ans.AddResults());
                 }
                 pipe2->SendSubscribeOnResourceResult(ans, cookie);
-            }));
+            });
 
         for (size_t i = 0; i < 5; ++i) {
             // Error request. If second ProxySession was sent, it will arrive first.
@@ -482,14 +482,14 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         TKesusProxyTestSetup setup;
         auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
         EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
-            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+            .WillOnce([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(record.GetResources(0).GetResourcePath(), "res");
                 UNIT_ASSERT(!record.GetResources(0).GetStartConsuming());
                 NKikimrKesus::TEvSubscribeOnResourcesResult ans;
                 FillResult(ans.AddResults());
                 pipe->SendSubscribeOnResourceResult(ans, cookie);
-            }));
+            });
 
         auto session = setup.ProxyRequest("res");
         UNIT_ASSERT_VALUES_EQUAL(session->Get()->ResourceId, 42);
@@ -503,14 +503,14 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         TKesusProxyTestSetup setup;
         auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
         EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
-            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+            .WillOnce([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(record.GetResources(0).GetResourcePath(), "res");
                 UNIT_ASSERT(!record.GetResources(0).GetStartConsuming());
                 NKikimrKesus::TEvSubscribeOnResourcesResult ans;
                 FillResult(ans.AddResults());
                 pipe->SendSubscribeOnResourceResult(ans, cookie);
-            }));
+            });
 
         auto session = setup.ProxyRequest("res");
         UNIT_ASSERT_VALUES_EQUAL(session->Get()->ResourceId, 42);
@@ -533,13 +533,13 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         TKesusProxyTestSetup setup;
         auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
         EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
-            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+            .WillOnce([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(record.GetResources(0).GetResourcePath(), "res");
                 NKikimrKesus::TEvSubscribeOnResourcesResult ans;
                 FillResult(ans.AddResults());
                 pipe->SendSubscribeOnResourceResult(ans, cookie);
-            }));
+            });
 
         auto session = setup.ProxyRequest("res");
         UNIT_ASSERT_VALUES_EQUAL(session->Get()->ResourceId, 42);
@@ -551,13 +551,13 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         TKesusProxyTestSetup setup;
         auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
         EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
-            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+            .WillOnce([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(record.GetResources(0).GetResourcePath(), "res");
                 NKikimrKesus::TEvSubscribeOnResourcesResult ans;
                 FillResult(ans.AddResults());
                 pipe->SendSubscribeOnResourceResult(ans, cookie);
-            }));
+            });
 
         setup.GetPipeFactory().ExpectTabletPipeCreation(); // Expect second pipe. Without connecting.
 
@@ -576,13 +576,13 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         TKesusProxyTestSetup setup;
         auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
         EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
-            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+            .WillOnce([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(record.GetResources(0).GetResourcePath(), "res");
                 NKikimrKesus::TEvSubscribeOnResourcesResult ans;
                 FillResult(ans.AddResults());
                 pipe->SendSubscribeOnResourceResult(ans, cookie);
-            }));
+            });
 
         setup.GetPipeFactory().ExpectTabletPipeCreation(); // Expect second pipe. Without connecting.
 
@@ -601,12 +601,12 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         TKesusProxyTestSetup setup;
         auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
         EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
-            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+            .WillOnce([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
                 NKikimrKesus::TEvSubscribeOnResourcesResult ans;
                 FillResult(ans.AddResults(), 42, 100.0);
                 pipe->SendSubscribeOnResourceResult(ans, cookie);
-            }));
+            });
 
         auto session = setup.ProxyRequest("res");
         UNIT_ASSERT_VALUES_EQUAL(session->Get()->ResourceId, 42);
@@ -648,12 +648,12 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         TKesusProxyTestSetup setup;
         auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
         EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
-            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+            .WillOnce([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
                 NKikimrKesus::TEvSubscribeOnResourcesResult ans;
                 FillResult(ans.AddResults(), 42, 100.0);
                 pipe->SendSubscribeOnResourceResult(ans, cookie);
-            }));
+            });
 
         auto session = setup.ProxyRequest("res");
         UNIT_ASSERT_VALUES_EQUAL(session->Get()->ResourceId, 42);
@@ -709,12 +709,12 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         TKesusProxyTestSetup setup;
         auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
         EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
-            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+            .WillOnce([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
                 NKikimrKesus::TEvSubscribeOnResourcesResult ans;
                 FillResult(ans.AddResults(), 42, 100.0);
                 pipe->SendSubscribeOnResourceResult(ans, cookie);
-            }));
+            });
 
         auto session = setup.ProxyRequest("res");
         UNIT_ASSERT_VALUES_EQUAL(session->Get()->ResourceId, 42);
@@ -742,12 +742,12 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         TKesusProxyTestSetup setup;
         auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
         EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
-            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+            .WillOnce([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
                 NKikimrKesus::TEvSubscribeOnResourcesResult ans;
                 FillResult(ans.AddResults(), 42, 100.0);
                 pipe->SendSubscribeOnResourceResult(ans, cookie);
-            }));
+            });
 
         auto session = setup.ProxyRequest("res");
         UNIT_ASSERT_VALUES_EQUAL(session->Get()->ResourceId, 42);
@@ -790,12 +790,12 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         TKesusProxyTestSetup setup;
         auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
         EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
-            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+            .WillOnce([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
                 NKikimrKesus::TEvSubscribeOnResourcesResult ans;
                 FillResult(ans.AddResults(), 42, 100.0);
                 pipe->SendSubscribeOnResourceResult(ans, cookie);
-            }));
+            });
 
         auto session = setup.ProxyRequest("res");
         UNIT_ASSERT_VALUES_EQUAL(session->Get()->ResourceId, 42);
@@ -825,13 +825,13 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         TKesusProxyTestSetup setup;
         auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
         EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
-            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+            .WillOnce([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(record.GetResources(0).GetResourcePath(), "res");
                 NKikimrKesus::TEvSubscribeOnResourcesResult ans;
                 FillResult(ans.AddResults());
                 pipe->SendSubscribeOnResourceResult(ans, cookie);
-            }));
+            });
 
         auto* pipe2 = setup.GetPipeFactory().ExpectTabletPipeCreation(); // Expect second pipe. Without connecting.
 
@@ -856,12 +856,12 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         TKesusProxyTestSetup setup;
         auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
         EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
-            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+            .WillOnce([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
                 NKikimrKesus::TEvSubscribeOnResourcesResult ans;
                 FillResult(ans.AddResults(), 42, 100.0); // speed=100, BucketMax=20
                 pipe->SendSubscribeOnResourceResult(ans, cookie);
-            }));
+            });
         EXPECT_CALL(*pipe, OnUpdateConsumptionState(_, _))
             .Times(AnyNumber());
 
@@ -894,12 +894,12 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         TKesusProxyTestSetup setup;
         auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
         EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
-            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+            .WillOnce([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
                 NKikimrKesus::TEvSubscribeOnResourcesResult ans;
                 FillResult(ans.AddResults(), 42, 100.0);
                 pipe->SendSubscribeOnResourceResult(ans, cookie);
-            }));
+            });
         EXPECT_CALL(*pipe, OnUpdateConsumptionState(_, _))
             .Times(AnyNumber());
 
@@ -928,12 +928,12 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         TKesusProxyTestSetup setup;
         auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
         EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
-            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+            .WillOnce([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
                 NKikimrKesus::TEvSubscribeOnResourcesResult ans;
                 FillResult(ans.AddResults(), 42, 100.0);
                 pipe->SendSubscribeOnResourceResult(ans, cookie);
-            }));
+            });
         EXPECT_CALL(*pipe, OnUpdateConsumptionState(_, _))
             .Times(AnyNumber());
 
@@ -967,12 +967,12 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         TKesusProxyTestSetup setup;
         auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
         EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
-            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+            .WillOnce([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
                 NKikimrKesus::TEvSubscribeOnResourcesResult ans;
                 FillResult(ans.AddResults(), 42, 100.0);
                 pipe->SendSubscribeOnResourceResult(ans, cookie);
-            }));
+            });
         EXPECT_CALL(*pipe, OnUpdateConsumptionState(_, _))
             .Times(AnyNumber());
 
@@ -1002,12 +1002,12 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         TKesusProxyTestSetup setup;
         auto* pipe = setup.GetPipeFactory().ExpectTabletPipeConnection();
         EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
-            .WillOnce(Invoke([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
+            .WillOnce([&](const NKikimrKesus::TEvSubscribeOnResources& record, ui64 cookie) {
                 UNIT_ASSERT_VALUES_EQUAL(record.ResourcesSize(), 1);
                 NKikimrKesus::TEvSubscribeOnResourcesResult ans;
                 FillResult(ans.AddResults(), 42, 100.0);
                 pipe->SendSubscribeOnResourceResult(ans, cookie);
-            }));
+            });
         EXPECT_CALL(*pipe, OnUpdateConsumptionState(_, _))
             .Times(AnyNumber());
 

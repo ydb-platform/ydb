@@ -58,8 +58,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, _KqpSlowLogWarningThresholdMs);
     REGISTER_SETTING(*this, _KqpSlowLogNoticeThresholdMs);
     REGISTER_SETTING(*this, _KqpSlowLogTraceThresholdMs);
-    REGISTER_SETTING(*this, _KqpYqlSyntaxVersion);
-    REGISTER_SETTING(*this, _KqpYqlAntlr4Parser);
+    REGISTER_SETTING(*this, _KqpYqlSyntaxVersion).Deprecated("ignored: YQL v1 is always used");
+    REGISTER_SETTING(*this, _KqpYqlAntlr4Parser).Deprecated("ignored: ANTLR4 parser is always used");
     REGISTER_SETTING(*this, _KqpAllowUnsafeCommit);
     REGISTER_SETTING(*this, _KqpMaxComputeActors);
     REGISTER_SETTING(*this, _KqpEnableSpilling);
@@ -91,6 +91,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptForceOlapPushdownDistinctLimit);
     REGISTER_SETTING(*this, OptEnableOlapPushdownProjections);
     REGISTER_SETTING(*this, OptEnableOlapPushdownRegexp);
+    REGISTER_SETTING(*this, OptEnableOlapFastAsciiIgnoreCase);
     REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
     REGISTER_SETTING(*this, OptOverrideStatistics);
     REGISTER_SETTING(*this, OptimizerHints).Parser([](const TString& v) { return NKikimr::NKqp::TOptimizerHints::Parse(v); });
@@ -168,8 +169,10 @@ TKikimrConfiguration::TKikimrConfiguration() {
                 return NKqpProto::ISOLATION_LEVEL_READ_STALE;
             } else if (mode == "ReadCommittedRW") {
                 return NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW;
+            } else if (mode == "StrictSerializableRW") {
+                return NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE;
             } else {
-                throw yexception() << "Unknown DefaultTxMode, available: [SerializableRW, SnapshotRW, SnapshotRO, StaleRO]";
+                throw yexception() << "Unknown DefaultTxMode, available: [SerializableRW, SnapshotRW, SnapshotRO, StaleRO, ReadCommittedRW, StrictSerializableRW]";
             }
         });
     REGISTER_SETTING(*this, UseKqpTasksGraphV2);
@@ -324,6 +327,10 @@ bool TKikimrConfiguration::GetEnableOlapPushdownAggregate() const {
 bool TKikimrConfiguration::GetEnableOlapPushdownRegexp() const {
     return ((GetOptionalFlagValue(OptEnableOlapPushdownRegexp.Get()) == EOptionalFlag::Enabled) ||
         TTableServiceConfig::GetEnableOlapPushdownRegexp());
+}
+
+bool TKikimrConfiguration::GetEnableOlapFastAsciiIgnoreCase() const {
+    return GetOptionalFlagValue(OptEnableOlapFastAsciiIgnoreCase.Get()) == EOptionalFlag::Enabled;
 }
 
 bool TKikimrConfiguration::GetUseDqHashCombine() const {

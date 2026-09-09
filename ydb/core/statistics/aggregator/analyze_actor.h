@@ -17,11 +17,17 @@ namespace NKikimr::NStat {
 
 class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
 public:
+    static constexpr ui64 MaxStatisticSize = 8ull << 20;
+    static constexpr ui32 MaxHistogramOversampleFactor = 256;
+
     struct TConfig {
         ui64 MaxTotalScanActorsInFlight = 100;
         i64 MaxPerNodeScanActorsInFlight = 1;
         ui64 WholeTableScanMaxBytes = 10ULL << 30; // 10 GiB
         std::optional<ui64> TableBytesSize;
+        bool CollectPrimaryKeyHistogram = false;
+        ui32 HistogramOversampleFactor = 8;
+        ui64 HistogramMaxStateBytes = 4u << 20;
     };
 
 private:

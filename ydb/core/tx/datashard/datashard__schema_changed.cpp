@@ -43,3 +43,7 @@ ITransaction* TDataShard::CreateTxSchemaChanged(TEvDataShard::TEvSchemaChangedRe
 }
 
 }}
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

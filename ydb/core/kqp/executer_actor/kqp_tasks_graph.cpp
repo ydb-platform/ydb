@@ -1945,6 +1945,12 @@ void TKqpTasksGraph::SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDq
         (*result->MutableTaskParams())[taskParam] = actorIdProto.SerializeAsString();
     }
 
+    if (const auto executionGeneration = GetMeta().UserRequestContext->CurrentExecutionGeneration) {
+        auto& params = *result->MutableTaskParams();
+        params["current_execution_generation"] = ToString(executionGeneration);
+        params["checkpoints_enabled"] = ToString(GetMeta().AllowCheckpoints);
+    }
+
     SerializeCtxToMap(*GetMeta().UserRequestContext, *result->MutableRequestContext());
 
     result->SetDisableMetering(!enableMetering);
@@ -3345,6 +3351,9 @@ void TKqpTasksGraph::FillKqpTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings&
     if (!settings.GetInconsistentTx() && GetMeta().LockMode) {
         settings.SetLockMode(*GetMeta().LockMode);
     }
+    settings.SetCollectAffectedRows(
+        GetMeta().CollectAffectedRows && !settings.GetIsIndexImplTable());
+
         // Use per-transaction QuerySpanId if available (for deferred effects),
         // otherwise fall back to global QuerySpanId; apply per-table suppression.
         {
@@ -4018,7 +4027,12 @@ void TKqpTasksGraph::CountReadTasksFromSource(TStageInfo& stageInfo, size_t reso
     if (taskCountHint) {
         taskCount = std::min<ui32>(taskCount, taskCountHint);
     } else if (resourceSnapshotSize) {
-        taskCount = std::min<ui32>(taskCount, resourceSnapshotSize * 2);
+        if (externalSource.GetType() == NYql::PqSource) {
+            const ui32 tasksByThread = TStagePredictor::GetUsableThreads();
+            taskCount = std::min<ui32>(taskCount, tasksByThread * resourceSnapshotSize);
+        } else {
+            taskCount = std::min<ui32>(taskCount, resourceSnapshotSize * 2);
+        }
     }
 
     for (ui32 i = 0; i < taskCount; ++i) {

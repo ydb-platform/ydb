@@ -117,6 +117,29 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
             AppConfig.emplace();
         }
 
+        {
+            using TExecutor = NKikimrConfig::TActorSystemConfig::TExecutor;
+
+            auto& actorSystemConfig = *AppConfig->MutableActorSystemConfig();
+            actorSystemConfig.ClearExecutor();
+
+            const auto addPool = [&](const TString& name, ui32 threads, TExecutor::EType type) {
+                auto& executor = *actorSystemConfig.AddExecutor();
+                executor.SetType(type);
+                executor.SetName(name);
+                executor.SetThreads(threads);
+                if (type == TExecutor::BASIC) {
+                    executor.SetSpinThreshold(1);
+                }
+            };
+
+            // Pools: 0=System, 1=User, 2=Batch, 3=IO.
+            addPool("System", 1, TExecutor::BASIC); actorSystemConfig.SetSysExecutor(0);
+            addPool("User", 3, TExecutor::BASIC);   actorSystemConfig.SetUserExecutor(1);
+            addPool("Batch", 1, TExecutor::BASIC);  actorSystemConfig.SetBatchExecutor(2);
+            addPool("IO", 1, TExecutor::IO);        actorSystemConfig.SetIoExecutor(3);
+        }
+
         auto& featureFlags = *AppConfig->MutableFeatureFlags();
         featureFlags.SetEnableStreamingQueries(true);
         featureFlags.SetEnableSchemaSecrets(true);
@@ -859,9 +882,15 @@ void TStreamingTestFixture::CheckScriptExecutionsCount(ui64 expectedExecutionsCo
     });
 }
 
-void TStreamingTestFixture::WaitCheckpointUpdate(const TString& checkpointId) {
+void TStreamingTestFixture::WaitCheckpointUpdate(const TString& checkpointId, std::optional<std::pair<ui64, ui64>> initialBound) {
     std::optional<ui64> minGeneration;
     std::optional<ui64> minSeqNo;
+
+    if (initialBound) {
+        minGeneration = initialBound->first;
+        minSeqNo = initialBound->second;
+    }
+
     WaitFor(TEST_OPERATION_TIMEOUT, "checkpoint update", [&](TString& error) {
         const auto& result = ExecQuery(fmt::format(
             R"sql(

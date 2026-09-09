@@ -27,7 +27,7 @@ public:
 
     // IO uring callbacks
     virtual void OnComplete(NActors::TActorSystem* actorSystem) noexcept override final;
-    virtual void OnDrop() noexcept override final;
+    virtual void OnDrop(NActors::TActorSystem* actorSystem) noexcept override final;
 
     // reply should not access raw uring result field – use just status and data if status OK
     virtual void Reply(
@@ -53,7 +53,7 @@ public:
 
     // Read-path integrity zero mask (TIntegrityManager::TReadPlan::Mixed): bit i covers the i-th
     // IntegrityUnitSize block of the read range; unset bits are zero-filled before replying. Must
-    // live in the op because the reply happens on the uring completion thread.
+    // live in the op because the reply happens on the uring I/O thread.
     void SetReadUsedBlocksMask(TDynBitMap&& usedBlocks) { ReadUsedBlocksMask.emplace(std::move(usedBlocks)); }
 
     const TActorId& GetDDiskId() const { return DDiskId; }
@@ -72,7 +72,7 @@ public:
 
     using NPDisk::TUringOperationBase::SetResult;
 
-    void SetResult(i32 result, TRope&& data);
+    void SetResult(i64 result, TRope&& data);
 
 protected:
     TDDiskActor& Actor;
@@ -84,6 +84,9 @@ protected:
     void ApplyReadUsedBlocksMask(TRope& data) noexcept;
 
 private:
+    class TCompletionGuard;
+    void AccountShortIo() noexcept;
+
     NHPTimer::STime StartTs;
 
     TActorId OriginalRequester;

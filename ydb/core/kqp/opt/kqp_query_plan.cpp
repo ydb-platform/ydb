@@ -147,8 +147,10 @@ TString GetExprStr(const TExprBase& scalar, bool quoteStr = true) {
     }
 
     if (literal) {
-        CollapseText(*literal, 32);
-
+        if (literal->size() > 100) {
+            Utf8TruncateInplace(*literal, 96);
+            *literal += " ...";
+        }
         if (quoteStr) {
             return TStringBuilder() << '"' << *literal << '"';
         } else {

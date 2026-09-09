@@ -850,6 +850,7 @@
                             "DecommitStatus": "DECOMMIT_NONE",
                             "DiskSpace": "Green",
                             "Guid": "1",
+                            "MaintenanceStatus": "NO_REQUEST",
                             "PDiskId": "1-1",
                             "Path": "SectorMap:1:64",
                             "SlotCount": "not-zero-number-text",
@@ -959,6 +960,7 @@
                             "DecommitStatus": "DECOMMIT_NONE",
                             "DiskSpace": "Green",
                             "Guid": "1",
+                            "MaintenanceStatus": "NO_REQUEST",
                             "PDiskId": "1-1",
                             "Path": "SectorMap:1:64",
                             "SlotCount": "not-zero-number-text",
@@ -1068,6 +1070,7 @@
                             "DecommitStatus": "DECOMMIT_NONE",
                             "DiskSpace": "Green",
                             "Guid": "1",
+                            "MaintenanceStatus": "NO_REQUEST",
                             "PDiskId": "1-1",
                             "Path": "SectorMap:1:64",
                             "SlotCount": "not-zero-number-text",
@@ -1178,6 +1181,7 @@
                             "DecommitStatus": "DECOMMIT_NONE",
                             "DiskSpace": "Green",
                             "Guid": "1",
+                            "MaintenanceStatus": "NO_REQUEST",
                             "PDiskId": "1-1",
                             "Path": "SectorMap:1:64",
                             "SlotCount": "not-zero-number-text",
@@ -1288,6 +1292,7 @@
                             "DecommitStatus": "DECOMMIT_NONE",
                             "DiskSpace": "Green",
                             "Guid": "1",
+                            "MaintenanceStatus": "NO_REQUEST",
                             "PDiskId": "1-1",
                             "Path": "SectorMap:1:64",
                             "SlotCount": "not-zero-number-text",
@@ -7052,7 +7057,6 @@
                 "EnableProtoSourceIdInfo": true,
                 "Enabled": true,
                 "MaxStorageNodePort": 65535,
-                "MetaCacheTimeoutSec": 1,
                 "QuotingConfig": {
                     "EnableQuoting": false
                 },
@@ -7078,8 +7082,7 @@
                     "ChannelBufferSize": "262144",
                     "MkqlHeavyProgramMemoryLimit": "1048576",
                     "MkqlLightProgramMemoryLimit": "65536"
-                },
-                "SqlVersion": 1
+                }
             },
             "TenantPoolConfig": {
                 "Slots": [
@@ -8108,7 +8111,6 @@
                 "EnableProtoSourceIdInfo": true,
                 "Enabled": true,
                 "MaxStorageNodePort": 65535,
-                "MetaCacheTimeoutSec": 1,
                 "QuotingConfig": {
                     "EnableQuoting": false
                 },
@@ -8134,8 +8136,7 @@
                     "ChannelBufferSize": "262144",
                     "MkqlHeavyProgramMemoryLimit": "1048576",
                     "MkqlLightProgramMemoryLimit": "65536"
-                },
-                "SqlVersion": 1
+                }
             },
             "TenantPoolConfig": {
                 "Slots": [
@@ -9164,7 +9165,6 @@
                 "EnableProtoSourceIdInfo": true,
                 "Enabled": true,
                 "MaxStorageNodePort": 65535,
-                "MetaCacheTimeoutSec": 1,
                 "QuotingConfig": {
                     "EnableQuoting": false
                 },
@@ -9190,8 +9190,7 @@
                     "ChannelBufferSize": "262144",
                     "MkqlHeavyProgramMemoryLimit": "1048576",
                     "MkqlLightProgramMemoryLimit": "65536"
-                },
-                "SqlVersion": 1
+                }
             },
             "TenantPoolConfig": {
                 "Slots": [

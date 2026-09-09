@@ -33,6 +33,7 @@ PEERDIR(
     yql/essentials/public/issue
     ydb/core/quoter/public
     library/cpp/html/escape
+    library/cpp/time_provider
 )
 
 YQL_LAST_ABI_VERSION()

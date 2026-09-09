@@ -2,7 +2,75 @@
 
 namespace NKikimr {
 
+namespace {
+
+enum class EPayloadLayout {
+    Unaligned,
+    FragmentedUnaligned,
+    FragmentedAligned,
+};
+
+void TestWriteAndReadPayloadLayout(NDDisk::TDDiskConfig config, EPayloadLayout layout) {
+    config.CheckChecksumBeforeWrite = true;
+    TTestContext ctx(std::move(config), NLog::PRI_INFO);
+    const auto creds = Connect(ctx, 32, 1);
+    const TString expected = MakeData('A', MinBlockSize) + MakeData('B', MinBlockSize);
+    TRope payload;
+    if (layout == EPayloadLayout::Unaligned) {
+        payload = MakeAlignedRope(TString("!") + expected);
+        payload.EraseFront(1);
+        UNIT_ASSERT_VALUES_EQUAL(payload.Begin().ContiguousSize(), expected.size());
+        UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(payload.Begin().ContiguousData()) % MinBlockSize, 1u);
+    } else {
+        // Split inside an integrity block to exercise streaming checksum validation as well as copying.
+        const ui32 split = layout == EPayloadLayout::FragmentedUnaligned ? MinBlockSize - 1 : MinBlockSize;
+        payload = MakeAlignedRope(expected.substr(0, split));
+        payload.Insert(payload.End(), MakeAlignedRope(expected.substr(split)));
+        UNIT_ASSERT_VALUES_EQUAL(payload.Begin().ContiguousSize(), split);
+        UNIT_ASSERT_C(payload.Begin().ContiguousSize() < payload.size(), "payload must remain fragmented");
+    }
+
+    // Exercise both initial allocation and an overwrite of an existing chunk.
+    for (ui32 attempt = 0; attempt < 2; ++attempt) {
+        auto write = std::make_unique<NDDisk::TEvWrite>(creds,
+            NDDisk::TBlockSelector(7, MinBlockSize, expected.size()), NDDisk::TWriteInstruction(0));
+        write->AddPayloadThenChecksum(TRope(payload));
+        AssertStatus<NDDisk::TEvWriteResult>(
+            ctx.SendAndGrab<NDDisk::TEvWriteResult>(write.release()), TReplyStatus::OK);
+
+        auto read = ctx.SendAndGrab<NDDisk::TEvReadResult>(
+            new NDDisk::TEvRead(creds, {7, MinBlockSize, static_cast<ui32>(expected.size())}, {true}));
+        AssertReadResult(read, expected);
+    }
+}
+
+} // anonymous namespace
+
 Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
+    Y_UNIT_TEST(WriteAndReadUnalignedPayload_Uring) {
+        TestWriteAndReadPayloadLayout({}, EPayloadLayout::Unaligned);
+    }
+
+    Y_UNIT_TEST(WriteAndReadUnalignedPayload_PDiskFallback) {
+        TestWriteAndReadPayloadLayout({.ForcePDiskFallback = true}, EPayloadLayout::Unaligned);
+    }
+
+    Y_UNIT_TEST(WriteAndReadFragmentedUnalignedPayload_Uring) {
+        TestWriteAndReadPayloadLayout({}, EPayloadLayout::FragmentedUnaligned);
+    }
+
+    Y_UNIT_TEST(WriteAndReadFragmentedUnalignedPayload_PDiskFallback) {
+        TestWriteAndReadPayloadLayout({.ForcePDiskFallback = true}, EPayloadLayout::FragmentedUnaligned);
+    }
+
+    Y_UNIT_TEST(WriteAndReadFragmentedAlignedPayload_Uring) {
+        TestWriteAndReadPayloadLayout({}, EPayloadLayout::FragmentedAligned);
+    }
+
+    Y_UNIT_TEST(WriteAndReadFragmentedAlignedPayload_PDiskFallback) {
+        TestWriteAndReadPayloadLayout({.ForcePDiskFallback = true}, EPayloadLayout::FragmentedAligned);
+    }
+
     Y_UNIT_TEST(WriteAndRead_4KiB_Uring) {
         TestWriteAndRead({}, 4_KB);
     }

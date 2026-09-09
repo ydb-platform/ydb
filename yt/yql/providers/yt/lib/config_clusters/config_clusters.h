@@ -24,9 +24,12 @@ public:
 
     void AddCluster(const TYtClusterConfig& cluster, bool checkDuplicate);
 
+    TString TryResolveServerByYtName(const TString& ytName) const;
+
     const TString& GetServer(const TString& name) const;
     TString TryGetServer(const TString& name) const;
     const TString& GetYtName(const TString& name) const;
+    TString TryGetYtName(const TString& name) const;
     TString GetNameByYtName(const TString& ytName) const;
     TMaybe<TString> GetAuth(const TString& name) const;
     void GetAllClusters(TVector<TString>& names) const;

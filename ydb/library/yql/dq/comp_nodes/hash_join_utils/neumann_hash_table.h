@@ -9,6 +9,8 @@
 
 #include <util/generic/buffer.h>
 
+#include <bit>
+
 #include "tuple.h"
 #include "join_defs.h"
 namespace NKikimr {
@@ -177,15 +179,21 @@ class TNeumannHashTable {
     TNeumannHashTable &operator=(TNeumannHashTable &&) = default;
 
     static ui32 EstimateLogSize(int nItems) {
-        int estimated = 32 - std::countl_zero<ui32>(nItems);
-        return std::max(1, std::min(24, estimated > 2 ? estimated - 2 : estimated));
+        if (nItems <= 0) {
+            return 1;
+        }
+        const ui64 want = (static_cast<ui64>(nItems) * 9 + 7) / 8;
+        const int estimated = std::bit_width(want - 1);
+        return std::max(1, std::min(24, estimated));
     }
 
 
 
 
     ui64 RequiredMemoryForBuild(int nItems) const {
-        return sizeof(TDirectory)*EstimateLogSize(nItems)+ static_cast<size_t>(BufferSlotSize_) * nItems;
+        const ui32 directoryHashBits = EstimateLogSize(nItems);
+        return sizeof(TDirectory) * ((ui64{1} << directoryHashBits) + 1)
+            + static_cast<ui64>(BufferSlotSize_) * nItems;
     }
 
     void Build(const ui8 *const tuples, const ui8 *const overflow, int nItems,

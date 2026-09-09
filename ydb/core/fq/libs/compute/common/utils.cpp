@@ -446,7 +446,7 @@ void EnumeratePlans(NYson::TYsonWriter& writer, const NJson::TJsonValue& value, 
     }
 }
 
-TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* timeline) {
+TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* timeline, TString* timelineError) {
     TStringStream out;
     NYson::TYsonWriter writer(&out);
     writer.OnBeginMap();
@@ -493,8 +493,16 @@ TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage, TString* time
     }
     if (timeline) {
         NPlan2Svg::TPlanVisualizer planViz;
-        planViz.LoadPlans(plan);
-        *timeline = planViz.PrintSvg();
+        planViz.LoadPlansSafe(plan);
+        if (const auto& error = planViz.GetLoadError()) {
+            // No timeline rather than an error picture stored as one; the
+            // caller reports the failure through its own channel.
+            if (timelineError) {
+                *timelineError = error;
+            }
+        } else {
+            *timeline = planViz.PrintSvgSafe();
+        }
     }
     writer.OnEndMap();
     return NJson2Yson::ConvertYson2Json(out.Str());
@@ -1202,7 +1210,7 @@ struct TNoneStatProcessor : IPlanStatProcessor {
         return plan;
     }
 
-    TString GetQueryStat(const TString&, double& cpuUsage, TString*) override {
+    TString GetQueryStat(const TString&, double& cpuUsage, TString*, TString*) override {
         cpuUsage = 0.0;
         return "";
     }
@@ -1235,8 +1243,8 @@ struct TPlanStatProcessor : IPlanStatProcessor {
         return plan;
     }
 
-    TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline) override {
-        return GetV1StatFromV2Plan(plan, &cpuUsage, timeline);
+    TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline, TString* timelineError) override {
+        return GetV1StatFromV2Plan(plan, &cpuUsage, timeline, timelineError);
     }
 
     TPublicStat GetPublicStat(const TString& stat) override {
@@ -1267,8 +1275,8 @@ struct TProfileStatProcessor : TPlanStatProcessor {
 };
 
 struct TProdStatProcessor : TFullStatProcessor {
-    TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline) override {
-        return GetPrettyStatistics(GetV1StatFromV2Plan(plan, &cpuUsage, timeline));
+    TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline, TString* timelineError) override {
+        return GetPrettyStatistics(GetV1StatFromV2Plan(plan, &cpuUsage, timeline, timelineError));
     }
 };
 
@@ -1365,7 +1373,12 @@ Fq::Private::PingTaskRequest PingTaskRequestBuilder::Build(const TString& queryP
     CpuUsage = 0.0;
     try {
         TString timeline;
-        auto stat = Processor->GetQueryStat(plan, CpuUsage, ShowQueryTimeline ? &timeline : nullptr);
+        TString timelineError;
+        auto stat = Processor->GetQueryStat(plan, CpuUsage, ShowQueryTimeline ? &timeline : nullptr, &timelineError);
+
+        if (timelineError) {
+            Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Error timeline processing: " << timelineError));
+        }
 
         if (MaxQueryTimelineSize && timeline.size() > MaxQueryTimelineSize) {
             Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Timeline size  " << timeline.size() << " exceeds limit of " << MaxQueryTimelineSize));

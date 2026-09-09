@@ -823,9 +823,6 @@ optimizer_trace::Node BuildPlanNode(
             .detail(BuildColumnValueTable("Order enforcer", BuildOrderEnforcerRows(*op->Props.OrderEnforcer)));
     }
 
-    if (op->Props.EnsureAtMostOne) {
-        node.field("EnsureAtMostOne", "true");
-    }
 
     if ((opts & (EPrintPlanOptions::PrintBasicMetadata | EPrintPlanOptions::PrintFullMetadata))
         && op->Props.Metadata.has_value()) {
@@ -969,7 +966,6 @@ void DefineHtmlTraceFields(optimizer_trace::Trace& trace) {
         {"LeftShuffleBy", "Left shuffle"},
         {"RightShuffleBy", "Right shuffle"},
         {"OrderEnforcer", "Order"},
-        {"EnsureAtMostOne", "At most one"},
         {"Storage", "Storage"},
         {"KeyColumns", "Key columns"},
         {"SortBy", "Sort by"},

@@ -175,7 +175,6 @@ TKqpTranslationSettingsBuilder& TKqpTranslationSettingsBuilder::SetFromConfig(co
     SetLangVer(config.GetDefaultLangVer());
     SetBackportMode(config.GetYqlBackportMode());
     SetIsAmbiguityError(config.GetAntlr4ParserIsAmbiguityError());
-    KqpYqlSyntaxVersion = config.GetSqlVersion();
     return *this;
 }
 
@@ -184,15 +183,7 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
     settings.LangVer = LangVer;
     settings.BackportMode = BackportMode;
 
-    if (QueryType == NYql::EKikimrQueryType::Scan || QueryType == NYql::EKikimrQueryType::Query) {
-        SqlVersion = SqlVersion ? *SqlVersion : 1;
-    }
-
-    if (SqlVersion) {
-        settings.SyntaxVersion = *SqlVersion == 0 ? 1 : *SqlVersion;
-    } else {
-        settings.SyntaxVersion = KqpYqlSyntaxVersion == 0 ? 1 : KqpYqlSyntaxVersion;
-    }
+    settings.SyntaxVersion = 1;
 
     if (IsEnableExternalDataSources) {
         settings.DynamicClusterProvider = NYql::KikimrProviderName;
@@ -238,6 +229,11 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
         settings.Flags.insert("WarnOnAnsiAliasShadowing");
         settings.Flags.insert("AnsiCurrentRow");
         settings.Flags.insert("AnsiInForEmptyOrNullableItemsCollections");
+    }
+
+    if (QueryType == NYql::EKikimrQueryType::Query) {
+        // Allow comment-only SQL via ExecuteQuery; preserve other APIs' existing behavior.
+        settings.Flags.insert("AllowNoStatements");
     }
 
     // __ydb_row_id (added to a user table for the fulltext UseRowIdAsDocId opt-in) must not surface
@@ -305,7 +301,6 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
         NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder, bool& keepInCache, TMaybe<TString>& commandTagName,
         NSQLTranslation::TTranslationSettings* effectiveSettings) {
     NYql::TAstParseResult astRes;
-    settingsBuilder.SetSqlVersion(sqlVersion);
     if (isSql) {
         if (QueryRequestsPgSyntax(queryText)) {
             return MakeRejectedSyntaxResult(PgSyntaxNotSupportedMessage);
@@ -331,7 +326,7 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
 
         auto ast = NSQLTranslation::SqlToYql(translators, queryText, settings, nullptr, &stmtParseInfo, effectiveSettings);
         deprecatedSQL = false;
-        sqlVersion = ast.ActualSyntaxType == NYql::ESyntaxType::Pg ? 0 : 1;
+        sqlVersion = 1;
         keepInCache = stmtParseInfo.KeepInCache;
         commandTagName = stmtParseInfo.CommandTagName;
         return std::move(ast);
@@ -362,7 +357,6 @@ TQueryAst ParseQuery(const TString& queryText, const TMaybe<Ydb::Query::Syntax>&
 TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<ui16>& sqlVersion, bool& deprecatedSQL,
         NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder) {
     TVector<TQueryAst> result;
-    settingsBuilder.SetSqlVersion(sqlVersion);
     NSQLTranslationV1::TLexers lexers;
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
@@ -396,6 +390,13 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
         deprecatedSQL = false;
         sqlVersion = actualSyntaxVersion;
         YQL_ENSURE(astStatements.size() == stmtParseInfo.size());
+        if (astStatements.empty() && settings.Flags.contains("AllowNoStatements")) {
+            // An empty result also represents a full-text parse failure; the
+            // SqlToAstStatements API does not expose issues in that case. Reparse
+            // the original text to recover diagnostics or obtain a valid empty
+            // program. The compile service requires at least one AST result.
+            return {ParseQuery(queryText, /*syntax=*/{}, isSql, settingsBuilder)};
+        }
         for (size_t i = 0; i < astStatements.size(); ++i) {
             result.push_back({std::make_shared<NYql::TAstParseResult>(std::move(astStatements[i])), sqlVersion, false, stmtParseInfo[i].KeepInCache, stmtParseInfo[i].CommandTagName});
         }

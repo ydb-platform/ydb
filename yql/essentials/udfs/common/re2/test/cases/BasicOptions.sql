@@ -1,4 +1,14 @@
-/* syntax version 1 */
+$input = [
+    <|value: ""|>,
+    <|value: "a"|>,
+    <|value: "aax"|>,
+    <|value: "xaax1"|>,
+    <|value: "xaaxaaxaa"|>,
+    <|value: "sup, dude"|>,
+    <|value: "one, two, three."|>,
+    <|value: "привет это русские, буквы111!"|>,
+];
+
 $options = Re2::Options(true as Utf8);
 $match = Re2::Match("[ax]+\d",$options);
 $grep = Re2Posix::Grep("a.*",$options);
@@ -19,4 +29,4 @@ SELECT
     $replace(value, "b\\1z") AS replace,
     $count(value) AS count,
     $find_and_consume(value) AS tokens
-FROM Input;
+FROM AS_TABLE($input);

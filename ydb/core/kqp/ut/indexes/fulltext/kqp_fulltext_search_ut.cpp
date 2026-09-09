@@ -2465,7 +2465,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextMatchShorterThanMinNgram, RELEVANCE, UTF8) {
     }
 }
 
-Y_UNIT_TEST(ExplainFulltextIndexContains) {
+Y_UNIT_TEST(ExplainFulltextIndexLongUTF8) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
     CreateTexts(db);
@@ -2475,30 +2475,38 @@ Y_UNIT_TEST(ExplainFulltextIndexContains) {
     auto tableClient = kikimr.GetTableClient();
     auto session = tableClient.CreateSession().GetValueSync().GetSession();
 
-    TString query = R"sql(
-        SELECT Key, Text
-        FROM `/Root/Texts` VIEW `fulltext_idx`
-        WHERE FulltextMatch(Text, "cats")
-    )sql";
-    auto result = session.ExplainDataQuery(query).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    for (int prefix = 0; prefix < 2; prefix++) {
+        TString query = Sprintf(R"sql(
+            SELECT Key, Text
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(Text, "%sтетрагидропиранилциклопентилтетрагидропиридопиридиновые")
+        )sql", prefix ? "_" : "");
+        auto result = session.ExplainDataQuery(query).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-    Cerr << result.GetPlan() << Endl;
+        Cerr << result.GetPlan() << Endl;
 
-    NJson::TJsonValue plan;
-    NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-    UNIT_ASSERT(ValidatePlanNodeIds(plan));
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
-    // Verify ReadFullTextIndex operator is present
-    auto readFullTextIndex = FindPlanNodeByKv(plan, "Name", "ReadFullTextIndex");
-    UNIT_ASSERT(readFullTextIndex.IsDefined());
+        // Verify ReadFullTextIndex operator is present
+        auto readFullTextIndex = FindPlanNodeByKv(plan, "Name", "ReadFullTextIndex");
+        UNIT_ASSERT(readFullTextIndex.IsDefined());
 
-    // Verify operator properties
-    const auto& opProps = readFullTextIndex.GetMapSafe();
-    UNIT_ASSERT(opProps.contains("Table"));
-    UNIT_ASSERT(opProps.contains("Index"));
-    UNIT_ASSERT(opProps.contains("Columns"));
-    UNIT_ASSERT_VALUES_EQUAL(opProps.at("Index").GetStringSafe(), "fulltext_idx");
+        // Verify operator properties
+        const auto& opProps = readFullTextIndex.GetMapSafe();
+        UNIT_ASSERT(opProps.contains("Table"));
+        UNIT_ASSERT(opProps.contains("Index"));
+        UNIT_ASSERT(opProps.contains("Columns"));
+        UNIT_ASSERT_VALUES_EQUAL(opProps.at("Index").GetStringSafe(), "fulltext_idx");
+
+        // Verify correct UTF-8 truncation (at odd and even positions)
+        auto expected = prefix
+            ? "\"_тетрагидропиранилциклопентилтетрагидропиридопир ...\""
+            : "\"тетрагидропиранилциклопентилтетрагидропиридопири ...\"";
+        UNIT_ASSERT_VALUES_EQUAL(opProps.at("Query").GetStringSafe(), expected);
+    }
 }
 
 Y_UNIT_TEST(ExplainFulltextIndexRelevance) {
@@ -3756,23 +3764,23 @@ Y_UNIT_TEST(AddFulltextIndexAutoProvisionsRowId) {
     }
 }
 
-Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixed, Compact) {
+Y_UNIT_TEST_QUAD(SelectWithFulltextMatchPrefixed, Compact, KeyPart) {
     auto kikimr = KikimrPrefix(Compact);
     auto db = kikimr.GetQueryClient();
 
     { // Create table with a prefixed fulltext index ON (UserId, Text)
-        TString query = R"sql(
+        TString query = Sprintf(R"sql(
             CREATE TABLE `/Root/Docs` (
                 Key Uint64,
                 UserId Uint64,
                 Text Utf8,
-                PRIMARY KEY (Key),
+                PRIMARY KEY (%s),
                 INDEX fulltext_idx
                     GLOBAL USING fulltext_plain
                     ON (UserId, Text)
                     WITH (tokenizer=standard, use_filter_lowercase=true)
             );
-        )sql";
+        )sql", KeyPart ? "UserId, Key" : "Key");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
@@ -3884,7 +3892,7 @@ Y_UNIT_TEST(CreatePrefixedFulltextIndexOnPrimaryKey) {
     )sql";
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_C(result.GetStatus() != EStatus::SUCCESS, result.GetIssues().ToString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "must not be a primary key column");
+    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "index prefix must not contain all primary key columns");
 }
 
 Y_UNIT_TEST(SelectWithFulltextRelevancePrefixed) {
@@ -4382,7 +4390,7 @@ Y_UNIT_TEST(SelectWithFulltextRelevancePrefixedPerPrefixStats) {
         {{"dogs", {}}});
 }
 
-Y_UNIT_TEST(SelectWithFulltextRelevancePrefixedWriteMaintenance) {
+Y_UNIT_TEST_TWIN(SelectWithFulltextRelevancePrefixedWriteMaintenance, KeyPart) {
     // Online write maintenance for a prefixed relevance index must keep the per-prefix BM25 statistics
     // (DocCount / SumDocLength) in sync. INSERT / UPDATE / DELETE on one prefix change that prefix's
     // scores while other prefixes stay isolated. Plain format only: compact relevance is build-only.
@@ -4394,9 +4402,14 @@ Y_UNIT_TEST(SelectWithFulltextRelevancePrefixedWriteMaintenance) {
         UNIT_ASSERT_VALUES_EQUAL_C(r.GetStatus(), EStatus::SUCCESS, r.GetIssues().ToString());
     };
 
-    exec(R"sql(
-        CREATE TABLE `/Root/Docs` (Key Uint64, UserId Uint64, Text Utf8, PRIMARY KEY (Key));
-    )sql");
+    exec(Sprintf(R"sql(
+        CREATE TABLE `/Root/Docs` (
+            Key Uint64,
+            UserId Uint64,
+            Text Utf8,
+            PRIMARY KEY (%s)
+        );
+    )sql", KeyPart ? "UserId, Key" : "Key"));
     exec(R"sql(
         UPSERT INTO `/Root/Docs` (Key, UserId, Text) VALUES
             (1, 100, "cats"),

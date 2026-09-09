@@ -16,6 +16,11 @@
 namespace NKikimr {
 
 struct TEvThroughputUpdate : public TEventLocal<TEvThroughputUpdate, TEvBlobStorage::EvThroughputUpdate> {
+    ui64 Generation;
+
+    explicit TEvThroughputUpdate(ui64 generation)
+        : Generation(generation)
+    {}
 };
 
 class TMonQueryProcessor : public TActorBootstrapped<TMonQueryProcessor> {
@@ -23,15 +28,17 @@ class TMonQueryProcessor : public TActorBootstrapped<TMonQueryProcessor> {
     TIntrusivePtr<TGroupQueues> GroupQueues;
     const ui32 GroupId;
     TIntrusivePtr<TBlobStorageGroupInfo> Info;
+    const bool IsDormant;
     NMon::TEvHttpInfo::TPtr Ev;
 
 public:
     TMonQueryProcessor(TIntrusivePtr<TBlobStorageGroupProxyMon> mon, TIntrusivePtr<TGroupQueues> groupQueues,
-            ui32 groupId, TIntrusivePtr<TBlobStorageGroupInfo> info, NMon::TEvHttpInfo::TPtr ev)
+            ui32 groupId, TIntrusivePtr<TBlobStorageGroupInfo> info, bool isDormant, NMon::TEvHttpInfo::TPtr ev)
         : Mon(std::move(mon))
         , GroupQueues(std::move(groupQueues))
         , GroupId(groupId)
         , Info(std::move(info))
+        , IsDormant(isDormant)
         , Ev(ev)
     {}
 
@@ -81,6 +88,9 @@ public:
                     str << "Group content";
                 }
                 DIV_CLASS("panel-body") {
+                    DIV() {
+                        str << "State: " << (IsDormant ? "Dormant" : "Active");
+                    }
                     if (Info) {
                         const auto& top = Info->GetTopology();
                         DIV() {
@@ -381,16 +391,33 @@ public:
 
 class TBlobStorageGroupProxyMonActor : public TActorBootstrapped<TBlobStorageGroupProxyMonActor> {
     enum {
-        EvNodeWhiteboardNotify = EventSpaceBegin(TKikimrEvents::ES_PRIVATE)
+        EvNodeWhiteboardNotify = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+        EvMonUpdate,
     };
 
     struct TEvNodeWhiteboardNotify : public TEventLocal<TEvNodeWhiteboardNotify, EvNodeWhiteboardNotify>
-    {};
+    {
+        ui64 Generation;
+
+        explicit TEvNodeWhiteboardNotify(ui64 generation)
+            : Generation(generation)
+        {}
+    };
+
+    struct TEvMonUpdate : public TEventLocal<TEvMonUpdate, EvMonUpdate> {
+        ui64 Generation;
+
+        explicit TEvMonUpdate(ui64 generation)
+            : Generation(generation)
+        {}
+    };
 
     TIntrusivePtr<TBlobStorageGroupProxyMon> Mon;
     const ui32 GroupId;
     TIntrusivePtr<TBlobStorageGroupInfo> Info;
     const TActorId ProxyId;
+    bool IsDormant;
+    ui64 PeriodicGeneration = 0;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -398,11 +425,12 @@ public:
     }
 
     TBlobStorageGroupProxyMonActor(TIntrusivePtr<TBlobStorageGroupProxyMon> mon, ui32 groupId,
-            TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId proxyId)
+            TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId proxyId, bool isDormant)
         : Mon(std::move(mon))
         , GroupId(groupId)
         , Info(std::move(info))
         , ProxyId(proxyId)
+        , IsDormant(isDormant)
     {}
 
     ~TBlobStorageGroupProxyMonActor() {
@@ -436,31 +464,53 @@ public:
         }
 
         Become(&TThis::StateOnline);
-        Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup());
-        Send(SelfId(), new TEvThroughputUpdate);
-        Send(SelfId(), new TEvNodeWhiteboardNotify);
+        if (IsDormant) {
+            Mon->PrepareForDormancy();
+        } else {
+            StartPeriodicProcesses();
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // All states
-    void HandleWakeup() {
-        Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup());
+    void StartPeriodicProcesses() {
+        const ui64 generation = ++PeriodicGeneration;
+        Schedule(TDuration::Seconds(5), new TEvMonUpdate(generation));
+        Send(SelfId(), new TEvThroughputUpdate(generation));
+        Send(SelfId(), new TEvNodeWhiteboardNotify(generation));
+    }
+
+    void Handle(TEvMonUpdate::TPtr& ev) {
+        if (IsDormant || ev->Get()->Generation != PeriodicGeneration) {
+            return;
+        }
         Mon->Update();
+        Schedule(TDuration::Seconds(5), new TEvMonUpdate(PeriodicGeneration));
     }
 
-    void HandleThroughputUpdate() {
+    void Handle(TEvThroughputUpdate::TPtr& ev) {
+        if (IsDormant || ev->Get()->Generation != PeriodicGeneration) {
+            return;
+        }
         Mon->ThroughputUpdate();
-        Schedule(TDuration::Seconds(15), new TEvThroughputUpdate);
+        Schedule(TDuration::Seconds(15), new TEvThroughputUpdate(PeriodicGeneration));
     }
 
-    void HandleNodeWhiteboardNotify() {
+    void NotifyNodeWhiteboard() {
         ui32 groupId, groupGen;
         if (Mon->GetGroupIdGen(&groupId, &groupGen)) {
             auto event = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate>();
             Mon->SerializeToWhiteboard(event->Record, groupId);
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), event.release());
         }
-        Schedule(TDuration::Seconds(15), new TEvNodeWhiteboardNotify);
+    }
+
+    void Handle(TEvNodeWhiteboardNotify::TPtr& ev) {
+        if (IsDormant || ev->Get()->Generation != PeriodicGeneration) {
+            return;
+        }
+        NotifyNodeWhiteboard();
+        Schedule(TDuration::Seconds(15), new TEvNodeWhiteboardNotify(PeriodicGeneration));
     }
 
     void Handle(TEvThroughputAddRequest::TPtr& ev) {
@@ -479,12 +529,28 @@ public:
 
     void Handle(TEvProxySessionsState::TPtr ev) {
         for (auto& monEv : std::exchange(MonQueue, {})) {
-            Register(new TMonQueryProcessor(Mon, ev->Get()->GroupQueues, GroupId, Info, monEv));
+            Register(new TMonQueryProcessor(Mon, ev->Get()->GroupQueues, GroupId, Info, ev->Get()->IsDormant, monEv));
         }
     }
 
     void Handle(TEvBlobStorage::TEvConfigureProxy::TPtr ev) {
         Info = std::move(ev->Get()->Info);
+    }
+
+    void Handle(TEvSetProxyDormant::TPtr& ev) {
+        const bool isDormant = ev->Get()->IsDormant;
+        if (std::exchange(IsDormant, isDormant) == isDormant) {
+            return;
+        }
+
+        if (IsDormant) {
+            ++PeriodicGeneration; // invalidate all already scheduled updates
+            Mon->PrepareForDormancy();
+            NotifyNodeWhiteboard();
+        } else {
+            Mon->ResetThroughput();
+            StartPeriodicProcesses();
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -495,12 +561,13 @@ public:
         switch (ev->GetTypeRewrite()) {
             cFunc(NActors::TEvents::TSystem::Poison, PassAway);
             hFunc(NMon::TEvHttpInfo, Handle);
-            cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
-            cFunc(TEvBlobStorage::EvThroughputUpdate, HandleThroughputUpdate);
-            cFunc(EvNodeWhiteboardNotify, HandleNodeWhiteboardNotify);
+            hFunc(TEvMonUpdate, Handle);
+            hFunc(TEvThroughputUpdate, Handle);
+            hFunc(TEvNodeWhiteboardNotify, Handle);
             hFunc(TEvThroughputAddRequest, Handle);
             hFunc(TEvProxySessionsState, Handle);
             hFunc(TEvBlobStorage::TEvConfigureProxy, Handle);
+            hFunc(TEvSetProxyDormant, Handle);
         default:
             break;
         }
@@ -511,8 +578,8 @@ public:
 // Blob Storage Group Proxy Mon Creation
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 IActor* CreateBlobStorageGroupProxyMon(TIntrusivePtr<TBlobStorageGroupProxyMon> mon, ui32 groupId,
-        TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId proxyId) {
-    return new TBlobStorageGroupProxyMonActor(std::move(mon), groupId, std::move(info), proxyId);
+        TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId proxyId, bool isDormant) {
+    return new TBlobStorageGroupProxyMonActor(std::move(mon), groupId, std::move(info), proxyId, isDormant);
 }
 
 } // NKikimr

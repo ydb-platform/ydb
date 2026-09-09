@@ -327,6 +327,7 @@ private:
 
         ev->SetProgressStatsPeriod(TDuration::MilliSeconds(req->stats_period_ms()));
         ev->Record.MutableRequest()->SetCollectDiagnostics(NeedCollectDiagnostics(*req));
+        ev->Record.MutableRequest()->SetCollectAffectedRows(req->collect_affected_rows());
 
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, 0, Span_.GetTraceId())) {
             NYql::TIssues issues;
@@ -586,6 +587,14 @@ private:
 };
 
 } // namespace
+
+template<>
+template<>
+IActor* TEvExecuteQueryRequest::CreateRpcActor(IRequestNoOpCtx* msg, ui64 rpcBufferSize) {
+    auto* req = dynamic_cast<TEvExecuteQueryRequest*>(msg);
+    Y_ABORT_UNLESS(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    return new TExecuteQueryRPC(req, rpcBufferSize);
+}
 
 namespace NQuery {
 

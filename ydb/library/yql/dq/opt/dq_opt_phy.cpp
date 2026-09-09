@@ -3787,7 +3787,8 @@ TExprBase DqPushWatermarkGeneratorToStage(
     TExprBase node,
     TExprContext& ctx,
     IOptimizationContext& optCtx,
-    const TParentsMap& parentsMap
+    const TParentsMap& parentsMap,
+    bool allowStageMultiUsage
 ) {
     const auto maybeWatermarkGenerator = node.Maybe<TDqPhyWatermarkGenerator>();
     if (!maybeWatermarkGenerator) {
@@ -3801,7 +3802,7 @@ TExprBase DqPushWatermarkGeneratorToStage(
     }
     const auto connection = maybeConnection.Cast();
 
-    if (!IsSingleConsumerConnection(connection, parentsMap)) {
+    if (!IsSingleConsumerConnection(connection, parentsMap, allowStageMultiUsage)) {
         return node;
     }
 

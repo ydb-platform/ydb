@@ -13,6 +13,7 @@ SRCS(
     narrowing_visitor.cpp
     parse_tree.cpp
     parser.cpp
+    path_visitor.cpp
 )
 
 END()

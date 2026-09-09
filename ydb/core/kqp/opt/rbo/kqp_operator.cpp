@@ -877,6 +877,42 @@ NJson::TJsonValue TOpJoin::ToJson(ui32 explainFlags) {
 }
 
 /**
+ * OpDependentJoin.
+ * Note: it does not have runtime support. We have to eliminate it or to rewrite it.
+ */
+
+TOpDependentJoin::TOpDependentJoin(TIntrusivePtr<IOperator> domain, TIntrusivePtr<IOperator> input, const TVector<TInfoUnit>& dependencies,
+                                   TPositionHandle pos)
+    : IBinaryOperator(EOperator::DependentJoin, pos, domain, input)
+    , Dependencies(dependencies) {
+    Y_ENSURE(!Dependencies.empty(), "Dependent join must have correlated columns");
+}
+
+void TOpDependentJoin::ComputeOutputIUs() {
+    TVector<TInfoUnit> res = GetDomain()->GetOutputIUs();
+    for (const auto& iu : GetInput()->GetOutputIUs()) {
+        if (!ContainsInfoUnit(res, iu)) {
+            res.push_back(iu);
+        }
+    }
+    Props.OutputIUs = std::move(res);
+}
+
+TString TOpDependentJoin::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    TStringBuilder res;
+    res << "DependentJoin, Domain: [";
+    for (size_t i = 0; i < Dependencies.size(); i++) {
+        if (i) {
+            res << ", ";
+        }
+        res << Dependencies[i].GetFullName();
+    }
+    res << "]";
+    return res;
+}
+
+/**
  * OpUnionAll operator methods
  */
 
@@ -1383,6 +1419,33 @@ NJson::TJsonValue TOpAggregate::ToJson(ui32 explainFlags) {
     return res;
 }
 
+/**
+ * OpGroupingSets operator. Logical representation of grouping sets.
+ */
+TOpGroupingSets::TOpGroupingSets(TIntrusivePtr<TOpAggregate> input, TVector<TVector<TInfoUnit>> groupingSets, TPositionHandle pos)
+    : IUnaryOperator(EOperator::GroupingSets, pos, input)
+    , GroupingSets(std::move(groupingSets)) {
+    Y_ENSURE(!GroupingSets.empty(), "Grouping sets list must not be empty");
+}
+
+void TOpGroupingSets::ComputeOutputIUs() {
+    Props.OutputIUs = GetInput()->GetOutputIUs();
+}
+
+TString TOpGroupingSets::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+
+    TStringBuilder result;
+    result << "GroupingSets [";
+    for (size_t setIndex = 0; setIndex < GroupingSets.size(); ++setIndex) {
+        if (setIndex != 0) {
+            result << ", ";
+        }
+        result << "(" << FormatInfoUnits(GroupingSets[setIndex]) << ")";
+    }
+    return result << "]";
+}
+
 /***
  * OpCBOTree operator methods
  */
@@ -1442,6 +1505,108 @@ TString TOpCBOTree::ToString(TExprContext& ctx) {
     }
     res << "]";
     return res;
+}
+
+/**
+* Table Effect operator methods: these are inserts/updates/deletes
+*/
+TOpTableEffect::TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table, EEffectType type, TEffectOptions options)
+    : IUnaryOperator(EOperator::TableEffect, pos, input)
+    , Table(table)
+    , EffectType(type)
+    , Options(options) {
+
+    if (options.ReturningColumns.has_value()) {
+        for (const auto & c : options.ReturningColumns.value()) {
+            OutputIUs.push_back(TInfoUnit(c));
+        }
+    }
+
+    UsedIUs = GetInput()->GetOutputIUs();
+}
+
+TVector<TInfoUnit> TOpTableEffect::GetUsedIUs(TPlanProps& props) {
+    Y_UNUSED(props);
+    return UsedIUs;
+}
+
+void TOpTableEffect::ComputeOutputIUs() {
+    Props.OutputIUs = OutputIUs;
+}
+
+TString TOpTableEffect::GetExplainName() const {
+    switch (EffectType) {
+        case EEffectType::InsertRows:
+        case EEffectType::InsertRowsIndex:
+            return "InsertRows";
+        case EEffectType::UpdateRows:
+        case EEffectType::UpdateRowsIndex:
+            return "UpdateRows";
+        case EEffectType::DeleteRows:
+        case EEffectType::DeleteRowsIndex:
+            return "DeleteRows";
+        default:
+            Y_ENSURE(false, "Uknown table effect type");
+    }
+}
+
+TString TOpTableEffect::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    return GetExplainName();
+}
+
+TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx) {
+    if (Options.ReturningColumns.has_value() && Options.ReturningColumns->size()) {
+        Y_ENSURE(false, "Returning columns not supported in new optimizer");
+    }
+
+    TString mode;
+    
+    if (EffectType == EEffectType::InsertRows) {
+        mode = "insert";
+    } else if (EffectType == EEffectType::UpdateRows) {
+        mode = "update";
+    } else if (EffectType == EEffectType::UpsertRows) {
+        mode = "upsert";
+    } else if (EffectType == EEffectType::DeleteRows) {
+        mode = "delete";
+    } else {
+        Y_ENSURE(false, "Unsupported DML in new optimizer");
+    }
+
+    TString isBatch = "false";
+    if (Options.IsBatch.has_value() && Options.IsBatch.value()){
+        isBatch = "true";
+    }
+
+    TVector<TExprNode::TPtr> defaultColumns;
+    if (Options.DefaultColumns.has_value()) {
+        for (auto c : Options.DefaultColumns.value()) {
+            defaultColumns.push_back(ctx.NewAtom(Pos, c));
+        }
+    }
+
+    TVector<TExprNode::TPtr> settings;
+    if (Options.Settings.has_value()) {
+        settings = Options.Settings.value();
+    }
+
+    return Build<TKqpTableSinkSettings>(ctx, Pos)
+            .Table(Table)
+            .InconsistentWrite().Build("false")
+            .Mode().Build(mode)
+            .Priority().Build("0")
+            .StreamWrite().Build("false")
+            .IsBatch().Build(isBatch)
+            .IsIndexImplTable().Build("false")
+            .DefaultColumns()
+                .Add(defaultColumns)
+            .Build()
+            .ReturningColumns().Build()
+            .Settings()
+                .Add(settings)
+            .Build()
+            .Done().Ptr();
 }
 
 /**

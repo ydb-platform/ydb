@@ -1,5 +1,6 @@
 RECURSE(
     bin
+    ut
 )
 
 PY3_LIBRARY(ydbd_slice)

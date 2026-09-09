@@ -4,6 +4,8 @@
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/neumann_hash_table.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_rh_hash.h>
 
+#include <type_traits>
+
 namespace NKikimr::NMiniKQL::NJoinTable {
 
 using TTuple = const NYql::NUdf::TUnboxedValue*;
@@ -123,19 +125,34 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         Lookup(row, resumeIndex, consume, [] { return false; });
     }
 
-    // Stops when isFull() after a match. resumeIndex is the next directory slot for this
-    // probe and is reset to 0 when every match has been consumed
-    bool Lookup(TSingleTuple row, size_t& resumeIndex, std::invocable<TSingleTuple> auto consume,
-                std::predicate auto isFull) {
+    // resumeIndex is how many matches of this probe were already consumed
+    bool Lookup(TSingleTuple row, size_t& resumeIndex, auto consume, std::predicate auto isFull) {
         if (Empty()) {
             resumeIndex = 0;
             return true;
         }
-        return Table_.Apply(row.PackedData, row.OverflowBegin, resumeIndex,
-                            [consume, this](const ui8* tuplePackedData) {
-                                consume(TSingleTuple{tuplePackedData, BuildData_.Overflow.data()});
-                            },
-                            isFull);
+        bool full = false;
+        size_t seen = 0;
+        Table_.Apply(row.PackedData, row.OverflowBegin, [&](const ui8* packed) {
+            if (seen++ < resumeIndex) {
+                return true;
+            }
+            const TSingleTuple match{packed, BuildData_.Overflow.data()};
+            bool keep = true;
+            if constexpr (std::is_void_v<decltype(consume(match))>) {
+                consume(match);
+            } else {
+                keep = bool(consume(match));
+            }
+            resumeIndex = seen;
+            full = isFull();
+            return keep && !full;
+        });
+        if (full) {
+            return false;
+        }
+        resumeIndex = 0;
+        return true;
     }
 
     // Stops on the first accepted match. Semi/only joins only need existence, so
@@ -169,26 +186,24 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         return true;
     }
 
-    // Call only after the pair is accepted, including join filters. Marking inside Lookup would
-    // treat filter-rejected matches as used and drop them from unmatched Left/LeftOnly output.
-    void MarkUsed(TSingleTuple tuple) {
+    // After the pair is accepted, including join filters. Returns true if this tuple was unused
+    bool MarkUsed(TSingleTuple tuple) {
         if (!TrackUsed_) {
-            return;
+            return false;
         }
         const size_t index = Table_.IndexOfPackedRow(tuple.PackedData);
         MKQL_ENSURE(index < Used_.size(), "used-tracking index out of bounds");
+        const bool first = Used_[index] == 0;
         Used_[index] = 1;
+        return first;
     }
 
-    // Scans tuples whose used flag equals `used`, starting at `resumeIndex`. Stops as soon as isFull
-    // reports the output is full, so a large table is drained across several calls. Returns true when
-    // the whole table has been scanned, otherwise leaves resumeIndex pointing at the next tuple.
-    bool ForEachWhereUsed(bool used, size_t& resumeIndex, std::invocable<TSingleTuple> auto consume,
-                          std::predicate auto isFull) const {
-        MKQL_ENSURE(TrackUsed_, "ForEachWhereUsed called but not tracking used tuples");
+    bool ForEachUnused(size_t& resumeIndex, std::invocable<TSingleTuple> auto consume,
+                       std::predicate auto isFull) const {
+        MKQL_ENSURE(TrackUsed_, "ForEachUnused called but not tracking used tuples");
         const size_t nTuples = static_cast<size_t>(BuildData_.NTuples);
         for (; resumeIndex < nTuples; ++resumeIndex) {
-            if (bool(Used_[resumeIndex]) != used) {
+            if (Used_[resumeIndex]) {
                 continue;
             }
             consume(TSingleTuple{

@@ -615,18 +615,26 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
             }
             // A non-zero cursor means this probe already produced a match on a previous call
             [[maybe_unused]] bool found = buildCursor > 0;
-            auto onMatch = [&](TSingleTuple tableMatch) {
+            auto onMatch = [&](TSingleTuple tableMatch) -> bool {
                 if constexpr (HasFilter) {
                     if (!filter->PairPasses(tableMatch)) {
-                        return;
+                        return true;
                     }
                 }
                 found = true;
-                table.MarkUsed(tableMatch);
+                const bool firstUse = table.MarkUsed(tableMatch);
                 if constexpr (Join.Kind == EJoinKind::Inner || Join.Kind == EJoinKind::Left ||
                               Join.Kind == EJoinKind::Cross) {
                     consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = probeRow});
+                } else if constexpr (Join.Kind == EJoinKind::LeftSemi && PreservedRowsInBuildTable()) {
+                    if (firstUse) {
+                        consume(tableMatch);
+                    }
                 }
+                if constexpr (LeftSemiOrOnly(Join.Kind) && !PreservedRowsInBuildTable()) {
+                    return false;
+                }
+                return true;
             };
             if constexpr (IsGrid) {
                 if (!table.ForEachFrom(buildCursor, onMatch, isFull)) {
@@ -746,7 +754,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     state.FetchedPack = std::move(GetPayload(var));
                 } else {
                     MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unexpected enum");
-                    if constexpr (PreservedRowsInBuildTable()) {
+                    if constexpr (PreservedRowsInBuildTable() && Join.Kind != EJoinKind::LeftSemi) {
                         if (!EmitPreservedBuildRowsFromInMemoryBuckets(state.Spiller, state.PreservedBucketIndex,
                                                                        state.PreservedResumeIndex, consume, isFull)) {
                             return EFetchResult::One;
@@ -888,7 +896,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                         }
                     } else if (table->Futures.empty()) {
                         MKQL_ENSURE(currentProbe.empty(), "sanity check");
-                        if constexpr (PreservedRowsInBuildTable()) {
+                        if constexpr (PreservedRowsInBuildTable() && Join.Kind != EJoinKind::LeftSemi) {
                             if (!EmitPreservedBuildRows(table->Table, table->PreservedResumeIndex, consume, isFull)) {
                                 return EFetchResult::One;
                             }
@@ -917,7 +925,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
     // Both emit helpers return false when they stopped on a full output; the caller must return
     // control to the batch loop and call MatchRows again to pick the scan up where it left off.
     bool EmitPreservedBuildRows(TTable& table, size_t& resumeIndex, auto consume, auto isFull) {
-        return table.ForEachWhereUsed(Join.Kind == EJoinKind::LeftSemi, resumeIndex, consume, isFull);
+        return table.ForEachUnused(resumeIndex, consume, isFull);
     }
 
     template <typename TSpiller>

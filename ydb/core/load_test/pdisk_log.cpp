@@ -363,8 +363,8 @@ public:
             for (auto& worker : Workers) {
                 AppData(ctx)->Dcb->RegisterLocalControl(worker->MaxInFlight,
                         Sprintf("PDiskWriteLoadActor_MaxInFlight_%04" PRIu64 "_%04" PRIu32, Tag, worker->Idx));
-                SendRequest(ctx, worker->GetYardInit(PDiskGuid));
             }
+            InitWorker(ctx, 0);
         } else {
             LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " Send TEvRegisterPDiskLoadActor");
             Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvRegisterPDiskLoadActor());
@@ -379,7 +379,15 @@ public:
                 << " TEvRegisterPDiskLoadActorResult received, ownerRound# " << (ui32)msg->OwnerRound);
         for (auto& worker : Workers) {
             worker->OwnerRound = msg->OwnerRound + 1;
-            SendRequest(ctx, worker->GetYardInit(PDiskGuid));
+        }
+        InitWorker(ctx, 0);
+    }
+
+    void InitWorker(const TActorContext& ctx, ui32 workerIdx) {
+        // YardInitResult has no VDisk ID or request cookie. Keep one initial YardInit
+        // in flight so its result belongs to the first worker without PDiskParams.
+        if (workerIdx < Workers.size()) {
+            SendRequest(ctx, Workers[workerIdx]->GetYardInit(PDiskGuid));
         }
     }
 
@@ -407,6 +415,7 @@ public:
                 LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " owner# "
                         << (ui32)worker->PDiskParams->Owner << " going to send first TEvLogRead# " << logRead->ToString());
                 SendRequest(ctx, std::move(logRead));
+                InitWorker(ctx, worker->Idx + 1);
                 break;
             }
         }

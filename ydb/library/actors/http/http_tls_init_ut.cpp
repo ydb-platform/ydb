@@ -9,6 +9,7 @@
 #include <util/network/address.h>
 #include <util/network/sock.h>
 #include <util/network/socket.h>
+#include <util/system/tempfile.h>
 #include <util/system/condvar.h>
 #include <util/system/mutex.h>
 #include <netinet/in.h>
@@ -177,6 +178,28 @@ Y_UNIT_TEST_SUITE(HttpProxyTlsInitialization) {
         UNIT_ASSERT_GE(proxy.Retries, 2u);
         UNIT_ASSERT_EQUAL_C(ProbeTcp("127.0.0.1", port), EProbeResult::Refused,
             "Retrying acceptor opened a TCP listener without a security context");
+    }
+
+    // The file-based path carries the same contract, and its loaders report failure with 0
+    // rather than a negative value, so an unusable certificate file must also stop the listener.
+    Y_UNIT_TEST(UnloadableCertificateFileDoesNotListen) {
+        TTempFileHandle certificateFile;
+        certificateFile.Write(MALFORMED_PEM.data(), MALFORMED_PEM.size());
+
+        TPortManager portManager;
+        TIpPort port = portManager.GetTcpPort();
+
+        TSimulatedProxy proxy;
+        THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
+        add->Secure = true;
+        add->CertificateFile = certificateFile.Name();
+        add->PrivateKeyFile = certificateFile.Name();
+        proxy.AddListeningPort(std::move(add));
+
+        UNIT_ASSERT(proxy.NoConfirmListenWithin(TDuration::MilliSeconds(500)));
+        UNIT_ASSERT_GE(proxy.Retries, 1u);
+        UNIT_ASSERT_EQUAL_C(ProbeTcp("127.0.0.1", port), EProbeResult::Refused,
+            "Unloadable certificate file opened a TCP listener");
     }
 
     Y_UNIT_TEST(ValidInlinePemServesHttps) {

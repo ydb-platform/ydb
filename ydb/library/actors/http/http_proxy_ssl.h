@@ -82,14 +82,15 @@ struct TSslHelpers {
         TSslHolder<SSL_CTX> ctx = CreateSslCtx(SSLv23_server_method());
         SSL_CTX_set_ecdh_auto(ctx.Get(), 1);
         int res;
+        // The loaders report failure with 0, never with a negative value.
         res = SSL_CTX_use_certificate_chain_file(ctx.Get(), certificate.c_str());
-        if (res < 0) {
+        if (res <= 0) {
             // TODO(xenoxeno): more diagnostics?
             return nullptr;
         }
         // Load key. The key can be set through explicit key field or with the same file with certificate
         res = SSL_CTX_use_PrivateKey_file(ctx.Get(), key.empty() ? certificate.c_str() : key.c_str(), SSL_FILETYPE_PEM);
-        if (res < 0) {
+        if (res <= 0) {
             // TODO(xenoxeno): more diagnostics?
             return nullptr;
         }

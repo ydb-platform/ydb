@@ -73,11 +73,6 @@ protected:
         TString address = event->Get()->Address;
         ui16 port = event->Get()->Port;
         MaxRecycledRequestsCount = event->Get()->MaxRecycledRequestsCount;
-        if (event->Get()->PreboundSocket) {
-            Socket = event->Get()->PreboundSocket;
-        } else if (!Socket) {
-            Socket = TryBindListeningSocket(address, port);
-        }
         Endpoint = std::make_shared<TPrivateEndpointInfo>(event->Get()->CompressContentTypes);
         Endpoint->Owner = SelfId();
         Endpoint->Proxy = Owner;
@@ -88,12 +83,6 @@ protected:
         Endpoint->RateLimiter.Period = TDuration::Seconds(1);
         Endpoint->InactivityTimeout = event->Get()->InactivityTimeout;
         int err = 0;
-        if (!Socket) {
-            err = -1;
-            YDB_LOG_WARN("Failed to bind",
-                {"address", address},
-                {"port", port});
-        }
         if (Endpoint->Secure) {
             if (!event->Get()->SslCertificatePem.empty()) {
                 Endpoint->SecureContext = TSslHelpers::CreateServerContext(
@@ -114,6 +103,22 @@ protected:
             // Enable ALPN for HTTP/2 negotiation on secure endpoints
             if (Endpoint->SecureContext && Endpoint->AllowHttp2) {
                 TSslHelpers::EnableAlpn(Endpoint->SecureContext.Get());
+            }
+        }
+        // Open (or adopt) the listening socket only once the security context is ready:
+        // a listening socket without a usable context accepts TCP connections that can
+        // never be served, which makes a TCP probe report a broken endpoint as ready.
+        if (err == 0) {
+            if (event->Get()->PreboundSocket) {
+                Socket = event->Get()->PreboundSocket;
+            } else if (!Socket) {
+                Socket = TryBindListeningSocket(address, port);
+            }
+            if (!Socket) {
+                err = -1;
+                YDB_LOG_WARN("Failed to bind",
+                    {"address", address},
+                    {"port", port});
             }
         }
         TStringBuf schema = Endpoint->Secure ? "https://" : "http://";

@@ -225,44 +225,108 @@ TVector<std::pair<TInfoUnit, TExprNode::TPtr>> BuildExpressionsFromColumns(const
     return renameExprMap;
 }
 
+TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprContext &ctx) {
+    if (input->IsCallable("Member")) {
+        auto member = TCoMember(input);
+        // clang-format off
+        auto res = Build<TCoMember>(ctx, input->Pos())
+            .Struct(arg)
+            .Name(member.Name())
+        .Done().Ptr();
+        // clang-format on
+        res->SetTypeAnn(input->GetTypeAnn());
+        return res;
+    } else if (input->IsCallable()) {
+        TVector<TExprNode::TPtr> newChildren;
+        for (auto c : input->Children()) {
+            newChildren.push_back(ReplaceArg(c, arg, ctx));
+        }
+        // clang-format off
+        auto res = ctx.Builder(input->Pos())
+            .Callable(input->Content())
+            .Add(std::move(newChildren))
+            .Seal()
+        .Build();
+        // clang-format on
+        res->SetTypeAnn(input->GetTypeAnn());
+        return res;
+    } else if (input->IsList()) {
+        TVector<TExprNode::TPtr> newChildren;
+        for (auto c : input->Children()) {
+            newChildren.push_back(ReplaceArg(c, arg, ctx));
+        }
+        // clang-format off
+        auto res = ctx.Builder(input->Pos())
+            .List()
+            .Add(std::move(newChildren))
+            .Seal()
+        .Build();
+        // clang-format on
+        res->SetTypeAnn(input->GetTypeAnn());
+        return res;
+    } else if (input->IsLambda()) {
+        auto lambda = TCoLambda(input);
+        // clang-format off
+        auto res = Build<TCoLambda>(ctx, input->Pos())
+            .Args(lambda.Args())
+            .Body(ReplaceArg(lambda.Body().Ptr(), arg, ctx))
+        .Done().Ptr();
+        // clang-format on
+        res->SetTypeAnn(input->GetTypeAnn());
+        return res;
+    } else {
+        return input;
+    }
+}
+
 TExprNode::TPtr BuildAggregateExpressionMap(TExprNode::TPtr resultExpr,
                                             const TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>& aggFieldsExpressionsMap,
                                             const TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& groupByKeysExpressionsMap,
                                             TExprContext& ctx, TPositionHandle pos) {
     // Add expressions
     TVector<TExprNode::TPtr> mapElements;
+    TVector<TExprNode::TPtr> lambdaElements;
+
     for (const auto& [colName, expr, forceOptional] : aggFieldsExpressionsMap) {
         // clang-format off
         mapElements.push_back(Build<TKqpOpMapElementLambda>(ctx, pos)
-            .Input(resultExpr)
             .Variable()
                 .Value(colName.GetFullName())
             .Build()
-            .Lambda(expr)
             .ForceOptional()
                 .Value(forceOptional ? "True" : "False")
             .Build()
         .Done().Ptr());
         // clang-format on
+        Y_ENSURE(expr->IsLambda(), "Encountered non lambda");
+        lambdaElements.push_back(TCoLambda(expr).Body().Ptr());
     }
 
     // Add expressions for group by keys.
     for (const auto& [colName, expr] : groupByKeysExpressionsMap) {
         // clang-format off
         mapElements.push_back(Build<TKqpOpMapElementLambda>(ctx, pos)
-            .Input(resultExpr)
             .Variable()
                 .Value(colName.GetFullName())
             .Build()
-            .Lambda(expr)
             .ForceOptional().Value("False").Build()
         .Done().Ptr());
         // clang-format on
+        Y_ENSURE(expr->IsLambda(), "Encountered non lambda");
+        lambdaElements.push_back(TCoLambda(expr).Body().Ptr());
     }
+
+    auto lambdaArg = ctx.NewArgument(pos, "arg");
+    auto lambdaBody = ctx.NewList(pos, std::move(lambdaElements));
+    lambdaBody = ReplaceArg(lambdaBody, lambdaArg, ctx);
 
     // clang-format off
     return Build<TKqpOpMap>(ctx, pos)
         .Input(resultExpr)
+        .Lambda()
+            .Args({lambdaArg})
+            .Body(lambdaBody)
+        .Build()
         .MapElements()
             .Add(mapElements)
         .Build()
@@ -574,6 +638,7 @@ void EliminateDuplicateAggregations(TVector<std::tuple<TInfoUnit, TExprNode::TPt
     // Collect all columns which are needed after aggregations.
     THashSet<TString> aggregationResults;
     for (const auto& expression : expressionsMapPostAgg) {
+
         auto lambda = TCoLambda(get<1>(expression));
         const auto members = FindNodes(lambda.Body().Ptr(), [](const TExprNode::TPtr& node) { return node->IsCallable("Member"); });
         for (const auto& member : members) {
@@ -1187,6 +1252,8 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
         auto setItem = setItems->ChildPtr(i);
 
         TVector<TExprNode::TPtr> resultElements;
+        TVector<TExprNode::TPtr> resultLambdaElements;
+
         // In pg syntax duplicate attributes are allowed in the results, but we need to rename them
         // We use the counters for this purpose
         THashMap<TString, int> resultElementCounters;
@@ -1613,18 +1680,11 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
 
             // clang-format off
             resultElements.push_back(Build<TKqpOpMapElementLambda>(ctx, node->Pos())
-                .Input(resultExpr)
                 .Variable(variable)
-                .Lambda<TCoLambda>()
-                    .Args({"_map_arg_"})
-                    .Body<TExprApplier>()
-                        .Apply(TCoLambda(lambda))
-                        .With(TCoLambda(lambda).Args().Arg(0), "_map_arg_")
-                    .Build()
-                .Build()
                 .ForceOptional().Value("False").Build()
             .Done().Ptr());
             // clang-format on
+            resultLambdaElements.push_back(lambda.Body().Ptr());
 
             finalProjection.push_back(columnName);
         };
@@ -1696,7 +1756,6 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                 if (std::find(finalProjection.begin(), finalProjection.end(), iu.GetFullName()) == finalProjection.end()) {
                     // clang-format off
                     resultElements.push_back(Build<TKqpOpMapElementRename>(ctx, node->Pos())
-                        .Input(resultExpr)
                         .Variable().Value(iu.GetFullName()).Build()
                         .From().Value(iu.GetFullName()).Build()
                     .Done().Ptr());
@@ -1705,9 +1764,21 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
             }
         }
 
+        for (auto e : resultLambdaElements) {
+            YQL_CLOG(TRACE, ProviderKikimr) << "Lambda element: " << PrintRBOExpression(e, ctx);
+        }
+
+        auto lambdaArg = ctx.NewArgument(node->Pos(), "arg");
+        auto lambdaBody = ctx.NewList(node->Pos(), std::move(resultLambdaElements));
+        lambdaBody = ReplaceArg(lambdaBody, lambdaArg, ctx);
+
         // clang-format off
         auto setItemPtr = Build<TKqpOpMap>(ctx, node->Pos())
             .Input(resultExpr)
+            .Lambda()
+                .Args({lambdaArg})
+                .Body(lambdaBody)
+            .Build()
             .MapElements()
                 .Add(resultElements)
             .Build()
@@ -1725,7 +1796,6 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
             for (const auto& column : finalProjection) {
                 // clang-format off
                 projectElements.push_back(Build<TKqpOpMapElementRename>(ctx, node->Pos())
-                    .Input(setItemPtr)
                     .Variable().Value(column).Build()
                     .From().Value(column).Build()
                 .Done().Ptr());
@@ -1735,6 +1805,10 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
             // clang-format off
             setItemPtr = Build<TKqpOpMap>(ctx, node->Pos())
                 .Input(setItemPtr)
+                .Lambda()
+                    .Args({"arg"})
+                    .Body(ctx.NewList(node->Pos(), {}))
+                .Build()
                 .MapElements()
                     .Add(projectElements)
                 .Build()

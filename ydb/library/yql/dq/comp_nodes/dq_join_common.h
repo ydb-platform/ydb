@@ -313,7 +313,7 @@ template <typename Source> class TInMemoryHashJoin {
             return EFetchResult::Finish;
         }
 
-        auto lookupOne = [&](TSingleTuple probeTuple) {
+        auto lookupProbeRow = [&](TSingleTuple probeTuple) {
             return Table_.Lookup(probeTuple, BuildCursor_,
                                  [&](TSingleTuple buildTuple) {
                                      consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
@@ -327,7 +327,7 @@ template <typename Source> class TInMemoryHashJoin {
                 if (idx++ < ResumeIndex_) {
                     continue;
                 }
-                if (!lookupOne(probeTuple)) {
+                if (!lookupProbeRow(probeTuple)) {
                     ResumeIndex_ = idx - 1;
                     return EFetchResult::One;
                 }
@@ -350,7 +350,7 @@ template <typename Source> class TInMemoryHashJoin {
                 ui32 idx = 0;
                 for (TSingleTuple probeTuple : *FetchedPack_) {
                     idx++;
-                    if (!lookupOne(probeTuple)) {
+                    if (!lookupProbeRow(probeTuple)) {
                         ResumeIndex_ = idx - 1;
                         return EFetchResult::One;
                     }

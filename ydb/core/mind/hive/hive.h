@@ -375,6 +375,8 @@ struct TBalancerSettings {
     const std::vector<TNodeId> FilterNodeIds = {};
     EResourceToBalance ResourceToBalance = EResourceToBalance::ComputeResources;
     std::optional<TFullObjectId> FilterObjectId;
+    // Scatter sources must stay above this bound throughout the run.
+    std::optional<double> MinNodeUsage;
 };
 
 struct TStorageBalancerSettings {

@@ -5457,6 +5457,176 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
     }
 
+    void TestHiveScatterStopsAtSourceThreshold(ui32 inflight) {
+        constexpr ui32 NUM_NODES = 6;
+        constexpr ui64 CPU_PER_TABLET = 10'000;
+        constexpr ui64 MAX_CPU = 1'000'000;
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 owner = MakeTabletID(false, 1);
+        TTestBasicRuntime runtime(NUM_NODES, false);
+        Setup(runtime, true, 1, [inflight](TAppPrepare& app) {
+            app.HiveConfig.SetMaxResourceCPU(MAX_CPU);
+            app.HiveConfig.SetMinNodeUsageToBalance(0.0175);
+            app.HiveConfig.SetMinCPUScatterToBalance(0.5);
+            app.HiveConfig.SetMinCounterScatterToBalance(1);
+            app.HiveConfig.SetMinMemoryScatterToBalance(1);
+            app.HiveConfig.SetMinNetworkScatterToBalance(1);
+            app.HiveConfig.SetMaxNodeUsageToKick(1);
+            app.HiveConfig.SetSpreadNeighbours(false);
+            app.HiveConfig.SetWarmUpEnabled(false);
+            app.HiveConfig.SetTabletKickCooldownPeriod(0);
+            app.HiveConfig.SetResourceChangeReactionPeriod(86'400);
+            app.HiveConfig.SetMetricsWindowSize(3'600'000);
+            app.HiveConfig.SetMaxMovementsOnAutoBalancer(100);
+            app.HiveConfig.SetBalancerInflight(inflight);
+            app.HiveConfig.SetNodeBalanceStrategy(NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_HEAVIEST);
+            app.HiveConfig.SetNodeSelectStrategy(NKikimrConfig::THiveConfig::HIVE_NODE_SELECT_STRATEGY_RANDOM_MIN_7P);
+        });
+        // Use identical limits independently of the machine running this test.
+        auto limitsObserver = runtime.AddObserver<TEvLocal::TEvStatus>([](auto&& ev) {
+            ev->Get()->Record.ClearResourceMaximum();
+        });
+        TBlockEvents<NHive::TEvPrivate::TEvProcessTabletBalancer> blockBalancer(runtime);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, NUM_NODES);
+            runtime.DispatchEvents(options);
+        }
+        const TActorId sender = runtime.AllocateEdgeActor();
+        using TDistribution = std::array<std::vector<ui64>, NUM_NODES>;
+        TDistribution initial;
+        THashMap<ui64, ui32> tabletNodes;
+        ui64 ownerIdx = 100500;
+        for (ui32 node = 0; node < NUM_NODES; ++node) {
+            for (ui32 tablet = 0; tablet <= node; ++tablet, ++ownerIdx) {
+                auto create = MakeHolder<TEvHive::TEvCreateTablet>(owner, ownerIdx, TTabletTypes::Dummy, BINDED_CHANNELS);
+                create->Record.SetObjectId(ownerIdx);
+                create->Record.AddAllowedNodeIDs(runtime.GetNodeId(node));
+                if (node == NUM_NODES - 1) {
+                    // Six percent of background load that the balancer cannot move.
+                    create->Record.SetBalancerPolicy(NKikimrHive::POLICY_IGNORE);
+                }
+                const ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, owner, std::move(create), 0, true);
+                MakeSureTabletIsUp(runtime, tabletId, 0);
+                initial[node].push_back(tabletId);
+                tabletNodes.emplace(tabletId, node);
+                if (node != NUM_NODES - 1) {
+                    // The placement restriction is only for constructing the fixture.
+                    auto update = MakeHolder<TEvHive::TEvCreateTablet>(owner, ownerIdx, TTabletTypes::Dummy, BINDED_CHANNELS);
+                    update->Record.SetObjectId(ownerIdx);
+                    UNIT_ASSERT_VALUES_EQUAL(SendCreateTestTablet(runtime, hiveTablet, owner, std::move(update), 0, false), tabletId);
+                }
+            }
+        }
+        auto getDistribution = [&]() {
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo());
+            TAutoPtr<IEventHandle> handle;
+            auto* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+            TDistribution result;
+            for (const auto& tablet : response->Record.GetTablets()) {
+                if (!tabletNodes.contains(tablet.GetTabletID())) {
+                    continue;
+                }
+                const ui32 node = tablet.GetNodeID() - runtime.GetNodeId(0);
+                UNIT_ASSERT_LT(node, NUM_NODES);
+                result[node].push_back(tablet.GetTabletID());
+            }
+            for (auto& tablets : result) {
+                std::sort(tablets.begin(), tablets.end());
+            }
+            return result;
+        };
+        for (auto& tablets : initial) {
+            std::sort(tablets.begin(), tablets.end());
+        }
+        UNIT_ASSERT_EQUAL(getDistribution(), initial);
+
+        auto metricsObserver = runtime.AddObserver<TEvHive::TEvTabletMetrics>([&](auto&& ev) {
+            auto& record = ev->Get()->Record;
+            record.MutableResourceMaximum()->Clear();
+            record.MutableResourceMaximum()->SetCPU(MAX_CPU);
+            const ui32 node = ev->Sender.NodeId() - runtime.GetNodeId(0);
+            if (node < NUM_NODES) {
+                record.MutableTotalResourceUsage()->Clear();
+                record.MutableTotalResourceUsage()->SetCPU((node + 1) * CPU_PER_TABLET);
+            }
+            for (auto& metric : *record.MutableTabletMetrics()) {
+                if (tabletNodes.contains(metric.GetTabletID())) {
+                    metric.MutableResourceUsage()->SetCPU(CPU_PER_TABLET);
+                }
+            }
+        });
+        // Repeated node totals become stable and deliberately stay at their initial
+        // values throughout the moves. In particular node 5 still reports 5% after
+        // its tablet aggregate reaches 3%; this must not permit a third evacuation.
+        for (ui32 node = 0; node < NUM_NODES; ++node) {
+            const TActorId localSender = runtime.AllocateEdgeActor(node);
+            for (ui32 sample = 0; sample < 20; ++sample) {
+                auto metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
+                metrics->Record.MutableTotalResourceUsage()->SetCPU((node + 1) * CPU_PER_TABLET);
+                for (ui64 tabletId : initial[node]) {
+                    auto* metric = metrics->Record.AddTabletMetrics();
+                    metric->SetTabletID(tabletId);
+                    metric->MutableResourceUsage()->SetCPU(CPU_PER_TABLET);
+                }
+                runtime.SendToPipe(hiveTablet, localSender, metrics.Release(), node, GetPipeConfigWithRetries());
+                TAutoPtr<IEventHandle> handle;
+                runtime.GrabEdgeEventRethrow<TEvLocal::TEvTabletMetricsAck>(handle);
+            }
+        }
+        ui32 movements = 0;
+        std::array<ui32, NUM_NODES> departures = {};
+        auto moveObserver = runtime.AddObserver<TEvLocal::TEvBootTablet>([&](auto&& ev) {
+            const ui64 tabletId = ev->Get()->Record.GetInfo().GetTabletID();
+            auto it = tabletNodes.find(tabletId);
+            if (it == tabletNodes.end()) {
+                return;
+            }
+            const ui32 target = ev->Recipient.NodeId() - runtime.GetNodeId(0);
+            if (it->second != target) {
+                // Nodes 1--3 never donate, including after receiving a tablet.
+                UNIT_ASSERT_C(it->second == 3 || it->second == 4, "unexpected source " << it->second + 1);
+                ++departures[it->second];
+                ++movements;
+                it->second = target;
+            }
+        });
+        blockBalancer.Stop();
+        BalanceTablets(runtime, hiveTablet, sender);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(NHive::TEvPrivate::EvBalancerOut);
+            runtime.DispatchEvents(options, TDuration::Seconds(10));
+        }
+        const auto finalDistribution = getDistribution();
+        UNIT_ASSERT_VALUES_EQUAL(movements, 3);
+        UNIT_ASSERT_VALUES_EQUAL(departures[3], 1);
+        UNIT_ASSERT_VALUES_EQUAL(departures[4], 2);
+        for (ui32 node = 0; node < NUM_NODES - 1; ++node) {
+            UNIT_ASSERT_VALUES_EQUAL_C(finalDistribution[node].size(), 3, "node " << node + 1);
+        }
+        UNIT_ASSERT_EQUAL(finalDistribution.back(), initial.back());
+        // The immovable sixth node must not trigger another CPU pass after the
+        // five participating nodes reach equal 3% loads.
+        BalanceTablets(runtime, hiveTablet, sender);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(NHive::TEvPrivate::EvBalancerOut);
+            runtime.DispatchEvents(options, TDuration::Seconds(10));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(movements, 3);
+        UNIT_ASSERT_EQUAL(getDistribution(), finalDistribution);
+    }
+
+    Y_UNIT_TEST(TestHiveScatterStopsAtSourceThresholdSerial) {
+        TestHiveScatterStopsAtSourceThreshold(1);
+    }
+
+    Y_UNIT_TEST(TestHiveScatterStopsAtSourceThresholdConcurrent) {
+        TestHiveScatterStopsAtSourceThreshold(4);
+    }
+
     Y_UNIT_TEST(TestHiveBalancerDifferentResources) {
         static constexpr ui64 TABLETS_PER_NODE = 4;
         TTestBasicRuntime runtime(2, false);

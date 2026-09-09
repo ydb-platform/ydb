@@ -277,7 +277,11 @@ public:
         return ResourceMaximumValues;
     }
 
+    bool HasTabletsForBalancer(EResourceToBalance resource, TInstant now) const;
+
     double GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbourPenalty = true) const;
+    // Aggregate used by scatter; excludes delayed node-wide resource totals.
+    double GetTabletUsage(EResourceToBalance resource) const;
     double GetNodeUsage(EResourceToBalance resource = EResourceToBalance::ComputeResources) const;
     double GetNodeUsage(const TResourceNormalizedValues& normValues,
                         EResourceToBalance resource = EResourceToBalance::ComputeResources) const;

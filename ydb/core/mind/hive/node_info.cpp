@@ -485,6 +485,16 @@ void TNodeInfo::UpdateResourceMaximum(const NKikimrTabletBase::TMetrics& metrics
     Hive.UpdateTotalResourceValues(nullptr, nullptr, {}, {}, {}, normalizedValues - oldNormalizedValues);
 }
 
+bool TNodeInfo::HasTabletsForBalancer(EResourceToBalance resource, TInstant now) const {
+    if (!IsAlive() || Down || Freeze) {
+        return false;
+    }
+    auto it = Tablets.find(TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING);
+    return it != Tablets.end() && std::any_of(it->second.begin(), it->second.end(), [&](const TTabletInfo* tablet) {
+        return tablet->IsGoodForBalancer(now, resource);
+    });
+}
+
 double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbourPenalty) const {
     // what it would like when tablet will run on this node?
     auto maximum = GetResourceMaximumValues();
@@ -524,6 +534,10 @@ double TNodeInfo::GetNodeUsage(const TResourceNormalizedValues& normValues, ERes
         usage = std::max(usage, AveragedNodeTotalUsage.GetValue());
     }
     return usage;
+}
+
+double TNodeInfo::GetTabletUsage(EResourceToBalance resource) const {
+    return GetNodeUsage(NormalizeRawValues(ResourceValues, GetResourceMaximumValues()), resource);
 }
 
 double TNodeInfo::GetNodeUsage(EResourceToBalance resource) const {

@@ -2791,6 +2791,58 @@ THive::THiveStats THive::GetStats(TIter begin, TIter end) const {
     return stats;
 }
 
+std::optional<TBalancerSettings> THive::GetScatterBalancerSettings(TConstArrayRef<const TNodeInfo*> nodes, TInstant now) const {
+    static constexpr std::pair<EResourceToBalance, EBalancerType> resources[] = {
+        {EResourceToBalance::Counter, EBalancerType::ScatterCounter},
+        {EResourceToBalance::CPU, EBalancerType::ScatterCPU},
+        {EResourceToBalance::Memory, EBalancerType::ScatterMemory},
+        {EResourceToBalance::Network, EBalancerType::ScatterNetwork},
+    };
+    const auto minScatter = GetMinScatterToBalance();
+    const auto minUsage = GetMinNodeUsageToBalance();
+    for (const auto& [resource, type] : resources) {
+        // The cohort is resource-specific: a node with no movable CPU tablets
+        // must not keep CPU balancing active or lower its minimum.
+        std::vector<const TNodeInfo*> eligibleNodes;
+        eligibleNodes.reserve(nodes.size());
+        for (const auto* node : nodes) {
+            if (node->HasTabletsForBalancer(resource, now)) {
+                eligibleNodes.push_back(node);
+            }
+        }
+        auto eligibleRange = eligibleNodes
+            | std::views::transform([](const TNodeInfo* node) -> const TNodeInfo& { return *node; });
+        const auto stats = GetStats(eligibleRange.begin(), eligibleRange.end());
+        const double scatterLimit = TTabletInfo::ExtractResourceUsage(minScatter, resource);
+        if (!(TTabletInfo::ExtractResourceUsage(stats.ScatterByResource, resource) > scatterLimit)) {
+            continue;
+        }
+        // scatter = (maximum - max(minimum, floor)) / maximum. Only sources
+        // strictly above floor / (1 - scatterLimit) can cause this trigger.
+        const double sourceThreshold = TTabletInfo::ExtractResourceUsage(minUsage, resource) / (1 - scatterLimit);
+        std::vector<TNodeId> sourceNodeIds;
+        for (const auto* node : eligibleNodes) {
+            if (node->GetTabletUsage(resource) > sourceThreshold) {
+                sourceNodeIds.push_back(node->Id);
+            }
+        }
+        // An empty FilterNodeIds means unrestricted balancing, not no donors.
+        if (sourceNodeIds.empty()) {
+            continue;
+        }
+        return TBalancerSettings{
+            .Type = type,
+            .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
+            .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
+            .MaxInFlight = GetBalancerInflight(),
+            .FilterNodeIds = std::move(sourceNodeIds),
+            .ResourceToBalance = resource,
+            .MinNodeUsage = sourceThreshold,
+        };
+    }
+    return std::nullopt;
+}
+
 THive::THiveStats THive::GetStats() const {
     auto getNode = [](const decltype(Nodes)::value_type& p) -> const TNodeInfo& { return p.second; };
     auto nodesRange = Nodes | std::views::transform(getNode);
@@ -2957,42 +3009,18 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
             continue;
         }
 
-        auto scatteredResource = CheckScatter(stats.ScatterByResource);
-        if (scatteredResource) {
-            EBalancerType balancerType = EBalancerType::Scatter;
-            switch (*scatteredResource) {
-                case EResourceToBalance::Counter:
-                    balancerType = EBalancerType::ScatterCounter;
-                    break;
-                case EResourceToBalance::CPU:
-                    balancerType = EBalancerType::ScatterCPU;
-                    break;
-                case EResourceToBalance::Memory:
-                    balancerType = EBalancerType::ScatterMemory;
-                    break;
-                case EResourceToBalance::Network:
-                    balancerType = EBalancerType::ScatterNetwork;
-                    break;
-                case EResourceToBalance::ComputeResources:
-                    balancerType = EBalancerType::Scatter;
-                    break;
-            }
-            std::vector<TNodeId> nodeIds;
-            nodeIds.reserve(stats.Values.size());
-            std::transform(nodes.begin(), nodes.end(), std::back_inserter(nodeIds), [](const TNodeInfo& node) { return node.Id; });
-            YDB_LOG_TRACE("ProcessTabletBalancer: scatter over limit triggered balancer",
+        std::vector<const TNodeInfo*> segmentNodes;
+        segmentNodes.reserve(stats.Values.size());
+        for (const auto& node : nodes) {
+            segmentNodes.push_back(&node);
+        }
+        if (auto scatterSettings = GetScatterBalancerSettings(segmentNodes, TActivationContext::Now())) {
+            YDB_LOG_TRACE("ProcessTabletBalancer: movable nodes triggered scatter balancer",
                 {"logPrefix", GetLogPrefix()},
-                {"scatterByResource", stats.ScatterByResource},
-                {"minScatterToBalance", GetMinScatterToBalance()},
-                {"balancerTypeName", EBalancerTypeName(balancerType)});
-            settings.emplace(TBalancerSettings{
-                .Type = balancerType,
-                .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
-                .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
-                .MaxInFlight = GetBalancerInflight(),
-                .FilterNodeIds = std::move(nodeIds),
-                .ResourceToBalance = *scatteredResource,
-            });
+                {"balancerTypeName", EBalancerTypeName(scatterSettings->Type)},
+                {"sourceNodeIds", scatterSettings->FilterNodeIds},
+                {"minNodeUsage", *scatterSettings->MinNodeUsage});
+            settings.emplace(std::move(*scatterSettings));
             if (maybeStartBalancer()) {
                 continue;
             }

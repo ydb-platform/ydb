@@ -34,6 +34,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/containers/ring_buffer/ring_buffer.h>
 
+#include <util/generic/array_ref.h>
 #include <util/generic/queue.h>
 #include <util/random/random.h>
 
@@ -1128,6 +1129,7 @@ protected:
     };
 
     THiveStats GetStats() const;
+    std::optional<TBalancerSettings> GetScatterBalancerSettings(TConstArrayRef<const TNodeInfo*> nodes, TInstant now) const;
     template<std::forward_iterator TIter>
     THiveStats GetStats(TIter begin, TIter end) const;
     void RemoveNodeFromSegments(TNodeInfo* node);

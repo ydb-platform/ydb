@@ -128,6 +128,7 @@ protected:
     std::vector<TNodeId>::iterator NextNode;
     std::vector<TFullTabletId> Tablets;
     std::vector<TFullTabletId>::iterator NextTablet;
+    std::unordered_map<TFullTabletId, TNodeId> ScatterSourcesInFlight;
 
     static constexpr ui64 MAX_TABLETS_PROCESSED = 10;
 
@@ -188,20 +189,33 @@ protected:
         Stats.CurrentMovements = Movements;
     }
 
+    bool IsNodeSuitableForBalancing(const TNodeInfo& node) const {
+        if (!Settings.MinNodeUsage) {
+            return true;
+        }
+        // Wait for a source's previous restart to update its resource totals.
+        // Other sources can still make progress up to MaxInFlight.
+        return !node.Down && !node.Freeze
+            && node.GetTabletUsage(Settings.ResourceToBalance) > *Settings.MinNodeUsage
+            && std::none_of(ScatterSourcesInFlight.begin(), ScatterSourcesInFlight.end(), [&](const auto& entry) {
+                return entry.second == node.Id;
+            });
+    }
+
     void BalanceNodes() {
         std::vector<TNodeInfo*> nodes;
         if (!Settings.FilterNodeIds.empty()) {
             nodes.reserve(Settings.FilterNodeIds.size());
             for (TNodeId nodeId : Settings.FilterNodeIds) {
                 TNodeInfo* node = Hive->FindNode(nodeId);
-                if (node != nullptr && node->IsAlive()) {
+                if (node != nullptr && node->IsAlive() && IsNodeSuitableForBalancing(*node)) {
                     nodes.emplace_back(node);
                 }
             }
         } else {
             nodes.reserve(Hive->Nodes.size());
             for (auto& [nodeId, nodeInfo] : Hive->Nodes) {
-                if (nodeInfo.IsAlive()) {
+                if (nodeInfo.IsAlive() && IsNodeSuitableForBalancing(nodeInfo)) {
                     nodes.emplace_back(&nodeInfo);
                 }
             }
@@ -222,6 +236,7 @@ protected:
             break;
         }
 
+        Nodes.clear();
         Nodes.reserve(nodes.size());
         for (auto node : nodes) {
             Nodes.push_back(node->Id);
@@ -232,21 +247,8 @@ protected:
     }
 
     bool IsTabletSuitableForBalancing(const TTabletInfo* tablet, TInstant now) const {
-        if (!tablet->IsGoodForBalancer(now)) {
-            return false;
-        }
-        if (Settings.FilterObjectId && tablet->GetObjectId() != *Settings.FilterObjectId) {
-            return false;
-        }
-        if (!tablet->HasMetric(Settings.ResourceToBalance)) {
-            return false;
-        }
-        if (tablet->IsPinnedToNode()) {
-            // The tablet accounts for most of its node's usage, so moving it would only relocate the
-            // load. Leave it where it is and let the balancer drain the rest of the node instead.
-            return false;
-        }
-        return true;
+        return tablet->IsGoodForBalancer(now, Settings.ResourceToBalance)
+            && (!Settings.FilterObjectId || tablet->GetObjectId() == *Settings.FilterObjectId);
     }
 
     // Tablets we would rather not move are ordered last: system tablets because restarting them is
@@ -286,7 +288,7 @@ protected:
             }
             Tablets.clear();
             TNodeInfo* node = Hive->FindNode(*NextNode);
-            if (node == nullptr) {
+            if (node == nullptr || !node->IsAlive() || !IsNodeSuitableForBalancing(*node)) {
                 continue;
             }
             YDB_LOG_TRACE("Balancer selected node",
@@ -355,8 +357,11 @@ protected:
             if (!tabletId) {
                 break;
             }
+            ++tabletsProcessed;
             TTabletInfo* tablet = Hive->FindTablet(*tabletId);
-            if (tablet == nullptr || !tablet->IsRunning()) {
+            if (tablet == nullptr || !tablet->IsRunning()
+                || !IsTabletSuitableForBalancing(tablet, now)
+                || !IsNodeSuitableForBalancing(*tablet->Node)) {
                 continue;
             }
             YDB_LOG_TRACE("Balancer selected tablet",
@@ -370,6 +375,9 @@ protected:
                     tablet->ActorsToNotifyOnRestart.emplace_back(SelfId()); // volatile settings, will not persist upon restart
                     ++KickInFlight;
                     ++Movements;
+                    if (Settings.MinNodeUsage) {
+                        ScatterSourcesInFlight.emplace(tablet->GetFullTabletId(), tablet->Node->Id);
+                    }
                     YDB_LOG_DEBUG("Balancer moving tablet",
                         {"logPrefix", GetLogPrefix()},
                         {"tablet", tablet->ToString()},
@@ -380,7 +388,6 @@ protected:
                     UpdateProgress();
                 }
             }
-            ++tabletsProcessed;
         }
 
         if (KickInFlight == 0) {
@@ -395,6 +402,7 @@ protected:
             {"status", ev->Get()->Status},
             {"tabletId", ev->Get()->TabletId});
         --KickInFlight;
+        ScatterSourcesInFlight.erase(ev->Get()->TabletId);
         BalanceNodes();
         KickNextTablet();
     }

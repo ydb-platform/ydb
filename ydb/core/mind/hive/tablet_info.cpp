@@ -220,6 +220,10 @@ bool TTabletInfo::IsGoodForBalancer(TInstant now) const {
             && (now - LastBalancerDecisionTime > Hive.GetTabletKickCooldownPeriod());
 }
 
+bool TTabletInfo::IsGoodForBalancer(TInstant now, EResourceToBalance resource) const {
+    return IsGoodForBalancer(now) && HasMetric(resource) && !IsPinnedToNode();
+}
+
 void TTabletInfo::SetUsageImpact(double usageImpact) {
     UsageImpact = usageImpact;
     if (Node != nullptr && IsResourceDrainingState(VolatileState)) {

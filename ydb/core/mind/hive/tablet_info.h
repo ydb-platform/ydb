@@ -134,6 +134,7 @@ public:
     }
 
     bool IsGoodForBalancer(TInstant now) const;
+    bool IsGoodForBalancer(TInstant now, EResourceToBalance resource) const;
 
     void MakeBalancerDecision(TInstant now) {
         LastBalancerDecisionTime = now;

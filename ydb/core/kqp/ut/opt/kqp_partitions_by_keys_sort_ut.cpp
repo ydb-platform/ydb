@@ -11,7 +11,8 @@ void CheckWindowFunctionAst(
     const TString& selectBody,
     bool useSortForPartitionsByKeys,
     bool rejectSqueezeToList = false,
-    bool allowSqueezeToDict = false)
+    bool allowSqueezeToDict = false,
+    bool rejectNarrowSort = false)
 {
     TKikimrRunner kikimr;
     auto db = kikimr.GetTableClient();
@@ -40,6 +41,9 @@ void CheckWindowFunctionAst(
         }
         if (rejectSqueezeToList) {
             UNIT_ASSERT_C(!ast.Contains("SqueezeToList"), ast);
+        }
+        if (rejectNarrowSort) {
+            UNIT_ASSERT_C(!ast.Contains("(Sort "), ast);
         }
     } else {
         UNIT_ASSERT_C(ast.Contains("SqueezeToDict"), ast);
@@ -160,6 +164,45 @@ Y_UNIT_TEST_SUITE(KqpPartitionsByKeysSort) {
             "    ROW_NUMBER() OVER (PARTITION BY Text ORDER BY Abs(Data) DESC, Key) AS rn\n"
             "FROM `/Root/EightShard`;\n",
             UseSortForPartitionsByKeys,
+            true,
+            true);
+    }
+
+    Y_UNIT_TEST_TWIN(WindowFunctionRebuildPlanAst, UseSortForPartitionsByKeys) {
+        CheckWindowFunctionAst(
+            "$input = SELECT\n"
+            "    premium.Text AS grp_agr,\n"
+            "    intermediary.Text AS grp_type,\n"
+            "    premium.Key AS grp_id,\n"
+            "    intermediary.Data AS grp_perc,\n"
+            "    intermediary.Key % 3 AS perc_10000,\n"
+            "    CAST(premium.Data AS Int64) AS premium_cents,\n"
+            "    CAST(premium.Key AS Int64) AS wo_cents,\n"
+            "    premium.Text AS pr_nk\n"
+            "FROM `/Root/EightShard` AS premium\n"
+            "JOIN `/Root/EightShard` AS intermediary\n"
+            "ON intermediary.Key = premium.Key;\n"
+            "\n"
+            "SELECT\n"
+            "    input.*,\n"
+            "    SUM(COALESCE(premium_cents, 0)) OVER wgrp AS grp_prem,\n"
+            "    SUM(COALESCE(wo_cents, 0)) OVER wgrp AS grp_fact,\n"
+            "    SUM(IF(wo_cents != 0, wo_cents, 0)) OVER wgrp AS grp_wo_prem,\n"
+            "    SUM(IF(premium_cents != 0, premium_cents, 0)) OVER wgrp AS grp_fact_wo,\n"
+            "    ROW_NUMBER() OVER (\n"
+            "        PARTITION BY grp_agr, grp_type, grp_id, grp_perc\n"
+            "        ORDER BY ABS(COALESCE(premium_cents, 0)) DESC, pr_nk\n"
+            "    ) AS rn,\n"
+            "    ROW_NUMBER() OVER (\n"
+            "        PARTITION BY grp_agr, grp_type, grp_id, grp_perc\n"
+            "        ORDER BY ABS(COALESCE(wo_cents, 0)) DESC, pr_nk\n"
+            "    ) AS rn_off\n"
+            "FROM $input AS input\n"
+            "WINDOW wgrp AS (\n"
+            "    PARTITION BY grp_agr, grp_type, grp_id, grp_perc, perc_10000\n"
+            ");\n",
+            UseSortForPartitionsByKeys,
+            true,
             true,
             true);
     }

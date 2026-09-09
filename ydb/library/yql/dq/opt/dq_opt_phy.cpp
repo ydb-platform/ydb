@@ -82,7 +82,13 @@ TMaybeNode<TCoMux> ConvertMuxArgumentsToFlows(TCoMux node, TExprContext& ctx) {
         .Done();
 }
 
-bool PrepareKeySelectorToStage(TCoLambda& keySelector, TCoLambda& stageLambda, TCoLambda& handlerLambda, TExprContext& ctx) {
+bool PrepareKeySelectorToStage(
+    TCoLambda& keySelector,
+    TCoLambda& stageLambda,
+    TCoLambda& handlerLambda,
+    TExprContext& ctx,
+    TStringBuf memberPrefix = "_yql_key_selector_")
+{
     if (keySelector.Body().Ref().IsComplete()) {
         // constant key
         return false;
@@ -109,7 +115,7 @@ bool PrepareKeySelectorToStage(TCoLambda& keySelector, TCoLambda& stageLambda, T
             }
         }
 
-        TString newMemberName = TString("_yql_key_selector_") + ToString(genCount++);
+        TString newMemberName = TString(memberPrefix) + ToString(genCount++);
 
         TCoLambda computeElement = Build<TCoLambda>(ctx, pos)
             .InitFrom(keySelector)
@@ -488,6 +494,35 @@ TExprBase DqBuildPartitionsStageStub(
                 .KeySelectorLambda(keyLambda)
                 .ListHandlerLambda(handlerLambda)
                 .Done();
+        }
+
+        if constexpr(std::is_base_of<TCoPartitionsByKeys, TPartition>::value) {
+            if (useSortForPartitionsByKeys) {
+                if (auto sortKeyLambda = partition.SortKeySelectorLambda().template Maybe<TCoLambda>()) {
+                    auto preparedSortKeyLambda = sortKeyLambda.Cast();
+                    stageLambda = BuildIdentityLambda(node.Pos(), ctx);
+                    handlerLambda = partition.ListHandlerLambda();
+                    if (PrepareKeySelectorToStage(
+                        preparedSortKeyLambda,
+                        stageLambda,
+                        handlerLambda,
+                        ctx,
+                        "_yql_sort_key_selector_"))
+                    {
+                        auto newConn = DqPushLambdaToStageUnionAll(dqUnion, stageLambda, {}, ctx, optCtx);
+                        if (!newConn) {
+                            return node;
+                        }
+
+                        return Build<TPartition>(ctx, node.Pos())
+                            .InitFrom(partition)
+                            .Input(newConn.Cast())
+                            .SortKeySelectorLambda(preparedSortKeyLambda)
+                            .ListHandlerLambda(handlerLambda)
+                            .Done();
+                    }
+                }
+            }
         }
 
         TDqConnection newConnection = BuildConnection(node.Pos(), keyLambda, dqUnion, ctx, typeCtx, enableShuffleElimination);

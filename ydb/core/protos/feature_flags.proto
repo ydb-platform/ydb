@@ -303,9 +303,6 @@ message TFeatureFlags {
     optional bool EnableKqpConstraintsTransformer = 277 [default = false];
     optional bool EnableSmallBlobsQuotaEnforcement = 288 [default = false];
     optional bool EnableExportFiltering = 291 [default = false];
-<<<<<<< HEAD
-    optional bool EnableMoveWithColumnTableReplace = 305 [default = false];
-=======
     optional bool EnableNodeBrokerLongLease = 292 [default = false];
->>>>>>> 34cf7ca54f9 (Add long leases logic to NodeBroker & clients (#45855))
+    optional bool EnableMoveWithColumnTableReplace = 305 [default = false];
 }

@@ -336,8 +336,8 @@ struct TPDiskMon {
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceNonperformanceMs;
 
     // Merged device overestimation: combines samples from PDisk's own block
-    // device thread together with samples received from IO_URING sources
-    // (DDisk / PersistentBuffer actors) that share the same physical device,
+    // device thread together with samples from the shared TUringRouter I/O
+    // thread (DDisk / PersistentBuffer I/O on the same physical device),
     // via TDeviceOverestimationAggregator. See blobstorage_pdisk_device_overestimation.h.
     NPDisk::TDeviceOverestimationAggregator DeviceOverestimationMerged;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceOverestimationRatioMerged;
@@ -349,6 +349,13 @@ struct TPDiskMon {
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceCompletionThreadBusyTimeNs;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceIoErrors;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceWaitTimeMs;
+
+    // Set once when the shared UringRouter is first created (or creation fails).
+    ::NMonitoring::TDynamicCounters::TCounterPtr RegularUringCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr FallbackUringCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr FallbackPDiskCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr UringCompletionThreadCPU;
+    ::NMonitoring::TDynamicCounters::TCounterPtr UringCompletionThreadBusyTimeNs;
 
     TBytesHistogram DeviceWritesSizes;
 

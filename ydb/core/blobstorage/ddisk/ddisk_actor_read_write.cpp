@@ -71,30 +71,13 @@ namespace NKikimr::NDDisk {
             return;
         }
 
-        if (instr.PayloadId) {
+        if (!ev->Get()->PayloadAlignmentChecked && instr.PayloadId) {
+            ev->Get()->PayloadAlignmentChecked = true;
             const TRope& data = ev->Get()->GetPayload(*instr.PayloadId);
-            auto dataIter = data.Begin();
+            const auto dataIter = data.Begin();
             if (dataIter.ContiguousSize() != data.size() ||
                     reinterpret_cast<uintptr_t>(dataIter.ContiguousData()) % DiskFormat->SectorSize != 0) {
-                TStringStream ss;
-                ss << "payload must be contiguous and aligned to " << DiskFormat->SectorSize << " bytes"
-                    << ", contiguousSize# " << dataIter.ContiguousSize()
-                    << " dataSize# " << data.size()
-                    << " aligned# " << (reinterpret_cast<uintptr_t>(dataIter.ContiguousData()) % DiskFormat->SectorSize == 0);
-
-                YDB_LOG_DEBUG_CTX_COMP(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK, "Dump DDiskId: payload must be contiguous and aligned",
-                    {"sectorSize", DiskFormat->SectorSize},
-                    {"contiguousSize", dataIter.ContiguousSize()},
-                    {"dataSize", data.size()},
-                    {"aligned", (reinterpret_cast<uintptr_t>(dataIter.ContiguousData()) % DiskFormat->SectorSize == 0)},
-                    {"DDiskId", DDiskId});
-
-                SendReply(*ev, std::make_unique<TEvWriteResult>(
-                    NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
-                    ss.Str()));
-                Counters.Interface.Write.Request(selector.Size);
-                Counters.Interface.Write.Reply(false, selector.Size);
-                return;
+                Counters.Interface.UnalignedWritePayloads->Inc();
             }
         }
 
@@ -245,7 +228,7 @@ namespace NKikimr::NDDisk {
             std::unique_ptr<TDirectIoOpBase> op = std::move(it->second.Op);
             WriteCallbacks.erase(it);
             op->SetResult(-EIO);
-            op.release()->OnComplete(TActorContext::ActorSystem());
+            op.release()->OnComplete(TActivationContext::ActorSystem());
             return;
         }
 
@@ -257,7 +240,7 @@ namespace NKikimr::NDDisk {
                 std::unique_ptr<TDirectIoOpBase> op = std::move(it->second.Op);
                 WriteCallbacks.erase(it);
                 op->SetResult(-EIO);
-                op.release()->OnComplete(TActorContext::ActorSystem());
+                op.release()->OnComplete(TActivationContext::ActorSystem());
                 return;
             }
             if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvChunkWriteRawResult)")) {
@@ -272,7 +255,7 @@ namespace NKikimr::NDDisk {
         Y_DEBUG_ABORT_UNLESS(op->GetTotalSize() <= static_cast<ui64>(Max<i32>()));
         op->SetResult(static_cast<i32>(op->GetTotalSize()));
 
-        op.release()->OnComplete(TActorContext::ActorSystem());
+        op.release()->OnComplete(TActivationContext::ActorSystem());
     }
 
     void TDDiskActor::Handle(TEvRead::TPtr ev) {
@@ -349,6 +332,12 @@ namespace NKikimr::NDDisk {
         const auto& record = ev->Get<TEvRead>()->Record;
         const TQueryCredentials creds(record.GetCredentials());
         const TBlockSelector selector(record.GetSelector());
+        if (Stopping) {
+            Counters.Interface.Read.Reply(false, selector.Size);
+            SendReply(*ev, std::make_unique<TEvReadResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::SESSION_MISMATCH, TString(StoppingReason)));
+            return;
+        }
         TChunkRef& chunkRef = ChunkRefs.at(creds.TabletId).at(selector.VChunkIndex);
 
         auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Read",
@@ -386,7 +375,7 @@ namespace NKikimr::NDDisk {
         op->SetSpan(std::move(span));
         op->PrepareRead(selector.Size, offset, chunkRef.ChunkIdx, selector.OffsetInBytes);
         if (plan && plan->Kind == TIntegrityManager::TReadPlan::Mixed) {
-            // The unused blocks are zero-filled right before the reply, on the uring completion
+            // The unused blocks are zero-filled right before the reply, on the uring I/O
             // thread, so the mask travels inside the op.
             op->SetReadUsedBlocksMask(std::move(plan->UsedBlocks));
         }
@@ -570,7 +559,7 @@ namespace NKikimr::NDDisk {
             std::unique_ptr<TDirectIoOpBase> op = std::move(it->second.Op);
             ReadCallbacks.erase(it);
             op->SetResult(-EIO);
-            op.release()->OnComplete(TActorContext::ActorSystem());
+            op.release()->OnComplete(TActivationContext::ActorSystem());
             return;
         }
 
@@ -581,7 +570,7 @@ namespace NKikimr::NDDisk {
                 std::unique_ptr<TDirectIoOpBase> op = std::move(it->second.Op);
                 ReadCallbacks.erase(it);
                 op->SetResult(-EIO);
-                op.release()->OnComplete(TActorContext::ActorSystem());
+                op.release()->OnComplete(TActivationContext::ActorSystem());
                 return;
             }
             if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvChunkReadRawResult)")) {
@@ -596,47 +585,50 @@ namespace NKikimr::NDDisk {
         Y_DEBUG_ABORT_UNLESS(op->GetTotalSize() <= static_cast<ui64>(Max<i32>()));
         op->SetResult(static_cast<i32>(op->GetTotalSize()), std::move(msg.Data));
 
-        op.release()->OnComplete(TActorContext::ActorSystem());
+        op.release()->OnComplete(TActivationContext::ActorSystem());
     }
 
-    bool TDDiskActor::DirectUringOpImpl(std::unique_ptr<TDirectIoOpBase>& op, bool flush) {
+    void TDDiskActor::DirectUringOpImpl(std::unique_ptr<TDirectIoOpBase>& op) {
 #if defined(__linux__)
         Y_ABORT_UNLESS(UringRouter);
 
-        // this is our main/regular path
-        bool submitted = false;
-        switch (op->GetOperationType()) {
+        // The router may complete the operation on its I/O thread before the
+        // submission call returns. Transfer ownership and publish the running
+        // counter before making the call, and do not touch rawOp after acceptance.
+        TDirectIoOpBase* rawOp = op.release();
+        Counters.DirectIO.RunningCount->Inc();
+        DirectIoState.fetch_add(1, std::memory_order_relaxed);
+
+        bool accepted = false;
+        switch (rawOp->GetOperationType()) {
         case NPDisk::TUringOperationBase::EREAD:
-            submitted = UringRouter->Read(op.get());
+            accepted = UringRouter->Read(rawOp);
             break;
         case NPDisk::TUringOperationBase::EWRITE:
-            submitted = UringRouter->Write(op.get());
+            accepted = UringRouter->Write(rawOp);
             break;
         default:
             Y_ABORT("Unknown OperationType");
         }
 
-        if (submitted) {
-            Y_UNUSED(op.release());
+        if (Y_UNLIKELY(!accepted)) {
+            // StopAsync() makes rejection expected while PDisk is shutting
+            // down. Submit() did not take ownership, so restore it and fail on
+            // the actor thread; OnDrop() is reserved for accepted operations
+            // and would violate the I/O-thread producer side of the op pool.
+            op.reset(rawOp);
+            FailDirectIoOp(std::move(op), "io_uring router stopped before submission");
         }
-
-        // note, we want to flush anyway (e.g. previous operations)
-        if (flush) {
-            // with SQ polling – usually no syscall
-            UringRouter->Flush();
-        }
-
-        return submitted;
 #else
         Y_UNUSED(op);
-        Y_UNUSED(flush);
+        Y_ABORT("DirectUringOpImpl is only available on Linux");
 #endif
-        return false;
     }
 
-    void TDDiskActor::DirectUringOp(std::unique_ptr<TDirectIoOpBase>& op, bool flush, bool isShort) {
+    void TDDiskActor::DirectUringOp(std::unique_ptr<TDirectIoOpBase>& op, bool isRetry) {
+        Y_ABORT_UNLESS(!Stopping);
         if (Y_UNLIKELY(IsBroken())) {
-            if (isShort) {
+            if (isRetry) {
                 switch (op->GetOperationType()) {
                     case NPDisk::TUringOperationBase::EREAD:
                         Counters.DirectIO.Read.Done(op->GetTotalSize());
@@ -654,7 +646,7 @@ namespace NKikimr::NDDisk {
             return;
         }
 
-        if (Y_LIKELY(!isShort)) {
+        if (Y_LIKELY(!isRetry)) {
             switch (op->GetOperationType()) {
             case NPDisk::TUringOperationBase::EREAD:
                 Counters.DirectIO.Read.Request(op->GetTotalSize());
@@ -669,15 +661,7 @@ namespace NKikimr::NDDisk {
 
 #if defined(__linux__)
         if (Y_LIKELY(UringRouter)) {
-            bool submitted = DirectUringOpImpl(op, flush);
-            if (submitted) {
-                Counters.DirectIO.RunningCount->Inc();
-            } else {
-                DirectIoQueue.push(std::move(op));
-                Counters.DirectIO.QueueSize->Inc();
-                ScheduleIoSubmitWakeup();
-            }
-
+            DirectUringOpImpl(op);
             return;
         }
 #endif
@@ -685,8 +669,6 @@ namespace NKikimr::NDDisk {
         Counters.DirectIO.RunningCount->Inc();
 
         // fallback path: either not linux or uring disabled / not available
-        Y_UNUSED(flush);
-
         switch (op->GetOperationType()) {
         case NPDisk::TUringOperationBase::EREAD:
             SendPDiskRead(std::move(op));
@@ -699,86 +681,57 @@ namespace NKikimr::NDDisk {
         }
     }
 
-    TDDiskActor::TEvPrivate::TEvShortIO::TEvShortIO(std::unique_ptr<TDirectIoOpBase> op)
+    TDDiskActor::TEvPrivate::TEvRetryIO::TEvRetryIO(std::unique_ptr<TDirectIoOpBase> op)
         : Op(std::move(op))
     {}
 
-    TDDiskActor::TEvPrivate::TEvShortIO::~TEvShortIO() = default;
+    TDDiskActor::TEvPrivate::TEvRetryIO::~TEvRetryIO() = default;
 
-    void TDDiskActor::HandleShortIO(TEvPrivate::TEvShortIO::TPtr ev) {
+    void TDDiskActor::HandleRetryIO(TEvPrivate::TEvRetryIO::TPtr ev) {
         std::unique_ptr<TDirectIoOpBase> op = std::move(ev->Get()->Op);
 
-        DirectUringOp(op, true, true);
-    }
-
-    void TDDiskActor::ScheduleIoSubmitWakeup() {
-#if defined(__linux__)
-        if (DirectIoQueue.empty()) {
-            return;
-        }
-
-        ui32 currentInflight = UringRouter->GetInflight();
-
-        // TODO: move to constants or config?
-        const ui32 opMinLatencyUs = 10;
-        const ui32 opsInParallel = 4;
-        const ui32 inDiskInflight = 128;
-
-        if (currentInflight <= inDiskInflight) {
-            // for some reason we failed to submit, but there should have been space
-            // in the router. It's OK to retry just a little bit later
-            Schedule(TDuration::MicroSeconds(opMinLatencyUs), new TEvents::TEvWakeup(EWakeupTag::WakeupIoSubmitQueue));
-            return;
-        }
-
-        const ui32 opsToWait = currentInflight - inDiskInflight;
-        const ui32 usecWait = (opsToWait + opsInParallel - 1) * opMinLatencyUs / opsInParallel;
-        Schedule(TDuration::MicroSeconds(usecWait), new TEvents::TEvWakeup(EWakeupTag::WakeupIoSubmitQueue));
-#else
-        Y_UNUSED(this);
-#endif
-    }
-
-    void TDDiskActor::ProcessIoSubmitQueue() {
-#if defined(__linux__)
-        Y_ABORT_UNLESS(UringRouter);
-
-        if (Y_UNLIKELY(IsBroken())) {
-            while (!DirectIoQueue.empty()) {
-                auto op = std::move(DirectIoQueue.front());
-                DirectIoQueue.pop();
-                FailDirectIoOp(std::move(op), false);
+        if (Stopping) {
+            switch (op->GetOperationType()) {
+                case NPDisk::TUringOperationBase::EREAD:
+                    Counters.DirectIO.Read.Done(op->GetTotalSize());
+                    break;
+                case NPDisk::TUringOperationBase::EWRITE:
+                    Counters.DirectIO.Write.Done(op->GetTotalSize());
+                    break;
+                default:
+                    Y_ABORT("Unknown OperationType");
             }
             return;
         }
 
-        while (!DirectIoQueue.empty()) {
-            auto& op = DirectIoQueue.front();
-            auto queueTime = op->TimePassed();
-            if (!DirectUringOpImpl(op, false)) {
+#if defined(__linux__)
+        if (Y_LIKELY(UringRouter)) {
+            DirectUringOp(op, /*isRetry=*/true);
+            return;
+        }
+
+        switch (op->GetOperationType()) {
+            case NPDisk::TUringOperationBase::EREAD:
+                Counters.DirectIO.Read.Done(op->GetTotalSize());
                 break;
-            }
-            DirectIoQueue.pop();
-            Counters.DirectIO.QueueTime->Collect(queueTime);
-            Counters.DirectIO.QueueSize->Dec();
-            Counters.DirectIO.RunningCount->Inc();
+            case NPDisk::TUringOperationBase::EWRITE:
+                Counters.DirectIO.Write.Done(op->GetTotalSize());
+                break;
+            default:
+                Y_ABORT("Unknown OperationType");
         }
-
-        // flush unconditionally
-        UringRouter->Flush();
-
-        ScheduleIoSubmitWakeup();
+        op->Reply(TActivationContext::ActorSystem(),
+            NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
+            "io_uring stopped before I/O error retry");
+        op.reset();
 #else
-        Y_UNUSED(this);
+        Y_UNUSED(op);
+        Y_ABORT("TEvRetryIO is only available with io_uring");
 #endif
     }
 
     void TDDiskActor::HandleWakeup(TEvents::TEvWakeup::TPtr &ev) {
         switch (ev->Get()->Tag) {
-            case EWakeupTag::WakeupIoSubmitQueue: {
-                ProcessIoSubmitQueue();
-                break;
-            }
             case EWakeupTag::WakeupUpdateFreeSpaceInfo: {
                 UpdateFreeSpaceInfo();
                 break;
@@ -793,10 +746,6 @@ namespace NKikimr::NDDisk {
             }
             case EWakeupTag::WakeupProcessDeallocatePersistentBufferChunk: {
                 ProcessDeallocatePersistentBufferChunk(true);
-                break;
-            }
-            case EWakeupTag::WakeupFlushDeviceOverestimationSamples: {
-                FlushDeviceOverestimationSamples();
                 break;
             }
         }

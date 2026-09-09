@@ -62,6 +62,10 @@ namespace NActors {
             ui16 GetType() const {
                 return TypeChannel & TypeMask;
             }
+
+            size_t GetMainChannelLength() const {
+                return sizeof(TChunkHeader) + (GetType() == kXdcPush ? 0 : Length);
+            }
         };
 
         struct TXdcSection {
@@ -76,8 +80,6 @@ namespace NActors {
 #pragma pack(pop)
 
         static_assert(sizeof(TXdcSection) == 17);
-
-        static constexpr size_t XdcPushFraming = sizeof(TChunkHeader) + sizeof(ui16);
 
     private:
         const bool Checksumming;
@@ -195,6 +197,20 @@ namespace NActors {
             std::vector<y_absl::Cord> Cords; // keeping ownership of the following cords referring the data
         };
         std::deque<TRefcountItem> RefcountItems;
+
+        // An XDC PUSH is usable by the peer only after its corresponding command on the main stream
+        // has been included in an issued main writev range. Keep cumulative end offsets for those
+        // command/payload pairs so the engine can safely issue XDC bytes covered by the currently
+        // submitted main write without waiting for its completion. This is deliberately separate from
+        // RefcountItems: submission coverage is speculative, while object lifetime is released only on
+        // successful CQEs.
+        struct TMainXdcCheckpoint {
+            ui64 MainEndOffset = 0;
+            ui64 XdcEndOffset = 0;
+        };
+        std::deque<TMainXdcCheckpoint> MainXdcCheckpoints;
+        ui64 XdcAllowedToSend = 0;
+
         size_t NumBytesInScratchBuffers = 0;
         ui64 CumulativeProducedMain = 0;
         ui64 CumulativeProducedXdc = 0;
@@ -246,6 +262,11 @@ namespace NActors {
 
         ui64 GetCumulativeProducedMain() const { return CumulativeProducedMain; }
         ui64 GetCumulativeProducedXdc() const { return CumulativeProducedXdc; }
+        ui64 GetCumulativeCommittedMain() const { return CumulativeCommittedMain; }
+        ui64 GetCumulativeCommittedXdc() const { return CumulativeCommittedXdc; }
+
+        void IssueMainBytes(ui64 mainEndOffset);
+        ui64 GetXdcAllowedToSend() const { return XdcAllowedToSend; }
 
     private:
         TPerChannelQueue& GetQueue(ui16 channel) {

@@ -197,15 +197,27 @@ namespace NKikimr::NHttpProxy {
                     signature.Region = Signature->GetRegion();
                     signature.SignedAt = signedAt;
 
-                    ctx.Send(MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({.Signature = std::move(signature),
-                                                                                                     .Database = DatabasePath,
-                                                                                                     .PeerName = SourceAddress,
-                                                                                                     .Entries = entries}));
+                    ctx.Send(
+                        MakeTicketParserID(),
+                        new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
+                                .Signature = std::move(signature),
+                                .Database = DatabasePath,
+                                .TraceContext = {SourceAddress, RequestId},
+                                .Entries = entries
+                            }
+                        )
+                    );
                 } else {
-                    ctx.Send(MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({.Ticket = IamToken,
-                                                                                                     .Database = DatabasePath,
-                                                                                                     .PeerName = SourceAddress,
-                                                                                                     .Entries = entries}));
+                    ctx.Send(
+                        MakeTicketParserID(),
+                        new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
+                                .Ticket = IamToken,
+                                .Database = DatabasePath,
+                                .TraceContext = {SourceAddress, RequestId},
+                                .Entries = entries
+                            }
+                        )
+                    );
                 }
                 return;
             }

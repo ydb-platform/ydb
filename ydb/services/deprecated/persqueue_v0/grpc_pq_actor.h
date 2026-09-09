@@ -114,15 +114,17 @@ struct TEvPQProxy {
 
 
     struct TEvWriteInit : public NActors::TEventLocal<TEvWriteInit, EvWriteInit> {
-        TEvWriteInit(const NPersQueue::TWriteRequest& req, const TString& peerName, const TString& database)
+        TEvWriteInit(const NPersQueue::TWriteRequest& req, const TString& peerName, const TString& database, const TString& requestId)
             : Request(req)
             , PeerName(peerName)
             , Database(database)
+            , RequestId(requestId)
         { }
 
         NPersQueue::TWriteRequest Request;
         TString PeerName;
         TString Database;
+        TString RequestId;
     };
 
     struct TEvWrite : public NActors::TEventLocal<TEvWrite, EvWrite> {
@@ -147,15 +149,17 @@ struct TEvPQProxy {
     };
 
     struct TEvReadInit : public NActors::TEventLocal<TEvReadInit, EvReadInit> {
-        TEvReadInit(const NPersQueue::TReadRequest& req, const TString& peerName, const TString& database)
+        TEvReadInit(const NPersQueue::TReadRequest& req, const TString& peerName, const TString& database, const TString& requestId)
             : Request(req)
             , PeerName(peerName)
             , Database(database)
+            , RequestId(requestId)
         { }
 
         NPersQueue::TReadRequest Request;
         TString PeerName;
         TString Database;
+        TString RequestId;
     };
 
     struct TEvRead : public NActors::TEventLocal<TEvRead, EvRead> {
@@ -490,6 +494,7 @@ private:
 
     TString PeerName;
     TString Database;
+    TString RequestId;
     ui64 Cookie;
 
     ui32 Partition;
@@ -750,6 +755,7 @@ private:
     TString Session;
     TString PeerName;
     TString Database;
+    TString RequestId;
     TString UserAgent;
 
     bool ClientsideLocksAllowed;

@@ -281,15 +281,19 @@ class Workload(unittest.TestCase):
             source_count = self.count_messages(messages_info_test)
             print(f"Source topic has {source_count} readable messages")
             print(f"Waiting up to {self.duration} sec for readable target topic messages")
-            messages_info_targets = self.read_messages_from_topics(
-                [
-                    (f"{self.target_topic_path}-{i}", f"{checkerConsumer}-{i}")
-                    for i in range(len(testOptions))
-                ],
-                expected_count=source_count,
-                timeout=self.duration,
-                processes=processes,
-            )
+            try:
+                messages_info_targets = self.read_messages_from_topics(
+                    [
+                        (f"{self.target_topic_path}-{i}", f"{checkerConsumer}-{i}")
+                        for i in range(len(testOptions))
+                    ],
+                    expected_count=source_count,
+                    timeout=self.duration,
+                    processes=processes,
+                )
+            except AssertionError:
+                self.dump_topic_end_offsets(self.test_topic_path)
+                raise
         finally:
             print("Killing processes")
             if source_process is not None:
@@ -707,6 +711,10 @@ class Workload(unittest.TestCase):
             if total_counts[i] < expected_count
         ]
         if missing:
+            for i, (topic, _) in enumerate(topics):
+                per_partition = {pid: len(msgs) for pid, msgs in messages_info[i].items()}
+                print(f"Read from {topic}: count={total_counts[i]} per_partition={per_partition}")
+                self.dump_topic_end_offsets(topic)
             raise AssertionError(
                 f"Target topics did not expose {expected_count} readable messages each: "
                 + "; ".join(missing)
@@ -751,6 +759,20 @@ class Workload(unittest.TestCase):
         if end == -1:
             raise AssertionError(f"Cannot parse payload index: {payload[:64]!r}")
         return int(payload[len(marker):end])
+
+    def dump_topic_end_offsets(self, topic):
+        try:
+            description = self.driver.topic_client.describe_topic(topic, include_stats=True)
+            parts = []
+            total = 0
+            for partition in description.partitions:
+                end = partition.partition_stats.partition_end if partition.partition_stats else None
+                parts.append(f"{partition.partition_id}:{end}")
+                if end is not None:
+                    total += end
+            print(f"Topic {topic} end offsets total={total} partitions=[{', '.join(parts)}]")
+        except Exception as error:
+            print(f"Failed to describe {topic}: {error}")
 
     def count_messages(self, messages_info):
         return sum(len(messages) for messages in messages_info.values())

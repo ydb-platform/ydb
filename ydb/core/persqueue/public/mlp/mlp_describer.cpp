@@ -41,7 +41,7 @@ void TDescriberActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
 
     auto& topic = topics.begin()->second;
     switch(topic.Status) {
-        case NDescriber::EStatus::SUCCESS: {
+        case NDescriber::EStatus::Success: {
             TopicInfo = std::move(topic);
             auto consumerConfig = GetConsumer(TopicInfo.Info->Description.GetPQTabletConfig(), Settings.Consumer);
             if (!consumerConfig) {
@@ -50,7 +50,7 @@ void TDescriberActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
             }
             return DoRuntimeAttributes();
         }
-        case NDescriber::EStatus::BAD_REQUEST: {
+        case NDescriber::EStatus::BadRequest: {
             return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST,
                 NDescriber::Description(Settings.TopicName, topic.Status));
         }

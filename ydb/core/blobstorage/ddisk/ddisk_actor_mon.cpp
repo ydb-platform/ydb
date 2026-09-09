@@ -110,6 +110,9 @@ void TDDiskActor::Handle(NMon::TEvHttpInfo::TPtr ev) {
                 TABLER() { TABLED() { str << "DDiskInstanceGuid"; } TABLED() { str << DDiskInstanceGuid; } }
                 TABLER() { TABLED() { str << "Uptime"; } TABLED() { str << FormatDuration(TInstant::Now() - StartedAt); } }
                 TABLER() { TABLED() { str << "HandlingQueries"; } TABLED() { str << (HandlingQueries ? "true" : "false"); } }
+                TABLER() { TABLED() { str << "Stopping"; } TABLED() { str << (Stopping ? "true" : "false"); } }
+                TABLER() { TABLED() { str << "I/O stalled"; } TABLED() { str << (IoStalled ? "true" : "false"); } }
+                TABLER() { TABLED() { str << "Router I/O in flight"; } TABLED() { str << GetDirectIoInflight(); } }
                 TABLER() { TABLED() { str << "PendingQueries"; } TABLED() { str << PendingQueries.size(); } }
             }
         }
@@ -248,18 +251,13 @@ void TDDiskActor::Handle(NMon::TEvHttpInfo::TPtr ev) {
         str << "<h3>In-flight I/O</h3>";
         TABLE_CLASS("table") {
             TABLEBODY() {
-                TABLER() { TABLED() { str << "DirectIoQueue"; } TABLED() { str << DirectIoQueue.size(); } }
                 TABLER() { TABLED() { str << "WriteCallbacks"; } TABLED() { str << WriteCallbacks.size(); } }
                 TABLER() { TABLED() { str << "ReadCallbacks"; } TABLED() { str << ReadCallbacks.size(); } }
                 TABLER() { TABLED() { str << "SyncsInFlight"; } TABLED() { str << SyncsInFlight.size(); } }
                 TABLER() { TABLED() { str << "LogCallbacks"; } TABLED() { str << LogCallbacks.size(); } }
-                TABLER() { TABLED() { str << "DirectIO QueueSize counter"; } TABLED() { str << CounterVal(Counters.DirectIO.QueueSize); } }
                 TABLER() { TABLED() { str << "DirectIO RunningCount counter"; } TABLED() { str << CounterVal(Counters.DirectIO.RunningCount); } }
                 TABLER() { TABLED() { str << "ShortReads"; } TABLED() { str << CounterVal(Counters.DirectIO.ShortReads); } }
                 TABLER() { TABLED() { str << "ShortWrites"; } TABLED() { str << CounterVal(Counters.DirectIO.ShortWrites); } }
-                TABLER() { TABLED() { str << "RegularUringCount"; } TABLED() { str << CounterVal(Counters.DirectIO.RegularUringCount); } }
-                TABLER() { TABLED() { str << "FallbackUringCount"; } TABLED() { str << CounterVal(Counters.DirectIO.FallbackUringCount); } }
-                TABLER() { TABLED() { str << "FallbackPDiskCount"; } TABLED() { str << CounterVal(Counters.DirectIO.FallbackPDiskCount); } }
             }
         }
 

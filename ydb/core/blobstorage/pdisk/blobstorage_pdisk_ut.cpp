@@ -69,6 +69,40 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         pDisk->Wakeup();
     }
 
+#if defined(__linux__)
+    Y_UNIT_TEST(TestSharedUringRouterFailureNotification) {
+        TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+        const TActorId recipient = runtime.AllocateEdgeActor();
+
+        auto pCtx = std::make_shared<NPDisk::TPDiskCtx>(runtime.GetActorSystem(0), 12345, recipient);
+        auto cfg = MakeIntrusive<TPDiskConfig>("", ui64{12345}, ui32{12345},
+            TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        auto pDisk = MakeHolder<NPDisk::TPDisk>(pCtx, cfg, counters);
+
+        pDisk->CheckSharedUringRouter();
+        UNIT_ASSERT(runtime.CaptureMailboxEvents(recipient.Hint(), recipient.NodeId()).empty());
+
+        // No worker or I/O is started, so this also works without kernel io_uring support.
+        pDisk->SharedUringRouter = std::make_shared<NPDisk::TUringRouter>(TFileHandle{}, pCtx->ActorSystem);
+        pDisk->SharedUringRouter->StopAsync(true);
+        UNIT_ASSERT(pDisk->SharedUringRouter->IsBroken());
+        for (ui32 i = 0; i < 3; ++i) {
+            pDisk->CheckSharedUringRouter();
+        }
+
+        auto events = runtime.CaptureMailboxEvents(recipient.Hint(), recipient.NodeId());
+        UNIT_ASSERT_VALUES_EQUAL(events.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(events.front()->GetTypeRewrite(), NPDisk::TEvDeviceError::EventType);
+        UNIT_ASSERT_VALUES_EQUAL(events.front()->Get<NPDisk::TEvDeviceError>()->Info,
+            "shared TUringRouter entered broken state");
+
+        pDisk->CheckSharedUringRouter();
+        UNIT_ASSERT(runtime.CaptureMailboxEvents(recipient.Hint(), recipient.NodeId()).empty());
+    }
+#endif
+
     Y_UNIT_TEST(TestThatEveryValueOfEStateEnumKeepsItIntegerValue) {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Warning!
@@ -1395,8 +1429,15 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
 
         TActorTestContext testCtx{{ .EnablePDiskSpaceColorOverride = true }};
-        TVDiskMock vdisk(&testCtx);
+        TVDiskMock vdisk(&testCtx, false, testCtx.Sender);
         vdisk.InitFull();
+
+        // Register the node whiteboard service on the test sender so that
+        // TEvPDiskStateUpdate messages (carrying PDiskCapacityAlert) are
+        // delivered to the test and can be inspected.
+        const ui32 firstNodeId = testCtx.GetRuntime()->GetFirstNodeId();
+        testCtx.GetRuntime()->SetDispatchTimeout(10 * TDuration::MilliSeconds(testCtx.GetPDiskConfig()->StatisticsUpdateIntervalMs));
+        testCtx.GetRuntime()->RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(firstNodeId), testCtx.Sender);
 
         auto& appData = testCtx.GetRuntime()->GetAppData();
         const ui32 pdiskId = testCtx.GetPDisk()->PCtx->PDiskId;
@@ -1414,16 +1455,64 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             UNIT_ASSERT_VALUES_EQUAL(StatusFlagToSpaceColor(space->StatusFlags), expected);
         };
 
+        auto checkPDiskCapacityAlert = [&](TColor::E expected) {
+            Cerr << (TStringBuilder() << "... Awaiting TEvPDiskStateUpdate"
+                << " PDiskCapacityAlert# " << TColor::E_Name(expected)
+                << Endl);
+            bool found = false;
+            for (int numInspect = 10; numInspect > 0; --numInspect) {
+                const auto ev = testCtx.Recv<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>();
+                Cerr << (TStringBuilder() << "Got TEvPDiskStateUpdate# " << ev->ToString() << Endl);
+                const auto& pdiskInfo = ev->Record;
+                if (pdiskInfo.HasPDiskCapacityAlert() && pdiskInfo.GetPDiskCapacityAlert() == expected) {
+                    found = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(found, "No TEvPDiskStateUpdate with expected PDiskCapacityAlert received");
+        };
+
+        auto checkVDiskCapacityAlert = [&](TColor::E expected) {
+            Cerr << (TStringBuilder() << "... Awaiting TEvVDiskStateUpdate"
+                << " CapacityAlert# " << TColor::E_Name(expected)
+                << Endl);
+            bool found = false;
+            for (int numInspect = 10; numInspect > 0; --numInspect) {
+                const auto ev = testCtx.Recv<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>();
+                Cerr << (TStringBuilder() << "Got TEvVDiskStateUpdate# " << ev->ToString() << Endl);
+                const auto& vdiskInfo = ev->Record;
+                if (vdiskInfo.HasCapacityAlert() && vdiskInfo.GetCapacityAlert() == expected) {
+                    found = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(found, "No TEvVDiskStateUpdate with expected CapacityAlert received");
+        };
+
+        auto checkCapacityAlerts = [&](TColor::E expected) {
+            testCtx.Send(new TEvents::TEvWakeup());
+            checkPDiskCapacityAlert(expected);
+            checkVDiskCapacityAlert(expected);
+        };
+
         checkColor(TColor::GREEN);
 
         setColor(TColor::YELLOW);
         checkColor(TColor::YELLOW);
+        // The PDiskCapacityAlert and VDisk CapacityAlert reported to the
+        // whiteboard/UI must also respect the ForcedPDiskSpaceColor ICB
+        // override. A single wakeup triggers a whiteboard report that emits
+        // both TEvPDiskStateUpdate and TEvVDiskStateUpdate; each check grabs
+        // its own event type from the edge, so they don't interfere.
+        checkCapacityAlerts(TColor::YELLOW);
 
         setColor(TColor::RED);
         checkColor(TColor::RED);
+        checkCapacityAlerts(TColor::RED);
 
         setColor(TColor::GREEN);
         checkColor(TColor::GREEN);
+        checkCapacityAlerts(TColor::GREEN);
 
         setColor(0);
         checkColor(TColor::GREEN);

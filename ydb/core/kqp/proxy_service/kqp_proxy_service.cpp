@@ -863,6 +863,7 @@ public:
         StartQueryTimeout(requestId, timerDuration, status);
         span.Attribute("ydb.target_node_id", static_cast<i64>(targetId.NodeId()));
         span.Attribute("ydb.forwarded", targetId.NodeId() != SelfId().NodeId());
+        PendingRequests.FindPtr(requestId)->QueryDispatched = true;
         Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId, std::move(ev->TraceId));
     }
 
@@ -1050,7 +1051,7 @@ public:
         }
 
         if constexpr (std::is_same_v<TEvent, TEvKqp::TEvQueryResponse::TPtr>) {
-            EndQueryTraceSpan(proxyRequest->Span, ev->Get()->Record.GetYdbStatus());
+            EndProxyQueryTraceSpan(proxyRequest->Span, ev->Get()->Record);
         }
         Send<ESendingType::Tail>(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
 
@@ -1559,6 +1560,9 @@ private:
         auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
         response->Record.SetYdbStatus(ydbStatus);
 
+        if (request->Span && !request->QueryDispatched) {
+            response->Record.SetRejectionStage(NKikimrKqp::TEvQueryResponse::REJECTION_STAGE_PROXY);
+        }
         NYql::IssuesToMessage(issues, response->Record.MutableResponse()->MutableQueryIssues());
         return Send(SelfId(), response.release(), 0, requestId);
     }

@@ -517,6 +517,8 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                         continue;
                     }
                     ++hops;
+                    UNIT_ASSERT(!FindAttribute(span, "ydb.rejected"));
+                    UNIT_ASSERT(!FindAttribute(span, "ydb.trace.coverage"));
                     UNIT_ASSERT_VALUES_EQUAL(FindAttribute(span, "ydb.target_node_id")->value().int_value(),
                         runtime.GetNodeId(0));
                     if (FindAttribute(span, "ydb.forwarded")->value().bool_value()) {
@@ -537,6 +539,89 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         ExecSQL(runtime, sender, "SELECT 1;", 15, Ydb::StatusIds::BAD_SESSION,
             "ydb://session/3?node_id=1&id=missing");
         AssertStatus(*uploader, "KQP request", NTraceProto::Status::STATUS_CODE_ERROR);
+        UNIT_ASSERT(!FindAttribute(*FindSpan(*uploader, "KQP request"), "ydb.rejected"));
+
+        for (const auto type : {NKikimrKqp::QUERY_TYPE_SQL_DML, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY}) {
+            ClearUploader(*uploader);
+            ExecSQL(runtime, sender, "SELECT 1;", 15, Ydb::StatusIds::BAD_SESSION,
+                TStringBuilder() << "ydb://session/3?node_id=" << runtime.GetNodeId(0) << "&id=missing", 1, type);
+            UNIT_ASSERT(uploader->BuildTraceTrees());
+            UNIT_ASSERT_VALUES_EQUAL(uploader->Spans.size(), 2);
+            for (const auto& span : uploader->Spans) {
+                UNIT_ASSERT_VALUES_EQUAL(span.name(), "KQP request");
+                UNIT_ASSERT(FindAttribute(span, "ydb.rejected")->value().bool_value());
+                UNIT_ASSERT_VALUES_EQUAL(FindAttribute(span, "ydb.trace.coverage")->value().string_value(), "proxy_only");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(SessionRejectionIsPropagatedAcrossProxies) {
+        auto [runtime, server, sender] = CreateServer(2);
+        auto* uploader = RegisterUploader(runtime);
+        for (const auto type : {NKikimrKqp::QUERY_TYPE_SQL_DML, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY}) {
+            const auto session = CreateSession(runtime, sender, type);
+            const auto firstSender = runtime.AllocateEdgeActor();
+            TAutoPtr<IEventHandle> compile;
+            auto previous = runtime.SetEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == NKqp::TEvKqp::TEvCompileRequest::EventType && !compile) {
+                    compile = ev;
+                    return true;
+                }
+                return false;
+            });
+            auto request = MakeSQLRequest("SELECT 987654;");
+            request->Record.MutableRequest()->SetType(type);
+            request->Record.MutableRequest()->SetSessionId(session);
+            ActorIdToProto(firstSender, request->Record.MutableRequestActorId());
+            runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId(0)), firstSender, request.Release()));
+            TDispatchOptions blocked;
+            blocked.FinalEvents.emplace_back([&](IEventHandle&) { return bool(compile); });
+            runtime.DispatchEvents(blocked);
+
+            ClearUploader(*uploader);
+            ExecSQL(runtime, sender, "SELECT 1;", 15, Ydb::StatusIds::SESSION_BUSY, session, 1, type);
+            UNIT_ASSERT(uploader->BuildTraceTrees());
+            UNIT_ASSERT_VALUES_EQUAL(uploader->Spans.size(), 2);
+            for (const auto& span : uploader->Spans) {
+                UNIT_ASSERT_VALUES_EQUAL(span.name(), "KQP request");
+                UNIT_ASSERT(FindAttribute(span, "ydb.rejected")->value().bool_value());
+                UNIT_ASSERT_VALUES_EQUAL(FindAttribute(span, "ydb.trace.coverage")->value().string_value(),
+                    "rejected_before_query_state");
+            }
+            runtime.SetEventFilter(std::move(previous));
+            runtime.Send(new IEventHandle(compile->Sender, firstSender, new NGRpcService::TEvClientLost()), 0, true);
+            const auto response = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(firstSender);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetYdbStatus(), Ydb::StatusIds::CANCELLED);
+        }
+    }
+
+    Y_UNIT_TEST(ForwardedTimeoutIsNotAnEarlyRejection) {
+        auto [runtime, server, sender] = CreateServer(2);
+        auto* uploader = RegisterUploader(runtime);
+        for (const auto type : {NKikimrKqp::QUERY_TYPE_SQL_DML, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY}) {
+            const auto session = CreateSession(runtime, sender, type);
+            TAutoPtr<IEventHandle> forwarded;
+            auto previous = runtime.SetEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == NKqp::TEvKqp::TEvQueryRequest::EventType
+                        && ev->GetRecipientRewrite() == NKqp::MakeKqpProxyID(runtime.GetNodeId(0))) {
+                    forwarded = ev;
+                    return true;
+                }
+                return false;
+            });
+            ClearUploader(*uploader);
+            auto request = MakeSQLRequest("SELECT 1;");
+            request->Record.MutableRequest()->SetType(type);
+            request->Record.MutableRequest()->SetSessionId(session);
+            request->Record.MutableRequest()->SetTimeoutMs(100);
+            ExecRequest(runtime, sender, std::move(request), 15, Ydb::StatusIds::TIMEOUT, 1);
+            runtime.SetEventFilter(std::move(previous));
+            UNIT_ASSERT(forwarded);
+            AssertStatus(*uploader, "KQP request", NTraceProto::Status::STATUS_CODE_ERROR);
+            const auto* proxy = FindSpan(*uploader, "KQP request");
+            UNIT_ASSERT(!FindAttribute(*proxy, "ydb.rejected"));
+            UNIT_ASSERT(!FindAttribute(*proxy, "ydb.trace.coverage"));
+        }
     }
 
     Y_UNIT_TEST(DistributedCommitPhaseOutcomes) {

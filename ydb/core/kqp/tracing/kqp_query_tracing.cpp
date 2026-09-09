@@ -399,4 +399,22 @@ void EndQueryTraceSpan(NWilson::TSpan& span, Ydb::StatusIds::StatusCode status) 
     }
 }
 
+void EndProxyQueryTraceSpan(NWilson::TSpan& span, const NKikimrKqp::TEvQueryResponse& response) {
+    if (span) {
+        switch (response.GetRejectionStage()) {
+            case NKikimrKqp::TEvQueryResponse::REJECTION_STAGE_PROXY:
+                span.Attribute("ydb.rejected", true);
+                span.Attribute("ydb.trace.coverage", TString("proxy_only"));
+                break;
+            case NKikimrKqp::TEvQueryResponse::REJECTION_STAGE_SESSION:
+                span.Attribute("ydb.rejected", true);
+                span.Attribute("ydb.trace.coverage", TString("rejected_before_query_state"));
+                break;
+            default:
+                break;
+        }
+    }
+    EndQueryTraceSpan(span, response.GetYdbStatus());
+}
+
 } // namespace NKikimr::NKqp

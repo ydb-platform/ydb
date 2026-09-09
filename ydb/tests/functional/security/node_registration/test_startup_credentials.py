@@ -64,6 +64,7 @@ def client_certificate_args(certificates, tmp_path):
     pytest.param('NodeRegistrationToken: "node@builtin"', 'node@builtin', id='explicit-custom-token'),
 ])
 def test_startup_registration_credentials(certificates, tmp_path, protocol, auth_config, expected_token):
+    recorder = RegistrationRecorder()
     log_path = tmp_path / 'ydbd.log'
     # An empty text protobuf is an empty TAppConfig, loaded by LoadBootstrapConfig.
     static_config = tmp_path / 'bootstrap.pb'

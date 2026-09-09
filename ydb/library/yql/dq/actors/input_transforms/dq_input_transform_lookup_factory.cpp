@@ -9,8 +9,8 @@ void RegisterDqInputTransformLookupActorFactory(NDq::TDqAsyncIoFactory& factory,
     factory.RegisterInputTransform<NYql::NDqProto::TDqInputTransformLookupSettings>(
         "StreamLookupInputTransform",
         [factory = &factory, counters](NDqProto::TDqInputTransformLookupSettings&& settings, IDqAsyncIoFactory::TInputTransformArguments&& args) {
-            if (counters && args.StatsLevel == TCollectStatsLevel::Profile) {
-                args.TaskCounters = counters->GetSubgroup("tx_id", TStringBuilder() << args.TxId);
+            if (counters) {
+                args.TaskCounters = (args.StatsLevel == TCollectStatsLevel::Profile) ? counters->GetSubgroup("tx_id", TStringBuilder() << args.TxId) : counters;
             }
             return CreateInputTransformStreamLookup(
                 factory,

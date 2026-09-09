@@ -61,7 +61,9 @@ public:
     YDB_ACCESSOR_DEF(TString, DatabaseId);
     YDB_ACCESSOR_DEF(TString, TypeId);
     YDB_ACCESSOR_DEF(TString, ObjectId);
+    YDB_ACCESSOR_DEF(TPathId, PathId);
     YDB_ACCESSOR_DEF(ui64, RequestGeneration);
+    YDB_ACCESSOR_DEF(ui64, ObjectGeneration);
 };
 
 } // namespace NKikimr::NMetadata::NProvider

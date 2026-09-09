@@ -23,7 +23,9 @@ class TService : public NActors::TActorBootstrapped<TService> {
         TString DatabaseId;
         TString TypeId;
         TString ObjectId;
+        TPathId PathId;
         ui64 RequestGeneration;
+        ui64 ObjectGeneration;
 
         bool operator==(const TTrackOperationId& other) const;
 

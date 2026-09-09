@@ -44,7 +44,9 @@ public:
             ev->SetDatabaseId(externalContext.GetDatabaseId());
             ev->SetTypeId(TypeId);
             ev->SetObjectId(ObjectId);
+            ev->SetPathId(Context.GetPathId());
             ev->SetRequestGeneration(Context.GetRequestGeneration());
+            ev->SetObjectGeneration(Context.GetObjectGeneration());
             actorSystem->Send(MakeServiceId(actorSystem->NodeId), ev.release());
         }
 
@@ -61,14 +63,13 @@ public:
 
 private:
     void DoExecute() const final {
-        GetBehaviour()->GetOperationsManager()->TrackObjectOperation(ObjectId, Context).Subscribe([controller = Controller](const auto&) {
+        GetBehaviour()->GetOperationsManager()->TrackObjectOperation(ObjectId, Context).Subscribe([controller = GetController()](const auto&) {
             controller->OnAlteringFinished();
         });
     }
 
     const TString ObjectId;
     const NModifications::IOperationsManager::TOperationTrackContext Context;
-    const TController::TPtr Controller;
 };
 
 } // anonymous namespace
@@ -82,12 +83,15 @@ ui64 TService::TTrackOperationId::THash::operator()(const TTrackOperationId& id)
     result = CombineHashes<ui64>(result, std::hash<TString>()(id.DatabaseId));
     result = CombineHashes<ui64>(result, std::hash<TString>()(id.TypeId));
     result = CombineHashes<ui64>(result, std::hash<TString>()(id.ObjectId));
+    result = CombineHashes<ui64>(result, id.PathId.Hash());
     result = CombineHashes<ui64>(result, std::hash<ui64>()(id.RequestGeneration));
+    result = CombineHashes<ui64>(result, std::hash<ui64>()(id.ObjectGeneration));
     return result;
 }
 
 bool TService::TTrackOperationId::operator==(const TTrackOperationId& other) const {
-    return DatabaseId == other.DatabaseId && TypeId == other.TypeId && ObjectId == other.ObjectId && RequestGeneration == other.RequestGeneration;
+    return DatabaseId == other.DatabaseId && TypeId == other.TypeId && ObjectId == other.ObjectId
+        && PathId == other.PathId && RequestGeneration == other.RequestGeneration && ObjectGeneration == other.ObjectGeneration;
 }
 
 void TService::PrepareManagers(std::vector<IClassBehaviour::TPtr> managers, TAutoPtr<IEventBase> ev, const NActors::TActorId& sender) {
@@ -182,7 +186,9 @@ void TService::Handle(TEvTrackOperationCompletion::TPtr& ev) {
         .DatabaseId = ev->Get()->GetDatabaseId(),
         .TypeId = ev->Get()->GetTypeId(),
         .ObjectId = ev->Get()->GetObjectId(),
+        .PathId = ev->Get()->GetPathId(),
         .RequestGeneration = ev->Get()->GetRequestGeneration(),
+        .ObjectGeneration = ev->Get()->GetObjectGeneration(),
     };
     if (!InflightTrackOperations.emplace(id).second) {
         return;
@@ -199,9 +205,9 @@ void TService::Handle(TEvTrackOperationCompletion::TPtr& ev) {
     externalData.SetActorSystem(TActivationContext::ActorSystem());
 
     NModifications::IOperationsManager::TOperationTrackContext context(std::move(externalData));
-    context.SetPathId(ev->Get()->GetPathId());
+    context.SetPathId(id.PathId);
     context.SetRequestGeneration(id.RequestGeneration);
-    context.SetObjectGeneration(ev->Get()->GetObjectGeneration());
+    context.SetObjectGeneration(id.ObjectGeneration);
     context.SetOperationOwner(ev->Get()->GetOperationOwner());
 
     auto controller = std::make_shared<TObjectTrackCommand::TController>(id.TypeId, id.ObjectId, context);
@@ -215,7 +221,9 @@ void TService::Handle(TEvTrackOperationFinished::TPtr& ev) {
         .DatabaseId = ev->Get()->GetDatabaseId(),
         .TypeId = ev->Get()->GetTypeId(),
         .ObjectId = ev->Get()->GetObjectId(),
+        .PathId = ev->Get()->GetPathId(),
         .RequestGeneration = ev->Get()->GetRequestGeneration(),
+        .ObjectGeneration = ev->Get()->GetObjectGeneration(),
     };
     Y_VALIDATE(InflightTrackOperations.erase(id) == 1, "Unexpected track operation finish");
 }

@@ -85,7 +85,7 @@ void AddQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescription
     }
     span.Attribute("db.query.summary", description.DisplayName);
     span.Attribute("db.operation.name", description.Operation);
-    ui64 cpuUs = stats.WorkerCpuTimeUs;
+    ui64 cpuUs = 0;
     ui64 rowsRead = 0;
     ui64 bytesRead = 0;
     ui64 rowsWritten = 0;
@@ -94,7 +94,7 @@ void AddQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescription
     double maxTaskSkew = 0;
     bool taskStatsIncomplete = false;
     for (const auto& execution : stats.Executions) {
-        cpuUs += execution.GetCpuTimeUs();
+        cpuUs += GetExecutionTraceCpuTimeUs(execution);
         NKqpProto::TKqpExecutionExtraStats extra;
         if (execution.GetExtra().UnpackTo(&extra)) {
             waitUs += extra.GetWaitTimeUs();
@@ -109,11 +109,12 @@ void AddQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescription
         }
     }
     if (stats.Compilation) {
-        cpuUs += stats.Compilation->CpuTimeUs;
+        span.Attribute("ydb.compile.cpu_us", static_cast<i64>(stats.Compilation->CpuTimeUs));
         span.Attribute("ydb.compile.cache_hit", stats.Compilation->FromCache);
         span.Attribute("ydb.compile.duration_us", static_cast<i64>(stats.Compilation->DurationUs));
     }
     span.Attribute("ydb.cpu_us", static_cast<i64>(cpuUs));
+    span.Attribute("ydb.session.cpu_us", static_cast<i64>(stats.WorkerCpuTimeUs));
     span.Attribute("ydb.rows_read", static_cast<i64>(rowsRead));
     span.Attribute("ydb.bytes_read", static_cast<i64>(bytesRead));
     span.Attribute("ydb.rows_written", static_cast<i64>(rowsWritten));
@@ -127,6 +128,12 @@ void AddQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescription
     span.Attribute("ydb.locks_broken_as_breaker", static_cast<i64>(stats.LocksBrokenAsBreaker));
     span.Attribute("ydb.consumed_ru", static_cast<i64>(requestUnits));
     span.Attribute("ydb.status_code", Ydb::StatusIds::StatusCode_Name(status));
+}
+
+ui64 GetExecutionTraceCpuTimeUs(const NYql::NDqProto::TDqExecutionStats& stats) {
+    NKqpProto::TKqpExecutionExtraStats extra;
+    return stats.GetExtra().UnpackTo(&extra) && extra.HasCpuTimeUs()
+        ? extra.GetCpuTimeUs() : stats.GetCpuTimeUs();
 }
 
 void AddReadTraceStats(NWilson::TSpan& span, NYql::NDqProto::TDqTaskStats& stats,

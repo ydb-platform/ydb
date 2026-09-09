@@ -9,6 +9,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_tracing.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/executer_actor/kqp_executer_stats.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
 #include <ydb/core/grpc_services/cancelation/cancelation_event.h>
 #include <ydb/core/testlib/test_client.h>
@@ -315,6 +316,107 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT(requests);
         UNIT_ASSERT(FindSpan(*uploader, "Task: "));
+    }
+
+    Y_UNIT_TEST(QueryCpuIncludesExecutionWithoutClientStats) {
+        auto [runtime, server, sender] = CreateServer();
+        CreateShardedTable(server, sender, "/Root", "table-1", 2, false);
+        ExecSQL(runtime, sender,
+            "UPSERT INTO `/Root/table-1` (key, value) VALUES (1u, 10u), (4000000000u, 20u);", 0);
+        auto* uploader = RegisterUploader(runtime);
+        for (const auto type : {NKikimrKqp::QUERY_TYPE_SQL_DML, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY}) {
+            for (const auto mode : {Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE,
+                    Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC,
+                    Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL}) {
+                for (const ui8 level : {1, 15}) {
+                    ClearUploader(*uploader);
+                    std::map<TActorId, ui64> taskCpu;
+                    const auto observer = runtime.AddObserver<NYql::NDq::TEvDqCompute::TEvState>(
+                        [&](NYql::NDq::TEvDqCompute::TEvState::TPtr& ev) {
+                            auto& state = ev->Get()->Record;
+                            if (state.GetState() == NYql::NDqProto::COMPUTE_STATE_FINISHED && state.GetStats().TasksSize() == 1) {
+                                auto& task = *state.MutableStats()->MutableTasks(0);
+                                task.SetCpuTimeUs(1000 + task.GetTaskId());
+                                taskCpu[ev->Sender] = task.GetCpuTimeUs();
+                            }
+                        });
+                    auto request = MakeSQLRequest("SELECT SUM(value) FROM `/Root/table-1` WHERE key > 0u;");
+                    request->Record.MutableRequest()->SetType(type);
+                    request->Record.MutableRequest()->SetCollectStats(mode);
+                    ExecRequest(runtime, sender, std::move(request), level);
+                    UNIT_ASSERT(!taskCpu.empty());
+                    ui64 cpu = 0;
+                    for (const auto& [actor, value] : taskCpu) {
+                        cpu += value;
+                    }
+                    const auto* query = FindSpan(*uploader, "Query");
+                    UNIT_ASSERT(query);
+                    UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*query, "ydb.cpu_us")->value().int_value(), cpu);
+                    UNIT_ASSERT(FindAttribute(*query, "ydb.compile.cpu_us"));
+                    UNIT_ASSERT(FindAttribute(*query, "ydb.session.cpu_us"));
+                    if (level == 15) {
+                        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*FindSpan(*uploader, "Execute plan"), "ydb.cpu_us")->value().int_value(), cpu);
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TableFreeCpuIsIncludedWithoutClientStats) {
+        auto [runtime, server, sender] = CreateServer();
+        auto* uploader = RegisterUploader(runtime);
+        for (const auto type : {NKikimrKqp::QUERY_TYPE_SQL_DML, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY}) {
+            ClearUploader(*uploader);
+            auto request = MakeSQLRequest("SELECT ListSum(ListFromRange(0u, 100000u));");
+            request->Record.MutableRequest()->SetType(type);
+            request->Record.MutableRequest()->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE);
+            ExecRequest(runtime, sender, std::move(request));
+            const auto* execution = FindSpan(*uploader, "Execute plan");
+            UNIT_ASSERT_C(execution, uploader->PrintTraces());
+            UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*execution, "ydb.actor.type")->value().string_value(),
+                type == NKikimrKqp::QUERY_TYPE_SQL_DML ? "TKqpLiteralExecuter" : "DataExecuter");
+            const auto cpu = FindAttribute(*execution, "ydb.cpu_us")->value().int_value();
+            UNIT_ASSERT_C(cpu > 0, execution->DebugString());
+            const auto* query = FindSpan(*uploader, "Query");
+            UNIT_ASSERT(query);
+            UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*query, "ydb.cpu_us")->value().int_value(), cpu);
+        }
+    }
+
+    Y_UNIT_TEST(QueryCpuSeparatesOverheadAndPreservesBatchTotals) {
+        auto [runtime, server, sender] = CreateServer();
+        auto* uploader = RegisterUploader(runtime);
+        for (const auto mode : {Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE,
+                Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC}) {
+            ClearUploader(*uploader);
+            NKqp::TBatchOperationExecutionStats batch(mode);
+            for (const ui64 cpu : {100, 200}) {
+                NYql::NDqProto::TDqExecutionStats execution;
+                if (mode == Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC) {
+                    execution.SetCpuTimeUs(cpu);
+                }
+                NKqpProto::TKqpExecutionExtraStats extra;
+                extra.SetCpuTimeUs(cpu);
+                execution.MutableExtra()->PackFrom(extra);
+                batch.TakeExecStats(std::move(execution));
+            }
+            NKqp::TKqpQueryStats stats;
+            batch.ExportExecStats(stats.Executions.emplace_back());
+            UNIT_ASSERT_VALUES_EQUAL(stats.Executions.back().GetCpuTimeUs(),
+                mode == Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC ? 300 : 0);
+            stats.Executions.emplace_back().SetCpuTimeUs(50);
+            stats.Compilation = NKqp::TKqpStatsCompile{.CpuTimeUs = 13};
+            stats.WorkerCpuTimeUs = 7;
+            NWilson::TSpan query(1, NWilson::TTraceId::NewTraceId(15, 4095), "Query",
+                NWilson::EFlags::NONE, runtime.GetActorSystem(0));
+            NKqp::AddQueryResultAttributes(query, {"SELECT", "SELECT"}, stats, 1, Ydb::StatusIds::SUCCESS);
+            query.EndOk();
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+            const auto* span = FindSpan(*uploader, "Query");
+            UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*span, "ydb.cpu_us")->value().int_value(), 350);
+            UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*span, "ydb.compile.cpu_us")->value().int_value(), 13);
+            UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*span, "ydb.session.cpu_us")->value().int_value(), 7);
+        }
     }
 
     Y_UNIT_TEST(CommonConfigSamplesSdkReadPaths) {

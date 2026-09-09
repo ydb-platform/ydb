@@ -58,6 +58,7 @@ void EndQueryTraceSpan(NWilson::TSpan& span, Ydb::StatusIds::StatusCode status);
 void EndProxyQueryTraceSpan(NWilson::TSpan& span, const NKikimrKqp::TEvQueryResponse& response);
 void AddQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescription& description,
     const TKqpQueryStats& stats, ui64 requestUnits, Ydb::StatusIds::StatusCode status);
+ui64 GetExecutionTraceCpuTimeUs(const NYql::NDqProto::TDqExecutionStats& stats);
 void AddReadTraceStats(NWilson::TSpan& span, NYql::NDqProto::TDqTaskStats& stats,
     const TString& table, ui64 rows, ui64 retries);
 void AddKqpTaskTraceAttributes(NWilson::TSpan& span, const NYql::NDqProto::TDqComputeActorStats& stats);

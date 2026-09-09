@@ -83,6 +83,8 @@ message TKqpExecutionExtraStats {
     uint64 SpilledBytes = 6;
     double MaxTaskSkew = 7;
     bool TaskStatsIncomplete = 8;
+    // Internal execution total, also available when client statistics are disabled.
+    optional uint64 CpuTimeUs = 9;
 
     // Profile stats
     uint64 ResolveCpuTimeUs = 100;

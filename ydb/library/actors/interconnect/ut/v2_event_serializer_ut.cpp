@@ -705,6 +705,56 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
         CheckIndexedEvent(*processor.Events.front(), 1, 8192, true);
     }
 
+    Y_UNIT_TEST(XdcCoverageFollowsCompletePush) {
+        for (bool preserialize : {false, true}) {
+            auto h = MakeIndexedEvent(1, 7, 8192, true);
+            if (preserialize) {
+                h->Preserialize(/*allowExternalDataChannel=*/true);
+            }
+            TEventSerializer ser(false, true);
+            ser.Push(std::move(h));
+
+            std::vector<TRcBuf> mainBufs;
+            std::vector<TRcBuf> xdcBufs;
+            auto [mainSpans, xdcSpans] = SerializeXdc(ser, mainBufs, xdcBufs);
+            const TString main = ConcatSpans(mainSpans);
+            const size_t xdcBytes = ConcatSpans(xdcSpans).size();
+
+            ui64 expectedXdcEnd = 0;
+            UNIT_ASSERT_VALUES_EQUAL(ser.GetXdcAllowedToSend(), 0u);
+            for (size_t offset = 0; offset < main.size();) {
+                TEventSerializer::TChunkHeader header;
+                UNIT_ASSERT(main.size() - offset >= sizeof(header));
+                memcpy(&header, main.data() + offset, sizeof(header));
+                // A PUSH consists only of its header on main; Length counts bytes on XDC.
+                const size_t end = offset + header.GetMainChannelLength();
+                UNIT_ASSERT(end <= main.size());
+                if (header.GetType() == TEventSerializer::TChunkHeader::kXdcPush) {
+                    UNIT_ASSERT_GT(header.Length, 0u);
+                    ser.IssueMainBytes(end - 1);
+                    UNIT_ASSERT_VALUES_EQUAL(ser.GetXdcAllowedToSend(), expectedXdcEnd);
+
+                    ser.IssueMainBytes(end);
+                    expectedXdcEnd += header.Length;
+                    UNIT_ASSERT_VALUES_EQUAL(ser.GetXdcAllowedToSend(), expectedXdcEnd);
+
+                    // A short completion retains issued credit; retrying the same endpoint adds none.
+                    ser.CommitProducedBytes(end - 1 - ser.GetCumulativeCommittedMain());
+                    UNIT_ASSERT_VALUES_EQUAL(ser.GetXdcAllowedToSend(), expectedXdcEnd);
+                    ser.IssueMainBytes(end);
+                    UNIT_ASSERT_VALUES_EQUAL(ser.GetXdcAllowedToSend(), expectedXdcEnd);
+                    ser.CommitProducedBytes(1);
+                } else {
+                    ser.IssueMainBytes(end);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(ser.GetXdcAllowedToSend(), expectedXdcEnd);
+                offset = end;
+            }
+            UNIT_ASSERT_GT(expectedXdcEnd, 0u);
+            UNIT_ASSERT_VALUES_EQUAL(expectedXdcEnd, xdcBytes);
+        }
+    }
+
     Y_UNIT_TEST(XdcFragmentedMainAndXdc) {
         constexpr ui64 numEvents = 40;
         TEventSerializer ser(true, true);
@@ -970,14 +1020,14 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
         while (pos + sizeof(TChunkHeader) <= main.size()) {
             TChunkHeader chunk;
             memcpy(&chunk, main.data() + pos, sizeof(chunk));
+            UNIT_ASSERT(pos + chunk.GetMainChannelLength() <= main.size());
             pos += sizeof(chunk);
-            UNIT_ASSERT(pos + chunk.Length <= main.size());
             if (chunk.GetType() == TChunkHeader::kEventHeader) {
                 UNIT_ASSERT(headerOffset + chunk.Length <= sizeof(header));
                 memcpy(reinterpret_cast<char*>(&header) + headerOffset, main.data() + pos, chunk.Length);
                 headerOffset += chunk.Length;
             }
-            pos += chunk.Length;
+            pos += chunk.GetMainChannelLength() - sizeof(TChunkHeader);
         }
         UNIT_ASSERT_VALUES_EQUAL(headerOffset, sizeof(header));
         return header;

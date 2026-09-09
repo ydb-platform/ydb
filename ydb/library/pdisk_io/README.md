@@ -15,6 +15,8 @@ for those layers.
 | [aio_linux.cpp](aio_linux.cpp), [aio_mtp.cpp](aio_mtp.cpp) | Linux native AIO and the platform fallback backend |
 | [aio_map.cpp](aio_map.cpp), [sector_map.h](sector_map.h) | In-memory sector-map I/O used by emulation/tests |
 | [uring_router.h](uring_router.h), [uring_router.cpp](uring_router.cpp) | One io_uring and its dedicated I/O thread |
+| [uring_router_client.h](uring_router_client.h) | Submit-only interface and shared router configuration |
+| [uring_router_backend.h](uring_router_backend.h) | Backend seam used to isolate liburing calls in tests |
 | [uring_operation.h](uring_operation.h), [uring_operation.cpp](uring_operation.cpp) | Operation lifetime, scalar/scatter-gather buffers, result and retry cursor |
 | [buffers.h](buffers.h), [buffer_pool.h](buffer_pool.h) | Aligned buffers and pooling |
 | [file_params.h](file_params.h), [drivedata.h](drivedata.h), [device_type.h](device_type.h) | File/device geometry and drive information |
@@ -23,10 +25,19 @@ for those layers.
 
 ## TUringRouter ownership and setup
 
-`TUringRouter` takes a borrowed file handle and actor-system pointer. Their
-owners must keep them usable through `Stop()`, including completion callbacks.
-The router owns the ring, wake eventfd and dedicated I/O thread. It is neither
-an actor nor the owner of the device's PDisk allocation.
+`TUringRouter` owns the duplicated file handle passed to its constructor, its
+ring, wake eventfd and dedicated I/O thread. The actor-system pointer is
+borrowed and must remain usable until the last router owner releases it and all
+terminal callbacks have returned. The router is neither an actor nor the owner
+of the device's PDisk allocation.
+
+In the DDisk integration, PDisk lazily creates and starts one shared router for
+its device when the first `TEvYardInit` requests an `IUringRouterClient`. That
+request carries the DDisk `IdleSpinUs` setting; because the router is shared,
+the first requesting DDisk selects this value for that PDisk incarnation.
+Later DDisk slots and their PersistentBuffer children share submit-only client
+references to the same router. They cannot register resources, start it, or
+stop it.
 
 Setup runs on one thread before concurrent submission:
 
@@ -61,22 +72,26 @@ The lifetime boundary is the return value of submission:
   run for this attempt; the caller retains responsibility for the operation
   and its buffers.
 
-An accepted submission gets exactly one `OnComplete()` callback before
-`Stop()` returns. The router does not access the operation after that callback
-returns, so the callback may free it or return it to a pool. `GetInflight()`
-counts accepted queued/submitted work and callbacks still executing.
+An accepted submission gets exactly one terminal callback before final router
+destruction returns: `OnComplete()` if it reached the kernel (including error
+completion), or `OnDrop()` if shutdown discards it first. The router does not
+access the operation after that callback returns, so the callback may free it
+or return it to a pool. `GetInflight()` counts accepted queued/submitted work
+and callbacks still executing.
 
-`OnComplete()` runs on the I/O thread outside actor activation. It must be
-`noexcept`, must not use `TActivationContext`, and should send actor messages
-through the supplied `TActorSystem`. It must not call `Stop()` on this router,
-which would try to join the callback's own thread. Keep callback and optional
-sample-sink work short; the single I/O thread also services all other requests.
+`OnComplete()` and `OnDrop()` run on the I/O thread outside actor activation.
+They must be `noexcept`, must not use `TActivationContext`, and should send
+actor messages through the supplied `TActorSystem`. They must not release the
+last router reference, because its destructor would try to join the callback's
+own thread. Keep callback and optional sample-sink work short; the single I/O
+thread also services all other requests.
 
-`GetResult()` exposes the CQE byte count or negative errno. The router does
-not turn short I/O into a complete logical request. The operation/caller
-decides whether to advance its iovec window and resubmit, or report failure.
-Each accepted resubmission has its own callback and can be rejected after
-shutdown closes admission. Keep backing buffers alive across that decision.
+`GetResult()` exposes the total requested byte count after successful logical
+completion, or a negative errno. The router advances the iovec window and
+continues positive short I/O internally. A zero-byte result with data remaining
+becomes `-EIO`; if shutdown prevents an internal continuation, the operation
+completes with `-ECANCELED`. Keep all backing buffers alive until the terminal
+callback.
 
 `PrepareScatterGather`/`AddIov` support up to 64 segments on Linux, with 16
 stored inline. Fixed-buffer operations use one registered segment. A recycled
@@ -86,33 +101,52 @@ Alignment requirements come from the opened device and caller contract.
 
 ## Shutdown
 
-`Stop()` atomically closes admission, waits for producers already publishing
-to finish, and appends a stop sentinel behind accepted work. The I/O thread
-drains queued requests and completions, retires any pending wake poll, and
-uses an `IOSQE_IO_DRAIN` marker before exiting. `Stop()` joins that thread and
-tears down the ring only after callbacks have finished.
+`StopAsync()` atomically closes admission and returns without waiting. A
+submission racing with that transition may still be accepted and will still
+receive one terminal callback. Repeated and concurrent `StopAsync()` calls are
+supported; concurrent setup and `Start()` calls are not part of the contract.
 
-Repeated and concurrent `Stop()` calls are supported. Concurrent setup and
-`Start()` calls are not part of the contract. Ordinary graceful shutdown uses
-`OnComplete`, including error completions; `OnDrop` is an operation cleanup
-hook for explicit abortive/failure ownership paths, not the graceful drain
-mechanism. Do not destroy callback state or the actor system before the drain
-finishes.
+The last shared-owner release runs synchronous shutdown in the router
+destructor. It appends a stop sentinel, calls `OnDrop()` for accepted work that
+has not reached the kernel, drains submitted I/O through `OnComplete()`, retires
+any pending wake poll, and uses an `IOSQE_IO_DRAIN` marker before joining the
+I/O thread and tearing down the ring. Callback state, backing buffers, and the
+actor system must therefore survive until each client's accepted I/O has
+finished and final router destruction has returned.
+
+PDisk owns router creation and the non-blocking stop decision. During PDisk
+shutdown it detaches device sampling. If PDisk holds the only router reference,
+it calls `StopAsync()` and releases it, so final destruction performs the
+synchronous cleanup. If DDisk or PersistentBuffer clients still hold
+references, PDisk deliberately neither closes admission nor waits: an old slot
+may continue until its owner-stamped PDisk request detects the stale round.
+PDisk then releases its reference during destruction, and the last client to
+release the router performs the drain/drop above. The duplicated device handle
+remains open until then, so a replacement PDisk waits for the old holder when
+acquiring the device lock.
+
+A fatal ring/backend failure marks the router broken and closes admission.
+PDisk observes that state and reports a device error once so that PDisk and its
+slots can be restarted. Clients still wait for their own accepted work. If a
+fatal failure leaves any operation potentially owned by the kernel, final
+destruction aborts instead of freeing storage whose ownership is unresolved.
 
 ## DDisk integration and fallback boundary
 
-[TDDiskActor::InitUring](../../core/blobstorage/ddisk/ddisk_actor_boot.cpp)
-chooses io_uring when enabled, a raw disk handle/format is available, and
-`Probe` succeeds. It requests fixed-file registration and installs device
-timing sampling. The actor otherwise uses PDisk raw-event I/O.
+[TPDisk::AttachSharedUringRouter](../../core/blobstorage/pdisk/blobstorage_pdisk_impl.cpp)
+handles a DDisk request for direct I/O. On the first request it duplicates the
+device handle, probes io_uring, creates and starts the per-device router, and
+installs fixed-file registration and device-timing sampling. Failure to create
+the shared router returns no client, so DDisk uses PDisk raw-event I/O instead.
+`ForcePDiskFallback` opts out in the DDisk yard-init request and always selects
+that fallback path.
 
 [direct_io_op.cpp](../../core/blobstorage/ddisk/direct_io_op.cpp) owns DDisk's
-operation payload, short-I/O completion handling and delivery back to the
-actor. Selection of PDisk fallback and translation into PDisk requests belong
-to the DDisk caller, not to `TUringRouter`. A plain ring is still io_uring;
-an ordinary CQE error is not an automatic switch to PDisk. Changes at this
-boundary must preserve sender/cookie, payload ownership and final completion
-on both paths.
+operation payload and delivery back to the actor. Selection of PDisk fallback
+and translation into PDisk requests belong to the DDisk caller, not to
+`TUringRouter`. A plain ring is still io_uring; an ordinary CQE error is not an
+automatic switch to PDisk. Changes at this boundary must preserve
+sender/cookie, payload ownership and final completion on both paths.
 
 ## Tests
 
@@ -122,8 +156,8 @@ The library target is `ydb/library/pdisk_io`; its Linux unit-test target is
 
 - Queue overload, multiple producers, wake-after-idle and normal I/O errors.
 - Fixed buffers, scatter/gather, retry cursor behavior and timing samples.
-- Submission before/after admission, submission racing with stop, concurrent
-  stops, and stop waiting for a running callback.
+- Submission before/after admission, submission racing with asynchronous stop,
+  concurrent stops, and destruction waiting for a running callback.
 
 Kernel or sandbox restrictions may prevent io_uring setup; distinguish that
 from an I/O correctness failure. DDisk/PB integration tests in

@@ -58,7 +58,7 @@ NProto::TGraphParams MakeTopicSourceGraph(ui64 taskCount, ui64 topicPartitionsCo
 }
 
 TActorId CreateManager(TTestActorRuntime& runtime, TActorId edgeActor, ui64 taskCount, ui64 partitionsCount) {
-    runtime.SetLogPriority(NKikimrServices::FQ_RUN_ACTOR, NLog::PRI_TRACE);
+    runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_TRACE);
     const auto manager = runtime.Register(CreateStreamingQueryNodesManager(
         edgeActor,
         "/Root/test",

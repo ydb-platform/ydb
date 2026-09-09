@@ -1266,6 +1266,13 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
             nodeWardenConfig->DDiskConfig->SetCheckChecksumWhenRead(
                 storageConfig.GetCheckChecksumWhenRead());
         }
+        if (storageConfig.HasIdleSpinUs()) {
+            if (!nodeWardenConfig->DDiskConfig) {
+                nodeWardenConfig->DDiskConfig.emplace();
+            }
+            nodeWardenConfig->DDiskConfig->SetIdleSpinUs(
+                storageConfig.GetIdleSpinUs());
+        }
         if (storageConfig.HasGlobalPBufferConfig()) {
             nodeWardenConfig->PBufferConfig = storageConfig.GetGlobalPBufferConfig();
         }

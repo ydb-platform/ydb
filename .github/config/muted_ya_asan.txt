@@ -32,7 +32,6 @@ ydb/core/kqp/ut/batch_operations KqpBatchUpdate.ManyPartitions_1
 ydb/core/kqp/ut/batch_operations unittest.[*/*] chunk
 ydb/core/kqp/ut/indexes KqpIndexes.DirectAccessToIndexImplTable+UserIsClusterAdmin+HasUsePermission
 ydb/core/kqp/ut/indexes KqpIndexes.DirectAccessToIndexImplTable-UserIsClusterAdmin+HasUsePermission
-ydb/core/kqp/ut/indexes/json KqpJsonIndexes.NoMultipleColumnsWithoutFeatureFlag
 ydb/core/kqp/ut/opt KqpConcurrentResults.ConcurrentStreamNamedExprRandomConsistency+EnableIndexStreamWrite
 ydb/core/kqp/ut/opt KqpNamedExpressions.NamedExpressionRandomUpsertRevert+UseDataQuery+EnableIndexStreamWrite
 ydb/core/kqp/ut/opt KqpNamedExpressions.NamedExpressionRandomUpsertRevert+UseDataQuery-EnableIndexStreamWrite
@@ -70,7 +69,6 @@ ydb/core/kqp/ut/scheme GeneratedStored.DeleteWithIndexOnGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.GeneratedInPrimaryKeyRejected
 ydb/core/kqp/ut/scheme GeneratedStored.IndexOnGeneratedKeyUpdatesEntry
 ydb/core/kqp/ut/scheme GeneratedStored.NotNullFailingCastRejected
-ydb/core/kqp/ut/scheme GeneratedStored.NullableOptionalExprAccepted
 ydb/core/kqp/ut/scheme GeneratedStored.RandomGeneratedConsistentWithIndex
 ydb/core/kqp/ut/scheme GeneratedStored.ReplaceReturningGeneratedWithDependencies
 ydb/core/kqp/ut/scheme GeneratedStored.ReplaceReturningMultipleRows
@@ -84,7 +82,6 @@ ydb/core/kqp/ut/scheme KqpAcl.AclInterruptInheritance
 ydb/core/kqp/ut/scheme KqpAcl.AclTemporary-IsOlap
 ydb/core/kqp/ut/scheme KqpAcl.AclTemporaryInterruptInheritance+IsOlap
 ydb/core/kqp/ut/scheme KqpAcl.AclTemporaryInterruptInheritance-IsOlap
-ydb/core/kqp/ut/scheme KqpConstraints.AlterTableAddColumnDefaultNullIsNotAllowed
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultOnPK-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalAsyncIndex-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultThenUpsertWithIndex-EnableIndexStreamWrite
@@ -170,7 +167,6 @@ ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithEmptyDatabaseAbs
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithFederationRootIgnoredForFirstClassCitizen
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithFederationRootLeadingSlash
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithFederationRootMultipleAccounts
-ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithFederationRootNotFound
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithFederationRootSingleComponentPath
 ydb/core/persqueue/public/describer/ut TDescriberTests.UnauthorizedWithDescribe
 ydb/core/persqueue/public/describer/ut unittest.sole chunk
@@ -188,12 +184,14 @@ ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.DescribeEmptyTopic
 ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.DescribeTest
 ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.TopicNotExists
 ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.UnauthorizedDescriber
+ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.EmptyTopic
 ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.PurgeWhileMessagesLocked
 ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.TopicNotExists
 ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.TopicWithData
 ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.TopicWithoutConsumer
 ydb/core/persqueue/public/mlp/ut TMLPReaderTests.TopicWithoutConsumer
 ydb/core/persqueue/public/mlp/ut unittest.sole chunk
+ydb/core/persqueue/public/schema/ut DescribeOperationActor.ValidateSchemaThrowsMapsToInternalError
 ydb/core/persqueue/public/schema/ut DlqAcl.AlterTopicMlpConsumerFailsWhenChangingDlqToTopicWithoutAccess
 ydb/core/persqueue/public/schema/ut DlqAcl.AlterTopicWithMlpConsumerFailsWhenDlqTopicDoesNotExist
 ydb/core/persqueue/public/schema/ut DlqAcl.AlterTopicWithMlpConsumerFailsWithoutDlqTopicAccess
@@ -207,6 +205,7 @@ ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerFailsWithou
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerSucceedsWithAlterSchemaAndUpdateRowOnDlqTopic
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerSucceedsWithOnlyAlterSchemaOnDlqTopic
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerSucceedsWithOnlyUpdateRowOnDlqTopic
+ydb/core/persqueue/public/schema/ut SchemaOps.AlterMissingWithoutIfExistsIsSchemeError
 ydb/core/persqueue/public/schema/ut TCheckDlqTopicsActor.SucceedsWithOnlyAlterSchema
 ydb/core/persqueue/public/schema/ut TCheckDlqTopicsActor.SucceedsWithOnlyUpdateRow
 ydb/core/persqueue/public/schema/ut unittest.sole chunk
@@ -240,6 +239,7 @@ ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.BuildToPosting
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.BuildToBuild
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.BuildToPosting
+ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPostingLastKeyAckInProgress
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPostingWithOverlap
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.BadRequest
@@ -283,6 +283,7 @@ ydb/library/actors/interconnect/ut Sticking.Check
 ydb/library/actors/interconnect/ut unittest.sole chunk
 ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]
 ydb/library/nmslib/test/run_test_integr exectest.sole chunk
+ydb/library/yql/providers/generic/actors/ut unittest.sole chunk
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.Producer_CloseTimeout
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeData
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeDataAndShuffle
@@ -297,7 +298,6 @@ ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTa
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTask/1
 ydb/services/metadata/secret/ut Secret.Simple
 ydb/services/metadata/secret/ut Secret.SimpleQueryService
-ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.AlterCannotChangeConsumerType
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.AlterSuccessAndMissing
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.ByteBurstDefaultsToWriteSpeed
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.ConsumerCodecsMustCoverTopicCodecs
@@ -652,6 +652,8 @@ ydb/tests/stress/statistics_workload/tests test_workload.py.TestStatisticsWorklo
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_2
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_3
+ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningPreferredWorkload.test_read[scale_aware_sdk]
+ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningWorkload.test_commit_reread[scale_aware_sdk]
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingWorkload.test
 ydb/tests/stress/vector_workload/tests py3test.sole chunk
 ydb/tests/stress/vector_workload/tests test_workload.py.TestYdbVectorWorkload.test
@@ -659,3 +661,4 @@ ydb/tools/mnc/viewer/ut py3test.sole chunk
 ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelectionStateTest.test_selecting_agents_overview_card_opens_agents_tab
 ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_agents_tab_navigation_matches_state_machine
 ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_reopening_active_operation_deactivates_pane_before_removal
+ydb/tools/ydb_bench/tests py3test.sole chunk

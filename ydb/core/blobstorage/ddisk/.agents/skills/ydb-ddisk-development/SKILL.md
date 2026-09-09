@@ -24,6 +24,12 @@ For PB identity or erase changes, account for TabletId, Generation, DirectBlockG
 
 For actor/callback lifetime changes, use the [actor guide](../../../../../../docs/en/core/contributor/actor-system/index.md). Keep the operation's durable boundary explicit when documenting success, cancellation, and recovery.
 
+## Documentation Updates
+
+Read linked documentation as context. During code changes, update documentation only when the change alters a documented contract or makes an existing statement inaccurate, or when the user explicitly requests documentation work. For contributor pages under `ydb/docs/en/` or `ydb/docs/ru/`, update the corresponding path in the other language in the same change.
+
+Delegate needed documentation updates to a subagent with forked conversation context (`fork_turns: "all"` when supported). Give it the affected paths, the final behavior change, and relevant validation results; scope its edits to documentation. Review its changes for accuracy and English/Russian consistency before completing the task.
+
 ## Validation
 
 Inspect `ydb/core/blobstorage/ddisk/ut` and the focused integration target `ydb/core/blobstorage/ut_blobstorage/ut_ddisk`. Longer PDisk-backed I/O/recovery scenarios are in `ydb/core/blobstorage/ddisk/ut_large`. Cover the changed format, replay, stale-session, checksum, or erase behavior using existing fixtures. Add I/O-library tests only if its interface changes. Follow active workspace build instructions.

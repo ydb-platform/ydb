@@ -13,7 +13,7 @@
 #include <util/generic/hash_set.h>
 #include <util/string/join.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_RUN_ACTOR
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
 
 #define LOG_T(msg, ...) YDB_LOG_TRACE(msg, {"queryId", QueryId}, ##__VA_ARGS__)
 #define LOG_D(msg, ...) YDB_LOG_DEBUG(msg, {"queryId", QueryId}, ##__VA_ARGS__)

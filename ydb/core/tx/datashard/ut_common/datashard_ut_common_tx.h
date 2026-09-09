@@ -272,10 +272,6 @@ public:
 
     TString Rollback(ui64 shardId);
 
-    void AckWriteSeqNum(ui64 shardId, size_t numOps) {
-        Shard2SeqNum[shardId] += numOps;
-    }
-
 private:
     THashMap<ui64, THashSet<ui64>> AncestorMappings;
 

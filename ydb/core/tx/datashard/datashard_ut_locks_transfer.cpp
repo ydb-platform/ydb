@@ -134,24 +134,31 @@ Y_UNIT_TEST(WriteSeqNums) {
     TTransactionState tx(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
     tx.WriterIndex = 123;
 
-    tx.LockRows(tableId, shards.at(0), {1});
-    UNIT_ASSERT_VALUES_EQUAL(
-        tx.Write(tableId, shards.at(0), TWriteOperation::Upsert(1, 100)),
-        "OK");
-
+    auto shard0Actor = ResolveTablet(runtime, shards.at(0));
+    TBlockEvents<NEvents::TDataEvents::TEvWriteResult> blockWriteResToShard0(runtime, [&](auto& ev) {
+        return ev->Sender == shard0Actor;
+    });
     auto shard1Actor = ResolveTablet(runtime, shards.at(1));
     TBlockEvents<NEvents::TDataEvents::TEvWrite> blockWritesToShard1(runtime, [&](auto& ev) {
         return ev->GetRecipientRewrite() == shard1Actor;
     });
 
-    tx.LockRows(tableId, shards.at(1), {15});
+    UNIT_ASSERT_VALUES_EQUAL(tx.LockRows(tableId, shards.at(0), {1}), "OK");
+    auto write1Fut = tx.SendWrite(tableId, shards.at(0), TWriteOperation::Upsert(1, 100));
+    UNIT_ASSERT_VALUES_EQUAL(
+        write1Fut.NextString(TDuration::Seconds(1)),
+        "<timeout>");
+
+    UNIT_ASSERT_VALUES_EQUAL(tx.LockRows(tableId, shards.at(1), {15}), "OK");
     auto write2Fut = tx.SendWrite(tableId, shards.at(1), TWriteOperation::Upsert(15, 1500));
     UNIT_ASSERT_VALUES_EQUAL(
         write2Fut.NextString(TDuration::Seconds(1)),
         "<timeout>");
+
     runtime.WaitFor("Blocked writes", [&] {
-        return !blockWritesToShard1.empty();
+        return !blockWriteResToShard0.empty() && !blockWritesToShard1.empty();
     });
+    blockWriteResToShard0.Stop();
     blockWritesToShard1.Stop();
 
     auto oldShards = shards;
@@ -164,14 +171,12 @@ Y_UNIT_TEST(WriteSeqNums) {
     UNIT_ASSERT_VALUES_EQUAL(
         tx.RetryWriteToAnotherShard(
             tableId, oldShards.at(0), shards.at(0), TWriteOperation::Upsert(1, 100)),
-        "OK");
-    tx.AckWriteSeqNum(oldShards.at(0), 1);
+        "OK (duplicate)");
     // not duplicate
     UNIT_ASSERT_VALUES_EQUAL(
         tx.RetryWriteToAnotherShard(
             tableId, oldShards.at(1), shards.at(0), TWriteOperation::Upsert(15, 1500)),
         "OK");
-    tx.AckWriteSeqNum(oldShards.at(1), 1);
 
     // stale request is an error now that the old shard is merged
     blockWritesToShard1.Unblock();
@@ -183,7 +188,6 @@ Y_UNIT_TEST(WriteSeqNums) {
     UNIT_ASSERT_VALUES_EQUAL(
         tx.Write(tableId, shards.at(0), TWriteOperation::Upsert(20, 2000)),
         "OK");
-    tx.AckWriteSeqNum(shards.at(0), 1);
 
     UNIT_ASSERT_VALUES_EQUAL(
         tx.ReadKey(tableId, shards.at(0), 1),

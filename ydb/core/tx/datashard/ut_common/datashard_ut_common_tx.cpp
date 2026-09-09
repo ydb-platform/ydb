@@ -291,6 +291,11 @@ std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> TTransactionState::TWriteP
     std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> msg(ev->Release().Release());
     for (const auto& lock : msg->Record.GetTxLocks()) {
         State.Locks.push_back(lock);
+        for (const auto& seqNum : lock.GetWriteSeqNums()) {
+            UNIT_ASSERT_VALUES_EQUAL(State.WriterIndex.value(), seqNum.GetWriterIndex());
+            auto& curSeqNum = State.Shard2SeqNum[msg->Record.GetOrigin()];
+            curSeqNum = std::max(curSeqNum, seqNum.GetWriteSeqNum());
+        }
     }
     return msg;
 }
@@ -301,10 +306,16 @@ TString TTransactionState::TWritePromise::NextString(TDuration simTimeout) {
         return "<timeout>";
     }
     auto status = msg->Record.GetStatus();
-    if (status != NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
-        return TStringBuilder() << "ERROR: " << status;
+    TStringBuilder res;
+    if (status == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
+        res << "OK";
+    } else {
+        res << "ERROR: " << status;
     }
-    return "OK";
+    if (msg->Record.GetIsDuplicate()) {
+        res << " (duplicate)";
+    }
+    return res;
 }
 
 void TTransactionState::InitCommit(std::vector<ui64> participants) {

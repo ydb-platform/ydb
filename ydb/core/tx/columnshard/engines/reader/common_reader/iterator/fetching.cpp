@@ -79,7 +79,6 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
         return;
     }
     const auto& scanOrbit = source->GetContext()->GetCommonContext()->GetScanOrbit();
-<<<<<<< HEAD
     if (!NLWTrace::HasShuttles(source->GetDataSourceOrbit())
         && !(scanOrbit && NLWTrace::HasShuttles(*scanOrbit))
         && !LWPROBE_ENABLED(ProgramConst)
@@ -93,15 +92,6 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
         && !LWPROBE_ENABLED(ProgramCheckHeaderData)
         && !LWPROBE_ENABLED(ProgramStreamLogic)
         && !LWPROBE_ENABLED(ProgramReserveMemory)) {
-        source->MutableExecutionContext().SetPrevCategoryName(currentCategoryName);
-        source->MutableExecutionContext().SetPrevExecutionResult(currentExecutionResult);
-=======
-    if (!NLWTrace::HasShuttles(source->GetDataSourceOrbit()) && !(scanOrbit && NLWTrace::HasShuttles(*scanOrbit)) &&
-        !LWPROBE_ENABLED(ProgramConst) && !LWPROBE_ENABLED(ProgramCalculation) && !LWPROBE_ENABLED(ProgramProjection) &&
-        !LWPROBE_ENABLED(ProgramFilter) && !LWPROBE_ENABLED(ProgramAggregation) && !LWPROBE_ENABLED(ProgramFetchOriginalData) &&
-        !LWPROBE_ENABLED(ProgramAssembleOriginalData) && !LWPROBE_ENABLED(ProgramCheckIndexData) && !LWPROBE_ENABLED(ProgramCheckHeaderData) &&
-        !LWPROBE_ENABLED(ProgramStreamLogic) && !LWPROBE_ENABLED(ProgramReserveMemory)) {
->>>>>>> 709ca02856d ([issue-#49169] (-) Make prev-node tracing state lock-free in TExecutionContext (#49452))
         return;
     }
     const auto& step = source->GetExecutionContext().GetCursorStep();
@@ -296,13 +286,8 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
         source->AddExecutionDuration(executionDurationMs);
 
         const TString currentExecutionResult = conclusion.IsFail() ? "Fail" : ToString(*conclusion);
-<<<<<<< HEAD
         ReportTracing(source, executionDurationMs, currentExecutionResult, tracingNodeId, tracingCategoryName, tracingProcessor);
-=======
-        ReportTracing(source, executionDurationMs, currentExecutionResult, tracingNodeId, tracingCategoryName, tracingProcessor,
-            reservedMemoryBeforeExecute);
         source->MutableExecutionContext().SetPrevNodeTracing(tracingNodeId, conclusion);
->>>>>>> 709ca02856d ([issue-#49169] (-) Make prev-node tracing state lock-free in TExecutionContext (#49452))
         if (conclusion.IsFail()) {
             source->MutableExecutionContext().OnFailedProgramStepExecution();
             return conclusion;

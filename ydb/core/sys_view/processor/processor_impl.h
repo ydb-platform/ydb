@@ -13,6 +13,7 @@
 #include <ydb/core/sys_view/service/query_interval.h>
 #include <ydb/core/tablet/detailed_metrics/processor_database_metrics_aggregator.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx.h>
 
@@ -44,7 +45,6 @@ private:
     struct TTxIntervalSummary;
     struct TTxIntervalMetrics;
     struct TTxIntervalMetricsFailure;
-    struct TTxCleanupHourMetrics;
     struct TTxTopPartitions;
 
     struct TEvPrivate {
@@ -56,7 +56,6 @@ private:
             EvApplyCounters,
             EvApplyLabeledCounters,
             EvSendNavigate,
-            EvCleanupHourMetrics,
             EvEnd
         };
 
@@ -74,7 +73,6 @@ private:
 
         struct TEvSendNavigate : public TEventLocal<TEvSendNavigate, EvSendNavigate> {};
 
-        struct TEvCleanupHourMetrics : public TEventLocal<TEvCleanupHourMetrics, EvCleanupHourMetrics> {};
     };
 
     struct TTopQuery {
@@ -151,7 +149,6 @@ private:
     void Handle(TEvPrivate::TEvApplyCounters::TPtr& ev);
     void Handle(TEvPrivate::TEvApplyLabeledCounters::TPtr& ev);
     void Handle(TEvPrivate::TEvSendNavigate::TPtr& ev);
-    void Handle(TEvPrivate::TEvCleanupHourMetrics::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev);
@@ -165,7 +162,6 @@ private:
     void PersistIntervalEnd(NIceDb::TNiceDb& db);
     void PersistLastMergedQueryMetricsIntervalEnd(
         NIceDb::TNiceDb& db, TInstant intervalEnd);
-    void PersistMetricsOneHourEvictBeforeHourEnd(NIceDb::TNiceDb& db, ui64 cutoff);
 
     template <typename TSchema>
     void PersistQueryTopResults(NIceDb::TNiceDb& db,
@@ -177,9 +173,6 @@ private:
     void MergeCurrentHourQueryMetrics(NIceDb::TNiceDb& db, TInstant hourEnd);
     ui32 PersistCurrentHourQueryMetrics(NIceDb::TNiceDb& db, TInstant hourEnd,
         const TRankedQueryMetrics& rankedMetrics);
-    static ui64 QueryMetricsResultSize(const TQueryToMetrics& result);
-    void EnforceMetricsOneHourByteLimit(NIceDb::TNiceDb& db, TInstant activeHourEnd);
-    void UpdateMetricsOneHourRetentionCounters(ui64 retainedBytes, ui64 evictedBuckets);
     void UpdateAndLogQueryMetricsCoverage(TInstant hourEnd, ui32 persistedHourMetrics);
     void FinalizeQueryMetricsInterval(NIceDb::TNiceDb& db);
     void PersistQueryResults(NIceDb::TNiceDb& db);
@@ -195,7 +188,6 @@ private:
     void ScheduleApplyCounters();
     void ScheduleApplyLabeledCounters();
     void ScheduleSendNavigate();
-    void ScheduleHourMetricsCleanup();
 
     template <typename TSchema, typename TMap>
     void CutHistory(NIceDb::TNiceDb& db, TMap& results, TDuration historySize);
@@ -283,7 +275,6 @@ private:
             hFunc(TEvPrivate::TEvApplyCounters, Handle);
             hFunc(TEvPrivate::TEvApplyLabeledCounters, Handle);
             hFunc(TEvPrivate::TEvSendNavigate, Handle);
-            hFunc(TEvPrivate::TEvCleanupHourMetrics, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             hFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
@@ -335,6 +326,9 @@ private:
     std::unordered_set<TNodeId> SummaryNodes;
     TQueryMetricsCoverage QueryMetricsCoverage;
 
+    TTabletCountersBase* TabletCounters = nullptr;
+    TAutoPtr<TTabletCountersBase> TabletCountersPtr;
+
     // IntervalMetrics
     std::unordered_map<TQueryHash, TQueryToMetrics> QueryMetrics;
 
@@ -342,9 +336,6 @@ private:
     std::unordered_map<TQueryHash, NKikimrSysView::TQueryMetrics> CurrentHourMetrics;
     TInstant CurrentHourEnd;
     TInstant LastMergedQueryMetricsIntervalEnd;
-    ui64 MetricsOneHourRetainedBytes = 0;
-    ui64 MetricsOneHourEvictBeforeHourEndUs = 0;
-    bool HourMetricsCleanupInFlight = false;
 
     // NodesToRequest
     using THashVector = std::vector<TQueryHash>;

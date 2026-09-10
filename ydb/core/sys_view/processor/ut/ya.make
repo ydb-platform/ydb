@@ -12,7 +12,6 @@ PEERDIR(
 )
 
 SRCS(
-    query_metrics_retention_db_ut.cpp
     query_metrics_ut.cpp
 )
 

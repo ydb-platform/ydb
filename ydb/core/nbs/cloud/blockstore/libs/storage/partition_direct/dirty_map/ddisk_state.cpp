@@ -59,7 +59,7 @@ void TDDiskState::Load(const TDDiskStateProto& proto)
         BehindField.Add(loadedBehind);
     }
 
-    CheckInvariants();
+    UpdateState(false);
 }
 
 void TDDiskState::SwitchOffline()
@@ -163,20 +163,32 @@ std::optional<TBlockRange16> TDDiskState::GetFreshRange() const
 
 void TDDiskState::RangeSynced(TBlockRange16 range)
 {
-    const bool behindChanged = BehindField.Remove(range);
-    const bool aheadChanged = AheadField.Remove(range);
-    if (behindChanged || aheadChanged) {
-        BehindAheadMonitor->OnBehindAheadChanged();
+    if (IsLagging()) {
+        return;
     }
 
+    // Update behind.
+    const bool behindChanged = BehindField.Remove(range);
+
+    // Update watermark.
     const ui16 newWatermark = IntegerCast<ui16>(range.End + 1);
     if (OperationalBlockCount < newWatermark &&
         !BehindField.Overlaps(TBlockRange16::WithLength(0, newWatermark)))
     {
         OperationalBlockCount = newWatermark;
     }
+
+    // Update ahead.
+    bool aheadChanged = AheadField.Remove(range);
+    if (auto operational = GetOperationalRange()) {
+        aheadChanged |= AheadField.Remove(*operational);
+    }
+
     UpdateState(false);
-    CheckInvariants();
+
+    if (behindChanged || aheadChanged) {
+        BehindAheadMonitor->OnBehindAheadChanged();
+    }
 }
 
 ui16 TDDiskState::GetFreshBlockCount() const
@@ -212,7 +224,18 @@ void TDDiskState::UpdateWatermarkDebugOnly(ui16 blockCount)
 
 void TDDiskState::CheckInvariants() const
 {
-    Y_DEBUG_ABORT_UNLESS(!BehindField.Overlaps(AheadField));
+    if (State == EState::Operational) {
+        Y_ABORT_UNLESS(OperationalBlockCount == TotalBlockCount);
+        Y_ABORT_UNLESS(BehindField.Empty());
+        Y_ABORT_UNLESS(AheadField.Empty());
+        return;
+    }
+
+    Y_ABORT_UNLESS(!BehindField.Overlaps(AheadField));
+
+    if (auto operation = GetOperationalRange()) {
+        Y_ABORT_UNLESS(!AheadField.Overlaps(*operation));
+    }
 }
 
 TString TDDiskState::DebugPrint() const
@@ -250,7 +273,8 @@ TString TDDiskState::DebugPrintAheadBehindBrief() const
 
 bool TDDiskState::IsFresh() const
 {
-    return OperationalBlockCount != TotalBlockCount || !BehindField.Empty();
+    return OperationalBlockCount != TotalBlockCount || !BehindField.Empty() ||
+           !AheadField.Empty();
 }
 
 void TDDiskState::UpdateState(bool force)
@@ -260,6 +284,7 @@ void TDDiskState::UpdateState(bool force)
     }
 
     State = IsFresh() ? EState::Fresh : EState::Operational;
+    CheckInvariants();
 }
 
 void TDDiskState::AddAhead(TBlockRange16 range)
@@ -267,14 +292,23 @@ void TDDiskState::AddAhead(TBlockRange16 range)
     Y_ABORT_UNLESS(!Lagging);
 
     const bool behindChanged = BehindField.Remove(range);
-    const bool aheadChanged = AheadField.Add(range);
+    bool aheadChanged = false;
+    if (range.Start > OperationalBlockCount) {
+        // Range outside operational blocks.
+        aheadChanged = AheadField.Add(range);
+    } else if (range.End <= OperationalBlockCount) {
+        // Range inside operational blocks.
+    } else {
+        // Range on operational blocks border.
+        aheadChanged = AheadField.Add(TBlockRange16::MakeClosedInterval(
+            OperationalBlockCount + 1,
+            range.End));
+    }
+
     if (behindChanged || aheadChanged) {
         BehindAheadMonitor->OnBehindAheadChanged();
     }
 
-    if (OperationalBlockCount) {
-        AheadField.Remove(TBlockRange16::WithLength(0, OperationalBlockCount));
-    }
     CheckInvariants();
 }
 
@@ -283,9 +317,17 @@ void TDDiskState::AddBehind(TBlockRange16 range)
     const bool aheadChanged = AheadField.Remove(range);
     const bool behindChanged = BehindField.Add(range);
     if (aheadChanged || behindChanged) {
+        UpdateState(false);
         BehindAheadMonitor->OnBehindAheadChanged();
     }
-    CheckInvariants();
+}
+
+std::optional<TBlockRange16> TDDiskState::GetOperationalRange() const
+{
+    if (!OperationalBlockCount) {
+        return std::nullopt;
+    }
+    return TBlockRange16::MakeClosedInterval(0, OperationalBlockCount - 1);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

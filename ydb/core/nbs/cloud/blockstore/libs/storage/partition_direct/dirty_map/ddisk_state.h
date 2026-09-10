@@ -20,6 +20,18 @@ struct IBehindAheadMonitor
     virtual void OnBehindAheadChanged() = 0;
 };
 
+// Tracks the synchronization state of one DDisk.
+//
+// OperationalBlockCount is the watermark: blocks below it are considered
+// operational, except for ranges listed in BehindField. AheadField contains
+// successfully flushed ranges above the watermark. BehindField contains
+// ranges whose data may be stale on a lagging DDisk.
+//
+// While the DDisk is lagging, successful synchronization callbacks are stale
+// and must be ignored: the corresponding range may have been dirtied again
+// after the synchronization started. Once lagging stops, the range can be
+// synchronized and removed from BehindField, potentially advancing the
+// watermark.
 class TDDiskState
 {
 public:
@@ -104,6 +116,7 @@ private:
     void UpdateState(bool force);
     void AddAhead(TBlockRange16 range);
     void AddBehind(TBlockRange16 range);
+    [[nodiscard]] std::optional<TBlockRange16> GetOperationalRange() const;
 
     IBehindAheadMonitor* BehindAheadMonitor = nullptr;
 

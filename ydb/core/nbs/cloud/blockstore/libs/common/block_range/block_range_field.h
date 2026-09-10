@@ -76,6 +76,7 @@ private:
     void Upgrade();
     void UpgradeToPreferredBackend();
     void UpgradeToBitmapBackend();
+    void DowngradeToSimpleBackendIfEmpty();
 
     [[nodiscard]] IBlockRangeFieldImpl* GetImpl();
     [[nodiscard]] const IBlockRangeFieldImpl* GetImpl() const;

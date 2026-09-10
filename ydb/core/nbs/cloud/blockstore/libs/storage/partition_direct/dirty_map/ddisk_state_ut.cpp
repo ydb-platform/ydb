@@ -84,6 +84,51 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
         UNIT_ASSERT_VALUES_EQUAL("[40..99]", ddisk.DebugPrintBehind());
     }
 
+    // A sync that completes while a DDisk is lagging is stale and must not
+    // clear a range dirtied after lagging started. Once lagging ends, the
+    // range is reported again and can be synchronized successfully.
+    Y_UNIT_TEST(ShouldIgnoreStaleSyncWhileLagging)
+    {
+        TTestBlockFieldMonitor monitor;
+        TDDiskState ddisk(CreateArenaAllocator(), TestBlockCount);
+        ddisk.Init(
+            &monitor,
+            /*totalBlockCount=*/100,
+            /*operationalBlockCount=*/40);
+
+        const auto dirtyRange = TBlockRange16::WithLength(50, 10);
+
+        // The DDisk starts lagging and gets dirty. The lagging state ends and
+        // the dirty range is synchronized successfully. The watermark remains
+        // at 40 because only a part of the fresh tail was synchronized.
+        ddisk.StartLagging();
+        ddisk.OnRangeFlushed(dirtyRange, TDDiskState::EFlushCompletion::Missed);
+        ddisk.StopLagging();
+        ddisk.RangeSynced(dirtyRange);
+        UNIT_ASSERT_VALUES_EQUAL("[40..49][60..99]", ddisk.DebugPrintBehind());
+
+        // The DDisk starts lagging again. The same range is dirtied again
+        // while the watermark is still below it.
+        ddisk.StartLagging();
+        ddisk.OnRangeFlushed(dirtyRange, TDDiskState::EFlushCompletion::Missed);
+
+        // The sync callback is stale while the DDisk is lagging.
+        ddisk.RangeSynced(dirtyRange);
+        UNIT_ASSERT_VALUES_EQUAL("[40..99]", ddisk.DebugPrintBehind());
+
+        // After lagging ends, the dirty ranges can be synchronized
+        // successfully. Adjacent dirty blocks are merged into one range by
+        // BehindField.
+        ddisk.StopLagging();
+        const auto freshRange = ddisk.GetFreshRange();
+        UNIT_ASSERT(freshRange.has_value());
+        UNIT_ASSERT_VALUES_EQUAL("[40..99]", freshRange->Print());
+        ddisk.RangeSynced(*freshRange);
+
+        UNIT_ASSERT_VALUES_EQUAL("", ddisk.DebugPrintBehind());
+        UNIT_ASSERT(!ddisk.GetFreshRange().has_value());
+    }
+
     // Save() chooses a compact encoding for Ahead/Behind; Load() must restore
     // exactly the same ranges. An empty DDisk produces an empty proto and loads
     // back to empty.
@@ -333,14 +378,35 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
             TDDiskState::EFlushCompletion::Missed);
         UNIT_ASSERT_VALUES_EQUAL(1u, monitor.BehindAheadGeneration);
 
-        // RangeSynced removes the range from Behind → monitor called.
+        // Leave lagging and synchronize the range successfully.
+        ddisk.StopLagging();
         ddisk.RangeSynced(TBlockRange16::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(2u, monitor.BehindAheadGeneration);
         UNIT_ASSERT_VALUES_EQUAL("", ddisk.DebugPrintBehind());
 
+        // The DDisk starts lagging again and the range becomes dirty again.
+        ddisk.StartLagging();
+        ddisk.OnRangeFlushed(
+            TBlockRange16::WithLength(10, 10),
+            TDDiskState::EFlushCompletion::Missed);
+        UNIT_ASSERT_VALUES_EQUAL(3u, monitor.BehindAheadGeneration);
+        UNIT_ASSERT_VALUES_EQUAL("[10..19]", ddisk.DebugPrintBehind());
+
+        // A sync completed while the DDisk was lagging is stale and must be
+        // ignored.
+        ddisk.RangeSynced(TBlockRange16::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL(3u, monitor.BehindAheadGeneration);
+        UNIT_ASSERT_VALUES_EQUAL("[10..19]", ddisk.DebugPrintBehind());
+
+        // After lagging ends, the same sync can be applied successfully.
+        ddisk.StopLagging();
+        ddisk.RangeSynced(TBlockRange16::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL(4u, monitor.BehindAheadGeneration);
+        UNIT_ASSERT_VALUES_EQUAL("", ddisk.DebugPrintBehind());
+
         // Syncing an empty field → no change → monitor NOT called.
         ddisk.RangeSynced(TBlockRange16::WithLength(0, 10));
-        UNIT_ASSERT_VALUES_EQUAL(2u, monitor.BehindAheadGeneration);
+        UNIT_ASSERT_VALUES_EQUAL(4u, monitor.BehindAheadGeneration);
     }
 }
 

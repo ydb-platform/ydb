@@ -137,6 +137,7 @@ bool TBlockRangeField::Remove(TBlockRange16 range)
 {
     bool changed = false;
     if (GetImpl()->TryRemove(range, &changed)) {
+        DowngradeToSimpleBackendIfEmpty();
         return changed;
     }
     // Retry with next backend.
@@ -175,10 +176,8 @@ bool TBlockRangeField::Clear()
     if (Empty()) {
         return false;
     }
-
-    BitMaskBasedImpl.reset();
-    NodeBasedImpl.reset();
-    SimpleImpl = TBlockRangeFieldSimple{};
+    GetImpl()->Clear();
+    DowngradeToSimpleBackendIfEmpty();
     return true;
 }
 
@@ -353,6 +352,17 @@ void TBlockRangeField::UpgradeToBitmapBackend()
     BitMaskBasedImpl = std::move(newBackend);
     NodeBasedImpl.reset();
     SimpleImpl.reset();
+}
+
+void TBlockRangeField::DowngradeToSimpleBackendIfEmpty()
+{
+    if (!Empty()) {
+        return;
+    }
+
+    BitMaskBasedImpl.reset();
+    NodeBasedImpl.reset();
+    SimpleImpl = TBlockRangeFieldSimple{};
 }
 
 IBlockRangeFieldImpl* TBlockRangeField::GetImpl()

@@ -135,18 +135,22 @@ void TBlocksDirtyMap::RestorePBuffer(
 
         auto& inflight = item->Value;
         inflight.RestorePBuffer(host);
-    } else {
-        Inflight.AddRange(
-            pBufferKey,
-            range,
-            TInflightInfo(
-                this,
-                DesiredDDisks,
-                DisabledHosts,
-                pBufferKey,
-                range.Size() * BlockSize,
-                host));
+        return;
     }
+
+    Inflight.AddRange(
+        pBufferKey,
+        range,
+        TInflightInfo(
+            this,
+            DesiredDDisks,
+            DisabledHosts,
+            pBufferKey,
+            range.Size() * BlockSize));
+    auto item = Inflight.GetValue(pBufferKey);
+    Y_ABORT_UNLESS(item);
+    auto& inflight = item->Value;
+    inflight.RestorePBuffer(host);
 }
 
 // Create multiple readRangeHints for specified range with possible overlapping
@@ -300,9 +304,9 @@ TEraseHints TBlocksDirtyMap::MakeEraseHint(size_t batchSize)
             if (DisabledHosts.Get(host)) {
                 // We can't handle this situation properly. Barrier cleanup
                 // will help us.
-                if (val.ConfirmErase(host)) {
-                    const bool removed = Inflight.RemoveRange(item->Key);
-                    Y_ABORT_UNLESS(removed);
+                val.ConfirmErase(host);
+                if (val.GetState() == TInflightInfo::EState::PBufferErased) {
+                    RemovePBuffer(pBufferKey);
                     break;
                 }
             } else {
@@ -365,8 +369,7 @@ void TBlocksDirtyMap::WriteFinished(
         // client with an error. The written PBuffers will be cleared through a
         // barrier garbage collection later. For now, we will forget about this
         // request as if it never existed.
-        const bool removed = Inflight.RemoveRange(pBufferKey);
-        Y_ABORT_UNLESS(removed);
+        RemovePBuffer(pBufferKey);
         return;
     }
 
@@ -423,10 +426,10 @@ void TBlocksDirtyMap::EraseFinished(
             continue;
         }
         auto& inflight = item->Value;
-
-        if (inflight.ConfirmErase(host)) {
-            const bool removed = Inflight.RemoveRange(item->Key);
-            Y_ABORT_UNLESS(removed);
+        inflight.ConfirmErase(host);
+        if (inflight.GetState() == TInflightInfo::EState::PBufferErased) {
+            ReadyToErase.erase(pBufferKey);
+            RemovePBuffer(pBufferKey);
         }
     }
 
@@ -662,6 +665,8 @@ void TBlocksDirtyMap::UnLockDDiskRange(TLockRangeHandle handle)
 
 void TBlocksDirtyMap::Register(TPBufferKey pBufferKey, EQueueType queueType)
 {
+    Y_ABORT_UNLESS(Inflight.GetValue(pBufferKey).has_value());
+
     switch (queueType) {
         case IReadyQueue::EQueueType::Clone: {
             ReadyToClone.insert(pBufferKey);
@@ -1133,6 +1138,15 @@ bool TBlocksDirtyMap::CheckEraseAbility(
         inflightInfo.SetPersistGeneration(BehindAheadGeneration);
     }
     return false;
+}
+
+void TBlocksDirtyMap::RemovePBuffer(TPBufferKey pBufferKey)
+{
+    Y_ABORT_UNLESS(!ReadyToFlush.contains(pBufferKey));
+    Y_ABORT_UNLESS(!ReadyToErase.contains(pBufferKey));
+
+    const bool removed = Inflight.RemoveRange(pBufferKey);
+    Y_ABORT_UNLESS(removed);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

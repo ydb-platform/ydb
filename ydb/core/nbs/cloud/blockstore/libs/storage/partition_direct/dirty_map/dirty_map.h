@@ -235,6 +235,8 @@ private:
         TBlockRange64 range,
         TInflightInfo& inflightInfo);
 
+    void RemovePBuffer(TPBufferKey pBufferKey);
+
     const IArenaAllocatorPtr ArenaAllocator;
     const ui32 BlockSize;
     const ui16 BlockCount;

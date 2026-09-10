@@ -29,6 +29,7 @@ private:
     std::optional<ui64> RequestedLimit;
     const ESorting Sorting = ESorting::ASC;   // Sorting inside returned batches
     std::shared_ptr<TPKRangesFilter> PKRangesFilter;
+    std::shared_ptr<TSystemColumnsFilter> SystemColumnsFilter;
     TProgramContainer Program;
     const std::shared_ptr<const TVersionedIndex> IndexVersionsPointer;
     TSnapshot RequestSnapshot;
@@ -157,6 +158,16 @@ public:
         return PKRangesFilter;
     }
 
+    void SetSystemColumnsFilter(const std::shared_ptr<TSystemColumnsFilter>& value) {
+        AFL_VERIFY(value);
+        SystemColumnsFilter = value;
+    }
+
+    const TSystemColumnsFilter& GetSystemColumnsFilter() const {
+        Y_ABORT_UNLESS(!!SystemColumnsFilter);
+        return *SystemColumnsFilter;
+    }
+
     ISnapshotSchema::TPtr GetResultSchema() const {
         AFL_VERIFY(ResultIndexSchema);
         return ResultIndexSchema;
@@ -198,13 +209,15 @@ public:
     {
         AFL_VERIFY(!ScanCursor || !ScanCursor->GetTabletId() || (*ScanCursor->GetTabletId() == TabletId))("cursor", ScanCursor->GetTabletId())(
                                                                 "tablet_id", TabletId);
+        SystemColumnsFilter = std::make_shared<TSystemColumnsFilter>(TSystemColumnsFilter::BuildEmpty());
     }
 
     virtual ~TReadMetadataBase() = default;
 
     virtual TString DebugString() const {
         return TStringBuilder() << " predicate{" << (PKRangesFilter ? PKRangesFilter->DebugString() : "no_initialized") << "}"
-                                << " " << Sorting << " sorted";
+                                << " " << (SystemColumnsFilter ? SystemColumnsFilter->DebugString() : "system_columns_no_initialized") << " "
+                                << Sorting << " sorted";
     }
 
     std::set<ui32> GetProcessingColumnIds() const {

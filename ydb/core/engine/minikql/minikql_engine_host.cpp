@@ -961,7 +961,7 @@ bool IsValidKey(const TScheme& scheme, ui64 localTableId, TKeyDesc& key) {
 
         for (size_t i = 0; i < key.Columns.size(); i++) {
             const TKeyDesc::TColumnOp& cop = key.Columns[i];
-            if (IsSystemColumn(cop.Column)) {
+            if (IsRowTableSystemColumn(cop.Column)) {
                 continue;
             }
             auto* cinfo = scheme.GetColumnInfo(tableInfo, cop.Column);
@@ -997,8 +997,10 @@ void AnalyzeRowType(TStructLiteral* columnIds, TSmallVec<NTable::TTag>& tags, TS
     tags.reserve(columnIds->GetValuesCount());
     for (ui32 i = 0; i < columnIds->GetValuesCount(); i++) {
         NTable::TTag columnId = AS_VALUE(TDataLiteral, columnIds->GetValue(i))->AsValue().Get<ui32>();
-        if (IsSystemColumn(columnId)) {
+        if (IsRowTableSystemColumn(columnId)) {
             systemColumnTags.push_back(columnId);
+        } else if (IsSystemColumn(columnId)) {
+            ythrow yexception() << "Unknown system column tag: " << columnId;
         } else {
             tags.push_back(columnId);
         }

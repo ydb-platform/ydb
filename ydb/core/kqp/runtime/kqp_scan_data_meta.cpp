@@ -55,7 +55,9 @@ TScanDataColumnsMeta::TScanDataColumnsMeta(const NKikimrTxDataShard::TKqpTransac
 
         if (!IsSystemColumn(c.Tag)) {
             Columns.emplace_back(std::move(c));
-        } else {
+        } else if (!meta.HasOlapProgram()) {
+            Y_ENSURE(IsRowTableSystemColumn(c.Tag),
+                "System column is not supported for row tables: " << c.Tag);
             SystemColumns.emplace_back(std::move(c));
         }
     }
@@ -73,7 +75,7 @@ TScanDataColumnsMeta::TScanDataColumnsMeta(const NKikimrTxDataShard::TKqpTransac
             c.Type = typeInfoMod.TypeInfo;
             c.TypeMod = typeInfoMod.TypeMod;
 
-            if (!IsSystemColumn(c.Tag)) {
+            if (!IsSystemColumn(c.Tag) || meta.HasOlapProgram()) {
                 ResultColumns.emplace_back(std::move(c));
             }
         }

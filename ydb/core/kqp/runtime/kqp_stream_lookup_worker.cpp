@@ -397,7 +397,7 @@ public:
         i64 storageRowSize = 0;
         for (size_t colIndex = 0, resultColIndex = 0; colIndex < Settings.Columns.size(); ++colIndex) {
             const auto& column = Settings.Columns[colIndex];
-            if (IsSystemColumn(column.Name)) {
+            if (IsRowTableSystemColumn(column.Name)) {
                 NMiniKQL::FillSystemColumn(rowItems[colIndex], shardId, column.Id, column.PType);
             } else {
                 YQL_ENSURE(resultColIndex < resultRow.size());
@@ -561,7 +561,7 @@ private:
         record.MutableTableId()->SetSchemaVersion(Settings.TableId.SchemaVersion);
 
         for (const auto& column : Settings.Columns) {
-            if (!IsSystemColumn(column.Name)) {
+            if (!IsRowTableSystemColumn(column.Name)) {
                 record.AddColumns(column.Id);
             }
         }
@@ -1208,7 +1208,7 @@ private:
                 auto it = ReadColumns.find(column.Name);
                 YQL_ENSURE(it != ReadColumns.end());
 
-                if (IsSystemColumn(column.Name)) {
+                if (IsRowTableSystemColumn(column.Name)) {
                     YQL_ENSURE(shardId);
                     NMiniKQL::FillSystemColumn(rightRowItems[colIndex], *shardId, column.Id, column.PType);
                     row.ComputeSize += sizeof(NUdf::TUnboxedValue);
@@ -1242,7 +1242,7 @@ private:
         record.MutableTableId()->SetSchemaVersion(Settings.TableId.SchemaVersion);
 
         for (const auto& [name, column] : ReadColumns) {
-            if (!IsSystemColumn(name)) {
+            if (!IsRowTableSystemColumn(name)) {
                 record.AddColumns(column.Id);
             }
         }

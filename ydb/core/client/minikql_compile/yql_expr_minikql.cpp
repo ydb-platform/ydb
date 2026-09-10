@@ -522,7 +522,7 @@ private:
         ui32 selectIndex = 0;
         for (auto selectItem : selectTuple->Children()) {
             auto columnName = selectItem->Content();
-            if (!NKikimr::IsSystemColumn(columnName)) {
+            if (!NKikimr::IsRowTableSystemColumn(columnName)) {
                 auto column = lookup->Columns.FindPtr(columnName);
                 Y_ENSURE_EX(column, TNodeException(node)
                     << "Unknown column '" << columnName

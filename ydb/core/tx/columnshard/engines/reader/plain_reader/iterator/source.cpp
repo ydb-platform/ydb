@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessor_callback.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
@@ -174,6 +175,12 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
                      .PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), ss)
                      .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>())
                      .DetachResult();
+    if (columns->GetColumnIds().contains((ui32)IIndexInfo::ESpecialColumn::PARTITION_ID)) {
+        IIndexInfo::AddPartitionIdColumn(*batch, GetTabletId());
+    }
+    if (columns->GetColumnIds().contains((ui32)IIndexInfo::ESpecialColumn::PORTION_ID)) {
+        IIndexInfo::AddPortionIdColumn(*batch, Portion->GetPortionId());
+    }
     MutableStageData().AddBatch(batch, *GetContext()->GetCommonContext()->GetResolver(), true);
 }
 

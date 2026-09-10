@@ -28,10 +28,17 @@ Adding rows is a special update or replace case, and a record of adding a row in
 
 All changes in {{ ydb-short-name }} tables are arranged according to the order in which transactions are performed. Each change is marked with a virtual timestamp which consists of two elements:
 
+<<<<<<< HEAD
 1. Global coordinator time.
 1. Unique transaction ID.
+=======
+1. Global [coordinator](../concepts/glossary.md#coordinator) time.
+1. Unique [transaction ID](../concepts/glossary.md#txid).
+>>>>>>> a1e8bf2e5f1 (DOCS: explain txid in cdc for single-shard transactions (#49940))
 
 Using these stamps, you can arrange records from different partitions of the topic relative to each other or use them for filtering (for example, to exclude old change records).
+
+For [single-shard transactions](../concepts/glossary.md#transactions), the timestamp of an existing distributed transaction in the execution queue can be used, which allows the timestamp to be non-unique. If there are no distributed transactions in the execution queue, the first element of the timestamp will be the time obtained from the coordinator, and the unique transaction ID will take the maximum possible value `18446744073709551615` (2<sup>64</sup>-1, the maximum value of `Uint64`).
 
 {% note info %}
 

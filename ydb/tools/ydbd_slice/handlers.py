@@ -48,8 +48,8 @@ class Slice:
         self.do_clear_logs = do_clear_logs
         self.yav_version = yav_version
         self.walle_provider = walle_provider
-        self._host_dynamic_slot_counts = getattr(cluster_details, 'host_dynamic_slot_counts', None) or {}
-        self._host_storage_enabled_map = getattr(cluster_details, 'host_storage_enabled', None) or {}
+        self._host_dynamic_slot_counts = cluster_details.host_dynamic_slot_counts or {}
+        self._host_storage_enabled_map = cluster_details.host_storage_enabled or {}
         self.__config_client = config_client.ConfigClient(
             self.nodes.nodes_list[0],
             self.cluster_details.grpc_config.get('port'),
@@ -264,7 +264,7 @@ class Slice:
 
     def _get_available_slots(self):
         if 'dynamic_slots' not in self.components:
-            return {}
+            return ({}, 0)
 
         slots_per_domain = {}
 
@@ -386,7 +386,9 @@ mon={mon}""".format(
         storage_host_set = set(storage_hosts)
         skip_hosts = [node for node in self.nodes.nodes_list if node not in storage_host_set]
         if skip_hosts:
-            self.nodes.execute_async("sudo service kikimr stop", check_retcode=False, nodes=skip_hosts)
+            # Static unit only (`kikimr`). Dynnodes are kikimr-multi@<slot> and stay running.
+            # check_retcode=False: stop is idempotent; the unit may already be inactive.
+            self._stop_static_on_hosts(skip_hosts)
         if storage_hosts:
             self.nodes.execute_async("sudo service kikimr start", check_retcode=True, nodes=storage_hosts)
 
@@ -470,8 +472,11 @@ mon={mon}""".format(
         tasks = self._stop_slot_ret(slot)
         self.nodes._check_async_execution(tasks, False)
 
+    def _stop_static_on_hosts(self, hosts):
+        self.nodes.execute_async("sudo service kikimr stop", check_retcode=False, nodes=hosts)
+
     def _stop_static(self):
-        self.nodes.execute_async("sudo service kikimr stop", check_retcode=False)
+        self._stop_static_on_hosts(self.nodes.nodes_list)
 
     def _stop_dynamic(self):
         if 'dynamic_slots' in self.components:

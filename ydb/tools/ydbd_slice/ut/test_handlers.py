@@ -11,6 +11,8 @@ class SliceTest(TestCase):
         cluster_details = SimpleNamespace(
             hosts=[SimpleNamespace(hostname='unavailable-host')],
             grpc_config={'port': 2135},
+            host_dynamic_slot_counts={},
+            host_storage_enabled={},
         )
 
         with mock.patch.object(handlers.config_client, 'ConfigClient') as config_client:
@@ -32,6 +34,7 @@ class SliceTest(TestCase):
                 olap: 1,
                 vla: 2,
             },
+            host_storage_enabled={},
         )
         walle_provider = SimpleNamespace(get_datacenter=lambda hostname: 'FAKE')
 
@@ -57,18 +60,18 @@ class SliceTest(TestCase):
         )
 
     def test_host_dynamic_slot_counts_from_yaml(self):
-        content = (
-            "hosts:\n"
-            "- name: olap-1.search.yandex.net\n"
-            "  dynamic_slots: 1\n"
-            "- host: vla-1.search.yandex.net\n"
-            "  dynamic_slots: 2\n"
-            "- name: other.search.yandex.net\n"
-            "domains:\n"
-            "- domain_name: Root\n"
-            "  dynamic_slots: 2\n"
-            "static_erasure: none\n"
-        )
+        content = """\
+hosts:
+- name: olap-1.search.yandex.net
+  dynamic_slots: 1
+- host: vla-1.search.yandex.net
+  dynamic_slots: 2
+- name: other.search.yandex.net
+domains:
+- domain_name: Root
+  dynamic_slots: 2
+static_erasure: none
+"""
         with mock.patch(
             'builtins.open',
             mock.mock_open(read_data=content),
@@ -89,6 +92,7 @@ class SliceTest(TestCase):
         cluster_details = SimpleNamespace(
             hosts=[SimpleNamespace(hostname=olap)],
             grpc_config={'port': 2135},
+            host_dynamic_slot_counts={},
             host_storage_enabled={
                 vla: False,
             },
@@ -110,14 +114,14 @@ class SliceTest(TestCase):
         ])
 
     def test_host_storage_enabled_from_yaml(self):
-        content = (
-            "hosts:\n"
-            "- name: olap-1.search.yandex.net\n"
-            "  host_config_id: 1\n"
-            "- name: vla-1.search.yandex.net\n"
-            "  storage: false\n"
-            "static_erasure: none\n"
-        )
+        content = """\
+hosts:
+- name: olap-1.search.yandex.net
+  host_config_id: 1
+- name: vla-1.search.yandex.net
+  storage: false
+static_erasure: none
+"""
         with mock.patch(
             'builtins.open',
             mock.mock_open(read_data=content),

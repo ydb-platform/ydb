@@ -144,18 +144,18 @@ void TReadQuoter::UpdateQuotaConfigImpl(bool totalQuotaUpdated, const TActorCont
     TVector<std::pair<TString, ui64>> updatedMessagesQuotas;
     for (auto& [consumerStr, consumerQuota] : ConsumerQuotas) {
         if (consumerQuota.PartitionPerConsumerQuotaTracker.UpdateConfigIfChanged(
-            GetConsumerReadBurst(PQTabletConfig, consumerStr, ctx), GetConsumerReadSpeed(PQTabletConfig, consumerStr, ctx))) {
+            GetConsumerReadBurst(PQTabletConfig, consumerStr, ctx), GetConsumerReadSpeed(PQTabletConfig, consumerStr, ctx), ctx.Now())) {
             updatedQuotas.push_back({consumerStr, consumerQuota.PartitionPerConsumerQuotaTracker.GetTotalSpeed()});
         }
 
         if (consumerQuota.PartitionPerConsumerMessageQuotaTracker.UpdateConfigIfChanged(
-            GetConsumerReadMessageBurst(PQTabletConfig, consumerStr, ctx), GetConsumerReadMessageSpeed(PQTabletConfig, consumerStr, ctx))) {
+            GetConsumerReadMessageBurst(PQTabletConfig, consumerStr, ctx), GetConsumerReadMessageSpeed(PQTabletConfig, consumerStr, ctx), ctx.Now())) {
             updatedMessagesQuotas.push_back({consumerStr, consumerQuota.PartitionPerConsumerMessageQuotaTracker.GetTotalSpeed()});
         }
     }
 
     totalQuotaUpdated |= PartitionTotalMessageQuotaTracker.Defined() && PartitionTotalMessageQuotaTracker->UpdateConfigIfChanged(
-        GetTotalPartitionMessageSpeedBurst(PQTabletConfig, ctx), GetTotalPartitionMessageSpeed(PQTabletConfig, ctx)
+        GetTotalPartitionMessageSpeedBurst(PQTabletConfig, ctx), GetTotalPartitionMessageSpeed(PQTabletConfig, ctx), ctx.Now()
     );
 
     ui64 totalSpeed = 0;

@@ -26,6 +26,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/base/services
     ydb/core/blobstorage/base
+    ydb/core/blobstorage/pdisk/subsystem
     ydb/core/blobstorage/crypto
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/lwtrace_probes

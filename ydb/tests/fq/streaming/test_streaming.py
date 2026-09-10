@@ -2510,7 +2510,7 @@ FROM `{table_name}`"""
             )
 
         assert wait_for(lambda: streaming_query_tasks_count() > 0, timeout_seconds=60, step_seconds=1), (
-             "Streaming query tasks did not appear after creation"
+            "Streaming query tasks did not appear after creation"
         )
         tasks_before_scaling = streaming_query_tasks_count()
         assert tasks_before_scaling > 0

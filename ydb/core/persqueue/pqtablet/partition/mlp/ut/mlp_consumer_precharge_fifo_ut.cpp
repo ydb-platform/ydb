@@ -240,7 +240,7 @@ static size_t ReadDistinctGroupHeads(std::shared_ptr<TTopicSdkTestSetup>& setup)
         Cerr << ">>>>> attempt " << i << ": read " << response->Messages.size() << " groups; totalGroups = " << groups.size() << Endl;
         Sleep(TDuration::MilliSeconds(1000));
     }
-    return grroups.size();
+    return groups.size();
 }
 
 static void MLPUnlockedGroupsReadAllGroupsImpl(float ratio) {

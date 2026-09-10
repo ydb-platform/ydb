@@ -464,7 +464,7 @@ TTopicSession::TTopicSession(
     , FunctionRegistry(functionRegistry)
     , BufferSize(maxBufferSize)
     , LogPrefix("TopicSession")
-    , ReadSessionMemory(config.GetMemoryQuotaManager())
+    , ReadSessionMemory(config.GetMemoryQuotaManager(), "topic read session")
     , Counters(counters)
     , CountersRoot(countersRoot)
     , EnableStreamingQueriesCounters(enableStreamingQueriesCounters)
@@ -1118,9 +1118,9 @@ void TTopicSession::SendDataArrived(TClientsInfo& info) {
     Send(RowDispatcherActorId, event.release());
 }
 
-void TTopicSession::HandleMemoryLimitException(const NKikimr::TMemoryLimitExceededException&) {
+void TTopicSession::HandleMemoryLimitException(const NKikimr::TMemoryLimitExceededException& error) {
     if (CurrentStateFunc() != &TThis::ErrorState) {
-        FatalError(TStatus::Fail(EStatusId::OVERLOADED, "Row dispatcher memory limit exceeded"));
+        FatalError(TStatus::Fail(EStatusId::OVERLOADED, GetMemoryLimitExceededMessage(error)));
     }
 }
 

@@ -97,7 +97,7 @@ public:
     TInputConsumer(const TInputSpec& spec, NYql::NPureCalc::TWorkerHolder<NYql::NPureCalc::IPushStreamWorker> worker)
         : Worker(std::move(worker))
     {
-        LimitAllocator(Worker->GetScopedAlloc(), spec.MemoryQuotaManager);
+        LimitAllocator(Worker->GetScopedAlloc(), spec.MemoryQuotaManager, "filter execution");
         const NKikimr::NMiniKQL::TStructType* structType = Worker->GetInputType();
         const ui64 count = structType->GetMembersCount();
 

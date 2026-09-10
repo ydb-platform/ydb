@@ -2,6 +2,7 @@
 
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/common/common.h>
+#include <ydb/core/fq/libs/row_dispatcher/memory/memory_quota.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -59,8 +60,8 @@ public:
         TStatus status = TStatus::Success();
         try {
             programHolder->CreateProgram(Factory);
-        } catch (const NKikimr::TMemoryLimitExceededException&) {
-            status = TStatus::Fail(EStatusId::OVERLOADED, "Row dispatcher memory limit exceeded while preparing a filter");
+        } catch (const NKikimr::TMemoryLimitExceededException& error) {
+            status = TStatus::Fail(EStatusId::OVERLOADED, GetMemoryLimitExceededMessage(error, "while preparing a filter"));
         } catch (const NYql::NPureCalc::TCompileError& error) {
             status = TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Compile issues: " << error.GetIssues())
                 .AddIssue(TStringBuilder() << "Final yql: " << error.GetYql())

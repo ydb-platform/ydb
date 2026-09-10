@@ -14,7 +14,7 @@ TTypeParser::TTypeParser(const TSourceLocation& location, const NKikimr::NMiniKQ
     , FunctionRegistry(functionRegistry)
     , MemInfo("SharedReadingParser")
 {
-    LimitAllocator(Alloc, memoryQuotaManager);
+    LimitAllocator(Alloc, memoryQuotaManager, "parser data");
     TypeEnv = std::make_unique<NKikimr::NMiniKQL::TTypeEnvironment>(Alloc);
     ProgramBuilder = std::make_unique<NKikimr::NMiniKQL::TProgramBuilder>(*TypeEnv, *FunctionRegistry);
     HolderFactory = std::make_unique<NKikimr::NMiniKQL::THolderFactory>(Alloc.Ref(), MemInfo, functionRegistry);
@@ -102,8 +102,8 @@ void TTopicParserBase::ParseBuffer() {
         } else {
             Consumer->OnParsingError(status);
         }
-    } catch (const NKikimr::TMemoryLimitExceededException&) {
-        Consumer->OnParsingError(TStatus::Fail(EStatusId::OVERLOADED, "Row dispatcher memory limit exceeded while parsing or filtering messages"));
+    } catch (const NKikimr::TMemoryLimitExceededException& error) {
+        Consumer->OnParsingError(TStatus::Fail(EStatusId::OVERLOADED, GetMemoryLimitExceededMessage(error, "while parsing or filtering messages")));
     } catch (...) {
         auto error = TStringBuilder() << "Failed to parse messages";
         if (const auto offsets = GetOffsets(); !offsets.empty()) {

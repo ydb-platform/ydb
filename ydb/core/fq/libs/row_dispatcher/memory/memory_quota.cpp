@@ -1,12 +1,27 @@
 #include "memory_quota.h"
 
 #include <util/generic/size_literals.h>
+#include <util/string/builder.h>
 #include <util/system/align.h>
 
 namespace NFq::NRowDispatcher {
 
-TMemoryQuota::TMemoryQuota(NYql::NDq::IMemoryQuotaManager::TPtr manager)
+namespace {
+
+class TMemoryQuotaExceededException : public NKikimr::TMemoryLimitExceededException {
+public:
+    explicit TMemoryQuotaExceededException(TString details)
+        : Details(std::move(details))
+    {}
+
+    const TString Details;
+};
+
+} // anonymous namespace
+
+TMemoryQuota::TMemoryQuota(NYql::NDq::IMemoryQuotaManager::TPtr manager, TString memoryName)
     : Manager(std::move(manager))
+    , MemoryName(std::move(memoryName))
 {}
 
 TMemoryQuota::~TMemoryQuota() {
@@ -16,7 +31,9 @@ TMemoryQuota::~TMemoryQuota() {
 void TMemoryQuota::Resize(ui64 size) {
     if (Manager) {
         if (size > Size && !Manager->AllocateQuota(size - Size)) {
-            throw NKikimr::TMemoryLimitExceededException();
+            throw TMemoryQuotaExceededException(TStringBuilder()
+                << "failed to reserve " << size - Size << " bytes for " << MemoryName
+                << " (already reserved: " << Size << " bytes)");
         }
         if (size < Size) {
             Manager->FreeQuota(Size - size);
@@ -35,12 +52,24 @@ ui64 TMemoryQuota::GetSize() const {
     return Size;
 }
 
-void LimitAllocator(NKikimr::NMiniKQL::TScopedAlloc& alloc, const NYql::NDq::IMemoryQuotaManager::TPtr& manager) {
+TString GetMemoryLimitExceededMessage(const NKikimr::TMemoryLimitExceededException& error, TStringBuf context) {
+    TStringBuilder message;
+    message << "Row dispatcher memory limit exceeded";
+    if (context) {
+        message << " " << context;
+    }
+    if (const auto* quotaError = dynamic_cast<const TMemoryQuotaExceededException*>(&error)) {
+        message << ": " << quotaError->Details;
+    }
+    return message;
+}
+
+void LimitAllocator(NKikimr::NMiniKQL::TScopedAlloc& alloc, const NYql::NDq::IMemoryQuotaManager::TPtr& manager, TString memoryName) {
     if (!manager) {
         return;
     }
 
-    auto quota = std::make_shared<TMemoryQuota>(manager);
+    auto quota = std::make_shared<TMemoryQuota>(manager, std::move(memoryName));
     quota->Resize(std::max<ui64>(alloc.GetAllocated(), 1));
     alloc.SetLimit(quota->GetSize());
     alloc.Ref().SetIncreaseMemoryLimitCallback([quota, &alloc](ui64, ui64 required) {

@@ -9,7 +9,7 @@ namespace NFq::NRowDispatcher {
 
 class TMemoryQuota : private TNonCopyable {
 public:
-    explicit TMemoryQuota(NYql::NDq::IMemoryQuotaManager::TPtr manager = {});
+    explicit TMemoryQuota(NYql::NDq::IMemoryQuotaManager::TPtr manager = {}, TString memoryName = "buffer");
     ~TMemoryQuota();
 
     void Resize(ui64 size);
@@ -18,10 +18,12 @@ public:
 
 private:
     const NYql::NDq::IMemoryQuotaManager::TPtr Manager;
+    const TString MemoryName;
     ui64 Size = 0;
 };
 
-void LimitAllocator(NKikimr::NMiniKQL::TScopedAlloc& alloc, const NYql::NDq::IMemoryQuotaManager::TPtr& manager);
+TString GetMemoryLimitExceededMessage(const NKikimr::TMemoryLimitExceededException& error, TStringBuf context = {});
+void LimitAllocator(NKikimr::NMiniKQL::TScopedAlloc& alloc, const NYql::NDq::IMemoryQuotaManager::TPtr& manager, TString memoryName = "MiniKQL allocator");
 NYql::TChunkedBuffer HoldMemoryQuota(NYql::TChunkedBuffer buffer, std::shared_ptr<TMemoryQuota> quota);
 
 } // namespace NFq::NRowDispatcher

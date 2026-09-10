@@ -34,13 +34,26 @@ Y_UNIT_TEST_SUITE(RowDispatcherMemoryQuota) {
         auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(100, 100);
         {
             TMemoryQuota first(manager);
-            TMemoryQuota second(manager);
+            TMemoryQuota second(manager, "test buffer");
             first.Resize(60);
-            UNIT_ASSERT_EXCEPTION(second.Resize(50), NKikimr::TMemoryLimitExceededException);
+            UNIT_ASSERT_EXCEPTION_SATISFIES(second.Resize(50), NKikimr::TMemoryLimitExceededException,
+                [](const auto& error) {
+                    UNIT_ASSERT_VALUES_EQUAL(GetMemoryLimitExceededMessage(error),
+                        "Row dispatcher memory limit exceeded: failed to reserve 50 bytes for test buffer (already reserved: 0 bytes)");
+                    return true;
+                });
             UNIT_ASSERT_VALUES_EQUAL(second.GetSize(), 0);
             UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 60);
             first.Resize(40);
             second.Resize(50);
+            UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 90);
+            UNIT_ASSERT_EXCEPTION_SATISFIES(second.Resize(70), NKikimr::TMemoryLimitExceededException,
+                [](const auto& error) {
+                    UNIT_ASSERT_VALUES_EQUAL(GetMemoryLimitExceededMessage(error, "while parsing or filtering messages"),
+                        "Row dispatcher memory limit exceeded while parsing or filtering messages: failed to reserve 20 bytes for test buffer (already reserved: 50 bytes)");
+                    return true;
+                });
+            UNIT_ASSERT_VALUES_EQUAL(second.GetSize(), 50);
             UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 90);
         }
         UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);

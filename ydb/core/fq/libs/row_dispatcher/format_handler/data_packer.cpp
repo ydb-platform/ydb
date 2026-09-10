@@ -15,7 +15,7 @@ ui64 EstimateMemoryUsage(size_t packedSize) {
 
 TMemoryLimitedDataPacker::TMemoryLimitedDataPacker(const NKikimr::NMiniKQL::TType* type, NYql::NDq::IMemoryQuotaManager::TPtr manager)
     : Manager(std::move(manager))
-    , Memory(std::make_shared<TMemoryQuota>(Manager))
+    , Memory(std::make_shared<TMemoryQuota>(Manager, "packed output"))
     , Packer(type, NKikimr::NMiniKQL::EValuePackerVersion::V0, NYql::DefaultDatumValidationMode)
 {
     Y_ENSURE(!Packer.IsBlock());
@@ -44,7 +44,7 @@ NYql::TChunkedBuffer TMemoryLimitedDataPacker::Finish() {
     try {
         auto data = Packer.Finish();
         Memory->Resize(EstimateMemoryUsage(data.Size()));
-        auto nextMemory = std::make_shared<TMemoryQuota>(Manager);
+        auto nextMemory = std::make_shared<TMemoryQuota>(Manager, "packed output");
         auto result = HoldMemoryQuota(std::move(data), Memory);
         Memory = std::move(nextMemory);
         return result;

@@ -375,7 +375,7 @@ private:
                     FilteredOffsets.push_back(Offset);
                 }
 
-                auto offsetsMemory = std::make_shared<TMemoryQuota>(Self.Config.MemoryQuotaManager);
+                auto offsetsMemory = std::make_shared<TMemoryQuota>(Self.Config.MemoryQuotaManager, "output offsets");
                 offsetsMemory->Resize(FilteredOffsets.size() * sizeof(ui64));
                 TVector<ui64> offsets(FilteredOffsets.begin(), FilteredOffsets.end());
                 auto data = HoldMemoryQuota(DataPacker->Finish(), std::move(offsetsMemory));
@@ -470,8 +470,8 @@ public:
         PassAway();
     }
 
-    void HandleMemoryLimitException(const NKikimr::TMemoryLimitExceededException&) {
-        FatalError(TStatus::Fail(EStatusId::OVERLOADED, "Row dispatcher memory limit exceeded"));
+    void HandleMemoryLimitException(const NKikimr::TMemoryLimitExceededException& error) {
+        FatalError(TStatus::Fail(EStatusId::OVERLOADED, GetMemoryLimitExceededMessage(error)));
     }
 
     void HandleException(const std::exception& error) {

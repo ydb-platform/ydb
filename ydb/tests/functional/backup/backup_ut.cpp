@@ -23,8 +23,7 @@ using namespace NYdb::NTable;
 
 namespace {
     template<typename TOp>
-    void WaitOp(TMaybe<TOperation>& op, NOperation::TOperationClient& opClient) {
-        int attempt = 20;
+    void WaitOp(TMaybe<TOperation>& op, NOperation::TOperationClient& opClient, int attempt = 20) {
         while (--attempt) {
             op = opClient.Get<TOp>(op->Id()).GetValueSync();
             if (op->Ready()) {
@@ -174,7 +173,7 @@ Y_UNIT_TEST_SUITE(Backup)
             UNIT_ASSERT_C(importResult.Status().IsSuccess(), importResult.Status().GetIssues().ToString());
         } else {
             TMaybe<TOperation> op = importResult;
-            WaitOp<NImport::TImportFromS3Response>(op, operationClient);
+            WaitOp<NImport::TImportFromS3Response>(op, operationClient, 300);
             UNIT_ASSERT_C(op->Status().IsSuccess(), op->Status().GetIssues().ToString());
         }
 

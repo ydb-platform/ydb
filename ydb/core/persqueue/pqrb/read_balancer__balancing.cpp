@@ -187,7 +187,7 @@ NActors::NStructuredLog::TStructuredMessage TPartitionFamily::LogPrefix() const 
     return YDB_LOG_CREATE_MESSAGE(
         Consumer.LogPrefix(),
         {"familyId", Id},
-            {"status", FamilyStatusName(Status)},
+        {"status", FamilyStatusName(Status)},
         {"partitions", Partitions});
 }
 
@@ -240,8 +240,7 @@ bool TPartitionFamily::Unlock(const TActorId& sender, ui32 partitionId, const TA
     if (Status != EStatus::Releasing) {
         YDB_LOG_CRIT("Try unlock partition but family status is",
             {LogPrefix()},
-            {"partitionId", partitionId},
-            {"status", Status});
+            {"partitionId", partitionId});
         return false;
     }
 
@@ -366,8 +365,7 @@ void TPartitionFamily::StartReading(TSession& session, const TActorContext& ctx)
         "StartReading session is not registered, family %lu", Id);
     if (Status != EStatus::Free) {
         YDB_LOG_CRIT("Try start reading but the family status is",
-            {LogPrefix()},
-            {"status", Status});
+            {LogPrefix()});
         return;
     }
 

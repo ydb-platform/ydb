@@ -221,6 +221,14 @@ class CheckSkillTests(Fixture):
         code, out = self.run_check(owner)
         self.assertEqual(code, 0, out)
 
+    def test_plain_path_is_checked(self):
+        owner, _ = self.make_skill(body="# D\n\nRead ydb/agents/GUIDE.md and ydb/nope/missing.md, not `scripts/tests/test_<name>.py`.\n")
+        code, out = self.run_check(owner)
+        self.assertEqual(code, 1)
+        self.assertIn("path does not exist: ydb/nope/missing.md", out)
+        self.assertNotIn("GUIDE.md", out)
+        self.assertNotIn("test_<name>", out)
+
     def test_link_in_fenced_block_is_ignored(self):
         owner, _ = self.make_skill(body="# D\n\n```markdown\n[x](missing.md)\n```\n")
         code, out = self.run_check(owner)

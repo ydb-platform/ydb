@@ -32,6 +32,7 @@ AGENTS_CHAIN_MAX_BYTES = 32 * 1024
 SENTENCE_MAX_WORDS = 40
 CLAUDE_INCLUDE = "@./AGENTS.md"
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
+PATH_RE = re.compile(r"(?<![\w@/.-])((?:\.\.?/)?[\w.-]+(?:/[\w.-]+)+\.(?:md|py))\b")
 SKIP_DIRS = {".git", ".claude", "contrib", "vendor", "node_modules", "__pycache__"}
 
 
@@ -211,6 +212,18 @@ def check_links(path, text, report):
                 report.error(path, number, "link target does not exist: %s" % target)
 
 
+def check_paths(path, text, root, report):
+    """Plain file paths in the text must exist, relative to the file or to the repo root."""
+    base = os.path.dirname(path)
+    for number, line in enumerate(text.splitlines(), start=1):
+        for token in PATH_RE.findall(line):
+            if any(mark in token for mark in "<>*{}"):
+                continue
+            if os.path.exists(os.path.join(base, token)) or os.path.exists(os.path.join(root, token)):
+                continue
+            report.error(path, number, "path does not exist: %s" % token)
+
+
 def check_sentences(path, text, start_line, report):
     in_code = False
     for number, line in enumerate(text.splitlines(), start=1):
@@ -321,6 +334,7 @@ def check_skill(path, root, report):
     elif len(lines) > SKILL_SOFT_LINES:
         report.warn(path, len(lines), "SKILL.md has %d lines; move detail to references/" % len(lines))
     check_links(path, text, report)
+    check_paths(path, text, root, report)
     check_sentences(path, text, body_start + 1, report)
     for number, line in enumerate(lines, start=1):
         if re.match(r"^\s*(?:[-*]\s+)?TODO\b", line):
@@ -351,6 +365,7 @@ def check_skill(path, root, report):
     for reference in sorted(glob_files(os.path.join(skill_dir, "references"), ".md")):
         reference_text = read_text(reference)
         check_links(reference, reference_text, report)
+        check_paths(reference, reference_text, root, report)
         check_sentences(reference, reference_text, 1, report)
 
     check_scripts(skill_dir, report)
@@ -413,6 +428,7 @@ def check_agents(path, root, report):
     if chain > AGENTS_CHAIN_MAX_BYTES:
         report.error(path, 0, "AGENTS.md chain from repo root is %d bytes; Codex stops reading after 32 KiB" % chain)
     check_links(path, text, report)
+    check_paths(path, text, root, report)
     check_sentences(path, text, 1, report)
 
 

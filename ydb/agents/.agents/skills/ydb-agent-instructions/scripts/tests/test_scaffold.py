@@ -59,8 +59,8 @@ class ScaffoldTests(unittest.TestCase):
         parts = self.parts()
         self.assertTrue(os.path.isfile(parts["skill"]))
         self.assertIn("name: ydb-demo-skill", read(parts["skill"]))
-        self.assertIn("(.agents/skills/ydb-demo-skill/SKILL.md)", read(parts["agents"]))
-        self.assertIn("(../agents/GUIDE.md)", read(parts["agents"]))
+        self.assertIn("read .agents/skills/ydb-demo-skill/SKILL.md.", read(parts["agents"]))
+        self.assertIn("Build and test commands: ../agents/GUIDE.md.", read(parts["agents"]))
         self.assertEqual(read(parts["claude"]), "@./AGENTS.md\n")
         self.assertEqual(os.readlink(parts["link"]), ".agents")
         self.assertIn("0 errors, 4 warnings", out)  # the four TODO lines of the template

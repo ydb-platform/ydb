@@ -32,9 +32,9 @@ Example, the reason for the root line that points to this skill: the task "chang
 | File | Budget | Source |
 |---|---|---|
 | `AGENTS.md` | 50 lines | this repo; loaded before the agent reads anything else |
-| `SKILL.md` | 200 lines, hard limit 500 | this repo; [Claude Code](https://code.claude.com/docs/en/skills) recommends staying under 500 lines |
-| `description` | 1024 characters | [Agent Skills specification](https://agentskills.io/specification) |
-| All `AGENTS.md` from root to `<dir>` | 32 KiB | [Codex](https://learn.chatgpt.com/docs/agent-configuration/agents-md) stops reading after this size; Claude Code reads the same text through `CLAUDE.md` and only skips a file above 4 MiB ([memory](https://code.claude.com/docs/en/memory)) |
+| `SKILL.md` | 200 lines, hard limit 500 | this repo; https://code.claude.com/docs/en/skills recommends staying under 500 lines |
+| `description` | 1024 characters | https://agentskills.io/specification |
+| All `AGENTS.md` from root to `<dir>` | 32 KiB | https://learn.chatgpt.com/docs/agent-configuration/agents-md stops reading after this size; Claude Code reads the same text through `CLAUDE.md` and only skips a file above 4 MiB (https://code.claude.com/docs/en/memory) |
 | Frontmatter keys | `name`, `description` | the only keys every tool understands, see `tool-compatibility.md` |
 
 `check.py` reports these; line budgets and frontmatter keys as warnings, the rest as errors. It also requires skill names to start with `ydb-`, rejects a name already used in the repo, and warns about names that look alike.

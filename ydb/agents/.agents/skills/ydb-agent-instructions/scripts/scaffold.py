@@ -53,7 +53,7 @@ AGENTS_TEMPLATE = """# {title}
 
 These instructions apply to {dir_text}.
 
-For work in this directory, read the [{name} skill]({skill_link}).{guide_line}
+For work in this directory, read {skill_link}.{guide_line}
 """
 
 CLAUDE_CONTENT = check.CLAUDE_INCLUDE + "\n"
@@ -90,8 +90,8 @@ def plan_actions(args, root):
         "description": " ".join((args.description or DEFAULT_DESCRIPTION).replace('"', "'").split()),
         "dir_text": dir_text,
         "skill_link": skill_link,
-        "guide_line": "\nBuild and test commands: [`GUIDE.md`](%s)." % relative_link(target_dir, guide) if has_guide else "",
-        "guide_note": " Build and test commands are in [GUIDE.md](%s); do not copy them here." % relative_link(skill_dir, guide) if has_guide else "",
+        "guide_line": "\nBuild and test commands: %s." % relative_link(target_dir, guide) if has_guide else "",
+        "guide_note": " Build and test commands are in %s; do not copy them here." % relative_link(skill_dir, guide) if has_guide else "",
     }
     if not has_guide:
         notes.append("no ydb/agents/GUIDE.md in this repo; the build and test link is left out")
@@ -105,7 +105,7 @@ def plan_actions(args, root):
         if skill_link in check.read_text(agents_md):
             notes.append("exists and links to the skill: %s" % agents_md)
         else:
-            notes.append("MANUAL STEP: add this line to %s:\n    For work in this directory, read the [%s skill](%s)." % (agents_md, args.skill_name, skill_link))
+            notes.append("MANUAL STEP: add this line to %s:\n    For work in this directory, read %s." % (agents_md, skill_link))
     elif os.path.exists(agents_md):
         conflicts.append("%s exists but is not a file" % agents_md)
     else:

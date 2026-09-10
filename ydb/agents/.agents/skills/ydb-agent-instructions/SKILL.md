@@ -15,7 +15,7 @@ Paths are relative to the repo root.
 4. Plain English: short sentences, numbered steps, exact paths. No marketing words such as "powerful" or "seamless".
 5. Minimum text. Every sentence must change what an agent does. If removing a sentence changes nothing, remove it.
 6. Change only what you were asked to change. On a contradiction, see Step 1.
-7. Every form in this skill works in all four tools. If the human asks for a form that only some tools read (list in [references/tool-compatibility.md](references/tool-compatibility.md)), name the tools that will not see it and ask: make it universal, or keep the limit?
+7. Every form in this skill works in all four tools. If the human asks for a form that only some tools read (list in references/tool-compatibility.md), name the tools that will not see it and ask: make it universal, or keep the limit?
 
 ## Step 1. Find existing instructions
 
@@ -35,13 +35,13 @@ Keep the list of what you found for Step 9.
 - The rule is about the whole repo (build, tests, style): `ydb/agents/<FILE>.md`, linked from `ydb/agents/GUIDE.md`.
 - The root `AGENTS.md` gets at most one link line. Write the reason in the pull request.
 
-Decision table, budgets and the layout of a skill directory: [references/placement.md](references/placement.md).
+Decision table, budgets and the layout of a skill directory: references/placement.md.
 
 ## Step 3. Choose the form
 
 - One or two sentences that always apply to a directory: a line in `<dir>/AGENTS.md`.
 - A task with steps: a skill. The `AGENTS.md` next to it gets one line that points to the skill.
-- Long tables or background: `references/*.md` inside the skill.
+- Long tables or background: references/*.md inside the skill.
 - A step goes into `scripts/<name>.py` when you can write down its exact input and its exact expected output, and the same input must always give the same output. A step stays with the model only when it needs judgment about meaning: what a text means, or which of several valid options fits.
 - Exception: a step that runs a few times a year and would need a script longer than `SKILL.md` may stay with the model; write the reason in `SKILL.md`.
 - Scripts: Python 3.8 syntax, standard library only, tests in `scripts/tests/test_<name>.py` (`unittest`).
@@ -56,13 +56,13 @@ python3 ydb/agents/.agents/skills/ydb-agent-instructions/scripts/scaffold.py <di
 
 `<skill-name>` starts with `ydb-` and must not exist elsewhere in the repo; the script refuses a taken name. When it warns that the name looks like another skill, tell the human and propose two or three other names before you continue.
 
-It creates `<dir>/.agents/skills/<skill-name>/SKILL.md`, `<dir>/AGENTS.md` (or prints the line to add), `<dir>/CLAUDE.md` with `@./AGENTS.md`, and the symlink `<dir>/.claude -> .agents`. It never overwrites a file. `--dry-run` shows the plan. Why each file exists: [references/tool-compatibility.md](references/tool-compatibility.md).
+It creates `<dir>/.agents/skills/<skill-name>/SKILL.md`, `<dir>/AGENTS.md` (or prints the line to add), `<dir>/CLAUDE.md` with `@./AGENTS.md`, and the symlink `<dir>/.claude -> .agents`. It never overwrites a file. `--dry-run` shows the plan. Why each file exists: references/tool-compatibility.md.
 
 ## Step 5. Write the text
 
 - `description`: name the directory or component, the task types, and what the skill is not for.
 - A skill about a code directory has three sections. "Source map": a table of the main files and what each one does. "Trace the changed contract": what to read on both sides of a change and which invariants to keep. "Validation": the smallest test target to run first.
-- Use relative links that resolve from the file they are in.
+- Write paths as plain text, relative to the repo root or to the file; no markdown links.
 - Replace every `TODO` line the script created.
 
 ## Step 6. Verify every command and claim
@@ -77,7 +77,7 @@ For each claim about a tool ("Codex loads X"): read the tool's documentation and
 
 For each script you changed: run its tests before and after the change.
 
-Commands, levels of verification and the report template: [references/verification.md](references/verification.md).
+Commands, levels of verification and the report template: references/verification.md.
 
 ## Step 7. Run the checker
 
@@ -89,10 +89,10 @@ Add the root `AGENTS.md` to the command when you changed it. Fix every `ERROR` l
 
 ## Step 8. Independent review
 
-Ask a separate agent to review your files as described in [references/verification.md](references/verification.md): fresh context, the reviewer prompt from that file, no notes from you.
+Ask a separate agent to review your files as described in references/verification.md: fresh context, the reviewer prompt from that file, no notes from you.
 
 For each finding: restate it in your own words, check it against the source, then fix it or answer with a technical reason. Do not agree just to be polite.
 
 ## Step 9. Report
 
-Fill the report template from [references/verification.md](references/verification.md).
+Fill the report template from references/verification.md.

@@ -233,7 +233,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpFilter> filter, TRBOContext& ctx, TPlanPro
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
+TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx, TPlanProps& props) {
     TVector<const TItemExprType*> resStructItemTypes;
     const TTypeAnnotationNode* inputType = map->GetInput()->Type;
     auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
@@ -257,7 +257,21 @@ TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
         // This is type annotation update inplace, which is different comparing to yql type annotation.
         auto expression = mapElement.GetExpression();
         auto lambda = expression.Node;
-        if (!UpdateLambdaAllArgumentsTypes(lambda, {structType}, ctx.ExprCtx)) {
+
+        auto lambdaIUs = expression.GetInputIUs(true,false);
+        TVector<TInfoUnit> subplanContextIUs;
+        for (const auto& iu : lambdaIUs) {
+            if (iu.IsSubplanContext()) {
+                subplanContextIUs.push_back(iu);
+            }
+        }
+
+        auto currStructType = structType;
+        if (!subplanContextIUs.empty()) {
+            currStructType = AddSubplanTypes(currStructType, subplanContextIUs, ctx, props);
+        }
+
+        if (!UpdateLambdaAllArgumentsTypes(lambda, {currStructType}, ctx.ExprCtx)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -708,7 +722,7 @@ TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& 
         return ComputeTypes(CastOperator<TOpFilter>(op), ctx, props);
     }
     else if(MatchOperator<TOpMap>(op)) {
-        return ComputeTypes(CastOperator<TOpMap>(op), ctx);
+        return ComputeTypes(CastOperator<TOpMap>(op), ctx, props);
     }
     else if(MatchOperator<TOpAddDependencies>(op)) {
         return ComputeTypes(CastOperator<TOpAddDependencies>(op), ctx);

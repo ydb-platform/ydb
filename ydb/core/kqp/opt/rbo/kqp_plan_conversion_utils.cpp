@@ -375,8 +375,10 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node) {
                 auto fromIU = TInfoUnit(name.StringValue());
                 mapElements.emplace_back(iu, fromIU, node->Pos(), &Ctx, &PlanProps, project);
             } else {
-                TExpression exprLambda(GetMapElementLambda(element.Lambda().Ptr(), forceOptional, Ctx), &Ctx);
-                mapElements.emplace_back(iu, exprLambda);
+                auto exprLambda = GetMapElementLambda(element.Lambda().Ptr(), forceOptional, Ctx);
+                exprLambda = RemoveSubplans(exprLambda);
+                TExpression mapExpr(exprLambda, &Ctx);
+                mapElements.emplace_back(iu, mapExpr);
             }
         }
     }

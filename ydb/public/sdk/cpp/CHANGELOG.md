@@ -1,5 +1,4 @@
 * Added optional `TRetryOperationSettings::StopToken` for cooperative cancellation between retry attempts.
-* Made `BulkUpsert` use the shared retry policy from the first attempt, including backoff before its first retry.
 
 * Added `EQ_HEIGHT_HISTOGRAM` to `EMultiColumnStatisticsType`.
 

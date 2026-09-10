@@ -127,7 +127,7 @@ public:
         if constexpr (MockTopicSession) {
             Runtime.GrabEdgeEvent<TEvMockPqEvents::TEvCreateSession>(PqGatewayNotifier, TDuration::Seconds(GrabTimeoutSec));
             MockReadSession = MockPqGateway->ExtractReadSession(TopicPath);
-            MockReadSession->AddStartSessionEvent();
+            MockReadSession->AddStartSessionEvent(42);
         }
     }
 
@@ -650,7 +650,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StopSession(ReadActorId2, source);
         Runtime.GrabEdgeEvent<TEvMockPqEvents::TEvCreateSession>(PqGatewayNotifier, TDuration::Seconds(GrabTimeoutSec));
         MockReadSession = MockPqGateway->ExtractReadSession(TopicPath);
-        MockReadSession->AddStartSessionEvent();
+        MockReadSession->AddStartSessionEvent(42);
 
         std::vector<TString> data3 = { Json4 };
         PQWrite(data3, 4);

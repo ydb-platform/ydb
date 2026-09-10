@@ -1066,7 +1066,7 @@ void TQueryExecutionStats::FillStageDurationUs(NYql::NDqProto::TDqStageStats& st
 }
 
 ui64 TQueryExecutionStats::EstimateCollectMem() {
-    ui64 result = 0;
+    ui64 result = CurrentTaskStats.capacity() * sizeof(TCurrentTaskStats);
     for (auto& [_, stageStat] : StageStats) {
         result += stageStat.EstimateMem();
     }
@@ -1236,6 +1236,13 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
     NYql::NDqProto::EComputeState state, TDuration collectLongTaskStatsTimeout) {
 
     if (taskId) {
+        AFL_ENSURE(taskId <= TaskCount);
+        CurrentTaskStats.resize(TaskCount);
+        auto& current = CurrentTaskStats[taskId - 1];
+        // Terminal reports can have no Tasks (failure before task-runner setup).
+        // Unlike cumulative counters, current memory must also accept zero.
+        current.MemoryBytes = state == NDqProto::COMPUTE_STATE_EXECUTING
+            ? stats.GetMemoryUsage() : 0;
         // CA may fail before SetTaskRunner (e.g. WASM compartment acquire);
         // FillStats then sends empty Tasks. Do not ENSURE — that would mask
         // the real failure issues from COMPUTE_STATE_FAILURE.
@@ -1244,6 +1251,7 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
         }
         AFL_ENSURE(stats.GetTasks().size() == 1);
         AFL_ENSURE(stats.GetTasks(0).GetTaskId() == taskId);
+        current.SourceReadBytes = std::max(current.SourceReadBytes, stats.GetTasks(0).GetIngressBytes());
     }
 
     for (auto& taskStats : stats.GetTasks()) {
@@ -1551,6 +1559,22 @@ void TQueryExecutionStats::ExportAggAsyncBufferStats(TAsyncBufferStats& data, NY
     ExportAggAsyncStats(data.Pop, *stats.MutablePop());
     ExportAggAsyncStats(data.Egress, *stats.MutableEgress());
     stats.SetLocalBytes(ExportAggStats(data.LocalBytes));
+}
+
+TCurrentExecStats TQueryExecutionStats::GetCurrentExecStats(TInstant now) const {
+    TCurrentExecStats result;
+    if (StartTs && now >= StartTs) {
+        result.DurationUs = (now - StartTs).MicroSeconds();
+    }
+    result.CpuTimeUs = StorageCpuTimeUs + ComputeCpuTimeUs.Sum;
+    for (const auto& task : CurrentTaskStats) {
+        result.ComputeMemoryBytes += task.MemoryBytes;
+        result.SourceReadBytes += task.SourceReadBytes;
+    }
+    for (const auto& [path, table] : Tables) {
+        result.TableReadBytes += table.StorageStats.ReadBytes + table.ReadBytes.Sum;
+    }
+    return result;
 }
 
 void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {

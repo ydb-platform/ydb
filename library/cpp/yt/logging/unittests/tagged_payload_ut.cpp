@@ -297,6 +297,19 @@ TEST(TLoggingTagListBuilderTest, SkipsTagOnFalseCondition)
     EXPECT_EQ(ToString(tags), "Kept: 2, KeptFormat: ff");
 }
 
+TEST(TLoggingTagListBuilderTest, EvaluatesLazyTagOnlyWhenKept)
+{
+    TLoggingTagList tags;
+    int calls = 0;
+    TLoggingTagListBuilder(&tags)
+        .WithIf(false, "Skipped", YT_LAZY((++calls, 1)))
+        .WithIf(true, "Kept", YT_LAZY((++calls, 2)))
+        .WithFormatIf(false, "SkippedFormat", "%x", YT_LAZY((++calls, 255)))
+        .WithFormatIf(true, "KeptFormat", "%x", YT_LAZY((++calls, 255)));
+    EXPECT_EQ(calls, 2);
+    EXPECT_EQ(ToString(tags), "Kept: 2, KeptFormat: ff");
+}
+
 TEST(TLoggingTagListBuilderTest, SplicesList)
 {
     auto spliced = TLoggingTagList()

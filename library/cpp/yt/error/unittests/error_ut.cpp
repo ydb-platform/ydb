@@ -224,6 +224,21 @@ TEST(TErrorTest, WithIf)
     EXPECT_TRUE(skipped.InnerErrors().empty());
 }
 
+TEST(TErrorTest, WithIfLazy)
+{
+    int calls = 0;
+
+    auto attached = TError("Error")
+        .WithIf(true, "key", YT_LAZY((++calls, 1)));
+    EXPECT_EQ(calls, 1);
+    EXPECT_EQ(attached.Attributes().Get<int>("key"), 1);
+
+    auto skipped = TError("Error")
+        .WithIf(false, "key", YT_LAZY((++calls, 1)));
+    EXPECT_EQ(calls, 1);
+    EXPECT_FALSE(skipped.Attributes().Contains("key"));
+}
+
 TEST(TErrorTest, WithIfGuardsOKInnerError)
 {
     TError okError;

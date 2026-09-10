@@ -312,6 +312,25 @@ TEST(TTaggedApiTest, WithFormatIf)
     EXPECT_EQ(decoded.Tags[1], std::pair(std::string("After"), std::string("3")));
 }
 
+TEST(TTaggedApiTest, WithIfLazy)
+{
+    TMockLogManager manager;
+    TLogger Logger(&manager, "Test");
+    int calls = 0;
+    YT_TLOG_INFO("Message")
+        .WithIf(true, "Kept", YT_LAZY((++calls, 1)))
+        .WithIf(false, "Dropped", YT_LAZY((++calls, 2)))
+        .WithFormatIf(true, "KeptFormat", "%v.%v", YT_LAZY("MyService"), "MyMethod")
+        .WithFormatIf(false, "DroppedFormat", "%v", YT_LAZY((++calls, 3)));
+
+    EXPECT_EQ(calls, 1);
+
+    auto decoded = DecodeSingleEvent(manager);
+    ASSERT_EQ(decoded.Tags.size(), 2u);
+    EXPECT_EQ(decoded.Tags[0], std::pair(std::string("Kept"), std::string("1")));
+    EXPECT_EQ(decoded.Tags[1], std::pair(std::string("KeptFormat"), std::string("MyService.MyMethod")));
+}
+
 TEST(TTaggedApiTest, TagList)
 {
     TMockLogManager manager;

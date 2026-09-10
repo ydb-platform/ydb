@@ -446,11 +446,12 @@ public:
     }
 
     //! Attaches the tag only when #condition holds, for fields a message omits rather
-    //! than renders empty. NB: #value is evaluated either way.
+    //! than renders empty.
+    //! NB: #value is evaluated either way unless wrapped in |YT_LAZY|.
     template <class TValue>
     TTaggedLoggingGuard& WithIf(bool condition, TLoggingTagKey tag, const TValue& value) &
     {
-        return condition ? DoWith(tag, value, "v"_sb) : *this;
+        return condition ? DoWith(tag, Unlazy(value), "v"_sb) : *this;
     }
 
     //! Attaches a keyed tag composed from several values, e.g. |.WithFormat("Method", "%v.%v", service, method)|.
@@ -462,12 +463,13 @@ public:
         return *this;
     }
 
-    //! Attaches a composed tag only when #condition holds. NB: #args are evaluated either way.
+    //! Attaches a composed tag only when #condition holds.
+    //! NB: #args are evaluated either way unless wrapped in |YT_LAZY|.
     template <class... TArgs>
-    TTaggedLoggingGuard& WithFormatIf(bool condition, TLoggingTagKey tag, TFormatString<TArgs...> format, TArgs&&... args) &
+    TTaggedLoggingGuard& WithFormatIf(bool condition, TLoggingTagKey tag, TFormatString<TUnlazy<TArgs>...> format, TArgs&&... args) &
     {
         return condition
-            ? WithFormat(tag, format, std::forward<TArgs>(args)...)
+            ? WithFormat(tag, format, Unlazy(std::forward<TArgs>(args))...)
             : *this;
     }
 

@@ -17,6 +17,7 @@ The export feature is available only for objects of the following types:
 - [Secondary index](../../../../concepts/glossary.md#secondary-index)
 - [Vector index](../../../../concepts/glossary.md#vector-index)
 - [Fulltext index](../../../../concepts/glossary.md#fulltext-index)
+- [Local Bloom skip index](../../../../concepts/glossary.md#local-bloom-skip-index)
 - [Topic](../../../../concepts/datamodel/topic.md) (schema only)
 
 {% endnote %}

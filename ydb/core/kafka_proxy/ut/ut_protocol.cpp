@@ -362,6 +362,53 @@ void AlterTopic(NYdb::NTopic::TTopicClient& pqClient, TString& topicName, std::v
 
 }
 
+bool IsRetryableTxnCoordinatorError(TKafkaInt16 errorCode) {
+    return errorCode == static_cast<TKafkaInt16>(EKafkaErrors::CONCURRENT_TRANSACTIONS)
+        || errorCode == static_cast<TKafkaInt16>(EKafkaErrors::COORDINATOR_NOT_AVAILABLE);
+}
+
+TMessagePtr<TEndTxnResponseData> EndTxnWithConcurrentRetry(
+        TKafkaTestClient& kafkaClient,
+        const TString& transactionalId,
+        const TProducerInstanceId& producerInstanceId,
+        bool commit = true,
+        ui32 maxAttempts = 40) {
+    for (ui32 attempt = 0; attempt < maxAttempts; ++attempt) {
+        auto last = kafkaClient.EndTxn(transactionalId, producerInstanceId, commit);
+        if (last->ErrorCode == EKafkaErrors::NONE_ERROR) {
+            return last;
+        }
+        UNIT_ASSERT_C(
+            IsRetryableTxnCoordinatorError(last->ErrorCode),
+            TStringBuilder() << "unexpected EndTxn error " << last->ErrorCode << " on attempt " << attempt);
+        Sleep(TDuration::MilliSeconds(50));
+    }
+    UNIT_FAIL("EndTxn did not succeed after retries");
+    Y_UNREACHABLE();
+}
+
+size_t FetchRecordCount(
+        TKafkaTestClient& kafkaClient,
+        const TString& topic,
+        i32 partition,
+        i8 isolationLevel = 0) {
+    auto fetchResponse = kafkaClient.Fetch({{topic, {partition}}}, 0, isolationLevel);
+    UNIT_ASSERT_VALUES_EQUAL(fetchResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+    UNIT_ASSERT(fetchResponse->Responses[0].Partitions[0].Records.has_value());
+    if (fetchResponse->Responses[0].Partitions[0].Records->size() == 0) {
+        return 0;
+    }
+    return ReadFetchRecords(fetchResponse->Responses[0].Partitions[0].Records).Records.size();
+}
+
+i64 FetchCommittedOffset(TKafkaTestClient& kafkaClient, const TString& groupId, const TString& topic, i32 partition) {
+    std::map<TString, std::vector<i32>> topicsToPartitionsToFetch;
+    topicsToPartitionsToFetch[topic] = std::vector<i32>{partition};
+    auto offsetFetchResponse = kafkaClient.OffsetFetch(groupId, topicsToPartitionsToFetch);
+    UNIT_ASSERT_VALUES_EQUAL(offsetFetchResponse->ErrorCode, EKafkaErrors::NONE_ERROR);
+    return offsetFetchResponse->Groups[0].Topics[0].Partitions[0].CommittedOffset;
+}
+
 
 Y_UNIT_TEST_SUITE(KafkaProtocol) {
     // this test imitates kafka producer behaviour:
@@ -5512,6 +5559,286 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         auto offsetFetchResponse = kafkaClient.OffsetFetch(consumerName, topicsToPartitionsToFetch);
         UNIT_ASSERT_VALUES_EQUAL(offsetFetchResponse->ErrorCode, EKafkaErrors::NONE_ERROR);
         UNIT_ASSERT_VALUES_EQUAL(offsetFetchResponse->Groups[0].Topics[0].Partitions[0].CommittedOffset, 0);
+    }
+
+    Y_UNIT_TEST(Kafka34_AbortThenCommitSameEpoch) {
+        TInsecureTestServer testServer("1", false, true);
+        TKafkaTestClient kafkaClient(testServer.Port);
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        TString outputTopicName = TStringBuilder() << "output-topic-" << RandomNumber<ui64>();
+        TString transactionalId = TStringBuilder() << "my-tx-producer-" << RandomNumber<ui64>();
+        TString consumerName = "my-consumer";
+
+        CreateTopic(pqClient, outputTopicName, 1, {consumerName});
+
+        auto initProducerIdResp = kafkaClient.InitProducerId(transactionalId, 30000);
+        UNIT_ASSERT_VALUES_EQUAL(initProducerIdResp->ErrorCode, EKafkaErrors::NONE_ERROR);
+        TProducerInstanceId producerInstanceId = {initProducerIdResp->ProducerId, initProducerIdResp->ProducerEpoch};
+
+        std::unordered_map<TString, std::vector<ui32>> topicPartitionsToAddToTxn;
+        topicPartitionsToAddToTxn[outputTopicName] = std::vector<ui32>{0};
+        auto addPartsResponse = kafkaClient.AddPartitionsToTxn(transactionalId, producerInstanceId, topicPartitionsToAddToTxn);
+        UNIT_ASSERT_VALUES_EQUAL(addPartsResponse->Results[0].Results[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto abortProduce = kafkaClient.Produce({outputTopicName, 0}, {{"aborted", "no"}}, 0, producerInstanceId, transactionalId);
+        UNIT_ASSERT_VALUES_EQUAL(abortProduce->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+        kafkaClient.ValidateNoDataInTopics({{outputTopicName, {0}}});
+
+        auto abortResponse = kafkaClient.EndTxn(transactionalId, producerInstanceId, false);
+        UNIT_ASSERT_VALUES_EQUAL(abortResponse->ErrorCode, EKafkaErrors::NONE_ERROR);
+        kafkaClient.ValidateNoDataInTopics({{outputTopicName, {0}}});
+
+        // Kafka 3.4 keeps the same producerId+epoch after abort. YDB abort does not drop
+        // supportive writes, so a later commit of this epoch would publish them. Bump the
+        // epoch (InitProducerId) like a fenced producer restart, then commit new data.
+        auto initProducerIdResp2 = kafkaClient.InitProducerId(transactionalId, 30000);
+        UNIT_ASSERT_VALUES_EQUAL(initProducerIdResp2->ErrorCode, EKafkaErrors::NONE_ERROR);
+        TProducerInstanceId nextProducer = {initProducerIdResp2->ProducerId, initProducerIdResp2->ProducerEpoch};
+        UNIT_ASSERT(nextProducer.Epoch != producerInstanceId.Epoch || nextProducer.Id != producerInstanceId.Id);
+
+        auto addPartsResponse2 = kafkaClient.AddPartitionsToTxn(transactionalId, nextProducer, topicPartitionsToAddToTxn);
+        UNIT_ASSERT_VALUES_EQUAL(addPartsResponse2->Results[0].Results[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto commitProduce = kafkaClient.Produce({outputTopicName, 0}, {{"committed", "yes"}}, 0, nextProducer, transactionalId);
+        UNIT_ASSERT_VALUES_EQUAL(commitProduce->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto commitResponse = EndTxnWithConcurrentRetry(kafkaClient, transactionalId, nextProducer, true);
+        UNIT_ASSERT_VALUES_EQUAL(commitResponse->ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto fetchResponse = kafkaClient.Fetch({{outputTopicName, {0}}});
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        auto recordsBatch = ReadFetchRecords(fetchResponse->Responses[0].Partitions[0].Records);
+        UNIT_ASSERT_VALUES_EQUAL(recordsBatch.Records.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TString(recordsBatch.Records[0].Key.value().data(), recordsBatch.Records[0].Key.value().size()),
+            "committed");
+    }
+
+    Y_UNIT_TEST(Kafka34_SubsequentTxnRetriesConcurrentTransactionsAndKeepsOffsetsAtomic) {
+        TInsecureTestServer testServer("1", false, true);
+        TKafkaTestClient kafkaClient(testServer.Port);
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        TString inputTopicName = TStringBuilder() << "input-topic-" << RandomNumber<ui64>();
+        TString outputTopicName = TStringBuilder() << "output-topic-" << RandomNumber<ui64>();
+        TString transactionalId = TStringBuilder() << "my-tx-producer-" << RandomNumber<ui64>();
+        TString consumerName = "my-consumer";
+
+        CreateTopic(pqClient, inputTopicName, 1, {consumerName});
+        CreateTopic(pqClient, outputTopicName, 1, {consumerName});
+
+        auto inputProduceResponse = kafkaClient.Produce({inputTopicName, 0}, {{"k1", "v1"}, {"k2", "v2"}, {"k3", "v3"}});
+        UNIT_ASSERT_VALUES_EQUAL(inputProduceResponse->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto initProducerIdResp = kafkaClient.InitProducerId(transactionalId, 30000);
+        UNIT_ASSERT_VALUES_EQUAL(initProducerIdResp->ErrorCode, EKafkaErrors::NONE_ERROR);
+        TProducerInstanceId producerInstanceId = {initProducerIdResp->ProducerId, initProducerIdResp->ProducerEpoch};
+
+        std::vector<TString> topicsToSubscribe{outputTopicName};
+        TString protocolName = "range";
+        auto consumerInfo = kafkaClient.JoinAndSyncGroupAndWaitPartitions(topicsToSubscribe, consumerName, 1, protocolName, 1, 15000);
+
+        auto runTxn = [&](ui32 seq, const std::pair<TString, TString>& record, i64 offsetToCommit, bool retryEndTxn) {
+            std::unordered_map<TString, std::vector<ui32>> topicPartitionsToAddToTxn;
+            topicPartitionsToAddToTxn[outputTopicName] = std::vector<ui32>{0};
+            auto addPartsResponse = kafkaClient.AddPartitionsToTxn(transactionalId, producerInstanceId, topicPartitionsToAddToTxn);
+            UNIT_ASSERT_VALUES_EQUAL(addPartsResponse->Results[0].Results[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+            auto produceResponse = kafkaClient.Produce({outputTopicName, 0}, {record}, seq, producerInstanceId, transactionalId);
+            UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+            auto addOffsetsResponse = kafkaClient.AddOffsetsToTxn(transactionalId, producerInstanceId, consumerName);
+            UNIT_ASSERT_VALUES_EQUAL(addOffsetsResponse->ErrorCode, EKafkaErrors::NONE_ERROR);
+
+            std::unordered_map<TString, std::vector<std::pair<ui32, ui64>>> offsetsToCommit;
+            offsetsToCommit[inputTopicName] = std::vector<std::pair<ui32, ui64>>{{0, static_cast<ui64>(offsetToCommit)}};
+            auto txnOffsetCommitResponse = kafkaClient.TxnOffsetCommit(
+                transactionalId, producerInstanceId, consumerName, consumerInfo.GenerationId, offsetsToCommit);
+            UNIT_ASSERT_VALUES_EQUAL(txnOffsetCommitResponse->Topics[0].Partitions[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+            if (!retryEndTxn) {
+                auto endTxnResponse = kafkaClient.EndTxn(transactionalId, producerInstanceId, true);
+                UNIT_ASSERT_VALUES_EQUAL(endTxnResponse->ErrorCode, EKafkaErrors::NONE_ERROR);
+                return;
+            }
+
+            auto endTxnResponse = kafkaClient.EndTxn(transactionalId, producerInstanceId, true);
+            if (IsRetryableTxnCoordinatorError(endTxnResponse->ErrorCode)) {
+                UNIT_ASSERT_VALUES_EQUAL(FetchRecordCount(kafkaClient, outputTopicName, 0), seq);
+                UNIT_ASSERT_VALUES_EQUAL(FetchCommittedOffset(kafkaClient, consumerName, inputTopicName, 0), seq);
+                auto retried = EndTxnWithConcurrentRetry(kafkaClient, transactionalId, producerInstanceId, true);
+                UNIT_ASSERT_VALUES_EQUAL(retried->ErrorCode, EKafkaErrors::NONE_ERROR);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(endTxnResponse->ErrorCode, EKafkaErrors::NONE_ERROR);
+            }
+        };
+
+        runTxn(0, {"0", "first"}, 1, false);
+        UNIT_ASSERT_VALUES_EQUAL(FetchRecordCount(kafkaClient, outputTopicName, 0), 1);
+        UNIT_ASSERT_VALUES_EQUAL(FetchCommittedOffset(kafkaClient, consumerName, inputTopicName, 0), 1);
+
+        runTxn(1, {"1", "second"}, 2, true);
+        UNIT_ASSERT_VALUES_EQUAL(FetchRecordCount(kafkaClient, outputTopicName, 0), 2);
+        UNIT_ASSERT_VALUES_EQUAL(FetchCommittedOffset(kafkaClient, consumerName, inputTopicName, 0), 2);
+    }
+
+    Y_UNIT_TEST(Kafka34_EndTxnIdempotentAfterSuccessfulCommit) {
+        TInsecureTestServer testServer("1", false, true);
+        TKafkaTestClient kafkaClient(testServer.Port);
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        TString outputTopicName = TStringBuilder() << "output-topic-" << RandomNumber<ui64>();
+        TString transactionalId = TStringBuilder() << "my-tx-producer-" << RandomNumber<ui64>();
+        TString consumerName = "my-consumer";
+
+        CreateTopic(pqClient, outputTopicName, 1, {consumerName});
+
+        auto initProducerIdResp = kafkaClient.InitProducerId(transactionalId, 30000);
+        UNIT_ASSERT_VALUES_EQUAL(initProducerIdResp->ErrorCode, EKafkaErrors::NONE_ERROR);
+        TProducerInstanceId producerInstanceId = {initProducerIdResp->ProducerId, initProducerIdResp->ProducerEpoch};
+
+        std::unordered_map<TString, std::vector<ui32>> topicPartitionsToAddToTxn;
+        topicPartitionsToAddToTxn[outputTopicName] = std::vector<ui32>{0};
+        auto addPartsResponse = kafkaClient.AddPartitionsToTxn(transactionalId, producerInstanceId, topicPartitionsToAddToTxn);
+        UNIT_ASSERT_VALUES_EQUAL(addPartsResponse->Results[0].Results[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto produceResponse = kafkaClient.Produce({outputTopicName, 0}, {{"0", "once"}}, 0, producerInstanceId, transactionalId);
+        UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto endTxnResponse = kafkaClient.EndTxn(transactionalId, producerInstanceId, true);
+        UNIT_ASSERT_VALUES_EQUAL(endTxnResponse->ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto endTxnRetry = kafkaClient.EndTxn(transactionalId, producerInstanceId, true);
+        UNIT_ASSERT_VALUES_EQUAL(endTxnRetry->ErrorCode, EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(FetchRecordCount(kafkaClient, outputTopicName, 0), 1);
+    }
+
+    Y_UNIT_TEST(Kafka34_SequenceNumbersContinueAcrossTransactions) {
+        TInsecureTestServer testServer("1", false, true);
+        TKafkaTestClient kafkaClient(testServer.Port);
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        TString outputTopicName = TStringBuilder() << "output-topic-" << RandomNumber<ui64>();
+        TString transactionalId = TStringBuilder() << "my-tx-producer-" << RandomNumber<ui64>();
+        TString consumerName = "my-consumer";
+
+        CreateTopic(pqClient, outputTopicName, 1, {consumerName});
+
+        auto initProducerIdResp = kafkaClient.InitProducerId(transactionalId, 30000);
+        UNIT_ASSERT_VALUES_EQUAL(initProducerIdResp->ErrorCode, EKafkaErrors::NONE_ERROR);
+        TProducerInstanceId producerInstanceId = {initProducerIdResp->ProducerId, initProducerIdResp->ProducerEpoch};
+
+        std::unordered_map<TString, std::vector<ui32>> topicPartitionsToAddToTxn;
+        topicPartitionsToAddToTxn[outputTopicName] = std::vector<ui32>{0};
+
+        for (ui32 seq = 0; seq < 3; ++seq) {
+            auto addPartsResponse = kafkaClient.AddPartitionsToTxn(transactionalId, producerInstanceId, topicPartitionsToAddToTxn);
+            UNIT_ASSERT_VALUES_EQUAL(addPartsResponse->Results[0].Results[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+            auto produceResponse = kafkaClient.Produce(
+                {outputTopicName, 0},
+                {{std::to_string(seq), "v"}},
+                seq,
+                producerInstanceId,
+                transactionalId);
+            UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+            auto endTxnResponse = EndTxnWithConcurrentRetry(kafkaClient, transactionalId, producerInstanceId, true);
+            UNIT_ASSERT_VALUES_EQUAL(endTxnResponse->ErrorCode, EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(FetchRecordCount(kafkaClient, outputTopicName, 0), seq + 1);
+        }
+    }
+
+    Y_UNIT_TEST(Kafka34_ProduceWithStaleEpochAfterInitProducerId) {
+        TInsecureTestServer testServer("1", false, true);
+        TKafkaTestClient kafkaClient(testServer.Port);
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        TString outputTopicName = TStringBuilder() << "output-topic-" << RandomNumber<ui64>();
+        TString transactionalId = TStringBuilder() << "my-tx-producer-" << RandomNumber<ui64>();
+        TString consumerName = "my-consumer";
+
+        CreateTopic(pqClient, outputTopicName, 1, {consumerName});
+
+        auto initProducerIdResp0 = kafkaClient.InitProducerId(transactionalId, 30000);
+        UNIT_ASSERT_VALUES_EQUAL(initProducerIdResp0->ErrorCode, EKafkaErrors::NONE_ERROR);
+        TProducerInstanceId oldProducer = {initProducerIdResp0->ProducerId, initProducerIdResp0->ProducerEpoch};
+
+        std::unordered_map<TString, std::vector<ui32>> topicPartitionsToAddToTxn;
+        topicPartitionsToAddToTxn[outputTopicName] = std::vector<ui32>{0};
+        auto addPartsResponse = kafkaClient.AddPartitionsToTxn(transactionalId, oldProducer, topicPartitionsToAddToTxn);
+        UNIT_ASSERT_VALUES_EQUAL(addPartsResponse->Results[0].Results[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto initProducerIdResp1 = kafkaClient.InitProducerId(transactionalId, 30000);
+        UNIT_ASSERT_VALUES_EQUAL(initProducerIdResp1->ErrorCode, EKafkaErrors::NONE_ERROR);
+        TProducerInstanceId newProducer = {initProducerIdResp1->ProducerId, initProducerIdResp1->ProducerEpoch};
+        UNIT_ASSERT(newProducer.Epoch != oldProducer.Epoch || newProducer.Id != oldProducer.Id);
+
+        auto addPartsNew = kafkaClient.AddPartitionsToTxn(transactionalId, newProducer, topicPartitionsToAddToTxn);
+        UNIT_ASSERT_VALUES_EQUAL(addPartsNew->Results[0].Results[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+        auto newProduce = kafkaClient.Produce({outputTopicName, 0}, {{"fresh", "yes"}}, 0, newProducer, transactionalId);
+        UNIT_ASSERT_VALUES_EQUAL(newProduce->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto staleProduce = kafkaClient.Produce({outputTopicName, 0}, {{"stale", "no"}}, 0, oldProducer, transactionalId);
+        auto staleError = staleProduce->Responses[0].PartitionResponses[0].ErrorCode;
+        UNIT_ASSERT_C(
+            staleError == EKafkaErrors::PRODUCER_FENCED || staleError == EKafkaErrors::INVALID_PRODUCER_EPOCH,
+            TStringBuilder() << "stale produce must fence, got " << staleError);
+    }
+
+    Y_UNIT_TEST(Kafka34_FetchReadCommittedHidesUncommittedAndAborted) {
+        TInsecureTestServer testServer("1", false, true);
+        TKafkaTestClient kafkaClient(testServer.Port);
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        TString outputTopicName = TStringBuilder() << "output-topic-" << RandomNumber<ui64>();
+        TString transactionalId = TStringBuilder() << "my-tx-producer-" << RandomNumber<ui64>();
+        TString consumerName = "my-consumer";
+        constexpr i8 readCommitted = 1;
+
+        CreateTopic(pqClient, outputTopicName, 1, {consumerName});
+
+        auto initProducerIdResp = kafkaClient.InitProducerId(transactionalId, 30000);
+        UNIT_ASSERT_VALUES_EQUAL(initProducerIdResp->ErrorCode, EKafkaErrors::NONE_ERROR);
+        TProducerInstanceId producerInstanceId = {initProducerIdResp->ProducerId, initProducerIdResp->ProducerEpoch};
+
+        std::unordered_map<TString, std::vector<ui32>> topicPartitionsToAddToTxn;
+        topicPartitionsToAddToTxn[outputTopicName] = std::vector<ui32>{0};
+        auto addPartsResponse = kafkaClient.AddPartitionsToTxn(transactionalId, producerInstanceId, topicPartitionsToAddToTxn);
+        UNIT_ASSERT_VALUES_EQUAL(addPartsResponse->Results[0].Results[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto produceResponse = kafkaClient.Produce({outputTopicName, 0}, {{"open", "txn"}}, 0, producerInstanceId, transactionalId);
+        UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        UNIT_ASSERT_VALUES_EQUAL(FetchRecordCount(kafkaClient, outputTopicName, 0, readCommitted), 0);
+
+        auto commitOpen = kafkaClient.EndTxn(transactionalId, producerInstanceId, true);
+        UNIT_ASSERT_VALUES_EQUAL(commitOpen->ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto fetchCommitted = kafkaClient.Fetch({{outputTopicName, {0}}}, 0, readCommitted);
+        UNIT_ASSERT_VALUES_EQUAL(fetchCommitted->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        auto committedBatch = ReadFetchRecords(fetchCommitted->Responses[0].Partitions[0].Records);
+        UNIT_ASSERT_VALUES_EQUAL(committedBatch.Records.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TString(committedBatch.Records[0].Key.value().data(), committedBatch.Records[0].Key.value().size()),
+            "open");
+
+        auto addPartsAbort = kafkaClient.AddPartitionsToTxn(transactionalId, producerInstanceId, topicPartitionsToAddToTxn);
+        UNIT_ASSERT_VALUES_EQUAL(addPartsAbort->Results[0].Results[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+        auto abortProduce = kafkaClient.Produce({outputTopicName, 0}, {{"aborted", "txn"}}, 1, producerInstanceId, transactionalId);
+        UNIT_ASSERT_VALUES_EQUAL(abortProduce->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(FetchRecordCount(kafkaClient, outputTopicName, 0, readCommitted), 1);
+
+        auto abortResponse = kafkaClient.EndTxn(transactionalId, producerInstanceId, false);
+        UNIT_ASSERT_VALUES_EQUAL(abortResponse->ErrorCode, EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(FetchRecordCount(kafkaClient, outputTopicName, 0, readCommitted), 1);
+    }
+
+    Y_UNIT_TEST(Kafka34_FindCoordinatorForTransactionalId) {
+        TInsecureTestServer testServer("1", false, true);
+        TKafkaTestClient kafkaClient(testServer.Port);
+        TString transactionalId = TStringBuilder() << "my-tx-producer-" << RandomNumber<ui64>();
+
+        auto initProducerIdResp = kafkaClient.InitProducerId(transactionalId, 30000);
+        UNIT_ASSERT_VALUES_EQUAL(initProducerIdResp->ErrorCode, EKafkaErrors::NONE_ERROR);
+
+        auto resp = kafkaClient.FindCoordinator(transactionalId, 1);
+        UNIT_ASSERT_VALUES_EQUAL(resp->ErrorCode, EKafkaErrors::NONE_ERROR);
     }
 
     Y_UNIT_TEST(TransactionShouldCommitIfPartitionIsAddedToTransactionButNoWritesToItWereReceived) {

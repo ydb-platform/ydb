@@ -48,6 +48,8 @@ class Slice:
         self.do_clear_logs = do_clear_logs
         self.yav_version = yav_version
         self.walle_provider = walle_provider
+        self._host_dynamic_slot_counts = getattr(cluster_details, 'host_dynamic_slot_counts', None) or {}
+        self._host_storage_enabled_map = getattr(cluster_details, 'host_storage_enabled', None) or {}
         self.__config_client = config_client.ConfigClient(
             self.nodes.nodes_list[0],
             self.cluster_details.grpc_config.get('port'),
@@ -252,12 +254,10 @@ class Slice:
             self.__create_databases(serverless=True)  # create serverless databases if any
 
     def _host_dynamic_slot_limit(self, node):
-        counts = getattr(self.cluster_details, 'host_dynamic_slot_counts', None) or {}
-        return counts.get(node)
+        return self._host_dynamic_slot_counts.get(node)
 
     def _host_storage_enabled(self, node):
-        flags = getattr(self.cluster_details, 'host_storage_enabled', None) or {}
-        return flags.get(node, True)
+        return self._host_storage_enabled_map.get(node, True)
 
     def _storage_hosts(self):
         return [node for node in self.nodes.nodes_list if self._host_storage_enabled(node)]
@@ -383,7 +383,8 @@ mon={mon}""".format(
 
     def _start_static(self):
         storage_hosts = self._storage_hosts()
-        skip_hosts = [node for node in self.nodes.nodes_list if node not in storage_hosts]
+        storage_host_set = set(storage_hosts)
+        skip_hosts = [node for node in self.nodes.nodes_list if node not in storage_host_set]
         if skip_hosts:
             self.nodes.execute_async("sudo service kikimr stop", check_retcode=False, nodes=skip_hosts)
         if storage_hosts:

@@ -54,6 +54,8 @@ class ClusterDetails(ClusterDetailsProvider):
         self.__details = None
         self.__databases = None
         self.__dynamic_slots = None
+        self.__host_dynamic_slot_counts = None
+        self.__host_storage_enabled = None
         self._cluster_description_file = cluster_description_path
         self._walle_provider = walle_provider
 
@@ -89,12 +91,14 @@ class ClusterDetails(ClusterDetailsProvider):
         If a host does not set ``dynamic_slots``, all domain slots are eligible
         on that host (legacy round-robin behaviour).
         """
-        counts = {}
-        for hostname, host in self._iter_host_yaml():
-            if 'dynamic_slots' not in host:
-                continue
-            counts[hostname] = int(host['dynamic_slots'])
-        return counts
+        if self.__host_dynamic_slot_counts is None:
+            counts = {}
+            for hostname, host in self._iter_host_yaml():
+                if 'dynamic_slots' not in host:
+                    continue
+                counts[hostname] = int(host['dynamic_slots'])
+            self.__host_dynamic_slot_counts = counts
+        return self.__host_dynamic_slot_counts
 
     @property
     def host_storage_enabled(self):
@@ -102,12 +106,14 @@ class ClusterDetails(ClusterDetailsProvider):
 
         Omitted ``storage`` means True (legacy: start kikimr on every listed host).
         """
-        enabled = {}
-        for hostname, host in self._iter_host_yaml():
-            if 'storage' not in host:
-                continue
-            enabled[hostname] = bool(host['storage'])
-        return enabled
+        if self.__host_storage_enabled is None:
+            enabled = {}
+            for hostname, host in self._iter_host_yaml():
+                if 'storage' not in host:
+                    continue
+                enabled[hostname] = bool(host['storage'])
+            self.__host_storage_enabled = enabled
+        return self.__host_storage_enabled
 
     @property
     def hosts_datacenters(self):

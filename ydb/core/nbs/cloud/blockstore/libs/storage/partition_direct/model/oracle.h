@@ -3,6 +3,7 @@
 #include "public.h"
 
 #include "host.h"
+#include "host_health_policy.h"
 #include "host_mask.h"
 #include "host_stat.h"
 #include "host_state.h"
@@ -175,6 +176,7 @@ private:
     TVector<EHostHealth> HostsHealths;
     TVector<TBackoffDelayProvider> HostsReconnectDelays;
     TVector<TTimePredictor> TimePredictors;
+    std::unique_ptr<IHostHealthPolicy> HealthPolicy;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -12,7 +12,6 @@
 #include <ydb/core/sys_view/common/query_metrics_limits.h>
 #include <ydb/core/sys_view/service/query_interval.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
-#include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx.h>
 
@@ -321,9 +320,6 @@ private:
     std::multimap<ui64, TQueryHash> ByCpu;
     std::unordered_set<TNodeId> SummaryNodes;
     TQueryMetricsCoverage QueryMetricsCoverage;
-
-    TTabletCountersBase* TabletCounters = nullptr;
-    TAutoPtr<TTabletCountersBase> TabletCountersPtr;
 
     // IntervalMetrics
     std::unordered_map<TQueryHash, TQueryToMetrics> QueryMetrics;

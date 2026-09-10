@@ -42,8 +42,6 @@ public:
         Runtime.SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_DEBUG);
         Edge = Runtime.AllocateEdgeActor();
         for (ui32 node = 0; node < nodes; ++node) {
-            // The real service uses wall-clock time. Stop its timers before
-            // replacing it with a controllable responder in simulated time.
             const auto serviceId = MakeSysViewServiceID(Runtime.GetNodeId(node));
             Runtime.Send(new IEventHandle(Runtime.GetLocalServiceId(serviceId, node),
                 Edge, new TEvents::TEvPoison), node, /* viaActorSystem */ true);
@@ -62,8 +60,6 @@ public:
         Sync();
     }
 
-    // The configure acknowledgement is emitted from Complete, after the
-    // preceding writes have committed. It also provides a readiness barrier.
     void Sync() {
         auto request = MakeHolder<TEvSysView::TEvConfigureProcessor>();
         request->Record.SetDatabase(Database);
@@ -80,8 +76,6 @@ public:
 
     void NextInterval() {
         IntervalEnd += CollectionInterval;
-        // Execute the scheduled reset, but stop before aggregation of the new
-        // interval. Only simulated time advances; no wall-clock sleeps.
         const auto collectTime = IntervalEnd + TDuration::Seconds(1);
         UNIT_ASSERT_LT(Runtime.GetCurrentTime(), collectTime);
         Runtime.SimulateSleep(collectTime - Runtime.GetCurrentTime());
@@ -179,7 +173,7 @@ void TestStaleFailure(bool disconnect) {
     env.Add(1, 42, 10);
     env.Submit(1);
     const auto oldRequest = env.TakeRequest(1);
-    env.NextInterval(); // The old request times out.
+    env.NextInterval();
 
     env.Add(1, 42, 20);
     env.Submit(1);
@@ -304,7 +298,7 @@ Y_UNIT_TEST_SUITE(TQueryMetricsProcessorTest) {
         env.Submit(0);
         env.Submit(1);
         env.Reply(0, env.TakeRequest(0));
-        env.TakeRequest(1); // Do not respond; finalize the partial result at the deadline.
+        env.TakeRequest(1);
         env.Sync();
         env.NextInterval();
         env.Reboot();

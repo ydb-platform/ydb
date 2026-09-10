@@ -16,11 +16,3 @@ enum ETxTypes {
     TXTYPE_INTERVAL_METRICS = 6 [(TxTypeOpts) = {Name: "TxIntervalMetrics"}];
     TXTYPE_TOP_PARTITIONS = 7   [(TxTypeOpts) = {Name: "TxTopPartitions"}];
 }
-
-enum ESimpleCounters {}
-
-enum EPercentileCounters {
-    COUNTER_PERCENTILE_IGNORE = 0;
-}
-
-enum ECumulativeCounters {}

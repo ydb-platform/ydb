@@ -19,6 +19,7 @@ struct TRequestContext {
     TInstant PartitionQuotaWaitStart;
     TDuration TotalQuotaWaitTime;
     TActorId PartitionActor;
+    TString Consumer;
 
     TRequestContext();
     TRequestContext(THolder<TEvPQ::TEvRequestQuota>&& request, const TActorId& partitionActor);
@@ -103,6 +104,7 @@ protected:
 protected:
     void CheckTotalPartitionQuota(TRequestContext&& context);
     void ApproveQuota(TRequestContext& context);
+    void ApproveQueuedRequestsForConsumer(const TString& consumer);
     TQuotaTracker CreatePartitionTotalQuotaTracker(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const;
 
     inline const TActorId& GetTabletActor() const {return TabletActorId;}

@@ -16,8 +16,17 @@ void TReadQuoter::Bootstrap(const TActorContext& ctx) {
 }
 
 void TReadQuoter::HandleQuotaRequestImpl(TRequestContext& context) {
+    if (!context.Request || !context.Request->Request) {
+        return;
+    }
     auto* readRequest = context.Request->Request->CastAsLocal<TEvPQ::TEvRead>();
-    GetOrCreateConsumerQuota(readRequest->ClientId, ActorContext());
+    if (!readRequest) {
+        return;
+    }
+    context.Consumer = readRequest->ClientId;
+    if (!context.Consumer.empty()) {
+        GetOrCreateConsumerQuota(context.Consumer, ActorContext());
+    }
 }
 
 void TReadQuoter::OnAccountQuotaApproved(TRequestContext&& context) {
@@ -44,11 +53,20 @@ bool TReadQuoter::CanExaust(TInstant now) {
 }
 
 void TReadQuoter::CheckConsumerPerPartitionQuota(TRequestContext&& context) {
-    AFL_ENSURE(context.Request->Request);
-    auto consumerQuota = GetOrCreateConsumerQuota(
-            context.Request->Request->CastAsLocal<TEvPQ::TEvRead>()->ClientId,
-            ActorContext()
-    );
+    if (!context.Request || !context.Request->Request) {
+        return;
+    }
+    TString consumerId = context.Consumer;
+    if (consumerId.empty()) {
+        if (auto* readRequest = context.Request->Request->CastAsLocal<TEvPQ::TEvRead>()) {
+            consumerId = readRequest->ClientId;
+        }
+    }
+    auto consumerQuota = GetConsumerQuotaIfExists(consumerId);
+    if (!consumerQuota) {
+        ApproveQuota(context);
+        return;
+    }
     auto now = ActorContext().Now();
     if (!consumerQuota->PartitionPerConsumerQuotaTracker.CanExaust(now)
             || !consumerQuota->PartitionPerConsumerMessageQuotaTracker.CanExaust(now)
@@ -107,7 +125,17 @@ void TReadQuoter::ProcessPerConsumerQuotaQueue(const TActorContext& ctx) {
 }
 
 void TReadQuoter::HandleConsumerRemoved(TEvPQ::TEvConsumerRemoved::TPtr& ev, const TActorContext&) {
-    auto it = ConsumerQuotas.find(ev->Get()->Consumer);
+    const TString& consumer = ev->Get()->Consumer;
+    auto it = ConsumerQuotas.find(consumer);
+    if (it != ConsumerQuotas.end()) {
+        for (auto& context : it->second.ReadRequests) {
+            ApproveQuota(context);
+        }
+        it->second.ReadRequests.clear();
+    }
+
+    ApproveQueuedRequestsForConsumer(consumer);
+
     if (it != ConsumerQuotas.end()) {
         if (it->second.AccountQuotaTracker) {
             Send(it->second.AccountQuotaTracker->Actor, new TEvents::TEvPoisonPill());

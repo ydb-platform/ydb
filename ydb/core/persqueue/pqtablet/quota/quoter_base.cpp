@@ -136,6 +136,26 @@ void TPartitionQuoterBase::ApproveQuota(TRequestContext& context) {
     Send(context.PartitionActor, MakeQuotaApprovedEvent(context));
 }
 
+void TPartitionQuoterBase::ApproveQueuedRequestsForConsumer(const TString& consumer) {
+    auto takeMatching = [&](std::deque<TRequestContext>& queue, bool inflightAlreadyCounted) {
+        std::deque<TRequestContext> kept;
+        for (auto& context : queue) {
+            if (!consumer.empty() && context.Consumer == consumer) {
+                if (!inflightAlreadyCounted) {
+                    ++RequestsInflight;
+                }
+                ApproveQuota(context);
+            } else {
+                kept.push_back(std::move(context));
+            }
+        }
+        queue = std::move(kept);
+    };
+
+    takeMatching(WaitingInflightRequests, false);
+    takeMatching(WaitingTotalPartitionQuotaRequests, true);
+}
+
 bool TPartitionQuoterBase::CanExaust(TInstant now) {
     return PartitionTotalQuotaTracker->CanExaust(now);
 }

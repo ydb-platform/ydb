@@ -441,6 +441,7 @@ protected:
     void SendAcquireExclusiveLock();
     void SendAcquireReadQuota(ui64 cookie, const TActorId& sender);
     void SendReadQuotaConsumed(ui64 cookie);
+    void SendConsumerRemoved(const TString& consumer);
     void SendReleaseExclusiveLock();
     void WaitExclusiveLockAcquired();
     void WaitReadQuotaAcquired();
@@ -5140,6 +5141,15 @@ void TPQTabletFixture::SendReadQuotaConsumed(ui64 cookie)
                        new TEvPQ::TEvConsumed(1024, 0, cookie, "client"));
 }
 
+void TPQTabletFixture::SendConsumerRemoved(const TString& consumer)
+{
+    EnsureReadQuoterExists();
+
+    Ctx->Runtime->Send(ReadQuoter->Quoter,
+                       Ctx->Edge,
+                       new TEvPQ::TEvConsumerRemoved(consumer));
+}
+
 void TPQTabletFixture::SendReleaseExclusiveLock()
 {
     EnsureReadQuoterExists();
@@ -5204,6 +5214,28 @@ Y_UNIT_TEST_F(ReadQuoter_ExclusiveLock, TPQTabletFixture)
 
     SendReleaseExclusiveLock();
     WaitReadQuotaAcquired();
+}
+
+Y_UNIT_TEST_F(ReadQuoter_ConsumerRemovedReleasesQueuedReads, TPQTabletFixture)
+{
+    EnsureReadQuoterExists();
+    PQTabletPrepare({.partitions = 1}, {}, *Ctx);
+
+    SendAcquireReadQuota(1, Ctx->Edge);
+    WaitReadQuotaAcquired();
+
+    SendAcquireExclusiveLock();
+    ExpectNoExclusiveLockAcquired();
+
+    SendAcquireReadQuota(2, Ctx->Edge);
+    ExpectNoReadQuotaAcquired();
+
+    SendConsumerRemoved("client");
+    WaitReadQuotaAcquired();
+
+    SendReadQuotaConsumed(1);
+    SendReadQuotaConsumed(2);
+    WaitExclusiveLockAcquired();
 }
 
 }

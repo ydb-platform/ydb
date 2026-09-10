@@ -62,13 +62,9 @@ void TBasicAccountQuoter::InitCounters(const TActorContext& ctx) {
 void TBasicAccountQuoter::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
     YDB_LOG_INFO_COMP(Service, "Killed",
         {"logPrefix", NPQ_LOG_PREFIX});
-    for (const auto& event : Queue) {
-        auto cookie = event.Request->Get()->Cookie;
-        ReplyPersQueueError(
-            TabletActorId, ctx, TabletId, TopicConverter->GetClientsideName(), Partition, Counters, NKikimrServices::PQ_RATE_LIMITER,
-            cookie, NPersQueue::NErrorCode::INITIALIZING,
-            TStringBuilder() << "Tablet is restarting, topic " << TopicConverter->GetClientsideName() << " (ReadInfo) cookie " << cookie
-        );
+    while (!Queue.empty()) {
+        ApproveQuota(Queue.front().Request, Queue.front().StartWait, ctx);
+        Queue.pop_front();
     }
     Die(ctx);
 }

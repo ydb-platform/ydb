@@ -1199,7 +1199,11 @@ namespace NKikimr::NDDisk {
         };
         std::map<TPersistentBufferTabletKey, TPersistentBufferRemoval> PersistentBufferRemovals;
         std::set<TPersistentBufferTabletKey> PersistentBufferRegistrations;
-        bool HasPersistentBufferBarrierInflight() const;
+        // In-flight barrier sectors stay occupied even if a newer version is durable.
+        // The flag requests reclamation once this sector's own write has completed.
+        absl::flat_hash_map<TPersistentBufferLocation, bool> PersistentBufferBarrierWrites;
+        void ReleasePersistentBufferBarrierSector(TPersistentBufferSectorInfo sector);
+        void CompletePersistentBufferBarrierWrite(TPersistentBufferDiskOperationInFlight& inflight);
         NKikimrBlobStorage::NDDisk::TReplyStatus::E CheckPersistentBufferOwnership(const TQueryCredentials& creds) const;
         void Handle(TEvRegisterPersistentBuffer::TPtr ev);
         void Handle(TEvUnregisterPersistentBuffer::TPtr ev);

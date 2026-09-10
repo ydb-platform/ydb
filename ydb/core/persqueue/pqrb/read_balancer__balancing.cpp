@@ -15,6 +15,18 @@
 
 namespace NKikimr::NPQ::NBalancing {
 
+namespace {
+
+const char* FamilyStatusName(TPartitionFamily::EStatus status) {
+    switch (status) {
+        case TPartitionFamily::EStatus::Active: return "Active";
+        case TPartitionFamily::EStatus::Releasing: return "Releasing";
+        case TPartitionFamily::EStatus::Free: return "Free";
+    }
+    return "Unknown";
+}
+
+}
 
 struct LowLoadSessionComparator {
     bool operator()(const TSession* lhs, const TSession* rhs) const;
@@ -162,14 +174,21 @@ ui32 TPartitionFamily::NextStep() {
     return Consumer.NextStep();
 }
 
-TString TPartitionFamily::LogPrefix() const {
-    TStringBuilder sb;
-    sb << Consumer.LogPrefix() << "family " << Id << " status " << Status
-        << " partitions [" << JoinRange(", ", Partitions.begin(), Partitions.end()) << "] ";
+NActors::NStructuredLog::TStructuredMessage TPartitionFamily::LogPrefix() const {
     if (Session) {
-        sb << "session \"" << Session->SessionName << "\" sender " << Session->Sender << " ";
+        return YDB_LOG_CREATE_MESSAGE(
+            Consumer.LogPrefix(),
+            {"familyId", Id},
+            {"status", FamilyStatusName(Status)},
+            {"partitions", Partitions},
+            {"session", Session->SessionName},
+            {"sender", Session->Sender});
     }
-    return sb;
+    return YDB_LOG_CREATE_MESSAGE(
+        Consumer.LogPrefix(),
+        {"familyId", Id},
+            {"status", FamilyStatusName(Status)},
+        {"partitions", Partitions});
 }
 
 
@@ -178,20 +197,20 @@ void TPartitionFamily::Release(const TActorContext& ctx, ETargetStatus targetSta
     Y_DEBUG_ABORT_UNLESS(Session, "Releasing a family without a session, family %lu", Id);
     if (Status != EStatus::Active) {
         YDB_LOG_CRIT("Releasing the family that isn't active",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"debugStr", DebugStr()});
         return;
     }
 
     if (!Session) {
         YDB_LOG_CRIT("Releasing the family that does not have a session",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"debugStr", DebugStr()});
         return;
     }
 
     YDB_LOG_INFO("Release partitions. Target status",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"lockedPartitions", JoinRange(", ", LockedPartitions.begin(), LockedPartitions.end())},
         {"targetStatus", targetStatus});
 
@@ -213,14 +232,14 @@ void TPartitionFamily::Release(const TActorContext& ctx, ETargetStatus targetSta
 bool TPartitionFamily::Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx) {
     if (!Session || Session->Pipe != sender) {
         YDB_LOG_DEBUG("Try unlock the partition from other sender",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"partitionId", partitionId});
         return false;
     }
 
     if (Status != EStatus::Releasing) {
         YDB_LOG_CRIT("Try unlock partition but family status is",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"partitionId", partitionId},
             {"status", Status});
         return false;
@@ -228,7 +247,7 @@ bool TPartitionFamily::Unlock(const TActorId& sender, ui32 partitionId, const TA
 
     if (!LockedPartitions.erase(partitionId)) {
         YDB_LOG_CRIT("Try unlock partition but partition isn't locked. Locked partitions are",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"partitionId", partitionId},
             {"lockedPartitions", JoinRange(", ", LockedPartitions.begin(), LockedPartitions.end())});
         return false;
@@ -238,7 +257,7 @@ bool TPartitionFamily::Unlock(const TActorId& sender, ui32 partitionId, const TA
 
     if (!LockedPartitions.empty()) {
         YDB_LOG_DEBUG("Partition was unlocked, but wait",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"partitionId", partitionId},
             {"lockedPartitions", JoinRange(", ", LockedPartitions.begin(), LockedPartitions.end())});
         return false;
@@ -270,7 +289,7 @@ bool TPartitionFamily::Reset(ETargetStatus targetStatus, const TActorContext& ct
 
         case ETargetStatus::Free:
             YDB_LOG_TRACE("Is free",
-                {"logPrefix", LogPrefix()});
+                {LogPrefix()});
 
             Status = EStatus::Free;
             AfterRelease();
@@ -285,7 +304,7 @@ bool TPartitionFamily::Reset(ETargetStatus targetStatus, const TActorContext& ct
             auto it = Consumer.Families.find(MergeTo);
             if (it == Consumer.Families.end()) {
                 YDB_LOG_DEBUG("Has been released for merge but target family is not exists",
-                    {"logPrefix", LogPrefix()});
+                    {LogPrefix()});
                 return true;
             }
             auto* targetFamily = it->second.get();
@@ -303,7 +322,7 @@ bool TPartitionFamily::Reset(ETargetStatus targetStatus, const TActorContext& ct
 
 void TPartitionFamily::Destroy(const TActorContext&) {
     YDB_LOG_DEBUG("Destroyed",
-        {"logPrefix", LogPrefix()});
+        {LogPrefix()});
 
     if (Session) {
         Session->Families.erase(Id);
@@ -347,13 +366,13 @@ void TPartitionFamily::StartReading(TSession& session, const TActorContext& ctx)
         "StartReading session is not registered, family %lu", Id);
     if (Status != EStatus::Free) {
         YDB_LOG_CRIT("Try start reading but the family status is",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"status", Status});
         return;
     }
 
     YDB_LOG_TRACE("Start reading",
-        {"logPrefix", LogPrefix()});
+        {LogPrefix()});
 
     Y_DEBUG_ABORT_UNLESS(IsCommon() || IsLonely(),
         "StartReading special-session family %zu has %zu partitions", Id, Partitions.size());
@@ -363,7 +382,7 @@ void TPartitionFamily::StartReading(TSession& session, const TActorContext& ctx)
         for (auto partitionId : Partitions) {
             if (!IsReadable(partitionId)) {
                 YDB_LOG_DEBUG("Skip start reading because the family has an unreadable partition",
-                    {"logPrefix", LogPrefix()},
+                    {LogPrefix()},
                     {"partitionId", partitionId});
                 return;
             }
@@ -392,7 +411,7 @@ void TPartitionFamily::StartReading(TSession& session, const TActorContext& ctx)
 
 void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, const TActorContext& ctx) {
     YDB_LOG_DEBUG("Attaching partitions",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"partitions", JoinRange(", ", partitions.begin(), partitions.end())});
 
     absl::flat_hash_set<ui32> existedPartitions;
@@ -422,7 +441,7 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
             "Attaching partitions to an active family without a session, family %zu", Id);
         if (!Session) {
             YDB_LOG_CRIT("Attaching partitions to an active family without a session",
-                {"logPrefix", LogPrefix()});
+                {LogPrefix()});
             return;
         }
         if (!Session->AllPartitionsReadable(newPartitions)) {
@@ -471,7 +490,7 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
 
 void TPartitionFamily::ActivatePartition(ui32 partitionId) {
     YDB_LOG_DEBUG("Activating partition",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"partitionId", partitionId});
 
     ChangePartitionCounters(1, -1);
@@ -479,7 +498,7 @@ void TPartitionFamily::ActivatePartition(ui32 partitionId) {
 
 void TPartitionFamily::InactivatePartition(ui32 partitionId) {
     YDB_LOG_DEBUG("Inactivating partition",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"partitionId", partitionId});
 
     ChangePartitionCounters(-1, 1);
@@ -502,7 +521,7 @@ void TPartitionFamily::ChangePartitionCounters(ssize_t active, ssize_t inactive)
 
 void TPartitionFamily::Merge(TPartitionFamily* other) {
     YDB_LOG_DEBUG("Merge family with",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"debug", other->DebugStr()});
 
     Y_DEBUG_ABORT_UNLESS(!HasSpecialSession(),
@@ -744,7 +763,7 @@ void TPartitionFamily::LockPartition(ui32 partitionId, const TActorContext& ctx)
         "Lock unreadable partition %u, family %lu", partitionId, Id);
     if (!Session) {
         YDB_LOG_CRIT("Lock partition without a session",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"partitionId", partitionId});
         return;
     }
@@ -752,7 +771,7 @@ void TPartitionFamily::LockPartition(ui32 partitionId, const TActorContext& ctx)
     auto step = NextStep();
 
     YDB_LOG_INFO("Lock partition for generation step",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"partitionId", partitionId},
         {"debug", Session->DebugStr()},
         {"tabletGeneration", TabletGeneration()},
@@ -847,7 +866,7 @@ void TConsumer::RegisterPartition(ui32 partitionId, const TActorContext& ctx) {
     auto [_, inserted] = Partitions.try_emplace(partitionId, TPartition());
     if (inserted && IsReadable(partitionId)) {
         YDB_LOG_DEBUG("Register readable partition",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"partitionId", partitionId});
 
         CreateFamily({partitionId}, ctx);
@@ -881,7 +900,7 @@ TPartitionFamily* TConsumer::CreateFamily(std::vector<ui32>&& partitions, TParti
     }
 
     YDB_LOG_DEBUG("Family created",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"family", family->DebugStr()});
 
     return family;
@@ -927,7 +946,7 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
 
     if (!family->IsLonely()) {
         YDB_LOG_DEBUG("Break up",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"family", family->DebugStr()},
             {"partition", partitionId});
 
@@ -1015,7 +1034,7 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
             }
         } else {
             YDB_LOG_DEBUG("Can't break up because is not root of family",
-                {"logPrefix", LogPrefix()},
+                {LogPrefix()},
                 {"family", family->DebugStr()},
                 {"partition", partitionId});
         }
@@ -1154,7 +1173,7 @@ TPartitionFamily* TConsumer::FindFamily(ui32 partitionId) {
 
 void TConsumer::RegisterReadingSession(TSession* session, const TActorContext& ctx) {
     YDB_LOG_INFO("Register reading session",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"debug", session->DebugStr()});
 
     Sessions[session->Pipe] = session;
@@ -1219,7 +1238,7 @@ void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext&
             }
             if (partition->StopReading()) {
                 YDB_LOG_DEBUG("Finish was reset because the reading session disconnected",
-                    {"logPrefix", LogPrefix()},
+                    {LogPrefix()},
                     {"partitionId", partitionId},
                     {"session", session->SessionName});
                 parentsToReleaseChildren.push_back(partitionId);
@@ -1273,7 +1292,7 @@ bool TConsumer::Unlock(const TActorId& sender, ui32 partitionId, const TActorCon
     auto* family = FindFamily(partitionId);
     if (!family) {
         YDB_LOG_CRIT("Unlocking the partition from unknown family",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"partitionId", partitionId});
         return false;
     }
@@ -1316,8 +1335,10 @@ bool TConsumer::ScalingSupport() const {
     return Balancer.ScalingSupport();
 }
 
-TString TConsumer::LogPrefix() const {
-    return TStringBuilder() << Balancer.LogPrefix() << "consumer " << ConsumerName << " ";
+NActors::NStructuredLog::TStructuredMessage TConsumer::LogPrefix() const {
+    return YDB_LOG_CREATE_MESSAGE(
+        Balancer.LogPrefix(),
+        {"consumer", ConsumerName});
 }
 
 bool TConsumer::SetCommittedState(ui32 partitionId, ui32 generation, ui64 cookie) {
@@ -1359,7 +1380,7 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
 
     if (partition.NeedReleaseChildren()) {
         YDB_LOG_DEBUG("Attache partitions",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"newPartitions", JoinRange(", ", newPartitions.begin(), newPartitions.end())},
             {"family", family->DebugStr()});
         for (auto id : newPartitions) {
@@ -1415,7 +1436,7 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
                 }
             } else {
                 YDB_LOG_DEBUG("Can't attache partition",
-                    {"logPrefix", LogPrefix()},
+                    {LogPrefix()},
                     {"id", id},
                     {"family", family->DebugStr()});
                 TPartitionFamily* commonParent = nullptr;
@@ -1462,7 +1483,7 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
 void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
     if (!GetPartitionInfo(partitionId)) {
         YDB_LOG_NOTICE("Reading of the partition was started by but partition has been deleted",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"partitionId", partitionId},
             {"consumerName", ConsumerName});
         return;
@@ -1471,7 +1492,7 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
     auto* partition = GetPartition(partitionId);
     if (!partition) {
         YDB_LOG_NOTICE("Reading of the partition was started by but partition does not exist",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"partitionId", partitionId},
             {"consumerName", ConsumerName});
         return;
@@ -1480,7 +1501,7 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
     auto wasInactive = partition->IsInactive();
     if (partition->StartReading()) {
         YDB_LOG_DEBUG("Reading of the partition was started by We stop reading from child partitions",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"partitionId", partitionId},
             {"consumerName", ConsumerName});
 
@@ -1528,7 +1549,7 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
 
     if (!IsReadable(partitionId)) {
         YDB_LOG_DEBUG("Reading of the partition was finished by but the partition isn't readable",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"partitionId", partitionId},
             {"consumerName", ConsumerName});
         return;
@@ -1537,7 +1558,7 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
     auto* family = FindFamily(partitionId);
     if (!family) {
         YDB_LOG_DEBUG("Reading of the partition was finished by but the partition hasn't family",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"partitionId", partitionId},
             {"consumerName", ConsumerName});
         return;
@@ -1545,7 +1566,7 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
 
     if (!family->Session) {
         YDB_LOG_DEBUG("Reading of the partition was finished by but the partition hasn't reading session",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"partitionId", partitionId},
             {"consumerName", ConsumerName});
         return;
@@ -1559,7 +1580,7 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
     const bool wasInactive = partition.IsInactive();
     if (partition.SetFinishedState(r.GetScaleAwareSDK(), r.GetStartedReadingFromEndOffset()) || wasInactive) {
         YDB_LOG_DEBUG("Reading of the partition was finished by",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"partitionId", partitionId},
             {"consumer", r.GetConsumer()},
             {"firstMessage", r.GetStartedReadingFromEndOffset()},
@@ -1572,7 +1593,7 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
         auto delay = std::min<size_t>(1ul << partition.Iteration, Balancer.GetLifetimeSeconds()); // TODO use split/merge time
 
         YDB_LOG_DEBUG("Reading of the partition was finished by Scheduled release of the partition for re-reading. seconds",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"partitionId", partitionId},
             {"consumer", r.GetConsumer()},
             {"delay", delay},
@@ -1586,14 +1607,14 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
 void TConsumer::ScheduleBalance(const TActorContext& ctx) {
     if (BalanceScheduled) {
         YDB_LOG_TRACE("Rebalancing already was scheduled",
-            {"logPrefix", LogPrefix()});
+            {LogPrefix()});
         return;
     }
 
     BalanceScheduled = true;
 
     YDB_LOG_DEBUG("Rebalancing was scheduled",
-        {"logPrefix", LogPrefix()});
+        {LogPrefix()});
 
     ctx.Send(Balancer.TopicActor.SelfId(), new TEvPQ::TEvBalanceConsumer(ConsumerName));
 }
@@ -1650,7 +1671,7 @@ size_t GetStatistics(const TFamilies& values, TPredicate predicate) {
 
 void TConsumer::Balance(const TActorContext& ctx) {
     YDB_LOG_DEBUG("Balancing",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"sessions", Sessions.size()},
         {"families", Families.size()},
         {"unreadableFamilies", UnreadableFamilies.size()},
@@ -1675,7 +1696,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
         }
         if (!family->Session || !family->SpecialSessions.contains(family->Session->Pipe)) {
             YDB_LOG_DEBUG("Rebalance because exists the special session for it",
-                {"logPrefix", LogPrefix()},
+                {LogPrefix()},
                 {"family", family->DebugStr()});
             family->Release(ctx);
         }
@@ -1694,7 +1715,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
             const bool hasUnreadable = AnyOf(family->Partitions, [&](ui32 id) { return !IsReadable(id); });
             if (hasUnreadable && (family->IsCommon() || !family->IsLonely())) {
                 YDB_LOG_DEBUG("Skip balancing because the family has an unreadable partition",
-                    {"logPrefix", LogPrefix()},
+                    {LogPrefix()},
                     {"family", family->DebugStr()});
                 continue;
             }
@@ -1709,7 +1730,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
 
             if (sit == sessions.end()) {
                 YDB_LOG_DEBUG("Balancing of the failed because there are no suitable reading sessions",
-                    {"logPrefix", LogPrefix()},
+                    {LogPrefix()},
                     {"family", family->DebugStr()});
 
                 continue;
@@ -1721,7 +1742,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
             sessions.erase(sit);
 
             YDB_LOG_DEBUG("Balancing",
-                {"logPrefix", LogPrefix()},
+                {LogPrefix()},
                 {"family", family->DebugStr()},
                 {"debug", session->DebugStr()});
             family->StartReading(*session, ctx);
@@ -1745,7 +1766,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
         auto allowPlusOne = familyCount % commonSessions.size();
 
         YDB_LOG_DEBUG("Start rebalancing",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"familyCount", familyCount},
             {"sessionCount", commonSessions.size()},
             {"desiredFamilyCount", desiredFamilyCount},
@@ -1787,7 +1808,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
 
             if (!family->IsActive() || !family->Session) {
                 YDB_LOG_DEBUG("Skip balancing because it is not active",
-                    {"logPrefix", LogPrefix()},
+                    {LogPrefix()},
                     {"family", family->DebugStr()});
 
                 FamiliesRequireBalancing.erase(family->Id);
@@ -1802,7 +1823,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
 
             if (family->Session->ActiveFamilyCount == 1) {
                 YDB_LOG_DEBUG("Skip balancing because it is considered a session that does not read anything else",
-                    {"logPrefix", LogPrefix()},
+                    {LogPrefix()},
                     {"family", family->DebugStr()});
 
                 FamiliesRequireBalancing.erase(family->Id);
@@ -1811,7 +1832,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
 
             if (family->SpecialSessions.size() <= 1) {
                 YDB_LOG_DEBUG("Skip balancing because there are no other suitable reading sessions",
-                    {"logPrefix", LogPrefix()},
+                    {LogPrefix()},
                     {"family", family->DebugStr()});
 
                 FamiliesRequireBalancing.erase(family->Id);
@@ -1835,7 +1856,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
                 FamiliesRequireBalancing.erase(family->Id);
             } else {
                 YDB_LOG_DEBUG("Skip balancing because it is already being read by the best session",
-                    {"logPrefix", LogPrefix()},
+                    {LogPrefix()},
                     {"family", family->DebugStr()});
             }
         }
@@ -1843,7 +1864,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
 
     auto duration = TAppData::TimeProvider->Now() - startTime;
     YDB_LOG_DEBUG("Balancing",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"duration", duration});
 }
 
@@ -1961,7 +1982,7 @@ const absl::flat_hash_map<TActorId, std::unique_ptr<TSession>, THash<TActorId>>&
 
 void TBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions, const std::vector<ui32>& deletedPartitions, const TActorContext& ctx) {
     YDB_LOG_DEBUG("Updating configuration. Deleted partitions Added partitions",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"deletedPartitions", JoinRange(", ", deletedPartitions.begin(), deletedPartitions.end())},
         {"addedPartitions", JoinRange(", ", addedPartitions.begin(), addedPartitions.end())});
 
@@ -1990,7 +2011,7 @@ bool TBalancer::SetCommittedState(const TString& consumerName, ui32 partitionId,
 
     if (!consumer->IsReadable(partitionId)) {
         YDB_LOG_DEBUG("The offset of the partition was commited by but the partition isn't readable",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"partitionId", partitionId},
             {"consumerName", consumerName});
         return false;
@@ -1999,7 +2020,7 @@ bool TBalancer::SetCommittedState(const TString& consumerName, ui32 partitionId,
     auto wasInactive = consumer->IsInactive(partitionId);
     if (consumer->SetCommittedState(partitionId, generation, cookie)) {
         YDB_LOG_DEBUG("The offset of the partition was commited by",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"partitionId", partitionId},
             {"consumerName", consumerName});
 
@@ -2026,7 +2047,7 @@ void TBalancer::Handle(TEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev
 
     if (pipeClient && !Sessions.contains(pipeClient)) {
         YDB_LOG_DEBUG("Received TEvReadingPartitionStartedRequest from unknown pipe",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"pipeClient", pipeClient});
         return;
     }
@@ -2034,7 +2055,7 @@ void TBalancer::Handle(TEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev
     auto consumer = GetConsumer(r.GetConsumer());
     if (!consumer) {
         YDB_LOG_DEBUG("Received TEvReadingPartitionStartedRequest from unknown consumer",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"consumer", r.GetConsumer()});
         return;
     }
@@ -2048,7 +2069,7 @@ void TBalancer::Handle(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& e
 
     if (pipeClient && !Sessions.contains(pipeClient)) {
         YDB_LOG_DEBUG("Received TEvReadingPartitionFinishedRequest from unknown pipe",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"pipeClient", pipeClient});
         return;
     }
@@ -2056,7 +2077,7 @@ void TBalancer::Handle(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& e
     auto consumer = GetConsumer(r.GetConsumer());
     if (!consumer) {
         YDB_LOG_DEBUG("Received TEvReadingPartitionFinishedRequest from unknown consumer",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"consumer", r.GetConsumer()});
         return;
     }
@@ -2073,7 +2094,7 @@ void TBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActo
     auto* partitionInfo = GetPartitionInfo(partitionId);
     if (!partitionInfo) {
         YDB_LOG_CRIT("Client pipe got deleted partition",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"clientId", r.GetClientId()},
             {"sender", sender},
             {"r", r});
@@ -2081,7 +2102,7 @@ void TBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActo
     }
 
     YDB_LOG_INFO("Client released partition from pipe session partition",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"clientId", r.GetClientId()},
         {"sender", sender},
         {"session", r.GetSession()},
@@ -2090,7 +2111,7 @@ void TBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActo
     auto* consumer = GetConsumer(consumerName);
     if (!consumer) {
         YDB_LOG_CRIT("Client pipe is not connected and got release partitions request for session",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"clientId", r.GetClientId()},
             {"sender", sender},
             {"session", r.GetSession()});
@@ -2116,14 +2137,14 @@ void TBalancer::Handle(TEvPQ::TEvWakeupReleasePartition::TPtr &ev, const TActorC
 
     if (partition->Commited) {
         YDB_LOG_DEBUG("Skip releasing partition of consumer by reading finished timeout because offset is commited",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"partitionId", msg->PartitionId},
             {"consumer", msg->Consumer});
         return;
     }
 
     YDB_LOG_INFO("Releasing partition of consumer by reading finished timeout",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"partitionId", msg->PartitionId},
         {"consumer", msg->Consumer});
 
@@ -2142,14 +2163,14 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActor
     ++session->ServerActors;
 
     YDB_LOG_INFO("Pipe connected; active server",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"sender", sender},
         {"actors", session->ServerActors});
 }
 
 void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_DEBUG("Pipe disconnected",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"clientId", ev->Get()->ClientId});
     Subscriptions.erase(ev->Get()->ClientId);
 
@@ -2157,13 +2178,13 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TAc
 
     if (it == Sessions.end()) {
         YDB_LOG_DEBUG("Pipe disconnected but there aren't sessions exists",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"clientId", ev->Get()->ClientId});
         return;
     }
 
     YDB_LOG_INFO("Pipe disconnected; active server",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"clientId", ev->Get()->ClientId},
         {"actors", (it != Sessions.end() ? it->second->ServerActors : -1)});
 
@@ -2174,7 +2195,7 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TAc
 
     if (!session->SessionName.empty()) {
         YDB_LOG_NOTICE("Pipe client disconnected session",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"eventClientId", ev->Get()->ClientId},
             {"sessionClientId", session->ClientId},
             {"sessionName", session->SessionName});
@@ -2194,7 +2215,7 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TAc
         Sessions.erase(it);
     } else {
         YDB_LOG_INFO("Pipe disconnected no session",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"clientId", ev->Get()->ClientId});
 
         Sessions.erase(it);
@@ -2207,33 +2228,33 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
 
     TActorId pipe = ActorIdFromProto(r.GetPipeClient());
     YDB_LOG_NOTICE("Consumer register session for pipe session",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"consumerName", consumerName},
         {"pipe", pipe},
         {"session", r.GetSession()});
 
     if (consumerName.empty()) {
         YDB_LOG_CRIT("Ignored the session registration with empty consumer name",
-            {"logPrefix", LogPrefix()});
+            {LogPrefix()});
         return;
     }
 
     if (r.GetSession().empty()) {
         YDB_LOG_CRIT("Ignored the session registration with empty session name",
-            {"logPrefix", LogPrefix()});
+            {LogPrefix()});
         return;
     }
 
     if (!pipe) {
         YDB_LOG_CRIT("Ignored the session registration with empty Pipe",
-            {"logPrefix", LogPrefix()});
+            {LogPrefix()});
         return;
     }
 
     auto jt = Sessions.find(pipe);
     if (jt == Sessions.end()) {
         YDB_LOG_CRIT("Client pipe is not connected and got register session request for session",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"consumerName", consumerName},
             {"pipe", pipe},
             {"session", r.GetSession()});
@@ -2352,7 +2373,7 @@ void TBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorCo
 
 void TBalancer::ProcessPendingStats(const TActorContext& ctx) {
     YDB_LOG_DEBUG("ProcessPendingStats. PendingUpdates size",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"pendingUpdatesSize", PendingUpdates.size()});
 
     GetPartitionGraph().Travers([&](ui32 id) {
@@ -2370,7 +2391,7 @@ void TBalancer::ProcessPendingStats(const TActorContext& ctx) {
 void TBalancer::Handle(TEvPersQueue::TEvBalancingSubscribe::TPtr& ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
     YDB_LOG_DEBUG("Handle TEvPersQueue::TEvBalancingSubscribe",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"ev", record.ShortDebugString()});
 
     auto sender = ActorIdFromProto(record.GetSourceActor());
@@ -2384,7 +2405,7 @@ void TBalancer::Handle(TEvPersQueue::TEvBalancingSubscribe::TPtr& ev, const TAct
 void TBalancer::Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr& ev, const TActorContext&) {
     auto& record = ev->Get()->Record;
     YDB_LOG_DEBUG("Handle TEvPersQueue::TEvBalancingUnsubscribe",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"ev", record.ShortDebugString()});
 
     auto sender = ActorIdFromProto(record.GetSourceActor());
@@ -2424,8 +2445,10 @@ void TBalancer::Notify(const TActorId subscriber, const TString& consumer, NKiki
     ctx.Send(subscriber, new TEvPersQueue::TEvBalancingSubscribeNotify(TabletGeneration(), ++NotifyCookie, TopicPath(), consumer, status));
 }
 
-TString TBalancer::LogPrefix() const {
-    return TStringBuilder() << "[" << TopicActor.TabletID() << "][" << Topic() << "] ";
+NActors::NStructuredLog::TStructuredMessage TBalancer::LogPrefix() const {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"tabletId", TopicActor.TabletID()},
+        {"topic", Topic()});
 }
 
 ui32 TBalancer::NextStep() {

@@ -40,13 +40,15 @@ namespace NKikimr::NHttpProxy {
 
         void Bootstrap(const TActorContext& ctx) {
             YDB_LOG_INFO_CTX(ctx, "Discovery actor created",
-                {"logPrefix", LogPrefix()});
+                {LogPrefix()});
 
             TBase::Become(&TDiscoveryActor::StateWork);
         }
 
-        TStringBuilder LogPrefix() const {
-            return TStringBuilder() << "database: " << Settings.Database << " endpoint: " << Settings.DiscoveryEndpoint;
+        NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
+            return YDB_LOG_CREATE_MESSAGE(
+                {"database", Settings.Database},
+                {"endpoint", Settings.DiscoveryEndpoint});
         }
         ~TDiscoveryActor() {
             GrpcClient.Stop(true);
@@ -111,7 +113,7 @@ namespace NKikimr::NHttpProxy {
         Ydb::Discovery::ListEndpointsRequest request;
         request.set_database(Settings.Database);
         YDB_LOG_INFO_CTX(ctx, "List endpoints request",
-            {"logPrefix", LogPrefix()});
+            {LogPrefix()});
 
         NYdbGrpc::TResponseCallback<Ydb::Discovery::ListEndpointsResponse> responseCb =
                 [actorSystem = ctx.ActorSystem(), actorId = ctx.SelfID](NYdbGrpc::TGrpcStatus&& status, Ydb::Discovery::ListEndpointsResponse&& response) -> void {

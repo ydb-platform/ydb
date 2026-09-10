@@ -7,6 +7,7 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/containers/absl/flat_hash_set.h>
 
@@ -19,7 +20,8 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_SCHEMA
 
-#define LOG_PREFIX NActors::TlsActivationContext->AsActorContext().SelfID
+#define LOG_PREFIX YDB_LOG_CREATE_MESSAGE( \
+    {"selfId", NActors::TlsActivationContext->AsActorContext().SelfID})
 
 namespace NKikimr::NPQ::NSchema {
 
@@ -86,7 +88,7 @@ public:
         }
 
         YDB_LOG_DEBUG("Check DLQ topics",
-            {"logPrefix", LOG_PREFIX},
+            {LOG_PREFIX},
             {"database", DatabasePath},
             {"paths", JoinRange(", ", DlqPaths.begin(), DlqPaths.end())});
 
@@ -117,7 +119,7 @@ public:
             const auto& info = ev->Get()->Topics.at(path);
             if (auto error = MapStatus(path, info); error) {
                 YDB_LOG_DEBUG("DLQ check failed",
-                    {"logPrefix", LOG_PREFIX},
+                    {LOG_PREFIX},
                     {"path", path},
                     {"status", error->first},
                     {"errorMessage", error->second});

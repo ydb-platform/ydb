@@ -6,6 +6,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/generic/string.h>
 
@@ -53,6 +54,7 @@ private:
     }
     void SendProposeRequest(const NActors::TActorContext &ctx);
     void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const NActors::TActorContext &ctx);
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const;
     bool IsOurPipe(const TActorId& clientId) const;
     void ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, const TActorContext& ctx);
 

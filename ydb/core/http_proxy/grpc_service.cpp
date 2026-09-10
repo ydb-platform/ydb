@@ -6,6 +6,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/grpc/server/grpc_method_setup.h>
 
@@ -23,8 +24,10 @@ public:
     using TBase = NActors::TActorBootstrapped<TGRpcRequestActor>;
 
 
-    TStringBuilder LogPrefix() const {
-        return TStringBuilder() << "[GrpcProxy] ListEndpointRequest requestId : " << RequestId;
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TGRpcRequestActor"},
+            {"requestId", RequestId});
         // << ReqCtx->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER)
         //                << " trace: " << ReqCtx->GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER) << " ";
     }
@@ -37,7 +40,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         YDB_LOG_INFO_CTX(ctx, "Got new request",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"peer", ReqCtx->GetPeer()});
         SendYdbDriverRequest(ctx);
         Become(&TGRpcRequestActor::StateWork);
@@ -66,7 +69,7 @@ private:
         }
         request->DatabasePath = database;
         YDB_LOG_DEBUG_CTX(ctx, "Database discovery request sent",
-            {"logPrefix", LogPrefix()});
+            {LogPrefix()});
 
         ctx.Send(MakeTenantDiscoveryID(), std::move(request));
     }
@@ -76,7 +79,7 @@ private:
         if (ev->Get()->DatabaseInfo) {
             auto& db = ev->Get()->DatabaseInfo;
             YDB_LOG_DEBUG_CTX(ctx, "Database discovery result",
-                {"logPrefix", LogPrefix()},
+                {LogPrefix()},
                 {"dbPath", db->Path});
             SendGrpcRequest(ctx, db->Endpoint, db->Path);
         } else {
@@ -87,7 +90,7 @@ private:
     void Handle(TEvServerlessProxy::TEvListEndpointsResponse::TPtr ev, const TActorContext& ctx) {
         if (ev->Get()->Record) {
             YDB_LOG_INFO_CTX(ctx, "Replying ok",
-                {"logPrefix", LogPrefix()});
+                {LogPrefix()});
 
             Ydb::Discovery::ListEndpointsResponse * resp = CreateResponseMessage();
             resp->CopyFrom(*(ev->Get()->Record.get()));
@@ -97,7 +100,7 @@ private:
             return;
         } else if (ev->Get()->Status) {
             YDB_LOG_INFO_CTX(ctx, "Replying error",
-                {"logPrefix", LogPrefix()},
+                {LogPrefix()},
                 {"grpcStatusCode", ev->Get()->Status->GRpcStatusCode},
                 {"statusMsg", ev->Get()->Status->Msg});
             if (ev->Get()->Status->GRpcStatusCode == grpc::StatusCode::NOT_FOUND)
@@ -105,7 +108,7 @@ private:
             return ReplyWithError(ctx, NYdb::EStatus::INTERNAL_ERROR, TString{ev->Get()->Status->Msg});
         } else {
             YDB_LOG_INFO_CTX(ctx, "Replying INTERNAL ERROR",
-                {"logPrefix", LogPrefix()});
+                {LogPrefix()});
             return ReplyWithError(ctx, NYdb::EStatus::INTERNAL_ERROR, "Error happened while discovering database endpoint");
         }
     }
@@ -113,7 +116,7 @@ private:
 
     void SendGrpcRequest(const TActorContext& ctx, const TString& endpoint, const TString& database) {
         YDB_LOG_DEBUG_CTX(ctx, "Send grpc request to endpoint",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"database", database},
             {"endpoint", endpoint});
         ctx.Send(MakeDiscoveryProxyID(), new TEvServerlessProxy::TEvListEndpointsRequest(endpoint, database));

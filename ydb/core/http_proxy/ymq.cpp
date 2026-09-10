@@ -75,7 +75,7 @@ namespace NKikimr::NHttpProxy {
             {
             }
 
-            TStringBuilder LogPrefix() const {
+            NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
                 return HttpContext.LogPrefix();
             }
 
@@ -94,7 +94,7 @@ namespace NKikimr::NHttpProxy {
 
             void SendGrpcRequestNoDriver(const TActorContext& ctx) {
                 YDB_LOG_INFO_CTX(ctx, "Sending grpc request to database: iam token",
-                    {"logPrefix", LogPrefix()},
+                    {LogPrefix()},
                     {"discoveryEndpoint", HttpContext.DiscoveryEndpoint},
                     {"databasePath", HttpContext.DatabasePath},
                     {"size", HttpContext.IamToken.size()});
@@ -220,7 +220,7 @@ namespace NKikimr::NHttpProxy {
                     }
 
                     YDB_LOG_DEBUG_CTX(ctx, "Send metering event",
-                        {"logPrefix", LogPrefix()},
+                        {LogPrefix()},
                         {"httpStatusCode", requestAttributes.HttpStatusCode},
                         {"isFifo", requestAttributes.IsFifo},
                         {"folderId", requestAttributes.FolderId},
@@ -246,7 +246,7 @@ namespace NKikimr::NHttpProxy {
                                     const TActorContext& ctx) {
                 if (ev->Get()->Status->IsSuccess()) {
                     YDB_LOG_DEBUG_CTX(ctx, "Got succesfult GRPC response",
-                        {"logPrefix", LogPrefix()});
+                        {LogPrefix()});
 
                     ReplyToHttpContext({
                         .HttpCode = 200,
@@ -263,7 +263,7 @@ namespace NKikimr::NHttpProxy {
                     case ERetryErrorClass::ShortRetry:
                     case ERetryErrorClass::LongRetry:
                         YDB_LOG_DEBUG_CTX(ctx, "Retrying failed GRPC response",
-                            {"logPrefix", LogPrefix()});
+                            {LogPrefix()});
                         RetryCounter.Click();
                         if (RetryCounter.HasAttemps()) {
                             return SendGrpcRequestNoDriver(ctx);
@@ -284,7 +284,7 @@ namespace NKikimr::NHttpProxy {
                             : NKikimr::NSQS::TErrorClass::GetErrorAndCode(issues.begin()->GetCode());
 
                         YDB_LOG_DEBUG_CTX(ctx, "Not retrying GRPC response",
-                            {"logPrefix", LogPrefix()},
+                            {LogPrefix()},
                             {"code", get<1>(errorAndCode)},
                             {"error", get<0>(errorAndCode)});
 
@@ -307,7 +307,7 @@ namespace NKikimr::NHttpProxy {
             void HandleYmqCloudAuthorizationResponse(TEvYmqCloudAuthResponse::TPtr ev, const TActorContext& ctx) {
                 if (ev->Get()->IsSuccess) {
                     YDB_LOG_DEBUG_CTX(ctx, "Got cloud auth response",
-                        {"logPrefix", LogPrefix()},
+                        {LogPrefix()},
                         {"folderId", ev->Get()->FolderId},
                         {"cloudId", ev->Get()->CloudId},
                         {"userSid", ev->Get()->Sid});
@@ -318,7 +318,7 @@ namespace NKikimr::NHttpProxy {
                     SendGrpcRequestNoDriver(ctx);
                 } else {
                     YDB_LOG_DEBUG_CTX(ctx, "Got cloud auth response",
-                        {"logPrefix", LogPrefix()},
+                        {LogPrefix()},
                         {"httpStatusCode", ev->Get()->Error->HttpStatusCode},
                         {"errorCode", ev->Get()->Error->ErrorCode},
                         {"message", ev->Get()->Error->Message});
@@ -359,7 +359,7 @@ namespace NKikimr::NHttpProxy {
                     return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(issueCode));
                 } catch (const std::exception& e) {
                     YDB_LOG_WARN_CTX(ctx, "Got new request with incorrect json",
-                        {"logPrefix", LogPrefix()},
+                        {LogPrefix()},
                         {"sourceAddress", HttpContext.SourceAddress});
                     return ReplyWithError(
                         ctx,
@@ -370,7 +370,7 @@ namespace NKikimr::NHttpProxy {
                 }
 
                 YDB_LOG_INFO_CTX(ctx, "Got new request",
-                    {"logPrefix", LogPrefix()},
+                    {LogPrefix()},
                     {"sourceAddress", HttpContext.SourceAddress});
 
                 if (!HttpContext.ServiceConfig.GetHttpConfig().GetYandexCloudMode()) {

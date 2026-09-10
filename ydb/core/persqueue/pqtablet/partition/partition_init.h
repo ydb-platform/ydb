@@ -47,7 +47,7 @@ protected:
 private:
     void DoNext(const TActorContext& ctx);
 
-    TString LogPrefix() const;
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const;
 
     TPartition* Partition;
 
@@ -83,7 +83,7 @@ public:
 protected:
     void Done(const TActorContext& ctx);
 
-    TString LogPrefix() const;
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const;
 
 private:
     TInitializer* Initializer;

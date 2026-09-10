@@ -12,6 +12,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/system/types.h>
 #include <util/generic/fwd.h>
@@ -106,7 +107,7 @@ private:
     TRequests<TPartitionMerge> BuildMergeRequest(size_t& allowedSplitsCount);
     TBuildSplitScaleRequestResult BuildSplitScaleRequest(const TPartitionScaleOperationInfo& splitParameters) const;
     std::vector<ui32> ReorderSplits() const;
-    TString LogPrefix() const;
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const;
     void ClearMirrorInfo();
     void UpdateMirrorRootPartitionsSet();
 

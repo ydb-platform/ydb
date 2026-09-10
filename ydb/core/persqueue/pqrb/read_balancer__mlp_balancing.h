@@ -52,6 +52,7 @@ public:
 
     const NKikimrPQ::TPQTabletConfig& GetConfig() const;
     const TPartitionGraph& GetPartitionGraph() const;
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const;
 
 private:
     TDuration GetReceiveAttemptIdPeriod() const;
@@ -120,6 +121,7 @@ public:
     const NKikimrPQ::TPQTabletConfig& GetConfig() const;
     const TPartitionGraph& GetPartitionGraph() const;
     const std::vector<ui32>& GetActivePartitions() const;
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const;
 
 private:
     TPersQueueReadBalancer& TopicActor;

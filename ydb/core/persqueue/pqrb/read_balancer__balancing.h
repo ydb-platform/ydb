@@ -164,7 +164,7 @@ private:
     void LockPartition(ui32 partitionId, const TActorContext& ctx);
     std::unique_ptr<TEvPersQueue::TEvReleasePartition> MakeEvReleasePartition(ui32 partitionId) const;
     std::unique_ptr<TEvPersQueue::TEvLockPartition> MakeEvLockPartition(ui32 partitionId, ui32 step) const;
-    TString LogPrefix() const;
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const;
     void AssertInvariants() const;
 };
 
@@ -250,7 +250,7 @@ struct TConsumer {
     bool ScalingSupport() const;
 
 private:
-    TString LogPrefix() const;
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const;
 };
 
 struct TSession {
@@ -349,7 +349,7 @@ public:
     void RenderApp(NApp::TNavigationBar&) const;
 
 private:
-    TString LogPrefix() const;
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const;
     ui32 NextStep();
 
 private:

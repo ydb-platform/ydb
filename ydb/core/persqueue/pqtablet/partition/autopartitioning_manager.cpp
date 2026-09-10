@@ -93,10 +93,16 @@ public:
         RecreateSumMetric();
     }
 
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TAutopartitioningManager"},
+            {"partition", PartitionId});
+    }
+
 protected:
     void OnWriteImpl(const TString& sourceId, ui64 delta, const TString& key = "") {
         YDB_LOG_DEBUG("TAutopartitioningManager::OnWrite",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"sourceId", sourceId},
             {"delta", delta},
             {"key", key},
@@ -175,7 +181,7 @@ protected:
             const auto& keyRange = partition->GetKeyRange();
 
             YDB_LOG_DEBUG("TAutopartitioningManager::SplitBoundary KLL sketch enabled, no median key found, will split by middle of key range",
-                {"logPrefix", LogPrefix()});
+                {LogPrefix()});
             return MiddleOf(keyRange.GetFromBound(), keyRange.GetToBound());
         }
 
@@ -201,7 +207,7 @@ protected:
         auto mergeEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
 
         YDB_LOG_DEBUG("TPartition::CheckScaleStatus",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"splitMergeAvgWriteBytes", SumMetric->GetValue()},
             {"usagePercent", usagePercent},
             {"scaleThresholdSeconds", Config.GetPartitionStrategy().GetScaleThresholdSeconds()},
@@ -216,11 +222,11 @@ protected:
 
         if (splitEnabled && canSplit && shouldSplit) {
             YDB_LOG_DEBUG("TPartition::CheckScaleStatus NEED_SPLIT",
-                {"logPrefix", LogPrefix()});
+                {LogPrefix()});
             return NKikimrPQ::EScaleStatus::NEED_SPLIT;
         } else if (mergeEnabled && usagePercent <= Config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent()) {
             YDB_LOG_DEBUG("TPartition::CheckScaleStatus NEED_MERGE",
-                {"logPrefix", LogPrefix()},
+                {LogPrefix()},
                 {"usagePercent", usagePercent});
             return NKikimrPQ::EScaleStatus::NEED_MERGE;
         }

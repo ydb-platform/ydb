@@ -33,6 +33,14 @@ TPartitionScaleRequest::TPartitionScaleRequest(
 
     }
 
+NActors::NStructuredLog::TStructuredMessage TPartitionScaleRequest::LogPrefix() const {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"actorClassName", "TPartitionScaleRequest"},
+        {"topic", Topic},
+        {"topicPath", TopicPath},
+        {"pathId", PathId});
+}
+
 void TPartitionScaleRequest::Bootstrap(const NActors::TActorContext &ctx) {
     SendProposeRequest(ctx);
     Become(&TPartitionScaleRequest::StateWork);
@@ -81,7 +89,7 @@ void TPartitionScaleRequest::FillProposeRequest(TEvTxUserProxy::TEvProposeTransa
         logMessage << ".";
     }
     YDB_LOG_DEBUG(logMessage,
-        {"logPrefix", LogPrefix()});
+        {LogPrefix()});
 
     for(const auto& merge: Merges) {
         auto* newMerge = groupDescription.AddMerge();
@@ -159,7 +167,7 @@ void TPartitionScaleRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatus:
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete:
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecAlready:
             YDB_LOG_DEBUG("TPartitionScaleRequest completed",
-                {"logPrefix", LogPrefix()},
+                {LogPrefix()},
                 {"status", TEvTxUserProxy::TResultStatus::Str(status)});
             ReplyAndDie(status, ctx);
             return;
@@ -169,7 +177,7 @@ void TPartitionScaleRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatus:
                 issues << issue.ShortDebugString() + ", ";
             }
             YDB_LOG_ERROR("TPartitionScaleRequest SchemaShard error when trying to execute a scale request",
-                {"logPrefix", LogPrefix()},
+                {LogPrefix()},
                 {"status", TEvTxUserProxy::TResultStatus::Str(status)},
                 {"request", issues});
             ReplyAndDie(status, ctx);

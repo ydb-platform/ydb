@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/containers/absl/flat_hash_set.h>
@@ -13,7 +14,8 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_DESCRIBER
 
-#define LOG_PREFIX NActors::TlsActivationContext->AsActorContext().SelfID
+#define LOG_PREFIX YDB_LOG_CREATE_MESSAGE( \
+    {"selfId", NActors::TlsActivationContext->AsActorContext().SelfID})
 
 namespace NKikimr::NPQ::NDescriber {
 
@@ -53,14 +55,14 @@ public:
             auto resolved = NNameResolver::ResolveName(DatabasePath, topic);
             if (!resolved) {
                 YDB_LOG_DEBUG("Name resolve failed",
-                    {"logPrefix", LOG_PREFIX},
+                    {LOG_PREFIX},
                     {"topic", topic},
                     {"reason", resolved.error()});
                 SetErrorResult(topic, EStatus::BadRequest);
                 continue;
             }
             YDB_LOG_DEBUG("Name resolved",
-                {"logPrefix", LOG_PREFIX},
+                {LOG_PREFIX},
                 {"topic", topic},
                 {"resolvedPath", resolved->Path},
                 {"navigateDatabase", resolved->NavigateDatabase});
@@ -78,7 +80,7 @@ public:
 
     void DoRequest(const absl::flat_hash_set<TString>& topicPath) {
         YDB_LOG_DEBUG("Create request with",
-            {"logPrefix", LOG_PREFIX},
+            {LOG_PREFIX},
             {"topicPaths", JoinRange(", ", topicPath.begin(), topicPath.end())},
             {"syncVersion", RetryWithSyncVersion},
             {"databaseName", RequestDatabaseName});
@@ -101,7 +103,7 @@ public:
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
-            {"logPrefix", LOG_PREFIX});
+            {LOG_PREFIX});
         auto& result = ev->Get()->Request;
 
         absl::flat_hash_set<TString> unknownPaths;
@@ -127,13 +129,13 @@ public:
                     if (RetryWithSyncVersion) {
                         if (entry.SecurityObject && !HasAccess(Settings, entry.SecurityObject)) {
                             YDB_LOG_DEBUG("Path UNAUTHORIZED",
-                                {"logPrefix", LOG_PREFIX},
+                                {LOG_PREFIX},
                                 {"realPath", realPath});
 
                             SetErrorResults(originals, EStatus::Unauthorized);
                         } else {
                             YDB_LOG_DEBUG("Path not found",
-                                {"logPrefix", LOG_PREFIX},
+                                {LOG_PREFIX},
                                 {"realPath", realPath});
 
                             SetErrorResults(originals, EStatus::NotFound);
@@ -145,7 +147,7 @@ public:
                 }
                 case TSchemeCacheNavigate::EStatus::AccessDenied: {
                     YDB_LOG_DEBUG("Path ACCESS DENIED",
-                        {"logPrefix", LOG_PREFIX},
+                        {LOG_PREFIX},
                         {"realPath", realPath});
                     SetErrorResults(originals, EStatus::Unauthorized);
                     break;
@@ -153,7 +155,7 @@ public:
                 case TSchemeCacheNavigate::EStatus::Ok: {
                     if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
                         YDB_LOG_DEBUG("Path is CDC",
-                            {"logPrefix", LOG_PREFIX},
+                            {LOG_PREFIX},
                             {"realPath", realPath});
 
                         // Copy before mutating PathToOriginalPaths (rehash must not invalidate originals).
@@ -169,7 +171,7 @@ public:
                         if (!entry.PQGroupInfo || entry.PQGroupInfo->Description.GetBalancerTabletID() == 0) {
                             if (RetryWithSyncVersion) {
                                 YDB_LOG_DEBUG("Path not found",
-                                    {"logPrefix", LOG_PREFIX},
+                                    {LOG_PREFIX},
                                     {"realPath", realPath});
                                 SetErrorResults(originals, EStatus::NotFound);
                             } else {
@@ -178,7 +180,7 @@ public:
                         } else {
                             if (!HasAccess(Settings, entry.SecurityObject)) {
                                 YDB_LOG_DEBUG("Path UNAUTHORIZED",
-                                    {"logPrefix", LOG_PREFIX},
+                                    {LOG_PREFIX},
                                     {"realPath", realPath});
 
                                 SetTopicResults(originals, TTopicInfo{
@@ -187,7 +189,7 @@ public:
                                 });
                             } else {
                                 YDB_LOG_DEBUG("Path SUCCESS",
-                                    {"logPrefix", LOG_PREFIX},
+                                    {LOG_PREFIX},
                                     {"realPath", realPath});
                                 SetTopicResults(originals, TTopicInfo{
                                     .Status = EStatus::Success,
@@ -203,12 +205,12 @@ public:
                         }
                     } else {
                         YDB_LOG_DEBUG("Path is not a",
-                            {"logPrefix", LOG_PREFIX},
+                            {LOG_PREFIX},
                             {"realPath", realPath},
                             {"topic", entry.Kind});
                         if (Settings.UserToken && !entry.SecurityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *Settings.UserToken)) {
                             YDB_LOG_DEBUG("Path UNAUTHORIZED",
-                                {"logPrefix", LOG_PREFIX},
+                                {LOG_PREFIX},
                                 {"realPath", realPath});
                             SetTopicResults(originals, TTopicInfo{
                                 .Status = EStatus::Unauthorized
@@ -224,7 +226,7 @@ public:
                 }
                 default: {
                     YDB_LOG_DEBUG("Path unknown error",
-                        {"logPrefix", LOG_PREFIX},
+                        {LOG_PREFIX},
                         {"realPath", realPath});
                     SetTopicResults(originals, TTopicInfo{
                         .Status = EStatus::UnknownError,

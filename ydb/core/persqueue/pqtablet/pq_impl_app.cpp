@@ -52,7 +52,7 @@ namespace {
         for (const auto& [name, _] : cgi) {
             if (!IsKnownPublicPersQueueDevUiParam(name)) {
                 YDB_LOG_WARN_COMP(NKikimrServices::PERSQUEUE, "PersQueue DevUI request is admin only",
-                    {"logPrefix", LogPrefix()},
+                    {LogPrefix()},
                     {"param", name},
                     {"cgi", cgi.Print()});
                 return false;
@@ -371,7 +371,7 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
     }
 
     YDB_LOG_INFO_COMP(NKikimrServices::PERSQUEUE, "Handle",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"TEvRemoteHttpInfo", ev->Get()->Query});
 
     TMap<ui32, TActorId> res;

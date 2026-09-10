@@ -118,7 +118,7 @@ namespace NKikimr::NHttpProxy {
     void THttpRequestContext::DoReply(THttpResponseData&& data) {
         auto ctx = TlsActivationContext->AsActorContext();
         YDB_LOG_INFO_CTX(ctx, "Reply with",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"status", data.HttpCode},
             {"message", data.Message});
 

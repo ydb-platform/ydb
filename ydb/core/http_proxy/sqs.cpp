@@ -14,6 +14,7 @@
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
 #include <ydb/core/ymq/actor/auth_multi_factory.h>
 #include <ydb/core/ymq/actor/serviceid.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/http_proxy/authorization/auth_helpers.h>
 #include <ydb/library/http_proxy/error/error.h>
@@ -78,7 +79,7 @@ namespace NKikimr::NHttpProxy {
                 }
             }
 
-            TStringBuilder LogPrefix() const {
+            NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
                 return HttpContext.LogPrefix();
             }
 
@@ -100,7 +101,7 @@ namespace NKikimr::NHttpProxy {
             void SendGrpcRequestNoDriver(const TActorContext& ctx) {
                 ReportInputCounters(ctx);
                 YDB_LOG_INFO_CTX(ctx, "Sending grpc request to database: iam token",
-                    {"logPrefix", LogPrefix()},
+                    {LogPrefix()},
                     {"discoveryEndpoint", HttpContext.DiscoveryEndpoint},
                     {"databasePath", HttpContext.DatabasePath},
                     {"size", HttpContext.IamToken.size()});
@@ -361,7 +362,7 @@ namespace NKikimr::NHttpProxy {
                             : NKikimr::NSQS::TErrorClass::GetErrorAndCode(issues.begin()->GetCode());
 
                         YDB_LOG_DEBUG_CTX(ctx, "Not retrying GRPC response",
-                            {"logPrefix", LogPrefix()},
+                            {LogPrefix()},
                             {"code", errorCode},
                             {"error", error});
                         return ReplyWithMessageQueueError(
@@ -411,7 +412,7 @@ namespace NKikimr::NHttpProxy {
                     return ReplyWithYdbError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(issueCode));
                 } catch (const std::exception& e) {
                     YDB_LOG_WARN_CTX(ctx, "Got new request with incorrect json from database",
-                        {"logPrefix", LogPrefix()},
+                        {LogPrefix()},
                         {"sourceAddress", HttpContext.SourceAddress},
                         {"databasePath", HttpContext.DatabasePath});
                     return ReplyWithYdbError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
@@ -434,7 +435,7 @@ namespace NKikimr::NHttpProxy {
                 }
 
                 YDB_LOG_INFO_CTX(ctx, "Got new request from database stream",
-                    {"logPrefix", LogPrefix()},
+                    {LogPrefix()},
                     {"sourceAddress", HttpContext.SourceAddress},
                     {"databasePath", HttpContext.DatabasePath},
                     {"request", MaybeGetQueueUrl<TProtoRequest>(Request)});

@@ -28,7 +28,7 @@ namespace NKikimr::NHttpProxy {
         explicit THttpProxyActor(const THttpProxyConfig& cfg);
 
         void Bootstrap(const TActorContext& ctx);
-        TStringBuilder LogPrefix() const;
+        NActors::NStructuredLog::TStructuredMessage LogPrefix() const;
 
     private:
         STFUNC(StateWork) {
@@ -72,8 +72,9 @@ namespace NKikimr::NHttpProxy {
         }
     }
 
-    TStringBuilder THttpProxyActor::LogPrefix() const {
-        return TStringBuilder() << "proxy service:";
+    NActors::NStructuredLog::TStructuredMessage THttpProxyActor::LogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "THttpProxyActor"});
     }
 
     void THttpProxyActor::Bootstrap(const TActorContext& ctx) {
@@ -108,7 +109,7 @@ namespace NKikimr::NHttpProxy {
                                     ServiceAccountCredentialsProvider);
 
         YDB_LOG_INFO_CTX(ctx, "Incoming request from request url database",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"sourceAddress", context.SourceAddress},
             {"methodName", context.MethodName},
             {"url", context.Request->URL},

@@ -489,7 +489,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
 
         if (blobs[blobIdx].Empty()) { // this is ok. Means that someone requested too much data or retention race
             YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Not full answer here!",
-                {"logPrefix", LogPrefix()});
+                {LogPrefix()});
             const ui64 answerSize = answer->Response->ByteSize();
             if (userInfo && Destination != 0) {
                 userInfo->ReadDone(ctx, ctx.Now(), answerSize, cnt, ClientDC,
@@ -558,7 +558,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
             }
 
             YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "FormAnswer processing batch offset totakecount count size from batchStartIdx cbcount",
-                {"logPrefix", LogPrefix()},
+                {LogPrefix()},
                 {"offsetHeaderCount", (offset - header.GetCount())},
                 {"count", count},
                 {"headerCount", header.GetCount()},
@@ -646,7 +646,7 @@ TReadAnswer TReadInfo::FormAnswer(
 
     AFL_ENSURE(endOffset <= (ui64)Max<i64>())("Max offset is too big", endOffset);
     YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "FormAnswer for blobs",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"blobsSize", Blobs.size()});
 
     if (!isActive && response->GetBlobs().empty()) {

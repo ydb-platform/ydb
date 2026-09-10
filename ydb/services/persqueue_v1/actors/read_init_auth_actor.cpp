@@ -41,7 +41,7 @@ TReadInitAndAuthActor::~TReadInitAndAuthActor() = default;
 
 void TReadInitAndAuthActor::Bootstrap(const TActorContext &ctx) {
     YDB_LOG_DEBUG_CTX(ctx, "Auth",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"clientId", ClientId});
     Become(&TThis::StateFunc);
     DoCheckACL = AppData(ctx)->PQConfig.GetCheckACL() && Token;
@@ -70,7 +70,7 @@ void TReadInitAndAuthActor::Die(const TActorContext& ctx) {
     }
 
     YDB_LOG_DEBUG_CTX(ctx, "Auth is DEAD",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX});
+        {PQ_LOG_PREFIX});
 
     TActorBootstrapped<TReadInitAndAuthActor>::Die(ctx);
 }
@@ -78,7 +78,7 @@ void TReadInitAndAuthActor::Die(const TActorContext& ctx) {
 bool TReadInitAndAuthActor::OnUnhandledException(const std::exception& exc) {
     auto ctx = *NActors::TlsActivationContext;
     YDB_LOG_CRIT_CTX(ctx, "Unhandled exception",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"typeName", TypeName(exc)},
         {"exception", exc.what()},
         {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
@@ -104,7 +104,7 @@ void TReadInitAndAuthActor::SendCacheNavigateRequest(const TActorContext& ctx, c
     schemeCacheRequest->ResultSet.emplace_back(entry);
     schemeCacheRequest->DatabaseName = AppData(ctx)->PQConfig.GetDatabase();
     YDB_LOG_DEBUG_CTX(ctx, "Send client acl request",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX});
+        {PQ_LOG_PREFIX});
     ctx.Send(NewSchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeCacheRequest.Release()));
 }
 
@@ -148,7 +148,7 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
 
 void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_DEBUG_CTX(ctx, "Handle describe topics response",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX});
+        {PQ_LOG_PREFIX});
 
     bool reDescribe = false;
     auto i = 0u;

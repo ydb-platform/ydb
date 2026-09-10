@@ -92,9 +92,10 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
     }
 }
 
-TString TDistributedTransaction::LogPrefix() const
+NActors::NStructuredLog::TStructuredMessage TDistributedTransaction::LogPrefix() const
 {
-    return TStringBuilder() << "[TxId: " << TxId << "] ";
+    return YDB_LOG_CREATE_MESSAGE(
+        {"txId", TxId});
 }
 
 void TDistributedTransaction::InitDataTransaction(const NKikimrPQ::TTransaction& tx)
@@ -252,7 +253,7 @@ void TDistributedTransaction::OnPlanStep(ui64 step)
 void TDistributedTransaction::OnTxCalcPredicateResult(const TEvPQ::TEvTxCalcPredicateResult& event)
 {
     YDB_LOG_DEBUG("Handle TEvTxCalcPredicateResult",
-        {"logPrefix", LogPrefix()});
+        {LogPrefix()});
 
     TMaybe<EDecision> decision;
 
@@ -288,7 +289,7 @@ void UpdatePartitionsData(NKikimrPQ::TPartitions& partitionsData, NKikimrPQ::TPa
 void TDistributedTransaction::OnProposePartitionConfigResult(TEvPQ::TEvProposePartitionConfigResult& event)
 {
     YDB_LOG_DEBUG("Handle TEvProposePartitionConfigResult",
-        {"logPrefix", LogPrefix()});
+        {LogPrefix()});
 
     UpdatePartitionsData(PartitionsData, event.Data);
 
@@ -311,7 +312,7 @@ void TDistributedTransaction::OnPartitionResult(const E& event, TMaybe<EDecision
     ++PartitionRepliesCount;
 
     YDB_LOG_DEBUG("Partition responses ",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"partitionRepliesCount", PartitionRepliesCount},
         {"partitionRepliesExpected", PartitionRepliesExpected});
 }
@@ -321,7 +322,7 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
                                         std::unique_ptr<TEvTxProcessing::TEvReadSetAck> ack)
 {
     YDB_LOG_DEBUG("Handle TEvReadSet",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"txId", TxId});
 
     TX_ENSURE((Step == Max<ui64>()) || (event.HasStep() && (Step == event.GetStep())));
@@ -340,7 +341,7 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
             ++ReadSetCount;
 
             YDB_LOG_DEBUG("Predicates ",
-                {"logPrefix", LogPrefix()},
+                {LogPrefix()},
                 {"readSetCount", ReadSetCount},
                 {"predicatesReceivedSize", PredicatesReceived.size()});
         }
@@ -362,7 +363,7 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
 void TDistributedTransaction::OnReadSetAck(const NKikimrTx::TEvReadSetAck& event)
 {
     YDB_LOG_DEBUG("Handle TEvReadSetAck",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"txId", TxId});
 
     TX_ENSURE(event.HasStep() && (Step == event.GetStep()));
@@ -378,7 +379,7 @@ void TDistributedTransaction::OnReadSetAck(ui64 tabletId)
         ++PredicateAcksCount;
 
         YDB_LOG_DEBUG("Predicate acks",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"predicateAcksCount", PredicateAcksCount},
             {"predicateRecipientsSize", PredicateRecipients.size()});
     }
@@ -428,7 +429,7 @@ bool TDistributedTransaction::HaveParticipantsDecision() const
 bool TDistributedTransaction::HaveAllRecipientsReceive() const
 {
     YDB_LOG_DEBUG("HaveAllRecipientsReceive",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"predicateAcks", PredicateAcksCount},
         {"predicateRecipientsSize", PredicateRecipients.size()});
     return PredicateRecipients.size() == PredicateAcksCount;
@@ -439,7 +440,7 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
 {
     auto tx = Serialize(state);
     YDB_LOG_DEBUG("Save tx",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"tx", tx.ShortDebugString()});
 
     TString value;

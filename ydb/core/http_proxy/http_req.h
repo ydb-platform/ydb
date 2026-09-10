@@ -3,6 +3,7 @@
 #include "events.h"
 
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/http_proxy/authorization/signature.h>
 #include <ydb/public/api/grpc/draft/ydb_datastreams_v1.grpc.pb.h>
@@ -85,8 +86,10 @@ struct THttpRequestContext {
     TString SerializedUserToken;
     TString UserName;
 
-    TStringBuilder LogPrefix() const {
-        return TStringBuilder() << "http request [" << MethodName << "] requestId [" << RequestId << "]";
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"methodName", MethodName},
+            {"requestId", RequestId});
     }
 
     THolder<NKikimr::NSQS::TAwsRequestSignV4> GetSignature();

@@ -20,7 +20,10 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_READ_PROXY
 
-#define LOG_PREFIX (TStringBuilder() << "Direct read proxy " << ctx.SelfID.ToString() << ": " << PQ_LOG_PREFIX)
+#define LOG_PREFIX YDB_LOG_CREATE_MESSAGE( \
+    {"actorClassName", "DirectReadProxy"}, \
+    {"selfId", ctx.SelfID}, \
+    PQ_LOG_PREFIX)
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -67,14 +70,14 @@ void TDirectReadSessionActor::Bootstrap(const TActorContext& ctx) {
 
 void TDirectReadSessionActor::Handle(typename IContext::TEvNotifiedWhenDone::TPtr&, const TActorContext& ctx) {
     YDB_LOG_INFO_CTX(ctx, "Grpc closed",
-        {"LOGPREFIX", LOG_PREFIX});
+        {LOG_PREFIX});
     Die(ctx);
 }
 
 bool TDirectReadSessionActor::ReadFromStreamOrDie(const TActorContext& ctx) {
     if (!Request->Read()) {
         YDB_LOG_INFO_CTX(ctx, "Grpc read failed at start",
-            {"LOGPREFIX", LOG_PREFIX});
+            {LOG_PREFIX});
         Die(ctx);
         return false;
     }
@@ -85,13 +88,13 @@ void TDirectReadSessionActor::Handle(typename IContext::TEvReadFinished::TPtr& e
     auto& request = ev->Get()->Record;
 
     YDB_LOG_DEBUG_CTX(ctx, "Grpc read done",
-        {"LOGPREFIX", LOG_PREFIX},
+        {LOG_PREFIX},
         {"success", ev->Get()->Success},
         {"data", request});
 
     if (!ev->Get()->Success) {
         YDB_LOG_INFO_CTX(ctx, "Grpc read failed",
-            {"LOGPREFIX", LOG_PREFIX});
+            {LOG_PREFIX});
         ctx.Send(ctx.SelfID, new TEvPQProxy::TEvDone());
         return;
     }
@@ -135,7 +138,7 @@ bool TDirectReadSessionActor::WriteToStreamOrDie(const TActorContext& ctx, TServ
 
     if (!res) {
         YDB_LOG_INFO_CTX(ctx, "Grpc write failed at start",
-            {"LOGPREFIX", LOG_PREFIX});
+            {LOG_PREFIX});
         Die(ctx);
     }
 
@@ -146,7 +149,7 @@ bool TDirectReadSessionActor::WriteToStreamOrDie(const TActorContext& ctx, TServ
 void TDirectReadSessionActor::Handle(typename IContext::TEvWriteFinished::TPtr& ev, const TActorContext& ctx) {
     if (!ev->Get()->Success) {
         YDB_LOG_INFO_CTX(ctx, "Grpc write failed",
-            {"LOGPREFIX", LOG_PREFIX});
+            {LOG_PREFIX});
         return Die(ctx);
     }
 }
@@ -174,7 +177,7 @@ void TDirectReadSessionActor::Die(const TActorContext& ctx) {
     }
 
     YDB_LOG_INFO_CTX(ctx, "Proxy is DEAD",
-        {"LOGPREFIX", LOG_PREFIX});
+        {LOG_PREFIX});
     ctx.Send(GetPQReadServiceActorID(), new TEvPQProxy::TEvSessionDead(Cookie));
     ctx.Send(NPQ::MakePQDReadCacheServiceActorId(), new TEvPQProxy::TEvDirectReadDataSessionDead(Session));
     TRlHelpers::PassAway(SelfId());
@@ -202,7 +205,7 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvAuth::TPtr& ev, const TActor
 
 void TDirectReadSessionActor::Handle(TEvPQProxy::TEvStartDirectRead::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_INFO_CTX(ctx, "Got StartDirectRead from client",
-        {"LOGPREFIX", LOG_PREFIX},
+        {LOG_PREFIX},
         {"sessionId", Session},
         {"assignId", ev->Get()->AssignId},
         {"lastDirectReadId", ev->Get()->LastDirectReadId},
@@ -230,7 +233,7 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvDirectReadDataSessionConnect
 
 void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_DEBUG_CTX(ctx, "Got init",
-        {"LOGPREFIX", LOG_PREFIX},
+        {LOG_PREFIX},
         {"request", ev->Get()->Request.DebugString()});
 
     if (Initing) {
@@ -293,7 +296,7 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, co
     }
 
     YDB_LOG_INFO_CTX(ctx, "Read init",
-        {"LOGPREFIX", LOG_PREFIX},
+        {LOG_PREFIX},
         {"from", PeerName},
         {"request", ev->Get()->Request});
 
@@ -326,7 +329,7 @@ void TDirectReadSessionActor::SetupCounters() {
 
 void TDirectReadSessionActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_INFO_CTX(ctx, "Auth ok",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"topics", ev->Get()->TopicAndTablets.size()},
         {"initDone", InitDone});
 
@@ -379,7 +382,7 @@ void TDirectReadSessionActor::InitSession(const TActorContext& ctx) {
 void TDirectReadSessionActor::CloseSession(PersQueue::ErrorCode::ErrorCode code, const TString& reason) {
     auto ctx = ActorContext();
     YDB_LOG_DEBUG_CTX(ctx, "Close session with",
-        {"LOGPREFIX", LOG_PREFIX},
+        {LOG_PREFIX},
         {"reason", reason});
     if (code != PersQueue::ErrorCode::OK) {
         if (Errors) {
@@ -393,18 +396,18 @@ void TDirectReadSessionActor::CloseSession(PersQueue::ErrorCode::ErrorCode code,
         FillIssue(result.add_issues(), code, reason);
 
         YDB_LOG_INFO_CTX(ctx, "Closed with error",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"reason", reason});
         if (!WriteToStreamOrDie(ctx, std::move(result), true)) {
             return;
         }
     } else {
         YDB_LOG_INFO_CTX(ctx, "Closed",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX});
+            {PQ_LOG_PREFIX});
         const Ydb::StatusIds::StatusCode statusCode = ConvertPersQueueInternalCodeToStatus(code);
         if (!Request->Finish(statusCode)) {
             YDB_LOG_INFO_CTX(ctx, "Grpc double finish failed",
-                {"PQLOGPREFIX", PQ_LOG_PREFIX});
+                {PQ_LOG_PREFIX});
         }
     }
     Die(ctx);
@@ -495,7 +498,7 @@ void TDirectReadSessionActor::RecheckACL(const TActorContext& ctx) {
         ForceACLCheck = false;
 
         YDB_LOG_DEBUG_CTX(ctx, "Checking auth because of timeout",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX});
+            {PQ_LOG_PREFIX});
         RunAuthActor(ctx);
     }
 }
@@ -511,7 +514,7 @@ void TDirectReadSessionActor::RunAuthActor(const TActorContext& ctx) {
 void TDirectReadSessionActor::HandleDestroyPartitionSession(TEvPQProxy::TEvDirectReadDestroyPartitionSession::TPtr& ev) {
     const auto& ctx = ActorContext();
     YDB_LOG_DEBUG_CTX(ctx, "Got EvDirectReadDestroyPartitionSession",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"assignId", ev->Get()->ReadKey.PartitionSessionId});
 
     TServerMessage result;
@@ -531,7 +534,7 @@ void TDirectReadSessionActor::HandleSessionKilled(TEvPQProxy::TEvDirectReadClose
 void TDirectReadSessionActor::HandleGotData(TEvPQProxy::TEvDirectReadSendClientData::TPtr& ev) {
     const auto& ctx = ActorContext();
     YDB_LOG_DEBUG_CTX(ctx, "Got direct read data, message",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"size", ev->Get()->Message->ByteSizeLong()});
     auto formedResponse = MakeIntrusive<TFormedDirectReadResponse>();
     formedResponse->Response = std::move(ev->Get()->Message);

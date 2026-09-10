@@ -3,6 +3,7 @@
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/cloud_permissions/cloud_permissions.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/base/counters.h>
@@ -24,7 +25,10 @@ namespace NKikimr::NGRpcProxy::V1 {
 #ifdef PQ_LOG_PREFIX
 #undef PQ_LOG_PREFIX
 #endif
-#define PQ_LOG_PREFIX (TStringBuilder() << "session cookie " << Cookie << " consumer " << ClientPath << " session " << Session)
+#define PQ_LOG_PREFIX YDB_LOG_CREATE_MESSAGE( \
+    {"sessionCookie", Cookie}, \
+    {"consumer", ClientPath}, \
+    {"session", Session})
 
 // moved to ydb/core/client/server/msgbus_server_persqueue.h?
 // const TString& TopicPrefix(const TActorContext& ctx);

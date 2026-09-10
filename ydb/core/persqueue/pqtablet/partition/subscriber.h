@@ -9,6 +9,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/common/blob_refcounter.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -94,6 +95,14 @@ struct TReadInfo {
 
     bool ReachedLastOffset() const {
         return LastOffset != 0 && Offset >= LastOffset;
+    }
+
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TReadInfo"},
+            {"user", User},
+            {"offset", Offset},
+            {"destination", Destination});
     }
 
     TReadAnswer FormAnswer(

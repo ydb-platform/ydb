@@ -16,6 +16,7 @@
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr {
@@ -203,7 +204,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TBroadcastPartitionError::TPtr& ev, const TActorContext& ctx);
 
-    TString LogPrefix() const;
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const;
 
     static constexpr const char * KeyConfig() { return "_config"; }
     static constexpr const char * KeyState() { return "_state"; }

@@ -17,7 +17,8 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_FETCH_REQUEST
 
-#define LOG_PREFIX TStringBuilder() << "[" << NActors::TlsActivationContext->AsActorContext().SelfID << "] "
+#define LOG_PREFIX YDB_LOG_CREATE_MESSAGE( \
+    {"selfId", NActors::TlsActivationContext->AsActorContext().SelfID})
 
 namespace NKikimr::NPQ {
 
@@ -157,7 +158,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         YDB_LOG_INFO("Fetch request actor boostrapped. Request is",
-            {"logPrefix", LOG_PREFIX},
+            {LOG_PREFIX},
             {"valid", (!Response)});
 
         // handle error from constructor
@@ -174,7 +175,7 @@ public:
 
     void DescribeTopics(const TActorContext&) {
         YDB_LOG_DEBUG("DescribeTopics",
-            {"logPrefix", LOG_PREFIX});
+            {LOG_PREFIX});
 
         absl::flat_hash_set<TString> topics;
         for (const auto& part : Settings.Partitions) {
@@ -190,7 +191,7 @@ public:
 
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
         YDB_LOG_DEBUG("Handle NDescriber::TEvDescribeTopicsResponse",
-            {"logPrefix", LOG_PREFIX});
+            {LOG_PREFIX});
 
         for (auto& [topicPath, info] : ev->Get()->Topics) {
             switch (info.Status) {
@@ -259,7 +260,7 @@ public:
             const auto partitionIndex = fetchInfo->Record.GetCookie();
             tabletInfo.PartitionIndexes.push_back(partitionIndex);
             YDB_LOG_DEBUG("Sending TEvPersQueue::TEvHasDataInfo",
-                {"logPrefix", LOG_PREFIX},
+                {LOG_PREFIX},
                 {"fetchInfoRecord", fetchInfo->Record.ShortDebugString()});
             NTabletPipe::SendData(ctx, tabletInfo.PipeClient, fetchInfo.Release());
             PartitionStatus[partitionIndex] = EPartitionStatus::HasDataRequested;
@@ -276,7 +277,7 @@ public:
     void ProceedFetchRequest(const TActorContext& ctx) {
         if (FetchRequestCurrentReadTablet) { //already got active read request
             YDB_LOG_DEBUG("Fetch request is pending. /",
-                {"logPrefix", LOG_PREFIX},
+                {LOG_PREFIX},
                 {"tabletId", FetchRequestCurrentReadTablet},
                 {"partitionIndex", FetchRequestCurrentPartitionIndex},
                 {"settingsPartitionsSize", Settings.Partitions.size()});
@@ -289,7 +290,7 @@ public:
 
         while (true) {
             YDB_LOG_DEBUG("Processing /",
-                {"logPrefix", LOG_PREFIX},
+                {LOG_PREFIX},
                 {"fetchRequestCurrentPartitionIndex", FetchRequestCurrentPartitionIndex},
                 {"settingsPartitionsSize", Settings.Partitions.size()});
             if (FetchRequestCurrentPartitionIndex == Settings.Partitions.size()) {
@@ -300,7 +301,7 @@ public:
             auto& status = PartitionStatus[FetchRequestCurrentPartitionIndex];
             if (status == EPartitionStatus::DataReceived) {
                 YDB_LOG_DEBUG("Skip partition because status is DataReceived",
-                    {"logPrefix", LOG_PREFIX},
+                    {LOG_PREFIX},
                     {"fetchRequestCurrentPartitionIndex", FetchRequestCurrentPartitionIndex});
                 ++FetchRequestCurrentPartitionIndex;
                 continue;
@@ -308,7 +309,7 @@ public:
 
             if (FetchRequestBytesLeft == 0) {
                 YDB_LOG_DEBUG("Partition status is",
-                    {"logPrefix", LOG_PREFIX},
+                    {LOG_PREFIX},
                     {"fetchRequestCurrentPartitionIndex", FetchRequestCurrentPartitionIndex},
                     {"status", (int)status},
                     {"bytesLeft", FetchRequestBytesLeft});
@@ -344,7 +345,7 @@ public:
             //Form read request
             auto request = CreateReadRequest(topic, req);
             YDB_LOG_DEBUG("Sending",
-                {"logPrefix", LOG_PREFIX},
+                {LOG_PREFIX},
                 {"request", request->Record.ShortDebugString()});
             NTabletPipe::SendData(ctx, tabletInfo.PipeClient, request.release());
 
@@ -356,7 +357,7 @@ public:
         auto& record = ev->Get()->Record;
         auto partitionIndex = record.GetCookie();
         YDB_LOG_DEBUG("Handle TEvPersQueue::TEvHasDataInfoResponse",
-            {"logPrefix", LOG_PREFIX},
+            {LOG_PREFIX},
             {"ev", record.ShortDebugString()});
         if (partitionIndex >= PartitionStatus.size()) {
             Y_VERIFY_DEBUG(partitionIndex < PartitionStatus.size());
@@ -364,7 +365,7 @@ public:
         }
         auto& status = PartitionStatus[partitionIndex];
         YDB_LOG_DEBUG("Partition status is",
-            {"logPrefix", LOG_PREFIX},
+            {LOG_PREFIX},
             {"partitionIndex", partitionIndex},
             {"status", (int)status});
         if (status != EPartitionStatus::HasDataRequested) {
@@ -395,13 +396,13 @@ public:
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
         YDB_LOG_DEBUG("Handle TEvPersQueue::TEvResponse",
-            {"logPrefix", LOG_PREFIX},
+            {LOG_PREFIX},
             {"ev", record.ShortDebugString()});
         AFL_ENSURE(record.HasPartitionResponse());
 
         if (record.GetPartitionResponse().GetCookie() != FetchRequestCurrentPartitionIndex || FetchRequestCurrentReadTablet == 0) {
             YDB_LOG_WARN("Proxy fetch error: got response from tablet while waiting from and requested tablet is",
-                {"logPrefix", LOG_PREFIX},
+                {LOG_PREFIX},
                 {"partitionResponseCookie", record.GetPartitionResponse().GetCookie()},
                 {"fetchRequestCurrentPartitionIndex", FetchRequestCurrentPartitionIndex},
                 {"fetchRequestCurrentReadTablet", FetchRequestCurrentReadTablet});
@@ -447,7 +448,7 @@ public:
         }
 
         YDB_LOG_DEBUG("After processing result",
-            {"logPrefix", LOG_PREFIX},
+            {LOG_PREFIX},
             {"fetchRequestBytesLeft", FetchRequestBytesLeft});
         if (FetchRequestBytesLeft == 0) {
             FinishProcessing(ctx);
@@ -537,7 +538,7 @@ public:
 
                 auto tabletId = topicInfo.PartitionToTablet[p.Partition];
                 YDB_LOG_DEBUG("Sending TEvPersQueue::TEvHasDataInfo",
-                    {"logPrefix", LOG_PREFIX},
+                    {LOG_PREFIX},
                     {"fetchInfoRecord", fetchInfo->Record.ShortDebugString()});
                 NTabletPipe::SendData(ctx, TabletInfo[tabletId].PipeClient, fetchInfo.release());
             }
@@ -591,7 +592,7 @@ public:
 
     void SendReplyAndDie(THolder<TEvPQ::TEvFetchResponse> event, const TActorContext& ctx) {
         YDB_LOG_DEBUG("Reply",
-            {"logPrefix", LOG_PREFIX},
+            {LOG_PREFIX},
             {"requesterId", RequesterId},
             {"response", event->Response.ShortDebugString()});
         ctx.Send(RequesterId, event.Release());

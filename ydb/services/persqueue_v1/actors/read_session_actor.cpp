@@ -89,7 +89,7 @@ void TReadSessionActor<Protocol>::Bootstrap(const TActorContext& ctx) {
 template <EProtocol Protocol>
 void TReadSessionActor<Protocol>::Handle(typename IContext::TEvNotifiedWhenDone::TPtr&, const TActorContext& ctx) {
     YDB_LOG_INFO_CTX(ctx, "Grpc closed",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX});
+        {PQ_LOG_PREFIX});
     Die(ctx);
 }
 
@@ -97,7 +97,7 @@ template <EProtocol Protocol>
 bool TReadSessionActor<Protocol>::ReadFromStreamOrDie(const TActorContext& ctx) {
     if (!Request->Read()) {
         YDB_LOG_INFO_CTX(ctx, "Grpc read failed at start",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX});
+            {PQ_LOG_PREFIX});
         Die(ctx);
         return false;
     }
@@ -119,13 +119,13 @@ void TReadSessionActor<Protocol>::Handle(typename IContext::TEvReadFinished::TPt
     }
 
     YDB_LOG_DEBUG_CTX(ctx, "Grpc read done",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"success", ev->Get()->Success},
         {"data", request});
 
     if (!ev->Get()->Success) {
         YDB_LOG_INFO_CTX(ctx, "Grpc read failed",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX});
+            {PQ_LOG_PREFIX});
         ctx.Send(ctx.SelfID, new TEvPQProxy::TEvDone());
         return;
     }
@@ -314,7 +314,7 @@ bool TReadSessionActor<Protocol>::WriteToStreamOrDie(const TActorContext& ctx, T
 
     if (!res) {
         YDB_LOG_INFO_CTX(ctx, "Grpc write failed at start",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX});
+            {PQ_LOG_PREFIX});
         Die(ctx);
     }
 
@@ -325,7 +325,7 @@ template <EProtocol Protocol>
 void TReadSessionActor<Protocol>::Handle(typename IContext::TEvWriteFinished::TPtr& ev, const TActorContext& ctx) {
     if (!ev->Get()->Success) {
         YDB_LOG_INFO_CTX(ctx, "Grpc write failed",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX});
+            {PQ_LOG_PREFIX});
         return Die(ctx);
     }
 
@@ -387,7 +387,7 @@ void TReadSessionActor<Protocol>::Die(const TActorContext& ctx) {
     }
 
     YDB_LOG_INFO_CTX(ctx, "Is DEAD",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX});
+        {PQ_LOG_PREFIX});
     ctx.Send(GetPQReadServiceActorID(), new TEvPQProxy::TEvSessionDead(Cookie));
     TRlHelpers::PassAway(TActorBootstrapped<TReadSessionActor>::SelfId());
     TActorBootstrapped<TReadSessionActor>::Die(ctx);
@@ -397,7 +397,7 @@ template <EProtocol Protocol>
 bool TReadSessionActor<Protocol>::OnUnhandledException(const std::exception& exc) {
     auto ctx = *NActors::TlsActivationContext;
     YDB_LOG_CRIT_CTX(ctx, "Unhandled exception",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"typeName", TypeName(exc)},
         {"exception", exc.what()},
         {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
@@ -488,7 +488,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvDirectReadAck::TPtr& ev,
     auto directReadId = ev->Get()->DirectReadId;
 
     YDB_LOG_DEBUG_CTX(ctx, "Got DirectReadAck from client",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"partition", it->second.Partition},
         {"directReadId", directReadId},
         {"bytesInflight", BytesInflight_});
@@ -521,7 +521,7 @@ void TReadSessionActor<Protocol>::ProcessDirectReads(TPartitionsMap::iterator it
         }
 
         YDB_LOG_DEBUG_CTX(ctx, "Processing direct read ack",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"directReadId", directReadId});
         pendingAcks.pop();
         BytesInflight_ -= drIt->second.ByteSize;
@@ -544,14 +544,14 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvStartRead::TPtr& ev, con
     if (it == Partitions.end() || it->second.Releasing) {
         // do nothing - already released partition
         YDB_LOG_WARN_CTX(ctx, "Got irrelevant StartRead from client",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"partition", ev->Get()->AssignId},
             {"offset", ev->Get()->ReadOffset});
         return;
     }
 
     YDB_LOG_INFO_CTX(ctx, "Got StartRead from client",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"partition", it->second.Partition},
         {"readOffset", ev->Get()->ReadOffset},
         {"commitOffset", ev->Get()->CommitOffset},
@@ -576,7 +576,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReleased::TPtr& ev, cons
     auto& partitionInfo = it->second;
 
     YDB_LOG_INFO_CTX(ctx, "Got Released from client",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"partition", partitionInfo.Partition});
 
     if (!partitionInfo.LockSent) {
@@ -719,7 +719,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvCommitDone::TPtr& ev, co
     partition.ReadingFinished = msg->ReadingFinishedSent;
 
     YDB_LOG_DEBUG_CTX(ctx, "Replying for commits",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"assignId", msg->AssignId},
         {"from", msg->StartCookie},
         {"to", msg->LastCookie},
@@ -947,7 +947,7 @@ void TReadSessionActor<Protocol>::Handle(typename TEvReadInit::TPtr& ev, const T
     }
 
     YDB_LOG_INFO_CTX(ctx, "Read init",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"from", PeerName},
         {"request", ev->Get()->Request});
 
@@ -1065,7 +1065,7 @@ void TReadSessionActor<Protocol>::SetupTopicCounters(const NPersQueue::TTopicCon
 template <EProtocol Protocol>
 void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_INFO_CTX(ctx, "Auth ok",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"topics", ev->Get()->TopicAndTablets.size()},
         {"initDone", InitDone});
 
@@ -1246,7 +1246,7 @@ bool TReadSessionActor<Protocol>::SendLockPartitionToSelf(ui32 partitionId, TStr
 template <EProtocol Protocol>
 void TReadSessionActor<Protocol>::RegisterSession(const TString& topic, const TActorId& pipe, const TVector<ui32>& groups, const TActorContext& ctx) {
     YDB_LOG_INFO_CTX(ctx, "Register session",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"topic", topic});
 
     auto request = MakeHolder<TEvPersQueue::TEvRegisterReadSession>();
@@ -1278,7 +1278,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvLockPartition::TPtr& e
     auto converterIter = FullPathToConverter.find(NPersQueue::NormalizeFullPath(path));
     if (converterIter == FullPathToConverter.end()) {
         YDB_LOG_DEBUG_CTX(ctx, "Ignored ev lock not recognized",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"path", path},
             {"reason", "path"});
         return;
@@ -1290,7 +1290,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvLockPartition::TPtr& e
     auto topicIt = Topics.find(name);
     if (topicIt == Topics.end() || (!ReadWithoutConsumer && topicIt->second->PipeClient != ActorIdFromProto(record.GetPipeClient()))) {
         YDB_LOG_ALERT_CTX(ctx, "Ignored ev lock is unknown",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"path", name},
             {"reason", "topic"});
         return;
@@ -1368,7 +1368,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvLockPartition::TPtr& e
     it->second.PartitionsInfly.Inc();
 
     YDB_LOG_INFO_CTX(ctx, "Assign",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"from", PeerName},
         {"user", (Token ? Token->GetUserSID() : "-")},
         {"topic", converter->GetPrintableString()},
@@ -1472,7 +1472,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& e
     }
 
     YDB_LOG_DEBUG_CTX(ctx, "Sending to client partition status",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX});
+        {PQ_LOG_PREFIX});
     SendControlMessage(it->second.Partition, std::move(result), ctx, false);
 }
 
@@ -1510,7 +1510,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvUpdateSession::TPtr& ev,
     }
 
     YDB_LOG_INFO_CTX(ctx, "Sending to client update partition stream event",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX});
+        {PQ_LOG_PREFIX});
     SendControlMessage(partitionInfo.Partition, std::move(result), ctx);
 }
 
@@ -1600,7 +1600,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvReleasePartition::TPtr
         counters.PartitionsToBeReleased.Inc();
 
         YDB_LOG_INFO_CTX(ctx, "Releasing",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"partition", it->second.Partition});
         partitionInfo.Releasing = true;
 
@@ -1616,7 +1616,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvReleasePartition::TPtr
 
     // Release partitions by partition id
     YDB_LOG_DEBUG_CTX(ctx, "Gone release",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"partition", partitionId});
 
     for (auto it = Partitions.begin(); it != Partitions.end(); ++it) {
@@ -1680,7 +1680,7 @@ void TReadSessionActor<Protocol>::InformBalancerAboutRelease(typename TPartition
     req.SetPartition(partitionInfo.Partition.Partition);
 
     YDB_LOG_INFO_CTX(ctx, "Released",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"partition", partitionInfo.Partition});
     NTabletPipe::SendData(ctx, topicInfo->PipeClient, request.Release());
 }
@@ -1703,18 +1703,18 @@ void TReadSessionActor<Protocol>::CloseSession(PersQueue::ErrorCode::ErrorCode c
         FillIssue(result.add_issues(), code, reason);
 
         YDB_LOG_INFO_CTX(ctx, "Closed with error",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"reason", reason});
         if (!WriteToStreamOrDie(ctx, std::move(result), true)) {
             return;
         }
     } else {
         YDB_LOG_INFO_CTX(ctx, "Closed",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX});
+            {PQ_LOG_PREFIX});
         const Ydb::StatusIds::StatusCode statusCode = ConvertPersQueueInternalCodeToStatus(code);
         if (!Request->Finish(statusCode)) {
             YDB_LOG_INFO_CTX(ctx, "Grpc double finish failed",
-                {"PQLOGPREFIX", PQ_LOG_PREFIX});
+                {PQ_LOG_PREFIX});
         }
     }
     Die(ctx);
@@ -1760,7 +1760,7 @@ void TReadSessionActor<Protocol>::ReleasePartition(TPartitionsMapIterator& it, b
     typename TFormedReadResponse<TServerMessage>::TPtr response;
 
     YDB_LOG_INFO_CTX(ctx, "Got all from client, actual releasing",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"partition", partition.Partition});
 
 
@@ -1811,7 +1811,7 @@ void TReadSessionActor<Protocol>::ProcessBalancerDead(ui64 tabletId, const TActo
             }
 
             YDB_LOG_INFO_CTX(ctx, "Balancer dead, restarting all from topic",
-                {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                {PQ_LOG_PREFIX},
                 {"topic", topic->FullConverter->GetPrintableString()});
 
             // Drop all partitions from this topic
@@ -1885,7 +1885,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TA
     }
 
     YDB_LOG_DEBUG_CTX(ctx, "Got read request",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"guid", ev->Get()->Guid});
 
     if constexpr (Protocol == EProtocol::PQv1) {
@@ -1985,7 +1985,7 @@ void TReadSessionActor<Protocol>::Handle(typename TEvReadResponse::TPtr& ev, con
     }
 
     YDB_LOG_DEBUG_CTX(ctx, "Read done",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"guid", formedResponse->Guid},
         {"partition", partitionInfo.Partition},
         {"size", response.ByteSize()});
@@ -2047,7 +2047,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvDirectReadResponse::TPtr
     it->second.Reading = false;
 
     YDB_LOG_DEBUG_CTX(ctx, "Direct read preparation done",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"guid", formedResponse->Guid},
         {"partition", it->second.Partition},
         {"size", ev->Get()->ByteSize},
@@ -2151,14 +2151,14 @@ void TReadSessionActor<Protocol>::ProcessAnswer(typename TFormedReadResponse<TSe
         ProcessDirectReads(it, ctx);
     } else if (formedResponse->HasMessages) {
         YDB_LOG_DEBUG_CTX(ctx, "Response to read",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"guid", formedResponse->Guid});
         if (!WriteToStreamOrDie(ctx, std::move(formedResponse->Response))) {
             return;
         }
     } else {
         YDB_LOG_DEBUG_CTX(ctx, "Empty read result, start new reading",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"guid", formedResponse->Guid});
     }
     BytesInflight_ -= diff;
@@ -2197,7 +2197,7 @@ void TReadSessionActor<Protocol>::ProcessAnswer(typename TFormedReadResponse<TSe
     // If some partition was removed from partitions container, it is not bad because it will be checked during read processing.
     AvailablePartitions.insert(formedResponse->PartitionsBecameAvailable.begin(), formedResponse->PartitionsBecameAvailable.end());
     YDB_LOG_DEBUG_CTX(ctx, "Process answer. Aval",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"parts", AvailablePartitions.size()});
 
 
@@ -2240,13 +2240,13 @@ std::tuple<TString, ui32, ui64> TReadSessionActor<Protocol>::GetReadFrom(const N
     auto jt = ReadFromTimestamp.find(topic->GetInternalName());
     if (jt == ReadFromTimestamp.end()) {
         YDB_LOG_ALERT_CTX(ctx, "Error searching for topic",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"internalName", topic->GetInternalName()},
             {"prettyName", topic->GetPrintableString()});
 
         for (const auto& kv : ReadFromTimestamp) {
             YDB_LOG_ALERT_CTX(ctx, "Have topic",
-                {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                {PQ_LOG_PREFIX},
                 {"topic", kv.first});
         }
 
@@ -2316,7 +2316,7 @@ void TReadSessionActor<Protocol>::ProcessReads(const TActorContext& ctx) {
             auto ev = MakeHolder<TEvPQProxy::TEvRead>(guid, ccount, csize, maxLag, readTimestampMs);
 
             YDB_LOG_DEBUG_CTX(ctx, "Performing read request ms",
-                {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                {PQ_LOG_PREFIX},
                 {"guid", ev->Guid},
                 {"from", it->second.Partition},
                 {"count", ccount},
@@ -2384,7 +2384,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvPartitionReady::TPtr& ev
     }
 
     YDB_LOG_DEBUG_CTX(ctx, "Partition ready for read",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"partition", ev->Get()->Partition},
         {"readOffset", ev->Get()->ReadOffset},
         {"endOffset", ev->Get()->EndOffset},
@@ -2401,7 +2401,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvPartitionReady::TPtr& ev
         ev->Get()->EndOffset - ev->Get()->ReadOffset).second;
     AFL_ENSURE(res);
     YDB_LOG_DEBUG_CTX(ctx, "TEvPartitionReady. Aval",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"parts", AvailablePartitions.size()});
 
     ProcessReads(ctx);
@@ -2461,7 +2461,7 @@ void TReadSessionActor<Protocol>::RecheckACL(const TActorContext& ctx) {
         RequestNotChecked = false;
 
         YDB_LOG_DEBUG_CTX(ctx, "Checking auth because of timeout",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX});
+            {PQ_LOG_PREFIX});
         RunAuthActor(ctx);
     }
 }
@@ -2537,7 +2537,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& e
             }
 
             YDB_LOG_INFO_CTX(ctx, "Sending to client end partition stream event",
-                {"PQLOGPREFIX", PQ_LOG_PREFIX});
+                {PQ_LOG_PREFIX});
             SendControlMessage(partitionInfo->Partition, std::move(result), ctx);
         }
     }

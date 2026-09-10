@@ -9,6 +9,7 @@
 #include <ydb/core/tx/tx_processing.h>
 
 #include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -102,7 +103,7 @@ struct TDistributedTransaction {
     template<class E>
     void OnPartitionResult(const E& event, TMaybe<EDecision> decision);
 
-    TString LogPrefix() const;
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() const;
 
     THashMap<ui64, TVector<NKikimrTx::TEvReadSet>> OutputMsgs;
 

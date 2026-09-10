@@ -591,7 +591,8 @@ TMessagePtr<TFindCoordinatorResponseData> TKafkaTestClient::FindCoordinator(cons
 TMessagePtr<TFetchResponseData> TKafkaTestClient::Fetch(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset, i8 isolationLevel) {
     Cerr << ">>>>> TFetchRequestData\n";
 
-    TRequestHeaderData header = Header(NKafka::EApiKey::FETCH, 3);
+    // IsolationLevel is present only from Fetch v4 (proxy MaxVersion is 4).
+    TRequestHeaderData header = Header(NKafka::EApiKey::FETCH, 4);
 
     TFetchRequestData request;
     request.MaxWaitMs = 1000;

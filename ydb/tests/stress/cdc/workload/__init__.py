@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import logging
 import random
 import threading
 import time
@@ -7,6 +8,8 @@ import ydb
 from enum import IntEnum, auto
 
 from ydb.tests.stress.common.common import WorkloadBase
+
+logger = logging.getLogger(__name__)
 
 
 class WorkloadRW(WorkloadBase):
@@ -33,8 +36,8 @@ class WorkloadRW(WorkloadBase):
                 """, False)
                 with self.lock:
                     self.queries += 1
-            except ydb.Aborted:
-                pass
+            except Exception as e:
+                logger.warning("rw query failed: %s", e)
 
     @staticmethod
     def _generate_select_keys(upsert_key, count):
@@ -76,20 +79,30 @@ class WorkloadAlterTable(WorkloadBase):
 
     def _alter_table_loop(self):
         while not self.is_stop_requested():
-            self._alter_table(self.state)
-            with self.lock:
-                self.state = self.State.next(self.state)
-                self.altered += 1
+            try:
+                self._alter_table(self.state)
+                with self.lock:
+                    self.state = self.State.next(self.state)
+                    self.altered += 1
+            except Exception as e:
+                logger.warning("alter table failed: %s", e)
+                time.sleep(1)
 
     def get_workload_thread_funcs(self):
         return [self._alter_table_loop]
 
 
 class WorkloadRunner:
-    def __init__(self, client, duration):
+    def __init__(self, client, duration, path=None):
         self.client = client
         self.duration = duration
-        self.table_path = '/'.join([self.client.database, "table", str(random.randint(100, 999))])
+        if path:
+            if path.startswith('/'):
+                self.table_path = path
+            else:
+                self.table_path = '/'.join([self.client.database.rstrip('/'), path])
+        else:
+            self.table_path = '/'.join([self.client.database, "table", str(random.randint(100, 999))])
         ydb.interceptor.monkey_patch_event_handler()
 
     def __enter__(self):
@@ -98,7 +111,7 @@ class WorkloadRunner:
     def __exit__(self, exc_type, exc_value, traceback):
         pass
 
-    def run(self):
+    def prepare(self):
         self.client.query(f"""
             CREATE TABLE `{self.table_path}` (
                 key Int32,
@@ -113,6 +126,7 @@ class WorkloadRunner:
             );
         """, True)
 
+    def run_load(self):
         stop = threading.Event()
         workloads = [
             WorkloadRW(self.client, self.table_path, stop),
@@ -132,3 +146,18 @@ class WorkloadRunner:
         for w in workloads:
             w.join()
         print("Stopped")
+
+    def clean(self):
+        try:
+            self.client.query(f"ALTER TABLE `{self.table_path}` DROP CHANGEFEED `updates`;", True)
+        except Exception as e:
+            logger.warning("drop changefeed failed: %s", e)
+        try:
+            self.client.query(f"DROP TABLE `{self.table_path}`;", True)
+        except Exception as e:
+            logger.warning("drop table failed: %s", e)
+
+    def run(self):
+        self.prepare()
+        self.run_load()
+        self.clean()

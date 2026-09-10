@@ -186,7 +186,7 @@ class Workload(object):
 
     def get_planner_row_count_estimate(self, table_name):
         with InstrumentedQuerySessionPool(self.driver) as session_pool:
-            res = session_pool.explain_with_retries(f"SELECT count(*) FROM {table_name}")
+            res = session_pool.explain_with_retries(f"SELECT count(*) FROM `{table_name}`")
             logger.debug(f"SELECT count explain: {res}")
             explain = json.loads(res)
 
@@ -203,9 +203,12 @@ class Workload(object):
         logger.info(f"planner row count estimate: {rc}")
         return rc
 
-    def execute(self):
-        table_name = table_name_with_prefix(self.table_prefix)
-        table_path = self.database + "/" + table_name
+    def execute(self, table_name=None, table_path=None, drop=True, raise_on_error=True):
+        create = table_name is None
+        if table_name is None:
+            table_name = table_name_with_prefix(self.table_prefix)
+        if table_path is None:
+            table_path = self.database + "/" + table_name
         table_statistics = ".metadata/statistics_v2"
         trace_id = random_string(5)
 
@@ -214,8 +217,9 @@ class Workload(object):
 
             self.pool.acquire()
 
-            logger.info(f"[{trace_id}] create table '{table_name}'")
-            self.create_table(table_name)
+            if create:
+                logger.info(f"[{trace_id}] create table '{table_name}'")
+                self.create_table(table_name)
 
             scheme = self.kikimr_client.send(
                 SchemeDescribeRequest(table_path).protobuf,
@@ -225,33 +229,60 @@ class Workload(object):
             logger.info(f"[{trace_id}] table '{table_name}' path id: {path_id}")
 
             self.add_data(table_path, trace_id)
-            count = self.rows_count(table_name)
-            logger.info(f"[{trace_id}] number of rows in table '{table_name}' {count}")
-            if count != self.batch_count * self.batch_size:
-                raise Exception(f"[{trace_id}] the number of rows in the '{table_name}' does not match the expected")
+            if create:
+                count = self.rows_count(table_name)
+                logger.info(f"[{trace_id}] number of rows in table '{table_name}' {count}")
+                if count != self.batch_count * self.batch_size:
+                    raise Exception(f"[{trace_id}] the number of rows in the '{table_name}' does not match the expected")
 
             logger.info(f"[{trace_id}] analyze '{table_name}'")
             self.analyze(table_path)
 
-            count = self.statistics_count(table_statistics, path_id)
-            logger.info(f"[{trace_id}] number of single-column (and tag-less) rows in statistics table '{table_statistics}' {count}")
-            if count == 0:
-                raise Exception(f"[{trace_id}] statistics table '{table_statistics}' has no single-column (or tag-less) stats")
+            if create:
+                count = self.statistics_count(table_statistics, path_id)
+                logger.info(f"[{trace_id}] number of single-column (and tag-less) rows in statistics table '{table_statistics}' {count}")
+                if count == 0:
+                    raise Exception(f"[{trace_id}] statistics table '{table_statistics}' has no single-column (or tag-less) stats")
 
-            multi_count = self.statistics_multi_count(table_statistics, path_id)
-            logger.info(f"[{trace_id}] number of multi-column rows in statistics table '{table_statistics}' {multi_count}")
-            if multi_count == 0:
-                raise Exception(f"[{trace_id}] statistics table '{table_statistics}' has no multi-column stats")
+                multi_count = self.statistics_multi_count(table_statistics, path_id)
+                logger.info(f"[{trace_id}] number of multi-column rows in statistics table '{table_statistics}' {multi_count}")
+                if multi_count == 0:
+                    raise Exception(f"[{trace_id}] statistics table '{table_statistics}' has no multi-column stats")
 
-            expected_count = self.batch_count * self.batch_size
-            self.wait_for_planner_row_count_estimate(table_name, expected_count, trace_id)
+                expected_count = self.batch_count * self.batch_size
+                self.wait_for_planner_row_count_estimate(table_name, expected_count, trace_id)
         except Exception as e:
             logger.error(f"[{trace_id}] {type(e)}, {e}")
-            raise
+            if raise_on_error:
+                raise
 
         finally:
-            logger.info(f"[{trace_id}] drop table '{table_name}'")
-            self.drop_table(table_path)
+            if drop:
+                logger.info(f"[{trace_id}] drop table '{table_name}'")
+                self.drop_table(table_path)
+
+    def _prepared_table_name(self):
+        return self.table_prefix
+
+    def _prepared_table_path(self):
+        return self.database.rstrip('/') + "/" + self._prepared_table_name()
+
+    def prepare(self):
+        self.driver.wait(timeout=60)
+        self.create_table(self._prepared_table_name())
+
+    def clean(self):
+        self.drop_table(self._prepared_table_path())
+
+    def run_on_prepared(self):
+        started_at = time.time()
+        table_name = self._prepared_table_name()
+        table_path = self._prepared_table_path()
+        while time.time() - started_at < self.duration:
+            try:
+                self.execute(table_name=table_name, table_path=table_path, drop=False, raise_on_error=False)
+            except Exception as e:
+                logger.error(f"{type(e)}, {e}")
 
     def run(self):
         started_at = time.time()

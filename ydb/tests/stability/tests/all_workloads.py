@@ -18,7 +18,21 @@ def _init_stress_utils():
 
     _all_stress_utils = {
         'Cdc': {
-            'args': ["--endpoint", "grpc://{node_host}:2135",],
+            'pre_nemesis_args': [
+                "--endpoint", "grpc://{node_host}:2135",
+                "--path", "cdc_{node_host}_{test_run_uuid}",
+                "--phase", "prepare",
+            ],
+            'args': [
+                "--endpoint", "grpc://{node_host}:2135",
+                "--path", "cdc_{node_host}_{test_run_uuid}",
+                "--phase", "run",
+            ],
+            'post_nemesis_args': [
+                "--endpoint", "grpc://{node_host}:2135",
+                "--path", "cdc_{node_host}_{test_run_uuid}",
+                "--phase", "clean",
+            ],
             'local_path': 'ydb/tests/stress/cdc/cdc'
         },
         'Ctas': {
@@ -67,9 +81,24 @@ def _init_stress_utils():
             'local_path': 'ydb/tests/stress/show_create/table/show_create_table'
         },
         'Statistics': {
-            'args': ["--host", "{node_host}",
-                     "--port", "2135",
-                     "--prefix", "statistics_workload_{node_host}_iter_{iteration_num}_{uuid}"],
+            'pre_nemesis_args': [
+                "--host", "{node_host}",
+                "--port", "2135",
+                "--prefix", "statistics_workload_{node_host}_{test_run_uuid}",
+                "--phase", "prepare",
+            ],
+            'args': [
+                "--host", "{node_host}",
+                "--port", "2135",
+                "--prefix", "statistics_workload_{node_host}_{test_run_uuid}",
+                "--phase", "run",
+            ],
+            'post_nemesis_args': [
+                "--host", "{node_host}",
+                "--port", "2135",
+                "--prefix", "statistics_workload_{node_host}_{test_run_uuid}",
+                "--phase", "clean",
+            ],
             'local_path': 'ydb/tests/stress/statistics_workload/statistics_workload'
         },
         'TopicKafka': {
@@ -176,20 +205,66 @@ def _init_stress_utils():
 
     for table_type in ['row', 'column']:
         _all_stress_utils[f'Kv_{table_type}'] = {
-            'args': ["--endpoint", "grpc://{node_host}:2135",
-                     "--store_type", table_type, "--kv_prefix", f"workload_kv_{table_type}_{{node_host}}_iter_{{iteration_num}}_{{uuid}}"],
+            'pre_nemesis_args': [
+                "--endpoint", "grpc://{node_host}:2135",
+                "--store_type", table_type,
+                "--kv_prefix", f"workload_kv_{table_type}_{{node_host}}_{{test_run_uuid}}",
+                "--phase", "prepare",
+            ],
+            'args': [
+                "--endpoint", "grpc://{node_host}:2135",
+                "--store_type", table_type,
+                "--kv_prefix", f"workload_kv_{table_type}_{{node_host}}_{{test_run_uuid}}",
+                "--phase", "run",
+            ],
+            'post_nemesis_args': [
+                "--endpoint", "grpc://{node_host}:2135",
+                "--store_type", table_type,
+                "--kv_prefix", f"workload_kv_{table_type}_{{node_host}}_{{test_run_uuid}}",
+                "--phase", "clean",
+            ],
             'local_path': 'ydb/tests/stress/kv/workload_kv'
         }
         _all_stress_utils[f'Log_{table_type}'] = {
-            'args': ["--endpoint", "grpc://{node_host}:2135",
-                     "--store_type", table_type,
-                     "--log_prefix", f"log_{table_type}_{{node_host}}_iter_{{iteration_num}}_{{uuid}}"],
+            'pre_nemesis_args': [
+                "--endpoint", "grpc://{node_host}:2135",
+                "--store_type", table_type,
+                "--log_prefix", f"log_{table_type}_{{node_host}}_{{test_run_uuid}}",
+                "--phase", "prepare",
+            ],
+            'args': [
+                "--endpoint", "grpc://{node_host}:2135",
+                "--store_type", table_type,
+                "--log_prefix", f"log_{table_type}_{{node_host}}_{{test_run_uuid}}",
+                "--phase", "run",
+            ],
+            'post_nemesis_args': [
+                "--endpoint", "grpc://{node_host}:2135",
+                "--store_type", table_type,
+                "--log_prefix", f"log_{table_type}_{{node_host}}_{{test_run_uuid}}",
+                "--phase", "clean",
+            ],
             'local_path': 'ydb/tests/stress/log/workload_log'
         }
         _all_stress_utils[f'Mixed_{table_type}'] = {
-            'args': ["--endpoint", "grpc://{node_host}:2135",
-                     "--store_type", table_type,
-                     "--mixed_prefix", f"mixed_{table_type}_{{node_host}}_iter_{{iteration_num}}_{{uuid}}"],
+            'pre_nemesis_args': [
+                "--endpoint", "grpc://{node_host}:2135",
+                "--store_type", table_type,
+                "--mixed_prefix", f"mixed_{table_type}_{{node_host}}_{{test_run_uuid}}",
+                "--phase", "prepare",
+            ],
+            'args': [
+                "--endpoint", "grpc://{node_host}:2135",
+                "--store_type", table_type,
+                "--mixed_prefix", f"mixed_{table_type}_{{node_host}}_{{test_run_uuid}}",
+                "--phase", "run",
+            ],
+            'post_nemesis_args': [
+                "--endpoint", "grpc://{node_host}:2135",
+                "--store_type", table_type,
+                "--mixed_prefix", f"mixed_{table_type}_{{node_host}}_{{test_run_uuid}}",
+                "--phase", "clean",
+            ],
             'local_path': 'ydb/tests/stress/mixedpy/workload_mixed'
         }
         _all_stress_utils[f'SimpleQueue_{table_type}'] = {

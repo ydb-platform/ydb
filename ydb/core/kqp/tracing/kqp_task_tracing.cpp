@@ -171,6 +171,8 @@ void TTaskTraceDescription::Annotate(NWilson::TSpan& span, const NYql::NDqProto:
         TryFromString(it->second, description.Operations_);
     }
     span.Name(description.Name());
+    span.Attribute("ydb.stage_id", static_cast<i64>(task.GetStageId()));
+    span.Attribute("ydb.task_id", static_cast<i64>(task.GetId()));
     span.Attribute("ydb.task.operations", description.OperationsAttribute());
 }
 

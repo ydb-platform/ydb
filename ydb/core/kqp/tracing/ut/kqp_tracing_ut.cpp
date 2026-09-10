@@ -8,10 +8,8 @@
 #include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/wilson_ids/wilson.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_tracing.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
-#include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 
 namespace NKikimr {
 
@@ -140,25 +138,28 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*span, "ydb.session.cpu_us")->value().int_value(), 7);
     }
 
-    Y_UNIT_TEST(BasicTaskTraceUsesExistingTimingAndSpillCounters) {
+    Y_UNIT_TEST(TaskTraceUsesReportedStatistics) {
         NActors::TTestActorRuntimeBase runtime;
         runtime.Initialize();
         auto* uploader = RegisterUploader(runtime);
-        NYql::NDq::TDqTaskRunnerStats source{};
-        source.StartTs = TInstant::MilliSeconds(120);
-        source.SpillingComputeWriteBytes = 30;
-        source.SpillingChannelWriteBytes = 70;
         NYql::NDqProto::TDqComputeActorStats stats;
+        stats.SetCpuTimeUs(90);
         auto& task = *stats.AddTasks();
         task.SetCreateTimeMs(100);
-        NYql::NDq::FillComputeTraceStats(source, task);
-        UNIT_ASSERT_VALUES_EQUAL(task.GetStartTimeMs(), 120);
+        task.SetStartTimeMs(120);
+        task.SetSpillingComputeWriteBytes(30);
+        task.SetSpillingChannelWriteBytes(70);
+        NKqpProto::TKqpTaskExtraStats extra;
+        extra.SetReadRetriesCount(2);
+        task.MutableExtra()->PackFrom(extra);
         NWilson::TSpan span(TComponentTracingLevels::TQueryProcessor::Detailed,
             NWilson::TTraceId::NewTraceId(15, 4095), "Task: Compute", NWilson::EFlags::NONE, runtime.GetActorSystem(0));
-        NYql::NDq::AddComputeTraceAttributes(span, stats);
+        NKqp::AddKqpTaskTraceAttributes(span, stats);
         span.EndOk();
         runtime.SimulateSleep(TDuration::Seconds(1));
         const auto* compute = FindSpan(*uploader, "Task: ");
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*compute, "ydb.cpu_us")->value().int_value(), 90);
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*compute, "ydb.read_retries")->value().int_value(), 2);
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*compute, "ydb.queue_delay_us")->value().int_value(), 20000);
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*compute, "ydb.spilled_bytes")->value().int_value(), 100);
     }

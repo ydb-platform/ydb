@@ -222,16 +222,21 @@ _CSS = (
 width:15rem;max-width:70vw;padding:.6rem;background:#fff;border:1px solid #d0d5dd;border-radius:5px;color:var(--text)}
 .actor-flag:hover .flag-help,.actor-flag:focus-within .flag-help{display:block}
 .view-tabs{display:flex;gap:.4rem;flex-wrap:wrap;margin:.8rem 0}.view-tabs button[aria-pressed=true]{background:var(--accent);color:#fff}
-.dense-run{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:.6rem;padding:.65rem 0;border-bottom:1px solid #d0d5dd}
+.dense-run{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.6rem;padding:.65rem 0;border-bottom:1px solid #d0d5dd}
 .dense-run-meta{display:flex;flex-wrap:wrap;gap:.2rem .8rem;font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
 .dense-run-profiles{font-size:.9rem;margin:.2rem 0;overflow-wrap:anywhere}.dense-run-id{font-size:.8rem;overflow-wrap:anywhere}
 .dense-run-actions{position:relative}.dense-run-actions .actions{position:absolute;right:0;z-index:10;background:#fff;
-padding:.6rem;border:1px solid #d0d5dd;min-width:8rem;flex-direction:column}.dense-run-select{padding-top:.15rem}
+padding:.6rem;border:1px solid #d0d5dd;min-width:8rem;flex-direction:column}
 .dense-run summary{cursor:pointer}.runs-toolbar{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin:.8rem 0}
+.runs-actions{display:flex;gap:.6rem;flex-wrap:wrap;margin-left:auto}
+.import-dialog{width:min(30rem,calc(100vw - 2rem));padding:1.2rem;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--text)}
+.import-dialog::backdrop{background:rgb(0 0 0 / 35%)}
+.import-dialog h2{margin-top:0}.import-dialog input{max-width:100%;margin:.8rem 0}
+.import-dialog .toolbar{justify-content:flex-end;margin-bottom:0}
 .dense-run{position:relative}.dense-run:hover{background:#f5f7fb}
 .dense-run-id::after{content:"";position:absolute;inset:0}
 .dense-run-id:focus-visible::after{outline:2px solid var(--accent);outline-offset:2px}
-.dense-run-select,.dense-run-actions{position:relative;z-index:1}
+.dense-run-actions{position:relative;z-index:1}
 .dense-run-actions[open]{z-index:2}
 .report-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem 2rem}
 .report-table{width:100%;font-variant-numeric:tabular-nums}.report-table th,.report-table td{text-align:right}
@@ -289,6 +294,14 @@ _CSS += (
     "ound:#fff;border:1px solid #ced6e2;border-radius:4px;z-index:20;box-shadow:0 4px 12px #18223722;font-size:13px}\n@media(max-width:600px){#cpu"
     "-topology .cpu-node{grid-template-columns:1fr;gap:8px}#cpu-topology .cpu-node-name{padding:0;display:flex;justify-content:space-between}}\n@m"
     "edia(pointer:coarse){#cpu-topology .cpu-core{min-height:44px}#cpu-topology #cpu-help-button{width:44px;height:44px}}\n"
+)
+
+_CSS += (
+    '.comparison-profile-choice{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--line)}'
+    '.comparison-profile-choice span:first-of-type{flex:1;min-width:180px}'
+    '#comparison-runs tr[data-picker-run]{cursor:pointer}'
+    '#comparison-runs tr:hover,#comparison-runs .comparison-run-selected{background:var(--panel)}'
+    '#comparison-runs td{white-space:normal;overflow-wrap:anywhere}'
 )
 
 _JS = (
@@ -1096,7 +1109,6 @@ async function refreshActiveBanner(){
     if(banner)banner.textContent='Run status unavailable';
   }finally{activeBannerLoading=false}
 }
-const selectedComparisonRuns=new Set;
 let runsSort='newest';
 function sortRuns(items,order){
   const timestamp=run=>Date.parse(run.started_at||run.queued_at||'')||0;
@@ -1108,9 +1120,7 @@ function sortRuns(items,order){
 }
 function compactRun(run){
   const profiles=Array.isArray(run.profile_names)?run.profile_names:[],benchmarks=Array.isArray(run.benchmarks)?run.benchmarks:[];
-  return '<article class=dense-run><label class=dense-run-select><input type=checkbox class=run-compare value="'+esc(run.id)+
-    '" aria-label="Select '+esc(run.id)+' for comparison" '+(selectedComparisonRuns.has(run.id)?'checked':'')+'></label>'+
-    '<div><div class=dense-run-meta>'+status(run.status)+'<time title="'+esc(run.started_at||run.queued_at||'')+'">'+
+  return '<article class=dense-run><div><div class=dense-run-meta>'+status(run.status)+'<time title="'+esc(run.started_at||run.queued_at||'')+'">'+
     esc(humanTime(run.started_at||run.queued_at))+'</time><span>'+duration(run)+'</span><span>'+
     esc(run.profiles)+' profiles · '+esc(run.repetitions)+' steps</span><span>perf '+(run.perf?'on':'off')+
     '</span><span>'+esc(run.source)+'</span></div><div class=dense-run-profiles>'+
@@ -1125,30 +1135,23 @@ function compactRun(run){
 async function renderRuns(){
   clearRefresh();
   app.innerHTML=shell('runs','<h1 class=page-title>Runs</h1>'+runFilters()+
-    '<div class=toolbar><input id=import-file type=file accept=.zip><button id=import-run>Import results</button>'+
-    '<button id=apply-filters>Apply filters</button></div><div class=runs-toolbar><label>Sort <select id=runs-sort>'+
+    '<div class=runs-toolbar><label>Sort <select id=runs-sort>'+
     '<option value=newest>Newest first</option><option value=oldest>Oldest first</option>'+
-    '<option value=longest>Longest first</option></select></label><button id=compare-selected>Compare selected</button>'+
-    '<button id=clear-selected>Clear selection</button><span id=selection-count aria-live=polite></span></div><div id=runs-table></div>');
+    '<option value=longest>Longest first</option></select></label><div class=runs-actions><button id=open-import>Import</button>'+
+    '<button id=apply-filters>Apply filters</button></div></div><div id=runs-table></div>'+
+    '<dialog id=import-dialog class=import-dialog aria-labelledby=import-title><h2 id=import-title>Import results</h2>'+
+    '<label for=import-file>Portable ZIP archive</label><input id=import-file type=file accept=".zip,application/zip">'+
+    '<div id=import-error role=alert></div><div id=import-status role=status></div><div class=toolbar>'+
+    '<button id=cancel-import>Cancel</button><button id=import-run class=primary>Import</button></div></dialog>');
   const target=document.querySelector('#runs-table'),sort=document.querySelector('#runs-sort');
   let records=[],request=0;
   sort.value=runsSort;
-  function selection(){
-    document.querySelector('#selection-count').textContent=selectedComparisonRuns.size+' selected';
-    document.querySelector('#compare-selected').disabled=!selectedComparisonRuns.size;
-  }
   function draw(){
     target.innerHTML=records.length?sortRuns(records,runsSort).map(compactRun).join(''):
       '<div class=empty>No runs match these filters.</div>';
-    for(const input of target.querySelectorAll('.run-compare'))input.onchange=()=>{
-      if(input.checked&&selectedComparisonRuns.size>=20){input.checked=false;alert('Select at most 20 runs.');return}
-      if(input.checked)selectedComparisonRuns.add(input.value);else selectedComparisonRuns.delete(input.value);
-      selection();
-    };
     for(const item of target.querySelectorAll('[data-repeat]'))item.onclick=event=>{
       event.preventDefault();reuseRun(item.dataset.repeat)
     };
-    selection()
   }
   async function load(){
     const current=++request,query=new URLSearchParams();
@@ -1160,15 +1163,30 @@ async function renderRuns(){
   }
   sort.onchange=()=>{runsSort=sort.value;draw()};
   document.querySelector('#apply-filters').onclick=load;
-  document.querySelector('#clear-selected').onclick=()=>{selectedComparisonRuns.clear();draw()};
-  document.querySelector('#compare-selected').onclick=async()=>{
-    try{await api('/api/comparisons/selection',jsonOptions([...selectedComparisonRuns]));setRoute('comparisons')}
-    catch(error){alert(error.message)}
+  const dialog=document.querySelector('#import-dialog'),fileInput=document.querySelector('#import-file'),
+    importButton=document.querySelector('#import-run'),cancelButton=document.querySelector('#cancel-import'),
+    importError=document.querySelector('#import-error'),importStatus=document.querySelector('#import-status');
+  let importing=false;
+  document.querySelector('#open-import').onclick=()=>{
+    fileInput.value='';importError.textContent='';importStatus.textContent='';dialog.showModal()
   };
-  document.querySelector('#import-run').onclick=async()=>{
-    try{const file=document.querySelector('#import-file').files[0];if(!file)throw Error('Choose a portable ZIP archive first.');
-      await api('/api/import',{method:'POST',body:await file.arrayBuffer()});await load()}
-    catch(error){target.innerHTML=displayError(error)}
+  cancelButton.onclick=()=>dialog.close();
+  dialog.addEventListener('cancel',event=>{if(importing)event.preventDefault()});
+  importButton.onclick=async()=>{
+    if(importing)return;
+    const file=fileInput.files[0];
+    importError.textContent='';
+    if(!file){importError.textContent='Choose a portable ZIP archive first.';fileInput.focus();return}
+    importing=true;importButton.disabled=true;cancelButton.disabled=true;fileInput.disabled=true;
+    importStatus.textContent='Importing…';
+    try{
+      await api('/api/import',{method:'POST',body:await file.arrayBuffer()});
+      if(dialog.isConnected){dialog.close();await load()}
+    }catch(error){if(dialog.isConnected)importError.textContent=error.message}
+    finally{
+      importing=false;importButton.disabled=false;cancelButton.disabled=false;fileInput.disabled=false;
+      importStatus.textContent=''
+    }
   };
   await load()
 }
@@ -1556,11 +1574,12 @@ function mountLocalYdbComparison(container,data,chartData=null){
   const all=data.entries||[];
   if(!all.length){container.innerHTML='<div class=empty>No local YDB profiles in the selected runs.</div>';return}
   const stateKey='ydb-bench-comparison-profiles:'+JSON.stringify([...new Set(all.map(item=>item.run))].sort());
-  if(!container.dataset.restored){
+  if(!container.dataset.restored&&!data.readonly){
     try{Object.assign(container.dataset,JSON.parse(sessionStorage.getItem(stateKey)||'{}'))}catch{}
     container.dataset.restored='true';
   }
   const remember=()=>{
+    if(data.readonly)return;
     const state=Object.fromEntries(['profiles','baseline','cpu','allConfig'].filter(key=>container.dataset[key]!==undefined)
       .map(key=>[key,container.dataset[key]]));
     try{sessionStorage.setItem(stateKey,JSON.stringify(state))}catch{}
@@ -1570,7 +1589,7 @@ function mountLocalYdbComparison(container,data,chartData=null){
   const baseline=entries.find(item=>localComparisonKey(item)===container.dataset.baseline)||entries[0];
   const options=all.map(item=>'<label><input type=checkbox data-comparison-profile value="'+
     esc(localComparisonKey(item))+'" '+(entries.includes(item)?'checked':'')+'> '+esc(localComparisonId(item))+'</label>').join('');
-  const toolbar='<div class=toolbar><details><summary>Profiles · '+entries.length+'</summary><div class=series-picker>'+
+  const toolbar=data.readonly?'':'<div class=toolbar><details><summary>Profiles · '+entries.length+'</summary><div class=series-picker>'+
     options+'</div><button type=button data-apply-profiles>Apply</button></details>'+
     (baseline?'<label>Baseline <select data-baseline>'+entries.map(item=>'<option value="'+esc(localComparisonKey(item))+
       '" '+(item===baseline?'selected':'')+'>'+esc(localComparisonId(item))+'</option>').join('')+'</select></label>':'')+'</div>';
@@ -1650,7 +1669,7 @@ function mountLocalYdbComparison(container,data,chartData=null){
       (configRows||'<tr><td colspan="'+(entries.length+1)+'">No configuration differences.</td></tr>')+
       '</tbody></table></div></div>';
     bindSectionTabs(container,'comparison');
-    container.querySelector('[data-baseline]').onchange=event=>{
+    if(!data.readonly)container.querySelector('[data-baseline]').onchange=event=>{
       container.dataset.baseline=event.target.value;remember();mountLocalYdbComparison(container,data)
     };
     container.querySelector('[data-comparison-cpu]').onchange=event=>{
@@ -1660,7 +1679,7 @@ function mountLocalYdbComparison(container,data,chartData=null){
       container.dataset.allConfig=String(!event.target.checked);remember();mountLocalYdbComparison(container,data)
     };
   }
-  container.querySelector('[data-apply-profiles]').onclick=()=>{
+  if(!data.readonly)container.querySelector('[data-apply-profiles]').onclick=()=>{
     container.dataset.profiles=JSON.stringify([...container.querySelectorAll('[data-comparison-profile]:checked')].map(input=>input.value));
     remember();mountLocalYdbComparison(container,data)
   }
@@ -2852,21 +2871,192 @@ function parseLocalYdbProfileSelection(groups,selected){
     "  };\n    refreshTimer=setInterval(refresh,2000);await refresh();\n  }catch(error){if(location.hash==='#topology')app.innerHTML=shell('topolog"
     "y',displayError(error))}\n}\n"
     """
+function filterComparisonRuns(runs,filters,selected){
+  const query=(filters.query||'').trim().toLowerCase();
+  return sortRuns(runs.filter(run=>{
+    const names=Array.isArray(run.profile_names)?run.profile_names:[];
+    const benchmarks=Array.isArray(run.benchmarks)?run.benchmarks:[];
+    const date=(run.started_at||run.queued_at||'').slice(0,10);
+    return (!filters.only||selected.has(run.id))&&(!filters.status||run.status===filters.status)&&
+      (!filters.benchmark||benchmarks.includes(filters.benchmark))&&(!filters.since||date>=filters.since)&&
+      (!query||[run.id,...names,...benchmarks].join(' ').toLowerCase().includes(query))
+  }),filters.sort||'newest')
+}
+async function renderSavedComparisons(){
+  clearRefresh();
+  const route=location.hash,parts=route.slice(1).split('?')[0].split('/'),id=parts[1];
+  const active=()=>location.hash===route;
+  try{
+    const records=await api('/api/saved-comparisons');
+    if(!active())return;
+    if(!id){
+      app.innerHTML=shell('comparisons','<div class=toolbar><h1 class=page-title>Comparisons</h1>'+
+        '<a href="#comparisons/new">New comparison</a></div>'+(!records.length?'<div class=empty>No saved comparisons.</div>':
+        '<div class=table-scroll><table><thead><tr><th>Comparison</th><th>Created</th><th>Profiles</th></tr></thead><tbody>'+
+        records.map(record=>'<tr data-comparison-id="'+esc(record.id)+'"><td><a href="#comparisons/'+enc(record.id)+'">'+
+          esc(record.name)+'</a><div class=muted>'+record.profiles.map(pair=>esc(pair[1])).join(' · ')+
+          '</div></td><td>'+esc(humanTime(record.created_at))+'</td><td>'+record.profiles.length+'</td></tr>').join('')+
+        '</tbody></table></div>'));
+      for(const row of app.querySelectorAll('[data-comparison-id]'))row.onclick=event=>{
+        if(event.target.closest('a,button,input,select')||event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
+        setRoute('comparisons/'+row.dataset.comparisonId)
+      };
+      return
+    }
+    const record=id==='new'?null:records.find(item=>item.id===id);
+    if(id!=='new'&&!record)throw Error('Comparison not found');
+    const editing=id==='new'||parts[2]==='edit';
+    const crumb='<div class=breadcrumbs><a href="#comparisons">Comparisons</a> / '+esc(record?.name||'New comparison')+'</div>';
+    if(editing){
+      const runs=await api('/api/runs');if(!active())return;
+      const selected=new Map((record?.profiles||[]).map(pair=>[JSON.stringify(pair),pair]));
+      const seeds=record?[...new Set(record.profiles.map(pair=>pair[0]))]:new URLSearchParams(route.split('?')[1]||'').getAll('run');
+      const chosenRuns=new Set(seeds),cache=new Map(),pending=new Map(),errors=new Map(),autoSelect=new Set(record?[]:seeds);
+      let baseline=record?JSON.stringify(record.baseline):'',saving=false;
+      const options=values=>'<option value="">All</option>'+[...new Set(values)].sort().map(value=>'<option value="'+esc(value)+'">'+esc(value)+'</option>').join('');
+      app.innerHTML=shell('comparisons',crumb+'<h1 class=page-title>'+(record?'Edit comparison':'New comparison')+'</h1>'+
+        '<div class=toolbar><label>Name <input id=comparison-name maxlength=200 value="'+esc(record?.name||'')+'"></label>'+
+        '<button id=save-saved-comparison>'+(record?'Save':'Create comparison')+'</button><a href="#comparisons'+
+        (record?'/'+enc(record.id):'')+'">Cancel</a></div><div id=comparison-error role=alert></div>'+
+        '<div class=filters><div class=field><label for=comparison-query>Run or profile</label><input id=comparison-query placeholder="Name, profile or run ID"></div>'+
+        '<div class=field><label for=comparison-status>Status</label><select id=comparison-status>'+options(runs.map(run=>run.status))+'</select></div>'+
+        '<div class=field><label for=comparison-benchmark>Benchmark</label><select id=comparison-benchmark>'+
+        options(runs.flatMap(run=>run.benchmarks||[]))+'</select></div><div class=field><label for=comparison-since>Started since</label>'+
+        '<input id=comparison-since type=date></div></div><div class=runs-toolbar><span id=comparison-selection-count aria-live=polite></span>'+
+        '<label><input id=comparison-selected-only type=checkbox> Selected only</label><button id=comparison-reset>Reset filters</button>'+
+        '<label>Sort <select id=comparison-sort><option value=newest>Newest first</option><option value=oldest>Oldest first</option>'+
+        '<option value=longest>Longest first</option></select></label></div><div class=table-scroll><table><thead><tr>'+
+        '<th></th><th>Run / profiles</th><th>Started</th><th>Duration</th><th>Status</th></tr></thead><tbody id=comparison-runs></tbody></table></div>'+
+        '<h3 id=comparison-profiles-title>Profiles</h3><div id=comparison-load-status aria-live=polite></div>'+
+        '<div id=comparison-profile-options></div><label>Baseline <select id=comparison-baseline></select></label>');
+      const element=id=>document.querySelector('#'+id);
+      const drawProfiles=()=>{
+        const available=[...chosenRuns].flatMap(id=>cache.get(id)||[]);
+        const choices=new Map(available.map(item=>[localComparisonKey(item),[item.run,item.profile]]));
+        for(const [key,pair] of selected)if(!choices.has(key))choices.set(key,pair);
+        element('comparison-profile-options').innerHTML=[...choices].map(([key,pair])=>
+          '<label class=comparison-profile-choice><input type=checkbox data-saved-profile value="'+esc(key)+'" '+(selected.has(key)?'checked':'')+'>'+
+          '<span>'+esc(pair[1])+'</span><span class=muted>'+esc(pair[0])+'</span></label>').join('')||
+          '<div class=muted>Select runs above to load profiles.</div>';
+        element('comparison-profiles-title').textContent='Profiles · '+selected.size;
+        if(!selected.has(baseline))baseline=selected.keys().next().value||'';
+        element('comparison-baseline').innerHTML=[...selected].map(([key,pair])=>'<option value="'+esc(key)+'" '+
+          (key===baseline?'selected':'')+'>'+esc(pair.join(' / '))+'</option>').join('');
+        const loading=[...chosenRuns].filter(id=>pending.has(id));
+        element('save-saved-comparison').disabled=saving||!!loading.length||!selected.size||!element('comparison-name').value.trim();
+        element('comparison-load-status').innerHTML=(loading.length?'<div class=muted>Loading profiles for '+loading.length+' runs…</div>':'')+
+          [...chosenRuns].filter(id=>errors.has(id)).map(id=>'<div class=notice>'+esc(id+': '+errors.get(id))+
+          ' <button data-retry-run="'+esc(id)+'">Retry</button></div>').join('');
+        for(const input of app.querySelectorAll('[data-saved-profile]'))input.onchange=()=>{
+          if(input.checked)selected.set(input.value,JSON.parse(input.value));else selected.delete(input.value);drawProfiles()
+        };
+        for(const button of app.querySelectorAll('[data-retry-run]'))button.onclick=()=>loadRun(button.dataset.retryRun);
+      };
+      const drawRuns=()=>{
+        const visible=filterComparisonRuns(runs,{
+          query:element('comparison-query').value,status:element('comparison-status').value,
+          benchmark:element('comparison-benchmark').value,since:element('comparison-since').value,
+          only:element('comparison-selected-only').checked,sort:element('comparison-sort').value
+        },chosenRuns);
+        const outside=[...chosenRuns].filter(id=>!visible.some(run=>run.id===id)).length;
+        element('comparison-selection-count').textContent=chosenRuns.size+' selected'+(outside?' · '+outside+' outside filters':'')+' · '+visible.length+' shown';
+        element('comparison-runs').innerHTML=visible.map(run=>'<tr data-picker-run="'+esc(run.id)+'" class="'+
+          (chosenRuns.has(run.id)?'comparison-run-selected':'')+'"><td><input type=checkbox aria-label="Select '+esc(run.id)+
+          '" '+(chosenRuns.has(run.id)?'checked':'')+'></td><td><div>'+esc((run.profile_names||[]).join(' · ')||'No profiles')+
+          '</div><div class=muted>'+esc((run.benchmarks||[]).join(' · '))+' · '+esc(run.id)+'</div></td><td>'+
+          esc(humanTime(run.started_at||run.queued_at))+'</td><td>'+duration(run)+'</td><td>'+status(run.status)+'</td></tr>').join('')||
+          '<tr><td colspan=5>No runs match these filters.</td></tr>';
+        for(const row of app.querySelectorAll('[data-picker-run]')){
+          row.onclick=event=>{
+            if(event.target.closest('input,button,a,select')||event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
+            toggleRun(row.dataset.pickerRun)
+          };
+          row.querySelector('input').onchange=()=>toggleRun(row.dataset.pickerRun)
+        }
+      };
+      const loadRun=async id=>{
+        if(pending.has(id))return;
+        errors.delete(id);
+        const request=loadLocalYdbComparison([id]);pending.set(id,request);drawProfiles();
+        try{
+          const result=await request;if(!active())return;
+          cache.set(id,result.entries||[]);
+          if(chosenRuns.has(id)&&autoSelect.has(id)){
+            for(const item of result.entries||[])selected.set(localComparisonKey(item),[item.run,item.profile]);
+            autoSelect.delete(id)
+          }
+          if(!(result.entries||[]).length)errors.set(id,'No local YDB profiles in this run')
+        }catch(error){if(active())errors.set(id,error.message)}
+        finally{pending.delete(id);if(active())drawProfiles()}
+      };
+      const toggleRun=id=>{
+        element('comparison-error').innerHTML='';
+        if(chosenRuns.has(id)){
+          chosenRuns.delete(id);autoSelect.delete(id);
+          for(const [key,pair] of selected)if(pair[0]===id)selected.delete(key)
+        }else{
+          if(chosenRuns.size>=20){element('comparison-error').textContent='Select at most 20 runs.';return}
+          chosenRuns.add(id);autoSelect.add(id);
+          if(cache.has(id)){
+            for(const item of cache.get(id))selected.set(localComparisonKey(item),[item.run,item.profile]);
+            autoSelect.delete(id)
+          }else loadRun(id)
+        }
+        drawRuns();drawProfiles()
+      };
+      element('comparison-baseline').onchange=event=>{baseline=event.target.value};
+      element('comparison-name').oninput=drawProfiles;
+      element('comparison-query').oninput=drawRuns;
+      for(const id of ['comparison-status','comparison-benchmark','comparison-since','comparison-selected-only','comparison-sort'])element(id).onchange=drawRuns;
+      element('comparison-reset').onclick=()=>{
+        for(const id of ['comparison-query','comparison-status','comparison-benchmark','comparison-since'])element(id).value='';
+        element('comparison-selected-only').checked=false;drawRuns()
+      };
+      element('save-saved-comparison').onclick=async()=>{
+        if(saving)return;saving=true;drawProfiles();
+        try{
+          const saved=await api('/api/saved-comparisons',jsonOptions({...record,name:element('comparison-name').value,
+            profiles:[...selected.values()],baseline:JSON.parse(baseline)}));
+          if(active())setRoute('comparisons/'+saved.id)
+        }catch(error){if(active())element('comparison-error').innerHTML=displayError(error)}
+        finally{saving=false;if(active())drawProfiles()}
+      };
+      drawRuns();drawProfiles();for(const id of chosenRuns)loadRun(id);return
+    }
+    app.innerHTML=shell('comparisons',crumb+'<div class=toolbar><h1 class=page-title>'+esc(record.name)+'</h1>'+
+      '<a href="#comparisons/'+enc(record.id)+'/edit">Edit comparison</a><button id=delete-comparison>Delete</button></div>'+
+      '<div class=muted>'+record.profiles.length+' profiles · Baseline: '+esc(record.baseline.join(' / '))+'</div>'+
+      '<div id=comparison-error></div><div id=comparison-missing></div><section id=local-ydb-comparison>Loading profiles…</section>');
+    document.querySelector('#delete-comparison').onclick=async()=>{
+      if(!confirm('Delete comparison "'+record.name+'"? Benchmark results will be kept.'))return;
+      try{await api('/api/saved-comparisons/delete',jsonOptions({id:record.id,revision:record.revision}));if(active())setRoute('comparisons')}
+      catch(error){if(active())document.querySelector('#comparison-error').innerHTML=displayError(error)}
+    };
+    const entries=[],errors=[];
+    for(const run of [...new Set(record.profiles.map(pair=>pair[0]))]){
+      try{entries.push(...(await loadLocalYdbComparison([run])).entries)}catch(error){errors.push(run+': '+error.message)}
+      if(!active())return
+    }
+    const keys=record.profiles.map(pair=>JSON.stringify(pair)),found=entries.filter(item=>keys.includes(localComparisonKey(item)));
+    const missing=record.profiles.filter(pair=>!found.some(item=>localComparisonKey(item)===JSON.stringify(pair)));
+    document.querySelector('#comparison-missing').innerHTML=missing.map(pair=>'<div class=notice>Result unavailable: '+esc(pair.join(' / '))+'</div>').join('')+
+      errors.map(error=>displayError(error)).join('');
+    const target=document.querySelector('#local-ydb-comparison');
+    if(!found.some(item=>localComparisonKey(item)===JSON.stringify(record.baseline))){
+      target.innerHTML='<div class=empty>Baseline unavailable. Edit comparison to choose another baseline.</div>';return
+    }
+    target.dataset.profiles=JSON.stringify(keys);target.dataset.baseline=JSON.stringify(record.baseline);target.dataset.restored='true';
+    mountLocalYdbComparison(target,{entries:found,readonly:true})
+  }catch(error){if(active())app.innerHTML=shell('comparisons',displayError(error))}
+}
 async function renderComparisons(){
   clearRefresh();
   try{
     const value=await api('/api/comparisons');
-    const content='<h1 class=page-title>Comparisons</h1><details><summary>Runs · '+value.selected.length+
-      '</summary><div class=series-picker>'+value.runs.map(run=>'<label><input class=compare type=checkbox value="'+
-      esc(run.id)+'" '+(value.selected.includes(run.id)?'checked':'')+'> '+esc(run.id)+'</label>').join('')+
-      '</div><button id=save-comparisons>Update selection</button></details><section><div id=local-ydb-comparison>'+
-      (value.selected.length?'Loading profiles…':'Select runs to compare their profiles.')+
+    const content='<h1 class=page-title>Comparisons</h1><section><div id=local-ydb-comparison>'+
+      (value.selected.length?'Loading profiles…':'<a href="#runs">Select runs in Runs</a> to compare their profiles.')+
       '</div></section><section id=other-comparisons hidden><h2>Other benchmarks</h2><div id=comparison-chart></div></section>';
     app.innerHTML=shell('comparisons',content);
-    document.querySelector('#save-comparisons').onclick=async()=>{
-      await api('/api/comparisons/selection',jsonOptions([...document.querySelectorAll('.compare:checked')].map(input=>input.value)));
-      renderComparisons()
-    };
     if(!value.selected.length)return;
     const [local,charts]=await Promise.allSettled([loadLocalYdbComparison(value.selected),loadChartData(value.selected)]);
     if(location.hash!=='#comparisons')return;
@@ -2888,7 +3078,7 @@ async function renderComparisons(){
     """
     "async function compose(){const pieces=routeParts(),current=pieces.join('/');if(current==='runs')return renderRuns();if(current==='new')return renderN"
     "ew('builder');if(current==='new/yaml')return renderNew('yaml');if(current==='topology')return renderTopology();if(curren"
-    "t==='comparisons')return renderComparisons();if(pieces[0]==='attempt'&&[4,5].includes(pieces.length))"
+    "t==='comparisons'||pieces[0]==='comparisons')return renderSavedComparisons();if(pieces[0]==='attempt'&&[4,5].includes(pieces.length))"
     "return renderLocalYdbAttempt(pieces[1],pieces[2],pieces[3],pieces[4]);if(pieces[0]==='run'){if(pieces[2]"
     "==='profile')return renderRun(pieces[1],pieces.slice(3).join('/'));return renderRun(pieces.slice(1).join('/'))}setRoute("
     "'runs')}\n"
@@ -4670,6 +4860,71 @@ class RunService:
                     raise BenchmarkError("local YDB comparison contains more than 100 profiles")
         return {"entries": entries}
 
+    def saved_comparisons(self):
+        path = self.output / ".saved-comparisons.json"
+        with self._lock:
+            if not path.exists():
+                return []
+            try:
+                records = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as error:
+                raise BenchmarkError("Cannot read saved comparisons") from error
+            if not isinstance(records, list):
+                raise BenchmarkError("Invalid saved comparisons")
+            return records
+
+    def save_comparison(self, value):
+        if not isinstance(value, dict):
+            raise BenchmarkError("Comparison must be an object")
+        name, profiles, baseline = value.get("name"), value.get("profiles"), value.get("baseline")
+        if not isinstance(name, str) or not name.strip() or len(name) > 200:
+            raise BenchmarkError("Comparison name must contain 1 to 200 characters")
+        if not isinstance(profiles, list) or not 1 <= len(profiles) <= 100:
+            raise BenchmarkError("Select between 1 and 100 profiles")
+        if any(
+            not isinstance(item, list)
+            or len(item) != 2
+            or any(not isinstance(part, str) or not part or len(part) > 500 for part in item)
+            for item in profiles
+        ):
+            raise BenchmarkError("Profiles must be run/profile pairs")
+        if len({tuple(item) for item in profiles}) != len(profiles) or len({item[0] for item in profiles}) > 20:
+            raise BenchmarkError("Select unique profiles from at most 20 runs")
+        if baseline not in profiles:
+            raise BenchmarkError("Baseline must be one of the selected profiles")
+        with self._lock:
+            records = self.saved_comparisons()
+            previous = next((item for item in records if item["id"] == value.get("id")), None)
+            if value.get("id") and previous is None:
+                raise BenchmarkError("Comparison no longer exists")
+            if previous and value.get("revision") != previous["revision"]:
+                raise BenchmarkError("Comparison changed elsewhere; reload before saving")
+            record = {
+                "id": previous["id"] if previous else uuid.uuid4().hex,
+                "name": name.strip(),
+                "profiles": profiles,
+                "baseline": baseline,
+                "created_at": previous["created_at"] if previous else datetime.now(timezone.utc).isoformat(),
+                "revision": previous["revision"] + 1 if previous else 1,
+            }
+            records = [item for item in records if item["id"] != record["id"]]
+            records.insert(0, record)
+            atomic_write_json(self.output / ".saved-comparisons.json", records)
+            return record
+
+    def delete_comparison(self, value):
+        if not isinstance(value, dict):
+            raise BenchmarkError("Comparison must be an object")
+        with self._lock:
+            records = self.saved_comparisons()
+            record = next((item for item in records if item["id"] == value.get("id")), None)
+            if record is None or record["revision"] != value.get("revision"):
+                raise BenchmarkError("Comparison changed or no longer exists; reload first")
+            atomic_write_json(
+                self.output / ".saved-comparisons.json", [item for item in records if item["id"] != record["id"]]
+            )
+        return {"deleted": record["id"]}
+
     def comparisons(self, selected=None):
         model = self.model()
         if selected is None:
@@ -4992,6 +5247,8 @@ def _handler(service):
                     "queue_position",
                 )
                 return self._json(200, [{key: item[key] for key in fields} for item in service.filtered_model(filters)])
+            if path == "/api/saved-comparisons":
+                return self._json(200, service.saved_comparisons())
             if path == "/api/comparisons":
                 return self._json(200, service.comparisons())
             if path == "/api/chart-data":
@@ -5118,6 +5375,10 @@ def _handler(service):
                     return self._json(
                         201, service.start(options["yaml"], options["perf"], options["continue_on_error"])
                     )
+                if path == "/api/saved-comparisons":
+                    return self._json(200, service.save_comparison(self._json_body()))
+                if path == "/api/saved-comparisons/delete":
+                    return self._json(200, service.delete_comparison(self._json_body()))
                 if path == "/api/comparisons/selection":
                     selected = self._json_body()
                     return self._json(200, service.select_comparisons(selected))

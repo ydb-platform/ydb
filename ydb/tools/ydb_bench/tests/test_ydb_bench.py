@@ -7878,7 +7878,7 @@ class WebTest(unittest.TestCase):
     @unittest.skipUnless(shutil.which("node"), "node is required for the compact Runs UI test")
     def test_web_compact_runs_sorting_and_tabs(self):
         helpers = web._JS[web._JS.index("function sectionTabs") : web._JS.index("let activeBannerLoading")]
-        runs = web._JS[web._JS.index("const selectedComparisonRuns") : web._JS.index("async function renderRuns")]
+        runs = web._JS[web._JS.index("let runsSort") : web._JS.index("async function renderRuns")]
         script = helpers + runs + """
         const assert=require('assert');
         const esc=value=>String(value??'').replaceAll('<','&lt;').replaceAll('"','&quot;');
@@ -7889,9 +7889,10 @@ class WebTest(unittest.TestCase):
         assert.deepEqual(sortRuns(records,'oldest').map(item=>item.id),['older','newer']);
         assert.deepEqual(sortRuns(records,'longest').map(item=>item.id),['older','newer']);
         assert.equal(records[0].id,'older');
-        selectedComparisonRuns.add('older');
         const html=compactRun({...records[0],profile_names:['first','<second>'],profiles:2,repetitions:4});
-        assert(html.includes('checked'));
+        assert(!html.includes('type=checkbox'));
+        assert(html.includes('class=dense-run-id'));
+        assert(html.includes('Actions'));
         assert(html.includes('first')&&html.includes('&lt;second>'));
         assert(html.includes('2 profiles · 4 steps'));
         const storage=new Map;
@@ -7973,6 +7974,83 @@ class WebTest(unittest.TestCase):
             BenchmarkError, "selected chart data has too many rows"
         ):
             chart_data(self.root, ["first", "second"])
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for browser logic checks")
+    def test_comparison_run_filters_preserve_selection(self):
+        script = "function sortRuns" + web._JS.split("function sortRuns", 1)[1].split("function compactRun", 1)[0]
+        script += (
+            "function filterComparisonRuns"
+            + web._JS.split("function filterComparisonRuns", 1)[1].split("async function renderSavedComparisons", 1)[0]
+        )
+        script += """
+            const runs=[
+              {id:'old',started_at:'2026-09-08T10:00:00Z',status:'completed',profile_names:['stable'],benchmarks:['local-ydb']},
+              {id:'new',started_at:'2026-09-10T10:00:00Z',status:'failed',profile_names:['united'],benchmarks:['local-ydb']},
+              {id:'ping',queued_at:'2026-09-09T10:00:00Z',status:'completed',profile_names:['ping'],benchmarks:['ping-bench']}
+            ],selected=new Set(['old','new']);
+            const ids=filters=>filterComparisonRuns(runs,filters,selected).map(run=>run.id);
+            process.stdout.write(JSON.stringify({all:ids({}),query:ids({query:'UNITED'}),
+              status:ids({status:'completed'}),date:ids({since:'2026-09-09'}),
+              benchmark:ids({benchmark:'ping-bench'}),only:ids({only:true,sort:'oldest'}),
+              empty:ids({query:'missing'}),selected:[...selected]}));
+        """
+        result = json.loads(
+            subprocess.run(
+                [shutil.which("node"), "-e", script], capture_output=True, text=True, check=True, timeout=10
+            ).stdout
+        )
+        self.assertEqual(
+            result,
+            {
+                "all": ["new", "ping", "old"],
+                "query": ["new"],
+                "status": ["ping", "old"],
+                "date": ["new", "ping"],
+                "benchmark": ["ping"],
+                "only": ["old", "new"],
+                "empty": [],
+                "selected": ["old", "new"],
+            },
+        )
+
+    def test_saved_comparisons_are_explicit_and_durable(self):
+        service = RunService(self.root)
+        service.select_comparisons(["legacy"])
+        self.assertEqual(service.saved_comparisons(), [])
+        value = {
+            "name": " United pool ",
+            "profiles": [["run", "baseline"], ["run", "united"]],
+            "baseline": ["run", "baseline"],
+        }
+        record = service.save_comparison(value)
+        self.assertEqual(record["name"], "United pool")
+        self.assertEqual(record["revision"], 1)
+        self.assertEqual(RunService(self.root).saved_comparisons(), [record])
+        updated = service.save_comparison({**record, "name": "Renamed", "baseline": ["run", "united"]})
+        self.assertEqual(updated["revision"], 2)
+        with self.assertRaisesRegex(BenchmarkError, "changed elsewhere"):
+            service.save_comparison(record)
+        with self.assertRaisesRegex(BenchmarkError, "changed or no longer"):
+            service.delete_comparison(record)
+        self.assertEqual(service.saved_comparisons(), [updated])
+        service.delete_comparison(updated)
+        self.assertEqual(service.saved_comparisons(), [])
+
+    def test_saved_comparisons_validate_selection(self):
+        service = RunService(self.root)
+        valid = {"name": "Comparison", "profiles": [["run", "profile"]], "baseline": ["run", "profile"]}
+        for change in (
+            {"name": " "},
+            {"name": "x" * 201},
+            {"profiles": []},
+            {"profiles": ["invalid"]},
+            {"profiles": [["run", "profile"], ["run", "profile"]]},
+            {"baseline": ["missing", "profile"]},
+            {"id": "missing"},
+        ):
+            with self.subTest(change=change), self.assertRaises(BenchmarkError):
+                service.save_comparison({**valid, **change})
+        self.assertEqual(service.saved_comparisons(), [])
 
     def test_local_ydb_summary_is_available_to_comparison_charts(self):
         self._manifest(self.root / "complete")
@@ -8260,6 +8338,8 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"function localComparisonSemantic", script)
                 self.assertIn(b"currentView.source===view.source", script)
                 self.assertIn(b"Only differences", script)
+                self.assertNotIn(b"save-comparisons", script)
+                self.assertIn(b"Select runs in Runs", script)
                 self.assertIn(b"function localComparisonKey", script)
                 self.assertIn(b"Incompatible", script)
                 self.assertIn(b"reference===0", script)

@@ -1,5 +1,6 @@
 #include "fulltext.h"
 #include "fulltext_query.h"
+#include "superlemmer.h"
 #include "table_index.h"
 
 #include <library/cpp/json/json_reader.h>
@@ -8,6 +9,24 @@
 #include <util/generic/xrange.h>
 
 namespace NKikimr::NFulltext {
+
+namespace {
+
+    struct TSuperLemmerCallState {
+        TString Languages;
+        ui32 Calls = 0;
+    } SuperLemmerCallState;
+
+    bool IsTestSuperLemmerLanguageSupported(const TString& language) {
+        return language == "english" || language == "russian";
+    }
+
+    void ApplyTestSuperLemmer(const TString& languages, TString&) {
+        SuperLemmerCallState.Languages = languages;
+        ++SuperLemmerCallState.Calls;
+    }
+
+}
 
 Y_UNIT_TEST_SUITE(NFulltext) {
 
@@ -219,6 +238,23 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
         UNIT_ASSERT_VALUES_EQUAL(error, "language is not supported by snowball");
 
+        columnAnalyzers->set_filter_length_max(6);
+        columnAnalyzers->set_language("english, russian,english");
+        UNIT_ASSERT_C(ValidateSettings(settings, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        columnAnalyzers->set_language("english,klingon");
+        UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "language is not supported by snowball");
+
+        columnAnalyzers->set_language("english,,russian");
+        UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "language is not supported by snowball");
+
+        columnAnalyzers->set_language("english,german");
+        UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "language is not supported by snowball");
+
         columnAnalyzers->set_language("english");
         columnAnalyzers->set_use_filter_ngram(true);
         UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
@@ -280,9 +316,16 @@ Y_UNIT_TEST_SUITE(NFulltext) {
 
         {
             auto settings = makeSettings();
-            settings.mutable_columns()->at(0).mutable_analyzers()->set_language("russian");
+            settings.mutable_columns()->at(0).mutable_analyzers()->set_language("russian, english");
             UNIT_ASSERT_C(ValidateSettings(settings, error), error);
             UNIT_ASSERT_VALUES_EQUAL(error, "");
+        }
+
+        {
+            auto settings = makeSettings();
+            settings.mutable_columns()->at(0).mutable_analyzers()->set_language("russian,klingon");
+            UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "language is not supported by superlemmer");
         }
     }
 
@@ -426,6 +469,11 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         UNIT_ASSERT_VALUES_EQUAL(
             Analyze("Это быстрый лис и он в саду", analyzers),
             (TVector<TString>{"быстрый", "лис", "саду"}));
+
+        analyzers.set_language("english,russian");
+        UNIT_ASSERT_VALUES_EQUAL(
+            Analyze("The quick fox и быстрый лис", analyzers),
+            (TVector<TString>{"quick", "fox", "быстрый", "лис"}));
     }
 
     Y_UNIT_TEST(AnalyzeInvalid) {
@@ -540,11 +588,32 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         analyzers.set_language("english");
         UNIT_ASSERT_VALUES_EQUAL(Analyze(englishText, analyzers), (TVector<TString>{"car", "are", "drive", "proper", "on", "the", "road"}));
 
+        analyzers.set_language("russian,english");
+        UNIT_ASSERT_VALUES_EQUAL(
+            Analyze("cars driving машины дорогам ελληνικά 123", analyzers),
+            (TVector<TString>{"car", "drive", "машин", "дорог", "ελληνικά", "123"}));
+
         analyzers.set_language("klingon");
         UNIT_ASSERT_EXCEPTION(Analyze(englishText, analyzers), yexception);
 
         analyzers.clear_language();
         UNIT_ASSERT_EXCEPTION(Analyze(englishText, analyzers), yexception);
+    }
+
+    Y_UNIT_TEST(AnalyzeFilterSuperLemmerUsesLanguageMaskOnce) {
+        RegisterSuperLemmer(IsTestSuperLemmerLanguageSupported, ApplyTestSuperLemmer);
+        SuperLemmerCallState = {};
+
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
+        analyzers.set_use_filter_superlemmer(true);
+        analyzers.set_language("english, russian,english");
+
+        Analyze("cars машины", analyzers);
+
+        UNIT_ASSERT_VALUES_EQUAL(SuperLemmerCallState.Calls, 2);
+        UNIT_ASSERT_VALUES_EQUAL(SuperLemmerCallState.Languages, "english,russian");
+        RegisterSuperLemmer(nullptr, nullptr);
     }
 
     Y_UNIT_TEST(BuildNgramsUtf8) {

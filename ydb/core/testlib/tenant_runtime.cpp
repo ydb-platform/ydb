@@ -33,9 +33,10 @@
 
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
-#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/folder/dirut.h>
+#include <util/string/builder.h>
+#include <util/system/yassert.h>
 
 namespace NKikimr {
 
@@ -384,7 +385,7 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
     void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx)
     {
         const auto &rec = ev->Get()->GetRecord();
-        UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), NKikimrScheme::StatusSuccess);
+        Y_ABORT_UNLESS((rec.GetStatus()) == (NKikimrScheme::StatusSuccess));
         auto &path = rec.GetPath();
         auto shardId = rec.GetPathDescription().GetSelf().GetSchemeshardId();
         auto pathId = rec.GetPathDescription().GetSelf().GetPathId();
@@ -543,7 +544,7 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
     void Handle(TEvLocal::TEvRegisterNode::TPtr &ev, const TActorContext &ctx)
     {
         auto &record = ev->Get()->Record;
-        UNIT_ASSERT_VALUES_EQUAL(record.ServicedDomainsSize(), 1);
+        Y_ABORT_UNLESS((record.ServicedDomainsSize()) == (1));
 
         TClientInfo info;
         info.Key = TSubDomainKey(record.GetServicedDomains(0));
@@ -562,7 +563,7 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
     {
         auto &record = ev->Get()->Record;
 
-        UNIT_ASSERT(Clients.contains(ev->Sender));
+        Y_ABORT_UNLESS(Clients.contains(ev->Sender));
         if (record.GetStatus() == TEvLocal::TEvStatus::StatusDead) {
             Clients.erase(ev->Sender);
         } else {
@@ -583,7 +584,7 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
 
     void Handle(TEvTest::TEvWaitHiveState::TPtr &ev, const TActorContext &ctx)
     {
-        UNIT_ASSERT(!WaitForState);
+        Y_ABORT_UNLESS(!WaitForState);
         for (auto &state : ev->Get()->States) {
             if (state.ResourceLimit.GetCPU()
                 || state.ResourceLimit.GetMemory()
@@ -936,8 +937,8 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
                 {
                     TAutoPtr<IEventHandle> handle;
                     auto event = GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
-                    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSchemeshardId(), domain.SchemeShardId);
-                    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
+                    Y_ABORT_UNLESS((event->Record.GetSchemeshardId()) == (domain.SchemeShardId));
+                    Y_ABORT_UNLESS((event->Record.GetStatus()) == (NKikimrScheme::EStatus::StatusAccepted));
                 }
 
                 auto evSubscribe = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(1);
@@ -946,7 +947,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
                 {
                     TAutoPtr<IEventHandle> handle;
                     auto event = GrabEdgeEvent<TEvSchemeShard::TEvNotifyTxCompletionResult>(handle);
-                    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), 1);
+                    Y_ABORT_UNLESS((event->Record.GetTxId()) == (1));
                 }
             }
             Y_ABORT_UNLESS(domain.Subdomains.empty(), "Pre-initialized subdomains are not supported for real SchemeShard");
@@ -1021,7 +1022,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
         SendToPipe(MakeBSControllerID(), Sender, request.Release(), 0, pipeConfig);
 
         auto reply2 = GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(reply2->Record.GetResponse().GetSuccess(), true);
+        Y_ABORT_UNLESS((reply2->Record.GetResponse().GetSuccess()) == (true));
     }
 
     // Create Tenant Slot Pools
@@ -1136,7 +1137,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
         SendToConsole(req);
         TAutoPtr<IEventHandle> handle;
         auto reply = GrabEdgeEventRethrow<TEvConsole::TEvSetConfigResponse>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        Y_ABORT_UNLESS((reply->Record.GetStatus().GetCode()) == (Ydb::StatusIds::SUCCESS));
     }
 
     // Create Tenant Slot Broker
@@ -1214,18 +1215,18 @@ void CheckTenantPoolStatus(TTenantTestRuntime &runtime,
     auto reply = runtime.GrabEdgeEventRethrow<TEvTenantPool::TEvTenantPoolStatus>(handle);
     auto &rec = reply->Record;
     for (auto &slot : rec.GetSlots()) {
-        UNIT_ASSERT(status.contains(slot.GetId()));
+        Y_ABORT_UNLESS(status.contains(slot.GetId()));
         auto &entry = status[slot.GetId()];
-        UNIT_ASSERT_VALUES_EQUAL(slot.GetId(), entry.GetId());
-        UNIT_ASSERT_VALUES_EQUAL(slot.GetType(), entry.GetType());
-        UNIT_ASSERT_VALUES_EQUAL(slot.GetAssignedTenant(), entry.GetAssignedTenant());
-        UNIT_ASSERT_VALUES_EQUAL(slot.GetLabel(), entry.GetLabel());
-        UNIT_ASSERT_VALUES_EQUAL(slot.GetResourceLimit().GetCPU(), entry.GetResourceLimit().GetCPU());
-        UNIT_ASSERT_VALUES_EQUAL(slot.GetResourceLimit().GetMemory(), entry.GetResourceLimit().GetMemory());
-        UNIT_ASSERT_VALUES_EQUAL(slot.GetResourceLimit().GetNetwork(), entry.GetResourceLimit().GetNetwork());
+        Y_ABORT_UNLESS((slot.GetId()) == (entry.GetId()));
+        Y_ABORT_UNLESS((slot.GetType()) == (entry.GetType()));
+        Y_ABORT_UNLESS((slot.GetAssignedTenant()) == (entry.GetAssignedTenant()));
+        Y_ABORT_UNLESS((slot.GetLabel()) == (entry.GetLabel()));
+        Y_ABORT_UNLESS((slot.GetResourceLimit().GetCPU()) == (entry.GetResourceLimit().GetCPU()));
+        Y_ABORT_UNLESS((slot.GetResourceLimit().GetMemory()) == (entry.GetResourceLimit().GetMemory()));
+        Y_ABORT_UNLESS((slot.GetResourceLimit().GetNetwork()) == (entry.GetResourceLimit().GetNetwork()));
         status.erase(slot.GetId());
     }
-    UNIT_ASSERT(status.empty());
+    Y_ABORT_UNLESS(status.empty());
 }
 
 } // namespace NKikimr

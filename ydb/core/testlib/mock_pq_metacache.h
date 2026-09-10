@@ -2,10 +2,12 @@
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 
 #include <ydb/library/actors/core/actor.h>
-#include <library/cpp/testing/gmock_in_unittest/gmock.h>
-#include <library/cpp/testing/unittest/registar.h>
+
+#include <gmock/gmock.h>
 
 #include <util/generic/ptr.h>
+#include <util/string/builder.h>
+#include <util/system/yassert.h>
 
 namespace NKikimr {
 
@@ -26,7 +28,7 @@ public:
             HFunc(TEvPqMetaCache::TEvDescribeTopicsRequest, HandleDescribeTopics);
             HFunc(TEvPqMetaCache::TEvDescribeTopicsByNameRequest, HandleDescribeTopicsByName);
             default:
-                UNIT_FAIL_NONFATAL("Unexpected event to PQ metacache: " << ev->GetTypeRewrite());
+                Y_ABORT("%s", (TStringBuilder() << "Unexpected event to PQ metacache: " << ev->GetTypeRewrite()).c_str());
         }
     }
 

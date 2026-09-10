@@ -9,10 +9,9 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/events.h>
-#include <library/cpp/testing/unittest/registar.h>
-
 #include <util/generic/ptr.h>
 #include <util/stream/output.h>
+#include <util/system/yassert.h>
 
 namespace NKikimr {
 
@@ -79,7 +78,7 @@ public:
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeScheme::TPtr &ev, const TActorContext &ctx) {
         const auto& record = ev->Get()->Record;
-        UNIT_ASSERT(record.GetPathId() == 1);
+        Y_ABORT_UNLESS(record.GetPathId() == 1);
         TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder> response =
             new NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder();
         TString out;

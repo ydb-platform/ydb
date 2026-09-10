@@ -6,7 +6,9 @@
 #include <ydb/core/cms/console/console_tenants_manager.h>
 
 #include <google/protobuf/util/message_differencer.h>
-#include <library/cpp/testing/unittest/registar.h>
+
+#include <util/string/builder.h>
+#include <util/system/yassert.h>
 
 namespace NKikimr {
 
@@ -126,14 +128,14 @@ struct TCreateTenantRequest {
 
     TSelf& WithDatabaseQuotas(const TString& quotas) {
         Ydb::Cms::DatabaseQuotas parsedQuotas;
-        UNIT_ASSERT_C(NProtoBuf::TextFormat::ParseFromString(quotas, &parsedQuotas), quotas);
+        Y_ABORT_UNLESS(NProtoBuf::TextFormat::ParseFromString(quotas, &parsedQuotas), "%s", (TStringBuilder() << quotas).c_str());
         DatabaseQuotas = std::move(parsedQuotas);
         return *this;
     }
 
     TSelf& WithScaleRecommenderPolicies(const TString& policies) {
         Ydb::Cms::ScaleRecommenderPolicies parsedPolicies;
-        UNIT_ASSERT_C(NProtoBuf::TextFormat::ParseFromString(policies, &parsedPolicies), policies);
+        Y_ABORT_UNLESS(NProtoBuf::TextFormat::ParseFromString(policies, &parsedPolicies), "%s", (TStringBuilder() << policies).c_str());
         ScaleRecommenderPolicies = std::move(parsedPolicies);
         return *this;
     }
@@ -143,7 +145,7 @@ struct TCreateTenantRequest {
             Type = EType::Common;
         }
 
-        UNIT_ASSERT(Type == EType::Common || Type == EType::Shared);
+        Y_ABORT_UNLESS(Type == EType::Common || Type == EType::Shared);
         Pools = pools;
         return *this;
     }
@@ -153,7 +155,7 @@ struct TCreateTenantRequest {
             Type = EType::Common;
         }
 
-        UNIT_ASSERT(Type == EType::Common || Type == EType::Shared);
+        Y_ABORT_UNLESS(Type == EType::Common || Type == EType::Shared);
         Slots = slots;
         return *this;
     }
@@ -163,7 +165,7 @@ struct TCreateTenantRequest {
             Type = EType::Common;
         }
 
-        UNIT_ASSERT(Type == EType::Common || Type == EType::Shared);
+        Y_ABORT_UNLESS(Type == EType::Common || Type == EType::Shared);
         Slots.push_back({type, zone, count});
         return *this;
     }
@@ -173,7 +175,7 @@ struct TCreateTenantRequest {
             Type = EType::Serverless;
         }
 
-        UNIT_ASSERT(Type == EType::Serverless);
+        Y_ABORT_UNLESS(Type == EType::Serverless);
         SharedDbPath = path;
         return *this;
     }
@@ -284,14 +286,14 @@ inline void CheckTenantStatus(TTenantTestRuntime &runtime, const TString &path, 
         runtime.SendToConsole(event);
         auto reply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvGetTenantStatusResponse>(handle);
         auto &operation = reply->Record.GetResponse().operation();
-        UNIT_ASSERT_VALUES_EQUAL(operation.status(), code);
+        Y_ABORT_UNLESS((operation.status()) == (code));
         if (code != Ydb::StatusIds::SUCCESS)
             return;
 
         Ydb::Cms::GetDatabaseStatusResult status;
-        UNIT_ASSERT(operation.result().UnpackTo(&status));
+        Y_ABORT_UNLESS(operation.result().UnpackTo(&status));
 
-        UNIT_ASSERT_VALUES_EQUAL(status.path(), CanonizePath(path));
+        Y_ABORT_UNLESS((status.path()) == (CanonizePath(path)));
 
         ok = status.state() == state && CompareState(slots, pools, registrations, status, shared);
         if (!ok) {
@@ -330,18 +332,19 @@ inline void CheckTenantScaleRecommenderPolicies(TTenantTestRuntime &runtime, con
     runtime.SendToConsole(event);
     auto reply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvGetTenantStatusResponse>(handle);
     auto &operation = reply->Record.GetResponse().operation();
-    UNIT_ASSERT_VALUES_EQUAL(operation.status(), Ydb::StatusIds::SUCCESS);
+    Y_ABORT_UNLESS((operation.status()) == (Ydb::StatusIds::SUCCESS));
 
     Ydb::Cms::GetDatabaseStatusResult status;
-    UNIT_ASSERT(operation.result().UnpackTo(&status));
+    Y_ABORT_UNLESS(operation.result().UnpackTo(&status));
 
     if (!policies.empty()) {
         Ydb::Cms::ScaleRecommenderPolicies expectedPolicies;
-        UNIT_ASSERT_C(NProtoBuf::TextFormat::ParseFromString(policies, &expectedPolicies), policies);
-        UNIT_ASSERT_C(NProtoBuf::util::MessageDifferencer::Equals(status.scale_recommender_policies(), expectedPolicies),
-                      TStringBuilder() << "Expected: " << policies << ", got: " << status.scale_recommender_policies().ShortDebugString());
+        Y_ABORT_UNLESS(NProtoBuf::TextFormat::ParseFromString(policies, &expectedPolicies), "%s", (TStringBuilder() << policies).c_str());
+        Y_ABORT_UNLESS(
+            NProtoBuf::util::MessageDifferencer::Equals(status.scale_recommender_policies(), expectedPolicies),
+            "%s", (TStringBuilder() << "Expected: " << policies << ", got: " << status.scale_recommender_policies().ShortDebugString()).c_str());
     } else {
-        UNIT_ASSERT(!status.has_scale_recommender_policies());
+        Y_ABORT_UNLESS(!status.has_scale_recommender_policies());
     }
 }
 
@@ -352,12 +355,12 @@ inline void AlterScaleRecommenderPolicies(TTenantTestRuntime &runtime, const TSt
     event->Record.MutableRequest()->set_path(path);
 
     auto *requestPolicies = event->Record.MutableRequest()->mutable_scale_recommender_policies();
-    UNIT_ASSERT_C(NProtoBuf::TextFormat::ParseFromString(policies, requestPolicies), policies);
+    Y_ABORT_UNLESS(NProtoBuf::TextFormat::ParseFromString(policies, requestPolicies), "%s", (TStringBuilder() << policies).c_str());
 
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
     auto reply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvAlterTenantResponse>(handle);
-    UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetResponse().operation().status(), code);
+    Y_ABORT_UNLESS((reply->Record.GetResponse().operation().status()) == (code));
 }
 
 inline void CheckCreateTenant(TTenantTestRuntime &runtime,
@@ -411,7 +414,7 @@ inline void CheckCreateTenant(TTenantTestRuntime &runtime,
     auto &operation = reply->Record.GetResponse().operation();
 
     if (operation.ready()) {
-        UNIT_ASSERT_VALUES_EQUAL_C(operation.status(), code, operation.DebugString());
+        Y_ABORT_UNLESS((operation.status()) == (code), "%s", (TStringBuilder() << operation.DebugString()).c_str());
     } else {
         TString id = operation.id();
         auto *request = new NConsole::TEvConsole::TEvNotifyOperationCompletionRequest;
@@ -423,12 +426,12 @@ inline void CheckCreateTenant(TTenantTestRuntime &runtime,
                                                      NConsole::TEvConsole::TEvOperationCompletionNotification>(handle);
         auto *resp = std::get<1>(replies);
         if (!resp) {
-            UNIT_ASSERT(!std::get<0>(replies)->Record.GetResponse().operation().ready());
+            Y_ABORT_UNLESS(!std::get<0>(replies)->Record.GetResponse().operation().ready());
             resp = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvOperationCompletionNotification>(handle);
         }
 
-        UNIT_ASSERT(resp->Record.GetResponse().operation().ready());
-        UNIT_ASSERT_VALUES_EQUAL(resp->Record.GetResponse().operation().status(), code);
+        Y_ABORT_UNLESS(resp->Record.GetResponse().operation().ready());
+        Y_ABORT_UNLESS((resp->Record.GetResponse().operation().status()) == (code));
     }
 }
 
@@ -506,7 +509,7 @@ inline void CheckRemoveTenant(TTenantTestRuntime &runtime,
     auto &operation = reply->Record.GetResponse().operation();
 
     if (operation.ready()) {
-        UNIT_ASSERT_VALUES_EQUAL(operation.status(), code);
+        Y_ABORT_UNLESS((operation.status()) == (code));
     } else {
         TString id = operation.id();
         for (;;) {
@@ -516,7 +519,7 @@ inline void CheckRemoveTenant(TTenantTestRuntime &runtime,
             auto checkReply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvGetOperationResponse>(handle);
             auto &checkOperation = checkReply->Record.GetResponse().operation();
             if (checkOperation.ready()) {
-                UNIT_ASSERT_VALUES_EQUAL(checkOperation.status(), code);
+                Y_ABORT_UNLESS((checkOperation.status()) == (code));
                 break;
             }
 
@@ -553,7 +556,7 @@ inline void CheckSetTenantAttributes(TTenantTestRuntime &runtime,
     auto &operation = reply->Record.GetResponse().operation();
 
     if (operation.ready()) {
-        UNIT_ASSERT_VALUES_EQUAL(operation.status(), code);
+        Y_ABORT_UNLESS((operation.status()) == (code));
     } else {
         TString id = operation.id();
         for (;;) {
@@ -563,7 +566,7 @@ inline void CheckSetTenantAttributes(TTenantTestRuntime &runtime,
             auto checkReply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvGetOperationResponse>(handle);
             auto &checkOperation = checkReply->Record.GetResponse().operation();
             if (checkOperation.ready()) {
-                UNIT_ASSERT_VALUES_EQUAL(checkOperation.status(), code);
+                Y_ABORT_UNLESS((checkOperation.status()) == (code));
                 break;
             }
 
@@ -610,11 +613,10 @@ inline Ydb::Cms::GetDatabaseStatusResult GetTenantStatusResult(TTenantTestRuntim
     TAutoPtr<IEventHandle> handle;
     auto reply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvGetTenantStatusResponse>(handle);
     auto &operation = reply->Record.GetResponse().operation();
-    UNIT_ASSERT_VALUES_EQUAL(operation.status(), Ydb::StatusIds::SUCCESS);
+    Y_ABORT_UNLESS((operation.status()) == (Ydb::StatusIds::SUCCESS));
 
     Ydb::Cms::GetDatabaseStatusResult result;
-    UNIT_ASSERT_C(operation.result().UnpackTo(&result),
-        "Failed to unpack status result for tenant " << path);
+    Y_ABORT_UNLESS(operation.result().UnpackTo(&result), "%s", (TStringBuilder() << "Failed to unpack status result for tenant " << path).c_str());
     return result;
 }
 
@@ -623,14 +625,11 @@ inline void CheckGetTenantAttributes(TTenantTestRuntime &runtime,
                                       const TMap<TString, TString> &expectedAttrs)
 {
     auto result = GetTenantStatusResult(runtime, path);
-    UNIT_ASSERT_VALUES_EQUAL_C(result.attributes_size(), expectedAttrs.size(),
-        "Attribute count mismatch for tenant " << path);
+    Y_ABORT_UNLESS(static_cast<size_t>(result.attributes_size()) == expectedAttrs.size(), "%s", (TStringBuilder() << "Attribute count mismatch for tenant " << path).c_str());
     for (const auto &[key, expectedValue] : expectedAttrs) {
         auto it = result.attributes().find(key);
-        UNIT_ASSERT_C(it != result.attributes().end(),
-            "Attribute '" << key << "' is missing for tenant " << path);
-        UNIT_ASSERT_VALUES_EQUAL_C(it->second, expectedValue,
-            "Attribute '" << key << "' value mismatch for tenant " << path);
+        Y_ABORT_UNLESS(it != result.attributes().end(), "%s", (TStringBuilder() << "Attribute '" << key << "' is missing for tenant " << path).c_str());
+        Y_ABORT_UNLESS((it->second) == (expectedValue), "%s", (TStringBuilder() << "Attribute '" << key << "' value mismatch for tenant " << path).c_str());
     }
 }
 
@@ -641,9 +640,8 @@ inline void CheckGetTenantAttribute(TTenantTestRuntime &runtime,
 {
     auto result = GetTenantStatusResult(runtime, path);
     auto it = result.attributes().find(attrName);
-    UNIT_ASSERT_C(it != result.attributes().end(),
-        "Attribute '" << attrName << "' is not set for tenant " << path);
-    UNIT_ASSERT_VALUES_EQUAL(it->second, expectedValue);
+    Y_ABORT_UNLESS(it != result.attributes().end(), "%s", (TStringBuilder() << "Attribute '" << attrName << "' is not set for tenant " << path).c_str());
+    Y_ABORT_UNLESS((it->second) == (expectedValue));
 }
 
 inline void CheckTenantAttributeAbsent(TTenantTestRuntime &runtime,
@@ -651,8 +649,7 @@ inline void CheckTenantAttributeAbsent(TTenantTestRuntime &runtime,
                                        const TString &attrName)
 {
     auto result = GetTenantStatusResult(runtime, path);
-    UNIT_ASSERT_C(result.attributes().find(attrName) == result.attributes().end(),
-        "Attribute '" << attrName << "' is unexpectedly set for tenant " << path);
+    Y_ABORT_UNLESS(result.attributes().find(attrName) == result.attributes().end(), "%s", (TStringBuilder() << "Attribute '" << attrName << "' is unexpectedly set for tenant " << path).c_str());
 }
 
 inline void WaitTenantStatus(TTenantTestRuntime &runtime,
@@ -666,12 +663,10 @@ inline void WaitTenantStatus(TTenantTestRuntime &runtime,
 
         auto reply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvGetTenantStatusResponse>(runtime.Sender);
         auto &operation = reply->Get()->Record.GetResponse().operation();
-        UNIT_ASSERT_C(operation.status() == Ydb::StatusIds::SUCCESS,
-                "Unexpected status " << operation.status() << " for tenant " << path);
+        Y_ABORT_UNLESS(operation.status() == Ydb::StatusIds::SUCCESS, "%s", (TStringBuilder() << "Unexpected status " << operation.status() << " for tenant " << path).c_str());
 
         Ydb::Cms::GetDatabaseStatusResult result;
-        UNIT_ASSERT_C(operation.result().UnpackTo(&result),
-                "Failed to unpack status result for tenant " << path);
+        Y_ABORT_UNLESS(operation.result().UnpackTo(&result), "%s", (TStringBuilder() << "Failed to unpack status result for tenant " << path).c_str());
 
         if (std::find(expected.begin(), expected.end(), result.state()) != expected.end())
             break;

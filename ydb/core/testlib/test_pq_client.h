@@ -16,10 +16,10 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
-#include <library/cpp/testing/unittest/registar.h>
-
+#include <util/string/builder.h>
 #include <util/string/printf.h>
 #include <util/system/tempfile.h>
+#include <util/system/yassert.h>
 
 namespace NKikimr {
 namespace NPersQueueTests {
@@ -177,7 +177,7 @@ struct TRequestCreatePQ {
 
         for (auto& i : Important) {
             auto* consumer = NPQ::GetConsumer(*config, i);
-            UNIT_ASSERT(consumer);
+            Y_ABORT_UNLESS(consumer);
             consumer->SetImportant(true);
         }
 
@@ -530,9 +530,9 @@ public:
         }
 
         if (expectSuccess) {
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            Y_ABORT_UNLESS(result.IsSuccess(), "%s", (TStringBuilder() << result.GetIssues().ToString()).c_str());
         } else {
-            UNIT_ASSERT(!result.IsSuccess());
+            Y_ABORT_UNLESS(!result.IsSuccess());
         }
     }
 
@@ -550,7 +550,7 @@ public:
             }
             return qr;
         });
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        Y_ABORT_UNLESS(result.IsSuccess(), "%s", (TStringBuilder() << result.GetIssues().ToString()).c_str());
         return rs;
     }
 
@@ -718,14 +718,14 @@ public:
     }
 
     void CheckClustersList(TTestActorRuntime* runtime, bool waitForUpdate = true, THashMap<TString, TPQTestClusterInfo> clusters = DEFAULT_CLUSTERS_LIST) {
-        UNIT_ASSERT(runtime != nullptr);
+        Y_ABORT_UNLESS(runtime != nullptr);
 
         auto compareInfo = [](const TString& name, const TPQTestClusterInfo& info, const NPQ::NClusterTracker::TClustersList::TCluster& trackerInfo) {
-            UNIT_ASSERT_EQUAL(name, trackerInfo.Name);
-            UNIT_ASSERT_EQUAL(name, trackerInfo.Datacenter);
-            UNIT_ASSERT_EQUAL(info.Balancer, trackerInfo.Balancer);
-            UNIT_ASSERT_EQUAL(info.Enabled, trackerInfo.IsEnabled);
-            UNIT_ASSERT_EQUAL(info.Weight, trackerInfo.Weight);
+            Y_ABORT_UNLESS((name) == (trackerInfo.Name));
+            Y_ABORT_UNLESS((name) == (trackerInfo.Datacenter));
+            Y_ABORT_UNLESS((info.Balancer) == (trackerInfo.Balancer));
+            Y_ABORT_UNLESS((info.Enabled) == (trackerInfo.IsEnabled));
+            Y_ABORT_UNLESS((info.Weight) == (trackerInfo.Weight));
         };
 
         TInstant now = TInstant::Now();
@@ -741,7 +741,7 @@ public:
             if (!waitForUpdate || trackerResponse->ClustersListUpdateTimestamp && trackerResponse->ClustersListUpdateTimestamp.GetRef() >= now + TDuration::Seconds(5)) {
                 for (auto& clusterInfo : trackerResponse->ClustersList->Clusters) {
                     auto it = clusters.find(clusterInfo.Name);
-                    UNIT_ASSERT(it != clusters.end());
+                    Y_ABORT_UNLESS(it != clusters.end());
                     compareInfo(it->first, it->second, clusterInfo);
                 }
                 Cerr << "=== CheckClustersList. Ok\n";
@@ -763,7 +763,7 @@ public:
         query << "SELECT balancer, enabled, weight FROM `/Root/PQ/Config/V2/Cluster` where name = \"" << name << "\";";
         auto result = RunYqlDataQuery(query);
         NYdb::TResultSetParser parser(*result);
-        UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
+        Y_ABORT_UNLESS((parser.RowsCount()) == (1));
         parser.TryNextRow();
 
         TPQTestClusterInfo info;
@@ -830,16 +830,16 @@ public:
         if (response.GetErrorCode() != (ui32)NPersQueue::NErrorCode::OK)
             return 0;
 
-        UNIT_ASSERT(response.HasMetaResponse());
+        Y_ABORT_UNLESS(response.HasMetaResponse());
         const auto& metaResp = response.GetMetaResponse();
-        UNIT_ASSERT(metaResp.HasCmdGetTopicMetadataResult());
+        Y_ABORT_UNLESS(metaResp.HasCmdGetTopicMetadataResult());
         const auto& resp = metaResp.GetCmdGetTopicMetadataResult();
-        UNIT_ASSERT(resp.TopicInfoSize() == 1);
+        Y_ABORT_UNLESS(resp.TopicInfoSize() == 1);
         const auto& topicInfo = resp.GetTopicInfo(0);
-        UNIT_ASSERT(topicInfo.GetTopic() == name);
-        //UNIT_ASSERT(topicInfo.GetConfig().GetTopicName() == name);
+        Y_ABORT_UNLESS(topicInfo.GetTopic() == name);
+        //Y_ABORT_UNLESS(topicInfo.GetConfig().GetTopicName() == name);
         if (cacheSize) {
-            UNIT_ASSERT(topicInfo.GetConfig().HasCacheSize());
+            Y_ABORT_UNLESS(topicInfo.GetConfig().HasCacheSize());
             ui64 actualSize = topicInfo.GetConfig().GetCacheSize();
             if (actualSize != cacheSize)
                 return 0;
@@ -937,8 +937,8 @@ public:
         grpc::ClientContext context;
         grpc::Status status = Stub->PersQueueRequest(&context, request, &response);
 
-        UNIT_ASSERT_C(status.ok(), status.error_message());
-        UNIT_ASSERT(response.HasErrorCode());
+        Y_ABORT_UNLESS(status.ok(), "%s", (TStringBuilder() << status.error_message()).c_str());
+        Y_ABORT_UNLESS(response.HasErrorCode());
 
         Cerr << "CallPersQueueGRPC response:\n" << PrintToString(response, maxPrintSize) << Endl;
 
@@ -1127,7 +1127,7 @@ public:
 
         Cerr << "PQ Client: create topic via Topic SDK: " << path << Endl;
         auto res = topicClient.CreateTopic(path, settings).GetValueSync();
-        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        Y_ABORT_UNLESS(res.IsSuccess(), "%s", (TStringBuilder() << res.GetIssues().ToString()).c_str());
     }
 
     void CreateTopicViaPersQueueSdk(const TRequestCreatePQ& createRequest) {
@@ -1180,7 +1180,7 @@ public:
 
         Cerr << "PQ Client: create topic via PersQueue SDK (mirror): " << path << Endl;
         auto res = pqClient.CreateTopic(path, settings).GetValueSync();
-        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        Y_ABORT_UNLESS(res.IsSuccess(), "%s", (TStringBuilder() << res.GetIssues().ToString()).c_str());
     }
 
     // Msgbus-only create for semantics Topic/PQv1 cannot express (LowWatermark,
@@ -1192,11 +1192,11 @@ public:
         AddTopic(createRequest.Topic);
         while (doWait && GetTopicVersionFromPath(createRequest.Topic) < prevVersion + 1) {
             Sleep(TDuration::MilliSeconds(500));
-            UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
+            Y_ABORT_UNLESS(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
         while (doWait && GetTopicVersionFromMetadata(createRequest.Topic, prevVersion) < prevVersion + 1) {
             Sleep(TDuration::MilliSeconds(500));
-            UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
+            Y_ABORT_UNLESS(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
     }
 
@@ -1217,11 +1217,11 @@ public:
         AddTopic(createRequest.Topic);
         while (doWait && GetTopicVersionFromPath(createRequest.Topic) < prevVersion + 1) {
             Sleep(TDuration::MilliSeconds(500));
-            UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
+            Y_ABORT_UNLESS(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
         while (doWait && GetTopicVersionFromMetadata(createRequest.Topic, prevVersion) < prevVersion + 1) {
             Sleep(TDuration::MilliSeconds(500));
-            UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
+            Y_ABORT_UNLESS(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
     }
 
@@ -1298,7 +1298,7 @@ public:
 
             Cerr << "PQ Client: alter topic via PersQueue SDK (mirror): " << path << Endl;
             auto res = pqClient.AlterTopic(path, settings).GetValueSync();
-            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            Y_ABORT_UNLESS(res.IsSuccess(), "%s", (TStringBuilder() << res.GetIssues().ToString()).c_str());
         } else {
             auto topicClient = NYdb::NTopic::TTopicClient(*AdminDriver);
             NYdb::NTopic::TAlterTopicSettings settings;
@@ -1309,7 +1309,7 @@ public:
 
             Cerr << "PQ Client: alter topic via Topic SDK: " << path << Endl;
             auto res = topicClient.AlterTopic(path, settings).GetValueSync();
-            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            Y_ABORT_UNLESS(res.IsSuccess(), "%s", (TStringBuilder() << res.GetIssues().ToString()).c_str());
         }
         Cerr << "Alter got " << prevVersion << "\n";
 
@@ -1321,7 +1321,7 @@ public:
 
             Sleep(TDuration::MilliSeconds(500));
             ver = GetTopicVersionFromMetadata(name, cacheSize);
-            UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
+            Y_ABORT_UNLESS(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
         auto ver2 = GetTopicVersionFromPath(name);
         while (ver2 != prevVersion + 1) {
@@ -1330,7 +1330,7 @@ public:
             Sleep(TDuration::MilliSeconds(500));
             ver2 = GetTopicVersionFromPath(name);
 
-            UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
+            Y_ABORT_UNLESS(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
 
     }
@@ -1339,7 +1339,7 @@ public:
         auto topicClient = NYdb::NTopic::TTopicClient(*AdminDriver);
         Cerr << "Drop topic: " << path << Endl;
         auto res = topicClient.DropTopic(path).GetValueSync();
-        UNIT_ASSERT(res.IsSuccess());
+        Y_ABORT_UNLESS(res.IsSuccess());
         return res;
     }
 
@@ -1355,29 +1355,27 @@ public:
         auto res = topicClient.DropTopic(path).GetValueSync();
 
         if (expectedStatus == NPersQueue::NErrorCode::OK) {
-            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            Y_ABORT_UNLESS(res.IsSuccess(), "%s", (TStringBuilder() << res.GetIssues().ToString()).c_str());
             ui32 i = 0;
             for (; i < 500; ++i) {
                 TAutoPtr<NMsgBusProxy::TBusResponse> r = TryDropPersQueueGroup("/Root/PQ", name);
-                UNIT_ASSERT(r);
+                Y_ABORT_UNLESS(r);
                 if (r->Record.GetSchemeStatus() == NKikimrScheme::StatusPathDoesNotExist) {
                     break;
                 }
                 Sleep(TDuration::MilliSeconds(50));
             }
-            UNIT_ASSERT_C(i < 500, "Drop is taking too long"); //25 seconds
+            Y_ABORT_UNLESS(i < 500, "Drop is taking too long"); //25 seconds
         } else {
-            UNIT_ASSERT_C(!res.IsSuccess(), "expected drop failure");
-            UNIT_ASSERT_C(
-                expectedStatus == NPersQueue::NErrorCode::UNKNOWN_TOPIC,
-                TStringBuilder() << "DeleteTopic2 via Topic SDK currently maps only UNKNOWN_TOPIC failures, got "
-                                 << (ui32)expectedStatus);
+            Y_ABORT_UNLESS(!res.IsSuccess(), "expected drop failure");
+            Y_ABORT_UNLESS(expectedStatus == NPersQueue::NErrorCode::UNKNOWN_TOPIC, "%s", (TStringBuilder() << "DeleteTopic2 via Topic SDK currently maps only UNKNOWN_TOPIC failures, got "
+                                 << (ui32)expectedStatus).c_str());
         }
         RemoveTopic(name);
         const TInstant start = TInstant::Now();
         while (waitForTopicDeletion && !IsTopicDeleted(name)) {
             Sleep(TDuration::MilliSeconds(50));
-            UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
+            Y_ABORT_UNLESS(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
     }
 
@@ -1385,7 +1383,7 @@ public:
         auto response = CallPersQueueGRPC(getOwnership.GetRequest()->Record);
 
         if (expectedStatus == NMsgBusProxy::MSTATUS_OK) {
-            UNIT_ASSERT_VALUES_EQUAL_C((ui32)response.GetErrorCode(), (ui32)NPersQueue::NErrorCode::OK, "write failure");
+            Y_ABORT_UNLESS(((ui32)response.GetErrorCode()) == ((ui32)NPersQueue::NErrorCode::OK), "write failure");
             return response.GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
         }
         return "";
@@ -1407,9 +1405,9 @@ public:
 
         Cerr << "ChooseProxy response:\n" << PrintToString(response) << Endl;
 
-        UNIT_ASSERT_C(status.ok(), status.error_message());
+        Y_ABORT_UNLESS(status.ok(), "%s", (TStringBuilder() << status.error_message()).c_str());
 
-        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response.GetStatus(), NMsgBusProxy::MSTATUS_OK, "proxy failure");
+        Y_ABORT_UNLESS(((NMsgBusProxy::EResponseStatus)response.GetStatus()) == (NMsgBusProxy::MSTATUS_OK), "proxy failure");
     }
 
 
@@ -1429,11 +1427,9 @@ public:
 
         auto response = CallPersQueueGRPC(request->Record);
 
-        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response.GetStatus(), expectedStatus,
-                                   "proxy failure");
+        Y_ABORT_UNLESS(((NMsgBusProxy::EResponseStatus)response.GetStatus()) == (expectedStatus), "proxy failure");
         if (expectedStatus == NMsgBusProxy::MSTATUS_OK) {
-            UNIT_ASSERT_VALUES_EQUAL_C((ui32)response.GetErrorCode(), (ui32)NPersQueue::NErrorCode::OK,
-                                       "write failure");
+            Y_ABORT_UNLESS(((ui32)response.GetErrorCode()) == ((ui32)NPersQueue::NErrorCode::OK), "write failure");
         }
     }
 
@@ -1465,12 +1461,12 @@ public:
 
         auto status = response.GetStatus();
         auto errorCode = response.GetErrorCode();
-        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)status, expectedStatus, response.GetErrorReason());
-        UNIT_ASSERT_VALUES_EQUAL_C((ui32)errorCode, (ui32)expectedError, response.GetErrorReason());
+        Y_ABORT_UNLESS(((NMsgBusProxy::EResponseStatus)status) == (expectedStatus), "%s", (TStringBuilder() << response.GetErrorReason()).c_str());
+        Y_ABORT_UNLESS(((ui32)errorCode) == ((ui32)expectedError), "%s", (TStringBuilder() << response.GetErrorReason()).c_str());
 
         if (expectedStatus == NMsgBusProxy::MSTATUS_OK) {
-            UNIT_ASSERT(response.GetPartitionResponse().HasCmdReadResult());
-            if (readCount > 0) UNIT_ASSERT_VALUES_EQUAL(response.GetPartitionResponse().GetCmdReadResult().ResultSize(), readCount);
+            Y_ABORT_UNLESS(response.GetPartitionResponse().HasCmdReadResult());
+            if (readCount > 0) Y_ABORT_UNLESS((response.GetPartitionResponse().GetCmdReadResult().ResultSize()) == (readCount));
         }
 
         TReadDebugInfo info;
@@ -1507,8 +1503,8 @@ public:
 
         auto status = response.GetStatus();
         auto errorCode = response.GetErrorCode();
-        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)status, expectedStatus, response.GetErrorReason());
-        UNIT_ASSERT_VALUES_EQUAL_C((ui32)errorCode, (ui32)expectedError, response.GetErrorReason());
+        Y_ABORT_UNLESS(((NMsgBusProxy::EResponseStatus)status) == (expectedStatus), "%s", (TStringBuilder() << response.GetErrorReason()).c_str());
+        Y_ABORT_UNLESS(((ui32)errorCode) == ((ui32)expectedError), "%s", (TStringBuilder() << response.GetErrorReason()).c_str());
     }
 
     void SetClientOffsetPQ(const TString& topic, ui32 partition, ui64 offset, const TString& ticket = "",
@@ -1527,8 +1523,7 @@ public:
 
         auto response = CallPersQueueGRPC(request->Record);
 
-        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response.GetStatus(), ok ? NMsgBusProxy::MSTATUS_OK : NMsgBusProxy::MSTATUS_ERROR,
-                                   "proxy failure");
+        Y_ABORT_UNLESS(((NMsgBusProxy::EResponseStatus)response.GetStatus()) == (ok ? NMsgBusProxy::MSTATUS_OK : NMsgBusProxy::MSTATUS_ERROR), "proxy failure");
 
         if (!ok)
             return;
@@ -1544,8 +1539,8 @@ public:
                     ++clientOffsetCount;
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(count, resCount);
-        UNIT_ASSERT_VALUES_EQUAL(clientOffsetCount, hasClientOffset);
+        Y_ABORT_UNLESS((count) == (resCount));
+        Y_ABORT_UNLESS((clientOffsetCount) == (hasClientOffset));
     }
 
     NKikimrClient::TResponse GetClientInfo(const TVector<TString>& topics, const TString& user, bool ok, const TVector<TString>& badTopics = {}) {
@@ -1554,8 +1549,7 @@ public:
 
         auto response = CallPersQueueGRPC(request->Record);
 
-        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response.GetStatus(), ok ? NMsgBusProxy::MSTATUS_OK : NMsgBusProxy::MSTATUS_ERROR,
-                                   "proxy failure");
+        Y_ABORT_UNLESS(((NMsgBusProxy::EResponseStatus)response.GetStatus()) == (ok ? NMsgBusProxy::MSTATUS_OK : NMsgBusProxy::MSTATUS_ERROR), "proxy failure");
         THashSet<TString> good;
         THashSet<TString> bad;
         for (auto& t : badTopics) {
@@ -1569,9 +1563,9 @@ public:
         for (auto& tt : response.GetMetaResponse().GetCmdGetReadSessionsInfoResult().GetTopicResult()) {
             const auto& topic = tt.GetTopic();
             if (bad.contains(topic)) {
-                UNIT_ASSERT(tt.GetErrorCode() != (ui32)NPersQueue::NErrorCode::OK);
+                Y_ABORT_UNLESS(tt.GetErrorCode() != (ui32)NPersQueue::NErrorCode::OK);
             } else {
-                UNIT_ASSERT(tt.GetErrorCode() == (ui32)NPersQueue::NErrorCode::OK);
+                Y_ABORT_UNLESS(tt.GetErrorCode() == (ui32)NPersQueue::NErrorCode::OK);
             }
         }
         return response;
@@ -1583,8 +1577,7 @@ public:
 
         auto response = CallPersQueueGRPC(request->Record);
 
-        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response.GetStatus(), ok ? NMsgBusProxy::MSTATUS_OK : NMsgBusProxy::MSTATUS_ERROR,
-                                   "proxy failure");
+        Y_ABORT_UNLESS(((NMsgBusProxy::EResponseStatus)response.GetStatus()) == (ok ? NMsgBusProxy::MSTATUS_OK : NMsgBusProxy::MSTATUS_ERROR), "proxy failure");
         if (!ok)
             return;
 
@@ -1594,7 +1587,7 @@ public:
             auto t = res.GetTopicResult(i);
             count += t.PartitionResultSize();
         }
-        UNIT_ASSERT_VALUES_EQUAL(count, resCount);
+        Y_ABORT_UNLESS((count) == (resCount));
     }
 
     TVector<ui32> GetPartLocation(const TVector<std::pair<TString, TVector<ui32>>>& topicsAndParts, ui32 resCount, bool ok) {
@@ -1614,8 +1607,7 @@ public:
                 doRetry = true;
                 continue;
             }
-            UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response.GetStatus(), ok ? NMsgBusProxy::MSTATUS_OK : NMsgBusProxy::MSTATUS_ERROR,
-                                       "proxy failure");
+            Y_ABORT_UNLESS(((NMsgBusProxy::EResponseStatus)response.GetStatus()) == (ok ? NMsgBusProxy::MSTATUS_OK : NMsgBusProxy::MSTATUS_ERROR), "proxy failure");
 
             if (!ok)
                 return {};
@@ -1635,12 +1627,12 @@ public:
                     }
                 }
             }
-            UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
+            Y_ABORT_UNLESS(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
             if (doRetry) {
                 Sleep(TDuration::MilliSeconds(50));
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(nodeIds.size(), resCount);
+        Y_ABORT_UNLESS((nodeIds.size()) == (resCount));
         return nodeIds;
     }
 
@@ -1651,27 +1643,26 @@ public:
         auto response = CallPersQueueGRPC(request->Record);
 
         if ((NMsgBusProxy::EResponseStatus)response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
-            UNIT_ASSERT(error);
+            Y_ABORT_UNLESS(error);
             return {};
         }
 
-        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response.GetStatus(), NMsgBusProxy::MSTATUS_OK,
-                                   "proxy failure");
+        Y_ABORT_UNLESS(((NMsgBusProxy::EResponseStatus)response.GetStatus()) == (NMsgBusProxy::MSTATUS_OK), "proxy failure");
 
         auto res = response.GetMetaResponse().GetCmdGetTopicMetadataResult();
 
-        UNIT_ASSERT(topics.size() <= res.TopicInfoSize());
+        Y_ABORT_UNLESS(topics.size() <= res.TopicInfoSize());
         for (ui32 i = 0; i < res.TopicInfoSize(); ++i) {
             const auto& topicInfo = res.GetTopicInfo(i);
             if (error) {
-                UNIT_ASSERT(topicInfo.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING);
+                Y_ABORT_UNLESS(topicInfo.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING);
             } else {
-                UNIT_ASSERT(topicInfo.GetNumPartitions() > 0 || topicInfo.GetErrorCode() != (ui32)NPersQueue::NErrorCode::OK);
-                UNIT_ASSERT(topicInfo.GetConfig().HasPartitionConfig() || topicInfo.GetErrorCode() != (ui32)NPersQueue::NErrorCode::OK);
+                Y_ABORT_UNLESS(topicInfo.GetNumPartitions() > 0 || topicInfo.GetErrorCode() != (ui32)NPersQueue::NErrorCode::OK);
+                Y_ABORT_UNLESS(topicInfo.GetConfig().HasPartitionConfig() || topicInfo.GetErrorCode() != (ui32)NPersQueue::NErrorCode::OK);
             }
             ui32 j = 0;
             for (; j < topics.size() && topics[j] != topicInfo.GetTopic(); ++j);
-            UNIT_ASSERT(j == 0 || j != topics.size());
+            Y_ABORT_UNLESS(j == 0 || j != topics.size());
         }
         return res;
     }
@@ -1773,11 +1764,11 @@ public:
         }
         if (params.ExpectFail) {
             res.Wait();
-            UNIT_ASSERT(!res.GetValue().IsSuccess());
+            Y_ABORT_UNLESS(!res.GetValue().IsSuccess());
         } else {
             res.Wait();
             Cerr << "Create topic result: " << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
-            UNIT_ASSERT(res.GetValue().IsSuccess());
+            Y_ABORT_UNLESS(res.GetValue().IsSuccess());
         }
     }
 };

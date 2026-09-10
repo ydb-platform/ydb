@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/generic/noncopyable.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 
@@ -28,6 +29,25 @@ namespace NTesting {
     };
 
     IOutputStream& operator<<(IOutputStream& out, const TPortHolder& port);
+
+    // Owns all allocated ports until the manager is destroyed. Unlike the
+    // legacy unittest TPortManager, this class has no test-framework
+    // dependencies and may be used by both unittest and gtest binaries.
+    class TPortManager: public TNonCopyable {
+    public:
+        TPortManager();
+        ~TPortManager();
+
+        ui16 GetPort(ui16 port = 0);
+        ui16 GetTcpPort(ui16 port = 0);
+        ui16 GetUdpPort(ui16 port = 0);
+        ui16 GetTcpAndUdpPort(ui16 port = 0);
+        ui16 GetPortsRange(ui16 startPort, ui16 range);
+
+    private:
+        class TImpl;
+        THolder<TImpl> Impl_;
+    };
 
     //@brief Get first free port.
     [[nodiscard]] TPortHolder GetFreePort();

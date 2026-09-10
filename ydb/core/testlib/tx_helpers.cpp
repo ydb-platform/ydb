@@ -2,12 +2,12 @@
 
 #include <google/protobuf/text_format.h>
 
-#include <library/cpp/testing/unittest/registar.h>
-
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/protos/tx_proxy.pb.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
+
+#include <util/system/yassert.h>
 
 namespace NKikimr {
 
@@ -23,7 +23,7 @@ NKikimrProto::EReplyStatus LocalQuery(TTestActorRuntime& runtime, ui64 tabletId,
     ForwardToTablet(runtime, tabletId, sender, req);
 
     auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(sender);
-    UNIT_ASSERT(ev);
+    Y_ABORT_UNLESS(ev);
     auto* msg = ev->Get();
 
     result = msg->Record.GetExecutionEngineEvaluatedResponse();
@@ -45,7 +45,7 @@ NKikimrProto::EReplyStatus LocalSchemeTx(TTestActorRuntime& runtime, ui64 tablet
     ForwardToTablet(runtime, tabletId, sender, req);
 
     auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvLocalSchemeTxResponse>(sender);
-    UNIT_ASSERT(ev);
+    Y_ABORT_UNLESS(ev);
     auto* msg = ev->Get();
 
     err = msg->Record.GetErrorReason();
@@ -61,7 +61,7 @@ NKikimrProto::EReplyStatus LocalSchemeTx(TTestActorRuntime& runtime, ui64 tablet
 {
     NTabletFlatScheme::TSchemeChanges schemeChanges;
     bool parseResult = ::google::protobuf::TextFormat::ParseFromString(schemeChangesStr, &schemeChanges);
-    UNIT_ASSERT_C(parseResult, "protobuf parsing failed");
+    Y_ABORT_UNLESS(parseResult, "protobuf parsing failed");
 
     return LocalSchemeTx(runtime, tabletId, schemeChanges, dryRun, scheme, err);
 }
@@ -70,7 +70,7 @@ ui64 GetExecutorCacheSize(TTestActorRuntime& runtime, ui64 tabletId) {
     NTabletFlatScheme::TSchemeChanges scheme;
     TString err;
     NKikimrProto::EReplyStatus status = LocalSchemeTx(runtime, tabletId, "", true, scheme, err);
-    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
+    Y_ABORT_UNLESS((status) == (NKikimrProto::EReplyStatus::OK));
     //Cdbg << scheme << "\n";
     // looking for "Delta { DeltaType: UpdateExecutorInfo ExecutorCacheSize: 33554432 }"
     for (ui32 i = 0; i < scheme.DeltaSize(); ++i) {
@@ -79,7 +79,7 @@ ui64 GetExecutorCacheSize(TTestActorRuntime& runtime, ui64 tabletId) {
             return d.GetExecutorCacheSize();
         }
     }
-    UNIT_ASSERT_C(false, "UpdateExecutorInfo delta record not found");
+    Y_ABORT("UpdateExecutorInfo delta record not found");
     return -1;
 }
 

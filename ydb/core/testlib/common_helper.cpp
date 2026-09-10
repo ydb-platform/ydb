@@ -9,7 +9,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <util/string/builder.h>
+#include <util/system/yassert.h>
 
 namespace NKikimr::Tests::NCommon {
 
@@ -72,15 +73,15 @@ void THelper::StartScanRequest(const TString& request, const bool expectSuccess,
                 NYdb::NTable::TScanQueryPart streamPart = streamPartFuture.GetValueSync();
                 if (!streamPart.IsSuccess()) {
                     resultReady = true;
-                    UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                    Y_ABORT_UNLESS(streamPart.EOS(), "%s", (TStringBuilder() << streamPart.GetIssues().ToString()).c_str());
                 } else {
-                    UNIT_ASSERT_C(streamPart.HasResultSet() || streamPart.HasQueryStats(), "Unexpected empty scan query response.");
+                    Y_ABORT_UNLESS(streamPart.HasResultSet() || streamPart.HasQueryStats(), "Unexpected empty scan query response.");
 
                     if (streamPart.HasQueryStats()) {
                         auto plan = streamPart.GetQueryStats().GetPlan();
                         NJson::TJsonValue jsonValue;
                         if (plan) {
-                            UNIT_ASSERT(NJson::ReadJsonFastTree(*plan, &jsonValue));
+                            Y_ABORT_UNLESS(NJson::ReadJsonFastTree(*plan, &jsonValue));
                             Cerr << jsonValue << Endl;
                         }
                     }
@@ -102,7 +103,7 @@ void THelper::StartScanRequest(const TString& request, const bool expectSuccess,
         }
     }
     Cerr << "REQUEST=" << request << ";EXPECTATION=" << expectation << Endl;
-    UNIT_ASSERT(resultReady);
+    Y_ABORT_UNLESS(resultReady);
     if (result) {
         *result = rows;
     }
@@ -123,7 +124,7 @@ void THelper::StartDataRequest(const TString& request, const bool expectSuccess,
                     TStringStream ss;
                     f.GetValueSync().GetIssues().PrintTo(ss, false);
                     Cerr << "REQUEST=" << request << ";RESULT=" << ss.Str() << ";EXPECTATION=" << expectation << Endl;
-                    UNIT_ASSERT(expectation == f.GetValueSync().IsSuccess());
+                    Y_ABORT_UNLESS(expectation == f.GetValueSync().IsSuccess());
                     *rrPtr = true;
                     if (result && expectation) {
                         TStringStream ss;
@@ -140,7 +141,7 @@ void THelper::StartDataRequest(const TString& request, const bool expectSuccess,
         Server.GetRuntime()->SimulateSleep(TDuration::Seconds(1));
     }
     Cerr << "REQUEST=" << request << ";EXPECTATION=" << expectation << Endl;
-    UNIT_ASSERT(resultReady);
+    Y_ABORT_UNLESS(resultReady);
 }
 
 void THelper::StartSchemaRequestTableServiceImpl(const TString& request, const bool expectation, const bool waiting) const {
@@ -155,7 +156,7 @@ void THelper::StartSchemaRequestTableServiceImpl(const TString& request, const b
                 TStringStream ss;
                 f.GetValueSync().GetIssues().PrintTo(ss, false);
                 Cerr << "REQUEST=" << request << ";RESULT=" << ss.Str() << ";EXPECTATION=" << expectation << Endl;
-                UNIT_ASSERT(expectation == f.GetValueSync().IsSuccess());
+                Y_ABORT_UNLESS(expectation == f.GetValueSync().IsSuccess());
                 *rrPtr = true;
             });
         });
@@ -165,7 +166,7 @@ void THelper::StartSchemaRequestTableServiceImpl(const TString& request, const b
         while (!*rrPtr && start + TDuration::Seconds(20) > TInstant::Now()) {
             Server.GetRuntime()->SimulateSleep(TDuration::Seconds(1));
         }
-        UNIT_ASSERT(*rrPtr);
+        Y_ABORT_UNLESS(*rrPtr);
         Cerr << "FINISHED_REQUEST=" << request << ";EXPECTATION=" << expectation << ";WAITING=" << waiting << Endl;
     }
 }
@@ -189,8 +190,8 @@ void THelper::StartSchemaRequestQueryServiceImpl(const TString& request, const b
         while (!*rrPtr && start + TDuration::Seconds(20) > TInstant::Now()) {
             Server.GetRuntime()->SimulateSleep(TDuration::Seconds(1));
         }
-        UNIT_ASSERT(*rrPtr);
-        UNIT_ASSERT_C(expectation == future.GetValueSync().IsSuccess(), future.GetValueSync().GetIssues().ToString());
+        Y_ABORT_UNLESS(*rrPtr);
+        Y_ABORT_UNLESS(expectation == future.GetValueSync().IsSuccess(), "%s", (TStringBuilder() << future.GetValueSync().GetIssues().ToString()).c_str());
         Cerr << "FINISHED_REQUEST=" << request << ";EXPECTATION=" << expectation << ";WAITING=" << waiting << Endl;
     }
 }
@@ -213,7 +214,7 @@ void THelper::DropTable(const TString& tablePath) {
     auto future = NRpcService::DoLocalRpc<TEvDropTableRequest>(std::move(request), "", "", runtime->GetActorSystem(0));
     future.Subscribe([&](const NThreading::TFuture<Ydb::Table::DropTableResponse> f) mutable {
         ++responses;
-        UNIT_ASSERT_VALUES_EQUAL(f.GetValueSync().operation().status(), Ydb::StatusIds::SUCCESS);
+        Y_ABORT_UNLESS((f.GetValueSync().operation().status()) == (Ydb::StatusIds::SUCCESS));
         });
 
     TDispatchOptions options;

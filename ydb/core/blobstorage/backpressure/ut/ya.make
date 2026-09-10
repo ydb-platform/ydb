@@ -13,7 +13,6 @@ PEERDIR(
 )
 
 SRCS(
-    common_ut.cpp
     queue_backpressure_client_ut.cpp
     queue_backpressure_server_ut.cpp
 )

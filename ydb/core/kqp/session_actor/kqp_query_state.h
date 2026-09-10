@@ -661,6 +661,10 @@ public:
         return cStats;
     }
 
+    bool GetCollectAffectedRows() const {
+        return RequestEv->GetCollectAffectedRows();
+    }
+
     bool ReportStats() const {
         return GetStatsMode() != Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE
             // always report stats for scripting subrequests

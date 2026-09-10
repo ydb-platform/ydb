@@ -43,6 +43,7 @@ namespace NSchemeShardUT_Private {
         OPTION(bool, EnableFulltextIndexPrefix, true);
         OPTION(bool, EnableFulltextIndexRowId, true);
         OPTION(std::optional<bool>, EnableCompactFulltextIndex, std::nullopt);
+        OPTION(bool, EnableSuperLemmer, false);
         OPTION(std::optional<bool>, EnablePersistentQueryStats, std::nullopt);
         OPTION(std::optional<bool>, EnablePersistentPartitionStats, std::nullopt);
         OPTION(std::optional<bool>, AllowUpdateChannelsBindingOfSolomonPartitions, std::nullopt);

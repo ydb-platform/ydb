@@ -44,11 +44,6 @@ DefaultSettings {
 }
 
 DefaultSettings {
-    Name: "_KqpYqlSyntaxVersion"
-    Value: "1"
-}
-
-DefaultSettings {
     Name: "_KqpAllowUnsafeCommit"
     Value: "false"
 }

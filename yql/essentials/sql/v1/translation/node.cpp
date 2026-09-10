@@ -1569,7 +1569,6 @@ TLegacyHoppingWindowSpecPtr TLegacyHoppingWindowSpec::Clone() const {
     res->Hop = Hop->Clone();
     res->Interval = Interval->Clone();
     res->Delay = Delay->Clone();
-    res->DataWatermarks = DataWatermarks;
     return res;
 }
 

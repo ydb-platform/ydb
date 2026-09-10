@@ -29,12 +29,12 @@ TIntrusivePtr<IOperator> TFuseFiltersRule::SimpleMatchAndApply(const TIntrusiveP
         return input;
     }
 
-    auto conjunctions = topFilter->FilterExpr.SplitConjunct();
-    auto bottomConjunctions = bottomFilter->FilterExpr.SplitConjunct();
+    auto conjunctions = topFilter->GetFilterExpression().SplitConjunct();
+    auto bottomConjunctions = bottomFilter->GetFilterExpression().SplitConjunct();
 
     conjunctions.insert(conjunctions.end(), bottomConjunctions.begin(), bottomConjunctions.end());
 
-    topFilter->FilterExpr = MakeConjunction(conjunctions);
+    topFilter->SetFilterExpression(MakeConjunction(conjunctions));
     topFilter->ReplaceChild(bottomFilter, bottomFilter->GetInput());
 
     return topFilter;

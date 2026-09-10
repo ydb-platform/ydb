@@ -48,7 +48,7 @@ class TColumnChunkRestoreInfo {
 private:
     const NArrow::NAccessor::TChunkConstructionData ChunkExternalInfo;
     const NArrow::NAccessor::NSubColumns::TSettings Settings;
-    THashMap<TString, TSubColumnChunkRestoreInfo> Chunks;
+    THashMap<ui32, TSubColumnChunkRestoreInfo> Chunks;
     YDB_ACCESSOR_DEF(std::optional<TBlobRange>, HeaderRange);
     std::shared_ptr<NArrow::NAccessor::TSubColumnsPartialArray> PartialArray;
     YDB_READONLY_DEF(TBlobRange, FullChunkRange);
@@ -91,9 +91,9 @@ public:
                             : std::make_shared<NArrow::NAccessor::TDeserializeChunkedArray>(
                                   GetRecordsCount(), columnLoader, i.second.GetBlobDataVerified(), true, additionalData);
             if (applyFilter) {
-                PartialArray->AddColumn(i.first, applyFilter->Apply(arrOriginal));
+                PartialArray->AddColumn(i.second.GetColumnIdx(), applyFilter->Apply(arrOriginal));
             } else {
-                PartialArray->AddColumn(i.first, arrOriginal);
+                PartialArray->AddColumn(i.second.GetColumnIdx(), arrOriginal);
             }
         }
     }
@@ -102,12 +102,19 @@ public:
         AFL_VERIFY(!HeaderRange);
         if (!!PartialArray) {
             for (auto&& subColumnName : subColumns) {
-                if (auto colIndex = PartialArray->GetHeader().GetColumnStats().GetKeyIndexOptional(subColumnName)) {
-                    auto colBlobRange = PartialArray->GetColumnReadRange(*colIndex);
+                auto pathResult = NArrow::NAccessor::NSubColumns::ResolveBestPath(PartialArray->GetHeader().GetColumnStats(),
+                    PartialArray->GetHeader().GetOtherStats(), NArrow::NAccessor::NSubColumns::ToJsonPath(subColumnName));
+                AFL_VERIFY(pathResult.IsSuccess())("subColumnName", subColumnName)("error", pathResult.GetErrorMessage());
+                const auto path = pathResult.DetachResult();
+                if (path && path->IsColumn) {
+                    if (Chunks.contains(path->Path.ColumnIndex)) {
+                        continue;
+                    }
+                    auto colBlobRange = PartialArray->GetColumnReadRange(path->Path.ColumnIndex);
                     const TBlobRange subRange = FullChunkRange.BuildSubset(colBlobRange.GetOffset(), colBlobRange.GetSize());
                     reading->AddRange(subRange);
-                    AddFetchData(subColumnName, subRange, *colIndex);
-                } else if (!PartialArray->HasOthers() && !OthersReadData && PartialArray->IsOtherColumn(subColumnName)) {
+                    AddFetchData(subRange, path->Path.ColumnIndex);
+                } else if (!PartialArray->HasOthers() && !OthersReadData && path) {
                     auto readRange = PartialArray->GetHeader().GetOthersReadRange();
                     OthersReadData = FullChunkRange.BuildSubset(readRange.GetOffset(), readRange.GetSize());
                     reading->AddRange(*OthersReadData);
@@ -162,17 +169,17 @@ public:
         return result;
     }
 
-    const THashMap<TString, TSubColumnChunkRestoreInfo>& GetChunks() const {
+    const THashMap<ui32, TSubColumnChunkRestoreInfo>& GetChunks() const {
         return Chunks;
     }
 
-    THashMap<TString, TSubColumnChunkRestoreInfo>& MutableChunks() {
+    THashMap<ui32, TSubColumnChunkRestoreInfo>& MutableChunks() {
         return Chunks;
     }
 
-    void AddFetchData(const TString& subColName, const TBlobRange& subRange, const ui32 colIndex) {
-        const std::string_view keyName(subColName.data(), subColName.size());
-        AFL_VERIFY(Chunks.emplace(subColName, TSubColumnChunkRestoreInfo(subRange, colIndex)).second);
+    void AddFetchData(const TBlobRange& subRange, const ui32 colIndex) {
+        const auto insertResult = Chunks.try_emplace(colIndex, subRange, colIndex);
+        AFL_VERIFY(insertResult.second);
     }
 };
 
@@ -284,7 +291,7 @@ private:
                         source->AddBytesRead(blobBytes);
                     }
                 }
-                for (auto&& [subColName, chunkData] : i.MutableChunks()) {
+                for (auto&& [columnIndex, chunkData] : i.MutableChunks()) {
                     if (!!chunkData.GetBlobRangeOptional()) {
                         const auto dataStart = TInstant::Now();
                         chunkData.SetBlobData(blobs.ExtractVerified(*StorageId, *chunkData.GetBlobRangeOptional()));
@@ -293,11 +300,11 @@ private:
                             auto columnLoader = source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId());
                             TString columnName = columnLoader->GetField() ? TString(columnLoader->GetField()->name()) : TString("unknown");
                             const ui64 blobBytes = chunkData.GetBlobDataVerified().size();
-                            const ui32 colIndex = i.GetPartialArray()->GetHeader().GetColumnStats().GetKeyIndexVerified(subColName);
-                            const ui64 rawBytes = i.GetPartialArray()->GetHeader().GetColumnStats().GetColumnSize(colIndex);
+                            const ui64 rawBytes = i.GetPartialArray()->GetHeader().GetColumnStats().GetColumnSize(columnIndex);
                             LWTRACK(SubColumnsDataRead, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-                                source->GetTxId(), source->GetSourceId(), GetEntityId(), columnName, dataDuration, subColName, chunkIndex,
-                                blobBytes, rawBytes);
+                                source->GetTxId(), source->GetSourceId(), GetEntityId(), columnName, dataDuration,
+                                i.GetPartialArray()->GetHeader().GetColumnStats().GetColumnNameString(columnIndex), chunkIndex, blobBytes,
+                                rawBytes);
                             source->AddBytesRead(blobBytes);
                         }
                     }

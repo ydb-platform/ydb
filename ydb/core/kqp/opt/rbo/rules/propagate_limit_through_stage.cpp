@@ -70,7 +70,7 @@ TIntrusivePtr<IOperator> TPropagateLimitThroughStageRule::SimpleMatchAndApply(co
         const auto map = CastOperator<TOpMap>(limitInput);
         const auto newLimit = MakeIntrusive<TOpLimit>(CastOperator<IUnaryOperator>(limitInput)->GetInput(), limit->Pos, limit->Props, limit->GetLimitCond(),
                                                       limit->GetLimitPhase());
-        return MakeIntrusive<TOpMap>(newLimit, map->Pos, map->Props, map->GetMapElements(), map->IsOrdered());
+        return MakeIntrusive<TOpMap>(newLimit, map->Pos, map->Props, map->GetMapElements());
     } else if (CanPushLimitToStage(limit, limitInput)) {
         auto props = limit->Props;
         props.StageId = limitInput->Props.StageId;

@@ -670,3 +670,7 @@ Y_DECLARE_OUT_SPEC(, NKikimrTxDataShard::TEvEraseRowsResponse::EStatus, stream, 
 Y_DECLARE_OUT_SPEC(, NKikimrTxDataShard::TEvConditionalEraseRowsResponse::EStatus, stream, value) {
     stream << NKikimrTxDataShard::TEvConditionalEraseRowsResponse_EStatus_Name(value);
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

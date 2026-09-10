@@ -6,6 +6,7 @@
 
 #include <util/datetime/base.h>
 #include <util/generic/size_literals.h>
+#include <util/generic/yexception.h>
 #include <util/stream/output.h>
 #include <util/string/cast.h>
 
@@ -44,7 +45,7 @@ void TPlan::Load(const NJson::TJsonValue& node) {
             LoadNode(node);
         }
         std::sort(Nodes.begin(), Nodes.end(),
-            [](std::shared_ptr<TClusterNode>& a, std::shared_ptr<TClusterNode>& b) {
+            [](const std::shared_ptr<TClusterNode>& a, const std::shared_ptr<TClusterNode>& b) {
                 return a->NodeId < b->NodeId;
             }
         );
@@ -56,15 +57,6 @@ void TPlan::LoadNode(const NJson::TJsonValue& node) {
         auto clusterNode = std::make_shared<TClusterNode>(nodeIdNode->GetIntegerSafe());
         ReadUi64(node, "Tasks", clusterNode->Tasks);
         ReadUi64(node, "FinishedTasks", clusterNode->FinishedTasks);
-        /*
-        if (auto* outputBytesNode = node.GetValueByPath("OutputBytes")) {
-            clusterNode->OutputBytes = std::make_shared<TSingleMetric>(&NodeOutputBytes, *outputBytesNode);
-            clusterNode->OutputBytes->FirstMessage.Min = clusterNode->OutputBytes->History.MinTime;
-            clusterNode->OutputBytes->FirstMessage.Max = clusterNode->OutputBytes->FirstMessage.Min;
-            clusterNode->OutputBytes->LastMessage.Max = clusterNode->OutputBytes->History.MaxTime;
-            clusterNode->OutputBytes->LastMessage.Min = clusterNode->OutputBytes->LastMessage.Max;
-        }
-        */
         if (auto* maxMemoryUsageNode = node.GetValueByPath("MaxMemoryUsage")) {
             clusterNode->MaxMemoryUsage = std::make_shared<TSingleMetric>(&NodeMaxMemoryUsage, *maxMemoryUsageNode);
             clusterNode->MaxMemoryUsage->MinMaxDistribution = false;
@@ -139,17 +131,9 @@ void TPlan::LoadNode(const NJson::TJsonValue& node) {
             }
 
         }
-        /*
-        if (auto* inputBytesNode = node.GetValueByPath("InputBytes")) {
-            clusterNode->InputBytes = std::make_shared<TSingleMetric>(&NodeInputBytes, *inputBytesNode);
-        }
-        if (auto* ingressBytesNode = node.GetValueByPath("IngressBytes")) {
-            clusterNode->IngressBytes = std::make_shared<TSingleMetric>(&NodeIngressBytes, *ingressBytesNode);
-        }
-        */
         Nodes.push_back(clusterNode);
     }
- }
+}
 
 void TPlan::ResolveCteRefs() {
     if (CtePlanRef) {
@@ -239,48 +223,48 @@ void TPlan::ResolveOperatorInputs() {
     }
 }
 
-void TPlan::MergeTotalCpu(std::shared_ptr<TSingleMetric> cpuTime) {
+void TPlan::MergeTotalCpu(const std::shared_ptr<TSingleMetric>& cpuTime) {
 
-            std::vector<ui64> updatedCpuTimes;
-            std::vector<ui64> updatedCpuValues;
+    std::vector<ui64> updatedCpuTimes;
+    std::vector<ui64> updatedCpuValues;
 
-            auto itt = TotalCpuTimes.begin();
-            auto itv = TotalCpuValues.begin();
-            auto ith = cpuTime->History.Values.begin();
+    auto itt = TotalCpuTimes.begin();
+    auto itv = TotalCpuValues.begin();
+    auto ith = cpuTime->History.Values.begin();
 
-            ui64 v0 = 0;
-            ui64 v1 = 0;
-            ui64 t = 0;
+    ui64 v0 = 0;
+    ui64 v1 = 0;
+    ui64 t = 0;
 
-            while (itt != TotalCpuTimes.end() || ith != cpuTime->History.Values.end()) {
+    while (itt != TotalCpuTimes.end() || ith != cpuTime->History.Values.end()) {
 
-                if (itt == TotalCpuTimes.end()) {
-                    t = ith->first;
-                    v1 = ith->second;
-                    ith++;
-                } else if (ith == cpuTime->History.Values.end()) {
-                    t = *itt++;
-                    v0 = *itv++;
-                } else if (*itt == ith->first) {
-                    t = *itt++;
-                    v0 = *itv++;
-                    v1 = ith->second;
-                    ith++;
-                } else if (*itt > ith->first) {
-                    t = ith->first;
-                    v1 = ith->second;
-                    ith++;
-                } else {
-                    t = *itt++;
-                    v0 = *itv++;
-                }
+        if (itt == TotalCpuTimes.end()) {
+            t = ith->first;
+            v1 = ith->second;
+            ith++;
+        } else if (ith == cpuTime->History.Values.end()) {
+            t = *itt++;
+            v0 = *itv++;
+        } else if (*itt == ith->first) {
+            t = *itt++;
+            v0 = *itv++;
+            v1 = ith->second;
+            ith++;
+        } else if (*itt > ith->first) {
+            t = ith->first;
+            v1 = ith->second;
+            ith++;
+        } else {
+            t = *itt++;
+            v0 = *itv++;
+        }
 
-                updatedCpuTimes.push_back(t);
-                updatedCpuValues.push_back(v0 + v1);
-            }
+        updatedCpuTimes.push_back(t);
+        updatedCpuValues.push_back(v0 + v1);
+    }
 
-            TotalCpuTimes.swap(updatedCpuTimes);
-            TotalCpuValues.swap(updatedCpuValues);
+    TotalCpuTimes.swap(updatedCpuTimes);
+    TotalCpuValues.swap(updatedCpuValues);
 }
 
 // What one operator entry in the plan says about itself: the text drawn on it,
@@ -319,14 +303,6 @@ static TOperatorDescription DescribeOperator(const NJson::TJsonValue& subNode, c
                     break;
                 }
                 filter.erase(p, 5);
-            }
-            while(true) {
-                auto p = filter.find('<');
-                if (p == filter.npos) {
-                    break;
-                }
-                filter.erase(p, 1);
-                filter.insert(p, "&lt;");
             }
             description.Info = filter;
         }
@@ -1143,6 +1119,42 @@ void TVisualizer::LoadPlans(const NJson::TJsonValue& root) {
         }
     }
     PostProcessPlans();
+}
+
+void TVisualizer::LoadPlansSafe(const TString& plans, bool simplified) {
+    LoadSafe([&] { LoadPlans(plans, simplified); });
+}
+
+void TVisualizer::LoadPlansSafe(const NJson::TJsonValue& root) {
+    LoadSafe([&] { LoadPlans(root); });
+}
+
+void TVisualizer::LoadSafe(const std::function<void()>& load) {
+    LoadError.clear();
+
+    // Enough state to roll a failed load back. Without the rollback a reused
+    // visualizer would keep the failed call's half-loaded plans, and the CTE
+    // maps would keep pointers into them.
+    auto plans = Plans.size();
+    auto cteStages = CteStages;
+    auto cteSubPlans = CteSubPlans;
+    auto maxTime = MaxTime;
+    auto baseTime = BaseTime;
+    auto updateTime = UpdateTime;
+    auto groupId = GroupId;
+
+    try {
+        load();
+    } catch (...) {
+        LoadError = CurrentExceptionMessage();
+        Plans.resize(plans);
+        CteStages = std::move(cteStages);
+        CteSubPlans = std::move(cteSubPlans);
+        MaxTime = maxTime;
+        BaseTime = baseTime;
+        UpdateTime = updateTime;
+        GroupId = groupId;
+    }
 }
 
 void TVisualizer::LoadPlan(const TString& nodeType, const NJson::TJsonValue& node) {

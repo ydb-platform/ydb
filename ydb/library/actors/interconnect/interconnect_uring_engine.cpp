@@ -3,6 +3,7 @@
 #include "uring_context.h" // for TUringContext::IsAvailable() / SqThreadIdleMs
 
 #include "v2_event_serializer.h"
+#include "v2_serialize_window.h"
 #include "interconnect_common.h"
 #include "interconnect_direct_session.h"
 #include "interconnect_uring_event_queue.h"
@@ -136,14 +137,15 @@ namespace NActors {
         const ui64 DeadPeerTimeoutCycles;
         const ui64 PingPeriodCycles;
 
-        // Low 3 bits of the session pointer are used as an io_uring user_data op tag; heap allocation
-        // alignment of this type is already >= 8 (actually 64 via base/members).
+        // Low 4 bits of the session pointer are used as an io_uring user_data op tag. Heap allocation
+        // of this type is already 64-byte aligned (atomic/iovec members), which is more than enough.
         struct TSession
             : TEventDeserializer::IEventProcessor
             , TIntrusiveListItem<TSession>
         {
             std::atomic_uint32_t OwnerShard;
             const TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
+            const TIntrusivePtr<NInterconnect::TStreamSocket> XdcSocket;
             const TActorId SessionId;
             const std::function<void(TDisconnectReason)> OnDisconnectCallback;
             TActorSystem* const ActorSystem;
@@ -154,19 +156,34 @@ namespace NActors {
             bool Terminated = false;
             bool ReadPending = false;
             bool WritePending = false;
+            bool XdcReadPending = false;
+            bool XdcWritePending = false;
             bool UnregisterRequested = false;
             const bool SendPings;
             TRcBuf WriteBuffer;
+            TRcBuf XdcWriteBuffer;
             size_t WriteBufferSize = 0;
             std::vector<TContiguousSpan> OutgoingSpans;
+            std::vector<TContiguousSpan> XdcOutgoingSpans;
             iovec Iov[MaxSpansPerWrite];
+            iovec XdcIov[MaxSpansPerWrite];
+            iovec XdcReadIov[MaxSpansPerWrite];
             size_t IovLen = 0;
+            size_t XdcIovLen = 0;
             size_t UnsentBytes = 0;
+            size_t XdcUnsentBytes = 0;
             size_t BytesToWriteLastTime = 0;
+            size_t XdcBytesToWriteLastTime = 0;
+            // Absolute end of the main byte range in the currently submitted writev. This is a
+            // speculative frontier: XDC may be issued through its corresponding PUSH checkpoints
+            // before the main CQE arrives.
+            ui64 MainWriteEnd = 0;
             int ReadPendingRingIdx = -1;
+            int XdcReadPendingRingIdx = -1;
             ui32 PreferredRingIdx = 0;
             // Index into the preferred ring's fixed-file table, or -1 when using the raw socket fd.
             int FixedFileIndex = -1;
+            int XdcFixedFileIndex = -1;
             std::atomic_uint64_t IncomingSeqNo{1};
             ui64 ExpectedSeqNo = 1;
 
@@ -179,10 +196,12 @@ namespace NActors {
 
             std::vector<TIncomingEventQueue::TRecord> PendingRecordsHeap;
 
-            size_t SerializeWindowSize = 0;
+            TSerializeWindow SerializeWindow;
 
             ui64 BytesSent = 0;
             ui64 BytesReceived = 0;
+            ui64 BytesSentXdc = 0;
+            ui64 BytesReceivedXdc = 0;
 
             ui64 ReceiveCycles = 0;
             ui64 EventsReceivedCallback = 0;
@@ -194,13 +213,15 @@ namespace NActors {
                     TActorId sessionId, bool checksumming, TScopeId peerScopeId,
                     std::function<void(TDisconnectReason)> onDisconnectCallback, TActorSystem *actorSystem,
                     bool sendPings, std::shared_ptr<std::atomic<int64_t>> clockSkew,
-                    std::shared_ptr<std::atomic<uint64_t>> pingRTT)
+                    std::shared_ptr<std::atomic<uint64_t>> pingRTT,
+                    TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket)
                 : OwnerShard(shardIdx)
                 , Socket(std::move(socket))
+                , XdcSocket(std::move(xdcSocket))
                 , SessionId(sessionId)
                 , OnDisconnectCallback(std::move(onDisconnectCallback))
                 , ActorSystem(actorSystem)
-                , Serializer(checksumming)
+                , Serializer(checksumming, /*useExternalDataChannel=*/ bool(XdcSocket))
                 , Deserializer(peerScopeId)
                 , SendPings(sendPings)
                 , MigrateTargetShard(shardIdx)
@@ -281,17 +302,44 @@ namespace NActors {
             void Serialize(size_t minWriteBufferSize, size_t maxWriteBufferSize) {
                 Serializer.ResetCounters();
 
-                while (UnsentBytes < SerializeWindowSize && OutgoingSpans.size() < MaxSpansPerWrite) {
-                    if (WriteBuffer.size() < minWriteBufferSize) { // (re)allocate write buffer
+                for (;;) {
+                    if (OutgoingSpans.size() >= MaxSpansPerWrite) {
+                        break;
+                    }
+                    if (XdcSocket && XdcOutgoingSpans.size() >= MaxSpansPerWrite) {
+                        break;
+                    }
+                    size_t mainBudget = SerializeWindow.RemainingMain(UnsentBytes);
+                    size_t xdcBudget = XdcSocket ? SerializeWindow.RemainingXdc(XdcUnsentBytes) : 0;
+                    if (!mainBudget && !xdcBudget) {
+                        // Both per-socket caps are exhausted. Liveness must not depend on payload
+                        // progress: the peer declares us dead if it stops seeing pings, so out-of-band
+                        // system traffic gets a small extra main-socket budget. It is emitted first
+                        // (the system channel sits at the head of the quota heap), and the loop ends
+                        // as soon as it drains, so the overshoot is bounded by one grant.
+                        if (!Serializer.HasOutOfBandTraffic()) {
+                            break;
+                        }
+                        mainBudget = minWriteBufferSize;
+                    }
+                    if (WriteBuffer.size() < minWriteBufferSize) {
                         WriteBuffer = TRcBuf::Uninitialized(WriteBufferSize);
                     }
-                    const size_t numBytesProduced = Serializer.ProduceOutputStream(WriteBuffer, &OutgoingSpans,
-                        SerializeWindowSize - UnsentBytes);
+                    if (XdcSocket && XdcWriteBuffer.size() < minWriteBufferSize) {
+                        XdcWriteBuffer = TRcBuf::Uninitialized(WriteBufferSize);
+                    }
+                    const ui64 mainBefore = Serializer.GetCumulativeProducedMain();
+                    const ui64 xdcBefore = Serializer.GetCumulativeProducedXdc();
+                    const size_t numBytesProduced = XdcSocket
+                        ? Serializer.ProduceOutputStream(WriteBuffer, &OutgoingSpans,
+                            &XdcWriteBuffer, &XdcOutgoingSpans, mainBudget, xdcBudget)
+                        : Serializer.ProduceOutputStream(WriteBuffer, &OutgoingSpans, mainBudget);
 
                     if (!numBytesProduced) {
                         break;
                     }
-                    UnsentBytes += numBytesProduced;
+                    UnsentBytes += Serializer.GetCumulativeProducedMain() - mainBefore;
+                    XdcUnsentBytes += Serializer.GetCumulativeProducedXdc() - xdcBefore;
                 }
 
                 const size_t numb = Serializer.GetNumBytesInScratchBuffers();
@@ -302,65 +350,75 @@ namespace NActors {
                 }
             }
 
-            bool PrepareIovec() {
-                // Build the iovec WITHOUT consuming spans: writev may complete partially, so a span is only
-                // dropped once the bytes it covers have actually been confirmed sent (see ApplyBytesWritten).
-                IovLen = 0;
-                BytesToWriteLastTime = 0;
-                for (const TContiguousSpan& span : OutgoingSpans) {
-                    if (IovLen >= MaxSpansPerWrite) {
+            static bool PrepareIovecFromSpans(std::vector<TContiguousSpan>& spans, iovec *iov, size_t *iovLen,
+                    size_t *bytesToWrite, size_t maxBytes = Max<size_t>()) {
+                *iovLen = 0;
+                *bytesToWrite = 0;
+                for (const TContiguousSpan& span : spans) {
+                    if (*iovLen >= MaxSpansPerWrite || *bytesToWrite >= maxBytes) {
                         break;
                     }
-                    Iov[IovLen++] = {
+                    const size_t size = Min(span.size(), maxBytes - *bytesToWrite);
+                    if (!size) {
+                        break;
+                    }
+                    iov[(*iovLen)++] = {
                         .iov_base = const_cast<char*>(span.data()),
-                        .iov_len = span.size(),
+                        .iov_len = size,
                     };
-                    BytesToWriteLastTime += span.size();
+                    *bytesToWrite += size;
                 }
-                return IovLen != 0;
+                return *iovLen != 0;
             }
 
-            void ApplyBytesWritten(size_t num, size_t minSerializeWindowSize, size_t maxSerializeWindowSize,
-                    std::vector<ui64> *eventToWireTime, std::vector<std::unique_ptr<IEventBase>> *events,
-                    std::vector<TIntrusivePtr<TEventSerializedData>> *buffers) {
-                BytesSent += num;
+            bool PrepareIovec() {
+                const bool res = PrepareIovecFromSpans(OutgoingSpans, Iov, &IovLen, &BytesToWriteLastTime);
+                MainWriteEnd = BytesSent + BytesToWriteLastTime;
+                Serializer.IssueMainBytes(MainWriteEnd);
+                return res;
+            }
 
-                // Check if we need to resize serialization window. If we have issued some data and all of it has been
-                // successfully written, and it was limited by serialization window, we can increase it. If we have
-                // serialized less than the window, we can decrease the window.
-                if (num == BytesToWriteLastTime && BytesToWriteLastTime == SerializeWindowSize) {
-                    SerializeWindowSize = Min(SerializeWindowSize + minSerializeWindowSize, maxSerializeWindowSize);
-                }  else if (UnsentBytes < SerializeWindowSize) {
-                    SerializeWindowSize = Max(SerializeWindowSize - minSerializeWindowSize, minSerializeWindowSize);
-                }
+            bool PrepareXdcIovec(size_t maxBytes = Max<size_t>()) {
+                return PrepareIovecFromSpans(XdcOutgoingSpans, XdcIov, &XdcIovLen, &XdcBytesToWriteLastTime,
+                    maxBytes);
+            }
 
-                // Advance past exactly the bytes the kernel accepted. A writev can be short (e.g. under
-                // backpressure or on a real network), so drop only fully-sent spans and trim the span that
-                // straddles the boundary; the rest stay queued and are retried by the next writev.
+            static void DropFrontSpans(std::vector<TContiguousSpan>& spans, size_t num) {
                 if constexpr (NSan::MSanIsOn()) {
-                    for (auto& span : OutgoingSpans) {
+                    for (auto& span : spans) {
                         NSan::CheckMemIsInitialized(span.data(), span.size());
                     }
                 }
                 size_t index = 0;
                 for (size_t remaining = num; remaining; ++index) {
-                    Y_DEBUG_ABORT_UNLESS(index < OutgoingSpans.size());
-                    if (TContiguousSpan& front = OutgoingSpans[index]; front.size() <= remaining) {
+                    Y_DEBUG_ABORT_UNLESS(index < spans.size());
+                    if (TContiguousSpan& front = spans[index]; front.size() <= remaining) {
                         remaining -= front.size();
                     } else {
                         front = TContiguousSpan(front.data() + remaining, front.size() - remaining);
                         break;
                     }
                 }
-                OutgoingSpans.erase(OutgoingSpans.begin(), OutgoingSpans.begin() + index);
+                spans.erase(spans.begin(), spans.begin() + index);
+            }
 
-                Y_ABORT_UNLESS(num <= UnsentBytes, "num# %zu UnsentBytes# %zu", num, UnsentBytes);
-                UnsentBytes -= num;
+            void ApplyBytesWritten(size_t num, bool xdc,
+                    std::vector<ui64> *eventToWireTime, std::vector<std::unique_ptr<IEventBase>> *events,
+                    std::vector<TIntrusivePtr<TEventSerializedData>> *buffers) {
+                (xdc ? BytesSentXdc : BytesSent) += num;
 
+                size_t& unsent = xdc ? XdcUnsentBytes : UnsentBytes;
+                const size_t bytesToWrite = xdc ? XdcBytesToWriteLastTime : BytesToWriteLastTime;
+
+                DropFrontSpans(xdc ? XdcOutgoingSpans : OutgoingSpans, num);
+
+                Y_ABORT_UNLESS(num <= unsent, "num# %zu unsent# %zu xdc# %d", num, unsent, int(xdc));
+                unsent -= num;
                 size_t numEvents = events->size();
                 size_t numBuffers = buffers->size();
                 size_t bytes = 0;
-                Serializer.CommitProducedBytes(num, eventToWireTime, events, buffers);
+                Serializer.CommitProducedBytes(xdc ? 0 : num, xdc ? num : 0, eventToWireTime, events, buffers);
+                SerializeWindow.CompleteWrite(num, bytesToWrite, xdc);
                 for (size_t i = numEvents, count = events->size(); i < count; ++i) {
                     bytes += (*events)[i]->CalculateSerializedSizeCached();
                 }
@@ -483,18 +541,24 @@ namespace NActors {
 #define PARAM(P) PARAM2(#P, P)
                                     PARAM2("OwnerShard", OwnerShard.load())
                                     PARAM2("Socket", (int)*Socket)
+                                    PARAM2("XdcSocket", XdcSocket ? (int)*XdcSocket : -1)
                                     PARAM(Terminated)
                                     PARAM(ReadPending)
                                     PARAM(WritePending)
+                                    PARAM(XdcReadPending)
+                                    PARAM(XdcWritePending)
                                     PARAM(UnregisterRequested)
                                     PARAM(SendPings)
                                     PARAM2("WriteBuffer size", WriteBuffer.size())
                                     PARAM(WriteBufferSize)
                                     PARAM2("OutgoingSpans size", OutgoingSpans.size())
+                                    PARAM2("XdcOutgoingSpans size", XdcOutgoingSpans.size())
                                     PARAM(UnsentBytes)
+                                    PARAM(XdcUnsentBytes)
                                     PARAM(ReadPendingRingIdx)
                                     PARAM(PreferredRingIdx)
                                     PARAM(FixedFileIndex)
+                                    PARAM(XdcFixedFileIndex)
                                     PARAM2("ReadBuffer size", ReadBuffer.size())
                                     PARAM(ReadBufferSize)
                                     PARAM2("IncomingSeqNo", IncomingSeqNo.load())
@@ -508,10 +572,14 @@ namespace NActors {
                                     PARAM2("PingPeriod", pingPeriod)
                                     PARAM2("ReceiveCallbacks size", ReceiveCallbacks.size())
                                     PARAM2("PendingRecordsHeap size", PendingRecordsHeap.size())
-                                    PARAM(SerializeWindowSize)
+                                    PARAM2("SerializeWindowSize", SerializeWindow.GetSize())
+                                    PARAM2("SerializeWindowSizeMain", SerializeWindow.GetMainSize())
+                                    PARAM2("SerializeWindowSizeXdc", SerializeWindow.GetXdcSize())
                                     PARAM2("NumBytesInScratchBuffers", Serializer.GetNumBytesInScratchBuffers())
                                     PARAM(BytesSent)
                                     PARAM(BytesReceived)
+                                    PARAM(BytesSentXdc)
+                                    PARAM(BytesReceivedXdc)
                                 }
                             }
                         }
@@ -519,6 +587,7 @@ namespace NActors {
                 }
             }
         };
+        static_assert(alignof(TSession) >= 16);
 
         // In-process load signal consumed by rebalancing (not the 15s monitoring scrape path).
         struct TShardLoad {
@@ -542,8 +611,10 @@ namespace NActors {
                 kOpTimer,
                 kOpCancel,
                 kOpProvideBuffers,
+                kOpXdcRead,
+                kOpXdcWrite,
             };
-            static const ui64 kOpMask = (1 << 3) - 1;
+            static const ui64 kOpMask = (1 << 4) - 1;
 
             struct TRingSlot {
                 io_uring Ring{};
@@ -661,8 +732,6 @@ namespace NActors {
             const ui32 MaxReadBufferSize;
             const ui32 MinWriteBufferSize;
             const ui32 MaxWriteBufferSize;
-            const ui32 MinSerializeWindowSize;
-            const ui32 MaxSerializeWindowSize;
 
         private:
             NMonitoring::TDynamicCounters::TCounterPtr *SwitchActivity(
@@ -739,33 +808,46 @@ namespace NActors {
 
             void BindSessionFixedFile(TSession& session) {
                 Y_DEBUG_ABORT_UNLESS(session.FixedFileIndex == -1);
+                Y_DEBUG_ABORT_UNLESS(session.XdcFixedFileIndex == -1);
                 Y_DEBUG_ABORT_UNLESS(session.PreferredRingIdx < Rings.size());
                 auto& slot = Rings[session.PreferredRingIdx];
                 if (!slot.FixedFilesEnabled || slot.FreeIndices.empty()) {
                     return;
                 }
-                session.FixedFileIndex = slot.FreeIndices.back();
-                const int fd = *session.Socket;
-                const int ret = io_uring_register_files_update(&slot.Ring, session.FixedFileIndex, &fd, 1);
-                if (ret != 1) {
-                    session.FixedFileIndex = -1;
-                } else {
-                    slot.FreeIndices.pop_back();
-                }
+
+                auto bindOne = [&](const TIntrusivePtr<NInterconnect::TStreamSocket>& socket, int& indexOut) {
+                    if (!socket || slot.FreeIndices.empty()) {
+                        return;
+                    }
+                    indexOut = slot.FreeIndices.back();
+                    const int fd = *socket;
+                    const int ret = io_uring_register_files_update(&slot.Ring, indexOut, &fd, 1);
+                    if (ret != 1) {
+                        indexOut = -1;
+                    } else {
+                        slot.FreeIndices.pop_back();
+                    }
+                };
+                bindOne(session.Socket, session.FixedFileIndex);
+                bindOne(session.XdcSocket, session.XdcFixedFileIndex);
             }
 
             void UnbindSessionFixedFile(TSession& session) {
-                if (session.FixedFileIndex == -1) {
-                    return;
-                }
-                Y_DEBUG_ABORT_UNLESS(session.PreferredRingIdx < Rings.size());
-                auto& slot = Rings[session.PreferredRingIdx];
-                Y_DEBUG_ABORT_UNLESS(slot.FixedFilesEnabled);
-                const int clear = -1;
-                const int ret = io_uring_register_files_update(&slot.Ring, session.FixedFileIndex, &clear, 1);
-                Y_ABORT_UNLESS(ret == 1, "io_uring_register_files_update(clear) failed: %s", strerror(-ret));
-                slot.FreeIndices.push_back(session.FixedFileIndex);
-                session.FixedFileIndex = -1;
+                auto unbindOne = [&](int& index) {
+                    if (index == -1) {
+                        return;
+                    }
+                    Y_DEBUG_ABORT_UNLESS(session.PreferredRingIdx < Rings.size());
+                    auto& slot = Rings[session.PreferredRingIdx];
+                    Y_DEBUG_ABORT_UNLESS(slot.FixedFilesEnabled);
+                    const int clear = -1;
+                    const int ret = io_uring_register_files_update(&slot.Ring, index, &clear, 1);
+                    Y_ABORT_UNLESS(ret == 1, "io_uring_register_files_update(clear) failed: %s", strerror(-ret));
+                    slot.FreeIndices.push_back(index);
+                    index = -1;
+                };
+                unbindOne(session.FixedFileIndex);
+                unbindOne(session.XdcFixedFileIndex);
             }
 
             // Shared recv pool: prefer buf_ring (5.19+), else legacy provide_buffers (5.7+ / 5.13).
@@ -877,8 +959,6 @@ namespace NActors {
                 , MaxReadBufferSize(v2.MaxReadBufferSize)
                 , MinWriteBufferSize(v2.MinWriteBufferSize)
                 , MaxWriteBufferSize(v2.MaxWriteBufferSize)
-                , MinSerializeWindowSize(v2.MinSerializeWindowSize)
-                , MaxSerializeWindowSize(v2.MaxSerializeWindowSize)
             {
                 const ui32 sqThreadIdleMs = v2.SqThreadIdleMs
                     ? v2.SqThreadIdleMs
@@ -1115,6 +1195,10 @@ namespace NActors {
                         Y_DEBUG_ABORT_UNLESS(session);
                         Y_DEBUG_ABORT_UNLESS(session->ReadPendingRingIdx == -1);
                         session->ReadPendingRingIdx = ringIdx;
+                    } else if (op == kOpXdcRead) {
+                        Y_DEBUG_ABORT_UNLESS(session);
+                        Y_DEBUG_ABORT_UNLESS(session->XdcReadPendingRingIdx == -1);
+                        session->XdcReadPendingRingIdx = ringIdx;
                     }
                     ++Rings[ringIdx].ItemsToSubmit;
                     uintptr_t sessionId = reinterpret_cast<uintptr_t>(session);
@@ -1201,6 +1285,7 @@ namespace NActors {
                     while (!TouchedSessions.Empty()) {
                         TSession *session = TouchedSessions.PopFront();
                         MaybeIssueReadForSession(*session);
+                        MaybeIssueXdcReadForSession(*session);
                         MaybeIssueWriteForSession(*session);
                         if (MaybeFinishMigrate(*session)) {
                             continue;
@@ -1347,6 +1432,9 @@ namespace NActors {
                         if (session.ReadPending) { // cancel pending read in order to unregister the session
                             CancelOp(session, kOpRead, session.ReadPendingRingIdx);
                         }
+                        if (session.XdcReadPending) {
+                            CancelOp(session, kOpXdcRead, session.XdcReadPendingRingIdx);
+                        }
                         TouchedSessions.PushBack(&session);
                         break;
                     }
@@ -1376,7 +1464,7 @@ namespace NActors {
                             session.ReceiveCallbacks[record->Ev->Sender] = std::move(record->Callback);
                         }
                         session.Serializer.Push(std::move(record->Ev));
-                        if (!session.WritePending) {
+                        if (!session.WritePending || (session.XdcSocket && !session.XdcWritePending)) {
                             TouchedSessions.PushBack(&session);
                         }
                         break;
@@ -1440,7 +1528,19 @@ namespace NActors {
 
                     case kOpWrite:
                         Y_DEBUG_ABORT_UNLESS(session != nullptr);
-                        DispatchWrite(*session, cqe.res);
+                        DispatchWrite(*session, cqe.res, /*xdc=*/ false);
+                        break;
+
+                    case kOpXdcRead:
+                        Y_DEBUG_ABORT_UNLESS(session != nullptr);
+                        Y_DEBUG_ABORT_UNLESS(session->XdcReadPendingRingIdx != -1);
+                        session->XdcReadPendingRingIdx = -1;
+                        DispatchXdcRead(*session, cqe.res);
+                        break;
+
+                    case kOpXdcWrite:
+                        Y_DEBUG_ABORT_UNLESS(session != nullptr);
+                        DispatchWrite(*session, cqe.res, /*xdc=*/ true);
                         break;
 
                     case kOpTimer:
@@ -1529,6 +1629,9 @@ namespace NActors {
                 if (candidate->ReadPending) {
                     CancelOp(*candidate, kOpRead, candidate->ReadPendingRingIdx);
                 }
+                if (candidate->XdcReadPending) {
+                    CancelOp(*candidate, kOpXdcRead, candidate->XdcReadPendingRingIdx);
+                }
 
                 TouchedSessions.PushBack(candidate);
             }
@@ -1542,7 +1645,8 @@ namespace NActors {
             }
 
             bool MaybeFinishMigrate(TSession& session) {
-                if (session.MigrateTargetShard == ShardIdx || session.ReadPending || session.WritePending || session.Terminated) {
+                if (session.MigrateTargetShard == ShardIdx || session.ReadPending || session.WritePending
+                        || session.XdcReadPending || session.XdcWritePending || session.Terminated) {
                     return false;
                 }
 
@@ -1666,9 +1770,10 @@ namespace NActors {
                 session.ReadPending = true;
             }
 
-            void DispatchWrite(TSession& session, i32 res) {
-                Y_ABORT_UNLESS(session.WritePending);
-                session.WritePending = false;
+            void DispatchWrite(TSession& session, i32 res, bool xdc) {
+                bool& pending = xdc ? session.XdcWritePending : session.WritePending;
+                Y_ABORT_UNLESS(pending);
+                pending = false;
 
                 if (session.Terminated) {
                     // teardown in progress: don't retry the write or re-arm; just let the session drain toward erasure below
@@ -1683,7 +1788,7 @@ namespace NActors {
                 } else {
                     *BytesSent += res;
                     ACTIVITY(&ApplyBytesWrittenTotalTime) {
-                        session.ApplyBytesWritten(res, MinSerializeWindowSize, MaxSerializeWindowSize,
+                        session.ApplyBytesWritten(res, xdc,
                             &EventToWireTimeVec, &EvDestroyEvents->Events, &EvDestroyEvents->Buffers);
                         for (const ui64 time : EventToWireTimeVec) {
                             EventToWireTime->Collect(time * Freq, 1u);
@@ -1696,10 +1801,17 @@ namespace NActors {
             }
 
             void MaybeIssueWriteForSession(TSession& session) {
-                if (session.WritePending || session.Terminated || session.MigrateTargetShard != ShardIdx) {
+                if (session.Terminated || session.MigrateTargetShard != ShardIdx) {
                     return;
                 }
-                if (session.Serializer.IsTrafficPending()) {
+                // Serialization is bounded per socket so it can continue while a write is in flight
+                // (pipeline depth of unsent data, one SQE per fd). XDC submission below is separately
+                // limited by the main write's speculative coverage frontier. Out-of-band system traffic
+                // is exempt from the window: pings are what keep dead-peer detection quiet.
+                const bool windowHasRoom = session.SerializeWindow.RemainingMain(session.UnsentBytes)
+                    || (session.XdcSocket && session.SerializeWindow.RemainingXdc(session.XdcUnsentBytes));
+                if (session.Serializer.IsTrafficPending()
+                        && (windowHasRoom || session.Serializer.HasOutOfBandTraffic())) {
                     ACTIVITY(&SerializeTotalTime) {
                         session.Serialize(MinWriteBufferSize, MaxWriteBufferSize);
                         const ui64 serializeEventTime = session.Serializer.GetSerializeEventTime();
@@ -1709,7 +1821,7 @@ namespace NActors {
                         *BytesAliased += session.Serializer.GetBytesAliased();
                     }
                 }
-                if (session.PrepareIovec()) {
+                if (!session.WritePending && session.PrepareIovec()) {
                     io_uring_sqe *sqe = GetSQE(&session, kOpWrite, session.PreferredRingIdx);
                     Y_ABORT_UNLESS(sqe);
                     const int fdOrIndex = session.FixedFileIndex >= 0
@@ -1721,6 +1833,85 @@ namespace NActors {
                     }
                     session.WritePending = true;
                 }
+                const ui64 xdcLimit = session.Serializer.GetXdcAllowedToSend();
+                const size_t xdcBytesAllowed = xdcLimit > session.BytesSentXdc
+                    ? static_cast<size_t>(xdcLimit - session.BytesSentXdc)
+                    : 0;
+                if (!session.XdcWritePending && session.XdcSocket && session.PrepareXdcIovec(xdcBytesAllowed)) {
+                    io_uring_sqe *sqe = GetSQE(&session, kOpXdcWrite, session.PreferredRingIdx);
+                    Y_ABORT_UNLESS(sqe);
+                    const int fdOrIndex = session.XdcFixedFileIndex >= 0
+                        ? session.XdcFixedFileIndex
+                        : static_cast<int>(*session.XdcSocket);
+                    io_uring_prep_writev(sqe, fdOrIndex, session.XdcIov, session.XdcIovLen, -1);
+                    if (session.XdcFixedFileIndex >= 0) {
+                        sqe->flags |= IOSQE_FIXED_FILE;
+                    }
+                    session.XdcWritePending = true;
+                }
+            }
+
+            void DispatchXdcRead(TSession& session, i32 res) {
+                Y_ABORT_UNLESS(session.XdcReadPending);
+                session.XdcReadPending = false;
+
+                if (session.Terminated) {
+                } else if (res == -ECANCELED) {
+                } else if (res == -EAGAIN) {
+                    ++*ReadUnavail;
+                } else if (res < 0) {
+                    session.Disconnect(TDisconnectReason::FromErrno(-res));
+                } else if (res == 0) {
+                    session.Disconnect(TDisconnectReason::EndOfStream());
+                } else {
+                    *BytesReceived += res;
+                    session.BytesReceivedXdc += res;
+                    session.LastInputActivityTimestamp = LastActivitySwitchTimestamp;
+                    session.Deserializer.CommitXdcBytes(res, &session, session.SessionId);
+                }
+
+                TouchedSessions.PushBack(&session);
+            }
+
+            void MaybeIssueXdcReadForSession(TSession& session) {
+                if (!session.XdcSocket) {
+                    // The peer framed XDC destinations on a session we have no second socket for, so
+                    // nothing will ever fill them and every channel involved would stall silently.
+                    // Negotiation is symmetric, so this only happens if the peer is misbehaving.
+                    if (session.Deserializer.HasXdcReadPending() && !session.Terminated) {
+                        session.Disconnect(TDisconnectReason::FormatError());
+                    }
+                    return;
+                }
+                if (session.XdcReadPending || session.Terminated || session.MigrateTargetShard != ShardIdx) {
+                    return;
+                }
+                if (!session.Deserializer.HasXdcReadPending()) {
+                    return;
+                }
+
+                TIoVec tmp[MaxSpansPerWrite];
+                const size_t n = session.Deserializer.PrepareXdcReadv(tmp, MaxSpansPerWrite, 1 << 20);
+                if (!n) {
+                    return;
+                }
+                for (size_t i = 0; i < n; ++i) {
+                    session.XdcReadIov[i] = {
+                        .iov_base = tmp[i].Data,
+                        .iov_len = tmp[i].Size,
+                    };
+                }
+
+                io_uring_sqe *sqe = GetSQE(&session, kOpXdcRead, session.PreferredRingIdx);
+                Y_ABORT_UNLESS(sqe);
+                const int fdOrIndex = session.XdcFixedFileIndex >= 0
+                    ? session.XdcFixedFileIndex
+                    : static_cast<int>(*session.XdcSocket);
+                io_uring_prep_readv(sqe, fdOrIndex, session.XdcReadIov, n, -1);
+                if (session.XdcFixedFileIndex >= 0) {
+                    sqe->flags |= IOSQE_FIXED_FILE;
+                }
+                session.XdcReadPending = true;
             }
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1735,7 +1926,8 @@ namespace NActors {
             // Frees an unregistered session once it has no io_uring operation in flight. It is unsafe to
             // erase earlier because any pending read/write completion references the session by raw pointer.
             void MaybeEraseSession(TSession& session) {
-                if (session.UnregisterRequested && !session.ReadPending && !session.WritePending) {
+                if (session.UnregisterRequested && !session.ReadPending && !session.WritePending
+                        && !session.XdcReadPending && !session.XdcWritePending) {
                     // Release the fixed-file slot while the socket is still alive, then drop the session
                     // (which closes the fd via TStreamSocket's destructor).
                     UnbindSessionFixedFile(session);
@@ -1799,7 +1991,8 @@ namespace NActors {
         ui64 Register(TIntrusivePtr<NInterconnect::TStreamSocket> socket, const TActorId& sessionActorId,
                 TScopeId peerScopeId, std::function<void(TDisconnectReason)> onDisconnectCallback,
                 bool sendPings, std::shared_ptr<std::atomic<int64_t>> clockSkew,
-                std::shared_ptr<std::atomic<uint64_t>> pingRTT) override {
+                std::shared_ptr<std::atomic<uint64_t>> pingRTT,
+                TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket) override {
             if (Stopping) {
                 return 0; // engine is shutting down; caller treats 0 as a failed registration and terminates
             }
@@ -1816,13 +2009,18 @@ namespace NActors {
             }
 
             const auto& v2 = Common->Settings.V2;
+            const ui32 maxSerializeWindowSize = Common->Settings.TCPSocketBufferSize
+                ? Max(v2.MinSerializeWindowSize,
+                    Min(v2.MaxSerializeWindowSize, Common->Settings.TCPSocketBufferSize))
+                : v2.MaxSerializeWindowSize;
 
             auto session = std::make_unique<TSession>(shardIdx, std::move(socket), sessionActorId,
                 ChecksumEvents, peerScopeId, std::move(onDisconnectCallback), ActorSystem, sendPings,
-                std::move(clockSkew), std::move(pingRTT));
+                std::move(clockSkew), std::move(pingRTT), std::move(xdcSocket));
             session->ReadBufferSize = v2.MinReadBufferSize;
             session->WriteBufferSize = v2.MinWriteBufferSize;
-            session->SerializeWindowSize = v2.MinSerializeWindowSize;
+            session->SerializeWindow = TSerializeWindow(v2.MinSerializeWindowSize, maxSerializeWindowSize,
+                /*hasXdc=*/ bool(session->XdcSocket));
             const ui64 conn = reinterpret_cast<ui64>(session.get());
             Shards[shardIdx]->Register(std::move(session));
             return conn;

@@ -146,7 +146,7 @@ message TFeatureFlags {
     optional bool ExtendedVDiskCounters = 120 [default = true, (RequireRestart) = true];
     optional bool ExtendedPDiskSensors = 121 [default = true, (RequireRestart) = true];
     optional bool EnableStableNodeNames = 122 [default = false];
-    optional bool EnableBackupService = 123 [default = false];
+    optional bool EnableBackupService = 123 [default = true];
     optional bool EnableVolatileTransactionArbiters = 124 [default = true];
     optional bool EnableGraphShard = 125 [default = false];
     optional bool EnableExternalSourceSchemaInference = 126 [default = true];
@@ -264,7 +264,7 @@ message TFeatureFlags {
     optional bool EnableStreamingQueriesPqSinkDeduplication = 235 [default = false];
     optional bool EnableBlobIdInSectorChecksum = 236 [default = false];
     optional bool TransferInternalDataDecompression = 237 [default = false];
-    optional bool EnableJsonIndex = 238 [default = false];
+    optional bool EnableJsonIndex = 238 [default = true];
     optional bool EnableSQSMigrationTopicCreation = 239 [default = false];
     optional bool EnableSQSMigrationCompatibility = 240 [default = false];
     optional bool EnableSQSMigrationFinished = 241 [default = false];
@@ -304,8 +304,8 @@ message TFeatureFlags {
     optional bool DisableOnlineRO = 263 [default = false];
     optional bool EnableUserAttributesInTopicQuery = 264 [default = true];
     optional bool EnableDqSourceStreamLookupJoinFullscan = 265 [default = false];
-    optional bool EnableTopicsPredicatePushdown = 266 [default = false];
-    optional bool EnableJsonIndexAutoSelect = 267 [default = false];
+    optional bool EnableTopicsPredicatePushdown = 266 [default = true];
+    optional bool EnableJsonIndexAutoSelect = 267 [default = true];
     optional bool ForbidRequestsToStaticNodesWithoutDatabase = 268 [default = true];
     optional bool EnableTabletDevUiSecurePath = 269 [default = false];
     optional bool EnableExtraSidsControlForHttpViewer = 270 [default = true];
@@ -373,4 +373,17 @@ message TFeatureFlags {
     // SchemeShard's single-threaded load.
     optional bool EnablePeriodicTableStatsParseOffload = 317 [default = false];
     optional bool EnableTruncateColumnTable = 318 [default = false];
+    optional bool EnableSuperLemmer = 319 [default = false];
+    optional bool EnableImportInParquet = 320 [default = false];
+    optional bool EnableS3Scheduling = 321 [default = false];
+    optional bool EnableInsecureMirrorFactory = 322 [default = false];
+    optional bool EnableDataShardUncommittedWriteSeqNum = 323 [default = true];
+    // VDisk: allocate huge blobs (and small SSTs) as variable-size stripes instead of
+    // size-class slots. Reads of the stripe format work even when this flag is off.
+    optional bool EnableVDiskHeapAllocator = 324 [default = false, (RequireRestart) = true];
+    optional bool EnableCheckpointsCompression = 325 [default = false];
+    optional bool EnableDataShardLocksTransferOnSplit = 326 [default = false];
+    optional bool EnableDqSourceStreamLookupJoinLocalLookups = 327 [default = false];
+    optional bool EnableStreamingAggregation = 328 [default = false];
+    optional bool EnableTableBackupAsSql = 329 [default = false];
 }

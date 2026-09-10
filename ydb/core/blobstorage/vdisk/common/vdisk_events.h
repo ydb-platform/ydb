@@ -18,7 +18,7 @@
 
 #include <ydb/core/base/event_filter.h>
 #include <ydb/core/base/interconnect_channels.h>
-#include <ydb/core/protos/blobstorage_config.pb.h>
+#include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
 
 #include <ydb/core/util/pb.h>
@@ -28,6 +28,7 @@
 
 #include <util/digest/multi.h>
 #include <util/generic/maybe.h>
+#include <optional>
 #include <util/stream/str.h>
 #include <util/string/escape.h>
 #include <util/generic/overloaded.h>
@@ -1913,12 +1914,16 @@ namespace NKikimr {
         {}
 
         TEvVBlock(ui64 tabletId, ui32 generation, const TVDiskID &vdisk, TInstant deadline,
-                TWriteSource writeSource = UnknownWriteSource(), ui64 issuerGuid = 0)
+                TWriteSource writeSource = UnknownWriteSource(), ui64 issuerGuid = 0,
+                std::optional<ui32> version = std::nullopt)
         {
             Record.SetTabletId(tabletId);
             Record.SetGeneration(generation);
             if (issuerGuid) {
                 Record.SetIssuerGuid(issuerGuid);
+            }
+            if (version) {
+                Record.SetVersion(*version);
             }
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
             if (deadline != TInstant::Max()) {
@@ -1978,6 +1983,10 @@ namespace NKikimr {
             }
             if (Record.HasGeneration()) {
                 str << "Generation# " << Record.GetGeneration();
+            }
+            if (Record.HasIsTabletStorageInfoVersionObsolete()) {
+                str << " IsTabletStorageInfoVersionObsolete# "
+                    << Record.GetIsTabletStorageInfoVersionObsolete();
             }
             if (Record.HasVDiskID()) {
                 str << "VDisk# " << VDiskIDFromVDiskID(Record.GetVDiskID()).ToString().c_str();

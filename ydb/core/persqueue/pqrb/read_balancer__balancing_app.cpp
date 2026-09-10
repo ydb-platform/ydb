@@ -119,7 +119,7 @@ void TBalancer::RenderApp(NApp::TNavigationBar& __navigationBar) const {
                             }
                             TABLED() {
                                 if (partition.Commited) {
-                                    __stream << "commited";
+                                    __stream << "committed";
                                 } else if (partition.ReadingFinished) {
                                     if (partition.ScaleAwareSDK) {
                                         __stream << "reading child";

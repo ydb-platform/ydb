@@ -41,8 +41,15 @@ ui32 TSelectBuilder::AddFactory(const TStringBuf& udafName, size_t paramCount) {
     return it->second.Id;
 }
 
-TString TSelectBuilder::Build(const TStringBuf& table, std::optional<ui64> tabletId) const {
+TString TSelectBuilder::Build(
+    const TStringBuf& table,
+    std::optional<ui64> tabletId,
+    const TStringBuf& where,
+    const TStringBuf& declares) const {
     TStringBuilder res;
+    if (declares) {
+        res << declares;
+    }
     for (const auto& [udaf, factory] : Udaf2Factory) {
         TStringBuilder paramsStr;
         for (size_t i = 0; i < factory.ParamCount; ++i) {
@@ -79,7 +86,10 @@ TString TSelectBuilder::Build(const TStringBuf& table, std::optional<ui64> table
         if (agg.UdafFactory) {
             res << "AGGREGATE_BY(";
             if (agg.TupleColumnNames) {
-                res << "StablePickle(AsTuple(";
+                res << (agg.TupleEncoding == ETupleEncoding::PresortKey
+                            ? "Udf(StatisticsInternal::PresortKey)"
+                            : "StablePickle")
+                    << "(AsTuple(";
                 bool firstCol = true;
                 for (const auto& columnName : *agg.TupleColumnNames) {
                     if (firstCol) {
@@ -109,6 +119,9 @@ TString TSelectBuilder::Build(const TStringBuf& table, std::optional<ui64> table
     res << " FROM " << TEscapedId{table};
     if (tabletId) {
         res << " WITH TabletId = '" << *tabletId << "'";
+    }
+    if (where) {
+        res << " WHERE " << where;
     }
     return res;
 }

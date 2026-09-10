@@ -1054,9 +1054,10 @@ namespace NActors {
                 // v2 session is incompatible with encryption and needs the io_uring data plane; only
                 // request it when encryption is disabled locally and io_uring is available (buffer rings
                 // are used when present, with a fallback to ordinary buffers on older kernels)
-                request.SetRequestSessionV2(Common->Settings.V2.Enable &&
+                const bool requestSessionV2 = Common->Settings.V2.Enable &&
                     Common->Settings.EncryptionMode == EEncryptionMode::DISABLED &&
-                    TUringContext::IsAvailable());
+                    TUringContext::IsAvailable();
+                request.SetRequestSessionV2(requestSessionV2);
                 request.SetHandshakeId(*HandshakeId);
 
                 ui32 pending = 0;

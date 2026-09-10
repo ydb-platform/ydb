@@ -1,3 +1,6 @@
+import pytest
+
+from ydb.apps.dstool.lib import common
 import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
 import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bsbase3
 import ydb.core.protos.msgbus_pb2 as kikimr_msgbus
@@ -9,6 +12,17 @@ from ydb.tests.library.common.msgbus_types import MessageBusStatus
 #
 # for ydb_{cluster, database, ...} fixture family
 pytest_plugins = 'ydb.tests.library.fixtures'
+
+
+@pytest.fixture(autouse=True)
+def isolate_dstool_client_state(monkeypatch):
+    monkeypatch.setattr(common, 'connection_params', common.ConnectionParams())
+    monkeypatch.setattr(common, 'bad_hosts', set())
+    monkeypatch.setattr(common, 'cache', {})
+    monkeypatch.setattr(common, 'name_cache', {})
+    monkeypatch.delenv('YDB_TOKEN', raising=False)
+    monkeypatch.delenv('IAM_TOKEN', raising=False)
+    yield
 
 
 class BaseConfigBuilder:

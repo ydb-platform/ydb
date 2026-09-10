@@ -576,6 +576,8 @@ config:
                 ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisksHDD, 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisksSSD, 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL(DSProxyControls.MaxPutTimeoutSeconds, 60, 1, 1'000'000, Settings.MaxPutTimeoutDSProxy.Seconds());
+                ADD_ICB_CONTROL(DSProxyControls.DormantTimeoutMinutes, DefaultDormantTimeout.Minutes(), 0,
+                    1'000'000, DefaultDormantTimeout.Minutes());
                 ADD_ICB_CONTROL(DSProxyControls.EnableChecksumCalcAndValidationOnDsProxy, false, false, true, false);
 
                 ADD_ICB_CONTROL(BlobDepotControls.MaxLoadedTrashRecords, 1'000'000, 1, 100'000'000, 1'000'000);
@@ -1132,8 +1134,12 @@ config:
         TControlWrapper enablePutBatching(true, false, true);
         TControlWrapper enableVPatch(false, false, true);
         TControlWrapper enableChecksumCalcAndValidationOnDsProxy(false, false, true);
+        TControlWrapper dormantTimeoutMinutes(DefaultDormantTimeout.Minutes(), 0, 1'000'000);
         if (auto it = IcbControls.find({nodeId, "DSProxyControls.EnableChecksumCalcAndValidationOnDsProxy"}); it != IcbControls.end()) {
             enableChecksumCalcAndValidationOnDsProxy = it->second;
+        }
+        if (auto it = IcbControls.find({nodeId, "DSProxyControls.DormantTimeoutMinutes"}); it != IcbControls.end()) {
+            dormantTimeoutMinutes = it->second;
         }
         auto info = GetGroupInfo(groupId);
         IActor *dsproxy = CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(info), nullptr, true, nodeMon,
@@ -1141,6 +1147,7 @@ config:
                     .Controls = TBlobStorageProxyControlWrappers{
                         .EnablePutBatching = enablePutBatching,
                         .EnableVPatch = enableVPatch,
+                        .DormantTimeoutMinutes = dormantTimeoutMinutes,
                         .EnableChecksumCalcAndValidationOnDsProxy = enableChecksumCalcAndValidationOnDsProxy,
                     }
                 }

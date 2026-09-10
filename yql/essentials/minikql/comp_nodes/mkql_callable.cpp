@@ -52,7 +52,7 @@ private:
     public:
         using TBase = TComputationValue<TCodegenValue>;
 
-        using TRunPtr = NUdf::TUnboxedValuePod (*)(TComputationContext*, const NUdf::TUnboxedValuePod*);
+        using TRunPtr = NUdf::TUnboxedValuePod (*)(const TComputationUpvalues*, TComputationContext*, const NUdf::TUnboxedValuePod*);
 
         TCodegenValue(TMemoryUsageInfo* memInfo, TRunPtr run, TComputationContext* ctx, IComputationNode* resultNode, const TComputationExternalNodePtrVector& argNodes)
             : TBase(memInfo)
@@ -64,17 +64,7 @@ private:
 
     private:
         NUdf::TUnboxedValue Run(const NUdf::IValueBuilder*, const NUdf::TUnboxedValuePod* args) const override {
-            if (!Upvalues_) {
-                return RunFunc_(Ctx_, args);
-            }
-
-            Upvalues_.SetUpvalues(*Ctx_);
-
-            const auto result = RunFunc_(Ctx_, args);
-
-            Upvalues_.RestoreUpvalues(*Ctx_);
-
-            return result;
+            return RunFunc_(&Upvalues_, Ctx_, args);
         }
 
         const TRunPtr RunFunc_;
@@ -132,9 +122,12 @@ private:
         const auto valueType = Type::getInt128Ty(context);
         const auto argsType = ArrayType::get(valueType, ArgNodes_.size());
         const auto contextType = GetCompContextType(context);
+        const auto upvaluesType = StructType::get(context);
 
-        const auto funcType =
-            FunctionType::get(valueType, {PointerType::getUnqual(contextType), PointerType::getUnqual(argsType)}, /*isVarArg=*/false);
+        const auto funcType = FunctionType::get(
+            valueType,
+            {PointerType::getUnqual(upvaluesType), PointerType::getUnqual(contextType), PointerType::getUnqual(argsType)},
+            /*isVarArg=*/false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
@@ -143,25 +136,49 @@ private:
 
         auto args = ctx.Func->arg_begin();
 
-        ctx.Ctx = &*args;
+        const auto upvalues = &*args;
+        ctx.Ctx = &*++args;
         const auto argsPtr = &*++args;
 
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         auto block = main;
 
         const auto arguments = new LoadInst(argsType, argsPtr, "arguments", block);
+        const auto emitCall = [&](BasicBlock*& resultBlock) {
+            unsigned i = 0U;
+            for (const auto node : ArgNodes_) {
+                const auto arg = ExtractValueInst::Create(arguments, {i++}, "arg", resultBlock);
+                const auto codegenArgNode = dynamic_cast<ICodegeneratorExternalNode*>(node);
+                MKQL_ENSURE(codegenArgNode, "Argument must be codegenerator node.");
+                codegenArgNode->CreateSetValue(ctx, resultBlock, arg);
+            }
+            return GetNodeValue(ResultNode_, ctx, resultBlock);
+        };
 
-        unsigned i = 0U;
-        for (const auto node : ArgNodes_) {
-            const auto arg = ExtractValueInst::Create(arguments, {i++}, "arg", block);
-            const auto codegenArgNode = dynamic_cast<ICodegeneratorExternalNode*>(node);
-            MKQL_ENSURE(codegenArgNode, "Argument must be codegenerator node.");
-            codegenArgNode->CreateSetValue(ctx, block, arg);
-        }
+        const auto hasUpvalues = EmitFunctionCall < &TComputationUpvalues::operator bool>(Type::getInt1Ty(context), {upvalues}, ctx, block);
+        const auto withoutUpvalues = BasicBlock::Create(context, "without_upvalues", ctx.Func);
+        const auto withUpvalues = BasicBlock::Create(context, "with_upvalues", ctx.Func);
+        BranchInst::Create(withUpvalues, withoutUpvalues, hasUpvalues, block);
 
-        const auto result = GetNodeValue(ResultNode_, ctx, block);
+        block = withoutUpvalues;
+        ReturnInst::Create(context, emitCall(block), block);
 
+        block = withUpvalues;
+        EmitFunctionCall<&TComputationUpvalues::SetUpvalues>(Type::getVoidTy(context), {upvalues, ctx.Ctx}, ctx, block);
+
+        // XXX: Preserve the calculated result in the local storage, so further
+        // ResultNode_ invalidation via RestoreUpvalues call doesn't spoil the
+        // target (e.g. particular slot in Mutables), where the result is stored.
+        const auto resultStorage = new AllocaInst(valueType, 0U, "result", block);
+        new StoreInst(emitCall(block), resultStorage, block);
+        ValueAddRef(ResultNode_->GetRepresentation(), resultStorage, ctx, block);
+
+        EmitFunctionCall<&TComputationUpvalues::RestoreUpvalues>(Type::getVoidTy(context), {upvalues, ctx.Ctx}, ctx, block);
+
+        const auto result = new LoadInst(valueType, resultStorage, "result", block);
+        ValueRelease(ResultNode_->GetRepresentation(), resultStorage, ctx, block);
         ReturnInst::Create(context, result, block);
+
         return ctx.Func;
     }
 

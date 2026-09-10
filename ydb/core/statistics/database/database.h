@@ -7,6 +7,8 @@
 
 namespace NKikimr::NStat {
 
+inline constexpr TStringBuf StatisticsTablePath = ".metadata/statistics_v2";
+
 NActors::IActor* CreateStatisticsTableCreator(std::unique_ptr<NActors::IEventBase> event, const TString& database);
 
 NActors::IActor* CreateSaveStatisticsQuery(const NActors::TActorId& replyActorId, const TString& database,

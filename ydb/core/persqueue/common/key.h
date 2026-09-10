@@ -192,7 +192,7 @@ public:
                         ui64 offset);
 
     TKey()
-        : TKey(TypeNone, TPartitionId(0), 0, 0, 0, 0, false)
+        : TKey(TypeNone, TPartitionId(0), 0, 0, 0, 0, Nothing())
     {}
 
     TKey(const TKey& key)

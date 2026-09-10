@@ -164,6 +164,19 @@ public:
     static const inline auto Registrator = TFactory::TRegistrator<TLogicMatchAsciiContainsIgnoreCase>(GetClassNameStatic());
 };
 
+class TLogicMatchOlapKernelsAsciiContainsIgnoreCase: public TLogicMatchString {
+private:
+    static TString GetClassNameStatic() {
+        return "OlapKernels._yql_AsciiContainsIgnoreCase";
+    }
+
+public:
+    TLogicMatchOlapKernelsAsciiContainsIgnoreCase()
+        : TLogicMatchString(TIndexCheckOperation::EOperation::Contains, false, false) {
+    }
+    static const inline auto Registrator = TFactory::TRegistrator<TLogicMatchOlapKernelsAsciiContainsIgnoreCase>(GetClassNameStatic());
+};
+
 class TLogicMatchAsciiStartsWithIgnoreCase: public TLogicMatchString {
 private:
     static TString GetClassNameStatic() {

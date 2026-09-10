@@ -906,4 +906,21 @@ Y_UNIT_TEST(TypeCheckColumnExpr) {
     UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
 }
 
+Y_UNIT_TEST(TypeCheckUdfStrictCasePragma) {
+    TChecksRequest request;
+    request.Program = R"sql(
+        pragma config.flags("UdfStrictCase");
+        SELECT 1
+    )sql";
+    request.ClusterMode = EClusterMode::Unknown;
+    request.Syntax = ESyntax::YQL;
+    request.Filters.ConstructInPlace();
+    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "typecheck"});
+
+    auto res = RunChecks(request);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "typecheck");
+    UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
+}
+
 } // Y_UNIT_TEST_SUITE(TLinterTests)

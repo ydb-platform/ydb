@@ -88,3 +88,7 @@ void TDataShard::Handle(TEvDataShard::TEvCancelTransactionProposal::TPtr &ev, co
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

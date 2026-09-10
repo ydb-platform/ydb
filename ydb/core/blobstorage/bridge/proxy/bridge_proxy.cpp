@@ -182,8 +182,13 @@ namespace NKikimr {
                 return CreateWithErrorReason(ev, ev->Status, ev->Id, StatusFlags, self.GroupId, ApproximateFreeSpaceShare);
             }
 
-            std::unique_ptr<IEventBase> Combine(TThis& /*self*/, TEvBlobStorage::TEvBlockResult *ev, auto* /*current*/) {
-                return CreateWithErrorReason(ev, ev->Status);
+            std::unique_ptr<IEventBase> Combine(TThis& /*self*/, TEvBlobStorage::TEvBlockResult *ev, auto *current) {
+                auto result = std::make_unique<TEvBlobStorage::TEvBlockResult>(ev->Status);
+                result->ErrorReason = std::move(ev->ErrorReason);
+                result->IsTabletStorageInfoVersionObsolete = ev->IsTabletStorageInfoVersionObsolete
+                    || (current && current->IsTabletStorageInfoVersionObsolete);
+                result->ActualGeneration = Max(ev->ActualGeneration, current ? current->ActualGeneration : 0);
+                return result;
             }
 
             std::unique_ptr<IEventBase> Combine(TThis& /*self*/, TEvBlobStorage::TEvCollectGarbageResult *ev, auto *current) {

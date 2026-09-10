@@ -73,6 +73,8 @@ public:
 
     void RebuildLockRequest(ui64 prevRequestId, ui64& newRequestId);
 
+    void ResetLockRowsProcessing(ui64 requestId);
+
     std::pair<ui64, THolder<NEvents::TDataEvents::TEvLockRows>> PopNextLockRequest();
 
     void AddLockResult(ui64 requestId, NEvents::TDataEvents::TEvLockRowsResult* result);

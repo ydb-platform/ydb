@@ -27,8 +27,11 @@ void TPartitionWriterCacheActor::Bootstrap(const TActorContext& ctx)
     this->Become(&TPartitionWriterCacheActor::StateWork);
 }
 
-TString TPartitionWriterCacheActor::BuildLogPrefix() const {
-    return TStringBuilder() << " (TabletId=" << TabletId << ", Partition=" << Partition << ") ";
+TLogPrefix TPartitionWriterCacheActor::BuildLogPrefix() const {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"actorClassName", "PartitionWriterCache"},
+        {"tabletId", TabletId},
+        {"partition", Partition});
 }
 
 void TPartitionWriterCacheActor::PoisonWriters() {

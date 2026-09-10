@@ -28,7 +28,9 @@ TLambdaBuilder::TLambdaBuilder(const NKikimr::NMiniKQL::IFunctionRegistry* funct
         const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider,
         const NKikimr::NUdf::ILogProvider* logProvider,
         TLangVersion langVer,
-        const TRuntimeSettings::TConstPtr runtimeSettings)
+        const TRuntimeSettings::TConstPtr runtimeSettings,
+        NKikimr::NUdf::EBridgeMode bridgeMode,
+        TString bridgeBinaryPath)
     : FunctionRegistry(functionRegistry)
     , Alloc(alloc)
     , RandomProvider(randomProvider)
@@ -39,6 +41,8 @@ TLambdaBuilder::TLambdaBuilder(const NKikimr::NMiniKQL::IFunctionRegistry* funct
     , LogProvider(logProvider)
     , LangVer(langVer)
     , RuntimeSettings(runtimeSettings)
+    , BridgeMode(bridgeMode)
+    , BridgeBinaryPath(std::move(bridgeBinaryPath))
     , Env(env)
 {
 }
@@ -200,7 +204,7 @@ THolder<IComputationGraph> TLambdaBuilder::BuildGraph(
     TComputationPatternOpts patternOpts(Alloc.Ref(), GetTypeEnvironment());
     patternOpts.SetOptions(factory, FunctionRegistry, validateMode, validatePolicy,
         optLLVM, graphPerProcess, JobStats, Counters,
-        SecureParamsProvider, LogProvider, LangVer, RuntimeSettings);
+        SecureParamsProvider, LogProvider, LangVer, RuntimeSettings, BridgeMode, BridgeBinaryPath);
     auto preparePatternFunc = [&]() {
         if (serialized) {
             auto tupleRunTimeNodes = DeserializeRuntimeNode(serialized, GetTypeEnvironment());
@@ -222,7 +226,8 @@ THolder<IComputationGraph> TLambdaBuilder::BuildGraph(
     YQL_ENSURE(pattern);
 
     const TComputationOptsFull computeOpts(JobStats, Alloc.Ref(), GetTypeEnvironment(), *randomProvider, *timeProvider,
-        validatePolicy, SecureParamsProvider, Counters, LogProvider, LangVer, RuntimeSettings);
+        validatePolicy, SecureParamsProvider, Counters, LogProvider, LangVer, RuntimeSettings,
+        BridgeMode, BridgeBinaryPath);
     auto graph = pattern->Clone(computeOpts);
     return MakeHolder<TComputationGraphProxy>(std::move(pattern), std::move(graph));
 }
@@ -262,8 +267,10 @@ TGatewayLambdaBuilder::TGatewayLambdaBuilder(
     const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider,
     const NKikimr::NUdf::ILogProvider* logProvider,
     TLangVersion langVer,
-    TRuntimeSettings::TConstPtr runtimeSettings)
-    : TLambdaBuilder(functionRegistry, alloc, env, randomProvider, timeProvider, jobStats, counters, secureParamsProvider, logProvider, langVer, runtimeSettings)
+    TRuntimeSettings::TConstPtr runtimeSettings,
+    NKikimr::NUdf::EBridgeMode bridgeMode,
+    TString bridgeBinaryPath)
+    : TLambdaBuilder(functionRegistry, alloc, env, randomProvider, timeProvider, jobStats, counters, secureParamsProvider, logProvider, langVer, runtimeSettings, bridgeMode, std::move(bridgeBinaryPath))
 {
 }
 

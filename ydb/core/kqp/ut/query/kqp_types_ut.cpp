@@ -32,44 +32,6 @@ Y_UNIT_TEST_SUITE(KqpTypes) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-
-    Y_UNIT_TEST(UnsafeTimestampCastV0Rejected) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
-            CREATE TABLE `/Root/TsTest` (
-                Key Timestamp,
-                Value String,
-                PRIMARY KEY (Key)
-            );
-        )").GetValueSync().IsSuccess());
-
-        const TString query = R"(
-            --!syntax_v0
-            DECLARE $key AS Uint64;
-            DECLARE $value AS String;
-
-            UPSERT INTO `/Root/TsTest` (Key, Value) VALUES
-                ($key, $value);
-        )";
-
-        auto params = TParamsBuilder()
-            .AddParam("$key").Uint64(1).Build()
-            .AddParam("$value").String("foo").Build()
-            .Build();
-
-        auto result = session.ExecuteDataQuery(
-            query,
-            TTxControl::BeginTx().CommitTx(),
-            params
-        ).ExtractValueSync();
-
-        result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT(!result.IsSuccess());
-    }
-
     Y_UNIT_TEST(UnsafeTimestampCastV1) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

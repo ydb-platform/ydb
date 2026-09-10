@@ -194,10 +194,8 @@ message TEvLoadTestRequest {
 
         // When true, the load test performs reads instead of writes.
         optional bool IsReadLoad = 15 [default = false];
-        // Enable io_uring SQPOLL mode for DDisk direct I/O.
-        optional bool SQPoll = 16 [default = false];
-        // Enable io_uring IOPOLL mode for DDisk direct I/O.
-        optional bool IOPoll = 17 [default = false];
+        reserved 16, 17;
+        reserved "SQPoll", "IOPoll";
         // Request size for read/write operations in bytes.
         optional uint32 IoSizeBytes = 18 [default = 4096];
         // Unmeasured background writes per measured read during IsReadLoad.
@@ -398,34 +396,33 @@ message TEvLoadTestRequest {
         // Allocation-time configuration. Persisted once at Create time and
         // reused across Runs. Editing it after Create requires Delete first.
         message TAllocConfig {
-            // BSC-side TabletId — the credential PB / DDisk validate on every
-            // request (TQueryCredentials, ddisk.h:47-79). Distinct from the
-            // YDB tablet id (which is Hive-assigned).
+            // Storage namespace owner. The load tablet overwrites this with
+            // its own Hive-assigned TabletID() before persisting allocation.
             optional uint64 TabletId = 1;
 
             optional string DDiskPoolName = 2 [default = "ddp1"];
             optional string PersistentBufferDDiskPoolName = 3 [default = "ddp1"];
 
-            // Number of DBGs this tablet owns. Each DBG = 5 (DDisk, PB) pairs
-            // with 10 wire connections; production-like value is 32.
+            // Number of DBGs this tablet owns. Each DBG has HostsPerDbg
+            // (DDisk, PB) pairs and twice that many peer connections.
             optional uint32 NumDirectBlockGroups = 4 [default = 1];
 
-            // Per-DDisk vChunk capacity reservation; v1 uses 1 (one vChunk
-            // per DBG, indexed by VChunkIndex=0).
+            // Requested data-side chunk claim and number of vChunks
+            // per DBG in the workload's address space. Must be positive to run.
             optional uint32 TargetNumVChunks = 5 [default = 1];
 
             // Upper bound on in-vChunk offset; must be <= cluster PDisk
             // chunk size. Default 128 MiB matches DefaultVChunkSize.
             optional uint64 VChunkSizeBytes = 6 [default = 134217728];
 
-            // Storage-pool bindings used when Hive creates the tablet.
-            // Forwarded onto each TEvHive::TEvCreateTablet::AddBindedChannels
-            // entry so the tablet can boot. Empty means "use a single
-            // empty-name binding" (lets Hive pick the default).
+            // Stored tablet-channel pool names. The HTTP Create helper reads
+            // its Hive bindings from the separate storage_pools form field;
+            // supplying only this field does not configure those bindings.
             repeated string TabletStoragePools = 7;
 
-            // Number of hosts/nodes/disks per DBG that worker should use.
-            // Must not exceed the current max fan-out supported by the worker.
+            // Expected DDisk/PB pairs per BSC response (3 to 5). This checks
+            // pool geometry; it is not sent as an allocation geometry setting.
+            // The workload replicates and flushes through the first three pairs.
             optional uint32 HostsPerDbg = 8 [default = 5];
         }
 
@@ -438,7 +435,8 @@ message TEvLoadTestRequest {
         }
 
         message TConfigureTablet {
-            // Global cap on tracked LSNs across DBGs
+            // Each DBG actor independently caps tracked LSNs at
+            // max(1, MaxInflightLsns / allocated DBG count). Zero rejects writes.
             optional uint32 MaxInflightLsns = 1 [default = 4096];
 
             // FlushBatchSize / EraseBatchSize are arbitrary trade-offs;
@@ -452,8 +450,8 @@ message TEvLoadTestRequest {
             // (nbs/cloud/blockstore/config/config.cpp:30, default 10). Gate is
             // checked per-DBG, before per-destination batching: DoFlush /
             // DoErase early-return on a DBG when its ready-queue size is below
-            // this value. Set to 1 to disable the gate. Bypassed during drain
-            // so the shutdown sweep can finalize any leftover LSNs.
+            // this value. Set to 1 to disable the gate. Load-worker drain does
+            // not bypass this gate or wait for the background pipeline.
             optional uint32 SyncRequestsBatchSize = 4 [default = 10];
 
             // Forwarded onto the wire (TEvWritePersistentBuffers
@@ -494,8 +492,8 @@ message TEvLoadTestRequest {
             optional uint64 Address = 1;
             optional uint32 SizeBytes = 2;
 
-            // Required rope payload referenced by the AddPayload() return
-            // value. The tablet rejects writes without PayloadId.
+            // Serialized payload reference. Local senders fill the event
+            // wrapper's Payload rope; its serializer supplies PayloadId.
             oneof Payload {
                 uint32 PayloadId = 3;
                 // <-- add RDMA here
@@ -540,14 +538,15 @@ message TEvLoadTestRequest {
             optional uint32 DelayBeforeMeasurementsSeconds = 3 [default = 15];
 
             // How many of the allocated DBGs (TAllocConfig.NumDirectBlockGroups = N)
-            // participate in this run. 0 = use all N; otherwise use the first M
-            // DBGs in tablet/actor order (1 <= M <= N).
+            // participate in this run. Use a prefix in tablet/actor order;
+            // zero or a value above the available count uses all available DBGs.
             optional uint32 NumDirectBlockGroupsToUse = 4 [default = 0];
 
-            // Combined cap on concurrent in-flight ops (writes + reads).
-            // ReadRatio controls what fraction of in-flight slots are used for reads.
+            // Combined cap on concurrent in-flight ops (writes + reads) per
+            // target tablet, divided among that tablet's load workers.
             optional uint32 MaxInFlight = 5 [default = 32];
 
+            // Reads issued per 100 writes, not a percentage of all operations.
             optional uint32 ReadRatio = 6 [default = 0];
 
             // false = uniform random over the user-level address space
@@ -557,7 +556,8 @@ message TEvLoadTestRequest {
             optional bool Sequential = 7 [default = false];
 
             // Read/write payload size in KiB. Must be >= 4, a multiple of 4,
-            // and ReadWriteSizeKiB * 1024 <= VChunkSizeBytes (from TAllocConfig).
+            // and ReadWriteSizeKiB * 1024 must fit in and evenly divide
+            // VChunkSizeBytes (from TAllocConfig).
             optional uint32 ReadWriteSizeKiB = 8 [default = 4];
 
             optional TConfigureTablet TabletConfig = 15;
@@ -565,6 +565,8 @@ message TEvLoadTestRequest {
             // If non-zero, stop the run once this many writes have completed
             // successfully and then drain. Whichever condition fires first
             // wins (DurationSeconds or StopOnWritesDoneCount). 0 = no limit.
+            // The current worker also caps issued writes at this count; errors
+            // can prevent reaching the success target, so also bound duration.
             optional uint32 StopOnWritesDoneCount = 16 [default = 0];
         }
 
@@ -575,9 +577,9 @@ message TEvLoadTestRequest {
         optional TWorkloadConfig WorkloadConfig = 102;
         optional uint64 Tag = 100;
 
-        // One target tablet for a multi-tablet run. NodeId is the node that
-        // currently hosts the tablet (from Hive); the coordinator places the
-        // per-tablet load actor on that node so it is co-located with the tablet.
+        // One target tablet for a multi-tablet run. NodeId selects the node on
+        // which to start its load actor; zero uses the coordinator's node.
+        // Supply current Hive placement for colocation; no lookup is performed.
         message TNbsTabletTarget {
             optional uint64 TabletId = 1;
             optional uint32 NodeId = 2;

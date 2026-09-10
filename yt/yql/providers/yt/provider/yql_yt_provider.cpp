@@ -600,7 +600,11 @@ TMaybe<TString> TYtState::ResolveClusterToken(const TString& cluster) {
         }
 
         if (auto ytTokenResolver = Gateway->GetYtTokenResolver()) {
-            return ytTokenResolver->ResolveClusterToken(cluster);
+            auto ytName = Gateway->GetClusterYtName(cluster);
+            if (!ytName) {
+                ythrow yexception() << "Unknown cluster name: " << cluster;
+            }
+            return ytTokenResolver->ResolveClusterToken(ytName);
         }
     }
 

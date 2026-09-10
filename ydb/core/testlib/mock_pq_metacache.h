@@ -61,7 +61,7 @@ public:
         };
 
         EXPECT_CALL(*this, HandleDescribeTopics(_, _))
-            .WillOnce(Invoke(handle));
+            .WillOnce(handle);
     }
 
     void SetDescribeTopicsByNameAnswer(
@@ -86,7 +86,7 @@ public:
         };
 
         EXPECT_CALL(*this, HandleDescribeTopicsByName(_, _))
-            .WillOnce(Invoke(handle));
+            .WillOnce(handle);
     }
 };
 

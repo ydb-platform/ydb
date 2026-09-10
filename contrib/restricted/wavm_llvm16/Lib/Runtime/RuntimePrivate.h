@@ -2,8 +2,10 @@
 
 #include <atomic>
 #include <cstddef>
+#include <ctime>
 #include <functional>
 #include <memory>
+#include <optional>
 #include "WAVM/IR/Module.h"
 #include "WAVM/Inline/BasicTypes.h"
 #include "WAVM/Inline/DenseStaticIntSet.h"

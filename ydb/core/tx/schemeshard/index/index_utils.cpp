@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/schemeshard_generated_column_utils.h>
 #include <ydb/core/tx/schemeshard/index/index_utils.h>
 
 #include <ydb/core/base/table_index.h>
@@ -85,6 +86,27 @@ TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig &indexDesc
         result.DataColumns.push_back(keyName);
     }
     return result;
+}
+
+bool IsVirtualGeneratedIndexColumn(const NKikimrSchemeOp::TTableDescription& tableDesc, const TString& columnName) {
+    for (const auto& column : tableDesc.GetColumns()) {
+        if (column.GetName() == columnName) {
+            return column.HasDefaultFromExpression() && !column.GetDefaultFromExpression().GetStored();
+        }
+    }
+    return false;
+}
+
+bool IsVirtualGeneratedIndexColumn(const NSchemeShard::TTableInfo::TPtr& tableInfo, const TString& columnName) {
+    for (const auto& [_, column] : tableInfo->Columns) {
+        if (column.IsDropped()) {
+            continue;
+        }
+        if (column.Name == columnName) {
+            return NSchemeShard::IsVirtualGeneratedColumn(column);
+        }
+    }
+    return false;
 }
 
 TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr &tableInfo) {

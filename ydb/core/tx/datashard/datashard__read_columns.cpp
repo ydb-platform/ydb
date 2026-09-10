@@ -387,3 +387,7 @@ void TDataShard::Handle(TEvDataShard::TEvReadColumnsRequest::TPtr& ev, const TAc
 }
 
 }}
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

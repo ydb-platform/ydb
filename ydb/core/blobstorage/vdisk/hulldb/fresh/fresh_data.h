@@ -70,6 +70,14 @@ namespace NKikimr {
 
         // you can't read from TFreshData directly, take a snapshot instead
         TFreshDataSnapshot GetSnapshot();
+        template <class TCallback>
+        void ForEachHugeBlob(TCallback&& callback) const {
+            if (Old)
+                Old->ForEachHugeBlob(callback);
+            if (Dreg)
+                Dreg->ForEachHugeBlob(callback);
+            Cur->ForEachHugeBlob(callback);
+        }
         void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
         ui64 GetFirstLsnToKeep() const;
         ui64 GetFirstLsn() const;

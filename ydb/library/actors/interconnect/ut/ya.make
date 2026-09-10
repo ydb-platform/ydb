@@ -14,6 +14,7 @@ SRCS(
     direct_session_ut.cpp
     event_holder_pool_ut.cpp
     event_output_channel_ut.cpp
+    interconnect_session_pool_mapping_ut.cpp
     interconnect_ut.cpp
     large.cpp
     outgoing_stream_ut.cpp
@@ -22,6 +23,7 @@ SRCS(
     sticking_ut.cpp
     xdc_shuffle_ut.cpp
     v2_event_serializer_ut.cpp
+    v2_serialize_window_ut.cpp
     v2_session_ut.cpp
 )
 

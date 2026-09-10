@@ -14,8 +14,8 @@ ui64 CalculateBlockChecksum(TRope::TConstIterator it, size_t numBytes) {
     Y_ABORT_UNLESS(numBytes > 0);
     Y_ABORT_UNLESS((numBytes & (IntegrityUnitSize - 1)) == 0);
 
-    // Fast path: the block is fully contiguous (always true for TEvWrite payloads, and common for PB
-    // ones), so a single one-shot hash call avoids the XXH3 streaming state overhead.
+    // Fast path: when the block is fully contiguous, a single one-shot hash call avoids the
+    // XXH3 streaming state overhead.
     if (it.Valid() && it.ContiguousSize() >= numBytes) {
         return XXH3_64bits(it.ContiguousData(), numBytes);
     }

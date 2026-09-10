@@ -10,15 +10,25 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorid.h>
 
+#include <optional>
 #include <queue>
 
 namespace NKikimr::NStat {
 
 class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
 public:
+    static constexpr ui64 MaxStatisticSize = 8ull << 20;
+    static constexpr ui32 MaxHistogramOversampleFactor = 256;
+
     struct TConfig {
         ui64 MaxTotalScanActorsInFlight = 100;
         i64 MaxPerNodeScanActorsInFlight = 1;
+        ui64 ColumnTableWholeTableScanMaxBytes = 10ULL << 30; // 10 GiB
+        ui64 RowTableWholeTableScanMaxBytes = 10ULL << 30; // 10 GiB
+        std::optional<ui64> TableBytesSize;
+        bool CollectPrimaryKeyHistogram = false;
+        ui32 HistogramOversampleFactor = 8;
+        ui64 HistogramMaxStateBytes = 4u << 20;
     };
 
 private:
@@ -94,9 +104,22 @@ private:
 
     TString TableName;
     bool IsColumnTable = false;
+
+    enum class EScanMode : ui8 {
+        WholeTable,
+        PerShard,
+        PerRange,
+    };
+    EScanMode ScanMode = EScanMode::WholeTable;
+
+    bool IsPartitionedScan() const {
+        return ScanMode != EScanMode::WholeTable;
+    }
+
     TVector<TColumnDesc> Columns;
     TVector<TMultiColumnStatDesc> MultiColumnStatDescs;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
+    TVector<TString> KeyColumnNames;
     ui64 HiveId = 0;
 
     ui32 ScansCompletedTotal = 0;
@@ -119,6 +142,18 @@ private:
 
     THashSet<ui64> TabletIdsToLocate;
     THashMap<ui64, ui32> TabletId2NodeId;
+
+    struct TScanWorkItem {
+        ui64 TabletId = 0;
+        TSerializedTableRange Range;
+    };
+    TVector<TScanWorkItem> RangeWorkItems;
+
+    ui32 PartitionedScanCount() const {
+        return ScanMode == EScanMode::PerRange
+            ? static_cast<ui32>(RangeWorkItems.size())
+            : static_cast<ui32>(TabletId2NodeId.size());
+    }
 
     size_t HiveRetryCount = 0;
     static constexpr size_t MaxHiveRetryCount = 3;
@@ -166,7 +201,7 @@ private:
     struct TNodeState {
         ui32 Id = 0;
         i64 TabletsInFlight = 0;
-        TVector<ui64> PendingTablets;
+        TVector<TScanWorkItem> PendingScans;
 
         explicit TNodeState(ui32 id) : Id(id) {}
     };
@@ -182,7 +217,7 @@ private:
     class TScanActor;
 
     void StartColumnStatEvalTasks();
-    void DispatchSomeScanActors();
+    bool DispatchSomeScanActors();
 
     void HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev);
     void Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev);

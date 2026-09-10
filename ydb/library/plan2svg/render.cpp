@@ -59,7 +59,7 @@ void TPlan::PrintTimeline(TStringBuilder& background, TStringBuilder& canvas, co
         << "</g>" << Endl;
 }
 
-void TPlan::PrintWaitTime(TStringBuilder& background, std::shared_ptr<TSingleMetric> metric, ui32 x, ui32 y, ui32 w, ui32 h, TStringBuf fillColor) {
+void TPlan::PrintWaitTime(TStringBuilder& background, const std::shared_ptr<TSingleMetric>& metric, ui32 x, ui32 y, ui32 w, ui32 h, TStringBuf fillColor) {
 
     if (metric->WaitTime.MaxDeriv == 0) {
         return;
@@ -78,7 +78,7 @@ void TPlan::PrintWaitTime(TStringBuilder& background, std::shared_ptr<TSingleMet
         << "' stroke='none' fill='" << fillColor << "' />" << Endl;
 }
 
-void TPlan::PrintSeries(TStringBuilder& canvas, std::vector<std::pair<ui64, ui64>> series, ui64 maxValue, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, TStringBuf lineColor, TStringBuf fillColor, bool closed) {
+void TPlan::PrintSeries(TStringBuilder& canvas, const std::vector<std::pair<ui64, ui64>>& series, ui64 maxValue, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, TStringBuf lineColor, TStringBuf fillColor, bool closed) {
     if (MaxTime == 0 || maxValue == 0 || series.empty()) {
         return;
     }
@@ -402,7 +402,7 @@ void TPlan::PrintPlanSummary(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
     auto titleHeight = INTERNAL_GAP_Y + (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2;
 
     SummaryBuilder
-        << "<g data-group='g" << GroupId << "' class='selectable'><title> " << planName << "</title>" << Endl
+        << "<g data-group='g" << GroupId << "' class='selectable'><title> " << SvgEscape(planName) << "</title>" << Endl
         << SvgRect(Config.HeaderLeft, 0, Config.HeaderWidth, TIME_HEIGHT + INTERNAL_HEIGHT, "background")
         << SvgTextS(Config.HeaderLeft + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, titleHeight, "Query - " + planName)
         << "</g>" << Endl;
@@ -415,10 +415,9 @@ void TPlan::PrintPlanSummary(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
         << SvgRect(INTERNAL_GAP_X, CONN_SIZE, CONN_SIZE, CONN_SIZE, "transparent")
         << "<use href='#icon_arrowup' transform='translate(" << INTERNAL_GAP_X << ' ' << CONN_SIZE << ") scale(0.014, 0.014)' fill='" << Config.Palette.ConnectionText << "'/></g>" << Endl;
 
+    // The columns are named once by the document header strip, so only the value
+    // belongs here.
     SummaryBuilder
-        << SvgTextS(Config.OperatorLeft + 2, titleHeight, "Rows")
-        << SvgTextS(Config.SummaryLeft + 2, titleHeight, "Statistics")
-        << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, titleHeight, "Tasks")
         << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, titleHeight + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT, ToString(p->Tasks));
 
     SummaryBuilder
@@ -502,10 +501,10 @@ void TPlan::PrintPlanSummary(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
 void TPlan::PrintStageOperators(const std::shared_ptr<TStage>& s) {
     ui32 y0 = INTERNAL_GAP_Y;
     ui32 index = 0;
-    for (auto op : s->Operators) {
+    for (const auto& op : s->Operators) {
         ui32 yt = y0 + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2;
         s->Svg
-            << "<g><title>" << op.Name << ": " << op.Info << (op.Blocks ? " Blocks: True" : "") << "</title>";
+            << "<g><title>" << SvgEscape(op.Name) << ": " << SvgEscape(op.Info) << (op.Blocks ? " Blocks: True" : "") << "</title>";
         if (op.Blocks) {
             auto h = INTERNAL_TEXT_HEIGHT * 2 + INTERNAL_GAP_Y * 2;
             if (index == s->Operators.size() - 1) {
@@ -548,7 +547,7 @@ void TPlan::PrintStageOperators(const std::shared_ptr<TStage>& s) {
                     auto it = Viz.CteSubPlans.find(input.PrecomputeRef);
                     if (it != Viz.CteSubPlans.end()) {
                         s->Svg
-                        << "<g data-group='g" << it->second->GroupId << "' class='selectable'><title>Data from precompute " << it->second->NodeType << "</title>" << Endl
+                        << "<g data-group='g" << it->second->GroupId << "' class='selectable'><title>Data from precompute " << SvgEscape(it->second->NodeType) << "</title>" << Endl
                         << SvgStageId(opX, opY, "P")
                         << "</g>" << Endl;
                     }
@@ -704,9 +703,9 @@ void TPlan::PrintMemoryStrip(const std::shared_ptr<TStage>& s, ui32& y0, ui64 px
 }
 
 // CPU: usage as a bar, the derivative as a curve, and the wait times that
-// explain the gaps in it. offsetY places the wait-output badge, which hangs off
-// the bottom of the whole stage rather than off this strip.
-void TPlan::PrintCpuStrip(const std::shared_ptr<TStage>& s, ui32& y0, ui64 px, ui64 pw, ui32 offsetY) {
+// explain the gaps in it. The wait-output badge hangs off the bottom of the
+// whole stage rather than off this strip.
+void TPlan::PrintCpuStrip(const std::shared_ptr<TStage>& s, ui32& y0, ui64 px, ui64 pw) {
     if (s->CpuTime) {
         TString tooltip;
         auto textSum = FormatTooltip(tooltip, "CPU Usage", s->CpuTime.get(), FormatUsage);
@@ -769,9 +768,11 @@ void TPlan::PrintCpuStrip(const std::shared_ptr<TStage>& s, ui32& y0, ui64 px, u
                     }
                 }
                 if (waitOutputPeers) {
-                    PrintWarningBadge(s->Svg, Config.TaskLeft + Config.TaskWidth / 2,
-                        s->OffsetY + offsetY + s->Height,
-                        TStringBuilder() << "Wait input with peer stage(s) " << waitOutputPeers << " wait output", "W");
+                    // Only remembered here: the badge sits at the bottom of the stage,
+                    // in the task column that later strips keep painting over, so it is
+                    // emitted last by PrepareStageSvg.
+                    s->WaitInputWarning = TStringBuilder()
+                        << "Wait input with peer stage(s) " << waitOutputPeers << " wait output";
                 }
             }
         }
@@ -823,36 +824,36 @@ void TPlan::PrintStageConnections(const std::shared_ptr<TStage>& s, ui32& y0, ui
         auto x = c->CteConnection ? c->CteIndentX : c->FromStage->IndentX;
         ui32 y = 0;
 
-        c->Svg << "<g data-group='g" << c->GroupId << "' class='selectable'><title>" << c->NodeType << " connection";
+        c->Svg << "<g data-group='g" << c->GroupId << "' class='selectable'><title>" << SvgEscape(c->NodeType) << " connection";
         if (!c->KeyColumns.empty()) {
             c->Svg << " KeyColumns: ";
             bool first = true;
-            for (auto k : c->KeyColumns) {
+            for (const auto& keyColumn : c->KeyColumns) {
                 if (first) {
                     first = false;
                 } else {
                     c->Svg << ", ";
                 }
-                c->Svg << k;
+                c->Svg << SvgEscape(keyColumn);
             }
         }
         if (!c->SortColumns.empty()) {
             c->Svg << " SortColumns: ";
             bool first = true;
-            for (auto s : c->SortColumns) {
+            for (const auto& sortColumn : c->SortColumns) {
                 if (first) {
                     first = false;
                 } else {
                     c->Svg << ", ";
                 }
-                c->Svg << s;
+                c->Svg << SvgEscape(sortColumn);
             }
         }
         if (c->Blocks) {
             c->Svg << " Blocks: True";
         }
         if (c->HashFunc) {
-            c->Svg << " HashFunc: " << c->HashFunc;
+            c->Svg << " HashFunc: " << SvgEscape(c->HashFunc);
         }
         if (c->Parallel) {
             c->Svg << " Parallel: True";
@@ -1003,7 +1004,7 @@ void TPlan::PrintIngressStrip(const std::shared_ptr<TStage>& s, ui32& y0, ui64 p
 
 // One stage: the boxes it occupies in every column, then a strip for each of
 // its data flows, memory and CPU, then its incoming connections.
-void TPlan::PrepareStageSvg(const std::shared_ptr<TStage>& s, ui64 maxTime, ui32 timelineDelta, ui32 offsetY) {
+void TPlan::PrepareStageSvg(const std::shared_ptr<TStage>& s, ui64 maxTime, ui32 timelineDelta) {
     s->Svg
         << "<g data-group='g" << s->GroupId << "' class='selectable'><title>Stage " << (s->External ? "E" : ToString(s->PhysicalStageId)) << "</title>" << Endl;
     auto stageClass = s->External ? "clone" : "stage";
@@ -1023,7 +1024,7 @@ void TPlan::PrepareStageSvg(const std::shared_ptr<TStage>& s, ui64 maxTime, ui32
     PrintStageBackground(s);
 
     for (auto& region : s->HotRegions) {
-        auto px = Config.TimelineLeft + region.first * (Config.TimelineWidth - timelineDelta) / maxTime;
+        auto px = Config.TimelineLeft + (TimeOffset + region.first) * (Config.TimelineWidth - timelineDelta) / maxTime;
         auto pw = (region.second - region.first) * (Config.TimelineWidth - timelineDelta) / maxTime;
         s->Svg
         << SvgRect(px, 0, pw, "100%", "hot");
@@ -1038,7 +1039,7 @@ void TPlan::PrepareStageSvg(const std::shared_ptr<TStage>& s, ui64 maxTime, ui32
     PrintEgressStrip(s, y0, px, pw);
     PrintOutputStrip(s, y0, px, pw);
     PrintMemoryStrip(s, y0, px, pw);
-    PrintCpuStrip(s, y0, px, pw, offsetY);
+    PrintCpuStrip(s, y0, px, pw);
 
     if (s->Tasks) {
         s->Svg << "<g><title>";
@@ -1071,6 +1072,16 @@ void TPlan::PrepareStageSvg(const std::shared_ptr<TStage>& s, ui64 maxTime, ui32
     PrintStageConnections(s, y0, px, pw);
 
     PrintIngressStrip(s, y0, px, pw);
+
+    // Last, so that nothing drawn for the stage can hide it: the badge shares the
+    // task column with the throughput overlay, which spans the whole stage box.
+    // Still inside the selectable group, so clicking the badge selects the stage.
+    // The stage draws into its own nested svg, so the badge is placed relative to
+    // that stage box, not to its offset in the whole plan.
+    if (s->WaitInputWarning) {
+        PrintWarningBadge(s->Svg, Config.TaskLeft + Config.TaskWidth / 2, s->Height, s->WaitInputWarning, "W");
+    }
+
     s->Svg << "</g>" << Endl;
 }
 
@@ -1081,13 +1092,13 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
     PrintPlanSummary(maxTime, timelineDelta, offsetY);
 
     for (auto& s : Stages) {
-        PrepareStageSvg(s, maxTime, timelineDelta, offsetY);
+        PrepareStageSvg(s, maxTime, timelineDelta);
     }
 
     offsetY += Height;
 }
 
-void TPlan::PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, TConnection* c) {
+void TPlan::PrintStage(TStringBuilder& builder, const std::shared_ptr<TStage>& stage, TConnection* c) {
 
     if (stage->Connections.size() > 1) {
         builder
@@ -1101,7 +1112,7 @@ void TPlan::PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, 
     builder << "</svg>" << Endl;
 
     auto y = stage->Height + GAP_Y;
-    for (auto c : stage->Connections) {
+    for (const auto& c : stage->Connections) {
         if (c->CteConnection) {
             builder << "<svg data-stage='outer cte' data-height='" << GAP_Y + INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2 << "' width='" << Config.Width << "' height='" << GAP_Y + INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2 << "' x='0' y='" << y << "'>" << Endl;
             builder << "<svg data-stage='inner cte' data-height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2 << "' width='" << Config.Width << "' height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2 << "' x='0' y='" << GAP_Y << "'>" << Endl;
@@ -1166,35 +1177,6 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
             << SvgTextS(Config.HeaderLeft + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, INTERNAL_GAP_Y + (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2, "NodeId = " + ToString(node->NodeId));
 
         ui32 y0 = INTERNAL_GAP_Y;
-/*
-        if (node->OutputBytes) {
-            auto textSum = "";
-            auto tooltip = "";
-            auto px = Config.TimelineLeft;
-            auto pw = Config.TimelineWidth;
-            PrintStageSummary(builder, {Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT}, {
-                .Metric = node->OutputBytes.get(),
-                .Colors = Config.Palette.Output,
-                .Text = textSum,
-                .Tooltip = tooltip,
-                .Icon = {"#icon_output", Config.Palette.Output.Light, "0.0325 0.0325"},
-            });
-            PrintValues(builder, node->OutputBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Max " + FormatBytes(node->OutputBytes->History.MaxValue), Config.Palette.Output.Medium, Config.Palette.Output.Medium);
-            y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
-        }
-
-        if (node->MaxMemoryUsage) {
-            TString tooltip;
-            auto textSum = FormatTooltip(tooltip, "Memory", node->MaxMemoryUsage.get(), FormatBytes);
-            PrintStageSummary(builder, {Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT}, {
-                .Metric = node->MaxMemoryUsage.get(),
-                .Colors = Config.Palette.Mem,
-                .Text = textSum,
-                .Tooltip = tooltip,
-                .Icon = {"#icon_memory", Config.Palette.Mem.Medium, "0.6 0.6"},
-            });
-        }
-*/
         ui32 px = Config.TimelineLeft;
         ui32 pw = Config.TimelineWidth - timelineDelta;
 
@@ -1221,11 +1203,6 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
             builder << "</g>" << Endl;
         }
 
-/*
-            if (s->SpillingComputeBytes && !s->SpillingComputeBytes->History.Deriv.empty()) {
-                PrintDeriv(s->Svg, s->SpillingComputeBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Spilling Compute", Config.Palette.SpillingBytes.Medium, Config.Palette.SpillingBytes.Light);
-            }
-*/
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
 
         if (node->MemArrowDefault.Values.size() || node->MemMkqlAllocated.Values.size() || node->MemMkqlFreeList.Values.size()) {
@@ -1291,33 +1268,6 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
             }
         }
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
-/*
-        if (node->InputBytes) {
-            auto textSum = "";
-            auto tooltip = "";
-            PrintStageSummary(builder, {Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT}, {
-                .Metric = node->InputBytes.get(),
-                .Colors = Config.Palette.Input,
-                .Text = textSum,
-                .Tooltip = tooltip,
-                .Icon = {"#icon_input", Config.Palette.Input.Light, "0.0325 0.0325"},
-            });
-            y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
-        }
-
-        if (node->IngressBytes) {
-            auto textSum = "";
-            auto tooltip = "";
-            PrintStageSummary(builder, {Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT}, {
-                .Metric = node->IngressBytes.get(),
-                .Colors = Config.Palette.Ingress,
-                .Text = textSum,
-                .Tooltip = tooltip,
-                .Icon = {"#icon_ingress", Config.Palette.Ingress.Medium, "0.9 0.9"},
-            });
-            y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
-        }
-*/
         if (node->Tasks) {
             PrintUnfinishedTasks(builder, node->Tasks, node->FinishedTasks);
             builder
@@ -1350,19 +1300,76 @@ void TPlan::PrintSvg(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta) 
     builder << "</svg>" << Endl;
 }
 
+// A document carrying the message, rather than a partial render of a plan that
+// could not be drawn. It has to be well-formed too: this is what a browser gets
+// to show when everything else failed.
+static TString ErrorSvg(TStringBuf message) {
+    return TStringBuilder()
+        << "<svg width='1024' height='256' xmlns='http://www.w3.org/2000/svg'>" << Endl
+        << "<text x='4' y='16' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px'>"
+        << SvgEscape(message) << "</text>" << Endl
+        << "</svg>" << Endl;
+}
+
+// The column titles shared by every plan in the document. Only the strip itself
+// is placed here; keeping it pinned to the top of the viewport while the
+// document scrolls is left to the script, because CSS positioning does not
+// apply to elements laid out by SVG. The group wrapper is what the script
+// translates, and it also keeps the strip out of the sibling walk that the fold
+// and slim handlers do over adjacent <svg> elements.
+void TVisualizer::PrintColumnHeaders(TStringBuilder& svg, ui64 maxSec, ui64 deltaSec, ui32 x, ui32 w) {
+    auto titleHeight = INTERNAL_GAP_Y + (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2;
+    svg << "<g id='columnHeaders'>" << Endl
+        << "<svg width='" << Config.Width << "' height='" << COLUMN_HEADER_HEIGHT << "' x='0' y='0'>" << Endl
+        // One box per column, laid out like the boxes of a stage row below, so the
+        // strip reads as the top of the same grid rather than a banner over it.
+        << SvgRect(Config.HeaderLeft, 0, Config.HeaderWidth, COLUMN_HEADER_HEIGHT, "columns")
+        << SvgRect(Config.OperatorLeft, 0, Config.OperatorWidth, COLUMN_HEADER_HEIGHT, "columns")
+        << SvgRect(Config.TaskLeft, 0, Config.TaskWidth, COLUMN_HEADER_HEIGHT, "columns")
+        << SvgRect(Config.SummaryLeft, 0, Config.SummaryWidth, COLUMN_HEADER_HEIGHT, "columns")
+        << SvgRect(Config.TimelineLeft, 0, Config.TimelineWidth, COLUMN_HEADER_HEIGHT, "columns")
+        << SvgTextS(Config.HeaderLeft + INTERNAL_GAP_X, titleHeight, "Stages and Operators")
+        << SvgTextS(Config.OperatorLeft + 2, titleHeight, "Rows")
+        << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, titleHeight, "Tasks")
+        << SvgTextS(Config.SummaryLeft + 2, titleHeight, "Statistics");
+    // The timeline column is titled by its own scale: the ticks the grid lines
+    // running down the document are drawn at.
+    for (ui64 t = 0; t <= maxSec; t += deltaSec) {
+        ui64 x1 = t * w * 1000 / MaxTime;
+        svg << "<g><title>" << TInstant::MilliSeconds(BaseTime + t * 1000) << "</title>" << Endl
+            << SvgTextS(x + x1 + 2, titleHeight, Sprintf("%lu:%.2lu", t / 60, t % 60))
+            << "</g>" << Endl;
+    }
+    svg << "</svg>" << Endl
+        // Outside the strip's own viewport, which would clip half of it away.
+        << SvgLine(0, COLUMN_HEADER_HEIGHT, Config.Width, COLUMN_HEADER_HEIGHT, "columns")
+        << "</g>" << Endl;
+}
+
 TString TVisualizer::PrintSvgSafe() {
+    if (LoadError) {
+        return ErrorSvg(LoadError);
+    }
     try {
         return PrintSvg();
     } catch (std::exception& e) {
-        return Sprintf("<svg width='1024' height='256' xmlns='http://www.w3.org/2000/svg'><text>%s<text></svg>", e.what());
+        return ErrorSvg(e.what());
     }
 }
 
 TString TVisualizer::PrintSvg() {
+    // Reached only by mixing LoadPlansSafe with the throwing printer; report the
+    // load failure rather than rendering the half-loaded plans behind it.
+    if (LoadError) {
+        ythrow yexception() << LoadError;
+    }
+
     TStringBuilder background;
     TStringBuilder svg;
 
-    ui32 offsetY = 0;
+    // The plans start below the column header strip, which is drawn once for all
+    // of them at the top of the document.
+    ui32 offsetY = COLUMN_HEADER_HEIGHT;
     ui32 timelineDelta = (UpdateTime > MaxTime) ? std::min<ui32>(Config.TimelineWidth * (UpdateTime - MaxTime) / UpdateTime, Config.TimelineWidth / 10) : 0;
 
     ui64 maxSec = MaxTime / 1000;
@@ -1390,21 +1397,11 @@ TString TVisualizer::PrintSvg() {
     auto x = Config.TimelineLeft + INTERNAL_GAP_X;
     auto w = Config.TimelineWidth - timelineDelta - INTERNAL_GAP_X * 2;
 
-    for (ui64 t = 0; t <= maxSec; t += deltaSec) {
-        ui64 x1 = t * w * 1000 / MaxTime;
-        TString timeLabel = TStringBuilder()
-            << "<g><title>" << TInstant::MilliSeconds(BaseTime + t * 1000) << "</title>" << Endl
-            << SvgTextS(x + x1 + 2, INTERNAL_GAP_Y + (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2, Sprintf("%lu:%.2lu", t / 60, t % 60)) << Endl
-            << "</g>" << Endl;
-        for (auto plan : Plans) {
-            plan->SummaryBuilder << timeLabel;
-        }
-    }
-    for (auto plan : Plans) {
+    for (auto& plan : Plans) {
         plan->PrepareSvg(MaxTime, timelineDelta, offsetY);
     }
 
-    for (auto plan : Plans) {
+    for (auto& plan : Plans) {
         plan->PrintSvg(background, MaxTime, timelineDelta);
     }
 
@@ -1424,6 +1421,9 @@ TString TVisualizer::PrintSvg() {
         << "  .textc { text-anchor:end; dominant-baseline:middle; font-family:Verdana; font-size:" << INTERNAL_TEXT_HEIGHT << "px; fill:" << Config.Palette.StageText << "; }" << Endl
         << "  circle.stage { stroke:" << Config.Palette.StageMain << "; stroke-width:1; fill:" << Config.Palette.StageClone << "; }" << Endl
         << "  line.opdiv { stroke-width:1; stroke:" << Config.Palette.StageGrid << "; stroke-dasharray:1,2; }" << Endl
+        << "  #columnHeaders text { font-weight:bold; }" << Endl
+        << "  rect.columns { stroke-width:0; fill:" << Config.Palette.ColumnHeader << "; }" << Endl
+        << "  line.columns { stroke-width:1; stroke:" << Config.Palette.StageGrid << "; }" << Endl
         << "  text.clipped { clip-path:url(#clipTextPath); }" << Endl
         << "  polygon.conn { stroke-width:0; fill:" << Config.Palette.ConnectionFill << "; }" << Endl
         << "  path.conn { stroke-width:1; stroke:" << Config.Palette.ConnectionLine << "; fill:" << Config.Palette.ConnectionFill << "; }" << Endl
@@ -1454,11 +1454,11 @@ TString TVisualizer::PrintSvg() {
         ui32 summary3 = (Config.SummaryWidth - INTERNAL_GAP_X * 2) / 3;
         svg
         << "<g><title>" << "Last Update: " << FormatTimeMs(UpdateTime) << "</title>" << Endl
-        << "  <rect x='" << Config.TimelineLeft + Config.TimelineWidth - summary3 << "' y='" << GAP_Y
+        << "  <rect x='" << Config.TimelineLeft + Config.TimelineWidth - summary3 << "' y='" << COLUMN_HEADER_HEIGHT + GAP_Y
         << "' width='" << summary3 << "' height='" << TIME_HEIGHT
         << "' stroke-width='0' fill='" << Config.Palette.StageTextHighlight << "'/>" << Endl
         << "  <text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextInverted << "' x='" << Config.TimelineLeft + Config.TimelineWidth - 2
-        << "' y='" << GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatTimeMs(UpdateTime) << "</text>" << Endl
+        << "' y='" << COLUMN_HEADER_HEIGHT + GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatTimeMs(UpdateTime) << "</text>" << Endl
         << "</g>" << Endl;
     }
 
@@ -1479,9 +1479,8 @@ TString TVisualizer::PrintSvg() {
         << "' stroke-width='0' opacity='" << opacity << "' fill='" << Config.Palette.StageTextHighlight << "'/>" << Endl;
     }
 
-    // Blank line left over from a canvas builder that was never written to. Kept so that the
-    // output stays byte for byte identical; drop it together with a golden re-baseline.
-    svg << Endl;
+    PrintColumnHeaders(svg, maxSec, deltaSec, x, w);
+
     svg << "</svg>" << Endl;
 
     return svg;

@@ -1,0 +1,190 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  color-scheme: dark light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+}
+
+.runtime-error {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  padding: 32px;
+  place-items: center;
+  color: #f0f0f0;
+  background: #1e1e1e;
+}
+
+.runtime-error__panel {
+  width: min(900px, 100%);
+  padding: 24px;
+  border: 1px solid #f14c4c;
+  border-radius: 4px;
+  background: #252526;
+}
+
+.runtime-error h1 {
+  margin: 0 0 8px;
+  color: #f48771;
+  font-size: 20px;
+}
+
+.runtime-error p {
+  margin: 0 0 16px;
+}
+
+.runtime-error pre {
+  max-height: 60vh;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: #f0f0f0;
+  border-radius: 2px;
+  background: #181818;
+}
+
+.app {
+  --background: #1e1e1e;
+  --border: #3c3c3c;
+  --foreground: #cccccc;
+  --muted: #252526;
+  --select: #3c3c3c;
+
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  color: var(--foreground);
+  background: var(--background);
+}
+
+.app--light {
+  --background: #ffffff;
+  --border: #d4d4d4;
+  --foreground: #333333;
+  --muted: #f3f3f3;
+  --select: #ffffff;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 52px;
+  padding: 8px 16px;
+  gap: 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--muted);
+}
+
+.toolbar h1 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.toolbar__controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+}
+
+.toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.toolbar select {
+  min-width: 112px;
+  padding: 5px 28px 5px 8px;
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--select);
+}
+
+.workspace {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+.editor,
+.preview {
+  min-width: 0;
+  min-height: 0;
+}
+
+.editor {
+  flex: 1 1 100%;
+}
+
+.editor[data-split="true"] {
+  flex-basis: 50%;
+}
+
+.preview {
+  flex: 1 1 50%;
+  overflow: auto;
+  border-left: 1px solid var(--border);
+  background: var(--background);
+}
+
+.preview__content {
+  min-height: 100%;
+}
+
+.preview__content--textmate .shiki,
+.preview__content--highlightjs pre {
+  min-height: 100%;
+  margin: 0;
+  padding: 10px 16px;
+  overflow: visible;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 14px;
+  line-height: 19px;
+}
+
+.preview__content--highlightjs code {
+  display: block;
+  min-height: calc(100vh - 72px);
+  padding: 0;
+  background: transparent;
+}
+
+@media (max-width: 760px) {
+  .toolbar {
+    align-items: flex-start;
+  }
+
+  .toolbar__controls {
+    flex-wrap: wrap;
+  }
+
+  .toolbar label {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+}

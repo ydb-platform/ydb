@@ -87,8 +87,8 @@ TMaybe<NActors::NLog::EPriority> ParseLogLevel(const TString& level) {
 
 } // anonymous namespace
 
-void WaitFor(TDuration timeout, const TString& description, std::function<bool(TString&)> predicate) {
-    auto delay = TDuration::MilliSeconds(1);
+void WaitFor(TDuration timeout, const TString& description, std::function<bool(TString&)> predicate, TDuration initialDelay, bool throwException) {
+    auto delay = initialDelay;
     const TInstant start = TInstant::Now();
     TString errorString;
     while (TInstant::Now() - start <= timeout) {
@@ -96,18 +96,24 @@ void WaitFor(TDuration timeout, const TString& description, std::function<bool(T
             return;
         }
 
-        Cerr << "Wait " << description << " " << TInstant::Now() - start << ": " << errorString << "\n";
+        Cerr << TString(TStringBuilder() << "Wait " << description << " " << TInstant::Now() - start << ": " << errorString << "\n") << Flush;
         Sleep(delay);
         delay = std::min(2 * delay, TDuration::Seconds(1));
     }
 
-    UNIT_FAIL("Waiting " << description << " timeout. Spent time " << TInstant::Now() - start << " exceeds limit " << timeout << ", last error: " << errorString);
+    const auto error = TStringBuilder() << "Waiting " << description << " timeout. Spent time " << TInstant::Now() - start << " exceeds limit " << timeout << ", last error: " << errorString << ". Fail at " << TInstant::Now();
+
+    if (throwException) {
+        ythrow yexception() << error;
+    } else {
+        UNIT_FAIL(error);
+    }
 }
 
-void WaitFor(TDuration timeout, const TString& description, std::function<bool()> predicate) {
+void WaitFor(TDuration timeout, const TString& description, std::function<bool()> predicate, TDuration initialDelay, bool throwException) {
     WaitFor(timeout, description, [predicate](TString&) {
         return predicate();
-    });
+    }, initialDelay, throwException);
 }
 
 void SetupSignalHandlers() {

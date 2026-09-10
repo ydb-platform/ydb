@@ -7,6 +7,8 @@
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/common/common.h>
 
+#include <span>
+
 namespace NFq::NRowDispatcher {
 
 class ITopicFilters : public TThrRefBase, public TNonCopyable {

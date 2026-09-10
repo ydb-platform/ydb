@@ -7,6 +7,8 @@
 
 #include <yql/essentials/public/udf/udf_value.h>
 
+#include <span>
+
 namespace NFq::NRowDispatcher {
 
 class IParsedDataConsumer : public TThrRefBase {

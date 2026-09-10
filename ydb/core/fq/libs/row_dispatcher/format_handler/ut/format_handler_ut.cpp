@@ -375,7 +375,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         }
         FormatHandler->ParseMessages({GetMessage(41, "1")});
 
-        const TString error = "Failed to parse massege at offset 42";
+        const TString error = "Failed to parse massage at offset 42";
         for (auto& client : Clients) {
             client->ExpectOffsets({42});
             client->ExpectError(EStatusId::BAD_REQUEST, error, true);
@@ -439,7 +439,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         UNIT_ASSERT(!client->IsStarted());
 
         client->ExpectOffsets({42});
-        client->ExpectError(EStatusId::BAD_REQUEST, "Failed to parse massege at offset 42", true);
+        client->ExpectError(EStatusId::BAD_REQUEST, "Failed to parse massage at offset 42", true);
         FormatHandler->ParseMessages({GetMessage(42, "invalid")});
         client->Validate();
         FormatHandler->RemoveClient(client->GetClientId());

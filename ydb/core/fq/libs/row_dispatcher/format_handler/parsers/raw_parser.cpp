@@ -105,7 +105,7 @@ protected:
                 value = value.MakeOptional();
             }
         } else if (!NumberOptionals) {
-            return TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse massege at offset " << Offsets.back() << ", can't parse data type " << NYql::NUdf::GetDataTypeInfo(DataSlot).Name << " from string: '" << TruncateString(CurrentMessage) << "'");
+            return TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse massage at offset " << Offsets.back() << ", can't parse data type " << NYql::NUdf::GetDataTypeInfo(DataSlot).Name << " from string: '" << TruncateString(CurrentMessage) << "'");
         }
 
         ParsedColumn.emplace_back(std::move(value));

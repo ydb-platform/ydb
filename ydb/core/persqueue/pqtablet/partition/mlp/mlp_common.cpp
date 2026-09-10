@@ -2,12 +2,12 @@
 
 #include <ydb/public/lib/base/msgbus_status.h>
 
-#include <algorithm>
+#include <cmath>
 
 namespace NKikimr::NPQ::NMLP {
 
 size_t EstimateFetchCountForNewGroups(size_t inflightMessageCount, size_t inflightGroupCount, size_t desiredNewGroups) {
-    if (inflightMessageCount == 0 || desiredNewGroups == 0 || inflightMessageCount <= inflightGroupCount) {
+    if (inflightMessageCount == 0 || desiredNewGroups == 0 || inflightGroupCount == 0 || inflightMessageCount <= inflightGroupCount) {
         return desiredNewGroups;
     }
     const float messagesPerGroup = static_cast<float>(inflightMessageCount) / inflightGroupCount;

@@ -192,7 +192,7 @@ Y_UNIT_TEST(MLPUnlockedGroupsEstimateFetchCountForNewGroups) {
 // at all, even with several groups locked.
 Y_UNIT_TEST(MLPUnlockedGroupsDisabledDoesNotFetch) {
     const auto count = GrabFirstFetchCount(/*ratio=*/0.0f, HEAD_MESSAGES, HEAD_GROUPS, /*lockedGroups=*/6);
-    UNIT_ASSERT_LE_C(count, /* default minMessages */ 100, TStringBuilder() << LabeledOutput(*count));
+    UNIT_ASSERT_LE_C(count.value_or(0), /* default minMessages */ 100, TStringBuilder() << LabeledOutput(*count));
 }
 
 // ratio 0.5: 10 groups, 6 locked -> readable 4 < target ceil(5)=5 -> 1 missing

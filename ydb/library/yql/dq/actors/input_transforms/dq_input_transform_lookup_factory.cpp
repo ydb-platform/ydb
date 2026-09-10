@@ -10,7 +10,7 @@ void RegisterDqInputTransformLookupActorFactory(NDq::TDqAsyncIoFactory& factory,
         "StreamLookupInputTransform",
         [factory = &factory, counters](NDqProto::TDqInputTransformLookupSettings&& settings, IDqAsyncIoFactory::TInputTransformArguments&& args) {
             if (counters) {
-                args.TaskCounters = (args.StatsLevel == TCollectStatsLevel::Profile) ? counters->GetSubgroup("tx_id", TStringBuilder() << args.TxId) : counters;
+                args.TaskCounters = counters;
             }
             return CreateInputTransformStreamLookup(
                 factory,

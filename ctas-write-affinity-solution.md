@@ -24,7 +24,7 @@ CREATE TABLE Destination
     AS SELECT Col1, Col2, Col3 FROM Source WHERE Col1 > 10;
 ```
 
-Плюс `TKikimrConfiguration` с флагом `EnableCsWriteAffinity` (раздел 2.4.1).
+Плюс `TKikimrConfiguration` с флагом `EnableCsWriteAffinity`
 
 
 #### 2.1.1 Rewrite: извлечение sharding columns из CREATE TABLE
@@ -104,7 +104,7 @@ const auto insert = exprCtx.NewCallable(pos, "Write!", {
 
 ### 2.2 Оптимизация
 
-**Вход:** `Write!`-callable из Rewrite (раздел 2.1.1) + `TKikimrConfiguration` с флагом `EnableCsWriteAffinity` (раздел 2.4.1).
+**Вход:** `Write!`-callable из Rewrite (раздел 2.1.1) + `TKikimrConfiguration` с флагом `EnableCsWriteAffinity`
 
 #### 2.2.1 Преобразование Write! → TKqlFillTable
 
@@ -621,7 +621,7 @@ TDqSink → WriteActor → ColumnShard[i] (локально)
 
 Компилятор сериализует физический план (DQ-граф из разделов 2.2.2–2.2.3) в `TKqpPhyTx` proto — единственный канал передачи данных от компилятора к исполнителю.
 
-**Вход:** Физический план (DQ-граф стадий) из `BuildFillTableEffect()` (раздел 2.2.2) + `TKikimrConfiguration` (раздел 2.4.1).
+**Вход:** Физический план (DQ-граф стадий) из `BuildFillTableEffect()` (раздел 2.2.2)
 
 ##### 2.2.4.1 Сериализация физического плана
 
@@ -655,9 +655,8 @@ for (const auto& stage : tx.Stages()) {
 | `TKqpPhyCnHashShuffle.ColumnShardHashV1` | нет HashShuffle | нет HashShuffle (`Map`) | `oneof HashKind = ColumnShardHashV1` | Оптимизатор (раздел 2.2.3) |
 | `TKqpPhyCnHashShuffle.KeyColumns` | не заполняется | не заполняется | `["Col1", ...]` | `CtasShardingColumns` из Rewrite-фазы (раздел 2.1.1) |
 
-> **Примечание:** Поля `TargetShardIds` и `ExpectedNodeId` в `TKqpTableSinkSettings` заполняются на стороне исполнителя (runtime) — см. раздел 2.3.9.
 
-### 2.3 Runtime
+### 2.3 Executor
 
 **Вход:** `TKqpPhyTx` proto — физический план, сериализованный компилятором (описание полей — раздел 2.2.4).
 
@@ -670,7 +669,7 @@ for (const auto& stage : tx.Stages()) {
 
 KqpExecuter превращает физический план (`TKqpPhyTx`) в исполняемые задачи и маршрутизирует данные к целевым ColumnShard'ам. Для CTAS с write affinity ключевая задача — создать **N per-shard задач** (по одной на шард), пиннить каждую к ноде своего шарда и настроить HashShuffle-маршрутизацию, чтобы каждая строка попала в задачу, владеющую её шардом.
 
-Исполнитель обрабатывает `TKqpPhyTx` proto последовательно, проходя 8 этапов (разделы 2.3.1–2.3.8). Ниже для каждого этапа описано состояние **до оптимизации** (старый код), **после оптимизации без аффинити** (план без HashShuffle) и **после оптимизации с аффинити** (план с HashShuffle).
+Исполнитель обрабатывает `TKqpPhyTx` proto последовательно, проходя 7 этапов построения графа задач (разделы 2.3.1–2.3.7) и этап runtime-исполнения (раздел 2.4). Ниже для каждого этапа описано состояние **до оптимизации** (старый код), **после оптимизации без аффинити** (план без HashShuffle) и **после оптимизации с аффинити** (план с HashShuffle).
 
 **Было** — логический план (3 стадии):
 ```
@@ -987,7 +986,9 @@ return fallbackBuffer;
 
 В узкой ветке (Struct) числовые индексы конвертируются обратно в имена колонок.
 
-#### 2.3.8 Runtime — выполнение задач и запись
+### 2.4 Runtime
+
+#### 2.4.1 Выполнение задач и запись
 
 **Вход:** Граф задач, полностью построенный в разделах 2.3.1–2.3.7. Для affinity: N задач с `TargetShardIds` (раздел 2.3.6) и `ColumnShardHashV1` routing (раздел 2.3.7). Каждая задача размещена на ноде своего шарда (раздел 2.3.4).
 
@@ -1016,7 +1017,7 @@ return fallbackBuffer;
 - Конструктор ([`kqp_write_table.cpp:446`](ydb/core/kqp/runtime/kqp_write_table.cpp:446)): `GetColumnShards()[i] == OrderedShardIds[i]`
 - Деструктор ([`kqp_write_table.cpp:511`](ydb/core/kqp/runtime/kqp_write_table.cpp:511)): `ActualShardIds ⊆ TargetShardIds`
 
-#### 2.3.9 Proto поля: `TargetShardIds`, `ExpectedNodeId`
+#### 2.4.2 Proto поля: `TargetShardIds`, `ExpectedNodeId`
 
 Поля в `TKqpTableSinkSettings` ([`kqp.proto:934-938`](ydb/core/protos/kqp.proto:933)):
 ```protobuf
@@ -1069,45 +1070,5 @@ settings.AddTargetShardIds(shardId);
 - `ExpectedNodeId` заполняется при построении графа задач: задача пиннится к ноде своего шарда
 - WriteActor фильтрует строки по `TargetShardIds` (отбрасывает строки для чужих шардов)
 - Node affinity: задача выполняется на ноде своего ColumnShard → запись локально
-
-
-### 2.4 Конфигурация
-
-#### 2.4.1 EnableCsWriteAffinity (Server Config Setting)
-
-Оптимизация управляется флагом `EnableCsWriteAffinity`, который определяет режим работы: новый (с affinity) или старый (без affinity).
-
-**Определение** ([`yql_kikimr_settings.h:129`](ydb/core/kqp/provider/yql_kikimr_settings.h:129)):
-```cpp
-NCommon::TConfSetting<bool, Static> EnableCsWriteAffinity;
-```
-
-**Регистрация** ([`yql_kikimr_settings.cpp:175`](ydb/core/kqp/provider/yql_kikimr_settings.cpp:175)):
-```cpp
-REGISTER_SETTING(*this, EnableCsWriteAffinity);
-```
-
-**Getter** ([`yql_kikimr_settings.cpp:401-402`](ydb/core/kqp/provider/yql_kikimr_settings.cpp:401)):
-```cpp
-bool TKikimrConfiguration::GetEnableCsWriteAffinity() const {
-    return EnableCsWriteAffinity.Get().GetOrElse(false);
-}
-```
-
-Значение задаётся через серверные KQP-настройки (`TKikimrSettings::SetKqpSettings`), а не через per-query PRAGMA:
-```cpp
-// В тестах:
-settings.SetKqpSettings(BuildKqpSettingsWithCsWriteAffinity(true));
-```
-
-| `EnableCsWriteAffinity` | Режим | План CTAS |
-|---|---|---|
-| `true` | Новый (с affinity) | Transform → HashShuffle(`ColumnShardHashV1`) → Sink (N per-shard задач) |
-| `false` | Старый (без affinity) | Один stage с inlined sink (стандартный путь) |
-
-[2] Флаг читается в одном месте:
-- **Rewrite-фаза** ([`kqp_statement_rewrite.cpp:319`](ydb/core/kqp/host/kqp_statement_rewrite.cpp:319)): `GetEnableCsWriteAffinity()` — при `true` в FILL-стейтмент добавляются `CtasShardingColumns` (раздел 2.1.1).
-
-[3] Оптимизатор ([`kqp_opt_effects.cpp:220`](ydb/core/kqp/opt/kqp_opt_effects.cpp:220)) использует `node.CtasShardingColumns().IsValid()` как индикатор affinity: sharding columns установлены только когда флаг включён.
 
 

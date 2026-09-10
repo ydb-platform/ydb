@@ -1327,7 +1327,7 @@ static bool HasColumnShardHashV1Input(const TStageInfo& stageInfo) {
     const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
     for (const auto& input : stage.GetInputs()) {
         if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kHashShuffle
-                && input.GetHashShuffle().has_columnshardhashv1()) {
+                && input.GetHashShuffle().GetHashKindCase() == NKqpProto::TKqpPhyCnHashShuffle::kColumnShardHashV1) {
             return true;
         }
     }

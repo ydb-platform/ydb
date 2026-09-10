@@ -147,26 +147,26 @@ struct TRenamesScalarOutput : TPackedTupleOutputBase<Join, IScalarLayoutConverte
         res.Buffer.reserve(nItems * this->Columns());
 
         if constexpr (LeftSemiOrOnly(Join.Kind)) {
-            TMKQLVector<NUdf::TUnboxedValue> probeValues(ProbeWidth_);
+            ProbeValues_.resize(nItems * ProbeWidth_);
+            this->Converters_.Probe->UnpackBatch(res.Packs.Probe, ProbeValues_.data());
             for (i64 tupleIndex = 0; tupleIndex < nItems; ++tupleIndex) {
-                this->Converters_.Probe->Unpack(res.Packs.Probe, tupleIndex, probeValues.data());
                 for (auto rename : *this->Renames_) {
                     MKQL_ENSURE(rename.Side == ESide::Probe,
                                 "renames in Semi or Only Left Join shouldn't contain columns from right side");
-                    res.Buffer.push_back(probeValues[rename.Index]);
+                    res.Buffer.push_back(ProbeValues_[tupleIndex * ProbeWidth_ + rename.Index]);
                 }
             }
         } else {
-            TMKQLVector<NUdf::TUnboxedValue> buildValues(BuildWidth_);
-            TMKQLVector<NUdf::TUnboxedValue> probeValues(ProbeWidth_);
+            BuildValues_.resize(nItems * BuildWidth_);
+            ProbeValues_.resize(nItems * ProbeWidth_);
+            this->Converters_.Build->UnpackBatch(res.Packs.Build, BuildValues_.data());
+            this->Converters_.Probe->UnpackBatch(res.Packs.Probe, ProbeValues_.data());
             for (i64 tupleIndex = 0; tupleIndex < nItems; ++tupleIndex) {
-                this->Converters_.Build->Unpack(res.Packs.Build, tupleIndex, buildValues.data());
-                this->Converters_.Probe->Unpack(res.Packs.Probe, tupleIndex, probeValues.data());
                 for (auto rename : *this->Renames_) {
                     if (rename.Side == ESide::Build) {
-                        res.Buffer.push_back(buildValues[rename.Index]);
+                        res.Buffer.push_back(BuildValues_[tupleIndex * BuildWidth_ + rename.Index]);
                     } else {
-                        res.Buffer.push_back(probeValues[rename.Index]);
+                        res.Buffer.push_back(ProbeValues_[tupleIndex * ProbeWidth_ + rename.Index]);
                     }
                 }
             }
@@ -178,6 +178,8 @@ struct TRenamesScalarOutput : TPackedTupleOutputBase<Join, IScalarLayoutConverte
 private:
     const int BuildWidth_;
     const int ProbeWidth_;
+    TMKQLVector<NUdf::TUnboxedValue> BuildValues_;
+    TMKQLVector<NUdf::TUnboxedValue> ProbeValues_;
 };
 
 template <TPhysicalJoin Join>
@@ -263,8 +265,8 @@ private:
                 Buffer_ = std::move(flush);
                 BufferPos_ = 0;
             };
-            return RunPackedHashJoinBatch<OutputThreshold_>(*JoinCtx_, Join_, Output_, flushSink,
-                                                            PairFilter_ ? &*PairFilter_ : nullptr);
+            return RunPackedHashJoinBatch(*JoinCtx_, Join_, Output_, flushSink,
+                                          PairFilter_ ? &*PairFilter_ : nullptr);
         }
 
     private:
@@ -276,7 +278,6 @@ private:
         std::optional<TPackedTuplePairFilter> PairFilter_;
         std::optional<typename TRenamesScalarOutput<Join>::TFlushResult> Buffer_;
         size_t BufferPos_ = 0;
-        static constexpr i64 OutputThreshold_ = 10000;
     };
 
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {

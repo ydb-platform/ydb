@@ -5,14 +5,12 @@
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/portions/constructor_portion.h>
-#include <ydb/core/tx/columnshard/tracing/probes.h>
+#include <ydb/core/tx/columnshard/tracing/write_orbit.h>
 #include <ydb/core/tx/columnshard/transactions/locks/write.h>
 
 #include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NColumnShard {
-
-LWTRACE_USING(YDB_CS);
 
 bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorContext&) {
     TInstant startTransactionTime = TInstant::Now();
@@ -74,7 +72,6 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             Self->OperationsManager->LinkInsertWriteIdToOperationWriteId(InsertWriteIds, op->GetWriteId());
         }
         if (op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
-            LWPROBE(EvWriteResult, Self->TabletID(), writeMeta.GetSource().ToString(), 0, op->GetCookie(), "no_tx_write", true, "");
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID());
             AddTableAccessStatsToTxStats(*ev->Record.MutableTxStats(), writeMeta.GetPathId().SchemeShardLocalPathId.GetRawValue(),
                 writeResult.GetRecordsCount(), writeResult.GetDataSize(), op->GetModificationType(), Self->TabletID());
@@ -97,7 +94,6 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             lock.SetGeneration(info.GetGeneration());
             lock.SetCounter(info.GetInternalGenerationCounter());
             writeMeta.GetPathId().SchemeShardLocalPathId.ToProto(lock);
-            LWPROBE(EvWriteResult, Self->TabletID(), writeMeta.GetSource().ToString(), 0, op->GetCookie(), "tx_write", true, "");
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), op->GetLockId(), lock);
             AddTableAccessStatsToTxStats(*ev->Record.MutableTxStats(), writeMeta.GetPathId().SchemeShardLocalPathId.GetRawValue(),
                 writeResult.GetRecordsCount(), writeResult.GetDataSize(), op->GetModificationType(), Self->TabletID());
@@ -165,12 +161,10 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
         Self->Counters.GetCSCounters().OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());
         Self->Counters.GetCSCounters().OnSuccessWriteResponse();
         writeMeta.OnStage(NEvWrite::EWriteStage::Finished);
-        LWPROBE(TxBlobsWritingFinished, Self->TabletID(), TransactionTime, TInstant::Now() - startCompleteTime, TInstant::Now() - StartTime,
-            now - writeMeta.GetWriteStartInstant());
+        const TString type = op->GetBehaviour() == EOperationBehaviour::NoTxWrite ? "no_tx_write" : "tx_write";
+        TrackWriteFinished(writeMeta, type, TransactionTime, TInstant::Now() - startCompleteTime, TInstant::Now() - StartTime);
     }
     Self->SetupCompaction(pathIds);
-    TDuration completeTime = TInstant::Now() - startCompleteTime;
-    LWPROBE(TxBlobsWritingFinished, Self->TabletID(), TransactionTime, completeTime, TInstant::Now() - StartTime, TDuration::Zero());
 }
 
 TTxBlobsWritingFinished::TTxBlobsWritingFinished(TColumnShard* self, const NKikimrProto::EReplyStatus /* writeStatus */,
@@ -190,11 +184,10 @@ bool TTxBlobsWritingFailed::DoExecute(TTransactionContext& /* txc */, const TAct
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         Self->GetOperationsManager().SetOperationFinished(op->GetWriteId());
 
-        LWPROBE(
-            EvWriteResult, Self->TabletID(), writeMeta.GetSource().ToString(), 0, op->GetCookie(), "tx_write", false, wResult.GetErrorMessage());
-        auto ev = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), op->GetLockId(),
-            wResult.IsInternalError() ? NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR
-                                      : NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, wResult.GetErrorMessage());
+        const auto status = wResult.IsInternalError() ? NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR
+                                                      : NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST;
+        TrackWriteFailed(writeMeta, "tx_write", ToString(status), wResult.GetErrorMessage());
+        auto ev = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), op->GetLockId(), status, wResult.GetErrorMessage());
         Results.emplace_back(std::move(ev), writeMeta.GetSource(), op->GetCookie());
     }
     return true;

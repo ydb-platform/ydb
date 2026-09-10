@@ -16,7 +16,7 @@ When restoring a cluster' metadata, databases and their administrators are creat
 
 {% include [restore-database-nodes.md](./restore-database-nodes.md) %}
 
-A [cluster configuration](../../../../maintenance/manual/config-overview.md) is restored separately using the following steps:
+A [cluster configuration](../../../../devops/configuration-management/configuration-v1/config-overview.md) is restored separately using the following steps:
 
 1) Load the saved configuration using the `{{ ydb-cli }} admin cluster config replace` command.
 2) Restart the cluster nodes.
@@ -49,7 +49,7 @@ The `admin database restore` command restores the database from a backup on the 
 
 Restoring database schema objects follows the same process described in [Schema objects](#schema-objects).
 
-[Database configuration](../../../../maintenance/manual/config-overview.md) is restored separately using the following steps:
+[Database configuration](../../../../devops/configuration-management/configuration-v1/config-overview.md) is restored separately using the following steps:
 
 1) Load the saved configuration using the `{{ ydb-cli }} admin database config replace` command.
 2) Restart the database nodes.

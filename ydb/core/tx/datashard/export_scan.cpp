@@ -116,7 +116,7 @@ class TExportScan: private NActors::IActorCallback, public IActorExceptionHandle
     void Handle(TEvExportScan::TEvReset::TPtr&) {
         Y_ENSURE(IsReady());
 
-        YDB_LOG_DEBUG("[Export]");
+        YDB_LOG_DEBUG("[Export] Handle TEvExportScan::TEvReset");
 
         Stats.Reset(new TStats);
         State.Reset(ES_UPLOADER_READY).Reset(ES_BUFFER_SENT).Reset(ES_NO_MORE_DATA);
@@ -127,7 +127,7 @@ class TExportScan: private NActors::IActorCallback, public IActorExceptionHandle
     void Handle(TEvExportScan::TEvFeed::TPtr&) {
         Y_ENSURE(IsReady());
 
-        YDB_LOG_DEBUG("[Export]");
+        YDB_LOG_DEBUG("[Export] Handle TEvExportScan::TEvFeed");
 
         State.Set(ES_UPLOADER_READY).Reset(ES_BUFFER_SENT);
         Spent->Alter(true);
@@ -139,7 +139,7 @@ class TExportScan: private NActors::IActorCallback, public IActorExceptionHandle
     void Handle(TEvExportScan::TEvFinish::TPtr& ev) {
         Y_ENSURE(IsReady());
 
-        YDB_LOG_DEBUG("[Export]",
+        YDB_LOG_DEBUG("[Export] Handle TEvExportScan::TEvFinish",
             {"msg", ev->Get()->ToString()});
 
         Success = ev->Get()->Success;
@@ -207,7 +207,7 @@ public:
         if (!Buffer->Collect(row)) {
             Success = false;
             Error = Buffer->GetError();
-            YDB_LOG_ERROR("[Export]",
+            YDB_LOG_ERROR("[Export] Feed: Buffer collect failed",
                 {"error", Error});
             return EScan::Final;
         }
@@ -282,3 +282,7 @@ NTable::IScan* CreateExportScan(IBuffer::TPtr buffer, std::function<IActor*()>&&
 
 } // NDataShard
 } // NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

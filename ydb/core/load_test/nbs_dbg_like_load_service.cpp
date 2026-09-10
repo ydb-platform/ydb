@@ -4,6 +4,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/domain.h>
+#include <ydb/core/base/storage_pool_kinds.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/services/blobstorage_service_id.h>
@@ -638,7 +639,7 @@ private:
                 // Tablet was previously created by Hive but we don't know whether
                 // its TEvNbsLoadTabletAllocateGroups succeeded. Bypass TEvTabletCreationResult
                 // (Hive only sends that on first boot) and try the idempotent
-                // tablet handler directly. Phase 1.2 spec §23.10 case 1.
+                // tablet handler directly.
                 WaitingForTabletCreation = false;
                 LOG_N("Tablet already exists OwnerIdx# " << OwnerIdx
                     << " TabletId# " << TabletId);

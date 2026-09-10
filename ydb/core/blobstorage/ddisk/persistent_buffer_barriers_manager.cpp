@@ -45,6 +45,14 @@ namespace NKikimr::NDDisk {
         return result;
     }
 
+    // Uncompact stops at a zero raw LSN / zero LEB128 delta, so unused CompactLsns
+    // bytes have to be zeros rather than leftover / uninitialized padding.
+    static void ZeroCompactLsnsTail(TPersistentBufferFastErases& header, size_t used) {
+        if (used < TPersistentBufferFastErases::ErasesBufferSize) {
+            memset(header.CompactLsns + used, 0, TPersistentBufferFastErases::ErasesBufferSize - used);
+        }
+    }
+
     void TPersistentBufferBarriersManager::Initialize(ui64 uniqueId, ui32 nodeId, ui32 pdiskId, ui32 slotId) {
         PersistentBufferUniqueId = uniqueId;
         NodeId = nodeId;
@@ -168,14 +176,12 @@ namespace NKikimr::NDDisk {
                 // across the map (ordering is TabletId, then Generation, then
                 // DirectBlockGroupIndex), so we scan every entry with a matching TabletId and
                 // filter by DirectBlockGroupIndex rather than relying on a contiguous range.
-                bool found = false;
                 for (auto it = persistentBuffers.lower_bound({barrier.TabletId, 0});
                         it != persistentBuffers.end() && it->first.TabletId == barrier.TabletId; ) {
                     if (it->first.DirectBlockGroupIndex != barrier.DirectBlockGroupIndex) {
                         ++it;
                         continue;
                     }
-                    found = true;
                     if (it->first.Generation < barrier.Generation) {
                         it = persistentBuffers.erase(it);
                         continue;
@@ -192,35 +198,27 @@ namespace NKikimr::NDDisk {
                         ++it;
                     }
                 }
-                if (!found) {
-                    YDB_LOG_DEBUG("TPersistentBufferBarriersManager::RestoreBarriers tablet records not found, erase barrier marked as free",
-                        {"marker", "BSDD30"},
+                // Barriers are durable state even when this namespace has no live records.
+                auto locationIt = PersistentBufferBarriersLocation.find(key);
+                if (locationIt == PersistentBufferBarriersLocation.end()) {
+                    PersistentBufferBarriersLocation[key] = {pos, FreeBarrierPosition};
+                } else {
+                    auto oldBarrierLocation = PersistentBufferBarriersLocation[key];
+                    auto oldBarrier = PersistentBufferBarriers[oldBarrierLocation.BarrierIdx].Header.Barriers[oldBarrierLocation.Position];
+                    YDB_LOG_DEBUG("TPersistentBufferBarriersManager::RestoreBarriers duplicated barrier erase record found, bigger lsn used",
+                        {"marker", "BSDD38"},
                         {"tabletId", barrier.TabletId},
                         {"directBlockGroupIndex", barrier.DirectBlockGroupIndex},
-                        {"lsn", barrier.Lsn});
-                    PersistentBufferBarrierHoles.push_back({pos, FreeBarrierPosition});
-                } else {
-                    auto locationIt = PersistentBufferBarriersLocation.find(key);
-                    if (locationIt == PersistentBufferBarriersLocation.end()) {
-                        PersistentBufferBarriersLocation[key] = {pos, FreeBarrierPosition};
+                        {"barrierGeneration", barrier.Generation},
+                        {"oldBarrierGeneration", oldBarrier.Generation},
+                        {"barrierLsn", barrier.Lsn},
+                        {"oldBarrier.Lsn", oldBarrier.Lsn});
+                    if (barrier.Generation > oldBarrier.Generation
+                        || (barrier.Generation == oldBarrier.Generation && barrier.Lsn > oldBarrier.Lsn)) {
+                        PersistentBufferBarrierHoles.push_back(locationIt->second);
+                        locationIt->second = {pos, FreeBarrierPosition};
                     } else {
-                        auto oldBarrierLocation = PersistentBufferBarriersLocation[key];
-                        auto oldBarrier = PersistentBufferBarriers[oldBarrierLocation.BarrierIdx].Header.Barriers[oldBarrierLocation.Position];
-                        YDB_LOG_DEBUG("TPersistentBufferBarriersManager::RestoreBarriers duplicated barrier erase record found, bigger lsn used",
-                            {"marker", "BSDD38"},
-                            {"tabletId", barrier.TabletId},
-                            {"directBlockGroupIndex", barrier.DirectBlockGroupIndex},
-                            {"barrierGeneration", barrier.Generation},
-                            {"oldBarrierGeneration", oldBarrier.Generation},
-                            {"barrierLsn", barrier.Lsn},
-                            {"oldBarrier.Lsn", oldBarrier.Lsn});
-                        if (barrier.Generation > oldBarrier.Generation
-                            || (barrier.Generation == oldBarrier.Generation && barrier.Lsn > oldBarrier.Lsn)) {
-                            PersistentBufferBarrierHoles.push_back(locationIt->second);
-                            locationIt->second = {pos, FreeBarrierPosition};
-                        } else {
-                            PersistentBufferBarrierHoles.push_back({pos, FreeBarrierPosition});
-                        }
+                        PersistentBufferBarrierHoles.push_back({pos, FreeBarrierPosition});
                     }
                 }
             }
@@ -253,7 +251,9 @@ namespace NKikimr::NDDisk {
 
         if (cnt * sizeof(oldLsns[0]) <= TPersistentBufferFastErases::ErasesBufferSize) {
             oldLsns = MergeUnique(oldLsns, newLsns);
-            memcpy(header.CompactLsns, oldLsns.data(), oldLsns.size() * sizeof(oldLsns[0]));
+            const size_t used = oldLsns.size() * sizeof(oldLsns[0]);
+            memcpy(header.CompactLsns, oldLsns.data(), used);
+            ZeroCompactLsnsTail(header, used);
             return true;
         }
 
@@ -287,33 +287,36 @@ namespace NKikimr::NDDisk {
         }
         oldLsns = std::move(lsns);
         header.Header.Flags |= TPersistentBufferHeader::IS_ERASE_COMPACT;
+        ZeroCompactLsnsTail(header, resPos);
         return true;
     }
 
     std::vector<ui64> TPersistentBufferBarriersManager::Uncompact(const ui8* data, bool isCompact) {
         std::vector<ui64> res;
+        constexpr size_t lsnSize = sizeof(ui64);
         ui64 first = 0;
-        memcpy(&first, data, sizeof(res[0]));
+        memcpy(&first, data, lsnSize);
         if (first == 0) {
             return res;
         }
         res.push_back(first);
 
         if (!isCompact) {
-            size_t pos = sizeof(res[0]);
-            while (pos < TPersistentBufferFastErases::ErasesBufferSize) {
+            size_t pos = lsnSize;
+            // ErasesBufferSize is not a multiple of 8; never memcpy a ui64 past the buffer.
+            while (pos + lsnSize <= TPersistentBufferFastErases::ErasesBufferSize) {
                 ui64 v = 0;
-                memcpy(&v, data + pos, sizeof(res[0]));
+                memcpy(&v, data + pos, lsnSize);
                 if (v == 0) {
                     return res;
                 }
                 res.push_back(v);
-                pos += sizeof(res[0]);
+                pos += lsnSize;
             }
             return res;
         }
         ui64 prev = first;
-        size_t pos = sizeof(res[0]);
+        size_t pos = lsnSize;
         while (pos < TPersistentBufferFastErases::ErasesBufferSize) {
             ui64 delta = 0;
             int shift = 0;
@@ -416,14 +419,17 @@ namespace NKikimr::NDDisk {
             auto itErase = std::upper_bound(erase.Lsns.begin(), erase.Lsns.end(), barrier.Lsn);
             erase.Lsns = std::vector<ui64>(itErase, erase.Lsns.end());
 
-            auto pbIt = persistentBuffers.find({tid, erase.Generation, dbg});
-            if (pbIt == persistentBuffers.end()) {
-                it = Erases.erase(it);
-                continue;
-            }
-
+            // Preserve the version and its on-disk sector even without live records.
+            // Otherwise subsequent erases restart HeaderLsn, and an older header
+            // still present on disk can win during the next recovery.
             const TPersistentBufferSectorInfo eraseSector{.ChunkIdx = erase.ChunkIdx, .SectorIdx = erase.SectorIdx};
             allocator.MarkOccupied(std::span<const TPersistentBufferSectorInfo>(&eraseSector, 1));
+
+            auto pbIt = persistentBuffers.find({tid, erase.Generation, dbg});
+            if (pbIt == persistentBuffers.end()) {
+                ++it;
+                continue;
+            }
 
             TPersistentBuffer& buffer = pbIt->second;
             for (ui64 lsn : erase.Lsns) {

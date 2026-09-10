@@ -14,7 +14,6 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 VERSION(2022-05-14)
 
 PEERDIR(
-    contrib/libs/libunwind
     contrib/libs/llvm16/lib/Analysis
     contrib/libs/llvm16/lib/AsmParser
     contrib/libs/llvm16/lib/BinaryFormat
@@ -95,23 +94,39 @@ PEERDIR(
     library/cpp/sanitizer/include
 )
 
+IF (NOT OS_WINDOWS)
+    PEERDIR(
+        contrib/libs/libunwind
+    )
+ENDIF()
+
 ADDINCL(
-    contrib/libs/libunwind/include
     ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm16/include
     contrib/libs/llvm16/include
     contrib/restricted/wavm_llvm16/Include
 )
+
+IF (NOT OS_WINDOWS)
+    ADDINCL(
+        contrib/libs/libunwind/include
+    )
+ENDIF()
 
 NO_COMPILER_WARNINGS()
 
 NO_UTIL()
 
 CFLAGS(
-    -DHAS_FUTIMENS
-    -DHAS_UTIMENSAT
     -DWASM_C_API=WAVM_API
     -DWAVM_API=
 )
+
+IF (NOT OS_WINDOWS)
+    CFLAGS(
+        -DHAS_FUTIMENS
+        -DHAS_UTIMENSAT
+    )
+ENDIF()
 
 SRCS(
     Emscripten/Emscripten.cpp
@@ -141,17 +156,6 @@ SRCS(
     Logging/Logging.cpp
     NFA/NFA.cpp
     ObjectCache/ObjectCache.cpp
-    Platform/POSIX/ClockPOSIX.cpp
-    Platform/POSIX/DiagnosticsPOSIX.cpp
-    Platform/POSIX/ErrorPOSIX.cpp
-    Platform/POSIX/EventPOSIX.cpp
-    Platform/POSIX/FilePOSIX.cpp
-    Platform/POSIX/MemoryPOSIX.cpp
-    Platform/POSIX/MutexPOSIX.cpp
-    Platform/POSIX/RWMutexPOSIX.cpp
-    Platform/POSIX/RandomPOSIX.cpp
-    Platform/POSIX/SignalPOSIX.cpp
-    Platform/POSIX/ThreadPOSIX.cpp
     RegExp/RegExp.cpp
     Runtime/Atomics.cpp
     Runtime/Compartment.cpp
@@ -192,11 +196,51 @@ SRCS(
 
 IF (ARCH_AARCH64)
     SRCS(
+        Platform/POSIX/ClockPOSIX.cpp
+        Platform/POSIX/DiagnosticsPOSIX.cpp
+        Platform/POSIX/ErrorPOSIX.cpp
+        Platform/POSIX/EventPOSIX.cpp
+        Platform/POSIX/FilePOSIX.cpp
+        Platform/POSIX/MemoryPOSIX.cpp
+        Platform/POSIX/MutexPOSIX.cpp
         Platform/POSIX/POSIX-AArch64.S
+        Platform/POSIX/RWMutexPOSIX.cpp
+        Platform/POSIX/RandomPOSIX.cpp
+        Platform/POSIX/SignalPOSIX.cpp
+        Platform/POSIX/ThreadPOSIX.cpp
+    )
+ELSEIF (OS_WINDOWS)
+    LDFLAGS(
+        /DEFAULTLIB:bcrypt.lib
+        /DEFAULTLIB:psapi.lib
+    )
+    SRCS(
+        Platform/Windows/ClockWindows.cpp
+        Platform/Windows/DiagnosticsWindows.cpp
+        Platform/Windows/ErrorWindows.cpp
+        Platform/Windows/EventWindows.cpp
+        Platform/Windows/FileWindows.cpp
+        Platform/Windows/MemoryWindows.cpp
+        Platform/Windows/MutexWindows.cpp
+        Platform/Windows/RWMutexWindows.cpp
+        Platform/Windows/RandomWindows.cpp
+        Platform/Windows/SignalWindows.cpp
+        Platform/Windows/ThreadWindows.cpp
     )
 ELSE()
     SRCS(
+        Platform/POSIX/ClockPOSIX.cpp
+        Platform/POSIX/DiagnosticsPOSIX.cpp
+        Platform/POSIX/ErrorPOSIX.cpp
+        Platform/POSIX/EventPOSIX.cpp
+        Platform/POSIX/FilePOSIX.cpp
+        Platform/POSIX/MemoryPOSIX.cpp
+        Platform/POSIX/MutexPOSIX.cpp
         Platform/POSIX/POSIX-X86_64.S
+        Platform/POSIX/RWMutexPOSIX.cpp
+        Platform/POSIX/RandomPOSIX.cpp
+        Platform/POSIX/SignalPOSIX.cpp
+        Platform/POSIX/ThreadPOSIX.cpp
     )
 ENDIF()
 

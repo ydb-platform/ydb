@@ -3,11 +3,13 @@ LIBRARY()
 GENERATE_ENUM_SERIALIZATION(host_roles.h)
 GENERATE_ENUM_SERIALIZATION(host_stat.h)
 GENERATE_ENUM_SERIALIZATION(host.h)
+GENERATE_ENUM_SERIALIZATION(mon_model.h)
 GENERATE_ENUM_SERIALIZATION(oracle.h)
 GENERATE_ENUM_SERIALIZATION(vchunk_config.h)
 
 SRCS(
     count_size.cpp
+    host_health_policy.cpp
     host_mask.cpp
     host_roles.cpp
     host_stat.cpp
@@ -15,6 +17,7 @@ SRCS(
     host.cpp
     mon_model.cpp
     oracle.cpp
+    oracle_config.cpp
     region_geometry.cpp
     time_predictor.cpp
     vchunk_config.cpp

@@ -327,12 +327,15 @@ TString MakeXForwardedFor(const TProxiedRequestParams& params) {
 }
 
 NHttp::THttpOutgoingRequestPtr CreateProxiedRequest(const TProxiedRequestParams& params) {
-    auto outRequest = NHttp::THttpOutgoingRequest::CreateRequest(params.Request->Method, params.ProtectedPage.Url);
+    NHttp::THttpOutgoingRequestPtr outRequest = new NHttp::THttpOutgoingRequest(params.Request->Method, params.ProtectedPage.Url, "HTTP", "1.1");
     NHttp::THeaders headers(params.Request->Headers);
     for (const auto& header : params.Settings.REQUEST_HEADERS_WHITE_LIST) {
         if (headers.Has(header)) {
             outRequest->Set(header, headers.Get(header));
         }
+    }
+    if (!headers.Has("Accept")) {
+        outRequest->Set("Accept", "*/*");
     }
     outRequest->Set("Accept-Encoding", "deflate");
 

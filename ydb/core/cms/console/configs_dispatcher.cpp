@@ -387,7 +387,7 @@ void TConfigsDispatcher::Bootstrap()
     TIntrusivePtr<NMonitoring::TDynamicCounters> authCounters = GetServiceCounters(rootCounters, "config");
     NMonitoring::TDynamicCounterPtr counters = authCounters->GetSubgroup("subsystem", "configs_dispatcher");
     StartupConfigChanged = counters->GetCounter("StartupConfigChanged", true);
-    ConfigurationV1 = counters->GetCounter("ConfigurationV1", true);
+    ConfigurationV1 = counters->GetCounter("ConfigurationV1", false);
     ConfigurationV2 = counters->GetCounter("ConfigurationV2", false);
 
     Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(true));
@@ -1108,6 +1108,9 @@ try {
             break;
     }
 
+    // Trace only this replay. Reusing the tracer accumulates update history
+    // (including source file names) for the lifetime of the dispatcher.
+    RecordedInitialConfiguratorDeps->ConfigUpdateTracer = MakeDefaultConfigUpdateTracer();
     auto deps = RecordedInitialConfiguratorDeps->GetDeps();
     NConfig::TInitialConfigurator initCfg(deps);
 

@@ -2,6 +2,7 @@
 #include "json_pipe_req.h"
 #include "log.h"
 #include "viewer_helper.h"
+#include <ydb/core/blobstorage/vdisk/common/vdisk_outofspace.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr::NViewer {
@@ -215,6 +216,7 @@ public:
         ui32 NumActiveSlots = 0;
         ui64 Category = 0;
         TString DecommitStatus;
+        TString MaintenanceStatus;
         NKikimrViewer::EFlag DiskSpace = NKikimrViewer::EFlag::Grey;
         float PDiskUsage = 0;
 
@@ -1742,6 +1744,7 @@ public:
                     pDisk.NumActiveSlots = info.GetNumActiveSlots();
                     pDisk.Category = info.GetCategory();
                     pDisk.DecommitStatus = info.GetDecommitStatus();
+                    pDisk.MaintenanceStatus = info.GetMaintenanceStatus();
                 }
                 FieldsAvailable |= FieldsBsPDisks;
                 ApplyEverything();
@@ -2128,17 +2131,10 @@ public:
                     }
                     pDisk.SlotSizeInUnits = info.GetSlotSizeInUnits();
                     pDisk.SetCategory(info.GetCategory());
-                    //pDisk.DecommitStatus = info.GetDecommitStatus();
-                    float usage = pDisk.TotalSize ? 100.0 * (pDisk.TotalSize - pDisk.AvailableSize) / pDisk.TotalSize : 0;
-                    if (usage >= 95) {
-                        pDisk.DiskSpace = NKikimrViewer::EFlag::Red;
-                    } else if (usage >= 90) {
-                        pDisk.DiskSpace = NKikimrViewer::EFlag::Orange;
-                    } else if (usage >= 85) {
-                        pDisk.DiskSpace = NKikimrViewer::EFlag::Yellow;
-                    } else {
-                        pDisk.DiskSpace = NKikimrViewer::EFlag::Green;
+                    if (info.HasPDiskCapacityAlert()) {
+                        pDisk.DiskSpace = GetViewerFlag(TOutOfSpaceState::ToWhiteboardFlag(info.GetPDiskCapacityAlert()));
                     }
+                    // DecommitStatus and MaintenanceStatus are absent in Whiteboard because it's BSC-level info only
                 }
             }
         }
@@ -2400,6 +2396,7 @@ public:
                 jsonPDisk.SetAvailableSize(pdisk.AvailableSize);
                 jsonPDisk.SetStatus(pdisk.Status);
                 jsonPDisk.SetDecommitStatus(pdisk.DecommitStatus);
+                jsonPDisk.SetMaintenanceStatus(pdisk.MaintenanceStatus);
                 jsonPDisk.SetSlotSize(pdisk.GetSlotTotalSize());
                 jsonPDisk.SetSlotCount(pdisk.SlotCount);
                 if (pdisk.DiskSpace != NKikimrViewer::Grey) {

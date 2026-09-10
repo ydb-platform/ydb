@@ -182,7 +182,7 @@ public:
                 // Fuse serializer with corresponding DQ replicate output
 
                 const auto& maybeDqReplicate = program.Body().Maybe<TDqReplicate>();
-                YQL_ENSURE(maybeDqReplicate, "Can not push S3 sink into stage with multi output without DQ replicate");
+                YQL_ENSURE(maybeDqReplicate, "Cannot push S3 sink into stage with multi output without DQ replicate");
                 const auto& dqReplicate = maybeDqReplicate.Cast();
 
                 TVector<TExprNode::TPtr> newBranchLambdas;
@@ -271,7 +271,7 @@ public:
             auto outputsBuilder = Build<TDqStageOutputsList>(ctx, writePos);
             if (const auto outputs = inputStage.Outputs()) {
                 outputsBuilder.InitFrom(outputs.Cast());
-                YQL_ENSURE(inputStage.Program().Body().Maybe<TDqReplicate>(), "Can not push multiple async outputs into stage without TDqReplicate");
+                YQL_ENSURE(inputStage.Program().Body().Maybe<TDqReplicate>(), "Cannot push multiple async outputs into stage without TDqReplicate");
             }
             outputsBuilder.Add(sink.BuildSink(FromString<ui64>(dqUnionOutput.Index().Value()), ctx, writePos));
 
@@ -392,7 +392,7 @@ private:
         {}
 
         TExprNode::TPtr BuildSerializer(TExprNode::TPtr input, TExprContext& ctx) {
-            YQL_ENSURE(Serializer, "Can not build serializer twice");
+            YQL_ENSURE(Serializer, "Cannot build serializer twice");
             auto result = ctx.ReplaceNode(std::move(Serializer), SerializerArgument.Ref(), std::move(input));
             Serializer = nullptr;
             return result;

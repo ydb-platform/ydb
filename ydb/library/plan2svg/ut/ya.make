@@ -9,6 +9,7 @@ SRCS(
 PEERDIR(
     library/cpp/json
     library/cpp/testing/common
+    library/cpp/xml/document
 )
 
 DATA(

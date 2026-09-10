@@ -42,6 +42,8 @@ struct TEvPartitionDirectPrivate
         EvAddHostToDBG,
         EvPartitionCleanupCompleted,
 
+        EvPersistHostHealth,
+
         EvEnd,
     };
 
@@ -109,12 +111,12 @@ struct TEvPartitionDirectPrivate
     struct TEvAddHostToDBG
         : public NActors::TEventLocal<TEvAddHostToDBG, EvAddHostToDBG>
     {
-        size_t DirectBlockGroupId;
-        size_t NewHostIndex;
+        const size_t DirectBlockGroupId;
+        const ui32 DBGConnectionsConfigGeneration;
 
-        TEvAddHostToDBG(size_t dbgId, size_t newHostIndex)
+        TEvAddHostToDBG(size_t dbgId, ui32 dbgConnectionsConfigGeneration)
             : DirectBlockGroupId(dbgId)
-            , NewHostIndex(newHostIndex)
+            , DBGConnectionsConfigGeneration(dbgConnectionsConfigGeneration)
         {}
     };
 
@@ -130,6 +132,26 @@ struct TEvPartitionDirectPrivate
 
         explicit TEvPartitionCleanupCompleted(NProto::TError error)
             : Error(std::move(error))
+        {}
+    };
+
+    struct TEvPersistHostHealth
+        : public NActors::TEventLocal<TEvPersistHostHealth, EvPersistHostHealth>
+    {
+        size_t DirectBlockGroupId;
+        size_t HostIndex;
+        EHostHealth OldHealth;
+        EHostHealth NewHealth;
+
+        TEvPersistHostHealth(
+            size_t direct_block_group_id,
+            size_t host_index,
+            EHostHealth old_health,
+            EHostHealth new_health)
+            : DirectBlockGroupId(direct_block_group_id)
+            , HostIndex(host_index)
+            , OldHealth(old_health)
+            , NewHealth(new_health)
         {}
     };
 };

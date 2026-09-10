@@ -20,6 +20,10 @@ struct ibv_mr {
 
 #endif
 
+#if !defined(PLATFORM_CACHE_LINE)
+    #define PLATFORM_CACHE_LINE 64
+#endif
+
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/thread/lfstack.h>
@@ -183,7 +187,7 @@ namespace NInterconnect::NRdma {
         IMemPool* MemPool;
         std::atomic<ui32> SlotSize;
         std::atomic<ui32> MaxUseCount; //For monitoring and stats
-        class TChunkUseLock {
+        class alignas(PLATFORM_CACHE_LINE) TChunkUseLock {
             // Prevent reclaming just after new chunk allocation
             std::atomic<ui64> Lock = ReclaimingBitMask;
             static constexpr ui64 ReclaimingBitMask = 1ull << 63;
@@ -262,7 +266,7 @@ namespace NInterconnect::NRdma {
             ui32 GetUseCount() const noexcept {
                 return Lock.load(std::memory_order_relaxed) & UseCountMask;
             }
-        } __attribute__((aligned(64))) ReclaimSemaphore;
+        } ReclaimSemaphore;
     private:
         void TrackMaxUseCount(ui32 newUseCount) noexcept {
             ui32 maxUseCount = MaxUseCount.load(std::memory_order_relaxed);

@@ -1,11 +1,14 @@
 #pragma once
 #include "defs.h"
+#include <ydb/core/base/blobstorage_write_source.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hulllogctx.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/cache_block/cache_block.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/recovery/hulldb_recovery.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_context.h>
+
+#include <optional>
 
 namespace NKikimr {
 
@@ -24,12 +27,15 @@ namespace NKikimr {
         TString ErrorReason;
         ui64 Lsn;
         bool Postponed;
+        bool ObsoleteVersion;
 
-        THullCheckStatus(NKikimrProto::EReplyStatus status, TString errorReason, ui64 lsn = 0, bool postponed = false)
+        THullCheckStatus(NKikimrProto::EReplyStatus status, TString errorReason, ui64 lsn = 0, bool postponed = false,
+                bool obsoleteVersion = false)
             : Status(status)
             , ErrorReason(std::move(errorReason))
             , Lsn(lsn)
             , Postponed(postponed)
+            , ObsoleteVersion(obsoleteVersion)
         {}
     };
 
@@ -153,8 +159,11 @@ namespace NKikimr {
                 ui64 tabletID,
                 ui32 gen,
                 ui64 issuerGuid,
+                std::optional<ui32> version,
+                TWriteSource writeSource,
                 ui32 *actGen,
-                TLsnSeg *seg);
+                TLsnSeg *seg,
+                bool *versionChanged);
 
         void AddBlockCmd(
                 const TActorContext &ctx,

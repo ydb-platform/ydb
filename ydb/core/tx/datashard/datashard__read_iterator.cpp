@@ -4263,3 +4263,7 @@ inline void Out<NKikimr::NDataShard::TReadIteratorId>(
 {
     o << info.ToString();
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

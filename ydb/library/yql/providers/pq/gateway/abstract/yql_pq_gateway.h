@@ -7,6 +7,7 @@
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
 
+#include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 
@@ -53,6 +54,7 @@ public:
     struct TClusterInfo {
         NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo Info;
         ui32 PartitionsCount = 0;
+        THashSet<TString> Consumers;
         std::unordered_map<ui64, TInstant> MaxWriteTime;
     };
     using TDescribeFederatedTopicResult = std::vector<TClusterInfo>;

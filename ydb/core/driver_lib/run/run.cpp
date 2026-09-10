@@ -55,6 +55,7 @@
 #include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/config_metrics.h>
 #include <ydb/core/base/domain.h>
+#include <ydb/core/base/storage_pool_kinds.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/tablet_types.h>
@@ -161,6 +162,7 @@
 #include <ydb/services/view/grpc_service.h>
 
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
+#include <ydb/services/nbs/classic_grpc_service.h>
 #include <ydb/services/nbs/grpc_service.h>
 #endif
 
@@ -1327,7 +1329,15 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         if (grpcConfig.GetPort()) {
             grpcServers.push_back({ "grpc", new NYdbGrpc::TGRpcServer(opts, Counters) });
 
-            fillFn(grpcConfig, *grpcServers.back().second, opts);
+            auto& server = *grpcServers.back().second;
+            fillFn(grpcConfig, server, opts);
+
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
+            if (auto blockStore = NYdb::NBS::NBlockStore::GetNbsFrontendBlockStore()) {
+                server.AddService(new NGRpcService::TClassicNbsGrpcService(
+                    std::move(blockStore)));
+            }
+#endif
         }
 
         for (auto &ex : grpcConfig.GetExtEndpoints()) {
@@ -1504,6 +1514,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     AppData->DataShardExportFactory = ModuleFactories ? ModuleFactories->DataShardExportFactory.get() : nullptr;
     AppData->SqsEventsWriterFactory = ModuleFactories ? ModuleFactories->SqsEventsWriterFactory.get() : nullptr;
+    if (ModuleFactories && !ModuleFactories->PersQueueMirrorReaderFactory && runConfig.AppConfig.GetFeatureFlags().GetEnableInsecureMirrorFactory()) {
+        ModuleFactories->PersQueueMirrorReaderFactory =
+             std::make_shared<NKikimr::NPQ::TPersQueueInsecureMirrorReaderFactory>();
+    }
     AppData->PersQueueMirrorReaderFactory = ModuleFactories ? ModuleFactories->PersQueueMirrorReaderFactory.get() : nullptr;
     AppData->PersQueueGetReadSessionsInfoWorkerFactory = ModuleFactories ? ModuleFactories->PQReadSessionsInfoWorkerFactory.get() : nullptr;
     AppData->IoContextFactory = ModuleFactories ? ModuleFactories->IoContextFactory.get() : nullptr;

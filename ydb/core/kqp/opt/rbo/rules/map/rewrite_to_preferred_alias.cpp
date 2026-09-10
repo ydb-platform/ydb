@@ -100,7 +100,7 @@ bool CanRenameUsedIUTo(IOperator& op, const TInfoUnit& from, const TInfoUnit& to
     }
 
     const auto& map = static_cast<const TOpMap&>(op);
-    for (const auto& mapElement : map.MapElements) {
+    for (const auto& mapElement : map.GetMapElements()) {
         if (mapElement.IsRename() || mapElement.GetElementName() != to) {
             continue;
         }
@@ -142,10 +142,10 @@ bool DropRedundantAliasAppends(IOperator& op) {
 
     auto& map = static_cast<TOpMap&>(op);
     TVector<TMapElement> elements;
-    elements.reserve(map.MapElements.size());
+    elements.reserve(map.GetMapElements().size());
 
     bool changed = false;
-    for (auto mapElement : map.MapElements) {
+    for (auto mapElement : map.GetMapElements()) {
         if (IsRedundantAliasAppend(map, mapElement)) {
             changed = true;
             continue;
@@ -154,7 +154,7 @@ bool DropRedundantAliasAppends(IOperator& op) {
     }
 
     if (changed) {
-        map.MapElements = std::move(elements);
+        map.SetMapElements(std::move(elements));
     }
     return changed;
 }
@@ -215,7 +215,7 @@ bool TRewriteExpressionsToPreferredAliasesRule::MatchAndApply(TIntrusivePtr<IOpe
     }
 
     input->RenameUsedIUs(renameMap, ctx.ExprCtx);
-    const bool subplansChanged = props.Subplans.RenameReferences(renameMap, ctx.ExprCtx);
+    const bool subplansChanged = props.Subplans.RenameExternalReferences(renameMap, ctx.ExprCtx);
     Y_UNUSED(subplansChanged);
     return true;
 }

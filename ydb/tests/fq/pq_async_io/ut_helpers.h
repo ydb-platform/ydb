@@ -88,8 +88,8 @@ struct TPqIoTestFixture : public NUnitTest::TBaseFixture {
         InitAsyncOutput(BuildPqTopicSinkSettings(topic), freeSpace);
     }
 
-    void LoadSink(const TSinkState& state) {
-        CaSetup->LoadSink(state);
+    void LoadSink(const TSinkState& state, const NDqProto::TCheckpoint& checkpoint) {
+        CaSetup->LoadSink(state, checkpoint);
     }
 
     void AsyncOutputWrite(std::vector<TString> data, TMaybe<NDqProto::TCheckpoint> checkpoint = Nothing());

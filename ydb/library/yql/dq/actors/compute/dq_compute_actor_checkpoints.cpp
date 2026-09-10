@@ -432,7 +432,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvGetTaskStateResult::TPt
         return;
     }
 
-    auto& checkpoint = ev->Get()->Checkpoint;
+    const auto& checkpoint = ev->Get()->Checkpoint;
     std::vector<ui64> taskIds;
     size_t taskIdsSize = 1;
     if (StateLoadPlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN) {
@@ -459,10 +459,10 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvGetTaskStateResult::TPt
     RestoringTaskRunnerForCheckpoint = checkpoint;
     RestoringTaskRunnerForEvent = ev->Cookie;
     if (StateLoadPlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_OWN) {
-        ComputeActor->LoadState(std::move(ev->Get()->States[0]));
+        ComputeActor->LoadState(std::move(ev->Get()->States[0]), checkpoint);
     } else if (StateLoadPlan.GetStateType() == NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN) {
         TComputeActorState state = CombineForeignState(StateLoadPlan, ev->Get()->States, taskIds);
-        ComputeActor->LoadState(std::move(state));
+        ComputeActor->LoadState(std::move(state), checkpoint);
     } else {
         Y_ABORT("Unprocessed state type %s (%d)",
             NDqProto::NDqStateLoadPlan::EStateType_Name(StateLoadPlan.GetStateType()).c_str(),
@@ -538,7 +538,7 @@ void TDqComputeActorCheckpoints::Handle(TEvRetryQueuePrivate::TEvRetry::TPtr& ev
 }
 
 void TDqComputeActorCheckpoints::Handle(NActors::TEvents::TEvWakeup::TPtr&) {
-    const auto buildDiagnostics = [task = &Task, ca = ComputeActor](const TPendingCheckpointBase& checkpoint, const TString& type) -> TString {
+    const auto buildDiagnostics = [task = &Task, ca = ComputeActor, id = SelfId()](const TPendingCheckpointBase& checkpoint, const TString& type) -> TString {
         TString diagnostics;
         if (!checkpoint.IsSlowCheckpoint(diagnostics)) {
             return "";
@@ -546,6 +546,7 @@ void TDqComputeActorCheckpoints::Handle(NActors::TEvents::TEvWakeup::TPtr&) {
 
         return TStringBuilder()
             << " Stage: " << task->GetStageId()
+            << ". Self id: " << id
             << ". Channels version: " << task->GetDqChannelVersion()
             << ". Pending checkpoint type: " << type
             << ". " << diagnostics

@@ -124,3 +124,7 @@ void TDataShard::VacuumComplete(ui64 vacuumGeneration, const TActorContext& ctx)
 }
 
 } // namespace NKikimr::NDataShard
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

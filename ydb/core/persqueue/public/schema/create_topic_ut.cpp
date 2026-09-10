@@ -52,7 +52,7 @@ Y_UNIT_TEST(CreateTopicKeepsLiteralDashDashName) {
     UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1u);
     const auto it = response->Topics.find(name);
     UNIT_ASSERT(it != response->Topics.end());
-    UNIT_ASSERT_VALUES_EQUAL(it->second.Status, NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(it->second.Status, NDescriber::EStatus::Success);
     UNIT_ASSERT_VALUES_EQUAL(it->second.RealPath, path);
 
     // "--" is not a path separator: the converted legacy path must not exist.
@@ -60,7 +60,7 @@ Y_UNIT_TEST(CreateTopicKeepsLiteralDashDashName) {
     runtime.Register(NDescriber::CreateDescriberActor(convertedEdge, "/Root", {TString("TestSchemeList/test-topic-1")}));
     auto converted = runtime.GrabEdgeEvent<NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
     UNIT_ASSERT_VALUES_EQUAL(converted->Topics.size(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(converted->Topics.begin()->second.Status, NDescriber::EStatus::NOT_FOUND);
+    UNIT_ASSERT_VALUES_EQUAL(converted->Topics.begin()->second.Status, NDescriber::EStatus::NotFound);
 }
 
 // https://github.com/ydb-platform/ydb/issues/50971

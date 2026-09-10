@@ -218,3 +218,7 @@ void TDataShard::Handle(TEvDataShard::TEvIncrementalRestoreSrcCreateRequest::TPt
 }
 
 } // namespace NKikimr::NDataShard
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/statistics/database    
     yql/essentials/core/minsketch
+    yql/essentials/core/histogram
 )
 
 YQL_LAST_ABI_VERSION()

@@ -41,6 +41,7 @@ private:
     {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
+            HFunc(TEvPQ::TEvCredentialsCreated, HandleCredentialsCreated);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             HFunc(TEvents::TEvPoisonPill, Handle);
             HFunc(TEvPQ::TEvMirrorTopicDescription, HandleDescriptionResult);
@@ -62,8 +63,7 @@ private:
 
     void DescribeTopic(const TActorContext& ctx);
 
-    TString BuildLogPrefix() const override;
-    TString GetCurrentState() const;
+    TLogPrefix BuildLogPrefix() const override;
 
 public:
     TMirrorDescriber(

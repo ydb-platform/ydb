@@ -56,7 +56,7 @@ public:
 
         void ExpectError(TStatusCode statusCode, const TString& message) {
             std::lock_guard lock(Mutex_);
-            UNIT_ASSERT_C(!ExpectedError_, "Can not add existing error, client id: " << ClientId_);
+            UNIT_ASSERT_C(!ExpectedError_, "Cannot add existing error, client id: " << ClientId_);
             ExpectedError_ = {statusCode, message};
         }
 

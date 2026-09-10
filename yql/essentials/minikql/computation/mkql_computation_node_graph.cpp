@@ -244,6 +244,8 @@ public:
         , FunctionRegistry_(*opts.FunctionRegistry)
         , ValidateMode_(opts.ValidateMode)
         , ValidatePolicy_(opts.ValidatePolicy)
+        , BridgeMode_(opts.BridgeMode)
+        , BridgeBinaryPath_(opts.BridgeBinaryPath)
         , GraphPerProcess_(opts.GraphPerProcess)
         , PatternNodes_(MakeIntrusive<TPatternNodes>(opts.AllocState))
         , ExternalAlloc_(opts.PatternEnv)
@@ -479,6 +481,8 @@ private:
             PatternNodes_->ValueBuilder_.Get(),
             ValidateMode_,
             ValidatePolicy_,
+            BridgeMode_,
+            BridgeBinaryPath_,
             GraphPerProcess_,
             PatternNodes_->Mutables_,
             PatternNodes_->ElementsCache_,
@@ -579,6 +583,8 @@ private:
     THolder<TNodeFactory> NodeFactory_;
     NUdf::EValidateMode ValidateMode_;
     NUdf::EValidatePolicy ValidatePolicy_;
+    NUdf::EBridgeMode BridgeMode_;
+    const TString BridgeBinaryPath_;
     EGraphPerProcess GraphPerProcess_;
     TPatternNodes::TPtr PatternNodes_;
     const bool ExternalAlloc_; // obsolete, will be removed after YQL-13977
@@ -858,8 +864,8 @@ public:
                        : NYql::NCodegen::ICodegen::TPtr())
 #endif
     {
-        /// TODO: Enable JIT for AARCH64/Win
-#if defined(__aarch64__) || defined(_win_)
+        /// TODO: Enable JIT for AARCH64/Win/Darwin (YDBREQUESTS-7823)
+#if defined(__aarch64__) || defined(_win_) || defined(_darwin_)
         Codegen_ = {};
 #endif
 

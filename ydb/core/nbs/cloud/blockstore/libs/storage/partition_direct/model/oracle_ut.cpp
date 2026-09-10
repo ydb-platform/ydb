@@ -19,12 +19,19 @@ namespace {
 struct THostStateControllerMock: public IHostStateController
 {
     TMap<THostIndex, EHostState> States;
+    TMap<THostIndex, EHostHealth> Healths;
+
     TCountAndSize HostPBufferUsedSize{.Count = 1, .Size = 1_MB};
 
-    // Records every host index passed to QueryAddHost, in call order.
-    TVector<THostIndex> AddHostQueries;
+    // Counts the QueryAddHost calls.
+    size_t AddHostQueries = 0;
 
     THostStateControllerMock() = default;
+
+    void PersistHostHealth(
+        THostIndex hostIndex,
+        EHostHealth oldHealth,
+        EHostHealth newHealth) override;
 
     void SetHostState(
         THostIndex hostIndex,
@@ -43,11 +50,21 @@ struct THostStateControllerMock: public IHostStateController
         return HostPBufferUsedSize;
     }
 
-    void QueryAddHost(THostIndex hostIndex) override
+    void QueryAddHost() override
     {
-        AddHostQueries.push_back(hostIndex);
+        ++AddHostQueries;
     }
 };
+
+void THostStateControllerMock::PersistHostHealth(
+    THostIndex hostIndex,
+    EHostHealth oldHealth,
+    EHostHealth newHealth)
+{
+    Y_UNUSED(oldHealth);
+
+    Healths[hostIndex] = newHealth;
+}
 
 TStorageConfigPtr MakeStorageConfig()
 {
@@ -272,13 +289,16 @@ Y_UNIT_TEST_SUITE(TOracle)
             hostStateController.States[0]);
 
         // Generate success. Switching to the enabled state.
-        now += TDuration::Seconds(1);
-        oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
-        oracle.OnRequestSucceeded(
-            0,
-            EOperation::WriteToPBuffer,
-            now,
-            TDuration());
+        now += TDuration::Seconds(11);
+        for (size_t i = 0; i < 1000; ++i) {
+            oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestSucceeded(
+                0,
+                EOperation::WriteToPBuffer,
+                now,
+                TDuration());
+        }
+        now += TDuration::Seconds(11);
 
         oracle.Think(now);
         UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.States.size());
@@ -363,12 +383,15 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         // Generate success. Switching to the enabled state.
         now += TDuration::Seconds(1);
-        oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
-        oracle.OnRequestSucceeded(
-            0,
-            EOperation::WriteToPBuffer,
-            now,
-            TDuration());
+        for (size_t i = 0; i < 1000; ++i) {
+            oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestSucceeded(
+                0,
+                EOperation::WriteToPBuffer,
+                now,
+                TDuration());
+        }
+        now += TDuration::Seconds(11);
 
         oracle.Think(now);
         UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.States.size());
@@ -408,13 +431,16 @@ Y_UNIT_TEST_SUITE(TOracle)
             hostStateController.States[0]);
 
         // Generate success. Switching to the enabled state.
-        now += TDuration::Seconds(1);
-        oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
-        oracle.OnRequestSucceeded(
-            0,
-            EOperation::WriteToPBuffer,
-            now,
-            TDuration());
+        now += TDuration::Seconds(11);
+        for (size_t i = 0; i < 1000; ++i) {
+            oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestSucceeded(
+                0,
+                EOperation::WriteToPBuffer,
+                now,
+                TDuration());
+        }
+        now += TDuration::Seconds(11);
 
         oracle.Think(now);
         UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.States.size());
@@ -676,7 +702,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         // With the default set of DirectBlockGroupHostCount online hosts, the
         // alive count equals the required count, so no new host is requested.
         oracle.Think(TInstant::Now());
-        UNIT_ASSERT_VALUES_EQUAL(0, hostStateController.AddHostQueries.size());
+        UNIT_ASSERT_VALUES_EQUAL(0, hostStateController.AddHostQueries);
     }
 
     Y_UNIT_TEST(ThinkDoesNotQueryAddHostForTemporaryOfflineHost)
@@ -705,7 +731,7 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         // A TemporaryOffline host is still considered alive, so the alive
         // count is unchanged and no new host is requested.
-        UNIT_ASSERT_VALUES_EQUAL(0, hostStateController.AddHostQueries.size());
+        UNIT_ASSERT_VALUES_EQUAL(0, hostStateController.AddHostQueries);
     }
 
     Y_UNIT_TEST(ThinkQueriesAddHostWhenHostGoesOffline)
@@ -732,20 +758,16 @@ Y_UNIT_TEST_SUITE(TOracle)
         UNIT_ASSERT_VALUES_EQUAL(
             EHostState::TemporaryOffline,
             hostStateController.States[0]);
-        UNIT_ASSERT_VALUES_EQUAL(0, hostStateController.AddHostQueries.size());
+        UNIT_ASSERT_VALUES_EQUAL(0, hostStateController.AddHostQueries);
 
         // Six seconds later host 0 goes Offline, dropping the alive count
-        // below DirectBlockGroupHostCount. The oracle must request a new host
-        // with the next free index (equal to the current host count).
+        // below DirectBlockGroupHostCount. The oracle must request a new host.
         now += TDuration::Seconds(3);
         oracle.Think(now);
         UNIT_ASSERT_VALUES_EQUAL(
             EHostState::Offline,
             hostStateController.States[0]);
-        UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.AddHostQueries.size());
-        UNIT_ASSERT_VALUES_EQUAL(
-            DirectBlockGroupHostCount,
-            hostStateController.AddHostQueries[0]);
+        UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.AddHostQueries);
     }
 
     Y_UNIT_TEST(ThinkKeepsQueryingAddHostWhileHostRemainsOffline)
@@ -770,17 +792,13 @@ Y_UNIT_TEST_SUITE(TOracle)
         UNIT_ASSERT_VALUES_EQUAL(
             EHostState::Offline,
             hostStateController.States[0]);
-        UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.AddHostQueries.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.AddHostQueries);
 
         // As long as no new host is actually added, the alive count stays
-        // below the required count and every Think re-issues the request with
-        // the same next-free index.
+        // below the required count and every Think re-issues the request.
         now += TDuration::Seconds(1);
         oracle.Think(now);
-        UNIT_ASSERT_VALUES_EQUAL(2, hostStateController.AddHostQueries.size());
-        UNIT_ASSERT_VALUES_EQUAL(
-            DirectBlockGroupHostCount,
-            hostStateController.AddHostQueries[1]);
+        UNIT_ASSERT_VALUES_EQUAL(2, hostStateController.AddHostQueries);
     }
 
     Y_UNIT_TEST(ThinkStopsQueryingAddHostAfterNewHostIsAdded)
@@ -802,16 +820,16 @@ Y_UNIT_TEST_SUITE(TOracle)
         oracle.OnRequestFailed(0, EOperation::WriteToPBuffer, now);
         now += TDuration::Seconds(6);
         oracle.Think(now);
-        UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.AddHostQueries.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.AddHostQueries);
 
         // Satisfy the request: add the newly-requested host. It comes up
         // Online, restoring the alive count to DirectBlockGroupHostCount.
-        oracle.AddHostIfNeeded(hostStateController.AddHostQueries.back());
+        oracle.AddHostIfNeeded(DirectBlockGroupHostCount);
 
         // No further add-host requests are issued.
         now += TDuration::Seconds(1);
         oracle.Think(now);
-        UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.AddHostQueries.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.AddHostQueries);
     }
 
     Y_UNIT_TEST(AddHostIfNeededGrowsHostCount)
@@ -877,7 +895,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         UNIT_ASSERT_VALUES_EQUAL(
             EHostState::Offline,
             hostStateController.States[0]);
-        UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.AddHostQueries.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.AddHostQueries);
 
         // The broken health is reported through the host stats.
         {
@@ -889,7 +907,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         // Repeated notifications are idempotent: the replacement is requested
         // only once, on the first transition.
         oracle.OnDDiskBroken(0);
-        UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.AddHostQueries.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.AddHostQueries);
         UNIT_ASSERT_VALUES_EQUAL(
             EHostState::Offline,
             hostStateController.States[0]);
@@ -927,6 +945,135 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         const auto stats = oracle.BuildHostStats(now);
         UNIT_ASSERT_EQUAL(EHostHealth::Broken, stats[0].Health);
+    }
+
+    Y_UNIT_TEST(ShouldPersistHostHealthIfChangesToOffline)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto& oracleConfig = *rawConfig.MutableOracleConfig();
+        oracleConfig.SetMaxDurationBeforeGoingTemporaryOffline(2000);
+        oracleConfig.SetMaxDurationBeforeGoingOffline(4000);
+        oracleConfig.SetMinErrorsCountBeforeGoingOffline(1);
+
+        auto config = std::make_shared<TStorageConfig>(rawConfig);
+
+        THostStateControllerMock hostStateController;
+        TOracle oracle(config, &hostStateController);
+        auto now = TInstant::Now();
+
+        // Generate a single error on host 0.
+        oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+        oracle.OnRequestFailed(0, EOperation::WriteToPBuffer, now);
+
+        // Go to TemporaryOffline. Expect PersistHostHealth call
+        now += TDuration::Seconds(3);
+        oracle.Think(now);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostState::TemporaryOffline,
+            hostStateController.States[0]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostHealth::TemporaryOffline,
+            hostStateController.Healths[0]);
+
+        // Go to Offline. Expect PersistHostHealth call
+        now += TDuration::Seconds(3);
+        oracle.Think(now);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostState::Offline,
+            hostStateController.States[0]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostHealth::Offline,
+            hostStateController.Healths[0]);
+    }
+
+    Y_UNIT_TEST(ShouldPersistHostHealthIfChangesToOnline)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto& oracleConfig = *rawConfig.MutableOracleConfig();
+        oracleConfig.SetMaxDurationBeforeGoingTemporaryOffline(2000);
+        oracleConfig.SetMaxDurationBeforeGoingOffline(4000);
+        oracleConfig.SetMinErrorsCountBeforeGoingOffline(1);
+
+        auto config = std::make_shared<TStorageConfig>(rawConfig);
+
+        THostStateControllerMock hostStateController;
+        TOracle oracle(config, &hostStateController);
+        auto now = TInstant::Now();
+
+        // Generate a single error on host 0.
+        oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+        oracle.OnRequestFailed(0, EOperation::WriteToPBuffer, now);
+
+        // Go to TemporaryOffline. Expect PersistHostHealth call
+        now += TDuration::Seconds(3);
+        oracle.Think(now);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostState::TemporaryOffline,
+            hostStateController.States[0]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostHealth::TemporaryOffline,
+            hostStateController.Healths[0]);
+
+        // Generate success. Switching to the online state.
+        now += TDuration::Seconds(11);
+        for (size_t i = 0; i < 1000; ++i) {
+            oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestSucceeded(
+                0,
+                EOperation::WriteToPBuffer,
+                now,
+                TDuration());
+        }
+        now += TDuration::Seconds(11);
+
+        oracle.Think(now);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostState::Online,
+            hostStateController.States[0]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostHealth::Online,
+            hostStateController.Healths[0]);
+    }
+
+    Y_UNIT_TEST(ShouldNotPersistChangesBetweenOnlineAndSufferer)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto& oracleConfig = *rawConfig.MutableOracleConfig();
+        oracleConfig.SetMaxDurationBeforeGoingTemporaryOffline(2000);
+        oracleConfig.SetMaxDurationBeforeGoingOffline(4000);
+        oracleConfig.SetMinErrorsCountBeforeGoingOffline(2);
+
+        auto config = std::make_shared<TStorageConfig>(rawConfig);
+
+        THostStateControllerMock hostStateController;
+        TOracle oracle(config, &hostStateController);
+        auto now = TInstant::Now();
+
+        // Generate a single error on host 0.
+        oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+        oracle.OnRequestFailed(0, EOperation::WriteToPBuffer, now);
+
+        // Still TemporaryOffline three seconds later - no add-host request.
+        now += TDuration::Seconds(3);
+        oracle.Think(now);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostState::Online,
+            hostStateController.States[0]);
+        UNIT_ASSERT_VALUES_EQUAL(0, hostStateController.Healths.size());
+
+        now += TDuration::Seconds(3);
+        oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+        oracle.OnRequestSucceeded(
+            0,
+            EOperation::WriteToPBuffer,
+            now,
+            TDuration());
+        oracle.Think(now);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostState::Online,
+            hostStateController.States[0]);
+        UNIT_ASSERT_VALUES_EQUAL(0, hostStateController.Healths.size());
     }
 }
 

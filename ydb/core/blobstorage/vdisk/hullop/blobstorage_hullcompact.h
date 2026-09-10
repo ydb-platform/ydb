@@ -32,6 +32,7 @@ namespace NKikimr {
         // huge blobs to delete after compaction
         TDiskPartVec FreedHugeBlobs;
         TDiskPartVec AllocatedHugeBlobs;
+        TDiskPartVec AllocatedStripeBlobs;
         // was the compaction process aborted by some reason?
         bool Aborted = false;
         bool FreshCompaction = false;
@@ -291,15 +292,20 @@ namespace NKikimr {
 
             msg->FreedHugeBlobs = IsAborting ? TDiskPartVec() : Worker.GetFreedHugeBlobs();
             msg->AllocatedHugeBlobs = IsAborting ? TDiskPartVec() : Worker.GetAllocatedHugeBlobs();
+            msg->AllocatedStripeBlobs = IsAborting ? TDiskPartVec() : Worker.GetAllocatedStripeBlobs();
 
             if (IsAborting) { // release previously preallocated slots for huge blobs if we are aborting
-                ctx.Send(HugeKeeperId, new TEvHugeDropAllocatedSlots(Worker.GetAllocatedHugeBlobs().Vec));
+                std::vector<TDiskPart> drop = Worker.GetAllocatedHugeBlobs().Vec;
+                drop.insert(drop.end(), Worker.GetAllocatedStripeBlobs().Vec.begin(),
+                    Worker.GetAllocatedStripeBlobs().Vec.end());
+                ctx.Send(HugeKeeperId, new TEvHugeDropAllocatedSlots(std::move(drop)));
             }
 
             // chunks to commit
             msg->CommitChunks = IsAborting ? TVector<ui32>() : Worker.GetCommitChunks();
 
-            Y_VERIFY_S(emptyWrite == msg->CommitChunks.empty(), HullCtx->VCtx->VDiskLogPrefix); // both empty or not
+            Y_VERIFY_S(emptyWrite == (msg->CommitChunks.empty() && msg->AllocatedStripeBlobs.Empty()),
+                HullCtx->VCtx->VDiskLogPrefix); // both empty or not
 
             msg->SegVec = IsAborting ? nullptr : std::move(Result);
             msg->FreshSegment = IsAborting ? nullptr : FreshSegment;

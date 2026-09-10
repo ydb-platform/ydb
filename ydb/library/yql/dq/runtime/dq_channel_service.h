@@ -113,7 +113,7 @@ public:
 };
 
 // Channel usually created with unknown peer id which may be local or remote etc.
-// But references to channel are used to create other objects and not be changed later
+// But references to channel are used to create other objects and cannot be changed later
 // We use recreatable buffers, they make late binding possible
 // Most channel API calls are translated directly to buffer method calls
 

@@ -68,7 +68,7 @@ Y_UNIT_TEST(MeasureProxyMemoryWith100kResources) {
 
     ui64 nextResId = 1;
     EXPECT_CALL(*pipe, OnSubscribeOnResources(_, _))
-        .WillRepeatedly(Invoke([pipe, &nextResId](
+        .WillRepeatedly([pipe, &nextResId](
             const NKikimrKesus::TEvSubscribeOnResources& req, ui64 cookie) {
             NKikimrKesus::TEvSubscribeOnResourcesResult result;
             result.SetProtocolVersion(1);
@@ -81,7 +81,7 @@ Y_UNIT_TEST(MeasureProxyMemoryWith100kResources) {
                 props->MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(100);
             }
             pipe->SendSubscribeOnResourceResult(result, cookie);
-        }));
+        });
 
     EXPECT_CALL(*pipe, OnUpdateConsumptionState(_, _)).Times(AnyNumber());
 

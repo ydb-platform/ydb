@@ -104,4 +104,50 @@ Y_UNIT_TEST(MissingSourcePartitionBeforeNewRootIsAnError) {
     UNIT_ASSERT(c.RootPartitionsMismatch->Error);
 }
 
+Y_UNIT_TEST(NonRootSourcePartitionsAreSkipped) {
+    std::vector<TPartitionInfo> source;
+    source.push_back(RootPartition(0));
+
+    Ydb::Topic::DescribeTopicResult::PartitionInfo child;
+    child.set_partition_id(1);
+    child.set_active(true);
+    child.add_parent_partition_ids(0);
+    source.push_back(child);
+
+    auto c = ComparePartitionGraphs(RootGraph(1), source);
+    UNIT_ASSERT(!c.RootPartitionsMismatch);
+}
+
+Y_UNIT_TEST(HoleInTargetBeforeNewRootIsAnError) {
+    auto c = ComparePartitionGraphs(RootGraph(1), std::vector<TPartitionInfo>{
+        RootPartition(0),
+        RootPartition(2),
+    });
+    UNIT_ASSERT(c.RootPartitionsMismatch);
+    UNIT_ASSERT(c.RootPartitionsMismatch->Error);
+}
+
+Y_UNIT_TEST(AlterPlanCopiesSourceBounds) {
+    Ydb::Topic::DescribeTopicResult::PartitionInfo p0;
+    p0.set_partition_id(0);
+    p0.set_active(true);
+    p0.mutable_key_range()->set_from_bound("aa");
+    p0.mutable_key_range()->set_to_bound("mm");
+
+    Ydb::Topic::DescribeTopicResult::PartitionInfo p1;
+    p1.set_partition_id(1);
+    p1.set_active(true);
+    p1.mutable_key_range()->set_from_bound("mm");
+    p1.mutable_key_range()->set_to_bound("zz");
+
+    auto c = ComparePartitionGraphs(RootGraph(1), std::vector<TPartitionInfo>{p0, p1});
+    UNIT_ASSERT(c.RootPartitionsMismatch);
+    UNIT_ASSERT(!c.RootPartitionsMismatch->Error);
+    UNIT_ASSERT_VALUES_EQUAL(c.RootPartitionsMismatch->AlterRootPartitions.size(), 2u);
+    UNIT_ASSERT_EQUAL(c.RootPartitionsMismatch->AlterRootPartitions[0].Action, EPartitionAction::Modify);
+    UNIT_ASSERT_EQUAL(c.RootPartitionsMismatch->AlterRootPartitions[1].Action, EPartitionAction::Create);
+    UNIT_ASSERT(c.RootPartitionsMismatch->AlterRootPartitions[0].FromBound.has_value());
+    UNIT_ASSERT(c.RootPartitionsMismatch->AlterRootPartitions[1].ToBound.has_value());
+}
+
 } // Y_UNIT_TEST_SUITE(TPqrbGraphCmp)

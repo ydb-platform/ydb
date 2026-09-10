@@ -48,6 +48,7 @@
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/parser/pg_wrapper/interface/arrow.h>
 
+#include <util/generic/scope.h>
 #include <util/generic/size_literals.h>
 #include <util/stream/format.h>
 #include <util/system/fstat.h>
@@ -176,10 +177,10 @@ struct TReadSpec {
     NDB::ColumnsWithTypeAndName CHColumns;
     std::shared_ptr<arrow::Schema> ArrowSchema;
     NDB::FormatSettings Settings;
-    // It's very important to keep here std::string instead of TString 
+    // It's very important to keep here std::string instead of TString
     // because of the cast from TString to std::string is using the MutRef (it isn't thread-safe).
     // This behaviour can be found in the getInputFormat call
-    std::string Format;  
+    std::string Format;
     TString Compression;
     ui64 SizeLimit = 0;
     ui32 BlockLengthPosition = 0;
@@ -253,7 +254,7 @@ void OnDownloadFinished(TActorSystem* actorSystem, const TActorId& self, const T
     actorSystem->Send(new IEventHandle(self, parent, new TEvS3Provider::TEvDownloadFinish(pathIndex, curlResponseCode, std::move(issues))));
 }
 
-void DownloadStart(const TRetryStuff::TPtr& retryStuff, TActorSystem* actorSystem, const TActorId& self, const TActorId& parent, size_t pathIndex, const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter) {
+void DownloadStart(const TRetryStuff::TPtr& retryStuff, TActorSystem* actorSystem, const TActorId& self, const TActorId& parent, size_t pathIndex, const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter, IHttpRequestContext::TPtr context = nullptr) {
     retryStuff->CancelHook = retryStuff->Gateway->Download(
         retryStuff->Url,
         retryStuff->Headers,
@@ -262,7 +263,8 @@ void DownloadStart(const TRetryStuff::TPtr& retryStuff, TActorSystem* actorSyste
         std::bind(&OnDownloadStart, actorSystem, self, parent, std::placeholders::_1, std::placeholders::_2),
         std::bind(&OnNewData, actorSystem, self, parent, std::placeholders::_1),
         std::bind(&OnDownloadFinished, actorSystem, self, parent, pathIndex, std::placeholders::_1, std::placeholders::_2),
-        inflightCounter);
+        inflightCounter,
+        std::move(context));
 }
 
 struct TParquetFileInfo {
@@ -362,10 +364,7 @@ public:
 
     private:
         bool nextImpl() final {
-            while (!Coro->InputFinished || !Coro->DeferredDataParts.empty()) {
-                Coro->CpuTime += Coro->GetCpuTimeDelta();
-                Coro->ProcessOneEvent();
-                Coro->StartCycleCount = GetCycleCountFast();
+            while (true) {
                 if (Coro->InputBuffer) {
                     RawDataBuffer.swap(Coro->InputBuffer);
                     Coro->InputBuffer.clear();
@@ -373,6 +372,12 @@ public:
                     working_buffer = NDB::BufferBase::Buffer(rawData, rawData + RawDataBuffer.size());
                     return true;
                 }
+                if (Coro->InputFinished && Coro->DeferredDataParts.empty()) {
+                    break;
+                }
+                Coro->CpuTime += Coro->GetCpuTimeDelta();
+                Coro->ProcessOneEvent();
+                Coro->StartCycleCount = GetCycleCountFast();
             }
             return false;
         }
@@ -390,10 +395,7 @@ public:
 
     private:
         bool nextImpl() final {
-            while (!Coro->DecompressedInputFinished || !Coro->DeferredDecompressedDataParts.empty()) {
-                Coro->CpuTime += Coro->GetCpuTimeDelta();
-                Coro->ProcessOneEvent();
-                Coro->StartCycleCount = GetCycleCountFast();
+            while (true) {
                 auto decompressed = Coro->ExtractDecompressedDataPart();
                 if (decompressed) {
                     RawDataBuffer.swap(decompressed);
@@ -407,6 +409,12 @@ public:
                         Coro->FinishDecompressor();
                     }
                 }
+                if (Coro->DecompressedInputFinished && Coro->DeferredDecompressedDataParts.empty()) {
+                    break;
+                }
+                Coro->CpuTime += Coro->GetCpuTimeDelta();
+                Coro->ProcessOneEvent();
+                Coro->StartCycleCount = GetCycleCountFast();
             }
             return false;
         }
@@ -414,6 +422,60 @@ public:
         TS3ReadCoroImpl* const Coro;
         TString RawDataBuffer;
     };
+
+    void StartUnit() {
+        if (!Work || Working) {
+            return;
+        }
+        for (;;) {
+            const auto now = TMonotonic::Now();
+            const auto delay = Work->TryStartExecution(now);
+            if (!delay) {
+                break;
+            }
+
+            // A delivered event means the scheduler woke us up.
+            const auto resumeEv = WaitForSpecificEvent<NActors::TEvents::TEvWakeup>(&TS3ReadCoroImpl::ProcessEventWhileAcquiringSlot, now + *delay);
+            Work->NotifyResumed(/* byScheduler = */ static_cast<bool>(resumeEv));
+        }
+        Working = true;
+    }
+
+    void StopUnit() {
+        if (!Work || !Working) {
+            return;
+        }
+        Work->StopExecution();
+        Working = false;
+    }
+
+    bool IsPaused() const {
+        return DownstreamPaused || UpstreamPaused;
+    }
+
+    void SetDownstreamPause(bool paused) {
+        if (DownstreamPaused == paused) {
+            return;
+        }
+        DownstreamPaused = paused;
+        ReconcileWorking();
+    }
+
+    void SetUpstreamPause(bool paused) {
+        if (UpstreamPaused == paused) {
+            return;
+        }
+        UpstreamPaused = paused;
+        ReconcileWorking();
+    }
+
+    void ReconcileWorking() {
+        if (IsPaused()) {
+            StopUnit();
+        } else {
+            StartUnit();
+        }
+    }
 
     void RunClickHouseParserOverHttp() {
         LOG_CORO_D("RunClickHouseParserOverHttp");
@@ -423,7 +485,13 @@ public:
         NDB::ReadBuffer* buffer = coroBuffer.get();
 
         // lz4 decompressor reads signature in ctor, w/o actual data it will be deadlocked
-        DownloadStart(RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize);
+        IHttpRequestContext::TPtr context;
+        if (Work) {
+            const auto scope = Work->GetWorkScope();
+            LOG_CORO_D("S3 Download: db=" << scope.Namespace << " pool=" << scope.Name);
+            context = MakeIntrusive<TDefaultHttpRequestContext>(scope);
+        }
+        DownloadStart(RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize, std::move(context));
 
         if (ReadSpec->Compression && !AsyncDecompressing) {
             decompressorBuffer = MakeDecompressor(*buffer, ReadSpec->Compression);
@@ -437,16 +505,34 @@ public:
             )
         );
 
-        while (NDB::Block batch = stream->read()) {
-            Paused = SourceContext->Add(batch.bytes(), SelfActorId);
-            const bool isCancelled = StopIfConsumedEnough(batch.rows());
-            Send(ParentActorId, new TEvS3Provider::TEvNextBlock(batch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta(), ReadSpec->Compression ? TakeIngressDecompressedDelta(buffer->count()) : 0ULL));
-            if (Paused) {
+        while (true) {
+            bool isCancelled = false;
+            {
+                StartUnit();
+                // Stop-only, no pause toggle — StopUnit does not yield, so this
+                // Y_DEFER is safe during exception unwind (e.g. stream->read()
+                // throwing on malformed input).
+                Y_DEFER { StopUnit(); };
+
+                NDB::Block batch = stream->read();
+                if (!batch) {
+                    break;
+                }
+
+                if (SourceContext->Add(batch.bytes(), SelfActorId)) {
+                    SetDownstreamPause(true);
+                }
+                isCancelled = StopIfConsumedEnough(batch.rows());
+                Send(ParentActorId, new TEvS3Provider::TEvNextBlock(batch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta(), ReadSpec->Compression ? TakeIngressDecompressedDelta(buffer->count()) : 0ULL));
+            }
+
+            if (IsPaused()) {
                 CpuTime += GetCpuTimeDelta();
                 auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
                 HandleEvent(*ev);
                 StartCycleCount = GetCycleCountFast();
             }
+
             if (isCancelled) {
                 LOG_CORO_D("RunClickHouseParserOverHttp - STOPPED ON SATURATION");
                 break;
@@ -479,10 +565,12 @@ public:
         );
 
         while (NDB::Block batch = stream->read()) {
-            Paused = SourceContext->Add(batch.bytes(), SelfActorId);
+            if (SourceContext->Add(batch.bytes(), SelfActorId)) {
+                SetDownstreamPause(true);
+            }
             const bool isCancelled = StopIfConsumedEnough(batch.rows());
             Send(ParentActorId, new TEvS3Provider::TEvNextBlock(batch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta(), ReadSpec->Compression ? TakeIngressDecompressedDelta(buffer->count()) : 0ULL));
-            if (Paused) {
+            if (IsPaused()) {
                 CpuTime += GetCpuTimeDelta();
                 auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
                 HandleEvent(*ev);
@@ -552,12 +640,19 @@ public:
         if (it != RangeCache.end()) {
             return it->second;
         }
+        IHttpRequestContext::TPtr context;
+        if (Work) {
+            const auto scope = Work->GetWorkScope();
+            LOG_CORO_D("S3 GetOrCreate: db=" << scope.Namespace << " pool=" << scope.Name);
+            context = MakeIntrusive<TDefaultHttpRequestContext>(scope);
+        }
         RetryStuff->Gateway->Download(RetryStuff->Url, RetryStuff->Headers,
                             range.Offset,
                             range.Length,
                             std::bind(&OnResult, GetActorSystem(), SelfActorId, range, ++RangeCookie, std::placeholders::_1),
                             {},
-                            RetryStuff->RetryPolicy);
+                            RetryStuff->RetryPolicy,
+                            std::move(context));
         LOG_CORO_D("Download STARTED [" << range.Offset << "-" << range.Length << "], cookie: " << RangeCookie);
         auto& result = RangeCache[range];
         if (result.Cookie) {
@@ -630,10 +725,14 @@ public:
 
         CpuTime += GetCpuTimeDelta();
 
+        SetUpstreamPause(true);
+
         while (!cache.Ready) {
             auto ev = WaitForSpecificEvent<TEvS3Provider::TEvReadResult2>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
             HandleEvent(*ev);
         }
+
+        SetUpstreamPause(false);
 
         StartCycleCount = GetCycleCountFast();
 
@@ -674,10 +773,11 @@ public:
             ThrowParquetNotOk(readers[0]->GetSchema(&schema));
             std::vector<int> columnIndices;
             std::vector<TColumnConverter> columnConverters;
+            TMissingColumns missingColumns;
 
-            BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters, ReadSpec->RowSpec, ReadSpec->Settings);
+            BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters, missingColumns, ReadSpec->RowSpec, ReadSpec->Settings);
 
-            // select count(*) case - single reader is enough
+            // no columns to read (select count(*) or all requested columns are absent in file) - single reader is enough
             if (!columnIndices.empty()) {
                 if (ReadSpec->ParallelRowGroupCount) {
                     readerCount = ReadSpec->ParallelRowGroupCount;
@@ -728,7 +828,7 @@ public:
             ui64 readyGroupCount = 0;
 
             while (readyGroupCount < numGroups) {
-                if (Paused) {
+                if (IsPaused()) {
                     CpuTime += GetCpuTimeDelta();
                     auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
                     HandleEvent(*ev);
@@ -750,7 +850,7 @@ public:
                     readyGroupIndex = ReadyRowGroups.top();
                     ReadyRowGroups.pop();
                 } else {
-                    // select count(*) case - no columns, no download, just fetch meta info instantly
+                    // no columns to read (select count(*) or all requested columns are absent in file) - no download, just fetch meta info instantly
                     readyGroupIndex = readyGroupCount;
                 }
                 SourceContext->DecChunkCount();
@@ -760,7 +860,14 @@ public:
                 std::shared_ptr<arrow::Table> table;
 
                 LOG_CORO_D("Decode RowGroup " << readyGroupIndex << " of " << numGroups << " from reader " << readyReaderIndex);
-                ThrowParquetNotOk(readers[readyReaderIndex]->DecodeRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[readyGroupIndex]) : static_cast<int>(readyGroupIndex) }, columnIndices, &table));
+                // TODO:
+                // Current unit takes <=100ms typically, which is fine; only large groups can overrun.
+                // Consider to split DecodeRowGroups for large row groups (arrow async / column streaming).
+                {
+                    StartUnit();
+                    Y_DEFER { StopUnit(); };
+                    ThrowParquetNotOk(readers[readyReaderIndex]->DecodeRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[readyGroupIndex]) : static_cast<int>(readyGroupIndex) }, columnIndices, &table));
+                }
                 readyGroupCount++;
 
                 auto downloadedBytes = ReadInflightSize[readyGroupIndex];
@@ -774,10 +881,14 @@ public:
                 bool isCancelled = false;
                 ui64 numRows = 0;
                 while (status = reader->ReadNext(&batch), status.ok() && batch) {
-                    auto convertedBatch = ConvertArrowColumns(batch, columnConverters);
+                    StartUnit();
+                    Y_DEFER { StopUnit(); };
+                    auto convertedBatch = ConvertArrowColumns(batch, columnConverters, missingColumns);
                     auto size = NUdf::GetSizeOfArrowBatchInBytes(*convertedBatch);
                     decodedBytes += size;
-                    Paused = SourceContext->Add(size, SelfActorId, Paused);
+                    if (SourceContext->Add(size, SelfActorId, DownstreamPaused)) {
+                        SetDownstreamPause(true);
+                    }
                     Send(ParentActorId, new TEvS3Provider::TEvNextRecordBatch(
                         convertedBatch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta()
                     ));
@@ -805,7 +916,7 @@ public:
                 if (isCancelled) {
                     LOG_CORO_D("RunCoroBlockArrowParserOverHttp - STOPPED ON SATURATION, downloaded " <<
                                SourceContext->GetDownloadedBytes() << " bytes");
-                    break;        
+                    break;
                 }
             }
         }
@@ -834,12 +945,13 @@ public:
         ThrowParquetNotOk(fileReader->GetSchema(&schema));
         std::vector<int> columnIndices;
         std::vector<TColumnConverter> columnConverters;
+        TMissingColumns missingColumns;
 
-        BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters, ReadSpec->RowSpec, ReadSpec->Settings);
+        BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters, missingColumns, ReadSpec->RowSpec, ReadSpec->Settings);
 
         for (int group = 0; group < fileReader->num_row_groups(); group++) {
 
-            if (Paused) {
+            if (IsPaused()) {
                 CpuTime += GetCpuTimeDelta();
                 LOG_CORO_D("RunCoroBlockArrowParserOverFile - PAUSED " << SourceContext->GetValue());
                 auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
@@ -860,10 +972,12 @@ public:
             bool isCancelled = false;
             ui64 numRows = 0;
             while (status = reader->ReadNext(&batch), status.ok() && batch) {
-                auto convertedBatch = ConvertArrowColumns(batch, columnConverters);
+                auto convertedBatch = ConvertArrowColumns(batch, columnConverters, missingColumns);
                 auto size = NUdf::GetSizeOfArrowBatchInBytes(*convertedBatch);
                 decodedBytes += size;
-                Paused = SourceContext->Add(size, SelfActorId, Paused);
+                if (SourceContext->Add(size, SelfActorId, DownstreamPaused)) {
+                    SetDownstreamPause(true);
+                }
                 Send(ParentActorId, new TEvS3Provider::TEvNextRecordBatch(
                     convertedBatch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta()
                 ));
@@ -892,10 +1006,18 @@ public:
         hFunc(TEvS3Provider::TEvContinue, Handle);
         hFunc(TEvS3Provider::TEvReadResult2, Handle);
         hFunc(TEvents::TEvPoison, Handle);
+        sFunc(TEvents::TEvWakeup, HandleWakeup);
     )
 
+    // CPU scheduler (TQuery::ResumeTasks) may send multiple TEvWakeups while we
+    // are throttled — one per peer's StopExecution. StartUnit's WaitForSpecificEvent
+    // consumes only the first; extras leak into the general event flow and reach
+    // StateFunc via WaitForEvent in ProcessOneEvent. Ignore them here; StartUnit
+    // re-checks TryStartExecution on every wakeup anyway.
+    void HandleWakeup() {}
+
     void ProcessOneEvent() {
-        if (!Paused) {
+        if (!IsPaused()) {
             if (!DeferredDecompressedDataParts.empty()) {
                 return;
             }
@@ -910,8 +1032,12 @@ public:
             }
         }
 
+        SetUpstreamPause(true);
+
         TAutoPtr<IEventHandle> ev(WaitForEvent().Release());
         StateFunc(ev);
+
+        SetUpstreamPause(false);
     }
 
     void ExtractDataPart(TEvS3Provider::TEvDownloadData& event, bool deferred = false) {
@@ -948,7 +1074,7 @@ public:
             HttpDataRps->Inc();
         }
         if (200L == HttpResponseCode || 206L == HttpResponseCode) {
-            if (Paused || !DeferredDataParts.empty()) {
+            if (IsPaused() || !DeferredDataParts.empty() || !InputBuffer.empty()) {
                 DeferredDataParts.push(std::move(ev->Release()));
                 if (DeferredQueueSize) {
                     DeferredQueueSize->Inc();
@@ -1021,7 +1147,15 @@ public:
         }
 
         if (!RetryStuff->IsCancelled() && RetryStuff->NextRetryDelay && RetryStuff->SizeLimit > 0ULL) {
-            GetActorSystem()->Schedule(*RetryStuff->NextRetryDelay, new IEventHandle(ParentActorId, SelfActorId, new TEvS3Provider::TEvRetryEventFunc(std::bind(&DownloadStart, RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize))));
+            IHttpRequestContext::TPtr retryContext;
+            if (Work) {
+                retryContext = MakeIntrusive<TDefaultHttpRequestContext>(Work->GetWorkScope());
+            }
+            GetActorSystem()->Schedule(*RetryStuff->NextRetryDelay, new IEventHandle(ParentActorId, SelfActorId, new TEvS3Provider::TEvRetryEventFunc(std::bind(&DownloadStart, RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize, std::move(retryContext)))));
+            if (!InputBuffer.empty()) {
+                RetryStuff->Offset -= InputBuffer.size();
+                RetryStuff->SizeLimit += InputBuffer.size();
+            }
             InputBuffer.clear();
             if (DeferredDataParts.size()) {
                 if (DeferredQueueSize) {
@@ -1045,7 +1179,7 @@ public:
 
     void HandleEvent(TEvS3Provider::TEvContinue::THandle&) {
         LOG_CORO_D("TEvContinue");
-        Paused = false;
+        SetDownstreamPause(false);
     }
 
     void Handle(TEvS3Provider::TEvContinue::TPtr& ev) {
@@ -1082,7 +1216,8 @@ public:
         const ::NMonitoring::TDynamicCounters::TCounterPtr& httpInflightSize,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& httpDataRps,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& rawInflightSize,
-        bool asyncDecompressing)
+        bool asyncDecompressing,
+        IDqSchedulableWorkFactoryPtr workFactory)
         : TActorCoroImpl(256_KB)
         , TSourceErrorHandler(inputIndex)
         , ReadActorFactoryCfg(readActorFactoryCfg)
@@ -1100,6 +1235,8 @@ public:
         , HttpDataRps(httpDataRps)
         , RawInflightSize(rawInflightSize)
         , AsyncDecompressing(asyncDecompressing)
+        , WorkFactory(std::move(workFactory))
+        , Work(WorkFactory ? WorkFactory->CreateSchedulableWork() : nullptr)
     {}
 
     ~TS3ReadCoroImpl() override {
@@ -1154,8 +1291,12 @@ private:
     }
 
     void Run() final {
+        LOG_CORO_D("Run start: WorkFactory=" << (WorkFactory ? "set" : "null") << " Work=" << (Work ? "set" : "null"));
+        if (Work) {
+            Work->RegisterForResume(SelfActorId);
+        }
         if (AsyncDecompressing) {
-            DecompressorActorId = Register(CreateS3DecompressorActor(SelfActorId, ReadSpec->Compression));
+            DecompressorActorId = Register(CreateS3DecompressorActor(SelfActorId, ReadSpec->Compression, WorkFactory));
         }
 
         FatalCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
@@ -1241,6 +1382,18 @@ private:
         return StateFunc(ev);
     }
 
+    // Process events while waiting for a slot to start a unit of work.
+    // The event processing MUST NOT re-enter StartUnit / ReconcileWorking —
+    // that would double-acquire the slot.
+    void ProcessEventWhileAcquiringSlot(TAutoPtr<IEventHandle> ev) {
+        if (ev->GetTypeRewrite() == TEvS3Provider::TEvContinue::EventType) {
+            // CA is ready to process data
+            DownstreamPaused = false;
+            return;
+        }
+        StateFunc(ev);
+    }
+
     TString GetLastDataAsText() {
         if (LastData.empty()) {
             return "[]";
@@ -1300,7 +1453,8 @@ private:
     ui64 StartCycleCount = 0;
     TString InputBuffer;
     std::optional<ui64> RowsRemained;
-    bool Paused = false;
+    bool DownstreamPaused = false;   // CA input queue full — stop producing
+    bool UpstreamPaused = false;     // waiting on HTTP data / HDRF admission — stop consuming
     std::queue<THolder<TEvS3Provider::TEvDownloadData>> DeferredDataParts;
     std::queue<THolder<TEvS3Provider::TEvDecompressDataResult>> DeferredDecompressedDataParts;
     TSourceContext::TPtr SourceContext;
@@ -1309,6 +1463,9 @@ private:
     const ::NMonitoring::TDynamicCounters::TCounterPtr HttpDataRps;
     const ::NMonitoring::TDynamicCounters::TCounterPtr RawInflightSize;
     const bool AsyncDecompressing;
+    const IDqSchedulableWorkFactoryPtr WorkFactory;
+    std::unique_ptr<IDqSchedulableWork> Work;
+    bool Working = false;            // holds HDRF slot — allowed to consume CPU
 };
 
 class TS3ReadCoroActor : public TActorCoro {
@@ -1355,7 +1512,8 @@ public:
         ui64 fileQueueConsumersCountDelta,
         bool asyncDecoding,
         bool asyncDecompressing,
-        bool allowLocalFiles)
+        bool allowLocalFiles,
+        IDqSchedulableWorkFactoryPtr workFactory)
         : TSourceErrorHandler(inputIndex)
         , ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
@@ -1384,7 +1542,8 @@ public:
         , FileQueueConsumersCountDelta(fileQueueConsumersCountDelta)
         , AsyncDecoding(asyncDecoding)
         , AsyncDecompressing(asyncDecompressing)
-        , AllowLocalFiles(allowLocalFiles) {
+        , AllowLocalFiles(allowLocalFiles)
+        , WorkFactory(std::move(workFactory)) {
         if (Counters) {
             QueueDataSize = Counters->GetCounter("QueueDataSize");
             QueueDataLimit = Counters->GetCounter("QueueDataLimit");
@@ -1418,7 +1577,7 @@ public:
     }
 
     void Bootstrap() {
-        LOG_D("TS3StreamReadActor", "Bootstrap");
+        LOG_D("TS3StreamReadActor", "Bootstrap WorkFactory=" << (WorkFactory ? "set" : "null"));
 
         // Arrow blocks are currently not limited by mem quoter, so we use rough buffer quotation
         // After exact mem control implementation, this allocation should be deleted
@@ -1464,7 +1623,8 @@ public:
                 Pattern,
                 PatternVariant,
                 ES3PatternType::Wildcard,
-                AllowLocalFiles));
+                AllowLocalFiles,
+                WorkFactory));
         }
         FileQueueEvents.Init(TxId, SelfId(), SelfId());
         FileQueueEvents.OnNewRecipientId(FileQueueActor);
@@ -1501,7 +1661,7 @@ public:
         if (ReadSpec->ParallelDownloadCount && splitCount >= ReadSpec->ParallelDownloadCount) {
             // explicit limit
             return false;
-        } 
+        }
         if (splitCount && DownloadSize * SourceContext->Ratio() > ReadActorFactoryCfg.DataInflight * 2) {
             // dynamic limit
             return false;
@@ -1547,7 +1707,8 @@ public:
             HttpInflightSize,
             HttpDataRps,
             RawInflightSize,
-            AsyncDecompressing
+            AsyncDecompressing,
+            WorkFactory
         );
         if (AsyncDecoding) {
             actorId = Register(new TS3ReadCoroActor(std::move(impl)));
@@ -1869,7 +2030,7 @@ private:
             }
         }
     }
-    
+
     void Handle(TEvS3Provider::TEvAck::TPtr& ev) {
         FileQueueEvents.OnEventReceived(ev);
     }
@@ -1992,6 +2153,7 @@ private:
     const bool AsyncDecoding;
     const bool AsyncDecompressing;
     const bool AllowLocalFiles;
+    const IDqSchedulableWorkFactoryPtr WorkFactory;
     bool IsCurrentBatchEmpty = false;
     bool IsFileQueueEmpty = false;
     bool IsWaitingFileQueueResponse = false;
@@ -2155,7 +2317,8 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     ::NMonitoring::TDynamicCounterPtr counters,
     ::NMonitoring::TDynamicCounterPtr taskCounters,
     IMemoryQuotaManager::TPtr memoryQuotaManager,
-    bool allowLocalFiles)
+    bool allowLocalFiles,
+    IDqSchedulableWorkFactoryPtr workFactory)
 {
     const IFunctionRegistry& functionRegistry = *holderFactory.GetFunctionRegistry();
 
@@ -2373,7 +2536,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
                                                   std::move(paths), addPathIndex, readSpec, computeActorId, retryPolicy,
                                                   cfg, counters, taskCounters, fileSizeLimit, sizeLimit, rowsLimitHint, memoryQuotaManager,
                                                   params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta,
-                                                  params.GetAsyncDecoding(), params.GetAsyncDecompressing(), allowLocalFiles);
+                                                  params.GetAsyncDecoding(), params.GetAsyncDecompressing(), allowLocalFiles, std::move(workFactory));
 
         return {actor, actor};
     }

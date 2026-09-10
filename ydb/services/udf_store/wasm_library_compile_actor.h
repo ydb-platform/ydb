@@ -21,6 +21,10 @@ private:
         WriteArtifactChunk,
         UpsertArtifact,
         UpdateMetaReady,
+        VerifyStillCurrent,
+        DeleteStaleArtifactChunks,
+        DeleteStaleArtifacts,
+        ConfirmStillCurrent,
         UpdateMetaFailed,
     };
 

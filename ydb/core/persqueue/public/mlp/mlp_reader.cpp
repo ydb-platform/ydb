@@ -32,8 +32,7 @@ void TReaderActor::Bootstrap() {
 }
 
 void TReaderActor::DoDescribe() {
-    YDB_LOG_DEBUG("Start describe",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Start describe");
     Become(&TReaderActor::DescribeState);
 
     NDescriber::TDescribeSettings settings = {
@@ -44,8 +43,7 @@ void TReaderActor::DoDescribe() {
 }
 
 void TReaderActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle NDescriber::TEvDescribeTopicsResponse",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
 
     ChildActorId = {};
 
@@ -54,7 +52,7 @@ void TReaderActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
 
     auto& topic = topics.begin()->second;
     switch(topic.Status) {
-        case NDescriber::EStatus::SUCCESS: {
+        case NDescriber::EStatus::Success: {
             Info = topic.Info;
             ConsumerConfig = GetConsumer(Info->Description.GetPQTabletConfig(), Settings.Consumer);
             if (!ConsumerConfig) {
@@ -63,7 +61,7 @@ void TReaderActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
             }
             return DoSelectPartition();
         }
-        case NDescriber::EStatus::BAD_REQUEST: {
+        case NDescriber::EStatus::BadRequest: {
             return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST,
                 NDescriber::Description(Settings.TopicName, topic.Status));
         }
@@ -82,16 +80,16 @@ STFUNC(TReaderActor::DescribeState) {
 }
 
 void TReaderActor::DoSelectPartition() {
-    YDB_LOG_DEBUG("Start select partition",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Start select partition");
     Become(&TReaderActor::SelectPartitionState);
     SendToTablet(Info->Description.GetBalancerTabletID(), new TEvPQ::TEvMLPGetPartitionRequest(Settings.TopicName, Settings.Consumer, Settings.ReceiveAttemptId));
 }
 
 void TReaderActor::Handle(TEvPQ::TEvMLPGetPartitionResponse::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPGetPartitionResponse",
-        {"logPrefix", NPQ_LOG_PREFIX},
-        {"ev", ev->Get()->Record.ShortDebugString()});
+    LOG_D(
+        "Handle TEvPQ::TEvMLPGetPartitionResponse",
+        {"ev", ev->Get()->Record.ShortDebugString()}
+    );
     auto* result = ev->Get();
     switch (result->GetStatus()) {
         case Ydb::StatusIds::SUCCESS: {
@@ -108,8 +106,7 @@ void TReaderActor::HandleOnSelectPartition(TEvPipeCache::TEvDeliveryProblem::TPt
     if (ev->Cookie != Cookie) {
         return;
     }
-    YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
     if (Backoff.HasMore()) {
         Backoff.Next();
         return DoSelectPartition();
@@ -127,8 +124,7 @@ STFUNC(TReaderActor::SelectPartitionState) {
 }
 
 void TReaderActor::DoRead() {
-    YDB_LOG_DEBUG("Start read",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Start read");
     Become(&TReaderActor::ReadState);
 
     auto* request = new TEvPQ::TEvMLPReadRequest(
@@ -145,8 +141,7 @@ void TReaderActor::DoRead() {
 }
 
 void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPReadResponse",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Handle TEvPQ::TEvMLPReadResponse");
 
     auto response = std::make_unique<TEvReadResponse>();
     response->BalancerTabletId = Info->Description.GetBalancerTabletID();
@@ -154,9 +149,10 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
         NKikimrPQClient::TDataChunk proto;
         bool res = proto.ParseFromString(message.GetData());
         if (!res) {
-            YDB_LOG_WARN("Error parsing data. Offset",
-                {"logPrefix", NPQ_LOG_PREFIX},
-                {"messageIdOffset", message.GetId().GetOffset()});
+            LOG_W(
+                "Error parsing data. Offset",
+                {"messageIdOffset", message.GetId().GetOffset()}
+            );
             // Skip message
             continue;
         }
@@ -201,9 +197,10 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
 
 void TReaderActor::Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev) {
     // TODO MLP Retry
-    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPErrorResponse",
-        {"logPrefix", NPQ_LOG_PREFIX},
-        {"ev", ev->Get()->Record.ShortDebugString()});
+    LOG_D(
+        "Handle TEvPQ::TEvMLPErrorResponse",
+        {"ev", ev->Get()->Record.ShortDebugString()}
+    );
     ReplyErrorAndDie(ev->Get()->GetStatus(), std::move(ev->Get()->GetErrorMessage()));
 }
 
@@ -211,8 +208,7 @@ void TReaderActor::HandleOnRead(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
     if (ev->Cookie != Cookie) {
         return;
     }
-    YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
     if (Backoff.HasMore()) {
         Backoff.Next();
         return DoRead();
@@ -236,9 +232,10 @@ void TReaderActor::SendToTablet(ui64 tabletId, IEventBase *ev) {
 }
 
 void TReaderActor::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-    YDB_LOG_INFO("Reply error",
-        {"logPrefix", NPQ_LOG_PREFIX},
-        {"statusCodeName", Ydb::StatusIds::StatusCode_Name(errorCode)});
+    LOG_I(
+        "Reply error",
+        {"statusCodeName", Ydb::StatusIds::StatusCode_Name(errorCode)}
+    );
     Send(ParentId, new TEvReadResponse(errorCode, std::move(errorMessage)));
     PassAway();
 }

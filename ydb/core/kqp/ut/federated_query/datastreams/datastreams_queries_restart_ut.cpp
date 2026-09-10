@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsQueriesRestart) {
         const auto runTest = [&](bool local) {
             const std::string suffix = local ? "_local" : "_nonlocal";
             const std::string inputTopicName  = std::string("restartAfterPartIncInputTopic")  + suffix;
-            const std::string outputTopicName = std::string("restartAfterPartIncOutputTopic") + suffix;
+            const TString outputTopicName = std::string("restartAfterPartIncOutputTopic") + suffix;
             const std::string sourceName      = std::string("restartAfterPartIncSource")      + suffix;
             const std::string queryName       = std::string("restartAfterPartIncQuery")       + suffix;
 

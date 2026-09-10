@@ -731,6 +731,7 @@ class LintExtraParams:
         'alice/agents/booking',
         'bigrt',
         'grut',
+        'quality/antifraud',
         'quality/user_sessions',
         'yabs',
         'maps',

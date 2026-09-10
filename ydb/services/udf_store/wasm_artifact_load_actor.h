@@ -27,19 +27,27 @@ private:
     };
 
     NActors::TActorId ReplyTo_;
-    TString Md5_;
+    TString Name_;
     TString Manifest_;
+    //! Uid of the upload to load. Part of the artifact key, so an artifact left
+    //! behind by a compile of an earlier upload simply is not found here.
+    TString Uid_;
     TString ArtifactTablePath_;
     TString ArtifactChunksTablePath_;
     NWasm::TWasmManifest ParsedManifest_;
+    //! Uid of every required library, for the same reason.
+    THashMap<TString, TString> LibraryUids_;
     TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> FunctionRegistry_;
 
     EStep Step_ = EStep::ReadModuleArtifact;
     size_t NextLibraryIndex_ = 0;
     TString PendingLibraryName_;
+    TString PendingLibraryUid_;
     NTableQuery::TWasmArtifactRow ModuleArtifact_;
     NTableQuery::TWasmArtifactRow PendingLibraryArtifact_;
-    TVector<TString> PendingWasmChunks_;
+    //! Body of the wasm_data blob, held while the object_code blob of the same
+    //! artifact is read. Already verified against the sizes in the artifact row.
+    TString PendingWasmData_;
     TVector<NWasm::TNamedModuleBytecode> Libraries_;
 
     void ExecuteQuery(const TString& yql, bool readOnly);
@@ -53,16 +61,20 @@ private:
 public:
     TWasmArtifactLoadActor(
         const NActors::TActorId& replyTo,
-        const TString& md5,
+        const TString& name,
         const TString& manifest,
+        const TString& uid,
         const TString& artifactTablePath,
         const TString& artifactChunksTablePath,
+        THashMap<TString, TString> libraryUids,
         TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> functionRegistry)
         : ReplyTo_(replyTo)
-        , Md5_(md5)
+        , Name_(name)
         , Manifest_(manifest)
+        , Uid_(uid)
         , ArtifactTablePath_(artifactTablePath)
         , ArtifactChunksTablePath_(artifactChunksTablePath)
+        , LibraryUids_(std::move(libraryUids))
         , FunctionRegistry_(std::move(functionRegistry))
     {}
 

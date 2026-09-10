@@ -21,7 +21,7 @@ TKqpComputeActor::TKqpComputeActor(
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
     NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    NScheduler::TSchedulableActorOptions schedulableOptions,
+    NScheduler::TSchedulableOptions schedulableOptions,
     NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     const TString& database
@@ -50,7 +50,9 @@ void TKqpComputeActor::DoBootstrap() {
     const auto& taskParams = GetTask().GetTaskParams();
     if (const auto it = taskParams.find(TString(NUdfStore::NWasm::WasmUdfModulesTaskParam)); it != taskParams.end()) {
         try {
-            WasmQueryCompartment_.emplace(NUdfStore::NWasm::ParseWasmUdfModulesTaskParam(it->second));
+            WasmQueryCompartment_.emplace(
+                NUdfStore::NWasm::ParseWasmUdfModulesTaskParam(it->second),
+                GetAllocatorPtr());
         } catch (const std::exception& e) {
             ErrorFromIssue(TIssuesIds::DEFAULT_ERROR, TStringBuilder()
                 << "Failed to acquire WASM query compartment: " << e.what());
@@ -373,7 +375,7 @@ IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::T
     NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
     const TGUCSettings::TPtr& GUCSettings,
-    NScheduler::TSchedulableActorOptions schedulableOptions,
+    NScheduler::TSchedulableOptions schedulableOptions,
     NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     const TString& database

@@ -22,7 +22,7 @@ namespace NKqp {
 
 using namespace NYql;
 
-enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, Aggregate, Limit, Sort, UnionAll, TableLookup, IndexLookupJoin, CBOTree, Root };
+enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, DependentJoin, Aggregate, GroupingSets, Window, Limit, Sort, UnionAll, TableLookup, IndexLookupJoin, CBOTree, TableEffect, Root };
 
 // clang-format off
 #define PHASE_ENUM(X) \
@@ -123,7 +123,6 @@ struct TPhysicalOpProps {
     std::optional<int> StageId;
     std::optional<TString> Algorithm;
     std::optional<TOrderEnforcer> OrderEnforcer;
-    bool EnsureAtMostOne = false;
 
     std::optional<TRBOMetadata> Metadata;
     std::optional<TRBOStatistics> Statistics;
@@ -150,7 +149,6 @@ private:
         StageId = other.StageId;
         Algorithm = other.Algorithm;
         OrderEnforcer = other.OrderEnforcer;
-        EnsureAtMostOne = other.EnsureAtMostOne;
         Metadata = other.Metadata;
         Statistics = other.Statistics;
         JoinAlgo = other.JoinAlgo;
@@ -222,16 +220,28 @@ public:
         return {};
     }
 
-    virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) {
-        Y_UNUSED(props);
-        return {};
+    /**
+     * Get the unique raw input IUs used to discover subplan references. The
+     * result is plan-independent, cached by operators that expose it, and
+     * preserves first-occurrence order.
+     */
+    virtual const TVector<TInfoUnit>& GetUniqueRawInputIUs() const {
+        static const TVector<TInfoUnit> empty;
+        return empty;
     }
+
+    // Resolve cached, plan-independent raw input IUs against the current registry.
+    // The result itself is intentionally not cached.
+    TVector<TInfoUnit> GetSubplanIUs(const TSubplans& subplans) const;
 
     const TTypeAnnotationNode* GetIUType(const TInfoUnit& iu);
 
-    virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() {
+    virtual TVector<std::reference_wrapper<const TExpression>> GetExpressions() const {
         return {};
     }
+
+    // Overrides must also bind stored expressions not exposed by GetExpressions().
+    virtual void BindExpressionPlanProps(TPlanProps* props);
 
     virtual void ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) {
         Y_UNUSED(map);
@@ -474,7 +484,6 @@ public:
     TInfoUnit GetElementName() const;
     void SetElementName(const TInfoUnit& elementName);
     const TExpression& GetExpression() const;
-    TExpression& GetExpressionRef();
     bool DependsOnlyOn(const TVector<TInfoUnit>& availableIUs) const;
     void SetExpression(TExpression expr);
 
@@ -486,13 +495,12 @@ private:
 
 class TOpMap: public IUnaryOperator {
 public:
-    TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool ordered = false);
-    TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TVector<TMapElement>& mapElements,
-           bool ordered = false);
+    TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements);
+    TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TVector<TMapElement>& mapElements);
 
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
-    virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
-    virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
+    virtual const TVector<TInfoUnit>& GetUniqueRawInputIUs() const override;
+    virtual TVector<std::reference_wrapper<const TExpression>> GetExpressions() const override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
     virtual bool PropagateNameConstraints() override;
     virtual TPlanAliases::TAliasMap ComputeAliases() override;
@@ -511,21 +519,24 @@ public:
     virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     virtual TString GetExplainName() const override { return "Map"; }
 
-    bool IsOrdered() const {
-        return Ordered;
-    }
-
-    TVector<TMapElement>& GetMapElements() { return MapElements; }
-    TMapElement* FindOutputElement(const TInfoUnit& output);
+    const TVector<TMapElement>& GetMapElements() const { return MapElements; }
+    void SetMapElements(TVector<TMapElement> mapElements);
+    void AddMapElement(TMapElement mapElement);
+    void RemoveMapElement(size_t index);
+    void SetMapElementExpression(size_t index, TExpression expression);
     const TMapElement* FindOutputElement(const TInfoUnit& output) const;
     bool HasOutputElement(const TInfoUnit& output) const;
     bool HasRenames() const;
 
-    TVector<TMapElement> MapElements;
-    bool Ordered = false;
-
 protected:
     void ComputeOutputIUs() override;
+
+private:
+    void InvalidateUniqueRawInputIUs();
+
+    TVector<TMapElement> MapElements;
+    mutable bool UniqueRawInputIUsDirty = true;
+    mutable TVector<TInfoUnit> UniqueRawInputIUs;
 };
 
 /**
@@ -610,18 +621,140 @@ protected:
     void ComputeOutputIUs() override;
 };
 
+class TOpGroupingSets: public IUnaryOperator {
+public:
+    TOpGroupingSets(TIntrusivePtr<TOpAggregate> input, TVector<TVector<TInfoUnit>> groupingSets, TPositionHandle pos);
+
+    const TVector<TVector<TInfoUnit>>& GetGroupingSets() const {
+        return GroupingSets;
+    }
+
+    virtual TString ToString(TExprContext& ctx) override;
+    // This op is not present is explain, but we have to define a function, because it's a pure virtual.
+    virtual TString GetExplainName() const override { return "GroupingSets"; }
+
+protected:
+    void ComputeOutputIUs() override;
+
+private:
+    TVector<TVector<TInfoUnit>> GroupingSets;
+};
+
+enum class EWindowFuncKind : ui32 {
+    Aggregate,
+    Native,
+};
+
+TString ToStringWindowFuncKind(EWindowFuncKind kind);
+EWindowFuncKind WindowFuncKindFromString(const TString& kind);
+
+struct TOpWindowFunc {
+    TOpWindowFunc() = default;
+    TOpWindowFunc(const TString& function, EWindowFuncKind kind, const TVector<TInfoUnit>& arguments, const TInfoUnit& resultColName)
+        : Function(function)
+        , Kind(kind)
+        , Arguments(arguments)
+        , ResultColName(resultColName) {
+    }
+
+    TString Function;
+    EWindowFuncKind Kind = EWindowFuncKind::Aggregate;
+    TVector<TInfoUnit> Arguments;
+    TInfoUnit ResultColName;
+};
+
+enum class EWindowFrameType : ui32 {
+    Rows,
+    Range,
+    Groups,
+};
+
+enum class EWindowFrameBound : ui32 {
+    UnboundedPreceding,
+    Preceding,
+    CurrentRow,
+    Following,
+    UnboundedFollowing,
+};
+
+TString ToStringWindowFrameType(EWindowFrameType type);
+EWindowFrameType WindowFrameTypeFromString(const TString& type);
+TString ToStringWindowFrameBound(EWindowFrameBound bound);
+EWindowFrameBound WindowFrameBoundFromString(const TString& bound);
+
+struct TOpWindowFrame {
+    EWindowFrameType Type = EWindowFrameType::Rows;
+    EWindowFrameBound BeginKind = EWindowFrameBound::UnboundedPreceding;
+    ui64 BeginValue = 0;
+    EWindowFrameBound EndKind = EWindowFrameBound::CurrentRow;
+    ui64 EndValue = 0;
+
+    bool IsPrefixFrame() const {
+        return EndKind == EWindowFrameBound::CurrentRow ||
+               (EndKind == EWindowFrameBound::Preceding) ||
+               (EndKind == EWindowFrameBound::Following && EndValue == 0);
+    }
+};
+
+// Represents a window function.
+class TOpWindow: public IUnaryOperator {
+public:
+    TOpWindow(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TOpWindowFunc>& windowFuncs,
+              const TVector<TInfoUnit>& partitionKeys, const TVector<TSortElement>& sortElements, const TOpWindowFrame& frame);
+
+    virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
+    virtual void PropagateLiveness(ILivenessContext& ctx) override;
+    void RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) override;
+    void RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) override;
+    virtual TString ToString(TExprContext& ctx) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
+    virtual TString GetExplainName() const override {
+        return "Window";
+    }
+
+    const TVector<TOpWindowFunc>& GetWindowFuncs() const {
+        return WindowFuncs;
+    }
+    TVector<TOpWindowFunc>& GetWindowFuncs() {
+        return WindowFuncs;
+    }
+    const TVector<TInfoUnit>& GetPartitionKeys() const {
+        return PartitionKeys;
+    }
+    TVector<TInfoUnit>& GetPartitionKeys() {
+        return PartitionKeys;
+    }
+    const TVector<TSortElement>& GetSortElements() const {
+        return SortElements;
+    }
+    TVector<TSortElement>& GetSortElements() {
+        return SortElements;
+    }
+    const TOpWindowFrame& GetFrame() const {
+        return Frame;
+    }
+
+    TVector<TOpWindowFunc> WindowFuncs;
+    TVector<TInfoUnit> PartitionKeys;
+    TVector<TSortElement> SortElements;
+    TOpWindowFrame Frame;
+
+protected:
+    void ComputeOutputIUs() override;
+};
+
 class TOpFilter: public IUnaryOperator {
 public:
     TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& filterExpr);
     TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& filterExpr);
 
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
-    virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
+    virtual const TVector<TInfoUnit>& GetUniqueRawInputIUs() const override;
     virtual TString ToString(TExprContext& ctx) override;
     virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     virtual TString GetExplainName() const override { return "Filter"; }
 
-    virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
+    virtual TVector<std::reference_wrapper<const TExpression>> GetExpressions() const override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
     virtual TPlanAliases::TAliasMap ComputeAliases() override;
     virtual void ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) override;
@@ -631,12 +764,16 @@ public:
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
-    TExpression GetFilterExpression() const { return FilterExpr; }
-
-    TExpression FilterExpr;
+    const TExpression& GetFilterExpression() const { return FilterExpr; }
+    void SetFilterExpression(TExpression filterExpr);
 
 protected:
     void ComputeOutputIUs() override;
+
+private:
+    TExpression FilterExpr;
+    mutable bool UniqueRawInputIUsDirty = true;
+    mutable TVector<TInfoUnit> UniqueRawInputIUs;
 };
 
 bool TestAndExtractEqualityPredicate(TExprNode::TPtr pred, TExprNode::TPtr& leftArg, TExprNode::TPtr& rightArg);
@@ -650,7 +787,7 @@ public:
             const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys, const TVector<TExpression>& joinFilters);
 
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
-    virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
+    virtual TVector<std::reference_wrapper<const TExpression>> GetExpressions() const override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
     virtual bool PropagateNameConstraints() override;
     virtual TPlanAliases::TAliasMap ComputeAliases() override;
@@ -669,6 +806,40 @@ public:
     TString JoinKind;
     TVector<std::pair<TInfoUnit, TInfoUnit>> JoinKeys;
     TVector<TExpression> JoinFilters;
+
+protected:
+    void ComputeOutputIUs() override;
+};
+
+/**
+ * Dependent join based on Neumann "Unnesting Arbitrary Queries".
+ *
+ */
+class TOpDependentJoin: public IBinaryOperator {
+public:
+    TOpDependentJoin(TIntrusivePtr<IOperator> domain, TIntrusivePtr<IOperator> input, const TVector<TInfoUnit>& dependencies, TPositionHandle pos);
+
+    virtual void PropagateLiveness(ILivenessContext& ctx) override;
+
+    virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
+    virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
+
+    virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "DependentJoin"; }
+
+    TIntrusivePtr<IOperator>& GetDomain() {
+        return GetLeftInput();
+    }
+
+    TIntrusivePtr<IOperator>& GetInput() {
+        return GetRightInput();
+    }
+
+    void SetInput(TIntrusivePtr<IOperator> newInput) {
+        SetRightInput(std::move(newInput));
+    }
+
+    TVector<TInfoUnit> Dependencies;
 
 protected:
     void ComputeOutputIUs() override;
@@ -712,7 +883,8 @@ public:
     virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     virtual TString GetExplainName() const override { return "Limit"; }
 
-    virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
+    virtual TVector<std::reference_wrapper<const TExpression>> GetExpressions() const override;
+    void BindExpressionPlanProps(TPlanProps* props) override;
 
     EOpPhase GetLimitPhase() const {
         return LimitPhase;
@@ -797,7 +969,7 @@ public:
                    const TVector<std::pair<TInfoUnit, TInfoUnit>>& residualJoinKeys = {});
 
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
-    virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
+    virtual TVector<std::reference_wrapper<const TExpression>> GetExpressions() const override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
     virtual TString ToString(TExprContext& ctx) override;
     virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
@@ -886,6 +1058,55 @@ private:
     void RebuildChildren();
 };
 
+// Table Effects operator inserts/updates/deletes rows based on input tuples
+
+enum class EEffectType : ui32 {
+    InsertRows,
+    InsertRowsIndex,
+    UpdateRows,
+    UpdateRowsIndex,
+    UpsertRows,
+    UpsertRowsIndex,
+    DeleteRows,
+    DeleteRowsIndex
+};
+
+struct TEffectOptions {
+    std::optional<TVector<TString>> Columns;
+    std::optional<TVector<TString>> ReturningColumns;
+    std::optional<TVector<TString>> DefaultColumns;
+    std::optional<TString> OnConflict;
+    std::optional<bool> IsBatch;
+    std::optional<TVector<TExprNode::TPtr>> Settings;
+};
+
+class TOpTableEffect: public IUnaryOperator {
+
+public:
+    TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table, EEffectType type, TEffectOptions options);
+    virtual TString GetExplainName() const override;
+    virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
+
+    virtual void PropagateLiveness(ILivenessContext& ctx) override;
+    //virtual void RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) override;
+    //virtual void RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) override;
+    virtual TString ToString(TExprContext& ctx) override;
+
+    TExprNode::TPtr BuildSettings(TExprContext& ctx);
+
+    //virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
+    //virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
+
+    TExprNode::TPtr Table;
+    EEffectType EffectType;
+    TEffectOptions Options;
+    TVector<TInfoUnit> OutputIUs;
+    TVector<TInfoUnit> UsedIUs;
+
+protected:
+    void ComputeOutputIUs() override;
+};
+
 // End-of-traversal sentinel for TOpIterator
 struct TOpEnd {};
 
@@ -947,10 +1168,12 @@ private:
         TIntrusivePtr<IOperator> Parent;
         size_t ChildIndex = 0;
         std::shared_ptr<TInfoUnit> SubplanIU;
-        TVector<TInfoUnit> SubplanIUs;
-        size_t NextSubplanIdx = 0;
+        // Points into the operator's raw member cache. The cursor is advanced
+        // before descent, but the next registry lookup stays live until this
+        // frame resumes.
+        const TVector<TInfoUnit>* UniqueRawInputIUs = nullptr;
+        size_t NextRawInputIUIdx = 0;
         size_t NextChildIdx = 0;
-        bool SubplansLoaded = false;
         // Pre-order only: the node was already emitted when its frame was entered
         bool Emitted = false;
     };

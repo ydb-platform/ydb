@@ -14,7 +14,6 @@ SRCS(
 
 PEERDIR(
     library/cpp/json
-    library/cpp/json/yson
     library/cpp/resource
 )
 

@@ -11,6 +11,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/mind/local.h>

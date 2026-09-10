@@ -237,6 +237,13 @@ message ExecuteQueryRequest {
 
     // Format settings, only used for Ydb.ResultSet.Format.FORMAT_ARROW
     Ydb.Formats.ArrowFormatSettings arrow_format_settings = 14;
+
+    // Enable PostgreSQL-like affected_rows statistics collection.
+    // When true, the server counts logical base-table rows affected by DML
+    // (INSERT, UPSERT, REPLACE, UPDATE, DELETE), excluding secondary-index
+    // maintenance. Zero for read-only queries and non-matching DML.
+    // Enabling this setting can lead to overheads.
+    bool collect_affected_rows = 15;
 }
 
 message ResultSetMeta {

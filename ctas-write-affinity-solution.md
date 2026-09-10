@@ -154,14 +154,14 @@ return Build<TKiWriteTable>(ctx, node->Pos())
 [`HandleWriteTable()`](ydb/core/kqp/provider/yql_kikimr_type_ann.cpp:931) в type annotation валидирует `TKiWriteTable`:
 - Проверяет тип `World`
 - Проверяет тип `DataSink` (должен быть `kikimr`)
-- Для `mode="fill_table"` — проверяет `CtasShardingColumns` (если присутствует), устанавливает тип узла как тип `World` и завершает работу
+- Для `mode="fill_table"` — устанавливает тип узла как тип `World` и завершает работу (без проверки `CtasShardingColumns` — проверка происходит позже в `AnnotateFillTable()`, раздел 2.2.1.4)
 - Для других режимов — проверяет тип `Input` (должен быть списком или stream структур), соответствие схеме таблицы, наличие ключевых колонок
 
 **Было:** `HandleWriteTable()` для `mode="fill_table"` устанавливает тип узла как тип `World` и завершает работу. `CtasShardingColumns` не проверяется.
 
 **Стало (без аффинити):** `HandleWriteTable()` для `mode="fill_table"` устанавливает тип узла как тип `World` и завершает работу. `CtasShardingColumns` не проверяется (логика не изменилась).
 
-**Стало (с аффинити):** `HandleWriteTable()` для `mode="fill_table"` проверяет `CtasShardingColumns` (если присутствует) через `EnsureTupleOfAtoms()`, устанавливает тип узла как тип `World` и завершает работу.
+**Стало (с аффинити):** `HandleWriteTable()` для `mode="fill_table"` устанавливает тип узла как тип `World` и завершает работу (логика не изменилась — проверка `CtasShardingColumns` происходит в `AnnotateFillTable()`, раздел 2.2.1.4).
 
 ##### 2.2.1.3 BuildFillTable: TKiWriteTable → TKqlFillTable
 
@@ -542,7 +542,7 @@ auto sinkInput = Build<TDqCnHashShuffle>(ctx, pos)
 | `Output.Stage` | `transformStage` | Источник строк — Transform Stage |
 | `Output.Index` | `"0"` | Индекс выхода из Transform Stage |
 | `KeyColumns` | `keyColumnAtoms` | Колонки для вычисления хэша (из `CtasShardingColumns`) |
-| `HashFunc` | `"ColumnShardHashV1"` | Та же hash-функция, что использует ColumnShard (раздел 3.2) |
+| `HashFunc` | `"ColumnShardHashV1"` | Та же hash-функция, что использует ColumnShard для маршрутизации строк |
 | `UseSpilling` | `false` | Spilling на диск отключён |
 
 `TDqCnHashShuffle` — соединение между Transform Stage и Sink Stage. При исполнении каждая строка маршрутизируется: `hash(KeyColumns) → bucket → task i`.

@@ -40,6 +40,8 @@ struct TDqFillAggregator {
     std::atomic<ui64> TotalCount;
     std::atomic<ui64> EarlyFinishedCount;
     std::atomic<ui64> FinishedCount;
+    // Unbound V2 outputs cannot accept control messages, even when other outputs can accept rows.
+    std::atomic<ui64> UnboundCount = 0;
 
     ui64 GetCount(EDqFillLevel level) {
         ui32 index = static_cast<ui32>(level);

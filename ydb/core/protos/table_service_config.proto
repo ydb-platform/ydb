@@ -582,7 +582,6 @@ message TTableServiceConfig {
     // outputs. Can be overridden per query with PRAGMA ydb.EnableNewRBOPhysicalStagePeephole.
     optional bool EnableNewRBOPhysicalStagePeephole = 147 [default = true, (InvalidateCompileCache) = true];
 
-    // Let a ParallelUnionAll consumer stage size itself from resources instead of copying the producer task count.
-    // Requires scatter wiring: with one-to-one channels a consumer beyond the producer count would get no input.
+    // Enables consumer expansion and Scatter outputs; all participating nodes must support the Scatter wire type.
     optional bool EnableParallelUnionAllConsumerSizing = 148 [default = false, (InvalidateCompileCache) = true];
 };

@@ -13,7 +13,9 @@
 
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <algorithm>
 #include <type_traits>
+#include <utility>
 #include <ydb/library/formats/arrow/hash/xx_hash.h>
 
 #include <util/string/builder.h>
@@ -1009,10 +1011,6 @@ private:
     std::shared_ptr<TDqFillAggregator> Aggregator;
 };
 
-// Static round-robin across the output's channels: every row goes to exactly one channel, picked by a plain counter.
-// Deliberately does NOT consult channel fill levels - routing by that signal was measured to concentrate rows on a
-// straggler under node degradation and to add variance on a healthy cluster. Row placement is decided by the plan
-// (which channels this producer owns), not at runtime.
 class TDqOutputScatterConsumer : public IDqOutputConsumer {
 public:
     TDqOutputScatterConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth)
@@ -1027,14 +1025,11 @@ public:
     }
 
     EDqFillLevel GetFillLevel() const override {
-        auto result = Aggregator->GetFillLevel();
-        if (result == HardLimit) {
-            for (auto output : Outputs) {
-                output->UpdateFillLevel();
-            }
-            result = Aggregator->GetFillLevel();
+        const auto [output, level] = FindWritableOutput();
+        if (output) {
+            LastWritableOutput = output;
         }
-        return result;
+        return level;
     }
 
     void Consume(TUnboxedValue&& value) final {
@@ -1047,7 +1042,6 @@ public:
         Next()->WidePush(values, count);
     }
 
-    // Checkpoints and watermarks are control messages, not rows: every channel must see them.
     void Consume(NDqProto::TCheckpoint&& checkpoint) override {
         for (auto& output : Outputs) {
             output->Push(NDqProto::TCheckpoint(checkpoint));
@@ -1085,17 +1079,39 @@ public:
     }
 
 private:
-    IDqOutput::TPtr& Next() {
-        if (RoundRobin >= Outputs.size()) {
-            RoundRobin = 0;
+    std::pair<TMaybe<size_t>, EDqFillLevel> FindWritableOutput() const {
+        if (Aggregator->UnboundCount.load()) {
+            return {Nothing(), HardLimit};
         }
-        return Outputs[RoundRobin++];
+        if (Aggregator->GetCount(NoLimit) == Outputs.size() && Aggregator->TotalCount.load() == Outputs.size()) {
+            return {RoundRobin, NoLimit};
+        }
+        EDqFillLevel result = NoLimit;
+        for (size_t offset = 0; offset < Outputs.size(); ++offset) {
+            const size_t index = (RoundRobin + offset) % Outputs.size();
+            const auto level = Outputs[index]->UpdateFillLevel();
+            if (level == NoLimit) {
+                return {index, NoLimit};
+            }
+            result = std::max(result, level);
+        }
+        return {Nothing(), result};
+    }
+
+    IDqOutput::TPtr& Next() {
+        // Fill checks do not reserve capacity. If pressure changed after Fetch began, retain the already fetched row
+        // on the last writable output; the next GetFillLevel applies backpressure before fetching another row.
+        const size_t selected = FindWritableOutput().first.GetOrElse(LastWritableOutput.GetOrElse(RoundRobin));
+        LastWritableOutput.Clear();
+        RoundRobin = (selected + 1) % Outputs.size();
+        return Outputs[selected];
     }
 
     TVector<IDqOutput::TPtr> Outputs;
     const TMaybe<ui32> OutputWidth;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     size_t RoundRobin = 0;
+    mutable TMaybe<size_t> LastWritableOutput;
 };
 
 } // namespace

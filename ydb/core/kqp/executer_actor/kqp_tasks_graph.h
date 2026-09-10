@@ -232,7 +232,6 @@ struct TGraphMeta {
 
     ui32 DqChannelVersion = 1u;
 
-    // Size a ParallelUnionAll consumer stage from resources instead of copying the producer task count.
     bool EnableParallelUnionAllConsumerSizing = false;
 
     const TIntrusivePtr<TProtoArenaHolder>& GetArenaIntrusivePtr() const {

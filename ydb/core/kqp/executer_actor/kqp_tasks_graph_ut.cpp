@@ -180,7 +180,6 @@ struct TBuildConfig {
     // scenario - and the only way to make that difference observable.
     bool ReverseSnapshotNodeOrder = false;
 
-    // Lets a ParallelUnionAll consumer stage size itself from resources instead of copying the producer task count.
     bool EnableParallelUnionAllConsumerSizing = false;
 };
 
@@ -680,8 +679,6 @@ public:
         });
     }
 
-    // Physical plan of the query most recently passed to BuildTasks. Lets a test locate stages by their connection
-    // kinds instead of hardcoding stage indices, which shift whenever the optimizer changes.
     const NKqpProto::TKqpPhyQuery& LastPhysicalQuery() const {
         UNIT_ASSERT_C(LastPlan, "BuildTasks has not been called yet");
         return LastPlan->GetPhysicalQuery();
@@ -2872,28 +2869,28 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 25u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 234);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 234);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 253);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 253);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 93);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 101);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 93);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  8), 100);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  9), 93);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 101);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  8), 108);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  9), 101);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 10), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 11), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 12), 93);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 13), 100);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 14), 93);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 12), 101);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 13), 108);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 14), 101);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 15), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 16), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 16), 2);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 17), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 18), 93);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 18), 101);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 19), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 20), 93);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 21), 187);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 22), 93);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 23), 281);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 20), 101);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 21), 202);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 22), 101);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 23), 303);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 24), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
@@ -2902,28 +2899,28 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         AssertNodeDistribution(dist, 0, {
             /* stage 0 */ { {2, 104}, {3, 16} },
             /* stage 1 */ { {2, 104}, {3, 16} },
-            /* stage 2 */ { {1, 6}, {2, 114} },
-            /* stage 3 */ { {1, 6}, {2, 114} },
+            /* stage 2 */ { {2, 107}, {3, 13} },
+            /* stage 3 */ { {2, 107}, {3, 13} },
             /* stage 4 */ { {2, 104}, {3, 16} },
-            /* stage 5 */ { {1, 93} },
+            /* stage 5 */ { {1, 101} },
             /* stage 6 */ { {2, 104}, {3, 16} },
-            /* stage 7 */ { {1, 93} },
-            /* stage 8 */ { {1, 100} },
-            /* stage 9 */ { {1, 93} },
+            /* stage 7 */ { {1, 101} },
+            /* stage 8 */ { {1, 108} },
+            /* stage 9 */ { {1, 101} },
             /* stage 10 */ { {2, 104}, {3, 16} },
             /* stage 11 */ { {2, 104}, {3, 16} },
-            /* stage 12 */ { {1, 93} },
-            /* stage 13 */ { {1, 100} },
-            /* stage 14 */ { {1, 93} },
+            /* stage 12 */ { {1, 101} },
+            /* stage 13 */ { {1, 108} },
+            /* stage 14 */ { {1, 101} },
             /* stage 15 */ { {1, 1} },
-            /* stage 16 */ { {1, 1} },
+            /* stage 16 */ { {2, 1} },
             /* stage 17 */ { {1, 1} },
-            /* stage 18 */ { {1, 93} },
+            /* stage 18 */ { {1, 101} },
             /* stage 19 */ { {1, 1} },
-            /* stage 20 */ { {1, 93} },
-            /* stage 21 */ { {1, 53}, {2, 67} },
-            /* stage 22 */ { {1, 93} },
-            /* stage 23 */ { {2, 79}, {3, 41} },
+            /* stage 20 */ { {1, 101} },
+            /* stage 21 */ { {1, 38}, {2, 82} },
+            /* stage 22 */ { {1, 101} },
+            /* stage 23 */ { {2, 57}, {3, 63} },
             /* stage 24 */ { {1, 1} },
         });
     }
@@ -2961,12 +2958,8 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
 
 } // Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild)
 
-// A ParallelUnionAll consumer stage is not bound to its producers by correctness (any row may go to any consumer task),
-// so EnableParallelUnionAllConsumerSizing lets it size itself from resources. Without the flag the consumer count is
-// pinned to the producer count, which caps a consumer-heavy stage at however many partitions the source table has.
 Y_UNIT_TEST_SUITE(TKqpTasksGraphParallelUnionAll) {
 
-    // 4 partitions on 1 node -> few producers, and the aggregating consumer stage above UNION ALL copies that count.
     class TFixture : public TKqpTasksGraphBuildFixture<16> {
     public:
         void SetUp(NUnitTest::TTestContext& ctx) override {
@@ -3004,9 +2997,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphParallelUnionAll) {
             return Build(Query, enableSizing);
         }
 
-        // The scan stage (both union branches read the same table, so the optimizer emits a single shared scan) is
-        // pinned to 2 tasks, leaving the 16-thread pool free for the consumer to grow into. Pinning anything else would
-        // make that stage FIXED and defeat the sizing under test.
+        // Both branches share one scan. Fix only that stage so consumer sizing remains automatic.
         static constexpr TStringBuf Query = R"(
             PRAGMA ydb.OptimizerHints = 'Rows(pua_src # 1e9)';
             PRAGMA ydb.OverridePlanner = @@ [
@@ -3019,9 +3010,6 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphParallelUnionAll) {
             ) GROUP BY k;
         )";
 
-        // PUA is still present, but this consumer only evaluates a stateless expression and terminates early. It must
-        // retain the producer width: creating extra consumers cannot accelerate a LIMIT and may increase work before
-        // cancellation reaches the scans.
         static constexpr TStringBuf LimitQuery = R"(
             PRAGMA ydb.OptimizerHints = 'Rows(pua_src # 1e9)';
             PRAGMA ydb.OverridePlanner = @@ [
@@ -3034,8 +3022,6 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphParallelUnionAll) {
             ) LIMIT 10;
         )";
 
-        // The consumer has a physical hash combine, but the producer is already much wider than the cluster. Further
-        // resource-only expansion has no evidence of shortening the critical path and can amplify partial rows.
         static constexpr TStringBuf WideAggregationQuery = R"(
             PRAGMA ydb.OptimizerHints = 'Rows(pua_src # 1e9)';
             PRAGMA ydb.OverridePlanner = @@ [
@@ -3048,8 +3034,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphParallelUnionAll) {
             ) GROUP BY k;
         )";
 
-        // Different producer widths exercise the compatibility path: with sizing disabled, a narrow PUA input must
-        // retain the legacy Map wire type even though the consumer copies the wider input's task count.
+        // OFF must retain Map outputs even when one input is narrower than the consumer.
         static constexpr TStringBuf UnequalInputsQuery = R"(
             SELECT k, SUM(v) AS s FROM (
                 SELECT k, v FROM pua_src
@@ -3067,8 +3052,7 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphParallelUnionAll) {
         )";
     };
 
-    // Returns the task count of the stage whose only inputs are ParallelUnionAll connections, plus the largest task
-    // count among its producer stages - that maximum is what CountComputeTasks pins the consumer to by default.
+    // Returns {consumer task count, maximum producer task count}.
     static std::pair<ui32, ui32> FindPuaConsumer(const TTaskDistribution& dist, const NKqpProto::TKqpPhyQuery& phy) {
         for (ui32 stageIdx = 0; stageIdx < phy.GetTransactions(0).StagesSize(); ++stageIdx) {
             const auto& stage = phy.GetTransactions(0).GetStages(stageIdx);
@@ -3149,14 +3133,24 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphParallelUnionAll) {
             "a non-aggregating LIMIT consumer must keep the producer count");
     }
 
-    Y_UNIT_TEST_F(WideAggregatingConsumerKeepsProducerCount, TFixture) {
+    Y_UNIT_TEST_F(WideAggregatingConsumerSizedFromResources, TFixture) {
+        auto offDist = Build(WideAggregationQuery, /* enableSizing */ false);
+        AssertNoCrossNodeCopyChannels(offDist);
+
+        auto [offConsumers, offProducers] = FindPuaConsumer(offDist, LastPhysicalQuery());
+        UNIT_ASSERT_VALUES_EQUAL(offProducers, 8);
+        UNIT_ASSERT_VALUES_EQUAL(offConsumers, offProducers);
+        UNIT_ASSERT_VALUES_EQUAL(offDist.ScatterOutputs, 0);
+
         auto dist = Build(WideAggregationQuery, /* enableSizing */ true);
         AssertNoCrossNodeCopyChannels(dist);
 
         auto [consumers, producers] = FindPuaConsumer(dist, LastPhysicalQuery());
-        UNIT_ASSERT_C(producers > 0, "no ParallelUnionAll consumer stage found in the wide aggregation plan");
-        UNIT_ASSERT_VALUES_EQUAL_C(consumers, producers,
-            "an already-wide aggregation consumer must keep the producer count");
+        UNIT_ASSERT_VALUES_EQUAL(producers, offProducers);
+        UNIT_ASSERT_C(consumers > producers,
+            "a wide aggregation consumer must expand when resources allow, got "
+                << consumers << " consumers for " << producers << " producers");
+        UNIT_ASSERT_C(dist.ScatterOutputs > 0, "expanded consumer must receive Scatter outputs");
     }
 }
 

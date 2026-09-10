@@ -2,6 +2,8 @@
 
 #include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/blob_manager.h>
+#include <ydb/core/tx/columnshard/blobs_action/bs/gc.h>
+#include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
 #include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
@@ -74,6 +76,31 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT_C(!mgr.HasBlobsForGroups({ 999u }), "an unrelated group must not match");
         // The gate is polled on every wakeup, so the query has to be non-destructive.
         UNIT_ASSERT_C(mgr.HasBlobsForGroups({ OldGroup }), "repeated query must give the same answer");
+    }
+
+    // The gate must stay closed between GC-task build and the commit that erases the rows.
+    Y_UNIT_TEST(TestMoveDataGateHeldWhileGCInFlight) {
+        TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        static constexpr ui64 TabletId = 43;
+        static constexpr ui32 OldGroup = 100;
+        static constexpr ui32 NewGroup = 200;
+        static constexpr ui32 ReassignGen = 5;
+
+        auto tabletInfo = MakeTabletInfo(TabletId, { { 0, OldGroup }, { ReassignGen, NewGroup } }, TBlobStorageGroupType::ErasureNone);
+        auto mgr = std::make_shared<NOlap::TBlobManager>(tabletInfo, 3, NOlap::TTabletId(TabletId));
+        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
+            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        NOlap::NBlobOperations::TStorageCounters storageCounters(NOlap::NBlobOperations::TGlobal::DefaultStorageId);
+        auto counters = storageCounters.GetConsumerCounter(NOlap::NBlobOperations::EConsumer::GC)->GetRemoveGCCounters();
+
+        mgr->DeleteBlobOnComplete(NOlap::TTabletId(TabletId), MakeDsBlobId(OldGroup, TabletId, 1, 1, 2));
+        UNIT_ASSERT_C(mgr->HasBlobsForGroups({ OldGroup }), "queued blob must hold the gate closed");
+
+        auto task = mgr->BuildGCTask(NOlap::NBlobOperations::TGlobal::DefaultStorageId, mgr, shared, counters);
+        UNIT_ASSERT_C(task, "a queued delete must produce a GC task");
+        UNIT_ASSERT_C(
+            mgr->HasBlobsForGroups({ OldGroup }), "the gate must stay closed while the GC task is in flight, even though the queue is drained");
     }
 
     // After submission InitialPortionIds is preserved, so a failed change can re-enter Pending.

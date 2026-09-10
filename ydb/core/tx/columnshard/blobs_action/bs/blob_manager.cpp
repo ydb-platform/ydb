@@ -512,6 +512,10 @@ TSmallBlobsStat TBlobManager::CalcSmallBlobsToDelete(const ui64 sizeThreshold) c
 }
 
 bool TBlobManager::HasBlobsForGroups(const THashSet<ui32>& groups) const {
+    // A built GC task drains BlobsToDelete before its rows leave the local DB, so the queues alone lie.
+    if (CollectGenStepInFlight) {
+        return true;
+    }
     const auto keptBlobInGroups = [&](const TLogoBlobID& blob) {
         const ui32 groupId = TabletInfo->GroupFor(blob.Channel(), blob.Generation());
         return groupId != Max<ui32>() && groups.contains(groupId);

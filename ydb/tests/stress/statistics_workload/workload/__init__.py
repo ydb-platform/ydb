@@ -208,14 +208,12 @@ class Workload(object):
         if table_name is None:
             table_name = table_name_with_prefix(self.table_prefix)
         if table_path is None:
-            table_path = self.database + "/" + table_name
+            table_path = self.database.rstrip('/') + "/" + table_name
         table_statistics = ".metadata/statistics_v2"
         trace_id = random_string(5)
 
         try:
             logger.info(f"[{trace_id}] start new round")
-
-            self.pool.acquire()
 
             if create:
                 logger.info(f"[{trace_id}] create table '{table_name}'")
@@ -229,28 +227,26 @@ class Workload(object):
             logger.info(f"[{trace_id}] table '{table_name}' path id: {path_id}")
 
             self.add_data(table_path, trace_id)
-            if create:
-                count = self.rows_count(table_name)
-                logger.info(f"[{trace_id}] number of rows in table '{table_name}' {count}")
-                if count != self.batch_count * self.batch_size:
-                    raise Exception(f"[{trace_id}] the number of rows in the '{table_name}' does not match the expected")
+            count = self.rows_count(table_name)
+            logger.info(f"[{trace_id}] number of rows in table '{table_name}' {count}")
+            if count != self.batch_count * self.batch_size:
+                raise Exception(f"[{trace_id}] the number of rows in the '{table_name}' does not match the expected")
 
             logger.info(f"[{trace_id}] analyze '{table_name}'")
             self.analyze(table_path)
 
-            if create:
-                count = self.statistics_count(table_statistics, path_id)
-                logger.info(f"[{trace_id}] number of single-column (and tag-less) rows in statistics table '{table_statistics}' {count}")
-                if count == 0:
-                    raise Exception(f"[{trace_id}] statistics table '{table_statistics}' has no single-column (or tag-less) stats")
+            count = self.statistics_count(table_statistics, path_id)
+            logger.info(f"[{trace_id}] number of single-column (and tag-less) rows in statistics table '{table_statistics}' {count}")
+            if count == 0:
+                raise Exception(f"[{trace_id}] statistics table '{table_statistics}' has no single-column (or tag-less) stats")
 
-                multi_count = self.statistics_multi_count(table_statistics, path_id)
-                logger.info(f"[{trace_id}] number of multi-column rows in statistics table '{table_statistics}' {multi_count}")
-                if multi_count == 0:
-                    raise Exception(f"[{trace_id}] statistics table '{table_statistics}' has no multi-column stats")
+            multi_count = self.statistics_multi_count(table_statistics, path_id)
+            logger.info(f"[{trace_id}] number of multi-column rows in statistics table '{table_statistics}' {multi_count}")
+            if multi_count == 0:
+                raise Exception(f"[{trace_id}] statistics table '{table_statistics}' has no multi-column stats")
 
-                expected_count = self.batch_count * self.batch_size
-                self.wait_for_planner_row_count_estimate(table_name, expected_count, trace_id)
+            expected_count = self.batch_count * self.batch_size
+            self.wait_for_planner_row_count_estimate(table_name, expected_count, trace_id)
         except Exception as e:
             logger.error(f"[{trace_id}] {type(e)}, {e}")
             raise

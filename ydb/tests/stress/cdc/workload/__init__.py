@@ -92,13 +92,14 @@ class WorkloadRunner:
     def __init__(self, client, duration, path=None):
         self.client = client
         self.duration = duration
+        db = self.client.database.rstrip('/')
         if path:
             if path.startswith('/'):
                 self.table_path = path
             else:
-                self.table_path = '/'.join([self.client.database.rstrip('/'), path])
+                self.table_path = '/'.join([db, path])
         else:
-            self.table_path = '/'.join([self.client.database, "table", str(random.randint(100, 999))])
+            self.table_path = '/'.join([db, "table", str(random.randint(100, 999))])
         ydb.interceptor.monkey_patch_event_handler()
 
     def __enter__(self):

@@ -532,9 +532,9 @@ private:
                 ++row;
             }
             CheckPendingWatermark();
-            if (Batches && (!KeysForLookup->empty() || ReadyQueue.RowCount())) {
+            if (Batches && row) {
                 Batches->Inc();
-                LruHits->Add(ReadyQueue.RowCount());
+                LruHits->Add(row - AwaitingQueue.size());
                 LruMiss->Add(AwaitingQueue.size());
             }
             if (KeysForLookup->empty()) {

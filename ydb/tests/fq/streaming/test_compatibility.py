@@ -4,7 +4,6 @@ import time
 from typing import Callable
 
 from ydb.tests.fq.streaming_common.common import StreamingTestBase
-from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +41,7 @@ class SimpleTest:
 
 
 Queries = [SimpleTest("test_compatibility_")]
+
 
 class StreamingTestBase2(StreamingTestBase):
 

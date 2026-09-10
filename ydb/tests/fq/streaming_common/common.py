@@ -446,14 +446,16 @@ class Kikimr:
     def __init__(
         self,
         config: KikimrConfigGenerator,
-        main_binary_path: str,
-        stable_binary_path: str,
+        main_binary_path: Optional[str] = None,
+        stable_binary_path: Optional[str] = None,
         timeout_seconds: int = 240,
         enable_discovery: bool = True,
         tenant_database: str = "/Root/my_tenant",
     ):
-        #kikimr_driver_path
-        #ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
+        if main_binary_path is None:
+            main_binary_path = config.get_binary_path(0)
+        if stable_binary_path is None:
+            stable_binary_path = main_binary_path
         logger.info(yatest.common.execute([main_binary_path, "-V"], wait=True).stdout.decode("utf-8"))
 
         self.main_binary_path = main_binary_path

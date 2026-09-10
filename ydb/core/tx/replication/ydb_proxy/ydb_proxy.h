@@ -231,15 +231,16 @@ struct TEvYdbProxy {
         {
         }
 
-        explicit TStartTopicReadingSessionResult(const TString& readSessionId)
+        TStartTopicReadingSessionResult(const TString& readSessionId, ui64 committedOffset)
             : ReadSessionId(readSessionId)
+            , CommittedOffset(committedOffset)
         {
         }
 
         void Out(IOutputStream& out) const;
 
         TString ReadSessionId;
-        ui64 CommittedOffset = 0;
+        ui64 CommittedOffset;
     };
 
     struct TEvStartTopicReadingSession: public TGenericResponse<TEvStartTopicReadingSession, EvStartTopicReadingSession, TStartTopicReadingSessionResult> {

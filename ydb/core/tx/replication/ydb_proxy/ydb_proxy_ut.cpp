@@ -712,6 +712,61 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         const auto reader = CreateTopicReader(env, "/Root/topic");
         auto started = env.GetRuntime().GrabEdgeEventRethrow<TEvYdbProxy::TEvStartTopicReadingSession>(env.GetSender());
         UNIT_ASSERT_VALUES_EQUAL(started->Sender, reader);
+        UNIT_ASSERT_VALUES_EQUAL(started->Get()->Result.CommittedOffset, 0);
+    }
+
+    void CheckTopicSessionCommittedOffset(bool local) {
+        TEnv env;
+
+        auto settings = NYdb::NTopic::TCreateTopicSettings()
+            .BeginAddConsumer()
+                .ConsumerName("consumer")
+            .EndAddConsumer();
+
+        auto create = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(
+            new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", settings));
+        UNIT_ASSERT(create->Get()->Result.IsSuccess());
+
+        const auto proxy = local
+            ? env.GetRuntime().Register(CreateLocalYdbProxy(env.GetDatabase()))
+            : env.GetYdbProxy();
+        auto readerSettings = TEvYdbProxy::TTopicReaderSettings()
+            .ConsumerName("consumer")
+            .AppendTopics(NYdb::NTopic::TTopicReadSettings("/Root/topic")
+                .AppendPartitionIds(0)
+            );
+
+        for (const ui64 committedOffset : {0, 1}) {
+            auto createReader = env.Send<TEvYdbProxy::TEvCreateTopicReaderResponse>(proxy,
+                new TEvYdbProxy::TEvCreateTopicReaderRequest(readerSettings));
+            const auto reader = createReader->Get()->Result;
+            UNIT_ASSERT(reader);
+
+            auto started = env.GetRuntime().GrabEdgeEventRethrow<TEvYdbProxy::TEvStartTopicReadingSession>(
+                env.GetSender(), TDuration::Seconds(30));
+            UNIT_ASSERT_C(started, "Topic session did not start without a read request");
+            UNIT_ASSERT_VALUES_EQUAL(started->Sender, reader);
+            UNIT_ASSERT_VALUES_EQUAL(started->Get()->Result.CommittedOffset, committedOffset);
+            UNIT_ASSERT_STRING_CONTAINS(started->Get()->ToString(),
+                TStringBuilder() << " CommittedOffset: " << committedOffset);
+
+            env.SendAsync(reader, new TEvents::TEvPoison());
+            if (committedOffset == 0) {
+                UNIT_ASSERT(NTestHelpers::WriteTopic(env, "/Root/topic", "message"));
+                auto commit = env.Send<TEvYdbProxy::TEvCommitOffsetResponse>(
+                    new TEvYdbProxy::TEvCommitOffsetRequest(
+                        "/Root/topic", 0, "consumer", 1, NYdb::NTopic::TCommitOffsetSettings()));
+                UNIT_ASSERT(commit->Get()->Result.IsSuccess());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(StartsTopicSessionFromCommittedOffset) {
+        CheckTopicSessionCommittedOffset(false);
+    }
+
+    Y_UNIT_TEST(StartsLocalTopicSessionFromCommittedOffset) {
+        CheckTopicSessionCommittedOffset(true);
     }
 
     Y_UNIT_TEST(ReadNonExistentTopic) {

@@ -146,6 +146,11 @@ public:
 
     NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() override;
 
+    void PersistHostHealth(
+        THostIndex hostIndex,
+        EHostHealth oldHealth,
+        EHostHealth newHealth) override;
+
     // IHostStateController implementation
     void SetHostState(
         THostIndex hostIndex,

@@ -1148,6 +1148,54 @@ NThreading::TFuture<TDbgSnapshot> TDirectBlockGroup::BuildMonSnapshot()
     return future;
 }
 
+<<<<<<< HEAD
+=======
+NThreading::TFuture<TVChunkStatsGatherResult>
+TDirectBlockGroup::GatherVChunkStats(EVChunkStatsDetail detail) const
+{
+    auto promise = NewPromise<TVChunkStatsGatherResult>();
+    auto future = promise.GetFuture();
+    Executor->ExecuteSimple(
+        [weakSelf = weak_from_this(),
+         detail,
+         promise = std::move(promise)]   //
+        () mutable
+        {
+            if (auto self = weakSelf.lock()) {
+                promise.SetValue(self->DoGatherVChunkStats(detail));
+            } else {
+                promise.SetValue({});
+            }
+        });
+
+    return future;
+}
+
+void TDirectBlockGroup::PersistHostHealth(
+    const THostIndex hostIndex,
+    const EHostHealth oldHealth,
+    const EHostHealth newHealth)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(Service);
+
+    LOG_WARN(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s %s persisting health change: %s -> %s",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostAndNode(hostIndex).c_str(),
+        ToString(oldHealth).c_str(),
+        ToString(newHealth).c_str());
+
+    Service->PersistHostHealth(
+        DirectBlockGroupIndex,
+        hostIndex,
+        oldHealth,
+        newHealth);
+}
+
+>>>>>>> 8a60344d593 (NBS-7513:  Add Oracle->PartitionDirect PersistHostHealth path (#52610))
 void TDirectBlockGroup::SetHostState(
     THostIndex hostIndex,
     EHostState oldState,

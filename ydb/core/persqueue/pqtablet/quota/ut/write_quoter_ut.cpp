@@ -1,4 +1,4 @@
-#include "quota.h"
+#include <ydb/core/persqueue/pqtablet/quota/quota.h>
 
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -26,19 +26,18 @@ TActorId RegisterQuoter(auto& runtime, auto& edgeActor, size_t writeSpeedInBytes
     pqConfig.MutableQuotingConfig()->SetEnableQuoting(true);
     pqConfig.SetTopicsAreFirstClassCitizen(true);
 
-    NPersQueue::TTopicConverterPtr topicConverter;
     NKikimrPQ::TPQTabletConfig config;
     config.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(writeSpeedInBytesPerSecond);
     config.MutablePartitionConfig()->SetBurstSize(writeSpeedInBytesPerSecond);
     config.MutablePartitionConfig()->SetWriteSpeedInMessagesPerSecond(writeSpeedInMessagesPerSecond);
     config.MutablePartitionConfig()->SetBurstSizeInMessages(burstSizeInMessages);
- 
+
     TPartitionId partitionId;
     TActorId tabletActor = edgeActor;
     ui64 tabletId = 28739;
     std::shared_ptr<TTabletCountersBase> counters = std::make_shared<TTabletCountersBase>();
 
-    auto quoterId = runtime.Register(CreateWriteQuoter(pqConfig, topicConverter, config, partitionId, tabletActor, tabletId, counters));
+    auto quoterId = runtime.Register(CreateWriteQuoter(pqConfig, /*topicConverter=*/nullptr, config, partitionId, tabletActor, tabletId, counters));
     runtime.EnableScheduleForActor(quoterId);
 
     return quoterId;

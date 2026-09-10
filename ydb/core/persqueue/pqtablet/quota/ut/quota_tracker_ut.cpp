@@ -3,6 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/size_literals.h>
+#include <util/generic/ylimits.h>
 
 namespace NKikimr::NPQ {
 
@@ -130,6 +131,110 @@ Y_UNIT_TEST(UpdateConfigDoesNotGiftBurst) {
 
     UNIT_ASSERT(quota.UpdateConfigIfChanged(4_MB, 2_MB, ts));
     UNIT_ASSERT(!quota.CanExaust(ts));
+}
+
+Y_UNIT_TEST(UpdateConfigUnchangedReturnsFalse) {
+    TInstant ts = TInstant::MilliSeconds(123456789);
+    TQuotaTracker quota(2_MB, 2_MB, ts);
+
+    UNIT_ASSERT(!quota.UpdateConfigIfChanged(2_MB, 2_MB, ts));
+    UNIT_ASSERT_VALUES_EQUAL(quota.GetTotalSpeed(), 2_MB);
+}
+
+Y_UNIT_TEST(UpdateConfigClampsAvailableToNewCap) {
+    TInstant ts = TInstant::MilliSeconds(123456789);
+    TQuotaTracker quota(4_MB, 2_MB, ts);
+
+    UNIT_ASSERT(quota.UpdateConfigIfChanged(2_MB, 2_MB, ts));
+
+    const ui64 blobSize = 1_KB;
+    const ui64 immediate = DrainWhilePossible(quota, ts, blobSize) * blobSize;
+    UNIT_ASSERT_LE(immediate, 2_MB / 20 + blobSize);
+}
+
+Y_UNIT_TEST(UpdateConfigChangesSpeed) {
+    TInstant ts = TInstant::MilliSeconds(123456789);
+    TQuotaTracker quota(2_MB, 2_MB, ts);
+
+    DrainWhilePossible(quota, ts, 1_KB);
+    UNIT_ASSERT(quota.UpdateConfigIfChanged(1_MB, 1_MB, ts + TDuration::MilliSeconds(1)));
+    UNIT_ASSERT_VALUES_EQUAL(quota.GetTotalSpeed(), 1_MB);
+}
+
+Y_UNIT_TEST(ZeroSpeedNeverAllowsExhaust) {
+    TInstant ts = TInstant::MilliSeconds(123456789);
+    TQuotaTracker quota(0, 0, ts);
+
+    UNIT_ASSERT(!quota.CanExaust(ts));
+    UNIT_ASSERT(!quota.CanExaust(ts + TDuration::Seconds(10)));
+    UNIT_ASSERT_VALUES_EQUAL(quota.GetTotalSpeed(), 0);
+}
+
+Y_UNIT_TEST(LowSpeedKeepsAtLeastOneUnit) {
+    TInstant ts = TInstant::MilliSeconds(123456789);
+    TQuotaTracker quota(1, 1, ts);
+
+    UNIT_ASSERT(quota.CanExaust(ts));
+    quota.Exaust(1, ts);
+    UNIT_ASSERT(!quota.CanExaust(ts));
+    UNIT_ASSERT(quota.CanExaust(ts + TDuration::Seconds(1)));
+}
+
+Y_UNIT_TEST(QuotedTimeAccumulatesWhileThrottled) {
+    TInstant ts = TInstant::MilliSeconds(123456789);
+    TQuotaTracker quota(2_MB, 2_MB, ts);
+
+    UNIT_ASSERT_VALUES_EQUAL(quota.GetQuotedTime(ts), TDuration::Zero());
+    quota.Exaust(2_MB, ts);
+    ts += TDuration::Seconds(1);
+    UNIT_ASSERT_VALUES_EQUAL(quota.GetQuotedTime(ts), TDuration::Seconds(1));
+}
+
+Y_UNIT_TEST(PastTimestampDoesNotRefill) {
+    TInstant ts = TInstant::MilliSeconds(123456789);
+    TQuotaTracker quota(2_MB, 2_MB, ts);
+
+    DrainWhilePossible(quota, ts, 1_KB);
+    quota.Update(ts - TDuration::Seconds(1));
+    UNIT_ASSERT(!quota.CanExaust(ts));
+}
+
+Y_UNIT_TEST(SameMillisecondUpdateIsNoop) {
+    TInstant ts = TInstant::MilliSeconds(123456789);
+    TQuotaTracker quota(2_MB, 2_MB, ts);
+
+    DrainWhilePossible(quota, ts, 1_KB);
+    quota.Update(ts + TDuration::MicroSeconds(500));
+    UNIT_ASSERT(!quota.CanExaust(ts + TDuration::MicroSeconds(500)));
+}
+
+Y_UNIT_TEST(HugeValuesDoNotOverflow) {
+    TInstant ts = TInstant::MilliSeconds(123456789);
+    TQuotaTracker quota(Max<ui64>(), Max<ui64>(), ts);
+
+    UNIT_ASSERT(quota.CanExaust(ts));
+    UNIT_ASSERT_VALUES_EQUAL(quota.GetTotalSpeed(), Max<ui64>());
+    quota.Exaust(Max<ui64>(), ts);
+    quota.Update(ts + TDuration::Days(365));
+    UNIT_ASSERT(quota.CanExaust(ts + TDuration::Days(365)));
+}
+
+Y_UNIT_TEST(HugeBurstOverSmallSpeed) {
+    TInstant ts = TInstant::MilliSeconds(123456789);
+    TQuotaTracker quota(Max<ui64>(), 1, ts);
+
+    UNIT_ASSERT(quota.CanExaust(ts));
+    quota.Update(ts + TDuration::MilliSeconds(1));
+    quota.Exaust(1, ts + TDuration::MilliSeconds(1));
+}
+
+Y_UNIT_TEST(HugeExhaustGoesNegativeThenRecovers) {
+    TInstant ts = TInstant::MilliSeconds(123456789);
+    TQuotaTracker quota(2_MB, 2_MB, ts);
+
+    quota.Exaust(Max<ui64>(), ts);
+    UNIT_ASSERT(!quota.CanExaust(ts));
+    UNIT_ASSERT(!quota.CanExaust(ts + TDuration::Seconds(1)));
 }
 
 } //Y_UNIT_TEST_SUITE

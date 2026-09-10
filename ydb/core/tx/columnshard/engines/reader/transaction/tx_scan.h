@@ -18,7 +18,7 @@ private:
 
     // Properties of the request. Each reads the request and the tablet, and nothing else.
     TSnapshot GetSnapshot(const NColumnShard::TSchemeShardLocalPathId& ssPathId) const;
-    TReadMetadataBase::ESorting GetSorting() const;
+    ERequestSorting GetRequestSorting() const;
     bool GetDeduplicationEnabled(const TSnapshot& snapshot) const;
     TString GetReaderName() const;
     NConveyorComposite::TCPULimitsConfig GetCpuLimits() const;
@@ -28,7 +28,7 @@ private:
     // Steps building the read description
     TConclusion<std::shared_ptr<ITableMetadataAccessor>> MakeTableAccessor(
         const NColumnShard::TSchemeShardLocalPathId& ssPathId, const TSnapshot& snapshot) const;
-    TReadDescription MakeReadDescription(const TSnapshot& snapshot, const TReadMetadataBase::ESorting sorting,
+    TReadDescription MakeReadDescription(const TSnapshot& snapshot, const ERequestSorting requestSorting,
         const std::shared_ptr<NLWTrace::TOrbit>& orbit, const EReaderClass readerClass,
         const std::shared_ptr<ITableMetadataAccessor>& tableMetadataAccessor) const;
     ui64 OnScanStartedForPath(const TReadDescription& read, NLWTrace::TOrbit& orbit) const;

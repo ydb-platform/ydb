@@ -30,12 +30,12 @@ TSnapshot TTxScan::GetSnapshot(const NColumnShard::TSchemeShardLocalPathId& ssPa
     return Self->TablesManager.ResolveReadSnapshot(ssPathId, snapshot);
 }
 
-TReadMetadataBase::ESorting TTxScan::GetSorting() const {
+ERequestSorting TTxScan::GetRequestSorting() const {
     const auto& request = Ev->Get()->Record;
     if (!request.HasReverse()) {
-        return TReadMetadataBase::ESorting::NONE;
+        return ERequestSorting::NONE;
     }
-    return request.GetReverse() ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC;
+    return request.GetReverse() ? ERequestSorting::DESC : ERequestSorting::ASC;
 }
 
 bool TTxScan::GetDeduplicationEnabled(const TSnapshot& snapshot) const {
@@ -70,7 +70,7 @@ const TVersionedPresetSchemas& TTxScan::GetPresetSchemas() const {
     return Self->GetIndexOptional() ? Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedSchemas() : defaultSchemas;
 }
 
-TReadDescription TTxScan::MakeReadDescription(const TSnapshot& snapshot, const TReadMetadataBase::ESorting sorting,
+TReadDescription TTxScan::MakeReadDescription(const TSnapshot& snapshot, const ERequestSorting requestSorting,
     const std::shared_ptr<NLWTrace::TOrbit>& orbit, const EReaderClass readerClass,
     const std::shared_ptr<ITableMetadataAccessor>& tableMetadataAccessor) const {
     const auto& request = Ev->Get()->Record;
@@ -230,7 +230,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     auto orbit = std::make_shared<NLWTrace::TOrbit>();
     const NColumnShard::TSchemeShardLocalPathId ssPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(request);
     const TSnapshot snapshot = GetSnapshot(ssPathId);
-    const TReadMetadataBase::ESorting sorting = GetSorting();
+    const ERequestSorting requestSorting = GetRequestSorting();
     const TScannerConstructorContext context(snapshot, request.HasItemsLimit() ? request.GetItemsLimit() : 0);
     const NConveyorComposite::TCPULimitsConfig cpuLimits = GetCpuLimits();
     if (request.GetGeneration() > 1) {

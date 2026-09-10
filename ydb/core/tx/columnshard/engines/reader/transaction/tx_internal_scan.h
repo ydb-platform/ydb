@@ -20,11 +20,11 @@ private:
 
     // Properties of the request. Each reads the request and the tablet, and nothing else.
     TSnapshot GetSnapshot() const;
-    TReadMetadataBase::ESorting GetSorting() const;
+    ERequestSorting GetRequestSorting() const;
 
     // Steps building the read description
     TConclusion<std::shared_ptr<ITableMetadataAccessor>> MakeTableAccessor(const TSnapshot& snapshot) const;
-    TReadDescription MakeReadDescription(const TSnapshot& snapshot, const TReadMetadataBase::ESorting sorting,
+    TReadDescription MakeReadDescription(const TSnapshot& snapshot, const ERequestSorting requestSorting,
         const std::shared_ptr<ITableMetadataAccessor>& tableMetadataAccessor) const;
 
     // Null when diagnostics are disabled.

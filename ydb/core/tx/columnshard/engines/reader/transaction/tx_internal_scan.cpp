@@ -25,11 +25,11 @@ TSnapshot TTxInternalScan::GetSnapshot() const {
     return Self->TablesManager.ResolveReadSnapshot(request.GetPathId().GetSchemeShardLocalPathId(), request.GetSnapshot());
 }
 
-TReadMetadataBase::ESorting TTxInternalScan::GetSorting() const {
-    return InternalScanEvent->Get()->GetReverse() ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC;
+ERequestSorting TTxInternalScan::GetRequestSorting() const {
+    return InternalScanEvent->Get()->GetReverse() ? ERequestSorting::DESC : ERequestSorting::ASC;
 }
 
-TReadDescription TTxInternalScan::MakeReadDescription(const TSnapshot& snapshot, const TReadMetadataBase::ESorting sorting,
+TReadDescription TTxInternalScan::MakeReadDescription(const TSnapshot& snapshot, const ERequestSorting requestSorting,
     const std::shared_ptr<ITableMetadataAccessor>& tableMetadataAccessor) const {
     const auto& request = *InternalScanEvent->Get();
     AFL_VERIFY(Self->GetIndexOptional());
@@ -116,7 +116,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         {"tablet", Self->TabletID()},
         {"snapshot", snapshot.DebugString()},
         {"taskId", request.TaskIdentifier});
-    const TReadMetadataBase::ESorting sorting = GetSorting();
+    const ERequestSorting requestSorting = GetRequestSorting();
     const TScannerConstructorContext context(snapshot, 0);
 
     auto accessorConclusion = MakeTableAccessor(snapshot);

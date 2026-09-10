@@ -2179,6 +2179,88 @@ class YdbBenchTest(unittest.TestCase):
                     )
                 )
 
+    def test_logical_cpu_sampler_deltas_and_resets(self):
+        sampler = linux_telemetry.LogicalCpuSampler(proc_root=Path('/test-proc'))
+        samples = [
+            "cpu0 100 10 20 400 10 2 3 5 50 2\ncpu7 1 0 0 1 0 0 0 0\n",
+            "cpu0 120 10 30 450 20 4 6 10 60 2\ncpu7 2 0 0 2 0 0 0 0\n",
+            "cpu0 1 0 0 1 0 0 0 0\n",
+        ]
+        with mock.patch.object(Path, "read_text", side_effect=samples) as read, mock.patch.object(
+            linux_telemetry.time, "monotonic", side_effect=[10, 10.2, 12, 14]
+        ):
+            first = sampler.sample()
+            self.assertIsNone(first["cpus"][0])
+            self.assertIs(sampler.sample(), first)
+            second = sampler.sample()
+            self.assertEqual(second["cpus"][0], {"busy": 40, "user": 20, "system": 15, "iowait": 10, "steal": 5})
+            self.assertEqual(second["interval_seconds"], 2)
+            self.assertIsNone(sampler.sample()["cpus"][0])
+            self.assertEqual(read.call_count, 3)
+        with mock.patch.object(Path, "read_text", side_effect=OSError), mock.patch.object(
+            linux_telemetry.time, "monotonic", return_value=16
+        ):
+            self.assertFalse(sampler.sample()["available"])
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for browser logic checks")
+    def test_topology_groups_preserve_sparse_cpu_ids(self):
+        script = web._JS[web._JS.index("function topologyGroups(") : web._JS.index("async function renderTopology(")]
+        script += """
+const t={allowed_cpus:[2,9,130],physical_cores:[[2,130]],numa_nodes:[{id:7,cpus:[2,9,130]}],chiplets:[{numa_node:7,cpus:[2,130],label:'L3'}]};
+const groups=topologyGroups(t)[0].groups;
+if(JSON.stringify(groups.flatMap(g=>g.cores.flatMap(c=>c.cpus)).sort((a,b)=>a-b))!=='[2,9,130]')throw Error('CPU lost or duplicated');
+if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Error('Grouping lost');
+"""
+        subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True, timeout=10)
+
+    def test_darwin_cpu_sampler(self):
+        with mock.patch.object(linux_telemetry.sys, 'platform', 'darwin'):
+            sampler = linux_telemetry.LogicalCpuSampler()
+        with mock.patch.object(
+            linux_telemetry,
+            '_darwin_cpu_ticks',
+            side_effect=[
+                {0: (100, 0, 100, 100, 0, 0, 0, 0)},
+                {0: (120, 10, 110, 160, 0, 0, 0, 0)},
+                OSError('Unavailable'),
+            ],
+        ), mock.patch.object(linux_telemetry.time, 'monotonic', side_effect=[0, 2, 4]):
+            self.assertIsNone(sampler.sample()['cpus'][0])
+            self.assertEqual(
+                sampler.sample()['cpus'][0],
+                {
+                    'busy': 40,
+                    'user': 30,
+                    'system': 10,
+                    'iowait': None,
+                    'steal': None,
+                },
+            )
+            self.assertFalse(sampler.sample()['available'])
+
+    def test_cpu_usage_affinity_fallback(self):
+        service = object.__new__(web.RunService)
+        service._cpu_sampler = mock.Mock()
+        service._cpu_sampler.sample.return_value = {'available': True, 'cpus': {0: None, 7: None}}
+        for error in (AttributeError(), OSError()):
+            with mock.patch.object(web.os, 'sched_getaffinity', create=True, side_effect=error):
+                self.assertEqual(set(service.cpu_usage()['cpus']), {0, 7})
+        with mock.patch.object(web.os, 'sched_getaffinity', create=True, return_value={7}):
+            self.assertEqual(set(service.cpu_usage()['cpus']), {7})
+
+    def test_local_ydb_actor_cpu_count_is_independent_of_affinity(self):
+        profile = {"workload": {"type": "kv", "operation": "upsert"}, "load": {"parameter": "threads", "values": [1]}}
+        profile["actor-system"] = {"static-nodes": {"cpu-count": 8}, "dynamic-nodes": {"cpu-count": 4}}
+        loaded = load_config(self._config(yaml.safe_dump({"local-ydb": {"cpu": profile}}))).runs[0]
+        actor_system = loaded.parameters["local_ydb"]["actor_system"]
+        self.assertEqual(actor_system["static_nodes"], {"cpu_count": 8})
+        self.assertEqual(actor_system["dynamic_nodes"], {"cpu_count": 4})
+        for value in (True, 0, -1, 1.5, "8", None, 32768):
+            with self.subTest(value=value):
+                profile["actor-system"]["static-nodes"]["cpu-count"] = value
+                with self.assertRaisesRegex(BenchmarkError, "cpu-count"):
+                    load_config(self._config(yaml.safe_dump({"local-ydb": {"cpu": profile}})))
+
     def test_local_ydb_actor_system_flags_default_and_validate(self):
         profile = {"workload": {"type": "kv", "operation": "upsert"}, "load": {"parameter": "threads", "values": [1]}}
 
@@ -2230,7 +2312,12 @@ class YdbBenchTest(unittest.TestCase):
               flags:
                 workload: {type: stock, operation: put-rand-order}
                 load: {parameter: threads, values: [1]}
-                actor-system: {use-shared-threads: true, use-united-pool: false, use-ring-queue: false}
+                actor-system:
+                  use-shared-threads: true
+                  use-united-pool: false
+                  use-ring-queue: false
+                  static-nodes: {cpu-count: 8}
+                  dynamic-nodes: {cpu-count: 4}
         """))
         model = web.editor_model(loaded, self.root / "results")
         script = "const editor={model:" + json.dumps(model) + "};\n"
@@ -2278,6 +2365,8 @@ class YdbBenchTest(unittest.TestCase):
         self.assertFalse(result["old"]["use_shared_threads"])
         self.assertTrue(result["current"]["use_shared_threads"])
         self.assertFalse(result["current"]["use_united_pool"])
+        self.assertEqual(result["current"]["Static node vCPUs"], 8)
+        self.assertEqual(result["current"]["Dynamic node vCPUs"], 4)
 
     def test_local_ydb_profile_is_editable_by_web_builder(self):
         loaded = load_config(self._config("""
@@ -2452,6 +2541,8 @@ class YdbBenchTest(unittest.TestCase):
             const localMetricDirection=()=>null;
             const localComparisonDelta=()=>'';
             const mountLocalYdbComparisonCurves=()=>{};
+            const sectionTabs=()=>'';
+            const bindSectionTabs=()=>{};
             """
             + web._JS[mount_start:mount_finish]
             + """
@@ -2956,8 +3047,10 @@ class YdbBenchTest(unittest.TestCase):
               panels:Object.fromEntries(container.panels.map(item=>[item.dataset.localYdbPanel,item.hidden])),
               hasResultMarkup:container.innerHTML.includes('data-local-ydb-panel=result'),
               hasDiscoveryMarkup:container.innerHTML.includes('data-local-ydb-panel=discovery'),
-              hasResultContent:container.innerHTML.includes('Metric source'),
-              hasDiscoveryContent:container.innerHTML.includes('Geometry stages'),
+              hasResultContent:container.innerHTML.includes('Search measurement · no completed verification'),
+              hasFormattedMetrics:container.innerHTML.includes('class=report-table'),
+              hasConfiguration:container.innerHTML.includes('data-report-config'),
+              hasDiscoveryContent:container.innerHTML.includes('class=discovery-status'),
               focused:container.focused||null,preventedFocusScroll:Boolean(container.preventedFocusScroll)
             });
             process.stdout.write(JSON.stringify({finished:summarize(finished),running:summarize(running)}));
@@ -2977,6 +3070,8 @@ class YdbBenchTest(unittest.TestCase):
         self.assertTrue(result["finished"]["hasResultMarkup"])
         self.assertTrue(result["finished"]["hasDiscoveryMarkup"])
         self.assertTrue(result["finished"]["hasResultContent"])
+        self.assertTrue(result["finished"]["hasFormattedMetrics"])
+        self.assertTrue(result["finished"]["hasConfiguration"])
         self.assertTrue(result["finished"]["hasDiscoveryContent"])
         self.assertEqual(result["finished"]["focused"], "discovery")
         self.assertTrue(result["finished"]["preventedFocusScroll"])
@@ -2984,14 +3079,108 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(result["running"]["tabs"], ["result", "discovery"])
         self.assertEqual(result["running"]["panels"], {"result": True, "discovery": False})
 
+    @unittest.skipUnless(shutil.which("node"), "node is required for the attempt report test")
+    def test_local_ydb_attempt_report_tabs_and_metric_sources(self):
+        start = web._JS.index("function localAttemptReport")
+        finish = web._JS.index("async function renderLocalYdbAttempt", start)
+        schema_start = web._JS.index("function localLegacyResultSchema")
+        schema_finish = web._JS.index("function localChart", schema_start)
+        script = (
+            """
+            const assert=require('node:assert/strict');
+            const esc=v=>String(v??'').replaceAll('<','&lt;');
+            const metricLabel=v=>String(v),elapsedLabel=v=>String(v??0);
+            const localPhaseLabel=v=>v,localSearchAxisLabel=()=> 'YDB CLI threads';
+            const localCommandText=c=>c.argv.join(' ');
+            const localReportMetrics=data=>JSON.stringify(data.result.selected_metrics);
+            """
+            + web._JS[schema_start:schema_finish]
+            + web._JS[start:finish]
+            + """
+            const data={parameters:{workload:{type:'stock'},load:{parameter:'threads',
+              objective:{type:'latency-slo',percentile:'p95',max_ms:20}}},
+              verification:{accepted:false,load:64},result:{verified_metrics:{throughput:4000,p95_ms:21}}};
+            const item={passed:true,load:32,throughput:3000,p95_ms:18,p99_ms:99};
+            const header=localAttemptHeader(data,item,item);
+            assert.ok(header.includes('Latency (p95)'));
+            assert.ok(header.includes('Successful query operations'));
+            assert.ok(header.includes('3000'));
+            assert.ok(!header.includes('4000'));
+            assert.ok(!header.includes('Latency (p99)'));
+            assert.equal(localAttemptMetrics(data,data.verification).throughput,4000);
+            assert.ok(localAttemptHeader(data,data.verification,data.verification).includes('FAIL'));
+            assert.ok(localAttemptHeader(data,{...item,passed:false,error:'<bad>'},item).includes('&lt;bad>'));
+            assert.equal(localAttemptView('counters'),'counters');
+            assert.equal(localAttemptView('commands'),'commands');
+            assert.equal(localAttemptView('invalid'),'summary');
+            assert.ok(localAttemptReport(data,null).includes('No completed measurement'));
+            assert.ok(localAttemptCommands({}).includes('No recorded commands'));
+            assert.ok(localAttemptCommands({commands:[{argv:['ydb','<arg>'],phase:'measuring',exit_code:0}]}).includes('&lt;arg>'));
+            assert.ok(!localAttemptCommands({commands:[{argv:['ydb'],phase:'measuring'}]}).includes('<details'));
+            """
+        )
+        subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True, text=True, timeout=10)
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the attempt route test")
+    def test_local_ydb_attempt_tab_deep_links(self):
+        start = web._JS.index("async function compose()")
+        finish = web._JS.index("addEventListener('hashchange'", start)
+        script = (
+            """
+            const assert=require('node:assert/strict');let pieces,seen;
+            const routeParts=()=>pieces;
+            const setRoute=()=>{throw Error('Unexpected redirect')};
+            const renderLocalYdbAttempt=(...args)=>{seen=args};
+            """
+            + web._JS[start:finish]
+            + """
+            (async()=>{
+              for(const view of [undefined,'summary','counters','commands']){
+                pieces=['attempt','run','profile','7'];if(view)pieces.push(view);
+                await compose();assert.deepEqual(seen,['run','profile','7',view]);
+              }
+            })().catch(error=>{console.error(error);process.exitCode=1});
+            """
+        )
+        subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True, text=True, timeout=10)
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the attempt navigation test")
+    def test_local_ydb_attempt_row_navigation_preserves_interactive_controls(self):
+        start = web._JS.index("function bindLocalAttemptRows")
+        finish = web._JS.index("function renderLocalYdbProfile", start)
+        script = (
+            """
+            const assert=require('node:assert/strict');
+            const location={hash:''};let selection='';
+            const window={getSelection:()=>({toString:()=>selection})};
+            const row={dataset:{attemptHref:'#attempt/run/profile/7'}};
+            """
+            + web._JS[start:finish]
+            + """
+            bindLocalAttemptRows({querySelectorAll:()=>[row]});
+            const click={button:0,target:{closest:()=>null}};
+            row.onclick(click);assert.equal(location.hash,row.dataset.attemptHref);
+            for(const override of [
+              {target:{closest:()=>({})}},{ctrlKey:true},{metaKey:true},
+              {shiftKey:true},{altKey:true},{button:1},{defaultPrevented:true}
+            ]){
+              location.hash='';row.onclick({...click,...override});assert.equal(location.hash,'');
+            }
+            selection='selected text';row.onclick(click);assert.equal(location.hash,'');
+            """
+        )
+        subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True, text=True, timeout=10)
+
     @unittest.skipUnless(shutil.which("node"), "node is required for the local YDB attempts UI test")
     def test_local_ydb_web_attempts_use_objective_latency_percentile(self):
         schema_start = web._JS.index("function localLegacyResultSchema")
         schema_finish = web._JS.index("function localChart", schema_start)
-        render_start = web._JS.index("function renderLocalYdbProfile")
+        render_start = web._JS.index("function bindLocalAttemptRows")
         render_finish = web._JS.index("async function mountLocalYdbProfile", render_start)
         script = (
-            """
+            "const enc=encodeURIComponent;\n"
+            + web._JS[web._JS.index("function localAttemptHref(") : web._JS.index("function localCounterCharts(")]
+            + """
             const esc=value=>String(value??'');
             const metricLabel=value=>String(value??'—');
             const elapsedLabel=value=>String(value??0);
@@ -3048,7 +3237,7 @@ class YdbBenchTest(unittest.TestCase):
                 passed:true,decision:'within SLO',duration_seconds:1
               }]
             });
-            const table=container.innerHTML.slice(container.innerHTML.indexOf('<table class=local-attempts>'));
+            const table=container.innerHTML.slice(container.innerHTML.indexOf('<table class="local-attempts discovery-attempts">'));
             process.stdout.write(JSON.stringify({table}));
             """
         )
@@ -3064,6 +3253,9 @@ class YdbBenchTest(unittest.TestCase):
         self.assertNotIn(">p99 (ms)</th>", table)
         self.assertIn(">5.95</td>", table)
         self.assertNotIn(">99.99</td>", table)
+        self.assertIn("data-attempt-href=", table)
+        self.assertNotIn("<details", table)
+        self.assertNotIn("<th>Static CPU</th>", table)
 
     @unittest.skipUnless(shutil.which("node"), "node is required for the schema-aware Builder test")
     def test_local_ydb_web_builder_omits_unsupported_error_controls(self):
@@ -4507,6 +4699,19 @@ class YdbBenchTest(unittest.TestCase):
         config = yaml.safe_load(cluster.config_path.read_text(encoding="utf-8"))
         self.assertEqual(config["config"]["actor_system_config"], {"use_auto_config": True, **flags})
 
+        cluster.actor_system.update(static_nodes={"cpu_count": 8}, dynamic_nodes={"cpu_count": 4})
+        for role, expected in (("static_nodes", 8), ("dynamic_nodes", 4)):
+            with self.subTest(role=role):
+                directory = cluster.directory / role
+                directory.mkdir()
+                path = cluster._node_config(role, directory)
+                effective = yaml.safe_load(path.read_text(encoding="utf-8"))
+                self.assertEqual(
+                    effective["config"]["actor_system_config"],
+                    {"use_auto_config": True, **flags, "cpu_count": expected},
+                )
+        self.assertNotIn("cpu_count", yaml.safe_load(cluster.config_path.read_text())["config"]["actor_system_config"])
+
     def test_local_ydb_scaling_waits_for_database_and_every_new_node(self):
         cluster_directory = self.root / "scaling-cluster"
         cluster_directory.mkdir()
@@ -4618,12 +4823,13 @@ class YdbBenchTest(unittest.TestCase):
 
         partial = command_result("grpc://benchmark-host:20000\n")
         complete = command_result("grpc://benchmark-host:20000\ngrpc://benchmark-host:20001 [zone-a]\n")
-        with mock.patch.object(local_ydb, "run_command", side_effect=(partial, complete)) as run, mock.patch.object(
-            local_ydb.time, "sleep"
-        ):
+        unavailable = command_result("", exit_code=1, stderr="Status: UNAVAILABLE\nDatabase nodes resolve failed")
+        with mock.patch.object(
+            local_ydb, "run_command", side_effect=(unavailable, partial, complete)
+        ) as run, mock.patch.object(local_ydb.time, "sleep"):
             cluster._wait_client_endpoints(30)
 
-        self.assertEqual(run.call_count, 2)
+        self.assertEqual(run.call_count, 3)
         command = run.call_args_list[0].args[0]
         self.assertEqual(
             command,
@@ -4639,7 +4845,12 @@ class YdbBenchTest(unittest.TestCase):
         )
         self.assertEqual(run.call_args_list[0].kwargs["cpu_affinity"], (0, 1))
         attempts = json.loads((cluster_directory / "client-discovery-attempts.json").read_text(encoding="utf-8"))
-        self.assertEqual([item["stdout"] for item in attempts], [partial.stdout, complete.stdout])
+        self.assertEqual([item["stdout"] for item in attempts], [unavailable.stdout, partial.stdout, complete.stdout])
+        with mock.patch.object(local_ydb, "run_command", return_value=unavailable) as run, mock.patch.object(
+            local_ydb.time, "monotonic", side_effect=(0, 0, 31)
+        ), self.assertRaisesRegex(BenchmarkError, "discovery exited with code 1: Status: UNAVAILABLE"):
+            cluster._wait_client_endpoints(30)
+        run.assert_called_once()
 
     def test_local_ydb_client_readiness_does_not_hide_cli_failures(self):
         cluster_directory = self.root / "client-ready-failure"
@@ -7407,6 +7618,42 @@ class WebTest(unittest.TestCase):
         self.assertEqual(model["complete"]["status"], "completed")
         self.assertEqual(model["imported"]["source"], "imported")
 
+    @unittest.skipUnless(shutil.which("node"), "node is required for the compact Runs UI test")
+    def test_web_compact_runs_sorting_and_tabs(self):
+        helpers = web._JS[web._JS.index("function sectionTabs") : web._JS.index("let activeBannerLoading")]
+        runs = web._JS[web._JS.index("const selectedComparisonRuns") : web._JS.index("async function renderRuns")]
+        script = helpers + runs + """
+        const assert=require('assert');
+        const esc=value=>String(value??'').replaceAll('<','&lt;').replaceAll('"','&quot;');
+        const enc=encodeURIComponent,status=esc,humanTime=esc,duration=()=>'',runHref=()=>'';
+        const records=[{id:'older',started_at:'2025-01-01',duration_seconds:100},
+          {id:'newer',queued_at:'2025-02-01',duration_seconds:10}];
+        assert.deepEqual(sortRuns(records,'newest').map(item=>item.id),['newer','older']);
+        assert.deepEqual(sortRuns(records,'oldest').map(item=>item.id),['older','newer']);
+        assert.deepEqual(sortRuns(records,'longest').map(item=>item.id),['older','newer']);
+        assert.equal(records[0].id,'older');
+        selectedComparisonRuns.add('older');
+        const html=compactRun({...records[0],profile_names:['first','<second>'],profiles:2,repetitions:4});
+        assert(html.includes('checked'));
+        assert(html.includes('first')&&html.includes('&lt;second>'));
+        assert(html.includes('2 profiles · 4 steps'));
+        const storage=new Map;
+        const sessionStorage={getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)};
+        const buttons=['final','search'].map(key=>({dataset:{sectionTab:'comparison:'+key},
+          setAttribute(name,value){this[name]=value}}));
+        const panels=['final','search'].map(key=>({dataset:{sectionPanel:'comparison:'+key}}));
+        const container={dataset:{},querySelectorAll:selector=>selector.includes('tab')?buttons:panels};
+        bindSectionTabs(container,'comparison');
+        assert.equal(panels[1].hidden,true);
+        buttons[1].onclick();
+        assert.equal(panels[0].hidden,true);
+        assert.equal(buttons[1]['aria-pressed'],'true');
+        container.dataset={};
+        bindSectionTabs(container,'comparison');
+        assert.equal(panels[1].hidden,false);
+        """
+        subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True)
+
     def test_web_runs_are_sorted_newest_first(self):
         self._manifest(self.root / "older")
         self._manifest(self.root / "newer")
@@ -7624,17 +7871,19 @@ class WebTest(unittest.TestCase):
         worker.start()
         try:
             base = "http://127.0.0.1:{}".format(server.server_port)
+            with urllib.request.urlopen(base + "/api/activity-status") as response:
+                self.assertEqual(json.load(response), {"active_run_id": None, "queued": 0})
             with urllib.request.urlopen(base + "/") as response:
                 self.assertIn("default-src 'self'", response.headers["Content-Security-Policy"])
                 self.assertIn(b"app.js", response.read())
             with urllib.request.urlopen(base + "/app.js") as response:
                 script = response.read()
                 self.assertIn(b"System topology", script)
-                self.assertIn(b"NUMA, cache and cores", script)
+                self.assertIn(b"Topology & CPU usage", script)
                 self.assertIn(b"function affinityTree", script)
                 self.assertIn(b"class=affinity-tree", script)
                 self.assertIn(b"SMT threads", script)
-                self.assertIn(b"<span class=cpu-ranges>vCPU ", script)
+                self.assertIn(b"data-cpu=", script)
                 self.assertNotIn(b"(core.index+1)", script)
                 self.assertIn(b"Unavailable", script)
                 self.assertNotIn(b"Use in new run", script)
@@ -7733,12 +7982,13 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"Ternary resolution (%)", script)
                 self.assertIn(b"Growth multiplier", script)
                 self.assertIn(b"Geometry stages", script)
-                self.assertIn(b"Current phase", script)
+                self.assertIn(b"class=discovery-status", script)
                 self.assertIn(b"Running command", script)
                 self.assertIn(b"function localShellArg", script)
                 self.assertIn(b"function localCommandDetails", script)
                 self.assertIn(b"progress.current_command", script)
-                self.assertIn(b"<th>Commands</th>", script)
+                self.assertIn(b"function localAttemptReport", script)
+                self.assertIn(b"data-attempt-href", script)
                 self.assertIn(b"class=local-attempts-scroll", script)
                 self.assertIn(b"data-local-profile-config", script)
                 self.assertIn(b"profileConfigOpen", script)
@@ -8169,6 +8419,7 @@ class WebTest(unittest.TestCase):
         self.assertTrue(started["first"].wait(2))
         second = service.start(config("second"))
         third = service.start(config("third"))
+        self.assertEqual(service.activity_status(), {"active_run_id": first["id"], "queued": 2})
 
         second_detail = service.detail(second["id"])
         third_detail = service.detail(third["id"])

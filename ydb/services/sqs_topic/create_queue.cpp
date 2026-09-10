@@ -115,7 +115,7 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo& topicInfo) {
-            if (topicInfo.Status == NPQ::NDescriber::EStatus::NOT_FOUND) {
+            if (topicInfo.Status == NPQ::NDescriber::EStatus::NotFound) {
                 PendingAction_ = EPendingAction::CreateNewTopic;
                 this->ChargeRequestUnits(ActorContext());
                 return;

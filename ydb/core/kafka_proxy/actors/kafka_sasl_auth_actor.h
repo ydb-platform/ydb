@@ -26,9 +26,10 @@ struct TAuthData {
 };
 
 public:
-    TKafkaSaslAuthActor(const TContext::TPtr context, NRawSocket::TSocketDescriptor::TSocketAddressType address)
+    TKafkaSaslAuthActor(const TContext::TPtr context, NRawSocket::TSocketDescriptor::TSocketAddressType address, TString requestId)
         : Context(context)
-        , Address(address) {
+        , Address(address)
+        , RequestId(std::move(requestId)) {
     }
 
     void Bootstrap();
@@ -137,6 +138,7 @@ private:
     TString AuthRequest = "";
     TString AuthResponse = "";
     const NRawSocket::TNetworkConfig::TSocketAddressType Address;
+    const TString RequestId;
 
     static const TDuration Timeout;
 

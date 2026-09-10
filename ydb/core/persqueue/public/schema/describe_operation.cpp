@@ -76,8 +76,9 @@ public:
             }));
     }
 
-    TString BuildLogPrefix() const override {
-        return TStringBuilder() << "[" << Strategy->GetName() << "]";
+    TLogPrefix BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", Strategy->GetName()});
     }
 
     bool OnUnhandledException(const std::exception& exc) override {
@@ -179,17 +180,17 @@ private:
         LOG_D("Handle TEvDescribeTopicsResponse. Status=" << TopicInfo.Status
                                                          << " usedSyncVersion=" << UsedSyncVersion);
 
-        if (TopicInfo.Status != NDescriber::EStatus::SUCCESS) {
+        if (TopicInfo.Status != NDescriber::EStatus::Success) {
             const auto status = [&]() {
                 switch (TopicInfo.Status) {
-                    case NDescriber::EStatus::NOT_FOUND:
-                    case NDescriber::EStatus::NOT_TOPIC:
-                    case NDescriber::EStatus::UNAUTHORIZED:
-                    case NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
+                    case NDescriber::EStatus::NotFound:
+                    case NDescriber::EStatus::NotTopic:
+                    case NDescriber::EStatus::Unauthorized:
+                    case NDescriber::EStatus::UnauthorizedWithDescribeAccess:
                         return Ydb::StatusIds::SCHEME_ERROR;
-                    case NDescriber::EStatus::BAD_REQUEST:
+                    case NDescriber::EStatus::BadRequest:
                         return Ydb::StatusIds::BAD_REQUEST;
-                    case NDescriber::EStatus::UNKNOWN_ERROR:
+                    case NDescriber::EStatus::UnknownError:
                         return Ydb::StatusIds::INTERNAL_ERROR;
                     default:
                         return Ydb::StatusIds::INTERNAL_ERROR;
@@ -197,13 +198,13 @@ private:
             }();
             const auto issueCode = [&]() {
                 switch (TopicInfo.Status) {
-                    case NDescriber::EStatus::NOT_FOUND:
-                    case NDescriber::EStatus::UNAUTHORIZED:
-                    case NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
+                    case NDescriber::EStatus::NotFound:
+                    case NDescriber::EStatus::Unauthorized:
+                    case NDescriber::EStatus::UnauthorizedWithDescribeAccess:
                         return Ydb::PersQueue::ErrorCode::ACCESS_DENIED;
-                    case NDescriber::EStatus::NOT_TOPIC:
+                    case NDescriber::EStatus::NotTopic:
                         return Ydb::PersQueue::ErrorCode::VALIDATION_ERROR;
-                    case NDescriber::EStatus::BAD_REQUEST:
+                    case NDescriber::EStatus::BadRequest:
                         return Ydb::PersQueue::ErrorCode::BAD_REQUEST;
                     default:
                         return Ydb::PersQueue::ErrorCode::BAD_REQUEST;

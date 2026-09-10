@@ -29,14 +29,14 @@ namespace {
 
     void LogKafkaBatchUserError(
         TStringBuf message,
-        const TString& logPrefix,
+        const TLogPrefix& logPrefix,
         ui32 partition,
         ui64 offset,
         const TString& error,
         TStringBuf user = {})
     {
-        YDB_LOG_ERROR_COMP(PERSQUEUE, message,
-            {"logPrefix", logPrefix},
+        YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, message,
+            logPrefix,
             {"errorType", "user"},
             {"user", user},
             {"partition", partition},
@@ -48,7 +48,7 @@ namespace {
         const IBatchCutter& cutter,
         const TBatchCutterData& data,
         ui64 readStartOffset,
-        const TString& logPrefix,
+        const TLogPrefix& logPrefix,
         const TString& user,
         ui32 partition)
     {
@@ -70,7 +70,7 @@ namespace {
         const IBatchCutter& cutter,
         const TBatchCutterData& data,
         ui64 readStartOffset,
-        const TString& logPrefix,
+        const TLogPrefix& logPrefix,
         ui32 partition)
     {
         auto outcome = cutter.GetKeys(data, readStartOffset);
@@ -90,12 +90,14 @@ namespace {
 TConsumerBatchProcessor::TConsumerBatchProcessor(ui64 tabletId, const NActors::TActorId& tabletActorId, TString user)
     : TBaseTabletActor(tabletId, tabletActorId, NKikimrServices::PERSQUEUE)
     , User(std::move(user))
-    , LogPrefix(TStringBuilder() << "ConsumerBatchProcessor " << TabletId << " [" << User << "]: ")
+    , LogPrefix(YDB_LOG_CREATE_MESSAGE(
+        {"actorClassName", "ConsumerBatchProcessor"},
+        {"consumer", User}))
 {
     BatchCutters.emplace(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1, MakeHolder<TKafkaBatchCutter>());
 }
 
-const TString& TConsumerBatchProcessor::GetLogPrefix() const {
+const TLogPrefix& TConsumerBatchProcessor::GetLogPrefix() const {
     return LogPrefix;
 }
 
@@ -259,10 +261,11 @@ STFUNC(TConsumerBatchProcessor::StateWork) {
             HFunc(NActors::TEvents::TEvWakeup, Handle);
             HFunc(NActors::TEvents::TEvPoisonPill, Handle);
         default:
-            YDB_LOG_WARN("Unexpected event in TConsumerBatchProcessor",
-                {"logPrefix", GetLogPrefix()},
+            LOG_W(
+                "Unexpected event in TConsumerBatchProcessor",
                 {"user", User},
-                {"eventType", ev->GetTypeRewrite()});
+                {"eventType", ev->GetTypeRewrite()}
+            );
             break;
         }
     }

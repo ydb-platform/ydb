@@ -1,4 +1,5 @@
 #include "ddisk_actor_pdisk_common_ut.h"
+#include <ydb/library/pdisk_io/uring_test_support.h>
 
 namespace NKikimr {
 
@@ -72,6 +73,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
     }
 
     Y_UNIT_TEST(WriteAndRead_4KiB_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
         TestWriteAndRead({}, 4_KB);
     }
 
@@ -80,6 +82,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
     }
 
     Y_UNIT_TEST(WriteAndRead_8KiB_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
         TestWriteAndRead({}, 8_KB);
     }
 
@@ -88,6 +91,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
     }
 
     Y_UNIT_TEST(WriteAndRead_1MiB_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
         TestWriteAndRead({}, 1_MB);
     }
 
@@ -96,6 +100,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
     }
 
     Y_UNIT_TEST(WriteAndReadWithoutChecksums_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
         TestWriteAndReadWithoutChecksums({});
     }
 
@@ -104,6 +109,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
     }
 
     Y_UNIT_TEST(CheckVChunksArePerTablet_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
         TestCheckVChunksArePerTablet({});
     }
 
@@ -112,6 +118,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
     }
 
     Y_UNIT_TEST(OverwriteSameOffset_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
         TestOverwrite({});
     }
 
@@ -120,6 +127,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
     }
 
     Y_UNIT_TEST(ReadUnallocatedChunk_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
         TestReadUnallocatedChunk({});
     }
 
@@ -128,6 +136,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
     }
 
     Y_UNIT_TEST(ManyVChunksPerTablet_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
         TestManyVChunks({});
     }
 
@@ -136,6 +145,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
     }
 
     Y_UNIT_TEST(MultiTabletInterleavedWrites_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
         TestMultiTabletInterleaved({});
     }
 
@@ -144,6 +154,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
     }
 
     Y_UNIT_TEST(MultiTabletInterleavedWritesWithDDiskRestart_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
         TestMultiTabletInterleavedWritesWithDDiskRestart({});
     }
 
@@ -152,6 +163,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
     }
 
     Y_UNIT_TEST(MultipleRestarts_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
         TestMultipleRestarts({});
     }
 
@@ -160,6 +172,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
     }
 
     Y_UNIT_TEST(OverwriteAfterRestart_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
         TestOverwriteAfterRestart({});
     }
 
@@ -168,6 +181,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
     }
 
     Y_UNIT_TEST(EmptyRestart_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
         TestEmptyRestart({});
     }
 
@@ -180,6 +194,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
     }
 
     Y_UNIT_TEST(RestartAfterCutLog_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
         TestRestartAfterCutLog({});
     }
 
@@ -188,6 +203,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
     }
 
     Y_UNIT_TEST(ReadWithoutConnect_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
         TestReadWithoutConnect({});
     }
 
@@ -196,6 +212,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
     }
 
     Y_UNIT_TEST(PDiskRestartWithReservedChunks_DDiskZombie_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
         TestPDiskRestartWithReservedChunks({}, /*restartDDisk=*/false);
     }
 
@@ -204,6 +221,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
     }
 
     Y_UNIT_TEST(PDiskRestartWithReservedChunks_DDiskRestart_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
         TestPDiskRestartWithReservedChunks({}, /*restartDDisk=*/true);
     }
 
@@ -216,6 +234,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
     }
 
     Y_UNIT_TEST(DeleteTabletChunks_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
         TestDeleteTabletChunks({});
     }
 

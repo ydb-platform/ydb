@@ -112,14 +112,17 @@ TBridgeHandle BridgeMakeString(uint64_t srcOff, int64_t len);
 //! Does not consume `inner`, and may return `inner` itself with an added ref
 //! when MiniKQL represents the Optional exactly like its payload.
 TBridgeHandle BridgeMakeOptional(TBridgeHandle inner);
-//! Build a Tuple from an array of handles in linear memory. When the declared
-//! result type names exactly one Tuple of this arity, or several and the
-//! member families pick one, the result is typed; otherwise it stays untyped
-//! and BridgeGetElement / BridgeGetMemberCount on it will fail. Prefer
-//! BridgeMakeArrayTyped when the result nests same-arity Tuples.
+//! Build a Tuple from an array of handles in linear memory, typed from the
+//! declared result type: the Tuples of this arity it names are the candidates,
+//! and the members pick which one is being built. A member that fits no
+//! candidate is an error naming the slot. Candidates the members cannot tell
+//! apart -- same arity, same member kinds -- leave the result untyped, and
+//! BridgeGetElement / BridgeGetMemberCount on it will fail. Prefer
+//! BridgeMakeArrayTyped when the result nests or repeats same-arity Tuples.
 TBridgeHandle BridgeMakeArray(uint64_t elemsOff, int32_t n);
 //! Same layout and the same typing rule, but the result reads back as a
-//! Struct; members follow the declared member order of the result type.
+//! Struct; members follow the declared member order of the result type. Prefer
+//! BridgeMakeStructTyped when the result nests or repeats same-arity Structs.
 TBridgeHandle BridgeMakeStruct(uint64_t membersOff, int32_t n);
 //! Same inference as BridgeMakeArray for List types in the result. Prefer
 //! BridgeMakeListTyped when the result nests Lists or holds sibling Lists.

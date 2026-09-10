@@ -328,6 +328,10 @@ std::optional<EBridgeKindFamily> NodeValueFamily(const TWasmBridgeNodeTable::TNo
     return BridgeNodeValueFamily(node, CurrentTypeHelper());
 }
 
+std::optional<EBridgeValueKind> NodeValueKind(const TWasmBridgeNodeTable::TNode& node) {
+    return BridgeNodeValueKind(node, CurrentTypeHelper());
+}
+
 bool SlotAcceptsNull(const TType* type);
 
 //! Guard for a guest handle the host is about to hand to MiniKQL as a value of
@@ -384,7 +388,8 @@ void EnsureNodeMatchesType(
 
 //! Same family comparison EnsureNodeMatchesType uses, without throwing. Used
 //! when several declared containers share an arity and the handles themselves
-//! have to pick which one the guest is building.
+//! have to pick which one the guest is building. A handle the guard would not
+//! let into the slot cannot belong to that candidate.
 bool HandleMatchesExpectedType(ui64 handle, const TType* expected) {
     if (handle == NullBridgeHandle) {
         return SlotAcceptsNull(expected);
@@ -409,6 +414,26 @@ bool HandleMatchesExpectedType(ui64 handle, const TType* expected) {
     return !family || *family == expectedFamily;
 }
 
+//! Whether the handle carries the very kind the slot declares, as opposed to
+//! merely a kind of the same family. Families put Int32 next to Int64 and
+//! String next to Utf8 on purpose -- MiniKQL stores those alike, so the guard
+//! has no reason to refuse one for the other -- which leaves the family
+//! comparison unable to tell two sibling containers apart when they differ
+//! only in the width of a member. This is the finer evidence that does.
+bool HandleHasDeclaredKind(ui64 handle, const TType* expected) {
+    const auto* helper = CurrentTypeHelper();
+    if (handle == NullBridgeHandle || !expected || !helper) {
+        return false;
+    }
+    const auto declared = BridgeKindsFromType(PeelOptional(expected), helper).Value;
+    if (declared == EBridgeValueKind::Null) {
+        // A slot the bridge has no name for: nothing to be exact about.
+        return false;
+    }
+    const auto kind = NodeValueKind(CurrentBridgeTable().Resolve(handle));
+    return kind && *kind == declared;
+}
+
 const ui64* PeekHandles(ui64 handlesOff, i32 n, const char* what) {
     if (n < 0) {
         ythrow yexception() << "Bridge: " << what << " negative count";
@@ -422,30 +447,89 @@ const ui64* PeekHandles(ui64 handlesOff, i32 n, const char* what) {
         static_cast<size_t>(n));
 }
 
-bool HandlesMatchListType(const ui64* handles, i32 n, const TType* listType) {
-    const TType* itemType = ListItemTypeOf(listType);
+//! What one declared candidate makes of the handles the guest passed.
+struct TCandidateFit {
+    //! Every handle would pass the guard in the slot it lands in, so the guest
+    //! could be building this candidate.
+    bool Accepts = true;
+    //! Slots whose handle carries the very kind declared there. Finer than the
+    //! family comparison exactly where two candidates look alike to it.
+    i32 ExactSlots = 0;
+};
+
+template <class TSlotOf>
+TCandidateFit FitHandles(const TType* candidate, const ui64* handles, i32 n, const TSlotOf& slotOf) {
+    TCandidateFit fit;
     for (i32 i = 0; i < n; ++i) {
-        if (!HandleMatchesExpectedType(handles[i], itemType)) {
-            return false;
+        const TType* slot = slotOf(candidate, i);
+        if (!HandleMatchesExpectedType(handles[i], slot)) {
+            fit.Accepts = false;
+            continue;
+        }
+        if (HandleHasDeclaredKind(handles[i], slot)) {
+            ++fit.ExactSlots;
         }
     }
-    return true;
+    return fit;
 }
 
-bool HandlesMatchMemberedType(const ui64* handles, i32 n, const TType* type) {
-    for (i32 i = 0; i < n; ++i) {
-        if (!HandleMatchesExpectedType(handles[i], ElementTypeOf(type, static_cast<ui32>(i)))) {
-            return false;
+//! Pick the declared container the guest is building; `slotOf` names the type
+//! of slot `i` inside a candidate. Candidates come from the result type, which
+//! is why there can be several: the guest builds a nested container bottom-up
+//! while the intrinsic sees the whole call's result type.
+//!
+//! A candidate every handle fits is a possible reading of the call, and the
+//! one naming the most slots exactly is the reading taken. A tie there means
+//! the handles cannot tell those candidates apart -- two Lists of the same
+//! item type, say -- and leaves the node untyped for the guest to name with a
+//! typed Make*.
+//!
+//! Otherwise the closest candidate is handed back although it fits no better
+//! than partially, so the per-slot guard reports which slot is wrong and why,
+//! the way it did when the first match was stamped unconditionally. That
+//! covers both "nothing fits" and a coarse match that another candidate beats
+//! on kinds: a guest that means Tuple<Int64,String> and gets its second member
+//! wrong hears about that member, instead of having its tuple silently rebuilt
+//! as the sibling Tuple<Int32,Int32>, which accepts two Int64 handles because
+//! Int32 and Int64 share a family.
+template <class TSlotOf>
+const TType* NarrowCandidates(
+    const TVector<const TType*>& candidates,
+    const ui64* handles,
+    i32 n,
+    const TSlotOf& slotOf)
+{
+    const TType* match = nullptr;
+    i32 matchExact = -1;
+    bool ambiguous = false;
+    const TType* closest = nullptr;
+    i32 closestExact = -1;
+    for (const TType* candidate : candidates) {
+        const auto fit = FitHandles(candidate, handles, n, slotOf);
+        if (fit.ExactSlots > closestExact) {
+            closest = candidate;
+            closestExact = fit.ExactSlots;
+        }
+        if (!fit.Accepts) {
+            continue;
+        }
+        if (fit.ExactSlots > matchExact) {
+            match = candidate;
+            matchExact = fit.ExactSlots;
+            ambiguous = false;
+        } else if (fit.ExactSlots == matchExact) {
+            ambiguous = true;
         }
     }
-    return true;
+    if (!match || closestExact > matchExact) {
+        return closest;
+    }
+    return ambiguous ? nullptr : match;
 }
 
 //! Pick the List the guest is building from the declared result type. A single
-//! candidate is taken as-is (item checks still run later). Several candidates
-//! -- nested Lists, sibling Lists in a Tuple -- are narrowed by item families;
-//! when that does not leave exactly one, the node stays untyped instead of
-//! being stamped with the outermost match.
+//! candidate is taken as-is (item checks still run later); several -- nested
+//! Lists, sibling Lists in a Tuple -- go through the narrowing above.
 const TType* InferListType(const TType* resultType, ui64 itemsOff, i32 n, const char* what) {
     auto candidates = CollectListTypesIn(resultType);
     if (candidates.empty()) {
@@ -455,17 +539,9 @@ const TType* InferListType(const TType* resultType, ui64 itemsOff, i32 n, const 
         return candidates.front();
     }
     const ui64* handles = PeekHandles(itemsOff, n, what);
-    const TType* match = nullptr;
-    for (const TType* candidate : candidates) {
-        if (!HandlesMatchListType(handles, n, candidate)) {
-            continue;
-        }
-        if (match) {
-            return nullptr;
-        }
-        match = candidate;
-    }
-    return match;
+    return NarrowCandidates(candidates, handles, n, [](const TType* candidate, i32) {
+        return ListItemTypeOf(candidate);
+    });
 }
 
 //! Same narrowing for Struct / Tuple. An arity the declaration never names is
@@ -492,17 +568,9 @@ const TType* InferMemberedType(
         return candidates.front();
     }
     const ui64* handles = PeekHandles(elemsOff, n, what);
-    const TType* match = nullptr;
-    for (const TType* candidate : candidates) {
-        if (!HandlesMatchMemberedType(handles, n, candidate)) {
-            continue;
-        }
-        if (match) {
-            return nullptr;
-        }
-        match = candidate;
-    }
-    return match;
+    return NarrowCandidates(candidates, handles, n, [](const TType* candidate, i32 index) {
+        return ElementTypeOf(candidate, static_cast<ui32>(index));
+    });
 }
 
 ui64 RegisterTypeRef(const TType* type) {

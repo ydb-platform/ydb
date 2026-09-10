@@ -28,6 +28,12 @@ SELECT
     BridgeTypes::MakeGreetingStruct() AS greeting,
     BridgeTypes::MakeIntList() AS int_list,
     BridgeTypes::MakeNameDict() AS name_dict,
+    -- Nested and repeated containers: the first is typed by inference alone,
+    -- the rest name the container they build (BridgeMake*Typed).
+    BridgeTypes::MakeNestedIntLists() AS nested_int_lists,
+    BridgeTypes::MakeIntListPair() AS int_list_pair,
+    BridgeTypes::MakeLabelledPoint() AS labelled_point,
+    BridgeTypes::MakeOptionalIntListPair() AS optional_int_list_pair,
     -- Way() returns the alternative index; the ydb CLI cannot format Variant.
     Way(BridgeTypes::MakeVariantUint32()) AS variant_uint32,
     BridgeTypes::RunCallableInt64(($x) -> { RETURN $x + 1; }, 41l) AS run_callable;

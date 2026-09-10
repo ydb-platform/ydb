@@ -218,6 +218,89 @@
       }
     },
     {
+      "name": "MakeNestedIntLists",
+      "export": "make_nested_int_lists",
+      "argument_types": [],
+      "result_type": {
+        "value": "list",
+        "tag": "concrete_type",
+        "item": {
+          "value": "list",
+          "tag": "concrete_type",
+          "item": {"value": "int64", "tag": "concrete_type"}
+        }
+      }
+    },
+    {
+      "name": "MakeIntListPair",
+      "export": "make_int_list_pair",
+      "argument_types": [],
+      "result_type": {
+        "value": "tuple",
+        "tag": "concrete_type",
+        "elements": [
+          {
+            "value": "list",
+            "tag": "concrete_type",
+            "item": {"value": "int64", "tag": "concrete_type"}
+          },
+          {
+            "value": "list",
+            "tag": "concrete_type",
+            "item": {"value": "int64", "tag": "concrete_type"}
+          }
+        ]
+      }
+    },
+    {
+      "name": "MakeLabelledPoint",
+      "export": "make_labelled_point",
+      "argument_types": [],
+      "result_type": {
+        "value": "struct",
+        "tag": "concrete_type",
+        "members": [
+          {"name": "label", "type": {"value": "string", "tag": "concrete_type"}},
+          {
+            "name": "point",
+            "type": {
+              "value": "struct",
+              "tag": "concrete_type",
+              "members": [
+                {"name": "x", "type": {"value": "int64", "tag": "concrete_type"}},
+                {"name": "y", "type": {"value": "int64", "tag": "concrete_type"}}
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "MakeOptionalIntListPair",
+      "export": "make_optional_int_list_pair",
+      "argument_types": [],
+      "result_type": {
+        "value": "optional",
+        "tag": "concrete_type",
+        "item": {
+          "value": "tuple",
+          "tag": "concrete_type",
+          "elements": [
+            {
+              "value": "list",
+              "tag": "concrete_type",
+              "item": {"value": "int64", "tag": "concrete_type"}
+            },
+            {
+              "value": "list",
+              "tag": "concrete_type",
+              "item": {"value": "int64", "tag": "concrete_type"}
+            }
+          ]
+        }
+      }
+    },
+    {
       "name": "MakeVariantUint32",
       "export": "make_variant_uint32",
       "argument_types": [],

@@ -59,6 +59,28 @@ uint64_t* AllocHandles(size_t count) {
     return handles;
 }
 
+//! Two-item Int64 list, typed from the declared result type: the items name a
+//! List<Int64> and nothing else, so the host has one candidate to pick.
+uint64_t MakeIntListInferred(int64_t first, int64_t second) {
+    uint64_t* items = AllocHandles(2);
+    items[0] = MakeInt64(first).Release();
+    items[1] = MakeInt64(second).Release();
+    const uint64_t list = BridgeMakeList(reinterpret_cast<uint64_t>(items), 2);
+    free(items);
+    return list;
+}
+
+//! Same list, but of the type `listType` names. Needed wherever the result
+//! declares several Lists the items cannot be told apart by.
+uint64_t MakeIntListOfType(uint64_t listType, int64_t first, int64_t second) {
+    uint64_t* items = AllocHandles(2);
+    items[0] = MakeInt64(first).Release();
+    items[1] = MakeInt64(second).Release();
+    const uint64_t list = BridgeMakeListTyped(listType, reinterpret_cast<uint64_t>(items), 2);
+    free(items);
+    return list;
+}
+
 } // namespace
 
 extern "C" {
@@ -339,6 +361,81 @@ __attribute__((visibility("default"))) void make_variant_uint32(
     TExpressionContext* /*ctx*/, uint64_t* result)
 {
     *result = MakeVariant(0, TBridgeValue(BridgeMakeUint32(5))).Release();
+}
+
+// ---- makers: nested and repeated containers ----
+
+//! Nesting the declared result type resolves on its own. The guest builds
+//! bottom-up, so BridgeMakeList is called twice with the same result type in
+//! scope: Int64 items name the inner List<Int64>, and lists of them name the
+//! outer List<List<Int64>>.
+__attribute__((visibility("default"))) void make_nested_int_lists(
+    TExpressionContext* /*ctx*/, uint64_t* result)
+{
+    uint64_t* inner = AllocHandles(2);
+    inner[0] = MakeIntListInferred(1, 2);
+    inner[1] = MakeIntListInferred(3, 4);
+    *result = BridgeMakeList(reinterpret_cast<uint64_t>(inner), 2);
+    free(inner);
+}
+
+//! Two members of the same type: nothing about two Int64 items says which of
+//! the declared Lists they belong to, so each is named with BridgeTypeMember
+//! and built with BridgeMakeListTyped. The outer Tuple is the only two-member
+//! Tuple declared, which leaves BridgeMakeArray one candidate.
+__attribute__((visibility("default"))) void make_int_list_pair(
+    TExpressionContext* /*ctx*/, uint64_t* result)
+{
+    TBridgeValue resultType(BridgeGetResultType(), /*owned*/ true);
+    TBridgeValue firstType(BridgeTypeMember(resultType.Get(), 0), /*owned*/ true);
+    TBridgeValue secondType(BridgeTypeMember(resultType.Get(), 1), /*owned*/ true);
+
+    uint64_t* members = AllocHandles(2);
+    members[0] = MakeIntListOfType(firstType.Get(), 1, 2);
+    members[1] = MakeIntListOfType(secondType.Get(), 3, 4);
+    *result = BridgeMakeArray(reinterpret_cast<uint64_t>(members), 2);
+    free(members);
+}
+
+//! A Struct inside a Struct of the same member count: the inner one is named
+//! explicitly, while the outer is picked by its own members (a string and a
+//! struct fit no other declaration). Members go in declared order.
+__attribute__((visibility("default"))) void make_labelled_point(
+    TExpressionContext* /*ctx*/, uint64_t* result)
+{
+    static const char kLabel[] = "origin";
+    TBridgeValue resultType(BridgeGetResultType(), /*owned*/ true);
+    TBridgeValue pointType(BridgeTypeMember(resultType.Get(), 1), /*owned*/ true);
+
+    uint64_t* coords = AllocHandles(2);
+    coords[0] = MakeInt64(3).Release();
+    coords[1] = MakeInt64(4).Release();
+    const uint64_t point =
+        BridgeMakeStructTyped(pointType.Get(), reinterpret_cast<uint64_t>(coords), 2);
+    free(coords);
+
+    uint64_t* members = AllocHandles(2);
+    members[0] = MakeString(kLabel, static_cast<int64_t>(sizeof(kLabel) - 1)).Release();
+    members[1] = point;
+    *result = BridgeMakeStruct(reinterpret_cast<uint64_t>(members), 2);
+    free(members);
+}
+
+//! An Optional result: what the guest has to build sits under the wrapper, and
+//! BridgeTypeOptionalItem is what peels it before the members are named.
+__attribute__((visibility("default"))) void make_optional_int_list_pair(
+    TExpressionContext* /*ctx*/, uint64_t* result)
+{
+    TBridgeValue resultType(BridgeGetResultType(), /*owned*/ true);
+    TBridgeValue pairType(BridgeTypeOptionalItem(resultType.Get()), /*owned*/ true);
+    TBridgeValue firstType(BridgeTypeMember(pairType.Get(), 0), /*owned*/ true);
+    TBridgeValue secondType(BridgeTypeMember(pairType.Get(), 1), /*owned*/ true);
+
+    uint64_t* members = AllocHandles(2);
+    members[0] = MakeIntListOfType(firstType.Get(), 5, 6);
+    members[1] = MakeIntListOfType(secondType.Get(), 7, 8);
+    *result = BridgeMakeArrayTyped(pairType.Get(), reinterpret_cast<uint64_t>(members), 2);
+    free(members);
 }
 
 // ---- callable ----

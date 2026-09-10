@@ -9,7 +9,7 @@ It prints one finding per line: "ERROR path:line: message" or
 "WARN path:line: message". Exit code 0 means no errors, 1 means errors,
 2 means a usage problem such as a missing PATH.
 
-Written for Python 3.8 with the standard library only.
+Written for Python 3.9 with the standard library only.
 """
 import argparse
 import ast
@@ -20,7 +20,7 @@ import subprocess
 import sys
 import sysconfig
 
-PY_VERSION = (3, 8)
+PY_VERSION = (3, 9)
 SKILL_NAME_RE = re.compile(r"^ydb(-[a-z0-9]+)+$")
 SKILL_NAME_MAX_CHARS = 64
 DESCRIPTION_MAX_CHARS = 1024
@@ -199,8 +199,6 @@ def check_paths(path, text, root, report):
             if any(mark in target for mark in "<>*{}"):
                 continue
             if os.path.exists(os.path.join(base, target)) or os.path.exists(os.path.join(root, target)):
-                if target.startswith("../"):
-                    report.warn(path, number, "path %s goes up the tree; write it from the repo root" % target)
                 continue
             report.error(path, number, "path does not exist: %s" % target)
 
@@ -276,7 +274,7 @@ def glob_files(folder, suffix=""):
 
 
 def check_scripts(skill_dir, report):
-    """Every .py under scripts/ must be Python 3.8 with standard imports; scripts/<name>.py needs scripts/tests/test_<name>.py."""
+    """Every .py under scripts/ must be Python 3.9 with standard imports; scripts/<name>.py needs scripts/tests/test_<name>.py."""
     scripts_dir = os.path.join(skill_dir, "scripts")
     if not os.path.isdir(scripts_dir):
         return

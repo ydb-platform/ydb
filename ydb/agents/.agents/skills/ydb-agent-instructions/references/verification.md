@@ -24,10 +24,10 @@ The short `./ya make --help` hides most flags; use `-hh` or `-hhh`.
 
 ## How to check a script
 
-Every contributor has Python 3 because `./ya` needs it; nothing else is guaranteed. Scripts use Python 3.8 syntax, the oldest version on a developer machine: Ubuntu 20.04 ships 3.8 (https://wiki.ubuntu.com/FocalFossa/ReleaseNotes), macOS Command Line Tools ship 3.9 (`/usr/bin/python3 --version`). Standard library only: no `match`, no `X | Y` in type hints, no `list[str]`, no `str.removeprefix`, no pip packages. On Windows the commands below start with `py -3` instead of `python3.8` or `python3`. `check.py` rejects grammar newer than 3.8 and imports that the running interpreter does not find in its standard library; the run under `python3.8` is the real test.
+Every contributor has Python 3 because `./ya` needs it; nothing else is guaranteed. Scripts use Python 3.9 syntax, the version macOS Command Line Tools ship (`/usr/bin/python3 --version`). Standard library only: no `match`, no `X | Y` in type hints, no parenthesized `with` items, no pip packages. On Windows the commands below start with `py -3` instead of `python3.9` or `python3`. `check.py` rejects grammar newer than 3.9 and imports that the running interpreter does not find in its standard library; the run under `python3.9` is the real test.
 
 ```bash
-python3.8 -m unittest discover -s <skill>/scripts/tests
+python3.9 -m unittest discover -s <skill>/scripts/tests
 python3 -m unittest discover -s <skill>/scripts/tests       # also on the newest Python
 grep -n -E '^(import|from) ' <script>                       # every module must be in the standard library
 ```
@@ -71,7 +71,7 @@ Check and report:
    python3 ydb/agents/.agents/skills/ydb-agent-instructions/scripts/check.py <dir>
    Name each command that fails or that you could not run.
 7. Scripts. For each scripts/<name>.py run
-   python3.8 -m unittest discover -s <skill>/scripts/tests   (or python3 when 3.8 is absent)
+   python3.9 -m unittest discover -s <skill>/scripts/tests   (or python3 when 3.9 is absent)
    grep -n -E '^(import|from) ' <script>
    Name each failing test and each import outside the standard library. Name each step in the text that a script could do.
 8. Trigger. Give three requests where the skill must be used and three where it must not. State whether the description picks the right ones.

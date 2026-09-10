@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for find.py. Run: python3.8 -m unittest discover -s <this dir>"""
+"""Tests for find.py. Run: python3.9 -m unittest discover -s <this dir>"""
 import contextlib
 import io
 import os
@@ -33,6 +33,7 @@ class FindTests(unittest.TestCase):
         write(os.path.join(self.root, "ydb", "docs", "en", "core", "contributor", "storage.md"), "PDISK internals\n")
         write(os.path.join(self.root, "ydb", "docs", "en", "core", "contributor", "toc_i.yaml"), "pdisk: yes\n")
         write(os.path.join(self.root, "ydb", "other.md"), "pdisk but not an instruction\n")
+        write(os.path.join(self.root, "ydb", "core", ".hidden", "x.md"), "hidden\n")
         write(os.path.join(self.root, "ydb", "agents", "GUIDE.md"), "shared guide, no topic\n")
         write(os.path.join(self.root, "ydb", "agents", "TESTS.md"), "how to run pdisk tests\n")
         write(os.path.join(self.root, "ydb", "agents", "notes.txt"), "pdisk, not markdown\n")
@@ -70,10 +71,10 @@ class FindTests(unittest.TestCase):
         for absent in ("ydb/other.md", "ydb/agents/GUIDE.md", "toc_i.yaml", "notes.txt", "contrib/"):
             self.assertNotIn(absent, mention)
 
-    def test_skills_prints_name_and_directory(self):
+    def test_skills_prints_names_directories_and_components(self):
         code, out = self.run_find("--skills")
         self.assertEqual(code, 0)
-        self.assertEqual(out, "ydb-foo-skill\tydb/core/foo\n")
+        self.assertEqual(out, "skills:\n  ydb-foo-skill\tydb/core/foo\ncomponents:\n  ydb/core/bar\n  ydb/core/foo\n  ydb/docs/en\n")
 
     def test_untracked_files_are_listed(self):
         write(os.path.join(self.root, "ydb", "new", "AGENTS.md"), "# new\n")

@@ -44,19 +44,19 @@ Decision table, budgets and the layout of a skill directory: references/placemen
 - Long tables or background: references/*.md inside the skill.
 - A step goes into `scripts/<name>.py` when you can write down its exact input and its exact expected output, and the same input must always give the same output. A step stays with the model only when it needs judgment about meaning: what a text means, or which of several valid options fits.
 - Exception: a step that runs a few times a year and would need a script longer than `SKILL.md` may stay with the model; write the reason in `SKILL.md`.
-- Scripts: Python 3.8 syntax, standard library only, tests in `scripts/tests/test_<name>.py` (`unittest`).
+- Scripts: Python 3.9 syntax, standard library only, tests in `scripts/tests/test_<name>.py` (`unittest`).
 
 Example of the text: `ydb/core/blobstorage/pdisk/AGENTS.md` and `ydb/core/blobstorage/pdisk/.agents/skills/ydb-pdisk-development/SKILL.md`. That directory has no `CLAUDE.md`; Step 4 adds it for a new skill.
 
 ## Step 4. Choose the name and create the files
 
-The name starts with `ydb-` and must be unique in the repo. Print the existing names with their directories and compare:
+The name starts with `ydb-` and must be unique in the repo. Print the existing skill names with their directories and the component directories, and compare:
 
 ```bash
 python3 ydb/agents/.agents/skills/ydb-agent-instructions/scripts/find.py --skills
 ```
 
-If a reader could take the new name for one of them, or for a component it does not cover, tell the human and propose two or three other names before you continue.
+If a reader could take the new name for an existing skill, or for a component the skill does not cover, tell the human and propose two or three other names before you continue.
 
 ```bash
 python3 ydb/agents/.agents/skills/ydb-agent-instructions/scripts/scaffold.py <dir> <skill-name> --description "<one sentence>"
@@ -68,7 +68,7 @@ It creates `<dir>/.agents/skills/<skill-name>/SKILL.md`, `<dir>/AGENTS.md` (or p
 
 - `description`: name the directory or component, the task types, and what the skill is not for.
 - A skill about a code directory usually has three sections, as in `ydb-pdisk-development`. "Source map": a table of the main files and what each one does. "Trace the changed contract": what to read on both sides of a change and which invariants to keep. "Validation": the smallest test target to run first.
-- Write paths as plain text. A file inside the same directory: relative to the file (`.agents/skills/<name>/SKILL.md`). Anything else: from the repo root (`ydb/agents/GUIDE.md`). Do not use `../`.
+- Write paths as plain text, relative to the file (`.agents/skills/<name>/SKILL.md`, `../README.md`) or from the repo root (`ydb/agents/GUIDE.md`).
 - Replace every `TODO` line the script created.
 
 ## Step 6. Verify every command and claim

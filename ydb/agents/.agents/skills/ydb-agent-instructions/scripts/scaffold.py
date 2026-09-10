@@ -17,7 +17,7 @@ After writing it runs check.py on DIR; exit code 1 then means check.py
 found errors in the files (the files stay in place, fix them).
 Exit code 2 means a bad SKILL_NAME, a missing DIR, or no repository root.
 
-Written for Python 3.8 with the standard library only.
+Written for Python 3.9 with the standard library only.
 """
 import argparse
 import os

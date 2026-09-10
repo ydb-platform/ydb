@@ -10,10 +10,11 @@ not yet added, but not ignored).
 With TOPIC: also prints the README.md files, the .md files under
 ydb/docs/en/core/contributor/ and the instruction files that contain TOPIC
 (case does not matter).
-With --skills: prints only the skills, one per line as "name<TAB>directory",
-so a reader can compare a new name with the existing ones.
+With --skills: prints the skills, one per line as "name<TAB>directory", and
+then the component directories ydb/<layer>/<component>, so a reader can
+compare a new skill name with the existing names.
 
-Written for Python 3.8 with the standard library only.
+Written for Python 3.9 with the standard library only.
 """
 import argparse
 import os
@@ -57,6 +58,16 @@ def skills(files):
     return found
 
 
+def components(files):
+    """Directories ydb/<layer>/<component> that hold tracked files."""
+    found = set()
+    for path in files:
+        parts = path.split("/")
+        if len(parts) >= 4 and parts[0] == "ydb" and not parts[1].startswith(".") and not parts[2].startswith("."):
+            found.add("/".join(parts[:3]))
+    return sorted(found)
+
+
 def files_mentioning(files, topic, root):
     needle = topic.lower()
     found = []
@@ -77,7 +88,7 @@ def files_mentioning(files, topic, root):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("topic", nargs="?", metavar="TOPIC", help="word or phrase to look for, for example a directory or component name")
-    parser.add_argument("--skills", action="store_true", help="print only skill names with their directories")
+    parser.add_argument("--skills", action="store_true", help="print skill names with their directories, then the component directories")
     parser.add_argument("--root", help="repository root (default: found with git)")
     args = parser.parse_args(argv)
 
@@ -91,8 +102,12 @@ def main(argv=None):
         return 2
 
     if args.skills:
+        print("skills:")
         for name, owner in skills(files):
-            print("%s\t%s" % (name, owner))
+            print("  %s\t%s" % (name, owner))
+        print("components:")
+        for path in components(files):
+            print("  " + path)
         return 0
     print("instruction files:")
     for path in instruction_files(files):

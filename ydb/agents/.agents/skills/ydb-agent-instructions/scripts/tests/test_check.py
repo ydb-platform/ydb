@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for check.py. Run: python3.8 -m unittest discover -s <this dir>"""
+"""Tests for check.py. Run: python3.9 -m unittest discover -s <this dir>"""
 import contextlib
 import io
 import os
@@ -190,12 +190,6 @@ class SkillTests(Fixture):
         for absent in ("GUIDE.md", "in-code.md", "<name>", "example.md"):
             self.assertNotIn(absent, out)
 
-    def test_path_going_up_is_warning(self):
-        owner, _ = self.make_skill(body="# D\n\nSee ../../../../agents/GUIDE.md.\n")
-        code, out = self.run_check(owner)
-        self.assertEqual(code, 0, out)
-        self.assertIn("goes up the tree", out)
-
     def test_broken_path_in_reference_is_error(self):
         owner, skill_md = self.make_skill()
         write(os.path.join(os.path.dirname(skill_md), "references", "more.md"), "See gone/file.md.\n")
@@ -258,7 +252,7 @@ class ScriptTests(Fixture):
         write(self.script_path(owner), "#!/usr/bin/env python3\nmatch 1:\n    case 1: pass\n")
         code, out = self.run_check(owner)
         self.assertEqual(code, 1)
-        self.assertIn("not valid Python 3.8 syntax", out)
+        self.assertIn("not valid Python 3.9 syntax", out)
         write(self.script_path(owner), "#!/usr/bin/env python3\nimport yaml\n")
         code, out = self.run_check(owner)
         self.assertEqual(code, 1)

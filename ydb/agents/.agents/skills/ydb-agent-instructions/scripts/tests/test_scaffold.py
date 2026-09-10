@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for scaffold.py. Run: python3.8 -m unittest discover -s <this dir>"""
+"""Tests for scaffold.py. Run: python3.9 -m unittest discover -s <this dir>"""
 import contextlib
 import io
 import os

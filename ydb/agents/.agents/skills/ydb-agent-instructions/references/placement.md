@@ -49,7 +49,7 @@ Example, the reason for the root line that points to this skill: the task "chang
   .agents/skills/<name>/
     SKILL.md                     frontmatter name + description, then short numbered text
     references/*.md              long tables and background, read on demand
-    scripts/<name>.py            Python 3.8, standard library only
+    scripts/<name>.py            Python 3.9, standard library only
     scripts/tests/test_<name>.py unittest for each script
 ```
 

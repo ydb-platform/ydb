@@ -104,18 +104,25 @@ private:
 // session handle carried by TEvNodeConnected.
 class TDirectSessionGrabber: public TActorBootstrapped<TDirectSessionGrabber> {
 public:
-    TDirectSessionGrabber(ui32 peerNodeId, NThreading::TPromise<std::shared_ptr<IDirectSession>> promise)
-        : PeerNodeId(peerNodeId)
+    TDirectSessionGrabber(TActorId proxyId, NThreading::TPromise<std::shared_ptr<IDirectSession>> promise)
+        : ProxyId(proxyId)
         , Promise(std::move(promise))
     {}
 
     void Bootstrap() {
         Become(&TThis::StateFunc);
-        Send(TActivationContext::ActorSystem()->InterconnectProxy(PeerNodeId), new TEvInterconnect::TEvConnectNode);
+        Connect();
     }
 
 private:
+    void Connect() {
+        if (!Resolved) {
+            Send(ProxyId, new TEvInterconnect::TEvConnectNode);
+        }
+    }
+
     STRICT_STFUNC(StateFunc,
+        cFunc(TEvents::TEvWakeup::EventType, Connect)
         hFunc(TEvInterconnect::TEvNodeConnected, Handle)
         cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, HandleDisconnected)
     )
@@ -127,17 +134,49 @@ private:
         }
     }
 
-    void HandleDisconnected() {}
+    void HandleDisconnected() {
+        if (!Resolved) {
+            // A failed initial handshake consumes the subscription request. Retry after the
+            // proxy has had a chance to leave its error state, within GrabDirectSession's deadline.
+            Schedule(TDuration::MilliSeconds(100), new TEvents::TEvWakeup);
+        }
+    }
 
-    const ui32 PeerNodeId;
+    const TActorId ProxyId;
     NThreading::TPromise<std::shared_ptr<IDirectSession>> Promise;
     bool Resolved = false;
+};
+
+// Reject one connection request, then let the real proxy establish the session.
+class TRejectFirstConnect: public TActor<TRejectFirstConnect> {
+public:
+    explicit TRejectFirstConnect(TActorId proxyId)
+        : TActor(&TThis::StateFunc)
+        , ProxyId(proxyId)
+    {}
+
+private:
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvInterconnect::TEvConnectNode, Handle)
+    )
+
+    void Handle(TEvInterconnect::TEvConnectNode::TPtr& ev) {
+        if (!Rejected) {
+            Rejected = true;
+            Send(ev->Sender, new TEvInterconnect::TEvNodeDisconnected(2), 0, ev->Cookie);
+        } else {
+            TActivationContext::Send(IEventHandle::Forward(ev, ProxyId));
+        }
+    }
+
+    const TActorId ProxyId;
+    bool Rejected = false;
 };
 
 std::shared_ptr<IDirectSession> GrabDirectSession(TTestICCluster& cluster, ui32 fromNode, ui32 peerNode) {
     auto promise = NThreading::NewPromise<std::shared_ptr<IDirectSession>>();
     auto future = promise.GetFuture();
-    cluster.RegisterActor(new TDirectSessionGrabber(peerNode, promise), fromNode);
+    cluster.RegisterActor(new TDirectSessionGrabber(cluster.InterconnectProxy(peerNode, fromNode), promise), fromNode);
     UNIT_ASSERT_C(future.Wait(TDuration::Seconds(10)), "timed out waiting for TEvNodeConnected");
     auto directSession = future.GetValueSync();
     UNIT_ASSERT_C(directSession, "v1 session did not provide a direct session handle");
@@ -163,6 +202,17 @@ TAutoPtr<IEventHandle> MakeRequest(const TActorId& recipient, const TActorId& se
 } // namespace
 
 Y_UNIT_TEST_SUITE(InterconnectDirectSession) {
+
+    Y_UNIT_TEST(RetriesInitialConnectionFailure) {
+        TTestICCluster cluster(2);
+        const TActorId proxyId = cluster.RegisterActor(
+            new TRejectFirstConnect(cluster.InterconnectProxy(2, 1)), 1);
+        auto promise = NThreading::NewPromise<std::shared_ptr<IDirectSession>>();
+        auto future = promise.GetFuture();
+        cluster.RegisterActor(new TDirectSessionGrabber(proxyId, promise), 1);
+        UNIT_ASSERT_C(future.Wait(TDuration::Seconds(10)), "did not retry initial connection failure");
+        UNIT_ASSERT(future.GetValueSync());
+    }
 
     // Replies addressed to a registered local id must be delivered to the receive callback.
     Y_UNIT_TEST(ReceivesExpectedReplies) {

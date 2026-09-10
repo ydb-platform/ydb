@@ -208,7 +208,6 @@ void TSysViewProcessor::Handle(TEvSysView::TEvGetIntervalMetricsResponse::TPtr& 
 }
 
 void TSysViewProcessor::HandleIntervalMetricsFailure(ui64 requestId) {
-    
     Execute(new TTxIntervalMetricsFailure(this, requestId),
         TActivationContext::AsActorContext());
 }

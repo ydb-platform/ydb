@@ -773,11 +773,11 @@ public:
             ThrowParquetNotOk(readers[0]->GetSchema(&schema));
             std::vector<int> columnIndices;
             std::vector<TColumnConverter> columnConverters;
-            std::vector<TMissingColumn> missingColumns;
+            TMissingColumns missingColumns;
 
             BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters, missingColumns, ReadSpec->RowSpec, ReadSpec->Settings);
 
-            // select count(*) case - single reader is enough
+            // no columns to read (select count(*) or all requested columns are absent in file) - single reader is enough
             if (!columnIndices.empty()) {
                 if (ReadSpec->ParallelRowGroupCount) {
                     readerCount = ReadSpec->ParallelRowGroupCount;
@@ -850,7 +850,7 @@ public:
                     readyGroupIndex = ReadyRowGroups.top();
                     ReadyRowGroups.pop();
                 } else {
-                    // select count(*) case - no columns, no download, just fetch meta info instantly
+                    // no columns to read (select count(*) or all requested columns are absent in file) - no download, just fetch meta info instantly
                     readyGroupIndex = readyGroupCount;
                 }
                 SourceContext->DecChunkCount();
@@ -945,7 +945,7 @@ public:
         ThrowParquetNotOk(fileReader->GetSchema(&schema));
         std::vector<int> columnIndices;
         std::vector<TColumnConverter> columnConverters;
-        std::vector<TMissingColumn> missingColumns;
+        TMissingColumns missingColumns;
 
         BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters, missingColumns, ReadSpec->RowSpec, ReadSpec->Settings);
 

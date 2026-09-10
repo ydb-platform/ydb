@@ -890,7 +890,7 @@ TColumnConverter BuildOutputColumnConverter(const std::string& columnName, NKiki
 }
 
 void BuildColumnConverters(std::shared_ptr<arrow::Schema> outputSchema, std::shared_ptr<arrow::Schema> dataSchema,
-    std::vector<int>& columnIndices, std::vector<TColumnConverter>& columnConverters, std::vector<TMissingColumn>& missingColumns,
+    std::vector<int>& columnIndices, std::vector<TColumnConverter>& columnConverters, TMissingColumns& missingColumns,
     std::unordered_map<TStringBuf, NKikimr::NMiniKQL::TType*, THash<TStringBuf>> rowTypes, const NDB::FormatSettings& settings) {
 
     for (int i = 0; i < dataSchema->num_fields(); ++i) {
@@ -906,6 +906,7 @@ void BuildColumnConverters(std::shared_ptr<arrow::Schema> outputSchema, std::sha
         }
     }
 
+    missingColumns.Schema = outputSchema;
     columnConverters.reserve(outputSchema->num_fields());
     for (int i = 0; i < outputSchema->num_fields(); ++i) {
         const auto& targetField = outputSchema->field(i);
@@ -917,7 +918,7 @@ void BuildColumnConverters(std::shared_ptr<arrow::Schema> outputSchema, std::sha
                 throw parquet::ParquetException(TStringBuilder() << "Missing field: " << targetField->name()
                     << " (only optional fields may be absent in file), found fields in arrow file: " << dataSchema->ToString());
             }
-            missingColumns.push_back({i, targetField});
+            missingColumns.Columns.emplace_back(static_cast<size_t>(i), targetField);
             continue;
         }
         auto targetType = targetField->type();
@@ -932,7 +933,7 @@ void BuildColumnConverters(std::shared_ptr<arrow::Schema> outputSchema, std::sha
 }
 
 std::shared_ptr<arrow::RecordBatch> ConvertArrowColumns(std::shared_ptr<arrow::RecordBatch> batch, std::vector<TColumnConverter>& columnConverters,
-    const std::vector<TMissingColumn>& missingColumns) {
+    const TMissingColumns& missingColumns) {
     auto columns = batch->columns();
     for (size_t i = 0; i < columnConverters.size(); ++i) {
         auto converter = columnConverters[i];
@@ -941,20 +942,29 @@ std::shared_ptr<arrow::RecordBatch> ConvertArrowColumns(std::shared_ptr<arrow::R
         }
     }
 
-    if (missingColumns.empty()) {
+    if (missingColumns.Columns.empty()) {
         return arrow::RecordBatch::Make(batch->schema(), batch->num_rows(), columns);
     }
 
-    auto fields = batch->schema()->fields();
-    for (const auto& missingColumn : missingColumns) {
-        auto nullColumn = arrow::MakeArrayOfNull(missingColumn.Field->type(), batch->num_rows());
-        THROW_ARROW_NOT_OK(nullColumn.status());
-        YQL_ENSURE(static_cast<size_t>(missingColumn.OutputIndex) <= columns.size(), "Invalid position " << missingColumn.OutputIndex
-            << " of missing column " << missingColumn.Field->name() << ", batch has " << columns.size() << " columns");
-        columns.insert(columns.begin() + missingColumn.OutputIndex, nullColumn.ValueOrDie());
-        fields.insert(fields.begin() + missingColumn.OutputIndex, missingColumn.Field);
+    const size_t numColumns = missingColumns.Schema->num_fields();
+    YQL_ENSURE(columns.size() + missingColumns.Columns.size() == numColumns, "Batch has " << columns.size() << " columns and "
+        << missingColumns.Columns.size() << " missing columns, expected " << numColumns << " columns in total");
+
+    std::vector<std::shared_ptr<arrow::Array>> result;
+    result.reserve(numColumns);
+    auto column = columns.begin();
+    auto missingColumn = missingColumns.Columns.begin();
+    for (size_t i = 0; i < numColumns; ++i) {
+        if (missingColumn != missingColumns.Columns.end() && missingColumn->OutputIndex == i) {
+            auto nullColumn = arrow::MakeArrayOfNull(missingColumn->Field->type(), batch->num_rows());
+            THROW_ARROW_NOT_OK(nullColumn.status());
+            result.emplace_back(std::move(nullColumn).ValueOrDie());
+            ++missingColumn;
+        } else {
+            result.emplace_back(std::move(*column++));
+        }
     }
-    return arrow::RecordBatch::Make(arrow::schema(std::move(fields)), batch->num_rows(), std::move(columns));
+    return arrow::RecordBatch::Make(missingColumns.Schema, batch->num_rows(), std::move(result));
 }
 
 // Type conversion same as in ClickHouseClient.SerializeFormat udf

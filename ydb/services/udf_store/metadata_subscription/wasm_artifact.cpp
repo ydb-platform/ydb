@@ -12,7 +12,7 @@ TVector<NKikimrSchemeOp::TColumnDescription> TUdfWasmArtifact::GetColumnDescript
     return {
         makeCol(IdColName, "Utf8"),
         makeCol(KindColName, "Utf8"),
-        makeCol(SourceMd5ColName, "Utf8"),
+        makeCol(UidColName, "Utf8"),
         makeCol(VersionColName, "Uint64"),
         makeCol(FormatColName, "Utf8"),
         makeCol(WasmDataSizeColName, "Uint64"),
@@ -24,7 +24,7 @@ TVector<NKikimrSchemeOp::TColumnDescription> TUdfWasmArtifact::GetColumnDescript
 }
 
 TVector<TString> TUdfWasmArtifact::GetPk() {
-    return {IdColName, KindColName};
+    return {IdColName, KindColName, UidColName};
 }
 
 TString WasmArtifactKindToString(EWasmArtifactKind kind) {

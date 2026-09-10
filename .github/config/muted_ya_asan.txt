@@ -458,6 +458,7 @@ ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grp
 ydb/tests/functional/dstool py3test.sole chunk
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_cluster_balance_skips_not_bsc_ready
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_filter_healthy_groups_requires_bsc_ready
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_list_fallback_to_legacy_api
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_vdisk_evict_fallback_to_legacy_api
 ydb/tests/functional/dstool test_static_vdisk_evict.py.test_dstool_evict_static_vdisk
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx

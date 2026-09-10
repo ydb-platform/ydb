@@ -117,6 +117,10 @@ void TPartitionQuoterBase::CheckTotalPartitionQuota(TRequestContext&& context) {
 }
 
 void TPartitionQuoterBase::HandleAccountQuotaApproved(NAccountQuoterEvents::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+    // TEvResponse can arrive after the request left PendingAccountQuotaRequests:
+    // account-quoter poison (consumer delete) fail-opens queued TEvRequest, and a
+    // duplicate/late clearance can follow. AFL_ENSURE here used to kill the partition
+    // quoter; log and drop instead.
     auto* response = ev->Get();
     if (!response->Request) {
         YDB_LOG_ERROR("Account quota response without a request",

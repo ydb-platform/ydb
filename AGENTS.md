@@ -30,6 +30,6 @@ Test filters should include part of full test name. Full test name format depend
 
 - Use C++20 or earlier
 
-## Agent instructions
+## Adding or changing agent instructions
 
 Before you add or change `AGENTS.md`, `CLAUDE.md`, skills or rules, read ydb/agents/.agents/skills/ydb-agent-instructions/SKILL.md.

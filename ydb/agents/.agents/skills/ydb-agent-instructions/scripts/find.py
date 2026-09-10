@@ -4,8 +4,9 @@
 Usage:
     python3 find.py [TOPIC] [--root DIR]
 
-Prints every AGENTS.md, SKILL.md, RULES.md and rules/*.md outside contrib/
-and vendor/ (tracked or not yet added, but not ignored). With TOPIC it also prints the README.md files and the
+Prints every AGENTS.md, SKILL.md, RULES.md, rules/*.md and every .md file
+under ydb/agents/, outside contrib/ and vendor/ (tracked or not yet added,
+but not ignored). With TOPIC it also prints the README.md files and the
 files under ydb/docs/en/core/contributor/ that contain TOPIC (case does not
 matter). Read the printed files before you write a new instruction.
 
@@ -22,6 +23,11 @@ import check  # noqa: E402
 
 INSTRUCTION_RE = re.compile(r"(^|/)(AGENTS\.md|SKILL\.md|RULES\.md|rules/[^/]+\.md)$")
 SKIP_PREFIXES = ("contrib/", "vendor/")
+SHARED_DIR = "ydb/agents/"
+
+
+def is_instruction(path):
+    return bool(INSTRUCTION_RE.search(path)) or (path.startswith(SHARED_DIR) and path.endswith(".md"))
 
 
 def tracked_files(root):
@@ -32,14 +38,14 @@ def tracked_files(root):
 
 
 def instruction_files(files):
-    return [path for path in files if INSTRUCTION_RE.search(path)]
+    return [path for path in files if is_instruction(path)]
 
 
 def files_mentioning(files, topic, root):
     needle = topic.lower()
     found = []
     for path in files:
-        if not (path.endswith("/README.md") or path.startswith("ydb/docs/en/core/contributor/") or INSTRUCTION_RE.search(path)):
+        if not (path.endswith("/README.md") or path.startswith("ydb/docs/en/core/contributor/") or is_instruction(path)):
             continue
         try:
             text = check.read_text(os.path.join(root, path))

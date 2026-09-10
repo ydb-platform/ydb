@@ -113,7 +113,7 @@ class TNeumannHashTable {
     static_assert(sizeof(THash) == sizeof(typename THash::T));
 
     Hash getDirectorySlot(THash thash) const {
-        return (*thash >> kBucketHashBits) & DirectoryHashMask_;
+        return (*thash >> Log2Buckets) & DirectoryHashMask_;
     }
 
     static constexpr ui32 kEmbeddedSize = 16;

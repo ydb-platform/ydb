@@ -133,7 +133,7 @@ using TBuckets = TMKQLVector<TBucket>;
 using TPairOfBuckets = TMKQLVector<TSides<TBucket>>;
 bool IsBucketSpilled(const TSides<TBucket>& bucket);
 
-inline constexpr unsigned kBucketHashBits = 6;
+constexpr ui32 Log2Buckets = 6;
 
 enum class PageSpillingAlready {
     InMemoryYet,

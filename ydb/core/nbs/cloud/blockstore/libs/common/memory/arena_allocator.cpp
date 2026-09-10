@@ -101,17 +101,21 @@ public:
 
     void* Allocate()
     {
+        void* result = nullptr;
         if (FreeList) {
-            TSlot* result = FreeList;
+            result = FreeList;
             FreeList = FreeList->Next;
             std::memset(result, 0, SlotSize);
             --FreeCount;
-            return result;
+        } else {
+            if (AllocatedSlots == SlotsPerArena) {
+                return nullptr;
+            }
+            result = static_cast<char*>(Base) + AllocatedSlots++ * SlotSize;
         }
-        if (AllocatedSlots == SlotsPerArena) {
-            return nullptr;
-        }
-        return static_cast<char*>(Base) + AllocatedSlots++ * SlotSize;
+
+        MaxAllocatedSlots = Max(MaxAllocatedSlots, AllocatedSlots - FreeCount);
+        return result;
     }
 
     bool Deallocate(void* slot)
@@ -128,6 +132,11 @@ public:
         return FreeCount == AllocatedSlots;
     }
 
+    [[nodiscard]] size_t GetMaxAllocatedSlots() const
+    {
+        return MaxAllocatedSlots;
+    }
+
 private:
     const size_t ArenaSize = 0;
     const TBase Base = nullptr;
@@ -136,6 +145,7 @@ private:
     size_t AllocatedSlots = 0;
     TSlot* FreeList = nullptr;
     size_t FreeCount = 0;
+    size_t MaxAllocatedSlots = 0;
 };
 
 // Manages arenas that contain slots of the same size.
@@ -201,12 +211,23 @@ public:
     {
         return TArenaAllocatorStats{
             .SlotSize = SlotSize,
+            .ArenaSize = ArenaSize,
             .ReservedSize = GetReservedSize(),
             .UsedSize = GetAllocatedSize(),
+            .MaxUsedSize = GetMaxUsedSize(),
             .Count = AllocateCount};
     }
 
 private:
+    [[nodiscard]] size_t GetMaxUsedSize() const
+    {
+        size_t result = 0;
+        for (const auto& arena: Arenas) {
+            result += arena.GetMaxAllocatedSlots() * SlotSize;
+        }
+        return result;
+    }
+
     void FreeArena(TArenaPtr arena)
     {
         if (arena == LastUsed) {

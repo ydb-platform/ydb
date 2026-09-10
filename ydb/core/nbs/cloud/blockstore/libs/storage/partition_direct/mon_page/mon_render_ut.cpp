@@ -104,11 +104,15 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
                     .ArenaMemoryUsage =
                         {.Slots =
                              {{.SlotSize = 256,
+                               .ArenaSize = 1_MB,
                                .ReservedSize = 16_KB,
-                               .UsedSize = 5_KB},
+                               .UsedSize = 5_KB,
+                               .MaxUsedSize = 8_KB},
                               {.SlotSize = 512,
+                               .ArenaSize = 2_MB,
                                .ReservedSize = 32_KB,
-                               .UsedSize = 7_KB}}}},
+                               .UsedSize = 7_KB,
+                               .MaxUsedSize = 12_KB}}}},
             .Dbgs = {std::move(first), std::move(second)},
         };
 
@@ -118,6 +122,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "256 B");
         UNIT_ASSERT_STRING_CONTAINS(html, "512 B");
         UNIT_ASSERT_STRING_CONTAINS(html, "5.00 KiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "8.00 KiB");
         UNIT_ASSERT_STRING_CONTAINS(html, "16.00 KiB");
         UNIT_ASSERT_STRING_CONTAINS(html, "48.00 KiB");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=dbg&dbg=1");

@@ -14,9 +14,11 @@ namespace NYdb::NBS::NBlockStore {
 struct TArenaAllocatorStats
 {
     size_t SlotSize = 0;
+    size_t ArenaSize = 0;
     size_t ReservedSize = 0;
     size_t UsedSize = 0;
-    size_t Count = 0;   // Total allocations performed
+    size_t MaxUsedSize = 0;   // Maximum simultaneous usage of one arena
+    size_t Count = 0;         // Total allocations performed
 };
 
 //////////////////////////////////////////////////////////////////////////////

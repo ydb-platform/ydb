@@ -7,6 +7,7 @@ SIZE(SMALL)
 BENCHMARK_OPTS(--benchmark_min_time=0.05s)
 
 SRCS(
+    dirty_map_benchmark.cpp
     requests_benchmark.cpp
     time_predictor_benchmark.cpp
     ../base_test_fixture.cpp

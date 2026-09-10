@@ -30,10 +30,16 @@ void RenderMemory(IOutputStream& str, const TMonPageData& data)
                             str << "Slot size";
                         }
                         TABLEH () {
+                            str << "Arena size";
+                        }
+                        TABLEH () {
                             str << "Reserved";
                         }
                         TABLEH () {
                             str << "Used";
+                        }
+                        TABLEH () {
+                            str << "Max used";
                         }
                         TABLEH () {
                             str << "Count";
@@ -52,10 +58,16 @@ void RenderMemory(IOutputStream& str, const TMonPageData& data)
                                 str << FormatByteSize(usage.SlotSize);
                             }
                             TABLED () {
+                                str << FormatByteSize(usage.ArenaSize);
+                            }
+                            TABLED () {
                                 str << FormatByteSize(usage.ReservedSize);
                             }
                             TABLED () {
                                 str << FormatByteSize(usage.UsedSize);
+                            }
+                            TABLED () {
+                                str << FormatByteSize(usage.MaxUsedSize);
                             }
                             TABLED () {
                                 str << usage.Count;
@@ -67,10 +79,16 @@ void RenderMemory(IOutputStream& str, const TMonPageData& data)
                             str << "Total";
                         }
                         TABLED () {
+                            str << "-";
+                        }
+                        TABLED () {
                             str << FormatByteSize(totalReservedSize);
                         }
                         TABLED () {
                             str << FormatByteSize(totalUsedSize);
+                        }
+                        TABLED () {
+                            str << "-";
                         }
                         TABLED () {
                             str << totalCount;

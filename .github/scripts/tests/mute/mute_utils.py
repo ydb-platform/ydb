@@ -152,31 +152,57 @@ def _split(s: str, sep: str) -> tuple[str, str]:
     else:
         return s[:p], s[p + 1 :]
 
-def get_previously_skipped_tests(report_json_path: str) -> set[tuple[str, str]]:
+def load_report_results(report_json_path: str) -> list[dict]:
+    if not report_json_path:
+        return []
+    with open(report_json_path, 'r') as f:
+        return json.load(f).get('results', [])
+
+
+def get_previously_skipped_tests(results: list[dict]) -> set[tuple[str, str]]:
     result: set[tuple[str, str]] = set()
-    if report_json_path:
-        with open(report_json_path, 'r') as f:
-            report = json.load(f)
-        for test in report.get('results', []):
-            if test.get('status', '') not in {'SKIPPED'}:
-                continue
-            path = test.get('path', '')
-            name = test.get('name', '')
-            sub_name = test.get('subtest_name', '')
-            if name and sub_name:
-                result.add((path, f'{name}.{sub_name}'))
-            elif name:
-                result.add((path, name))
-            elif sub_name:
-                result.add((path, sub_name))
+    for test in results:
+        if test.get('status', '') not in {'SKIPPED'}:
+            continue
+        path = test.get('path', '')
+        name = test.get('name', '')
+        sub_name = test.get('subtest_name', '')
+        if name and sub_name:
+            result.add((path, f'{name}.{sub_name}'))
+        elif name:
+            result.add((path, name))
+        elif sub_name:
+            result.add((path, sub_name))
     return result
+
+
+def get_suites_with_unmuted_failures(results: list[dict]) -> set[str]:
+    """Suites whose previous-run failures were not covered by the mute list.
+
+    Muted failures are rewritten to MUTE by transform_build_results.py, so a leftover
+    FAILED/ERROR is exactly what made this rerun happen.
+
+    Blacklisting such a suite loses those failures: `-X` restarts the whole suite
+    without per-test filters, and the blacklist then subtracts the muted test from a
+    test list that is still empty before the suite is listed. ya reads that as an
+    empty suite and drops it (unittest), or narrows it down to a placeholder name that
+    matches nothing (pytest).
+    """
+    return {
+        test['path']
+        for test in results
+        if test.get('status', '') in {'FAILED', 'ERROR'} and test.get('path', '')
+    }
+
 
 def convert_muted_txt_to_yaml(muted_txt_path: str, report_json_path: str) -> None:
     import yaml
 
     with open(muted_txt_path) as file:
         muted_tests = file.readlines()
-    previously_skipped = get_previously_skipped_tests(report_json_path)
+    results = load_report_results(report_json_path)
+    previously_skipped = get_previously_skipped_tests(results)
+    suites_to_rerun_fully = get_suites_with_unmuted_failures(results)
     filter_by_suite: dict[tuple[str, str], list[str]] = {}
     for test_line in [l.strip() for l in muted_tests]:
         if not test_line:
@@ -185,6 +211,8 @@ def convert_muted_txt_to_yaml(muted_txt_path: str, report_json_path: str) -> Non
         if filter.endswith('chunk'):
             continue
         if (path, filter) in previously_skipped:
+            continue
+        if path in suites_to_rerun_fully:
             continue
         suite_type = ''
         filter = filter.replace('.', '::').replace('::py::', '.py::')

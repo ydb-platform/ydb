@@ -17,11 +17,8 @@ TBlockRangeFieldBitMask::TBlockRangeFieldBitMask(
     IArenaAllocatorPtr allocator,
     size_t maxBlockCount)
     : MaxBlockCount(maxBlockCount)
-    , Allocator(std::move(allocator))
-    , Mask(static_cast<ui8*>(Allocator->Allocate(GetMaskSize())))
-{
-    memset(Mask, 0, GetMaskSize());
-}
+    , Mask(GetMaskSize(), std::move(allocator))
+{}
 
 // static
 size_t TBlockRangeFieldBitMask::CalcMemoryUsage(size_t blockCount)
@@ -119,7 +116,7 @@ bool TBlockRangeFieldBitMask::TryRemove(TBlockRange16 range, bool* changed)
 
 void TBlockRangeFieldBitMask::Clear()
 {
-    memset(Mask, 0, GetMaskSize());
+    memset(Mask.GetRawData(), 0, GetMaskSize());
     BlockCount = 0;
 }
 
@@ -155,7 +152,8 @@ std::optional<TBlockRange16> TBlockRangeFieldBitMask::GetFirstRange() const
         return std::nullopt;
     }
 
-    const auto* mask = reinterpret_cast<const TBigIntegerType*>(Mask);
+    const auto* mask =
+        reinterpret_cast<const TBigIntegerType*>(Mask.GetRawData());
     const size_t chunkCount = GetMaskSize() / sizeof(TBigIntegerType);
     constexpr size_t BitsPerChunk = sizeof(TBigIntegerType) * 8;
 
@@ -203,7 +201,9 @@ std::optional<TBlockRange16> TBlockRangeFieldBitMask::GetFirstRange() const
 
 TString TBlockRangeFieldBitMask::Save() const
 {
-    return TString{reinterpret_cast<const char*>(Mask), GetMaskSize()};
+    return TString{
+        reinterpret_cast<const char*>(Mask.GetRawData()),
+        GetMaskSize()};
 }
 
 TString TBlockRangeFieldBitMask::Print() const
@@ -214,7 +214,7 @@ TString TBlockRangeFieldBitMask::Print() const
 void TBlockRangeFieldBitMask::DeserializeFromBitmap(const TString& input)
 {
     const size_t count = Min(GetMaskSize(), input.size());
-    memcpy(Mask, input.data(), count);
+    memcpy(Mask.GetRawData(), input.data(), count);
     for (size_t i = count; i < GetMaskSize(); ++i) {
         Mask[i] = 0;
     }
@@ -226,9 +226,9 @@ void TBlockRangeFieldBitMask::Add(const TBlockRangeFieldBitMask& other)
 {
     Y_DEBUG_ABORT_UNLESS(MaxBlockCount == other.MaxBlockCount);
 
-    auto* mask = reinterpret_cast<TBigIntegerType*>(Mask);
+    auto* mask = reinterpret_cast<TBigIntegerType*>(Mask.GetRawData());
     const auto* otherMask =
-        reinterpret_cast<const TBigIntegerType*>(other.Mask);
+        reinterpret_cast<const TBigIntegerType*>(other.Mask.GetRawData());
     const size_t count =
         Min(GetMaskSize(), other.GetMaskSize()) / sizeof(TBigIntegerType);
 
@@ -243,9 +243,9 @@ void TBlockRangeFieldBitMask::Remove(const TBlockRangeFieldBitMask& other)
 {
     Y_DEBUG_ABORT_UNLESS(MaxBlockCount == other.MaxBlockCount);
 
-    auto* mask = reinterpret_cast<TBigIntegerType*>(Mask);
+    auto* mask = reinterpret_cast<TBigIntegerType*>(Mask.GetRawData());
     const auto* otherMask =
-        reinterpret_cast<const TBigIntegerType*>(other.Mask);
+        reinterpret_cast<const TBigIntegerType*>(other.Mask.GetRawData());
     const size_t count =
         Min(GetMaskSize(), other.GetMaskSize()) / sizeof(TBigIntegerType);
 
@@ -261,9 +261,10 @@ bool TBlockRangeFieldBitMask::OverlapsWithBitMask(
 {
     Y_DEBUG_ABORT_UNLESS(MaxBlockCount == other.MaxBlockCount);
 
-    const auto* mask = reinterpret_cast<const TBigIntegerType*>(Mask);
+    const auto* mask =
+        reinterpret_cast<const TBigIntegerType*>(Mask.GetRawData());
     const auto* otherMask =
-        reinterpret_cast<const TBigIntegerType*>(other.Mask);
+        reinterpret_cast<const TBigIntegerType*>(other.Mask.GetRawData());
     const size_t count =
         Min(GetMaskSize(), other.GetMaskSize()) / sizeof(TBigIntegerType);
 
@@ -284,7 +285,8 @@ size_t TBlockRangeFieldBitMask::GetMaskSize() const
 void TBlockRangeFieldBitMask::RecountBlockCount()
 {
     BlockCount = 0;
-    const auto* maskPtr = reinterpret_cast<const TBigIntegerType*>(Mask);
+    const auto* maskPtr =
+        reinterpret_cast<const TBigIntegerType*>(Mask.GetRawData());
     for (size_t i = 0; i < GetMaskSize() / sizeof(TBigIntegerType); ++i) {
         BlockCount += ::NBitMapPrivate::CountBitsPrivate(maskPtr[i]);
     }

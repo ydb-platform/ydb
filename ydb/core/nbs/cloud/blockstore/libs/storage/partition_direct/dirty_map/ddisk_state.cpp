@@ -293,15 +293,15 @@ void TDDiskState::AddAhead(TBlockRange16 range)
 
     const bool behindChanged = BehindField.Remove(range);
     bool aheadChanged = false;
-    if (range.Start > OperationalBlockCount) {
+    if (range.Start >= OperationalBlockCount) {
         // Range outside operational blocks.
         aheadChanged = AheadField.Add(range);
-    } else if (range.End <= OperationalBlockCount) {
+    } else if (range.End < OperationalBlockCount) {
         // Range inside operational blocks.
     } else {
         // Range on operational blocks border.
         aheadChanged = AheadField.Add(TBlockRange16::MakeClosedInterval(
-            OperationalBlockCount + 1,
+            OperationalBlockCount,
             range.End));
     }
 

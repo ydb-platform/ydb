@@ -4,7 +4,50 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <cstdlib>
+#include <memory>
+
 namespace NYdb::NBS::NBlockStore {
+
+namespace {
+
+class TTrackingAllocator final: public IArenaAllocator
+{
+public:
+    void* Allocate(size_t size) override
+    {
+        ++AllocatedBlocksCount;
+        return std::malloc(size);
+    }
+
+    void DeAllocate(void* ptr) override
+    {
+        UNIT_ASSERT(ptr);
+        UNIT_ASSERT(AllocatedBlocksCount);
+        --AllocatedBlocksCount;
+        std::free(ptr);
+    }
+
+    size_t AllocatedBlocks() const override
+    {
+        return AllocatedBlocksCount;
+    }
+
+    size_t AllocatedSize() const override
+    {
+        return 0;
+    }
+
+    TVector<TArenaAllocatorStats> GetStats() const override
+    {
+        return {};
+    }
+
+private:
+    size_t AllocatedBlocksCount = 0;
+};
+
+}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -483,6 +526,24 @@ Y_UNIT_TEST_SUITE(TBlockRangeFieldBitMaskTest)
         UNIT_ASSERT(range.has_value());
         UNIT_ASSERT_VALUES_EQUAL(5, range->Start);
         UNIT_ASSERT_VALUES_EQUAL(9, range->End);
+    }
+
+    Y_UNIT_TEST(ShouldReleaseMaskMemoryOnDestruction)
+    {
+        auto allocator = std::make_shared<TTrackingAllocator>();
+
+        {
+            TBlockRangeFieldBitMask field(allocator, 256 * 8);
+            UNIT_ASSERT_VALUES_EQUAL(1, allocator->AllocatedBlocks());
+
+            bool changed = false;
+            UNIT_ASSERT(field.TryAdd(
+                TBlockRange16::MakeClosedInterval(0, 127),
+                &changed));
+            UNIT_ASSERT(changed);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(0, allocator->AllocatedBlocks());
     }
 }
 

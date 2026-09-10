@@ -3,6 +3,7 @@
 #include <ydb/core/nbs/cloud/storage/core/libs/common/disable_copy.h>
 
 #include <util/generic/algorithm.h>
+#include <util/generic/bitops.h>
 #include <util/generic/hash.h>
 #include <util/generic/list.h>
 #include <util/generic/map.h>
@@ -21,17 +22,20 @@ namespace {
 
 //////////////////////////////////////////////////////////////////////////////
 
-constexpr size_t BlockSize = 1_MB;
-constexpr size_t MinSlotSize = 256;
-constexpr size_t MaxSlotSize = 4096;
-constexpr size_t SlotSizeCount = 5;   // 256, 512, 1024, 2048, 4096
+constexpr size_t MinArenaSize = 1_MB;
+constexpr size_t Alignment = 8;
+
+size_t CalculateArenaSize(size_t slotSize)
+{
+    const size_t slotCount = (MinArenaSize + slotSize - 1) / slotSize;
+    return slotCount * slotSize;
+}
 
 //////////////////////////////////////////////////////////////////////////////
 
-class TBlock;
+class TArena;
 using TBase = void*;
-using TBlockPtr = TBlock*;
-using TBlocks = TMap<void*, TBlock*>;
+using TArenaPtr = TArena*;
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -49,21 +53,10 @@ void AlignedFree(void* ptr)
     free(ptr);
 }
 
-size_t SlotIndexForSize(size_t size)
-{
-    // Only exact power-of-two slot sizes within [MinSlotSize, MaxSlotSize]
-    // are allowed.
-    Y_ABORT_UNLESS(
-        size >= MinSlotSize && size <= MaxSlotSize && (size & (size - 1)) == 0);
-    return size == MinSlotSize
-               ? 0
-               : static_cast<size_t>(__builtin_ctzll(size)) -
-                     static_cast<size_t>(__builtin_ctzll(MinSlotSize));
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBlock
+// Owns one contiguous memory arena split into fixed-size slots.
+class TArena
 {
     struct TSlot
     {
@@ -71,15 +64,16 @@ class TBlock
     };
 
 public:
-    explicit TBlock(size_t slotSize)
-        : Base(AlignedAlloc(BlockSize, 8))
+    explicit TArena(size_t slotSize)
+        : ArenaSize(CalculateArenaSize(slotSize))
+        , Base(AlignedAlloc(ArenaSize, Alignment))
         , SlotSize(slotSize)
-        , SlotsPerBlock(BlockSize / slotSize)
+        , SlotsPerArena(ArenaSize / slotSize)
     {
-        std::memset(Base, 0, BlockSize);
+        std::memset(Base, 0, ArenaSize);
     }
 
-    ~TBlock()
+    ~TArena()
     {
         AlignedFree(Base);
     }
@@ -94,6 +88,17 @@ public:
         return SlotSize;
     }
 
+    [[nodiscard]] size_t GetArenaSize() const
+    {
+        return ArenaSize;
+    }
+
+    [[nodiscard]] bool Contains(void* ptr) const
+    {
+        return static_cast<char*>(ptr) >= static_cast<char*>(Base) &&
+               static_cast<char*>(ptr) < static_cast<char*>(Base) + ArenaSize;
+    }
+
     void* Allocate()
     {
         if (FreeList) {
@@ -103,18 +108,19 @@ public:
             --FreeCount;
             return result;
         }
-        if (AllocatedSlots == SlotsPerBlock) {
+        if (AllocatedSlots == SlotsPerArena) {
             return nullptr;
         }
         return static_cast<char*>(Base) + AllocatedSlots++ * SlotSize;
     }
 
-    void Free(void* slot)
+    bool Deallocate(void* slot)
     {
         TSlot* ptr = static_cast<TSlot*>(slot);
         ptr->Next = FreeList;
         FreeList = ptr;
         ++FreeCount;
+        return Empty();
     }
 
     [[nodiscard]] bool Empty() const
@@ -123,22 +129,25 @@ public:
     }
 
 private:
+    const size_t ArenaSize = 0;
     const TBase Base = nullptr;
     const size_t SlotSize = 0;
-    const size_t SlotsPerBlock = 0;
+    const size_t SlotsPerArena = 0;
     size_t AllocatedSlots = 0;
     TSlot* FreeList = nullptr;
     size_t FreeCount = 0;
 };
 
-class TBlockList
+// Manages arenas that contain slots of the same size.
+class TArenaList
 {
 public:
-    explicit TBlockList(size_t slotSize)
+    explicit TArenaList(size_t slotSize)
         : SlotSize(slotSize)
+        , ArenaSize(CalculateArenaSize(slotSize))
     {}
 
-    void* Allocate(TBlockPtr* block)
+    void* Allocate(TArenaPtr* arena)
     {
         ++AllocateCount;
 
@@ -148,26 +157,26 @@ public:
             }
         }
 
-        for (auto& block: Blocks) {
-            if (auto* result = block.Allocate()) {
-                LastUsed = &block;
+        for (auto& arena: Arenas) {
+            if (auto* result = arena.Allocate()) {
+                LastUsed = &arena;
                 return result;
             }
         }
 
-        Blocks.emplace_back(SlotSize);
-        LastUsed = &Blocks.back();
-        *block = LastUsed;
+        Arenas.emplace_back(SlotSize);
+        LastUsed = &Arenas.back();
+        *arena = LastUsed;
         return LastUsed->Allocate();
     }
 
-    bool Deallocate(TBlockPtr block, void* ptr)
+    bool Deallocate(TArenaPtr arena, void* ptr)
     {
-        block->Free(ptr);
+        Y_ABORT_UNLESS(arena->Contains(ptr), "Deallocate: unknown pointer");
         ++DeallocateCount;
 
-        if (block->Empty()) {
-            FreeBlock(block);
+        if (arena->Deallocate(ptr)) {
+            FreeArena(arena);
             return true;
         }
         return false;
@@ -180,7 +189,7 @@ public:
 
     [[nodiscard]] size_t GetReservedSize() const
     {
-        return Blocks.size() * BlockSize;
+        return Arenas.size() * ArenaSize;
     }
 
     [[nodiscard]] size_t GetSlotSize() const
@@ -198,29 +207,31 @@ public:
     }
 
 private:
-    void FreeBlock(TBlockPtr block)
+    void FreeArena(TArenaPtr arena)
     {
-        if (block == LastUsed) {
+        if (arena == LastUsed) {
             LastUsed = nullptr;
         }
-        for (auto it = Blocks.begin(); it != Blocks.end(); ++it) {
-            if (&*it == block) {
-                Blocks.erase(it);
+        for (auto it = Arenas.begin(); it != Arenas.end(); ++it) {
+            if (&*it == arena) {
+                Arenas.erase(it);
                 return;
             }
         }
-        Y_ABORT_UNLESS(false, "FreeBlock: unknown block");
+        Y_ABORT_UNLESS(false, "FreeArena: unknown arena");
     }
 
     const size_t SlotSize = 0;
-    TList<TBlock> Blocks;
-    TBlock* LastUsed = nullptr;
+    const size_t ArenaSize = 0;
+    TList<TArena> Arenas;
+    TArena* LastUsed = nullptr;
     size_t AllocateCount = 0;
     size_t DeallocateCount = 0;
 };
 
 ///////////////////////////////////////////////////////////////////////////
 
+// Thread-safe allocator that routes allocations to size-specific arena lists.
 class TArenaAllocator final
     : public IArenaAllocator
     , public TDisableCopyMove
@@ -229,11 +240,12 @@ public:
     void* Allocate(size_t size) override
     {
         with_lock (Mutex) {
-            ++AllocatedBlockCount;
-            TBlockPtr newBlock = nullptr;
-            void* result = GetBlockList(size).Allocate(&newBlock);
-            if (newBlock) {
-                Bases.emplace(newBlock->GetBase(), newBlock);
+            ++AllocatedAllocationCount;
+            TArenaPtr newArena = nullptr;
+            void* result =
+                GetArenaList(RoundAllocationSize(size)).Allocate(&newArena);
+            if (newArena) {
+                Bases.emplace(newArena->GetBase(), newArena);
             }
             return result;
         }
@@ -246,22 +258,18 @@ public:
         }
 
         with_lock (Mutex) {
-            --AllocatedBlockCount;
-            // Find the block whose [Base, Base + BlockSize) range contains
-            // ptr: it is the block with the greatest base <= ptr.
+            --AllocatedAllocationCount;
+            // Find the arena whose [Base, Base + ArenaSize) range contains
+            // ptr: it is the arena with the greatest base <= ptr.
             auto it = Bases.upper_bound(ptr);
             if (it == Bases.begin()) {
                 // Unknown pointer.
                 Y_ABORT_UNLESS(false, "DeAllocate: unknown pointer");
             }
             --it;
-            TBlock* block = it->second;
-            Y_ABORT_UNLESS(
-                static_cast<char*>(ptr) <
-                    static_cast<char*>(block->GetBase()) + BlockSize,
-                "DeAllocate: unknown pointer");
-            auto& blockList = GetBlockList(block->GetSlotSize());
-            if (blockList.Deallocate(block, ptr)) {
+            TArena* arena = it->second;
+            auto& arenaList = GetArenaList(arena->GetSlotSize());
+            if (arenaList.Deallocate(arena, ptr)) {
                 Bases.erase(it);
             }
         }
@@ -270,7 +278,7 @@ public:
     [[nodiscard]] size_t AllocatedBlocks() const override
     {
         with_lock (Mutex) {
-            return AllocatedBlockCount;
+            return AllocatedAllocationCount;
         }
     }
 
@@ -278,10 +286,10 @@ public:
     {
         with_lock (Mutex) {
             return Accumulate(
-                BlocksBySlotSize,
+                ArenasBySlotSize,
                 0,
-                [](size_t result, const TBlockList& block)
-                { return result + block.GetAllocatedSize(); });
+                [](size_t result, const auto& entry)
+                { return result + entry.second.GetAllocatedSize(); });
         }
     }
 
@@ -289,29 +297,25 @@ public:
     {
         with_lock (Mutex) {
             TVector<TArenaAllocatorStats> result;
-            result.reserve(BlocksBySlotSize.size());
-            for (const auto& blockList: BlocksBySlotSize) {
-                result.push_back(blockList.GetStats());
+            result.reserve(ArenasBySlotSize.size());
+            for (const auto& entry: ArenasBySlotSize) {
+                result.push_back(entry.second.GetStats());
             }
             return result;
         }
     }
 
 private:
-    TBlockList& GetBlockList(size_t slotSize)
+    TArenaList& GetArenaList(size_t slotSize)
     {
-        return BlocksBySlotSize[SlotIndexForSize(slotSize)];
+        return ArenasBySlotSize.try_emplace(slotSize, TArenaList{slotSize})
+            .first->second;
     }
 
     TMutex Mutex;
-    TMap<TBase, TBlock*> Bases;
-    std::array<TBlockList, SlotSizeCount> BlocksBySlotSize{
-        TBlockList(256),
-        TBlockList(512),
-        TBlockList(1024),
-        TBlockList(2048),
-        TBlockList(4096)};
-    size_t AllocatedBlockCount = 0;
+    TMap<TBase, TArena*> Bases;
+    THashMap<size_t, TArenaList> ArenasBySlotSize;
+    size_t AllocatedAllocationCount = 0;
 };
 
 }   // namespace
@@ -321,6 +325,28 @@ private:
 IArenaAllocatorPtr CreateArenaAllocator()
 {
     return std::make_shared<TArenaAllocator>();
+}
+
+size_t RoundAllocationSize(size_t size)
+{
+    constexpr size_t MaxPowerOfTwoSize = 128 * 1024;
+
+    if (size && !(size & (size - 1))) {
+        // Size already power of 2.
+        return size;
+    }
+
+    if (size <= MaxPowerOfTwoSize) {
+        if (!size) {
+            return 0;
+        }
+
+        return FastClp2(size);
+    }
+
+    constexpr size_t Alignment = MaxPowerOfTwoSize;
+    const size_t remainder = size % Alignment;
+    return remainder ? size + Alignment - remainder : size;
 }
 
 //////////////////////////////////////////////////////////////////////////////

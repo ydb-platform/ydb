@@ -24,6 +24,9 @@ class TArenaSet;
 template <class TKey, class TValue, class TCmp>
 class TArenaMap;
 
+template <typename T>
+class TArenaArrayUniquePtr;
+
 //////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore

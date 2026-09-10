@@ -112,6 +112,8 @@ TArenaAllocatorPool::~TArenaAllocatorPool() = default;
 
 void* TArenaAllocatorPool::Allocate(size_t size)
 {
+    size = RoundAllocationSize(size);
+
     auto& slots = SizeMap[size];
     if (!slots.CurrentSlot) {
         auto* slot = slots.Acquire(Allocator, size, SlotSize);
@@ -145,21 +147,22 @@ void TArenaAllocatorPool::Deallocate(void* ptr) noexcept
     }
     --it;
     auto* slot = it->second;
+    const size_t chunkSize = slot->ChunkSize;
 
     Y_ABORT_UNLESS(
         static_cast<char*>(ptr) <
             static_cast<char*>(slot->Base) + slot->SlotSize,
         "Deallocate: unknown pointer");
 
-    UsedSize -= slot->ChunkSize;
+    UsedSize -= chunkSize;
     slot->Free(ptr);
 
     if (slot->Empty()) {
         Bases.erase(it);
-        auto& slots = SizeMap[slot->ChunkSize];
+        auto& slots = SizeMap[chunkSize];
         slots.Release(slot);
         if (slots.Empty()) {
-            SizeMap.erase(slot->ChunkSize);
+            SizeMap.erase(chunkSize);
         }
     }
 }

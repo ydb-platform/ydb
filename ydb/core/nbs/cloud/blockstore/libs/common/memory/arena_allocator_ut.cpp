@@ -21,6 +21,22 @@ namespace NYdb::NBS::NBlockStore {
 
 Y_UNIT_TEST_SUITE(ArenaAllocatorTest)
 {
+    Y_UNIT_TEST(RoundAllocationSize)
+    {
+        UNIT_ASSERT_VALUES_EQUAL(0, RoundAllocationSize(0));
+        UNIT_ASSERT_VALUES_EQUAL(1, RoundAllocationSize(1));
+        UNIT_ASSERT_VALUES_EQUAL(2, RoundAllocationSize(2));
+        UNIT_ASSERT_VALUES_EQUAL(4, RoundAllocationSize(3));
+        UNIT_ASSERT_VALUES_EQUAL(128 * 1024, RoundAllocationSize(128 * 1024));
+        UNIT_ASSERT_VALUES_EQUAL(
+            256 * 1024,
+            RoundAllocationSize(128 * 1024 + 1));
+        UNIT_ASSERT_VALUES_EQUAL(256 * 1024, RoundAllocationSize(256 * 1024));
+        UNIT_ASSERT_VALUES_EQUAL(
+            384 * 1024,
+            RoundAllocationSize(256 * 1024 + 1));
+    }
+
     Y_UNIT_TEST(AllocateAllSizes)
     {
         auto allocator = CreateArenaAllocator();
@@ -44,35 +60,64 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorTest)
         void* slot2048 = allocator->Allocate(2048);
 
         const auto stats = allocator->GetStats();
-        UNIT_ASSERT_VALUES_EQUAL(5, stats.size());
-        UNIT_ASSERT_VALUES_EQUAL(256, stats[0].SlotSize);
-        UNIT_ASSERT_VALUES_EQUAL(0, stats[0].ReservedSize);
-        UNIT_ASSERT_VALUES_EQUAL(0, stats[0].UsedSize);
-        UNIT_ASSERT_VALUES_EQUAL(512, stats[1].SlotSize);
+        UNIT_ASSERT_VALUES_EQUAL(2, stats.size());
+        UNIT_ASSERT_VALUES_EQUAL(512, stats[0].SlotSize);
+        UNIT_ASSERT_VALUES_EQUAL(1_MB, stats[0].ReservedSize);
+        UNIT_ASSERT_VALUES_EQUAL(1024, stats[0].UsedSize);
+        UNIT_ASSERT_VALUES_EQUAL(2, stats[0].Count);
+        UNIT_ASSERT_VALUES_EQUAL(2048, stats[1].SlotSize);
         UNIT_ASSERT_VALUES_EQUAL(1_MB, stats[1].ReservedSize);
-        UNIT_ASSERT_VALUES_EQUAL(1024, stats[1].UsedSize);
-        UNIT_ASSERT_VALUES_EQUAL(2, stats[1].Count);
-        UNIT_ASSERT_VALUES_EQUAL(2048, stats[3].SlotSize);
-        UNIT_ASSERT_VALUES_EQUAL(1_MB, stats[3].ReservedSize);
-        UNIT_ASSERT_VALUES_EQUAL(2048, stats[3].UsedSize);
-        UNIT_ASSERT_VALUES_EQUAL(1, stats[3].Count);
+        UNIT_ASSERT_VALUES_EQUAL(2048, stats[1].UsedSize);
+        UNIT_ASSERT_VALUES_EQUAL(1, stats[1].Count);
 
         allocator->DeAllocate(slot512);
 
         const auto statsAfterPartialDeallocation = allocator->GetStats();
         UNIT_ASSERT_VALUES_EQUAL(
             512,
-            statsAfterPartialDeallocation[1].UsedSize);
+            statsAfterPartialDeallocation[0].UsedSize);
         UNIT_ASSERT_VALUES_EQUAL(
             2048,
-            statsAfterPartialDeallocation[3].UsedSize);
+            statsAfterPartialDeallocation[1].UsedSize);
 
         allocator->DeAllocate(anotherSlot512);
         allocator->DeAllocate(slot2048);
 
         const auto statsAfterDeallocation = allocator->GetStats();
+        UNIT_ASSERT_VALUES_EQUAL(0, statsAfterDeallocation[0].UsedSize);
         UNIT_ASSERT_VALUES_EQUAL(0, statsAfterDeallocation[1].UsedSize);
-        UNIT_ASSERT_VALUES_EQUAL(0, statsAfterDeallocation[3].UsedSize);
+    }
+
+    Y_UNIT_TEST(SupportsLargeSlotSizes)
+    {
+        auto allocator = CreateArenaAllocator();
+
+        for (size_t size: {128_KB, 2_MB, 3_MB + 1}) {
+            void* ptr = allocator->Allocate(size);
+            UNIT_ASSERT(ptr);
+            UNIT_ASSERT_VALUES_EQUAL(
+                RoundAllocationSize(size),
+                allocator->AllocatedSize());
+
+            const auto stats = allocator->GetStats();
+            const size_t allocationSize = RoundAllocationSize(size);
+            const size_t expectedBlockSize = Max(
+                1_MB,
+                (1_MB + allocationSize - 1) / allocationSize * allocationSize);
+            bool found = false;
+            for (const auto& stat: stats) {
+                if (stat.SlotSize == allocationSize) {
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        expectedBlockSize,
+                        stat.ReservedSize);
+                    found = true;
+                }
+            }
+            UNIT_ASSERT(found);
+
+            allocator->DeAllocate(ptr);
+            UNIT_ASSERT_VALUES_EQUAL(0, allocator->AllocatedSize());
+        }
     }
 
     Y_UNIT_TEST(AllocationIsAligned)

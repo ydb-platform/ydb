@@ -38,5 +38,7 @@ public:
 
 IArenaAllocatorPtr CreateArenaAllocator();
 
+size_t RoundAllocationSize(size_t size);
+
 //////////////////////////////////////////////////////////////////////////////
 }   // namespace NYdb::NBS::NBlockStore

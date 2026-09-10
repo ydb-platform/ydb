@@ -3,6 +3,7 @@
 #include "block_range_field_impl.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_unique_ptr.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/disable_copy.h>
 
@@ -55,8 +56,7 @@ public:
 
 private:
     const size_t MaxBlockCount;
-    const std::shared_ptr<IArenaAllocator> Allocator;
-    ui8* const Mask = nullptr;
+    TArenaArrayUniquePtr<ui8> Mask;
     size_t BlockCount = 0;   // Cached count of set bits
 
     [[nodiscard]] size_t GetMaskSize() const;

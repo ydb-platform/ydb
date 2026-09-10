@@ -225,6 +225,33 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
         UNIT_ASSERT_VALUES_EQUAL("[10..19]", ddisk.DebugPrintBehind());
     }
 
+    Y_UNIT_TEST(ShouldAddRangeStartingAtWatermarkToAhead)
+    {
+        TTestBlockFieldMonitor monitor;
+        TDDiskState ddisk(CreateArenaAllocator(), TestBlockCount);
+        ddisk.Init(
+            &monitor,
+            /*totalBlockCount=*/100,
+            /*operationalBlockCount=*/40);
+
+        ddisk.OnRangeFlushed(
+            TBlockRange16::WithLength(0, 39),
+            TDDiskState::EFlushCompletion::Completed);
+        UNIT_ASSERT_VALUES_EQUAL("", ddisk.DebugPrintAhead());
+
+        ddisk.OnRangeFlushed(
+            TBlockRange16::WithLength(35, 10),
+            TDDiskState::EFlushCompletion::Completed);
+        UNIT_ASSERT_VALUES_EQUAL("[40..44]", ddisk.DebugPrintAhead());
+
+        ddisk.RangeSynced(TBlockRange16::WithLength(0, 50));
+
+        ddisk.OnRangeFlushed(
+            TBlockRange16::WithLength(50, 10),
+            TDDiskState::EFlushCompletion::Completed);
+        UNIT_ASSERT_VALUES_EQUAL("[50..59]", ddisk.DebugPrintAhead());
+    }
+
     Y_UNIT_TEST(ShouldKeepFreshTailWhenLoadedBehindIsEmpty)
     {
         TBlockRangeField ahead(CreateArenaAllocator(), TestBlockCount);

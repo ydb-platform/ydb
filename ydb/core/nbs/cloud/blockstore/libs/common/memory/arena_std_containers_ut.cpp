@@ -30,6 +30,9 @@ Y_UNIT_TEST_SUITE(ArenaSetTests)
     {
         TArenaAllocatorPool pool(CreateArenaAllocator());
         TArenaHashMap<TString, ui64> map1(&pool);
+        for (ui64 i = 0; i < 1000000; ++i) {
+            map1[std::to_string(i)] = i;
+        }
     }
 }
 

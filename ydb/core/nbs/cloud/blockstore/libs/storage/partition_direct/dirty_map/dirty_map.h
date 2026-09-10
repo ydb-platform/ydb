@@ -143,6 +143,9 @@ public:
     // IReadyQueue implementation
     void Register(TPBufferKey pBufferKey, EQueueType queueType) override;
     void UnRegister(TPBufferKey pBufferKey, EQueueType queueType) override;
+    void InflightFlushFinished(
+        TPBufferKey pBufferKey,
+        THostIndex host) override;
     void FlushCompleted(TPBufferKey pBufferKey, THostMask ddisks) override;
     void DataToPBufferAdded(
         THostIndex host,
@@ -225,7 +228,6 @@ private:
         THostMask ddisks);
 
     [[nodiscard]] bool HasInflightFlush(THostIndex host, TBlockRange64 range);
-    void InflightFlushFinished(TBlockRange64 range);
 
     [[nodiscard]] bool HasOlderUnflushedOverlap(
         TPBufferKey pBufferKey,

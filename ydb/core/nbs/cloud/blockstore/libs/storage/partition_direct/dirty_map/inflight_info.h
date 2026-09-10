@@ -41,6 +41,13 @@ struct IReadyQueue
     // Removes the record's registration from the given queue.
     virtual void UnRegister(TPBufferKey pBufferKey, EQueueType queueType) = 0;
 
+    // Notifies that a flush request to the specified host stopped being
+    // in-flight. The request may have completed successfully, failed, or been
+    // dropped because the host was disabled.
+    virtual void InflightFlushFinished(
+        TPBufferKey pBufferKey,
+        THostIndex host) = 0;
+
     // Notifies of flushes completion to DDisks.
     virtual void FlushCompleted(TPBufferKey pBufferKey, THostMask ddisks) = 0;
 

@@ -199,6 +199,7 @@ void TInflightInfo::ConfirmFlush(THostIndex host)
     Y_ABORT_UNLESS(!FlushConfirmed.Get(host));
 
     FlushConfirmed.Set(host);
+    ReadyQueue->InflightFlushFinished(PBufferKey, host);
     MaybeAdvanceToFlushed();
 }
 
@@ -210,11 +211,12 @@ void TInflightInfo::FlushFailed(THostIndex host)
 
     FlushRequested.Reset(host);
     ReadyQueue->Register(PBufferKey, IReadyQueue::EQueueType::Flush);
+    ReadyQueue->InflightFlushFinished(PBufferKey, host);
 }
 
 THostMask TInflightInfo::GetInflightFlushes() const
 {
-    return FlushRequested;
+    return FlushRequested.Exclude(FlushConfirmed);
 }
 
 void TInflightInfo::RequestErase(THostIndex host)
@@ -284,8 +286,12 @@ void TInflightInfo::UpdateHosts(
         }
         case EState::PBufferFlushing: {
             // Just update DesiredDDisks and Disabled.
+            const auto droppedFlushes =
+                GetInflightFlushes().LogicalAnd(disabled);
+
             DesiredDDisks = DesiredDDisks.Include(added).Exclude(removed);
             Disabled = disabled;
+            FlushRequested = FlushRequested.Exclude(disabled);
 
             auto notRequestsFlushes =
                 DesiredDDisks.Exclude(Disabled).Exclude(FlushRequested);
@@ -295,6 +301,11 @@ void TInflightInfo::UpdateHosts(
                     PBufferKey,
                     IReadyQueue::EQueueType::Flush);
             }
+
+            for (const auto host: droppedFlushes) {
+                ReadyQueue->InflightFlushFinished(PBufferKey, host);
+            }
+
             MaybeAdvanceToFlushed();
             break;
         }

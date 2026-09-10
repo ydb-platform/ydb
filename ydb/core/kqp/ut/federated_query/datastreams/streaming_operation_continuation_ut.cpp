@@ -167,9 +167,9 @@ struct TContinuationTest {
             "INSERT INTO Source.output SELECT value FROM Source.input WITH (FORMAT = 'raw', SCHEMA (value String NOT NULL)); END DO;";
     }
 
-    void Replay(const TEvTrackOperationCompletion& request) {
-        Runtime.Send(new IEventHandle(NMetadata::NProvider::MakeServiceId(Runtime.GetNodeId()),
-            Runtime.AllocateEdgeActor(), CopyTracking(request).Release()));
+    void Replay(const TEvTrackOperationCompletion& request, ui32 node = 0) {
+        Runtime.Send(new IEventHandle(NMetadata::NProvider::MakeServiceId(Runtime.GetNodeId(node)),
+            Runtime.AllocateEdgeActor(node), CopyTracking(request).Release()), node);
     }
 
     auto Describe() {
@@ -1306,8 +1306,126 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
         f.CheckSettled();
     }
 
-    Y_UNIT_TEST_TWIN(OlderSchemeShardGenerationMonitorsNewOwner, StopNewOwner) {
+    Y_UNIT_TEST(TrackingRequestsKeepOnlyNewestPendingGeneration) {
         TContinuationTest f;
+        std::deque<TEvTrackOperationFinished::TPtr> finishing;
+        IEventHandle* unblocked = nullptr;
+        auto finishingObserver = f.Runtime.AddObserver<TEvTrackOperationFinished>([&](auto& ev) {
+            // This event has no sender, so TBlockEvents cannot print its actor name.
+            if (ev.Get() == unblocked) {
+                unblocked = nullptr;
+            } else if (ev->Get()->GetObjectId() == TContinuationTest::QueryName) {
+                finishing.emplace_back(std::move(ev));
+            }
+        });
+        const auto finishOne = [&] {
+            unblocked = finishing.front().Get();
+            f.Runtime.Send(finishing.front().Release());
+            finishing.pop_front();
+        };
+        f.Exec(TContinuationTest::CreateQuery());
+        f.WaitFor("initial tracker awaiting deregistration", [&] { return finishing.size() == 1; });
+        auto request = CopyTracking(*f.Tracking.front());
+        const auto generation = request->GetRequestGeneration();
+
+        // Arrival order must not downgrade the pending request or start concurrent trackers.
+        for (ui64 offset : {0, 1, 3, 2, 3, 0}) {
+            request->SetRequestGeneration(generation + offset);
+            f.Replay(*request);
+        }
+        f.Runtime.SimulateSleep(TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(finishing.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(finishing.front()->Get()->GetRequestGeneration(), generation);
+
+        finishOne();
+        f.WaitFor("newest pending tracker finished", [&] { return finishing.size() == 1; });
+        UNIT_ASSERT_VALUES_EQUAL(finishing.front()->Get()->GetRequestGeneration(), generation + 3);
+        f.Runtime.SimulateSleep(TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(finishing.size(), 1);
+        finishOne();
+
+        // Once the newest tracker finishes, the key must be available again.
+        request->SetRequestGeneration(generation);
+        f.Replay(*request);
+        f.WaitFor("completed operation can be tracked again", [&] { return finishing.size() == 1; });
+        UNIT_ASSERT_VALUES_EQUAL(finishing.front()->Get()->GetRequestGeneration(), generation);
+        finishOne();
+        f.CheckSettled();
+    }
+
+    Y_UNIT_TEST(QueuedGenerationContinuesAfterRemoteTrackerStops) {
+        TContinuationTest f(true, 2);
+        f.Exec(TContinuationTest::CreateQuery());
+        f.WaitFinished(1);
+
+        TBlockEvents<TEvTrackOperationCompletion> tracking(f.Runtime);
+        TBlockEvents<TEvKqp::TEvQueryRequest> locking(f.Runtime, IsLockRequest);
+        f.Start("ALTER STREAMING QUERY ContinuedQuery SET (RUN = FALSE);");
+        f.WaitFor("alter operation registered", [&] { return !tracking.empty() && !locking.empty(); });
+        auto older = CopyTracking(*tracking.front()->Get());
+        f.CrashOwner(older->GetOperationOwner());
+        locking.Stop().clear();
+
+        RebootTablet(f.Runtime, older->GetPathId().OwnerId, f.Runtime.AllocateEdgeActor());
+        f.WaitFor("second generation announced", [&] { return tracking.size() >= 2; });
+        auto remote = CopyTracking(*tracking.back()->Get());
+        RebootTablet(f.Runtime, older->GetPathId().OwnerId, f.Runtime.AllocateEdgeActor());
+        f.WaitFor("third generation announced", [&] { return tracking.size() >= 3; });
+        auto newest = CopyTracking(*tracking.back()->Get());
+        UNIT_ASSERT(older->GetRequestGeneration() < remote->GetRequestGeneration());
+        UNIT_ASSERT(remote->GetRequestGeneration() < newest->GetRequestGeneration());
+        tracking.Stop().clear();
+
+        TBlockEvents<TEvKqp::TEvQueryRequest> localLocking(f.Runtime, [&](const auto& ev) {
+            return IsLockRequest(ev) && ev->Recipient == MakeKqpProxyID(f.Runtime.GetNodeId(0));
+        });
+        f.Replay(*older, 0);
+        f.WaitFor("old local tracker awaiting lock", [&] { return localLocking.size() == 1; });
+
+        TBlockEvents<TEvKqp::TEvQueryRequest> unlocking(f.Runtime, [](const auto& ev) {
+            return ev->Get()->GetQuery().Contains("-- TUnlockStreamingQueryRequestActor::ReadQueryInfo");
+        });
+        f.Replay(*remote, 1);
+        f.WaitFor("remote tracker acquired the lock", [&] { return !unlocking.empty(); });
+        const auto remoteState = f.CheckRow();
+        UNIT_ASSERT_VALUES_EQUAL(remoteState.GetOperationOwnerGeneration(), remote->GetRequestGeneration());
+        TActorId remoteOwner;
+        UNIT_ASSERT(ScriptExecutionRunnerActorIdFromString(remoteState.GetOperationActorId(), remoteOwner));
+        UNIT_ASSERT_VALUES_EQUAL(remoteOwner.NodeId(), f.Runtime.GetNodeId(1));
+
+        f.Replay(*newest, 0);
+        f.Replay(*remote, 0);
+        f.Runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(localLocking.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.Finished, 1);
+        f.CrashOwner(remoteOwner);
+        unlocking.clear();
+
+        ui64 finalizations = 0;
+        auto schemeRequests = f.Runtime.AddObserver<TEvTxUserProxy::TEvProposeTransaction>([&](auto& ev) {
+            const auto& query = ev->Get()->Record.GetTransaction().GetModifyScheme().GetCreateStreamingQuery();
+            if (query.GetName() == TContinuationTest::QueryName && !query.HasOperationOwnerActorId()) {
+                ++finalizations;
+            }
+        });
+        localLocking.Unblock(1);
+        f.WaitFor("old tracker retired and queued tracker started", [&] {
+            return f.Finished == 2 && localLocking.size() == 1;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(finalizations, 0);
+        UNIT_ASSERT_VALUES_EQUAL(f.CheckRow().GetOperationActorId(), remoteState.GetOperationActorId());
+
+        localLocking.Unblock().Stop();
+        f.WaitFor("queued tracker acquired the abandoned remote lock", [&] { return !unlocking.empty(); });
+        UNIT_ASSERT_VALUES_EQUAL(f.CheckRow().GetOperationOwnerGeneration(), newest->GetRequestGeneration());
+        unlocking.Unblock().Stop();
+        f.WaitFinished(3);
+        UNIT_ASSERT_VALUES_EQUAL(finalizations, 1);
+        f.CheckSettled();
+    }
+
+    Y_UNIT_TEST_TWIN(OlderSchemeShardGenerationFinishesWithoutFinalization, StopNewOwner) {
+        TContinuationTest f(true, 2);
         TBlockEvents<TEvTrackOperationCompletion> tracking(f.Runtime);
         TBlockEvents<TEvKqp::TEvQueryRequest> locking(f.Runtime, IsLockRequest);
         f.Start(TContinuationTest::CreateQuery());
@@ -1326,7 +1444,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
         TBlockEvents<TEvKqp::TEvQueryRequest> validating(f.Runtime, [](const auto& ev) {
             return ev->Get()->GetQuery().Contains("-- TUpdateStreamingQueryStateRequestActor::ReadQueryInfo");
         });
-        f.Replay(*newer);
+        f.Replay(*newer, 1);
         f.WaitFor("newer tracker acquired the provisional row", [&] { return !validating.empty(); });
         const auto state = f.CheckRow(true);
         UNIT_ASSERT_VALUES_EQUAL(state.GetOperationOwnerGeneration(), newer->GetRequestGeneration());
@@ -1338,28 +1456,30 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
             validating.Stop().clear();
         }
 
-        ui64 ownerChecks = 0;
-        auto ownerObserver = f.Runtime.AddObserver([&](auto& ev) {
-            // The newer owner's lock result is held, so only liveness probes reach it.
-            if (ev->Recipient == newerOwner) {
-                ++ownerChecks;
+        ui64 finalizations = 0;
+        auto schemeRequests = f.Runtime.AddObserver<TEvTxUserProxy::TEvProposeTransaction>([&](auto& ev) {
+            const auto& query = ev->Get()->Record.GetTransaction().GetModifyScheme().GetCreateStreamingQuery();
+            if (query.GetName() == TContinuationTest::QueryName && !query.HasOperationOwnerActorId()) {
+                ++finalizations;
             }
         });
         f.Replay(*older);
-        f.WaitFor("older tracker keeps monitoring the newer owner", [&] {
-            return ownerChecks >= 2 || f.Finished;
-        });
-        UNIT_ASSERT_C(ownerChecks >= 2, "An older generation must monitor the owner without restarting the tracker");
-        UNIT_ASSERT_VALUES_EQUAL(f.Finished, 0);
+        f.WaitFinished(1);
+        UNIT_ASSERT_VALUES_EQUAL(finalizations, 0);
         const auto preserved = f.CheckRow(true);
         UNIT_ASSERT_VALUES_EQUAL(preserved.GetOperationOwnerGeneration(), newer->GetRequestGeneration());
         UNIT_ASSERT_VALUES_EQUAL(preserved.GetOperationActorId(), state.GetOperationActorId());
         const auto description = f.Describe();
         UNIT_ASSERT(ActorIdFromProto(description->ResultSet.at(0).StreamingQueryInfo->Description.GetOperationOwnerActorId()));
 
-        // Only the newer generation may continue; the older tracker observes completion.
+        // The old tracker retires even if the newer lock owner is already dead.
         if constexpr (StopNewOwner) {
+            TBlockEvents<TEvTrackOperationCompletion> recovery(f.Runtime);
             RebootTablet(f.Runtime, newer->GetPathId().OwnerId, f.Runtime.AllocateEdgeActor());
+            f.WaitFor("SchemeShard requests another generation", [&] { return !recovery.empty(); });
+            auto request = CopyTracking(*recovery.back()->Get());
+            recovery.Stop().clear();
+            f.Replay(*request);
         } else {
             validating.Unblock().Stop();
         }
@@ -1368,7 +1488,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
     }
 
     Y_UNIT_TEST_TWIN(TrackerRechecksCompletionAfterLosingLockDuringSync, Completed) {
-        TContinuationTest f;
+        TContinuationTest f(true, 2);
         TBlockEvents<TEvTrackOperationCompletion> tracking(f.Runtime);
         TBlockEvents<TEvKqp::TEvQueryRequest> locking(f.Runtime, IsLockRequest);
         f.Start(TContinuationTest::CreateQuery());
@@ -1379,11 +1499,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
         ui64 updates = 0;
         TBlockEvents<TEvKqp::TEvQueryRequest> syncing(f.Runtime, [&](const auto& ev) {
             // Let provisional-row validation finish, then pause sync before its first state update.
-            return ev->Recipient == MakeKqpProxyID(f.Runtime.GetNodeId())
+            return ev->Recipient == MakeKqpProxyID(ev->Recipient.NodeId())
                 && ev->Get()->GetQuery().Contains("-- TUpdateStreamingQueryStateRequestActor::ReadQueryInfo")
                 && ++updates > 1;
         });
-        tracking.Unblock().Stop();
+        auto older = CopyTracking(*tracking.front()->Get());
+        tracking.Stop().clear();
+        f.Replay(*older);
         f.WaitFor("older tracker syncing the query", [&] { return !syncing.empty(); });
         auto oldSync = std::move(syncing.front());
         syncing.pop_front();
@@ -1399,7 +1521,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
         });
         ui64 unlocks = 0;
         auto unlockRequests = f.Runtime.AddObserver<TEvKqp::TEvQueryRequest>([&](auto& ev) {
-            if (ev->Recipient == MakeKqpProxyID(f.Runtime.GetNodeId())
+            if (ev->Recipient == MakeKqpProxyID(ev->Recipient.NodeId())
                 && ev->Get()->GetQuery().Contains("-- TUnlockStreamingQueryRequestActor::ReadQueryInfo")) {
                 ++unlocks;
             }
@@ -1411,14 +1533,17 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
                 ++finalizations;
             }
         });
+        TBlockEvents<TEvTrackOperationCompletion> recovery(f.Runtime);
         RebootTablet(f.Runtime, Tests::SchemeRoot, f.Runtime.AllocateEdgeActor());
+        f.WaitFor("newer tracker announced", [&] { return !recovery.empty(); });
+        auto newer = CopyTracking(*recovery.back()->Get());
+        recovery.Stop().clear();
+        f.Replay(*newer, 1);
         f.Runtime.WaitFor("newer tracker took over and started sync", [&] { return !syncing.empty(); }, TDuration::Minutes(3));
         unreachable.Remove();
         const auto newState = f.CheckRow();
         UNIT_ASSERT(newState.GetOperationOwnerGeneration() > oldState.GetOperationOwnerGeneration());
         UNIT_ASSERT_VALUES_UNEQUAL(newState.GetOperationActorId(), oldState.GetOperationActorId());
-        TActorId newOwner;
-        UNIT_ASSERT(ScriptExecutionRunnerActorIdFromString(newState.GetOperationActorId(), newOwner));
         UNIT_ASSERT_VALUES_EQUAL(finalizations, 0);
 
         if constexpr (Completed) {
@@ -1427,21 +1552,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
             f.CheckSettled();
         }
 
-        ui64 ownerChecks = 0;
-        auto ownerObserver = f.Runtime.AddObserver([&](auto& ev) {
-            // While the new owner's state update is blocked, only liveness probes reach it.
-            if (ev->Recipient == newOwner) {
-                ++ownerChecks;
-            }
-        });
         syncing.push_front(std::move(oldSync));
         syncing.Unblock(1);
         if constexpr (!Completed) {
-            f.WaitFor("older tracker monitors the new lock owner after failed unlock", [&] { return ownerChecks > 0 || f.Finished; });
-            UNIT_ASSERT(ownerChecks > 0);
+            f.WaitFinished(1);
             UNIT_ASSERT_VALUES_EQUAL(unlocks, 1);
             UNIT_ASSERT_VALUES_EQUAL(finalizations, 0);
-            UNIT_ASSERT_VALUES_EQUAL(f.Finished, 0);
             UNIT_ASSERT_VALUES_EQUAL(f.CheckRow().GetOperationActorId(), newState.GetOperationActorId());
             syncing.Unblock().Stop();
         }
@@ -1453,7 +1569,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
     }
 
     Y_UNIT_TEST(NewerTrackerChecksOwnerChangedDuringTakeover) {
-        TContinuationTest f;
+        TContinuationTest f(true, 2);
         TBlockEvents<TEvTrackOperationCompletion> tracking(f.Runtime);
         TBlockEvents<TEvKqp::TEvQueryRequest> initialValidation(f.Runtime, [](const auto& ev) {
             return ev->Get()->GetQuery().Contains("-- TUpdateStreamingQueryStateRequestActor::ReadQueryInfo");
@@ -1476,7 +1592,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
             // Pause G2 after checking the original owner, before re-reading and claiming its lock.
             return IsLockRequest(ev) && ++lockReads == 2;
         });
-        f.Replay(*newer);
+        f.Replay(*newer, 1);
         f.WaitFor("newer tracker checked the dead original owner", [&] { return !takeover.empty(); });
 
         TBlockEvents<TEvKqp::TEvQueryRequest> validating(f.Runtime, [](const auto& ev) {

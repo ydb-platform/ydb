@@ -745,10 +745,6 @@ public:
             return;
         }
 
-        // TODO: not the best place for adding database.
-        auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>(ev->Get()->GetDatabaseId());
-        Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addDatabaseEvent.Release());
-
         const TString& database = ev->Get()->GetDatabase();
         const TString& traceId = ev->Get()->GetTraceId();
         const auto queryType = ev->Get()->GetType();
@@ -1837,8 +1833,6 @@ private:
             return false;
         }
 
-        // TODO: add database to scheduler
-
         switch (ScriptExecutionsCreationStatus) {
             case EScriptExecutionsCreationStatus::NotStarted:
                 StartScriptExecutionsTablesCreation();
@@ -2033,9 +2027,9 @@ private:
     void Handle(TEvKqp::TEvUpdateDatabaseInfo::TPtr& ev) {
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
             ResourcePoolsCache.UpdateDatabaseInfo(ev->Get()->DatabaseId, ev->Get()->Serverless);
+            Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddDatabase(ev->Get()->DatabaseId));
         }
         DatabasesCache.UpdateDatabaseInfo(ev, ActorContext());
-        // TODO: update info for compute scheduler too
     }
 
     void Handle(TEvKqp::TEvDelayedRequestError::TPtr& ev) {

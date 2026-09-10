@@ -68,6 +68,15 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
             }
         }
 
+        // An update may set only a part of the attributes (e.g. the guarantee without the limit),
+        // so the configuration should be validated against the result of the merge - not against
+        // the incoming attributes alone.
+        TStaticAttributes MergedWith(const TStaticAttributes& other) const {
+            TStaticAttributes merged = *this;
+            merged.Update(other);
+            return merged;
+        }
+
         TString ToString() const {
             return TStringBuilder()
                 << "Weight: " << GetWeight()
@@ -107,6 +116,18 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
 
         size_t ChildrenSize() const {
             return Children.size();
+        }
+
+        // Sum of the guarantees reserved by children. Saturates instead of overflowing, since the
+        // guarantees are configured independently and are not bound by the parent's own limit.
+        ui64 GetChildrenCpuGuarantee() const {
+            ui64 reserved = 0;
+            for (const auto& child : Children) {
+                // TODO: replace with std::add_sat() in C++26
+                const auto guarantee = child->GetCpuGuarantee();
+                reserved = guarantee > Infinity() - reserved ? Infinity() : reserved + guarantee;
+            }
+            return reserved;
         }
 
         template <class T, class Fn>

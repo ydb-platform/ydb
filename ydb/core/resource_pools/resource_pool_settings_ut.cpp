@@ -110,6 +110,13 @@ Y_UNIT_TEST_SUITE(ResourcePoolTest) {
             UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), "Invalid resource pool configuration, queue_size unsupported without concurrent_query_limit or database_load_cpu_threshold");
         }
 
+        {  // Cpu guarantee exceeding cpu limit validation
+            TPoolSettings settings;
+            settings.TotalCpuLimitPercentPerNode = 30;
+            settings.TotalCpuGuaranteePercentPerNode = 50;
+            UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), "Invalid resource pool configuration, total_cpu_guarantee_percent_per_node is 50, that exceeds total_cpu_limit_percent_per_node in 30");
+        }
+
         {  // QueryMemoryLimitPercentPerNode not supported yet
             TPoolSettings settings;
             settings.QueryMemoryLimitPercentPerNode = 50;

@@ -8,6 +8,8 @@
 
 namespace NKikimr::NKqp::NScheduler {
 
+class TCpuGuaranteeError : public yexception {};
+
 class TComputeScheduler : public std::enable_shared_from_this<TComputeScheduler> {
 public:
     TComputeScheduler(const TIntrusivePtr<TKqpCounters>& counters, const TOptions& options);
@@ -36,6 +38,13 @@ public:
     THashMap<NHdrf::TFullPoolId, double> GetLeafPoolFairShares() const;
 
 private:
+    // TODO: both methods are workaround for serverless scenario with remote node execution,
+    //       when those nodes don't know about databases at all. Remove them later.
+    void SetDefaultDatabaseGuarantee(NHdrf::TStaticAttributes& attrs) const;                 // run under Mutex
+    NHdrf::NDynamic::TDatabasePtr GetOrCreateDatabase(const NHdrf::TDatabaseId& databaseId); // run under Mutex
+
+private:
+
     static constexpr NHdrf::TQueryId READ_QUERY_ID = -1;
 
     std::atomic<bool> Enabled;

@@ -1162,11 +1162,6 @@ protected:
         if (IsSchedulable()) {
             const auto schedulerServiceId = MakeKqpSchedulerServiceId(SelfId().NodeId());
 
-            // TODO: deliberately create the database here - since database doesn't have any useful scheduling properties for now.
-            //       Replace with more precise database events in the future.
-            auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>(databaseId);
-            this->Send(schedulerServiceId, addDatabaseEvent.Release());
-
             // TODO: replace with more precise pool events.
             auto addPoolEvent = MakeHolder<NScheduler::TEvAddPool>(databaseId, poolId);
             this->Send(schedulerServiceId, addPoolEvent.Release());

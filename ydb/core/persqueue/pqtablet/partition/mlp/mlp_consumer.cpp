@@ -1019,7 +1019,7 @@ size_t TConsumerActor::FifoReadAheadGroupDeficit() const {
     if (!Config.GetKeepMessageOrder()) {
         return 0;
     }
-    const float targetReadAhead = AppData()->PQConfig.GetMLPTargetUnlockedFIFOGroupsReadAhead();
+    const float targetReadAhead = AppData()->PQConfig.GetMLPUnlockedGroupsRatio();
     if (targetReadAhead <= 0.0f) {
         return 0;
     }

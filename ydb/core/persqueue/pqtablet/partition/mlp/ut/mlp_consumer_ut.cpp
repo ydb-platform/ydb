@@ -1300,7 +1300,7 @@ Y_UNIT_TEST(LongPollDuringPQTabletReload) {
 }
 
 // ---------------------------------------------------------------------------
-// Tests for PQConfig.MLPTargetUnlockedFIFOGroupsReadAhead: FIFO (KeepMessageOrder)
+// Tests for PQConfig.MLPUnlockedGroupsRatio: FIFO (KeepMessageOrder)
 // read-ahead behavior in TConsumerActor::RequiredToFetchMessageCount().
 //
 // Scenario: 100000 messages spread over 10 groups + 5 messages in 5 new unique
@@ -1436,7 +1436,7 @@ std::optional<ui64> GrabFirstFetchCount(float readAhead, size_t messageCount, si
     TTestBasicRuntime runtime(1, false);
     runtime.Initialize(TAppPrepare().Unwrap());
     runtime.SetScheduledLimit(10000);
-    runtime.GetAppData().PQConfig.SetMLPTargetUnlockedFIFOGroupsReadAhead(readAhead);
+    runtime.GetAppData().PQConfig.SetMLPUnlockedGroupsRatio(readAhead);
 
     auto pipeCache = runtime.Register(new TIgnorePipeCacheActor());
     runtime.EnableScheduleForActor(pipeCache);
@@ -1545,7 +1545,7 @@ size_t ReadDistinctGroupHeads(std::shared_ptr<TTopicSdkTestSetup>& setup, size_t
 
 void FifoReadAheadReadAllGroupsImpl(float readAhead) {
     auto setup = CreateSetup();
-    setup->GetRuntime().GetAppData().PQConfig.SetMLPTargetUnlockedFIFOGroupsReadAhead(readAhead);
+    setup->GetRuntime().GetAppData().PQConfig.SetMLPUnlockedGroupsRatio(readAhead);
     CreateTopic(setup, "/Root/topic1", "mlp-consumer", 1, /*keepMessagesOrder=*/true);
     WriteReadAheadDataset(setup, "/Root/topic1");
 
@@ -1566,7 +1566,7 @@ Y_UNIT_TEST(FifoReadAheadRatioReadsAllGroups) {
 // only the 10 head groups are ever readable.
 Y_UNIT_TEST(FifoReadAheadDisabledDoesNotReachTailGroups) {
     auto setup = CreateSetup();
-    setup->GetRuntime().GetAppData().PQConfig.SetMLPTargetUnlockedFIFOGroupsReadAhead(0.0f);
+    setup->GetRuntime().GetAppData().PQConfig.SetMLPUnlockedGroupsRatio(0.0f);
     CreateTopic(setup, "/Root/topic1", "mlp-consumer", 1, /*keepMessagesOrder=*/true);
     WriteReadAheadDataset(setup, "/Root/topic1");
 

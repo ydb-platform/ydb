@@ -1,4 +1,4 @@
-UNITTEST()
+UNITTEST_FOR(ydb/core/persqueue/pqtablet/quota)
 
 YQL_LAST_ABI_VERSION()
 
@@ -13,7 +13,6 @@ SRCS(
 
 PEERDIR(
     library/cpp/testing/unittest
-    ydb/core/persqueue/pqtablet/quota
     ydb/core/testlib/basics
     ydb/core/testlib/default
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils

@@ -604,7 +604,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
         // optional values
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMaybe<ui16>{}}), R"({"value":"\u003Cnull\u003E"})");
-        // @todo TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMaybe<ui16>{1}}), R"({"value":1})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMaybe<ui16>{1}}), R"({"value":1})");
 
         // optional subMessages
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMaybe<TStructuredMessage>{}}), R"({})");

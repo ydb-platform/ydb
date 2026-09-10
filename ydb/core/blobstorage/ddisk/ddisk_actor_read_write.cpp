@@ -319,28 +319,40 @@ namespace NKikimr::NDDisk {
             const ui64 integrityOperationId = IntegrityManager->BeginChecksumRead(
                 {creds.TabletId, selector.VChunkIndex}, selector.OffsetInBytes, selector.Size);
             const bool inserted = PendingChecksumReads.emplace(integrityOperationId,
-                TPendingChecksumRead{std::unique_ptr<IEventHandle>(ev.Release())}).second;
+                TPendingChecksumRead{
+                    .Event = std::unique_ptr<IEventHandle>(ev.Release()),
+                }).second;
             Y_ABORT_UNLESS(inserted);
             DrainIntegrityManager();
+
+            // Cache hits have already started the data read (or replied). On a miss,
+            // submit data I/O without waiting for metadata. Known holes need no data I/O.
+            const auto it = PendingChecksumReads.find(integrityOperationId);
+            if (it != PendingChecksumReads.end()
+                    && IntegrityManager->MakeReadPlan({creds.TabletId, selector.VChunkIndex},
+                        selector.OffsetInBytes, selector.Size).Kind != TIntegrityManager::TReadPlan::AllZero) {
+                it->second.DataReadStarted = true;
+                StartDDiskDataRead(*it->second.Event, {}, integrityOperationId);
+            }
         } else {
-            StartDDiskDataRead(std::unique_ptr<IEventHandle>(ev.Release()), {});
+            StartDDiskDataRead(*ev, {});
         }
     }
 
-    void TDDiskActor::StartDDiskDataRead(std::unique_ptr<IEventHandle> ev,
-            std::vector<ui64> checksums) {
-        const auto& record = ev->Get<TEvRead>()->Record;
+    void TDDiskActor::StartDDiskDataRead(IEventHandle& ev,
+            std::vector<ui64> checksums, ui64 integrityOperationId) {
+        const auto& record = ev.Get<TEvRead>()->Record;
         const TQueryCredentials creds(record.GetCredentials());
         const TBlockSelector selector(record.GetSelector());
         if (Stopping) {
             Counters.Interface.Read.Reply(false, selector.Size);
-            SendReply(*ev, std::make_unique<TEvReadResult>(
+            SendReply(ev, std::make_unique<TEvReadResult>(
                 NKikimrBlobStorage::NDDisk::TReplyStatus::SESSION_MISMATCH, TString(StoppingReason)));
             return;
         }
         TChunkRef& chunkRef = ChunkRefs.at(creds.TabletId).at(selector.VChunkIndex);
 
-        auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Read",
+        auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev.TraceId), "DDisk.Read",
             NWilson::EFlags::NONE, TActivationContext::ActorSystem());
         NPrivate::AddMessageWaitAttributes(span);
         span
@@ -350,7 +362,7 @@ namespace NKikimr::NDDisk {
             .Attribute("size", selector.Size);
 
         std::optional<TIntegrityManager::TReadPlan> plan;
-        if (Config.EnableChecksums) {
+        if (Config.EnableChecksums && !integrityOperationId) {
             plan.emplace(IntegrityManager->MakeReadPlan({creds.TabletId, selector.VChunkIndex},
                 selector.OffsetInBytes, selector.Size));
             if (plan->Kind == TIntegrityManager::TReadPlan::AllZero) {
@@ -359,7 +371,7 @@ namespace NKikimr::NDDisk {
                 TRope result(std::move(zero));
                 Counters.Interface.Read.Reply(true, selector.Size, 0);
                 span.End();
-                SendReply(*ev, std::make_unique<TEvReadResult>(
+                SendReply(ev, std::make_unique<TEvReadResult>(
                     NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt,
                     std::move(result), checksums));
                 return;
@@ -368,9 +380,10 @@ namespace NKikimr::NDDisk {
 
         auto offset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, selector.OffsetInBytes);
 
-        std::unique_ptr<TDirectIoOpBase> op = AllocateOp<TDDiskIoOp>(ev.get());
+        std::unique_ptr<TDirectIoOpBase> op = AllocateOp<TDDiskIoOp>(&ev);
         auto* ddiskOp = static_cast<TDDiskIoOp*>(op.get());
         ddiskOp->SetChunkKey(creds.TabletId, selector.VChunkIndex);
+        ddiskOp->SetIntegrityOperationId(integrityOperationId);
         ddiskOp->SetReadChecksums(std::move(checksums));
         op->SetSpan(std::move(span));
         op->PrepareRead(selector.Size, offset, chunkRef.ChunkIdx, selector.OffsetInBytes);
@@ -394,6 +407,56 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(chunkIt->second.InFlightDataIo > 0);
         --chunkIt->second.InFlightDataIo;
 
+        if (msg.OperationType == NPDisk::TUringOperationBase::EREAD && msg.IntegrityOperationId) {
+            const auto it = PendingChecksumReads.find(msg.IntegrityOperationId);
+            if (it != PendingChecksumReads.end()) {
+                it->second.DataResult.reset(ev.Release());
+                MaybeFinishChecksumRead(msg.IntegrityOperationId);
+            }
+            // Stopping/Broken may already have rejected this request; late I/O only retires.
+            return;
+        }
+
+        FinishDDiskIoResult(msg);
+    }
+
+    void TDDiskActor::MaybeFinishChecksumRead(ui64 operationId) {
+        const auto it = PendingChecksumReads.find(operationId);
+        if (it == PendingChecksumReads.end() || !it->second.DataResult || !it->second.IntegrityResult) {
+            return;
+        }
+        auto pending = std::move(it->second);
+        PendingChecksumReads.erase(it);
+        auto& msg = *pending.DataResult->Get<TEvPrivate::TEvDDiskIoResult>();
+        const auto& integrity = *pending.IntegrityResult;
+        if (integrity.Status == TIntegrityManager::EOperationStatus::Corrupted) {
+            msg.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::CORRUPTED;
+            msg.ErrorMessage = integrity.ErrorReason;
+        } else if (pending.ReadPlan.Kind == TIntegrityManager::TReadPlan::AllZero) {
+            // The speculative data result is irrelevant for a never-written range.
+            auto zero = TRcBuf::Uninitialized(msg.TotalSize);
+            memset(zero.GetDataMut(), 0, zero.size());
+            msg.Data = TRope(std::move(zero));
+            msg.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
+            msg.ErrorMessage.clear();
+            msg.Checksums = std::move(pending.IntegrityResult->Checksums);
+        } else if (msg.Status == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+            msg.Checksums = std::move(pending.IntegrityResult->Checksums);
+            // After restart the bitmap is only known when metadata completes. Apply
+            // that snapshot before checking or returning the independently read data.
+            if (pending.ReadPlan.Kind == TIntegrityManager::TReadPlan::Mixed) {
+                auto data = msg.Data.UnsafeGetContiguousSpanMut();
+                for (size_t i = 0; i < data.size() / IntegrityUnitSize; ++i) {
+                    if (!pending.ReadPlan.UsedBlocks.Get(i)) {
+                        memset(data.data() + i * IntegrityUnitSize, 0, IntegrityUnitSize);
+                    }
+                }
+            }
+        }
+        FinishDDiskIoResult(msg);
+    }
+
+    void TDDiskActor::FinishDDiskIoResult(TEvPrivate::TEvDDiskIoResult& msg) {
         auto status = msg.Status;
         TString errorMessage = std::move(msg.ErrorMessage);
         if (Y_UNLIKELY(IsBroken())) {
@@ -564,8 +627,8 @@ namespace NKikimr::NDDisk {
         }
 
         if (msg.Status != NKikimrProto::OK) {
-            if (it->second.Op->IsCriticalDDiskIo()) {
-                // Complete fallback integrity reads through the same path as an io_uring EIO.
+            if (it->second.Op->IsCriticalDDiskIo() || it->second.Op->IsRestoreIo()) {
+                // Complete fallback integrity and PB restore reads through the same path as an io_uring EIO.
                 // TEvIntegrityIoResult will latch Broken and fail every joined client request.
                 std::unique_ptr<TDirectIoOpBase> op = std::move(it->second.Op);
                 ReadCallbacks.erase(it);
@@ -618,6 +681,7 @@ namespace NKikimr::NDDisk {
             // and would violate the I/O-thread producer side of the op pool.
             op.reset(rawOp);
             FailDirectIoOp(std::move(op), "io_uring router stopped before submission");
+            Send(SelfId(), new TEvPrivate::TEvBeginStopping);
         }
 #else
         Y_UNUSED(op);
@@ -687,47 +751,57 @@ namespace NKikimr::NDDisk {
 
     TDDiskActor::TEvPrivate::TEvRetryIO::~TEvRetryIO() = default;
 
-    void TDDiskActor::HandleRetryIO(TEvPrivate::TEvRetryIO::TPtr ev) {
-        std::unique_ptr<TDirectIoOpBase> op = std::move(ev->Get()->Op);
-
-        if (Stopping) {
-            switch (op->GetOperationType()) {
-                case NPDisk::TUringOperationBase::EREAD:
-                    Counters.DirectIO.Read.Done(op->GetTotalSize());
-                    break;
-                case NPDisk::TUringOperationBase::EWRITE:
-                    Counters.DirectIO.Write.Done(op->GetTotalSize());
-                    break;
-                default:
-                    Y_ABORT("Unknown OperationType");
-            }
-            return;
-        }
-
-#if defined(__linux__)
-        if (Y_LIKELY(UringRouter)) {
-            DirectUringOp(op, /*isRetry=*/true);
-            return;
-        }
-
+    void TDDiskActor::CancelPendingIo(std::unique_ptr<TDirectIoOpBase> op) {
+        using TStatus = NKikimrBlobStorage::NDDisk::TReplyStatus;
         switch (op->GetOperationType()) {
-            case NPDisk::TUringOperationBase::EREAD:
-                Counters.DirectIO.Read.Done(op->GetTotalSize());
-                break;
-            case NPDisk::TUringOperationBase::EWRITE:
-                Counters.DirectIO.Write.Done(op->GetTotalSize());
-                break;
-            default:
-                Y_ABORT("Unknown OperationType");
+        case NPDisk::TUringOperationBase::EREAD:
+            Counters.DirectIO.Read.Done(op->GetTotalSize());
+            break;
+        case NPDisk::TUringOperationBase::EWRITE:
+            Counters.DirectIO.Write.Done(op->GetTotalSize());
+            break;
+        default:
+            Y_ABORT("Unknown OperationType");
         }
-        op->Reply(TActivationContext::ActorSystem(),
-            NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
-            "io_uring stopped before I/O error retry");
-        op.reset();
-#else
-        Y_UNUSED(op);
-        Y_ABORT("TEvRetryIO is only available with io_uring");
-#endif
+        op->Reply(TActivationContext::ActorSystem(), Stopping ? TStatus::SESSION_MISMATCH : TStatus::ERROR,
+            Stopping ? TString(StoppingReason) : GetBrokenReason());
+        // This is the actor thread, not the SPSC return-pool producer.
+    }
+
+    void TDDiskActor::CancelRetries() {
+        while (!DelayedRetries.empty()) {
+            auto it = DelayedRetries.begin();
+            auto op = std::move(it->second.Op);
+            DelayedRetries.erase(it);
+            CancelPendingIo(std::move(op));
+        }
+    }
+
+    void TDDiskActor::HandleRetryIO(TEvPrivate::TEvRetryIO::TPtr ev) {
+        auto op = std::move(ev->Get()->Op);
+        if (Stopping || IsBroken()) {
+            CancelPendingIo(std::move(op));
+            return;
+        }
+        Y_ABORT_UNLESS(op->RetryCount && op->RetryCount <= TDirectIoOpBase::MaxResubmissions);
+        const auto delay = TDuration::MilliSeconds(Min<ui32>(1u << (op->RetryCount - 1), 100));
+        const ui64 id = ++NextRetryId;
+        DelayedRetries.emplace(id, TPendingIoOp(std::move(op)));
+        Schedule(delay, new TEvPrivate::TEvRetryIODelayed(id));
+    }
+
+    void TDDiskActor::HandleRetryIODelayed(TEvPrivate::TEvRetryIODelayed::TPtr ev) {
+        const auto it = DelayedRetries.find(ev->Get()->Id);
+        if (it == DelayedRetries.end()) {
+            return;
+        }
+        auto op = std::move(it->second.Op);
+        DelayedRetries.erase(it);
+        if (Stopping || IsBroken()) {
+            CancelPendingIo(std::move(op));
+            return;
+        }
+        DirectUringOp(op, /*isRetry=*/true);
     }
 
     void TDDiskActor::HandleWakeup(TEvents::TEvWakeup::TPtr &ev) {

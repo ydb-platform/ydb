@@ -269,16 +269,19 @@ namespace NKikimr {
             && writeSource != TWriteSource::SkeletonForceBlock;
     }
 
-    THullCheckStatus THull::CheckBlockCmdAndAllocLsn(ui64 tabletID, ui32 gen, ui64 issuerGuid, ui32 version,
+    THullCheckStatus THull::CheckBlockCmdAndAllocLsn(ui64 tabletID, ui32 gen, ui64 issuerGuid, std::optional<ui32> version,
             TWriteSource writeSource, ui32 *actGen, TLsnSeg *seg, bool *versionChanged) {
         const TBlocksCache::TBlockedGen g(gen, issuerGuid);
         auto res = BlocksCache.IsBlocked(tabletID, g, actGen);
 
-        if (ShouldCheckVersion(tabletID, writeSource)) {
+        // A missing Version field is a legacy client that predates TTabletStorageInfo::Version;
+        // those must still be able to boot against a VDisk that already stores a version. An
+        // explicit Version (including 0) is always checked.
+        if (ShouldCheckVersion(tabletID, writeSource) && version) {
             const auto [actualVersion, lsn] = BlocksCache.FindMax(~tabletID);
-            if (version < actualVersion) {
+            if (*version < actualVersion) {
                 return {NKikimrProto::ERROR, "obsolete tablet storage info version", lsn, lsn != 0, true};
-            } else if (actualVersion < version) {
+            } else if (actualVersion < *version) {
                 if (res.Status != TBlocksCache::EStatus::OK) {
                     // the version may only advance along with the block, so reject the whole command
                     return {NKikimrProto::ERROR, "generation check failed while increasing tablet storage info version",
@@ -294,7 +297,7 @@ namespace NKikimr {
                 ? Fields->LsnMngr->AllocDiscreteLsnBatchForHullAndSyncLog(2)
                 : Fields->LsnMngr->AllocLsnForHullAndSyncLog();
             if (*versionChanged) {
-                BlocksCache.UpdateInFlight(~tabletID, {version, 0}, seg->First);
+                BlocksCache.UpdateInFlight(~tabletID, {*version, 0}, seg->First);
             }
             BlocksCache.UpdateInFlight(tabletID, g, seg->Last);
             return {NKikimrProto::OK, "", false};

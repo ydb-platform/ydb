@@ -186,6 +186,7 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvPrivate::TEvUpdateNodeDrives, Handle);
         hFunc(TEvPrivate::TEvRetrySaveConfig, Handle);
         hFunc(TEvPrivate::TEvRetrySlay, Handle);
+        hFunc(TEvPrivate::TEvRestartDrainReminder, Handle);
 
         hFunc(NMon::TEvHttpInfo, Handle);
         cFunc(NActors::TEvents::TSystem::Poison, PassAway);

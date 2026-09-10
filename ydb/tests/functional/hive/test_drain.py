@@ -3,7 +3,7 @@ import logging
 
 import yatest
 from ydb.tests.library.common.delayed import wait_tablets_are_active
-from ydb.tests.library.common.types import Erasure
+from ydb.tests.library.common.types import Erasure, TabletStates
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -15,6 +15,18 @@ from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
 logger = logging.getLogger(__name__)
 TabletsCount = 1500
 TimeoutSeconds = 300
+
+# A tablet that has reached any of these states has already superseded its previous
+# generation: it locked the state storage with a greater generation, which makes the
+# guardian of the previous leader demote it.
+AliveTabletStates = frozenset((
+    TabletStates.Candidate,
+    TabletStates.BlockBlobStorage,
+    TabletStates.RebuildGraph,
+    TabletStates.WriteZeroEntry,
+    TabletStates.Restored,
+    TabletStates.Active,
+))
 
 
 class TestHive(object):
@@ -95,7 +107,8 @@ class TestHive(object):
                 wait_tablets_are_active(
                     self.cluster.client,
                     all_tablet_ids,
-                    0,  # Tablets should already be active, as drain must be finished at this point
+                    0,
+                    active_states=AliveTabletStates,
                 )
 
             node.start()

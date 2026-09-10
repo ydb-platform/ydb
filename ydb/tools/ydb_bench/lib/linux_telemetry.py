@@ -1,7 +1,9 @@
 """Linux CPU sampling for benchmark process roles."""
 
 import math
+import ctypes
 import os
+import sys
 import threading
 import time
 from pathlib import Path
@@ -16,6 +18,102 @@ def _is_finite_number(value):
         return math.isfinite(value)
     except (TypeError, ValueError, OverflowError):
         return False
+
+
+def _darwin_cpu_ticks():
+    """Read Mach per-processor ticks and release both returned resources."""
+    lib = ctypes.CDLL('/usr/lib/libSystem.B.dylib')
+    uint = ctypes.c_uint
+    pointer = ctypes.POINTER(uint)
+    lib.mach_host_self.restype = uint
+    lib.mach_task_self.restype = uint
+    lib.host_processor_info.argtypes = [
+        uint,
+        ctypes.c_int,
+        ctypes.POINTER(uint),
+        ctypes.POINTER(pointer),
+        ctypes.POINTER(uint),
+    ]
+    lib.host_processor_info.restype = ctypes.c_int
+    lib.vm_deallocate.argtypes = [uint, ctypes.c_size_t, ctypes.c_size_t]
+    lib.vm_deallocate.restype = ctypes.c_int
+    lib.mach_port_deallocate.argtypes = [uint, uint]
+    lib.mach_port_deallocate.restype = ctypes.c_int
+    host, task = lib.mach_host_self(), lib.mach_task_self()
+    count, size, data = uint(), uint(), pointer()
+    try:
+        if lib.host_processor_info(host, 2, ctypes.byref(count), ctypes.byref(data), ctypes.byref(size)):
+            raise OSError('host_processor_info failed')
+        if not data or size.value != count.value * 4:
+            raise OSError('Invalid processor CPU load response')
+        # Mach order: user, system, idle, nice. Normalize to Linux tick order.
+        return {
+            cpu: (data[cpu * 4], data[cpu * 4 + 3], data[cpu * 4 + 1], data[cpu * 4 + 2], 0, 0, 0, 0)
+            for cpu in range(count.value)
+        }
+    finally:
+        if data:
+            lib.vm_deallocate(task, ctypes.cast(data, ctypes.c_void_p).value, size.value * ctypes.sizeof(uint))
+        lib.mach_port_deallocate(task, host)
+
+
+class LogicalCpuSampler:
+    """Shared, bounded on-demand sampler; requests within one second reuse a sample."""
+
+    def __init__(self, proc_root=Path("/proc")):
+        self.proc_root = Path(proc_root)
+        self._lock = threading.Lock()
+        self._previous = {}
+        self._time = None
+        self._result = None
+        self._darwin = sys.platform == 'darwin' and self.proc_root == Path('/proc')
+
+    def _read_ticks(self):
+        if self._darwin:
+            return _darwin_cpu_ticks()
+        current = {}
+        for line in self.proc_root.joinpath('stat').read_text().splitlines():
+            fields = line.split()
+            if fields and fields[0].startswith('cpu') and fields[0][3:].isdigit():
+                ticks = tuple(map(int, fields[1:9]))
+                if len(ticks) == 8 and all(value >= 0 for value in ticks):
+                    current[int(fields[0][3:])] = ticks
+        return current
+
+    def sample(self):
+        with self._lock:
+            now = time.monotonic()
+            if self._time is not None and now - self._time < 1:
+                return self._result
+            try:
+                current = self._read_ticks()
+            except (OSError, ValueError):
+                current = {}
+            cpus = {}
+            for cpu, ticks in current.items():
+                previous = self._previous.get(cpu)
+                cpus[cpu] = None
+                if previous is None:
+                    continue
+                delta = [value - old for value, old in zip(ticks, previous)]
+                total = sum(delta)
+                if total <= 0 or any(value < 0 for value in delta):
+                    continue
+                cpus[cpu] = {
+                    "busy": 100 * (total - delta[3] - delta[4]) / total,
+                    "user": 100 * (delta[0] + delta[1]) / total,
+                    "system": 100 * (delta[2] + delta[5] + delta[6]) / total,
+                    "iowait": None if self._darwin else 100 * delta[4] / total,
+                    "steal": None if self._darwin else 100 * delta[7] / total,
+                }
+            self._result = {
+                "cpus": cpus,
+                "interval_seconds": None if self._time is None else now - self._time,
+                "available": bool(current),
+            }
+            self._time = now
+            self._previous = current
+            return self._result
 
 
 class LinuxCpuMonitor:

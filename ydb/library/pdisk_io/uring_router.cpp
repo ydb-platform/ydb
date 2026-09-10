@@ -19,6 +19,8 @@
 #include "liburing_compat.h"
 
 #include <cerrno>
+#include <chrono>
+#include <optional>
 #include <cstdio>
 #include <cstring>
 #include <utility>
@@ -331,14 +333,14 @@ void TUringRouter::StopAsync(bool makeBroken) {
             [[fallthrough]];
         case EUringRouterState::Running:
             if (State.compare_exchange_weak(state, target,
-                    std::memory_order_acq_rel, std::memory_order_acquire)) {
+                    std::memory_order_seq_cst, std::memory_order_acquire)) {
                 WakeIoThreadIfParked(Parked, WakeEventFd);
                 return;
             }
             break;
         case EUringRouterState::Broken:
             if (State.compare_exchange_weak(state, EUringRouterState::StoppingBroken,
-                    std::memory_order_acq_rel, std::memory_order_acquire)) {
+                    std::memory_order_seq_cst, std::memory_order_acquire)) {
                 WakeIoThreadIfParked(Parked, WakeEventFd);
                 return;
             }
@@ -348,15 +350,18 @@ void TUringRouter::StopAsync(bool makeBroken) {
                 return;
             }
             if (State.compare_exchange_weak(state, EUringRouterState::StoppingBroken,
-                    std::memory_order_acq_rel, std::memory_order_acquire)) {
+                    std::memory_order_seq_cst, std::memory_order_acquire)) {
                 WakeIoThreadIfParked(Parked, WakeEventFd);
                 return;
             }
             break;
-        case EUringRouterState::StoppingBroken:
-            [[fallthrough]];
         case EUringRouterState::Stopped:
-            [[fallthrough]];
+            if (makeBroken && !State.compare_exchange_weak(state, EUringRouterState::StoppedBroken,
+                    std::memory_order_seq_cst, std::memory_order_acquire)) {
+                break;
+            }
+            return;
+        case EUringRouterState::StoppingBroken:
         case EUringRouterState::StoppedBroken:
             return;
         default:
@@ -366,17 +371,23 @@ void TUringRouter::StopAsync(bool makeBroken) {
 }
 
 void TUringRouter::StopSync() {
+    std::lock_guard guard(StopMutex);
     const EUringRouterState state = State.load(std::memory_order_acquire);
     if (state == EUringRouterState::Stopped || state == EUringRouterState::StoppedBroken) {
         return;
     }
     StopAsync();
+    while (Publishers.load(std::memory_order_seq_cst)) {
+        if (TestHooks && TestHooks->WaitingForPublishers) { TestHooks->WaitingForPublishers(); }
+        Sleep(TDuration::MilliSeconds(1));
+    }
 
     if (IoThread) {
         if (RingEnabled) {
             Queue.Push(QueueStopSentinel());
             WakeIoThreadIfParked(Parked, WakeEventFd);
         }
+        if (TestHooks && TestHooks->BeforeJoin) { TestHooks->BeforeJoin(); }
         IoThread->Join();
         IoThread.reset();
     }
@@ -396,8 +407,14 @@ void TUringRouter::StopSync() {
         Ring.reset();
     }
 
-    State.store(IsBroken() ? EUringRouterState::StoppedBroken : EUringRouterState::Stopped,
-        std::memory_order_release);
+    Fd.Close();
+    if (TestHooks && TestHooks->Retired) { TestHooks->Retired(); }
+    auto finalState = State.load(std::memory_order_acquire);
+    if (TestHooks && TestHooks->BeforeFinalStopCas) { TestHooks->BeforeFinalStopCas(); }
+    while (!State.compare_exchange_weak(finalState,
+            finalState == EUringRouterState::StoppingBroken ? EUringRouterState::StoppedBroken : EUringRouterState::Stopped,
+            std::memory_order_acq_rel, std::memory_order_acquire)) {
+    }
 }
 
 void TUringRouter::WaitSync() {
@@ -534,9 +551,13 @@ bool TUringRouter::Submit(TUringOperationBase* op) {
     Y_ABORT_UNLESS(op->GetOperationType() != TUringOperationBase::ENOT_SET,
         "Submit() called with an unprepared operation");
 
+    Publishers.fetch_add(1, std::memory_order_seq_cst);
     if (State.load(std::memory_order_seq_cst) != EUringRouterState::Running) {
+        Publishers.fetch_sub(1, std::memory_order_seq_cst);
         return false;
     }
+
+    if (TestHooks && TestHooks->AfterAdmission) { TestHooks->AfterAdmission(); }
 
     // A client may resubmit after a terminal negative CQE. This is a new
     // admission, even though its advanced iovec/progress remains intact.
@@ -545,7 +566,10 @@ bool TUringRouter::Submit(TUringOperationBase* op) {
 
     NSan::Release(op);
     Queue.Push(op);
+    if (TestHooks && TestHooks->AfterPublication) { TestHooks->AfterPublication(); }
     WakeIoThreadIfParked(Parked, WakeEventFd);
+    if (TestHooks && TestHooks->AfterWake) { TestHooks->AfterWake(); }
+    Publishers.fetch_sub(1, std::memory_order_seq_cst);
     return true;
 }
 
@@ -626,6 +650,7 @@ void TUringRouter::DropOperation(TUringOperationBase* op) {
         CompleteOperation(op, -ECANCELED);
         return;
     }
+    if (TestHooks && TestHooks->BeforeTerminalCallback) { TestHooks->BeforeTerminalCallback(); }
     op->OnDrop(ActorSystem);
     const ui64 previous = InFlightCount.fetch_sub(1, std::memory_order_release);
     Y_DEBUG_ABORT_UNLESS(previous > 0);
@@ -633,6 +658,7 @@ void TUringRouter::DropOperation(TUringOperationBase* op) {
 
 void TUringRouter::CompleteOperation(TUringOperationBase* op, i64 result) {
     op->Result = result;
+    if (TestHooks && TestHooks->BeforeTerminalCallback) { TestHooks->BeforeTerminalCallback(); }
     op->OnComplete(ActorSystem);
     // OnComplete may destroy or immediately recycle op, including a new
     // admission on this router. Do not access it after the callback.
@@ -865,6 +891,20 @@ void TUringRouter::ParkAndWait() {
 }
 
 void TUringRouter::HandleStop() {
+    std::optional<std::chrono::steady_clock::time_point> fatalDeadline;
+    auto checkFatalDrain = [&] {
+        if (!FatalRingError) {
+            return;
+        }
+        const auto now = Backend->Now();
+        if (!fatalDeadline) {
+            fatalDeadline = now + std::chrono::milliseconds(200);
+        }
+        Y_ABORT_UNLESS(now < *fatalDeadline,
+            "io_uring fatal shutdown timed out: inflight=%llu sq=%u wake=%d stop=%d",
+            static_cast<unsigned long long>(GetInflight()), io_uring_sq_ready(Ring.get()),
+            WakePollArmed, StopCqePending);
+    };
     // No fresh data work may be started after stop. Drop pending, continuation,
     // and staged work that has not been published to the kernel.
     if (PendingSubmit) {
@@ -892,6 +932,7 @@ void TUringRouter::HandleStop() {
     }
 
     while (WakePollArmed || io_uring_sq_ready(Ring.get()) != 0) {
+        checkFatalDrain();
         SubmitPendingSqes(/*allowWhileStopping=*/true);
         if (ReapCompletions() == 0) {
             WaitForProgress();
@@ -907,6 +948,7 @@ void TUringRouter::HandleStop() {
         StopCqePending = true;
 
         do {
+            checkFatalDrain();
             SubmitPendingSqes(/*allowWhileStopping=*/true);
             if (ReapCompletions() == 0) {
                 WaitForProgress();
@@ -914,6 +956,12 @@ void TUringRouter::HandleStop() {
         } while (StopCqePending || io_uring_sq_ready(Ring.get()) != 0);
     }
 
+    while (GetInflight() || WakePollArmed || StopCqePending || io_uring_sq_ready(Ring.get())) {
+        checkFatalDrain();
+        if (ReapCompletions() == 0) {
+            WaitForProgress();
+        }
+    }
     Y_ABORT_UNLESS(!Queue.Pop(),
         "operation found behind io_uring stop sentinel");
 }

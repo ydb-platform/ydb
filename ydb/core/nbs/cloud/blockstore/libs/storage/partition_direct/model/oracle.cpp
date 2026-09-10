@@ -2,10 +2,10 @@
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle_config.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/format.h>
 
-#include <util/generic/size_literals.h>
 #include <util/random/random.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
@@ -21,21 +21,6 @@ constexpr TDuration MaxReconnectDelay = TDuration::Seconds(10);
 constexpr TDuration FlushRequestCooldownPenalty = TDuration::MilliSeconds(10);
 
 ////////////////////////////////////////////////////////////////////////////////
-
-TDuration GetFromConfig(ui64 milliseconds, TDuration defaultValue)
-{
-    return milliseconds ? TDuration::MilliSeconds(milliseconds) : defaultValue;
-}
-
-ui32 GetFromConfig(ui32 value, ui32 defaultValue)
-{
-    return value ? value : defaultValue;
-}
-
-ui64 GetFromConfig(ui64 value, ui64 defaultValue)
-{
-    return value ? value : defaultValue;
-}
 
 EHostState HealthToState(EHostHealth health)
 {
@@ -69,72 +54,14 @@ size_t GetAliveHostCount(const TVector<THostState>& hostStates)
         });
 }
 
-}   // namespace
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TOracleConfig
+// All Online-state healths are persisted as EHostHealth::Online
+EHostHealth ToPersistentHealth(const EHostHealth health)
 {
-public:
-    explicit TOracleConfig(TStorageConfigPtr storageConfig)
-        : StorageConfig(std::move(storageConfig))
-    {}
+    return HealthToState(health) == EHostState::Online ? EHostHealth::Online
+                                                       : health;
+}
 
-    [[nodiscard]] TDuration GetMaxDurationBeforeGoingTemporaryOffline() const
-    {
-        return GetFromConfig(
-            StorageConfig->GetOracleConfig()
-                .GetMaxDurationBeforeGoingTemporaryOffline(),
-            TDuration::Seconds(10));
-    }
-
-    [[nodiscard]] TDuration GetMaxDurationBeforeGoingOffline() const
-    {
-        return GetFromConfig(
-            StorageConfig->GetOracleConfig().GetMaxDurationBeforeGoingOffline(),
-            TDuration::Seconds(10));
-    }
-
-    [[nodiscard]] ui32 GetMinErrorsCountBeforeGoingOffline() const
-    {
-        return GetFromConfig(
-            StorageConfig->GetOracleConfig()
-                .GetMinErrorsCountBeforeGoingOffline(),
-            10);
-    }
-
-    [[nodiscard]] ui32 GetErrorsCountForGoingOffline() const
-    {
-        return GetFromConfig(
-            StorageConfig->GetOracleConfig().GetErrorsCountForGoingOffline(),
-            1000);
-    }
-
-    [[nodiscard]] ui64 GetErrorsTotalSizeForGoingOffline() const
-    {
-        return GetFromConfig(
-            StorageConfig->GetOracleConfig()
-                .GetErrorsTotalSizeForGoingOffline(),
-            100_MB);
-    }
-
-    [[nodiscard]] ui32 GetTimePredictionHistorySize() const
-    {
-        return GetFromConfig(
-            StorageConfig->GetOracleConfig().GetTimePredictionHistorySize(),
-            0);
-    }
-
-    [[nodiscard]] ui32 GetTimePredictionNthFromEnd() const
-    {
-        return GetFromConfig(
-            StorageConfig->GetOracleConfig().GetTimePredictionNthFromEnd(),
-            0);
-    }
-
-private:
-    TStorageConfigPtr StorageConfig;
-};
+}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -163,6 +90,7 @@ TOracle::TOracle(
           TTimePredictor(
               OracleConfig->GetTimePredictionHistorySize(),
               OracleConfig->GetTimePredictionNthFromEnd()))
+    , HealthPolicy(CreateDefaultHostHealthPolicy(OracleConfig))
 {
     HostsHealths.resize(HostStates.size());
     for (auto& healths: HostsHealths) {
@@ -183,41 +111,26 @@ void TOracle::Think(TInstant now)
 
         auto errorsInfo = HostStatistics[i].GetErrorsInfo(now);
 
-        if (newHostsHealths[i] == EHostHealth::Broken) {
-            // Host with broken ddisk can not be restored.
-            continue;
-        }
-
-        const bool hasSufferingSymptom =
-            (errorsInfo.ConsecutiveErrorCount != 0);
-        const bool hasTemporaryOfflineSymptom =
-            hasSufferingSymptom &&
-            ((errorsInfo.ConsecutiveErrorCount >=
-                  config.GetMinErrorsCountBeforeGoingOffline() &&
-              errorsInfo.FromFirstError >
-                  config.GetMaxDurationBeforeGoingTemporaryOffline()) ||
-             (errorsInfo.ConsecutiveErrorCount >=
-              config.GetErrorsCountForGoingOffline()) ||
-             (HostStates[i].UsedPBuffers.Size >=
-              config.GetErrorsTotalSizeForGoingOffline()));
-        const bool hasOfflineSymptom =
-            hasTemporaryOfflineSymptom &&
-            (errorsInfo.FromFirstError >
-             config.GetMaxDurationBeforeGoingOffline());
-
-        if (hasOfflineSymptom) {
-            newHostsHealths[i] = EHostHealth::Offline;
-        } else if (hasTemporaryOfflineSymptom) {
-            newHostsHealths[i] = EHostHealth::TemporaryOffline;
-        } else if (hasSufferingSymptom) {
-            newHostsHealths[i] = EHostHealth::Sufferer;
-        } else {
-            newHostsHealths[i] = EHostHealth::Online;
-        }
+        newHostsHealths[i] = HealthPolicy->GetNewHealth(
+            HostsHealths[i],
+            errorsInfo,
+            HostStates[i].UsedPBuffers.Size);
     }
 
     for (size_t i = 0; i < newHostsHealths.size(); ++i) {
         if (newHostsHealths[i] != HostsHealths[i]) {
+            const auto oldPersistentHealth =
+                ToPersistentHealth(HostsHealths[i]);
+            const auto newPersistedHealth =
+                ToPersistentHealth(newHostsHealths[i]);
+
+            if (newPersistedHealth != oldPersistentHealth) {
+                HostStateController->PersistHostHealth(
+                    i,
+                    oldPersistentHealth,
+                    newPersistedHealth);
+            }
+
             HostsHealths[i] = newHostsHealths[i];
             const auto oldState = HostStates[i].State;
             const auto newState = HealthToState(newHostsHealths[i]);
@@ -272,6 +185,14 @@ void TOracle::OnDDiskConnected(THostIndex hostIndex, TInstant now)
 void TOracle::OnDDiskBroken(THostIndex hostIndex)
 {
     const auto oldState = HostStates[hostIndex].State;
+
+    if (HostsHealths[hostIndex] != EHostHealth::Broken) {
+        HostStateController->PersistHostHealth(
+            hostIndex,
+            ToPersistentHealth(HostsHealths[hostIndex]),
+            EHostHealth::Broken);
+    }
+
     HostsHealths[hostIndex] = EHostHealth::Broken;
     if (oldState != EHostState::Offline) {
         HostStates[hostIndex].State = EHostState::Offline;

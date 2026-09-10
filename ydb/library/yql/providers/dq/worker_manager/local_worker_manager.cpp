@@ -200,6 +200,8 @@ private:
     void WakeUp() {
         auto currentRusage = TRusage::Get();
         TRusage delta;
+        // MaxRss is a peak, not a delta; AddRusageDelta merges it with Max.
+        delta.MaxRss = currentRusage.MaxRss;
         delta.Utime = currentRusage.Utime - Rusage.Utime;
         delta.Stime = currentRusage.Stime - Rusage.Stime;
         delta.MajorPageFaults = currentRusage.MajorPageFaults - Rusage.MajorPageFaults;

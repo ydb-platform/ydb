@@ -59,6 +59,23 @@ uint64_t* AllocHandles(size_t count) {
     return handles;
 }
 
+//! Sum of every Int64 in a List<List<Int64>>. Each item of the outer list is a
+//! list itself, read through the same range as the outer one: the item handle
+//! needs no unwrapping, only a non-owning view, since the range still owns it.
+int64_t SumNestedIntLists(uint64_t listH) {
+    TBridgeList outer(listH, /*owned*/ false);
+    int64_t sum = 0;
+    for (auto row : outer.Items()) {
+        TBridgeList inner(row.Get(), /*owned*/ false);
+        for (auto item : inner.Items()) {
+            sum += BridgeGetInt64(item.Get());
+            item.Reset();
+        }
+        row.Reset();
+    }
+    return sum;
+}
+
 //! Two-item Int64 list, typed from the declared result type: the items name a
 //! List<Int64> and nothing else, so the host has one candidate to pick.
 uint64_t MakeIntListInferred(int64_t first, int64_t second) {
@@ -240,6 +257,52 @@ __attribute__((visibility("default"))) void list_sum_int64(
         item.Reset();
     }
     SetInt64(result, sum);
+}
+
+//! A nested container on the way in: List<List<Int64>> folded to one number.
+__attribute__((visibility("default"))) void nested_list_sum_int64(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t listH)
+{
+    SetInt64(result, SumNestedIntLists(listH));
+}
+
+//! Dict<String, List<List<Int64>>> -> Dict<String, Int64>: every key keeps its
+//! payload's total. The dict is walked with an iterator, and the pairs are
+//! collected before the call because BridgeMakeDict takes them all at once --
+//! which is also why the keys the iterator handed over are released only after
+//! that call has copied them.
+__attribute__((visibility("default"))) void dict_nested_list_sums(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t dictH)
+{
+    TBridgeValue resultType(BridgeGetResultType(), /*owned*/ true);
+    const int64_t length = BridgeDictLength(dictH);
+    if (length == 0) {
+        *result = BridgeMakeDict(resultType.Get(), /*pairsOff*/ 0, 0);
+        return;
+    }
+
+    uint64_t* pairs = AllocHandles(static_cast<size_t>(length) * 2);
+    TBridgeValue iter(BridgeDictMakeIterator(dictH), /*owned*/ true);
+    int64_t pairCount = 0;
+    uint64_t keyHandle = 0;
+    uint64_t payloadHandle = 0;
+    while (pairCount < length
+        && BridgeDictIterNext(iter.Get(), &keyHandle, &payloadHandle) != 0)
+    {
+        TBridgeValue payload(payloadHandle, /*owned*/ true);
+        pairs[pairCount * 2] = keyHandle;
+        pairs[pairCount * 2 + 1] = MakeInt64(SumNestedIntLists(payload.Get())).Release();
+        ++pairCount;
+    }
+
+    *result = BridgeMakeDict(
+        resultType.Get(),
+        reinterpret_cast<uint64_t>(pairs),
+        static_cast<int32_t>(pairCount));
+    for (int64_t i = 0; i < pairCount; ++i) {
+        BridgeUnref(pairs[i * 2]);
+    }
+    free(pairs);
 }
 
 __attribute__((visibility("default"))) void dict_get_int64(

@@ -44,7 +44,7 @@ void WritePrechargeDataset(std::shared_ptr<TTopicSdkTestSetup>& setup, const TSt
         .Messages = std::move(messages),
     });
     auto response = GetWriteResponse(runtime);
-    UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::Success);
+    UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::SUCCESS);
     UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), TAIL_GROUPS);
 }
 

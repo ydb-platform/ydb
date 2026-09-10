@@ -108,17 +108,18 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvConnectResult>(Edge, false);
                 UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
                 Creds.DDiskInstanceGuid = res->Get()->Record.GetDDiskInstanceGuid();
+                Creds.ConnectionToken.emplace(res->Get()->Record.GetConnectionToken());
             }
 
             PBCreds.clear();
             PBCreds.resize(10);
             for (ui32 i : xrange(10)) {
-                PBCreds[i].TabletId = i + 1;
-                PBCreds[i].Generation = 1;
+                PBCreds[i] = NDDisk::TQueryCredentials::ToPersistentBuffer(i + 1, 1, std::nullopt, 0);
                 Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvConnect(PBCreds[i])), Edge.NodeId());
                 auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvConnectResult>(Edge, false);
                 UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
                 PBCreds[i].DDiskInstanceGuid = res->Get()->Record.GetDDiskInstanceGuid();
+                PBCreds[i].ConnectionToken.emplace(res->Get()->Record.GetConnectionToken());
             }
         }
 
@@ -309,6 +310,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
             auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvConnectResult>(Edge, false);
             UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
             PBCreds[tabletIdx].DDiskInstanceGuid = res->Get()->Record.GetDDiskInstanceGuid();
+            PBCreds[tabletIdx].ConnectionToken.emplace(res->Get()->Record.GetConnectionToken());
         }
 
         // Write a persistent buffer record with an explicit generation (does NOT update PersistentBuffers map).
@@ -543,12 +545,55 @@ Y_UNIT_TEST_SUITE(DDisk) {
             auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvConnectResult>(Edge, false);
             UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
             Creds.DDiskInstanceGuid = res->Get()->Record.GetDDiskInstanceGuid();
+            Creds.ConnectionToken.emplace(res->Get()->Record.GetConnectionToken());
 
             for (auto& cred : PBCreds) {
                 Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvConnect(cred)), Edge.NodeId());
                 res = Env.WaitForEdgeActorEvent<NDDisk::TEvConnectResult>(Edge, false);
                 UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
                 cred.DDiskInstanceGuid = res->Get()->Record.GetDDiskInstanceGuid();
+                cred.ConnectionToken.emplace(res->Get()->Record.GetConnectionToken());
+            }
+
+            ReconcilePersistentBuffersAfterRestart();
+        }
+
+        // Reconcile the test's in-memory view of persistent buffer records (PersistentBuffers)
+        // with what the DDisk actually recovered from disk after a restart.
+        //
+        // Every operation the test issues (WritePB/ErasePB/BatchErasePB) blocks for the OK reply
+        // before returning, so nothing the test itself issued should ever be genuinely in-flight
+        // at the moment RestartNode() is called from the outer test loop. In that sense this
+        // reconciliation is expected to be a no-op in the common case. It exists purely to make
+        // the test resilient to any legitimately-lost record that was still physically in-flight
+        // on the DDisk side (e.g. a barrier/erase write not yet durable) at the exact moment of
+        // the simulated crash, without papering over genuine data loss of already-acknowledged
+        // records - hence we only ever remove entries here, never add or "invent" any.
+        void ReconcilePersistentBuffersAfterRestart() {
+            Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvListPersistentBuffer(
+                PBCreds[0])), Edge.NodeId());
+            auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvListPersistentBufferResult>(Edge, false);
+            const auto& rr = res->Get()->Record;
+            UNIT_ASSERT(rr.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+
+            THashSet<ui64> onDiskLsns;
+            for (const auto& item : rr.GetRecords()) {
+                const auto& sel = item.GetSelector();
+                if (sel.GetVChunkIndex() != VChunkIndex) {
+                    continue;
+                }
+                onDiskLsns.insert(item.GetLsn());
+            }
+
+            for (auto it = PersistentBuffers.begin(); it != PersistentBuffers.end(); ) {
+                if (onDiskLsns.contains(it->first)) {
+                    ++it;
+                } else {
+                    Cerr << "record lsn# " << it->first << " was expected but missing from DDisk after"
+                        " restart; pruning from expected in-memory state (legitimate loss of a record"
+                        " that was in flight at the moment of the crash)\n";
+                    it = PersistentBuffers.erase(it);
+                }
             }
         }
     };

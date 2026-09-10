@@ -52,39 +52,39 @@ enum EFacilityCode
 #define FACILITY_FROM_CODE(code) ((ui32(code) & 0x7FFFFFFFu) >> 16)
 #define STATUS_FROM_CODE(code) ((ui32(code) & 0x0000FFFFu))
 
-#define MAKE_RESULT_CODE(severity, facility, status) \
-    (((ui32(severity) & 0x00000001u) << 31) |        \
-     ((ui32(facility) & 0x00007FFFu) << 16) |        \
+#define MAKE_RESULT_CODE(severity, facility, status)                           \
+    (((ui32(severity) & 0x00000001u) << 31) |                                  \
+     ((ui32(facility) & 0x00007FFFu) << 16) |                                  \
      ((ui32(status) & 0x0000FFFFu)))   // MAKE_RESULT_CODE
 
-#define MAKE_SUCCESS(status) \
+#define MAKE_SUCCESS(status)                                                   \
     MAKE_RESULT_CODE(SEVERITY_SUCCESS, FACILITY_NULL, status)
 
-#define MAKE_ERROR(status) \
+#define MAKE_ERROR(status)                                                     \
     MAKE_RESULT_CODE(SEVERITY_ERROR, FACILITY_NULL, status)
 
-#define MAKE_SYSTEM_ERROR(status) \
+#define MAKE_SYSTEM_ERROR(status)                                              \
     MAKE_RESULT_CODE(SEVERITY_ERROR, FACILITY_SYSTEM, status)
 
-#define MAKE_GRPC_ERROR(status) \
+#define MAKE_GRPC_ERROR(status)                                                \
     MAKE_RESULT_CODE(SEVERITY_ERROR, FACILITY_GRPC, status)
 
-#define MAKE_KIKIMR_ERROR(status) \
+#define MAKE_KIKIMR_ERROR(status)                                              \
     MAKE_RESULT_CODE(SEVERITY_ERROR, FACILITY_KIKIMR, status)
 
-#define MAKE_SCHEMESHARD_ERROR(status) \
+#define MAKE_SCHEMESHARD_ERROR(status)                                         \
     MAKE_RESULT_CODE(SEVERITY_ERROR, FACILITY_SCHEMESHARD, status)
 
-#define MAKE_TXPROXY_ERROR(status) \
+#define MAKE_TXPROXY_ERROR(status)                                             \
     MAKE_RESULT_CODE(SEVERITY_ERROR, FACILITY_TXPROXY, status)
 
-#define MAKE_BLOCKSTORE_ERROR(status) \
+#define MAKE_BLOCKSTORE_ERROR(status)                                          \
     MAKE_RESULT_CODE(SEVERITY_ERROR, FACILITY_BLOCKSTORE, status)
 
-#define MAKE_FILESTORE_ERROR(status) \
+#define MAKE_FILESTORE_ERROR(status)                                           \
     MAKE_RESULT_CODE(SEVERITY_ERROR, FACILITY_FILESTORE, status)
 
-#define MAKE_RDMA_ERROR(status) \
+#define MAKE_RDMA_ERROR(status)                                                \
     MAKE_RESULT_CODE(SEVERITY_ERROR, FACILITY_RDMA, status)
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -202,8 +202,12 @@ enum class EErrorKind
     ErrorSession,
 };
 
-bool IsCancelledError(const NProto::TError& e);
+bool IsCanNotAcquireDataError(const NProto::TError& e);
 bool IsConnectionError(const NProto::TError& e);
+bool IsSessionBlockedError(const NProto::TError& e);
+bool IsDeviceBrokenError(const NProto::TError& e);
+bool IsNeverRetriableError(const NProto::TError& e);
+
 EErrorKind GetErrorKind(const NProto::TError& e);
 
 // error classification used for logging and stats
@@ -512,6 +516,8 @@ inline TResultOrError<void> ResultOrError(NThreading::TFuture<void>& future)
 NProto::TError MakeTabletIsDeadError(
     ui32 code,
     const TSourceLocation& location);
+
+NProto::TError MakeCanNotAcquireDataError();
 
 }   // namespace NYdb::NBS
 

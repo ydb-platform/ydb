@@ -123,7 +123,7 @@ bool TPartitionDatabase::ReadDirectBlockGroupsConnections(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool TPartitionDatabase::ReadAllVChunkConfigs(TVector<TVChunkConfig>& out)
+bool TPartitionDatabase::ReadAllVChunkConfigs(TVChunkConfigs& out)
 {
     using TTable = TPartitionSchema::VChunkConfigs;
 
@@ -135,7 +135,9 @@ bool TPartitionDatabase::ReadAllVChunkConfigs(TVector<TVChunkConfig>& out)
 
     while (it.IsValid()) {
         if (it.HaveValue<TTable::Config>()) {
-            out.push_back(FromProto(it.GetValue<TTable::Config>()));
+            auto parsedConfig = FromProto(it.GetValue<TTable::Config>());
+            const ui32 vChunkIndex = parsedConfig.GetVChunkIndex();
+            out[vChunkIndex] = std::move(parsedConfig);
         }
         it.Next();
     }
@@ -175,6 +177,41 @@ void TPartitionDatabase::StoreVChunkConfig(const TVChunkConfig& cfg)
     Table<TTable>()
         .Key(cfg.GetVChunkIndex())
         .Update(NKikimr::NIceDb::TUpdate<TTable::Config>(ToProto(cfg)));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool TPartitionDatabase::ReadAllDirtyMapStates(TDirtyMapStateProtos& out)
+{
+    using TTable = TPartitionSchema::DirtyMapStates;
+
+    auto it =
+        Table<TTable>().Range().Select<TTable::VChunkIndex, TTable::State>();
+
+    if (!it.IsReady()) {
+        return false;
+    }
+
+    while (it.IsValid()) {
+        if (it.HaveValue<TTable::State>()) {
+            out[it.GetValue<TTable::VChunkIndex>()] =
+                it.GetValue<TTable::State>();
+        }
+        it.Next();
+    }
+
+    return true;
+}
+
+void TPartitionDatabase::StoreDirtyMapState(
+    ui32 vChunkIndex,
+    const TDirtyMapStateProto& state)
+{
+    using TTable = TPartitionSchema::DirtyMapStates;
+
+    Table<TTable>()
+        .Key(vChunkIndex)
+        .Update(NKikimr::NIceDb::TUpdate<TTable::State>(state));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

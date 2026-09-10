@@ -38,7 +38,8 @@ void TPartitionActor::CompleteUpdateVChunkConfig(
     TTxPartition::TUpdateVChunkConfig& args)
 {
     Y_UNUSED(ctx);
-    Y_UNUSED(args);
+
+    args.UpdateCompleted.SetValue();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

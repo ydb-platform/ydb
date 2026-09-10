@@ -1,6 +1,8 @@
 #pragma once
 
 #include <util/generic/fwd.h>
+#include <util/generic/ylimits.h>
+#include <util/stream/output.h>
 #include <util/system/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -49,6 +51,15 @@ enum class EHostState
     Offline,
 };
 
+enum class EHostHealth
+{
+    Online,
+    Sufferer,
+    TemporaryOffline,
+    Offline,
+    Broken,   // changes strictly outside of Oracle
+};
+
 // Determines where the data is located
 enum class EDataLocation
 {
@@ -71,7 +82,19 @@ struct THostRoute
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct THostAndNodeId
+{
+    THostIndex HostIndex = InvalidHostIndex;
+    ui32 NodeId = Max<ui32>();
+};
+
+IOutputStream& operator<<(IOutputStream& out, THostAndNodeId value);
+
 TString PrintHostIndex(THostIndex hostIndex);
+TString PrintNodeId(ui32 nodeId);
+TString PrintHostAndNodeId(THostIndex hostIndex, ui32 nodeId);
+TString PrintDbgId(ui32 dbgId);
+TString PrintVChunkId(ui32 vChunkId);
 
 ////////////////////////////////////////////////////////////////////////////////
 

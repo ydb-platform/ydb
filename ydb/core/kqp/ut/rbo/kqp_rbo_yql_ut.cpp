@@ -5468,6 +5468,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 c Int64,
                 d Int64,
                 e Int64,
+                f Decimal(22,9),
                 PRIMARY KEY (a)
             )
         )" << (columnStore ? " WITH (Store = Column);" : ";");
@@ -5517,6 +5518,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 addCell(rows, "c", c);
                 addCell(rows, "d", d);
                 addCell(rows, "e", e);
+                rows.AddMember("f");
+                if (e) {
+                    rows.BeginOptional().Decimal(NYdb::TDecimalValue(TStringBuilder() << *e << ".5", 22, 9)).EndOptional();
+                } else {
+                    rows.EmptyOptional(NYdb::TTypeBuilder().Decimal(NYdb::TDecimalType(22, 9)).Build());
+                }
                 rows.EndStruct();
             }
             rows.EndList();

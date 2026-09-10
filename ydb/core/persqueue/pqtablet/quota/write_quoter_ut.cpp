@@ -86,6 +86,32 @@ Y_UNIT_TEST(WaitMessagesQuota) {
     }
 }
 
+Y_UNIT_TEST(AlterMessagesQuotaIsApplied) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    auto edgeActorId = runtime.AllocateEdgeActor();
+
+    auto quoterId = RegisterQuoter(runtime, edgeActorId, 1_MB, 1, 1);
+    RequestQuota(runtime, quoterId, edgeActorId);
+    UNIT_ASSERT(WaitForQuotaApproved(runtime));
+    ConsumeQuota(runtime, quoterId, edgeActorId, 1_KB, 1);
+
+    NKikimrPQ::TPQTabletConfig config;
+    config.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(1_MB);
+    config.MutablePartitionConfig()->SetBurstSize(1_MB);
+    config.MutablePartitionConfig()->SetWriteSpeedInMessagesPerSecond(1_MB);
+    config.MutablePartitionConfig()->SetBurstSizeInMessages(1_MB);
+    runtime.Send(quoterId, edgeActorId, new TEvPQ::TEvChangePartitionConfig(nullptr, config));
+
+    TInstant start = TInstant::Now();
+    RequestQuota(runtime, quoterId, edgeActorId);
+    const auto ev = WaitForQuotaApproved(runtime, TDuration::MilliSeconds(500));
+    UNIT_ASSERT_LT_C(ev->PartitionQuotaWaitTime, TDuration::MilliSeconds(500),
+        "duration: " << ev->PartitionQuotaWaitTime);
+    UNIT_ASSERT_LT_C(TInstant::Now() - start, TDuration::MilliSeconds(500),
+        "wall: " << (TInstant::Now() - start));
+}
+
 }
 
 } // namespace NKikimr::NPQ

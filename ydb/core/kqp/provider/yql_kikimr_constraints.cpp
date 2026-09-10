@@ -28,6 +28,17 @@ TStatus ConstraintKqpWriteConstraint(const TExprNode::TPtr& input, TExprContext&
     return TStatus::Ok;
 }
 
+TStatus ConstraintKqpStreamingAggregation(const TExprNode::TPtr& input) {
+    // Each input row produces an update; repeated keys are neither unique nor distinct.
+    if (const auto* c = input->Head().GetConstraint<TStreamingConstraintNode>()) {
+        input->AddConstraint(c);
+    }
+    if (const auto* c = input->Head().GetConstraint<TEmptyConstraintNode>()) {
+        input->AddConstraint(c);
+    }
+    return TStatus::Ok;
+}
+
 class TKiSourceConstraintsTransformer final : public TVisitorTransformerBase {
 public:
     explicit TKiSourceConstraintsTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx)
@@ -90,6 +101,10 @@ TAutoPtr<IGraphTransformer> CreateKiSinkConstraintsTransformer(TIntrusivePtr<TKi
 
     return CreateFunctorTransformer([dq = std::move(dqTransformer)](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> TStatus {
         output = input;
+
+        if (TKqpStreamingAggregation::Match(input.Get())) {
+            return ConstraintKqpStreamingAggregation(input);
+        }
 
         if (TKqpWriteConstraint::Match(input.Get())) {
             return ConstraintKqpWriteConstraint(input, ctx);

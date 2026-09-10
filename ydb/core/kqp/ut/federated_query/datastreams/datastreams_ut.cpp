@@ -1901,6 +1901,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "Aggregation of streaming input without windows is not supported"
         );
 
+        // Keyless agg
+        ExecQuery(fmt::format(R"sql(
+                SELECT COUNT(*) FROM `{source}`.`{i}` WITH (STREAMING = "TRUE");
+            )sql", "source"_a = source, "i"_a = input1),
+            EStatus::GENERIC_ERROR,
+            "Aggregation of streaming input without windows is not supported"
+        );
+
         // Distinct agg
         ExecQuery(fmt::format(R"sql(
                 SELECT DISTINCT Data FROM `{source}`.`{i}` WITH (STREAMING = "TRUE");

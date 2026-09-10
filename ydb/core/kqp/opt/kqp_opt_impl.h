@@ -10,6 +10,7 @@ namespace NKikimr::NKqp::NOpt {
 void DumpAppliedRule(const TString& name, const NYql::TExprNode::TPtr& input,
     const NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx);
 
+bool IsKqpPureExpr(const NYql::NNodes::TExprBase& expr, bool checkDqSources = false, bool checkIndexReads = false);
 bool IsKqpPureLambda(const NYql::NNodes::TCoLambda& lambda);
 bool IsKqpPureInputs(const NYql::NNodes::TExprList& inputs);
 

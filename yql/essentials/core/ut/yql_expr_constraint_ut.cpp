@@ -4116,18 +4116,28 @@ Y_UNIT_TEST(MatchRecognize) {
 }
 
 Y_UNIT_TEST(StreamingConstraintAggregate) {
-    {
-        const TStringBuf s = R"((
-            (let list (AsList (AsStruct '('key (String '1)) '('time (Timestamp '1000)))))
-            (let streamingList (AssumeConstraints list '"{\"Streaming\" = #}"))
-            (let aggr (Aggregate streamingList '('key) '() '()))
-            (let res (DataSink 'result))
-            (let world (Write! world res (Key) aggr '()))
-            (return (Commit! world res))
-        ))";
+    for (const bool streamingInput : {false, true}) {
+        for (const TStringBuf settings : {"'()", "'('('streaming '()))", "'('('streaming '('/Root/state)))"}) {
+            for (const bool empty : {false, true}) {
+                const TString s = TStringBuilder() << R"((
+                    (let rowType (StructType '('key (DataType 'String))))
+                    (let list )" << (empty ? "(List (ListType rowType))" : "(AsList (AsStruct '('key (String '1))))") << ")"
+                    << (streamingInput ? R"((let list (AssumeConstraints list '"{\"Streaming\" = #}")))" : "")
+                    << "(let aggr (Aggregate list '('key) '() " << settings << R"())
+                    (let res (DataSink 'result))
+                    (let world (Write! world res (Key) aggr '()))
+                    (return (Commit! world res))
+                ))";
 
-        TExprContext exprCtx;
-        ParseAndAnnotate(s, exprCtx, {.ExpectedError = "Aggregation of streaming input without windows is not supported"});
+                TExprContext exprCtx;
+                const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+                CheckConstraint<TStreamingConstraintNode>(exprRoot, "Aggregate", streamingInput ? "Streaming" : "");
+                CheckConstraint<TEmptyConstraintNode>(exprRoot, "Aggregate", empty ? "Empty" : "");
+                const bool unique = !streamingInput && settings == "'()";
+                CheckConstraint<TUniqueConstraintNode>(exprRoot, "Aggregate", unique ? "Unique((key))" : "");
+                CheckConstraint<TDistinctConstraintNode>(exprRoot, "Aggregate", unique ? "Distinct((key))" : "");
+            }
+        }
     }
 
     {
@@ -4150,6 +4160,56 @@ Y_UNIT_TEST(StreamingConstraintAggregate) {
         TExprContext exprCtx;
         const auto exprRoot = ParseAndAnnotate(s, exprCtx);
         CheckConstraint<TStreamingConstraintNode>(exprRoot, "Aggregate", "Streaming");
+    }
+}
+
+Y_UNIT_TEST(StreamingConstraintAggregatePhases) {
+    for (const TStringBuf callable : {"AggregateCombine", "AggregateCombineState", "AggregateMergeState",
+            "AggregateMergeFinalize", "AggregateMergeManyFinalize", "AggregateFinalize"}) {
+        for (const bool streamingInput : {false, true}) {
+            const TString s = TStringBuilder() << R"((
+                (let list (AsList (AsStruct '('key (String '1)))))
+            )" << (streamingInput ? R"((let list (AssumeConstraints list '"{\"Streaming\" = #}")))" : "")
+                << "(let aggr (" << callable << R"( list '('key) '() '()))
+                (let res (DataSink 'result))
+                (let world (Write! world res (Key) aggr '()))
+                (return (Commit! world res))
+            ))";
+
+            TExprContext exprCtx;
+            const auto exprRoot = ParseAndAnnotate(s, exprCtx,
+                {.ExpectedError = streamingInput ? "Aggregation of streaming input without windows is not supported" : ""});
+            if (!streamingInput) {
+                CheckConstraint<TStreamingConstraintNode>(exprRoot, callable, "");
+                const bool final = callable != "AggregateCombine" && callable != "AggregateCombineState";
+                CheckConstraint<TUniqueConstraintNode>(exprRoot, callable, final ? "Unique((key))" : "");
+                CheckConstraint<TDistinctConstraintNode>(exprRoot, callable, final ? "Distinct((key))" : "");
+            }
+        }
+    }
+}
+
+Y_UNIT_TEST(StreamingConstraintBlockAggregatePhases) {
+    for (const bool many : {false, true}) {
+        for (const bool streamingInput : {false, true}) {
+            const TString s = TStringBuilder() << R"((
+                (let blocks (EmptyIterator (StreamType (MultiType
+                    (BlockType (DataType 'String))
+                    (BlockType (DataType 'Uint32))
+                    (ScalarType (DataType 'Uint64))))))
+            )" << (streamingInput ? R"((let blocks (AssumeConstraints blocks '"{\"Streaming\" = #}")))" : "")
+                << "(let aggr (" << (many ? "BlockMergeManyFinalizeHashed" : "BlockMergeFinalizeHashed")
+                << " blocks '('0) '()" << (many ? " '1 '('())" : "") << R"())
+                (let rows (Collect (NarrowMap (ToFlow (WideFromBlocks aggr)) (lambda '(key) (AsStruct '('key key))))))
+                (let res (DataSink 'result))
+                (let world (Write! world res (Key) rows '()))
+                (return (Commit! world res))
+            ))";
+
+            TExprContext exprCtx;
+            ParseAndAnnotate(s, exprCtx,
+                {.ExpectedError = streamingInput ? "Aggregation of streaming input without windows is not supported" : ""});
+        }
     }
 }
 

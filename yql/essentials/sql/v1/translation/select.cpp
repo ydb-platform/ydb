@@ -1798,6 +1798,7 @@ public:
         const TVector<TNodePtr>& groupByExpr,
         const TVector<TNodePtr>& groupBy,
         bool compactGroupBy,
+        std::optional<TStreamingGroupBySettings> streamingGroupBy,
         TString groupBySuffix,
         bool assumeSorted,
         const TVector<TSortSpecificationPtr>& orderBy,
@@ -1818,6 +1819,7 @@ public:
         , GroupBy_(groupBy)
         , AssumeSorted_(assumeSorted)
         , CompactGroupBy_(compactGroupBy)
+        , StreamingGroupBy_(std::move(streamingGroupBy))
         , GroupBySuffix_(std::move(groupBySuffix))
         , OrderBy_(orderBy)
         , Having_(std::move(having))
@@ -1879,6 +1881,7 @@ public:
         }
 
         src->SetCompactGroupBy(CompactGroupBy_);
+        src->SetStreamingGroupBy(StreamingGroupBy_);
         src->SetGroupBySuffix(GroupBySuffix_);
 
         for (auto& term : Terms_) {
@@ -2282,7 +2285,7 @@ public:
 
     TNodePtr DoClone() const final {
         return new TSelectCore(Pos_, Source_->CloneSource(), CloneContainer(GroupByExpr_),
-                               CloneContainer(GroupBy_), CompactGroupBy_, GroupBySuffix_, AssumeSorted_, CloneContainer(OrderBy_),
+                               CloneContainer(GroupBy_), CompactGroupBy_, StreamingGroupBy_, GroupBySuffix_, AssumeSorted_, CloneContainer(OrderBy_),
                                SafeClone(Having_), CloneContainer(WinSpecs_), SafeClone(LegacyHoppingWindowSpec_),
                                CloneContainer(Terms_), Distinct_, Without_, ForceWithout_, SelectStream_, Settings_, TColumnsSets(UniqueSets_), TColumnsSets(DistinctSets_));
     }
@@ -2644,6 +2647,7 @@ private:
     TVector<TNodePtr> GroupBy_;
     bool AssumeSorted_ = false;
     bool CompactGroupBy_ = false;
+    std::optional<TStreamingGroupBySettings> StreamingGroupBy_;
     TString GroupBySuffix_;
     TVector<TSortSpecificationPtr> OrderBy_;
     TNodePtr Having_;
@@ -3071,6 +3075,7 @@ TSourcePtr DoBuildSelectCore(
     const TVector<TNodePtr>& groupByExpr,
     const TVector<TNodePtr>& groupBy,
     bool compactGroupBy,
+    const std::optional<TStreamingGroupBySettings>& streamingGroupBy,
     const TString& groupBySuffix,
     bool assumeSorted,
     const TVector<TSortSpecificationPtr>& orderBy,
@@ -3086,14 +3091,14 @@ TSourcePtr DoBuildSelectCore(
     TColumnsSets&& uniqueSets,
     TColumnsSets&& distinctSets) {
     if (groupBy.empty() || !groupBy.front()->ContentListPtr()) {
-        return new TSelectCore(pos, std::move(source), groupByExpr, groupBy, compactGroupBy, groupBySuffix, assumeSorted,
+        return new TSelectCore(pos, std::move(source), groupByExpr, groupBy, compactGroupBy, streamingGroupBy, groupBySuffix, assumeSorted,
                                orderBy, having, winSpecs, legacyHoppingWindowSpec, terms, distinct, without, forceWithout, selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
     }
     if (groupBy.size() == 1) {
         /// actualy no big idea to use grouping function in this case (result allways 0)
         auto contentPtr = groupBy.front()->ContentListPtr();
         source = new TNestedProxySource(pos, *contentPtr, source);
-        return DoBuildSelectCore(ctx, pos, originalSource, source, groupByExpr, *contentPtr, compactGroupBy, groupBySuffix,
+        return DoBuildSelectCore(ctx, pos, originalSource, source, groupByExpr, *contentPtr, compactGroupBy, streamingGroupBy, groupBySuffix,
                                  assumeSorted, orderBy, having, std::move(winSpecs),
                                  legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), forceWithout, selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
     }
@@ -3121,7 +3126,7 @@ TSourcePtr DoBuildSelectCore(
         }
         totalGroups += contentPtr->size();
         TSelectCore* selectCore = new TSelectCore(pos, std::move(proxySource), CloneContainer(groupByExpr),
-                                                  CloneContainer(*contentPtr), compactGroupBy, groupBySuffix, assumeSorted, orderBy, SafeClone(having), CloneContainer(winSpecs),
+                                                  CloneContainer(*contentPtr), compactGroupBy, streamingGroupBy, groupBySuffix, assumeSorted, orderBy, SafeClone(having), CloneContainer(winSpecs),
                                                   legacyHoppingWindowSpec, terms, distinct, without, forceWithout, selectStream, settings, TColumnsSets(uniqueSets), TColumnsSets(distinctSets));
         subselects.emplace_back(selectCore);
     }
@@ -3142,6 +3147,7 @@ TSourcePtr BuildSelectCore(
     const TVector<TNodePtr>& groupByExpr,
     const TVector<TNodePtr>& groupBy,
     bool compactGroupBy,
+    const std::optional<TStreamingGroupBySettings>& streamingGroupBy,
     const TString& groupBySuffix,
     bool assumeSorted,
     const TVector<TSortSpecificationPtr>& orderBy,
@@ -3157,7 +3163,7 @@ TSourcePtr BuildSelectCore(
     TColumnsSets&& uniqueSets,
     TColumnsSets&& distinctSets)
 {
-    return DoBuildSelectCore(ctx, pos, source, source, groupByExpr, groupBy, compactGroupBy, groupBySuffix, assumeSorted, orderBy,
+    return DoBuildSelectCore(ctx, pos, source, source, groupByExpr, groupBy, compactGroupBy, streamingGroupBy, groupBySuffix, assumeSorted, orderBy,
                              having, std::move(windowSpec), legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), forceWithout, selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
 }
 

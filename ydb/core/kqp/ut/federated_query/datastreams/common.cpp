@@ -30,7 +30,7 @@ using namespace NYdb::NQuery;
 using namespace NYql::NConnector::NApi;
 using namespace NYql::NConnector::NTest;
 
-TStreamingTestFixture::~TStreamingTestFixture () {
+TStreamingTestFixture::~TStreamingTestFixture() {
     if (PqGatewayDriver) {
         PqGatewayDriver.reset();
     }
@@ -143,6 +143,7 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
         auto& featureFlags = *AppConfig->MutableFeatureFlags();
         featureFlags.SetEnableStreamingQueries(true);
         featureFlags.SetEnableSchemaSecrets(true);
+        featureFlags.SetEnableStreamingAggregation(true);
 
         auto& queryServiceConfig = *AppConfig->MutableQueryServiceConfig();
         queryServiceConfig.SetEnableMatchRecognize(true);

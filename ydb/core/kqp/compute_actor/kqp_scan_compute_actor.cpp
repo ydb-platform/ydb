@@ -332,6 +332,7 @@ void TKqpScanComputeActor::DoBootstrap() {
     auto wakeupCallback = [actorSystem, selfId]() {
         actorSystem->Send(selfId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
     };
+    ComputeCtx.SetWakeupCallback(wakeupCallback);
     auto errorCallback = [actorSystem, selfId](const TString& error) {
         actorSystem->Send(selfId, new TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::INTERNAL_ERROR, error));
     };

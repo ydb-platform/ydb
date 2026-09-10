@@ -1087,11 +1087,12 @@ public:
 
         mutableTableInfo->RegisterSplitMergeOp(OperationId, op);
 
-        // CreateTx implicitly calls for AcquirePathRefs, move-assign releases those refs,
-        // so we need to acquire refs explicitly again.
+        // CreateTx acquires the path refs; move the prepared fields instead of
+        // the whole state so the refs are acquired exactly once.
         auto& txState = context.SS->CreateTx(OperationId, TTxState::TxSplitTablePartition, path->PathId);
-        txState = std::move(op);
-        txState.AcquirePathRefs(context.SS);
+        txState.State = op.State;
+        txState.Shards = std::move(op.Shards);
+        txState.SplitDescription = std::move(op.SplitDescription);
         context.OnComplete.ActivateTx(OperationId);
 
         for (const auto& shard : txState.Shards) {

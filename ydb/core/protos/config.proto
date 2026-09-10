@@ -3423,7 +3423,11 @@ message TStatisticsConfig {
 
     // Column tables smaller than or equal to this size are scanned as a whole table
     // rather than per shard. 0 disables the optimization (always per-shard).
-    optional uint64 AnalyzeWholeTableScanMaxBytes = 9 [default = 10737418240]; // 10 GiB
+    optional uint64 AnalyzeColumnTableWholeTableScanMaxBytes = 9 [default = 10737418240]; // 10 GiB
+
+    // Row tables: whole-table scan if size is known and <= this. Else one PK range
+    // per DataShard, merged down to ceil(tableBytes / this). 0: always split.
+    optional uint64 AnalyzeRowTableWholeTableScanMaxBytes = 14 [default = 10737418240]; // 10 GiB
 
     // Auto-collect PK equi-height histogram on ANALYZE. Declared stats ignore this.
     optional bool AnalyzeCollectPrimaryKeyHistogram = 10 [default = false];

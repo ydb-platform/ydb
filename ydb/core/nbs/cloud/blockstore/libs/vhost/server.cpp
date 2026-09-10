@@ -335,21 +335,29 @@ public:
     // a single device handler.
     void ProcessRequest(TVhostRequestPtr vhostRequest)
     {
+        // VhostDevice::Stop() waits for vhost requests to be completed, but a
+        // request may be completed by Stop() while this method is still
+        // dispatching it to DeviceHandler. Keep the endpoint (and therefore
+        // DeviceHandler) alive until the synchronous dispatch is finished.
+        auto self = shared_from_this();
+
         const auto requestType = vhostRequest->Type;
-        auto request = RegisterRequest(std::move(vhostRequest));
+        auto request = self->RegisterRequest(std::move(vhostRequest));
         if (!request) {
             return;
         }
 
         switch (requestType) {
             case EBlockStoreRequest::WriteBlocks:
-                ProcessRequest<TWriteBlocksLocalMethod>(std::move(request));
+                self->ProcessRequest<TWriteBlocksLocalMethod>(
+                    std::move(request));
                 break;
             case EBlockStoreRequest::ReadBlocks:
-                ProcessRequest<TReadBlocksLocalMethod>(std::move(request));
+                self->ProcessRequest<TReadBlocksLocalMethod>(
+                    std::move(request));
                 break;
             case EBlockStoreRequest::ZeroBlocks:
-                ProcessRequest<TZeroBlocksMethod>(std::move(request));
+                self->ProcessRequest<TZeroBlocksMethod>(std::move(request));
                 break;
             default:
                 Y_ABORT(

@@ -33,12 +33,6 @@ ydb/tests/fq/streaming py3test.[*/*] chunk
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_issues_after_restart[kikimr0-False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_issues_after_restart[kikimr0-True]
 ydb/tests/fq/streaming/generic py3test.sole chunk
-ydb/tests/fq/streaming/generic test_iam_generic.py.TestIamAuthGeneric.test_generic_lookup_iam_auth[aje00000000000000000-kikimr0]
-ydb/tests/fq/streaming/generic test_iam_generic.py.TestIamAuthGeneric.test_generic_lookup_iam_auth[bad-kikimr0]
-ydb/tests/fq/streaming/generic test_iam_generic.py.TestIamAuthGeneric.test_generic_lookup_iam_auth[bad-token-kikimr0]
-ydb/tests/fq/streaming/generic test_iam_generic.py.TestIamAuthGeneric.test_generic_read_iam_auth[aje00000000000000000]
-ydb/tests/fq/streaming/generic test_iam_generic.py.TestIamAuthGeneric.test_generic_read_iam_auth[bad-token]
-ydb/tests/fq/streaming/generic test_iam_generic.py.TestIamAuthGeneric.test_generic_read_iam_auth[bad]
 ydb/tests/fq/streaming/streaming_large test_cluster_restarts.py.TestStreamingLarge.test_replace_node[kikimr0]
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_restart_compute_node
 ydb/tests/fq/yt/yt_integration py3test.sole chunk

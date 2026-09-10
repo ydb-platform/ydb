@@ -432,3 +432,17 @@ Generic configurable summary charts remain available below the baseline table.
 Run manifests use schema version 4. Earlier manifests are intentionally not
 read as resumable results because they lack the immutable step plan and durable
 per-step artifact contract.
+# Actor-system capacity and CPU placement
+
+For local YDB, `actor-system.static-nodes.cpu-count` and `actor-system.dynamic-nodes.cpu-count` independently set the vCPU count used by YDB automatic actor-system configuration **per node**. They do not set an OS affinity mask or an exact executor thread count. These positive integers remain unchanged when dynamic nodes are added. `affinity` only controls eligible logical CPUs; its mask can be larger or smaller than the configured actor-system capacity. For example:
+
+```yaml
+actor-system:
+  static-nodes: {cpu-count: 8}
+  dynamic-nodes: {cpu-count: 8}
+affinity:
+  static-nodes: {mode: pack-numa-pack-chiplet, cpus: 16}
+  dynamic-nodes: {mode: pack-numa-pack-chiplet, cpus: 32}
+```
+
+An explicit actor-system count also works with `mode: none`. Omitting it preserves YDB's automatic detection from the process affinity (or available host CPUs). Linux CPU usage remains relative to the assigned CPUs, not this actor-system setting.

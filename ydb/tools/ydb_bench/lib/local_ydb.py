@@ -600,6 +600,16 @@ class LocalYdbCluster:
     def _node_ports(self):
         return {name: _next_available_port(candidates, name) for name, candidates in self.port_candidates.items()}
 
+    def _node_config(self, role, directory):
+        cpu_count = self.actor_system.get(role, {}).get("cpu_count")
+        if cpu_count is None:
+            return self.config_path
+        config = yaml.safe_load(self.config_path.read_text(encoding="utf-8"))
+        config["config"]["actor_system_config"]["cpu_count"] = cpu_count
+        path = directory / "cluster.yaml"
+        atomic_write_text(path, yaml.safe_dump(config, sort_keys=False))
+        return path
+
     def start(self):
         self._progress("preparing-cluster")
         self.directory.mkdir(parents=True, exist_ok=True)
@@ -618,7 +628,7 @@ class LocalYdbCluster:
                 self.ydbd,
                 "server",
                 "--yaml-config",
-                self.config_path,
+                self._node_config("static_nodes", node_directory),
                 "--node",
                 "static",
                 "--grpc-port",
@@ -722,7 +732,7 @@ class LocalYdbCluster:
                 self.ydbd,
                 "server",
                 "--yaml-config",
-                self.config_path,
+                self._node_config("dynamic_nodes", node_directory),
                 "--tenant",
                 self.database,
                 "--node-broker-port",

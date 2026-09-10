@@ -73,14 +73,8 @@ EHostHealth TDefaultHostHealthPolicy::NewHealthFromTemporaryOffline(
     const ui64 errorsTotalSize) const
 {
     if (HasRecovered(stats)) {
-        fprintf(stderr, "recv\n");
         return EHostHealth::Online;
     }
-    fprintf(
-        stderr,
-        "!recv, %lu %lu\n",
-        stats.ConsecutiveSuccessCount,
-        stats.FromFirstSuccess);
     if (IsDownByStats(stats, errorsTotalSize) &&
         stats.FromFirstError > Config->GetMaxDurationBeforeGoingOffline())
     {
@@ -115,14 +109,6 @@ bool TDefaultHostHealthPolicy::IsDownByStats(
     const bool hardDowntimeByErrorsTotalSize =
         stats.ConsecutiveErrorCount > 0 &&
         errorsTotalSize >= Config->GetErrorsTotalSizeForGoingOffline();
-
-    fprintf(
-        stderr,
-        "%s %s %s %s\n",
-        softDowntimeByErrors ? "yes" : "no",
-        temporaryOfflineDelayOver ? "yes" : "no",
-        hardDowntimeByErrors ? "yes" : "no",
-        hardDowntimeByErrorsTotalSize ? "yes" : "no");
 
     return hardDowntimeByErrorsTotalSize || hardDowntimeByErrors ||
            (softDowntimeByErrors && temporaryOfflineDelayOver);

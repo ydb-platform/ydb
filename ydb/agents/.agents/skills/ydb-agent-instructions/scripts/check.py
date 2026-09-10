@@ -191,7 +191,26 @@ def parse_frontmatter(lines):
     return None, index, "frontmatter is not closed with ---"
 
 
-def check_links(path, text, report):
+def path_targets(line):
+    """Markdown link targets and bare paths in one line of text."""
+    found = []
+    for target in LINK_RE.findall(line):
+        if target.startswith(("http://", "https://", "mailto:", "#")):
+            continue
+        target = target.split("#", 1)[0]
+        if target:
+            found.append(target)
+    found.extend(PATH_RE.findall(LINK_RE.sub("", line)))
+    return found
+
+
+def check_paths(path, text, root, report):
+    """Every file the text points to must exist, relative to the file or to the repo root.
+
+    Covers markdown links [text](target) and bare paths such as ydb/agents/GUIDE.md.
+    Fenced code blocks and inline code are skipped: paths there are examples.
+    Tokens with < > * { } are placeholders and are skipped too.
+    """
     base = os.path.dirname(path)
     in_code = False
     for number, line in enumerate(text.splitlines(), start=1):
@@ -201,27 +220,12 @@ def check_links(path, text, report):
         if in_code:
             continue
         line = re.sub(r"`[^`]*`", "", line)
-        for target in LINK_RE.findall(line):
-            if target.startswith(("http://", "https://", "mailto:", "#")):
+        for target in path_targets(line):
+            if any(mark in target for mark in "<>*{}"):
                 continue
-            target = target.split("#", 1)[0]
-            if not target:
+            if os.path.exists(os.path.join(base, target)) or os.path.exists(os.path.join(root, target)):
                 continue
-            resolved = os.path.normpath(os.path.join(base, target))
-            if not os.path.exists(resolved):
-                report.error(path, number, "link target does not exist: %s" % target)
-
-
-def check_paths(path, text, root, report):
-    """Plain file paths in the text must exist, relative to the file or to the repo root."""
-    base = os.path.dirname(path)
-    for number, line in enumerate(text.splitlines(), start=1):
-        for token in PATH_RE.findall(line):
-            if any(mark in token for mark in "<>*{}"):
-                continue
-            if os.path.exists(os.path.join(base, token)) or os.path.exists(os.path.join(root, token)):
-                continue
-            report.error(path, number, "path does not exist: %s" % token)
+            report.error(path, number, "path does not exist: %s" % target)
 
 
 def check_sentences(path, text, start_line, report):
@@ -333,7 +337,6 @@ def check_skill(path, root, report):
         report.error(path, len(lines), "SKILL.md has %d lines; hard limit is %d" % (len(lines), SKILL_HARD_LINES))
     elif len(lines) > SKILL_SOFT_LINES:
         report.warn(path, len(lines), "SKILL.md has %d lines; move detail to references/" % len(lines))
-    check_links(path, text, report)
     check_paths(path, text, root, report)
     check_sentences(path, text, body_start + 1, report)
     for number, line in enumerate(lines, start=1):
@@ -364,7 +367,6 @@ def check_skill(path, root, report):
         report.warn(claude_link, 0, "missing; create the symlink .claude -> .agents for Claude Code")
     for reference in sorted(glob_files(os.path.join(skill_dir, "references"), ".md")):
         reference_text = read_text(reference)
-        check_links(reference, reference_text, report)
         check_paths(reference, reference_text, root, report)
         check_sentences(reference, reference_text, 1, report)
 
@@ -427,7 +429,6 @@ def check_agents(path, root, report):
     chain = agents_chain_bytes(path, root)
     if chain > AGENTS_CHAIN_MAX_BYTES:
         report.error(path, 0, "AGENTS.md chain from repo root is %d bytes; Codex stops reading after 32 KiB" % chain)
-    check_links(path, text, report)
     check_paths(path, text, root, report)
     check_sentences(path, text, 1, report)
 

@@ -31,6 +31,11 @@ public:
         EHostState oldState,
         EHostState newState) = 0;
 
+    virtual void PersistHostHealth(
+        THostIndex hostIndex,
+        EHostHealth oldHealth,
+        EHostHealth newHealth) = 0;
+
     [[nodiscard]] virtual TCountAndSize GetPBuffersUsage(
         THostIndex hostIndex) const = 0;
 

@@ -19,12 +19,19 @@ namespace {
 struct THostStateControllerMock: public IHostStateController
 {
     TMap<THostIndex, EHostState> States;
+    TMap<THostIndex, EHostHealth> Healths;
+
     TCountAndSize HostPBufferUsedSize{.Count = 1, .Size = 1_MB};
 
     // Counts the QueryAddHost calls.
     size_t AddHostQueries = 0;
 
     THostStateControllerMock() = default;
+
+    void PersistHostHealth(
+        THostIndex hostIndex,
+        EHostHealth oldHealth,
+        EHostHealth newHealth) override;
 
     void SetHostState(
         THostIndex hostIndex,
@@ -48,6 +55,16 @@ struct THostStateControllerMock: public IHostStateController
         ++AddHostQueries;
     }
 };
+
+void THostStateControllerMock::PersistHostHealth(
+    THostIndex hostIndex,
+    EHostHealth oldHealth,
+    EHostHealth newHealth)
+{
+    Y_UNUSED(oldHealth);
+
+    Healths[hostIndex] = newHealth;
+}
 
 TStorageConfigPtr MakeStorageConfig()
 {
@@ -919,6 +936,134 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         const auto stats = oracle.BuildHostStats(now);
         UNIT_ASSERT_EQUAL(EHostHealth::Broken, stats[0].Health);
+    }
+
+    Y_UNIT_TEST(ShouldPersistHostHealthIfChangesToOffline)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto& oracleConfig = *rawConfig.MutableOracleConfig();
+        oracleConfig.SetMaxDurationBeforeGoingTemporaryOffline(2000);
+        oracleConfig.SetMaxDurationBeforeGoingOffline(4000);
+        oracleConfig.SetMinErrorsCountBeforeGoingOffline(1);
+
+        auto config = std::make_shared<TStorageConfig>(rawConfig);
+
+        THostStateControllerMock hostStateController;
+        TOracle oracle(config, &hostStateController);
+        auto now = TInstant::Now();
+
+        // Generate a single error on host 0.
+        oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+        oracle.OnRequestFailed(0, EOperation::WriteToPBuffer, now);
+
+        // Go to TemporaryOffline. Expect PersistHostHealth call
+        now += TDuration::Seconds(3);
+        oracle.Think(now);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostState::TemporaryOffline,
+            hostStateController.States[0]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostHealth::TemporaryOffline,
+            hostStateController.Healths[0]);
+
+        // Go to Offline. Expect PersistHostHealth call
+        now += TDuration::Seconds(3);
+        oracle.Think(now);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostState::Offline,
+            hostStateController.States[0]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostHealth::Offline,
+            hostStateController.Healths[0]);
+    }
+
+    Y_UNIT_TEST(ShouldPersistHostHealthIfChangesToOnline)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto& oracleConfig = *rawConfig.MutableOracleConfig();
+        oracleConfig.SetMaxDurationBeforeGoingTemporaryOffline(2000);
+        oracleConfig.SetMaxDurationBeforeGoingOffline(4000);
+        oracleConfig.SetMinErrorsCountBeforeGoingOffline(1);
+
+        auto config = std::make_shared<TStorageConfig>(rawConfig);
+
+        THostStateControllerMock hostStateController;
+        TOracle oracle(config, &hostStateController);
+        auto now = TInstant::Now();
+
+        // Generate a single error on host 0.
+        oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+        oracle.OnRequestFailed(0, EOperation::WriteToPBuffer, now);
+
+        // Go to TemporaryOffline. Expect PersistHostHealth call
+        now += TDuration::Seconds(3);
+        oracle.Think(now);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostState::TemporaryOffline,
+            hostStateController.States[0]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostHealth::TemporaryOffline,
+            hostStateController.Healths[0]);
+
+        // Go to Online. Expect PersistHostHealth call
+        for (size_t i = 0; i < 10; ++i) {
+            now += TDuration::Seconds(1);
+            oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestSucceeded(
+                0,
+                EOperation::WriteToPBuffer,
+                now,
+                TDuration());
+            oracle.Think(now);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostState::Online,
+            hostStateController.States[0]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostHealth::Online,
+            hostStateController.Healths[0]);
+    }
+
+    Y_UNIT_TEST(ShouldNotPersistChangesBetweenOnlineAndSufferer)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto& oracleConfig = *rawConfig.MutableOracleConfig();
+        oracleConfig.SetMaxDurationBeforeGoingTemporaryOffline(2000);
+        oracleConfig.SetMaxDurationBeforeGoingOffline(4000);
+        oracleConfig.SetMinErrorsCountBeforeGoingOffline(2);
+
+        auto config = std::make_shared<TStorageConfig>(rawConfig);
+
+        THostStateControllerMock hostStateController;
+        TOracle oracle(config, &hostStateController);
+        auto now = TInstant::Now();
+
+        // Generate a single error on host 0.
+        oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+        oracle.OnRequestFailed(0, EOperation::WriteToPBuffer, now);
+
+        // Still TemporaryOffline three seconds later - no add-host request.
+        now += TDuration::Seconds(3);
+        oracle.Think(now);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostState::Online,
+            hostStateController.States[0]);
+        UNIT_ASSERT_VALUES_EQUAL(0, hostStateController.Healths.size());
+
+        now += TDuration::Seconds(3);
+        oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+        oracle.OnRequestSucceeded(
+            0,
+            EOperation::WriteToPBuffer,
+            now,
+            TDuration());
+        oracle.Think(now);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostState::Online,
+            hostStateController.States[0]);
+        UNIT_ASSERT_VALUES_EQUAL(0, hostStateController.Healths.size());
     }
 }
 

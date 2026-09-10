@@ -3,6 +3,7 @@
 #include "public.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
@@ -84,6 +85,13 @@ struct IPartitionDirectService
     // Returns the delay before the operation may start. Zero means it may start
     // immediately or throttling is disabled. Called from DBG executor threads.
     virtual TDuration TakeVolumeCopyRangeBudget(ui64 byteCount) = 0;
+
+    // Store changes host health in partition's local DB
+    virtual void PersistHostHealth(
+        size_t directBlockGroupId,
+        THostIndex hostIndex,
+        EHostHealth oldHealth,
+        EHostHealth newHealth) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

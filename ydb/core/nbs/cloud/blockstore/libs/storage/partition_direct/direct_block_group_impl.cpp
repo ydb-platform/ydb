@@ -1402,6 +1402,30 @@ TDirectBlockGroup::GatherVChunkStats(EVChunkStatsDetail detail) const
     return future;
 }
 
+void TDirectBlockGroup::PersistHostHealth(
+    const THostIndex hostIndex,
+    const EHostHealth oldHealth,
+    const EHostHealth newHealth)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(Service);
+
+    LOG_WARN(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s %s persisting health change: %s -> %s",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostAndNode(hostIndex).c_str(),
+        ToString(oldHealth).c_str(),
+        ToString(newHealth).c_str());
+
+    Service->PersistHostHealth(
+        DirectBlockGroupIndex,
+        hostIndex,
+        oldHealth,
+        newHealth);
+}
+
 void TDirectBlockGroup::SetHostState(
     THostIndex hostIndex,
     EHostState oldState,

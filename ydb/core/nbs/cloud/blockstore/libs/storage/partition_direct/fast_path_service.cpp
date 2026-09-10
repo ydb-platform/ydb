@@ -499,6 +499,21 @@ TDuration TFastPathService::TakeVolumeCopyRangeBudget(ui64 byteCount)
     return CopyRangeBucket->Register(ActorSystem->Timestamp(), byteCount);
 }
 
+void TFastPathService::PersistHostHealth(
+    size_t directBlockGroupId,
+    THostIndex hostIndex,
+    EHostHealth oldHealth,
+    EHostHealth newHealth)
+{
+    auto event =
+        std::make_unique<TEvPartitionDirectPrivate::TEvPersistHostHealth>(
+            directBlockGroupId,
+            hostIndex,
+            oldHealth,
+            newHealth);
+    ActorSystem->Send(PartitionActorId, event.release());
+}
+
 TFastPathServiceInfo TFastPathService::GetMonInfo() const
 {
     return {

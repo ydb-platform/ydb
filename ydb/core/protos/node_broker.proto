@@ -13,6 +13,11 @@ message TListNodes {
     }
 }
 
+enum ELiveness {
+    ALIVE = 0;
+    DEAD = 1;
+}
+
 message TNodeInfo {
     optional uint32 NodeId = 1;
     optional string Host = 2;
@@ -21,7 +26,9 @@ message TNodeInfo {
     optional string Address = 5;
     optional NActorsInterconnect.TNodeLocation Location = 6;
     optional uint64 Expire = 7;
+    optional uint64 ExpireV2 = 9;
     optional string Name = 8;
+    optional ELiveness Liveness = 10;
 }
 
 message TNodeInfoSchema {
@@ -35,6 +42,9 @@ message TNodeInfoSchema {
     optional NKikimrSubDomains.TDomainKey ServicedSubDomain = 8;
     optional uint32 SlotIndex = 9;
     optional bool AuthorizedByCertificate = 10;
+    optional uint64 ExpireV2 = 11;
+    optional uint64 AliveUntil = 12;
+    optional ELiveness Liveness = 13;
 }
 
 message TVersionInfo {
@@ -113,6 +123,7 @@ message TExtendLeaseResponse {
   optional TStatus Status = 1;
   optional uint32 NodeId = 2;
   optional uint64 Expire = 3;
+  optional uint64 ExpireV2 = 5;
   // Epoch at which ping happened. Lease is extended
   // until the end of the next epoch.
   optional TEpoch Epoch = 4;
@@ -129,6 +140,7 @@ message TConfig {
     // Don't allocate and extend lease for IDs from banned intervals.
     repeated TNodeIds BannedNodeIds = 2;
     optional string StableNodeNamePrefix = 3 [default = "slot-"];
+    optional uint64 LeaseDuration = 4 [default = 259200000000];
 }
 
 message TGetConfigRequest {

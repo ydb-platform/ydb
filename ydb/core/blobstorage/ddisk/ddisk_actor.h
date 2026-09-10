@@ -782,6 +782,10 @@ namespace NKikimr::NDDisk {
 
         struct TPendingChecksumRead {
             std::unique_ptr<IEventHandle> Event;
+            bool DataReadStarted = false;
+            std::unique_ptr<IEventHandle> DataResult;
+            std::optional<TIntegrityManager::TOperationResult> IntegrityResult;
+            TIntegrityManager::TReadPlan ReadPlan;
         };
 
         absl::flat_hash_map<ui64, TPendingChecksumRead> PendingChecksumReads; // integrity operation id
@@ -804,7 +808,10 @@ namespace NKikimr::NDDisk {
         void ProcessIntegrityCompletions();
         void MaybeFinishClientWrite(ui64 operationId);
         void FinishClientWrite(TParkedWriteReply result);
-        void StartDDiskDataRead(std::unique_ptr<IEventHandle> ev, std::vector<ui64> checksums);
+        void StartDDiskDataRead(IEventHandle& ev, std::vector<ui64> checksums,
+            ui64 integrityOperationId = 0);
+        void MaybeFinishChecksumRead(ui64 operationId);
+        void FinishDDiskIoResult(TEvPrivate::TEvDDiskIoResult& msg);
         void OpenDataChunkWritePath(std::vector<TIntegrityManager::TDataChunkKey> placedKeys);
         void DrainIntegrityManager(bool kickReserve = true);
         void ReleaseIntegrityExtentWrite(ui64 tabletId, ui64 vChunkIndex);

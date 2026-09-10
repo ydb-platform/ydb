@@ -320,6 +320,16 @@ namespace NKikimr::NDDisk {
             if (readIt == PendingChecksumReads.end()) {
                 continue;
             }
+            if (readIt->second.DataReadStarted) {
+                const auto& record = readIt->second.Event->Get<TEvRead>()->Record;
+                const TQueryCredentials creds(record.GetCredentials());
+                const TBlockSelector selector(record.GetSelector());
+                readIt->second.ReadPlan = IntegrityManager->MakeReadPlan(
+                    {creds.TabletId, selector.VChunkIndex}, selector.OffsetInBytes, selector.Size);
+                readIt->second.IntegrityResult.emplace(std::move(result));
+                MaybeFinishChecksumRead(readIt->first);
+                continue;
+            }
             std::unique_ptr<IEventHandle> readEvent = std::move(readIt->second.Event);
             PendingChecksumReads.erase(readIt);
             if (result.Status == TIntegrityManager::EOperationStatus::Corrupted) {
@@ -328,7 +338,7 @@ namespace NKikimr::NDDisk {
                 SendReply(*readEvent, std::make_unique<TEvReadResult>(
                     NKikimrBlobStorage::NDDisk::TReplyStatus::CORRUPTED, result.ErrorReason));
             } else {
-                StartDDiskDataRead(std::move(readEvent), std::move(result.Checksums));
+                StartDDiskDataRead(*readEvent, std::move(result.Checksums));
             }
         }
     }

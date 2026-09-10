@@ -3201,6 +3201,8 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             new NDDisk::TEvRead(creds, {0, 0, BlockSize}, {true}));
         auto integrityRead = ctx.WaitPDiskRequestNoAutoServe<NPDisk::TEvChunkReadRaw>(disk);
         UNIT_ASSERT_VALUES_UNEQUAL(integrityRead->Get()->ChunkIdx, initial.ChunkIdx);
+        auto dataRead = ctx.WaitPDiskRequestNoAutoServe<NPDisk::TEvChunkReadRaw>(disk);
+        UNIT_ASSERT_VALUES_EQUAL(dataRead->Get()->ChunkIdx, initial.ChunkIdx);
         UNIT_ASSERT_VALUES_EQUAL(requestsInFlight->Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(bytesInFlight->Val(), BlockSize);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -3213,9 +3215,13 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         AssertStatus(WaitFromDDisk<NDDisk::TEvReadResult>(ctx), TReplyStatus::ERROR);
         UNIT_ASSERT_VALUES_EQUAL(requestsInFlight->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(bytesInFlight->Val(), 0);
+        // The speculative data callback arrives after the metadata failure already replied.
+        ctx.SendPDiskResponse(disk, *dataRead,
+            new NPDisk::TEvChunkReadRawResult(TRope(firstPayload)));
         auto laterRead = SendToDDiskAndWait<NDDisk::TEvReadResult>(
-            ctx, disk.ServiceId, new NDDisk::TEvRead(creds, {0, 0, BlockSize}, {true}));
+            ctx, disk.ServiceId, new NDDisk::TEvRead(creds, {0, 0, BlockSize}, {true}), 999);
         AssertStatus(laterRead, TReplyStatus::ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(laterRead->Cookie, 999);
     }
 
     Y_UNIT_TEST(CheckVChunksArePerTablet) {
@@ -7348,7 +7354,9 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         snapshot->SetGenerationCounter(1);
 
         TTestContext ctx;
-        const TDiskHandle disk = ctx.RegisterDDisk(77, 1);
+        NDDisk::TDDiskConfig config;
+        config.CheckChecksumWhenRead = true;
+        const TDiskHandle disk = ctx.RegisterDDisk(77, 1, std::nullopt, config);
         ctx.BootstrapDDisk(
             disk, TTestContext::ChunkSize, MinChunksReserved,
             &snapshotRecord, 10);
@@ -7380,44 +7388,111 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             return true;
         };
         SendToDDisk(ctx, disk.ServiceId,
-            new NDDisk::TEvRead(creds, {0, 0, BlockSize}, {true}), 701);
+            new NDDisk::TEvRead(creds, {0, 0, 2 * BlockSize}, {true}), 701);
         SendToDDisk(ctx, disk.ServiceId,
-            new NDDisk::TEvRead(creds, {0, 0, BlockSize}, {true}), 702);
+            new NDDisk::TEvRead(creds, {0, 0, 2 * BlockSize}, {true}), 702);
+        SendToDDisk(ctx, disk.ServiceId,
+            new NDDisk::TEvRead(creds, {0, BlockSize, BlockSize}, {true}), 703);
         ui32 eventsProcessed = 0;
         ctx.Runtime.Sim([&] {
-            return heldReads.size() < 2 && ++eventsProcessed <= 300;
+            return heldReads.size() < 4 && ++eventsProcessed <= 300;
         });
         ctx.Runtime.FilterFunction = {};
-        UNIT_ASSERT_VALUES_EQUAL_C(heldReads.size(), 1,
-            "concurrent cold reads of one checksum pair must share one metadata load");
+        UNIT_ASSERT_VALUES_EQUAL_C(heldReads.size(), 4,
+            "cold reads must submit all data I/O alongside one shared metadata load");
 
-        auto integrityRead =
-            std::unique_ptr<TEventHandle<NPDisk::TEvChunkReadRaw>>(
+        std::unique_ptr<TEventHandle<NPDisk::TEvChunkReadRaw>> integrityRead;
+        std::unique_ptr<TEventHandle<NPDisk::TEvChunkReadRaw>> holeRead;
+        std::vector<std::unique_ptr<TEventHandle<NPDisk::TEvChunkReadRaw>>> dataReads;
+        for (auto& raw : heldReads) {
+            auto read = std::unique_ptr<TEventHandle<NPDisk::TEvChunkReadRaw>>(
                 reinterpret_cast<TEventHandle<NPDisk::TEvChunkReadRaw>*>(
-                    heldReads[0].release()));
-        UNIT_ASSERT_VALUES_EQUAL(integrityRead->Get()->ChunkIdx, IntegrityChunk);
+                    raw.release()));
+            if (read->Get()->ChunkIdx == IntegrityChunk) {
+                UNIT_ASSERT(!integrityRead);
+                integrityRead = std::move(read);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(read->Get()->ChunkIdx, DataChunk);
+                if (read->Get()->Offset == BlockSize) {
+                    UNIT_ASSERT(!holeRead);
+                    UNIT_ASSERT_VALUES_EQUAL(read->Get()->Size, BlockSize);
+                    holeRead = std::move(read);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(read->Get()->Offset, 0);
+                    UNIT_ASSERT_VALUES_EQUAL(read->Get()->Size, 2 * BlockSize);
+                    dataReads.push_back(std::move(read));
+                }
+            }
+        }
+        UNIT_ASSERT(integrityRead);
+        UNIT_ASSERT(holeRead);
+        UNIT_ASSERT_VALUES_EQUAL(dataReads.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(integrityRead->Get()->Size,
+            NDDisk::IntegrityPairSlots * NDDisk::IntegrityUnitSize);
+
+        // The restored bitmap is unknown: speculative data includes stale bytes in block 1.
+        const TString diskPayload = oldPayload + MakeData('X', BlockSize);
+        const TString zeroPayload = MakeData('\0', BlockSize);
+        const TString expectedPayload = oldPayload + zeroPayload;
+        ui32 dataCompletions = 0;
+        ctx.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            UNIT_ASSERT_C(ev->GetTypeRewrite() != NDDisk::TEvReadResult::EventType,
+                "data completion must wait for the restored checksum metadata");
+            if (ev->GetTypeRewrite()
+                    == NDDisk::TDDiskActor::TEvPrivate::TEvDDiskIoResult::EventType) {
+                auto* result = ev->Get<NDDisk::TDDiskActor::TEvPrivate::TEvDDiskIoResult>();
+                if (result->Cookie == 703) {
+                    // An unreadable physical block must not fail a logically unwritten range.
+                    result->Status = TReplyStatus::ERROR;
+                    result->ErrorMessage = "injected speculative data read failure";
+                    result->Data = {};
+                }
+                ++dataCompletions;
+            }
+            return true;
+        };
+        ctx.SendPDiskResponse(disk, *dataReads[0],
+            new NPDisk::TEvChunkReadRawResult(TRope(diskPayload)));
+        ctx.SendPDiskResponse(disk, *holeRead,
+            new NPDisk::TEvChunkReadRawResult(TRope(MakeData('X', BlockSize))));
+        eventsProcessed = 0;
+        ctx.Runtime.Sim([&] {
+            return dataCompletions < 2 && ++eventsProcessed <= 300;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(dataCompletions, 2);
+        ctx.Runtime.FilterFunction = {};
         ctx.SendPDiskResponse(disk, *integrityRead,
             new NPDisk::TEvChunkReadRawResult(
                 MakeRestoredIntegrityPair(
                     disk.SlotId, 0x100000 + disk.PDiskId,
                     TabletId, 0, 1, IntegrityChunk, 0, 1, oldPayload)));
 
-        for (ui32 i = 0; i < 2; ++i) {
-            auto dataRead = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(disk);
-            UNIT_ASSERT_VALUES_EQUAL(dataRead->Get()->ChunkIdx, DataChunk);
-            ctx.SendPDiskResponse(disk, *dataRead,
-                new NPDisk::TEvChunkReadRawResult(TRope(oldPayload)));
-        }
         std::set<ui64> readCookies;
-        for (ui32 i = 0; i < 2; ++i) {
+        auto checkReadResult = [&] {
             auto readResult = WaitFromDDisk<NDDisk::TEvReadResult>(ctx);
             AssertStatus(readResult, TReplyStatus::OK);
-            UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->Record.ChecksumsSize(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(
-                readResult->Get()->Record.GetChecksums(0), oldChecksum);
-            readCookies.insert(readResult->Cookie);
-        }
-        UNIT_ASSERT(readCookies == std::set<ui64>({701, 702}));
+            if (readResult->Cookie == 703) {
+                UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->GetPayload(0).ConvertToString(), zeroPayload);
+                UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->Record.ChecksumsSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    readResult->Get()->Record.GetChecksums(0), NDDisk::GetZeroBlockChecksum());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->GetPayload(0).ConvertToString(), expectedPayload);
+                UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->Record.ChecksumsSize(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->Record.GetChecksums(0), oldChecksum);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    readResult->Get()->Record.GetChecksums(1), NDDisk::GetZeroBlockChecksum());
+            }
+            UNIT_ASSERT(readCookies.insert(readResult->Cookie).second);
+        };
+        checkReadResult();
+        checkReadResult();
+        UNIT_ASSERT(readCookies.contains(703));
+        // The other mixed read completes with metadata first and must apply the same hole mask.
+        ctx.SendPDiskResponse(disk, *dataReads[1],
+            new NPDisk::TEvChunkReadRawResult(TRope(diskPayload)));
+        checkReadResult();
+        UNIT_ASSERT(readCookies == std::set<ui64>({701, 702, 703}));
 
         // The pair is now cached: another read must go straight to the data chunk.
         heldReads.clear();

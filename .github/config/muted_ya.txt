@@ -7,19 +7,11 @@ ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3of4
 ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
 ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
-ydb/core/kafka_proxy/ut RequestUtilityActors.DescribeConfigs
-ydb/core/kafka_proxy/ut TTopicLocationActor.MissingTopicIsSchemeError
-ydb/core/kafka_proxy/ut TTopicLocationActor.SuccessReturnsLivePartitions
-ydb/core/kafka_proxy/ut TTopicLocationActor.UnauthorizedStaysUnauthorized
-ydb/core/kafka_proxy/ut TTopicOffsetsActor.MissingPartitionIsSchemeError
 ydb/core/kafka_proxy/ut/protocol KafkaProtocol.TopicsCompactionGapFromRetention
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CreateAndAlterStreamingQuery
 ydb/core/kqp/ut/federated_query/datastreams unittest.[*/*] chunk
 ydb/core/persqueue/public/schema/ut unittest.sole chunk
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ManySessions_NoCommits_AutoscaleAwareSDK
-ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactWithIndexCreation[TabletRebootsBucket0]
-ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactWithIndexCreation[TabletRebootsBucket1]
-ydb/core/tx/schemeshard/ut_compaction_reboots unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut InterconnectDirectSession.UnregisterRestoresActorSystemDelivery
 ydb/library/actors/interconnect/ut InterconnectSessionV2.ClosePeerSocketAndReconnect
 ydb/library/actors/interconnect/ut InterconnectSessionV2.DirectSessionRoundTrip
@@ -71,4 +63,3 @@ ydb/tests/stress/reconfig_state_storage_workload/tests test_scheme_board_workloa
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingWorkload.test
 ydb/tools/mnc/viewer/ut py3test.sole chunk
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite
-ydb/tools/stress_tool/ut TDeviceTestTool.PersistentBufferTestWrite

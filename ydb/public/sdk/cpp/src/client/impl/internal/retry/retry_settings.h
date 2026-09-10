@@ -56,23 +56,17 @@ template <typename TClient, typename TRunOnce>
 auto RunUnaryWithRetry(TClient& client, TRetryOperationSettings settings, TRunOnce&& runOnce)
     -> decltype(runOnce(TDuration::Max()))
 {
-    if (client.GetInRetryOperationContext()) {
-        return runOnce(TDuration::Max());
+    const bool nested = client.GetInRetryOperationContext();
+    if (!settings.StopToken_ && (nested || !IsRetryEnabled(settings))) {
+        return runOnce(nested ? TDuration::Max() : settings.MaxTimeout_);
     }
-    if (!IsRetryEnabled(settings)) {
-        return runOnce(settings.MaxTimeout_);
+    if (nested) {
+        settings.MaxRetries(0);
     }
-
-    using TResult = decltype(runOnce(TDuration::Max()));
-
-    auto operation = [runOnce = std::forward<TRunOnce>(runOnce)](TClient& /*clientRef*/, TDuration remainingTimeout) -> TResult {
-        return runOnce(remainingTimeout);
+    auto operation = [runOnce = std::forward<TRunOnce>(runOnce), nested](TClient&, TDuration remainingTimeout) {
+        return runOnce(nested ? TDuration::Max() : remainingTimeout);
     };
-
-    using TRetryAsync = Async::TRetryWithoutSession<TClient, decltype(operation), TResult>;
-    using TRetryContextAsync = Async::TRetryContext<TClient, TResult>;
-
-    return typename TRetryContextAsync::TPtr(new TRetryAsync(client, std::move(operation), settings))->Execute();
+    return Async::Retry<false>(client, std::move(operation), settings);
 }
 
 } // namespace NYdb::NRetry

@@ -1,262 +1,99 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
-
 #include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry.h>
-#include <ydb/public/sdk/cpp/src/client/impl/observability/span.h>
-
-#include <util/generic/function.h>
-#include <util/system/type_name.h>
-
-#include <chrono>
-#include <cstdint>
-#include <exception>
-#include <memory>
-#include <typeinfo>
 
 namespace NYdb::inline Dev::NRetry::Async {
 
-template <typename TClient, typename TAsyncStatusType>
-class TRetryContext : public TThrRefBase, public TRetryContextBase {
-public:
-    using TStatusType = typename TAsyncStatusType::value_type;
-    using TPtr = TIntrusivePtr<Async::TRetryContext<TClient, TAsyncStatusType>>;
+    template <typename TClient, typename TOperation, bool WithSession>
+    class TRetryContext: public TThrRefBase,
+                         public TRetryContextBase<TRetryContext<TClient, TOperation, WithSession>, typename TFunctionResult<TOperation>::value_type> {
+        using TBase = TRetryContextBase<TRetryContext, typename TFunctionResult<TOperation>::value_type>;
 
-protected:
-    TClient Client_;
-    NThreading::TPromise<TStatusType> Promise_;
+    public:
+        using TAsyncStatusType = TFunctionResult<TOperation>;
+        using TStatusType = typename TAsyncStatusType::value_type;
+        using TPtr = TIntrusivePtr<TRetryContext>;
 
-public:
-    TAsyncStatusType Execute() {
-        ParentSpan_ = Client_.Impl_->CreateRetryRootSpan();
+        TRetryContext(const TClient& client, TOperation operation, const TRetryOperationSettings& settings)
+            : TBase(settings)
+            , Client_(client)
+            , Operation_(std::move(operation))
+        {
+        }
 
-        this->RetryStartTime_ = TInstant::Now();
-        TPtr self(this);
-        DoRetry(self);
+        TAsyncStatusType Execute() {
+            TPtr self(this);
+            auto future = Promise_.GetFuture();
+            this->Start();
+            return future;
+        }
 
-        return this->Promise_.GetFuture().Apply(
-            [self](const auto& f) mutable {
-                try {
-                    auto value = f.GetValue();
-                    if (self->ParentSpan_) {
-                        self->ParentSpan_->SetRetryCount(self->RetryNumber_);
-                        self->ParentSpan_->End(GetRetryStatusCode(value));
-                    }
-                    return value;
-                } catch (...) {
-                    if (self->ParentSpan_) {
-                        self->ParentSpan_->SetRetryCount(self->RetryNumber_);
-                        try {
-                            std::rethrow_exception(std::current_exception());
-                        } catch (const std::exception& e) {
-                            self->ParentSpan_->EndWithException(TypeName(e).c_str(), e.what());
-                        } catch (...) {
-                            self->ParentSpan_->EndWithException("unknown", "unknown exception");
-                        }
-                    }
-                    throw;
-                }
-            }
-        );
-    }
-
-protected:
-    explicit TRetryContext(const TClient& client, const TRetryOperationSettings& settings)
-        : TRetryContextBase(settings)
-        , Client_(client)
-        , Promise_(NThreading::NewPromise<TStatusType>())
-    {}
-
-    virtual void Retry() = 0;
-
-    virtual TAsyncStatusType RunOperation() = 0;
-
-    static void DoRetry(TPtr self) {
-        [[maybe_unused]] auto parentScope = self->ParentSpan_ ? self->ParentSpan_->Activate() : nullptr;
-
-        self->StartAttemptSpan();
-
-        [[maybe_unused]] auto attemptScope = self->AttemptSpan_ ? self->AttemptSpan_->Activate() : nullptr;
-        self->Retry();
-    }
-
-    static void DoBackoff(TPtr self, bool fast) {
-        auto backoffSettings = fast ? self->Settings_.FastBackoffSettings_
-                                    : self->Settings_.SlowBackoffSettings_;
-        AsyncBackoff(self->Client_.Impl_, backoffSettings, self->RetryNumber_,
-            [self](std::chrono::microseconds backoff) {
-                self->LastBackoffMs_ =
-                    std::chrono::duration_cast<std::chrono::milliseconds>(backoff).count();
-                DoRetry(self);
+        void ExecuteImpl() {
+            Session_.Execute(*this, [this](auto& target) {
+                Await(this->InvokeOperation(Operation_, target), [this](const auto& result) { OnAttemptReady(result); });
             });
-    }
-
-    static void HandleExceptionAsync(TPtr self, std::exception_ptr e) {
-        self->EndAttemptSpan(EStatus::CLIENT_INTERNAL_ERROR);
-        self->Promise_.SetException(e);
-    }
-
-    static void HandleStatusAsync(TPtr self, const TStatusType& status) {
-        const TStatus& retryStatus = GetRetryStatus(status);
-        self->EndAttemptSpan(retryStatus.GetStatus());
-        auto nextStep = self->GetNextStep(retryStatus);
-        if (nextStep != NextStep::Finish) {
-            self->RetryNumber_++;
-            self->Client_.Impl_->CollectRetryStatAsync(retryStatus.GetStatus());
-            self->LogRetry(retryStatus);
         }
-        switch (nextStep) {
-            case NextStep::RetryImmediately:
-                self->LastBackoffMs_ = 0;
-                return DoRetry(self);
-            case NextStep::RetryFastBackoff:
-                return DoBackoff(self, true);
-            case NextStep::RetrySlowBackoff:
-                return DoBackoff(self, false);
-            case NextStep::Finish:
-                return self->Promise_.SetValue(status);
+
+        void WaitAndExecute(std::chrono::microseconds delay, std::function<void()> fn) {
+            Client_.Impl_->ScheduleTask([self = TPtr(this), fn = std::move(fn)] { fn(); },
+                                        std::chrono::duration_cast<TDeadline::Duration>(delay));
         }
-    }
 
-    static void DoRunOperation(TPtr self) {
-        try {
-            self->RunOperation().Subscribe(
-                [self](const TAsyncStatusType& result) {
-                    [[maybe_unused]] auto attemptScope = self->ActivateAttemptSpan();
-                    try {
-                        HandleStatusAsync(self, result.GetValue());
-                    } catch (const NStatusHelpers::TYdbRangeErrorException& e) {
-                        HandleStatusAsync(self, MakeRetryResultFromStatus<TStatusType>(TStatus(e.GetStatus())));
-                    } catch (...) {
-                        HandleExceptionAsync(self, std::current_exception());
-                    }
-                }
-            );
-        } catch (const NStatusHelpers::TYdbRangeErrorException& e) {
-            HandleStatusAsync(self, MakeRetryResultFromStatus<TStatusType>(TStatus(e.GetStatus())));
-        } catch (...) {
-            HandleExceptionAsync(self, std::current_exception());
+        template <typename T, typename F>
+        void Await(NThreading::TFuture<T> future, F fn) {
+            future.Subscribe([self = TPtr(this), fn = std::move(fn)](const auto& result) mutable {
+                self->Guarded([&] { fn(result.GetValue()); });
+            });
         }
-    }
 
-protected:
-    std::unique_ptr<NTrace::IScope> ActivateAttemptSpan() {
-        return AttemptSpan_ ? AttemptSpan_->Activate() : nullptr;
-    }
-
-private:
-    void StartAttemptSpan() {
-        AttemptSpan_ = Client_.Impl_->CreateRetryAttemptSpan(
-            this->RetryNumber_, LastBackoffMs_, ParentSpan_);
-    }
-
-    void EndAttemptSpan(EStatus status) {
-        if (AttemptSpan_) {
-            AttemptSpan_->End(status);
-            AttemptSpan_.reset();
+        bool StopRequested() const {
+            return this->Settings_.StopToken_ && this->Settings_.StopToken_->stop_requested();
         }
-    }
 
-    std::shared_ptr<NObservability::TRequestSpan> ParentSpan_;
-    std::shared_ptr<NObservability::TRequestSpan> AttemptSpan_;
-    std::int64_t LastBackoffMs_ = 0;
-};
-
-template <typename TClient, typename TOperation, typename TAsyncStatusType = TFunctionResult<TOperation>>
-class TRetryWithoutSession : public TRetryContext<TClient, TAsyncStatusType> {
-    using TRetryContext = TRetryContext<TClient, TAsyncStatusType>;
-    using TPtr = typename TRetryContext::TPtr;
-
-private:
-    TOperation Operation_;
-
-public:
-    explicit TRetryWithoutSession(
-        const TClient& client, TOperation&& operation, const TRetryOperationSettings& settings)
-        : TRetryContext(client, settings)
-        , Operation_(operation)
-    {}
-
-    void Retry() override {
-        TPtr self(this);
-        TRetryContext::DoRunOperation(self);
-    }
-
-protected:
-    TAsyncStatusType RunOperation() override {
-        TInRetryOperationContextClientGuard guard(this->Client_);
-        if constexpr (TFunctionArgs<TOperation>::Length == 1) {
-            return Operation_(this->Client_);
-        } else {
-            return Operation_(this->Client_, this->GetRemainingTimeout());
+        auto GetRetryDelay(NextStep step) const {
+            // Async backoff has always used a one-based retry index.
+            return TBase::GetRetryDelay(step, this->RetryNumber_ + 1);
         }
-    }
-};
 
-template <typename TClient, typename TOperation, typename TAsyncStatusType = TFunctionResult<TOperation>>
-class TRetryWithSession : public TRetryContext<TClient, TAsyncStatusType>, public TRetryDeadlineHelper<TClient> {
-    using TRetryContextAsync = TRetryContext<TClient, TAsyncStatusType>;
-    using TStatusType = typename TRetryContextAsync::TStatusType;
-    using TSession = typename TClient::TSession;
-    using TCreateSessionSettings = typename TClient::TCreateSessionSettings;
-    using TAsyncCreateSessionResult = typename TClient::TAsyncCreateSessionResult;
-
-private:
-    const TOperation Operation_;
-    const TDeadline Deadline_;
-    std::optional<TSession> Session_;
-
-public:
-    explicit TRetryWithSession(
-        const TClient& client, TOperation&& operation, const TRetryOperationSettings& settings)
-        : TRetryContextAsync(client, settings)
-        , Operation_(std::move(operation))
-        , Deadline_(TDeadline::AfterDuration(this->Settings_.MaxTimeout_))
-    {}
-
-    void Retry() override {
-        TIntrusivePtr<TRetryWithSession> self(this);
-        if (!Session_) {
-            auto settings = TCreateSessionSettings()
-                .ClientTimeout(this->Settings_.GetSessionClientTimeout_)
-                .Deadline(Deadline_);
-
-            this->Client_.GetSession(settings).Subscribe(
-                [self](const TAsyncCreateSessionResult& resultFuture) {
-                    [[maybe_unused]] auto attemptScope = self->ActivateAttemptSpan();
-                    try {
-                        auto& result = resultFuture.GetValue();
-                        if (!result.IsSuccess()) {
-                            return TRetryContextAsync::HandleStatusAsync(
-                                self, MakeRetryResultFromStatus<TStatusType>(TStatus(result)));
-                        }
-
-                        self->Session_ = result.GetSession();
-                        TRetryDeadlineHelper<TClient>::SetDeadline(*self->Session_, self->Deadline_);
-                        self->DoRunOperation(self);
-                    } catch (...) {
-                        return TRetryContextAsync::HandleExceptionAsync(self, std::current_exception());
-                    }
-                }
-            );
-        } else {
-            TRetryContextAsync::DoRunOperation(self);
+        void OnAttemptReady(TStatusType result) {
+            this->DoNext(std::move(result));
         }
-    }
 
-private:
-    void Reset() override {
-        Session_.reset();
-    }
-
-    TAsyncStatusType RunOperation() override {
-        TInRetryOperationContextClientGuard guard(this->Client_);
-        if constexpr (TFunctionArgs<TOperation>::Length == 1) {
-            return Operation_(this->Session_.value());
-        } else {
-            return Operation_(this->Session_.value(), this->GetRemainingTimeout());
+        void OnReady(TStatusType result) {
+            Promise_.SetValue(std::move(result));
         }
-    }
-};
 
-} // namespace NYdb::NRetry::Async
+        void OnReady(std::exception_ptr error) {
+            Promise_.SetException(error);
+        }
+
+        TClient& GetClient() {
+            return Client_;
+        }
+
+        auto& GetClientImpl() {
+            return Client_.Impl_;
+        }
+
+        void ResetSession() {
+            Session_.Reset();
+        }
+
+        void CollectRetryStat(EStatus status) {
+            Client_.Impl_->CollectRetryStatAsync(status);
+        }
+
+    private:
+        TClient Client_;
+        TOperation Operation_;
+        TRetrySessionState<TClient, WithSession> Session_;
+        NThreading::TPromise<TStatusType> Promise_ = NThreading::NewPromise<TStatusType>();
+    };
+
+    template <bool WithSession, typename TClient, typename TOperation>
+    auto Retry(TClient& client, TOperation&& operation, const TRetryOperationSettings& settings) {
+        using TContext = TRetryContext<TClient, std::decay_t<TOperation>, WithSession>;
+        return MakeIntrusive<TContext>(client, std::forward<TOperation>(operation), settings)->Execute();
+    }
+
+} // namespace NYdb::inline Dev::NRetry::Async

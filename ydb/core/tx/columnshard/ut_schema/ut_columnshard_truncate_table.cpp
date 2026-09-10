@@ -108,8 +108,7 @@ void AssertPathsToDropState(const TColumnShard& shard, const TInternalPathId& pa
 void AdvanceShardPlanStep(
     TTestBasicRuntime& runtime, TActorId& sender, ui64& txId, int& writeId, const ui64 pathId, const TestTableDescription& testTable) {
     std::vector<ui64> writeIds;
-    UNIT_ASSERT(
-        WriteData(runtime, sender, writeId++, pathId, MakeTestBlob({ 0, 1 }, testTable.Schema), testTable.Schema, true, &writeIds));
+    UNIT_ASSERT(WriteData(runtime, sender, writeId++, pathId, MakeTestBlob({ 0, 1 }, testTable.Schema), testTable.Schema, true, &writeIds));
     const auto planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
     PlanCommit(runtime, sender, planStep, txId);
 }
@@ -318,8 +317,8 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         auto writeAndCommit = [&](ui64 from, ui64 to) -> NOlap::TSnapshot {
             std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(
-                runtime, sender, writeId++, pathId, MakeTestBlob({ from, to }, testTable.Schema), testTable.Schema, true, &writeIds));
+            UNIT_ASSERT(
+                WriteData(runtime, sender, writeId++, pathId, MakeTestBlob({ from, to }, testTable.Schema), testTable.Schema, true, &writeIds));
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
             return NOlap::TSnapshot(planStep, txId);
@@ -507,8 +506,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         auto& csController = *csControllerGuard.operator->();
         const auto* shard = csController.GetTheOnlyShard();
-        const auto newInternalPathId =
-            shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
+        const auto newInternalPathId = shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
         UNIT_ASSERT(newInternalPathId);
         UNIT_ASSERT(!shard->GetTablesManager().GetTableTtl(*newInternalPathId).has_value());
 
@@ -521,8 +519,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         shard = csController.GetTheOnlyShard();
         {
-            const auto resolved =
-                shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
+            const auto resolved = shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
             UNIT_ASSERT(resolved);
             UNIT_ASSERT_VALUES_EQUAL(*resolved, *newInternalPathId);
             UNIT_ASSERT(shard->GetTablesManager().GetTableTtl(*resolved).has_value());
@@ -577,8 +574,8 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         int writeId = 10;
         {
             std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(
-                runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds));
+            UNIT_ASSERT(
+                WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds));
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
         }
@@ -658,8 +655,8 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         int writeId = 10;
         {
             std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(
-                runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds));
+            UNIT_ASSERT(
+                WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds));
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
         }
@@ -802,8 +799,8 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         int writeId = 10;
         {
             std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(
-                runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds));
+            UNIT_ASSERT(
+                WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds));
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
         }
@@ -842,8 +839,8 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         int writeId = 10;
         {
             std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(
-                runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds));
+            UNIT_ASSERT(
+                WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds));
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
         }
@@ -913,9 +910,9 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
                 restartedShard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(copyPathIdA), false);
             UNIT_ASSERT(recoveredOld);
             UNIT_ASSERT_VALUES_EQUAL(*recoveredOld, *oldInternalPathId);
-            const auto pathDropVersion =
-                restartedShard->GetTablesManager().GetTable(*oldInternalPathId).GetPathDropVersionOptional(
-                    TSchemeShardLocalPathId::FromRawValue(srcPathId));
+            const auto pathDropVersion = restartedShard->GetTablesManager()
+                                             .GetTable(*oldInternalPathId)
+                                             .GetPathDropVersionOptional(TSchemeShardLocalPathId::FromRawValue(srcPathId));
             UNIT_ASSERT(pathDropVersion.has_value());
             UNIT_ASSERT_VALUES_EQUAL(*pathDropVersion, truncateSnapshot);
         }
@@ -1003,8 +1000,8 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         int writeId = 10;
         {
             std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(
-                runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds));
+            UNIT_ASSERT(
+                WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds));
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
         }
@@ -1084,8 +1081,8 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         int writeId = 10;
         {
             std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(
-                runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds));
+            UNIT_ASSERT(
+                WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds));
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
         }
@@ -1222,8 +1219,8 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         int writeId = 10;
         std::vector<ui64> writeIds;
         const auto lockId = 1;
-        UNIT_ASSERT(WriteData(runtime, sender, writeId++, pathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true,
-            &writeIds, NEvWrite::EModificationType::Upsert, lockId));
+        UNIT_ASSERT(WriteData(runtime, sender, writeId++, pathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds,
+            NEvWrite::EModificationType::Upsert, lockId));
         const auto commitTxId = ++txId;
         const auto commitPlanStep = ProposeCommit(runtime, sender, commitTxId, writeIds, lockId);
 
@@ -1283,8 +1280,8 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         int writeId = 10;
 
         std::vector<ui64> uncommittedWriteIds;
-        UNIT_ASSERT(WriteData(runtime, sender, writeId++, pathId, MakeTestBlob({ 0, 50 }, testTable.Schema), testTable.Schema, true,
-            &uncommittedWriteIds));
+        UNIT_ASSERT(WriteData(
+            runtime, sender, writeId++, pathId, MakeTestBlob({ 0, 50 }, testTable.Schema), testTable.Schema, true, &uncommittedWriteIds));
 
         std::vector<ui64> writeIdsBefore;
         const auto lockBefore = 1;
@@ -1466,8 +1463,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         const auto* shard = WaitForShard(csController, runtime);
         UNIT_ASSERT(shard);
 
-        const auto newInternalPathId =
-            shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
+        const auto newInternalPathId = shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
         UNIT_ASSERT(newInternalPathId);
         TInternalPathId oldInternalPathId;
         {

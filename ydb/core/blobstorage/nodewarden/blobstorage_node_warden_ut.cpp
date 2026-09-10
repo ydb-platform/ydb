@@ -2487,7 +2487,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             auto reply = Grab<TEvent>();
             UNIT_ASSERT(reply->Get()->Record.GetStatus() == TStatus::OK);
         }
-        NDDisk::TQueryCredentials Connect(TActorId recipient) {
+        NDDisk::TQueryCredentials Connect(TActorId recipient, bool registerBuffer = true) {
             auto creds = recipient == PBService
                 ? NDDisk::TQueryCredentials::ToPersistentBuffer(901, 1, std::nullopt, 0)
                 : NDDisk::TQueryCredentials::ToDDisk(901, 1, 0, std::nullopt, 0);
@@ -2496,6 +2496,10 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             UNIT_ASSERT_C(reply->Get()->Record.GetStatus() == TStatus::OK, reply->Get()->Record.DebugString());
             creds.DDiskInstanceGuid = reply->Get()->Record.GetDDiskInstanceGuid();
             creds.ConnectionToken.emplace(reply->Get()->Record.GetConnectionToken());
+            if (recipient == PBService && registerBuffer) {
+                Send(recipient, new NDDisk::TEvRegisterPersistentBuffer(creds, Runtime.GetClock()));
+                ExpectOk<NDDisk::TEvRegisterPersistentBufferResult>();
+            }
             return creds;
         }
         void Write(bool pb, const NDDisk::TQueryCredentials& creds, char value, ui64 lsn) {
@@ -2660,7 +2664,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             UNIT_ASSERT_UNEQUAL(LookupDDiskActor(), parent);
             Cerr << "requested restart: reconnect" << Endl;
             parentCreds = Connect(DDiskServiceId);
-            pbCreds = Connect(PBService);
+            pbCreds = Connect(PBService, false);
             UNIT_ASSERT_UNEQUAL(Runtime.GetNode(NodeId)->ActorSystem->LookupLocalService(PBService), child);
             Read(false, parentCreds, 'C', 2);
             Read(true, pbCreds, 'D', 2);

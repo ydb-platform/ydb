@@ -938,6 +938,27 @@ std::unique_ptr<IEventHandle> WaitUringOrClient(TTestContext& ctx, const TDiskHa
     }
 }
 
+// Complete the durable registration barrier before the test starts controlling data I/O.
+NDDisk::TQueryCredentials ConnectPersistentBufferWithUring(TTestContext& ctx,
+        const TDiskHandle& disk, TScriptedUringClient& router, ui64 tabletId, ui32 generation) {
+    auto creds = Connect(ctx, disk.PBServiceId, tabletId, generation, 0, false);
+    SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvRegisterPersistentBuffer(creds, ctx.Runtime.GetClock()));
+    for (;;) {
+        auto ev = WaitUringOrClient(ctx, disk, router);
+        if (ev->Recipient == router.Edge) {
+            auto* op = ev->Get<TEvUringRequest>()->Op;
+            UNIT_ASSERT(op->GetOperationType() == NPDisk::TUringOperationBase::EWRITE);
+            const auto* header = static_cast<const NDDisk::TPersistentBufferHeader*>(op->GetIovBase());
+            UNIT_ASSERT(header->Flags & NDDisk::TPersistentBufferHeader::IS_BARRIER);
+            router.CompleteSuccessfully(op);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(ev->GetTypeRewrite(), NDDisk::TEvRegisterPersistentBufferResult::EventType);
+            UNIT_ASSERT(ev->Get<NDDisk::TEvRegisterPersistentBufferResult>()->Record.GetStatus() == TReplyStatus::OK);
+            return creds;
+        }
+    }
+}
+
 void FinishUringWrite(TTestContext& ctx, const TDiskHandle& disk, TScriptedUringClient& router,
         TReplyStatus::E expectedStatus, i64 dataResult = 0) {
     bool replied = false;
@@ -1050,29 +1071,37 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
     }
 
 #if defined(__linux__)
-    Y_UNIT_TEST(FreshPersistentBufferReadinessDrainsQueuedWrite) {
+    Y_UNIT_TEST(FreshPersistentBufferReadinessDrainsQueuedRegistration) {
         TTestContext ctx;
         const auto disk = ctx.RegisterDDisk(113, 1);
-        bool queued = false;
+        std::optional<NDDisk::TQueryCredentials> creds;
         ctx.BeforePersistentBufferReady = [&] {
-            const auto creds = Connect(ctx, disk.PBServiceId, 913, 1);
-            auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
-                creds, NDDisk::TBlockSelector(0, 0, BlockSize), 1, NDDisk::TWriteInstruction(0));
-            write->AddPayloadThenChecksum(MakeAlignedRope(MakeData('P', BlockSize)));
-            SendToDDisk(ctx, disk.PBServiceId, write.release(), 100);
+            creds = Connect(ctx, disk.PBServiceId, 913, 1, 0, false);
+            // Registration is the first durable request and must wait for readiness.
+            SendToDDisk(ctx, disk.PBServiceId,
+                new NDDisk::TEvRegisterPersistentBuffer(*creds, ctx.Runtime.GetClock()), 100);
             auto info = SendToDDiskAndWait<NDDisk::TEvPersistentBufferInfo>(ctx, disk.PBServiceId,
                 new NDDisk::TEvGetPersistentBufferInfo(false, false));
             UNIT_ASSERT_VALUES_EQUAL(info->Get()->PendingEvents, 1);
-            queued = true;
         };
         ctx.BootstrapDDisk(disk);
-        UNIT_ASSERT(queued);
+        UNIT_ASSERT(creds);
+        auto registration = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        ctx.SendPDiskResponse(disk, *registration, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        auto registered = WaitFromDDisk<NDDisk::TEvRegisterPersistentBufferResult>(ctx);
+        AssertStatus(registered, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(registered->Cookie, 100);
+        AssertNoClientReplyBeforeSentinel(ctx, "Readiness must process a queued request once");
+
+        auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
+            *creds, NDDisk::TBlockSelector(0, 0, BlockSize), 1, NDDisk::TWriteInstruction(0));
+        write->AddPayloadThenChecksum(MakeAlignedRope(MakeData('P', BlockSize)));
+        SendToDDisk(ctx, disk.PBServiceId, write.release(), 101);
         auto raw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
         ctx.SendPDiskResponse(disk, *raw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         auto reply = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
         AssertStatus(reply, TReplyStatus::OK);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, 100);
-        AssertNoClientReplyBeforeSentinel(ctx, "Readiness must process a queued request once");
+        UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, 101);
     }
 
     Y_UNIT_TEST(ForcedDestructionWaitsForCallbackRetirement) {
@@ -1084,7 +1113,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             auto router = std::make_shared<TScriptedUringClient>(ctx);
             const auto disk = ctx.RegisterDDisk(106, 1);
             ctx.BootstrapDDisk(disk, TTestContext::ChunkSize, MinChunksReserved, nullptr, 0, {}, nullptr, router);
-            const auto creds = Connect(ctx, disk.PBServiceId, 906, 1);
+            const auto creds = ConnectPersistentBufferWithUring(ctx, disk, *router, 906, 1);
             auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
                 creds, NDDisk::TBlockSelector(0, 0, BlockSize), 1, NDDisk::TWriteInstruction(0));
             write->AddPayloadThenChecksum(MakeAlignedRope(MakeData('P', BlockSize)));
@@ -1129,7 +1158,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             auto router = std::make_shared<TScriptedUringClient>(ctx);
             const auto disk = ctx.RegisterDDisk(107, 1);
             ctx.BootstrapDDisk(disk, TTestContext::ChunkSize, MinChunksReserved, nullptr, 0, {}, nullptr, router);
-            const auto creds = Connect(ctx, disk.PBServiceId, 907, 1);
+            const auto creds = ConnectPersistentBufferWithUring(ctx, disk, *router, 907, 1);
             auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
                 creds, NDDisk::TBlockSelector(0, 0, BlockSize), 1, NDDisk::TWriteInstruction(0));
             write->AddPayloadThenChecksum(MakeAlignedRope(MakeData('P', BlockSize)));
@@ -1164,7 +1193,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             auto router = std::make_shared<TScriptedUringClient>(ctx);
             const TDiskHandle disk = ctx.RegisterDDisk(97, 1);
             ctx.BootstrapDDisk(disk, TTestContext::ChunkSize, MinChunksReserved, nullptr, 0, {}, nullptr, router);
-            const auto creds = Connect(ctx, disk.PBServiceId, 907, 1);
+            const auto creds = ConnectPersistentBufferWithUring(ctx, disk, *router, 907, 1);
             const auto actorId = ctx.Runtime.GetNode(NodeId)->ActorSystem->LookupLocalService(disk.PBServiceId);
             ui32 finishNotifications = 0;
             ctx.Runtime.FilterEnqueue = [&](ui32, std::unique_ptr<IEventHandle>& ev, ISchedulerCookie*, TInstant) {
@@ -1355,7 +1384,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
                 const TDiskHandle disk = ctx.RegisterDDisk(93, 1);
                 ctx.BootstrapDDisk(disk, TTestContext::ChunkSize, MinChunksReserved, nullptr, 0, {}, nullptr, router);
                 const auto creds = Connect(ctx, disk.ServiceId, 903, 1);
-                const auto pbCreds = Connect(ctx, disk.PBServiceId, 903, 1);
+                const auto pbCreds = ConnectPersistentBufferWithUring(ctx, disk, *router, 903, 1);
                 SendToDDisk(ctx, disk.ServiceId, MakeWrite(creds, 0, 0, MakeData('R', BlockSize)).release());
                 FinishUringWrite(ctx, disk, *router, TReplyStatus::OK);
                 const auto held = HoldUringWrite(ctx, disk, creds, *router);
@@ -1467,7 +1496,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const auto disk = ctx.RegisterDDisk(109, 1);
         ctx.BootstrapDDisk(disk, TTestContext::ChunkSize, MinChunksReserved, nullptr, 0, {}, nullptr, router);
         const auto creds = Connect(ctx, disk.ServiceId, 909, 1);
-        const auto pbCreds = Connect(ctx, disk.PBServiceId, 909, 1);
+        const auto pbCreds = ConnectPersistentBufferWithUring(ctx, disk, *router, 909, 1);
         SendToDDisk(ctx, disk.ServiceId, MakeWrite(creds, 0, 0, MakeData('R', BlockSize)).release());
         FinishUringWrite(ctx, disk, *router, TReplyStatus::OK);
         const auto held = HoldUringWrite(ctx, disk, creds, *router);
@@ -1544,7 +1573,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         auto router = std::make_shared<TScriptedUringClient>(ctx);
         const TDiskHandle disk = ctx.RegisterDDisk(94, 1);
         ctx.BootstrapDDisk(disk, TTestContext::ChunkSize, MinChunksReserved, nullptr, 0, {}, nullptr, router);
-        const auto creds = Connect(ctx, disk.PBServiceId, 904, 1);
+        const auto creds = ConnectPersistentBufferWithUring(ctx, disk, *router, 904, 1);
         auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
             creds, NDDisk::TBlockSelector(0, 0, BlockSize), 1, NDDisk::TWriteInstruction(0));
         write->AddPayloadThenChecksum(MakeAlignedRope(MakeData('P', BlockSize)));
@@ -1573,7 +1602,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             // A record crosses the chunk boundary, producing two writes and
             // then two reads. Disable the cache so the read reaches the router.
             ctx.BootstrapDDisk(disk, 140 * 1024, MinChunksReserved, nullptr, 0, {}, nullptr, router);
-            const auto creds = Connect(ctx, disk.PBServiceId, 906, 1);
+            const auto creds = ConnectPersistentBufferWithUring(ctx, disk, *router, 906, 1);
             const NDDisk::TBlockSelector selector(0, 0, 48 * BlockSize);
             auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
                 creds, selector, 1, NDDisk::TWriteInstruction(0));
@@ -5675,7 +5704,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
                 };
                 auto first = takeRead();
                 auto second = takeRead();
-                const auto creds = Connect(ctx, disk.PBServiceId, 908, 1);
+                const auto creds = Connect(ctx, disk.PBServiceId, 908, 1, 0, false);
                 if (afterSuccess) {
                     complete(first, true);
                     first = takeRead();

@@ -2973,6 +2973,8 @@ message TColumnShardConfig {
         CUT_HISTORY_PROOF_COMPARE = 2;
     }
     optional ECutHistoryProofSource CutHistoryProofSource = 80 [default = CUT_HISTORY_PROOF_PORTIONS];
+    // Run the whole proof pipeline and export its timings, but never place a barrier or cut.
+    optional bool CutHistoryMeasureOnly = 79 [default = true];
     optional uint64 NodePortionsCountLimit = 73;
 
     message TFlowControlConfig {

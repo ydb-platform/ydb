@@ -119,6 +119,9 @@ public:
     static ui32 GetMaxDrainChecksPerNomination();
     static EProofSource GetProofSource();
 
+    // True while the build only measures: the proof runs to the end but stops short of the barrier.
+    static bool IsMeasureOnly();
+
     // At most this many range reads are outstanding at once; a round nominates at most MaxDrainChecks entries anyway.
     static constexpr ui32 MaxRangeProbesInFlight = 4;
 

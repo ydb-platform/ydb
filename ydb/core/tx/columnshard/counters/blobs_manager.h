@@ -61,6 +61,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr BootProbesDeferred;
     NMonitoring::TDynamicCounters::TCounterPtr BootProbesNominated;
     NMonitoring::TDynamicCounters::TCounterPtr BootEntriesDeferred;
+    NMonitoring::TDynamicCounters::TCounterPtr EntriesProven;
 
 public:
     THistoryCutterCounters(const TCommonCountersOwner& sameAs, const TString& componentName);
@@ -107,6 +108,11 @@ public:
 
     void OnBootProbeNominated(const ui64 count) const {
         BootProbesNominated->Add(count);
+    }
+
+    // Passed every gate and the final re-check; in measure-only mode this is where the entry stops.
+    void OnEntryProven() const {
+        EntriesProven->Add(1);
     }
 };
 

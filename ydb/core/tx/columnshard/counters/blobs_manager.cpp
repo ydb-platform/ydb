@@ -36,6 +36,7 @@ THistoryCutterCounters::THistoryCutterCounters(const TCommonCountersOwner& sameA
     , BootProbesDeferred(TBase::GetDeriviative("BootProbe/Deferred/Count"))
     , BootProbesNominated(TBase::GetDeriviative("BootProbe/Nominated/Count"))
     , BootEntriesDeferred(TBase::GetValue("BootProbe/Deferred"))
+    , EntriesProven(TBase::GetDeriviative("Entries/Proven/Count"))
 {
 }
 

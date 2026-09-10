@@ -96,9 +96,12 @@ private:
 void TColumnShard::SetupCutHistory() {
     using EProofSource = NOlap::NBlobOperations::NBlobStorage::EProofSource;
     if (CutHistoryCutter) {
-        // BsRange proves at boot from the tablet's own history; the cadence exists only for the portion scan.
-        if (THistoryCutterWrapper::GetProofSource() != EProofSource::BsRange) {
-            CutHistoryCutter->TryNominate(NActors::TActivationContext::AsActorContext());
+        const auto ctx = NActors::TActivationContext::AsActorContext();
+        if (THistoryCutterWrapper::GetProofSource() == EProofSource::BsRange) {
+            // A GC task starting right after boot makes IsDrained refuse everything, so retry until it lands.
+            CutHistoryCutter->TryNominateAtBoot(ctx);
+        } else {
+            CutHistoryCutter->TryNominate(ctx);
         }
         return;
     }

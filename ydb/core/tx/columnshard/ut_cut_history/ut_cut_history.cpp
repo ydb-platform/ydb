@@ -450,6 +450,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
     // Underflow poisons the channel; nomination then skips it though every other gate is open.
     Y_UNIT_TEST(UnderflowPoisonsChannelAndBlocksNomination) {
         TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.ColumnShardConfig.SetCutHistoryMeasureOnly(false);
         actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
         static constexpr ui64 TabletId = 1010;
@@ -542,6 +543,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         TTestBasicRuntime runtime;
         TAppPrepare app;
         runtime.Initialize(app.Unwrap());
+        runtime.GetAppData().ColumnShardConfig.SetCutHistoryMeasureOnly(false);
         auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
 
         static constexpr ui64 TabletId = 3030;
@@ -626,6 +628,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         TTestBasicRuntime runtime;
         TAppPrepare app;
         runtime.Initialize(app.Unwrap());
+        runtime.GetAppData().ColumnShardConfig.SetCutHistoryMeasureOnly(false);
         auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
 
         static constexpr ui64 TabletId = 4040;
@@ -699,6 +702,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         TTestBasicRuntime runtime;
         TAppPrepare app;
         runtime.Initialize(app.Unwrap());
+        runtime.GetAppData().ColumnShardConfig.SetCutHistoryMeasureOnly(false);
         auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
 
         static constexpr ui64 TabletId = 4041;
@@ -791,6 +795,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
 
     Y_UNIT_TEST(OrphanedDeleteMarkUnderCutEntryIsErasedNotCollected) {
         TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.ColumnShardConfig.SetCutHistoryMeasureOnly(false);
         actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         static constexpr ui64 TabletId = 890;
         static constexpr ui32 CurrentGen = 7;
@@ -824,6 +829,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
     // A live portion in the range blocks nomination; the portion erase from MoveData opens the gate.
     Y_UNIT_TEST(LivePortionBlocksNomination) {
         TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.ColumnShardConfig.SetCutHistoryMeasureOnly(false);
         actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
         static constexpr ui64 TabletId = 3131;
@@ -986,6 +992,53 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT_C(nominated, "a clean range must be nominated straight from boot");
         UNIT_ASSERT_C(env.Cutter().GetCutStateForTest(env.Key) == ECutState::Verifying, "the entry enters the round");
         UNIT_ASSERT(env.Cutter().IsSweepInFlight());
+    }
+
+    // A GC task starting right after boot makes IsDrained refuse the candidate; with no cadence in
+    // BsRange mode the entry must still be re-nominatable rather than lost until the next restart.
+    Y_UNIT_TEST(BootProbeRetriesAfterGcBlockedRound) {
+        TRangeProbeEnv env;
+        auto& csConfig = env.Runtime.GetAppData().ColumnShardConfig;
+        csConfig.SetCutHistoryProofSource(NKikimrConfig::TColumnShardConfig::CUT_HISTORY_PROOF_BS_RANGE);
+
+        bool first = false;
+        env.RunInActor([&](const NActors::TActorContext& ctx) {
+            first = env.Cutter().TryNominateAtBoot(ctx);
+        });
+        UNIT_ASSERT_C(first, "the clean range must be nominated at boot");
+
+        // The round ends without a barrier, exactly as a GC-blocked IsDrained would leave it.
+        env.RunInActor([&](const NActors::TActorContext& ctx) {
+            env.Cutter().OnBatchComplete({ env.Key }, /*exhausted=*/true, ctx);
+        });
+        UNIT_ASSERT_C(!env.Cutter().IsSweepInFlight(), "the blocked round must finish");
+        UNIT_ASSERT_C(env.Cutter().GetCutStateForTest(env.Key) == ECutState::None, "the entry returns to None");
+
+        bool again = false;
+        env.RunInActor([&](const NActors::TActorContext& ctx) {
+            again = env.Cutter().TryNominateAtBoot(ctx);
+        });
+        UNIT_ASSERT_C(again, "a later pass must re-nominate the entry the blocked round gave up on");
+    }
+
+    // Repeated passes must not re-nominate an entry whose round is still running.
+    Y_UNIT_TEST(BootProbeSkipsEntryAlreadyInFlight) {
+        TRangeProbeEnv env;
+        auto& csConfig = env.Runtime.GetAppData().ColumnShardConfig;
+        csConfig.SetCutHistoryProofSource(NKikimrConfig::TColumnShardConfig::CUT_HISTORY_PROOF_BS_RANGE);
+
+        bool nominated = false;
+        env.RunInActor([&](const NActors::TActorContext& ctx) {
+            nominated = env.Cutter().TryNominateAtBoot(ctx);
+        });
+        UNIT_ASSERT(nominated);
+        UNIT_ASSERT(env.Cutter().IsSweepInFlight());
+
+        bool second = true;
+        env.RunInActor([&](const NActors::TActorContext& ctx) {
+            second = env.Cutter().TryNominateAtBoot(ctx);
+        });
+        UNIT_ASSERT_C(!second, "a pass while a round is in flight must nominate nothing");
     }
 
 }   // TCutHistoryCutterCounters

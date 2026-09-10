@@ -262,6 +262,10 @@ ui32 THistoryCutterWrapper::GetMaxDrainChecksPerNomination() {
     return checks ? checks : DefaultMaxDrainChecksPerNomination;
 }
 
+bool THistoryCutterWrapper::IsMeasureOnly() {
+    return HasAppData() && AppDataVerified().ColumnShardConfig.GetCutHistoryMeasureOnly();
+}
+
 EProofSource THistoryCutterWrapper::GetProofSource() {
     if (!HasAppData()) {
         return EProofSource::Portions;
@@ -531,6 +535,9 @@ bool THistoryCutterWrapper::TryNominateAtBoot(const TActorContext& ctx) {
         const auto& hist = TabletInfo->Channels[ch].History;
         for (int i = 0; i < static_cast<int>(hist.size()) - 1; ++i) {
             const TEntryKey key{ ch, hist[i].FromGeneration };
+            if (const auto* state = CutState.FindPtr(key); state && *state != ECutState::None) {
+                continue;
+            }
             const ui32 nextGen = GetNextFromGeneration(key);
             if (!nextGen || !SeenGroupsCheckPasses(key)) {
                 continue;
@@ -742,6 +749,13 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
             }
         }
         if (!groupId) {
+            CutState[key] = ECutState::None;
+            continue;
+        }
+
+        Signals.OnEntryProven();
+        if (IsMeasureOnly()) {
+            // Nothing durable happens: reset to None so the next round re-measures the same entry.
             CutState[key] = ECutState::None;
             continue;
         }

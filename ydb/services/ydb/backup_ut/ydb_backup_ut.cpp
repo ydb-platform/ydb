@@ -1,6 +1,10 @@
 #include "ydb_common_ut.h"
 
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/library/aws_init/aws.h>
 
@@ -3878,6 +3882,163 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             UNIT_ASSERT_C(child.GetName() != NDump::NFiles::IncompleteData().FileName,
                 "Stray incomplete data file left behind after backing up an empty column table: " << child.GetPath());
         }
+    }
+
+    // The table has two shards. The ReadTable stream is broken right after the client has received the data
+    // of exactly one shard, so the dump has to resume from the last key it wrote. In ordered mode the shards
+    // are streamed by key order, so that key is a correct resume point. In unordered mode the shards stream
+    // concurrently, and the chunk of the shard with the larger keys is what reaches the client first here:
+    // the dump then resumes past the larger keys and never reads the rows of the shard with the smaller keys.
+    void TestReadTableResumesAfterStreamFailure(bool ordered) {
+        NKqp::TKikimrRunner kikimr(NKqp::TKikimrSettings()
+            .SetUseRealThreads(false)
+            .SetWithSampleTables(false));
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        constexpr const char* table = "/Root/table";
+        constexpr ui32 rowCount = 100;
+        constexpr ui32 splitKey = rowCount / 2;
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = kikimr.RunCall([&] {
+            return tableClient.GetSession().ExtractValueSync().GetSession();
+        });
+
+        kikimr.RunCall([&] {
+            ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                    CREATE TABLE `%s` (
+                        Key Uint32,
+                        Value Utf8,
+                        PRIMARY KEY (Key)
+                    ) WITH (
+                        PARTITION_AT_KEYS = (%u),
+                        AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+                    );
+                )", table, splitKey
+            ));
+
+            TStringBuilder values;
+            for (ui32 key = 1; key <= rowCount; ++key) {
+                values << (key > 1 ? ", " : "") << "(" << key << "u, \"value_" << key << "\")";
+            }
+            ExecuteDataModificationQuery(session, Sprintf(R"(
+                    UPSERT INTO `%s` (Key, Value) VALUES %s;
+                )", table, values.c_str()
+            ));
+            return true;
+        });
+
+        const auto originalContent = kikimr.RunCall([&] {
+            return GetTableContent(session, table);
+        });
+
+        const auto shards = kikimr.RunCall([&] {
+            return Tests::TClient::ExtractTableShards(kikimr.GetTestClient().Ls(table));
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(shards.size(), 2, "The table is expected to be split in two shards");
+        const ui64 lowKeysShard = shards[0];
+        const ui64 highKeysShard = shards[1];
+
+        // Hold the data chunks that the shard scans send towards the tx proxy
+        NActors::TBlockEvents<TEvDataShard::TEvProposeTransactionResult> blockedChunks(runtime, [](const auto& ev) {
+            return ev->Get()->GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::RESPONSE_DATA;
+        });
+        auto findChunk = [&](ui64 shardId) {
+            return std::find_if(blockedChunks.begin(), blockedChunks.end(), [shardId](const auto& ev) {
+                return ev->Get()->GetOrigin() == shardId;
+            });
+        };
+        auto moveChunkToFront = [&](ui64 shardId) {
+            auto it = findChunk(shardId);
+            UNIT_ASSERT(it != blockedChunks.end());
+            if (it != blockedChunks.begin()) {
+                DoSwap(*it, blockedChunks.front());
+            }
+        };
+
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        auto dumpFuture = kikimr.RunInThreadPool([&] {
+            NDump::TClient backupClient(kikimr.GetDriver());
+            return backupClient.Dump(table, pathToBackup, NDump::TDumpSettings()
+                .Database("/Root")
+                .AvoidCopy(true)
+                .Ordered(ordered));
+        });
+
+        // In ordered mode only the first shard is streaming, so its chunk is the only one that can be delivered first
+        const ui64 deliveredShard = ordered ? lowKeysShard : highKeysShard;
+        const ui64 failedShard = ordered ? highKeysShard : lowKeysShard;
+
+        runtime.WaitFor(TStringBuilder() << "data chunk from shard " << deliveredShard, [&] {
+            return findChunk(deliveredShard) != blockedChunks.end();
+        }, TDuration::Seconds(60));
+        moveChunkToFront(deliveredShard);
+        blockedChunks.Unblock(1);
+
+        runtime.WaitFor(TStringBuilder() << "data chunk from shard " << failedShard, [&] {
+            return findChunk(failedShard) != blockedChunks.end();
+        }, TDuration::Seconds(60));
+        blockedChunks.Stop();
+        moveChunkToFront(failedShard);
+        // The shard fails instead of delivering its data: the stream is closed and the dump has to retry
+        auto& failedRecord = blockedChunks.front()->Get()->Record;
+        const ui64 failedReadTxId = failedRecord.GetTxId();
+        failedRecord.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
+        failedRecord.ClearTxResult();
+        blockedChunks.Unblock();
+
+        const auto dumpResult = runtime.WaitFuture(dumpFuture);
+
+        // The proxy treats the injected error as the shard having finished its ReadTable transaction, so it does not
+        // interrupt it. The scan of that shard is still waiting for an ack of the chunk though, and would block
+        // the scheme operations below: interrupt it the same way the proxy does on a real stream failure.
+        runtime.SendToPipe(failedShard, runtime.AllocateEdgeActor(), new TEvTxProcessing::TEvInterruptTransaction(failedReadTxId));
+
+        UNIT_ASSERT_C(dumpResult.IsSuccess(), dumpResult.GetIssues().ToString());
+
+        TSet<ui32> dumpedKeys;
+        TVector<TFsPath> children;
+        pathToBackup.Child("table").List(children);
+        for (const auto& child : children) {
+            if (!child.GetName().StartsWith("data_")) {
+                continue;
+            }
+            TFileInput input(child.GetPath());
+            TString line;
+            while (input.ReadLine(line)) {
+                dumpedKeys.insert(FromString<ui32>(TStringBuf(line).Before(',')));
+            }
+        }
+        TVector<ui32> missingKeys;
+        for (ui32 key = 1; key <= rowCount; ++key) {
+            if (!dumpedKeys.contains(key)) {
+                missingKeys.push_back(key);
+            }
+        }
+        UNIT_ASSERT_C(missingKeys.empty(), "Dump lost " << missingKeys.size() << " rows, keys: " << JoinSeq(", ", missingKeys));
+        UNIT_ASSERT_VALUES_EQUAL(dumpedKeys.size(), rowCount);
+
+        kikimr.RunCall([&] {
+            ExecuteDataDefinitionQuery(session, Sprintf("DROP TABLE `%s`;", table));
+            return true;
+        });
+        const auto restoreResult = kikimr.RunCall([&] {
+            NDump::TClient backupClient(kikimr.GetDriver());
+            return backupClient.Restore(pathToBackup, "/Root");
+        });
+        UNIT_ASSERT_C(restoreResult.IsSuccess(), restoreResult.GetIssues().ToString());
+
+        const auto restoredContent = kikimr.RunCall([&] {
+            return GetTableContent(session, table);
+        });
+        CompareResults(restoredContent, originalContent);
+    }
+
+    Y_UNIT_TEST_TWIN(ReadTableResumesAfterStreamFailure, Ordered) {
+        TestReadTableResumesAfterStreamFailure(Ordered);
     }
 
     Y_UNIT_TEST(ColumnTableSkippedWhenCopyTableFallbackTriggered) {

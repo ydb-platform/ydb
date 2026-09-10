@@ -419,14 +419,17 @@ namespace NKikimr::NDDisk {
             auto itErase = std::upper_bound(erase.Lsns.begin(), erase.Lsns.end(), barrier.Lsn);
             erase.Lsns = std::vector<ui64>(itErase, erase.Lsns.end());
 
-            auto pbIt = persistentBuffers.find({tid, erase.Generation, dbg});
-            if (pbIt == persistentBuffers.end()) {
-                it = Erases.erase(it);
-                continue;
-            }
-
+            // Preserve the version and its on-disk sector even without live records.
+            // Otherwise subsequent erases restart HeaderLsn, and an older header
+            // still present on disk can win during the next recovery.
             const TPersistentBufferSectorInfo eraseSector{.ChunkIdx = erase.ChunkIdx, .SectorIdx = erase.SectorIdx};
             allocator.MarkOccupied(std::span<const TPersistentBufferSectorInfo>(&eraseSector, 1));
+
+            auto pbIt = persistentBuffers.find({tid, erase.Generation, dbg});
+            if (pbIt == persistentBuffers.end()) {
+                ++it;
+                continue;
+            }
 
             TPersistentBuffer& buffer = pbIt->second;
             for (ui64 lsn : erase.Lsns) {

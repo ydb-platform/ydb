@@ -29,17 +29,6 @@ struct TEvStreamingQueryNodesManager {
     };
 };
 
-// Creates a StreamingQueryNodesManager actor that:
-//   - periodically (every checkPeriod) fetches the list of tenant nodes via
-//     CreateTenantNodeEnumerationLookup;
-//   - waits for startDelay to collect TEvDqCompute::TEvState events from
-//     tasks that read from topics, which identify the nodes running readers;
-//   - checks:
-//       (a) ratio = nodesWithTopicReaders / totalTenantNodes >= 0.5  (else abort)
-//       (b) topicReaderTasks <= 2 * nodesWithTopicReaders             (else no action)
-//   - sends TEvStreamingQueryNodesManager::TEvAbortQuery to runActorId when
-//     the health check fails.
-//
 // Parameters:
 //   runActorId   – actor that receives TEvAbortQuery
 //   tenantName   – tenant path used for TenantNodeEnumeration lookup
@@ -53,8 +42,8 @@ NActors::IActor* CreateStreamingQueryNodesManager(
     TString tenantName,
     TString queryId,
     const NProto::TGraphParams& graphParams,
-    TDuration checkPeriod = TDuration::Minutes(1),
-    TDuration startDelay = TDuration::Minutes(1),
-    ui64 maxTasksPerStage = 0);
+    TDuration checkPeriod,
+    TDuration startDelay,
+    ui64 maxTasksPerStage);
 
 } // namespace NFq

@@ -2461,8 +2461,6 @@ FROM `{table_name}`"""
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
 
-
-
     @pytest.mark.parametrize("local_topics", [True, False])
     @pytest.mark.parametrize(
         "max_tasks_per_stage, should_restart",
@@ -2480,7 +2478,7 @@ FROM `{table_name}`"""
         inp, out, _ = self.get_io_names(
             kikimr,
             "test_read_tasks_are_rebalanced_to_new_slots",
-            True,
+            local_topics,
             entity_name,
             partitions_count=100,
         )
@@ -2499,7 +2497,6 @@ FROM `{table_name}`"""
             END DO;
         """)
         self.wait_completed_checkpoints(kikimr, query_name)
-        time.sleep(60)
 
         path = f"{kikimr.get_database_name()}/{query_name}"
 
@@ -2511,6 +2508,10 @@ FROM `{table_name}`"""
                 or 0
                 for node_id in kikimr.cluster.slots
             )
+
+        assert wait_for(lambda: streaming_query_tasks_count() > 0, timeout_seconds=60, step_seconds=1), (
+             "Streaming query tasks did not appear after creation"
+        )
         tasks_before_scaling = streaming_query_tasks_count()
         assert tasks_before_scaling > 0
 
@@ -2560,7 +2561,6 @@ FROM `{table_name}`"""
             #     step_seconds=1
             # ), "Read tasks were not placed on every tenant slot"
 
-            kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
-
         finally:
-            kikimr.cluster.unregister_and_stop_slots(added_slots)        
+            kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+            kikimr.cluster.unregister_and_stop_slots(added_slots)

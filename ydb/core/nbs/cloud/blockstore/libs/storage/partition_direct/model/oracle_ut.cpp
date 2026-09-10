@@ -74,6 +74,9 @@ TStorageConfigPtr MakeStorageConfig()
     return std::make_shared<TStorageConfig>(rawConfig);
 }
 
+const auto DefaultHostHealths =
+    TVector{DirectBlockGroupHostCount, EHostHealth::Online};
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -87,7 +90,7 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         const auto hosts = THostMask::MakeAll(5);
 
-        TOracle oracle(storageConfig, nullptr);
+        TOracle oracle(storageConfig, nullptr, DefaultHostHealths);
 
         // Host 2 has the lowest inflight count (zero), all others are higher.
         const auto now = TInstant::Now();
@@ -116,7 +119,7 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         const auto hosts = THostMask::MakeOne(3);
 
-        TOracle oracle(storageConfig, nullptr);
+        TOracle oracle(storageConfig, nullptr, DefaultHostHealths);
 
         // Host 2 has the lowest inflight count (zero), all others are higher.
         const auto now = TInstant::Now();
@@ -149,7 +152,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         hosts.Set(0);
         hosts.Set(3);
 
-        TOracle oracle(storageConfig, nullptr);
+        TOracle oracle(storageConfig, nullptr, DefaultHostHealths);
 
         const auto now = TInstant::Now();
         for (THostIndex hostIndex: {0, 0, 3}) {
@@ -184,7 +187,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         hosts.Set(2);
         hosts.Set(4);
 
-        TOracle oracle(storageConfig, nullptr);
+        TOracle oracle(storageConfig, nullptr, DefaultHostHealths);
 
         std::map<THostIndex, size_t> counts;
         const size_t iterations = 3000;
@@ -220,7 +223,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         // picked - only ties at the global minimum are randomized.
         const auto hosts = THostMask::MakeAll(5);
 
-        TOracle oracle(storageConfig, nullptr);
+        TOracle oracle(storageConfig, nullptr, DefaultHostHealths);
 
         // Host 2 has the lowest inflight count (zero), all others are higher.
         const auto now = TInstant::Now();
@@ -249,7 +252,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         const std::vector<THostIndex> hostIndexes = {0, 1, 2, 3, 4};
 
         THostStateControllerMock hostStateController;
-        TOracle oracle(config, &hostStateController);
+        TOracle oracle(config, &hostStateController, DefaultHostHealths);
         auto now = TInstant::Now();
 
         oracle.Think(now);
@@ -320,7 +323,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         const std::vector<THostIndex> hostIndexes = {0, 1, 2, 3, 4};
 
         THostStateControllerMock hostStateController;
-        TOracle oracle(config, &hostStateController);
+        TOracle oracle(config, &hostStateController, DefaultHostHealths);
         auto now = TInstant::Now();
 
         oracle.Think(now);
@@ -363,7 +366,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         const std::vector<THostIndex> hostIndexes = {0, 1, 2, 3, 4};
 
         THostStateControllerMock hostStateController;
-        TOracle oracle(config, &hostStateController);
+        TOracle oracle(config, &hostStateController, DefaultHostHealths);
         auto now = TInstant::Now();
 
         oracle.Think(now);
@@ -413,7 +416,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         const std::vector<THostIndex> hostIndexes = {0, 1, 2, 3, 4};
 
         THostStateControllerMock hostStateController;
-        TOracle oracle(config, &hostStateController);
+        TOracle oracle(config, &hostStateController, DefaultHostHealths);
         auto now = TInstant::Now();
 
         oracle.Think(now);
@@ -454,7 +457,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         NProto::TStorageServiceConfig rawConfig;
         auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
 
-        TOracle oracle(storageConfig, nullptr);
+        TOracle oracle(storageConfig, nullptr, DefaultHostHealths);
 
         // No read requests recorded -> predictor returns zero -> fallback to
         // default. Default ReadHedgingDelay is 1ms when not set in config.
@@ -472,7 +475,7 @@ Y_UNIT_TEST_SUITE(TOracle)
     {
         auto storageConfig = MakeStorageConfig();
 
-        TOracle oracle(storageConfig, nullptr);
+        TOracle oracle(storageConfig, nullptr, DefaultHostHealths);
         auto now = TInstant::Now();
 
         // Feed DDisk reads with 100ms, 200ms on host 0.
@@ -525,7 +528,7 @@ Y_UNIT_TEST_SUITE(TOracle)
     {
         auto storageConfig = MakeStorageConfig();
 
-        TOracle oracle(storageConfig, nullptr);
+        TOracle oracle(storageConfig, nullptr, DefaultHostHealths);
 
         // No write requests recorded -> predictor returns zero -> fallback to
         // default. Default WriteHedgingDelay is 1ms when not set in config.
@@ -543,7 +546,7 @@ Y_UNIT_TEST_SUITE(TOracle)
     {
         auto storageConfig = MakeStorageConfig();
 
-        TOracle oracle(storageConfig, nullptr);
+        TOracle oracle(storageConfig, nullptr, DefaultHostHealths);
         auto now = TInstant::Now();
 
         // WriteToPBuffer (direct): [100, 200] -> predict 100ms.
@@ -581,7 +584,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         NProto::TStorageServiceConfig rawConfig;
         auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
 
-        TOracle oracle(storageConfig, nullptr);
+        TOracle oracle(storageConfig, nullptr, DefaultHostHealths);
 
         // No errors recorded on any host -> no cooldown.
         UNIT_ASSERT_VALUES_EQUAL(
@@ -594,7 +597,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         NProto::TStorageServiceConfig rawConfig;
         auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
 
-        TOracle oracle(storageConfig, nullptr);
+        TOracle oracle(storageConfig, nullptr, DefaultHostHealths);
         const auto now = TInstant::Now();
 
         // Each consecutive error adds a 10ms penalty on host 0.
@@ -625,7 +628,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         NProto::TStorageServiceConfig rawConfig;
         auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
 
-        TOracle oracle(storageConfig, nullptr);
+        TOracle oracle(storageConfig, nullptr, DefaultHostHealths);
         const auto now = TInstant::Now();
 
         // Host 1: two consecutive errors -> 20ms.
@@ -663,7 +666,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         NProto::TStorageServiceConfig rawConfig;
         auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
 
-        TOracle oracle(storageConfig, nullptr);
+        TOracle oracle(storageConfig, nullptr, DefaultHostHealths);
         const auto now = TInstant::Now();
 
         // The cooldown grows by 10ms per consecutive error and is capped at
@@ -697,7 +700,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         auto config = std::make_shared<TStorageConfig>(rawConfig);
 
         THostStateControllerMock hostStateController;
-        TOracle oracle(config, &hostStateController);
+        TOracle oracle(config, &hostStateController, DefaultHostHealths);
 
         // With the default set of DirectBlockGroupHostCount online hosts, the
         // alive count equals the required count, so no new host is requested.
@@ -716,7 +719,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         auto config = std::make_shared<TStorageConfig>(rawConfig);
 
         THostStateControllerMock hostStateController;
-        TOracle oracle(config, &hostStateController);
+        TOracle oracle(config, &hostStateController, DefaultHostHealths);
         auto now = TInstant::Now();
 
         // Push host 0 into the TemporaryOffline state.
@@ -745,7 +748,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         auto config = std::make_shared<TStorageConfig>(rawConfig);
 
         THostStateControllerMock hostStateController;
-        TOracle oracle(config, &hostStateController);
+        TOracle oracle(config, &hostStateController, DefaultHostHealths);
         auto now = TInstant::Now();
 
         // Generate a single error on host 0.
@@ -781,7 +784,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         auto config = std::make_shared<TStorageConfig>(rawConfig);
 
         THostStateControllerMock hostStateController;
-        TOracle oracle(config, &hostStateController);
+        TOracle oracle(config, &hostStateController, DefaultHostHealths);
         auto now = TInstant::Now();
 
         // Drive host 0 to Offline.
@@ -812,7 +815,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         auto config = std::make_shared<TStorageConfig>(rawConfig);
 
         THostStateControllerMock hostStateController;
-        TOracle oracle(config, &hostStateController);
+        TOracle oracle(config, &hostStateController, DefaultHostHealths);
         auto now = TInstant::Now();
 
         // Drive host 0 to Offline so a new host is requested.
@@ -838,7 +841,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         auto config = std::make_shared<TStorageConfig>(rawConfig);
 
         THostStateControllerMock hostStateController;
-        TOracle oracle(config, &hostStateController);
+        TOracle oracle(config, &hostStateController, DefaultHostHealths);
         const auto now = TInstant::Now();
 
         // Initially there are DirectBlockGroupHostCount hosts.
@@ -864,7 +867,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         auto config = std::make_shared<TStorageConfig>(rawConfig);
 
         THostStateControllerMock hostStateController;
-        TOracle oracle(config, &hostStateController);
+        TOracle oracle(config, &hostStateController, DefaultHostHealths);
         const auto now = TInstant::Now();
 
         // An index that already exists must not change the host count.
@@ -885,7 +888,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         auto config = MakeStorageConfig();
 
         THostStateControllerMock hostStateController;
-        TOracle oracle(config, &hostStateController);
+        TOracle oracle(config, &hostStateController, DefaultHostHealths);
         auto now = TInstant::Now();
 
         // A broken device forces the host offline and requests a replacement.
@@ -918,7 +921,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         auto config = MakeStorageConfig();
 
         THostStateControllerMock hostStateController;
-        TOracle oracle(config, &hostStateController);
+        TOracle oracle(config, &hostStateController, DefaultHostHealths);
         auto now = TInstant::Now();
 
         oracle.OnDDiskBroken(0);
@@ -958,7 +961,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         auto config = std::make_shared<TStorageConfig>(rawConfig);
 
         THostStateControllerMock hostStateController;
-        TOracle oracle(config, &hostStateController);
+        TOracle oracle(config, &hostStateController, DefaultHostHealths);
         auto now = TInstant::Now();
 
         // Generate a single error on host 0.
@@ -997,7 +1000,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         auto config = std::make_shared<TStorageConfig>(rawConfig);
 
         THostStateControllerMock hostStateController;
-        TOracle oracle(config, &hostStateController);
+        TOracle oracle(config, &hostStateController, DefaultHostHealths);
         auto now = TInstant::Now();
 
         // Generate a single error on host 0.
@@ -1046,7 +1049,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         auto config = std::make_shared<TStorageConfig>(rawConfig);
 
         THostStateControllerMock hostStateController;
-        TOracle oracle(config, &hostStateController);
+        TOracle oracle(config, &hostStateController, DefaultHostHealths);
         auto now = TInstant::Now();
 
         // Generate a single error on host 0.
@@ -1074,6 +1077,45 @@ Y_UNIT_TEST_SUITE(TOracle)
             EHostState::Online,
             hostStateController.States[0]);
         UNIT_ASSERT_VALUES_EQUAL(0, hostStateController.Healths.size());
+    }
+
+    Y_UNIT_TEST(ConstructorSetsInitialHealth)
+    {
+        const TVector initialHealth{
+            EHostHealth::Online,
+            EHostHealth::TemporaryOffline,
+            EHostHealth::Offline,
+            EHostHealth::Online,
+            EHostHealth::Broken,
+        };
+        const TVector expectedStates{
+            EHostState::Online,
+            EHostState::TemporaryOffline,
+            EHostState::Offline,
+            EHostState::Online,
+            EHostState::Offline,
+        };
+
+        auto config = MakeStorageConfig();
+
+        THostStateControllerMock hostStateController;
+        TOracle oracle(config, &hostStateController, initialHealth);
+        auto now = TInstant::Now();
+
+        auto stats = oracle.BuildHostStats(now);
+
+        UNIT_ASSERT_VALUES_EQUAL(initialHealth.size(), stats.size());
+
+        for (size_t i = 0; i < initialHealth.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                expectedStates[i],
+                stats[i].State,
+                "host #" << i);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                initialHealth[i],
+                stats[i].Health,
+                "host #" << i);
+        }
     }
 }
 

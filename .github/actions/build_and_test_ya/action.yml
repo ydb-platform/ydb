@@ -95,7 +95,6 @@ runs:
           # If the branch name is not provided, use a default prefix
           FOLDER_PREFIX='ya-'
         fi
-        
         # Output the folder_prefix for use in subsequent steps
         echo "folder_prefix=${FOLDER_PREFIX}" >> $GITHUB_ENV
 

@@ -291,15 +291,17 @@ struct TVDiskMock {
 
     TActorTestContext *TestCtx;
     const TVDiskID VDiskID;
+    const TActorId WhiteboardProxyId;
     TIntrusivePtr<TPDiskParams> PDiskParams;
     ui64 LastUsedLsn = 0;
     ui64 FirstLsnToKeep = 1;
 
     TMap<EChunkState, TSet<TChunkIdx>> Chunks;
 
-    TVDiskMock(TActorTestContext *testCtx, bool dynamicGroup = false)
+    TVDiskMock(TActorTestContext *testCtx, bool dynamicGroup = false, TActorId whiteboardProxyId = {})
         : TestCtx(testCtx)
         , VDiskID(MakeGroupId(dynamicGroup), 1, 0, 0, 0)
+        , WhiteboardProxyId(whiteboardProxyId)
     {}
 
     static ui32 MakeGroupId(bool dynamicGroup) {
@@ -322,7 +324,7 @@ struct TVDiskMock {
         const auto evInitRes = TestCtx->TestResponse<NPDisk::TEvYardInitResult>(
                 new NPDisk::TEvYardInit(OwnerRound.fetch_add(1), VDiskID,
                     TestCtx->TestCtx.PDiskGuid, TestCtx->Sender,
-                    {}, Max<ui32>(), groupSizeInUnits),
+                    WhiteboardProxyId, Max<ui32>(), groupSizeInUnits),
                 NKikimrProto::OK);
 
         PDiskParams = evInitRes->PDiskParams;

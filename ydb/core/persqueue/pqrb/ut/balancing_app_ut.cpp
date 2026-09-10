@@ -28,20 +28,25 @@ Y_UNIT_TEST(RenderAppCoversFamilyPartitionAndSessionStates) {
     tc.Runtime->SetScheduledLimit(10000);
 
     PQTabletPrepare({}, {}, tc);
+    // Finish/Commit are only valid on partitions that already have children.
+    // 1 and 2 get grandchildren so later Finish events cover HTML description
+    // branches without tripping the leaf-partition debug abort.
     SendBalancerUpdate(tc, TBalancerUpdate{
         .Partitions = {
             {0, {tc.TabletId, 1}},
             {1, {tc.TabletId, 2}},
             {2, {tc.TabletId, 3}},
+            {3, {tc.TabletId, 4}},
+            {4, {tc.TabletId, 5}},
         },
         .Strategy = NKikimrPQ::TPQTabletConfig::CAN_SPLIT,
         .Consumers = {
             {"user", NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING},
             {"other", NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING},
         },
-        .ParentPartitionIds = {{1, {0}}, {2, {0}}},
-        .ChildPartitionIds = {{0, {1, 2}}},
-        .NextPartitionId = 3,
+        .ParentPartitionIds = {{1, {0}}, {2, {0}}, {3, {1}}, {4, {2}}},
+        .ChildPartitionIds = {{0, {1, 2}}, {1, {3}}, {2, {4}}},
+        .NextPartitionId = 5,
     });
     WaitBalancerReady(tc);
 

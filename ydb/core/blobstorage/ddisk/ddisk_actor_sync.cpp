@@ -243,6 +243,9 @@ namespace NKikimr::NDDisk {
 
     template <typename TEventPtr>
     void TDDiskActor::InternalSyncReadResult(TEventPtr ev) {
+        if (Stopping) {
+            return;
+        }
         YDB_LOG_TRACE_COMP(BS_DDISK, "TDDiskActor::InternalSyncReadResult",
             {"marker", "BSDD26"},
             {"DDiskId", DDiskId},

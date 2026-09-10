@@ -67,8 +67,18 @@ TPqIoTestFixture::TPqIoTestFixture() {
 }
 
 TPqIoTestFixture::~TPqIoTestFixture() {
-    CaSetup = nullptr;
+    // Teardown order matters (YDBBUGS-600, https://github.com/ydb-platform/ydb/issues/46513).
+    // Async IO actors subscribe to SDK futures (DescribeTopic, WaitEvent, ...) with callbacks that
+    // call TActorSystem::Send from SDK threads. Resetting the topic client in PassAway does not cancel
+    // requests that are already in flight, so:
+    // 1. pass away the actors while the actor system is still alive;
+    // 2. stop the driver and wait until all in-flight requests and their callbacks are drained
+    //    (a late Send to an already dead actor id is harmless);
+    // 3. only then destroy the test runtime and its actor system.
+    // Destroying the runtime first races TMailboxTable::Cleanup with callbacks pushing events into mailboxes.
+    CaSetup->Terminate();
     Driver.Stop(true);
+    CaSetup = nullptr;
 }
 
 void TPqIoTestFixture::InitAsyncOutput(

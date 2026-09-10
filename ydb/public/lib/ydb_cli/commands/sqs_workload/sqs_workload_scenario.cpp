@@ -59,6 +59,7 @@ namespace NYdb::NConsoleClient {
             Aws::String(Endpoint.c_str(), Endpoint.size());
         sqsClientConfiguration.scheme = Aws::Http::Scheme::HTTP;
         sqsClientConfiguration.httpRequestTimeoutMs = RequestTimeoutMs;
+        sqsClientConfiguration.maxConnections = WorkersCount * 4;
         sqsClientConfiguration.executor =
             Aws::MakeShared<Aws::Utils::Threading::PooledThreadExecutor>(
                 "pooled-thread-executor", WorkersCount);

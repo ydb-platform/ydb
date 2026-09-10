@@ -155,7 +155,6 @@ struct TSysViewProcessor::TTxAggregate : public TTxBase {
             {"tabletId", Self->TabletID()});
 
         if (Self->CurrentStage == COLLECT) {
-            Self->ScheduleHourMetricsCleanup();
             Self->ScheduleAggregate();
         } else {
             Self->ScheduleCollect();

@@ -2,6 +2,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/tablet/resource_broker_impl.h>
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/tenant_runtime.h>
@@ -9,6 +10,7 @@
 #include <ydb/core/kqp/node_service/kqp_query_control_plane.h>
 
 #include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -99,6 +101,24 @@ TResourceBrokerConfig MakeResourceBrokerTestConfig() {
     return config;
 }
 
+struct TMockMonRequest : public NMonitoring::IMonHttpRequest {
+    IOutputStream& Output() override { Y_ABORT("Not implemented"); }
+    HTTP_METHOD GetMethod() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPath() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPathInfo() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetUri() const override { Y_ABORT("Not implemented"); }
+    const TCgiParameters& GetParams() const override { Y_ABORT("Not implemented"); }
+    const TCgiParameters& GetPostParams() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPostContent() const override { Y_ABORT("Not implemented"); }
+    const THttpHeaders& GetHeaders() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetHeader(TStringBuf) const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetCookie(TStringBuf) const override { Y_ABORT("Not implemented"); }
+    TString GetRemoteAddr() const override { Y_ABORT("Not implemented"); }
+    TString GetServiceTitle() const override { Y_ABORT("Not implemented"); }
+    NMonitoring::IMonPage* GetPage() const override { Y_ABORT("Not implemented"); }
+    NMonitoring::IMonHttpRequest* MakeChild(NMonitoring::IMonPage*, const TString&) const override { Y_ABORT("Not implemented"); }
+};
+
 NKikimrConfig::TTableServiceConfig::TResourceManager MakeKqpResourceManagerConfig() {
     NKikimrConfig::TTableServiceConfig::TResourceManager config;
 
@@ -120,6 +140,7 @@ class KqpRm : public TTestBase {
 public:
     void SetUp() override {
         Runtime = MakeHolder<TTenantTestRuntime>(MakeTenantTestConfig());
+        SetPoolsCountersFlag(true);
 
         NActors::NLog::EPriority priority = DETAILED_LOG ? NLog::PRI_DEBUG : NLog::PRI_ERROR;
         Runtime->SetLogPriority(NKikimrServices::RESOURCE_BROKER, priority);
@@ -209,8 +230,36 @@ public:
     }
 
     TIntrusivePtr<NRm::TTxState> MakeTx(ui64 txId, std::shared_ptr<NRm::IKqpResourceManager> rm,
-            const TString& poolId = "", double memoryPoolPercent = 100) {
-        return MakeIntrusive<NRm::TTxState>(rm, txId, TInstant::Now(), poolId, memoryPoolPercent, "", false);
+            const TString& poolId = "", double memoryPoolPercent = 100, const TString& database = "") {
+        return MakeIntrusive<NRm::TTxState>(rm, txId, TInstant::Now(), poolId, memoryPoolPercent, database, false);
+    }
+
+    void SetPoolsCountersFlag(bool value) {
+        for (ui32 nodeIndex = 0; nodeIndex < Runtime->GetNodeCount(); ++nodeIndex) {
+            Runtime->GetAppData(nodeIndex).FeatureFlags.SetEnableResourcePoolsCounters(value);
+        }
+    }
+
+    NMonitoring::TDynamicCounterPtr FindPoolSensorGroup(const TString& database, const TString& poolId) {
+        auto wm = GetServiceCounters(Counters, "kqp")->FindSubgroup("subsystem", "workload_manager");
+        return wm ? wm->FindSubgroup("pool", database + "/" + poolId) : nullptr;
+    }
+
+    NMonitoring::TDynamicCounterPtr GetPoolSensorGroup(const TString& database, const TString& poolId) {
+        auto group = FindPoolSensorGroup(database, poolId);
+        UNIT_ASSERT(group);
+        return group;
+    }
+
+    TString RenderRmMonPage() {
+        TMockMonRequest request;
+        auto edge = Runtime->AllocateEdgeActor();
+        Runtime->Send(new IEventHandle(ResourceManagers.front(), edge, new NMon::TEvHttpInfo(request)), 0, true);
+
+        TAutoPtr<IEventHandle> handle;
+        auto* response = Runtime->GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        UNIT_ASSERT(response);
+        return response->Answer;
     }
 
     void AssertResourceManagerStats(
@@ -305,6 +354,11 @@ public:
         UNIT_TEST(PoolLimitIgnoredForSenselessPercents);
         UNIT_TEST(PoolLimitAppliedJustBelowHundredPercent);
         UNIT_TEST(SpillingPercentAppliedWithoutPoolLimit);
+        UNIT_TEST(P09PoolLimitAndAllocated);
+        UNIT_TEST(P11PoolDenied);
+        UNIT_TEST(P14PoolSensorsPersistAcrossIdle);
+        UNIT_TEST(P15PoolSensorsAppearAfterFlagEnabled);
+        UNIT_TEST(P16MonPageListsIdlePool);
     UNIT_TEST_SUITE_END();
 
     void SingleTask();
@@ -329,6 +383,11 @@ public:
     void PoolLimitIgnoredForSenselessPercents();
     void PoolLimitAppliedJustBelowHundredPercent();
     void SpillingPercentAppliedWithoutPoolLimit();
+    void P09PoolLimitAndAllocated();
+    void P11PoolDenied();
+    void P14PoolSensorsPersistAcrossIdle();
+    void P15PoolSensorsAppearAfterFlagEnabled();
+    void P16MonPageListsIdlePool();
 
 private:
     THolder<TTestBasicRuntime> Runtime;
@@ -918,6 +977,134 @@ void KqpRm::SpillingPercentAppliedWithoutPoolLimit() {
     }
 
     AssertResourceManagerStats(rm, 1000, 100);
+}
+
+void KqpRm::P09PoolLimitAndAllocated() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    auto tx = MakeTx(1, rm, "pool_a", 50, "db1");
+    NRm::TKqpResourcesRequest request{.Memory = 100};
+
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, request));
+
+    auto sensorGroup = GetPoolSensorGroup("db1", "pool_a");
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryLimit", false)->Val(), 500);
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryAllocated", false)->Val(), 100);
+
+    UNIT_ASSERT(rm->AllocateResources(*tx, 2, request));
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryAllocated", false)->Val(), 200);
+
+    rm->FreeResources(*tx, 1, request);
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryAllocated", false)->Val(), 100);
+
+    rm->FreeResources(*tx, 2, request);
+    UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryAllocated", false)->Val(), 0);
+}
+
+void KqpRm::P11PoolDenied() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    auto tx = MakeTx(1, rm, "pool_c", 10, "db1");
+    NRm::TKqpResourcesRequest request{.Memory = 40};
+
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, request));
+    UNIT_ASSERT(rm->AllocateResources(*tx, 2, request));
+
+    auto deniedCtr = GetPoolSensorGroup("db1", "pool_c")->GetCounter("MemoryDeniedRequests", true);
+    UNIT_ASSERT_VALUES_EQUAL(deniedCtr->Val(), 0);
+
+    UNIT_ASSERT(!rm->AllocateResources(*tx, 3, request));
+    UNIT_ASSERT_VALUES_EQUAL(deniedCtr->Val(), 1);
+
+    UNIT_ASSERT(!rm->AllocateResources(*tx, 4, request));
+    UNIT_ASSERT_VALUES_EQUAL(deniedCtr->Val(), 2);
+}
+
+void KqpRm::P14PoolSensorsPersistAcrossIdle() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    NRm::TKqpResourcesRequest request{.Memory = 40};
+
+    {
+        auto tx = MakeTx(1, rm, "pool_p14", 10, "db1");
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, request));
+        rm->FreeResources(*tx, 1, request);
+    }
+
+    auto sensorGroup = GetPoolSensorGroup("db1", "pool_p14");
+    auto limitCtr = sensorGroup->GetCounter("MemoryLimit", false);
+    auto allocCtr = sensorGroup->GetCounter("MemoryAllocated", false);
+    auto deniedCtr = sensorGroup->GetCounter("MemoryDeniedRequests", true);
+
+    UNIT_ASSERT_VALUES_EQUAL(limitCtr->Val(), 100);
+    UNIT_ASSERT_VALUES_EQUAL(allocCtr->Val(), 0);
+
+    {
+        auto tx = MakeTx(2, rm, "pool_p14", 10, "db1");
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, request));
+        UNIT_ASSERT(rm->AllocateResources(*tx, 2, request));
+        UNIT_ASSERT(!rm->AllocateResources(*tx, 3, request));
+
+        UNIT_ASSERT_VALUES_EQUAL(limitCtr->Val(), 100);
+        UNIT_ASSERT_VALUES_EQUAL(allocCtr->Val(), 80);
+        UNIT_ASSERT_VALUES_EQUAL(deniedCtr->Val(), 1);
+    }
+}
+
+void KqpRm::P15PoolSensorsAppearAfterFlagEnabled() {
+    SetPoolsCountersFlag(false);
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    NRm::TKqpResourcesRequest request{.Memory = 40};
+
+    {
+        auto tx = MakeTx(1, rm, "pool_p15", 10, "db1");
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, request));
+        rm->FreeResources(*tx, 1, request);
+    }
+    UNIT_ASSERT(!FindPoolSensorGroup("db1", "pool_p15"));
+
+    SetPoolsCountersFlag(true);
+
+    {
+        auto tx = MakeTx(2, rm, "pool_p15", 10, "db1");
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, request));
+
+        auto sensorGroup = GetPoolSensorGroup("db1", "pool_p15");
+        UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryLimit", false)->Val(), 100);
+        UNIT_ASSERT_VALUES_EQUAL(sensorGroup->GetCounter("MemoryAllocated", false)->Val(), 40);
+    }
+}
+
+void KqpRm::P16MonPageListsIdlePool() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    NRm::TKqpResourcesRequest request{.Memory = 40};
+
+    {
+        auto tx = MakeTx(1, rm, "pool_idle", 10, "db1");
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, request));
+        rm->FreeResources(*tx, 1, request);
+    }
+
+    auto liveTx = MakeTx(2, rm, "pool_live", 10, "db1");
+    UNIT_ASSERT(rm->AllocateResources(*liveTx, 1, request));
+
+    const TString page = RenderRmMonPage();
+    UNIT_ASSERT_STRING_CONTAINS(page, "<td>db1</td><td>pool_idle</td><td>100</td><td>0</td><td>0</td>");
+    UNIT_ASSERT_STRING_CONTAINS(page, "<td>db1</td><td>pool_live</td><td>100</td><td>40</td><td>0</td>");
 }
 
 } // namespace NKqp

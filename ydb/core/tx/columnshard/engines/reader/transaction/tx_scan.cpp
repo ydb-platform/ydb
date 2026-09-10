@@ -74,8 +74,8 @@ TReadDescription TTxScan::MakeReadDescription(const TSnapshot& snapshot, const E
     const std::shared_ptr<NLWTrace::TOrbit>& orbit, const EReaderClass readerClass,
     const std::shared_ptr<ITableMetadataAccessor>& tableMetadataAccessor) const {
     const auto& request = Ev->Get()->Record;
-    TReadDescription read(
-        Self->TabletID(), snapshot, sorting, GetDeduplicationEnabled(snapshot), readerClass, tableMetadataAccessor, GetCursorSourcesSorting());
+    TReadDescription read(Self->TabletID(), snapshot, requestSorting, GetDeduplicationEnabled(snapshot), readerClass, tableMetadataAccessor,
+        GetCursorSourcesSorting());
     read.GroupedMemoryLimiterOperator =
         request.GetCSScanPolicy() == "EXPORT" ? EScanGroupedMemoryLimiterOperator::Deduplication : EScanGroupedMemoryLimiterOperator::Scan;
     read.Orbit = orbit;
@@ -260,7 +260,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     }
     const std::unique_ptr<IScannerConstructor> scannerConstructor = constructorConclusion.DetachResult();
 
-    TReadDescription read = MakeReadDescription(snapshot, sorting, orbit, scannerConstructor->GetReaderClass(), tableMetadataAccessor);
+    TReadDescription read = MakeReadDescription(snapshot, requestSorting, orbit, scannerConstructor->GetReaderClass(), tableMetadataAccessor);
     const ui64 rawPathId = OnScanStartedForPath(read, *orbit);
 
     if (auto status = InitScanCursor(read, *scannerConstructor); status.IsFail()) {

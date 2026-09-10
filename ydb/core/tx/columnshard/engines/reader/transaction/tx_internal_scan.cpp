@@ -35,7 +35,7 @@ TReadDescription TTxInternalScan::MakeReadDescription(const TSnapshot& snapshot,
     AFL_VERIFY(Self->GetIndexOptional());
     // An internal scan always deduplicates, always through the trivial reader, and never resumes from
     // a cursor
-    TReadDescription read(Self->TabletID(), snapshot, sorting, true, EReaderClass::Trivial, tableMetadataAccessor, std::nullopt);
+    TReadDescription read(Self->TabletID(), snapshot, requestSorting, true, EReaderClass::Trivial, tableMetadataAccessor, std::nullopt);
     read.SetScanIdentifier(request.TaskIdentifier);
     // the parent write has already subscribed to the lock, so no need to subscribe again
     read.SetLock(request.GetLockId(), std::nullopt, NKikimrDataEvents::OPTIMISTIC,
@@ -124,7 +124,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         return SendError("cannot build table metadata accessor for request: " + accessorConclusion.GetErrorMessage(),
             AppDataVerified().ColumnShardConfig.GetReaderClassName(), ctx);
     }
-    TReadDescription read = MakeReadDescription(snapshot, sorting, accessorConclusion.DetachResult());
+    TReadDescription read = MakeReadDescription(snapshot, requestSorting, accessorConclusion.DetachResult());
 
     const NTrivial::TIndexScannerConstructor scannerConstructor(context);
     auto metadataConclusion = MakeReadMetadata(Self, Self->Counters.GetScanCounters(), scannerConstructor, read);

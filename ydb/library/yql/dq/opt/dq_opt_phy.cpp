@@ -3324,6 +3324,8 @@ TExprBase DqBuildJoin(
         hashJoin = EHashJoinMode::Map;
     } else if (joinAlgo == EJoinAlgoType::GraceJoin || joinAlgo == EJoinAlgoType::ReverseBlockJoin) {
         hashJoin = EHashJoinMode::Grace;
+    } else if (joinAlgo == EJoinAlgoType::Undefined && mapJoinCanBeApplied && !streaming) {
+        hashJoin = EHashJoinMode::Grace;
     }
 
     bool useHashJoin = EHashJoinMode::Off != hashJoin

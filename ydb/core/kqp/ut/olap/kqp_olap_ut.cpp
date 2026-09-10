@@ -1530,8 +1530,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto session = queryClient.GetSession().GetValueSync().GetSession();
         {
             const auto res = session.ExecuteQuery(R"(
-                INSERT INTO `/Root/foo` (id, str, u_str) VALUES
-                    (1, "hello", "hello")
+                INSERT INTO `/Root/foo` (id, str, u_str, json) VALUES
+                    (1, "hello", "hello", JsonDocument('{"body":"hello"}'))
             )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
         }
@@ -1555,6 +1555,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             "u_str ILIKE '%eLLo%'",
             "u_str ILIKE '%HeLLo%'",
             "u_str ILIKE '%LLL%'",
+            "JSON_VALUE(json, '$.body') ILIKE '%ELL%'",
         };
 
         std::vector<TString> expectedResults = {
@@ -1576,6 +1577,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             "[[1]]",
             "[[1]]",
             "[]",
+            "[[1]]",
         };
 
         UNIT_ASSERT_EQUAL(expectedResults.size(), predicates.size());

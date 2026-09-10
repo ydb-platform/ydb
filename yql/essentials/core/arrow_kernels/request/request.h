@@ -48,6 +48,7 @@ public:
 
     ui32 AddUnaryOp(EUnaryOp op, const TTypeAnnotationNode* arg1Type, const TTypeAnnotationNode* retType);
     ui32 AddBinaryOp(EBinaryOp op, const TTypeAnnotationNode* arg1Type, const TTypeAnnotationNode* arg2Type, const TTypeAnnotationNode* retType);
+    ui32 Cast(const TTypeAnnotationNode* argType, const TTypeAnnotationNode* retType, bool safe);
     ui32 AddIf(const TTypeAnnotationNode* conditionType, const TTypeAnnotationNode* thenType, const TTypeAnnotationNode* elseType);
     ui32 Udf(const TString& name, bool isPolymorphic, const TTypeAnnotationNode::TListType& argTypes, const TTypeAnnotationNode* retType);
     ui32 AddScalarApply(const TExprNode& lambda, const TTypeAnnotationNode::TListType& argTypes, TExprContext& ctx);

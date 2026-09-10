@@ -22,6 +22,7 @@
 #include "mkql_block_logical.h"
 #include "mkql_block_map_join.h"
 #include "mkql_block_compress.h"
+#include "mkql_block_cast.h"
 #include "mkql_block_skiptake.h"
 #include "mkql_block_top.h"
 #include "mkql_callable.h"
@@ -324,6 +325,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"BlockXor", &WrapBlockXor},
         {"BlockNot", &WrapBlockNot},
         {"BlockJust", &WrapBlockJust},
+        {"BlockCast", &WrapBlockCast},
         {"BlockCompress", &WrapBlockCompress},
         {"BlockAsTuple", &WrapBlockAsContainer},
         {"BlockAsStruct", &WrapBlockAsContainer},

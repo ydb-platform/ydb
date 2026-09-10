@@ -312,6 +312,7 @@ public:
     TRuntimeNode BlockDynamicVariant(TRuntimeNode item, TRuntimeNode index, TType* variantType);
     TRuntimeNode BlockIf(TRuntimeNode condition, TRuntimeNode thenBranch, TRuntimeNode elseBranch);
     TRuntimeNode BlockJust(TRuntimeNode data);
+    TRuntimeNode BlockCast(TRuntimeNode data, TType* type, bool safe);
 
     TRuntimeNode BlockFunc(const std::string_view& funcName, TType* returnType, const TArrayRef<const TRuntimeNode>& args);
     TRuntimeNode BlockCombineAll(TRuntimeNode flow, std::optional<ui32> filterColumn,

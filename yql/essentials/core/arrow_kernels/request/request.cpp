@@ -83,6 +83,13 @@ ui32 TKernelRequestBuilder::AddBinaryOp(EBinaryOp op, const TTypeAnnotationNode*
     return Items_.size() - 1;
 }
 
+ui32 TKernelRequestBuilder::Cast(const TTypeAnnotationNode* argType, const TTypeAnnotationNode* retType, bool safe) {
+    const TGuard<TScopedAlloc> allocGuard(Alloc_);
+    const auto arg = MakeArg(argType);
+    Items_.emplace_back(Pb_.BlockCast(arg, MakeType(retType), safe));
+    return Items_.size() - 1;
+}
+
 ui32 TKernelRequestBuilder::AddIf(const TTypeAnnotationNode* conditionType, const TTypeAnnotationNode* thenType, const TTypeAnnotationNode* elseType) {
     const TGuard<TScopedAlloc> allocGuard(Alloc_);
     const auto arg1 = MakeArg(conditionType);

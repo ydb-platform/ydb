@@ -218,28 +218,29 @@ static size_t ReadDistinctGroupHeads(std::shared_ptr<TTopicSdkTestSetup>& setup)
     const TInstant deadline = TDuration::Seconds(40).ToDeadLine();
     auto& runtime = setup->GetRuntime();
     const size_t expectedGroups = HEAD_GROUPS + TAIL_GROUPS; // 15
-    size_t best = 0;
+    TSet<TString> groups;
     for (size_t i = 0; TInstant::Now() < deadline; ++i) {
-        if (i > 0) {
-            Sleep(TDuration::MilliSeconds(250));
-        }
         CreateReaderActor(runtime, {
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .WaitTime = TDuration::Seconds(2),
-            .ProcessingTimeout = TDuration::MilliSeconds(1),
+            .ProcessingTimeout = TDuration::Seconds(60),
             .MaxNumberOfMessage = static_cast<ui32>(expectedGroups),
         });
         auto response = GetReadResponse(runtime, TDuration::Seconds(10));
         UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
-        best = std::max(best, response->Messages.size());
-        if (best == expectedGroups) {
+        for (const auto& message : response->Messages) {
+            auto [it, ins] = groups.insert(message.MessageGroupId);
+            UNIT_ASSERT_C(ins, LabeledOutput(message.MessageGroupId));
+        }
+        if (groups.size() == expectedGroups) {
             break;
         }
-        Cerr << ">>>>> attempt " << i << ": read " << response->Messages.size() << " groups" << Endl;
+        Cerr << ">>>>> attempt " << i << ": read " << response->Messages.size() << " groups; totalGroups = " << groups.size() << Endl;
+        Sleep(TDuration::MilliSeconds(1000));
     }
-    return best;
+    return grroups.size();
 }
 
 static void MLPUnlockedGroupsReadAllGroupsImpl(float ratio) {

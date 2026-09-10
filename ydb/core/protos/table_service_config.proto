@@ -71,7 +71,7 @@ message TTableServiceConfig {
         // memory availability instead of the allocator yellow zone and give memory back explicitly.
         // Off: the operators use the allocator heuristics only. Takes effect once the operators consult the
         // bound quota (the operator side of the RFC); until then the flag only binds the quota.
-        optional bool EnableOperatorMemoryQuota = 34 [default = false];
+        optional bool EnableOperatorMemoryQuota = 34 [default = true];
     }
 
     message TSpillingServiceConfig {

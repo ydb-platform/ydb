@@ -92,13 +92,12 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
         && !LWPROBE_ENABLED(ProgramCheckHeaderData)
         && !LWPROBE_ENABLED(ProgramStreamLogic)
         && !LWPROBE_ENABLED(ProgramReserveMemory)) {
-        source->MutableExecutionContext().SetPrevCategoryName(currentCategoryName);
-        source->MutableExecutionContext().SetPrevExecutionResult(currentExecutionResult);
         return;
     }
     const auto& step = source->GetExecutionContext().GetCursorStep();
-    const TString tracingName = source->GetExecutionContext().GetPrevCategoryName() + " - " + currentCategoryName;
-    const TString tracingExecutionResult = source->GetExecutionContext().GetPrevExecutionResult() + " - " + currentExecutionResult;
+    const auto prevTracing = source->GetExecutionContext().GetPrevNodeTracing();
+    const TString tracingName = prevTracing.CategoryName + " - " + currentCategoryName;
+    const TString tracingExecutionResult = prevTracing.ExecutionResult + " - " + currentExecutionResult;
     const TDuration finishDurationMs = source->GetAndResetWaitDuration();
     const auto processorType = processor->GetProcessorType();
     const TString details = processor->DebugJson().GetStringRobust();
@@ -245,8 +244,6 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
 #undef PROGRAM_PROBE_ARGS
 #undef PROGRAM_PROBE_RESERVED
 #undef PROGRAM_PROBE_TAIL
-    source->MutableExecutionContext().SetPrevCategoryName(currentCategoryName);
-    source->MutableExecutionContext().SetPrevExecutionResult(currentExecutionResult);
 }
 
 NO_SANITIZE_THREAD
@@ -290,6 +287,7 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
 
         const TString currentExecutionResult = conclusion.IsFail() ? "Fail" : ToString(*conclusion);
         ReportTracing(source, executionDurationMs, currentExecutionResult, tracingNodeId, tracingCategoryName, tracingProcessor);
+        source->MutableExecutionContext().SetPrevNodeTracing(tracingNodeId, conclusion);
         if (conclusion.IsFail()) {
             source->MutableExecutionContext().OnFailedProgramStepExecution();
             return conclusion;

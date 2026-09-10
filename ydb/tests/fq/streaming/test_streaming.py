@@ -1140,6 +1140,9 @@ FROM `{table_name}`"""
         self.wait_completed_checkpoints(kikimr, query_name)
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         self.wait_completed_checkpoints(kikimr, query_name)
+        kikimr.ydb_client.query(f"""
+            DROP STREAMING QUERY `{query_name}`;
+        """)
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic_restore_state(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
@@ -1311,6 +1314,9 @@ FROM `{table_name}`"""
         assert self.read_stream(message_count, topic_path=self.output_topic, endpoint=endpoint) == ["time to lunch" for i in range(message_count)]
 
         kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
+        kikimr.ydb_client.query(f"""
+            DROP STREAMING QUERY `{name}`;
+        """)
 
     @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
     @pytest.mark.parametrize("local_topics", [True, False])
@@ -1733,6 +1739,9 @@ FROM `{table_name}`"""
         # After restart the newly written records can reach the table while the
         # delayed records expected below are being validated.
         validate_table(expected_data2, allow_extra_rows=True)
+        kikimr.ydb_client.query(f"""
+            DROP STREAMING QUERY `{query_name}`;
+        """)
 
     @link_test_case("#46139")
     @pytest.mark.parametrize("local_topics", [True, False])
@@ -1953,6 +1962,9 @@ FROM `{table_name}`"""
             ALTER STREAMING QUERY `{path}` SET (RUN = TRUE);
         """)
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        second_ydb_client.query(f"""
+            DROP STREAMING QUERY `{path}`;
+        """)
 
     @link_test_case("#47255")
     @pytest.mark.parametrize("local_topics", [True, False])
@@ -2121,6 +2133,9 @@ FROM `{table_name}`"""
         # After restart, records written before the query was stopped can be
         # persisted while the expected delayed records are being validated.
         validate_table(expected_data2, allow_extra_rows=True)
+        kikimr.ydb_client.query(f"""
+            DROP STREAMING QUERY `{query_name}`;
+        """)
 
     @link_test_case("#47257")
     @pytest.mark.parametrize("local_topics", [True, False])
@@ -2351,6 +2366,9 @@ FROM `{table_name}`"""
         second_node = list(kikimr.cluster.slots.values())[1]
         second_ydb_client = YdbClient.from_driver_config(database=kikimr.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
         check_issues(get_issues(client=second_ydb_client), "Lease expired")
+        kikimr.ydb_client.query(f"""
+            DROP STREAMING QUERY `{path}`;
+        """)
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_restart_query_after_partition_increase(

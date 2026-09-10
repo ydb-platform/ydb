@@ -59,12 +59,14 @@ _CSS = (
     'tion:none}a:hover{text-decoration:underline}button,input,select,textarea{font:inherit}button{cursor:pointer;border:1px s'
     'olid #667085;border-radius:5px;background:#fff;color:var(--text);padding:.38rem .65rem}button.primary{background:var(--a'
     'ccent);color:#fff;border-color:var(--accent)}button.danger{color:var(--bad);border-color:var(--bad)}button:disabled{opac'
-    'ity:.5;cursor:not-allowed}.shell{display:grid;grid-template-columns:14rem minmax(0,1fr);min-height:100vh}.sidebar{paddin'
-    'g:1.4rem 1rem;background:#172033;color:#fff}.brand{font-weight:700;font-size:1.05rem;margin:0 0 1.7rem}.sidebar a{displa'
-    'y:block;color:#d6e2f7;padding:.55rem .65rem;border-radius:5px;margin:.15rem 0}.sidebar a.active,.sidebar a:hover{color:#'
-    'fff;background:#315882;text-decoration:none}.content{min-width:0}.topbar{min-height:3.7rem;border-bottom:1px solid #d0d5'
-    'dd;padding:.8rem 1.6rem;display:flex;justify-content:space-between;gap:1rem;align-items:center}.topbar .active-run{font-'
-    'size:.9rem;color:var(--muted)}main{max-width:1160px;padding:1.5rem 1.6rem 3rem}.breadcrumbs{color:var(--muted);font-size'
+    'ity:.5;cursor:not-allowed}.shell{min-height:100vh}.brand{font-weight:700;font-size:1.05rem;white-space:nowrap;'
+    'color:var(--text)}.content{min-width:0}.topbar{min-height:3.7rem;border-bottom:1px solid #d0d5dd;'
+    'padding:0 1.6rem;display:flex;flex-wrap:wrap;gap:0 1.6rem;align-items:center}.primary-nav{display:flex;'
+    'flex-wrap:wrap;gap:0 1.2rem}.primary-nav a{color:var(--muted);padding:1rem 0;border-bottom:2px solid transparent;'
+    'white-space:nowrap}.primary-nav a:hover{color:var(--accent);text-decoration:none}.primary-nav a[aria-current=page]{'
+    'color:var(--text);font-weight:650;border-bottom-color:var(--accent)}.topbar .active-run{font-size:.9rem;'
+    'color:var(--muted);margin-left:auto;min-width:0;max-width:100%;overflow-wrap:anywhere;padding:.6rem 0}'
+    'main{padding:1.5rem 1.6rem 3rem}.breadcrumbs{color:var(--muted);font-size'
     ':.9rem;margin:0 0 .6rem}.page-title{margin:0 0 1rem;font-size:1.5rem}.toolbar{display:flex;gap:.55rem;align-items:center'
     ';flex-wrap:wrap;margin:.8rem 0}.filters,.grid{display:grid;gap:.7rem}.filters{grid-template-columns:repeat(auto-fit,minm'
     'ax(10rem,1fr));background:var(--panel);padding:.8rem;border:1px solid #d0d5dd;border-radius:6px}.field{display:grid;gap:'
@@ -123,8 +125,8 @@ _CSS = (
     'f}.chart-bg-0{background:#1b62b9}.chart-bg-1{background:#c2410c}.chart-bg-2{background:#087443}.chart-bg-3{background:#7'
     'c3aed}.chart-bg-4{background:#be185d}.chart-bg-5{background:#0e7490}.chart-bg-6{background:#854d0e}.chart-bg-7{backgroun'
     'd:#94a3b8}.chart-bg-8{background:#ef4444}.chart-bg-9{background:#818cf8}.chart-bg-10{background:#22c55e}.chart-bg-11{bac'
-    'kground:#d946ef}@media(max-width:760px){.shell{display:block}.sidebar{padding:.7rem;display:flex;gap:.3rem;overflow:auto'
-    '}.brand{display:none}.sidebar a{white-space:nowrap}.topbar,main{padding-left:1rem;padding-right:1rem}.split,.topology-su'
+    'kground:#d946ef}@media(max-width:1000px){.primary-nav{order:3;flex-basis:100%}.primary-nav a{padding:.6rem 0}'
+    '.brand{padding:.6rem 0}}@media(max-width:760px){.topbar,main{padding-left:1rem;padding-right:1rem}.split,.topology-su'
     'mmary{grid-template-columns:1fr}}\n'
     '.grid,.grid>*{min-width:0}.run-tree{overflow:hidden}.run-tree details{min-width:0}.affinity-details>td>details{overflow:'
     'hidden}.affinity-details table{display:block;max-width:100%;overflow-x:auto}.modal-backdrop{position:fixed;inset:0;z-ind'
@@ -229,6 +231,9 @@ width:15rem;max-width:70vw;padding:.6rem;background:#fff;border:1px solid #d0d5d
 padding:.6rem;border:1px solid #d0d5dd;min-width:8rem;flex-direction:column}
 .dense-run summary{cursor:pointer}.runs-toolbar{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin:.8rem 0}
 .runs-actions{display:flex;gap:.6rem;flex-wrap:wrap;margin-left:auto}
+.runs-heading{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}
+.runs-heading .page-title{margin:0}.new-run-link{padding:.38rem .65rem;border-radius:5px;background:var(--accent);color:#fff;white-space:nowrap}
+.new-run-link:hover{color:#fff;text-decoration:none}
 .import-dialog{width:min(30rem,calc(100vw - 2rem));padding:1.2rem;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--text)}
 .import-dialog::backdrop{background:rgb(0 0 0 / 35%)}
 .import-dialog h2{margin-top:0}.import-dialog input{max-width:100%;margin:.8rem 0}
@@ -340,13 +345,18 @@ _JS = (
     "tep.duration_seconds)))return secondsLabel(step.duration_seconds);if(step.state==='running'&&step.started_at)return seco"
     "ndsLabel((Date.now()-Date.parse(step.started_at))/1000);return '—'}\n"
     'function status(value){return \'<span class="status \'+esc(value||\'unknown\')+\'">\'+esc(value||\'unknown\')+\'</span>\'}\n'
-    "function shell(current,body,breadcrumb=''){queueMicrotask(refreshActiveBanner);const navigation=[['runs','Runs'],['new','New run'],['topology','System topol"
-    "ogy'],['comparisons','Comparisons']];return '<div class=shell><aside class=sidebar><div class=brand>YDB benchmark</div>'"
-    '+navigation.map(([id,label])=>\'<a class="\'+(current===id?\'active\':\'\')+\'" href="#\'+id+\'">\'+label+\'</a>\').join(\'\')+\'</asid'
-    "e><div class=content><header class=topbar><strong>'+esc(current==='new'?'New run':current==='topology'?'System topology'"
-    ':current===\'comparisons\'?\'Comparisons\':\'Runs\')+\'</strong><span class=active-run>\'+ (activeRun?\'<a href="#run/\'+enc(activ'
-    'eRun)+\'">Active run: \'+esc(activeRun)+\'</a>\':\'No active run\')+\'</span></header><main>\'+breadcrumb+body+\'</main></div></d'
-    "iv>'}\n"
+    """
+function shell(current,body,breadcrumb=''){
+  queueMicrotask(refreshActiveBanner);
+  const navigation=[['runs','Runs'],['topology','System topology'],['comparisons','Comparisons']];
+  const section=current==='new'?'runs':current;
+  return '<div class=shell><div class=content><header class=topbar><a class=brand href="#runs">YDB benchmark</a>'+
+    '<nav class=primary-nav aria-label="Main navigation">'+navigation.map(([id,label])=>
+      '<a href="#'+id+'"'+(section===id?' aria-current="page"':'')+'>'+label+'</a>').join('')+
+    '</nav><span class=active-run>'+(activeRun?'<a href="#run/'+enc(activeRun)+'">Active run: '+esc(activeRun)+'</a>':
+      'No active run')+'</span></header><main>'+breadcrumb+body+'</main></div></div>'
+}
+"""
     "function breadcrumbs(items){return items.length?'<div class=breadcrumbs>'+items.map((item,index)=>index===items.length-1"
     '?esc(item.label):\'<a href="#\'+esc(item.route)+\'">\'+esc(item.label)+\'</a>\').join(\' / \')+\'</div>\':\'\'}\n'
     "function saveDraft(){sessionStorage.setItem('ydb-bench-draft',editor.yaml)}\n"
@@ -1134,7 +1144,8 @@ function compactRun(run){
 }
 async function renderRuns(){
   clearRefresh();
-  app.innerHTML=shell('runs','<h1 class=page-title>Runs</h1>'+runFilters()+
+  app.innerHTML=shell('runs','<div class=runs-heading><h1 class=page-title>Runs</h1>'+
+    '<a class=new-run-link href="#new"><span aria-hidden=true>+</span> New run</a></div>'+runFilters()+
     '<div class=runs-toolbar><label>Sort <select id=runs-sort>'+
     '<option value=newest>Newest first</option><option value=oldest>Oldest first</option>'+
     '<option value=longest>Longest first</option></select></label><div class=runs-actions><button id=open-import>Import</button>'+

@@ -7875,6 +7875,38 @@ class WebTest(unittest.TestCase):
         self.assertEqual(model["complete"]["status"], "completed")
         self.assertEqual(model["imported"]["source"], "imported")
 
+    @unittest.skipUnless(shutil.which("node"), "node is required for navigation checks")
+    def test_web_top_navigation(self):
+        script = web._JS[web._JS.index("function shell(") : web._JS.index("function breadcrumbs(")]
+        script += """
+        const assert=require('assert'),enc=encodeURIComponent;
+        const esc=value=>String(value).replaceAll('<','&lt;').replaceAll('"','&quot;');
+        let refreshes=0,activeRun=null;
+        const queueMicrotask=callback=>callback(),refreshActiveBanner=()=>{refreshes++};
+        for(const page of ['runs','new','topology','comparisons']){
+          const html=shell(page,'<h1>Content</h1>','<div>Breadcrumb</div>');
+          assert(html.includes('<nav class=primary-nav aria-label="Main navigation">'));
+          assert(html.includes('href="#'+(page==='new'?'runs':page)+'" aria-current="page"'));
+          assert(!html.includes('href="#new"'));
+          assert.equal((html.match(/aria-current="page"/g)||[]).length,1);
+          assert(!html.includes('sidebar')&&!html.includes('<aside'));
+          assert(html.includes('No active run'));
+          assert(html.includes('<main><div>Breadcrumb</div><h1>Content</h1></main>'));
+          for(const destination of ['runs','topology','comparisons'])assert(html.includes('href="#'+destination+'"'));
+        }
+        activeRun='run/<tag>';
+        const html=shell('runs','');
+        assert(html.includes('href="#run/run%2F%3Ctag%3E"'));
+        assert(html.includes('Active run: run/&lt;tag>'));
+        assert.equal(refreshes,5);
+        """
+        subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True, timeout=10)
+
+    def test_new_run_link_is_in_runs_heading(self):
+        runs = web._JS.split("async function renderRuns(){", 1)[1].split("async function", 1)[0]
+        self.assertIn('<div class=runs-heading><h1 class=page-title>Runs</h1>', runs)
+        self.assertIn('<a class=new-run-link href="#new"><span aria-hidden=true>+</span> New run</a></div>', runs)
+
     @unittest.skipUnless(shutil.which("node"), "node is required for the compact Runs UI test")
     def test_web_compact_runs_sorting_and_tabs(self):
         helpers = web._JS[web._JS.index("function sectionTabs") : web._JS.index("let activeBannerLoading")]

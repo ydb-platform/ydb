@@ -1,5 +1,0 @@
-<tmp_path>/program.sql:<main>: Warning: Parse Sql
-
-    <tmp_path>/program.sql:<main>:38:1: Warning: Symbol $str is not used
-    	$str = ($x) -> {
-	^

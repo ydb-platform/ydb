@@ -4,30 +4,6 @@
 
 namespace NSQLTranslationV1 {
 
-namespace {
-
-bool StoreString(const TRule_table_setting_value& from, TDeferredAtom& to, TContext& ctx, const TString& errorPrefix = {}) {
-    switch (from.Alt_case()) {
-        case TRule_table_setting_value::kAltTableSettingValue2: {
-            // STRING_VALUE
-            const TString stringValue(ctx.Token(from.GetAlt_table_setting_value2().GetToken1()));
-            auto unescaped = StringContent(ctx, ctx.Pos(), stringValue);
-            if (!unescaped) {
-                ctx.Error() << errorPrefix << " value cannot be unescaped";
-                return false;
-            }
-            to = TDeferredAtom(ctx.Pos(), unescaped->Content);
-            break;
-        }
-        default:
-            ctx.Error() << errorPrefix << " value should be a string literal";
-            return false;
-    }
-    return true;
-}
-
-} // namespace
-
 bool TBackupTranslation::StoreStringSettingsEntry(
     const TIdentifier& id,
     const TRule_table_setting_value* value,

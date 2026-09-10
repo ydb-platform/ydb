@@ -1,6 +1,0 @@
-SELECT
-    nullif(1, 2),
-    nullif(1, 1),
-    nullif(just(1), just(2)),
-    nullif(just(1), just(1))
-;

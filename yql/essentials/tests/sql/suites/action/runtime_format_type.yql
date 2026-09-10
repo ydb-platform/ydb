@@ -1,1 +1,0 @@
-select FormatType(TypeHandle(TypeOf(1)));

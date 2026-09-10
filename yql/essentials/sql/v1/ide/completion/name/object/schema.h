@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yql/essentials/utils/meta/reflection.h>
+
 #include <library/cpp/threading/future/core/future.h>
 
 #include <util/generic/string.h>
@@ -67,3 +69,9 @@ public:
 };
 
 } // namespace NSQLComplete
+
+namespace NYql::NReflection {
+
+YQL_DEFINE_REFLECTING(NSQLComplete::TFolderEntry, (Type)(Name));
+
+} // namespace NYql::NReflection

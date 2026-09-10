@@ -1,6 +1,0 @@
-SELECT
-    666 AS x
-INTERSECT
-SELECT
-    666 AS x
-;

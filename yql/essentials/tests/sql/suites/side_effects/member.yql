@@ -1,2 +1,0 @@
-/* custom error: Condition violated */
-select <|a:1,b:WithSideEffects(Ensure(2,false))|>.a

@@ -1,2 +1,0 @@
-$a, $b, $c = AsTuple(1, 5u, "test");
-select $a, $b, $c;

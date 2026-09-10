@@ -1,9 +1,0 @@
-use plato;
-
---insert into Output
-select
-  key,
-  max(TablePath()) as table_rec
-from Input
-group by key
-;

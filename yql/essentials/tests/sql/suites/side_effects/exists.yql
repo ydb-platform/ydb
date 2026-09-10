@@ -1,2 +1,0 @@
-/* custom error: Condition violated */
-select just(WithSideEffects(Ensure(1,false))) is not null

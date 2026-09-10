@@ -1,5 +1,0 @@
-pragma EmitAggApply;
-
-SELECT
-    some(key)
-FROM (values (null)) as a(key)

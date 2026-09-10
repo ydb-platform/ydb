@@ -1,3 +1,0 @@
-/* custom error: Condition violated */
-$t = WithSideEffects(Ensure(true,false));
-select $t == $t;

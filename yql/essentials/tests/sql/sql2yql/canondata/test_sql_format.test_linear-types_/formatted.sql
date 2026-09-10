@@ -1,8 +1,0 @@
-SELECT
-    FormatType(Linear<Int32>),
-    FormatType(LinearType(Int32)),
-    FormatType(DynamicLinear<Int32>),
-    FormatType(DynamicLinearType(Int32)),
-    FormatType(ParseType('Linear<Int32>')),
-    FormatType(LinearItemType(LinearType(Int32)))
-;

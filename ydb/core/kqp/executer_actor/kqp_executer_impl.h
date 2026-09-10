@@ -357,7 +357,7 @@ protected:
             bool hasColumnShardHashV1Input = false;
             for (const auto& input : stage.GetInputs()) {
                 if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kHashShuffle
-                        && input.GetHashShuffle().has_columnshardhashv1()) {
+                        && input.GetHashShuffle().GetHashKindCase() == NKqpProto::TKqpPhyCnHashShuffle::kColumnShardHashV1) {
                     hasColumnShardHashV1Input = true;
                     break;
                 }

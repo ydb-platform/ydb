@@ -161,11 +161,14 @@ void TPartitionQuoterBase::HandleConsumed(TEvPQ::TEvConsumed::TPtr& ev, const TA
         RequestsInflight--;
         ProcessInflightQueue();
     } else {
-        YDB_LOG_ERROR("Attempt to make the inflight counter below zero. Topic partition readCookie",
-            {"logPrefix", NPQ_LOG_PREFIX},
+        LOG_E(
+            "Attempt to make the inflight counter below zero. Topic partition readCookie",
             {"clientSideName", TopicConverter->GetClientsideName()},
-            {"partition", Partition},
-            {"requestCookie", ev->Get()->RequestCookie});
+                    {"partition",
+            Partition},
+                    {"requestCookie",
+            ev->Get()->RequestCookie}
+        );
     }
 
     if (!RequestsInflight && (ExclusiveLockState == EExclusiveLockState::EAcquiring)) {

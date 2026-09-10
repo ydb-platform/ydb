@@ -101,8 +101,9 @@ public:
         ctx.Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
     }
 
-    const TString& GetLogPrefix() const {
-        static const TString LogPrefix = "[MonitoringProxy]";
+    const TLogPrefix& GetLogPrefix() const {
+        static const TLogPrefix LogPrefix = YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "MonitoringProxy"});
         return LogPrefix;
     }
 
@@ -181,10 +182,11 @@ private:
             }
         }
 
-        YDB_LOG_DEBUG_COMP(Service, "Answer TEvRemoteHttpInfoRes: to self",
-            {"logPrefix", NPQ_LOG_PREFIX},
+        LOG_D(
+            "Answer TEvRemoteHttpInfoRes: to self",
             {"sender", Sender},
-            {"selfId", ctx.SelfID});
+            {"selfId", ctx.SelfID}
+        );
         ctx.Send(Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
         Die(ctx);
     }

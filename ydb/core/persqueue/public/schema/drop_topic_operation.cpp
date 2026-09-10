@@ -31,8 +31,10 @@ public:
         DoDescribe();
     }
 
-    TString BuildLogPrefix() const override {
-        return TStringBuilder() << ParentId << "[" << Settings.Path << "] ";
+    TLogPrefix BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "DropTopic"},
+            {"path", Settings.Path});
     }
 
     void OnException(const std::exception& exc) override {
@@ -41,8 +43,7 @@ public:
 
 private:
     void DoDescribe() {
-        YDB_LOG_DEBUG("DoDescribe",
-            {"logPrefix", NPQ_LOG_PREFIX});
+        LOG_D("DoDescribe");
         Become(&TDropTopicOperationActor::DescribeState);
 
         RegisterWithSameMailbox(NDescriber::CreateDescriberActor(
@@ -57,8 +58,7 @@ private:
     }
 
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle NDescriber::TEvDescribeTopicsResponse",
-            {"logPrefix", NPQ_LOG_PREFIX});
+        LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
 
         auto& topics = ev->Get()->Topics;
         AFL_ENSURE(topics.size() == 1)("s", topics.size());
@@ -98,8 +98,7 @@ private:
 
 private:
     void DoDrop() {
-        YDB_LOG_DEBUG("DoDrop",
-            {"logPrefix", NPQ_LOG_PREFIX});
+        LOG_D("DoDrop");
 
         Become(&TDropTopicOperationActor::DropState);
 
@@ -134,8 +133,7 @@ private:
     }
 
     void Handle(TEvSchemaOperationResponse::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle TEvSchemaOperationResponse",
-            {"logPrefix", NPQ_LOG_PREFIX});
+        LOG_D("Handle TEvSchemaOperationResponse");
         auto& response = *ev->Get();
         return ReplyAndDie(response.Status, std::move(response.ErrorMessage));
     }

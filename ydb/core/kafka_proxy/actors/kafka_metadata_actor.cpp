@@ -66,8 +66,10 @@ public:
         Become(&TTopicLocationActor::StateWork);
     }
 
-    TString BuildLogPrefix() const override {
-        return TStringBuilder() << "[TTopicLocationActor][" << Path << "]";
+    TLogPrefix BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TopicLocationActor"},
+            {"path", Path});
     }
 
     bool OnUnhandledException(const std::exception& exc) override {

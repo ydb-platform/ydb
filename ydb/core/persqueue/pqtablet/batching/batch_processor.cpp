@@ -21,10 +21,10 @@ void TBatchProcessor::Bootstrap(const NActors::TActorContext&) {
     Become(&TThis::StateWork);
 }
 
-TString TBatchProcessor::BuildLogPrefix() const {
-    // TBaseTabletActor::LogBuilder logs tablet id, not SelfId. TActorId already
-    // prints itself in [node:local:hint] form.
-    return TStringBuilder() << "[BatchProcessor]" << SelfId() << " ";
+TLogPrefix TBatchProcessor::BuildLogPrefix() const {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"actorClassName", "BatchProcessor"},
+        {"selfId", SelfId()});
 }
 
 NActors::TActorId TBatchProcessor::GetOrCreateConsumerProcessor(const TString& user) {
@@ -71,9 +71,10 @@ STFUNC(TBatchProcessor::StateWork) {
         HFunc(TEvPQ::TEvConsumerRemoved, HandleConsumerRemoved);
         HFunc(NActors::TEvents::TEvPoisonPill, Handle);
     default:
-        YDB_LOG_WARN("Unexpected event",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"inTBatchProcessor", ev->GetTypeRewrite()});
+        LOG_W(
+            "Unexpected event",
+            {"inTBatchProcessor", ev->GetTypeRewrite()}
+        );
         break;
     }
 }

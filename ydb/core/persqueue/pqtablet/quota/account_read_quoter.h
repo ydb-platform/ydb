@@ -160,7 +160,7 @@ public:
 
 protected:
     void InitCountersImpl(const TActorContext& ctx) override;
-    TString BuildLogPrefix() const override;
+    TLogPrefix BuildLogPrefix() const override;
     THolder<NAccountQuoterEvents::TEvCounters> MakeCountersUpdateEvent() override;
 
 private:
@@ -187,7 +187,7 @@ public:
 
 protected:
     void InitCountersImpl(const TActorContext& ctx) override;
-    TString BuildLogPrefix() const override;
+    TLogPrefix BuildLogPrefix() const override;
     THolder<NAccountQuoterEvents::TEvCounters> MakeCountersUpdateEvent() override;
 };
 

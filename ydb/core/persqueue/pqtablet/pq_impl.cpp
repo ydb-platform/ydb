@@ -272,8 +272,9 @@ public:
         ctx.Schedule(TOTAL_TIMEOUT, new TEvents::TEvWakeup());
     }
 
-    const TString& GetLogPrefix() const {
-        static const TString LogPrefix = "[BuilderProxy]";
+    const TLogPrefix& GetLogPrefix() const {
+        static const TLogPrefix LogPrefix = YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "BuilderProxy"});
         return LogPrefix;
     }
 

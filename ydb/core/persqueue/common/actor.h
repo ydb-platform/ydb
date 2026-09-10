@@ -4,27 +4,43 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/struct_log/text_writer.h>
 #include <ydb/library/services/services.pb.h>
 
-#define NPQ_LOG_PREFIX LogBuilder() << GetLogPrefix()
-#define LOG(level, stream) LOG_LOG_S (*NActors::TlsActivationContext, level, Service, NPQ_LOG_PREFIX << stream)
-#define LOG_T(stream) LOG_TRACE_S (*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << stream)
-#define LOG_D(stream) LOG_DEBUG_S (*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << stream)
-#define LOG_I(stream) LOG_INFO_S  (*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << stream)
-#define LOG_N(stream) LOG_NOTICE_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << stream)
-#define LOG_W(stream) LOG_WARN_S  (*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << stream)
-#define LOG_E(stream) LOG_ERROR_S (*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << stream)
-#define LOG_C(stream) LOG_CRIT_S  (*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << stream)
-#define LOG_A(stream) LOG_ALERT_S (*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << stream)
+#define NPQ_LOG_PREFIX ::NKikimr::NPQ::MakeNpqLogPrefix(this->LogBuilder(), this->GetLogPrefix())
+#define LOG(level, T, ...) YDB_LOG_COMP(level, this->Service, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
+#define LOG_T(T, ...) YDB_LOG_TRACE_COMP(this->Service, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
+#define LOG_D(T, ...) YDB_LOG_DEBUG_COMP(this->Service, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
+#define LOG_I(T, ...) YDB_LOG_INFO_COMP(this->Service, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
+#define LOG_N(T, ...) YDB_LOG_NOTICE_COMP(this->Service, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
+#define LOG_W(T, ...) YDB_LOG_WARN_COMP(this->Service, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
+#define LOG_E(T, ...) YDB_LOG_ERROR_COMP(this->Service, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
+#define LOG_C(T, ...) YDB_LOG_CRIT_COMP(this->Service, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
+#define LOG_A(T, ...) YDB_LOG_ALERT_COMP(this->Service, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
 
 namespace NKikimr::NPQ {
 
-void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, const TStringBuf prefix, const std::exception& exc);
+using TLogPrefix = NActors::NStructuredLog::TStructuredMessage;
+
+inline TLogPrefix MakeNpqLogPrefix(TLogPrefix builder, const TLogPrefix& prefix) {
+    builder.AppendMessage(prefix);
+    return builder;
+}
+
+inline TString StructuredLogPrefixText(const TLogPrefix& prefix) {
+    TStringBuilder out;
+    NActors::NStructuredLog::TTextWriter writer;
+    writer.Write(out, prefix);
+    return out;
+}
+
+void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, const TLogPrefix& prefix, const std::exception& exc);
+void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, TStringBuf prefix, const std::exception& exc);
 
 namespace NPrivate {
     class ILogPrefixBase {
     public:
-        virtual const TString& GetLogPrefix() const = 0;
+        virtual const TLogPrefix& GetLogPrefix() const = 0;
     protected:
         ~ILogPrefixBase() = default;
     };
@@ -64,8 +80,9 @@ public:
         Y_UNUSED(exc);
     }
 
-    TStringBuilder LogBuilder() const {
-        return TStringBuilder() << TBase::SelfId();
+    TLogPrefix LogBuilder() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"selfId", TBase::SelfId()});
     }
 
     void PassAway() override {
@@ -107,8 +124,9 @@ public:
         self.Send(TabletActorId, new NActors::TEvents::TEvPoison());
     }
 
-    TStringBuilder LogBuilder() const {
-        return TStringBuilder() << "[" << TabletId << "]";
+    TLogPrefix LogBuilder() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"tabletId", TabletId});
     }
 
 protected:
@@ -119,13 +137,13 @@ protected:
 
 class TConstantLogPrefix: virtual public NPrivate::ILogPrefixBase {
 public:
-    const TString& GetLogPrefix() const final;
-    virtual TString BuildLogPrefix() const {
-        return " ";
+    const TLogPrefix& GetLogPrefix() const final;
+    virtual TLogPrefix BuildLogPrefix() const {
+        return {};
     }
 
 private:
-    mutable TMaybe<TString> LogPrefix_;
+    mutable TMaybe<TLogPrefix> LogPrefix_;
 };
 
 class TPipeCacheClient {

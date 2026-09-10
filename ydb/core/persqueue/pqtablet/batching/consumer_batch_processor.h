@@ -16,7 +16,7 @@ public:
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(NActors::TEvents::TEvPoisonPill::TPtr& ev, const NActors::TActorContext& ctx);
 
-    const TString& GetLogPrefix() const override;
+    const TLogPrefix& GetLogPrefix() const override;
 
 private:
     STFUNC(StateWork);
@@ -24,7 +24,7 @@ private:
 
 private:
     const TString User;
-    TString LogPrefix;
+    TLogPrefix LogPrefix;
 
     // codec -> batch cutter
     THashMap<int, THolder<IBatchCutter>> BatchCutters;

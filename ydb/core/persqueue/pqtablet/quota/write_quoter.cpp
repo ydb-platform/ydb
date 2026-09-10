@@ -1,6 +1,7 @@
 #include "write_quoter.h"
 
 #include <ydb/core/persqueue/public/config.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ  {
 
@@ -23,8 +24,10 @@ TWriteQuoter::TWriteQuoter(
 {
 }
 
-TString TWriteQuoter::BuildLogPrefix() const {
-    return TStringBuilder() << "[WriteQuoter][" << Partition << "] ";
+TLogPrefix TWriteQuoter::BuildLogPrefix() const {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"actorClassName", "WriteQuoter"},
+        {"partition", Partition.ToString()});
 }
 
 void TWriteQuoter::Bootstrap(const TActorContext& ctx) {

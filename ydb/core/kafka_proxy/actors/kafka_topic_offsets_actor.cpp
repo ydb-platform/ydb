@@ -50,8 +50,10 @@ public:
         Become(&TTopicOffsetsActor::StateWork);
     }
 
-    TString BuildLogPrefix() const override {
-        return TStringBuilder() << "[TTopicOffsetsActor][" << Settings.Path << "]";
+    TLogPrefix BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TopicOffsetsActor"},
+            {"path", Settings.Path});
     }
 
     bool OnUnhandledException(const std::exception& exc) override {

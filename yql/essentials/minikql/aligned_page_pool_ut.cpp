@@ -27,7 +27,7 @@ public:
         void* Addr;
         size_t Size;
         bool Needed;
-        bool operator==(const TMadviseEntry& rhs) {
+        bool operator==(const TMadviseEntry& rhs) const {
             return std::tie(Addr, Size, Needed) == std::tie(rhs.Addr, rhs.Size, rhs.Needed);
         }
     };

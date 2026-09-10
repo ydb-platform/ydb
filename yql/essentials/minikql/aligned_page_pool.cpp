@@ -120,11 +120,15 @@ public:
         if constexpr (ReserveFreedPages) {
             void* page = nullptr;
             if (ReservedPages_.Dequeue(&page)) {
-                auto res = Provider_.Madvise(page, PageSize_, /*needed=*/true);
-                Y_DEBUG_ABORT_UNLESS(0 == res, "Madvise failed: %s", LastSystemErrorText());
-                TotalMmappedBytes_ += PageSize_;
-                NYql::NUdf::SanitizerMakeRegionInaccessible(page, PageSize_);
-                return page;
+                if (Y_LIKELY(0 == Provider_.Madvise(page, PageSize_, /*needed=*/true))) {
+                    TotalMmappedBytes_ += PageSize_;
+                    NYql::NUdf::SanitizerMakeRegionInaccessible(page, PageSize_);
+                    return page;
+                }
+
+                // The region is still reserved, but the OS refused to back it with the memory
+                // right now. Keep it for the further attempts and let the caller map a new one.
+                ReservedPages_.Enqueue(page);
             }
         }
 
@@ -171,15 +175,19 @@ private:
     void FreePage(void* addr) noexcept {
         if constexpr (ReserveFreedPages) {
             NYql::NUdf::SanitizerMakeRegionInaccessible(addr, PageSize_);
-            auto res = Provider_.Madvise(addr, PageSize_, /*needed=*/false);
-            Y_DEBUG_ABORT_UNLESS(0 == res, "Madvise failed: %s", LastSystemErrorText());
-            ReservedPages_.Enqueue(addr);
+            if (Y_LIKELY(0 == Provider_.Madvise(addr, PageSize_, /*needed=*/false))) {
+                ReservedPages_.Enqueue(addr);
+            } else {
+                // The memory of the region is still held by the process, so there is no point
+                // in keeping its address space reserved - drop the whole mapping.
+                UnmapPage(addr);
+            }
         } else {
             UnmapPage(addr);
         }
 
         i64 prev = TotalMmappedBytes_.fetch_sub(PageSize_);
-        Y_DEBUG_ABORT_UNLESS(prev >= 0);
+        Y_DEBUG_ABORT_UNLESS(prev >= i64(PageSize_));
     }
 
     void UnmapPage(void* addr) noexcept {

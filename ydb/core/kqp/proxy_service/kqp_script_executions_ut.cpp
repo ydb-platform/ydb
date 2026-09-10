@@ -27,12 +27,6 @@ using namespace fmt::literals;
 
 namespace  {
 
-// Pin the IHTTPGateway singleton for the lifetime of the test binary so
-// curl_global_cleanup (which clears c-ares) does not race with gRPC threads
-// still using c-ares during test tear-down.
-[[maybe_unused]] const auto& g_HttpGatewayHolder =
-    NYql::NTestHelpers::GetGlobalHttpGatewayHolder();
-
 constexpr TDuration TestLeaseDuration = TDuration::Seconds(1);
 constexpr TDuration TestTimeout = TDuration::Seconds(10);
 constexpr TDuration TestOperationTtl = TDuration::Minutes(1);

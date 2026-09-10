@@ -1334,7 +1334,7 @@ static void WriteReadAheadDataset(std::shared_ptr<TTopicSdkTestSetup>& setup, co
         .Messages = std::move(messages),
     });
     auto response = GetWriteResponse(runtime);
-    UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::Success);
     UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), kReadAheadUniqueGroups);
 }
 

@@ -7,13 +7,13 @@
 namespace NKikimr::NPQ::NMLP {
 
 size_t EstimateFetchCountForNewGroups(size_t inflightMessageCount, size_t inflightGroupCount, size_t desiredNewGroups) {
-    if (desiredNewGroups == 0) {
-        return 0;
+    if (inflightMessageCount == 0 || desiredNewGroups == 0) {
+        return desiredNewGroups;
     }
-    const size_t messagesPerGroup = inflightGroupCount == 0
-        ? 1
-        : std::max<size_t>(1, (inflightMessageCount + inflightGroupCount - 1) / inflightGroupCount);
-    return desiredNewGroups * messagesPerGroup;
+    const float messagesPerGroup = static_cast<float>(inflightMessageCount) / inflightGroupCount;
+    const float messages = desiredNewGroups * messagesPerGroup;
+    const size_t result = std::ceil(messages);
+    return result;
 }
 
 std::unique_ptr<TEvPersQueue::TEvRequest> MakeEvPQRead(

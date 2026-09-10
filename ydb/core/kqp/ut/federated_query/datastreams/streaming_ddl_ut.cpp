@@ -139,7 +139,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             END DO;
         )");
 
-        WaitForRowDispatcherMemoryLimit(*this, "failed to reserve 16777216 bytes for topic read session");
+        WaitForRowDispatcherMemoryLimit(*this, "failed to reserve 16000000 bytes for topic read session");
         const auto formatCounters = GetCounters()->GetSubgroup("subsystem", "row_dispatcher")->GetSubgroup("format", "raw");
         UNIT_ASSERT(formatCounters->FindCounter("ActiveFilters"));
         UNIT_ASSERT(!pqGateway->ExtractReadSession("memoryLimitInput"));

@@ -140,6 +140,7 @@ class TestStreamingLarge(StreamingTestBase):
             shared=True,
             partitions_count=9
         )
+
         node1 = kikimr.cluster.slots[len(kikimr.cluster.slots)]
         node1.stop()
 
@@ -175,7 +176,7 @@ class TestStreamingLarge(StreamingTestBase):
         node2 = kikimr.cluster.slots[stop_node_id]
         node2.stop()
         node1.start()
-        kikimr.recreate_driver()
+        kikimr.recreate_driver(1)
 
         def write_read(i):
             value = f"value {i}"

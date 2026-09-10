@@ -596,13 +596,26 @@ message TEvExecuterStreamProfile {
     optional NYql.NDqProto.TDqExecutionStats Profile = 2;
 };
 
-// 1. Executer fills progress stats from it's own execution
-// 2. Session adds stats from early finished executions and builds complete plan
+message TCurrentExecutionStats {
+    optional uint64 DurationUs = 1;
+    optional uint64 CpuTimeUs = 2;
+    // Current compute task quota, excluding channel quota; not RSS or peak memory.
+    optional uint64 ComputeMemoryBytes = 3;
+    // These counters may overlap and must not be added together.
+    optional uint64 TableReadBytes = 4;
+    optional uint64 SourceReadBytes = 5;
+}
+
+// 1. Executer fills progress stats from its own execution.
+// 2. Session adds stats from earlier executions and builds the complete plan.
+// CurrentExecutionStats remains a snapshot of the reporting execution.
 message TEvExecuterProgress {
     optional NActorsProto.TActorId ExecuterActorId = 1;
     optional string QueryPlan = 2;
     optional NKqpProto.TKqpStatsQuery QueryStats = 3;
     optional string QueryAst = 4;
+    // Latest snapshot of the reporting physical execution only.
+    optional TCurrentExecutionStats CurrentExecutionStats = 5;
 };
 
 message TKqpProxyNodeResources {

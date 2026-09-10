@@ -922,6 +922,13 @@ protected:
                     auto now = TInstant::Now();
                     if (LastProgressStats + Request.ProgressStatsPeriod <= now) {
                         auto progress = MakeHolder<TEvKqpExecuter::TEvExecuterProgress>();
+                        const auto current = Stats->GetCurrentExecStats(now);
+                        auto& currentProto = *progress->Record.MutableCurrentExecutionStats();
+                        currentProto.SetDurationUs(current.DurationUs);
+                        currentProto.SetCpuTimeUs(current.CpuTimeUs);
+                        currentProto.SetComputeMemoryBytes(current.ComputeMemoryBytes);
+                        currentProto.SetTableReadBytes(current.TableReadBytes);
+                        currentProto.SetSourceReadBytes(current.SourceReadBytes);
                         auto& execStats = *progress->Record.MutableQueryStats()->AddExecutions();
                         Stats->ExportExecStats(execStats);
                         for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {

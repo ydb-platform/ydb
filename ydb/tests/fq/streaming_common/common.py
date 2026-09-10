@@ -468,6 +468,7 @@ class Kikimr:
 
         self.first_node = random.choice(list(self.cluster.slots.values()))
         self.endpoint = Endpoint(f"{self.first_node.host}:{self.first_node.port}", tenant_database)
+        self.recreate_driver()
         logger.info(f"Creating ydb client to {self.endpoint}, database={self.endpoint.database}")
         self.ydb_client = self._setup_ydb_client(self.endpoint, enable_discovery)
 
@@ -478,11 +479,16 @@ class Kikimr:
             self.external_endpoint = Endpoint(os.getenv("YDB_ENDPOINT"), os.getenv("YDB_DATABASE"))
             self.external_ydb_client = self._setup_ydb_client(self.external_endpoint, enable_discovery)
 
-    def recreate_driver(self):
-        self.ydb_client.stop()
-        self.ydb_client = YdbClient(
-            database=self.endpoint.database, endpoint=f"grpc://{self.endpoint.endpoint}", enable_discovery=False
-        )
+    def recreate_driver(self, node_id = None):
+        if hasattr(self, "ydb_client"):
+            self.ydb_client.stop()
+
+        if node_id is None:
+            node_id = random.choice(list(self.cluster.slots.keys()))
+        node = self.cluster.slots[node_id]
+        self.endpoint = Endpoint(f"{node.host}:{node.port}", self.get_database_name())
+
+        self.ydb_client = self._setup_ydb_client(self.endpoint, enable_discovery=False)
 
     @staticmethod
     def _setup_ydb_client(endpoint: Endpoint, enable_discovery: bool) -> YdbClient:
@@ -718,4 +724,5 @@ class StreamingTestBase(TestYdsBase):
             logger.info(f"upgrading {role} {node_id}")
             node.stop()
             node.start()
+            kikimr.recreate_driver()
             yield

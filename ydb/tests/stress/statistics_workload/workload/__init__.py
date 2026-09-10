@@ -203,7 +203,7 @@ class Workload(object):
         logger.info(f"planner row count estimate: {rc}")
         return rc
 
-    def execute(self, table_name=None, table_path=None, drop=True, raise_on_error=True):
+    def execute(self, table_name=None, table_path=None, drop=True):
         create = table_name is None
         if table_name is None:
             table_name = table_name_with_prefix(self.table_prefix)
@@ -253,8 +253,7 @@ class Workload(object):
                 self.wait_for_planner_row_count_estimate(table_name, expected_count, trace_id)
         except Exception as e:
             logger.error(f"[{trace_id}] {type(e)}, {e}")
-            if raise_on_error:
-                raise
+            raise
 
         finally:
             if drop:
@@ -279,10 +278,7 @@ class Workload(object):
         table_name = self._prepared_table_name()
         table_path = self._prepared_table_path()
         while time.time() - started_at < self.duration:
-            try:
-                self.execute(table_name=table_name, table_path=table_path, drop=False, raise_on_error=False)
-            except Exception as e:
-                logger.error(f"{type(e)}, {e}")
+            self.execute(table_name=table_name, table_path=table_path, drop=False)
 
     def run(self):
         started_at = time.time()

@@ -36,8 +36,8 @@ class WorkloadRW(WorkloadBase):
                 """, False)
                 with self.lock:
                     self.queries += 1
-            except Exception as e:
-                logger.warning("rw query failed: %s", e)
+            except ydb.Aborted:
+                pass
 
     @staticmethod
     def _generate_select_keys(upsert_key, count):
@@ -79,14 +79,10 @@ class WorkloadAlterTable(WorkloadBase):
 
     def _alter_table_loop(self):
         while not self.is_stop_requested():
-            try:
-                self._alter_table(self.state)
-                with self.lock:
-                    self.state = self.State.next(self.state)
-                    self.altered += 1
-            except Exception as e:
-                logger.warning("alter table failed: %s", e)
-                time.sleep(1)
+            self._alter_table(self.state)
+            with self.lock:
+                self.state = self.State.next(self.state)
+                self.altered += 1
 
     def get_workload_thread_funcs(self):
         return [self._alter_table_loop]

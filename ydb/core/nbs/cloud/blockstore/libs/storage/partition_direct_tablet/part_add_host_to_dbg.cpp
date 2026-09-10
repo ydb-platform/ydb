@@ -197,19 +197,18 @@ void TPartitionActor::HandleAddHostAllocationResult(
     const NActors::TActorContext& ctx)
 {
     const auto* msg = ev->Get();
-    const size_t dbgId = ev->Cookie;
 
-    if (!AddHostInFlight.has_value() ||
-        AddHostInFlight->DirectBlockGroupId != dbgId)
-    {
+    if (!AddHostInFlight.has_value() || ev->Cookie != AddHostInFlight->Cookie) {
         LOG_WARN(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "%s AddHost response for unexpected dbgId=%lu (stale)",
+            "%s AddHost response for unexpected cookie %lu (stale)",
             LogTitle.GetWithTime().c_str(),
-            dbgId);
+            ev->Cookie);
         return;
     }
+
+    const size_t dbgId = AddHostInFlight->DirectBlockGroupId;
 
     const ui32 expectedCurrent = AddHostInFlight->NewHostIndex;
     const auto newHostIndex = AddHostInFlight->NewHostIndex;
@@ -313,6 +312,10 @@ bool TPartitionActor::ValidateAddHostToDBGRequest(
         RejectAddHost(ctx, dbgId, "Another AddHost is already in progress");
         return false;
     }
+    if (InflightBscAllocateRequestCookie) {
+        RejectAddHost(ctx, dbgId, "Grow is already in progress");
+        return false;
+    }
 
     // Authoritative AddHost gate: reads the persisted connection count under
     // the single-in-flight guard above, so it cannot overshoot MaxHostCount or
@@ -381,9 +384,9 @@ void TPartitionActor::SendAllocateDDiskForAddHost(
 {
     Y_ABORT_UNLESS(AddHostInFlight.has_value());
 
-    const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
-    const ui64 regionCount =
-        CalcRegionCount(blockCount, VolumeConfig.GetBlockSize());
+    const auto& config = EffectiveVolumeConfig();
+    const ui64 blockCount = config.GetPartitions(0).GetBlockCount();
+    const ui64 regionCount = CalcRegionCount(blockCount, config.GetBlockSize());
 
     const auto pipe = ctx.Register(
         NTabletPipe::CreateClient(ctx.SelfID, MakeBSControllerID()));
@@ -402,7 +405,12 @@ void TPartitionActor::SendAllocateDDiskForAddHost(
     define->SetNumChunksPerDDisk(regionCount);
     define->SetNumPersistentBuffers(numDDisks);
 
-    NTabletPipe::SendData(ctx, pipe, request.release(), dbgId);
+    AddHostInFlight->Cookie = NextBscCookie++;
+    NTabletPipe::SendData(
+        ctx,
+        pipe,
+        request.release(),
+        AddHostInFlight->Cookie);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

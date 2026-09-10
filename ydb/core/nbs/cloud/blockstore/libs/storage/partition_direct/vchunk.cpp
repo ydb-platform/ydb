@@ -102,17 +102,22 @@ TVChunk::~TVChunk()
         LogTitle.GetWithTime().c_str());
 }
 
-void TVChunk::Start()
+NThreading::TFuture<void> TVChunk::Start()
 {
+    auto started = NThreading::NewPromise<void>();
+    auto future = started.GetFuture();
     // ActorSystem thread
     Executor->ExecuteSimple(
-        [weakSelf = weak_from_this()]() mutable
+        [weakSelf = weak_from_this(), started]() mutable
         {
             // Executor thread
             if (auto self = weakSelf.lock()) {
-                self->DoStart();
+                self->DoStart(std::move(started));
+            } else {
+                started.SetValue();
             }
         });
+    return future;
 }
 
 NThreading::TFuture<void> TVChunk::Stop()
@@ -522,7 +527,7 @@ void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
     DoPersistDirtyMap();
 }
 
-void TVChunk::DoStart()
+void TVChunk::DoStart(NThreading::TPromise<void> started)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -537,12 +542,13 @@ void TVChunk::DoStart()
     auto future =
         DirectBlockGroup->RestoreDBGPBuffers(VChunkConfig.GetVChunkIndex());
     future.Subscribe(
-        [weakSelf = weak_from_this()]   //
+        [weakSelf = weak_from_this(), started = std::move(started)]   //
         (const TFuture<TDBGRestoreResponse>& f) mutable
         {
             if (auto self = weakSelf.lock()) {
                 self->UpdateDirtyMap(f.GetValue());
             }
+            started.SetValue();
         });
 }
 

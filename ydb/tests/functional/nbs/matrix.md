@@ -43,6 +43,7 @@ Update this file when a case lands. Legend:
 | F1.23 | ZeroBlocks | P0 | — | — | yes | `F1_vhost/F1_23_zero_blocks.py` (known_bug xfail) |
 | F1.24 | DeletePartition wipe | P0 | — | — | yes | `F1_24_delete_partition_wipe.py` |
 | F1.25 | Max disk size per block size, 2³¹ blocks each | P0 | — | 2³¹ blocks | yes | `F1_25_max_disk_size.py` (known_bug xfail, not run, per size >4 KiB: eager vchunk metadata) |
+| F1.26 | Grow disk online: new region, same region, same size, shrink rejected, grow under live IO | P0 | — | — | yes | `F1_26_resize_grow.py` |
 
 ---
 

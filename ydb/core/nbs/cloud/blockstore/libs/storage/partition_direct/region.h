@@ -34,7 +34,9 @@ public:
         ui32 blockSize,
         ui64 vChunkSize);
 
-    void Run();
+    // Starts every vchunk. The future is ready when each vchunk has finished
+    // Register and dirty-map restore.
+    NThreading::TFuture<void> Run();
 
     NThreading::TFuture<void> Stop();
 

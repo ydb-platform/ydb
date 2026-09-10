@@ -8,6 +8,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/volume_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
@@ -91,7 +92,34 @@ ui32 CheckedBlockSize(ui32 blockSize, const TStorageConfig& storageConfig)
     return blockSize;
 }
 
+TRegionPtr CreateRegion(
+    NActors::TActorSystem* actorSystem,
+    ITraceService* traceService,
+    IPartitionDirectService* partitionDirectService,
+    const TDiskDescription& diskDescription,
+    ui32 regionIndex,
+    ui32 blockSize,
+    const TVector<IDirectBlockGroupPtr>& directBlockGroups,
+    const TVChunkConfigs& vChunkConfigs,
+    const TDirtyMapStateProtos& dirtyMapStates,
+    const TStorageConfig& storageConfig)
+{
+    return std::make_shared<TRegion>(
+        actorSystem,
+        traceService,
+        partitionDirectService,
+        diskDescription,
+        regionIndex,
+        directBlockGroups,
+        vChunkConfigs,
+        dirtyMapStates,
+        storageConfig.GetSyncRequestsBatchSize(),
+        blockSize,
+        storageConfig.GetVChunkSize());
+}
+
 TVector<TRegionPtr> CreateRegions(
+    NActors::TActorSystem* actorSystem,
     ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
     const TDiskDescription& diskDescription,
@@ -106,18 +134,17 @@ TVector<TRegionPtr> CreateRegions(
     const size_t regionCount = CalcRegionCount(blockCount, blockSize);
     TVector<TRegionPtr> regions(regionCount);
     for (size_t i = 0; i < regionCount; i++) {
-        regions[i] = std::make_shared<TRegion>(
-            TActorContext::ActorSystem(),
+        regions[i] = CreateRegion(
+            actorSystem,
             traceService,
             partitionDirectService,
             diskDescription,
             i,
+            blockSize,
             directBlockGroups,
             vChunkConfigs,
             dirtyMapStates,
-            storageConfig.GetSyncRequestsBatchSize(),
-            blockSize,
-            storageConfig.GetVChunkSize());
+            storageConfig);
     }
 
     return regions;
@@ -149,7 +176,8 @@ TFastPathService::TFastPathService(
     , Timer(std::move(timer))
     , DirectBlockGroups(std::move(directBlockGroups))
     , ChaosInjectorControls(std::move(chaosInjectorControls))
-    , Regions(CreateRegions(
+    , Regions(MakeIntrusive<TRegionsSnapshot>(CreateRegions(
+          ActorSystem,
           this,
           this,
           DiskDescription,
@@ -158,7 +186,7 @@ TFastPathService::TFastPathService(
           DirectBlockGroups,
           vChunkConfigs,
           dirtyMapStates,
-          *StorageConfig))
+          *StorageConfig)))
     , LogTitle(
           GetCycleCount(),
           TLogTitle::TFastPathService{
@@ -175,12 +203,13 @@ TFastPathService::TFastPathService(
           StorageConfig->GetDDiskPoolName(),
           DiskDescription,
           "vchunk"))
-    , VolumeConfig(std::make_shared<TVolumeConfig>(TVolumeConfig{
-          .DiskId = DiskDescription.DiskId,
-          .BlockSize = blockSize,
-          .BlockCount = blockCount,
-          .BlocksPerStripe = StorageConfig->GetStripeSize() / blockSize,
-          .VChunkSize = StorageConfig->GetVChunkSize()}))
+    , VolumeConfig(MakeIntrusive<TVolumeConfigHolder>(
+          std::make_shared<TVolumeConfig>(TVolumeConfig{
+              .DiskId = DiskDescription.DiskId,
+              .BlockSize = blockSize,
+              .BlockCount = blockCount,
+              .BlocksPerStripe = StorageConfig->GetStripeSize() / blockSize,
+              .VChunkSize = StorageConfig->GetVChunkSize()})))
 {
     Y_ABORT_UNLESS(DirectBlockGroups.size() == ChaosInjectorControls.size());
 
@@ -198,7 +227,7 @@ TFastPathService::TFastPathService(
         NKikimrServices::NBS_PARTITION,
         "%s Regions: %zu",
         LogTitle.GetWithTime().c_str(),
-        Regions.size());
+        Regions.AtomicLoad()->Regions.size());
 }
 
 TFastPathService::~TFastPathService()
@@ -223,19 +252,14 @@ NThreading::TFuture<void> TFastPathService::Run()
     for (const auto& dbg: DirectBlockGroups) {
         initialReadyFutures.push_back(dbg->Run(this, this));
     }
-    for (const auto& region: Regions) {
+    const auto snapshot = Regions.AtomicLoad();
+    for (const auto& region: snapshot->Regions) {
         region->Run();
     }
     ScheduleDirtyMapDebugPrint();
     ScheduleVChunkCountersUpdate();
 
     return NThreading::WaitAll(initialReadyFutures);
-}
-
-IDirectBlockGroupPtr TFastPathService::GetDirectBlockGroup(ui32 dbgIndex) const
-{
-    return dbgIndex >= DirectBlockGroups.size() ? nullptr
-                                                : DirectBlockGroups[dbgIndex];
 }
 
 NThreading::TFuture<void> TFastPathService::Stop()
@@ -246,9 +270,14 @@ NThreading::TFuture<void> TFastPathService::Stop()
         "%s TFastPathService::Stop",
         LogTitle.GetWithTime().c_str());
 
+    Stopping.store(true);
+
     TVector<NThreading::TFuture<void>> stopFutures;
-    for (size_t regionIndex = 0; regionIndex < Regions.size(); ++regionIndex) {
-        auto stopFuture = Regions[regionIndex]->Stop();
+    const auto snapshot = Regions.AtomicLoad();
+    for (size_t regionIndex = 0; regionIndex < snapshot->Regions.size();
+         ++regionIndex)
+    {
+        auto stopFuture = snapshot->Regions[regionIndex]->Stop();
         stopFuture.Subscribe(
             [self = shared_from_this(),
              regionIndex]   //
@@ -273,6 +302,114 @@ NThreading::TFuture<void> TFastPathService::Stop()
     return result;
 }
 
+void TFastPathService::PublishVolumeConfig(ui64 newBlockCount)
+{
+    const auto volumeConfig = VolumeConfig.AtomicLoad()->Config;
+    VolumeConfig.AtomicStore(MakeIntrusive<TVolumeConfigHolder>(
+        std::make_shared<TVolumeConfig>(TVolumeConfig{
+            .DiskId = volumeConfig->DiskId,
+            .BlockSize = volumeConfig->BlockSize,
+            .BlockCount = newBlockCount,
+            .BlocksPerStripe = volumeConfig->BlocksPerStripe,
+            .VChunkSize = volumeConfig->VChunkSize})));
+}
+
+NThreading::TFuture<void> TFastPathService::Grow(ui64 newBlockCount)
+{
+    if (Stopping.load()) {
+        return MakeFuture();
+    }
+
+    const auto volumeConfig = VolumeConfig.AtomicLoad()->Config;
+    const ui32 blockSize = volumeConfig->BlockSize;
+    const size_t newRegionCount = CalcRegionCount(newBlockCount, blockSize);
+
+    const auto oldSnapshot = Regions.AtomicLoad();
+    if (newRegionCount <= oldSnapshot->Regions.size()) {
+        LOG_INFO(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s Grow blockCount %lu -> %lu, region count unchanged (%zu)",
+            LogTitle.GetWithTime().c_str(),
+            volumeConfig->BlockCount,
+            newBlockCount,
+            oldSnapshot->Regions.size());
+        PublishVolumeConfig(newBlockCount);
+        return MakeFuture();
+    }
+
+    TVector<TRegionPtr> grown;
+    grown.reserve(newRegionCount);
+    grown.insert(
+        grown.end(),
+        oldSnapshot->Regions.begin(),
+        oldSnapshot->Regions.end());
+
+    const size_t oldRegionCount = oldSnapshot->Regions.size();
+    TVector<TFuture<void>> started;
+    started.reserve(newRegionCount - oldRegionCount);
+    for (size_t i = oldRegionCount; i < newRegionCount; ++i) {
+        auto region = CreateRegion(
+            ActorSystem,
+            this,
+            this,
+            DiskDescription,
+            i,
+            blockSize,
+            DirectBlockGroups,
+            TVChunkConfigs{},
+            TDirtyMapStateProtos{},
+            *StorageConfig);
+        started.push_back(region->Run());
+        grown.push_back(std::move(region));
+    }
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Grow regions %zu -> %zu (blockCount %lu -> %lu)",
+        LogTitle.GetWithTime().c_str(),
+        oldRegionCount,
+        grown.size(),
+        volumeConfig->BlockCount,
+        newBlockCount);
+
+    auto published = NewPromise<void>();
+    auto future = published.GetFuture();
+    WaitAll(started).Subscribe(
+        [self = shared_from_this(),
+         grown = std::move(grown),
+         oldRegionCount,
+         newBlockCount,
+         published]   //
+        (const TFuture<void>& f) mutable
+        {
+            Y_UNUSED(f);
+            if (self->Stopping.load()) {
+                TVector<TFuture<void>> stops;
+                stops.reserve(grown.size() - oldRegionCount);
+                for (size_t i = oldRegionCount; i < grown.size(); ++i) {
+                    stops.push_back(grown[i]->Stop());
+                }
+                WaitAll(stops).Subscribe(
+                    [published, grown = std::move(grown)]   //
+                    (const TFuture<void>&) mutable { published.SetValue(); });
+                return;
+            }
+            self->Regions.AtomicStore(
+                MakeIntrusive<TRegionsSnapshot>(std::move(grown)));
+            self->PublishVolumeConfig(newBlockCount);
+            published.SetValue();
+        });
+    return future;
+}
+
+IDirectBlockGroupPtr TFastPathService::GetDirectBlockGroup(ui32 dbgIndex) const
+{
+    return dbgIndex >= DirectBlockGroups.size() ? nullptr
+                                                : DirectBlockGroups[dbgIndex];
+}
+
 NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request)
@@ -293,13 +430,14 @@ NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
     const size_t regionIndex =
         GetRegionIndex(*request->Headers.VolumeConfig, request->Headers.Range);
 
+    const auto snapshot = Regions.AtomicLoad();
     Y_ABORT_UNLESS(
-        regionIndex < Regions.size(),
+        regionIndex < snapshot->Regions.size(),
         "Region index out of bound: %" PRISZT " >= %" PRISZT,
         regionIndex,
-        Regions.size());
+        snapshot->Regions.size());
 
-    auto result = Regions[regionIndex]->ReadBlocksLocal(
+    auto result = snapshot->Regions[regionIndex]->ReadBlocksLocal(
         std::move(callContext),
         std::move(request),
         span->GetTraceId());
@@ -345,13 +483,14 @@ TFastPathService::WriteBlocksLocal(
     const size_t regionIndex =
         GetRegionIndex(*request->Headers.VolumeConfig, request->Headers.Range);
 
+    const auto snapshot = Regions.AtomicLoad();
     Y_ABORT_UNLESS(
-        regionIndex < Regions.size(),
+        regionIndex < snapshot->Regions.size(),
         "Region index out of bound: %" PRISZT " >= %" PRISZT,
         regionIndex,
-        Regions.size());
+        snapshot->Regions.size());
 
-    auto result = Regions[regionIndex]->WriteBlocksLocal(
+    auto result = snapshot->Regions[regionIndex]->WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
         span->GetTraceId());
@@ -393,7 +532,7 @@ void TFastPathService::ReportIOError()
 
 TVolumeConfigPtr TFastPathService::GetVolumeConfig() const
 {
-    return VolumeConfig;
+    return VolumeConfig.AtomicLoad()->Config;
 }
 
 NWilson::TSpan TFastPathService::CreateRootSpan(TStringBuf name)
@@ -501,11 +640,12 @@ TDuration TFastPathService::TakeVolumeCopyRangeBudget(ui64 byteCount)
 
 TFastPathServiceInfo TFastPathService::GetMonInfo() const
 {
+    const auto volumeConfig = VolumeConfig.AtomicLoad()->Config;
     return {
         .LsnCounter = SequenceGenerator.load(),
         .LastSafeBarrier = LastSafeBarrier.load(),
-        .TotalVChunks =
-            Regions.size() * GetVChunksPerRegion(VolumeConfig->VChunkSize),
+        .TotalVChunks = Regions.AtomicLoad()->Regions.size() *
+                        GetVChunksPerRegion(volumeConfig->VChunkSize),
         .DbgCount = DirectBlockGroups.size(),
     };
 }
@@ -602,14 +742,17 @@ TFastPathService::GatherVChunkMonSnapshot(ui32 vchunkIndex) const
     const auto notFound =
         MakeFuture<std::optional<TVChunkSnapshot>>(std::nullopt);
 
+    const auto volumeConfig = VolumeConfig.AtomicLoad()->Config;
     const size_t regionIndex =
-        GetRegionIndexByVChunk(*VolumeConfig, vchunkIndex);
-    if (regionIndex >= Regions.size()) {
+        GetRegionIndexByVChunk(*volumeConfig, vchunkIndex);
+    const auto snapshot = Regions.AtomicLoad();
+    if (regionIndex >= snapshot->Regions.size()) {
         return notFound;
     }
     const size_t vChunkIndexInRegion =
-        GetVChunkIndexInRegion(*VolumeConfig, vchunkIndex);
-    auto vchunk = Regions[regionIndex]->GetVChunk(vChunkIndexInRegion);
+        GetVChunkIndexInRegion(*volumeConfig, vchunkIndex);
+    auto vchunk =
+        snapshot->Regions[regionIndex]->GetVChunk(vChunkIndexInRegion);
     if (!vchunk) {
         return notFound;
     }

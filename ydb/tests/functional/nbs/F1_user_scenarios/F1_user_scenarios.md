@@ -60,6 +60,7 @@ Geometry to keep in mind when picking offsets:
 | F1.17 | Noisy neighbour: load-actor on disk A while doing verified IO on disk B | disk B read-after-write holds; disk A `RequestsFailed == 0` | none |
 | F1.18 | 500 GiB disk, first / middle / last block of first / middle / last 32 MiB chunk (in-memory PDisk chunk size) | each 4 KiB read matches | `test_nbs_500gb_disk_read_write` |
 | F1.25 | Max disk size at every supported block size (`2³¹` blocks) | create, first / middle / last block read-after-write exact, write past the last block rejected. Only 4 KiB runs today; larger sizes are `known_bug` xfail with `run=False` (eager vchunk metadata at 2³¹ blocks) | `F1_25_max_disk_size.py` (known_bug xfail, not run, per size >4 KiB) |
+| F1.26 | Grow an existing disk (`ResizePartition`): 4→8 GiB (new region), 2→4 GiB (same region), same size, shrink, grow under live IO | grow: write past the old end fails before the resize; old data survives; write/read in the new capacity succeeds without reconnect. same size: SUCCESS, data and capacity unchanged. shrink: `BAD_REQUEST`, data and capacity unchanged. under IO: background read-after-write on the old range keeps succeeding across the resize | `F1_26_resize_grow.py` |
 
 Extend F1.18 with a self-describing payload (LBA + sequence) so a misplaced
 block is distinguishable from a torn one. Today's test writes the same

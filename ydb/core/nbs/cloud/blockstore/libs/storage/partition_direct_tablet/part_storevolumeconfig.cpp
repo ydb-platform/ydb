@@ -1,8 +1,6 @@
 #include "part_database.h"
 #include "partition_direct_actor.h"
 
-#include <util/generic/fwd.h>
-
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NActors;
@@ -38,10 +36,9 @@ void TPartitionActor::CompleteStoreVolumeConfig(
     const TActorContext& ctx,
     TTxPartition::TStoreVolumeConfig& args)
 {
+    Y_UNUSED(ctx);
     VolumeConfig = args.VolumeConfig;
     Y_ABORT_UNLESS(VolumeConfig.PartitionsSize() == 1);
-
-    AllocateDDiskBlockGroup(ctx);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

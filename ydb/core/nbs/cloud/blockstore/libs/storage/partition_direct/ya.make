@@ -44,6 +44,7 @@ PEERDIR(
     contrib/proto/opentelemetry
 
     library/cpp/cgiparam
+    library/cpp/threading/hot_swap
 )
 
 END()

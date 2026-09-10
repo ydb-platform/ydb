@@ -93,6 +93,7 @@ dstool
    └─ partition
       ├─ create                         Create NBS 2.0 partition
       ├─ delete                         Delete NBS 2.0 partition
+      ├─ resize                         Grow an NBS 2.0 partition
       ├─ get-load-actor-adapter-actor-id
       │                                 Get LoadActorAdapter actor id for NBS 
       │                                 2.0 partition

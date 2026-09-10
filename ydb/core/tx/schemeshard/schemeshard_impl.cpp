@@ -808,9 +808,7 @@ void TSchemeShard::IncrementPathDbRefCount(const TPathId& pathId, const TStringB
     auto it = PathsById.find(pathId);
     Y_VERIFY_DEBUG_S(it != PathsById.end(), "pathId: " << pathId << " debug: " << debug);
     if (it != PathsById.end()) {
-        if (TlsActivationContext) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, "IncrementPathDbRefCount reason " << debug << " for pathId " << pathId << " was " << it->second->DbRefCount);
-        }
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, "IncrementPathDbRefCount reason " << debug << " for pathId " << pathId << " was " << it->second->DbRefCount);
         size_t newRefCount = ++it->second->DbRefCount;
         Y_DEBUG_ABORT_UNLESS(newRefCount > 0);
     }
@@ -823,17 +821,14 @@ void TSchemeShard::DecrementPathDbRefCount(const TPathId& pathId, const TStringB
     auto it = PathsById.find(pathId);
     Y_VERIFY_DEBUG_S(it != PathsById.end(), "pathId " << pathId << " " << debug);
     if (it != PathsById.end()) {
-        // FIXME: not all references are accounted right now
-        if (TlsActivationContext) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, "DecrementPathDbRefCount reason " << debug << " for pathId " << pathId << " was " << it->second->DbRefCount);
-        }
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, "DecrementPathDbRefCount reason " << debug << " for pathId " << pathId << " was " << it->second->DbRefCount);
         Y_DEBUG_ABORT_UNLESS(it->second->DbRefCount > 0);
         if (it->second->DbRefCount > 0) {
             size_t newRefCount = --it->second->DbRefCount;
-            if (newRefCount == 0 && it->second->Dropped() && TlsActivationContext) {
+            if (newRefCount == 0 && it->second->Dropped()) {
                 CleanDroppedPathsCandidates.insert(pathId);
                 ScheduleCleanDroppedPaths();
-            } else if (newRefCount == 1 && it->second->AllChildrenCount == 0 && it->second->Dropped() && TlsActivationContext) {
+            } else if (newRefCount == 1 && it->second->AllChildrenCount == 0 && it->second->Dropped()) {
                 auto itSubDomain = SubDomains.find(pathId);
                 if (itSubDomain != SubDomains.end() && itSubDomain->second->GetInternalShards().empty()) {
                     // We have an empty dropped subdomain, schedule its deletion
@@ -3906,7 +3901,7 @@ void TSchemeShard::PersistView(NIceDb::TNiceDb &db, TPathId pathId) {
 
 void TSchemeShard::PersistRemoveView(NIceDb::TNiceDb& db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
-    if (Views.contains(pathId)) {
+    if (const auto view = Views.find(pathId); view != Views.end()) {
         Views.erase(pathId);
     }
     db.Table<Schema::View>().Key(pathId.LocalPathId).Delete();
@@ -3932,7 +3927,7 @@ void TSchemeShard::PersistSysView(NIceDb::TNiceDb& db, TPathId pathId) {
 
 void TSchemeShard::PersistRemoveSysView(NIceDb::TNiceDb& db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
-    if (SysViews.contains(pathId)) {
+    if (const auto sysView = SysViews.find(pathId); sysView != SysViews.end()) {
         SysViews.erase(pathId);
     }
 
@@ -4102,7 +4097,7 @@ void TSchemeShard::PersistStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId) {
 
 void TSchemeShard::PersistRemoveStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
-    if (StreamingQueries.contains(pathId)) {
+    if (const auto it = StreamingQueries.find(pathId); it != StreamingQueries.end()) {
         StreamingQueries.erase(pathId);
     }
 

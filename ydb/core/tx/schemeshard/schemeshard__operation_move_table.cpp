@@ -299,6 +299,7 @@ public:
             tableInfo->AlterVersion += 1;
             context.SS->PersistColumnTable(db, dstPath.Base()->PathId, *tableInfo, false);
             context.SS->SetPartitioning(dstPath.Base()->PathId, tableInfo.GetPtr());
+            context.SS->AcquireOwnDbRef(dstPath.Base()->PathId, "move table info");
         } else {
             Y_ABORT();
         }

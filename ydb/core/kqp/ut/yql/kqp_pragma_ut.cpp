@@ -84,6 +84,46 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(NewRboPhysicalStagePeepholeUnionAll, Peephole) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto scheme = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t_repro` (k Uint64 NOT NULL, PRIMARY KEY(k));
+        )").GetValueSync();
+        UNIT_ASSERT_C(scheme.IsSuccess(), scheme.GetIssues().ToString());
+        auto rows = TValueBuilder().BeginList()
+            .AddListItem().BeginStruct().AddMember("k").Uint64(1).EndStruct()
+            .AddListItem().BeginStruct().AddMember("k").Uint64(2).EndStruct()
+            .EndList().Build();
+        auto upsert = kikimr.GetTableClient().BulkUpsert("/Root/t_repro", std::move(rows)).GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        const TString pragma = TStringBuilder()
+            << "PRAGMA ydb.EnableNewRBOPhysicalStagePeephole = \""
+            << (Peephole ? "true" : "false") << "\";\n";
+        const TString source = R"(
+            ((SELECT k FROM `/Root/t_repro`) UNION ALL (SELECT k FROM `/Root/t_repro`))
+        )";
+        for (const auto& [projection, expected] : TVector<std::pair<TString, TString>>{
+            {"*", R"([[1u];[1u];[2u];[2u]])"},
+            {"COUNT(*) AS cnt", R"([[4u]])"},
+        }) {
+            const TString query = pragma + "SELECT " + projection + " FROM " + source + ";";
+            auto result = session.ExecuteDataQuery(
+                query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYsonUnordered(expected, FormatResultSetYson(result.GetResultSet(0)));
+
+            auto queryResult = kikimr.GetQueryClient().ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(queryResult.IsSuccess(), queryResult.GetIssues().ToString());
+            CompareYsonUnordered(expected, FormatResultSetYson(queryResult.GetResultSet(0)));
+        }
+    }
+
     Y_UNIT_TEST(OrderedColumns) {
         TKikimrRunner kikimr;
         NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());

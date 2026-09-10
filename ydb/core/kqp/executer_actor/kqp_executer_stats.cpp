@@ -1577,7 +1577,12 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
             }
 
             for (auto& [stageId, stageStat] : StageStats) {
-                auto& stageStats = *protoStages[stageStat.StageId.StageId];
+                if (stageStat.StageId.TxId != 0) {
+                    continue;
+                }
+                auto it = protoStages.find(stageStat.StageId.StageId);
+                YQL_ENSURE(it != protoStages.end());
+                auto& stageStats = *it->second;
                 stageStats.SetTotalTasksCount(stageStat.Task2Index.size());
                 stageStats.SetFinishedTasksCount(stageStat.FinishedCount);
 

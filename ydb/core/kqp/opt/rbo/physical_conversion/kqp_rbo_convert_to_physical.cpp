@@ -101,7 +101,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
         } else if (op->Kind == EOperator::Source) {
             auto opRead = CastOperator<TOpRead>(op);
 
-            currentStageBody = Build<TPhysicalSourceBuilder>(opRead, ctx, op->Pos);
+            currentStageBody = TPhysicalSourceBuilder(opRead, ctx, op->Pos, graph.StageGUIDs.at(opStageId)).BuildPhysicalOp();
 
             if (!opRead->IsSingleConsumer()) {
                 if (opRead->GetTableStorageType() == NYql::EStorageType::RowStorage) {

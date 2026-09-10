@@ -203,12 +203,17 @@ namespace NActors {
         semaphore.CurrentThreadCount = ThreadCount;
         Semaphore = semaphore.ConvertToI64();
 
-        DefaultThreadCount = DefaultFullThreadCount + HasOwnSharedThread;
-        MinThreadCount = MinFullThreadCount + HasOwnSharedThread;
-        MaxThreadCount = MaxFullThreadCount + HasOwnSharedThread;
+        const i16 ownSharedThreadCount = cfg.AllThreadsAreShared
+            ? cfg.DefaultThreadCount
+            : HasOwnSharedThread;
+        DefaultThreadCount = DefaultFullThreadCount + ownSharedThreadCount;
+        MinThreadCount = MinFullThreadCount + ownSharedThreadCount;
+        MaxThreadCount = cfg.AllThreadsAreShared
+            ? Max(cfg.MaxThreadCount, cfg.DefaultThreadCount)
+            : MaxFullThreadCount + ownSharedThreadCount;
 
         if (SharedOnly) {
-            MaxThreadCount = cfg.ForcedForeignSlotCount + 1;
+            MaxThreadCount = cfg.ForcedForeignSlotCount + ownSharedThreadCount;
         }
 
         Threads.Reset(new NThreading::TPadded<TExecutorThreadCtx>[MaxFullThreadCount]);

@@ -54,7 +54,7 @@ class TUringRouterTest : public TPerfTest {
             }
         }
 
-        void OnDrop() noexcept override {
+        void OnDrop(NActors::TActorSystem*) noexcept override {
             if (DevState) {
                 DevState->OnIoDrop(*this);
             }
@@ -64,7 +64,6 @@ class TUringRouterTest : public TPerfTest {
     struct alignas(64) TDeviceState {
         ui32 BuffSize = 0;
         ui64 DeviceSizeBytes = 0;
-        THolder<TFileHandle> File;
         THolder<NPDisk::TUringRouter> Router;
 
         TVector<TOp> Ops;
@@ -101,8 +100,8 @@ class TUringRouterTest : public TPerfTest {
                 ++WriteEventsDone;
             }
 
-            const i32 result = op.GetResult();
-            Y_VERIFY_S(result == (i32)BuffSize, "TUringRouter write failed, res# " << result);
+            const i64 result = op.GetResult();
+            Y_VERIFY_S(result == static_cast<i64>(BuffSize), "TUringRouter write failed, res# " << result);
             InFlight.fetch_sub(1, std::memory_order_release);
             // Publish the reusable slot only after the callback has finished
             // accessing the operation.
@@ -207,9 +206,6 @@ public:
             if (dev && dev->Router) {
                 dev->Router.Reset();
             }
-            if (dev) {
-                dev->File.Reset();
-            }
         }
     }
 
@@ -258,11 +254,12 @@ private:
         if (UseAlignedData || UseWriteFixed) {
             openFlags = static_cast<EOpenMode>(openFlags | DirectAligned);
         }
-        dev.File = MakeHolder<TFileHandle>(path.c_str(), openFlags);
+        TFileHandle file(path.c_str(), openFlags);
+        Y_VERIFY_S(file.IsOpen(), "Failed to open device " << deviceIdx << " path# " << path.Quote());
 
         NPDisk::TUringRouterConfig cfg;
         cfg.QueueDepth = QueueDepth;
-        dev.Router = MakeHolder<NPDisk::TUringRouter>(static_cast<FHANDLE>(*dev.File), nullptr, cfg);
+        dev.Router = MakeHolder<NPDisk::TUringRouter>(std::move(file), nullptr, cfg);
         dev.Router->RegisterFile();
 
         dev.Ops.resize(QueueDepth);
@@ -348,15 +345,13 @@ private:
                 ok = dev.Router->Write(&op);
             }
             Y_ABORT_UNLESS(ok, "Failed to start write");
-
-            dev.Router->Flush();
         }
 
         while (dev.InFlight.load(std::memory_order_acquire) > 0) {
             SpinLockPause();
         }
 
-        dev.Router->Stop();
+        dev.Router.Reset();
     }
 
     ui64 RandomOffset(TDeviceState& dev) const {

@@ -2728,7 +2728,9 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
             const localMetricLabel=()=>'';
             const localMetricDirection=()=>null;
             const localComparisonDelta=()=>'';
-            const mountLocalYdbComparisonCurves=()=>{};
+            const localPreferredSlo=()=>['p99','p99_ms'];
+            const localSearchAxisLabel=()=> 'YDB CLI threads';
+            const enc=encodeURIComponent;
             const sectionTabs=()=>'';
             const bindSectionTabs=()=>{};
             """
@@ -2761,9 +2763,76 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
         result = json.loads(completed.stdout)
         self.assertIn("fresh cluster", result["fresh"])
         self.assertIn("retained search cluster", result["search"])
-        self.assertIn("Comparable with warnings", result["comparison"])
         self.assertIn("Verification cluster", result["comparison"])
-        self.assertIn("retained search cluster → fresh cluster", result["comparison"])
+        self.assertIn("retained search cluster", result["comparison"])
+        self.assertIn("fresh cluster", result["comparison"])
+        self.assertIn("Only differences", result["comparison"])
+        self.assertIn("data-comparison-profile", result["comparison"])
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the comparison UI test")
+    def test_comparison_profile_selection_and_slo(self):
+        start = web._JS.index("function mountLocalYdbComparison(container")
+        finish = web._JS.index("const localPhaseLabels", start)
+        script = (
+            """
+        const esc=x=>String(x??''),enc=encodeURIComponent,metricLabel=x=>String(x);
+        const localComparisonKey=x=>JSON.stringify([x.run,x.profile]);
+        const localComparisonId=x=>x.run+'/'+x.profile;
+        const localResultSchema=()=>({throughput_unit:'query operations/s'});
+        const localResultMetrics=x=>({metrics:x.selected_metrics||{},source:x.source||'Search'});
+        const localComparisonSemantic=()=>({same:true});
+        const localPreferredSlo=(schema,objective)=>[objective.percentile,objective.percentile+'_ms'];
+        const localSearchAxisLabel=()=> 'YDB CLI threads';
+        const localComparisonConfig=x=>({threads:x.parameters.client.threads});
+        const localComparisonContext=()=>({}),localComparisonBuild=()=>({});
+        const localComparisonStable=x=>x;
+        const localComparisonDelta=(value,base)=>'DELTA:'+((value/base-1)*100).toFixed(1);
+        const sectionTabs=()=>'',bindSectionTabs=()=>{};
+        const memory=new Map;
+        const sessionStorage={getItem:key=>memory.get(key),setItem:(key,value)=>memory.set(key,value)};
+        const controls={};let checked=[];
+        const container={dataset:{},querySelector:s=>controls[s]||(controls[s]={}),querySelectorAll:()=>checked};
+        const entry=(profile,latency,threads)=>({run:'run',profile,state:'passed',
+          parameters:{client:{threads},load:{parameter:'threads',objective:{type:'latency-slo',percentile:'p95',max_ms:20}}},
+          result:{selected_load:threads,selected_metrics:{throughput:threads,p95_ms:latency,errors:0}}
+        });
+        const data={entries:[entry('base',20,10),entry('candidate',21,20),entry('missing',null,30)]};
+        """
+            + web._JS[start:finish]
+            + """
+        mountLocalYdbComparison(container,data);
+        const initial=container.innerHTML;
+        controls['[data-baseline]'].onchange({target:{value:localComparisonKey(data.entries[1])}});
+        const changedBaseline=container.innerHTML;
+        checked=[{value:localComparisonKey(data.entries[1])}];
+        controls['[data-apply-profiles]'].onclick();
+        const selected=container.innerHTML;
+        const restored={dataset:{},querySelector:()=>({})};
+        mountLocalYdbComparison(restored,data);
+        checked=[];controls['[data-apply-profiles]'].onclick();
+        const empty=container.innerHTML;
+        data.entries[1].result.source='Holdout';
+        const mixed={dataset:{},querySelector:()=>({})};memory.clear();
+        mountLocalYdbComparison(mixed,data);
+        process.stdout.write(JSON.stringify({initial,changedBaseline,selected,restored:restored.innerHTML,empty,mixed:mixed.innerHTML}));
+        """
+        )
+        completed = subprocess.run(
+            [shutil.which("node"), "-e", script], check=True, capture_output=True, text=True, timeout=10
+        )
+        result = json.loads(completed.stdout)
+        self.assertIn("Satisfied", result["initial"])
+        self.assertIn("Exceeded", result["initial"])
+        self.assertIn("Unknown", result["initial"])
+        self.assertIn("p95 ≤ 20 ms", result["initial"])
+        self.assertIn("DELTA:100.0", result["initial"])
+        self.assertIn("DELTA:-50.0", result["changedBaseline"])
+        self.assertIn("Profiles · 1", result["selected"])
+        self.assertNotIn("<strong>base</strong>", result["selected"])
+        self.assertIn("0 differing parameters", result["selected"])
+        self.assertIn("Profiles · 1", result["restored"])
+        self.assertIn("Select profiles to compare", result["empty"])
+        self.assertIn("Incompatible metric source", result["mixed"])
 
     @unittest.skipUnless(shutil.which("node"), "node is required for the local YDB validity UI test")
     def test_local_ydb_web_hides_latency_for_empty_measurements(self):
@@ -8131,7 +8200,7 @@ class WebTest(unittest.TestCase):
                 )
                 self.assertIn(b"function localResultSchema", script)
                 self.assertIn(b"result_schema_id:schema.schema_id", script)
-                self.assertIn(b"const metricHeaders=metricColumns.map", script)
+                self.assertIn(b"data-only-differences", script)
                 self.assertIn(b"if(option.choices.length)return localSelect", script)
                 self.assertIn(b"if(option.kind==='boolean')return localCheck", script)
                 self.assertIn(b"if(option.kind==='integer')", script)
@@ -8185,28 +8254,26 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"local-ydb-profile?profile=", script)
                 self.assertIn(b"function defaultActorCharts", script)
                 self.assertIn(b"function defaultMemoryCharts", script)
-                self.assertIn(b"Local YDB baseline comparison", script)
+                self.assertIn("Throughput · Δ vs baseline".encode(), script)
                 self.assertIn(b"function mountLocalYdbComparison", script)
-                self.assertIn(b"function mountLocalYdbComparisonCurves", script)
+                self.assertNotIn(b"function mountLocalYdbComparisonCurves", script)
                 self.assertIn(b"function localComparisonSemantic", script)
-                self.assertIn(b"sameMetricSource=metricView.source===baselineView.source", script)
-                self.assertIn(b"<th>Metric source</th>", script)
+                self.assertIn(b"currentView.source===view.source", script)
+                self.assertIn(b"Only differences", script)
                 self.assertIn(b"function localComparisonKey", script)
                 self.assertIn(b"Incompatible", script)
                 self.assertIn(b"reference===0", script)
                 self.assertIn(b"value===null", script)
                 self.assertIn(b"Load values", script)
-                self.assertIn(b"...Object.keys(config)", script)
-                self.assertIn(b"series.benchmark!=='local-ydb'", script)
-                self.assertIn(b"const curveMetrics=localComparisonCurveMetrics", script)
-                self.assertIn(b"metric.repetition_aggregation==='sum'?'sum_':'median_'", script)
-                self.assertIn(b"['errors','sum_errors','Errors across repetitions']", script)
+                self.assertIn(b"values.flatMap(Object.keys)", script)
+                self.assertIn(b"item.benchmark!=='local-ydb'", script)
+                self.assertIn(b"data-apply-profiles", script)
+                self.assertIn(b"data-comparison-cpu", script)
                 self.assertIn(b"localMetricLabel(schema,metric.name)", script)
                 self.assertIn(b"dynamicNodes", script)
                 self.assertIn(b"connectMeasuredPoints", script)
                 self.assertIn(b"item.rows.has(String(x))", script)
-                self.assertIn(b"no values are synthesized", script)
-                self.assertIn(b"loadChartData(value.selected,'local-ydb')", script)
+                self.assertNotIn(b"loadChartData(value.selected,'local-ydb')", script)
                 self.assertIn(b"Promise.allSettled", script)
                 self.assertIn(b"function defaultChartScope", script)
                 self.assertIn(b"['actorPairs','in_flight']", script)
@@ -8239,7 +8306,6 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"const chartPointLimit=10000", script)
                 self.assertIn(b"function chartExtent", script)
                 self.assertIn(b"Chart omitted because it has more than", script)
-                self.assertIn(b"Search curves omitted because they have more than", script)
                 self.assertNotIn(b"Math.min(...values)", script)
                 self.assertNotIn(b"Math.max(...values)", script)
                 self.assertNotIn(b"Math.min(...numericX)", script)

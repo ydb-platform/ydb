@@ -200,6 +200,15 @@ _CSS = (
 .local-activity-command{grid-column:2;margin:.15rem 0}.local-activity-command summary{cursor:pointer;color:var(--muted)}
 .attempt-pass{color:var(--good);font-weight:650}.attempt-fail{color:var(--bad);font-weight:650}
 .comparison-delta{font-weight:650}.comparison-delta.good{color:var(--good)}.comparison-delta.bad{color:var(--bad)}
+.comparison-config-changed{background:var(--panel);font-weight:600;overflow-wrap:anywhere}
+#local-ydb-comparison table{width:100%;min-width:620px;table-layout:fixed}
+#local-ydb-comparison td,#local-ydb-comparison th{white-space:normal;overflow-wrap:anywhere}
+#local-ydb-comparison .comparison-results th:first-child{width:34%}
+#local-ydb-comparison td.good{color:var(--good);background:transparent}
+#local-ydb-comparison td.bad{color:var(--bad)}
+#local-ydb-comparison .view-tabs{gap:.35rem;border-bottom:1px solid #d0d5dd;margin:1rem 0}
+#local-ydb-comparison .view-tabs button{padding:.6rem .8rem;border:1px solid transparent;border-radius:6px 6px 0 0;background:transparent;color:var(--muted);margin-bottom:-1px}
+#local-ydb-comparison .view-tabs button[aria-pressed=true]{background:#fff;color:var(--text);font-weight:650;border-color:#d0d5dd;border-bottom-color:#fff}
 .verification-badge{display:inline-flex;align-items:center;margin-left:.35rem;padding:.08rem .42rem;border:1px solid #d0d5dd}
 .verification-badge{border-radius:999px;background:var(--panel);color:var(--text);font-size:.75rem;font-weight:650;vertical-align:middle}
 .verification-badge.bad{border-color:#fecdca;background:#fff0f0;color:var(--bad)}
@@ -1543,158 +1552,117 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     "  return '<span class=\"comparison-delta '+(good?'good':bad?'bad':'')+'\">'+(delta>0?'+':'')+delta.toFixed(1)+'%</span>'\n"
     '}\n'
     """
-function mountLocalYdbComparisonCurves(container,comparisonData,chartData,baseline){
-  if(!chartData){
-    container.innerHTML='<div class=empty>Search curves are unavailable because summary data could not be loaded.</div>';
-    return
-  }
-  const entries=new Map((comparisonData.entries||[]).map(item=>[localComparisonKey(item),item]));
-  const baselineSemantic=JSON.stringify(localComparisonSemantic(baseline)),groups=[];
-  for(const series of chartData.series||[]){
-    if(series.benchmark!=='local-ydb'||series.affinity!=='roles')continue;
-    const entry=entries.get(JSON.stringify([series.run,series.profile]));
-    if(!entry||JSON.stringify(localComparisonSemantic(entry))!==baselineSemantic)continue;
-    const byNodes=new Map;
-    for(const row of series.rows||[]){
-      const load=chartNumber(row.load);if(!Number.isFinite(load))continue;
-      const dynamicNodes=String(row.dynamic_nodes??entry.result?.dynamic_nodes??'—');
-      if(!byNodes.has(dynamicNodes))byNodes.set(dynamicNodes,new Map);
-      byNodes.get(dynamicNodes).set(String(load),row)
-    }
-    for(const [dynamicNodes,rows] of byNodes)groups.push({
-      rows,label:localComparisonId(entry)+' · '+dynamicNodes+' dynamic',connectMeasuredPoints:true
-    })
-  }
-  groups.sort((left,right)=>left.label.localeCompare(right.label,undefined,{numeric:true}));
-  groups.forEach((group,index)=>group.colorIndex=index);
-  if(!groups.some(group=>group.rows.size)){
-    container.innerHTML='<div class=empty>No compatible local YDB search summaries are available.</div>';
-    return
-  }
-  const schema=localResultSchema(baseline);
-  const objective=baseline.parameters?.load?.objective||{};
-  const curveMetrics=localComparisonCurveMetrics(schema,objective);
-  const cpuSpecifications=[
-    ['static_cpu','median_static_cpu_mean','Static node CPU (%)'],
-    ['dynamic_cpu','median_dynamic_cpu_mean','Dynamic node CPU (%)'],
-    ['cli_cpu','median_cli_cpu_mean','YDB CLI CPU (%)']
-  ];
-  const customSpecifications=curveMetrics.map(metric=>[
-    'workload_'+metric.name,(metric.repetition_aggregation==='sum'?'sum_':'median_')+metric.name,
-    localMetricLabel(schema,metric.name)+' ('+metric.unit+')'
-  ]);
-  const [percentile,sloMetric]=localPreferredSlo(schema,objective);
-  const specifications=(schema.schema_id==='generic-total-v1'?[
-    ['throughput','median_throughput','Achieved throughput ('+schema.throughput_unit+')'],
-    ['latency_ms','median_'+sloMetric,percentile+' latency (ms)'],
-    ...cpuSpecifications,
-    ['errors','sum_errors','Errors across repetitions']
-  ]:customSpecifications.concat(cpuSpecifications)).filter(([,metric])=>groups.some(group=>[...group.rows.values()]
-    .some(row=>Number.isFinite(chartNumber(row[metric])))));
-  if(!specifications.length){
-    container.innerHTML='<div class=empty>No numeric local YDB search metrics are available.</div>';
-    return
-  }
-  let pointCount=0;
-  for(const [,metric] of specifications)for(const group of groups)for(const row of group.rows.values()){
-    if(Number.isFinite(chartNumber(row[metric]))&&++pointCount>chartPointLimit){
-      container.innerHTML='<div class=notice>Search curves omitted because they have more than '+chartPointLimit+
-        ' numeric points. Select fewer runs.</div>';
-      return
-    }
-  }
-  const xValues=[...new Set(groups.flatMap(group=>[...group.rows.keys()].map(Number)))]
-    .sort((left,right)=>left-right);
-  const seriesByMetric=Object.fromEntries(specifications.map(([alias,metric])=>[
-    alias,groups.map(group=>({...group,metric}))
-  ]));
-  const xName=localSearchAxisLabel(
-    baseline.parameters?.load?.parameter||'load',baseline.parameters?.workload?.type
-  );
-  const legend='<div class=chart-legend>'+groups.map(group=>'<span><i class="legend-swatch chart-bg-'+
-    group.colorIndex%chartColors.length+'"></i>'+esc(group.label)+'</span>').join('')+'</div>';
-  container.innerHTML='<h3>Search measurements</h3><p class=muted>Only search measurements; holdout is not included. Lines connect each profile&apos;s own measured loads; '+
-    'no values are synthesized at loads measured only by another profile.</p>'+legend+'<div class=local-charts>'+
-    specifications.map(([alias,,title])=>localChart(title,alias,xName,xValues,seriesByMetric[alias])).join('')+'</div>';
-  bindChartTooltips(
-    container,xName,xValues,seriesByMetric,specifications.map(([alias])=>alias),chartColors,true
-  )
-}
 function mountLocalYdbComparison(container,data,chartData=null){
-  const entries=data.entries||[];if(!entries.length){container.closest('.card').hidden=true;return}
-  const previous=container.dataset.baseline;
-  const baseline=entries.find(item=>localComparisonKey(item)===previous)||entries.find(item=>{
-    const schema=localResultSchema(item);return Object.keys(localResultMetrics(item.result,schema).metrics).length
-  })||entries[0];
-  const baselineSchema=localResultSchema(baseline);
-  container.dataset.baseline=localComparisonKey(baseline);
-  const baselineView=localResultMetrics(baseline.result,baselineSchema),baselineMetrics=baselineView.metrics;
-  const metricColumns=localDisplayedMetrics(baselineSchema,baseline.parameters?.load?.objective||{});
-  const baselineConfig=localComparisonConfig(baseline),baselineContext=localComparisonContext(baseline);
-  const baselineBuild=localComparisonBuild(baseline);
-  const baselineSemantic=JSON.stringify(localComparisonSemantic(baseline));
-  const rows=entries.map(item=>{
-    const itemSchema=localResultSchema(item);
-    const metricView=localResultMetrics(item.result,itemSchema),metrics=metricView.metrics;
-    const config=localComparisonConfig(item),context=localComparisonContext(item),build=localComparisonBuild(item);
-    const sameResultSchema=itemSchema.schema_id===baselineSchema.schema_id&&
-      itemSchema.throughput_unit===baselineSchema.throughput_unit;
-    const semanticCompatible=JSON.stringify(localComparisonSemantic(item))===baselineSemantic;
-    const sameMetricSource=metricView.source===baselineView.source;
-    const compatible=sameResultSchema&&semanticCompatible&&sameMetricSource;
-    const differences=[...new Set([...Object.keys(baselineConfig),...Object.keys(config)])].sort()
-      .filter(name=>String(config[name])!==String(baselineConfig[name]));
-    const contextDifferences=[...new Set([...Object.keys(baselineContext),...Object.keys(context)])].sort()
-      .filter(name=>String(context[name])!==String(baselineContext[name]));
-    const buildDifferences=[...new Set([...Object.keys(baselineBuild),...Object.keys(build)])].sort()
-      .filter(name=>String(build[name])!==String(baselineBuild[name]));
-    const details=[...differences.map(name=>'<li><strong>'+esc(name)+':</strong> '+esc(baselineConfig[name])+
-      ' → '+esc(config[name])+'</li>'),...contextDifferences.map(name=>'<li><strong>'+esc(name)+':</strong> '+
-      esc(baselineContext[name])+' → '+esc(context[name])+'</li>'),...buildDifferences.map(name=>'<li><strong>'+
-      esc(name)+':</strong> '+esc(baselineBuild[name])+' → '+esc(build[name])+'</li>')];
-    if(!sameResultSchema)details.unshift('<li><strong>Result schema:</strong> '+esc(baselineSchema.schema_id)+' → '+
-      esc(itemSchema.schema_id)+'</li>');
-    if(!sameMetricSource)details.unshift('<li><strong>Metric source:</strong> '+esc(baselineView.source)+' → '+
-      esc(metricView.source)+'</li>');
-    const comparisonState=!sameResultSchema?'Incompatible result schema':
-      !semanticCompatible?'Incompatible workload':!sameMetricSource?'Incompatible metric source':
-      differences.length||contextDifferences.length?'Comparable with warnings':'Comparable · build changed';
-    const differenceText=item===baseline?'Baseline':details.length?'<details><summary class="'+
-      (compatible?'':'attempt-fail')+'">'+comparisonState+' · '+differences.length+' config · '+
-      contextDifferences.length+' environment · '+buildDifferences.length+' build'+
-      (sameMetricSource?'':' · metric source')+'</summary><ul>'+details.join('')+
-      '</ul></details>':'Same configuration, environment and build';
-    const metricCells=metricColumns.map(metric=>'<td>'+esc(metricLabel(metrics[metric.name]??'—'))+' '+
-      localComparisonDelta(
-        metrics[metric.name],baselineMetrics[metric.name],localMetricDirection(baselineSchema,metric.name),compatible
-      )+'</td>').join('');
-    return '<tr><td>'+esc(localComparisonId(item))+'</td><td>'+esc(item.state??'—')+
-      localVerificationBadge(item.result,item.parameters,item.verification)+'</td><td>'+esc(metricView.source)+
-      '</td><td><code>'+esc(String(item.binaries?.ydbd?.sha256??'—').slice(0,12))+'</code></td><td>'+
-      esc(metricLabel(item.result?.selected_load??'—'))+'</td>'+metricCells+
-      '<td>'+esc(metricLabel(metrics.static_cpu_mean??'—'))+'%</td><td>'+esc(metricLabel(metrics.dynamic_cpu_mean??'—'))+'%</td>'+
-      '<td>'+esc(metricLabel(metrics.cli_cpu_mean??'—'))+'%</td><td>'+esc(item.result?.dynamic_nodes??'—')+'</td><td>'+
-      differenceText+'</td></tr>'
-  }).join('');
-  const metricHeaders=metricColumns.map(metric=>'<th title="'+esc(metric.description||'')+'">'+
-    esc(localMetricLabel(baselineSchema,metric.name))+' ('+esc(metric.unit)+')</th>').join('');
-  container.innerHTML='<div class=run-section-title><h2>Local YDB baseline comparison</h2><label>Baseline '+
-    '<select id=local-comparison-baseline>'+entries.map(item=>'<option value="'+esc(localComparisonKey(item))+'" '+
-    (item===baseline?'selected':'')+'>'+esc(localComparisonId(item))+'</option>').join('')+'</select></label></div>'+
-    sectionTabs('comparison',[['final','Final results'],['search','Search measurements']])+
-    '<div data-section-panel="comparison:final"><p class=muted>Deltas compare metrics only when both rows use the same result schema and source: search or '+
-    'independent holdout. Expand configuration differences before interpreting a regression.</p>'+
-    '<div class=local-attempts-scroll><table class=local-attempts><thead><tr><th>Run / profile</th><th>State</th>'+
-    '<th>Metric source</th><th>ydbd</th><th>Selected load</th>'+metricHeaders+
-    '<th>Static CPU</th><th>Dynamic CPU</th><th>CLI CPU</th><th>Dynamic nodes</th>'+
-    '<th>Compatibility</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
-    '</div><div data-section-panel="comparison:search" hidden><div id=local-comparison-curves></div></div>';
-  mountLocalYdbComparisonCurves(
-    container.querySelector('#local-comparison-curves'),data,chartData,baseline
-  );
-  bindSectionTabs(container,'comparison');
-  container.querySelector('#local-comparison-baseline').onchange=event=>{
-    container.dataset.baseline=event.target.value;mountLocalYdbComparison(container,data,chartData)
+  const all=data.entries||[];
+  if(!all.length){container.innerHTML='<div class=empty>No local YDB profiles in the selected runs.</div>';return}
+  const stateKey='ydb-bench-comparison-profiles:'+JSON.stringify([...new Set(all.map(item=>item.run))].sort());
+  if(!container.dataset.restored){
+    try{Object.assign(container.dataset,JSON.parse(sessionStorage.getItem(stateKey)||'{}'))}catch{}
+    container.dataset.restored='true';
+  }
+  const remember=()=>{
+    const state=Object.fromEntries(['profiles','baseline','cpu','allConfig'].filter(key=>container.dataset[key]!==undefined)
+      .map(key=>[key,container.dataset[key]]));
+    try{sessionStorage.setItem(stateKey,JSON.stringify(state))}catch{}
+  };
+  const saved=container.dataset.profiles?JSON.parse(container.dataset.profiles):all.map(localComparisonKey);
+  const entries=all.filter(item=>saved.includes(localComparisonKey(item)));
+  const baseline=entries.find(item=>localComparisonKey(item)===container.dataset.baseline)||entries[0];
+  const options=all.map(item=>'<label><input type=checkbox data-comparison-profile value="'+
+    esc(localComparisonKey(item))+'" '+(entries.includes(item)?'checked':'')+'> '+esc(localComparisonId(item))+'</label>').join('');
+  const toolbar='<div class=toolbar><details><summary>Profiles · '+entries.length+'</summary><div class=series-picker>'+
+    options+'</div><button type=button data-apply-profiles>Apply</button></details>'+
+    (baseline?'<label>Baseline <select data-baseline>'+entries.map(item=>'<option value="'+esc(localComparisonKey(item))+
+      '" '+(item===baseline?'selected':'')+'>'+esc(localComparisonId(item))+'</option>').join('')+'</select></label>':'')+'</div>';
+  if(!baseline){
+    container.innerHTML=toolbar+'<div class=empty>Select profiles to compare.</div>';
+  }else{
+    container.dataset.baseline=localComparisonKey(baseline);
+    const schema=localResultSchema(baseline),view=localResultMetrics(baseline.result,schema);
+    const semantic=JSON.stringify(localComparisonSemantic(baseline));
+    const showCpu=container.dataset.cpu==='true';
+    const rows=entries.map(item=>{
+      const currentSchema=localResultSchema(item),currentView=localResultMetrics(item.result,currentSchema);
+      const metrics=currentView.metrics,objective=item.parameters?.load?.objective||{};
+      const [percentile,latencyMetric]=localPreferredSlo(currentSchema,objective);
+      const latency=metrics[latencyMetric];
+      const compatible=JSON.stringify(localComparisonSemantic(item))===semantic&&currentView.source===view.source;
+      const incompatibility=currentView.source!==view.source?'Incompatible metric source':'Incompatible workload or result schema';
+      const slo=objective.type==='latency-slo';
+      const known=latency!==null&&latency!==undefined&&Number.isFinite(Number(latency));
+      const passing=known&&Number(latency)<=Number(objective.max_ms);
+      const href='#run/'+enc(item.run)+'/profile/'+enc('local-ydb/'+item.profile);
+      return '<tr><td><a href="'+esc(href)+'"><strong>'+esc(item.profile)+'</strong></a>'+
+        (item===baseline?' <span class=muted>Baseline</span>':'')+
+        '<div class=muted title="'+esc(item.run)+'">'+esc(item.started_at?humanTime(item.started_at):item.run)+' · '+esc(currentView.source)+'</div>'+
+        '<div class=muted>'+esc(localSearchAxisLabel(item.parameters?.load?.parameter||'load',
+          item.parameters?.workload?.type))+': '+esc(metricLabel(item.result?.selected_load??'—'))+'</div>'+
+        (['passed','completed'].includes(item.state)?'':'<div class=muted>Profile state: '+esc(item.state??'—')+'</div>')+'</td>'+
+        '<td>'+esc(metricLabel(metrics.throughput??'—'))+' <span class=muted>'+esc(currentSchema.throughput_unit)+'</span>'+
+        '<div>'+(item===baseline?'—':compatible?localComparisonDelta(metrics.throughput,view.metrics.throughput):
+          '<span class=muted>'+esc(incompatibility)+'</span>')+'</div></td>'+
+        '<td>'+esc(metricLabel(latency??'—'))+(known?' ms':'')+' <span class=muted>'+esc(percentile??'')+'</span></td>'+
+        '<td>'+esc(metricLabel(metrics.errors??'—'))+(item.parameters?.load?.allow_errors?' <span class=muted>allowed</span>':'')+'</td>'+
+        '<td'+(slo&&known?' class="'+(passing?'good':'bad')+'"':'')+'>'+
+        (slo?(known?(passing?'Satisfied':'Exceeded'):'Unknown'):'—')+
+        (slo?'<div class=muted>'+esc(objective.percentile)+' ≤ '+esc(objective.max_ms)+' ms</div>':'')+'</td>'+
+        (showCpu?['static_cpu_mean','dynamic_cpu_mean','cli_cpu_mean'].map(key=>'<td>'+
+          esc(metricLabel(metrics[key]??'—'))+(metrics[key]!==undefined?'%':'')+'</td>').join(''):'')+'</tr>'
+    }).join('');
+    const groups=[
+      ['Profile configuration',localComparisonConfig],
+      ['Environment',localComparisonContext],
+      ['Build',localComparisonBuild]
+    ];
+    let configRows='',differenceCount=0;
+    for(const [title,project] of groups){
+      const values=entries.map(project);
+      const names=[...new Set(values.flatMap(Object.keys))];
+      let groupRows='';
+      for(const name of names){
+        const cells=values.map(value=>value[name]??'—');
+        const different=new Set(cells.map(value=>JSON.stringify(localComparisonStable(value)))).size>1;
+        if(different)differenceCount++;
+        if(!different&&container.dataset.allConfig!=='true')continue;
+        const reference=cells[entries.indexOf(baseline)];
+        groupRows+='<tr><th>'+esc(name)+'</th>'+cells.map(value=>{
+          const full=typeof value==='object'?JSON.stringify(localComparisonStable(value)):String(value);
+          const revision=value&&typeof value==='object'?(value.commit_id||value.hash):null;
+          const short=revision?String(revision).slice(0,12)+' · '+(value.build_type||'unknown build'):
+            /^[a-f0-9]{40,64}$/.test(full)?full.slice(0,12):full;
+          return '<td'+(JSON.stringify(value)!==JSON.stringify(reference)?' class=comparison-config-changed':'')+
+            '><span title="'+esc(full)+'">'+esc(short)+'</span></td>'
+        }).join('')+'</tr>';
+      }
+      if(groupRows)configRows+='<tr><th colspan="'+(entries.length+1)+'">'+esc(title)+'</th></tr>'+groupRows;
+    }
+    container.innerHTML=toolbar+sectionTabs('comparison',[['results','Results'],['configuration','Configuration']])+
+      '<div data-section-panel="comparison:results"><label><input type=checkbox data-comparison-cpu '+
+      (showCpu?'checked':'')+'> CPU metrics</label><div class=local-attempts-scroll><table class="local-attempts comparison-results">'+
+      '<thead><tr><th>Profile</th><th>Throughput · Δ vs baseline</th><th>Latency</th><th>Errors</th><th>SLO</th>'+
+      (showCpu?'<th>Static CPU</th><th>Dynamic CPU</th><th>YDB CLI CPU</th>':'')+'</tr></thead><tbody>'+
+      rows+'</tbody></table></div></div><div data-section-panel="comparison:configuration" hidden>'+
+      '<label><input type=checkbox data-only-differences '+(container.dataset.allConfig==='true'?'':'checked')+
+      '> Only differences</label> <span class=muted>'+differenceCount+' differing parameters</span>'+
+      '<div class=local-attempts-scroll><table class=local-attempts><thead><tr><th>Parameter</th>'+
+      entries.map(item=>'<th>'+esc(item.profile)+'<div class=muted>'+esc(item.run)+
+        (item===baseline?' · Baseline':'')+'</div></th>').join('')+'</tr></thead><tbody>'+
+      (configRows||'<tr><td colspan="'+(entries.length+1)+'">No configuration differences.</td></tr>')+
+      '</tbody></table></div></div>';
+    bindSectionTabs(container,'comparison');
+    container.querySelector('[data-baseline]').onchange=event=>{
+      container.dataset.baseline=event.target.value;remember();mountLocalYdbComparison(container,data)
+    };
+    container.querySelector('[data-comparison-cpu]').onchange=event=>{
+      container.dataset.cpu=String(event.target.checked);remember();mountLocalYdbComparison(container,data)
+    };
+    container.querySelector('[data-only-differences]').onchange=event=>{
+      container.dataset.allConfig=String(!event.target.checked);remember();mountLocalYdbComparison(container,data)
+    };
+  }
+  container.querySelector('[data-apply-profiles]').onclick=()=>{
+    container.dataset.profiles=JSON.stringify([...container.querySelectorAll('[data-comparison-profile]:checked')].map(input=>input.value));
+    remember();mountLocalYdbComparison(container,data)
   }
 }
     """
@@ -2883,37 +2851,41 @@ function parseLocalYdbProfileSelection(groups,selected){
     "'';c.style.color=''});target.querySelectorAll('[data-node-usage]').forEach(e=>e.textContent='—');details()}}\n      finally{loading=false}\n  "
     "  };\n    refreshTimer=setInterval(refresh,2000);await refresh();\n  }catch(error){if(location.hash==='#topology')app.innerHTML=shell('topolog"
     "y',displayError(error))}\n}\n"
-    'async function renderComparisons(){\n'
-    '  clearRefresh();\n'
-    '  try{\n'
-    "    const value=await api('/api/comparisons');\n"
-    "    let content='<h1 class=page-title>Comparisons</h1><p class=muted>Select runs, then choose a benchmark, profile, axes"
-    ' and exact affinity lines. Charts use the common X intersection and report incomplete coverage.</p><section class=card><'
-    "h2>Selected runs: '+value.selected.length+'</h2><a href=\"#runs\">Choose runs in Runs</a><details><summary>Change selection here</summary>'+ "
-    "(value.runs.length?'<div class=series-picker>'+value.runs.map(run=>'<label><input class=compare type=chec"
-    'kbox value="\'+esc(run.id)+\'" \'+(value.selected.includes(run.id)?\'checked\':\'\')+\'> \'+esc(run.id)+\' <span class=muted>(\'+es'
-    "c(run.source)+')</span></label>').join('')+'</div>':'<div class=empty>No runs are available.</div>')+'<div class=toolbar"
-    "><button class=primary id=save-comparisons>Update comparison</button></div></details></section><section class=card><div id=local-ydb-comparison>'+"
-    "(value.selected.length?'Loading local YDB results…':'Select one or more runs.')+'</div></section><section class=card><h2>Comparison "
-    "charts</h2><div id=comparison-chart>'+(value.selected.length?'Loading summary data…':'Select one or more runs.')+'</div><"
-    "/section>';\n"
-    "    app.innerHTML=shell('comparisons',content);\n"
-    "    document.querySelector('#save-comparisons').onclick=async()=>{await api('/api/comparisons/selection',jsonOptions([.."
-    ".document.querySelectorAll('.compare:checked')].map(input=>input.value)));renderComparisons()};\n"
-    "    if(value.selected.length){const [localResult,localChartResult,chartResult]=await Promise.allSettled([\n"
-    "      loadLocalYdbComparison(value.selected),loadChartData(value.selected,'local-ydb'),loadChartData(value.selected)\n"
-    '    ]);\n'
-    "      const localTarget=document.querySelector('#local-ydb-comparison');\n"
-    "      const chartTarget=document.querySelector('#comparison-chart');\n"
-    "      if(localResult.status==='fulfilled')mountLocalYdbComparison(\n"
-    "        localTarget,localResult.value,localChartResult.status==='fulfilled'?localChartResult.value:null\n"
-    '      );\n'
-    '      else localTarget.innerHTML=displayError(localResult.reason);\n'
-    "      if(chartResult.status==='fulfilled')mountChartBuilder(chartTarget,chartResult.value);\n"
-    '      else chartTarget.innerHTML=displayError(chartResult.reason)\n'
-    '    }\n'
-    "  }catch(error){app.innerHTML=shell('comparisons',displayError(error))}\n"
-    '}\n'
+    """
+async function renderComparisons(){
+  clearRefresh();
+  try{
+    const value=await api('/api/comparisons');
+    const content='<h1 class=page-title>Comparisons</h1><details><summary>Runs · '+value.selected.length+
+      '</summary><div class=series-picker>'+value.runs.map(run=>'<label><input class=compare type=checkbox value="'+
+      esc(run.id)+'" '+(value.selected.includes(run.id)?'checked':'')+'> '+esc(run.id)+'</label>').join('')+
+      '</div><button id=save-comparisons>Update selection</button></details><section><div id=local-ydb-comparison>'+
+      (value.selected.length?'Loading profiles…':'Select runs to compare their profiles.')+
+      '</div></section><section id=other-comparisons hidden><h2>Other benchmarks</h2><div id=comparison-chart></div></section>';
+    app.innerHTML=shell('comparisons',content);
+    document.querySelector('#save-comparisons').onclick=async()=>{
+      await api('/api/comparisons/selection',jsonOptions([...document.querySelectorAll('.compare:checked')].map(input=>input.value)));
+      renderComparisons()
+    };
+    if(!value.selected.length)return;
+    const [local,charts]=await Promise.allSettled([loadLocalYdbComparison(value.selected),loadChartData(value.selected)]);
+    if(location.hash!=='#comparisons')return;
+    const target=document.querySelector('#local-ydb-comparison');
+    if(local.status==='fulfilled')mountLocalYdbComparison(target,local.value);
+    else target.innerHTML=displayError(local.reason);
+    if(charts.status==='fulfilled'){
+      const other={...charts.value,series:(charts.value.series||[]).filter(item=>item.benchmark!=='local-ydb')};
+      if(other.series.length){
+        document.querySelector('#other-comparisons').hidden=false;
+        mountChartBuilder(document.querySelector('#comparison-chart'),other)
+      }
+    }else{
+      document.querySelector('#other-comparisons').hidden=false;
+      document.querySelector('#comparison-chart').innerHTML=displayError(charts.reason)
+    }
+  }catch(error){app.innerHTML=shell('comparisons',displayError(error))}
+}
+    """
     "async function compose(){const pieces=routeParts(),current=pieces.join('/');if(current==='runs')return renderRuns();if(current==='new')return renderN"
     "ew('builder');if(current==='new/yaml')return renderNew('yaml');if(current==='topology')return renderTopology();if(curren"
     "t==='comparisons')return renderComparisons();if(pieces[0]==='attempt'&&[4,5].includes(pieces.length))"

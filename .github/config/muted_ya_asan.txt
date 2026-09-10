@@ -114,6 +114,7 @@ ydb/core/kqp/ut/tli KqpTli.TwoVictimsOneBreaker
 ydb/core/kqp/ut/tli KqpTli.VictimReadThenWriteSameTable
 ydb/core/kqp/ut/tli KqpTli.VictimReadThenWriteSameTableMultiTable
 ydb/core/kqp/ut/tli unittest.[*/*] chunk
+ydb/core/kqp/ut/tx KqpReadYourWrites.InsertThenUpdateThenDeleteAfterCommit_Serializable+IsOlap
 ydb/core/kqp/ut/tx KqpReadYourWrites.InsertThenUpdateThenDeleteAfterCommit_Snapshot+IsOlap
 ydb/core/kqp/ut/tx KqpSinkMvcc.OlapMultiSinks
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TBrokenLocksReadAfterUpsertOlap
@@ -159,6 +160,7 @@ ydb/core/persqueue/public/describer/ut TDescriberTests.CustomAccessRightsAlterSc
 ydb/core/persqueue/public/describer/ut TDescriberTests.LegacyNameBadRequest
 ydb/core/persqueue/public/describer/ut TDescriberTests.LegacyRt3CdcWithFederationRoot
 ydb/core/persqueue/public/describer/ut TDescriberTests.LegacyRt3TopicWithFederationRoot
+ydb/core/persqueue/public/describer/ut TDescriberTests.LegacyShortTopicWithFederationRoot
 ydb/core/persqueue/public/describer/ut TDescriberTests.MultipleCDC
 ydb/core/persqueue/public/describer/ut TDescriberTests.NotTopicWithDescribeAccess
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicInDatabaseWithSlashInName

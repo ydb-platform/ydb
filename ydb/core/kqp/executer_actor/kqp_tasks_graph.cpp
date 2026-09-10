@@ -2239,6 +2239,10 @@ void TKqpTasksGraph::FillOutputDesc(NYql::NDqProto::TTaskOutput& outputDesc, con
                         {"columnShardHashKeyTypes", columnShardHashV1Params.KeyTypesToString()},
                         {"keyColumns", JoinSeq(",", output.KeyColumns)});
 
+                    Y_ENSURE(columnShardHashV1Params.SourceShardCount != 0, "ShardCount for ColumnShardHashV1 Shuffle can't be equal to 0");
+                    Y_ENSURE(columnShardHashV1Params.TaskIndexByHash != nullptr, "TaskIndexByHash for ColumnShardHashV1 wasn't propagated to this stage");
+                    Y_ENSURE(columnShardHashV1Params.SourceTableKeyColumnTypes != nullptr, "SourceTableKeyColumnTypes for ColumnShardHashV1 wasn't propagated to this stage");
+
                     Y_ENSURE(
                         columnShardHashV1Params.SourceTableKeyColumnTypes->size() == output.KeyColumns.size(),
                         TStringBuilder{}
@@ -4355,7 +4359,6 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
             }
 
             BuildKqpStageChannels(stageInfo, GetMeta().TxId, GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination());
-
         }
 
         GetMeta().DqChannelVersion = tx.Body->DqChannelVersion();
@@ -4945,7 +4948,6 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
                 task.Meta.TaskParams["CsWriteAffinityShardId"] = ToString(shardId);
                 MaxTasksGraph->AddTask(task, nodeId);
             }
-
 
             return;
         }

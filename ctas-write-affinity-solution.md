@@ -767,7 +767,7 @@ Executer → TableResolver → (схемы) → TEvTableResolveStatus
    |-----------|---------|-------------------|
    | Read source | `Sources(0).Type == kReadRangesSource` | `PartitionPruner->Prune()` → `PrunedPartitions` → `shardId` |
    | Scan / OLAP | `IsScan() \|\| IsOlap()` | `PartitionPruner->Prune()` для каждого `TableOp` → `shardId` |
-   | **Sink (CTAS)** | `else` (нет sources, не scan) | **Только при `ColumnShardHashV1`-входе:** `ShardKey->GetPartitions()` → `partition.ShardId` |
+   | **Sink (CTAS)** | `else` (нет sources, не scan) | **Только при `ColumnShardHashV1`-входе:** `ShardKey->GetPartitions()` → `partition.ShardId`; fallback: `ColumnTableInfoPtr->Description.GetSharding().GetColumnShards()` |
 
    Для sink-стадий (CTAS) дополнительно проверяются:
    - `sink.HasInternalSink()` — настройки типа `TKqpTableSinkSettings`
@@ -978,7 +978,14 @@ return fallbackBuffer;
   7. Возвращает `hashShuffleKeyColumns` (числовые индексы для широких каналов, имена для узких)
 - Канал: HashShuffle → строки маршрутизируются по hash(sharding_key) → bucket → task
 
-В case `kColumnShardHashV1` вызывается [`BuildColumnShardHashV1ForWriteAffinity`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1548). `TaskIndexByHash[bucket]` = индекс задачи, владеющей шардом bucket'а. Shuffle Elimination отключён для CTAS sink с `ColumnShardHashV1`-входом.
+В case `kColumnShardHashV1` вызывается [`BuildColumnShardHashV1ForWriteAffinity`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1548). `TaskIndexByHash[bucket]` = индекс задачи, владеющей шардом bucket'а.
+
+**Shuffle Elimination skip:** Для CTAS sink с `ColumnShardHashV1`-входом shuffle elimination отключён. Причина: shuffle elimination использует `stageInfo.Tasks.size()` (количество задач Transform-стадии) как `SourceShardCount`, что отражает количество шардов *источника*, а не *целевой* таблицы. Это вызывает несоответствие hash bucket'ов между DQ `ColumnShardHashV1` routing и runtime `TConsistencySharding64`. В коде это реализовано добавлением условия `!isCsWriteAffinitySink` в два места [`BuildKqpStageChannels`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1945):
+```cpp
+const bool isCsWriteAffinitySink = IsCsWriteAffinitySinkStage(stageInfo);
+if (enableShuffleElimination && !isCsWriteAffinitySink && !isFusedWithScanStage) { ... }
+if (enableShuffleElimination && !isCsWriteAffinitySink && !hasMap && !isFusedWithScanStage && ...) { ... }
+```
 
 **Обработка числовых индексов**: `BuildColumnShardHashV1ForWriteAffinity` получает `effectiveShardingColumns` через [`GetEffectiveShardingColumns()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1368), который возвращает `CsShardingColumns` (заполнено `FillStages()` из HashShuffle proto для CTAS, или Table Resolver'ом для существующих таблиц). В ветке `useNumericIndices` (широкие каналы) каждая запись интерпретируется как:
 1. Имя колонки → поиск в `columnNameToIndex` (из `sinkSettings.GetColumns()`)

@@ -1014,18 +1014,19 @@ Y_UNIT_TEST_SUITE(TOracle)
             EHostHealth::TemporaryOffline,
             hostStateController.Healths[0]);
 
-        // Go to Online. Expect PersistHostHealth call
-        for (size_t i = 0; i < 10; ++i) {
-            now += TDuration::Seconds(1);
+        // Generate success. Switching to the online state.
+        now += TDuration::Seconds(11);
+        for (size_t i = 0; i < 1000; ++i) {
             oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
             oracle.OnRequestSucceeded(
                 0,
                 EOperation::WriteToPBuffer,
                 now,
                 TDuration());
-            oracle.Think(now);
         }
+        now += TDuration::Seconds(11);
 
+        oracle.Think(now);
         UNIT_ASSERT_VALUES_EQUAL(
             EHostState::Online,
             hostStateController.States[0]);

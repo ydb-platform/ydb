@@ -540,9 +540,6 @@ void TTablesManager::DropTable(
     const bool isReadOnly = table->IsReadOnly(schemeShardLocalPathId);
     const bool isPartialDrop = table->GetPathIds().size() > 1;
     table->SetDropVersion(schemeShardLocalPathId, version);
-    if (table->IsDropped()) {
-        AFL_VERIFY(PathsToDrop[table->GetDropVersionVerified()].emplace(pathId).second);
-    }
     if (isReadOnly) {
         RebuildReadOnlyTablesSnapshots();
     } else if (!isPartialDrop) {
@@ -559,6 +556,14 @@ void TTablesManager::DropTable(
         NYDBTest::TControllers::GetColumnShardController()->OnDeletePathId(TabletId, TUnifiedPathId::BuildValid(pathId, schemeShardLocalPathId));
     } else {
         Schema::SaveTableDropVersionV1(db, schemeShardLocalPathId, pathId, version.GetPlanStep(), version.GetTxId());
+    }
+    // Schedule the drop only once the path set above is final. The PathsToDrop key is
+    // GetDropVersionVerified(), i.e. the max drop version over the *remaining* paths, and GC
+    // re-derives that very key later in TryFinalizeDropPathOnExecute/OnComplete. Registering
+    // before Remove() would compute the key over a path that is about to disappear, so the
+    // max would shift downwards and GC could no longer find the entry to finalize.
+    if (table->IsDropped()) {
+        AFL_VERIFY(PathsToDrop[table->GetDropVersionVerified()].emplace(pathId).second);
     }
 }
 

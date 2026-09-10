@@ -72,7 +72,16 @@ std::unordered_map<TString, TPoolSettings::TProperty> TPoolSettings::GetProperti
 
 std::optional<TString> TPoolSettings::Validate() const {
     if (QueryMemoryLimitPercentPerNode != -1) {
-        return "Invalid resource pool configuration, query_memory_limit_percent_per_node is not supported yet. Use total_memory_limit_percent_per_node for pool-wide memory limit";
+        return "Invalid resource pool configuration, query_memory_limit_percent_per_node is not supported";
+    }
+    if (TotalMemoryLimitPercentPerNode != -1) {
+        return "Invalid resource pool configuration, total_memory_limit_percent_per_node is not supported";
+    }
+    if (QueryCpuLimitPercentPerNode != -1) {
+        return "Invalid resource pool configuration, query_cpu_limit_percent_per_node is not supported";
+    }
+    if (ResourceWeight != -1) {
+        return "Invalid resource pool configuration, resource_weight is not supported";
     }
     if (ConcurrentQueryLimit > POOL_MAX_CONCURRENT_QUERY_LIMIT) {
         return TStringBuilder() << "Invalid resource pool configuration, concurrent_query_limit is " << ConcurrentQueryLimit << ", that exceeds limit in " << POOL_MAX_CONCURRENT_QUERY_LIMIT;

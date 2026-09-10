@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <functional>
+#include <type_traits>
 
 namespace NActors {
 
@@ -103,6 +104,8 @@ namespace NActors {
          * the request is only started when the wait is actually awaited (an already cancelled
          * coroutine never starts it). The order is not needed for correctness: a reply is a mailbox
          * event and cannot be handled before the current turn ends, whoever sends it.
+         * The starter runs synchronously, in the same actor turn, and must not wait for anything:
+         * it returns void, so a coroutine cannot be passed as a starter by mistake.
          */
         template<class TEvent, class TStarter>
         class [[nodiscard]] TActorStartedEventAwaiter : public TActorSpecificEventAwaiter<TEvent> {
@@ -153,11 +156,13 @@ namespace NActors {
      * starter(IActor& self, ui64 cookie) to start the request, both from await_suspend. Use it when
      * the request is started by something other than a plain Send (an external callback, a future
      * subscription, a helper that needs the cookie): the cookie is allocated for you, and the
-     * request is not started unless the wait is awaited.
+     * request is not started unless the wait is awaited. The starter runs synchronously, in the
+     * same actor turn, and must not wait: it returns void, a coroutine is not accepted.
      */
     template<class TEvent, class TStarter>
     inline auto ActorWaitForEvent(TStarter&& starter)
         requires std::invocable<TStarter&, IActor&, ui64>
+            && std::is_void_v<std::invoke_result_t<TStarter&, IActor&, ui64>>
     {
         return NDetail::TActorStartedEventAwaiter<TEvent, TStarter>(AllocateWaitCookie(), std::forward<TStarter>(starter));
     }

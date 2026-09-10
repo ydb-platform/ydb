@@ -60,27 +60,23 @@ namespace {
         const TString& database,
         bool useTls,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-        const TString& path,
-        bool addRoot) {
+        const TString& path) {
         auto driver = federatedQuerySetup->Driver;
 
         NYdb::TCommonClientSettings opts;
         opts
             .DiscoveryEndpoint(endpoint)
-            .Database(addRoot ? "/Root" + database : database)
+            .Database(database)
             .SslCredentials(NYdb::TSslCredentials(useTls))
             .DiscoveryMode(NYdb::EDiscoveryMode::Async)
             .CredentialsProviderFactory(credentialsProviderFactory);
         auto schemeClient = std::make_shared<NYdb::NScheme::TSchemeClient>(*driver, opts);
 
-        return schemeClient->DescribePath(addRoot ? "/Root" + path : path)
-            .Apply([actorSystem, p = path, sc = schemeClient, database, endpoint, f = federatedQuerySetup, useTls, credentialsProviderFactory, addRoot](const NThreading::TFuture<NYdb::NScheme::TDescribePathResult>& result) {
+        return schemeClient->DescribePath(path)
+            .Apply([actorSystem, p = path, sc = schemeClient, database, endpoint](const NThreading::TFuture<NYdb::NScheme::TDescribePathResult>& result) {
                 auto describePathResult = result.GetValue();
                 TGetSchemeEntryResult res;
                 if (!describePathResult.IsSuccess()) {
-                    if (describePathResult.GetStatus() == NYdb::EStatus::CLIENT_UNAUTHENTICATED && !addRoot) {
-                        return GetSchemeEntryTypeImpl(actorSystem, f, endpoint, database, useTls, credentialsProviderFactory, p, true);
-                    }
                     TString message = TStringBuilder() << "Describe path '" << p << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "' failed.";
                     YDB_LOG_WARN_CTX(*actorSystem, message,
                         {"issues", describePathResult.GetIssues()});
@@ -430,8 +426,7 @@ namespace {
                 NKikimr::CanonizePath(database),
                 useTls,
                 federatedQuerySetup->CredentialsFactory->Create(structuredTokenJson),
-                path,
-                false);
+                path);
     };
 
     std::vector<NKqpProto::TKqpExternalSink> FilterExternalSinksWithEffects(const std::vector<NKqpProto::TKqpExternalSink>& sinks) {

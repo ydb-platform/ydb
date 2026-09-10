@@ -193,6 +193,7 @@ private:
         bool add) const;
 
     void SetState(EState newState);
+    void CheckInvariants() const;
 
     void MaybeAdvanceToFlushed();
     void MaybeAdvanceToErased();

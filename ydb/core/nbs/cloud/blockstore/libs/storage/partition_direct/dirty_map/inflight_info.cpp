@@ -326,6 +326,8 @@ void TInflightInfo::UpdateHosts(
             // Nothing to do.
         } break;
     }
+
+    CheckInvariants();
 }
 
 void TInflightInfo::LockPBuffer()
@@ -445,9 +447,69 @@ void TInflightInfo::SetState(EState newState)
     }
 
     State = newState;
+    CheckInvariants();
 
     if (State == EState::PBufferFlushed) {
+        ReadyQueue->UnRegister(PBufferKey, IReadyQueue::EQueueType::Flush);
         ReadyQueue->FlushCompleted(PBufferKey, FlushConfirmed);
+    }
+}
+
+void TInflightInfo::CheckInvariants() const
+{
+    Y_ABORT_UNLESS(WriteConfirmed.Exclude(WriteRequested).Empty());
+    Y_ABORT_UNLESS(
+        FlushConfirmed.Exclude(Disabled).Exclude(FlushRequested).Empty());
+    Y_ABORT_UNLESS(
+        FlushRequested.Exclude(Disabled).Exclude(DesiredDDisks).Empty());
+    Y_ABORT_UNLESS(EraseConfirmed.Exclude(EraseRequested).Empty());
+    Y_ABORT_UNLESS(EraseRequested.Exclude(WriteRequested).Empty());
+
+    switch (State) {
+        case EState::PBufferPendingWrite:
+            Y_ABORT_UNLESS(WriteRequested.Empty());
+            Y_ABORT_UNLESS(WriteConfirmed.Empty());
+            Y_ABORT_UNLESS(FlushRequested.Empty());
+            Y_ABORT_UNLESS(FlushConfirmed.Empty());
+            Y_ABORT_UNLESS(EraseRequested.Empty());
+            Y_ABORT_UNLESS(EraseConfirmed.Empty());
+            break;
+        case EState::PBufferIncompleteWrite:
+            Y_ABORT_UNLESS(FlushRequested.Empty());
+            Y_ABORT_UNLESS(FlushConfirmed.Empty());
+            Y_ABORT_UNLESS(EraseRequested.Empty());
+            Y_ABORT_UNLESS(EraseConfirmed.Empty());
+            Y_ABORT_UNLESS(
+                WriteConfirmed.Count() < QuorumDirectBlockGroupHostCount);
+            break;
+        case EState::PBufferWritten:
+            Y_ABORT_UNLESS(
+                WriteConfirmed.Count() >= QuorumDirectBlockGroupHostCount);
+            Y_ABORT_UNLESS(FlushRequested.Empty());
+            Y_ABORT_UNLESS(FlushConfirmed.Empty());
+            Y_ABORT_UNLESS(EraseRequested.Empty());
+            Y_ABORT_UNLESS(EraseConfirmed.Empty());
+            break;
+        case EState::PBufferFlushing:
+            Y_ABORT_UNLESS(
+                WriteConfirmed.Count() >= QuorumDirectBlockGroupHostCount);
+            Y_ABORT_UNLESS(EraseRequested.Empty());
+            Y_ABORT_UNLESS(EraseConfirmed.Empty());
+            break;
+        case EState::PBufferFlushed:
+        case EState::PBufferErasing:
+        case EState::PBufferErased:
+            Y_ABORT_UNLESS(
+                FlushConfirmed.Count() >= QuorumDirectBlockGroupHostCount);
+            Y_ABORT_UNLESS(GetInflightFlushes().Empty());
+            break;
+    }
+
+    if (State == EState::PBufferErased) {
+        Y_ABORT_UNLESS(
+            EraseConfirmed.Exclude(Disabled) ==
+            WriteRequested.Exclude(Disabled));
+        Y_ABORT_UNLESS(PBuffersLockCount == 0);
     }
 }
 
@@ -455,7 +517,7 @@ void TInflightInfo::MaybeAdvanceToFlushed()
 {
     Y_ABORT_UNLESS(State == EState::PBufferFlushing);
 
-    if (DesiredDDisks.Exclude(Disabled) == FlushConfirmed &&
+    if (DesiredDDisks.Exclude(Disabled) == FlushConfirmed.Exclude(Disabled) &&
         FlushConfirmed.Count() >= QuorumDirectBlockGroupHostCount)
     {
         SetState(EState::PBufferFlushed);

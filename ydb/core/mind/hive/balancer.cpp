@@ -128,8 +128,10 @@ protected:
     std::vector<TNodeId>::iterator NextNode;
     std::vector<TFullTabletId> Tablets;
     std::vector<TFullTabletId>::iterator NextTablet;
+    TNodeId TabletsNodeId = 0;
     std::unordered_set<TNodeId> ScatterSourceNodeIds;
     std::unordered_map<TFullTabletId, TNodeId> ScatterSourcesInFlight;
+    std::unordered_set<TNodeId> ScatterNodesInFlight;
 
     static constexpr ui64 MAX_TABLETS_PROCESSED = 10;
 
@@ -199,9 +201,7 @@ protected:
         return ScatterSourceNodeIds.contains(node.Id)
             && !node.Down && !node.Freeze
             && node.GetTabletUsage(Settings.ResourceToBalance) > *Settings.MinNodeUsage
-            && std::none_of(ScatterSourcesInFlight.begin(), ScatterSourcesInFlight.end(), [&](const auto& entry) {
-                return entry.second == node.Id;
-            });
+            && !ScatterNodesInFlight.contains(node.Id);
     }
 
     void BalanceNodes() {
@@ -284,6 +284,14 @@ protected:
     }
 
     std::optional<TFullTabletId> GetNextTablet(TInstant now) {
+        if (Settings.MinNodeUsage && !Tablets.empty() && NextTablet != Tablets.end()) {
+            TNodeInfo* node = Hive->FindNode(TabletsNodeId);
+            if (node == nullptr || !node->IsAlive() || !IsNodeSuitableForBalancing(*node)) {
+                // NextNode already points to the next source. Skip this source's
+                // remaining tablets without spending the per-event tablet budget.
+                Tablets.clear();
+            }
+        }
         for (; Tablets.empty() || NextTablet == Tablets.end(); ++NextNode) {
             if (NextNode == Nodes.end()) {
                 return std::nullopt;
@@ -332,6 +340,7 @@ protected:
                 Tablets.push_back(tablet->GetFullTabletId());
             }
             NextTablet = Tablets.begin();
+            TabletsNodeId = node->Id;
         }
         return *(NextTablet++);
     }
@@ -379,6 +388,7 @@ protected:
                     ++Movements;
                     if (Settings.MinNodeUsage) {
                         ScatterSourcesInFlight.emplace(tablet->GetFullTabletId(), tablet->Node->Id);
+                        ScatterNodesInFlight.insert(tablet->Node->Id);
                     }
                     YDB_LOG_DEBUG("Balancer moving tablet",
                         {"logPrefix", GetLogPrefix()},
@@ -404,7 +414,11 @@ protected:
             {"status", ev->Get()->Status},
             {"tabletId", ev->Get()->TabletId});
         --KickInFlight;
-        ScatterSourcesInFlight.erase(ev->Get()->TabletId);
+        auto source = ScatterSourcesInFlight.find(ev->Get()->TabletId);
+        if (source != ScatterSourcesInFlight.end()) {
+            ScatterNodesInFlight.erase(source->second);
+            ScatterSourcesInFlight.erase(source);
+        }
         BalanceNodes();
         KickNextTablet();
     }

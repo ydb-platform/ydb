@@ -1129,7 +1129,8 @@ protected:
     };
 
     THiveStats GetStats() const;
-    std::optional<TBalancerSettings> GetScatterBalancerSettings(TConstArrayRef<const TNodeInfo*> nodes, TInstant now) const;
+    std::optional<TBalancerSettings> GetScatterBalancerSettings(TConstArrayRef<const TNodeInfo*> nodes, TInstant now,
+        std::optional<TResourceNormalizedValues> scatterByResource = {}) const;
     template<std::forward_iterator TIter>
     THiveStats GetStats(TIter begin, TIter end) const;
     void RemoveNodeFromSegments(TNodeInfo* node);

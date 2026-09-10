@@ -5457,10 +5457,12 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
     }
 
-    void TestHiveScatterStopsAtSourceThreshold(ui32 inflight) {
+    void TestHiveScatterStopsAtSourceThreshold(ui32 inflight, bool checkParallelDispatch = false) {
         constexpr ui32 NUM_NODES = 6;
-        constexpr ui64 CPU_PER_TABLET = 10'000;
+        constexpr ui64 CPU_PER_PERCENT = 10'000;
         constexpr ui64 MAX_CPU = 1'000'000;
+        const ui32 tabletsPerPercent = checkParallelDispatch ? 4 : 1;
+        const ui64 cpuPerTablet = CPU_PER_PERCENT / tabletsPerPercent;
         const ui64 hiveTablet = MakeDefaultHiveID();
         const ui64 owner = MakeTabletID(false, 1);
         TTestBasicRuntime runtime(NUM_NODES, false);
@@ -5505,7 +5507,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         THashMap<ui64, ui32> tabletNodes;
         ui64 ownerIdx = 100500;
         for (ui32 node = 0; node < NUM_NODES; ++node) {
-            for (ui32 tablet = 0; tablet <= node; ++tablet, ++ownerIdx) {
+            for (ui32 tablet = 0; tablet < (node + 1) * tabletsPerPercent; ++tablet, ++ownerIdx) {
                 auto create = MakeHolder<TEvHive::TEvCreateTablet>(owner, ownerIdx, TTabletTypes::Dummy, BINDED_CHANNELS);
                 create->Record.SetObjectId(ownerIdx);
                 create->Record.AddAllowedNodeIDs(runtime.GetNodeId(node));
@@ -5555,11 +5557,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             const ui32 node = ev->Sender.NodeId() - runtime.GetNodeId(0);
             if (node < NUM_NODES) {
                 record.MutableTotalResourceUsage()->Clear();
-                record.MutableTotalResourceUsage()->SetCPU((node + 1) * CPU_PER_TABLET);
+                record.MutableTotalResourceUsage()->SetCPU((node + 1) * CPU_PER_PERCENT);
             }
             for (auto& metric : *record.MutableTabletMetrics()) {
                 if (tabletNodes.contains(metric.GetTabletID())) {
-                    metric.MutableResourceUsage()->SetCPU(CPU_PER_TABLET);
+                    metric.MutableResourceUsage()->SetCPU(cpuPerTablet);
                 }
             }
         });
@@ -5570,11 +5572,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             const TActorId localSender = runtime.AllocateEdgeActor(node);
             for (ui32 sample = 0; sample < 20; ++sample) {
                 auto metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
-                metrics->Record.MutableTotalResourceUsage()->SetCPU((node + 1) * CPU_PER_TABLET);
+                metrics->Record.MutableTotalResourceUsage()->SetCPU((node + 1) * CPU_PER_PERCENT);
                 for (ui64 tabletId : initial[node]) {
                     auto* metric = metrics->Record.AddTabletMetrics();
                     metric->SetTabletID(tabletId);
-                    metric->MutableResourceUsage()->SetCPU(CPU_PER_TABLET);
+                    metric->MutableResourceUsage()->SetCPU(cpuPerTablet);
                 }
                 runtime.SendToPipe(hiveTablet, localSender, metrics.Release(), node, GetPipeConfigWithRetries());
                 TAutoPtr<IEventHandle> handle;
@@ -5598,6 +5600,52 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 it->second = target;
             }
         });
+        if (checkParallelDispatch) {
+            TBlockEvents<NHive::TEvPrivate::TEvRestartComplete> completions(runtime, [&](const auto& ev) {
+                const IActor* actor = runtime.FindActor(ev->GetRecipientRewrite());
+                return actor && actor->GetActivityType() == NKikimrServices::TActivity::HIVE_BALANCER_ACTOR
+                    && tabletNodes.contains(ev->Get()->TabletId.first);
+            });
+            TBlockEvents<TEvents::TEvWakeup> wakeups(runtime, [&](const auto& ev) {
+                const IActor* actor = runtime.FindActor(ev->GetRecipientRewrite());
+                return actor && actor->GetActivityType() == NKikimrServices::TActivity::HIVE_BALANCER_ACTOR;
+            });
+            blockBalancer.Remove();
+            BalanceTablets(runtime, hiveTablet, sender);
+            runtime.WaitFor("both scatter sources to restart tablets", [&] {
+                return completions.size() == 2 || !wakeups.empty();
+            }, TDuration::Seconds(10));
+            // Each source has more than one event's worth of cached tablets.
+            // A busy source must not consume the budget before the next donor.
+            UNIT_ASSERT_C(wakeups.empty(), "busy source delayed another donor with a wakeup");
+            UNIT_ASSERT_VALUES_EQUAL(movements, 2);
+            UNIT_ASSERT_VALUES_EQUAL(departures[3], 1);
+            UNIT_ASSERT_VALUES_EQUAL(departures[4], 1);
+
+            // Release only one source: it must be able to donate again while
+            // the other source still has an unfinished restart.
+            completions.Unblock(1);
+            runtime.WaitFor("completed source to restart another tablet", [&] {
+                return completions.size() == 2 || !wakeups.empty();
+            }, TDuration::Seconds(10));
+            UNIT_ASSERT_C(wakeups.empty(), "completed source did not resume immediately");
+            UNIT_ASSERT_VALUES_EQUAL(movements, 3);
+            UNIT_ASSERT_VALUES_EQUAL(departures[3] + departures[4], 3);
+
+            completions.Stop().Unblock();
+            wakeups.Stop().Unblock();
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(NHive::TEvPrivate::EvBalancerOut);
+            runtime.DispatchEvents(options, TDuration::Seconds(10));
+            const auto finalDistribution = getDistribution();
+            UNIT_ASSERT_VALUES_EQUAL(departures[3], 2);
+            UNIT_ASSERT_VALUES_EQUAL(departures[4], 6);
+            UNIT_ASSERT_VALUES_EQUAL(movements, 8);
+            UNIT_ASSERT_VALUES_EQUAL(finalDistribution[3].size(), 14);
+            UNIT_ASSERT_VALUES_EQUAL(finalDistribution[4].size(), 14);
+            UNIT_ASSERT_EQUAL(finalDistribution.back(), initial.back());
+            return;
+        }
         blockBalancer.Remove();
         BalanceTablets(runtime, hiveTablet, sender);
         {
@@ -5631,6 +5679,10 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
     Y_UNIT_TEST(TestHiveScatterStopsAtSourceThresholdConcurrent) {
         TestHiveScatterStopsAtSourceThreshold(4);
+    }
+
+    Y_UNIT_TEST(TestHiveScatterBusySourceDoesNotDelayOtherSources) {
+        TestHiveScatterStopsAtSourceThreshold(4, true);
     }
 
     Y_UNIT_TEST(TestHiveBalancerDifferentResources) {

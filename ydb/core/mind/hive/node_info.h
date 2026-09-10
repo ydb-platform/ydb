@@ -277,6 +277,22 @@ public:
         return ResourceMaximumValues;
     }
 
+    using TBalancerResourceMask = std::bitset<static_cast<size_t>(EResourceToBalance::Network) + 1>;
+    // Only valid within one synchronous decision: the RUNNING bucket must not
+    // change, and cooldowns are checked at the same instant for every resource.
+    class TBalancerResourceScanner {
+        TInstant Now;
+        TBalancerResourceMask Pending;
+        TBalancerResourceMask Found;
+        const std::unordered_set<TTabletInfo*>* Tablets = nullptr;
+        std::unordered_set<TTabletInfo*>::const_iterator Next;
+
+    public:
+        TBalancerResourceScanner(const TNodeInfo& node, TBalancerResourceMask resources, TInstant now);
+        bool HasResource(EResourceToBalance resource);
+    };
+
+    TBalancerResourceMask GetBalancerResourceMask(TBalancerResourceMask resources, TInstant now) const;
     bool HasTabletsForBalancer(EResourceToBalance resource, TInstant now) const;
 
     double GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbourPenalty = true) const;

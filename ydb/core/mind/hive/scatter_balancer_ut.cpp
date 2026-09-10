@@ -135,6 +135,90 @@ void AssertSources(const std::optional<TBalancerSettings>& settings, std::initia
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(THiveScatterBalancerTest) {
+    Y_UNIT_TEST(ResourceMaskCombinesTabletsAndOnlyReturnsRequestedResources) {
+        TScatterFixture fixture;
+        auto& node = fixture.AddNode(EResourceToBalance::CPU, 50'000);
+        fixture.AddTablet(node, EResourceToBalance::Memory);
+        fixture.AddTablet(node, EResourceToBalance::Network);
+        fixture.AddTablet(node, EResourceToBalance::Counter);
+        TNodeInfo::TBalancerResourceMask requested;
+        UNIT_ASSERT(node.GetBalancerResourceMask(requested, fixture.Now).none());
+        requested.set();
+        UNIT_ASSERT(node.GetBalancerResourceMask(requested, fixture.Now).all());
+        requested.reset();
+        requested.set(static_cast<size_t>(EResourceToBalance::CPU));
+        UNIT_ASSERT(node.GetBalancerResourceMask(requested, fixture.Now) == requested);
+        fixture.Tablets.front()->BalancerPolicy = TTabletInfo::EBalancerPolicy::POLICY_IGNORE;
+        UNIT_ASSERT(node.GetBalancerResourceMask(requested, fixture.Now).none());
+    }
+
+    Y_UNIT_TEST(ResourceMaskIsRefreshedAfterCooldownAndMetricChanges) {
+        TScatterFixture fixture;
+        auto& node = fixture.AddNode(EResourceToBalance::CPU, 50'000);
+        auto& tablet = *fixture.Tablets.back();
+        TNodeInfo::TBalancerResourceMask requested;
+        requested.set(static_cast<size_t>(EResourceToBalance::CPU));
+        UNIT_ASSERT(node.GetBalancerResourceMask(requested, fixture.Now).any());
+        tablet.MakeBalancerDecision(fixture.Now);
+        UNIT_ASSERT(node.GetBalancerResourceMask(requested, fixture.Now).none());
+        const auto later = fixture.Now + TDuration::Seconds(601);
+        UNIT_ASSERT(node.GetBalancerResourceMask(requested, later).any());
+        SetResource(tablet.GetMutableResourceValues(), EResourceToBalance::CPU, 0);
+        UNIT_ASSERT(node.GetBalancerResourceMask(requested, later).none());
+    }
+
+    Y_UNIT_TEST(ComputeResourceMaskPreservesCounterBasedEligibility) {
+        TScatterFixture fixture;
+        auto& receiver = fixture.AddNode(EResourceToBalance::Counter, 1);
+        fixture.AddNode(EResourceToBalance::CPU, 50'000);
+        TNodeInfo::TBalancerResourceMask requested;
+        requested.set(static_cast<size_t>(EResourceToBalance::CPU));
+        requested.set(static_cast<size_t>(EResourceToBalance::ComputeResources));
+        const auto mask = receiver.GetBalancerResourceMask(requested, fixture.Now);
+        UNIT_ASSERT(!mask.test(static_cast<size_t>(EResourceToBalance::CPU)));
+        UNIT_ASSERT(mask.test(static_cast<size_t>(EResourceToBalance::ComputeResources)));
+        // A permitted compute metric with value zero and a nonzero counter is
+        // still a ComputeResources match. Keep this node as a CPU receiver.
+        AssertSources(fixture.Settings(), {2});
+    }
+
+    Y_UNIT_TEST(NextResourceCanTriggerAfterFirstCohortIsBalanced) {
+        TScatterFixture fixture;
+        auto& first = fixture.AddNode(EResourceToBalance::CPU, 30'000);
+        fixture.AddTablet(first, EResourceToBalance::Memory);
+        SetResource(first.ResourceValues, EResourceToBalance::Memory, 10'000);
+        auto& second = fixture.AddNode(EResourceToBalance::CPU, 30'000);
+        fixture.AddTablet(second, EResourceToBalance::Memory);
+        SetResource(second.ResourceValues, EResourceToBalance::Memory, 50'000);
+        fixture.AddNode(EResourceToBalance::CPU, 900'000);
+        fixture.Tablets.back()->BalancerPolicy = TTabletInfo::EBalancerPolicy::POLICY_IGNORE;
+        const auto settings = fixture.Settings();
+        AssertSources(settings, {2});
+        UNIT_ASSERT(settings->ResourceToBalance == EResourceToBalance::Memory);
+    }
+
+    Y_UNIT_TEST(CounterDifferenceOfOneIsIgnoredAfterRemovingUnmovableNodes) {
+        TScatterFixture fixture;
+        fixture.AddNode(EResourceToBalance::Counter, 1);
+        fixture.AddNode(EResourceToBalance::Counter, 2);
+        fixture.AddNode(EResourceToBalance::Counter, 10);
+        fixture.Tablets.back()->BalancerPolicy = TTabletInfo::EBalancerPolicy::POLICY_IGNORE;
+        UNIT_ASSERT(!fixture.Settings());
+    }
+
+    Y_UNIT_TEST(CPUKeepsPriorityWhenMemoryAlsoExceedsScatterLimit) {
+        TScatterFixture fixture;
+        auto& first = fixture.AddNode(EResourceToBalance::CPU, 10'000);
+        fixture.AddTablet(first, EResourceToBalance::Memory);
+        SetResource(first.ResourceValues, EResourceToBalance::Memory, 50'000);
+        auto& second = fixture.AddNode(EResourceToBalance::CPU, 50'000);
+        fixture.AddTablet(second, EResourceToBalance::Memory);
+        SetResource(second.ResourceValues, EResourceToBalance::Memory, 10'000);
+        const auto settings = fixture.Settings();
+        AssertSources(settings, {2});
+        UNIT_ASSERT(settings->ResourceToBalance == EResourceToBalance::CPU);
+    }
+
     Y_UNIT_TEST(SelectsOnlySourcesAboveThresholdFromMovableCohort) {
         TScatterFixture fixture;
         for (i64 percent = 1; percent <= 6; ++percent) {

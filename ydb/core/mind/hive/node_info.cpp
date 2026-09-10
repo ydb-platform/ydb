@@ -485,14 +485,66 @@ void TNodeInfo::UpdateResourceMaximum(const NKikimrTabletBase::TMetrics& metrics
     Hive.UpdateTotalResourceValues(nullptr, nullptr, {}, {}, {}, normalizedValues - oldNormalizedValues);
 }
 
-bool TNodeInfo::HasTabletsForBalancer(EResourceToBalance resource, TInstant now) const {
-    if (!IsAlive() || Down || Freeze) {
+TNodeInfo::TBalancerResourceScanner::TBalancerResourceScanner(
+        const TNodeInfo& node, TBalancerResourceMask resources, TInstant now)
+    : Now(now)
+    , Pending(resources)
+{
+    if (resources.none() || !node.IsAlive() || node.Down || node.Freeze) {
+        return;
+    }
+    auto it = node.Tablets.find(TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING);
+    if (it != node.Tablets.end()) {
+        Tablets = &it->second;
+        Next = Tablets->begin();
+    }
+}
+
+bool TNodeInfo::TBalancerResourceScanner::HasResource(EResourceToBalance resource) {
+    const auto requested = static_cast<size_t>(resource);
+    if (Found.test(requested)) {
+        return true;
+    }
+    if (!Tablets || !Pending.test(requested)) {
         return false;
     }
-    auto it = Tablets.find(TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING);
-    return it != Tablets.end() && std::any_of(it->second.begin(), it->second.end(), [&](const TTabletInfo* tablet) {
-        return tablet->IsRunning() && tablet->IsGoodForBalancer(now, resource);
-    });
+    while (Next != Tablets->end()) {
+        const auto* tablet = *Next++;
+        if (!tablet->IsRunning() || !tablet->IsGoodForBalancer(Now) || tablet->IsPinnedToNode()) {
+            continue;
+        }
+        for (size_t index = 0; index < Pending.size(); ++index) {
+            // ComputeResources has its own HasMetric semantics; it is not the
+            // union of the three individual compute-resource checks.
+            if (Pending.test(index) && tablet->HasMetric(static_cast<EResourceToBalance>(index))) {
+                Found.set(index);
+                Pending.reset(index);
+            }
+        }
+        if (Found.test(requested)) {
+            return true;
+        }
+    }
+    Tablets = nullptr;
+    return false;
+}
+
+TNodeInfo::TBalancerResourceMask TNodeInfo::GetBalancerResourceMask(TBalancerResourceMask resources, TInstant now) const {
+    TBalancerResourceScanner scanner(*this, resources, now);
+    TBalancerResourceMask result;
+    for (size_t index = 0; index < resources.size(); ++index) {
+        if (resources.test(index) && scanner.HasResource(static_cast<EResourceToBalance>(index))) {
+            result.set(index);
+        }
+    }
+    return result;
+}
+
+bool TNodeInfo::HasTabletsForBalancer(EResourceToBalance resource, TInstant now) const {
+    TBalancerResourceMask resources;
+    resources.set(static_cast<size_t>(resource));
+    TBalancerResourceScanner scanner(*this, resources, now);
+    return scanner.HasResource(resource);
 }
 
 double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbourPenalty) const {

@@ -2791,7 +2791,12 @@ THive::THiveStats THive::GetStats(TIter begin, TIter end) const {
     return stats;
 }
 
-std::optional<TBalancerSettings> THive::GetScatterBalancerSettings(TConstArrayRef<const TNodeInfo*> nodes, TInstant now) const {
+std::optional<TBalancerSettings> THive::GetScatterBalancerSettings(TConstArrayRef<const TNodeInfo*> nodes, TInstant now,
+        std::optional<TResourceNormalizedValues> scatterByResource) const {
+    if (!scatterByResource) {
+        auto range = nodes | std::views::transform([](const TNodeInfo* node) -> const TNodeInfo& { return *node; });
+        scatterByResource = GetStats(range.begin(), range.end()).ScatterByResource;
+    }
     static constexpr std::pair<EResourceToBalance, EBalancerType> resources[] = {
         {EResourceToBalance::Counter, EBalancerType::ScatterCounter},
         {EResourceToBalance::CPU, EBalancerType::ScatterCPU},
@@ -2800,50 +2805,92 @@ std::optional<TBalancerSettings> THive::GetScatterBalancerSettings(TConstArrayRe
     };
     const auto minScatter = GetMinScatterToBalance();
     const auto minUsage = GetMinNodeUsageToBalance();
+    TNodeInfo::TBalancerResourceMask requestedResources;
     for (const auto& [resource, type] : resources) {
-        // Loaded nodes without movable tablets must not affect the thresholds.
-        // Keep resource-idle receivers as comparison points, including new nodes
-        // and nodes whose movable tablets consume a different resource.
-        std::vector<const TNodeInfo*> sourceCandidates;
-        std::vector<const TNodeInfo*> comparisonNodes;
-        sourceCandidates.reserve(nodes.size());
-        comparisonNodes.reserve(nodes.size());
-        for (const auto* node : nodes) {
-            if (!node->IsAlive() || node->Down || node->Freeze) {
-                continue;
-            }
-            if (node->HasTabletsForBalancer(resource, now)) {
-                sourceCandidates.push_back(node);
-                comparisonNodes.push_back(node);
-            } else if (node->GetNodeUsage(resource) == 0
-                       && (resource == EResourceToBalance::Counter
-                           || node->GetNodeUsage() == 0
-                           || node->HasTabletsForBalancer(EResourceToBalance::ComputeResources, now))) {
-                // Counter scatter compares tablet counts independently of compute load.
-                // An empty node with only external load is not a compute receiver.
-                comparisonNodes.push_back(node);
+        Y_UNUSED(type);
+        const double limit = TTabletInfo::ExtractResourceUsage(minScatter, resource);
+        // Removing nodes cannot increase scatter with the same resource floor.
+        // Reuse the segment statistics before looking at any tablets.
+        if (TTabletInfo::ExtractResourceUsage(*scatterByResource, resource) > limit) {
+            requestedResources.set(static_cast<size_t>(resource));
+            if (resource != EResourceToBalance::Counter) {
+                requestedResources.set(static_cast<size_t>(EResourceToBalance::ComputeResources));
             }
         }
-        auto comparisonRange = comparisonNodes
-            | std::views::transform([](const TNodeInfo* node) -> const TNodeInfo& { return *node; });
-        const auto stats = GetStats(comparisonRange.begin(), comparisonRange.end());
-        const double scatterLimit = TTabletInfo::ExtractResourceUsage(minScatter, resource);
-        if (!(TTabletInfo::ExtractResourceUsage(stats.ScatterByResource, resource) > scatterLimit)) {
+    }
+    if (requestedResources.none()) {
+        return std::nullopt;
+    }
+    struct TNodeState {
+        const TNodeInfo* Node;
+        TNodeInfo::TBalancerResourceScanner Scanner;
+
+        TNodeState(const TNodeInfo* node, TNodeInfo::TBalancerResourceMask resources, TInstant now)
+            : Node(node)
+            , Scanner(*node, resources, now)
+        {}
+    };
+    std::vector<TNodeState> nodeStates;
+    nodeStates.reserve(nodes.size());
+    for (const auto* node : nodes) {
+        if (node->IsAlive() && !node->Down && !node->Freeze) {
+            nodeStates.emplace_back(node, requestedResources, now);
+        }
+    }
+    std::vector<std::pair<TNodeId, double>> sources;
+    sources.reserve(nodeStates.size());
+    for (const auto& [resource, type] : resources) {
+        if (!requestedResources.test(static_cast<size_t>(resource))) {
             continue;
         }
-        double minimumUsage = std::numeric_limits<double>::max();
-        for (const auto& node : stats.Values) {
-            minimumUsage = std::min(minimumUsage, TTabletInfo::ExtractResourceUsage(node.ResourceNormValues, resource));
+        sources.clear();
+        double minimum = std::numeric_limits<double>::max();
+        double maximum = 0;
+        for (auto& state : nodeStates) {
+            const auto* node = state.Node;
+            const bool source = state.Scanner.HasResource(resource);
+            if (!source) {
+                if (node->GetNodeUsage(resource) != 0) {
+                    continue;
+                }
+                // Keep idle receivers, including nodes with movable tablets
+                // consuming another resource. Counter ignores compute load.
+                if (resource != EResourceToBalance::Counter && node->GetNodeUsage() != 0
+                    && !state.Scanner.HasResource(EResourceToBalance::ComputeResources)) {
+                    continue;
+                }
+            }
+            const double usage = node->GetTabletUsage(resource);
+            minimum = std::min(minimum, usage);
+            maximum = std::max(maximum, usage);
+            if (source) {
+                sources.emplace_back(node->Id, usage);
+            }
         }
-        // scatter = (maximum - max(minimum, floor)) / maximum. Hold the initial
-        // effective minimum fixed for this pass and only shed load from sources
-        // strictly above max(minimum, floor) / (1 - scatterLimit).
-        const double effectiveMinimum = std::max(minimumUsage, TTabletInfo::ExtractResourceUsage(minUsage, resource));
+        if (sources.empty()) {
+            continue;
+        }
+        const double floor = TTabletInfo::ExtractResourceUsage(minUsage, resource);
+        const double effectiveMinimum = std::max(minimum, floor);
+        maximum = std::max(maximum, floor);
+        double discrepancy = maximum - effectiveMinimum;
+        if (resource == EResourceToBalance::Counter
+            && discrepancy * CurrentConfig.GetMaxResourceCounter() <= 1.5) {
+            discrepancy = 0;
+        }
+        const double scatter = maximum == 0 ? 0 : discrepancy / maximum;
+        const double scatterLimit = TTabletInfo::ExtractResourceUsage(minScatter, resource);
+        if (!(scatter > scatterLimit)) {
+            continue;
+        }
+        // Hold the initial effective minimum fixed for this pass. Only sources
+        // strictly above this bound may continue shedding tablet load.
         const double sourceThreshold = effectiveMinimum / (1 - scatterLimit);
         std::vector<TNodeId> sourceNodeIds;
-        for (const auto* node : sourceCandidates) {
-            if (node->GetTabletUsage(resource) > sourceThreshold) {
-                sourceNodeIds.push_back(node->Id);
+        sourceNodeIds.reserve(sources.size());
+        for (const auto& [nodeId, usage] : sources) {
+            if (usage > sourceThreshold) {
+                sourceNodeIds.push_back(nodeId);
             }
         }
         // An empty FilterNodeIds means unrestricted balancing, not no donors.
@@ -3029,12 +3076,15 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
             continue;
         }
 
+        if (!CheckScatter(stats.ScatterByResource)) {
+            continue;
+        }
         std::vector<const TNodeInfo*> segmentNodes;
         segmentNodes.reserve(stats.Values.size());
         for (const auto& node : nodes) {
             segmentNodes.push_back(&node);
         }
-        if (auto scatterSettings = GetScatterBalancerSettings(segmentNodes, TActivationContext::Now())) {
+        if (auto scatterSettings = GetScatterBalancerSettings(segmentNodes, TActivationContext::Now(), stats.ScatterByResource)) {
             YDB_LOG_TRACE("ProcessTabletBalancer: movable nodes triggered scatter balancer",
                 {"logPrefix", GetLogPrefix()},
                 {"balancerTypeName", EBalancerTypeName(scatterSettings->Type)},

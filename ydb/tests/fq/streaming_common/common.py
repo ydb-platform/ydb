@@ -12,6 +12,7 @@ import pytest
 import random
 import requests
 
+from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.tools.datastreams_helpers.control_plane import Endpoint
@@ -578,13 +579,20 @@ class StreamingTestBase(TestYdsBase):
 
     def restart_streaming_node(self, kikimr: Kikimr) -> int:
         """Find and restart the node hosting the streaming query (DQ_PQ_READ_ACTOR).
+
         Returns the restarted node ID."""
-        restart_node_id = None
-        for node_id in kikimr.cluster.slots:
-            count = self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
-            if count:
-                restart_node_id = node_id
-                break
+        def _find_node():
+            for node_id in kikimr.cluster.slots:
+                if self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR"):
+                    return node_id
+            return None
+
+        wait_for(
+            lambda: _find_node() is not None,
+            timeout_seconds=30,
+            step_seconds=1,
+        )
+        restart_node_id = _find_node()
         assert restart_node_id is not None, "No node found with DQ_PQ_READ_ACTOR"
         self.restart_node(kikimr, restart_node_id)
         return restart_node_id

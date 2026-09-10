@@ -1,6 +1,5 @@
 #include "processor_impl.h"
 
-#include "query_metrics_retention.h"
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 
@@ -21,6 +20,14 @@ TSysViewProcessor::TSysViewProcessor(const NActors::TActorId& tablet, TTabletSto
     , ExternalGroup(new ::NMonitoring::TDynamicCounters)
     , LabeledGroup(new ::NMonitoring::TDynamicCounters)
 {
+    TabletCountersPtr.Reset(new TProtobufTabletCounters<
+        ESimpleCounters_descriptor,
+        ECumulativeCounters_descriptor,
+        EPercentileCounters_descriptor,
+        ETxTypes_descriptor
+    >());
+    TabletCounters = TabletCountersPtr.Get();
+
     InternalGroups["kqp_serverless"] = new ::NMonitoring::TDynamicCounters;
     InternalGroups["tablets_serverless"] = new ::NMonitoring::TDynamicCounters;
     InternalGroups["grpc_serverless"] = new ::NMonitoring::TDynamicCounters;
@@ -44,7 +51,7 @@ void TSysViewProcessor::OnActivateExecutor(const TActorContext& ctx) {
     YDB_LOG_INFO("TSysViewProcessor::OnActivateExecutor",
         {"tabletId", TabletID()});
 
-    // TODO: tablet counters
+    Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     Execute(CreateTxInitSchema(), ctx);
 }
 
@@ -56,13 +63,6 @@ void TSysViewProcessor::Handle(TEvPrivate::TEvSendRequests::TPtr&) {
     YDB_LOG_DEBUG("Handle TEvPrivate::TEvSendRequests: sending interval metrics requests",
         {"tabletId", TabletID()});
     SendRequests();
-}
-
-void TSysViewProcessor::ScheduleHourMetricsCleanup() {
-    if (!HourMetricsCleanupInFlight) {
-        HourMetricsCleanupInFlight = true;
-        Send(SelfId(), new TEvPrivate::TEvCleanupHourMetrics());
-    }
 }
 
 void TSysViewProcessor::PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const TString& value) {
@@ -89,13 +89,6 @@ void TSysViewProcessor::PersistLastMergedQueryMetricsIntervalEnd(
 {
     PersistSysParam(db, Schema::SysParam_LastMergedQueryMetricsIntervalEnd,
         ToString(intervalEnd.MicroSeconds()));
-}
-
-void TSysViewProcessor::PersistMetricsOneHourEvictBeforeHourEnd(
-    NIceDb::TNiceDb& db, ui64 cutoff)
-{
-    PersistSysParam(db, Schema::SysParam_MetricsOneHourEvictBeforeHourEnd,
-        ToString(cutoff));
 }
 
 template <typename TSchema>
@@ -260,51 +253,6 @@ ui32 TSysViewProcessor::PersistCurrentHourQueryMetrics(NIceDb::TNiceDb& db,
     return hourRank;
 }
 
-ui64 TSysViewProcessor::QueryMetricsResultSize(const TQueryToMetrics& result) {
-    return result.Text.size() + result.Metrics.ByteSizeLong();
-}
-
-void TSysViewProcessor::UpdateMetricsOneHourRetentionCounters(
-    ui64 retainedBytes, ui64 evictedBuckets)
-{
-    MetricsOneHourRetainedBytes = retainedBytes;
-    auto* counters = Executor()->GetCounters();
-    counters->Simple()[COUNTER_QUERY_METRICS_ONE_HOUR_RETAINED_BYTES]
-        .Set(retainedBytes);
-    if (evictedBuckets) {
-        counters->Cumulative()[COUNTER_QUERY_METRICS_ONE_HOUR_BUCKETS_EVICTED_BY_SIZE]
-            .Increment(evictedBuckets);
-    }
-}
-
-void TSysViewProcessor::EnforceMetricsOneHourByteLimit(
-    NIceDb::TNiceDb& db, TInstant activeHourEnd)
-{
-    TMap<ui64, ui64> bucketBytes;
-    for (const auto& [key, result] : MetricsOneHour) {
-        bucketBytes[key.first] += QueryMetricsResultSize(result);
-    }
-
-    const auto plan = PlanQueryMetricsRetention(
-        bucketBytes, activeHourEnd.MicroSeconds(),
-        NQueryMetricsLimits::OneHourHistoryByteLimit);
-
-    for (ui64 hourEndUs : plan.BucketsToEvict) {
-        auto it = MetricsOneHour.lower_bound(std::make_pair(hourEndUs, 0));
-        while (it != MetricsOneHour.end() && it->first.first == hourEndUs) {
-            it = MetricsOneHour.erase(it);
-        }
-    }
-
-    if (plan.EvictBeforeHourEnd > MetricsOneHourEvictBeforeHourEndUs) {
-        MetricsOneHourEvictBeforeHourEndUs = plan.EvictBeforeHourEnd;
-        PersistMetricsOneHourEvictBeforeHourEnd(
-            db, MetricsOneHourEvictBeforeHourEndUs);
-    }
-
-    UpdateMetricsOneHourRetentionCounters(plan.RetainedBytes, 0);
-}
-
 void TSysViewProcessor::UpdateAndLogQueryMetricsCoverage(
     TInstant hourEnd, ui32 persistedHourMetrics)
 {
@@ -320,28 +268,6 @@ void TSysViewProcessor::UpdateAndLogQueryMetricsCoverage(
     for (const auto& [_, node] : RequestsInFlight) {
         timedOutNodes += !node.Hashes.empty();
     }
-
-    auto& counters = Executor()->GetCounters()->Simple();
-    counters[COUNTER_QUERY_METRICS_LAST_INTERVAL_TOTAL_CPU_TIME_US]
-        .Set(QueryMetricsCoverage.TotalCpuTimeUs);
-    counters[COUNTER_QUERY_METRICS_LAST_INTERVAL_NODE_RETAINED_CPU_TIME_US]
-        .Set(QueryMetricsCoverage.NodeRetainedCpuTimeUs);
-    counters[COUNTER_QUERY_METRICS_LAST_INTERVAL_PROCESSOR_RETAINED_CPU_TIME_US]
-        .Set(QueryMetricsCoverage.ProcessorRetainedCpuTimeUs);
-    counters[COUNTER_QUERY_METRICS_LAST_INTERVAL_RECEIVED_CPU_TIME_US]
-        .Set(receivedCpuTimeUs);
-    counters[COUNTER_QUERY_METRICS_LAST_INTERVAL_SUMMARY_NODES]
-        .Set(QueryMetricsCoverage.SummaryNodes);
-    counters[COUNTER_QUERY_METRICS_LAST_INTERVAL_COVERAGE_KNOWN_NODES]
-        .Set(QueryMetricsCoverage.Nodes);
-    counters[COUNTER_QUERY_METRICS_LAST_INTERVAL_REQUESTED_NODES]
-        .Set(QueryMetricsCoverage.RequestedNodes);
-    counters[COUNTER_QUERY_METRICS_LAST_INTERVAL_RESPONDED_NODES]
-        .Set(QueryMetricsCoverage.RespondedNodes);
-    counters[COUNTER_QUERY_METRICS_LAST_INTERVAL_FAILED_NODES]
-        .Set(QueryMetricsCoverage.FailedNodes);
-    counters[COUNTER_QUERY_METRICS_LAST_INTERVAL_TIMED_OUT_NODES]
-        .Set(timedOutNodes);
 
     YDB_LOG_DEBUG("Persist hour query metrics",
         {"tabletId", TabletID()},
@@ -374,7 +300,6 @@ void TSysViewProcessor::FinalizeQueryMetricsInterval(NIceDb::TNiceDb& db) {
     const auto hourMetrics = RankCurrentHourQueryMetrics();
     const ui32 persistedHourMetrics =
         PersistCurrentHourQueryMetrics(db, hourEnd, hourMetrics);
-    EnforceMetricsOneHourByteLimit(db, hourEnd);
 
     LastMergedQueryMetricsIntervalEnd = IntervalEnd;
     PersistLastMergedQueryMetricsIntervalEnd(
@@ -607,7 +532,6 @@ void TSysViewProcessor::Reset(NIceDb::TNiceDb& db, const TActorContext& ctx) {
     CutHistory<Schema::TopPartitionsByTliOneMinute>(db, TopPartitionsByTliOneMinute, minuteHistorySize);
     CutHistory<Schema::TopPartitionsByTliOneHour>(db, TopPartitionsByTliOneHour, hourHistorySize);
 
-    EnforceMetricsOneHourByteLimit(db, newHourEnd);
 }
 
 void TSysViewProcessor::SendRequests() {

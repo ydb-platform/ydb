@@ -1,5 +1,4 @@
 #include "processor_impl.h"
-#include "query_metrics_retention_db.h"
 #include <ydb/core/base/feature_flags.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
@@ -60,40 +59,24 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
     bool LoadMetricsOneHour(NIceDb::TNiceDb& db) {
         Self->MetricsOneHour.clear();
 
-        TQueryMetricsOneHourLoadResult loaded;
-        if (!LoadQueryMetricsOneHour(
-                db,
-                Self->CurrentHourEnd.MicroSeconds(),
-                NQueryMetricsLimits::OneHourHistoryByteLimit,
-                Self->MetricsOneHourEvictBeforeHourEndUs,
-                loaded))
-        {
+        auto rowset = db.Table<Schema::MetricsOneHour>().Range().Select();
+        if (!rowset.IsReady()) {
             return false;
         }
-
-        Self->MetricsOneHourEvictBeforeHourEndUs = loaded.EvictBeforeHourEnd;
-        for (auto& row : loaded.Rows) {
+        while (!rowset.EndOfSet()) {
+            const ui64 intervalEnd = rowset.GetValue<Schema::MetricsOneHour::IntervalEnd>();
+            const ui32 rank = rowset.GetValue<Schema::MetricsOneHour::Rank>();
             TQueryToMetrics result;
-            result.Text = std::move(row.Text);
-            if (row.Data) {
-                Y_PROTOBUF_SUPPRESS_NODISCARD
-                    result.Metrics.ParseFromString(row.Data);
+            result.Text = rowset.GetValue<Schema::MetricsOneHour::Text>();
+            const TString data = rowset.GetValue<Schema::MetricsOneHour::Data>();
+            if (data) {
+                Y_PROTOBUF_SUPPRESS_NODISCARD result.Metrics.ParseFromString(data);
             }
-            Self->MetricsOneHour.emplace(
-                std::make_pair(row.HourEnd, row.Rank), std::move(result));
+            Self->MetricsOneHour.emplace(std::make_pair(intervalEnd, rank), std::move(result));
+            if (!rowset.Next()) {
+                return false;
+            }
         }
-
-        if (Self->MetricsOneHourEvictBeforeHourEndUs) {
-            Self->PersistMetricsOneHourEvictBeforeHourEnd(
-                db, Self->MetricsOneHourEvictBeforeHourEndUs);
-        }
-
-        Self->UpdateMetricsOneHourRetentionCounters(loaded.RetainedBytes, 0);
-        YDB_LOG_DEBUG("Loading byte-bounded hour metrics",
-            {"tabletId", Self->TabletID()},
-            {"resultCount", Self->MetricsOneHour.size()},
-            {"retainedBytes", loaded.RetainedBytes},
-            {"evictBeforeHourEndUs", Self->MetricsOneHourEvictBeforeHourEndUs});
         return true;
     }
 
@@ -231,7 +214,6 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
 
         // SysParams
         {
-            Self->MetricsOneHourEvictBeforeHourEndUs = 0;
             auto rowset = db.Table<Schema::SysParams>().Range().Select();
             if (!rowset.IsReady()) {
                 return false;
@@ -268,12 +250,6 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                         YDB_LOG_DEBUG("Loading last merged query metrics interval end",
                             {"tabletId", Self->TabletID()},
                             {"lastMergedIntervalEnd", Self->LastMergedQueryMetricsIntervalEnd});
-                        break;
-                    case Schema::SysParam_MetricsOneHourEvictBeforeHourEnd:
-                        Self->MetricsOneHourEvictBeforeHourEndUs = FromString<ui64>(value);
-                        YDB_LOG_DEBUG("Loading query metrics one hour eviction cutoff",
-                            {"tabletId", Self->TabletID()},
-                            {"evictBeforeHourEndUs", Self->MetricsOneHourEvictBeforeHourEndUs});
                         break;
                     default:
                         YDB_LOG_CRIT("TTxInit::Execute: unexpected sys param id",
@@ -628,7 +604,6 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
 
         Self->SignalTabletActive(ctx);
         Self->Become(&TThis::StateWork);
-        Self->ScheduleHourMetricsCleanup();
     }
 };
 

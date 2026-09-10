@@ -432,6 +432,7 @@ def _wait_cms_config_applied(cluster: KiKiMR, full_yaml_config, timeout: int = 3
     logger.error("CMS configuration was not applied to all dynamic nodes within %d seconds", timeout)
     raise AssertionError("CMS configuration was not applied to all dynamic nodes")
 
+
 def get_streaming_query_diagnostics(context, path: str) -> str:
     try:
         query = f'SELECT Status, Issues FROM `.sys/streaming_queries` WHERE Path = "{path}";'
@@ -456,8 +457,10 @@ def get_streaming_query_diagnostics(context, path: str) -> str:
     except Exception as error:
         return f"failed to retrieve Status / Issues: {error}"
 
+
 def read_and_check_data(
-    context, query_path,
+    context,
+    query_path,
     expected_output,
     endpoint,
     database_path,
@@ -475,25 +478,26 @@ def read_and_check_data(
             consumer_name=consumer_name,
             database=database_path,
             endpoint=endpoint,
-            timeout=timeout)
+            timeout=timeout,
+        )
 
         if not allowed_dublicates:
             assert sorted(read_data) == sorted(expected_output)
             return
 
-        while (
-            len(read_data) < len(expected_output)
-            or sorted(read_data[-len(expected_output):]) != sorted(expected_output)
-        ):
+        while len(read_data) < len(expected_output) or sorted(read_data[-len(expected_output) :]) != sorted(expected_output):
             remaining_timeout = deadline - time.time()
             assert remaining_timeout > 0, f"Timed out waiting for expected data: {expected_output}, got: {read_data}"
-            read_data.extend(read_stream(
-                path=topic_name,
-                messages_count=1,
-                consumer_name=consumer_name,
-                database=database_path,
-                endpoint=endpoint,
-                timeout=remaining_timeout))
+            read_data.extend(
+                read_stream(
+                    path=topic_name,
+                    messages_count=1,
+                    consumer_name=consumer_name,
+                    database=database_path,
+                    endpoint=endpoint,
+                    timeout=remaining_timeout,
+                )
+            )
     except AssertionError as error:
         raise AssertionError(f"{error}\n{get_streaming_query_diagnostics(context, query_path)}") from error
 

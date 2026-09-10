@@ -9,7 +9,7 @@ from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, Restar
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.test_meta import link_test_case
 from ydb.tests.oss.ydb_sdk_import import ydb
-from ydb.tests.tools.datastreams_helpers.data_plane import write_stream, read_stream
+from ydb.tests.tools.datastreams_helpers.data_plane import write_stream
 
 logger = logging.getLogger(__name__)
 

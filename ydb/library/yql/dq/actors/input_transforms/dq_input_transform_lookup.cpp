@@ -32,12 +32,7 @@ class TInputTransformStreamLookupCommonBase
     friend TDerived;
 public:
     TInputTransformStreamLookupCommonBase(
-        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-        const NMiniKQL::THolderFactory& holderFactory,
-        const NMiniKQL::TTypeEnvironment& typeEnv,
-        ui64 inputIndex,
-        NUdf::TUnboxedValue inputFlow,
-        NActors::TActorId computeActorId,
+        IDqAsyncIoFactory::TInputTransformArguments&& args,
         ::NMonitoring::TDynamicCounterPtr taskCounters,
         IDqAsyncIoFactory* factory,
         NDqProto::TDqInputTransformLookupSettings&& settings,
@@ -47,20 +42,19 @@ public:
         const NMiniKQL::TStructType* lookupKeyType,
         const NMiniKQL::TStructType* lookupPayloadType,
         const NMiniKQL::TMultiType* outputRowType,
-        TOutputRowColumnOrder&& outputRowColumnOrder,
-        TDqComputeActorWatermarks* watermarksTracker,
-        const THashMap<TString, TString>& secureParams)
+        TOutputRowColumnOrder&& outputRowColumnOrder)
         : TActor(&TInputTransformStreamLookupDerivedBase::StateFunc)
-        , Alloc(alloc)
-        , HolderFactory(holderFactory)
-        , TypeEnv(typeEnv)
-        , InputIndex(inputIndex)
-        , InputFlow(std::move(inputFlow))
-        , ComputeActorId(std::move(computeActorId))
+        , Alloc(std::move(args.Alloc))
+        , HolderFactory(args.HolderFactory)
+        , TypeEnv(args.TypeEnv)
+        , InputIndex(args.InputIndex)
+        , InputFlow(args.TransformInput)
+        , ComputeActorId(args.ComputeActorId)
+        , StatsLevel(args.StatsLevel)
         , TaskCounters(taskCounters)
         , Factory(factory)
         , Settings(std::move(settings))
-        , SecureParams(secureParams)
+        , SecureParams(args.SecureParams)
         , FullscanRowLimit(Settings.HasFullscanLimit() ? Settings.GetFullscanLimit() : Settings.GetCacheLimit())
         , LookupInputIndexes(std::move(lookupInputIndexes))
         , OtherInputIndexes(std::move(otherInputIndexes))
@@ -70,7 +64,7 @@ public:
         , LookupPayloadType(lookupPayloadType)
         , OutputRowType(outputRowType)
         , OutputRowColumnOrder(std::move(outputRowColumnOrder))
-        , WatermarksTracker(watermarksTracker)
+        , WatermarksTracker(args.WatermarksTracker)
         , InputFlowFetchStatus(NUdf::EFetchStatus::Yield)
         , LruCache(std::make_unique<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl>(std::max(Settings.GetCacheLimit(), ui64(1)), lookupKeyType))
         , DisableLruCache(Settings.GetCacheLimit() < 1)
@@ -193,6 +187,7 @@ private: //IDqComputeActorAsyncInput
                 .SecureParams = SecureParams,
                 .MaxKeysInRequest = 1000, // TODO configure me
                 .IsMultiMatches = IsMultiMatches,
+                .StatsLevel = StatsLevel,
             };
             auto [lookupSource, lookupSourceActor] = Factory->CreateDqLookupSource(Settings.GetRightSource().GetProviderName(), std::move(lookupSourceArgs));
             MaxKeysInRequest = lookupSource->GetMaxSupportedKeysInRequest();
@@ -261,6 +256,7 @@ protected:
     ui64 InputIndex; // NYql::NDq::IDqComputeActorAsyncInput
     NUdf::TUnboxedValue InputFlow;
     const NActors::TActorId ComputeActorId;
+    TCollectStatsLevel StatsLevel;
     ::NMonitoring::TDynamicCounterPtr TaskCounters;
     IDqAsyncIoFactory::TPtr Factory;
     NDqProto::TDqInputTransformLookupSettings Settings;
@@ -1217,18 +1213,23 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
         inputColumns
     );
     auto taskCounters = args.TaskCounters;
-    if (taskCounters) {
-        taskCounters = taskCounters->GetSubgroup("task_id", ToString(args.TaskId))->GetSubgroup("input", ToString(args.InputIndex));
+    switch(args.StatsLevel) {
+        case TCollectStatsLevel::None:
+        case TCollectStatsLevel::Basic:
+            taskCounters = nullptr;
+            break;
+        case TCollectStatsLevel::Profile:
+            if (taskCounters) {
+                taskCounters = taskCounters->GetSubgroup("task_id", ToString(args.TaskId))->GetSubgroup("input", ToString(args.InputIndex));
+            }
+            break;
+        case TCollectStatsLevel::Full:
+            break;
     }
     if (settings.GetIsMultiget()) {
         auto actor = isWide ?
             (TInputTransformStreamMultiLookupBase*)new TInputTransformStreamMultiLookupWide(
-                args.Alloc,
-                args.HolderFactory,
-                args.TypeEnv,
-                args.InputIndex,
-                args.TransformInput,
-                args.ComputeActorId,
+                std::move(args),
                 taskCounters,
                 factory,
                 std::move(settings),
@@ -1238,17 +1239,10 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
                 lookupKeyType,
                 lookupPayloadType,
                 outputRowType,
-                std::move(outputColumnsOrder),
-                args.WatermarksTracker,
-                args.SecureParams
+                std::move(outputColumnsOrder)
             ) :
             (TInputTransformStreamMultiLookupBase*)new TInputTransformStreamMultiLookupNarrow(
-                args.Alloc,
-                args.HolderFactory,
-                args.TypeEnv,
-                args.InputIndex,
-                args.TransformInput,
-                args.ComputeActorId,
+                std::move(args),
                 taskCounters,
                 factory,
                 std::move(settings),
@@ -1258,20 +1252,13 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
                 lookupKeyType,
                 lookupPayloadType,
                 outputRowType,
-                std::move(outputColumnsOrder),
-                args.WatermarksTracker,
-                args.SecureParams
+                std::move(outputColumnsOrder)
             );
         return {actor, actor};
     }
     auto actor = isWide ?
         (TInputTransformStreamLookupBase*)new TInputTransformStreamLookupWide(
-            args.Alloc,
-            args.HolderFactory,
-            args.TypeEnv,
-            args.InputIndex,
-            args.TransformInput,
-            args.ComputeActorId,
+            std::move(args),
             taskCounters,
             factory,
             std::move(settings),
@@ -1281,17 +1268,10 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             lookupKeyType,
             lookupPayloadType,
             outputRowType,
-            std::move(outputColumnsOrder),
-            args.WatermarksTracker,
-            args.SecureParams
+            std::move(outputColumnsOrder)
         ) :
         (TInputTransformStreamLookupBase*)new TInputTransformStreamLookupNarrow(
-            args.Alloc,
-            args.HolderFactory,
-            args.TypeEnv,
-            args.InputIndex,
-            args.TransformInput,
-            args.ComputeActorId,
+            std::move(args),
             taskCounters,
             factory,
             std::move(settings),
@@ -1301,9 +1281,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             lookupKeyType,
             lookupPayloadType,
             outputRowType,
-            std::move(outputColumnsOrder),
-            args.WatermarksTracker,
-            args.SecureParams
+            std::move(outputColumnsOrder)
         );
     return {actor, actor};
 }

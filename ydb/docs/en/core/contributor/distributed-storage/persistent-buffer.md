@@ -44,7 +44,7 @@ with a full waiting interval. Failed barrier writes require recovery before
 the PB can resume normal operations.
 
 The NBS direct-partition transport completes a PB connection only after
-`Connect`, registration, and a successful list probe. The probe also verifies
+`TEvConnect`, registration, and a successful list probe. The probe also verifies
 an existing registration after duplicate registration is rejected on reconnect.
 Partition deletion unregisters every tablet/DBG registration, including separate
 registrations sharing one PB, before deleting DDisk chunks and deallocating the

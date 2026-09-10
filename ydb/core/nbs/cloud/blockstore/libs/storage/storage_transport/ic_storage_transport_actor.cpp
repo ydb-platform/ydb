@@ -359,6 +359,20 @@ void TICStorageTransportActor::HandleRegisterPersistentBufferResult(
     if (result.GetStatus() == TStatus::BUSY ||
         result.GetStatus() == TStatus::OVERLOADED)
     {
+        // NOTE: the registration timestamp is fixed on the first send (see
+        // SendPBufferRegistration) and never refreshed here, while the DDisk
+        // side rejects any registration whose timestamp is older than
+        // RegistrationTimeoutMilliseconds (default 5000 ms) with OUTDATED. If
+        // BUSY/OVERLOADED persists for longer than that window (e.g. the DDisk
+        // actor is replaying a large PB log, a barrier update is in flight for
+        // a long time, or its pending queue is overfilled), every 100 ms retry
+        // below deterministically fails once the window expires and the connect
+        // completes with OUTDATED instead of succeeding. Refreshing the
+        // timestamp here is not a safe fix on its own: it was deliberately
+        // fixed to avoid reviving/overriding a stale registration's lifecycle.
+        // If a bounded retry with a fresh connect (new timestamp only after a
+        // full reconnect) is required, that needs to be driven by the caller
+        // re-issuing TEvConnect from scratch.
         ctx.Schedule(
             TDuration::MilliSeconds(100),
             new TEvents::TEvWakeup(ev->Cookie));

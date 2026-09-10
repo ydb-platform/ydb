@@ -943,6 +943,13 @@ namespace NKikimr::NDDisk {
                     || std::is_same_v<TEventType, TEvErasePersistentBuffer>
                     || std::is_same_v<TEventType, TEvBatchErasePersistentBuffer>
                     || std::is_same_v<TEventType, TEvListPersistentBuffer>) {
+                // NOTE: durable registration (TEvRegisterPersistentBuffer) is a hard precondition
+                // for all persistent-buffer reads/writes/erases below. This requires lockstep
+                // upgrades of client and DDisk: an older client without register support loses
+                // all PB operations against a DDisk running this code, and this client build
+                // connecting to an older DDisk gets its register event undelivered and the
+                // connect fails. There is no fallback or version negotiation, so mixed fleets
+                // running old/new builds simultaneously are not supported for PB traffic.
                 if (PersistentBufferReady) {
                     const auto status = CheckPersistentBufferOwnership(creds);
                     if (status != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {

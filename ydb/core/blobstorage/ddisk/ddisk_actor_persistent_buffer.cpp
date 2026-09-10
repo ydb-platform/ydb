@@ -1013,6 +1013,11 @@ namespace NKikimr::NDDisk {
             if (!success && operation != EOperation::None) {
                 // A failed metadata write can have reached disk. Do not admit work using
                 // speculative in-memory barriers; recovery decides which copy is durable.
+                // This applies to every barrier operation, including plain Erase:
+                // BarrierErasePersistentBuffer speculatively calls MoveBarrier/RemoveBarrier
+                // before the write completes, so on failure the in-memory and on-disk states
+                // may diverge (see PersistentBufferPartialEraseSuccess for the expected
+                // behavior: a failed barrier write breaks the disk until recovery).
                 EnterBroken("persistent buffer barrier write failed");
             }
 
@@ -1888,6 +1893,11 @@ namespace NKikimr::NDDisk {
         const TQueryCredentials creds(record.GetCredentials());
         const auto now = TActivationContext::Now();
         const auto timestamp = TInstant::MicroSeconds(record.GetTimestampMicroseconds());
+        // NOTE: timestamp is the sender's wall-clock time, so this anti-replay check is sensitive
+        // to cross-node clock skew: if the client node's clock is ahead of (or behind) this node's
+        // by more than RegistrationTimeoutMilliseconds, every registration attempt fails with
+        // OUTDATED. The anti-replay property only requires "recent, not reused" - callers relying
+        // on this must keep client/DDisk clocks synchronized within the configured timeout window.
         if (timestamp > now || now - timestamp > TDuration::MilliSeconds(PersistentBufferFormat.RegistrationTimeoutMilliseconds)) {
             SendReply(*ev, std::make_unique<TEvRegisterPersistentBufferResult>(TStatus::OUTDATED, "registration timestamp expired or is in the future"));
             return;

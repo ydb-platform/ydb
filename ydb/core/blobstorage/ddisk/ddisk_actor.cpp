@@ -51,12 +51,27 @@ namespace NKikimr::NDDisk {
             : !PersistentBufferReady ? NKikimrBlobStorage::NDDisk::TReplyStatus::BUSY
             : CheckPersistentBufferOwnership(creds);
         if (ownershipStatus != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+            using TStatus = NKikimrBlobStorage::NDDisk::TReplyStatus;
+            const TStringBuf errorReason = [&] {
+                switch (ownershipStatus) {
+                    case TStatus::ERROR:
+                        return TStringBuf("persistent buffer is broken");
+                    case TStatus::BUSY:
+                        return TStringBuf("persistent buffer is not ready yet");
+                    case TStatus::OUTDATED:
+                        return TStringBuf("persistent buffer registration is being retired");
+                    case TStatus::INCORRECT_REQUEST:
+                        return TStringBuf("persistent buffer is not registered");
+                    default:
+                        return TStringBuf("persistent buffer registration is not ready, registered, or active");
+                }
+            }();
             auto result = std::make_unique<TEvWritePersistentBuffersResult>();
             for (const auto& id : record.GetPersistentBufferIds()) {
                 auto* item = result->Record.AddResult();
                 item->MutablePersistentBufferId()->CopyFrom(id);
                 item->MutableResult()->SetStatus(ownershipStatus);
-                item->MutableResult()->SetErrorReason("persistent buffer registration is not ready, registered, or active");
+                item->MutableResult()->SetErrorReason(errorReason.data(), errorReason.size());
             }
             SendReply(*ev, std::move(result));
             return;

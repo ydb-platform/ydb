@@ -423,6 +423,12 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
         auto* collector = new TResponseCollectorActor;
         const TActorId collectorId = cluster->RegisterActor(collector, 1);
 
+        // A failed initial handshake drops untracked messages. Wait for the monitor,
+        // which re-subscribes after a disconnect, before testing established-session delivery.
+        auto* monitor = new TConnectionMonitorActor(2);
+        cluster->RegisterActor(monitor, 1);
+        WaitFor(TDuration::Seconds(10), [&] { return monitor->Connects() >= 1; }, "connection established");
+
         constexpr ui64 N = 32;
         for (ui64 i = 0; i < N; ++i) {
             cluster->GetNode(1)->GetActorSystem()->Send(new IEventHandle(echoId, collectorId, new TEvTest(i)));

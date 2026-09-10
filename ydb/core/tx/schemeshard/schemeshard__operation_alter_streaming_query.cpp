@@ -159,13 +159,21 @@ class TAlterStreamingQuery : public TSubOperation {
         if (const auto it = oldProperties.find("__created_by"); it != oldProperties.end()) {
             properties["__created_by"] = it->second;
         }
-        properties["__modified_by"] = owner;
+        const TString& userSID = context.UserToken ? context.UserToken->GetUserSID() : owner;
+        properties["__modified_by"] = userSID;
 
         // Preserve original creation time; always update modification time
         if (const auto it = oldProperties.find("__created_at"); it != oldProperties.end()) {
             properties["__created_at"] = it->second;
         }
-        properties["__modified_at"] = ToString(TInstant::Now().MicroSeconds());
+        properties["__modified_at"] = ToString(context.Ctx.Now().MicroSeconds());
+
+        // Preserve both sides of the run history even when replacing all user properties.
+        for (const char* key : {"__started_by", "__stopped_by"}) {
+            if (const auto it = oldProperties.find(key); it != oldProperties.end()) {
+                properties[key] = it->second;
+            }
+        }
 
         // Detect run → stop and stop → run transitions to track who started/stopped
         const auto oldRunIt = oldProperties.find("run");
@@ -175,17 +183,10 @@ class TAlterStreamingQuery : public TSubOperation {
 
         if (!oldRun && newRun) {
             // Query is being started
-            properties["__started_by"] = owner;
+            properties["__started_by"] = userSID;
         } else if (oldRun && !newRun) {
             // Query is being stopped
-            properties["__stopped_by"] = owner;
-        } else {
-            // Preserve existing started_by/stopped_by
-            for (const char* key : {"__started_by", "__stopped_by"}) {
-                if (const auto it = oldProperties.find(key); it != oldProperties.end()) {
-                    properties.emplace(key, it->second);
-                }
-            }
+            properties["__stopped_by"] = userSID;
         }
 
         return streamingQueryInfo;

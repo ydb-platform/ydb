@@ -335,7 +335,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         });
     }
 
-    Y_UNIT_TEST_F(SysViewCreatedByModifiedByColumns, TStreamingSysViewTestFixture) {
+    Y_UNIT_TEST_TWIN_F(SysViewCreatedByModifiedByColumns, IdmPermissions, TStreamingSysViewTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetEnableIdmPermissionsManagement(IdmPermissions);
         Setup();
 
         constexpr char queryName[] = "createdByQuery";
@@ -407,6 +408,30 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
                 UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("ModifiedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
                 UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("StartedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
                 UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("StoppedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+            });
+        }
+
+        // Replacing the query must preserve the counterpart of each run transition.
+        for (bool run : {true, false}) {
+            ExecQuery(fmt::format(R"(
+                CREATE OR REPLACE STREAMING QUERY `{query_name}` WITH (
+                    RUN = {run}
+                ) AS DO BEGIN{text}END DO)",
+                "query_name"_a = queryName,
+                "run"_a = run ? "TRUE" : "FALSE",
+                "text"_a = GetQueryText(queryName)
+            ));
+            const auto& queryResult = ExecQuery(fmt::format(R"(
+                SELECT CreatedBy, ModifiedBy, StartedBy, StoppedBy
+                FROM `.sys/streaming_queries`
+                WHERE Path = '/Root/{name}'
+            )", "name"_a = queryName));
+            CheckScriptResult(queryResult[0], 4, 1, [&](TResultSetParser& rs) {
+                for (const char* column : {"CreatedBy", "ModifiedBy", "StartedBy", "StoppedBy"}) {
+                    const auto value = rs.ColumnParser(column).GetOptionalUtf8();
+                    UNIT_ASSERT_C(value.has_value(), column);
+                    UNIT_ASSERT_VALUES_EQUAL(*value, BUILTIN_ACL_ROOT);
+                }
             });
         }
 

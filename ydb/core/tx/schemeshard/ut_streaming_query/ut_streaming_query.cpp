@@ -1,7 +1,9 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/library/aclib/aclib.h>
 
 #include <util/generic/is_in.h>
+#include <util/string/cast.h>
 
 using namespace NSchemeShardUT_Private;
 
@@ -80,6 +82,127 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTest) {
         UNIT_ASSERT_VALUES_EQUAL(streamingQueryDescription.GetName(), "MyStreamingQuery");
         UNIT_ASSERT_VALUES_EQUAL(pathDescription.GetSelf().GetVersion().GetStreamingQueryVersion(), 1);
         CompareProperties(expectedProperties, streamingQueryDescription.GetProperties());
+    }
+
+    Y_UNIT_TEST(StreamingQueryAuditHistory) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        const auto apply = [&](const TString& user, bool run, bool replace, bool create) {
+            const TString scheme = TStringBuilder() << R"(Name: "AuditQuery" Properties { Properties { key: "run" value: ")"
+                << (run ? "true" : "false") << R"(" } })";
+            auto* ev = create || replace
+                ? CreateStreamingQueryRequest(TTestTxConfig::SchemeShard, ++txId, "/MyRoot", scheme)
+                : AlterStreamingQueryRequest(TTestTxConfig::SchemeShard, ++txId, "/MyRoot", scheme);
+            ev->Record.SetOwner("owner@builtin");
+            if (user) {
+                ev->Record.SetUserToken(NACLib::TUserToken(user, {}).SerializeAsString());
+            }
+            ev->Record.MutableTransaction(0)->SetReplaceIfExists(replace);
+            AsyncSend(runtime, TTestTxConfig::SchemeShard, ev);
+            TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
+            env.TestWaitNotification(runtime, txId);
+            const auto description = DescribePath(runtime, "/MyRoot/AuditQuery");
+            UNIT_ASSERT_VALUES_EQUAL(description.GetPathDescription().GetSelf().GetOwner(), "owner@builtin");
+            return description.GetPathDescription().GetStreamingQueryDescription().GetProperties().GetProperties();
+        };
+
+        auto properties = apply("creator@builtin", true, false, true);
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("__created_by"), "creator@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("__modified_by"), "creator@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("__started_by"), "creator@builtin");
+        UNIT_ASSERT(!properties.contains("__stopped_by"));
+
+        properties = apply("stopper@builtin", false, true, false);
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("__started_by"), "creator@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("__stopped_by"), "stopper@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("__modified_by"), "stopper@builtin");
+
+        properties = apply("starter@builtin", true, true, false);
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("__started_by"), "starter@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("__stopped_by"), "stopper@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("__modified_by"), "starter@builtin");
+
+        properties = apply("modifier@builtin", true, true, false);
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("__started_by"), "starter@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("__stopped_by"), "stopper@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("__modified_by"), "modifier@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("__created_by"), "creator@builtin");
+
+        properties = apply("alterer@builtin", false, false, false);
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("__stopped_by"), "alterer@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("__started_by"), "starter@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("__modified_by"), "alterer@builtin");
+
+        // Requests without a token retain the previous owner-based fallback.
+        properties = apply("", true, false, false);
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("__started_by"), "owner@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("__stopped_by"), "alterer@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("__modified_by"), "owner@builtin");
+    }
+
+    Y_UNIT_TEST(StreamingQueryAuditTimestampsUseRuntimeClock) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.AdvanceCurrentTime(TDuration::Days(30));
+        const auto beforeCreate = runtime.GetCurrentTime();
+        TestCreateStreamingQuery(runtime, ++txId, "/MyRoot", R"(Name: "ClockQuery")");
+        env.TestWaitNotification(runtime, txId);
+        auto description = DescribePath(runtime, "/MyRoot/ClockQuery");
+        auto properties = description.GetPathDescription().GetStreamingQueryDescription().GetProperties().GetProperties();
+        const auto createdAt = FromString<ui64>(properties.at("__created_at"));
+        UNIT_ASSERT_GE(createdAt, beforeCreate.MicroSeconds());
+        UNIT_ASSERT_LE(createdAt, runtime.GetCurrentTime().MicroSeconds());
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("__created_at"), properties.at("__modified_at"));
+
+        for (bool replace : {false, true}) {
+            runtime.AdvanceCurrentTime(TDuration::Hours(1));
+            const auto beforeAlter = runtime.GetCurrentTime();
+            if (replace) {
+                TestCreateStreamingQueryOrReplace(runtime, ++txId, "/MyRoot", R"(Name: "ClockQuery")", {NKikimrScheme::StatusAccepted});
+            } else {
+                TestAlterStreamingQuery(runtime, ++txId, "/MyRoot", R"(Name: "ClockQuery")");
+            }
+            env.TestWaitNotification(runtime, txId);
+            description = DescribePath(runtime, "/MyRoot/ClockQuery");
+            properties = description.GetPathDescription().GetStreamingQueryDescription().GetProperties().GetProperties();
+            UNIT_ASSERT_VALUES_EQUAL(FromString<ui64>(properties.at("__created_at")), createdAt);
+            const auto modifiedAt = FromString<ui64>(properties.at("__modified_at"));
+            UNIT_ASSERT_GE(modifiedAt, beforeAlter.MicroSeconds());
+            UNIT_ASSERT_LE(modifiedAt, runtime.GetCurrentTime().MicroSeconds());
+            UNIT_ASSERT_GT(modifiedAt, createdAt);
+        }
+    }
+
+    Y_UNIT_TEST(CreateStreamingQueryPropertiesLimitIncludesAudit) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        constexpr ui64 limit = 2_MB;
+
+        for (bool run : {false, true}) {
+            auto* ev = CreateStreamingQueryRequest(TTestTxConfig::SchemeShard, ++txId, "/MyRoot", R"(Name: "LargeQuery")");
+            auto* properties = ev->Record.MutableTransaction(0)->MutableCreateStreamingQuery()->MutableProperties();
+            auto& values = *properties->MutableProperties();
+            values["run"] = run ? "true" : "false";
+            auto& payload = values["query_text"];
+            payload = TString(limit, 'x');
+            payload.resize(payload.size() - (properties->ByteSizeLong() - limit));
+            if (properties->ByteSizeLong() < limit) {
+                payload.append(limit - properties->ByteSizeLong(), 'x');
+            }
+            UNIT_ASSERT_VALUES_EQUAL(properties->ByteSizeLong(), limit);
+            AsyncSend(runtime, TTestTxConfig::SchemeShard, ev);
+            TestModificationResults(runtime, txId, {NKikimrScheme::StatusSchemeError});
+            TestLs(runtime, "/MyRoot/LargeQuery", false, NLs::PathNotExist);
+        }
+
+        // Rejection must leave the path available for a subsequent valid create.
+        TestCreateStreamingQuery(runtime, ++txId, "/MyRoot", R"(Name: "LargeQuery")");
+        env.TestWaitNotification(runtime, txId);
+        TestLs(runtime, "/MyRoot/LargeQuery", false, NLs::PathExist);
     }
 
     Y_UNIT_TEST(ParallelCreateStreamingQuery) {

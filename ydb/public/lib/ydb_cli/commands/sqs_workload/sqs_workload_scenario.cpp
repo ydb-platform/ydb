@@ -38,9 +38,7 @@ namespace NYdb::NConsoleClient {
     TSqsWorkloadScenario::~TSqsWorkloadScenario() {}
 
     void TSqsWorkloadScenario::InitAwsSdk() {
-        if (AwsSdkLog) {
-            AwsOptions.loggingOptions.logLevel = Aws::Utils::Logging::LogLevel::Debug;
-        }
+        AwsOptions.loggingOptions.logLevel = GetAwsSdkLogLevel();
         Aws::InitAPI(AwsOptions);
     }
 
@@ -48,13 +46,13 @@ namespace NYdb::NConsoleClient {
         Aws::ShutdownAPI(AwsOptions);
     }
 
-    void TSqsWorkloadScenario::InitStatsCollector(size_t writerCount, size_t readerCount) {
-        StatsCollector = std::make_shared<TSqsWorkloadStatsCollector>(
-            writerCount, readerCount, Quiet, PrintTimestamp, WindowSec.Seconds(),
-            TotalSec.Seconds(), 0, Percentile, ErrorFlag);
+    Aws::Utils::Logging::LogLevel TSqsWorkloadScenario::GetAwsSdkLogLevel() const {
+        return AwsSdkLog
+            ? Aws::Utils::Logging::LogLevel::Debug
+            : Aws::Utils::Logging::LogLevel::Off;
     }
 
-    void TSqsWorkloadScenario::InitSqsClient(const TClientCommand::TConfig& config) {
+    Aws::Client::ClientConfiguration TSqsWorkloadScenario::CreateSqsClientConfiguration() const {
         Aws::Client::ClientConfiguration sqsClientConfiguration;
 
         sqsClientConfiguration.endpointOverride =
@@ -70,6 +68,18 @@ namespace NYdb::NConsoleClient {
         if (AwsRegion.Defined()) {
             sqsClientConfiguration.region = Aws::String(AwsRegion->c_str(), AwsRegion->size());
         }
+
+        return sqsClientConfiguration;
+    }
+
+    void TSqsWorkloadScenario::InitStatsCollector(size_t writerCount, size_t readerCount) {
+        StatsCollector = std::make_shared<TSqsWorkloadStatsCollector>(
+            writerCount, readerCount, Quiet, PrintTimestamp, WindowSec.Seconds(),
+            TotalSec.Seconds(), 0, Percentile, ErrorFlag);
+    }
+
+    void TSqsWorkloadScenario::InitSqsClient(const TClientCommand::TConfig& config) {
+        Aws::Client::ClientConfiguration sqsClientConfiguration = CreateSqsClientConfiguration();
 
         Aws::Auth::AWSCredentials credentials;
         if (AwsAccessKeyId.Defined()) {

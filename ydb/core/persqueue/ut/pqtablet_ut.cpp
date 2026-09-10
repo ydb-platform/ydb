@@ -5238,6 +5238,27 @@ Y_UNIT_TEST_F(ReadQuoter_ConsumerRemovedReleasesQueuedReads, TPQTabletFixture)
     WaitExclusiveLockAcquired();
 }
 
+Y_UNIT_TEST_F(ReadQuoter_DuplicateExclusiveLockDoesNotKill, TPQTabletFixture)
+{
+    EnsureReadQuoterExists();
+    PQTabletPrepare({.partitions = 1}, {}, *Ctx);
+
+    SendAcquireReadQuota(1, Ctx->Edge);
+    WaitReadQuotaAcquired();
+
+    SendAcquireExclusiveLock();
+    ExpectNoExclusiveLockAcquired();
+
+    SendReadQuotaConsumed(1);
+    WaitExclusiveLockAcquired();
+
+    SendAcquireExclusiveLock();
+
+    SendReleaseExclusiveLock();
+    SendAcquireReadQuota(2, Ctx->Edge);
+    WaitReadQuotaAcquired();
+}
+
 }
 
 Y_UNIT_TEST_SUITE(TFixTransactionStatesTests) {

@@ -94,7 +94,14 @@ void TWriteQuoter::UpdateCounters(const TActorContext&) {
 }
 
 void TWriteQuoter::HandlePoisonPill(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
+    PoisonChildren();
     Die(ctx);
+}
+
+void TWriteQuoter::PoisonChildren() {
+    if (AccountQuotaTracker) {
+        Send(AccountQuotaTracker->Actor, new TEvents::TEvPoisonPill());
+    }
 }
 
 void TWriteQuoter:: HandleUpdateAccountQuotaCounters(NAccountQuoterEvents::TEvCounters::TPtr&, const TActorContext&) {

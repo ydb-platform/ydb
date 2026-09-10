@@ -96,7 +96,14 @@ void TBasicAccountQuoter::HandleQuotaConsumed(NAccountQuoterEvents::TEvConsumed:
         {"consumedBytesInCredit", ConsumedBytesInCredit},
         {"creditBytes", CreditBytes});
     auto it = InProcessQuotaRequestCookies.find(ev->Get()->RequestCookie);
-    PQ_ENSURE(it != InProcessQuotaRequestCookies.end());
+    if (it == InProcessQuotaRequestCookies.end()) {
+        YDB_LOG_ERROR_COMP(Service, "Consumed quota for unknown cookie",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"tablet_id", TabletId},
+            {"partition", Partition},
+            {"cookie", ev->Get()->RequestCookie});
+        return;
+    }
     InProcessQuotaRequestCookies.erase(it);
 
     if (!QuotaRequestInFlight) {

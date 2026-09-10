@@ -4,6 +4,8 @@
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/library/actors/core/log.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ {
 
 void TReadQuoter::Bootstrap(const TActorContext& ctx) {
@@ -34,10 +36,15 @@ void TReadQuoter::OnAccountQuotaApproved(TRequestContext&& context) {
 }
 
 TAccountQuoterHolder* TReadQuoter::GetAccountQuotaTracker(const THolder<TEvPQ::TEvRequestQuota>& request) {
-    if (!TopicConverter)
+    if (!TopicConverter || !request || !request->Request) {
         return nullptr;
-    auto clientId = request->Request->CastAsLocal<TEvPQ::TEvRead>()->ClientId;
-    return GetOrCreateConsumerQuota(clientId, ActorContext())->AccountQuotaTracker.Get();
+    }
+    auto* readRequest = request->Request->CastAsLocal<TEvPQ::TEvRead>();
+    if (!readRequest || readRequest->ClientId.empty()) {
+        return nullptr;
+    }
+    auto* consumerQuota = GetOrCreateConsumerQuota(readRequest->ClientId, ActorContext());
+    return consumerQuota ? consumerQuota->AccountQuotaTracker.Get() : nullptr;
 }
 
 IEventBase* TReadQuoter::MakeQuotaApprovedEvent(TRequestContext& context) {
@@ -156,13 +163,17 @@ void TReadQuoter::UpdateCounters(const TActorContext& ctx) {
 }
 
 void TReadQuoter::HandlePoisonPill(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
+    PoisonChildren();
+    ConsumerQuotas.clear();
+    Die(ctx);
+}
+
+void TReadQuoter::PoisonChildren() {
     for (auto& consumerQuota : ConsumerQuotas) {
         if (consumerQuota.second.AccountQuotaTracker) {
             Send(consumerQuota.second.AccountQuotaTracker->Actor, new TEvents::TEvPoisonPill());
         }
     }
-    ConsumerQuotas.clear();
-    Die(ctx);
 }
 
 void TReadQuoter::UpdateQuotaConfigImpl(bool totalQuotaUpdated, const TActorContext& ctx) {
@@ -298,7 +309,13 @@ THolder<TAccountQuoterHolder> TReadQuoter::CreateAccountQuotaTracker(const TStri
 }
 
 TConsumerReadQuota* TReadQuoter::GetOrCreateConsumerQuota(const TString& consumerStr, const TActorContext& ctx) {
-    AFL_ENSURE(!consumerStr.empty());
+    if (consumerStr.empty()) {
+        YDB_LOG_ERROR("Refuse to create consumer quota with empty name",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"tablet_id", TabletId},
+            {"partition", Partition});
+        return nullptr;
+    }
     auto it = ConsumerQuotas.find(consumerStr);
     if (it == ConsumerQuotas.end()) {
         TConsumerReadQuota consumer(

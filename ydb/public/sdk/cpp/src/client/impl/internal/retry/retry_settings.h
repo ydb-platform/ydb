@@ -63,7 +63,7 @@ auto RunUnaryWithRetry(TClient& client, TRetryOperationSettings settings, TRunOn
     if (nested) {
         settings.MaxRetries(0);
     }
-    auto operation = [runOnce = std::forward<TRunOnce>(runOnce), nested](TClient&, TDuration remainingTimeout) {
+    auto operation = [runOnce = std::forward<TRunOnce>(runOnce), nested](TClient&, TDuration remainingTimeout) mutable {
         return runOnce(nested ? TDuration::Max() : remainingTimeout);
     };
     return Async::Retry<false>(client, std::move(operation), settings);

@@ -6,14 +6,13 @@ Usage:
 
 PATH is a directory or a file. The script checks only what is under PATH.
 It prints one finding per line: "ERROR path:line: message" or
-"WARN path:line: message". Exit code 0 means no errors.
+"WARN path:line: message". Exit code 0 means no errors, 1 means errors,
+2 means a usage problem such as a missing PATH.
 
-Written for Python 3.8 with the standard library only. Keep it that way:
-every YDB contributor has this Python because ./ya itself is Python.
+Written for Python 3.8 with the standard library only.
 """
 import argparse
 import ast
-import difflib
 import importlib.util
 import os
 import re
@@ -22,8 +21,8 @@ import sys
 import sysconfig
 
 PY_VERSION = (3, 8)
-SKILL_NAME_RE = re.compile(r"^ydb-[a-z0-9][a-z0-9-]*$")
-SIMILAR_NAME_RATIO = 0.8
+SKILL_NAME_RE = re.compile(r"^ydb(-[a-z0-9]+)+$")
+SKILL_NAME_MAX_CHARS = 64
 DESCRIPTION_MAX_CHARS = 1024
 SKILL_SOFT_LINES = 200
 SKILL_HARD_LINES = 500
@@ -33,10 +32,11 @@ SENTENCE_MAX_WORDS = 40
 CLAUDE_INCLUDE = "@./AGENTS.md"
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 PATH_RE = re.compile(r"(?<![\w@/.-])((?:\.\.?/)?[\w.-]+(?:/[\w.-]+)+\.(?:md|py))\b")
+TODO_RE = re.compile(r"^\s*(?:[-*]\s+)?TODO\b")
 SKIP_DIRS = {".git", ".claude", "contrib", "vendor", "node_modules", "__pycache__"}
 
 
-class Report(object):
+class Report:
     def __init__(self):
         self.items = []
 
@@ -47,25 +47,26 @@ class Report(object):
         self.items.append(("WARN", path, line, msg))
 
     def counts(self):
-        errors = sum(1 for i in self.items if i[0] == "ERROR")
+        errors = sum(1 for item in self.items if item[0] == "ERROR")
         return errors, len(self.items) - errors
 
     def print_all(self, root):
-        for level, path, line, msg in sorted(self.items, key=lambda i: (i[1], i[2], i[0])):
-            rel = os.path.relpath(path, root)
-            print("%s %s:%d: %s" % (level, rel, line, msg))
+        for level, path, line, msg in sorted(self.items, key=lambda item: (item[1], item[2], item[0])):
+            print("%s %s:%d: %s" % (level, os.path.relpath(path, root), line, msg))
+
+
+def run_git(args, root, stdin=None):
+    """Run git in root. Return the CompletedProcess, or None when git is not installed."""
+    try:
+        return subprocess.run(["git"] + args, cwd=root, input=stdin, capture_output=True, text=True, check=False)
+    except OSError:
+        return None
 
 
 def find_repo_root(start):
-    try:
-        out = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            cwd=start, capture_output=True, text=True, check=False,
-        )
-        if out.returncode == 0 and out.stdout.strip():
-            return os.path.realpath(out.stdout.strip())
-    except OSError:
-        pass
+    out = run_git(["rev-parse", "--show-toplevel"], start)
+    if out is not None and out.returncode == 0 and out.stdout.strip():
+        return os.path.realpath(out.stdout.strip())
     cur = os.path.realpath(start)
     while True:
         if os.path.exists(os.path.join(cur, ".git")):
@@ -77,42 +78,40 @@ def find_repo_root(start):
 
 
 def read_text(path):
-    with open(path, "r", encoding="utf-8") as handle:
+    """Text of a UTF-8 file (a BOM is allowed). Raises UnicodeDecodeError otherwise."""
+    with open(path, "r", encoding="utf-8-sig") as handle:
         return handle.read()
 
 
+def load_text(path, report):
+    """Text of the file, or None after reporting that it is not UTF-8."""
+    try:
+        return read_text(path)
+    except UnicodeDecodeError as exc:
+        report.error(path, 0, "not valid UTF-8: %s" % exc.reason)
+        return None
+
+
 def ignored_paths(paths, root):
-    """Return the subset of paths that git ignores. Symlinks are checked as paths."""
+    """The subset of paths that git ignores; None when git is not installed."""
     if not paths:
         return set()
-    try:
-        out = subprocess.run(
-            ["git", "check-ignore", "--stdin"],
-            cwd=root, input="\n".join(paths) + "\n", capture_output=True, text=True, check=False,
-        )
-    except OSError:
-        return set()
+    out = run_git(["check-ignore", "--stdin"], root, stdin="\n".join(paths) + "\n")
+    if out is None:
+        return None
     if out.returncode not in (0, 1):
         return set()
     return set(line for line in out.stdout.splitlines() if line)
 
 
-def is_ignored(path, root):
-    return path in ignored_paths([path], root)
-
-
 def repo_skill_names(root):
-    """Map skill folder name -> SKILL.md path for every skill in the repo (tracked or new, not ignored)."""
-    try:
-        out = subprocess.run(
-            ["git", "ls-files", "--cached", "--others", "--exclude-standard", "--", "*/.agents/skills/*/SKILL.md", ".agents/skills/*/SKILL.md"],
-            cwd=root, capture_output=True, text=True, check=False,
-        )
-    except OSError:
-        return {}
+    """Map skill folder name -> SKILL.md path for every skill in the repo; None when git is not installed."""
+    out = run_git(["ls-files", "--cached", "--others", "--exclude-standard", "--", "*/.agents/skills/*/SKILL.md", ".agents/skills/*/SKILL.md"], root)
+    if out is None:
+        return None
     names = {}
     for line in out.stdout.splitlines():
-        if line.startswith(("contrib/", "vendor/")) or "/.claude/" in "/" + line:
+        if line.startswith(("contrib/", "vendor/")):
             continue
         parts = line.split("/")
         if len(parts) >= 4 and parts[-4] == ".agents" and parts[-3] == "skills":
@@ -120,32 +119,8 @@ def repo_skill_names(root):
     return names
 
 
-def similar_names(name, names):
-    """Names that look like `name`: one contains the other, or the words mostly match."""
-    def core(value):
-        return value[4:] if value.startswith("ydb-") else value
-    found = []
-    for other in sorted(names):
-        if other == name:
-            continue
-        left, right = core(name), core(other)
-        if left in right or right in left or difflib.SequenceMatcher(None, left, right).ratio() >= SIMILAR_NAME_RATIO:
-            found.append(other)
-    return found
-
-
-def check_skill_name(name, skill_md, root, report):
-    names = repo_skill_names(root)
-    other = names.get(name)
-    if other and os.path.realpath(other) != os.path.realpath(skill_md):
-        report.error(skill_md, 1, "skill name %r is already used by %s; names must be unique in the repo" % (name, os.path.relpath(other, root)))
-    similar = similar_names(name, names)
-    if similar:
-        report.warn(skill_md, 1, "name %r looks like %s; tell the human and propose other names" % (name, ", ".join(similar)))
-
-
 def parse_frontmatter(lines):
-    """Return (fields, end_line, error). Supports key: value and block scalars."""
+    """Return (fields, end_line, error). Supports key: value, quoted values over several lines, and block scalars."""
     if not lines or lines[0].strip() != "---":
         return None, 0, "frontmatter must start with --- on line 1"
     fields = {}
@@ -166,7 +141,7 @@ def parse_frontmatter(lines):
             if key is not None and block is not None:
                 fields[key] = " ".join(block).strip()
             return fields, index + 1, None
-        if line.startswith(" ") or line.startswith("\t"):
+        if line.startswith((" ", "\t")):
             if key is not None and block is not None:
                 block.append(line.strip())
             index += 1
@@ -224,6 +199,8 @@ def check_paths(path, text, root, report):
             if any(mark in target for mark in "<>*{}"):
                 continue
             if os.path.exists(os.path.join(base, target)) or os.path.exists(os.path.join(root, target)):
+                if target.startswith("../"):
+                    report.warn(path, number, "path %s goes up the tree; write it from the repo root" % target)
                 continue
             report.error(path, number, "path does not exist: %s" % target)
 
@@ -263,8 +240,10 @@ def is_stdlib_module(name):
     return origin.startswith(stdlib + os.sep) and "site-packages" not in origin and "dist-packages" not in origin
 
 
-def check_python_script(path, report):
-    text = read_text(path)
+def check_python_script(path, local_modules, report):
+    text = load_text(path, report)
+    if text is None:
+        return
     if not text.startswith("#!/usr/bin/env python3"):
         report.warn(path, 1, "first line should be #!/usr/bin/env python3")
     try:
@@ -272,10 +251,6 @@ def check_python_script(path, report):
     except SyntaxError as exc:
         report.error(path, exc.lineno or 0, "not valid Python %d.%d syntax: %s" % (PY_VERSION[0], PY_VERSION[1], exc.msg))
         return
-    own_dir = os.path.dirname(path)
-    local_modules = set()
-    for folder in (own_dir, os.path.dirname(own_dir)):
-        local_modules.update(entry[:-3] for entry in os.listdir(folder) if entry.endswith(".py"))
     for node in ast.walk(tree):
         names = []
         if isinstance(node, ast.Import):
@@ -284,10 +259,36 @@ def check_python_script(path, report):
             names = [node.module]
         for name in names:
             top = name.split(".")[0]
-            if top in local_modules:
+            if top in local_modules or is_stdlib_module(top):
                 continue
-            if not is_stdlib_module(top):
-                report.error(path, node.lineno, "import %r is not in the standard library; use the standard library only" % top)
+            report.error(path, node.lineno, "import %r is not in the standard library; use the standard library only" % top)
+
+
+def glob_files(folder, suffix=""):
+    """All files under folder (symlinks are not followed) whose name ends with suffix."""
+    found = []
+    for dirpath, dirnames, filenames in os.walk(folder):
+        dirnames[:] = sorted(name for name in dirnames if name not in SKIP_DIRS)
+        for filename in filenames:
+            if filename.endswith(suffix):
+                found.append(os.path.join(dirpath, filename))
+    return found
+
+
+def check_scripts(skill_dir, report):
+    """Every .py under scripts/ must be Python 3.8 with standard imports; scripts/<name>.py needs scripts/tests/test_<name>.py."""
+    scripts_dir = os.path.join(skill_dir, "scripts")
+    if not os.path.isdir(scripts_dir):
+        return
+    all_scripts = sorted(glob_files(scripts_dir, ".py"))
+    local_modules = {os.path.basename(script)[:-3] for script in all_scripts}
+    tests_dir = os.path.join(scripts_dir, "tests")
+    for script in all_scripts:
+        check_python_script(script, local_modules, report)
+        if os.path.dirname(script) == scripts_dir and os.path.basename(script) != "__init__.py":
+            test = os.path.join(tests_dir, "test_" + os.path.basename(script))
+            if not os.path.isfile(test):
+                report.error(script, 0, "has no tests; add scripts/tests/test_%s" % os.path.basename(script))
 
 
 def skill_dir_parts(path):
@@ -300,8 +301,24 @@ def skill_dir_parts(path):
     return os.path.dirname(agents_dir), os.path.basename(skill_dir)
 
 
+def check_skill_name(name, skill_md, root, report):
+    if not SKILL_NAME_RE.match(name):
+        report.error(skill_md, 1, "name must be ydb- followed by words of lowercase letters and digits joined by single dashes")
+        return
+    if len(name) > SKILL_NAME_MAX_CHARS:
+        report.error(skill_md, 1, "name has %d characters; limit is %d" % (len(name), SKILL_NAME_MAX_CHARS))
+    names = repo_skill_names(root)
+    if names is None:
+        return
+    other = names.get(name)
+    if other and os.path.realpath(other) != os.path.realpath(skill_md):
+        report.error(skill_md, 1, "skill name %r is already used by %s; names must be unique in the repo" % (name, os.path.relpath(other, root)))
+
+
 def check_skill(path, root, report):
-    text = read_text(path)
+    text = load_text(path, report)
+    if text is None:
+        return
     lines = text.splitlines()
     fields, body_start, error = parse_frontmatter(lines)
     if error:
@@ -320,8 +337,6 @@ def check_skill(path, root, report):
         report.error(path, 1, "frontmatter needs name")
     elif name != folder_name:
         report.error(path, 1, "name %r must equal the folder name %r" % (name, folder_name))
-    elif not SKILL_NAME_RE.match(name):
-        report.error(path, 1, "name must start with ydb- and use only lowercase letters, digits and dashes")
     else:
         check_skill_name(name, path, root, report)
     if error:
@@ -330,6 +345,8 @@ def check_skill(path, root, report):
         report.error(path, 1, "frontmatter needs description")
     elif len(description) > DESCRIPTION_MAX_CHARS:
         report.error(path, 1, "description has %d characters; limit is %d" % (len(description), DESCRIPTION_MAX_CHARS))
+    elif "TODO" in description:
+        report.error(path, 1, "description still holds TODO; write the real description")
     for key in fields:
         if key not in ("name", "description"):
             report.warn(path, 1, "frontmatter key %r is not portable; keep only name and description" % key)
@@ -340,7 +357,7 @@ def check_skill(path, root, report):
     check_paths(path, text, root, report)
     check_sentences(path, text, body_start + 1, report)
     for number, line in enumerate(lines, start=1):
-        if re.match(r"^\s*(?:[-*]\s+)?TODO\b", line):
+        if TODO_RE.match(line):
             report.warn(path, number, "TODO line left from the template; replace it")
 
     skill_dir = os.path.dirname(path)
@@ -348,63 +365,31 @@ def check_skill(path, root, report):
     agents_md = os.path.join(owner_dir, "AGENTS.md")
     if not os.path.isfile(agents_md):
         report.error(agents_md, 0, "missing; every skill needs a sibling AGENTS.md that points to it")
-    elif rel_skill not in read_text(agents_md):
-        report.warn(agents_md, 0, "does not link to %s" % rel_skill)
+    elif rel_skill not in (load_text(agents_md, report) or ""):
+        report.warn(agents_md, 0, "does not point to %s" % rel_skill)
     claude_md = os.path.join(owner_dir, "CLAUDE.md")
     if not os.path.isfile(claude_md):
         report.warn(claude_md, 0, "missing; Claude Code reads CLAUDE.md, create it with the single line %s" % CLAUDE_INCLUDE)
-    claude_link = os.path.join(owner_dir, ".claude")
-    if os.path.islink(claude_link):
-        target = os.readlink(claude_link)
-        if target != ".agents":
-            report.error(claude_link, 0, "symlink points to %r; it must point to .agents" % target)
-    elif os.path.isdir(claude_link):
-        if os.path.realpath(owner_dir) != os.path.realpath(root):
-            report.error(claude_link, 0, "is a real directory; make it a symlink to .agents so tools see one skill tree")
-    elif os.path.exists(claude_link):
-        report.error(claude_link, 0, "exists but is not a symlink to .agents")
-    else:
-        report.warn(claude_link, 0, "missing; create the symlink .claude -> .agents for Claude Code")
+    claude_dir = os.path.join(owner_dir, ".claude")
+    if os.path.islink(claude_dir):
+        report.error(claude_dir, 0, "is a symlink; symlinks are not used, Claude Code reaches the skill through CLAUDE.md")
+    elif os.path.isdir(os.path.join(claude_dir, "skills")):
+        report.error(claude_dir, 0, "holds skills; skills live only in .agents/skills")
+
     for reference in sorted(glob_files(os.path.join(skill_dir, "references"), ".md")):
-        reference_text = read_text(reference)
+        reference_text = load_text(reference, report)
+        if reference_text is None:
+            continue
         check_paths(reference, reference_text, root, report)
         check_sentences(reference, reference_text, 1, report)
 
     check_scripts(skill_dir, report)
 
-    committed = [candidate for candidate in (agents_md, claude_md, claude_link) if os.path.lexists(candidate)]
+    committed = [candidate for candidate in (agents_md, claude_md) if os.path.isfile(candidate)]
     committed += glob_files(skill_dir)
-    for ignored in sorted(ignored_paths(committed, root)):
-        report.error(ignored, 0, "is ignored by git; it must be committed")
-
-
-def glob_files(folder, suffix=""):
-    """All files under folder (no symlinks followed) whose name ends with suffix."""
-    found = []
-    for dirpath, dirnames, filenames in os.walk(folder):
-        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
-        for filename in filenames:
-            if filename.endswith(suffix):
-                found.append(os.path.join(dirpath, filename))
-    return found
-
-
-def check_scripts(skill_dir, report):
-    """Every scripts/<name>.py must parse as Python 3.8 and have scripts/tests/test_<name>.py."""
-    scripts_dir = os.path.join(skill_dir, "scripts")
-    if not os.path.isdir(scripts_dir):
-        return
-    scripts = [entry for entry in sorted(os.listdir(scripts_dir)) if entry.endswith(".py")]
-    tests_dir = os.path.join(scripts_dir, "tests")
-    tests = []
-    if os.path.isdir(tests_dir):
-        tests = [entry for entry in sorted(os.listdir(tests_dir)) if entry.startswith("test_") and entry.endswith(".py")]
-    for entry in scripts:
-        check_python_script(os.path.join(scripts_dir, entry), report)
-        if entry != "__init__.py" and "test_" + entry not in tests:
-            report.error(os.path.join(scripts_dir, entry), 0, "has no tests; add scripts/tests/test_%s" % entry)
-    for entry in tests:
-        check_python_script(os.path.join(tests_dir, entry), report)
+    ignored = ignored_paths(committed, root)
+    for item in sorted(ignored or ()):
+        report.error(item, 0, "is ignored by git; it must be committed")
 
 
 def agents_chain_bytes(path, root):
@@ -422,19 +407,23 @@ def agents_chain_bytes(path, root):
 
 
 def check_agents(path, root, report):
-    text = read_text(path)
+    text = load_text(path, report)
+    if text is None:
+        return
     lines = text.splitlines()
     if len(lines) > AGENTS_MAX_LINES:
         report.warn(path, len(lines), "has %d lines; budget is %d, move detail to a skill or reference" % (len(lines), AGENTS_MAX_LINES))
     chain = agents_chain_bytes(path, root)
     if chain > AGENTS_CHAIN_MAX_BYTES:
-        report.error(path, 0, "AGENTS.md chain from repo root is %d bytes; Codex stops reading after 32 KiB" % chain)
+        report.error(path, 0, "AGENTS.md files from the repo root to here total %d bytes; Codex drops files once the total reaches 32 KiB" % chain)
     check_paths(path, text, root, report)
     check_sentences(path, text, 1, report)
 
 
 def check_claude(path, root, report):
-    text = read_text(path)
+    text = load_text(path, report)
+    if text is None:
+        return
     agents_md = os.path.join(os.path.dirname(path), "AGENTS.md")
     if text.strip() == CLAUDE_INCLUDE:
         if not os.path.isfile(agents_md):
@@ -454,13 +443,13 @@ def classify(path):
         return "agents"
     if base == "CLAUDE.md":
         return "claude"
-    if base.endswith(".py"):
-        return "python"
     return None
 
 
 def collect(paths, report):
+    """Return (targets, missing). targets are (kind, path); missing are paths that do not exist."""
     found = []
+    missing = []
     for item in paths:
         item = os.path.realpath(item)
         if os.path.isfile(item):
@@ -469,18 +458,14 @@ def collect(paths, report):
                 report.warn(item, 0, "not an instruction file; nothing to check")
             else:
                 found.append((kind, item))
-            continue
-        if not os.path.isdir(item):
-            report.error(item, 0, "path does not exist")
-            continue
-        for dirpath, dirnames, filenames in os.walk(item):
-            dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
-            for filename in filenames:
-                kind = classify(filename)
-                # Python scripts are checked from their SKILL.md, not on their own.
-                if kind in ("skill", "agents", "claude"):
-                    found.append((kind, os.path.join(dirpath, filename)))
-    return found
+        elif os.path.isdir(item):
+            for path in glob_files(item):
+                kind = classify(path)
+                if kind is not None:
+                    found.append((kind, path))
+        else:
+            missing.append(item)
+    return sorted(found), missing
 
 
 def main(argv=None):
@@ -490,13 +475,21 @@ def main(argv=None):
     parser.add_argument("--warnings-as-errors", action="store_true", help="exit 1 when there are warnings")
     args = parser.parse_args(argv)
 
-    root = os.path.realpath(args.root) if args.root else find_repo_root(args.paths[0] if os.path.isdir(args.paths[0]) else os.path.dirname(os.path.realpath(args.paths[0])) or ".")
+    first = args.paths[0]
+    start = first if os.path.isdir(first) else os.path.dirname(os.path.realpath(first)) or "."
+    root = os.path.realpath(args.root) if args.root else find_repo_root(start)
     if root is None:
         print("cannot find the repository root; pass --root DIR", file=sys.stderr)
         return 2
 
     report = Report()
-    targets = collect(args.paths, report)
+    targets, missing = collect(args.paths, report)
+    if missing:
+        for item in missing:
+            print("path does not exist: %s" % item, file=sys.stderr)
+        return 2
+    if run_git(["--version"], root) is None:
+        report.warn(root, 0, "git is not installed; name uniqueness and git-ignore checks were skipped")
     for kind, path in targets:
         if kind == "skill":
             check_skill(path, root, report)
@@ -504,9 +497,7 @@ def main(argv=None):
             check_agents(path, root, report)
         elif kind == "claude":
             check_claude(path, root, report)
-        elif kind == "python":
-            check_python_script(path, report)
-        if kind != "skill" and os.path.isfile(path) and is_ignored(path, root):
+        if kind != "skill" and (ignored_paths([path], root) or ()):
             report.error(path, 0, "is ignored by git; it must be committed")
 
     report.print_all(root)

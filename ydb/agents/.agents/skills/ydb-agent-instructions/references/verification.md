@@ -24,7 +24,7 @@ The short `./ya make --help` hides most flags; use `-hh` or `-hhh`.
 
 ## How to check a script
 
-Every contributor has Python 3 because `./ya` needs it; nothing else is guaranteed, so scripts use Python 3.8 syntax and the standard library only: no `match`, no `X | Y` in type hints, no `list[str]`, no `str.removeprefix`, no pip packages. `check.py` rejects grammar newer than 3.8 and imports that the running interpreter does not find in its standard library; the run under `python3.8` is the real test.
+Every contributor has Python 3 because `./ya` needs it; nothing else is guaranteed. Scripts use Python 3.8 syntax, the oldest version on a developer machine: Ubuntu 20.04 ships 3.8 (https://wiki.ubuntu.com/FocalFossa/ReleaseNotes), macOS Command Line Tools ship 3.9 (`/usr/bin/python3 --version`). Standard library only: no `match`, no `X | Y` in type hints, no `list[str]`, no `str.removeprefix`, no pip packages. On Windows the commands below start with `py -3` instead of `python3.8` or `python3`. `check.py` rejects grammar newer than 3.8 and imports that the running interpreter does not find in its standard library; the run under `python3.8` is the real test.
 
 ```bash
 python3.8 -m unittest discover -s <skill>/scripts/tests

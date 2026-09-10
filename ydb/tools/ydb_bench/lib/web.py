@@ -2824,7 +2824,9 @@ function parseLocalYdbProfileSelection(groups,selected){
     "length+' allowed vCPUs · '+t.numa_nodes.length+' NUMA nodes</p>'+\n      sectionTabs('topology',[['layout','Topology & CPU usage'],['affinity"
     "','Affinity availability']])+\n      '<section data-section-panel=\"topology:layout\"><div class=cpu-map-toolbar><div class=cpu-help><button id"
     "=cpu-help-button aria-label=\"About the CPU map\" aria-expanded=false aria-controls=cpu-map-help>?</button><div id=cpu-map-help hidden role=no"
-    "te><p>Each column is a physical core; its cells are visible SMT threads. Numbers are vCPU IDs.</p><p>Colour shows busy CPU usage, excluding "
+    "te><p>Columns group known physical cores and their visible SMT threads; unknown topology uses single-vCPU groups. "
+    "Numbers are vCPU IDs. macOS does not expose iowait or steal counters; these appear as unavailable.</p>"
+    "<p>Colour shows busy CPU usage, excluding "
     "idle and iowait. Hover for values; click to keep a core selected. User includes nice; system includes IRQ time. Steal is reported separately"
     ".</p><p>Only CPUs allowed by this process cpuset are shown. Missing counters are not zero usage.</p>'+t.hierarchy_reasons.map(item=>'<p>'+es"
     "c(item.level)+': '+esc(item.reason)+'</p>').join('')+'</div></div><small id=cpu-sample-status>Waiting for CPU samples…</small><small>0% <spa"
@@ -4012,7 +4014,10 @@ class RunService:
 
     def cpu_usage(self):
         result = self._cpu_sampler.sample()
-        allowed = os.sched_getaffinity(0) if hasattr(os, "sched_getaffinity") else set()
+        try:
+            allowed = os.sched_getaffinity(0)
+        except (AttributeError, OSError):
+            allowed = result["cpus"]
         return {**result, "cpus": {cpu: value for cpu, value in result["cpus"].items() if cpu in allowed}}
 
     def filtered_model(self, filters):

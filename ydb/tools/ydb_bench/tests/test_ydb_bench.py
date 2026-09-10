@@ -2174,7 +2174,7 @@ class YdbBenchTest(unittest.TestCase):
                 )
 
     def test_logical_cpu_sampler_deltas_and_resets(self):
-        sampler = linux_telemetry.LogicalCpuSampler()
+        sampler = linux_telemetry.LogicalCpuSampler(proc_root=Path('/test-proc'))
         samples = [
             "cpu0 100 10 20 400 10 2 3 5 50 2\ncpu7 1 0 0 1 0 0 0 0\n",
             "cpu0 120 10 30 450 20 4 6 10 60 2\ncpu7 2 0 0 2 0 0 0 0\n",
@@ -2206,6 +2206,41 @@ if(JSON.stringify(groups.flatMap(g=>g.cores.flatMap(c=>c.cpus)).sort((a,b)=>a-b)
 if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Error('Grouping lost');
 """
         subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True, timeout=10)
+
+    def test_darwin_cpu_sampler(self):
+        with mock.patch.object(linux_telemetry.sys, 'platform', 'darwin'):
+            sampler = linux_telemetry.LogicalCpuSampler()
+        with mock.patch.object(
+            linux_telemetry,
+            '_darwin_cpu_ticks',
+            side_effect=[
+                {0: (100, 0, 100, 100, 0, 0, 0, 0)},
+                {0: (120, 10, 110, 160, 0, 0, 0, 0)},
+                OSError('Unavailable'),
+            ],
+        ), mock.patch.object(linux_telemetry.time, 'monotonic', side_effect=[0, 2, 4]):
+            self.assertIsNone(sampler.sample()['cpus'][0])
+            self.assertEqual(
+                sampler.sample()['cpus'][0],
+                {
+                    'busy': 40,
+                    'user': 30,
+                    'system': 10,
+                    'iowait': None,
+                    'steal': None,
+                },
+            )
+            self.assertFalse(sampler.sample()['available'])
+
+    def test_cpu_usage_affinity_fallback(self):
+        service = object.__new__(web.RunService)
+        service._cpu_sampler = mock.Mock()
+        service._cpu_sampler.sample.return_value = {'available': True, 'cpus': {0: None, 7: None}}
+        for error in (AttributeError(), OSError()):
+            with mock.patch.object(web.os, 'sched_getaffinity', create=True, side_effect=error):
+                self.assertEqual(set(service.cpu_usage()['cpus']), {0, 7})
+        with mock.patch.object(web.os, 'sched_getaffinity', create=True, return_value={7}):
+            self.assertEqual(set(service.cpu_usage()['cpus']), {7})
 
     def test_local_ydb_actor_cpu_count_is_independent_of_affinity(self):
         profile = {"workload": {"type": "kv", "operation": "upsert"}, "load": {"parameter": "threads", "values": [1]}}

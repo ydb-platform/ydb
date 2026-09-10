@@ -8,6 +8,7 @@ SRCS(
     part_initschema.cpp
     part_loadstate.cpp
     part_monitoring.cpp
+    part_persist_host_health.cpp
     part_storepartitionids.cpp
     part_storevolumeconfig.cpp
     part_updatedirtymapstate.cpp

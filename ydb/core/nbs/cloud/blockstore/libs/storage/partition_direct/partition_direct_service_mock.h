@@ -34,6 +34,14 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         TPersistResultPromise Promise;
     };
 
+    struct TPersistHostHealthRequest
+    {
+        size_t DirectBlockGroupId = 0;
+        size_t HostIndex = 0;
+        EHostHealth OldHealth = EHostHealth::Online;
+        EHostHealth NewHealth = EHostHealth::Online;
+    };
+
     explicit TPartitionDirectServiceMock(bool dropScheduledCallbacks = false)
         : DropScheduledCallbacks(dropScheduledCallbacks)
     {}
@@ -49,6 +57,7 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     TDuration CopyRangeBudgetDelay;
     TVector<TUpdateConfigRequest> UpdateConfigRequests;
     TVector<TUpdateDirtyMapStateRequest> UpdateDirtyMapStateRequests;
+    TVector<TPersistHostHealthRequest> PersistHostHealthRequests;
 
     [[nodiscard]] TVolumeConfigPtr GetVolumeConfig() const override
     {
@@ -121,6 +130,16 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         ++CopyRangeBudgetRequestCount;
         LastCopyRangeBudgetByteCount = byteCount;
         return CopyRangeBudgetDelay;
+    }
+
+    void PersistHostHealth(
+        size_t directBlockGroupId,
+        THostIndex hostIndex,
+        EHostHealth oldHealth,
+        EHostHealth newHealth) override
+    {
+        PersistHostHealthRequests
+            .emplace_back(directBlockGroupId, hostIndex, oldHealth, newHealth);
     }
 };
 

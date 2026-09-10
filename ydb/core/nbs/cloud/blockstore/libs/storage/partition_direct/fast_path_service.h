@@ -150,6 +150,12 @@ public:
 
     TDuration TakeVolumeCopyRangeBudget(ui64 byteCount) override;
 
+    void PersistHostHealth(
+        size_t directBlockGroupId,
+        THostIndex hostIndex,
+        EHostHealth oldHealth,
+        EHostHealth newHealth) override;
+
     // Read-only info for the monitoring UI.
     [[nodiscard]] TFastPathServiceInfo GetMonInfo() const;
 

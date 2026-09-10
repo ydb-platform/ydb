@@ -313,6 +313,18 @@ void TPartitionActor::HandleAddHostToDBGDuringDelete(
         dbgId);
 }
 
+void TPartitionActor::HandlePersistHostHealthDuringDelete(
+    const TEvPartitionDirectPrivate::TEvPersistHostHealth::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    Y_UNUSED(ev);
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Drop PersistHostHealth during delete",
+        LogTitle.GetWithTime().c_str());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 STFUNC(TPartitionActor::StateDelete)

@@ -154,6 +154,11 @@ public:
     NThreading::TFuture<TVChunkStatsGatherResult> GatherVChunkStats(
         EVChunkStatsDetail detail) const override;
 
+    void PersistHostHealth(
+        THostIndex hostIndex,
+        EHostHealth oldHealth,
+        EHostHealth newHealth) override;
+
     // IHostStateController implementation
     void SetHostState(
         THostIndex hostIndex,

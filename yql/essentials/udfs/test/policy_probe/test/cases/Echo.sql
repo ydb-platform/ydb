@@ -1,0 +1,1 @@
+SELECT PolicyProbe::Echo("echo");

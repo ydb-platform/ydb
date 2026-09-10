@@ -1,4 +1,6 @@
 #include "tasks_runner_pipe.h"
+#include "tasks_runner_pipe_pool.h"
+#include "tasks_runner_pipe_process.h"
 
 #include <ydb/library/yql/dq/runtime/dq_input_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_output_channel.h>
@@ -32,6 +34,8 @@
 #include <util/string/cast.h>
 #include <util/string/strip.h>
 #include <util/string/builder.h>
+
+#include <cerrno>
 
 namespace NYql::NTaskRunnerProxy {
 
@@ -199,38 +203,97 @@ public:
 #endif
     }
 
-    virtual void Kill() {
+    virtual void Kill()
+    {
 #ifndef _win_
+        if (Pid <= 0) {
+            return;
+        }
         // todo: investigate why ain't killed sometimes
         YQL_CLOG(DEBUG, ProviderDq) << "Kill child, pid: " << Pid;
         kill(Pid, 9);
 #endif
     }
 
-    bool IsAlive() {
+    virtual bool Cleanup(TDuration timeout)
+    {
 #ifdef _win_
+        Y_UNUSED(timeout);
         return true;
 #else
-        int status;
-        YQL_CLOG(TRACE, ProviderDq) << "Check Pid " << Pid;
-        return waitpid(Pid, &status, WNOHANG) <= 0;
+        return NPrivate::CleanupChildProcess(
+            &Pid,
+            timeout,
+            [] (int pid, int signal) {
+                return kill(pid, signal);
+            },
+            [] (int pid, int* status, int options) {
+                return waitpid(pid, status, options);
+            });
 #endif
     }
 
-    int Wait(TDuration timeout = TDuration::Seconds(5)) {
-        int status;
-        int ret;
+    bool IsAlive()
+    {
+#ifdef _win_
+        return true;
+#else
+        if (Pid <= 0) {
+            return false;
+        }
+
+        int status = 0;
+        YQL_CLOG(TRACE, ProviderDq) << "Check Pid " << Pid;
+        const int result = waitpid(Pid, &status, WNOHANG);
+        if (result == Pid || (result < 0 && errno == ECHILD)) {
+            Pid = -1;
+            return false;
+        }
+        return result <= 0;
+#endif
+    }
+
+    int Wait(TDuration timeout = TDuration::Seconds(5))
+    {
+        int status = 0;
 #ifndef _win_
-        TInstant start = TInstant::Now();
-        while ((ret = waitpid(Pid, &status, WNOHANG)) == 0 && TInstant::Now() - start < timeout) {
+        if (Pid <= 0) {
+            return status;
+        }
+
+        const int pid = Pid;
+        int result = 0;
+        const auto deadline = TInstant::Now() + timeout;
+        while (true) {
+            result = waitpid(pid, &status, WNOHANG);
+            if (result < 0 && errno == EINTR && TInstant::Now() < deadline) {
+                continue;
+            }
+            if (result != 0 || TInstant::Now() >= deadline) {
+                break;
+            }
             Sleep(TDuration::MilliSeconds(10));
         }
-        if (ret <= 0) {
-            kill(Pid, 9);
-            waitpid(Pid, &status, 0);
+        if (result == 0 || (result < 0 && errno != ECHILD)) {
+            kill(pid, 9);
+            do {
+                result = waitpid(pid, &status, 0);
+            } while (result < 0 && errno == EINTR);
+        }
+        if (result == pid || (result < 0 && errno == ECHILD)) {
+            Pid = -1;
         }
 #endif
         return status;
+    }
+
+    bool HasStarted() const
+    {
+#ifdef _win_
+        return true;
+#else
+        return Pid > 0;
+#endif
     }
 
     IOutputStream& GetStdin() {
@@ -292,77 +355,6 @@ protected:
 };
 
 /*______________________________________________________________________________________________*/
-
-struct TProcessHolder {
-    TProcessHolder()
-        : Watcher(MakeHolder<TThread>([this] () { Watch(); }))
-    {
-        Running.test_and_set();
-        Watcher->Start();
-    }
-
-    ~TProcessHolder()
-    {
-        Running.clear();
-        Watcher->Join();
-    }
-
-    i64 Size() {
-        TGuard<TMutex> lock(Mutex);
-        return Processes.size();
-    }
-
-    void Put(const TString& key, THolder<TChildProcess>process) {
-        TGuard<TMutex> lock(Mutex);
-        Processes.emplace_back(key, std::move(process));
-    }
-
-    THolder<TChildProcess> Acquire(const TString& key, TList<THolder<TChildProcess>>* stopList) {
-        TGuard<TMutex> lock(Mutex);
-        THolder<TChildProcess> result;
-        while (!Processes.empty()) {
-            auto first = std::move(Processes.front());
-            Processes.pop_front();
-            if (first.first == key) {
-                result = std::move(first.second);
-                break;
-            }
-            stopList->push_back(std::move(first.second));
-        }
-        return result;
-    }
-
-    void Watch() {
-        while (Running.test()) {
-            TList<THolder<TChildProcess>> stopList;
-            {
-                TGuard<TMutex> lock(Mutex);
-                auto it = Processes.begin();
-                while (it != Processes.end()) {
-                    if (!it->second->IsAlive()) {
-                        YQL_CLOG(DEBUG, ProviderDq) << "Remove dead process";
-                        stopList.emplace_back(std::move(it->second));
-                        it = Processes.erase(it);
-                    } else {
-                        ++it;
-                    }
-                }
-            }
-
-            for (const auto& job : stopList) {
-                job->Kill();
-                job->Wait(TDuration::Seconds(1));
-            }
-            Sleep(TDuration::MilliSeconds(1000));
-        }
-    }
-
-    THolder<TThread> Watcher;
-    std::atomic_flag Running;
-
-    TMutex Mutex;
-    TList<std::pair<TString, THolder<TChildProcess>>> Processes;
-};
 
 struct TPortoSettings {
     bool Enable;
@@ -437,7 +429,8 @@ private:
         cmd.Run().Wait();
     }
 
-    void Kill() override {
+    bool DestroyContainer()
+    {
         if (MemoryLimit) {
             try {
                 // see YQL-13760
@@ -464,10 +457,31 @@ private:
         try {
             TShellCommand cmd(PortoCtl, {"destroy", ContainerName});
             cmd.Run().Wait();
+            const auto exitCode = cmd.GetExitCode();
+            if (NPrivate::IsShellCommandSuccessful(cmd.GetStatus(), exitCode)) {
+                return true;
+            }
+            YQL_CLOG(DEBUG, ProviderDq) << "Cannot destroy container (Status: " << static_cast<int>(cmd.GetStatus())
+                                       << ", ExitCode: " << exitCode.GetOrElse(-1)
+                                       << ", Error: " << cmd.GetError() << ")";
+            return false;
         } catch (...) {
             YQL_CLOG(DEBUG, ProviderDq) << "Cannot destroy: " << CurrentExceptionMessage();
+            return false;
         }
+    }
+
+    void Kill() override
+    {
+        DestroyContainer();
         TChildProcess::Kill();
+    }
+
+    bool Cleanup(TDuration timeout) override
+    {
+        const bool containerDestroyed = DestroyContainer();
+        const bool childReaped = TChildProcess::Cleanup(timeout);
+        return containerDestroyed && childReaped;
     }
 
     void PrepareForExec() override {
@@ -1371,7 +1385,7 @@ public:
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const NDqProto::TDqTask& task,
         TFilesHolder::TPtr&& filesHolder,
-        THolder<TChildProcess>&& command,
+        std::shared_ptr<TChildProcess> command,
         ui64 stageId,
         const TString& traceId)
         : TraceId(traceId)
@@ -1711,7 +1725,7 @@ private:
     std::atomic<bool> Running;
     int Code = -1;
     TString Stderr;
-    THolder<TChildProcess> Command;
+    std::shared_ptr<TChildProcess> Command;
     THolder<TThread> StderrReader;
     IOutputStream& Output;
     IInputStream& Input;
@@ -1731,7 +1745,7 @@ public:
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const NDqProto::TDqTask& task,
         TFilesHolder::TPtr&& filesHolder,
-        THolder<TChildProcess>&& command,
+        std::shared_ptr<TChildProcess> command,
         ui64 stageId,
         const TString& traceId)
         : Delegate(new TTaskRunner(alloc, task, std::move(filesHolder), std::move(command), stageId, traceId))
@@ -1982,35 +1996,7 @@ private:
 /*______________________________________________________________________________________________*/
 
 class TPipeFactory: public IProxyFactory {
-    struct TJob: public TTaskScheduler::ITask {
-        TJob(NThreading::TPromise<void> p)
-            : Promise(std::move(p))
-        { }
-
-        TInstant Process() override {
-            Promise.SetValue();
-            return TInstant::Max();
-        }
-
-        NThreading::TPromise<void> Promise;
-    };
-
-    struct TStopJob: public TTaskScheduler::ITask {
-        TList<THolder<TChildProcess>> StopList;
-
-        TStopJob(TList<THolder<TChildProcess>>&& stopList)
-            : StopList(std::move(stopList))
-        { }
-
-        TInstant Process() override {
-            for (const auto& job : StopList) {
-                job->Kill();
-                job->Wait(TDuration::Seconds(1));
-            }
-
-            return TInstant::Max();
-        }
-    };
+    using TProcessPool = TPipeProcessPool<TChildProcess>;
 
 public:
     TPipeFactory(const TPipeFactoryOptions& options)
@@ -2029,11 +2015,49 @@ public:
             ? *options.Revision
             : GetProgramCommitId())
         , TaskScheduler(1)
-        , MaxProcesses(options.MaxProcesses)
+        , ProcessPool(
+            options.MaxProcesses,
+            [this] (std::function<void()> callback) {
+                return TaskScheduler.AddFunc(
+                    [callback = std::move(callback)] () mutable {
+                        callback();
+                        return TInstant::Max();
+                    },
+                    TInstant());
+            },
+            [] (const auto& process) {
+                try {
+                    const bool cleaned = process->Cleanup(TDuration::Seconds(1));
+                    if (!cleaned) {
+                        YQL_CLOG(ERROR, ProviderDq) << "Cannot confirm pooled child process cleanup";
+                    }
+                    return cleaned;
+                } catch (...) {
+                    YQL_CLOG(ERROR, ProviderDq) << "Cannot clean up child process: " << CurrentExceptionMessage();
+                    return false;
+                }
+            },
+            [] (const auto& process) {
+                return process->IsAlive();
+            })
         , PortoCtlPath(options.PortoCtlPath)
+        , Watcher(MakeHolder<TThread>([this] () { Watch(); }))
     {
-        Start(ExePath, PortoSettings);
         TaskScheduler.Start();
+        ProcessPool.Prewarm(MakeRequest(ExePath, PortoSettings));
+        Running.test_and_set();
+        Watcher->Start();
+    }
+
+    ~TPipeFactory()
+    {
+        Running.clear();
+        Watcher->Join();
+        ProcessPool.BeginShutdown();
+        TaskScheduler.Stop();
+        if (!ProcessPool.FinishShutdown()) {
+            YQL_CLOG(ERROR, ProviderDq) << "Cannot clean up all pooled child processes";
+        }
     }
 
     ITaskRunner::TPtr GetOld(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& tmp, const TString& traceId) override {
@@ -2042,7 +2066,7 @@ public:
         tmp.GetMeta().UnpackTo(&taskMeta);
         ui64 stageId = taskMeta.GetStageId();
         auto result = GetExecutorForTask(taskMeta.GetFiles(), taskMeta.GetSettings());
-        auto [task, filesHolder] = PrepareTask(tmp, result.Get());
+        auto [task, filesHolder] = PrepareTask(tmp, result.get());
         return new TTaskRunner(alloc, task, std::move(filesHolder), std::move(result), stageId, traceId);
     }
 
@@ -2054,35 +2078,34 @@ public:
         tmp.GetMeta().UnpackTo(&taskMeta);
 
         auto result = GetExecutorForTask(taskMeta.GetFiles(), taskMeta.GetSettings());
-        auto [task, filesHolder] = PrepareTask(tmp, result.Get());
+        auto [task, filesHolder] = PrepareTask(tmp, result.get());
         return new TDqTaskRunner(alloc, task, std::move(filesHolder), std::move(result), taskMeta.GetStageId(), traceId);
     }
 
 private:
-    THolder<TChildProcess> StartOne(const TString& exePath, const TPortoSettings& portoSettings) {
-        return CreateChildProcess(PortoCtlPath, FileCache->GetDir(), exePath, Args, Env, ContainerId++, portoSettings);
+    TProcessPool::TRequest MakeRequest(const TString& exePath, const TPortoSettings& portoSettings)
+    {
+        return {
+            .Key = GetKey(exePath, portoSettings),
+            .Spawn = [this, exePath, portoSettings] {
+                return CreateChildProcess(
+                    PortoCtlPath,
+                    FileCache->GetDir(),
+                    exePath,
+                    Args,
+                    Env,
+                    ContainerId++,
+                    portoSettings);
+            },
+        };
     }
 
-    void Start(const TString& exePath, const TPortoSettings& portoSettings) {
-        const auto key = GetKey(exePath, portoSettings);
-        while (static_cast<int>(ProcessHolder.Size()) < MaxProcesses) {
-            auto process = StartOne(exePath, portoSettings);
-            ProcessHolder.Put(key, std::move(process));
+    void Watch()
+    {
+        while (Running.test()) {
+            ProcessPool.SweepDead();
+            Sleep(TDuration::MilliSeconds(1000));
         }
-    }
-
-    void ProcessJobs(const TString& exePath, const TPortoSettings& portoSettings) {
-        NThreading::TPromise<void> promise = NThreading::NewPromise();
-
-        promise.GetFuture().Apply([=, this](const NThreading::TFuture<void>&) mutable {
-            Start(exePath, portoSettings);
-        });
-
-        Y_ABORT_UNLESS(TaskScheduler.Add(MakeIntrusive<TJob>(promise), TInstant()));
-    }
-
-    void StopJobs(TList<THolder<TChildProcess>>&& stopList) {
-        Y_ABORT_UNLESS(TaskScheduler.Add(MakeIntrusive<TStopJob>(std::move(stopList)), TInstant()));
     }
 
     TString GetKey(const TString& exePath, const TPortoSettings& settings)
@@ -2150,7 +2173,7 @@ private:
     }
 
     template<typename T, typename S>
-    THolder<TChildProcess> GetExecutorForTask(const T& files, const S& settings) {
+    std::shared_ptr<TChildProcess> GetExecutorForTask(const T& files, const S& settings) {
         TString executorId;
         TPortoSettings portoSettings = PortoSettings;
 
@@ -2182,18 +2205,10 @@ private:
             exePath = *maybeExeFile;
         }
 
-        auto key = GetKey(exePath, portoSettings);
-        TList<THolder<TChildProcess>> stopList;
-        THolder<TChildProcess> result = ProcessHolder.Acquire(key, &stopList);
-        if (!result) {
-            result = StartOne(exePath, portoSettings);
-        }
-        ProcessJobs(exePath, portoSettings);
-        StopJobs(std::move(stopList));
-        return result;
+        return ProcessPool.Acquire(MakeRequest(exePath, portoSettings));
     }
 
-    static THolder<TChildProcess> CreateChildProcess(
+    static TProcessPool::TSpawnResult CreateChildProcess(
         const TString& portoCtlPath,
         const TString& cacheDir,
         const TString& exePath,
@@ -2202,18 +2217,41 @@ private:
         i64 containerId,
         const TPortoSettings& portoSettings)
     {
-        THolder<TChildProcess> command;
-        if (portoSettings.Enable) {
-            command = MakeHolder<TPortoProcess>(portoCtlPath, exePath, args, env, cacheDir + "/Slot-" + ToString(containerId), portoSettings);
-        } else {
-            command = MakeHolder<TChildProcess>(exePath, args, env, cacheDir + "/Slot-" + ToString(containerId));
+        std::shared_ptr<TChildProcess> command;
+        try {
+            if (portoSettings.Enable) {
+                command = std::make_shared<TPortoProcess>(
+                    portoCtlPath,
+                    exePath,
+                    args,
+                    env,
+                    cacheDir + "/Slot-" + ToString(containerId),
+                    portoSettings);
+            } else {
+                command = std::make_shared<TChildProcess>(
+                    exePath,
+                    args,
+                    env,
+                    cacheDir + "/Slot-" + ToString(containerId));
+            }
+            YQL_CLOG(DEBUG, ProviderDq) << "Executing " << exePath;
+            for (const auto& arg : args) {
+                YQL_CLOG(DEBUG, ProviderDq) << "Arg: " << arg;
+            }
+            command->Run();
+            return {
+                .Process = std::move(command),
+            };
+        } catch (...) {
+            YQL_CLOG(ERROR, ProviderDq) << "Cannot start child process (Executable: " << exePath
+                                       << ", Error: " << CurrentExceptionMessage() << ")";
+            return {
+                .Process = command && command->HasStarted()
+                    ? std::move(command)
+                    : nullptr,
+                .Error = std::current_exception(),
+            };
         }
-        YQL_CLOG(DEBUG, ProviderDq) << "Executing " << exePath;
-        for (const auto& arg: args) {
-            YQL_CLOG(DEBUG, ProviderDq) << "Arg: " << arg;
-        }
-        command->Run();
-        return command;
     }
 
     std::atomic<i64> ContainerId = 1;
@@ -2228,10 +2266,12 @@ private:
 
     const TString Revision;
 
-    TProcessHolder ProcessHolder;
     TTaskScheduler TaskScheduler;
-    const int MaxProcesses;
+    TProcessPool ProcessPool;
     const TString PortoCtlPath;
+
+    THolder<TThread> Watcher;
+    std::atomic_flag Running;
 };
 
 IProxyFactory::TPtr CreatePipeFactory(

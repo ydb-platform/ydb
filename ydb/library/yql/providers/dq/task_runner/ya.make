@@ -23,8 +23,13 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     file_cache.cpp
     tasks_runner_local.cpp
+    tasks_runner_pipe_process.cpp
     tasks_runner_proxy.cpp
     tasks_runner_pipe.cpp
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

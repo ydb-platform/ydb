@@ -48,7 +48,7 @@ runs:
       env:
         s3_key_id: ${{ inputs.s3_key_id }}
         s3_secret_access_key: ${{ inputs.s3_key_secret }}
-    
+
     - name: export s3 path variables
       shell: bash
       if: inputs.build_preset

@@ -84,14 +84,13 @@ ui64 TService::TTrackOperationId::THash::operator()(const TTrackOperationId& id)
     result = CombineHashes<ui64>(result, std::hash<TString>()(id.TypeId));
     result = CombineHashes<ui64>(result, std::hash<TString>()(id.ObjectId));
     result = CombineHashes<ui64>(result, id.PathId.Hash());
-    result = CombineHashes<ui64>(result, std::hash<ui64>()(id.RequestGeneration));
     result = CombineHashes<ui64>(result, std::hash<ui64>()(id.ObjectGeneration));
     return result;
 }
 
 bool TService::TTrackOperationId::operator==(const TTrackOperationId& other) const {
     return DatabaseId == other.DatabaseId && TypeId == other.TypeId && ObjectId == other.ObjectId
-        && PathId == other.PathId && RequestGeneration == other.RequestGeneration && ObjectGeneration == other.ObjectGeneration;
+        && PathId == other.PathId && ObjectGeneration == other.ObjectGeneration;
 }
 
 void TService::PrepareManagers(std::vector<IClassBehaviour::TPtr> managers, TAutoPtr<IEventBase> ev, const NActors::TActorId& sender) {
@@ -187,31 +186,39 @@ void TService::Handle(TEvTrackOperationCompletion::TPtr& ev) {
         .TypeId = ev->Get()->GetTypeId(),
         .ObjectId = ev->Get()->GetObjectId(),
         .PathId = ev->Get()->GetPathId(),
-        .RequestGeneration = ev->Get()->GetRequestGeneration(),
         .ObjectGeneration = ev->Get()->GetObjectGeneration(),
     };
-    if (!InflightTrackOperations.emplace(id).second) {
+    auto [it, inserted] = InflightTrackOperations.try_emplace(id);
+    if (!inserted) {
+        if (ev->Get()->GetRequestGeneration() > it->second->Get()->GetRequestGeneration()) {
+            it->second = std::move(ev);
+        }
         return;
     }
 
+    it->second = std::move(ev);
+    StartTracking(*it->second->Get());
+}
+
+void TService::StartTracking(const TEvTrackOperationCompletion& request) {
     // We should start initialization for this object before operation tracing begins
-    IClassBehaviour::TPtr cBehaviour(IClassBehaviour::TFactory::Construct(id.TypeId));
-    Y_VALIDATE(cBehaviour, "Unsupported object type: \"" << id.TypeId << "\"");
+    IClassBehaviour::TPtr cBehaviour(IClassBehaviour::TFactory::Construct(request.GetTypeId()));
+    Y_VALIDATE(cBehaviour, "Unsupported object type: \"" << request.GetTypeId() << "\"");
 
     NModifications::IOperationsManager::TExternalModificationContext externalData;
-    externalData.SetUserToken(ev->Get()->GetUserToken());
-    externalData.SetDatabase(ev->Get()->GetDatabase());
-    externalData.SetDatabaseId(id.DatabaseId);
+    externalData.SetUserToken(request.GetUserToken());
+    externalData.SetDatabase(request.GetDatabase());
+    externalData.SetDatabaseId(request.GetDatabaseId());
     externalData.SetActorSystem(TActivationContext::ActorSystem());
 
     NModifications::IOperationsManager::TOperationTrackContext context(std::move(externalData));
-    context.SetPathId(id.PathId);
-    context.SetRequestGeneration(id.RequestGeneration);
-    context.SetObjectGeneration(id.ObjectGeneration);
-    context.SetOperationOwner(ev->Get()->GetOperationOwner());
+    context.SetPathId(request.GetPathId());
+    context.SetRequestGeneration(request.GetRequestGeneration());
+    context.SetObjectGeneration(request.GetObjectGeneration());
+    context.SetOperationOwner(request.GetOperationOwner());
 
-    auto controller = std::make_shared<TObjectTrackCommand::TController>(id.TypeId, id.ObjectId, context);
-    auto command = std::make_shared<TObjectTrackCommand>(id.ObjectId, cBehaviour, std::move(controller), std::move(context));
+    auto controller = std::make_shared<TObjectTrackCommand::TController>(request.GetTypeId(), request.GetObjectId(), context);
+    auto command = std::make_shared<TObjectTrackCommand>(request.GetObjectId(), cBehaviour, std::move(controller), std::move(context));
 
     Send(SelfId(), new NProvider::TEvObjectsOperation(std::move(command)));
 }
@@ -222,10 +229,16 @@ void TService::Handle(TEvTrackOperationFinished::TPtr& ev) {
         .TypeId = ev->Get()->GetTypeId(),
         .ObjectId = ev->Get()->GetObjectId(),
         .PathId = ev->Get()->GetPathId(),
-        .RequestGeneration = ev->Get()->GetRequestGeneration(),
         .ObjectGeneration = ev->Get()->GetObjectGeneration(),
     };
-    Y_VALIDATE(InflightTrackOperations.erase(id) == 1, "Unexpected track operation finish");
+    const auto it = InflightTrackOperations.find(id);
+    Y_VALIDATE(it != InflightTrackOperations.end(), "Unexpected track operation finish");
+    const auto& request = *it->second->Get();
+    if (request.GetRequestGeneration() > ev->Get()->GetRequestGeneration()) {
+        StartTracking(request);
+    } else {
+        InflightTrackOperations.erase(it);
+    }
 }
 
 void TService::Bootstrap(const NActors::TActorContext& /*ctx*/) {

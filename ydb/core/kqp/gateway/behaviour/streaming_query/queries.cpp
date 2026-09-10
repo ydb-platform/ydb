@@ -2970,7 +2970,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             sFunc(TEvents::TEvWakeup, PingOperationOwner);
             hFunc(TEvPrivate::TEvPingOperationOwnerResult, Handle);
-            hFunc(TEvPrivate::TEvLockStreamingQueryResult, HandleRetry);
+            hFunc(TEvPrivate::TEvLockStreamingQueryResult, Handle);
             hFunc(TEvPrivate::TEvUnlockStreamingQueryResult, HandleRetry);
             hFunc(TEvPrivate::TEvExecuteSchemeTransactionResult, HandleRetry);
             default:
@@ -3000,6 +3000,19 @@ private:
 
         IsLockCreated = false;
         DescribeQuery("Check query info");
+    }
+
+    void Handle(TEvPrivate::TEvLockStreamingQueryResult::TPtr& ev) {
+        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS
+            && ev->Get()->Info.State.GetOperationOwnerGeneration() > Settings.SchemeShardGeneration) {
+            // A newer tracker owns continuation, including scheme transaction finalization.
+            SchemeOperationStarted = false;
+            IsLockCreated = false;
+            Finish(Ydb::StatusIds::SUCCESS);
+            return;
+        }
+
+        HandleRetry(ev);
     }
 
     template <typename TEvPtr>

@@ -14,6 +14,8 @@
 
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <unordered_map>
+
 namespace NKikimr::NMetadata::NProvider {
 
 class TService : public NActors::TActorBootstrapped<TService> {
@@ -24,7 +26,6 @@ class TService : public NActors::TActorBootstrapped<TService> {
         TString TypeId;
         TString ObjectId;
         TPathId PathId;
-        ui64 RequestGeneration;
         ui64 ObjectGeneration;
 
         bool operator==(const TTrackOperationId& other) const;
@@ -35,7 +36,7 @@ class TService : public NActors::TActorBootstrapped<TService> {
     };
 
     std::map<TString, NActors::TActorId> Accessors;
-    std::unordered_set<TTrackOperationId, TTrackOperationId::THash> InflightTrackOperations;
+    std::unordered_map<TTrackOperationId, TEvTrackOperationCompletion::TPtr, TTrackOperationId::THash> InflightTrackOperations;
     std::shared_ptr<TRegistrationData> RegistrationData = std::make_shared<TRegistrationData>();
     const TConfig Config;
 
@@ -48,6 +49,7 @@ class TService : public NActors::TActorBootstrapped<TService> {
     void Handle(TEvResetManagerRegistration::TPtr& ev);
     void Handle(TEvTrackOperationCompletion::TPtr& ev);
     void Handle(TEvTrackOperationFinished::TPtr& ev);
+    void StartTracking(const TEvTrackOperationCompletion& request);
 
     void PrepareManagers(std::vector<IClassBehaviour::TPtr> managers, TAutoPtr<IEventBase> ev, const NActors::TActorId& sender);
     void Activate();

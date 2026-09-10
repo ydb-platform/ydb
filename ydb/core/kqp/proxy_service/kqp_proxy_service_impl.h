@@ -386,7 +386,7 @@ public:
         return OrderedSessions.end();
     }
 
-    std::pair<TNodeId, TActorId> Erase(const TString& sessionId) {
+    std::pair<TNodeId, TActorId> Erase(TString sessionId) {
         auto it = LocalSessions.find(sessionId);
         auto result = std::make_pair<TNodeId, TActorId>(0, TActorId());
         if (it != LocalSessions.end()) {

@@ -3741,6 +3741,87 @@ Y_UNIT_TEST_F(PlanStepAccepted_Known_Not_Acked_By_Later_Unknown_WriteTx, TPQTabl
     WaitPlanStepAck({.Step=200, .TxIds={unknownTxId}});
 }
 
+Y_UNIT_TEST_F(Retransmit_AllUnknown_Behind_Known_Starts_Extra_WriteTx, TPQTabletFixture)
+{
+    // Current behavior (accepted trade-off): while a not-Ready known PlanStep blocks the
+    // queue, an all-unknown entry may already be Ready after its fence. A mediator
+    // retransmit of that all-unknown is appended again and schedules another WRITE_TX.
+    const ui64 txId = 67890;
+    const ui64 unknownTxId = 424305;
+    const ui64 mockTabletId = 22222;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+
+    ui64 writeTxRequestCount = 0;
+    ui64 writeTxResponseCount = 0;
+    auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+            if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                ++writeTxRequestCount;
+            }
+        }
+        if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvResponse>()) {
+            if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                ++writeTxResponseCount;
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    SendPlanStep({.Step=200, .TxIds={unknownTxId}});
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return writeTxResponseCount >= 1;
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
+    UNIT_ASSERT_VALUES_EQUAL(writeTxRequestCount, 1);
+
+    // First fence done: step 200 is Ready but stuck behind known 100.
+    {
+        auto premature = Ctx->Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAccepted>(
+            TDuration::Seconds(1));
+        UNIT_ASSERT(premature == nullptr);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(writeTxRequestCount, 1);
+
+    // Retransmit the same all-unknown step — another queue entry and another fence.
+    SendPlanStep({.Step=200, .TxIds={unknownTxId}});
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return writeTxResponseCount >= 2;
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
+    UNIT_ASSERT_VALUES_EQUAL(writeTxRequestCount, 2);
+
+    {
+        auto premature = Ctx->Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAccepted>(
+            TDuration::Seconds(1));
+        UNIT_ASSERT(premature == nullptr);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(writeTxRequestCount, 2);
+
+    Ctx->Runtime->SetObserverFunc(prev);
+}
+
 Y_UNIT_TEST_F(No_WriteTx_BusyLoop_While_Known_PlanStep_Pending, TPQTabletFixture)
 {
     // A not-Ready known PlanStep in PlanStepAckQueue must not keep restarting WRITE_TX

@@ -339,10 +339,6 @@ private:
             case NUdf::EFetchStatus::Ok:
                 break;
             case NUdf::EFetchStatus::Finish:
-                if (Y_UNLIKELY(!StartTs)) {
-                    StartTs = Now();
-                }
-                [[fallthrough]];
             case NUdf::EFetchStatus::Yield:
                 return status;
         }
@@ -351,9 +347,6 @@ private:
         CopyResult(result, width);
         if (Stats) {
             Stats.Add(result, width);
-        }
-        if (Y_UNLIKELY(!StartTs)) {
-            StartTs = Now();
         }
         ++InputsConsumed;
         return NUdf::EFetchStatus::Ok;

@@ -1481,7 +1481,7 @@ std::optional<ui64> GrabFirstFetchCount(float readAhead, size_t messageCount, si
 } // namespace
 
 // EstimateFetchCountForNewGroups: exercised directly as a pure function.
-Y_UNIT_TEST(FifoReadAheadEstimateFetchCountForNewGroups) {
+Y_UNIT_TEST(MLPUnlockedGroupsEstimateFetchCountForNewGroups) {
     UNIT_ASSERT_VALUES_EQUAL(EstimateFetchCountForNewGroups(100000, 10, 1), 10000);
     UNIT_ASSERT_VALUES_EQUAL(EstimateFetchCountForNewGroups(100000, 10, 3), 30000);
     UNIT_ASSERT_VALUES_EQUAL(EstimateFetchCountForNewGroups(0, 0, 5), 5);
@@ -1492,14 +1492,14 @@ Y_UNIT_TEST(FifoReadAheadEstimateFetchCountForNewGroups) {
 
 // With read-ahead disabled the fully buffered FIFO consumer does not fetch ahead
 // at all, even with several groups locked.
-Y_UNIT_TEST(FifoReadAheadDisabledDoesNotFetch) {
+Y_UNIT_TEST(MLPUnlockedGroupsDisabledDoesNotFetch) {
     const auto count = GrabFirstFetchCount(/*readAhead=*/0.0f, kReadAheadBaseMessages, kReadAheadBaseGroups, /*lockedGroups=*/6);
     UNIT_ASSERT_C(!count, TStringBuilder() << "expected no fetch with read-ahead disabled, got " << *count);
 }
 
 // ratio 0.5: 10 groups, 6 locked -> readable 4 < target ceil(5)=5 -> 1 missing
 // group; density is 100000/10 = 10000 messages per group.
-Y_UNIT_TEST(FifoReadAheadRatioFetchesEstimatedBatch) {
+Y_UNIT_TEST(MLPUnlockedGroupsRatioFetchesEstimatedBatch) {
     const auto count = GrabFirstFetchCount(/*readAhead=*/0.5f, kReadAheadBaseMessages, kReadAheadBaseGroups, /*lockedGroups=*/6);
     UNIT_ASSERT(count);
     Cerr << ">>>>> first CmdRead count (ratio 0.5): " << *count << Endl;
@@ -1508,7 +1508,7 @@ Y_UNIT_TEST(FifoReadAheadRatioFetchesEstimatedBatch) {
 
 // ratio 1.0: readable 4 < target 10 -> 6 missing groups -> estimate 60000, capped
 // by the free in-flight capacity (MaxMessages - 100000 = 20000).
-Y_UNIT_TEST(FifoReadAheadEnabledFetchesMaxBatches) {
+Y_UNIT_TEST(MLPUnlockedGroupsEnabledFetchesMaxBatches) {
     const auto count = GrabFirstFetchCount(/*readAhead=*/1.0f, kReadAheadBaseMessages, kReadAheadBaseGroups, /*lockedGroups=*/6);
     UNIT_ASSERT(count);
     Cerr << ">>>>> first CmdRead count (enabled): " << *count << Endl;
@@ -1543,7 +1543,7 @@ size_t ReadDistinctGroupHeads(std::shared_ptr<TTopicSdkTestSetup>& setup, size_t
     return best;
 }
 
-void FifoReadAheadReadAllGroupsImpl(float readAhead) {
+void MLPUnlockedGroupsReadAllGroupsImpl(float readAhead) {
     auto setup = CreateSetup();
     setup->GetRuntime().GetAppData().PQConfig.SetMLPUnlockedGroupsRatio(readAhead);
     CreateTopic(setup, "/Root/topic1", "mlp-consumer", 1, /*keepMessagesOrder=*/true);
@@ -1553,18 +1553,18 @@ void FifoReadAheadReadAllGroupsImpl(float readAhead) {
     UNIT_ASSERT_VALUES_EQUAL(ReadDistinctGroupHeads(setup, 30), expectedGroups);
 }
 
-Y_UNIT_TEST(FifoReadAheadEnabledReadsAllGroups) {
-    FifoReadAheadReadAllGroupsImpl(1.0f);
+Y_UNIT_TEST(MLPUnlockedGroupsEnabledReadsAllGroups) {
+    MLPUnlockedGroupsReadAllGroupsImpl(1.0f);
 }
 
-Y_UNIT_TEST(FifoReadAheadRatioReadsAllGroups) {
-    FifoReadAheadReadAllGroupsImpl(0.5f);
+Y_UNIT_TEST(MLPUnlockedGroupsRatioReadsAllGroups) {
+    MLPUnlockedGroupsReadAllGroupsImpl(0.5f);
 }
 
 // Negative: with read-ahead disabled the FIFO consumer keeps only a minimal
 // buffer and never fetches deep enough to surface the 5 unique tail groups, so
 // only the 10 head groups are ever readable.
-Y_UNIT_TEST(FifoReadAheadDisabledDoesNotReachTailGroups) {
+Y_UNIT_TEST(MLPUnlockedGroupsDisabledDoesNotReachTailGroups) {
     auto setup = CreateSetup();
     setup->GetRuntime().GetAppData().PQConfig.SetMLPUnlockedGroupsRatio(0.0f);
     CreateTopic(setup, "/Root/topic1", "mlp-consumer", 1, /*keepMessagesOrder=*/true);

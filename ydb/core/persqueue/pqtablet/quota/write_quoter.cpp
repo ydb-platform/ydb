@@ -63,10 +63,11 @@ void TWriteQuoter::HandleWakeUpImpl() {
     IncomingMessagesQuotaTracker.Update(ActorContext().Now());
 }
 
-void TWriteQuoter::UpdateQuotaConfigImpl(bool, const TActorContext&) {
+void TWriteQuoter::UpdateQuotaConfigImpl(bool, const TActorContext& ctx) {
     IncomingMessagesQuotaTracker.UpdateConfigIfChanged(
         PQTabletConfig.GetPartitionConfig().GetBurstSizeInMessages(),
-        PQTabletConfig.GetPartitionConfig().GetWriteSpeedInMessagesPerSecond()
+        PQTabletConfig.GetPartitionConfig().GetWriteSpeedInMessagesPerSecond(),
+        ctx.Now()
     );
 }
 

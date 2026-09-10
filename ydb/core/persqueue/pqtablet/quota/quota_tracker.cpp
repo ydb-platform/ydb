@@ -7,6 +7,7 @@ namespace NKikimr::NPQ {
     namespace {
 
     constexpr ui64 MILLISECONDS_PER_SECOND = TDuration::Seconds(1).MilliSeconds();
+    constexpr ui64 QUOTA_TICK_MILLISECONDS = TDuration::MilliSeconds(50).MilliSeconds();
 
     i64 ClampToI64(const ui64 value) {
         return value > static_cast<ui64>(Max<i64>())
@@ -17,31 +18,59 @@ namespace NKikimr::NPQ {
     } // namespace
 
     TQuotaTracker::TQuotaTracker(const ui64 maxBurst, const ui64 speedPerSecond, const TInstant timestamp)
-        : AvailableQuota(ClampToI64(TransformToQuota(maxBurst)))
+        : AvailableQuota(0)
         , SpeedPerSecond(speedPerSecond)
         , LastUpdateTime(timestamp)
-        , MaxBurst(TransformToQuota(maxBurst))
-    {}
+        , MaxBurst(ComputeMaxBurstQuota(maxBurst, speedPerSecond))
+    {
+        AvailableQuota = ClampToI64(MaxBurst);
+    }
 
-    ui64 TQuotaTracker::TransformToQuota(const ui64 bytesPerSecond) const {
+    ui64 TQuotaTracker::TransformToQuota(const ui64 bytes) const {
         ui64 result = 0;
-        if (__builtin_mul_overflow(bytesPerSecond, MILLISECONDS_PER_SECOND, &result)) {
+        if (__builtin_mul_overflow(bytes, MILLISECONDS_PER_SECOND, &result)) {
             return Max<ui64>();
         }
 
         return result;
     }
 
-    bool TQuotaTracker::UpdateConfigIfChanged(const ui64 maxBurst, const ui64 speedPerSecond) {
-        const ui64 newMaxBurst = TransformToQuota(maxBurst);
-        
-        if (newMaxBurst != MaxBurst || speedPerSecond != SpeedPerSecond) {
-            SpeedPerSecond = speedPerSecond;
-            MaxBurst = newMaxBurst;
-            AvailableQuota = ClampToI64(newMaxBurst);
-            return true;
+    ui64 TQuotaTracker::ComputeMaxBurstQuota(const ui64 maxBurst, const ui64 speedPerSecond) const {
+        ui64 extra = 0;
+        if (maxBurst > speedPerSecond) {
+            extra = TransformToQuota(maxBurst - speedPerSecond);
         }
-        return false;
+
+        ui64 tick = 0;
+        if (__builtin_mul_overflow(speedPerSecond, QUOTA_TICK_MILLISECONDS, &tick)) {
+            tick = Max<ui64>();
+        }
+
+        ui64 result = 0;
+        if (__builtin_add_overflow(extra, tick, &result)) {
+            result = Max<ui64>();
+        }
+
+        // CanExaust requires at least one full unit; keep the limiter usable at low speed.
+        if (speedPerSecond > 0 && result < MILLISECONDS_PER_SECOND) {
+            result = MILLISECONDS_PER_SECOND;
+        }
+
+        return result;
+    }
+
+    bool TQuotaTracker::UpdateConfigIfChanged(const ui64 maxBurst, const ui64 speedPerSecond, const TInstant timestamp) {
+        const ui64 newMaxBurst = ComputeMaxBurstQuota(maxBurst, speedPerSecond);
+
+        if (newMaxBurst == MaxBurst && speedPerSecond == SpeedPerSecond) {
+            return false;
+        }
+
+        Update(timestamp);
+        SpeedPerSecond = speedPerSecond;
+        MaxBurst = newMaxBurst;
+        AvailableQuota = Min<i64>(AvailableQuota, ClampToI64(MaxBurst));
+        return true;
     }
 
     void TQuotaTracker::Update(const TInstant timestamp) {
@@ -94,7 +123,4 @@ namespace NKikimr::NPQ {
         return SpeedPerSecond;
     }
 
-} // NKikimr::NPQ
-
-
-
+} // namespace NKikimr::NPQ

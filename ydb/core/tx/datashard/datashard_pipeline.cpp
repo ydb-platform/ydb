@@ -1939,15 +1939,14 @@ EExecutionStatus TPipeline::RunExecutionPlan(TOperation::TPtr op,
             return EExecutionStatus::Reschedule;
         }
 
-        NWilson::TSpan unitSpan(TWilsonTablet::TabletDetailed, txc.TransactionExecutionSpan.GetTraceId(), std::nullopt);
+        NWilson::TSpan unitSpan(TWilsonTablet::TabletDetailed, txc.TransactionExecutionSpan.GetTraceId(), "Datashard.Unit");
 
         NCpuTime::TCpuTimer timer;
         auto status = unit.Execute(op, txc, ctx);
         op->AddExecutionTime(timer.GetTime());
 
         if (unitSpan) {
-            unitSpan.Name(TStringBuilder() << "Datashard." << unit.GetKind())
-                    .Attribute("Type", TypeName(unit))
+            unitSpan.Attribute("Type", TypeName(unit))
                     .Attribute("Status", static_cast<int>(status))
                     .EndOk();
         }

@@ -51,6 +51,7 @@ void FillRequestFrom(IKqpGateway::TExecPhysicalRequest& request, const IKqpGatew
     request.FlushEffects = from.FlushEffects;
     request.DisablePessimisticLocks = from.DisablePessimisticLocks;
     request.UserTraceId = from.UserTraceId;
+    request.TraceId = NWilson::TTraceId(from.TraceId);
     request.OutputChunkMaxSize = from.OutputChunkMaxSize;
 }
 

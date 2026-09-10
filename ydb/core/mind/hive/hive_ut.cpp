@@ -5488,9 +5488,18 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             app.HiveConfig.SetMinMemoryScatterToBalance(1);
             app.HiveConfig.SetMinNetworkScatterToBalance(1);
             switch (resource) {
-            case NHive::EResourceToBalance::Counter:
+            case NHive::EResourceToBalance::Counter: {
                 app.HiveConfig.SetMinCounterScatterToBalance(minScatter);
+                // The default resource profile seeds each tablet with memory.
+                // Use the normal counter-only configuration before creation.
+                using TAllowedMetrics = NKikimrConfig::THiveConfig::THiveTabletAllowedMetrics;
+                auto* allowed = app.HiveConfig.AddDefaultTabletAllowedMetrics();
+                allowed->AddTabletType(TTabletTypes::Dummy);
+                allowed->SetCPU(TAllowedMetrics::Disabled);
+                allowed->SetMemory(TAllowedMetrics::Disabled);
+                allowed->SetNetwork(TAllowedMetrics::Disabled);
                 break;
+            }
             case NHive::EResourceToBalance::CPU:
                 app.HiveConfig.SetMinCPUScatterToBalance(minScatter);
                 break;
@@ -5614,12 +5623,19 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             }
         }
         auto getTabletNodes = [&]() {
-            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo());
+            auto request = MakeHolder<TEvHive::TEvRequestHiveInfo>();
+            if (resource == NHive::EResourceToBalance::Counter) {
+                request->Record.SetReturnMetrics(true);
+            }
+            runtime.SendToPipe(hiveTablet, sender, request.Release());
             TAutoPtr<IEventHandle> handle;
             auto* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
             THashMap<ui64, ui32> result;
             for (const auto& tablet : response->Record.GetTablets()) {
                 if (tabletNodes.contains(tablet.GetTabletID())) {
+                    if (resource == NHive::EResourceToBalance::Counter) {
+                        UNIT_ASSERT_VALUES_EQUAL_C(tablet.GetMetrics().GetCounter(), 1, tablet.GetTabletID());
+                    }
                     const ui32 node = tablet.GetNodeID() - runtime.GetNodeId(0);
                     UNIT_ASSERT_LT(node, numNodes);
                     result.emplace(tablet.GetTabletID(), node);

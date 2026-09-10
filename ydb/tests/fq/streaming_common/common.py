@@ -579,8 +579,8 @@ class StreamingTestBase(TestYdsBase):
 
     def restart_streaming_node(self, kikimr: Kikimr) -> int:
         """Find and restart the node hosting the streaming query (DQ_PQ_READ_ACTOR).
-
         Returns the restarted node ID."""
+
         def _find_node():
             for node_id in kikimr.cluster.slots:
                 if self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR"):

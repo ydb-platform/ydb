@@ -440,11 +440,15 @@ namespace NKikimr::NHttpProxy {
                     {"request", MaybeGetQueueUrl<TProtoRequest>(Request)});
 
                 if (!HttpContext.SecurityToken.empty()) {
-                    ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
-                        .Ticket = HttpContext.SecurityToken,
-                        .Database = HttpContext.DatabasePath,
-                        .PeerName = HttpContext.SourceAddress,
-                    }));
+                    ctx.Send(
+                        MakeTicketParserID(),
+                        new TEvTicketParser::TEvAuthorizeTicket({
+                                .Ticket = HttpContext.SecurityToken,
+                                .Database = HttpContext.DatabasePath,
+                                .TraceContext = {HttpContext.SourceAddress, HttpContext.RequestId},
+                            }
+                        )
+                    );
                 } else if (!HttpContext.IamToken.empty() || Signature) {
                     AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(
                         ctx.SelfID, HttpContext, std::move(Signature)));

@@ -1,6 +1,10 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/activity.h>
 
+#include <optional>
+
+constexpr ui32 NumRequiredWorkingVDisks = 6;
+
 std::vector<ui32> GetRestartableNodes(TEnvironmentSetup& env, ui32 partitionedNode) {
     auto config = env.FetchBaseConfig();
     std::vector<ui32> res;
@@ -22,7 +26,7 @@ std::vector<ui32> GetRestartableNodes(TEnvironmentSetup& env, ui32 partitionedNo
                 auto *slot = slots.at({id.GetNodeId(), id.GetPDiskId(), id.GetVSlotId()});
                 numFullyWorking += slot->GetReady() && nodeId != id.GetNodeId();
             }
-            if (numFullyWorking < 6) {
+            if (numFullyWorking < NumRequiredWorkingVDisks) {
                 badGroups = true;
                 break;
             }
@@ -35,7 +39,7 @@ std::vector<ui32> GetRestartableNodes(TEnvironmentSetup& env, ui32 partitionedNo
     return res;
 }
 
-bool IssueReassignQuery(TEnvironmentSetup& env, ui32 partitionedNode) {
+std::optional<NKikimrBlobStorage::TReassignGroupDisk> IssueReassignQuery(TEnvironmentSetup& env, ui32 partitionedNode) {
     auto config = env.FetchBaseConfig();
 
     std::map<std::tuple<ui32, ui32, ui32>, const NKikimrBlobStorage::TBaseConfig::TVSlot*> slots;
@@ -61,9 +65,9 @@ bool IssueReassignQuery(TEnvironmentSetup& env, ui32 partitionedNode) {
                 }
             }
         }
-        if (numFullyWorking > 6) {
+        if (numFullyWorking > NumRequiredWorkingVDisks) {
             options.insert(options.end(), all.begin(), all.end());
-        } else if (numFullyWorking == 6) {
+        } else if (numFullyWorking == NumRequiredWorkingVDisks) {
             options.insert(options.end(), notready.begin(), notready.end());
         }
     }
@@ -71,7 +75,7 @@ bool IssueReassignQuery(TEnvironmentSetup& env, ui32 partitionedNode) {
     Cerr << "NumOptions# " << options.size() << Endl;
 
     if (options.empty()) {
-        return false;
+        return std::nullopt;
     }
 
     const NKikimrBlobStorage::TBaseConfig::TVSlot *slot = options[RandomNumber(options.size())];
@@ -139,7 +143,32 @@ bool IssueReassignQuery(TEnvironmentSetup& env, ui32 partitionedNode) {
     auto response = env.Invoke(request);
     UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
 
-    return true;
+    return *reassign;
+}
+
+bool IsReassignedGroupUsable(TEnvironmentSetup& env, const NKikimrBlobStorage::TReassignGroupDisk& reassign, ui32 partitionedNode) {
+    const auto config = env.FetchBaseConfig();
+    ui32 numFullyWorking = 0;
+    bool reassignApplied = false;
+    for (const auto& slot : config.GetVSlot()) {
+        if (slot.GetGroupId() != reassign.GetGroupId()) {
+            continue;
+        }
+        reassignApplied |= slot.GetGroupGeneration() != reassign.GetGroupGeneration();
+        numFullyWorking += slot.GetReady() && slot.GetVSlotId().GetNodeId() != partitionedNode;
+    }
+    return reassignApplied && numFullyWorking >= NumRequiredWorkingVDisks;
+}
+
+void WaitForReassignedGroup(TEnvironmentSetup& env, const NKikimrBlobStorage::TReassignGroupDisk& reassign, ui32 partitionedNode) {
+    constexpr size_t MaxAttempts = 60;
+    for (size_t attempt = 0; attempt < MaxAttempts; ++attempt) {
+        if (IsReassignedGroupUsable(env, reassign, partitionedNode)) {
+            return;
+        }
+        env.Sim(TDuration::Seconds(1));
+    }
+    UNIT_ASSERT_C(false, "Reassigned group did not become usable: " << SingleLineProto(reassign));
 }
 
 void RunGroupReconfigurationRaceTest(TBlobStorageGroupType type) {
@@ -162,7 +191,7 @@ void RunGroupReconfigurationRaceTest(TBlobStorageGroupType type) {
         .Cache = cache,
     });
     auto& runtime = env.Runtime;
-    runtime->SetLogPriority(NActorsServices::TEST, NLog::PRI_DEBUG);
+    runtime->SetLogPriority(NActorsServices::TEST, NLog::PRI_NOTICE);
 
     ui32 partCounter = 0;
     runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
@@ -225,8 +254,8 @@ void RunGroupReconfigurationRaceTest(TBlobStorageGroupType type) {
                 --counter;
                 continue;
             }
-        } else if (IssueReassignQuery(env, partitionedNode)) {
-            env.Sim(TDuration::Minutes(10));
+        } else if (const auto reassign = IssueReassignQuery(env, partitionedNode)) {
+            WaitForReassignedGroup(env, *reassign, partitionedNode);
             --counter;
             continue;
         }

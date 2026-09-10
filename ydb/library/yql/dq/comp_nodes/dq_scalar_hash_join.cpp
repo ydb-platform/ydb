@@ -265,8 +265,8 @@ private:
                 Buffer_ = std::move(flush);
                 BufferPos_ = 0;
             };
-            return RunPackedHashJoinBatch<OutputThreshold_>(*JoinCtx_, Join_, Output_, flushSink,
-                                                            PairFilter_ ? &*PairFilter_ : nullptr);
+            return RunPackedHashJoinBatch(*JoinCtx_, Join_, Output_, flushSink,
+                                          PairFilter_ ? &*PairFilter_ : nullptr);
         }
 
     private:
@@ -278,7 +278,6 @@ private:
         std::optional<TPackedTuplePairFilter> PairFilter_;
         std::optional<typename TRenamesScalarOutput<Join>::TFlushResult> Buffer_;
         size_t BufferPos_ = 0;
-        static constexpr i64 OutputThreshold_ = 10000;
     };
 
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {

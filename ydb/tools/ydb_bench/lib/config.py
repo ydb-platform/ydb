@@ -131,6 +131,15 @@ def _profile_schema(benchmark):
                     "properties": {
                         "use-shared-threads": {"type": "boolean", "default": False},
                         "use-united-pool": {"type": "boolean", "default": False},
+                        **{
+                            role: {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "required": ["cpu-count"],
+                                "properties": {"cpu-count": {"type": "integer", "minimum": 1, "maximum": 32767}},
+                            }
+                            for role in ("static-nodes", "dynamic-nodes")
+                        },
                     },
                 },
                 "geometry": {
@@ -566,12 +575,22 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
         binary_config["ydbd_binary"] = binary_path
 
     actor_system = _mapping(
-        value.get("actor-system"), location + ".actor-system", ("use-shared-threads", "use-united-pool")
+        value.get("actor-system"),
+        location + ".actor-system",
+        ("use-shared-threads", "use-united-pool", "static-nodes", "dynamic-nodes"),
     )
     actor_system_config = {
         name.replace("-", "_"): _boolean(actor_system.get(name, False), location + ".actor-system." + name)
         for name in ("use-shared-threads", "use-united-pool")
     }
+    for role in ("static-nodes", "dynamic-nodes"):
+        if role in actor_system:
+            role_location = location + ".actor-system." + role
+            role_config = _mapping(actor_system[role], role_location, ("cpu-count",))
+            cpu_count = _positive_integer(role_config.get("cpu-count"), role_location + ".cpu-count")
+            if cpu_count > 32767:
+                _config_error(role_location + ".cpu-count", "must be at most 32767")
+            actor_system_config[role.replace("-", "_")] = {"cpu_count": cpu_count}
 
     geometry = _mapping(
         value.get("geometry"),

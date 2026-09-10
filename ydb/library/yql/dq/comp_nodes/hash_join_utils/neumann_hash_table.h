@@ -9,6 +9,8 @@
 
 #include <util/generic/buffer.h>
 
+#include <bit>
+
 #include "tuple.h"
 #include "join_defs.h"
 namespace NKikimr {
@@ -177,15 +179,21 @@ class TNeumannHashTable {
     TNeumannHashTable &operator=(TNeumannHashTable &&) = default;
 
     static ui32 EstimateLogSize(int nItems) {
-        int estimated = 32 - std::countl_zero<ui32>(nItems);
-        return std::max(1, std::min(24, estimated > 2 ? estimated - 2 : estimated));
+        if (nItems <= 0) {
+            return 1;
+        }
+        const ui64 want = (static_cast<ui64>(nItems) * 9 + 7) / 8;
+        const int estimated = std::bit_width(want - 1);
+        return std::max(1, std::min(24, estimated));
     }
 
 
 
 
     ui64 RequiredMemoryForBuild(int nItems) const {
-        return sizeof(TDirectory)*EstimateLogSize(nItems)+ static_cast<size_t>(BufferSlotSize_) * nItems;
+        const ui32 directoryHashBits = EstimateLogSize(nItems);
+        return sizeof(TDirectory) * ((ui64{1} << directoryHashBits) + 1)
+            + static_cast<ui64>(BufferSlotSize_) * nItems;
     }
 
     void Build(const ui8 *const tuples, const ui8 *const overflow, int nItems,
@@ -447,7 +455,15 @@ class TNeumannHashTable {
     }
 
     void Apply(const ui8 *const row, const ui8 *const overflow,
-               std::invocable<const ui8*> auto onMatch) const {
+               std::predicate<const ui8*> auto onMatch) const {
+        size_t slot = 0;
+        Apply(row, overflow, slot, onMatch);
+    }
+
+    // slot is the next directory slot of this key. onMatch returns false to stop the scan,
+    // leaving slot at the slot to continue from
+    void Apply(const ui8 *const row, const ui8 *const overflow, size_t& slot,
+               std::predicate<const ui8*> auto onMatch) const {
         MKQL_ENSURE(Layout_ != nullptr, "sanity check");
         MKQL_ENSURE(!Directories_.empty() && Tuples_ != nullptr, "lookup to empty table?");
 
@@ -471,12 +487,16 @@ class TNeumannHashTable {
         const ui8 *matchedRow;
 
         if constexpr (!ConsecutiveDuplicates) {
-            for (auto it = begin; it != end; it += BufferSlotSize_) {
-                if (GetRowMatch(it, row, overflow, &matchedRow)) {
-                    onMatch(matchedRow);
+            const ui8* it = begin + slot * BufferSlotSize_;
+            MKQL_ENSURE(it <= end, "Apply resume past the end of the directory");
+            for (; it != end; it += BufferSlotSize_) {
+                if (GetRowMatch(it, row, overflow, &matchedRow) && !onMatch(matchedRow)) {
+                    slot = (it - begin) / BufferSlotSize_ + 1;
+                    return;
                 }
             }
         } else {
+            MKQL_ENSURE(slot == 0, "Apply cannot resume over consecutive duplicates");
             ui32 size = 0;
             for (auto it = begin; it != end; it += size * BufferSlotSize_) {
                 size = ReadUnaligned<ui32>(it + RowIndexSize_);
@@ -485,7 +505,9 @@ class TNeumannHashTable {
                 }
 
                 for (; size; --size, it += BufferSlotSize_) {
-                    onMatch(it);
+                    if (!onMatch(GetRow(it))) {
+                        return;
+                    }
                 }
                 break;
             }

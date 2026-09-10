@@ -128,7 +128,8 @@ namespace NActors {
             // Minimum and maximum read buffer size.
             ui32 MinReadBufferSize = 4_KB;
             ui32 MaxReadBufferSize = 256_KB;
-            // Minimum and maximum serialization window size.
+            // Per-socket cap on serialized-but-not-yet-CQE'd bytes. Max is clamped to TCPSocketBufferSize
+            // when that is set. Main is further capped when XDC is enabled (see TSerializeWindow).
             ui32 MinSerializeWindowSize = 4_KB;
             ui32 MaxSerializeWindowSize = 256_KB;
         } V2;

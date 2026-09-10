@@ -139,7 +139,7 @@ namespace NKikimr::NSqsTopic::V1 {
         TVector<TTopicConsumerPair> tc(Reserve(topicsMap.size()));
 
         for (const auto& [name, describeResult] : topicsMap) {
-            if (describeResult.Status != NPQ::NDescriber::EStatus::SUCCESS) {
+            if (describeResult.Status != NPQ::NDescriber::EStatus::Success) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, std::format("Description of topic \"{}\" is unsuccessful", name.ConstRef())));
             }
             const auto& info = describeResult.Info;

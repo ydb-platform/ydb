@@ -138,6 +138,24 @@ keeping automatic pool sizing enabled. They do not affect the YDB CLI.
 The Builder exposes all three switches; saved profile parameters and comparisons
 retain their values.
 
+Set `ydbd-binary: /absolute/path/to/ydbd` in a `local-ydb` profile to
+use a different YDBD build. The Builder exposes the same optional executable
+path. It refers to a readable executable on the benchmark host (not the browser
+machine); relative paths and `~` are not accepted. Omit it to use bundled YDBD.
+The YDB CLI remains bundled. All static, dynamic, scaled, and verification
+nodes use the selected binary. At the first use of each distinct path in a run,
+the executable is copied into the temporary run directory without stripping;
+subsequent profiles using that path reuse the snapshot. Profile manifests
+record its original path, SHA-256 and size. The original file is never modified.
+
+For a version selector in Builder, arrange executable files as
+`bin/ydbd/<version>` and start the server with
+`ydb_bench web --binaries-dir /absolute/path/to/bin` (default: `./bin`).
+For example, `bin/ydbd/stable-26-3-1` is an executable file, not a directory.
+The catalog is refreshed when Builder loads; only readable executable files
+are listed. Selecting a version writes its absolute path to `ydbd-binary`.
+Manual paths and bundled YDBD remain available.
+
 An explicitly configured profile `timeout` caps every YDB CLI setup, warmup,
 measurement, and cleanup command. Workload-specific safety limits still apply
 when they are shorter. Without an explicit cap, setup and cleanup retain their

@@ -1477,10 +1477,7 @@ def run_local_ydb(
         "state": "running",
         "started_at": _utc_now(),
         "tool_revision": tool_revision,
-        "binaries": {
-            name: {"name": binary.path.name, "sha256": binary.sha256, "size": binary.size}
-            for name, binary in binaries.items()
-        },
+        "binaries": {name: binary.manifest_record() for name, binary in binaries.items()},
         "platform": collect_system_info(),
         "cpu_topology": topology_record(topology),
         "parameters": profile,

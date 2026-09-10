@@ -120,6 +120,11 @@ def _profile_schema(benchmark):
             "required": ["workload", "load"],
             "properties": {
                 "workload": workload_config_schema(),
+                "ydbd-binary": {
+                    "type": "string",
+                    "pattern": "^/",
+                    "description": "Absolute path to an executable on the benchmark host; omitted uses bundled ydbd.",
+                },
                 "actor-system": {
                     "type": "object",
                     "additionalProperties": False,
@@ -555,13 +560,20 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
     value = _mapping(
         value,
         location,
-        ("workload", "geometry", "actor-system", "client", "load", "measurement", "affinity", "timeout"),
+        ("workload", "ydbd-binary", "geometry", "actor-system", "client", "load", "measurement", "affinity", "timeout"),
     )
     if perf_enabled:
         _config_error(location, "does not support --perf; CPU utilization is collected per process role")
 
     workload = normalize_workload(value.get("workload"), location + ".workload")
     workload_metadata = workload_definition(workload["type"])
+
+    binary_config = {}
+    if "ydbd-binary" in value:
+        binary_path = value["ydbd-binary"]
+        if not isinstance(binary_path, str) or not binary_path.startswith("/") or "\0" in binary_path:
+            _config_error(location + ".ydbd-binary", "must be an absolute path on the benchmark host")
+        binary_config["ydbd_binary"] = binary_path
 
     actor_system = _mapping(
         value.get("actor-system"),
@@ -880,6 +892,7 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
         threads=(client_threads,),
         parameters={
             "local_ydb": {
+                **binary_config,
                 "workload": workload,
                 "geometry": geometry_config,
                 "actor_system": actor_system_config,

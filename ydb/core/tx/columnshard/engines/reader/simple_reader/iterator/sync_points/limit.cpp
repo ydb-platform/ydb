@@ -97,7 +97,7 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
 
     const auto& rk = *source->GetSourceSchema()->GetIndexInfo().GetReplaceKey();
     const auto& g = source->GetStageResult().GetBatch();
-
+    bool hasRows = false;
     if (g && g->GetRecordsCount()) {
         std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> arrs;
         for (auto&& i : rk.fields()) {
@@ -120,8 +120,8 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
             {"limit", Limit});
         TSourceIterator iterator(arrs, source->GetStageResult().GetNotAppliedFilter(), source);
         AFL_VERIFY(iterator.IsFilled());
-        // the filter can reject every row of the source, leaving nothing to compare against
         if (iterator.IsValid()) {
+            hasRows = true;
             FilledIterators.emplace_back(std::move(iterator));
             std::push_heap(FilledIterators.begin(), FilledIterators.end());
         }
@@ -129,11 +129,7 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
     if (DrainToLimit()) {
         Collection->Clear();
     }
-    if (source->GetStageResult().IsEmpty()) {
-        return ESourceAction::Finish;
-    } else {
-        return ESourceAction::ProvideNext;
-    }
+    return hasRows ? ESourceAction::ProvideNext : ESourceAction::Finish;
 }
 
 TString TSyncPointLimitControl::TSourceIterator::DebugString() const {

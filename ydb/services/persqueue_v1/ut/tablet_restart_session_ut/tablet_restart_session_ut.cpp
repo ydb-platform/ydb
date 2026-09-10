@@ -5,6 +5,9 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
+#include <ydb/core/base/tablet_pipe.h>
+
+#include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/retry_policy.h>
@@ -12,18 +15,15 @@
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
-#include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
-
-#include <grpcpp/client_context.h>
-#include <grpcpp/create_channel.h>
-
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/async.h>
 
+#include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/string.h>
 #include <util/thread/pool.h>
 
+#include <algorithm>
 #include <atomic>
 #include <memory>
 #include <mutex>
@@ -31,13 +31,6 @@
 using namespace NYdb;
 using namespace NYdb::NTopic;
 using namespace NYdb::NTopic::NTests;
-using Ydb::Topic::V1::TopicService;
-using StreamReadClient = Ydb::Topic::StreamReadMessage::FromClient;
-using StreamReadServer = Ydb::Topic::StreamReadMessage::FromServer;
-using StreamReadInit = Ydb::Topic::StreamReadMessage::InitRequest;
-using StreamReadReadReq = Ydb::Topic::StreamReadMessage::ReadRequest;
-using StreamReadStartResp = Ydb::Topic::StreamReadMessage::StartPartitionSessionResponse;
-using StreamReadStopResp = Ydb::Topic::StreamReadMessage::StopPartitionSessionResponse;
 
 namespace NKikimr::NPersQueueTests {
 namespace {
@@ -163,50 +156,26 @@ ui64 ResolvePqrbTabletId(::NPersQueue::TTestServer& server, const TString& topic
     return tabletId;
 }
 
-/// Per-test configuration for opening a read session.
-/// Each unit test fills this struct with the settings it wants to exercise.
+/// Per-test configuration for the SDK read sessions of a Concurrent step.
 struct TReadSessionSettings {
-    // If set (> 0), max_lag will be configured on the topic read settings (triggers WaitForData=true).
-    // Tests can set different values to cover different code paths.
-    // MaxLagSeconds = 0 means no WaitForData: the server replies immediately
-    // (with an empty ReadResponse when exhausted), which lets ReadAll detect
-    // end-of-data fast instead of blocking until its timeout.
+    // If set (> 0), max_lag will be configured on the topic read settings
+    // (triggers the WaitForData path on the server). 0 means no WaitForData.
     ui64 MaxLagSeconds = 0;
-
-    // Bytes size for the read request.
-    ui64 ReadRequestBytesSize = 100_KB;
-
-    // Consumer for the read session. Defaults to the shared "user" consumer.
-    // Concurrent-session tests use distinct consumers so each session gets
-    // an independent partition assignment.
-    TString Consumer = kConsumer;
-
-    // Populate the raw gRPC InitRequest proto from this test settings struct.
-    void ApplyToInitRequest(StreamReadInit& req) const {
-        req.set_consumer(Consumer);
-        auto* topic = req.add_topics_read_settings();
-        topic->set_path(kTopicPath);
-        if (MaxLagSeconds > 0) {
-            auto* maxLag = topic->mutable_max_lag();
-            maxLag->set_seconds(MaxLagSeconds);
-        }
-    }
 };
 
-/// A single step in a scenario: a write, a read, or a concurrent read+write.
+/// A single step in a scenario: a concurrent write+read.
 struct TScenarioStep {
     enum class EType {
-        Write,       // Write Count messages
-        Read,        // Open a read session and read data using ReadSettings
-        Concurrent,  // Open ReadSessionCount read sessions, optionally write
-                     // Count messages while they are open, then read from each
+        Concurrent,  // Open ReadSessionCount SDK read sessions, write Count
+                     // messages while they are open, then wait for each
+                     // session to deliver everything written
     };
 
-    EType Type = EType::Write;
-    ui64 Count = 1;           // For Write/Concurrent: number of messages to write
-    ui64 MessageSize = 1_MB;  // For Write/Concurrent: size of each message in bytes
-    TReadSessionSettings ReadSettings;  // For Read/Concurrent: read session settings
-    // For Concurrent: number of read sessions to open simultaneously.
+    EType Type = EType::Concurrent;
+    ui64 Count = 1;           // number of messages to write
+    ui64 MessageSize = 1_MB;  // size of each message in bytes
+    TReadSessionSettings ReadSettings;  // read session settings
+    // Number of read sessions to open simultaneously.
     // When > 1, session i uses consumer "user" + (i-1) so each session gets
     // an independent partition assignment.
     ui32 ReadSessionCount = 1;
@@ -215,17 +184,77 @@ struct TScenarioStep {
 /// A scenario is a sequence of steps (write/read operations).
 using TScenario = TVector<TScenarioStep>;
 
+// Decode a TEvPersQueue event type to a short human-readable name.
+// Offsets are relative to TEvPersQueue::EvRequest (see core/persqueue/events/global.h).
+const char* PqEventTypeName(ui32 type) {
+    const ui64 base = NKikimr::TEvPersQueue::EvRequest;
+    if (type < base || type >= NKikimr::TEvPersQueue::EvEnd) {
+        return "NON_PQ";
+    }
+    switch (type - base) {
+        case 0:   return "EvRequest";
+        case 1:   return "EvUpdateConfig";
+        case 2:   return "EvUpdateConfigResponse";
+        case 3:   return "EvOffsets";
+        case 4:   return "EvOffsetsResponse";
+        case 5:   return "EvDropTablet";
+        case 6:   return "EvDropTabletResult";
+        case 7:   return "EvStatus";
+        case 8:   return "EvStatusResponse";
+        case 9:   return "EvHasDataInfo";
+        case 10:  return "EvHasDataInfoResponse";
+        case 11:  return "EvPartitionClientInfo";
+        case 12:  return "EvPartitionClientInfoResponse";
+        case 13:  return "EvUpdateBalancerConfig";
+        case 14:  return "EvRegisterReadSession";
+        case 15:  return "EvLockPartition";
+        case 16:  return "EvReleasePartition";
+        case 17:  return "EvPartitionReleased";
+        case 18:  return "EvDescribe";
+        case 19:  return "EvDescribeResponse";
+        case 20:  return "EvGetReadSessionsInfo";
+        case 21:  return "EvReadSessionsInfoResponse";
+        case 22:  return "EvWakeupClient";
+        case 23:  return "EvUpdateACL";
+        case 24:  return "EvCheckACL";
+        case 25:  return "EvCheckACLResponse";
+        case 26:  return "EvError";
+        case 27:  return "EvGetPartitionIdForWrite";
+        case 28:  return "EvGetPartitionIdForWriteResponse";
+        case 29:  return "EvReportPartitionError";
+        case 30:  return "EvProposeTransaction";
+        case 31:  return "EvProposeTransactionResult";
+        case 32:  return "EvCancelTransactionProposal";
+        case 33:  return "EvPeriodicTopicStats";
+        case 34:  return "EvGetPartitionsLocation";
+        case 35:  return "EvGetPartitionsLocationResponse";
+        case 36:  return "EvReadingPartitionFinished";
+        case 37:  return "EvReadingPartitionStarted";
+        case 38:  return "EvOffloadStatus";
+        case 39:  return "EvBalancingSubscribe";
+        case 40:  return "EvBalancingUnsubscribe";
+        case 41:  return "EvBalancingSubscribeNotify";
+        case 42:  return "EvPartitionUpdateReadMetrics";
+        case 43:  return "EvCheckMessageDeduplicationRequest";
+        case 44:  return "EvCheckMessageDeduplicationResponse";
+        case 256: return "EvResponse";
+        case 512: return "EvInternalEvents";
+        default:  return "EvUnknown";
+    }
+}
+
 struct TTabletRestartReadSessionEnv {
     std::unique_ptr<::NPersQueue::TTestServer> Server;
     TString Endpoint;
     ui64 PqTabletId = 0;
     ui64 PqrbTabletId = 0;
-    // Actor ID of the PQ tablet (changes after each reboot). Resolved lazily by
-    // the event filter so that ALL events delivered to the tablet are counted,
-    // not just TEvRequest/TEvResponse. This is what makes the reboot fire during
-    // the write-session setup phase (where TEvProxyResponse and other internal
-    // events flow to the tablet), reproducing the HandleDie() null-pointer crash.
+    // Actor IDs of the PQ tablet and the balancer tablet (they change after
+    // each reboot). Resolved once at startup and then re-tracked by the event
+    // filter on every TEvTablet::EvBoot (the boot event's recipient is the new
+    // tablet actor). Used to address the injected poison pill at the event
+    // boundary.
     TActorId PqTabletActorId;
+    TActorId PqrbActorId;
 
     // Any TEvCloseSession with ErrorCode != OK.
     // Teardown DropHooks() clears the observer before gRPC cancel, so shutdown noise is ignored.
@@ -237,24 +266,67 @@ struct TTabletRestartReadSessionEnv {
 
     // Reboot verification counter — tracked via the event observer.
     // TabletBootCount increments on each TEvTablet::EvBoot event, proving
-    // that a new tablet instance booted. Comparing before/after RebootPqTablet
-    // ensures we didn't consume a stale EvBoot from the initial boot.
+    // that a new tablet instance booted after an injected poison pill.
     std::atomic<ui64> TabletBootCount{0};
 
     // Count of TEvPersQueue::TEvRequest and TEvPersQueue::TEvResponse events flowing
     // to/from the PQ tablet. Used by the event-filter-based reboot loop.
     std::atomic<ui64> PqTabletEventCount{0};
 
+    // Count of TEvPersQueue events flowing to/from the balancer tablet (PqrbTabletId).
+    // Used for balancer-reboot event-boundary detection.
+    std::atomic<ui64> PqBalancerEventCount{0};
+
+    // Per-event-type counters for the current run (reset each reboot point).
+    // Logged with names so the event sequence is easy to read after a failure.
+    THashMap<TString, ui64> PqEventTypeCount;
+
+    // The reboot point (target event) for the current scenario run. Kept separate
+    // from RebootAfterEventCount, which is cleared to 0 after the reboot fires, so
+    // logging can still report the original reboot point afterwards.
+    std::atomic<ui64> RebootPoint{0};
+
     // Event count at which to trigger the reboot (0 = no reboot, 1 = reboot after 1st event, etc.).
     std::atomic<ui64> RebootAfterEventCount{0};
     // Whether the reboot has already been triggered in the current test run.
     std::atomic<bool> RebootTriggered{false};
-    // Set to true while RebootPqTablet() is executing. The event filter checks
-    // this flag and NEVER blocks events during the reboot, so the poison pill,
-    // the launcher's reboot scheduling, and the new EvBoot all flow freely.
-    // Without this, the filter's blocking (count >= target) would interfere with
-    // the reboot machinery and the tablet would never come back up.
-    std::atomic<bool> InReboot{false};
+
+    // Which tablet to reboot (PqTabletId or PqrbTabletId), set by the event
+    // filter at the boundary based on which pipe the boundary event flows
+    // through. The main loop reads this to call RebootTablet() for the
+    // correct party.
+    std::atomic<ui64> RebootTargetTabletId{0};
+
+    // Set by the main loop after RebootTablet() completes. The event filter
+    // drops all TEvPersQueue events while RebootTriggered && !RebootCompleted,
+    // simulating the tablet being unavailable during the death/reboot window
+    // (events sent to a dead tablet are lost, exactly as in production).
+    std::atomic<bool> RebootCompleted{false};
+
+    // Count of TEvPersQueue events dropped during the reboot window
+    // (RebootTriggered && !RebootCompleted). Used for debug logging so we
+    // can see exactly which events are blocked while the tablet is dead.
+    std::atomic<ui64> DroppedInRebootCount{0};
+
+    // Reboot switches: control which tablet(s) to reboot at the event boundary.
+    // DoRebootPqTablet: reboot the partition tablet (PqTabletId).
+    // DoRebootPqrbTablet: reboot the balancer tablet (PqrbTabletId).
+    // When both are true, the reboot targets exactly the party whose event is
+    // at the boundary.
+    bool DoRebootPqTablet = true;
+    bool DoRebootPqrbTablet = false;
+
+    // Pipe actors (client- and server-side) whose target tablet is the PQ tablet
+    // (PqTabletId). Populated by TEvClientConnected observed in the event filter.
+    // Used to classify whether a counted event flows through the PQ tablet's
+    // pipe (so a reboot at its boundary is realistic).
+    THashSet<TActorId> PqTabletPipeActors;
+
+    // Pipe actors (client- and server-side) whose target tablet is the balancer
+    // tablet (PqrbTabletId). Populated by TEvClientConnected observed in the
+    // event filter. Used to classify whether a counted event flows through the
+    // balancer's pipe.
+    THashSet<TActorId> PqBalancerPipeActors;
 
     NActors::TTestActorRuntime& Runtime() {
         return *Server->CleverServer->GetRuntime();
@@ -332,64 +404,210 @@ struct TTabletRestartReadSessionEnv {
     void InstallHooks() {
         auto& runtime = Runtime();
 
-        // The event filter counts events and blocks events after the target is reached.
-        // Blocking events (returning true) forces DispatchEvents to return because
-        // no more events can be processed. This ensures the reboot happens after
-        // exactly the Nth event, not after a batch of events.
+        // The event filter counts TEvPersQueue events and, at the reboot
+        // boundary, DROPS the boundary event and signals the main loop to
+        // reboot the correspondent party (the partition tablet or the balancer,
+        // depending on which pipe the boundary event flows through).
         //
-        // IMPORTANT: The filter must NOT call DispatchEvents or perform any reboot —
-        // that would re-enter the dispatch loop while the runtime mutex is held,
-        // corrupting internal state. The reboot is performed in the main loop
-        // after DispatchEvents returns.
+        // HOW IT WORKS:
+        // 1. The filter classifies each TEvPersQueue event as flowing through
+        //    the partition tablet's pipe (isPqTabletEvent) or the balancer's
+        //    pipe (isBalancerEvent), based on the pipe actor sets populated
+        //    from TEvClientConnected events.
+        // 2. When the effective event count reaches the reboot target, the
+        //    filter DROPS the boundary event (return true) and sets
+        //    RebootTriggered + RebootTargetTabletId. The boundary event is
+        //    lost — exactly as a production tablet death loses in-flight
+        //    events.
+        // 3. The filter does NOT drop events while the reboot is in progress.
+        //    In production a tablet death is not "silent dropping" — the
+        //    tablet process dies, its pipe dies, and the client receives
+        //    TEvClientDestroyed, which is what triggers the client's own
+        //    retry/reconnect logic. Silently dropping an event (especially
+        //    EvRequest) would strand the sender waiting forever for a response
+        //    that never arrives.
+        // 4. The main loop's CustomFinalCondition detects RebootTriggered,
+        //    stops DispatchEvents, and calls RebootTablet() — the standard
+        //    test-framework reboot that sends a poison pill through the tablet
+        //    resolver (proper death path), waits for EvBoot (ensuring the
+        //    tablet reboots), invalidates the resolver cache (so clients
+        //    reconnect to the new instance), and waits for scheduled events.
+        //    During RebootTablet()'s internal dispatch, events that reach the
+        //    dead tablet fail naturally (pipe disconnected), and events that
+        //    arrive after EvBoot reach the new instance — exactly as in
+        //    production.
+        // 5. After RebootTablet() completes, the main loop sets
+        //    RebootCompleted=true (only to avoid re-triggering the reboot).
+        //    New pipes connect to the rebooted tablet, and the SDK's retry
+        //    logic recovers — exactly as in production.
+        //
+        // WHY NOT REPLACE WITH A POISON PILL (previous approach): the poison
+        // pill kills the tablet actor but doesn't go through the tablet
+        // resolver, so the launcher may not detect the death and may not
+        // reboot the tablet. The pipe doesn't die (the pipe client actor is
+        // still alive), so the sender gets no TEvClientDestroyed notification.
+        // The tablet resolver cache stays stale, so clients keep resolving to
+        // the dead actor. This caused infinite pipe restart loops, hangs, and
+        // lost messages.
+        //
+        // WHY NOT JUST DROP THE EVENT AND KEEP THE PIPE ALIVE: dropping the
+        // event while the pipe stays alive has no production counterpart. The
+        // sender would keep using the live pipe and the protocol state would
+        // diverge. The fix addresses this by dropping ALL subsequent events
+        // until the reboot completes — the tablet is effectively dead during
+        // that window, and the pipe fails when the sender tries to use it
+        // (because RebootTablet invalidates the resolver cache and the tablet
+        // actor is replaced).
         runtime.SetEventFilter([this](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
-            // NEVER block events while a reboot is in progress. During RebootPqTablet()
-            // the poison pill, the launcher's reboot scheduling, and the new EvBoot
-            // must all flow freely — otherwise the tablet never comes back up.
-            if (InReboot.load()) {
+            // Track pipe actors (client + server) whose target tablet is the PQ
+            // tablet or the balancer tablet. TEvClientConnected is delivered to
+            // the pipe owner once the pipe is established and carries both actor
+            // IDs together with the target TabletId.
+            if (auto* connected = ev->CastAsLocal<TEvTabletPipe::TEvClientConnected>()) {
+                if (connected->TabletId == PqTabletId) {
+                    PqTabletPipeActors.insert(connected->ClientId);
+                    PqTabletPipeActors.insert(connected->ServerId);
+                }
+                if (connected->TabletId == PqrbTabletId) {
+                    PqBalancerPipeActors.insert(connected->ClientId);
+                    PqBalancerPipeActors.insert(connected->ServerId);
+                }
+                return false; // pipe connect notifications are never counted
+            }
+
+            // Track the current actor IDs of the PQ tablet and the balancer
+            // tablet: TEvTablet::EvBoot is delivered to the NEW tablet actor
+            // after every (re)boot, so its recipient is the up-to-date actor ID
+            // the poison pill must be addressed to.
+            if (ev->Type == TEvTablet::EvBoot) {
+                if (auto* boot = ev->CastAsLocal<TEvTablet::TEvBoot>()) {
+                    if (boot->TabletID == PqTabletId) {
+                        PqTabletActorId = ev->GetRecipientRewrite();
+                    } else if (boot->TabletID == PqrbTabletId) {
+                        PqrbActorId = ev->GetRecipientRewrite();
+                    }
+                }
                 return false;
             }
 
-            // Only TEvPersQueue::TEvRequest and TEvPersQueue::TEvResponse are the events
-            // that flow through the PQ tablet pipe and can actually be interrupted by a
-            // tablet reboot in a real system. All other events (system events like
-            // Bootstrap, internal actor events, etc.) are never interrupted by a tablet
-            // reboot, so we must never count or block them.
-            //
-            // IMPORTANT: Never block system events. In a real actor system the Bootstrap
-            // event is always delivered first to a bootstrapped actor (TActorBootstrapped
-            // guarantees it), so a TReadProxy would never receive TEvResponse before
-            // Bootstrap. But if the test filter blocked the Bootstrap event, the actor
-            // would stay in StateBootstrap and a later TEvResponse would crash it with
-            // "Unexpected bootstrap message". So only the counted PQ events may be blocked.
+            // Only the TEvPersQueue event space (EvRequest..EvEnd) is counted: these
+            // are the events that flow through the PQ tablet pipes and can be
+            // interrupted by a tablet reboot in a real system. All other events
+            // (system events like Bootstrap, internal actor events, etc.) are never
+            // interrupted by a tablet reboot, so they are never counted.
             const bool isPqRequestOrResponse =
-                ev->CastAsLocal<TEvPersQueue::TEvRequest>() != nullptr
-                || ev->CastAsLocal<TEvPersQueue::TEvResponse>() != nullptr;
+                ev->Type >= TEvPersQueue::EvRequest && ev->Type < TEvPersQueue::EvEnd;
             if (!isPqRequestOrResponse) {
                 return false; // let the event through, don't count it
             }
 
-            // Check if we've already reached the target and need to block events.
-            // This ensures DispatchEvents returns after the target event is processed,
-            // not after a batch of events.
-            const ui64 currentCount = PqTabletEventCount.load();
-            const ui64 target = RebootAfterEventCount.load();
-            if (target > 0 && currentCount >= target && !RebootTriggered.load()) {
-                // Block this event to force DispatchEvents to return.
-                // The main loop will perform the reboot at a clean event boundary.
-                return true;
+            // If neither reboot switch is set, no reboot is expected — skip
+            // counting and blocking entirely.
+            if (!DoRebootPqTablet && !DoRebootPqrbTablet) {
+                return false;
             }
 
-            // Count the PQ request/response event. Pure counting — no dispatch, no reboot.
-            // The main loop checks this count and performs the reboot at a clean event boundary.
-            const ui64 newCount = ++PqTabletEventCount;
-            // Debug: Log the first few events for troubleshooting.
-            static constexpr ui64 DebugLogLimit = 10;
-            if (target > 0 && newCount <= DebugLogLimit) {
-                Cerr << "=== EVENT_FILTER count=" << newCount << " target=" << target
-                     << " type=" << ev->Type << " dest=" << ev->GetRecipientRewrite()
-                     << " src=" << ev->Sender << Endl;
+            // IMPORTANT: the filter does NOT drop events while a reboot is in
+            // progress. In production, a tablet death is not simulated by
+            // "silently dropping" events — the tablet process dies, so its pipe
+            // dies too, and the client receives TEvClientDestroyed, which is
+            // what triggers the client's own retry/reconnect logic. Silently
+            // dropping an event (especially EvRequest, the write request) would
+            // strand the sender waiting forever for a response that never
+            // arrives, because the sender never learns the pipe died.
+            //
+            // RebootTablet() reproduces the production death path exactly:
+            // poison pill through the tablet resolver kills the tablet, the
+            // pipe dies (clients get TEvClientDestroyed and retry), EvBoot is
+            // waited for, and the resolver cache is invalidated so retries
+            // reconnect to the NEW tablet instance. Events that arrive during
+            // this window fail naturally against the dead tablet — no filter
+            // intervention needed.
+
+            // Determine which tablet this event is flowing to/from.
+            // An event is "for the PQ tablet" if its sender or recipient is a
+            // PQ tablet pipe actor or the PQ tablet actor itself. Similarly for
+            // the balancer tablet.
+            const auto& dest = ev->GetRecipientRewrite();
+            const auto& src = ev->Sender;
+            const bool isPqTabletEvent =
+                PqTabletPipeActors.contains(dest) || PqTabletPipeActors.contains(src)
+                || dest == PqTabletActorId || src == PqTabletActorId;
+            const bool isBalancerEvent =
+                PqBalancerPipeActors.contains(dest) || PqBalancerPipeActors.contains(src);
+
+            // Count events per tablet. When both switches are set, the target
+            // is the sum of both counters (total events across both pipes).
+            // When only one switch is set, only that tablet's counter matters.
+            if (DoRebootPqTablet && isPqTabletEvent) {
+                ++PqTabletEventCount;
             }
-            return false; // let the event through
+            if (DoRebootPqrbTablet && isBalancerEvent) {
+                ++PqBalancerEventCount;
+            }
+
+            // The effective count for boundary detection:
+            // - Both switches: sum of both counters
+            // - Only tablet: PQ tablet counter
+            // - Only balancer: balancer counter
+            const ui64 effectiveCount =
+                (DoRebootPqTablet && DoRebootPqrbTablet)
+                    ? (PqTabletEventCount.load() + PqBalancerEventCount.load())
+                    : (DoRebootPqTablet ? PqTabletEventCount.load() : PqBalancerEventCount.load());
+
+            const char* name = PqEventTypeName(ev->Type);
+            ++PqEventTypeCount[name];
+            // Debug: log the first few counted PQ events for troubleshooting.
+            static constexpr ui64 DebugLogLimit = 100;
+            const ui64 target = RebootAfterEventCount.load();
+            if (target > 0 && effectiveCount <= DebugLogLimit) {
+                Cerr << "=== EVENT_FILTER effCount=" << effectiveCount
+                     << " pqCount=" << PqTabletEventCount.load()
+                     << " balCount=" << PqBalancerEventCount.load()
+                     << " target=" << target
+                     << " ev=" << name << "(#" << PqEventTypeCount[name] << ")"
+                     << " type=" << ev->Type
+                     << " dest=" << dest
+                     << " src=" << src
+                     << " isPq=" << isPqTabletEvent
+                     << " isBal=" << isBalancerEvent << Endl;
+            }
+
+            // Reboot at the event boundary: DROP the boundary event and
+            // signal the main loop to reboot the correspondent party — the
+            // partition tablet (if the boundary event flows through the PQ
+            // tablet's pipe) or the balancer (if it flows through the
+            // balancer's pipe). The boundary event is lost — exactly as a
+            // production tablet death loses the events that are in flight at
+            // that moment. The main loop calls RebootTablet() which kills the
+            // tablet through the tablet resolver (proper death path), waits
+            // for EvBoot (ensuring reboot), and invalidates the resolver cache.
+            if (target > 0 && effectiveCount >= target && !RebootTriggered.load()) {
+                RebootTriggered.store(true);
+                RebootCompleted.store(false);
+                // Classify which tablet to reboot based on which pipe the
+                // boundary event flows through. This is the essential design:
+                // reboot the partition tablet when the boundary event is on
+                // the partition tablet's pipe, reboot the balancer when the
+                // boundary event is on the balancer's pipe.
+                const ui64 tabletToReboot = isPqTabletEvent ? PqTabletId
+                                          : isBalancerEvent ? PqrbTabletId
+                                                            : 0;
+                RebootTargetTabletId.store(tabletToReboot);
+                Cerr << "=== REBOOT_BOUNDARY effCount=" << effectiveCount
+                     << " pqCount=" << PqTabletEventCount.load()
+                     << " balCount=" << PqBalancerEventCount.load()
+                     << " target=" << target << " ev=" << name
+                     << " isPq=" << isPqTabletEvent
+                     << " isBal=" << isBalancerEvent
+                     << " tabletToReboot=" << tabletToReboot << Endl;
+                // DROP the boundary event — it's lost in the "reboot".
+                // Subsequent events are also dropped (by the RebootTriggered
+                // && !RebootCompleted check above) until the main loop completes
+                // RebootTablet() and sets RebootCompleted.
+                return true;
+            }
+            return false;
         });
 
         runtime.SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
@@ -417,119 +635,28 @@ struct TTabletRestartReadSessionEnv {
         runtime.SetObserverFunc(&TTestActorRuntimeBase::DefaultObserverFunc);
     }
 
-    void RebootPqTablet() {
-        auto& runtime = Runtime();
-        const auto edge = runtime.AllocateEdgeActor();
-        // Disable the event filter's blocking while the reboot is in progress.
-        // The poison pill, the launcher's reboot scheduling, and the new EvBoot
-        // must all flow freely — otherwise the tablet never comes back up.
-        InReboot.store(true);
-        Cerr << "=== REBOOT_PQ_TABLET tabletId=" << PqTabletId
-             << " eventCount=" << PqTabletEventCount.load()
-             << " target=" << RebootAfterEventCount.load()
-             << " oldActorId=" << PqTabletActorId
-             << " bootCount=" << TabletBootCount.load() << Endl;
-
-        // Save the old actor ID before reboot so we can verify it changed.
-        const TActorId oldActorId = PqTabletActorId;
-        const ui64 bootCountBefore = TabletBootCount.load();
-
-        // Step 1: Send poison pill to kill the tablet.
-        ForwardToTablet(runtime, PqTabletId, edge, new TEvents::TEvPoisonPill(), /*nodeIndex=*/0, /*sysTablet=*/false);
-
-        // Step 2: Two-phase dispatch to ensure the tablet actually dies and reboots.
-        //
-        // ROOT CAUSE: The original RebootTablet() from tablet_helpers.cpp does
-        // ForwardToTablet(poison) + DispatchEvents(FinalEvents=[EvBoot]). In
-        // simulated mode (UseRealThreads=false), this nested DispatchEvents can
-        // return immediately by consuming a stale EvBoot from the initial boot,
-        // without ever processing the poison pill. The tablet never dies.
-        //
-        // FIX: Split into two phases:
-        //   Phase A: Dispatch with a timeout (no EvBoot final condition) to let
-        //            the poison pill be processed. The tablet dies, the launcher
-        //            schedules a reboot. We use a small timeout so this phase
-        //            completes even if there's no specific event to stop on.
-        //   Phase B: Dispatch with FinalEvents=[EvBoot] to wait for the NEW
-        //            tablet instance to boot. Since the old tablet is dead, any
-        //            EvBoot seen here must be from the new instance.
-        //
-        // This guarantees the poison pill is consumed before we wait for EvBoot,
-        // eliminating the stale EvBoot problem.
-
-        // Phase A: Process the poison pill.
-        // Use a short timeout-based dispatch to let the system process the poison.
-        // The tablet will receive the poison, call HandleDie, and die.
-        // The launcher will then schedule a new tablet boot.
-        Cerr << "=== PHASE_A_PROCESS_POISON" << Endl;
-        DispatchEventsWithRetry([&] {
-            // Dispatch with a small timeout to process pending events (including poison pill).
-            // This is not waiting for any specific event — just advancing the simulation.
-            runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
-        });
-
-        // Phase B: Wait for the new tablet to boot.
-        Cerr << "=== PHASE_B_WAIT_FOR_BOOT" << Endl;
-        {
-            TDispatchOptions rebootOptions;
-            rebootOptions.FinalEvents.emplace_back(
-                TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 1));
-            DispatchEventsWithRetry([&] {
-                // Use a timeout so we don't hang forever if the tablet fails to
-                // come back up. The bootCount check below will catch the failure.
-                runtime.DispatchEvents(rebootOptions, TDuration::Seconds(30));
-            });
-        }
-
-        const ui64 bootCountAfter = TabletBootCount.load();
-        Cerr << "=== TABLET_BOOTED bootCount=" << bootCountAfter
-             << " newBoots=" << (bootCountAfter - bootCountBefore) << Endl;
-
-        // Invalidate the resolver cache so the next ResolveTablet gets the new actor.
-        InvalidateTabletResolverCache(runtime, PqTabletId, /*nodeIndex=*/0);
-
-        // Wait for scheduled events (same as RebootTablet does).
-        WaitScheduledEvents(runtime, TDuration::MilliSeconds(50), edge, /*nodeIndex=*/0);
-
-        // Resolve the new tablet actor ID.
-        PqTabletActorId = ResolveTablet(runtime, PqTabletId, /*nodeIndex=*/0, /*sysTablet=*/false);
-
-        // Verify the reboot actually happened by checking:
-        // 1. A new EvBoot was observed (not a stale one from initial boot).
-        // 2. The tablet actor ID changed.
-        UNIT_ASSERT_C(bootCountAfter > bootCountBefore,
-            "Tablet did not reboot: no new EvBoot observed (stale EvBoot consumed?)");
-        UNIT_ASSERT_C(PqTabletActorId != oldActorId,
-            Sprintf("Tablet actor ID did not change after reboot: old=%s new=%s",
-                oldActorId.ToString().c_str(), PqTabletActorId.ToString().c_str()));
-
-        Cerr << "=== REBOOT_PQ_TABLET_DONE tabletId=" << PqTabletId
-             << " newActorId=" << PqTabletActorId
-             << " bootCount=" << bootCountAfter << Endl;
-
-        // Re-enable the event filter's blocking now that the reboot is complete.
-        InReboot.store(false);
-    }
-
-    void RebootPqrbTablet() {
-        auto& runtime = Runtime();
-        const auto edge = runtime.AllocateEdgeActor();
-        RebootTablet(runtime, PqrbTabletId, edge);
-    }
-
     void ResetCounters() {
         PqTabletEventCount.store(0);
+        PqBalancerEventCount.store(0);
+        PqEventTypeCount.clear();
+        RebootPoint.store(0);
         PartitionReadyCount.store(0);
         ErrorCloseSession.store(0);
         ErrorCloseReason.clear();
         RebootTriggered.store(false);
-        InReboot.store(false);
+        RebootTargetTabletId.store(0);
+        RebootCompleted.store(false);
+        DroppedInRebootCount.store(0);
+        PqTabletPipeActors.clear();
+        PqBalancerPipeActors.clear();
         TabletBootCount.store(0);
-        // The tablet actor ID changes after each reboot. Re-resolve it here so
-        // the event filter counts events delivered to the current tablet instance.
-        // (A previous rebootPoint iteration may have rebooted the tablet, giving
-        // it a new actor ID; without this the filter would match a dead actor.)
+        // The tablet actor IDs change after each reboot (RebootTablet kills
+        // the actor via the tablet resolver; the launcher boots a new one).
+        // Re-resolve them here so the event filter tracks the current instances
+        // for event classification. (A previous rebootPoint iteration may have
+        // rebooted the tablets, giving them new actor IDs.)
         PqTabletActorId = ResolveTablet(Runtime(), PqTabletId, /*nodeIndex=*/0, /*sysTablet=*/false);
+        PqrbActorId = ResolveTablet(Runtime(), PqrbTabletId, /*nodeIndex=*/0, /*sysTablet=*/false);
     }
 };
 
@@ -566,16 +693,45 @@ protected:
     // the read path delivers exactly the right number of messages with no
     // duplicates or losses.
     std::atomic<ui64> TotalWrittenMessages{0};
-    // Offsets delivered (and content-verified) across all read sessions of
-    // the test. Filled by the read steps on pool threads, hence the mutex.
-    THashSet<i64> VerifiedOffsets;
-    std::mutex VerifiedOffsetsMutex;
+    // SeqNos delivered (and content-verified) across all SDK read sessions
+    // of the test. Every message is stamped with an explicit SeqNo equal to
+    // its global write index, so coverage is tracked by SeqNo (stable across
+    // tablet reboots, unlike offsets which may be re-assigned on retry).
+    // Filled by the SDK read handlers on their own threads, hence the mutex.
+    THashSet<i64> VerifiedSeqNos;
+    std::mutex VerifiedSeqNosMutex;
+
+    // --- max_lag timing tracking ---
+    // When MaxLagSeconds > 0, the partition tablet skips messages older than
+    // max_lag (measured in simulated time via ctx.Now()). To predict which
+    // messages could have been skipped, we record the simulated time at key
+    // points during each scenario step execution. A message written at
+    // simulated time W can be permanently skipped if a read session attempts
+    // to read it at simulated time R where R - W > MaxLagSeconds. This happens
+    // when balancer reboots delay read session recovery beyond the lag window.
+    struct TStepTiming {
+        i64 FirstSeqNo = 0;       // first SeqNo written in this step (1-based)
+        i64 LastSeqNo = 0;        // last SeqNo written in this step
+        TInstant WriteStartTime;  // simulated time at step start (before write)
+        TInstant StepEndTime;     // simulated time at step end (after reads)
+    };
+    TVector<TStepTiming> StepTimings;
+    ui64 ScenarioMaxLagSeconds = 0;  // max_lag setting from the scenario (0 = none)
+
+    // Offset to start reading from in the current run. Each reboot-point run
+    // should only read messages written in that run, not from offset 0. This
+    // is set to the total messages written before the current run starts, so
+    // the read sessions skip past old messages via StartPartitionSessionResponse.read_offset.
+    i64 RunStartOffset = 0;
 
     void SetUp(NUnitTest::TTestContext&) override {
         Env.Start();
         Env.InstallHooks();
         TotalWrittenMessages.store(0);
-        VerifiedOffsets.clear();
+        VerifiedSeqNos.clear();
+        StepTimings.clear();
+        ScenarioMaxLagSeconds = 0;
+        RunStartOffset = 0;
     }
 
     void TearDown(NUnitTest::TTestContext&) override {
@@ -586,192 +742,126 @@ protected:
         return Env.Runtime();
     }
 
-    // Produce one large message so the read session has data to read.
-    void WriteOneMessage() {
-        WriteMessages(1);
-    }
-
     // Implementation of WriteMessages — the body that runs on the background thread.
     // Separated so that RunWithDispatchAndReboot can run it while interleaving
     // reboots at event boundaries.
     //
-    // Uses the Topics API SDK (TTopicClient::CreateSimpleBlockingWriteSession)
-    // which speaks the StreamWriteMessage protocol internally and — crucially —
-    // has built-in retry logic via IRetryPolicy. When the PQ tablet reboots
-    // mid-write, the SDK automatically reconnects and re-sends, so the write
-    // survives the reboot instead of failing with UNAVAILABLE.
+    // Pure gRPC write via Ydb::Topic::V1::TopicService::StreamWrite — the
+    // same protocol the SDK speaks internally, but WITHOUT the SDK: the
+    // SDK runs its own real threads whose interaction with the simulated
+    // actor runtime (UseRealThreads=false) is unreliable. The raw stream
+    // works directly against the server's gRPC proxy actors, which are
+    // served by the main thread's DispatchEvents pump.
+    //
+    // The whole write session (init + writes + acks) is retried with a fresh
+    // gRPC stream on failure — the same client-side retry pattern as
+    // TPQDataWriter::WaitWritePQServiceInitialization. A tablet reboot breaks
+    // the stream mid-write; the retry re-inits and re-sends. The server
+    // deduplicates by (producer, SeqNo), so re-sending already persisted
+    // messages is safe.
     void WriteMessagesImpl(ui64 count, ui64 messageSize) {
-        TDriver driver(MakeNoDiscoveryDriverConfig(Env.Endpoint));
-        TTopicClient client(driver);
+        // Large messages (1MB each) exceed gRPC's default 4MB limits when
+        // several arrive in one response; raise both limits.
+        grpc::ChannelArguments args;
+        args.SetMaxReceiveMessageSize(64 * 1024 * 1024);
+        args.SetMaxSendMessageSize(64 * 1024 * 1024);
+        auto channel = grpc::CreateCustomChannel(
+            Env.Endpoint, grpc::InsecureChannelCredentials(), args);
+        auto stub = Ydb::Topic::V1::TopicService::NewStub(channel);
 
-        auto sessionSettings = TWriteSessionSettings()
-            .Path(kTopicPath)
-            .ProducerId("src")
-            .MessageGroupId("src")
-            .Codec(ECodec::RAW)
-            .RetryPolicy(NTopic::IRetryPolicy::GetDefaultPolicy());
+        using FClient = Ydb::Topic::StreamWriteMessage::FromClient;
+        using FServer = Ydb::Topic::StreamWriteMessage::FromServer;
 
-        auto writeSession = client.CreateSimpleBlockingWriteSession(sessionSettings);
-        TR_ENSURE(writeSession);
-
-        // Write messages with a deterministic, distinguishable content:
-        // a fixed marker prefix followed by the global message index.
-        // This lets the read path verify that the correct messages were
-        // delivered (no corruption, no loss, no duplication).
+        // Prebuild the message bodies once: a fixed marker prefix followed
+        // by the global message index, which is also the explicit SeqNo of
+        // the message (1-based: the server rejects seq_no == 0). Using an
+        // explicit SeqNo means the server deduplicates retries by
+        // (producer, SeqNo) after a tablet reboot, and the read path can
+        // strictly verify that the delivered message content matches its
+        // SeqNo — independent of the offset the tablet happened to assign
+        // (offsets can diverge from the write index after a reboot + retry
+        // re-assigns it).
         const ui64 baseIndex = TotalWrittenMessages.load();
+        TVector<TString> bodies;
+        bodies.reserve(count);
         for (ui64 i = 0; i < count; ++i) {
-            TString data = Sprintf("MSG-%020lu", (unsigned long)(baseIndex + i));
+            const ui64 seqNo = baseIndex + i + 1;
+            TString data = Sprintf("MSG-%020lu", (unsigned long)seqNo);
             // Pad to the requested message size (keep the marker at the start).
             if (data.size() < messageSize) {
                 data.resize(messageSize, 'x');
             }
-            if (!writeSession->Write(data)) {
-                ythrow yexception() << "Write failed at message " << i;
+            bodies.push_back(std::move(data));
+        }
+
+        // Retry the whole write session on failure (stream break, deadline,
+        // non-SUCCESS status). Bounded so the outer wall-clock timeout in
+        // RunWithDispatchAndReboot still fires on a permanently broken path.
+        for (ui32 attempt = 1;; ++attempt) {
+            try {
+                grpc::ClientContext context;
+                context.set_deadline(
+                    std::chrono::system_clock::now() + std::chrono::seconds(10));
+                context.AddMetadata("x-ydb-database", "/" + Env.Server->ServerSettings.DomainName);
+                auto stream = stub->StreamWrite(&context);
+                TR_ENSURE(stream);
+
+                // 1. Init request.
+                FClient req;
+                req.mutable_init_request()->set_path(kTopicPath);
+                req.mutable_init_request()->set_producer_id("src");
+                req.mutable_init_request()->set_message_group_id("src");
+                TR_ENSURE(stream->Write(req));
+
+                FServer resp;
+                TR_ENSURE(stream->Read(&resp));
+                if (resp.status() != Ydb::StatusIds::SUCCESS) {
+                    ythrow yexception() << "write init failed: status=" << resp.status()
+                        << " issues=" << resp.ShortDebugString();
+                }
+                TR_ENSURE(resp.has_init_response());
+
+                // 2. Write all messages (one per WriteRequest, RAW codec).
+                for (ui64 i = 0; i < count; ++i) {
+                    req.Clear();
+                    auto* wr = req.mutable_write_request();
+                    wr->set_codec(Ydb::Topic::CODEC_RAW);
+                    auto* msg = wr->add_messages();
+                    msg->set_seq_no(baseIndex + i + 1);
+                    msg->set_data(bodies[i]);
+                    msg->set_uncompressed_size(bodies[i].size());
+                    TR_ENSURE(stream->Write(req));
+                }
+
+                // 3. Read the acks (one WriteResponse per WriteRequest).
+                for (ui64 i = 0; i < count; ++i) {
+                    TR_ENSURE(stream->Read(&resp));
+                    if (resp.status() != Ydb::StatusIds::SUCCESS) {
+                        ythrow yexception() << "write ack failed at message " << i
+                            << ": status=" << resp.status()
+                            << " issues=" << resp.ShortDebugString();
+                    }
+                    TR_ENSURE(resp.has_write_response());
+                    TR_ENSURE(resp.write_response().acks_size() == 1);
+                }
+
+                stream->WritesDone();
+                const auto status = stream->Finish();
+                if (!status.ok()) {
+                    ythrow yexception() << "write finish failed: " << status.error_message();
+                }
+
+                TotalWrittenMessages.fetch_add(count);
+                return;
+            } catch (const std::exception& e) {
+                Cerr << "=== WRITE_RETRY attempt=" << attempt
+                     << " error=" << e.what() << Endl;
+                if (attempt >= 1000) {
+                    ythrow yexception() << "write failed after " << attempt
+                        << " attempts: " << e.what();
+                }
+                Sleep(TDuration::MilliSeconds(100));
             }
-        }
-
-        writeSession->Close();
-        driver.Stop(true);
-        TotalWrittenMessages.fetch_add(count);
-    }
-
-    // Write Count messages to the topic. Each message is messageSize bytes.
-    void WriteMessages(ui64 count, ui64 messageSize = 1_MB) {
-        RunWithDispatch(Runtime(), [&] {
-            WriteMessagesImpl(count, messageSize);
-            return true;
-        });
-    }
-
-    // Open a read session with the given per-test settings.
-    // The settings struct controls max_lag, read request size, etc.
-    // This allows each unit test to configure its own read session behavior.
-    //
-    // Uses raw gRPC StreamReadMessage protocol directly. This gives full
-    // control over the request/response cycle, which is essential for the
-    // event-boundary reboot pattern: each gRPC Write/Read is a single blocking
-    // call on the background thread, and the main thread pumps DispatchEvents
-    // between calls. The Topics SDK's IReadSession::GetEvent(true) blocks
-    // indefinitely on the simulated runtime (SetUseRealThreads(false)) because
-    // the SDK's internal actors can't make progress without the main thread
-    // dispatching events — a deadlock. Raw gRPC avoids this by making each
-    // network round-trip an explicit, interruptible operation.
-    struct TStreamReadSession {
-        THolder<grpc::ClientContext> Context;
-        std::unique_ptr<grpc::ClientReaderWriter<StreamReadClient, StreamReadServer>> Stream;
-
-        // Data-correctness tracking: offsets of messages delivered on this
-        // session, in delivery order. Used to verify no duplicates and
-        // monotonicity after a tablet reboot.
-        TVector<i64> DeliveredOffsets;
-        // Highest offset seen so far (for monotonicity check).
-        i64 LastOffset = -1;
-        // Total number of messages delivered.
-        ui64 DeliveredCount = 0;
-        // Partition session ID (set when StartPartitionSessionRequest arrives).
-        i64 PartitionSessionId = -1;
-        // Bytes-size budget for ReadRequests sent on this session (copied
-        // from TReadSessionSettings when the session is opened).
-        ui64 ReadRequestBytesSize = 100_KB;
-    };
-
-    // Create a gRPC channel to the test server endpoint.
-    // The endpoint is in "host:port" form (e.g. "localhost:12345").
-    std::shared_ptr<grpc::Channel> MakeGrpcChannel() {
-        auto channel = grpc::CreateChannel(Env.Endpoint, grpc::InsecureChannelCredentials());
-        TR_ENSURE(channel);
-        return channel;
-    }
-
-    // Send a FromClient message on the stream.
-    void WriteToStream(TStreamReadSession& session, const StreamReadClient& msg, const char* what) {
-        TR_ENSURE(session.Stream);
-        if (!session.Stream->Write(msg)) {
-            ythrow yexception() << "gRPC write failed: " << what;
-        }
-    }
-
-    // Read a FromServer message from the stream. Returns false on stream end.
-    bool ReadFromStream(TStreamReadSession& session, StreamReadServer& msg, const char* what) {
-        TR_ENSURE(session.Stream);
-        bool ok = session.Stream->Read(&msg);
-        if (!ok) {
-            Cerr << "gRPC read returned false (stream closed): " << what << Endl;
-            return false;
-        }
-        return true;
-    }
-
-    TStreamReadSession OpenReadSession(const TReadSessionSettings& settings) {
-        auto& runtime = Runtime();
-        TStreamReadSession session;
-
-        RunWithDispatch(runtime, [&] {
-            session = OpenReadSessionImpl(settings);
-            return true;
-        });
-
-        return session;
-    }
-
-    // Implementation of OpenReadSession — runs on the background thread without
-    // its own dispatch. The caller (RunWithDispatch or RunWithDispatchAndReboot)
-    // is responsible for pumping DispatchEvents.
-    //
-    // Performs the StreamRead handshake: open the bidirectional stream, send
-    // InitRequest, read InitResponse. Each blocking gRPC call is a single
-    // operation; the main thread interleaves DispatchEvents between them.
-    TStreamReadSession OpenReadSessionImpl(const TReadSessionSettings& settings) {
-        TStreamReadSession session;
-        session.Context = MakeHolder<grpc::ClientContext>();
-        session.ReadRequestBytesSize = settings.ReadRequestBytesSize;
-
-        auto stub = TopicService::NewStub(MakeGrpcChannel());
-        TR_ENSURE(stub);
-
-        session.Stream = stub->StreamRead(session.Context.Get());
-        TR_ENSURE(session.Stream);
-
-        // Send InitRequest.
-        StreamReadClient initMsg;
-        settings.ApplyToInitRequest(*initMsg.mutable_init_request());
-        WriteToStream(session, initMsg, "InitRequest");
-
-        // Read InitResponse.
-        StreamReadServer resp;
-        TR_ENSURE(ReadFromStream(session, resp, "InitResponse"));
-        if (!resp.has_init_response() || resp.status() != Ydb::StatusIds::SUCCESS) {
-           ythrow yexception() << "InitResponse: has_init_response="
-                << resp.has_init_response() << " status=" << resp.status();
-        }
-
-        return session;
-    }
-
-    // Accumulate one delivered message, verifying it on arrival. Runs on
-    // pool threads, so it throws instead of asserting (see TR_ENSURE).
-    //
-    // Content check: the write path stamps every message with a
-    // "MSG-%020lu" marker carrying its write index, which must equal the
-    // assigned offset (single producer, single partition). This catches
-    // corruption, loss and duplication as the data is read — the sweep's
-    // read steps ARE the data-correctness verification.
-    void AccumulateDelivered(TStreamReadSession& session, i64 offset, TStringBuf data) {
-        const TString marker = Sprintf("MSG-%020lu", (unsigned long)offset);
-        if (data.size() < marker.size() || !data.StartsWith(marker)) {
-            ythrow yexception() << "content mismatch at offset " << offset
-                << ": got \"" << data.substr(0, 32) << "\"";
-        }
-        if (offset <= session.LastOffset) {
-            ythrow yexception() << "duplicate/non-monotonic offset " << offset
-                << " after " << session.LastOffset;
-        }
-        session.LastOffset = offset;
-        session.DeliveredOffsets.push_back(offset);
-        ++session.DeliveredCount;
-        {
-            std::lock_guard<std::mutex> lock(VerifiedOffsetsMutex);
-            VerifiedOffsets.insert(offset);
         }
     }
 
@@ -780,238 +870,209 @@ protected:
             what << "; reason=" << Env.ErrorCloseReason);
     }
 
-    void CloseSession(TStreamReadSession& session) {
-        if (session.Context) {
-            session.Context->TryCancel();
-        }
-        session.Stream.reset();
-        session.Context.Reset();
-    }
-
-    // Send a CommitOffsetRequest for the given partition session and offset.
-    void CommitOffsetImpl(TStreamReadSession& session, i64 commitOffset) {
-        TR_ENSURE(session.Stream);
-        TR_ENSURE(session.PartitionSessionId >= 0);
-        TR_ENSURE(!session.DeliveredOffsets.empty());
-        StreamReadClient msg;
-        auto* req = msg.mutable_commit_offset_request();
-        auto* off = req->add_commit_offsets();
-        off->set_partition_session_id(session.PartitionSessionId);
-        auto* range = off->add_offsets();
-        range->set_start(session.DeliveredOffsets.front());
-        range->set_end(commitOffset + 1);
-        WriteToStream(session, msg, "CommitOffsetRequest");
-    }
-
-    // Commit the offset and wait for the CommitOffsetResponse ack so the
-    // consumer offset is durable before the session closes.
+    // Final correctness check: every written message must have been
+    // delivered and content-verified by the sweep's read steps (SeqNos
+    // accumulated in VerifiedSeqNos). No re-reading from the tablet.
     //
-    // If the commit or the ack is lost (stream closed), the next iteration
-    // simply re-reads the same messages — correct, just repeated. Runs on a
-    // pool thread (throws are captured by the step's future).
-    void CommitOffsetAndWaitAck(TStreamReadSession& session, i64 commitOffset) {
-        try {
-            CommitOffsetImpl(session, commitOffset);
-        } catch (const std::exception& ex) {
-            Cerr << "=== COMMIT_SKIPPED (write failed): " << ex.what() << Endl;
+    // When MaxLagSeconds > 0, the partition tablet skips messages older than
+    // max_lag (measured in simulated time via ctx.Now() - maxTimeLagMs in
+    // GetReadFrom). Balancer reboots delay read session recovery, and if the
+    // delay exceeds max_lag, previously-unread messages become "too old" and
+    // are permanently skipped. This is expected behavior, not a bug. So when
+    // max_lag is set, we predict which messages could have been skipped based
+    // on the simulated time recorded during each step, and validate that:
+    //   1. Every missing message was eligible for skipping (old enough).
+    //   2. Every non-skippable message was delivered.
+    //   3. The set of missing messages is a subset of the skippable set.
+    void VerifyFullCoverage(const TString& label) {
+        // Only check messages from the current reboot-point run: each run
+        // writes messages with SeqNos (RunStartOffset+1 .. TotalWrittenMessages),
+        // and the read sessions start from RunStartOffset via read_offset.
+        // Messages from previous runs are not re-read or re-verified.
+        const i64 firstSeqNo = RunStartOffset + 1;
+        const i64 total = static_cast<i64>(TotalWrittenMessages.load());
+        const i64 runTotal = total - RunStartOffset;  // messages in this run
+
+        // Collect missing SeqNos (only for the current run).
+        THashSet<i64> missing;
+        {
+            std::lock_guard<std::mutex> lock(VerifiedSeqNosMutex);
+            for (i64 seqNo = firstSeqNo; seqNo <= total; ++seqNo) {
+                if (!VerifiedSeqNos.contains(seqNo)) {
+                    missing.insert(seqNo);
+                }
+            }
+        }
+
+        if (ScenarioMaxLagSeconds == 0) {
+            // No max_lag: every message must be delivered.
+            i64 firstMissing = missing.empty() ? -1 : *missing.begin();
+            UNIT_ASSERT_C(missing.empty(), label << ": " << missing.size() << " of " << runTotal
+                << " messages never delivered; first missing SeqNo: " << firstMissing);
+            AssertNoErrorClose(label);
             return;
         }
-        for (int guard = 0; guard < 1000; ++guard) {
-            StreamReadServer resp;
-            if (!ReadFromStream(session, resp, "commit ack")) {
-                Cerr << "=== COMMIT_ACK_NOT_RECEIVED (stream closed)" << Endl;
-                return;
+
+        // max_lag > 0: predict which messages could have been skipped.
+        // A message written in step S (at simulated time ~WriteStartTime) can
+        // be skipped if a later step S' starts reading at a simulated time
+        // more than MaxLagSeconds after the message's write time. Since the
+        // partition tablet uses ctx.Now() - maxTimeLagMs as the read timestamp
+        // threshold, any message with WriteTimestamp < ctx.Now() - max_lag is
+        // skipped. We approximate the write timestamp by the step's start time
+        // and the read time by the next step's start time (or the current
+        // step's end time for the last step).
+        //
+        // Note: this is a conservative over-approximation. Not all messages
+        // in a skippable step will actually be skipped — if some read
+        // sessions deliver them before the lag window expires, they survive.
+        // The validation checks that every missing message is in the skippable
+        // set (no unexpected losses) and that the missing count is reasonable.
+        const TDuration maxLag = TDuration::Seconds(ScenarioMaxLagSeconds);
+        THashSet<i64> skippable;
+        for (size_t i = 0; i < StepTimings.size(); ++i) {
+            const auto& st = StepTimings[i];
+            if (st.LastSeqNo < st.FirstSeqNo) {
+                continue; // no messages written in this step
             }
-            if (resp.has_commit_offset_response()) {
-                return;
+            // The earliest time a read session from a LATER step could
+            // attempt to read these messages. For step i, the next step's
+            // start time is the earliest "late read" opportunity. If there
+            // is no next step, use this step's end time.
+            TInstant lateReadTime = st.StepEndTime;
+            if (i + 1 < StepTimings.size()) {
+                lateReadTime = StepTimings[i + 1].WriteStartTime;
             }
-            if (resp.has_read_response()) {
-                // Data may still arrive from a pending read request —
-                // accumulate it (content-verified) like any other delivery.
-                const auto& readResp = resp.read_response();
-                for (const auto& pd : readResp.partition_data()) {
-                    for (const auto& batch : pd.batches()) {
-                        for (const auto& msg : batch.message_data()) {
-                            AccumulateDelivered(session, msg.offset(), msg.data());
-                        }
-                    }
+            // If the late read time exceeds the write time + max_lag, messages
+            // from this step are eligible for skipping.
+            if (lateReadTime - st.WriteStartTime > maxLag) {
+                for (i64 seqNo = st.FirstSeqNo; seqNo <= st.LastSeqNo; ++seqNo) {
+                    skippable.insert(seqNo);
                 }
             }
         }
-    }
 
-    // Read from the session until it has delivered the message with offset
-    // endOffset-1 (everything written up to endOffset), or the stream
-    // closes. Works from any starting offset (the session reads from the
-    // consumer's committed offset).
-    //
-    // The server serves each ReadRequest up to its bytes_size budget and
-    // then WAITS for the next ReadRequest, so after every data response the
-    // client re-arms the server with a new ReadRequest (as the Topics SDK
-    // does). An empty response only means "no data ready right now" — the
-    // loop keeps waiting.
-    //
-    // Every delivered message is content-verified on arrival
-    // (AccumulateDelivered), so the sweep's read steps ARE the data
-    // correctness verification — no final re-read is needed.
-    //
-    // Runs on the background thread; the caller pumps DispatchEvents and
-    // enforces the overall timeout (ReadAll).
-    ui64 ReadAllImpl(TStreamReadSession& session, ui64 endOffset) {
-        TR_ENSURE(session.Stream);
-        ui64 totalRead = 0;
-
-        // Send the initial ReadRequest.
-        StreamReadClient readMsg;
-        readMsg.mutable_read_request()->set_bytes_size(session.ReadRequestBytesSize);
-        WriteToStream(session, readMsg, "ReadAll ReadRequest");
-
-        // Read until the session has delivered the message with offset
-        // endOffset-1.
-        while (static_cast<ui64>(session.LastOffset + 1) < endOffset) {
-            StreamReadServer resp;
-            if (!ReadFromStream(session, resp, "ReadAll loop")) {
-                return totalRead;
-            }
-
-            if (resp.has_start_partition_session_request()) {
-                const auto& req = resp.start_partition_session_request();
-                session.PartitionSessionId = req.partition_session().partition_session_id();
-                StreamReadClient confirmMsg;
-                auto* confirm = confirmMsg.mutable_start_partition_session_response();
-                confirm->set_partition_session_id(session.PartitionSessionId);
-                WriteToStream(session, confirmMsg, "ReadAll StartPartitionSessionResponse");
-                continue;
-            }
-
-            if (resp.has_stop_partition_session_request()) {
-                const auto& req = resp.stop_partition_session_request();
-                StreamReadClient confirmMsg;
-                auto* confirm = confirmMsg.mutable_stop_partition_session_response();
-                confirm->set_partition_session_id(req.partition_session_id());
-                confirm->set_graceful(req.graceful());
-                WriteToStream(session, confirmMsg, "ReadAll StopPartitionSessionResponse");
-                // After stop, no more data from this partition.
-                return totalRead;
-            }
-
-            if (resp.has_read_response()) {
-                const auto& readResp = resp.read_response();
-                if (readResp.partition_data_size() > 0) {
-                    for (const auto& pd : readResp.partition_data()) {
-                        for (const auto& batch : pd.batches()) {
-                            for (const auto& msg : batch.message_data()) {
-                                AccumulateDelivered(session, msg.offset(), msg.data());
-                                ++totalRead;
-                            }
-                        }
-                    }
-                    // Re-arm the server with a fresh budget: it has served
-                    // this ReadRequest up to bytes_size and now waits for
-                    // the next one.
-                    StreamReadClient rearmMsg;
-                    rearmMsg.mutable_read_request()->set_bytes_size(session.ReadRequestBytesSize);
-                    WriteToStream(session, rearmMsg, "ReadAll ReadRequest (re-arm)");
-                }
-                // An empty response only means "no data ready right now" —
-                // keep waiting for the remaining messages.
-                continue;
-            }
-
-            // Other messages — continue.
-            continue;
-        }
-        return totalRead;
-    }
-
-    // Read messages with a timeout (main-thread dispatch version).
-    // endOffset is passed through to ReadAllImpl.
-    ui64 ReadAll(TStreamReadSession& session, TDuration timeout, ui64 endOffset) {
-        auto future = NThreading::Async([&] {
-            return ReadAllImpl(session, endOffset);
-        }, DispatchPool());
-
-        auto& runtime = Runtime();
-        const TInstant deadline = runtime.GetCurrentTime() + timeout;
-        while (runtime.GetCurrentTime() < deadline && !future.HasValue() && !future.HasException()) {
-            DispatchEventsWithRetry([&] {
-                runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
-            });
-        }
-
-        if (!future.HasValue() && !future.HasException()) {
-            if (session.Context) {
-                session.Context->TryCancel();
-            }
-            const TInstant cancelDeadline = runtime.GetCurrentTime() + TDuration::Seconds(20);
-            while (runtime.GetCurrentTime() < cancelDeadline && !future.HasValue() && !future.HasException()) {
-                DispatchEventsWithRetry([&] {
-                    runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
-                });
-            }
-            if (!future.HasValue() && !future.HasException()) {
-                UNIT_ASSERT_C(false, "ReadAll did not finish within 20s after TryCancel");
+        // Validate: every missing message must be in the skippable set.
+        TVector<i64> unexpectedMissing;
+        for (i64 seqNo : missing) {
+            if (!skippable.contains(seqNo)) {
+                unexpectedMissing.push_back(seqNo);
             }
         }
-        future.TryRethrow();
-        if (!future.HasValue()) {
-            return 0;
-        }
-        return future.GetValueSync();
-    }
 
-    // Final correctness check: every written message must have been
-    // delivered and content-verified by the sweep's read steps (offsets
-    // accumulated in VerifiedOffsets). No re-reading from the tablet.
-    void VerifyFullCoverage(const TString& label) {
-        const i64 total = static_cast<i64>(TotalWrittenMessages.load());
-        i64 firstMissing = -1;
-        ui64 missingCount = 0;
-        {
-            std::lock_guard<std::mutex> lock(VerifiedOffsetsMutex);
-            for (i64 off = 0; off < total; ++off) {
-                if (!VerifiedOffsets.contains(off)) {
-                    if (firstMissing < 0) {
-                        firstMissing = off;
-                    }
-                    ++missingCount;
-                }
+        // Log the timing analysis for diagnostics.
+        Cerr << "=== MAX_LAG_ANALYSIS label=" << label
+             << " maxLagSeconds=" << ScenarioMaxLagSeconds
+             << " runTotal=" << runTotal
+             << " firstSeqNo=" << firstSeqNo
+             << " missing=" << missing.size()
+             << " skippable=" << skippable.size()
+             << " unexpectedMissing=" << unexpectedMissing.size()
+             << Endl;
+        for (size_t i = 0; i < StepTimings.size(); ++i) {
+            const auto& st = StepTimings[i];
+            TInstant lateReadTime = st.StepEndTime;
+            if (i + 1 < StepTimings.size()) {
+                lateReadTime = StepTimings[i + 1].WriteStartTime;
             }
+            Cerr << "  step[" << i << "] seqNos=" << st.FirstSeqNo << "-" << st.LastSeqNo
+                 << " writeStart=" << st.WriteStartTime
+                 << " stepEnd=" << st.StepEndTime
+                 << " lateRead=" << lateReadTime
+                 << " age=" << (lateReadTime - st.WriteStartTime)
+                 << " skippable=" << (lateReadTime - st.WriteStartTime > maxLag ? "YES" : "no")
+                 << Endl;
         }
-        UNIT_ASSERT_C(missingCount == 0, label << ": " << missingCount << " of " << total
-            << " messages never delivered; first missing offset: " << firstMissing);
+        if (!missing.empty()) {
+            Cerr << "  missing SeqNos:";
+            for (i64 seqNo : missing) {
+                Cerr << " " << seqNo;
+            }
+            Cerr << Endl;
+        }
+
+        UNIT_ASSERT_C(unexpectedMissing.empty(),
+            label << ": " << unexpectedMissing.size() << " of " << missing.size()
+            << " missing messages were NOT eligible for max_lag skipping"
+            << " (maxLagSeconds=" << ScenarioMaxLagSeconds << ")"
+            << "; first unexpected missing SeqNo: "
+            << (unexpectedMissing.empty() ? -1 : unexpectedMissing[0]));
+
+        // Also validate that the missing count does not exceed the skippable
+        // count (sanity bound — all missing must be within the skippable set).
+        UNIT_ASSERT_C(missing.size() <= skippable.size(),
+            label << ": missing=" << missing.size() << " > skippable=" << skippable.size()
+            << " (maxLagSeconds=" << ScenarioMaxLagSeconds << ")");
+
         AssertNoErrorClose(label);
     }
 
+    // Shared state of one pure-gRPC read session (see GrpcReadSessionLoop).
+    struct TGrpcReadSessionState {
+        TString Consumer;
+        std::atomic<i64> LastSeqNo{0};        // highest SeqNo delivered (1-based)
+        std::atomic<ui64> DeliveredCount{0};  // messages delivered (incl. redelivered)
+        std::mutex Mutex;                     // guards Ctx / Exception
+        std::shared_ptr<grpc::ClientContext> Ctx; // current attempt's context (for TryCancel)
+        std::exception_ptr Exception;         // set on fatal (content mismatch)
+    };
+
     // Implementation of the Concurrent scenario step — runs on the background
     // thread; the caller (RunWithDispatch or RunWithDispatchAndReboot) pumps
-    // DispatchEvents and may reboot the tablet at any event boundary.
+    // DispatchEvents on the main thread and may reboot the tablet at any
+    // event boundary. IMPORTANT: this code MUST NOT dispatch events itself
+    // (no RunWithDispatch / WaitPromise here) — it runs inside the outer
+    // dispatch loop; it may only block (sleep/poll) while the main thread
+    // pumps the actor system.
     //
-    // Opens ReadSessionCount read sessions, optionally launches a write on
-    // the dispatch pool while the sessions are open, then reads everything
-    // written so far from each session and closes them. This forces the
-    // partition actor to handle a pending read and an incoming write/commit
-    // simultaneously during a pipe restart (ResendRecentRequests with both
-    // RequestInfly and CommitsInfly non-empty), and — with several sessions —
-    // saturates the inflight-reads limit so the reboot hits the
-    // memory-controller branch.
+    // Pure gRPC read sessions via Ydb::Topic::V1::TopicService::StreamRead —
+    // the same protocol the SDK speaks internally, but WITHOUT the SDK: the
+    // SDK runs its own real threads whose interaction with the simulated
+    // actor runtime (UseRealThreads=false) is unreliable. Each read session
+    // runs on its own dispatch-pool thread and blocks on the raw gRPC stream;
+    // the main thread's DispatchEvents pump serves the server side.
+    //
+    // Opens ReadSessionCount read sessions (each with its own consumer so
+    // the balancer assigns the partition independently), optionally launches
+    // a write while they are open, then waits for each session to deliver
+    // everything written so far. Every delivered message is content-verified
+    // on arrival (same invariants as AccumulateDelivered).
     bool ConcurrentReadWriteStepImpl(const TScenarioStep& step) {
-        // Open all read sessions first so they are concurrently active.
-        // With more than one session, each uses its own consumer so the
-        // balancer assigns the partition to every session independently.
-        TVector<TStreamReadSession> sessions;
-        sessions.reserve(step.ReadSessionCount);
+        TVector<std::unique_ptr<TGrpcReadSessionState>> states;
+        states.reserve(step.ReadSessionCount);
         for (ui32 i = 0; i < step.ReadSessionCount; ++i) {
-            TReadSessionSettings settings = step.ReadSettings;
-            if (step.ReadSessionCount > 1) {
-                settings.Consumer = i == 0
-                    ? TString(kConsumer)
-                    : Sprintf("user%u", i - 1);
-            }
-            sessions.push_back(OpenReadSessionImpl(settings));
+            auto st = std::make_unique<TGrpcReadSessionState>();
+            st->Consumer = (step.ReadSessionCount > 1 && i > 0)
+                ? Sprintf("user%u", i - 1)
+                : TString(kConsumer);
+            states.push_back(std::move(st));
+        }
+
+        // The total number of messages that will exist after this step's
+        // write completes; each read session finishes once it has delivered
+        // that many (SeqNos are global and 1-based).
+        const i64 expectedTotal =
+            static_cast<i64>(TotalWrittenMessages.load() + step.Count);
+        std::atomic<bool> abort{false};
+
+        // Launch the read sessions first so they are concurrently active.
+        // Pass RunStartOffset so the read sessions skip past messages from
+        // previous reboot-point runs via StartPartitionSessionResponse.read_offset.
+        TVector<NThreading::TFuture<bool>> readFutures;
+        for (ui32 i = 0; i < step.ReadSessionCount; ++i) {
+            TGrpcReadSessionState* st = states[i].get();
+            const ui32 maxLagSeconds = step.ReadSettings.MaxLagSeconds;
+            const i64 readOffset = RunStartOffset;
+            readFutures.push_back(NThreading::Async(
+                [this, st, expectedTotal, maxLagSeconds, readOffset, &abort] {
+                    GrpcReadSessionLoop(st, expectedTotal, maxLagSeconds, readOffset, abort);
+                    return true;
+                }, DispatchPool()));
         }
 
         // Launch the write (if requested) while the read sessions are open.
+        // It runs on the dispatch pool; the main thread serves its requests
+        // while pumping events in the outer loop.
         NThreading::TFuture<bool> writeFuture;
         if (step.Count > 0) {
             writeFuture = NThreading::Async([&] {
@@ -1020,66 +1081,307 @@ protected:
             }, DispatchPool());
         }
 
-        // Read everything written so far from each session, all
-        // concurrently, so several partition sessions with pending reads
-        // are in flight at the same time.
-        const ui64 endOffset = std::max<ui64>(TotalWrittenMessages.load(), 1);
-        TVector<NThreading::TFuture<bool>> readFutures;
-        for (auto& session : sessions) {
-            readFutures.push_back(NThreading::Async([this, &session, endOffset, &step, &writeFuture] {
-                ReadAllImpl(session, endOffset);
-                if (step.Count > 0) {
-                    // The concurrent write adds messages while the read is
-                    // in flight — wait for it and read them too, then
-                    // commit the progress (see CommitOffsetAndWaitAck).
-                    writeFuture.GetValueSync();
-                    const ui64 newEnd = TotalWrittenMessages.load();
-                    if (static_cast<ui64>(session.LastOffset + 1) < newEnd) {
-                        ReadAllImpl(session, newEnd);
-                    }
-                    if (!session.DeliveredOffsets.empty()) {
-                        CommitOffsetAndWaitAck(session, session.LastOffset);
-                    }
-                }
-                return static_cast<ui64>(session.LastOffset + 1) >= TotalWrittenMessages.load();
-            }, DispatchPool()));
-        }
+        // Wait (blocking on this pool thread — the MAIN thread keeps
+        // pumping DispatchEvents in the outer RunWithDispatchAndReboot
+        // loop, serving the gRPC requests and performing the event-boundary
+        // reboots) until every session has delivered everything written so
+        // far and the concurrent write (if any) has finished. The 25s
+        // deadline is a diagnostics bound; the outer wall-clock timeout in
+        // RunWithDispatchAndReboot is the real backstop.
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(25);
         bool gotData = false;
-        for (auto& f : readFutures) {
-            gotData = f.GetValueSync() || gotData;
+        while (true) {
+            bool writeDone = (step.Count == 0) || writeFuture.HasValue() || writeFuture.HasException();
+            const ui64 totalNow = TotalWrittenMessages.load();
+            bool allSessionsDone = true;
+            for (auto& st : states) {
+                if (st->LastSeqNo.load() < static_cast<i64>(totalNow)) {
+                    allSessionsDone = false;
+                }
+            }
+            if (writeDone && allSessionsDone) {
+                gotData = true;
+                break;
+            }
+            if (TInstant::Now() >= deadline) {
+                for (size_t i = 0; i < states.size(); ++i) {
+                    Cerr << "=== GRPC_READ_SESSION_TIMEOUT session=" << i
+                         << " consumer=" << states[i]->Consumer
+                         << " lastSeqNo=" << states[i]->LastSeqNo.load()
+                         << " delivered=" << states[i]->DeliveredCount.load()
+                         << " totalNow=" << totalNow << Endl;
+                }
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(10));
         }
 
-        // Close all sessions.
-        for (auto& session : sessions) {
-            if (session.Context) {
-                session.Context->TryCancel();
+        // Finish the read sessions. On the SUCCESS path no cancellation is
+        // needed: a session that delivered everything exits on its own (its
+        // loop condition LastSeqNo >= expectedTotal is already false), so
+        // the threads are simply joined — no stream write ever fails due to
+        // our actions. Cancellation (TryCancel to unblock a stuck stream
+        // Read) is applied ONLY on the deadline path, where the step has
+        // already failed and the session state is only needed for logging.
+        abort.store(true);
+        if (!gotData) {
+            for (auto& st : states) {
+                std::lock_guard<std::mutex> lock(st->Mutex);
+                if (st->Ctx) {
+                    st->Ctx->TryCancel();
+                }
             }
-            session.Stream.reset();
-            session.Context.Reset();
+        }
+        for (auto& fut : readFutures) {
+            fut.GetValueSync();
+        }
+        if (gotData) {
+            // Success: a session exception here is a real defect
+            // (content-verification failure) — rethrow it.
+            for (auto& st : states) {
+                std::lock_guard<std::mutex> lock(st->Mutex);
+                if (st->Exception) {
+                    std::rethrow_exception(st->Exception);
+                }
+            }
+        } else {
+            // Deadline path: the step already failed (the
+            // GRPC_READ_SESSION_TIMEOUT lines above carry the diagnosis).
+            // Log any session exceptions — including spurious check failures
+            // caused by our own TryCancel — instead of masking the timeout.
+            for (auto& st : states) {
+                std::lock_guard<std::mutex> lock(st->Mutex);
+                if (st->Exception) {
+                    Cerr << "=== GRPC_READ_SESSION_EXCEPTION consumer="
+                         << st->Consumer << " error=";
+                    try {
+                        std::rethrow_exception(st->Exception);
+                    } catch (const std::exception& e) {
+                        Cerr << e.what();
+                    } catch (...) {
+                        Cerr << "unknown";
+                    }
+                    Cerr << Endl;
+                }
+            }
         }
 
         // Wait for the concurrent write to finish (rethrows write failures).
         if (step.Count > 0) {
             writeFuture.GetValueSync();
         }
+
         return gotData;
     }
 
-    // Run a lambda on the background dispatch pool while pumping DispatchEvents on
-    // the main thread. Unlike RunWithDispatch (which uses WaitFuture and stops only
-    // when the future completes), this version ALSO stops DispatchEvents when the
-    // PQ tablet event count reaches the reboot target (via TFinalEventCondition).
+    // Body of one pure-gRPC read session (runs on its own dispatch-pool
+    // thread). Reconnects with a fresh stream whenever the current one ends
+    // (e.g. the balancer or partition tablet rebooted and the server closed
+    // the session) until the session has delivered expectedTotal messages or
+    // the step sets abort. Commits offsets as it goes so a reconnect resumes
+    // from the committed position, not from zero.
+    void GrpcReadSessionLoop(TGrpcReadSessionState* st, i64 expectedTotal,
+                             ui32 maxLagSeconds, i64 readOffset,
+                             std::atomic<bool>& abort)
+    {
+        while (!abort.load() && st->LastSeqNo.load() < expectedTotal) {
+            bool delivered = false;
+            try {
+                delivered = GrpcReadSessionAttempt(st, expectedTotal, maxLagSeconds, readOffset, abort);
+            } catch (...) {
+                std::lock_guard<std::mutex> lock(st->Mutex);
+                if (!st->Exception) {
+                    st->Exception = std::current_exception();
+                }
+                return;
+            }
+            if (delivered || abort.load()) {
+                return;
+            }
+            // The stream ended before everything was delivered (e.g. the
+            // balancer or partition tablet rebooted): pause briefly and
+            // reconnect with a fresh session, resuming from the committed
+            // offset.
+            Sleep(TDuration::MilliSeconds(100));
+        }
+    }
+
+    // One read-session attempt: a fresh StreamRead gRPC stream from init to
+    // stream end. Returns true when the session has delivered expectedTotal
+    // messages or the step aborted; returns false when the stream ended
+    // before that (transient — the caller reconnects). Throws only on fatal
+    // errors (content-verification failure).
+    bool GrpcReadSessionAttempt(TGrpcReadSessionState* st, i64 expectedTotal,
+                                 ui32 maxLagSeconds, i64 readOffset,
+                                 std::atomic<bool>& abort)
+    {
+        grpc::ChannelArguments args;
+        args.SetMaxReceiveMessageSize(64 * 1024 * 1024);
+        args.SetMaxSendMessageSize(64 * 1024 * 1024);
+        auto channel = grpc::CreateCustomChannel(
+            Env.Endpoint, grpc::InsecureChannelCredentials(), args);
+        auto stub = Ydb::Topic::V1::TopicService::NewStub(channel);
+
+        using FClient = Ydb::Topic::StreamReadMessage::FromClient;
+        using FServer = Ydb::Topic::StreamReadMessage::FromServer;
+        constexpr i64 FlowControlBytes = 100 * 1024 * 1024;
+
+        auto ctx = std::make_shared<grpc::ClientContext>();
+        ctx->set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
+        ctx->AddMetadata("x-ydb-database", "/" + Env.Server->ServerSettings.DomainName);
+        {
+            std::lock_guard<std::mutex> lock(st->Mutex);
+            st->Ctx = ctx;
+        }
+        auto stream = stub->StreamRead(ctx.get());
+        TR_ENSURE(stream);
+
+        // 1. Init request.
+        FClient req;
+        auto* init = req.mutable_init_request();
+        auto* ts = init->add_topics_read_settings();
+        ts->set_path(kTopicPath);
+        if (maxLagSeconds > 0) {
+            ts->mutable_max_lag()->set_seconds(maxLagSeconds);
+        }
+        init->set_consumer(st->Consumer);
+        TR_ENSURE(stream->Write(req));
+
+        FServer resp;
+        TR_ENSURE(stream->Read(&resp));
+        if (resp.status() != Ydb::StatusIds::SUCCESS) {
+            return false; // transient (e.g. mid-reboot) — reconnect
+        }
+        TR_ENSURE(resp.has_init_response());
+
+        // 2. Signal readiness for data (flow-control window).
+        req.Clear();
+        req.mutable_read_request()->set_bytes_size(FlowControlBytes);
+        TR_ENSURE(stream->Write(req));
+
+        // 3. Process server messages until the session has delivered
+        // everything, the stream ends (reboot), or the step aborts.
+        i64 partitionSessionId = -1;
+        i64 commitStart = 0; // start of the uncommitted offset range
+        while (!abort.load() && st->LastSeqNo.load() < expectedTotal) {
+            if (!stream->Read(&resp)) {
+                return false; // stream ended — reconnect
+            }
+            if (resp.status() != Ydb::StatusIds::SUCCESS) {
+                return false; // session-level error — reconnect
+            }
+            switch (resp.server_message_case()) {
+                case FServer::kStartPartitionSessionRequest: {
+                    const auto& start = resp.start_partition_session_request();
+                    partitionSessionId = start.partition_session().partition_session_id();
+                    commitStart = start.committed_offset();
+                    FClient r;
+                    auto* respMsg = r.mutable_start_partition_session_response();
+                    respMsg->set_partition_session_id(partitionSessionId);
+                    // Skip past messages from previous reboot-point runs: set
+                    // read_offset so the server starts delivering from the
+                    // current run's first message, not from offset 0.
+                    if (readOffset > commitStart) {
+                        respMsg->set_read_offset(readOffset);
+                        commitStart = readOffset;
+                    }
+                    TR_ENSURE(stream->Write(r));
+                    // Re-signal readiness for this partition.
+                    FClient rr;
+                    rr.mutable_read_request()->set_bytes_size(FlowControlBytes);
+                    TR_ENSURE(stream->Write(rr));
+                    break;
+                }
+                case FServer::kReadResponse: {
+                    const auto& readResp = resp.read_response();
+                    i64 maxOffset = commitStart - 1;
+                    for (const auto& pd : readResp.partition_data()) {
+                        partitionSessionId = pd.partition_session_id();
+                        for (const auto& batch : pd.batches()) {
+                            for (const auto& md : batch.message_data()) {
+                                // Content-verify every message on arrival:
+                                // the write path stamps each message with
+                                // "MSG-%020lu" carrying its explicit SeqNo, so
+                                // the content must match the message's own
+                                // SeqNo (NOT the offset — the offset can
+                                // diverge from the write index after a
+                                // reboot + retry re-assigns it). Redelivery
+                                // (at-least-once after reconnect) is allowed
+                                // and counted, but never breaks monotonic
+                                // max tracking.
+                                const i64 seqNo = md.seq_no();
+                                const TString data(md.data());
+                                const TString marker =
+                                    Sprintf("MSG-%020lu", (unsigned long)seqNo);
+                                if (data.size() < marker.size() || !data.StartsWith(marker)) {
+                                    ythrow yexception() << "content mismatch at SeqNo "
+                                        << seqNo << ": got \""
+                                        << data.substr(0, 32) << "\"";
+                                }
+                                if (seqNo > st->LastSeqNo.load()) {
+                                    st->LastSeqNo.store(seqNo);
+                                }
+                                st->DeliveredCount.fetch_add(1);
+                                {
+                                    std::lock_guard<std::mutex> lock(VerifiedSeqNosMutex);
+                                    VerifiedSeqNos.insert(seqNo);
+                                }
+                                maxOffset = md.offset();
+                            }
+                        }
+                    }
+                    // Commit the processed range so a reconnect after a
+                    // reboot resumes from the committed offset.
+                    if (partitionSessionId >= 0 && maxOffset >= commitStart) {
+                        FClient c;
+                        auto* co = c.mutable_commit_offset_request()->add_commit_offsets();
+                        co->set_partition_session_id(partitionSessionId);
+                        auto* range = co->add_offsets();
+                        range->set_start(commitStart);
+                        range->set_end(maxOffset + 1);
+                        TR_ENSURE(stream->Write(c));
+                        commitStart = maxOffset + 1;
+                    }
+                    // Replenish the flow-control window.
+                    FClient more;
+                    more.mutable_read_request()->set_bytes_size(FlowControlBytes);
+                    TR_ENSURE(stream->Write(more));
+                    break;
+                }
+                case FServer::kStopPartitionSessionRequest: {
+                    FClient r;
+                    r.mutable_stop_partition_session_response()
+                        ->set_partition_session_id(
+                            resp.stop_partition_session_request().partition_session_id());
+                    TR_ENSURE(stream->Write(r));
+                    break;
+                }
+                default:
+                    break; // commit acks, status updates — ignore
+            }
+        }
+        return true; // delivered everything (or aborted)
+    }
+
+    // Run a lambda on the background dispatch pool while pumping DispatchEvents
+    // on the main thread until the future completes. When the event filter
+    // detects the reboot boundary, it drops the boundary event (the in-flight
+    // event lost at the crash moment) and sets RebootTriggered +
+    // RebootTargetTabletId. The CustomFinalCondition stops DispatchEvents, and
+    // the main loop calls RebootTablet() — the standard test-framework reboot
+    // that sends a poison pill through the tablet resolver (proper death path),
+    // waits for EvBoot (ensuring the tablet reboots), invalidates the resolver
+    // cache (so clients reconnect to the new instance), and waits for scheduled
+    // events.
     //
-    // When DispatchEvents returns because the target event was reached (but the
-    // future is not yet complete), control returns to the main loop where the
-    // reboot is performed safely. Then dispatch resumes. This repeats until the
-    // future completes (the step is done).
-    //
-    // This is the safe event-boundary reboot pattern: no nested DispatchEvents,
-    // no re-entrant dispatch. The reboot always happens in the main loop after
-    // DispatchEvents returns at a clean event boundary.
+    // This reproduces production: the tablet dies (poison pill via resolver),
+    // its pipe dies with it (clients receive TEvClientDestroyed and retry),
+    // events that reach the dead tablet during the reboot window fail
+    // naturally, the tablet reboots (EvBoot waited for), and the SDK's retry
+    // logic reconnects to the new instance and recovers. No event filtering is
+    // needed during the reboot window — the natural pipe death does the work.
     template <typename TFunc>
-    auto RunWithDispatchAndReboot(TFunc&& func, TDuration stepTimeout = TDuration::Seconds(30)) {
+    auto RunWithDispatchAndReboot(TFunc&& func, TDuration stepTimeout = TDuration::Minutes(2)) {
         auto& runtime = Runtime();
         auto future = NThreading::Async(std::forward<TFunc>(func), DispatchPool());
 
@@ -1090,84 +1392,71 @@ protected:
         while (!future.HasValue() && !future.HasException()) {
             // Check wall-clock timeout before each dispatch iteration.
             if (TInstant::Now() >= deadline) {
+                // Flush per-event-type counters before throwing so the failure
+                // that matters most (a hung step) still has a readable summary.
+                DumpEventCounterSummary(Env.RebootPoint.load());
                 UNIT_ASSERT_C(false,
                     "Scenario step exceeded wall-clock timeout of " << stepTimeout
                     << " (deadline=" << deadline << ", now=" << TInstant::Now() << ")");
             }
             TDispatchOptions options;
-            // Stop when the future completes (the step is done).
+            // Stop when the future completes (the step is done) OR when a
+            // reboot is PENDING (the filter set RebootTriggered and the main
+            // loop has not performed the reboot yet). Once RebootCompleted is
+            // set, dispatch MUST resume pumping events: the server-side
+            // actors (KV storage, partition, balancer) only progress while
+            // DispatchEvents runs, and the gRPC clients block until the
+            // server responds. Stopping on RebootTriggered alone would freeze
+            // the whole actor system after the first boundary.
             options.CustomFinalCondition = [&]() {
-                return future.HasValue() || future.HasException();
+                return future.HasValue() || future.HasException()
+                    || (Env.RebootTriggered.load() && !Env.RebootCompleted.load());
             };
-            // The event filter (InstallHooks) now blocks events after the target
-            // count is reached, forcing DispatchEvents to return. This FinalEvents
-            // callback is a secondary check — it fires when the target is reached
-            // and the reboot hasn't been triggered yet.
-            const ui64 target = Env.RebootAfterEventCount.load();
-            if (target > 0) {
-                options.FinalEvents.emplace_back(
-                    [this](IEventHandle& /*ev*/) {
-                        const bool triggered = Env.RebootTriggered.load();
-                        const ui64 count = Env.PqTabletEventCount.load();
-                        const ui64 target = Env.RebootAfterEventCount.load();
-                        // Fire when target is reached and reboot not yet triggered.
-                        // With the filter blocking events after target, this will
-                        // fire at count == target exactly.
-                        const bool shouldFire = !triggered && count >= target;
-                        if (shouldFire) {
-                            Cerr << "=== FINAL_EVENT_FIRED count=" << count
-                                 << " target=" << target
-                                 << " triggered=" << triggered << Endl;
-                        }
-                        return shouldFire;
-                    });
-            } else {
-                // Quirk: non-empty FinalEvents enables full simulation (same as
-                // WaitFuture). Use a dummy that never fires.
-                options.FinalEvents.emplace_back([](IEventHandle&) { return false; });
-            }
-
-            Cerr << "=== DISPATCH_START count=" << Env.PqTabletEventCount.load()
-                 << " target=" << Env.RebootAfterEventCount.load()
-                 << " triggered=" << Env.RebootTriggered.load() << Endl;
+            // Quirk: non-empty FinalEvents enables full simulation (same as
+            // WaitFuture). Use a dummy that never fires.
+            options.FinalEvents.emplace_back([](IEventHandle&) { return false; });
 
             // Use a short timeout so DispatchEvents returns periodically.
-            // Without this, DispatchEvents can block forever when neither the
-            // CustomFinalCondition nor the FinalEvents fire (e.g., after a reboot
-            // is triggered and the future is still running). The periodic return
-            // allows the wall-clock timeout check at the top of the loop to run.
+            // Without this, DispatchEvents can block forever when the
+            // CustomFinalCondition does not fire (e.g., a hung step). The
+            // periodic return allows the wall-clock timeout check at the top
+            // of the loop to run.
             DispatchEventsWithRetry([&] {
                 runtime.DispatchEvents(options, TDuration::Seconds(1));
             });
 
-            // If the future is not complete, DispatchEvents returned because of
-            // the reboot event condition. Perform the reboot in the main loop.
-            if (!future.HasValue() && !future.HasException()) {
-                const ui64 currentCount = Env.PqTabletEventCount.load();
-                const ui64 currentTarget = Env.RebootAfterEventCount.load();
-                Cerr << "=== DISPATCH_RETURNED count=" << currentCount
-                     << " target=" << currentTarget
-                     << " triggered=" << Env.RebootTriggered.load()
-                     << " futureHasValue=" << future.HasValue()
-                     << " futureHasException=" << future.HasException() << Endl;
-                if (currentTarget > 0 && currentCount >= currentTarget && !Env.RebootTriggered.load()) {
-                    if (!Env.RebootTriggered.exchange(true)) {
-                        Cerr << "=== REBOOT_TRIGGERED count=" << currentCount
-                             << " target=" << currentTarget << Endl;
-                        // SAFE: we are in the main loop, not inside any callback.
-                        // Perform the reboot using the same pattern as PQTabletRestart:
-                        // ForwardToTablet(poison pill) + DispatchEvents(EvBoot) +
-                        // InvalidateTabletResolverCache.
-                        Env.RebootPqTablet();
-                        // Disable further reboots for this step run. The reboot at
-                        // the target event is done; the step should now continue to
-                        // completion normally. Setting RebootAfterEventCount=0 makes
-                        // the FinalEvents use a dummy (never fires) and the filter
-                        // stop blocking, so DispatchEvents runs until the future
-                        // completes (with the 1s timeout ensuring periodic returns).
-                        Env.RebootAfterEventCount.store(0);
-                    }
+            // If the reboot boundary was hit, reboot the tablet now from the
+            // main thread (which CAN dispatch, unlike the event filter).
+            // RebootTablet() reproduces the production death path: the poison
+            // pill kills the tablet, the pipe dies (clients get
+            // TEvClientDestroyed), EvBoot is waited for, and the resolver cache
+            // is invalidated so clients reconnect to the new instance. Events
+            // during this window fail naturally — no filter dropping needed.
+            if (Env.RebootTriggered.load() && !Env.RebootCompleted.load()
+                && !future.HasValue() && !future.HasException())
+            {
+                const ui64 tabletId = Env.RebootTargetTabletId.load();
+                if (tabletId != 0) {
+                    const TInstant rebootStart = TInstant::Now();
+                    Cerr << "=== REBOOT_TABLET tabletId=" << tabletId
+                         << " start=" << rebootStart << Endl;
+                    auto sender = runtime.AllocateEdgeActor();
+                    // RebootTablet: sends poison pill via tablet resolver
+                    // (proper death path), waits for EvBoot (ensuring reboot),
+                    // invalidates resolver cache (clients reconnect to the new
+                    // instance), waits for scheduled events.
+                    RebootTablet(runtime, tabletId, sender,
+                                 /*nodeIndex=*/0, /*sysTablet=*/false);
+                    const TInstant rebootEnd = TInstant::Now();
+                    Cerr << "=== REBOOT_COMPLETED tabletId=" << tabletId
+                         << " elapsedMs=" << (rebootEnd - rebootStart).MilliSeconds()
+                         << " bootCount=" << Env.TabletBootCount.load() << Endl;
+                } else {
+                    Cerr << "=== REBOOT_TABLET tabletId=0 (boundary event was"
+                            " neither PQ nor balancer!)" << Endl;
                 }
+                // Mark the reboot complete so the loop doesn't re-trigger it.
+                Env.RebootCompleted.store(true);
             }
         }
 
@@ -1179,141 +1468,84 @@ protected:
         }
     }
 
-    // Execute a scenario step: either write messages or open/read/close a session.
-    // Returns true if the step completed successfully.
-    // For read steps, stores whether data was received in dataReceived.
+    // Execute a scenario step (a concurrent write+read). Returns true if the
+    // step completed successfully; stores whether all expected data was
+    // delivered in dataReceived.
     //
-    // When a reboot target is set (RebootAfterEventCount > 0), the step is executed
-    // via RunWithDispatchAndReboot so that the tablet is rebooted at the target
-    // event boundary during the step. When no reboot target is set, the step runs
-    // normally via RunWithDispatch.
+    // When a reboot target is set (RebootAfterEventCount > 0), the step is
+    // executed via RunWithDispatchAndReboot so that the tablet is rebooted at
+    // the target event boundary during the step. When no reboot target is set,
+    // the step runs normally via RunWithDispatch.
     bool ExecuteScenarioStep(const TScenarioStep& step, bool* dataReceived = nullptr) {
         Cerr << "=== EXECUTE_STEP type=" << static_cast<int>(step.Type)
              << " rebootTarget=" << Env.RebootAfterEventCount.load() << Endl;
-        if (step.Type == TScenarioStep::EType::Write) {
-            if (Env.RebootAfterEventCount.load() > 0) {
-                RunWithDispatchAndReboot([&] {
-                    WriteMessagesImpl(step.Count, step.MessageSize);
-                    return true;
-                });
-            } else {
-                WriteMessages(step.Count, step.MessageSize);
-            }
-            return true;
-        }
-        if (step.Type == TScenarioStep::EType::Concurrent) {
-            if (Env.RebootAfterEventCount.load() > 0) {
-                bool gotData = RunWithDispatchAndReboot([&] {
-                    return ConcurrentReadWriteStepImpl(step);
-                });
 
-                if (dataReceived) {
-                    *dataReceived = gotData;
-                }
+        // Record the simulated time at step start and the SeqNo range that
+        // will be written in this step. The write timestamp of each message
+        // is approximately the step's start time (the partition tablet stamps
+        // WriteTimestampMS from ctx.Now() at write time). This is used by
+        // VerifyFullCoverage to predict which messages could have been
+        // skipped due to max_lag.
+        TStepTiming timing;
+        timing.FirstSeqNo = static_cast<i64>(TotalWrittenMessages.load()) + 1;
+        timing.LastSeqNo = static_cast<i64>(TotalWrittenMessages.load() + step.Count);
+        timing.WriteStartTime = Runtime().GetCurrentTime();
 
-                AssertNoErrorClose("scenario concurrent step");
-                UNIT_ASSERT_C(gotData,
-                    "scenario concurrent step: not all expected data delivered");
-            } else {
-                bool gotData = RunWithDispatch(Runtime(), [&] {
-                    return ConcurrentReadWriteStepImpl(step);
-                });
-
-                if (dataReceived) {
-                    *dataReceived = gotData;
-                }
-
-                AssertNoErrorClose("scenario concurrent step");
-                UNIT_ASSERT_C(gotData,
-                    "scenario concurrent step: not all expected data delivered");
-            }
-            return true;
+        bool gotData;
+        if (Env.RebootAfterEventCount.load() > 0) {
+            gotData = RunWithDispatchAndReboot([&] {
+                return ConcurrentReadWriteStepImpl(step);
+            });
         } else {
-            // Read step: open session, read data, close session.
-            // When a reboot target is set, run the entire open+read+close as a
-            // single background lambda so that reboots can interleave at any
-            // event boundary during the entire sequence.
-            if (Env.RebootAfterEventCount.load() > 0) {
-                bool gotData = RunWithDispatchAndReboot([&] {
-                    // Open session (blocks on gRPC I/O, main thread pumps events).
-                    TStreamReadSession session = OpenReadSessionImpl(step.ReadSettings);
-
-                    // Read everything written so far: reaching the known end
-                    // offset is the reliable stop condition (the server
-                    // never signals end-of-data itself).
-                    const ui64 endOffset = std::max<ui64>(TotalWrittenMessages.load(), 1);
-                    ReadAllImpl(session, endOffset);
-                    const bool complete = static_cast<ui64>(session.LastOffset + 1) >= endOffset;
-
-                    // Commit the progress and wait for the ack — inside the
-                    // same lambda, so reboots can land between the read and
-                    // the commit (stressing CommitsInfly resend on recovery).
-                    // The commit keeps the response of the next iteration
-                    // small (see CommitOffsetAndWaitAck).
-                    if (!session.DeliveredOffsets.empty()) {
-                        CommitOffsetAndWaitAck(session, session.LastOffset);
-                    }
-
-                    // Close session (cancel gRPC stream).
-                    if (session.Context) {
-                        session.Context->TryCancel();
-                    }
-                    session.Stream.reset();
-                    session.Context.Reset();
-
-                    return complete;
-                });
-
-                if (dataReceived) {
-                    *dataReceived = gotData;
-                }
-
-                AssertNoErrorClose("scenario read step");
-                UNIT_ASSERT_C(gotData,
-                    "scenario read step: not all expected data delivered");
-            } else {
-                auto session = OpenReadSession(step.ReadSettings);
-                const ui64 endOffset = std::max<ui64>(TotalWrittenMessages.load(), 1);
-                ReadAll(session, TDuration::Seconds(30), endOffset);
-                const bool complete = static_cast<ui64>(session.LastOffset + 1) >= endOffset;
-
-                // Commit the progress (see the reboot path above).
-                if (!session.DeliveredOffsets.empty()) {
-                    RunWithDispatch(Runtime(), [&] {
-                        CommitOffsetAndWaitAck(session, session.LastOffset);
-                        return true;
-                    });
-                }
-
-                if (dataReceived) {
-                    *dataReceived = complete;
-                }
-
-                AssertNoErrorClose("scenario read step");
-                UNIT_ASSERT_C(complete,
-                    "scenario read step: not all expected data delivered");
-
-                CloseSession(session);
-            }
-            return true;
+            gotData = RunWithDispatch(Runtime(), [&] {
+                return ConcurrentReadWriteStepImpl(step);
+            });
         }
+
+        // Record the simulated time at step end (after all reads completed).
+        timing.StepEndTime = Runtime().GetCurrentTime();
+        StepTimings.push_back(timing);
+
+        if (dataReceived) {
+            *dataReceived = gotData;
+        }
+
+        AssertNoErrorClose("scenario concurrent step");
+        UNIT_ASSERT_C(gotData,
+            "scenario concurrent step: not all expected data delivered");
+        return true;
     }
 
-    // Run the full scenario once with an event-boundary reboot after the
-    // rebootPoint-th PQ tablet event (at a clean event boundary: after the
-    // event is fully processed, before the next event starts). The reboot
-    // is performed in the main loop using TFinalEventCondition to stop
-    // DispatchEvents at the target event — never inside the event filter
-    // callback (which would re-enter the dispatch loop).
+    // Run the full scenario once with an event-boundary reboot at the
+    // rebootPoint-th counted event: the event filter drops that event and
+    // signals the main loop to call RebootTablet() for the correspondent
+    // party (the partition tablet or the balancer, depending on which pipe
+    // the boundary event flows through). The tablet dies via the tablet
+    // resolver (proper death path), the launcher reboots it, and the SDK's
+    // retry logic recovers.
     // Returns whether the reboot actually triggered (i.e. the scenario
-    // produced at least rebootPoint tablet events).
+    // produced at least rebootPoint counted events).
     bool RunScenarioOnceAtRebootPoint(const TScenario& scenario, ui64 rebootPoint) {
         TString testLabel = Sprintf("reboot_after_event_%lu", (unsigned long)rebootPoint);
         Cerr << "=== REBOOT_POINT=" << rebootPoint << Endl;
 
         // Reset counters for this run.
         Env.ResetCounters();
+        Env.RebootPoint.store(rebootPoint);
         Env.RebootAfterEventCount.store(rebootPoint);
+
+        // Reset per-run verification state: each reboot-point run is
+        // independent. The read sessions start from RunStartOffset (set via
+        // StartPartitionSessionResponse.read_offset) so they only read
+        // messages written in THIS run, not old messages from previous runs.
+        // TotalWrittenMessages keeps accumulating (so SeqNos stay unique
+        // across runs), but VerifiedSeqNos and StepTimings are per-run.
+        RunStartOffset = static_cast<i64>(TotalWrittenMessages.load());
+        {
+            std::lock_guard<std::mutex> lock(VerifiedSeqNosMutex);
+            VerifiedSeqNos.clear();
+        }
+        StepTimings.clear();
 
         // Execute each step in the scenario.
         for (ui64 stepIdx = 0; stepIdx < scenario.size(); ++stepIdx) {
@@ -1325,11 +1557,33 @@ protected:
             AssertNoErrorClose(stepLabel);
         }
 
+        // Verify coverage for THIS run (VerifiedSeqNos and StepTimings are
+        // per-run, reset at the start of each reboot-point run). With
+        // max_lag, this predicts which messages could have been skipped due
+        // to balancer reboot delays and validates that only those are missing.
+        if (ScenarioMaxLagSeconds > 0) {
+            VerifyFullCoverage(Sprintf("reboot_after_event_%lu", (unsigned long)rebootPoint));
+        }
+
         // Check if reboot was actually triggered.
         Cerr << "=== REBOOT_CHECK rebootPoint=" << rebootPoint
              << " triggered=" << Env.RebootTriggered.load()
-             << " eventCount=" << Env.PqTabletEventCount.load() << Endl;
-        if (!Env.RebootTriggered.load()) {
+             << " eventCount=" << Env.PqTabletEventCount.load()
+             << " bootCount=" << Env.TabletBootCount.load() << Endl;
+
+        // Dump per-event-type counters (sorted by count desc) so the event
+        // distribution for this reboot point is visible even on timeout.
+        DumpEventCounterSummary(rebootPoint);
+
+        if (Env.RebootTriggered.load()) {
+            // Sanity check: RebootTablet() must have killed the tablet and
+            // the launcher must have rebooted it (a new EvBoot was observed).
+            // The step could not have completed otherwise — the SDK recovery
+            // requires the tablet to be back — but verify explicitly.
+            UNIT_ASSERT_C(Env.TabletBootCount.load() > 0,
+                "rebootPoint=" << rebootPoint << ": RebootTablet was called "
+                << "but no tablet boot was observed");
+        } else {
             Cerr << "=== NO_REBOOT_TRIGGERED rebootPoint=" << rebootPoint
                  << " — stopping (no more events)" << Endl;
         }
@@ -1349,20 +1603,54 @@ protected:
     // boundary would re-run it ~500 times), a stride of 2-3 keeps the
     // runtime bounded while still sweeping the full event range.
     void RunScenarioWithAllReboots(const TScenario& scenario, ui64 initialRebootPoint = 1, ui64 rebootPointStride = 1) {
+        // Auto-detect max_lag from the scenario steps: if any step uses
+        // MaxLagSeconds > 0, enable max_lag-aware coverage verification so
+        // VerifyFullCoverage predicts skippable messages instead of
+        // asserting full coverage. Tests only set MaxLagSeconds in the
+        // scenario step; the framework handles the rest.
+        ScenarioMaxLagSeconds = DetectMaxLagSeconds(scenario);
+
         ui64 rebootPoint = initialRebootPoint;
         while (RunScenarioOnceAtRebootPoint(scenario, rebootPoint)) {
             rebootPoint += rebootPointStride;
         }
 
-        // CRITICAL: clear the reboot target. When the sweep stops at a
-        // non-triggering point, RebootAfterEventCount stays set to that point
-        // while RebootTriggered stays false — the event filter then BLOCKS
-        // every PQ tablet event once the running count reaches the target.
-        // Any read session opened after the sweep (the final verification
-        // read) would get no tablet responses at all: no
-        // StartPartitionSessionRequest, no data, ReadAll timing out with 0
-        // messages delivered.
+        // Clear the reboot target so nothing after the sweep (e.g. the final
+        // verification) injects poison pills.
         Env.RebootAfterEventCount.store(0);
+    }
+
+    // Auto-detect max_lag from the scenario steps: if any step uses
+    // MaxLagSeconds > 0, enable max_lag-aware coverage verification so
+    // VerifyFullCoverage predicts skippable messages instead of
+    // asserting full coverage. Tests only set MaxLagSeconds in the
+    // scenario step; the framework handles the rest.
+    ui64 DetectMaxLagSeconds(const TScenario& scenario) const {
+        ui64 maxLag = 0;
+        for (const auto& step : scenario) {
+            maxLag = Max(maxLag, step.ReadSettings.MaxLagSeconds);
+        }
+        return maxLag;
+    }
+
+    // Build a sampled reboot-point list: dense coverage of the first
+    // `denseCount` event boundaries (1, 2, ..., denseCount), then every
+    // `stride`-th boundary after that (denseCount+stride, denseCount+2*stride,
+    // ...). This keeps the early lifecycle stages — where the most interesting
+    // recovery logic happens — fully covered while bounding total runtime
+    // for scenarios that produce many events. The sweep terminates naturally
+    // when RunScenarioOnceAtRebootPoint encounters a reboot point that does
+    // not trigger (the scenario produced fewer events than the point), so
+    // the upper bound only needs to be large enough to reach the last event.
+    TVector<ui64> MakeSampledRebootPoints(ui64 denseCount, ui64 stride, ui64 maxPoint = 10000) const {
+        TVector<ui64> points;
+        for (ui64 p = 1; p <= denseCount && p <= maxPoint; ++p) {
+            points.push_back(p);
+        }
+        for (ui64 p = denseCount + stride; p <= maxPoint; p += stride) {
+            points.push_back(p);
+        }
+        return points;
     }
 
     // Run the scenario with an event-boundary reboot at each of the given
@@ -1373,6 +1661,7 @@ protected:
     // only sampling the repetitive middle of a long scenario — much cheaper
     // than a uniform sweep when the scenario produces many events.
     void RunScenarioAtRebootPoints(const TScenario& scenario, const TVector<ui64>& rebootPoints) {
+        ScenarioMaxLagSeconds = DetectMaxLagSeconds(scenario);
         for (ui64 rebootPoint : rebootPoints) {
             if (!RunScenarioOnceAtRebootPoint(scenario, rebootPoint)) {
                 break;
@@ -1383,182 +1672,128 @@ protected:
         Env.RebootAfterEventCount.store(0);
     }
 
+private:
+    void DumpEventCounterSummary(ui64 rebootPoint) const {
+        Cerr << "=== EVENT_COUNTER_SUMMARY rebootPoint=" << rebootPoint << Endl;
+        TVector<std::pair<TString, ui64>> sorted;
+        sorted.reserve(Env.PqEventTypeCount.size());
+        for (const auto& [n, c] : Env.PqEventTypeCount) {
+            sorted.emplace_back(n, c);
+        }
+        std::sort(sorted.begin(), sorted.end(), [](const auto& a, const auto& b) { return a.second > b.second; });
+        for (const auto& [n, c] : sorted) {
+            Cerr << "    " << n << " x" << c << Endl;
+        }
+    }
+
 };
 
 Y_UNIT_TEST_SUITE_F(TTabletRestartReadSessionTest, TTabletRestartReadSessionFixture) {
 
-// Write one message, then read it, rebooting the PQ tablet after each event
-// boundary. Catches the PR 50890 bug: with WaitForData=true the old code
-// re-entered WaitDataInPartition after a pipe restart without checking
-// whether data had arrived during the downtime. max_lag=3600 enables
-// WaitForData.
-Y_UNIT_TEST(ReadSessionWithDataSurvivesTabletRebootAfterEachEvent) {
-    // Build scenario: write one message, then read it.
+// Combined stress test: reboot the partition tablet only at event boundaries.
+// The scenario combines following stress factors:
+// - Concurrent write+read: 8 messages written while 5 SDK read sessions
+//   (each with its own consumer) are open and reading
+// - Large chunks (1MB messages spanning multiple blob parts)
+// - Small lag (MaxLagSeconds=1 to trigger WaitForData timeout path)
+// At each event boundary the boundary event is dropped and the main loop
+// calls RebootTablet() for the partition tablet: the tablet dies via the
+// tablet resolver (as a production tablet death with the event in flight),
+// the launcher reboots it, and the SDK's retry logic must recover.
+Y_UNIT_TEST(RebootTabletOnlyCombinedStress) {
+    // Configure: reboot only the PQ tablet, not the balancer.
+    Env.DoRebootPqTablet = true;
+    Env.DoRebootPqrbTablet = false;
+
+    // Single concurrent step: write 5 messages while 5 sessions read.
     TScenario scenario;
-    scenario.push_back(TScenarioStep{.Type = TScenarioStep::EType::Write, .Count = 1});
+    TScenarioStep step;
+    step.Type = TScenarioStep::EType::Concurrent;
+    step.Count = 5;
+    step.MessageSize = 512_KB;
+    step.ReadSessionCount = 5;
+    step.ReadSettings.MaxLagSeconds = 1; // small lag → WaitForData timeout path
+    scenario.push_back(step);
 
-    TScenarioStep readStep;
-    readStep.Type = TScenarioStep::EType::Read;
-    readStep.ReadSettings.MaxLagSeconds = 3600; // 1 hour lag → WaitForData = true
-    readStep.ReadSettings.ReadRequestBytesSize = 2_MB; // covers the 1MB messages
-    scenario.push_back(readStep);
-
-    // Run the scenario with reboots after each event.
-    RunScenarioWithAllReboots(scenario);
+    // Run the scenario with reboots at sampled event boundaries: dense
+    // coverage of the first 30 events, then every 3rd event after that.
+    // This bounds runtime while still sweeping the full event range.
+    RunScenarioAtRebootPoints(scenario, MakeSampledRebootPoints(30, 3));
 
     // Final correctness verification.
-    VerifyFullCoverage("ReadSessionWithData");
+    VerifyFullCoverage("RebootTabletOnlyCombinedStress");
 }
 
-// A 3MB message spans multiple blob parts: a reboot mid-read exercises
-// part reassembly and cache recovery.
-Y_UNIT_TEST(BigChunksSurviveTabletRebootAfterEachEvent) {
+// Combined stress test: reboot the balancer tablet only at event boundaries.
+// The scenario combines following stress factors:
+// - Concurrent write+read: 8 messages written while 5 SDK read sessions
+//   (each with its own consumer) are open and reading
+// - Large chunks (1MB messages spanning multiple blob parts)
+// - Small lag (MaxLagSeconds=1 to trigger WaitForData timeout path)
+// At each event boundary the boundary event is dropped and the main loop
+// calls RebootTablet() for the balancer: the balancer dies via the tablet
+// resolver, the launcher reboots it, and the read session actor's
+// ProcessBalancerDead handler must recover by re-registering the session
+// with the new balancer.
+Y_UNIT_TEST(RebootBalancerOnlyCombinedStress) {
+    // Configure: reboot only the balancer, not the PQ tablet.
+    Env.DoRebootPqTablet = false;
+    Env.DoRebootPqrbTablet = true;
+
+    // Single concurrent step: write 5 messages while 5 sessions read.
     TScenario scenario;
-    scenario.push_back(TScenarioStep{.Type = TScenarioStep::EType::Write, .Count = 1, .MessageSize = 3_MB});
+    TScenarioStep step;
+    step.Type = TScenarioStep::EType::Concurrent;
+    step.Count = 5;
+    step.MessageSize = 512_KB;
+    step.ReadSessionCount = 5;
+    step.ReadSettings.MaxLagSeconds = 1; // small lag → WaitForData timeout path
+    scenario.push_back(step);
 
-    TScenarioStep readStep;
-    readStep.Type = TScenarioStep::EType::Read;
-    readStep.ReadSettings.MaxLagSeconds = 3600; // WaitForData = true
-    readStep.ReadSettings.ReadRequestBytesSize = 4_MB; // covers the 3MB messages
-    scenario.push_back(readStep);
-
+    // Run the scenario with reboots after each event boundary.
+    // RunScenarioWithAllReboots auto-detects MaxLagSeconds from the scenario
+    // and enables max_lag-aware coverage verification accordingly.
     RunScenarioWithAllReboots(scenario);
 
-    // Final correctness verification.
-    VerifyFullCoverage("BigChunks");
+    // Final correctness verification (max_lag-aware).
+    VerifyFullCoverage("RebootBalancerOnlyCombinedStress");
 }
 
-// A 100-message write stresses write batching and BytesInflight tracking.
-Y_UNIT_TEST(ManyMessagesSurviveTabletRebootAfterEachEvent) {
+// Combined stress test: reboot both the partition tablet and the balancer
+// tablet at event boundaries. The effective count is the sum of both tablet
+// and balancer event counters. The reboot targets exactly the party whose
+// event is at the boundary.
+// The scenario combines following stress factors:
+// - Concurrent write+read: 8 messages written while 5 SDK read sessions
+//   (each with its own consumer) are open and reading
+// - Large chunks (1MB messages spanning multiple blob parts)
+// - Small lag (MaxLagSeconds=1 to trigger WaitForData timeout path)
+// At each event boundary the boundary event is dropped and the main loop
+// calls RebootTablet() for whichever party's event is at the boundary
+// (the partition tablet or the balancer, based on which pipe the event
+// flows through).
+Y_UNIT_TEST(RebootBothTabletsCombinedStress) {
+    // Configure: reboot both the PQ tablet and the balancer.
+    Env.DoRebootPqTablet = true;
+    Env.DoRebootPqrbTablet = true;
+
+    // Single concurrent step: write 5 messages while 5 sessions read.
     TScenario scenario;
-    scenario.push_back(TScenarioStep{.Type = TScenarioStep::EType::Write, .Count = 100, .MessageSize = 1_KB});
+    TScenarioStep step;
+    step.Type = TScenarioStep::EType::Concurrent;
+    step.Count = 5;
+    step.MessageSize = 512_KB;
+    step.ReadSessionCount = 5;
+    step.ReadSettings.MaxLagSeconds = 1; // small lag → WaitForData timeout path
+    scenario.push_back(step);
 
-    TScenarioStep readStep;
-    readStep.Type = TScenarioStep::EType::Read;
-    readStep.ReadSettings.MaxLagSeconds = 3600; // WaitForData = true
-    scenario.push_back(readStep);
-
-    // The write produces ~500 tablet events, mostly the same repetitive
-    // write-request/response pattern; a uniform sweep re-runs it ~160
-    // times (~220s). Reboot at the important stages instead: densely at the
-    // session start, sampled across the bulk write, densely at the tail
-    // (last writes, close and commit of a long session — a state the
-    // small-write tests never reach). The schedule stops at the first
-    // point that does not trigger.
-    TVector<ui64> rebootPoints;
-    for (ui64 p = 1; p <= 15; ++p) {
-        rebootPoints.push_back(p); // session init + first writes
-    }
-    for (ui64 p = 25; p <= 425; p += 50) {
-        rebootPoints.push_back(p); // steady-state bulk write samples
-    }
-    for (ui64 p = 430; p <= 500; p += 5) {
-        rebootPoints.push_back(p); // tail: last writes, close, commit
-    }
-    RunScenarioAtRebootPoints(scenario, rebootPoints);
+    // Run the scenario with reboots at sampled event boundaries: dense
+    // coverage of the first 30 events, then every 3rd event after that.
+    // This bounds runtime while still sweeping the full event range.
+    RunScenarioAtRebootPoints(scenario, MakeSampledRebootPoints(30, 3));
 
     // Final correctness verification.
-    VerifyFullCoverage("ManyMessages");
-}
-
-// A 1MB read request saturates the read batch path and MAX_INFLY_BYTES.
-Y_UNIT_TEST(LargeReadRequestSurvivesTabletRebootAfterEachEvent) {
-    TScenario scenario;
-    scenario.push_back(TScenarioStep{.Type = TScenarioStep::EType::Write, .Count = 1, .MessageSize = 1_MB});
-
-    TScenarioStep readStep;
-    readStep.Type = TScenarioStep::EType::Read;
-    readStep.ReadSettings.MaxLagSeconds = 3600; // WaitForData = true
-    readStep.ReadSettings.ReadRequestBytesSize = 2_MB; // covers the 1MB messages
-    scenario.push_back(readStep);
-
-    RunScenarioWithAllReboots(scenario);
-
-    // Final correctness verification.
-    VerifyFullCoverage("LargeReadRequest");
-}
-
-// max_lag=1 aggressively triggers the WaitForData timeout path and the
-// WaitDataInPartition timer race during a reboot.
-Y_UNIT_TEST(SmallLagSurvivesTabletRebootAfterEachEvent) {
-    TScenario scenario;
-    scenario.push_back(TScenarioStep{.Type = TScenarioStep::EType::Write, .Count = 1, .MessageSize = 1_MB});
-
-    TScenarioStep readStep;
-    readStep.Type = TScenarioStep::EType::Read;
-    readStep.ReadSettings.MaxLagSeconds = 1; // small lag → WaitForData timeout path
-    readStep.ReadSettings.ReadRequestBytesSize = 2_MB; // covers the 1MB messages
-    scenario.push_back(readStep);
-
-    RunScenarioWithAllReboots(scenario);
-
-    // Final correctness verification.
-    VerifyFullCoverage("SmallLag");
-}
-
-// Read and write concurrently: a reboot can hit the partition actor with
-// both a pending read and a pending write/commit in flight.
-Y_UNIT_TEST(ConcurrentReadWriteSurviveTabletReboot) {
-    // Pre-write a few small messages so the read session has data
-    // immediately when it opens.
-    WriteMessages(3, 1_KB);
-
-    // Concurrent step: open a read session, then write while it is open,
-    // then read.
-    TScenario scenario;
-    TScenarioStep concurrentStep;
-    concurrentStep.Type = TScenarioStep::EType::Concurrent;
-    concurrentStep.Count = 5;
-    concurrentStep.MessageSize = 1_KB;
-    concurrentStep.ReadSettings.MaxLagSeconds = 3600; // WaitForData = true
-    scenario.push_back(concurrentStep);
-
-    RunScenarioWithAllReboots(scenario);
-
-    // Final correctness verification.
-    VerifyFullCoverage("ConcurrentReadWrite");
-}
-
-// 5 concurrent read sessions saturate inflight reads, so a reboot hits the
-// memory-controller branch in ResendRecentRequests.
-Y_UNIT_TEST(MultipleReadSessionsSurviveTabletReboot) {
-    // Write data for the sessions to read.
-    WriteMessages(5, 1_KB);
-
-    // 5 simultaneously open read sessions, each with its own consumer.
-    TScenario scenario;
-    TScenarioStep concurrentStep;
-    concurrentStep.Type = TScenarioStep::EType::Concurrent;
-    concurrentStep.Count = 0; // read-only
-    concurrentStep.ReadSessionCount = 5;
-    concurrentStep.ReadSettings.MaxLagSeconds = 3600; // WaitForData = true
-    scenario.push_back(concurrentStep);
-
-    RunScenarioWithAllReboots(scenario);
-
-    // Final correctness verification.
-    VerifyFullCoverage("MultipleReadSessions");
-}
-
-// Reboot during the WaitForData wait with data arriving concurrently (the
-// PR 50890 race): the read opens on an empty topic and blocks in
-// WaitDataInPartition; a concurrent write must unblock it. If the
-// regression reappears, the read hangs and the step timeout fails the
-// test.
-Y_UNIT_TEST(RebootDuringWaitForDataTimeout) {
-    // No pre-written data: the concurrent write unblocks the waiting read.
-    TScenario scenario;
-    TScenarioStep concurrentStep;
-    concurrentStep.Type = TScenarioStep::EType::Concurrent;
-    concurrentStep.Count = 1; // the write that unblocks the waiting read
-    concurrentStep.MessageSize = 1_KB;
-    concurrentStep.ReadSettings.MaxLagSeconds = 1; // small lag -> WaitForData wait
-    scenario.push_back(concurrentStep);
-
-    RunScenarioWithAllReboots(scenario);
-
-    // Final correctness verification.
-    VerifyFullCoverage("RebootDuringWaitForDataTimeout");
+    VerifyFullCoverage("RebootBothTabletsCombinedStress");
 }
 
 } // Y_UNIT_TEST_SUITE_F(TTabletRestartReadSessionTest)

@@ -2972,7 +2972,7 @@ message TColumnShardConfig {
         // Cuts on the portion verdict and only counts disagreement, so the range read carries no risk.
         CUT_HISTORY_PROOF_COMPARE = 2;
     }
-    optional ECutHistoryProofSource CutHistoryProofSource = 79 [default = CUT_HISTORY_PROOF_PORTIONS];
+    optional ECutHistoryProofSource CutHistoryProofSource = 80 [default = CUT_HISTORY_PROOF_PORTIONS];
     optional uint64 NodePortionsCountLimit = 73;
 
     message TFlowControlConfig {

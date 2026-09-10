@@ -160,6 +160,7 @@ private:
 
     // A blob id sorts channel before generation, so the request already isolates the channel; this re-checks it anyway.
     bool IsLiveBlobOfProbe(const TEvBlobStorage::TEvRangeResult::TResponse& resp, const TRangeProbe& probe) const {
+        // DoNotKeep is this tablet's own delete declaration coming back, so it cannot pin the window.
         if (resp.DoNotKeep && !resp.Keep) {
             return false;
         }
@@ -302,7 +303,7 @@ void THistoryCutterWrapper::OnRangeProbeComplete(
     if (round != SweepRound) {
         return;
     }
-    if (GetProofSource() == EProofSource::BsRange) {
+    if (RoundProofSource == EProofSource::BsRange) {
         OnBatchComplete(disproved, /*exhausted=*/true, ctx);
         return;
     }
@@ -515,6 +516,58 @@ void THistoryCutterWrapper::OnBootComplete(const THashMap<ui64, std::vector<TUni
     }
 }
 
+bool THistoryCutterWrapper::TryNominateAtBoot(const TActorContext& ctx) {
+    if (!IsEnabled() || SweepInFlight) {
+        return false;
+    }
+    const auto manager = Manager.lock();
+    if (!manager) {
+        return false;
+    }
+    const ui32 channelCount = static_cast<ui32>(TabletInfo->Channels.size());
+    TVector<TEntryKey> batch;
+    ui64 deferred = 0;
+    for (ui32 ch = TGlobal::FirstDataChannel; ch < channelCount; ++ch) {
+        const auto& hist = TabletInfo->Channels[ch].History;
+        for (int i = 0; i < static_cast<int>(hist.size()) - 1; ++i) {
+            const TEntryKey key{ ch, hist[i].FromGeneration };
+            const ui32 nextGen = GetNextFromGeneration(key);
+            if (!nextGen || !SeenGroupsCheckPasses(key)) {
+                continue;
+            }
+            // A delete still owed to this range would be stranded by the cut, so defer to a later boot.
+            if (manager->HasPendingDeletesInRange(ch, key.FromGeneration, nextGen)) {
+                ++deferred;
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "cut_history_boot_deferred")("channel", ch)(
+                    "from_generation", key.FromGeneration)("next_from_generation", nextGen);
+                continue;
+            }
+            batch.push_back(key);
+        }
+    }
+    Signals.OnBootProbeDeferred(deferred);
+    if (batch.empty()) {
+        return false;
+    }
+    Signals.OnBootProbeNominated(batch.size());
+    for (const auto& key : batch) {
+        CutState[key] = ECutState::Verifying;
+        NYDBTest::TControllers::GetColumnShardController()->OnHistoryEntryNominated(key.Channel, key.FromGeneration);
+    }
+    SweepInFlight = true;
+    ++SweepRound;
+    RangeProbeIssued = false;
+    RoundProofSource = EProofSource::BsRange;
+    PortionVerdict.reset();
+    RangeVerdict.reset();
+    Signals.OnNomination();
+    PublishLevels(batch.size());
+    SweepSurvivors = batch;
+    SweepCandidates = std::make_shared<const TVector<TEntryKey>>(std::move(batch));
+    ctx.Send(TabletActorId, new NColumnShard::TEvPrivate::TEvStartCutHistorySweep());
+    return true;
+}
+
 bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
     if (!IsEnabled()) {
         return false;
@@ -588,6 +641,7 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
     SweepInFlight = true;
     ++SweepRound;
     RangeProbeIssued = false;
+    RoundProofSource = GetProofSource();
     // A verdict left over from a round whose counterpart never arrived must not be compared against this one.
     PortionVerdict.reset();
     RangeVerdict.reset();
@@ -641,7 +695,7 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
     SweepInFlight = false;
     Signals.OnSweepCompleted();
     PublishLevels(0);
-    if (GetProofSource() == EProofSource::Compare && SweepCandidates) {
+    if (RoundProofSource == EProofSource::Compare && SweepCandidates) {
         const THashSet<TEntryKey> survivors(SweepSurvivors.begin(), SweepSurvivors.end());
         THashSet<TEntryKey> disprovedByPortions;
         for (const auto& key : *SweepCandidates) {

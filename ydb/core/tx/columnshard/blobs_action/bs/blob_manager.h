@@ -249,6 +249,9 @@ public:
     // Scans BlobsToKeep, BlobsToDelete and BlobsToDeleteDelayed.
     bool HasNoBlobsInRange(ui32 channel, ui32 fromGen, ui32 nextFromGen) const;
 
+    // Deletes still owed to a range: cutting it would strand them, so the boot proof must refuse and retry.
+    bool HasPendingDeletesInRange(ui32 channel, ui32 fromGen, ui32 nextFromGen) const;
+
     // Shared by regular GC and CutHistory barriers alike; pass PerGenerationCounterStepSize().
     static ui32 AllocateGCPerGenerationCounter(ui32 step);
 

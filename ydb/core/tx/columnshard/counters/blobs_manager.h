@@ -58,6 +58,9 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr RangeProbeFailures;
     NMonitoring::TDynamicCounters::TCounterPtr RangeOnlyDisproved;
     NMonitoring::TDynamicCounters::TCounterPtr PortionsOnlyDisproved;
+    NMonitoring::TDynamicCounters::TCounterPtr BootProbesDeferred;
+    NMonitoring::TDynamicCounters::TCounterPtr BootProbesNominated;
+    NMonitoring::TDynamicCounters::TCounterPtr BootEntriesDeferred;
 
 public:
     THistoryCutterCounters(const TCommonCountersOwner& sameAs, const TString& componentName);
@@ -94,6 +97,16 @@ public:
     void OnRangeProbeDisagreement(const ui64 rangeOnly, const ui64 portionsOnly) const {
         RangeOnlyDisproved->Add(rangeOnly);
         PortionsOnlyDisproved->Add(portionsOnly);
+    }
+
+    // Decommission is stuck on this entry until a later boot finds the range clean.
+    void OnBootProbeDeferred(const ui64 count) const {
+        BootProbesDeferred->Add(count);
+        BootEntriesDeferred->Set(count);
+    }
+
+    void OnBootProbeNominated(const ui64 count) const {
+        BootProbesNominated->Add(count);
     }
 };
 

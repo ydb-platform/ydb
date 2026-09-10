@@ -600,6 +600,18 @@ bool TBlobManager::HasNoBlobsInRange(const ui32 channel, const ui32 fromGen, con
            BlobsToKeep.HasNoBlobsInRange(channel, fromGen, nextFromGen);
 }
 
+bool TBlobManager::HasPendingDeletesInRange(const ui32 channel, const ui32 fromGen, const ui32 nextFromGen) const {
+    // A DoNotKeep still owed to this range can never be delivered once the entry is cut: the group stops resolving.
+    if (GCTaskInFlight) {
+        return true;
+    }
+    const auto inRange = [&](const auto& blob) {
+        const TLogoBlobID& logoBlobId = blob.first.GetLogoBlobId();
+        return logoBlobId.Channel() == channel && logoBlobId.Generation() >= fromGen && logoBlobId.Generation() < nextFromGen;
+    };
+    return AnyOf(BlobsToDelete, inRange) || AnyOf(BlobsToDeleteDelayed, inRange);
+}
+
 void TBlobManager::OnBlobFree(const TUnifiedBlobId& blobId) {
     YDB_LOG_INFO("",
         {"event", "blob_free"},

@@ -94,8 +94,12 @@ private:
 }   // anonymous namespace
 
 void TColumnShard::SetupCutHistory() {
+    using EProofSource = NOlap::NBlobOperations::NBlobStorage::EProofSource;
     if (CutHistoryCutter) {
-        CutHistoryCutter->TryNominate(NActors::TActivationContext::AsActorContext());
+        // BsRange proves at boot from the tablet's own history; the cadence exists only for the portion scan.
+        if (THistoryCutterWrapper::GetProofSource() != EProofSource::BsRange) {
+            CutHistoryCutter->TryNominate(NActors::TActivationContext::AsActorContext());
+        }
         return;
     }
     auto op = std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(
@@ -112,6 +116,9 @@ void TColumnShard::SetupCutHistory() {
     CutHistoryCutter = cutter;
     // Boot starts with empty counters, so tier-1 can only undercount: the sweep disproves or the channel poisons.
     cutter->OnBootComplete({});
+    if (THistoryCutterWrapper::GetProofSource() == EProofSource::BsRange) {
+        cutter->TryNominateAtBoot(NActors::TActivationContext::AsActorContext());
+    }
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, const TActorContext& ctx) {
@@ -123,7 +130,7 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, con
     }
 
     using EProofSource = NOlap::NBlobOperations::NBlobStorage::EProofSource;
-    const auto proofSource = THistoryCutterWrapper::GetProofSource();
+    const auto proofSource = CutHistoryCutter->GetRoundProofSource();
     if (proofSource != EProofSource::Portions && CutHistoryCutter->TryIssueRangeProbe()) {
         auto probes = CutHistoryCutter->BuildRangeProbes();
         ctx.Register(NOlap::NBlobOperations::NBlobStorage::CreateCutHistoryRangeProbeActor(

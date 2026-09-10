@@ -89,6 +89,9 @@ public:
 
     bool TryNominate(const TActorContext& ctx);
 
+    // Boot proof: nominate every entry with a successor at once, no cadence and no portion scan.
+    bool TryNominateAtBoot(const TActorContext& ctx);
+
     std::shared_ptr<const TVector<TEntryKey>> GetSweepCandidates() const {
         static const auto empty = std::make_shared<const TVector<TEntryKey>>();
         return SweepCandidates ? SweepCandidates : empty;
@@ -122,6 +125,8 @@ public:
 protected:
     void StartSweepForTest(TVector<TEntryKey>&& candidates) {
         SweepInFlight = true;
+        // Same latch as the real round opener, so tests exercise the production decision path.
+        RoundProofSource = GetProofSource();
         SweepSurvivors = candidates;
         for (const auto& key : SweepSurvivors) {
             CutState[key] = ECutState::Verifying;
@@ -170,6 +175,11 @@ public:
     // True once per sweep, so a re-entrant TEvStartCutHistorySweep cannot issue a second set of probes.
     bool TryIssueRangeProbe() {
         return !std::exchange(RangeProbeIssued, true);
+    }
+
+    // The source this round opened with; every decision in the round must use it, not the live knob.
+    EProofSource GetRoundProofSource() const {
+        return RoundProofSource;
     }
 
     // Drives the barrier decision in BsRange mode; in Compare mode it only records the verdict for comparison.
@@ -255,6 +265,8 @@ private:
 
     ui64 SweepRound = 0;
     bool RangeProbeIssued = false;
+    // Latched at round open: a knob flip mid-round would otherwise change how the round decides.
+    EProofSource RoundProofSource = EProofSource::Portions;
     std::optional<THashSet<TEntryKey>> PortionVerdict;
     std::optional<THashSet<TEntryKey>> RangeVerdict;
 };

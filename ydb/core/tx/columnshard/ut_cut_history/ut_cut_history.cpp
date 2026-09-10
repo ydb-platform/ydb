@@ -897,6 +897,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
     }
 
     // A blob already released by GC is not evidence that the range is still occupied.
+    // A DoNotKeep blob is this tablet's own garbage declaration coming back, so it cannot pin the window.
     Y_UNIT_TEST(RangeProbeIgnoresCollectedGarbage) {
         TRangeProbeEnv env;
         env.Run({ MakeResponse(MakeBlob(TRangeProbeEnv::TabletId, TRangeProbeEnv::DataChannel, 3), /*keep=*/false, /*doNotKeep=*/true) });
@@ -934,6 +935,57 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT(env.Cutter().GetCutStateForTest(env.Key) == ECutState::None);
         UNIT_ASSERT_C(!env.Runtime.GrabEdgeEvent<TEvBlobStorage::TEvCollectGarbage>(env.EdgeBs, TDuration::Seconds(1)),
             "a disproved entry must not reach the barrier");
+    }
+
+    // A Compare round cuts on the portion verdict, so a knob flip mid-round must not resolve it early.
+    Y_UNIT_TEST(ProofSourceLatchedForTheRound) {
+        TRangeProbeEnv env;
+        auto& csConfig = env.Runtime.GetAppData().ColumnShardConfig;
+        csConfig.SetCutHistoryProofSource(NKikimrConfig::TColumnShardConfig::CUT_HISTORY_PROOF_COMPARE);
+        env.Cutter().StartSweepForTest({ env.Key });
+        UNIT_ASSERT(env.Cutter().IsSweepInFlight());
+
+        csConfig.SetCutHistoryProofSource(NKikimrConfig::TColumnShardConfig::CUT_HISTORY_PROOF_BS_RANGE);
+
+        env.RunInActor([&](const NActors::TActorContext& ctx) {
+            env.Cutter().OnRangeProbeComplete(env.Cutter().GetSweepRound(), {}, /*failures=*/0, ctx);
+        });
+
+        UNIT_ASSERT_C(env.Cutter().IsSweepInFlight(), "a Compare round must still wait for the portion verdict after the knob flips");
+        UNIT_ASSERT_C(
+            env.Cutter().GetCutStateForTest(env.Key) == ECutState::Verifying, "the range verdict alone may not resolve a Compare round");
+    }
+
+    // A delete owed to the range would be stranded by the cut, so the boot proof defers that entry.
+    Y_UNIT_TEST(BootProbeDefersEntryWithPendingDeletes) {
+        TRangeProbeEnv env;
+        auto& csConfig = env.Runtime.GetAppData().ColumnShardConfig;
+        csConfig.SetCutHistoryProofSource(NKikimrConfig::TColumnShardConfig::CUT_HISTORY_PROOF_BS_RANGE);
+
+        bool nominated = true;
+        env.RunInActor([&](const NActors::TActorContext& ctx) {
+            env.Env.Bm->DeleteBlobOnComplete(NOlap::TTabletId(TRangeProbeEnv::TabletId),
+                MakeUnifiedBlob(MakeBlob(TRangeProbeEnv::TabletId, TRangeProbeEnv::DataChannel, TRangeProbeEnv::OldFromGen + 1)));
+            nominated = env.Cutter().TryNominateAtBoot(ctx);
+        });
+        UNIT_ASSERT_C(!nominated, "an entry with a pending delete in range must not be nominated at boot");
+        UNIT_ASSERT_C(env.Cutter().GetCutStateForTest(env.Key) == ECutState::None, "the entry stays untouched for the next boot");
+        UNIT_ASSERT_C(!env.Cutter().IsSweepInFlight(), "nothing may be in flight when every candidate is deferred");
+    }
+
+    // With the range clean the same boot pass nominates the entry without any cadence or portion scan.
+    Y_UNIT_TEST(BootProbeNominatesCleanEntry) {
+        TRangeProbeEnv env;
+        auto& csConfig = env.Runtime.GetAppData().ColumnShardConfig;
+        csConfig.SetCutHistoryProofSource(NKikimrConfig::TColumnShardConfig::CUT_HISTORY_PROOF_BS_RANGE);
+
+        bool nominated = false;
+        env.RunInActor([&](const NActors::TActorContext& ctx) {
+            nominated = env.Cutter().TryNominateAtBoot(ctx);
+        });
+        UNIT_ASSERT_C(nominated, "a clean range must be nominated straight from boot");
+        UNIT_ASSERT_C(env.Cutter().GetCutStateForTest(env.Key) == ECutState::Verifying, "the entry enters the round");
+        UNIT_ASSERT(env.Cutter().IsSweepInFlight());
     }
 
 }   // TCutHistoryCutterCounters

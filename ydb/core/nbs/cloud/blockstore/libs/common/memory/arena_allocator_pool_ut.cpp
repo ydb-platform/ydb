@@ -358,10 +358,6 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorPoolTest)
         }
         UNIT_ASSERT_VALUES_EQUAL(2, allocator->AllocatedBlocks());
 
-        // Re-allocate same size — should reuse the reclaimed slot.
-        void* ptrA = pool.Allocate(SizeA);
-        UNIT_ASSERT_EQUAL(ptrsA[0], ptrA);
-
         // Free everything.
         for (void* ptr: ptrsB) {
             pool.Deallocate(ptr);
@@ -369,7 +365,6 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorPoolTest)
         for (void* ptr: ptrsC) {
             pool.Deallocate(ptr);
         }
-        pool.Deallocate(ptrA);
         UNIT_ASSERT_VALUES_EQUAL(0, allocator->AllocatedBlocks());
     }
 

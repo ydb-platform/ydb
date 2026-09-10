@@ -2,10 +2,10 @@
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle_config.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/format.h>
 
-#include <util/generic/size_literals.h>
 #include <util/random/random.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
@@ -21,21 +21,6 @@ constexpr TDuration MaxReconnectDelay = TDuration::Seconds(10);
 constexpr TDuration FlushRequestCooldownPenalty = TDuration::MilliSeconds(10);
 
 ////////////////////////////////////////////////////////////////////////////////
-
-TDuration GetFromConfig(ui64 milliseconds, TDuration defaultValue)
-{
-    return milliseconds ? TDuration::MilliSeconds(milliseconds) : defaultValue;
-}
-
-ui32 GetFromConfig(ui32 value, ui32 defaultValue)
-{
-    return value ? value : defaultValue;
-}
-
-ui64 GetFromConfig(ui64 value, ui64 defaultValue)
-{
-    return value ? value : defaultValue;
-}
 
 EHostState HealthToState(EHostHealth health)
 {
@@ -82,6 +67,7 @@ EHostHealth ToPersistentHealth(const EHostHealth health)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+<<<<<<< HEAD
 class TOracleConfig
 {
 public:
@@ -163,6 +149,8 @@ TOracleHostStat::TOracleHostStat(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+=======
+>>>>>>> de632e86bb4 (NBS-7513: Add return-to-online delay in TOracle (#52538))
 TOracle::TOracle(
     TStorageConfigPtr storageConfig,
     IHostStateController* hostStateController)
@@ -188,6 +176,7 @@ TOracle::TOracle(
           TTimePredictor(
               OracleConfig->GetTimePredictionHistorySize(),
               OracleConfig->GetTimePredictionNthFromEnd()))
+    , HealthPolicy(CreateDefaultHostHealthPolicy(OracleConfig))
 {
     HostsHealths.resize(HostStates.size());
     for (auto& healths: HostsHealths) {
@@ -211,6 +200,7 @@ void TOracle::Think(TInstant now)
     for (size_t i = 0; i < HostStatistics.size(); ++i) {
         auto errorsInfo = HostStatistics[i].GetErrorsInfo(now);
 
+<<<<<<< HEAD
         const bool hasSufferingSymptom =
             (errorsInfo.ConsecutiveErrorCount != 0);
         const bool hasTemporaryOfflineSymptom =
@@ -237,6 +227,12 @@ void TOracle::Think(TInstant now)
         } else {
             newHostsHealths[i] = EHostHealth::Online;
         }
+=======
+        newHostsHealths[i] = HealthPolicy->GetNewHealth(
+            HostsHealths[i],
+            errorsInfo,
+            HostStates[i].UsedPBuffers.Size);
+>>>>>>> de632e86bb4 (NBS-7513: Add return-to-online delay in TOracle (#52538))
     }
 
     for (size_t i = 0; i < newHostsHealths.size(); ++i) {

@@ -126,6 +126,7 @@ def _profile_schema(benchmark):
                     "properties": {
                         "use-shared-threads": {"type": "boolean", "default": False},
                         "use-united-pool": {"type": "boolean", "default": False},
+                        "use-ring-queue": {"type": "boolean", "default": True},
                         **{
                             role: {
                                 "type": "object",
@@ -565,11 +566,11 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
     actor_system = _mapping(
         value.get("actor-system"),
         location + ".actor-system",
-        ("use-shared-threads", "use-united-pool", "static-nodes", "dynamic-nodes"),
+        ("use-shared-threads", "use-united-pool", "use-ring-queue", "static-nodes", "dynamic-nodes"),
     )
     actor_system_config = {
-        name.replace("-", "_"): _boolean(actor_system.get(name, False), location + ".actor-system." + name)
-        for name in ("use-shared-threads", "use-united-pool")
+        name.replace("-", "_"): _boolean(actor_system.get(name, default), location + ".actor-system." + name)
+        for name, default in (("use-shared-threads", False), ("use-united-pool", False), ("use-ring-queue", True))
     }
     for role in ("static-nodes", "dynamic-nodes"):
         if role in actor_system:

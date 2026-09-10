@@ -1103,7 +1103,7 @@ class YdbBenchTest(unittest.TestCase):
             local-ydb:
               geometry-best:
                 workload: {type: kv, operation: upsert}
-                actor-system: {use-shared-threads: true, use-united-pool: true}
+                actor-system: {use-shared-threads: true, use-united-pool: true, use-ring-queue: false}
                 geometry: {preset: storage, static-nodes: 1, dynamic-nodes: 1, max-dynamic-nodes: 2}
                 load: {parameter: threads, values: [1]}
                 measurement: {warmup: 0, duration: 1, repetitions: 1, verification-repetitions: 2}
@@ -1138,8 +1138,14 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(manifest["verification"]["dynamic_nodes"], 1)
         self.assertEqual(self.last_local_ydb_cluster_constructor.call_count, 2)
         for call in self.last_local_ydb_cluster_constructor.call_args_list:
-            self.assertEqual(call.kwargs["actor_system"], {"use_shared_threads": True, "use_united_pool": True})
-        self.assertEqual(manifest["parameters"]["actor_system"], {"use_shared_threads": True, "use_united_pool": True})
+            self.assertEqual(
+                call.kwargs["actor_system"],
+                {"use_shared_threads": True, "use_united_pool": True, "use_ring_queue": False},
+            )
+        self.assertEqual(
+            manifest["parameters"]["actor_system"],
+            {"use_shared_threads": True, "use_united_pool": True, "use_ring_queue": False},
+        )
         verification_cluster = self.last_local_ydb_cluster_constructor.call_args_list[1]
         self.assertEqual(verification_cluster.args[3], self.root / "geometry-best" / "verification-cluster")
         self.assertEqual(verification_cluster.args[4]["dynamic_nodes"], 1)
@@ -2266,17 +2272,30 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
             {
                 "use_shared_threads": False,
                 "use_united_pool": False,
+                "use_ring_queue": True,
             },
         )
         for shared in (False, True):
             for united in (False, True):
-                with self.subTest(shared=shared, united=united):
-                    profile["actor-system"] = {"use-shared-threads": shared, "use-united-pool": united}
-                    flags = load().parameters["local_ydb"]["actor_system"]
-                    self.assertEqual(flags, {"use_shared_threads": shared, "use_united_pool": united})
-                    cluster = local_ydb._cluster_config([{"ic_port": 19001}], 64, "host", flags)
-                    self.assertEqual(cluster["config"]["actor_system_config"], {"use_auto_config": True, **flags})
-        for key in ("use-shared-threads", "use-united-pool"):
+                for ring in (False, True):
+                    with self.subTest(shared=shared, united=united, ring=ring):
+                        profile["actor-system"] = {
+                            "use-shared-threads": shared,
+                            "use-united-pool": united,
+                            "use-ring-queue": ring,
+                        }
+                        flags = load().parameters["local_ydb"]["actor_system"]
+                        self.assertEqual(
+                            flags, {"use_shared_threads": shared, "use_united_pool": united, "use_ring_queue": ring}
+                        )
+                        cluster = local_ydb._cluster_config([{"ic_port": 19001}], 64, "host", flags)
+                        self.assertEqual(cluster["config"]["actor_system_config"], {"use_auto_config": True, **flags})
+        self.assertTrue(
+            local_ydb._cluster_config([{"ic_port": 19001}], 64, "host")["config"]["actor_system_config"][
+                "use_ring_queue"
+            ]
+        )
+        for key in ("use-shared-threads", "use-united-pool", "use-ring-queue"):
             for value in (0, 1, "true", "false", None, [], {}):
                 with self.subTest(key=key, value=value):
                     profile["actor-system"] = {key: value}
@@ -2296,6 +2315,7 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
                 actor-system:
                   use-shared-threads: true
                   use-united-pool: false
+                  use-ring-queue: false
                   static-nodes: {cpu-count: 8}
                   dynamic-nodes: {cpu-count: 4}
         """))
@@ -2309,8 +2329,12 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
             const profile=editor.model.profiles[0], yaml=[];
             serializeLocalYdb(yaml,profile);
             const old={parameters:{}},current={parameters:profile.local_ydb};
+            const legacy=JSON.parse(JSON.stringify(profile)),legacyYaml=[];
+            delete legacy.local_ydb.actor_system.use_ring_queue;
+            serializeLocalYdb(legacyYaml,legacy);
             process.stdout.write(JSON.stringify({
               yaml:'local-ydb:\\n  flags:\\n'+yaml.join('\\n'),
+              legacyYaml:'local-ydb:\\n  flags:\\n'+legacyYaml.join('\\n'),
               defaults:defaultLocalYdb().actor_system,
               old:localComparisonConfig(old),current:localComparisonConfig(current)
             }));
@@ -2328,7 +2352,16 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
         self.assertEqual(
             load_config(self._config(result["yaml"])).runs[0].parameters["local_ydb"]["actor_system"], flags
         )
-        self.assertEqual(result["defaults"], {"use_shared_threads": False, "use_united_pool": False})
+        self.assertEqual(
+            result["defaults"], {"use_shared_threads": False, "use_united_pool": False, "use_ring_queue": True}
+        )
+        self.assertTrue(result["old"]["use_ring_queue"])
+        self.assertTrue(
+            load_config(self._config(result["legacyYaml"]))
+            .runs[0]
+            .parameters["local_ydb"]["actor_system"]["use_ring_queue"]
+        )
+        self.assertFalse(result["current"]["use_ring_queue"])
         self.assertFalse(result["old"]["use_shared_threads"])
         self.assertTrue(result["current"]["use_shared_threads"])
         self.assertFalse(result["current"]["use_united_pool"])
@@ -2869,6 +2902,55 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
         )
 
     @unittest.skipUnless(shutil.which("node"), "node is required for the local YDB profile panel test")
+    def test_local_ydb_finished_profile_does_not_reload_for_another_active_profile(self):
+        start = web._JS.index("async function mountLocalYdbProfile")
+        finish = web._JS.index("function parseLocalYdbProfileSelection", start)
+        script = (
+            """
+            const assert=require('node:assert/strict');
+            let refreshTimer=null, interval=null, timeout=null, renders=0, reloads=0, state='passed';
+            const enc=encodeURIComponent, displayError=error=>{throw error};
+            const api=async()=>({state});
+            const loadLocalYdbActivity=async()=>({events:[]});
+            const renderLocalYdbProfile=()=>{renders++};
+            const setInterval=callback=>{interval=callback;return 1};
+            const clearInterval=()=>{interval=null};
+            const setTimeout=callback=>{timeout=callback;return 2};
+            const renderRun=()=>{reloads++};
+        """
+            + web._JS[start:finish]
+            + """
+            (async()=>{
+              for(const terminal of ['passed','failed','cancelled']){
+                state=terminal;
+                await mountLocalYdbProfile({dataset:{}},'run','finished','running');
+                assert.equal(refreshTimer,null);
+                assert.equal(timeout,null);
+              }
+              state='preparing';
+              await mountLocalYdbProfile({dataset:{}},'run','active','running');
+              assert.ok(interval);
+              state='running';
+              await interval();
+              assert.equal(timeout,null);
+              state='passed';
+              await interval();
+              assert.equal(interval,null);
+              assert.ok(timeout);
+              const complete=timeout;
+              timeout=null;refreshTimer=null;
+              complete();
+              assert.equal(reloads,1);
+              await mountLocalYdbProfile({dataset:{}},'run','active','running');
+              assert.equal(timeout,null);
+              assert.equal(refreshTimer,null);
+              assert.equal(renders,7);
+            })().catch(error=>{console.error(error);process.exitCode=1});
+        """
+        )
+        subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True, text=True, timeout=10)
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the local YDB profile panel test")
     def test_local_ydb_profile_renders_separate_result_and_discovery_panels(self):
         schema_start = web._JS.index("function localLegacyResultSchema")
         schema_finish = web._JS.index("function localChart", schema_start)
@@ -3184,7 +3266,7 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
             const esc=value=>String(value??'');
             const localYdbGeometryKeys={static_nodes:'static-nodes',dynamic_nodes:'dynamic-nodes',max_dynamic_nodes:'max-dynamic-nodes',disk_size_gb:'disk-size-gb',storage_groups:'storage-groups'};
             const localYdbAffinityKeys={ydb_cli:'ydb-cli',static_nodes:'static-nodes',dynamic_nodes:'dynamic-nodes'};
-            const localYdbActorSystemKeys={use_shared_threads:'use-shared-threads',use_united_pool:'use-united-pool'};
+            const localYdbActorSystemKeys={use_shared_threads:'use-shared-threads',use_united_pool:'use-united-pool',use_ring_queue:'use-ring-queue'};
             const definition={type:'fake',operations:['run'],load_parameters:['rate'],options:[],
               slo_metrics:{p90:'latency_ms'},reports_errors:false,minimum_duration_seconds:1,
               maximum_total_seconds:3600};
@@ -4583,7 +4665,7 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
         self.assertEqual(start_process.call_args.kwargs["parent_death_wrapper"], self.root / "process_guard")
 
     def test_local_ydb_actor_system_config_is_used_by_static_dynamic_and_scaled_nodes(self):
-        flags = {"use_shared_threads": True, "use_united_pool": True}
+        flags = {"use_shared_threads": True, "use_united_pool": True, "use_ring_queue": False}
         cluster = local_ydb.LocalYdbCluster(
             self.root / "ydbd",
             self.root / "ydb",
@@ -7263,6 +7345,7 @@ class WebTest(unittest.TestCase):
         manifest["parameters"]["actor_system"] = {
             "use_shared_threads": True,
             "use_united_pool": False,
+            "use_ring_queue": False,
             "private": "not projected",
         }
         manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
@@ -7294,6 +7377,7 @@ class WebTest(unittest.TestCase):
                 {
                     "use_shared_threads": True,
                     "use_united_pool": False,
+                    "use_ring_queue": False,
                 },
             )
             with self.assertRaisesRegex(BenchmarkError, "between 1 and 20"):

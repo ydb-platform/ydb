@@ -148,7 +148,8 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             .ConsumerName("consumer")
             .AppendTopics(NYdb::NTopic::TTopicReadSettings()
                 .Path("/Root/topic")
-                .AppendPartitionIds(0));
+                .AppendPartitionIds(0)
+            );
 
         const auto reader = env.GetRuntime().Register(CreateRemoteTopicReader(ydbProxy, settings));
         env.SendAsync(reader, new TEvWorker::TEvHandshake());

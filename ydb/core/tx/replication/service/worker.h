@@ -77,9 +77,8 @@ struct TEvWorker {
     struct TEvReaderStarted: public TEventLocal<TEvReaderStarted, EvReaderStarted> {
         ui64 CommittedOffset;
 
-        explicit TEvReaderStarted(ui64 committedOffset)
-            : CommittedOffset(committedOffset)
-        {}
+        explicit TEvReaderStarted(ui64 committedOffset);
+        TString ToString() const override;
     };
 
     struct TEvData: public TEventLocal<TEvData, EvData> {

@@ -165,19 +165,19 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
             return Leave(TEvWorker::TEvGone::UNAVAILABLE);
         }
 
+        const auto offset = ev->Get()->Offset;
         if (CommitInFlight.Defined()) {
-            if (ev->Get()->Offset > *CommitInFlight
-                && (!PendingCommit || ev->Get()->Offset > *PendingCommit)) {
-                PendingCommit = ev->Get()->Offset;
+            if (offset > *CommitInFlight && (!PendingCommit || offset > *PendingCommit)) {
+                PendingCommit = offset;
             }
             YDB_LOG_DEBUG("Commit queued while another commit is in flight",
-                {"offset", ev->Get()->Offset},
+                {"offset", offset},
                 {"inFlightOffset", *CommitInFlight},
                 {"pendingOffset", PendingCommit.GetOrElse(*CommitInFlight)});
             return;
         }
 
-        StartCommit(ev->Get()->Offset);
+        StartCommit(offset);
     }
 
     void StartCommit(ui64 offset) {

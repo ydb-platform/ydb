@@ -1,4 +1,4 @@
-#include <ydb/core/fq/libs/actors/streaming_query_nodes_manager.h>
+#include <ydb/core/kqp/federated_query/actors/streaming_query_nodes_manager.h>
 #include <ydb/core/mind/tenant_node_enumeration.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
@@ -201,4 +201,3 @@ Y_UNIT_TEST(AbortIsSentOnlyOnce) {
 } // Y_UNIT_TEST_SUITE
 
 } // namespace NFq
-

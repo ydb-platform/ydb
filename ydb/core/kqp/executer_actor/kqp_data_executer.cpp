@@ -8,7 +8,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/client/minikql_compile/db_key_resolver.h>
 #include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
-#include <ydb/core/fq/libs/actors/streaming_query_nodes_manager.h>
+#include <ydb/core/kqp/federated_query/actors/streaming_query_nodes_manager.h>
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>

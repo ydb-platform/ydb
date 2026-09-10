@@ -11,7 +11,6 @@ SRCS(
     rate_limiter_resources.cpp
     result_writer.cpp
     run_actor.cpp
-    streaming_query_nodes_manager.cpp
     table_bindings_from_bindings.cpp
     task_get.cpp
     task_ping.cpp

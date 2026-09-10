@@ -1686,13 +1686,10 @@ private:
     void FillSource(const TDqSource& source, NKqpProto::TKqpPhyStage& stageProto, NKqpProto::TKqpSource* protoSource, bool allowSystemColumns,
         THashMap<TString, THashSet<TString>>& tablesMap, TExprContext& ctx)
     {
-        Cerr << "FillSource" << Endl;
         const TStringBuf dataSourceCategory = source.DataSource().Cast<TCoDataSource>().Category();
         if (IsIn({NYql::KikimrProviderName, NYql::YdbProviderName, NYql::KqpReadRangesSourceName, NYql::KqpFullTextSourceName, NYql::KqpSysViewSourceName}, dataSourceCategory)) {
-            Cerr << "FillSource dataSourceCategory " << dataSourceCategory << Endl;
             FillKqpSource(source, protoSource, allowSystemColumns, tablesMap);
         } else {
-            Cerr << "FillSource FillDqInput "  << Endl;
             FillDqInput(source.Ptr(), stageProto, protoSource, dataSourceCategory, ctx, true);
         }
     }

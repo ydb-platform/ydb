@@ -277,7 +277,6 @@ namespace NActors {
         NActors::NStructuredLog::TJsonWriter StructuredJsonWriter;
         NActors::NStructuredLog::TMetaWriter StructuredMetaWriter;
         NActors::NStructuredLog::TTextWriter StructuredTextWriter;
-        std::vector<NStructuredLog::ILogSinkSPtr> Sinks;
 
         void BecomeDefunct();
         void FlushLogBufferMessageEvent(TFlushLogBuffer::TPtr& ev, const NActors::TActorContext& ctx);

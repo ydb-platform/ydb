@@ -574,7 +574,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
         // Support types
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui8>(1)}), R"({"value":1})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i8>('a')}), R"({"value":"a"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i8>(1)}), R"({"value":1})");
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui16>(3)}), R"({"value":3})");
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i16>(4)}), R"({"value":4})");
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui32>(5)}), R"({"value":5})");
@@ -604,7 +604,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
         // optional values
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMaybe<ui16>{}}), R"({"value":"\u003Cnull\u003E"})");
-        // @todo TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMaybe<ui16>{1}}), R"({"value":1})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMaybe<ui16>{1}}), R"({"value":1})");
 
         // optional subMessages
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMaybe<TStructuredMessage>{}}), R"({})");

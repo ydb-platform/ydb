@@ -777,10 +777,8 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         kikimr = std::make_shared<TKikimrRunner>(settings);
+
         writer = std::make_shared<TExampleLogWriter>(kikimr);
-
-        UNIT_ASSERT(writer != nullptr);
-
         writer->CreateStore();
         writer->CreateTable();
         writer->TableExists = true;

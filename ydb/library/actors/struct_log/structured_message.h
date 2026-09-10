@@ -160,10 +160,11 @@ public:
 
     template <typename TCallable>
     bool ForIndexSerialized(std::size_t index, const TCallable& callable) const {
+        EnsureSorted();
+
         if (index >= AttachedValues.size()) {
             return false;
         }
-        EnsureSorted();
 
         auto& item = AttachedValues[index];
         return callable(item.Name, item.TypeCode, Data.data() + item.Offset, item.Length);

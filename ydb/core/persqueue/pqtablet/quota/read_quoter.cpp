@@ -18,6 +18,10 @@ void TReadQuoter::Bootstrap(const TActorContext& ctx) {
 }
 
 void TReadQuoter::HandleQuotaRequestImpl(TRequestContext& context) {
+    // TEvRequestQuota carries the original TEvRead as Request->Request. ClientId is the
+    // consumer name. Copy it onto TRequestContext now: StartQuoting may Release() the
+    // TEvRead to the account quoter, and TEvConsumerRemoved matches queued requests by
+    // context.Consumer, not by digging into the payload.
     if (!context.Request || !context.Request->Request) {
         return;
     }
@@ -26,6 +30,8 @@ void TReadQuoter::HandleQuotaRequestImpl(TRequestContext& context) {
         return;
     }
     context.Consumer = readRequest->ClientId;
+    // Empty ClientId is not a consumer; GetOrCreateConsumerQuota refuses it. The request
+    // still proceeds and CheckConsumerPerPartitionQuota fail-opens if there is no tracker.
     if (!context.Consumer.empty()) {
         GetOrCreateConsumerQuota(context.Consumer, ActorContext());
     }
@@ -136,6 +142,10 @@ void TReadQuoter::ProcessPerConsumerQuotaQueue(const TActorContext& ctx) {
 void TReadQuoter::HandleConsumerRemoved(TEvPQ::TEvConsumerRemoved::TPtr& ev, const TActorContext&) {
     const TString& consumer = ev->Get()->Consumer;
     auto it = ConsumerQuotas.find(consumer);
+    // Partition already waits for TEvApproveReadQuota (and has counted the read as in-quota).
+    // Dropping the queues here hangs the client until tablet restart. Approve so the parent
+    // can reply "consumer deleted". Pending account requests are unblocked by poisoning the
+    // account actor (it fail-opens with TEvResponse; see TBasicAccountQuoter poison handler).
     if (it != ConsumerQuotas.end()) {
         for (auto& context : it->second.ReadRequests) {
             ApproveQuota(context);

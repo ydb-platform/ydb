@@ -3490,7 +3490,6 @@ message TUdfStoreConfig {
 
 message TAppConfig {
     reserved 123;
-    reserved "UserFacingTracingConfig";
     option (NMarkers.Root) = true;
     optional TActorSystemConfig ActorSystemConfig = 1;
     optional TLogConfig LogConfig = 2;

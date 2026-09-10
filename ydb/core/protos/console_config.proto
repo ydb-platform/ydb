@@ -68,7 +68,6 @@ message TConfigItem {
     // detect kind for added items by checking set fields.
     enum EKind {
         reserved 123;
-        reserved "UserFacingTracingConfigItem";
         Auto = 0;
         ActorSystemConfigItem = 1;
         LogConfigItem = 2;

@@ -6,27 +6,34 @@
 
 #include <util/thread/singleton.h>
 #include <util/system/compiler.h>
+#include <util/system/tls.h>
 #include <util/system/yassert.h>
 
 namespace NKikimr::NJaegerTracing {
 
 namespace {
 
+Y_POD_STATIC_THREAD(TSamplingThrottlingControl*) TracingControlRawPtr;
+
 class TSamplingThrottlingControlTlsHolder {
 public:
-    TSamplingThrottlingControl* Get() {
+    TSamplingThrottlingControlTlsHolder()
+        : Control(CreateNewTracingControl())
+    {}
+
+    TSamplingThrottlingControl* GetTracingControlPtr() {
         if (Y_UNLIKELY(!Control)) {
-            Control = CreateControl();
+            Control = CreateNewTracingControl();
         }
         return Control.Get();
     }
 
-    void Reset() {
+    void ResetTracingControl() {
         Control = nullptr;
     }
 
 private:
-    static TIntrusivePtr<TSamplingThrottlingControl> CreateControl() {
+    static TIntrusivePtr<TSamplingThrottlingControl> CreateNewTracingControl() {
         Y_ASSERT(HasAppData()); // In general we must call this from actor thread
         if (Y_UNLIKELY(!HasAppData())) {
             return nullptr;
@@ -39,10 +46,17 @@ private:
     TIntrusivePtr<TSamplingThrottlingControl> Control;
 };
 
+TSamplingThrottlingControl* GetTracingControlTls() {
+    if (Y_UNLIKELY(!TracingControlRawPtr)) {
+        TracingControlRawPtr = FastTlsSingleton<TSamplingThrottlingControlTlsHolder>()->GetTracingControlPtr();
+    }
+    return TracingControlRawPtr;
+}
+
 } // namespace
 
 NWilson::TTraceId HandleTracing(const TRequestDiscriminator& discriminator, const TMaybe<TString>& traceparent) {
-    TSamplingThrottlingControl* control = FastTlsSingleton<TSamplingThrottlingControlTlsHolder>()->Get();
+    TSamplingThrottlingControl* control = GetTracingControlTls();
     if (Y_LIKELY(control)) {
         return control->HandleTracing(discriminator, traceparent);
     }
@@ -50,7 +64,10 @@ NWilson::TTraceId HandleTracing(const TRequestDiscriminator& discriminator, cons
 }
 
 void ClearTracingControl() {
-    FastTlsSingleton<TSamplingThrottlingControlTlsHolder>()->Reset();
+    if (TracingControlRawPtr) {
+        TracingControlRawPtr = nullptr;
+        FastTlsSingleton<TSamplingThrottlingControlTlsHolder>()->ResetTracingControl();
+    }
 }
 
 } // namespace NKikimr::NJaegerTracing

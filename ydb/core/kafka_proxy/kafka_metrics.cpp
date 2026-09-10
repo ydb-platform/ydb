@@ -24,6 +24,22 @@ TVector<std::pair<TString, TString>> BuildLabels(const NKafka::TContext::TPtr co
     }
 }
 
+TVector<std::pair<TString, TString>> BuildGroupLabels(const NKafka::TContext::TPtr context, const TString& groupId, const TString& name) {
+    if (context->Authenticated()) {
+        return {{"counters", context->IsServerless ? "datastreams_serverless" : "datastreams"},
+                {"database", context->DatabasePath},
+                {"cloud_id", context->CloudId},
+                {"folder_id", context->FolderId},
+                {"database_id", context->DatabaseId},
+                {"consumer_group", groupId},
+                {"name", name}};
+    } else {
+        return {{"counters", "datastreams"},
+                {"consumer_group", groupId},
+                {"name", name}};
+    }
+}
+
 TActorId MakeKafkaMetricsServiceID() {
     static const char x[12] = "kafka_mtrcs";
     return TActorId(0, TStringBuf(x, 12));

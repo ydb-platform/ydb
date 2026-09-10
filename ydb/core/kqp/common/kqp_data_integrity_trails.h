@@ -142,6 +142,14 @@ inline TStructuredMessage ToStructuredMessage(const NKikimrDataEvents::TLock& lo
         YDB_LOG_UPDATE_MESSAGE(result , {"hasWrites", lock.GetHasWrites()});
     }
 
+    if (lock.WriteSeqNumsSize() !=0) {
+        std::vector<std::string> items;
+        for(size_t i=0;i<lock.WriteSeqNumsSize();i++) {
+            items.push_back(lock.GetWriteSeqNums(i).ShortUtf8DebugString());
+        }
+        YDB_LOG_UPDATE_MESSAGE(result, {"writeSeqNums", items});
+    }
+
     return result;
 }
 

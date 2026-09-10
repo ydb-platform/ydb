@@ -277,12 +277,19 @@ namespace {
     std::optional<std::vector<ui64>> ExtractQuerySpanIdOccurrences(
         const TString& logs,
         const TString& component,
+        std::optional<ui64> victimTxQuerySpanId,
         const TString& messagePattern)
     {
         std::vector<ui64> result;
         for (const auto& record : ExtractTliRecords(logs)) {
             if (!record.Contains("component=" + component) || !MatchesMessage(record, messagePattern)) {
                 continue;
+            }
+            if (victimTxQuerySpanId.has_value()) {
+                auto txSpanId = ExtractNumericField(record, "victimTxSpanId");
+                if (txSpanId.has_value() && txSpanId.value() != victimTxQuerySpanId.value()) {
+                    continue;
+                }
             }
             auto value = ExtractNumericField(record, "querySpanId");
             if (value) {
@@ -412,7 +419,7 @@ namespace {
         data.VictimShardCurrentQuerySpanId = ExtractCurrentQuerySpanId(logs, "DataShard", patterns.VictimDatashardMessage);
         data.VictimShardVictimQuerySpanId = ExtractVictimQuerySpanId(logs, "DataShard", patterns.VictimDatashardMessage);
         data.VictimSessionVictimQuerySpanIdOccurrences = ExtractQuerySpanIdOccurrences(
-            logs, "SessionActor", patterns.VictimSessionActorMessagePattern);
+            logs, "SessionActor", data.VictimSessionVictimQuerySpanId, patterns.VictimSessionActorMessagePattern);
 
         auto [foundBreaker, matchingVictimIds] = ExtractMatchingFromBreakerDatashard(logs, patterns.BreakerDatashardMessage, data.BreakerSessionBreakerQuerySpanId);
         data.FoundBreakerRecordInDatashard = foundBreaker;

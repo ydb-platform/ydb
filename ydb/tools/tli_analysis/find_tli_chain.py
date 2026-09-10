@@ -105,22 +105,24 @@ def extract_field(line: str, field: str) -> Optional[str]:
             return line[pos:found]
 
     result = ""
-    pos = pos + 1
+    pos += 1
     while pos < len(line):
         if line[pos] == '"':
             return result
         if line[pos] == '\\':
-            pos = pos + 1
+            pos += 1
             if line[pos] == '"':
-                result = result + '"'
+                result += '"'
             elif line[pos] == '\\':
-                result = result + '\\'
+                result += '\\'
+            elif line[pos] == 'n':
+                result += '\n'
             else:
                 return None
-            pos = pos + 1
+            pos += 1
         else:
             result += line[pos]
-            pos = pos + 1
+            pos += 1
 
     return None
 
@@ -172,6 +174,11 @@ def extract_breaker_id(line: str) -> Optional[str]:
 
     return extract_field(line, "breakerQuerySpanId")
 
+def extract_breaker_tx_id(line: str) -> Optional[str]:
+    """Extract breakerTxSpanId from line."""
+
+    return extract_field(line, "breakerTxSpanId")
+
 
 def check_query_id_in_line(line: str, query_id: str) -> bool:
     """Check if query_id appears in line."""
@@ -197,6 +204,17 @@ def check_query_id_in_line(line: str, query_id: str) -> bool:
     id = extract_field(line, "breakerTxSpanId")
     if id and id.strip() == query_id:
         return True
+    return False
+
+def check_victim_query_id_in_line(line: str, query_id: str) -> bool:
+    """Check if query_id appears in line."""
+
+    query_id = query_id.strip()
+
+    id = extract_field(line, "victimQuerySpanId")
+    if id and id.strip() == query_id:
+        return True
+
     return False
 
 
@@ -311,21 +329,21 @@ def main():
         if breaker_log_ds is None:
             if ("broke other locks" in line) and \
                ("component=DataShard" in line or "datashard_integrity_trails" in line) and \
-               check_query_id_in_line(line, victim_id):
+               check_victim_query_id_in_line(line, victim_id):
                 breaker_log_ds = line.rstrip("\n")
                 breaker_id = extract_breaker_id(line)
 
         # Breaker SessionActor lines: "had broken other locks" + Component: SessionActor
         # Keep the line with the most queries in BreakerQueryTexts (prefer Commit over deferred)
         if ("had broken other locks" in line) and ("component=SessionActor" in line):
-            bid = extract_query_id(line)
+            bid = extract_breaker_tx_id(line)
             if bid:
                 breaker_query_text = unescape_and_format_query_text(extract_field(line, "queryText"))
                 if breaker_query_text:
                     breaker_sa_with_text_by_id[bid] = breaker_query_text
                     breaker_tx_items.append((bid, breaker_query_text))
 
-    if breaker_id:
+    if breaker_id and (breaker_id in breaker_sa_with_text_by_id):
         breaker_query_text = breaker_sa_with_text_by_id[breaker_id]
 
     # Output results

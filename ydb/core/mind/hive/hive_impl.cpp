@@ -2778,6 +2778,7 @@ THive::THiveStats THive::GetStats(TIter begin, TIter end) const {
     auto minValuesToBalance = GetMinNodeUsageToBalance();
     maxValues = piecewise_max(maxValues, minValuesToBalance);
     minValues = piecewise_max(minValues, minValuesToBalance);
+    stats.MinResourceNormValues = minValues;
     auto discrepancy = maxValues - minValues;
     auto& counterDiscrepancy = std::get<NMetrics::EResource::Counter>(discrepancy);
     if (counterDiscrepancy * CurrentConfig.GetMaxResourceCounter() <= 1.5) {
@@ -2977,12 +2978,26 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
                     balancerType = EBalancerType::Scatter;
                     break;
             }
+            const auto resource = *scatteredResource;
+            const double minScatter = TTabletInfo::ExtractResourceUsage(GetMinScatterToBalance(), resource);
+            if (!(minScatter >= 0.0 && minScatter < 1.0)) {
+                continue;
+            }
+            const double minUsage = TTabletInfo::ExtractResourceUsage(stats.MinResourceNormValues, resource);
+            const double usageThreshold = minUsage / (1.0 - minScatter);
+
             std::vector<TNodeId> nodeIds;
             nodeIds.reserve(stats.Values.size());
-            double usageThreshold = TTabletInfo::ExtractResourceUsage(GetMinNodeUsageToBalance(), *scatteredResource)
-                / TTabletInfo::ExtractResourceUsage(GetMinScatterToBalance(), *scatteredResource);
-            auto filteredNodes = nodes | std::views::filter([&](const TNodeInfo& node) { return node.GetNodeUsage(*scatteredResource) >= usageThreshold; });
-            std::transform(filteredNodes.begin(), filteredNodes.end(), std::back_inserter(nodeIds), [](const TNodeInfo& node) { return node.Id; });
+            for (const auto& node : stats.Values) {
+                const double usage = TTabletInfo::ExtractResourceUsage(node.ResourceNormValues, resource);
+                if (usage > usageThreshold) {
+                    nodeIds.push_back(node.NodeId);
+                }
+            }
+            // An empty filter means all nodes to the balancer.
+            if (nodeIds.empty()) {
+                continue;
+            }
             YDB_LOG_TRACE("ProcessTabletBalancer: scatter over limit triggered balancer",
                 {"logPrefix", GetLogPrefix()},
                 {"scatterByResource", stats.ScatterByResource},

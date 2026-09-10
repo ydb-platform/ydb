@@ -81,7 +81,7 @@ const NCommon::TPKSortPermutation& TSourceData::GetChunksPKOrder() const {
         return *ChunksPKOrder;
     }
     ChunksPKOrder.emplace();
-    if (!GetContext()->GetReadMetadata()->UseSortedLimitPushdown()) {
+    if (!GetContext()->GetReadMetadata()->IsSortedScanWithLimit()) {
         return *ChunksPKOrder;
     }
     const auto& records = GetPortionAccessor().GetRecordsVerified();

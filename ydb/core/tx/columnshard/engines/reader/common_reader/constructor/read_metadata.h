@@ -209,7 +209,7 @@ public:
         return TableMetadataAccessor->OrderByLimitAllowed() && !GetFakeSort();
     }
 
-    bool UseSortedLimitPushdown() const {
+    bool IsSortedScanWithLimit() const {
         return IsSorted() && HasLimit() && OrderByLimitAllowed();
     }
 

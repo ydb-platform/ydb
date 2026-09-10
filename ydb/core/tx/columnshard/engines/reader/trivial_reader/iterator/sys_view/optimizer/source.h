@@ -32,7 +32,7 @@ public:
         , OptimizerTasks(std::move(tasks))
         , ExternalPathId(externalPathId)
     {
-        if (context->GetReadMetadata()->UseSortedLimitPushdown()) {
+        if (context->GetReadMetadata()->IsSortedScanWithLimit()) {
             std::sort(OptimizerTasks.begin(), OptimizerTasks.end());
         }
     }

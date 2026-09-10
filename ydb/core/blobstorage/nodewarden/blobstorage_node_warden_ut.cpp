@@ -2293,7 +2293,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         const TActorId DDiskServiceId;
         TActorId NodeWardenId;
 
-        TDDiskLifecycleTestSetup(bool native = false)
+        TDDiskLifecycleTestSetup(bool native = false, bool useUring = true)
             : Runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>())
             , GroupId(TGroupID(EGroupConfigurationType::Dynamic, 1, 1).GetRaw())
             , VDiskId(GroupId, 1, 0, 0, 0)
@@ -2321,7 +2321,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                     ? static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory)
                     : static_cast<IPDiskServiceFactory*>(new TSilentPDiskServiceFactory)));
             nodeWardenConfig->DDiskConfig.emplace();
-            nodeWardenConfig->DDiskConfig->SetForcePDiskFallback(!native);
+            nodeWardenConfig->DDiskConfig->SetForcePDiskFallback(!native || !useUring);
             if (native) {
                 nodeWardenConfig->DDiskConfig->SetEnableChecksums(false);
                 nodeWardenConfig->PBufferConfig.emplace();
@@ -2426,8 +2426,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         std::atomic<ui32> Admissions{0};
         TManualEvent FirstCallback, SecondCallback, ReleaseFirst, ReleaseSecond;
 
-        TRequestedPDiskRestartFixture()
-            : TDDiskLifecycleTestSetup(true)
+        TRequestedPDiskRestartFixture(bool useUring = true)
+            : TDDiskLifecycleTestSetup(true, useUring)
             , Edge(Runtime.AllocateEdgeActor(NodeId))
             , PBService(MakeBlobStoragePersistentBufferId(NodeId, PDiskId, VDiskSlotId))
         {
@@ -2441,7 +2441,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             auto pointer = Grab<NPDisk::TEvYardControlResult>();
             UNIT_ASSERT_VALUES_EQUAL(pointer->Get()->Status, NKikimrProto::OK);
             auto* pdisk = reinterpret_cast<NPDisk::TPDisk*>(pointer->Get()->Cookie);
-            {
+            if (useUring) {
                 TGuard<TMutex> guard(pdisk->StateMutex);
                 NPDisk::TPDiskTestPeer::ConfigureRouter(*pdisk, [&](NPDisk::TUringRouter& router) {
                     NPDisk::NUringPrivate::TRouterHooks hooks;
@@ -2485,7 +2485,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         template<class TEvent>
         void ExpectOk() {
             auto reply = Grab<TEvent>();
-            UNIT_ASSERT(reply->Get()->Record.GetStatus() == TStatus::OK);
+            UNIT_ASSERT_C(reply->Get()->Record.GetStatus() == TStatus::OK, reply->Get()->Record.DebugString());
         }
         NDDisk::TQueryCredentials Connect(TActorId recipient, bool registerBuffer = true) {
             auto creds = recipient == PBService
@@ -2497,6 +2497,16 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             creds.DDiskInstanceGuid = reply->Get()->Record.GetDDiskInstanceGuid();
             creds.ConnectionToken.emplace(reply->Get()->Record.GetConnectionToken());
             if (recipient == PBService && registerBuffer) {
+                // Real PDisk bootstrap can advance virtual time beyond the registration
+                // timeout. Wait for its initial chunks before timestamping the request.
+                const auto pbId = Runtime.GetNode(NodeId)->ActorSystem->LookupLocalService(PBService);
+                Runtime.Sim([&] {
+                    bool ready = false;
+                    UNIT_ASSERT(Runtime.WrapInActorContext(pbId, [&](IActor* actor) {
+                        ready = static_cast<NDDisk::TDDiskActor*>(actor)->PersistentBufferReady;
+                    }));
+                    return !ready;
+                });
                 Send(recipient, new NDDisk::TEvRegisterPersistentBuffer(creds, Runtime.GetClock()));
                 ExpectOk<NDDisk::TEvRegisterPersistentBufferResult>();
             }
@@ -2677,6 +2687,15 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             UNIT_ASSERT_VALUES_EQUAL(permissions, 1);
         }
     };
+
+    Y_UNIT_TEST(RequestedPDiskRestartFixtureRegistersPersistentBufferWithFallback) {
+        TRequestedPDiskRestartFixture fixture(false);
+        fixture.Connect(fixture.DDiskServiceId);
+        const auto creds = fixture.Connect(fixture.PBService);
+        fixture.Write(true, creds, 'B', 1);
+        fixture.WriteReply(true);
+        fixture.Read(true, creds, 'B', 1);
+    }
 
     Y_UNIT_TEST(RequestedPDiskRestartDrainsBothNativeCompletionOrders) {
         if (!NPDisk::RequireUring()) { return; }

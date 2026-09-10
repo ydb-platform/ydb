@@ -484,11 +484,7 @@ protected:
             if (!transform.OutputBuffer || !transform.AsyncOutput) {
                 continue;
             }
-            const auto level = transform.OutputBuffer->GetFillLevel();
-            if (level != EDqFillLevel::NoLimit) {
-                transform.OutputConsumerWasLimited = true;
-            } else if (transform.OutputConsumerWasLimited) {
-                transform.OutputConsumerWasLimited = false;
+            if (transform.OutputBuffer->GetFillLevel() == EDqFillLevel::NoLimit) {
                 transform.AsyncOutput->OnOutputConsumerReady();
             }
         }
@@ -1128,7 +1124,6 @@ protected:
 
     struct TAsyncOutputTransformInfo : public TAsyncOutputInfoBase {
         IDqOutputConsumer::TPtr OutputBuffer;
-        bool OutputConsumerWasLimited = false;
     };
 
 protected:

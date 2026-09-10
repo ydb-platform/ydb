@@ -638,41 +638,22 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(PartitionSplit_ManySessions_NoCommits_AutoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
+
         TTopicClient client = setup.MakeClient();
 
-        TCreateTopicSettings createSettings;
-        createSettings
-            .BeginConfigurePartitioningSettings()
-            .MinActivePartitions(1)
-            .MaxActivePartitions(100)
-                .BeginConfigureAutoPartitioningSettings()
-                .UpUtilizationPercent(2)
-                .DownUtilizationPercent(1)
-                .StabilizationWindow(TDuration::Seconds(2))
-                .Strategy(EAutoPartitioningStrategy::ScaleUp)
-                .EndConfigureAutoPartitioningSettings()
-            .EndConfigurePartitioningSettings();
+        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0);
+        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0);
 
-        TConsumerSettings<TCreateTopicSettings> consumers(createSettings, setup.GetConsumerName(TEST_CONSUMER));
-        createSettings.AppendConsumers(consumers);
-        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
+        UNIT_ASSERT(writeSession_1->Write(Msg("message_1", 1)));
+        UNIT_ASSERT(writeSession_1->Write(Msg("message_2", 2)));
+        UNIT_ASSERT(writeSession_1->Write(Msg("message_3", 3)));
+        UNIT_ASSERT(writeSession_1->Write(Msg("message_4", 4)));
+        UNIT_ASSERT(writeSession_1->Write(Msg("message_5", 5)));
+        UNIT_ASSERT(writeSession_2->Write(Msg("message_6", 6)));
 
-        auto msg = TString(1_MB, 'a');
-
-        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, TString{TEST_TOPIC}, false);
-        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, TString{TEST_TOPIC}, false);
-
-        {
-            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 1)));
-            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 2)));
-            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 3)));
-            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 4)));
-            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 5)));
-            UNIT_ASSERT(writeSession_2->Write(Msg(msg, 6)));
-            Sleep(TDuration::Seconds(15));
-            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
-        }
+        ui64 txId = 1023;
+        SplitPartition(setup, ++txId, 0, "a");
 
         auto readSession1 = CreateTestReadSession({ .Name="Session-1", .Setup=setup, .Sdk = SdkVersion::Topic, .ExpectedMessagesCount = 6, .AutoCommit = false, .AutoPartitioningSupport = true });
         readSession1->WaitAndAssertPartitions({0, 1, 2}, "Must read all partition");

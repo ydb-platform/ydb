@@ -33,7 +33,6 @@ class TInputTransformStreamLookupCommonBase
 public:
     TInputTransformStreamLookupCommonBase(
         IDqAsyncIoFactory::TInputTransformArguments&& args,
-        ::NMonitoring::TDynamicCounterPtr taskCounters,
         IDqAsyncIoFactory* factory,
         NDqProto::TDqInputTransformLookupSettings&& settings,
         TVector<size_t>&& lookupInputIndexes,
@@ -51,7 +50,7 @@ public:
         , InputFlow(args.TransformInput)
         , ComputeActorId(args.ComputeActorId)
         , StatsLevel(args.StatsLevel)
-        , TaskCounters(taskCounters)
+        , TaskCounters(args.TaskCounters)
         , Factory(factory)
         , Settings(std::move(settings))
         , SecureParams(args.SecureParams)
@@ -84,8 +83,15 @@ public:
             Y_DEBUG_ABORT_UNLESS(OtherInputIndexes[i] < InputRowType->GetElementsCount());
         }
         Y_DEBUG_ABORT_UNLESS(LookupInputIndexes.size() == LookupKeyType->GetMembersCount());
-        InitMonCounters(taskCounters);
+        InitMonCounters(args);
         static_cast<TDerived*>(this)->ExtraInitialize();
+    }
+
+    ~TInputTransformStreamLookupCommonBase() override {
+        if (TaskCountersGroup && TaskCountersRoot)  {
+            // XXX Group may be removed muliple times; should be harmless (in each join task of query)
+            TaskCountersRoot->RemoveSubgroup(TaskCountersGroup->first, TaskCountersGroup->second);
+        }
     }
 
 protected:
@@ -205,11 +211,28 @@ private: //IDqComputeActorAsyncInput
         return KeysForLookup;
     }
 
-    void InitMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
-        if (!taskCounters) {
+    void InitMonCounters(const IDqAsyncIoFactory::TInputTransformArguments& args) {
+        TaskCounters = TaskCountersRoot = args.TaskCounters;
+        if (!TaskCounters) {
             return;
         }
-        auto component = taskCounters->GetSubgroup("component", "Lookup");
+        switch(args.StatsLevel) {
+            case TCollectStatsLevel::None:
+            case TCollectStatsLevel::Basic:
+                TaskCounters = nullptr;
+                return;
+            case TCollectStatsLevel::Profile:
+                TaskCountersGroup = std::pair { "tx_id", ToString(args.TxId) };
+                // XXX this nests counters twice by $TxId, ("operation_id", $TxId)->("tx_id", $TxId) in (obsolete) yqv1
+                TaskCounters = TaskCounters
+                    ->GetSubgroup(TaskCountersGroup->first, TaskCountersGroup->second)
+                    ->GetSubgroup("task_id", ToString(args.TaskId))
+                    ->GetSubgroup("input", ToString(args.InputIndex));
+                break;
+            case TCollectStatsLevel::Full:
+                break;
+        }
+        auto component = TaskCounters->GetSubgroup("component", "Lookup");
         LruHits = component->GetCounter("Hits");
         LruMiss = component->GetCounter("Miss");
         LruSize = component->GetCounter("Size");
@@ -258,6 +281,8 @@ protected:
     const NActors::TActorId ComputeActorId;
     TCollectStatsLevel StatsLevel;
     ::NMonitoring::TDynamicCounterPtr TaskCounters;
+    ::NMonitoring::TDynamicCounterPtr TaskCountersRoot;
+    std::optional<std::pair<TString, TString>> TaskCountersGroup;
     IDqAsyncIoFactory::TPtr Factory;
     NDqProto::TDqInputTransformLookupSettings Settings;
     const THashMap<TString, TString> SecureParams;
@@ -1212,25 +1237,10 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
         lookupPayloadColumns,
         inputColumns
     );
-    auto taskCounters = args.TaskCounters;
-    switch(args.StatsLevel) {
-        case TCollectStatsLevel::None:
-        case TCollectStatsLevel::Basic:
-            taskCounters = nullptr;
-            break;
-        case TCollectStatsLevel::Profile:
-            if (taskCounters) {
-                taskCounters = taskCounters->GetSubgroup("task_id", ToString(args.TaskId))->GetSubgroup("input", ToString(args.InputIndex));
-            }
-            break;
-        case TCollectStatsLevel::Full:
-            break;
-    }
     if (settings.GetIsMultiget()) {
         auto actor = isWide ?
             (TInputTransformStreamMultiLookupBase*)new TInputTransformStreamMultiLookupWide(
                 std::move(args),
-                taskCounters,
                 factory,
                 std::move(settings),
                 std::move(lookupKeyInputIndexes),
@@ -1243,7 +1253,6 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             ) :
             (TInputTransformStreamMultiLookupBase*)new TInputTransformStreamMultiLookupNarrow(
                 std::move(args),
-                taskCounters,
                 factory,
                 std::move(settings),
                 std::move(lookupKeyInputIndexes),
@@ -1259,7 +1268,6 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
     auto actor = isWide ?
         (TInputTransformStreamLookupBase*)new TInputTransformStreamLookupWide(
             std::move(args),
-            taskCounters,
             factory,
             std::move(settings),
             std::move(lookupKeyInputIndexes),
@@ -1272,7 +1280,6 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
         ) :
         (TInputTransformStreamLookupBase*)new TInputTransformStreamLookupNarrow(
             std::move(args),
-            taskCounters,
             factory,
             std::move(settings),
             std::move(lookupKeyInputIndexes),

@@ -389,6 +389,58 @@ ui64 TFastPathService::GenerateLsn()
     return lsn;
 }
 
+<<<<<<< HEAD
+=======
+void TFastPathService::StopTablet(const TString& reason)
+{
+    // Just forward the signal to the actor thread.
+    auto event = std::make_unique<TEvPartitionDirectPrivate::TEvPoison>(reason);
+    ActorSystem->Send(PartitionActorId, event.release());
+}
+
+bool TFastPathService::TryAdvancePBufferBarrier(
+    const NKikimr::NBsController::TDDiskId& pbufferDDiskId,
+    ui64 lsn)
+{
+    auto guard = Guard(PBufferBarrierLock);
+    auto [it, inserted] =
+        LastSentBarrierByPBuffer.try_emplace(pbufferDDiskId, lsn);
+    if (inserted) {
+        return true;
+    }
+    if (lsn > it->second) {
+        it->second = lsn;
+        return true;
+    }
+    return false;
+}
+
+TDuration TFastPathService::TakeVolumeCopyRangeBudget(ui64 byteCount)
+{
+    if (!CopyRangeBucket) {
+        return {};
+    }
+
+    auto guard = Guard(CopyRangeBucketLock);
+    return CopyRangeBucket->Register(ActorSystem->Timestamp(), byteCount);
+}
+
+void TFastPathService::PersistHostHealth(
+    size_t directBlockGroupId,
+    THostIndex hostIndex,
+    EHostHealth oldHealth,
+    EHostHealth newHealth)
+{
+    auto event =
+        std::make_unique<TEvPartitionDirectPrivate::TEvPersistHostHealth>(
+            directBlockGroupId,
+            hostIndex,
+            oldHealth,
+            newHealth);
+    ActorSystem->Send(PartitionActorId, event.release());
+}
+
+>>>>>>> 8a60344d593 (NBS-7513:  Add Oracle->PartitionDirect PersistHostHealth path (#52610))
 TFastPathServiceInfo TFastPathService::GetMonInfo() const
 {
     const ui64 vchunkSize = StorageConfig->GetVChunkSize();

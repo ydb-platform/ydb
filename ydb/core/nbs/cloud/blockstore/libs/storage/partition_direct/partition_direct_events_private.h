@@ -35,6 +35,8 @@ struct TEvPartitionDirectPrivate
         EvFastPathServiceStopped,
         EvAddHostToDBG,
 
+        EvPersistHostHealth,
+
         EvEnd,
     };
 
@@ -77,6 +79,26 @@ struct TEvPartitionDirectPrivate
 
         explicit TEvAddHostToDBG(size_t dbgId)
             : DirectBlockGroupId(dbgId)
+        {}
+    };
+
+    struct TEvPersistHostHealth
+        : public NActors::TEventLocal<TEvPersistHostHealth, EvPersistHostHealth>
+    {
+        size_t DirectBlockGroupId;
+        size_t HostIndex;
+        EHostHealth OldHealth;
+        EHostHealth NewHealth;
+
+        TEvPersistHostHealth(
+            size_t direct_block_group_id,
+            size_t host_index,
+            EHostHealth old_health,
+            EHostHealth new_health)
+            : DirectBlockGroupId(direct_block_group_id)
+            , HostIndex(host_index)
+            , OldHealth(old_health)
+            , NewHealth(new_health)
         {}
     };
 };

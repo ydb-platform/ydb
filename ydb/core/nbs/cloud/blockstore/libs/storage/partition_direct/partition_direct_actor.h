@@ -164,6 +164,67 @@ private:
         const TEvPartitionDirectPrivate::TEvAddHostToDBG::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.h
+=======
+    void HandlePersistHostHealth(
+        const TEvPartitionDirectPrivate::TEvPersistHostHealth::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleDeletePartition(
+        const NYdb::NBS::NBlockStore::TEvService::TEvDeletePartitionRequest::
+            TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void StartPartitionTeardown(const NActors::TActorContext& ctx);
+
+    void HandleFastPathServiceStoppedDuringDelete(
+        const TEvPartitionDirectPrivate::TEvFastPathServiceStopped::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void StartCleanupActor(
+        const NActors::TActorContext& ctx,
+        TDirectBlockGroupsConnections connections);
+
+    void HandlePartitionCleanupCompleted(
+        const TEvPartitionDirectPrivate::TEvPartitionCleanupCompleted::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleAllocateResultDuringDelete(
+        const NKikimr::TEvBlobStorage::
+            TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleUpdateVolumeConfigDuringDelete(
+        const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleUpdateVChunkConfigDuringDelete(
+        const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleUpdateDirtyMapStateDuringDelete(
+        const TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleFastPathServiceShutdownDuringDelete(
+        const TEvPartitionDirectPrivate::TEvFastPathServiceShutdown::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleAddHostToDBGDuringDelete(
+        const TEvPartitionDirectPrivate::TEvAddHostToDBG::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandlePersistHostHealthDuringDelete(
+        const TEvPartitionDirectPrivate::TEvPersistHostHealth::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void ReplyToDeleteWaiters(
+        const NActors::TActorContext& ctx,
+        const NProto::TError& error);
+
+    void FinishDelete(const NActors::TActorContext& ctx);
+
+>>>>>>> 8a60344d593 (NBS-7513:  Add Oracle->PartitionDirect PersistHostHealth path (#52610)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.h
     // Rejects (logs + notifies the DBG) and returns false if the AddHost
     // request is invalid; true if it may proceed.
     bool ValidateAddHostToDBGRequest(

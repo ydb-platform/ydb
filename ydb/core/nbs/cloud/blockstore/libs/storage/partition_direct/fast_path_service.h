@@ -112,6 +112,23 @@ public:
 
     ui64 GenerateLsn() override;
 
+<<<<<<< HEAD
+=======
+    void StopTablet(const TString& reason) override;
+
+    bool TryAdvancePBufferBarrier(
+        const NKikimr::NBsController::TDDiskId& pbufferDDiskId,
+        ui64 lsn) override;
+
+    TDuration TakeVolumeCopyRangeBudget(ui64 byteCount) override;
+
+    void PersistHostHealth(
+        size_t directBlockGroupId,
+        THostIndex hostIndex,
+        EHostHealth oldHealth,
+        EHostHealth newHealth) override;
+
+>>>>>>> 8a60344d593 (NBS-7513:  Add Oracle->PartitionDirect PersistHostHealth path (#52610))
     // Read-only info for the monitoring UI.
     [[nodiscard]] TFastPathServiceInfo GetMonInfo() const;
 

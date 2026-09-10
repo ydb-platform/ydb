@@ -10,6 +10,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/tracing/test_util
     ydb/core/kqp/ut/common
     ydb/core/testlib/default
     ydb/core/tx/datashard/ut_common

@@ -1,4 +1,3 @@
-#include "datashard_read_tracing.h"
 #include "datashard_failpoints.h"
 #include "datashard_impl.h"
 #include "datashard_read_operation.h"
@@ -2452,7 +2451,7 @@ public:
             Result->Record.SetReadId(state.ReadId.ReadId);
             Self->SendImmediateReadResult(state.ReadId.Sender, Result.release(), 0, state.SessionId, request->ReadSpan.GetTraceId());
 
-            FailReadTrace(request->ReadSpan, state.TotalRows, Ydb::StatusIds::ABORTED, "Iterator aborted");
+            request->ReadSpan.EndError("Iterator aborted");
             Self->DeleteReadIterator(it);
             return;
         }
@@ -2472,9 +2471,9 @@ public:
                 {"tabletId", Self->TabletID()},
                 {"iterator", state.ReadId},
                 {"record", record.DebugString()});
-            FailReadTrace(request->ReadSpan, state.TotalRows, record.GetStatus().GetCode(), "Finished with error");
             Self->SendImmediateReadResult(state.ReadId.Sender, Result.release(), 0, state.SessionId, request->ReadSpan.GetTraceId());
 
+            request->ReadSpan.EndError("Finished with error");
             Self->DeleteReadIterator(it);
             return;
         }
@@ -2562,7 +2561,7 @@ public:
                 {"tabletId", Self->TabletID()},
                 {"iterator", state.ReadId});
 
-            EndReadTrace(request->ReadSpan, state.TotalRows + Reader->GetRowsRead());
+            request->ReadSpan.EndOk();
             Self->DeleteReadIterator(it);
         }
     }
@@ -3248,7 +3247,7 @@ public:
         SetStatusError(Reply->Record, code, message);
         Reply->Record.SetReadId(state.ReadId.ReadId);
 
-        FailReadTrace(state.Request->ReadSpan, state.TotalRows, code, message);
+        state.Request->ReadSpan.EndError(message);
     }
 
     void Complete(const TActorContext& ctx) override {
@@ -3652,7 +3651,7 @@ public:
             Result->Record.SetReadId(state.ReadId.ReadId);
             Self->SendImmediateReadResult(state.ReadId.Sender, Result.release(), 0, state.SessionId, state.Request->ReadSpan.GetTraceId());
 
-            FailReadTrace(state.Request->ReadSpan, state.TotalRows, Ydb::StatusIds::ABORTED, "Iterator aborted");
+            state.Request->ReadSpan.EndError("Iterator aborted");
             Self->DeleteReadIterator(it);
             return;
         }
@@ -3666,9 +3665,9 @@ public:
                 {"tabletId", Self->TabletID()},
                 {"iterator", state.ReadId},
                 {"record", record.DebugString()});
-            FailReadTrace(state.Request->ReadSpan, state.TotalRows, record.GetStatus().GetCode(), "Finished with error");
             Self->SendImmediateReadResult(state.ReadId.Sender, Result.release(), 0, state.SessionId, state.Request->ReadSpan.GetTraceId());
 
+            state.Request->ReadSpan.EndError("Finished with error");
             Self->DeleteReadIterator(it);
             return;
         }
@@ -3714,7 +3713,7 @@ public:
                 {"tabletId", Self->TabletID()},
                 {"iterator", state.ReadId});
 
-            EndReadTrace(state.Request->ReadSpan, state.TotalRows + Reader->GetRowsRead());
+            state.Request->ReadSpan.EndOk();
             Self->DeleteReadIterator(it);
         }
     }
@@ -3726,7 +3725,9 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
 
     if (ev->TraceId && !request->ReadSpan) {
         request->ReadSpan = NWilson::TSpan(TWilsonTablet::TabletTopLevel, std::move(ev->TraceId), "Datashard.Read", NWilson::EFlags::AUTO_END);
-        AddReadTraceAttributes(request->ReadSpan, TabletID(), SelfId().NodeId(), request->Record.GetReadId());
+        if (request->ReadSpan) {
+            request->ReadSpan.Attribute("Shard", std::to_string(TabletID()));
+        }
         // Reparent other event-based spans to the read span
         ev->TraceId = request->ReadSpan.GetTraceId();
     }
@@ -3739,7 +3740,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         SetStatusError(result->Record, Ydb::StatusIds::BAD_REQUEST, msg);
         ctx.Send(ev->Sender, result.release());
 
-        FailReadTrace(request->ReadSpan, 0, Ydb::StatusIds::BAD_REQUEST, msg);
+        request->ReadSpan.EndError(msg);
         return;
     }
 
@@ -3748,7 +3749,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
     TReadIteratorId readId(ev->Sender, record.GetReadId());
     if (!Pipeline.HandleWaitingReadIterator(readId, request)) {
         // This request has been cancelled
-        FailReadTrace(request->ReadSpan, 0, Ydb::StatusIds::CANCELLED, "Cancelled");
+        request->ReadSpan.EndError("Cancelled");
         return;
     }
 
@@ -3762,7 +3763,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         result->Record.SetReadId(readId.ReadId);
         ctx.Send(ev->Sender, result.release());
 
-        FailReadTrace(request->ReadSpan, 0, code, msg);
+        request->ReadSpan.EndError(msg);
     };
 
     if (Y_UNLIKELY(Pipeline.HasWaitingReadIterator(readId) || ReadIterators.contains(readId))) {
@@ -4010,7 +4011,7 @@ void TDataShard::Handle(TEvDataShard::TEvReadAck::TPtr& ev, const TActorContext&
         SendViaSession(state.SessionId, readId.Sender, SelfId(), result.release());
 
         // We definitely have Request in the read iterator state, because it's state is not Init.
-        FailReadTrace(state.Request->ReadSpan, state.TotalRows, Ydb::StatusIds::BAD_SESSION, issueStr);
+        state.Request->ReadSpan.EndError(issueStr);
         DeleteReadIterator(it);
         return;
     }
@@ -4080,7 +4081,7 @@ void TDataShard::Handle(TEvDataShard::TEvReadCancel::TPtr& ev, const TActorConte
 
     if (state.Request) {
         LWTRACK(ReadCancel, state.Request->Orbit);
-        FailReadTrace(state.Request->ReadSpan, state.TotalRows, Ydb::StatusIds::CANCELLED, "Cancelled");
+        state.Request->ReadSpan.EndError("Cancelled");
     }
     DeleteReadIterator(it);
 
@@ -4151,7 +4152,7 @@ void TDataShard::CancelReadIterators(Ydb::StatusIds::StatusCode code, const TStr
         result->Record.SetSeqNo(state.SeqNo + 1);
 
         SendViaSession(state.SessionId, readId.Sender, SelfId(), result.release());
-        FailReadTrace(state.Request->ReadSpan, state.TotalRows, code, issue);
+        state.Request->ReadSpan.EndError("Cancelled");
 
         if (state.ScanId) {
             Executor()->CancelScan(state.ScanLocalTid, state.ScanId);
@@ -4224,7 +4225,7 @@ void TDataShard::ReadIteratorsOnNodeDisconnected(const TActorId& sessionId, cons
         }
 
         if (state.Request) {
-            FailReadTrace(state.Request->ReadSpan, state.TotalRows, Ydb::StatusIds::UNAVAILABLE, "Disconnected");
+            state.Request->ReadSpan.EndError("Disconnected");
         }
         ReadIteratorsByLocalReadId.erase(state.LocalReadId);
         ReadIterators.erase(it);

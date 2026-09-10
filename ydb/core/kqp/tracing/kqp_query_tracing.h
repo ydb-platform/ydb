@@ -20,8 +20,6 @@ class TDqTaskStats;
 
 namespace NKikimr::NKqp {
 
-struct TKqpQueryStats;
-
 struct TQueryTraceDescription {
     TString DisplayName;
     TString Operation;
@@ -65,8 +63,6 @@ void AddQueryTraceAttributes(NWilson::TSpan& span, NKikimrKqp::EQueryType queryT
     NKikimrKqp::EQueryAction action, const TString& database, const TString& query);
 void EndQueryTraceSpan(NWilson::TSpan& span, Ydb::StatusIds::StatusCode status);
 void EndProxyQueryTraceSpan(NWilson::TSpan& span, const NKikimrKqp::TEvQueryResponse& response);
-void AddQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescription& description,
-    const TKqpQueryStats& stats, ui64 requestUnits, Ydb::StatusIds::StatusCode status);
 void AddWorkerQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescription& description,
     const NKikimrKqp::TEvQueryResponse& response, const NKqpProto::TKqpStatsQuery* workerStats);
 void AddExecutionTraceCpuTime(NWilson::TSpan& span, NYql::NDqProto::TDqExecutionStats& stats, ui64 cpuUs);

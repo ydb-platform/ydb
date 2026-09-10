@@ -50,6 +50,7 @@ void FillRequestFrom(IKqpGateway::TExecPhysicalRequest& request, const IKqpGatew
     request.NeedTxId = from.NeedTxId;
     request.FlushEffects = from.FlushEffects;
     request.UserTraceId = from.UserTraceId;
+    request.TraceId = NWilson::TTraceId(from.TraceId);
     request.OutputChunkMaxSize = from.OutputChunkMaxSize;
 }
 

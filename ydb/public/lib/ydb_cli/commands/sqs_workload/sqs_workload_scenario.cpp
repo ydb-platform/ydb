@@ -46,6 +46,12 @@ namespace NYdb::NConsoleClient {
         Aws::ShutdownAPI(AwsOptions);
     }
 
+    void TSqsWorkloadScenario::InitStatsCollector(size_t writerCount, size_t readerCount) {
+        StatsCollector = std::make_shared<TSqsWorkloadStatsCollector>(
+            writerCount, readerCount, Quiet, PrintTimestamp, WindowSec.Seconds(),
+            TotalSec.Seconds(), 0, Percentile, ErrorFlag);
+    }
+
     Aws::Utils::Logging::LogLevel TSqsWorkloadScenario::GetAwsSdkLogLevel() const {
         return AwsSdkLog
             ? Aws::Utils::Logging::LogLevel::Debug
@@ -70,12 +76,6 @@ namespace NYdb::NConsoleClient {
         }
 
         return sqsClientConfiguration;
-    }
-
-    void TSqsWorkloadScenario::InitStatsCollector(size_t writerCount, size_t readerCount) {
-        StatsCollector = std::make_shared<TSqsWorkloadStatsCollector>(
-            writerCount, readerCount, Quiet, PrintTimestamp, WindowSec.Seconds(),
-            TotalSec.Seconds(), 0, Percentile, ErrorFlag);
     }
 
     void TSqsWorkloadScenario::InitSqsClient(const TClientCommand::TConfig& config) {

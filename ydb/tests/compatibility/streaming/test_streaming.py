@@ -4,8 +4,7 @@ import os
 import pytest
 import time
 
-from ydb.tests.fq.streaming_common.common import wait_completed_checkpoints
-from ydb.tests.library.common.helpers import plain_or_under_sanitizer
+from ydb.tests.fq.streaming_common.common import wait_completed_checkpoints, read_and_check_data
 from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RestartToAnotherVersionFixture, RollingUpgradeAndDowngradeFixture
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.test_meta import link_test_case
@@ -369,37 +368,13 @@ class StreamingTestBase:
             assert time.time() < deadline, f"multi_output_table expected {expected_count} rows, got {count}"
             time.sleep(1)
 
-    def read_and_check_data(self, expected_output, endpoint):
-        logger.debug("read data from stream")
-        timeout = plain_or_under_sanitizer(60, 300)
-        deadline = time.time() + timeout
-        read_data = read_stream(
-            path=self.output_topic,
-            messages_count=len(expected_output),
-            consumer_name=self.consumer_name,
-            database=self.database_path,
-            endpoint=endpoint,
-            timeout=timeout)
-
-        while sorted(read_data) != sorted(expected_output):
-            read_data.pop(0)
-            remaining_timeout = deadline - time.time()
-            assert remaining_timeout > 0, f"Timed out waiting for expected data: {expected_output}, got: {read_data}"
-            read_data.extend(read_stream(
-                path=self.output_topic,
-                messages_count=1,
-                consumer_name=self.consumer_name,
-                database=self.database_path,
-                endpoint=endpoint,
-                timeout=remaining_timeout))
-
     def do_write_read(self, input, expected_output):
         logger.debug("do_write_read")
         endpoint = f"localhost:{self.cluster.nodes[1].port}"
         time.sleep(2)
         logger.debug("write data to stream")
         write_stream(path=self.input_topic, data=input, database=self.database_path, endpoint=endpoint)
-        self.read_and_check_data(expected_output, endpoint)
+        read_and_check_data(self, f"/Root/{self.query_name}", expected_output, endpoint, self.database_path, self.consumer_name, self.output_topic)
 
     def do_test_part1(self, extra_suffix=''):
         suffix = ('value1' if self.test_precompute_queries else '') + extra_suffix

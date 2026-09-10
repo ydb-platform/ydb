@@ -62,6 +62,9 @@ void TBasicAccountQuoter::InitCounters(const TActorContext& ctx) {
 
 void TBasicAccountQuoter::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
     LOG_I("Killed");
+    // Parent waits for TEvResponse. TEvError(INITIALIZING) to the tablet does not
+    // unblock PendingAccountQuotaRequests, and poison also runs on consumer delete
+    // while the tablet is still alive.
     while (!Queue.empty()) {
         ApproveQuota(Queue.front().Request, Queue.front().StartWait, ctx);
         Queue.pop_front();

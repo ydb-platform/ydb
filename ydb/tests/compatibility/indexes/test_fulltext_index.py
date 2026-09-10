@@ -9,6 +9,8 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 
 
 class TestFulltextIndex(RollingUpgradeAndDowngradeFixture):
+    PREFIXED_RELEVANCE_MIN_VERSION = (26, 4)
+
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         if min(self.versions) < (26, 3):
@@ -18,6 +20,11 @@ class TestFulltextIndex(RollingUpgradeAndDowngradeFixture):
         self.limit = 5
         self.good_queries = {}
         yield from self.setup_cluster(extra_feature_flags=["enable_fulltext_index", "enable_fulltext_index_prefix"])
+
+    def _index_types(self, with_prefix=False):
+        if with_prefix and min(self.versions) < self.PREFIXED_RELEVANCE_MIN_VERSION:
+            return ['fulltext_plain']
+        return ['fulltext_plain', 'fulltext_relevance']
 
     def create_table(self, table_name, with_prefix=False):
         if with_prefix:
@@ -116,9 +123,11 @@ class TestFulltextIndex(RollingUpgradeAndDowngradeFixture):
     def _get_queries(self):
         queries = []
         for text_type in ['string', 'utf8']:
-            for index_type in ['fulltext_plain', 'fulltext_relevance']:
+            for index_type in self._index_types():
                 for tokenizer in ['standard', 'whitespace']:
                     queries.extend(self._get_queries_for(text_type, index_type, tokenizer, with_prefix=False))
+            for index_type in self._index_types(with_prefix=True):
+                for tokenizer in ['standard', 'whitespace']:
                     queries.extend(self._get_queries_for(text_type, index_type, tokenizer, with_prefix=True))
         return queries
 
@@ -249,7 +258,7 @@ class TestFulltextIndex(RollingUpgradeAndDowngradeFixture):
             table_name = f"table_{text_type}"
             self.create_table(table_name, with_prefix=False)
             self._write_data(table_name, with_prefix=False)
-            for index_type in ['fulltext_plain', 'fulltext_relevance']:
+            for index_type in self._index_types():
                 for tokenizer in ['standard', 'whitespace']:
                     index_name = f"idx_{index_type}_{tokenizer}"
                     self._create_index(
@@ -264,7 +273,7 @@ class TestFulltextIndex(RollingUpgradeAndDowngradeFixture):
             table_name_prefixed = f"table_{text_type}_prefixed"
             self.create_table(table_name_prefixed, with_prefix=True)
             self._write_data(table_name_prefixed, with_prefix=True)
-            for index_type in ['fulltext_plain', 'fulltext_relevance']:
+            for index_type in self._index_types(with_prefix=True):
                 for tokenizer in ['standard', 'whitespace']:
                     index_name = f"idx_{index_type}_{tokenizer}_prefixed"
                     self._create_index(

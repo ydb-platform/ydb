@@ -243,6 +243,31 @@ void TOpAggregate::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit:
     }
 }
 
+void TOpWindow::RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+
+    for (auto& func : WindowFuncs) {
+        if (renameMap.contains(func.ResultColName)) {
+            func.ResultColName = renameMap.at(func.ResultColName);
+        }
+    }
+}
+
+void TOpWindow::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+
+    RenameInfoUnits(PartitionKeys, renameMap);
+    for (auto& element : SortElements) {
+        const auto it = renameMap.find(element.SortColumn);
+        if (it != renameMap.end()) {
+            element.SortColumn = it->second;
+        }
+    }
+    for (auto& func : WindowFuncs) {
+        RenameInfoUnits(func.Arguments, renameMap);
+    }
+}
+
 void TOpCBOTree::RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
     Y_UNUSED(renameMap);
     Y_UNUSED(ctx);

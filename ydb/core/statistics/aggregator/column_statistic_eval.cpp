@@ -557,16 +557,16 @@ bool IStage2ColumnStatisticEval::AreMinMaxNeeded(const NScheme::TTypeInfo& typeI
 
 // Eq-height histogram collection has three integration paths:
 //
-// 1. DataShard PK (sorted input): keys arrive in PK order → AddSorted fast path
-//    → RankUncertainty == 0 (exact). Finalize runs in the YQL query; no actor-side merge.
+// 1. Whole-table DataShard PK (sorted input): keys arrive in PK order → AddSorted
+//    fast path → RankUncertainty == 0 (exact). Finalize in YQL; no actor-side merge.
 //
 // 2. DataShard non-PK (unsorted input): keys arrive in PK order but the histogram
 //    is over non-PK columns → staging buffer → InterleaveInto → RankUncertainty > 0
 //    (bounded approximate). Finalize runs in the YQL query; no actor-side merge.
 //
-// 3. ColumnShard (per-shard): each shard runs Serialize in the YQL query,
-//    returning an intermediate state. The actor merges them here via
-//    IntermediateState->Merge(), then calls Finalize() to produce the final blob.
+// 3. Partitioned scans (ColumnShard per-shard or DataShard per-PK-range): each part
+//    runs Serialize in YQL; the actor merges via IntermediateState->Merge() then
+//    Finalize(). Disjoint PK ranges stay exact (RankUncertainty == 0).
 //    IntermediateState is created only for this path (IsIntermediateAggregation).
 class TMultiColumnEqHeightHistogramEval : public IMultiColumnStatisticEval {
     std::vector<TString> ColumnNames;

@@ -19,10 +19,12 @@ PEERDIR(
     ydb/core/kqp/node_service
     ydb/core/protos
     ydb/core/scheme
-    ydb/core/testlib/default
+    ydb/core/testlib/pg
     ydb/core/statistics/ut_common
     ydb/core/tx/conveyor_composite/usage
+    ydb/public/sdk/cpp/src/client/params
     yql/essentials/core/histogram
+    yql/essentials/types/dynumber
     yql/essentials/udfs/common/digest
     yql/essentials/udfs/common/hyperloglog
 )
@@ -31,6 +33,7 @@ SRCS(
     ut_analyze.cpp
     ut_traverse.cpp
     ut_analyze_op.cpp
+    ut_key_range_predicate.cpp
 )
 
 END()

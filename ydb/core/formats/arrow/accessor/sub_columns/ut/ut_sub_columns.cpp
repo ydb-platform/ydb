@@ -6,7 +6,6 @@
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
-
 #include <ydb/core/formats/arrow/accessor/sub_columns/ut_common/ut_helpers.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
@@ -17,16 +16,39 @@
 #include <yql/essentials/types/binary_json/write.h>
 
 #include <regex>
+#include <utility>
 
+using NKikimr::NArrow::NAccessor::NSubColumns::NTesting::BuildArrayWithStoredPaths;
+using NKikimr::NArrow::NAccessor::NSubColumns::NTesting::BuildStats;
+using NKikimr::NArrow::NAccessor::NSubColumns::NTesting::CreateTrivialArrayAccessor;
 using NKikimr::NArrow::NAccessor::NSubColumns::NTesting::PrintBinaryJsons;
 
 Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
     using namespace NKikimr::NArrow::NAccessor;
     using namespace NKikimr::NArrow;
     using namespace NKikimr;
+    using TResolvedPath = NSubColumns::TDictStats::TResolvedPath;
 
     std::string PrepareToCompare(const std::string& str) {
         return std::regex_replace(str, std::regex(" |\\n"), "");
+    }
+
+    TResolvedPath ResolvePathVerified(const NSubColumns::TDictStats& stats, TStringBuf path) {
+        auto pathInfoResult = stats.ResolvePath(path);
+        UNIT_ASSERT_C(pathInfoResult.IsSuccess(), pathInfoResult.GetErrorMessage());
+        const auto pathInfo = pathInfoResult.DetachResult();
+        UNIT_ASSERT_C(pathInfo, path);
+        const auto keyIndex = stats.GetKeyOrPrefixIndexOptional(NSubColumns::ToSubcolumnName(path));
+        UNIT_ASSERT_C(keyIndex, path);
+        UNIT_ASSERT_VALUES_EQUAL(*keyIndex, pathInfo->ColumnIndex);
+        return *pathInfo;
+    }
+
+    void CheckPathHasNoMatch(const NSubColumns::TDictStats& stats, TStringBuf path) {
+        auto pathInfoResult = stats.ResolvePath(path);
+        UNIT_ASSERT_C(pathInfoResult.IsSuccess(), pathInfoResult.GetErrorMessage());
+        UNIT_ASSERT_C(!pathInfoResult.DetachResult(), path);
+        UNIT_ASSERT_C(!stats.GetKeyOrPrefixIndexOptional(NSubColumns::ToSubcolumnName(path)), path);
     }
 
     Y_UNIT_TEST(EmptyOthers){
@@ -267,9 +289,12 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         const auto invalidResult = NSubColumns::ValidateJsonPath(R"("deployment.environment")");
         UNIT_ASSERT(invalidResult.IsFail());
         UNIT_ASSERT(invalidResult.GetErrorMessage().Contains("Unsupported path"));
+
+        const auto stats = BuildStats({ { R"("a")", NSubColumns::EValueType::BinaryJson } });
+        UNIT_ASSERT(!stats.GetKeyOrPrefixIndexOptional("\""));
     }
 
-    Y_UNIT_TEST(SplitJsonPath) {
+    Y_UNIT_TEST(ParseJsonPath) {
         TString path = R"($.a."b".'c'.'d"'."'"."\"".""."."[0,2].b[0].c[3][4].d[2 to 5].e[last])";
         TVector<TString> expectedItems = {"a", "b", "c", "d\"", "'", "\"", "", ".", "[0,2]", "b", "[0]", "c", "[3]", "[4]", "d", "[2 to 5]", "e", "[last]"};
         using enum NYql::NJsonPath::EJsonPathItemType;
@@ -277,189 +302,180 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
             MemberAccess, ArrayAccess, MemberAccess, ArrayAccess, ArrayAccess, MemberAccess, ArrayAccess, MemberAccess, ArrayAccess};
         TVector<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathBuf::size_type> expectedStartPositions = {1, 3, 7, 11, 16, 20, 25, 28, 32, 37, 39, 42, 44, 47, 50, 52, 60, 62};
 
-        auto result = NKikimr::NArrow::NAccessor::NSubColumns::SplitJsonPath(path, NSubColumns::TJsonPathSplitSettings{.FillTypes = true, .FillStartPositions = true});
+        auto result = NKikimr::NArrow::NAccessor::NSubColumns::ParseJsonPath(path);
         UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
-        const auto [pathItems, pathTypes, startPositions] = result.DetachResult();
+        const auto [pathItems, pathTypes, startPositions] = result.DetachResult().Items;
 
         UNIT_ASSERT_VALUES_EQUAL(expectedItems, pathItems);
         UNIT_ASSERT_EQUAL(expectedTypes, pathTypes);
         UNIT_ASSERT_VALUES_EQUAL(expectedStartPositions, startPositions);
     }
 
-    Y_UNIT_TEST(JsonPathTrie) {
-        TVector<TString> testPaths = {"$.a.b", "$.b", "$.c.d"};
-        TVector<std::shared_ptr<IChunkedArray>> testAccessors;
-        TVector<ui64> testCookies;
-        NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie jsonPathAccessorTrie;
+    Y_UNIT_TEST(JsonPathResolutionHandlesMultipleRequestedPaths) {
+        auto stats = BuildStats({
+            { R"("a"."b")", NSubColumns::EValueType::BinaryJson },
+            { R"("b")", NSubColumns::EValueType::BinaryJson },
+            { R"("c"."d")", NSubColumns::EValueType::BinaryJson },
+        });
 
-        {
-            ui64 testCookie = 0;
-            for (const auto& path : testPaths) {
-                testAccessors.emplace_back(TTrivialArray::BuildEmpty(std::make_shared<arrow::BinaryType>()));
-                testCookies.emplace_back(testCookie++);
-                UNIT_ASSERT(jsonPathAccessorTrie.Insert(path, testAccessors.back(), NSubColumns::EValueType::BinaryJson, testCookies.back()).IsSuccess());
-            }
-        }
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathVerified(stats, "$.a.b"), (TResolvedPath{0, NSubColumns::EValueType::BinaryJson, ""}));
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathVerified(stats, "$.b"), (TResolvedPath{1, NSubColumns::EValueType::BinaryJson, ""}));
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathVerified(stats, "$.c.d"), (TResolvedPath{2, NSubColumns::EValueType::BinaryJson, ""}));
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathVerified(stats, "$.a.b.e"), (TResolvedPath{0, NSubColumns::EValueType::BinaryJson, "strict $.e"}));
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathVerified(stats, "$.b.\"\".g[3].h"), (TResolvedPath{1, NSubColumns::EValueType::BinaryJson, "strict $.\"\".g[3].h"}));
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathVerified(stats, "$.c.d[54]"), (TResolvedPath{2, NSubColumns::EValueType::BinaryJson, "strict $[54]"}));
 
-        {
-            for (decltype(testPaths)::size_type i = 0; i < testPaths.size(); ++i) {
-                auto jsonPathAccessorResult = jsonPathAccessorTrie.GetAccessor(testPaths[i]);
-                UNIT_ASSERT_C(jsonPathAccessorResult.IsSuccess(), testPaths[i] + " error: " + jsonPathAccessorResult.GetErrorMessage());
-                auto jsonPathAccessor = jsonPathAccessorResult.DetachResult();
-                UNIT_ASSERT(jsonPathAccessor->IsValid());
-                UNIT_ASSERT_VALUES_EQUAL(testAccessors[i].get(), jsonPathAccessor->GetChunkedArrayAccessor().get());
-                UNIT_ASSERT_VALUES_EQUAL(testCookies[i], jsonPathAccessor->GetCookie());
-                UNIT_ASSERT_VALUES_EQUAL(TString{}, jsonPathAccessor->GetRemainingPath());
-            }
-        }
-
-        {
-            TVector<TString> testShortPaths = {"$.a", "$.\"\"", "$.c"};
-            for (const auto& path : testShortPaths) {
-                auto jsonPathAccessorResult = jsonPathAccessorTrie.GetAccessor(path);
-                UNIT_ASSERT_C(jsonPathAccessorResult.IsSuccess(), path + " error: " + jsonPathAccessorResult.GetErrorMessage());
-                auto jsonPathAccessor = jsonPathAccessorResult.DetachResult();
-                UNIT_ASSERT(!jsonPathAccessor->IsValid());
-                UNIT_ASSERT_VALUES_EQUAL(nullptr, jsonPathAccessor->GetChunkedArrayAccessor().get());
-                UNIT_ASSERT_VALUES_EQUAL(std::optional<ui64>{}, jsonPathAccessor->GetCookie());
-                UNIT_ASSERT_VALUES_EQUAL(TString{}, jsonPathAccessor->GetRemainingPath());
-            }
-        }
-
-        {
-            TVector<TString> testLongPaths = {"$.a.b.e", "$.b.\"\".g[3].h", "$.c.d[54]"};
-            TVector<TString> testLongRemainingPaths = {"strict $.e", "strict $.\"\".g[3].h", "strict $[54]"};
-            for (decltype(testPaths)::size_type i = 0; i < testPaths.size(); ++i) {
-                auto jsonPathAccessorResult = jsonPathAccessorTrie.GetAccessor(testLongPaths[i]);
-                UNIT_ASSERT_C(jsonPathAccessorResult.IsSuccess(), testPaths[i] + " error: " + jsonPathAccessorResult.GetErrorMessage());
-                auto jsonPathAccessor = jsonPathAccessorResult.DetachResult();
-                UNIT_ASSERT(jsonPathAccessor->IsValid());
-                UNIT_ASSERT_VALUES_EQUAL(testAccessors[i].get(), jsonPathAccessor->GetChunkedArrayAccessor().get());
-                UNIT_ASSERT_VALUES_EQUAL(testCookies[i], jsonPathAccessor->GetCookie());
-                UNIT_ASSERT_VALUES_EQUAL(testLongRemainingPaths[i], jsonPathAccessor->GetRemainingPath());
-            }
-        }
-
-        {
-            TVector<TString> testInvalidPaths = {"$.a.b.[2]", "$.b.", "$.c[]"};
-            for (decltype(testPaths)::size_type i = 0; i < testPaths.size(); ++i) {
-                auto jsonPathAccessorResult = jsonPathAccessorTrie.GetAccessor(testInvalidPaths[i]);
-                UNIT_ASSERT(jsonPathAccessorResult.IsFail());
-            }
+        for (const auto& path : { "$.a", "$.\"\"", "$.c" }) {
+            CheckPathHasNoMatch(stats, path);
         }
     }
 
-    std::shared_ptr<TTrivialArray> CreateTrivialArrayAccessor(TStringBuf data) {
-        auto binaryJsonResult = NBinaryJson::SerializeToBinaryJson(data);
-        UNIT_ASSERT(std::holds_alternative<NBinaryJson::TBinaryJson>(binaryJsonResult));
+    Y_UNIT_TEST(JsonPathResolutionUsesLongestPrefix) {
+        auto stats = BuildStats({ { R"("a")", NSubColumns::EValueType::BinaryJson }, { R"("a"."b")", NSubColumns::EValueType::String } });
 
-        auto binaryJson = std::get<NBinaryJson::TBinaryJson>(binaryJsonResult);
-        return std::make_shared<TTrivialArray>(NKikimr::NArrow::NAccessor::TTrivialArray::BuildArrayFromScalar(
-            std::make_shared<arrow::BinaryScalar>(std::make_shared<arrow::Buffer>((const ui8*)binaryJson.data(), binaryJson.size()), arrow::binary())));
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathVerified(stats, "$.a.b.c"), (TResolvedPath{1, NSubColumns::EValueType::String, "strict $.c"}));
     }
 
-    void CheckValueByPath(const NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie& jsonPathAccessorTrie, TStringBuf path, std::optional<TStringBuf> expected) {
-        auto jsonPathAccessorResult = jsonPathAccessorTrie.GetAccessor(path);
-        UNIT_ASSERT_C(jsonPathAccessorResult.IsSuccess(), TString(path) + " error: " + jsonPathAccessorResult.GetErrorMessage());
-        auto jsonPathAccessor = jsonPathAccessorResult.DetachResult();
-        UNIT_ASSERT(jsonPathAccessor->IsValid());
+
+
+    Y_UNIT_TEST(JsonPathResolutionMatchesExactPath) {
+        auto stats = BuildStats({ { R"("a"."b")", NSubColumns::EValueType::String } });
+
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathVerified(stats, "$.a.b"), (TResolvedPath{0, NSubColumns::EValueType::String, ""}));
+    }
+
+    Y_UNIT_TEST(JsonPathResolutionReturnsNoMatch) {
+        auto stats = BuildStats({ { R"("a")", NSubColumns::EValueType::BinaryJson } });
+
+        CheckPathHasNoMatch(stats, "$.b");
+    }
+
+    Y_UNIT_TEST(JsonPathResolutionMatchesQuotedMember) {
+        auto stats = BuildStats({ { R"("a.b")", NSubColumns::EValueType::String } });
+
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathVerified(stats, "$.\"a.b\".c"), (TResolvedPath{0, NSubColumns::EValueType::String, "strict $.c"}));
+    }
+
+    Y_UNIT_TEST(JsonPathResolutionRetainsArraySuffix) {
+        auto stats = BuildStats({ { R"("a")", NSubColumns::EValueType::BinaryJson } });
+
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathVerified(stats, "$.a[0].b"), (TResolvedPath{0, NSubColumns::EValueType::BinaryJson, "strict $[0].b"}));
+    }
+
+    Y_UNIT_TEST(JsonPathResolutionMatchesAncestorBeforeUnstoredDescendant) {
+        auto stats = BuildStats({ { R"("d")", NSubColumns::EValueType::BinaryJson }, { R"("d"."e"."f")", NSubColumns::EValueType::BinaryJson } });
+
+        // A descendant stored path does not prevent selecting the longest stored ancestor.
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathVerified(stats, "$.d.e"), (TResolvedPath{0, NSubColumns::EValueType::BinaryJson, "strict $.e"}));
+    }
+
+    Y_UNIT_TEST(JsonPathResolutionRejectsInvalidPaths) {
+        auto stats = NSubColumns::TDictStats::BuildEmpty();
+
+        for (const auto& path : { "$.a.b.[2]", "$.b.", "$.c[]" }) {
+            UNIT_ASSERT(stats.ResolvePath(path).IsFail());
+        }
+    }
+
+    void CheckMostSpecificStoredPath(const std::initializer_list<std::pair<TStringBuf, TStringBuf>>& columns, const TStringBuf otherName,
+        const TStringBuf otherValue, const TStringBuf path, const TStringBuf expected) {
+        auto array = BuildArrayWithStoredPaths(columns, otherName, otherValue);
+        auto accessorResult = array->GetPathAccessor(path, 1);
+        UNIT_ASSERT_C(accessorResult.IsSuccess(), accessorResult.GetErrorMessage());
+        accessorResult.DetachResult()->VisitValues([expected](const std::optional<TStringBuf>& value) {
+            UNIT_ASSERT_VALUES_EQUAL(value, expected);
+        });
+    }
+
+    void CheckValueByPath(const std::shared_ptr<IChunkedArray>& accessor, TStringBuf path, std::optional<TStringBuf> expected) {
+        static const auto stats = BuildStats({ { R"("a")", NSubColumns::EValueType::BinaryJson } });
+        auto pathInfo = ResolvePathVerified(stats, path);
+        NSubColumns::TJsonPathAccessor jsonPathAccessor(accessor, std::move(pathInfo.RemainingPath), pathInfo.ValueType);
 
         int callsCount = 0;
-        jsonPathAccessor->VisitValues([&](const std::optional<TStringBuf>& value) {
+        jsonPathAccessor.VisitValues([&](const std::optional<TStringBuf>& value) {
             UNIT_ASSERT_VALUES_EQUAL_C(expected, value, TString(path));
-            callsCount++;
-            UNIT_ASSERT_VALUES_EQUAL(1, callsCount);
+            ++callsCount;
         });
+        UNIT_ASSERT_VALUES_EQUAL(callsCount, 1);
     }
 
     Y_UNIT_TEST(JsonPathAccessorObject) {
         auto accessor = CreateTrivialArrayAccessor(
             R"({"root_integer": 1, "root_string": "a", "root_true": true, "root_false": false, "root_null": null, "root_object": {"a": "b"}, "root_array": ["a", 1, true, false, null, {}, [], [1, 2]]})");
-
-        NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie jsonPathAccessorTrie;
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.a", accessor, NSubColumns::EValueType::BinaryJson).IsSuccess());
-
         // Non-existing paths and root path must return std::nullopt and called only once for our binary JSON
         // Object, array, null must return std::nullopt
         {
             for (const auto& path : {"$.a", "$.a[0]", "$.a.h", "$.a.e.p", "$.a.f.z", "$.a.root_object", "$.a.root_array", "$.a.root_null", "$.a.root_array[4]", "$.a.root_array[5]",
                      "$.a.root_array[6]", "$.a.root_array[7]", "$.a.root_array[7][4]", "$.a.root_array[10]"}) {
-                CheckValueByPath(jsonPathAccessorTrie, path, std::nullopt);
+                CheckValueByPath(accessor, path, std::nullopt);
             }
         }
 
         // Root scalars
         {
-            CheckValueByPath(jsonPathAccessorTrie, "$.a.root_string", "a");
-            CheckValueByPath(jsonPathAccessorTrie, "$.a.root_integer", "1");
-            CheckValueByPath(jsonPathAccessorTrie, "$.a.root_true", "true");
-            CheckValueByPath(jsonPathAccessorTrie, "$.a.root_false", "false");
+            CheckValueByPath(accessor, "$.a.root_string", "a");
+            CheckValueByPath(accessor, "$.a.root_integer", "1");
+            CheckValueByPath(accessor, "$.a.root_true", "true");
+            CheckValueByPath(accessor, "$.a.root_false", "false");
         }
 
         // Non-root scalars
         {
-            CheckValueByPath(jsonPathAccessorTrie, "$.a.root_object.a", "b");
-            CheckValueByPath(jsonPathAccessorTrie, "$.a.root_array[0]", "a");
-            CheckValueByPath(jsonPathAccessorTrie, "$.a.root_array[1]", "1");
-            CheckValueByPath(jsonPathAccessorTrie, "$.a.root_array[2]", "true");
-            CheckValueByPath(jsonPathAccessorTrie, "$.a.root_array[3]", "false");
-            CheckValueByPath(jsonPathAccessorTrie, "$.a.root_array[7][0]", "1");
-            CheckValueByPath(jsonPathAccessorTrie, "$.a.root_array[7][1]", "2");
+            CheckValueByPath(accessor, "$.a.root_object.a", "b");
+            CheckValueByPath(accessor, "$.a.root_array[0]", "a");
+            CheckValueByPath(accessor, "$.a.root_array[1]", "1");
+            CheckValueByPath(accessor, "$.a.root_array[2]", "true");
+            CheckValueByPath(accessor, "$.a.root_array[3]", "false");
+            CheckValueByPath(accessor, "$.a.root_array[7][0]", "1");
+            CheckValueByPath(accessor, "$.a.root_array[7][1]", "2");
         }
 
         // Different quotes
         {
             for (const auto& path : {"$.a.root_integer", "$.a.\"root_integer\"", "$.a.'root_integer'", "$.\"a\".root_integer", "$.\"a\".\"root_integer\"", "$.\"a\".'root_integer'",
                      "$.'a'.root_integer", "$.'a'.\"root_integer\"", "$.'a'.'root_integer'"}) {
-                CheckValueByPath(jsonPathAccessorTrie, path, "1");
+                CheckValueByPath(accessor, path, "1");
             }
         }
     }
 
     Y_UNIT_TEST(JsonPathAccessorTopLevelNull) {
         auto accessor = CreateTrivialArrayAccessor("null");
-
-        NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie jsonPathAccessorTrie;
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.a", accessor, NSubColumns::EValueType::BinaryJson).IsSuccess());
-
-        CheckValueByPath(jsonPathAccessorTrie, "$.a", std::nullopt);
-        CheckValueByPath(jsonPathAccessorTrie, "$.a.b", std::nullopt);
-        CheckValueByPath(jsonPathAccessorTrie, "$.a.b.c", std::nullopt);
+        CheckValueByPath(accessor, "$.a", std::nullopt);
+        CheckValueByPath(accessor, "$.a.b", std::nullopt);
+        CheckValueByPath(accessor, "$.a.b.c", std::nullopt);
     }
 
     Y_UNIT_TEST(JsonPathAccessorArray) {
         auto accessor = CreateTrivialArrayAccessor(R"(["a", 1, true, false, null, {"a": "b"}, {}, [1,2], []])");
-
-        NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie jsonPathAccessorTrie;
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.a", accessor, NSubColumns::EValueType::BinaryJson).IsSuccess());
-
         // Non-existing paths and root path must return std::nullopt and called only once for our binary JSON
         // Object, array, null must return std::nullopt
         {
             for (const auto& path : {"$.a", "$.a[100]", "$.a.h", "$.a.e.p", "$.a[4]", "$.a[5]", "$.a[6]", "$.a[7]", "$.a[7][10]", "$.a[8]", "$.a[8][0]"}) {
-                CheckValueByPath(jsonPathAccessorTrie, path, std::nullopt);
+                CheckValueByPath(accessor, path, std::nullopt);
             }
         }
 
         // Root scalars
         {
-            CheckValueByPath(jsonPathAccessorTrie, "$.a[0]", "a");
-            CheckValueByPath(jsonPathAccessorTrie, "$.a[1]", "1");
-            CheckValueByPath(jsonPathAccessorTrie, "$.a[2]", "true");
-            CheckValueByPath(jsonPathAccessorTrie, "$.a[3]", "false");
+            CheckValueByPath(accessor, "$.a[0]", "a");
+            CheckValueByPath(accessor, "$.a[1]", "1");
+            CheckValueByPath(accessor, "$.a[2]", "true");
+            CheckValueByPath(accessor, "$.a[3]", "false");
         }
 
         // Non-root scalars
         {
-            CheckValueByPath(jsonPathAccessorTrie, "$.a[5].a", "b");
-            CheckValueByPath(jsonPathAccessorTrie, "$.a[7][0]", "1");
-            CheckValueByPath(jsonPathAccessorTrie, "$.a[7][1]", "2");
+            CheckValueByPath(accessor, "$.a[5].a", "b");
+            CheckValueByPath(accessor, "$.a[7][0]", "1");
+            CheckValueByPath(accessor, "$.a[7][1]", "2");
         }
 
         // Different quotes
         {
             for (const auto& path : {"$.a[1]", "$.\"a\"[1]", "$.'a'[1]"}) {
-                CheckValueByPath(jsonPathAccessorTrie, path, "1");
+                CheckValueByPath(accessor, path, "1");
             }
         }
     }
@@ -472,20 +488,16 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
             const auto& scalarJson = scalarJsons[i];
             const auto& expectedValue = expectedValues[i];
             auto accessor = CreateTrivialArrayAccessor(scalarJson);
-
-            NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie jsonPathAccessorTrie;
-            UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.a", accessor, NSubColumns::EValueType::BinaryJson).IsSuccess());
-
             // Non-existing paths must return std::nullopt and called only once for our binary JSON
             {
                 for (const auto& path : {"$.a.h", "$.a.e[3]", "$.a[4]"}) {
-                    CheckValueByPath(jsonPathAccessorTrie, path, std::nullopt);
+                    CheckValueByPath(accessor, path, std::nullopt);
                 }
             }
 
             // Existing path should return expected value
             {
-                CheckValueByPath(jsonPathAccessorTrie, "$.a", expectedValue);
+                CheckValueByPath(accessor, "$.a", expectedValue);
             }
         }
     }
@@ -496,41 +508,58 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         auto accessorTopScalar2 = CreateTrivialArrayAccessor("2");
         auto accessorTopScalar3 = CreateTrivialArrayAccessor("3");
         auto accessorTopArray = CreateTrivialArrayAccessor("[3,4]");
+        auto stats = BuildStats({
+            { R"("a")", NSubColumns::EValueType::BinaryJson },
+            { R"("a"."b")", NSubColumns::EValueType::BinaryJson },
+            { R"("b")", NSubColumns::EValueType::BinaryJson },
+            { R"("d"."e"."f")", NSubColumns::EValueType::BinaryJson },
+            { R"("d"."e"."g")", NSubColumns::EValueType::BinaryJson },
+            { R"("d"."e"."h")", NSubColumns::EValueType::BinaryJson },
+            { R"("d"."i"."j")", NSubColumns::EValueType::BinaryJson },
+            { R"("d"."i")", NSubColumns::EValueType::BinaryJson },
+            { R"("d")", NSubColumns::EValueType::BinaryJson },
+            { R"("k")", NSubColumns::EValueType::BinaryJson },
+            { R"("k"."l")", NSubColumns::EValueType::BinaryJson },
+            { R"("k"."m")", NSubColumns::EValueType::BinaryJson },
+        });
+        auto records = std::make_shared<TGeneralContainer>(1);
+        const std::vector<std::shared_ptr<IChunkedArray>> accessors = {
+            accessorTopObject, accessorTopScalar2, accessorTopArray, accessorTopScalar1, accessorTopScalar2, accessorTopScalar3,
+            accessorTopScalar1, accessorTopScalar2, accessorTopArray, accessorTopScalar1, accessorTopObject, accessorTopArray,
+        };
+        for (ui32 i = 0; i < accessors.size(); ++i) {
+            records->AddField(stats.GetField(i), accessors[i]).Validate();
+        }
+        NSubColumns::TColumnsData columns(stats, records);
 
-        NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie jsonPathAccessorTrie;
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.a", accessorTopObject, NSubColumns::EValueType::BinaryJson).IsSuccess());
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.a.b", accessorTopScalar2, NSubColumns::EValueType::BinaryJson).IsSuccess());
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.b", accessorTopArray, NSubColumns::EValueType::BinaryJson).IsSuccess());
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.d.e.f", accessorTopScalar1, NSubColumns::EValueType::BinaryJson).IsSuccess());
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.d.e.g", accessorTopScalar2, NSubColumns::EValueType::BinaryJson).IsSuccess());
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.d.e.h", accessorTopScalar3, NSubColumns::EValueType::BinaryJson).IsSuccess());
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.d.i.j", accessorTopScalar1, NSubColumns::EValueType::BinaryJson).IsSuccess());
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.d.i", accessorTopScalar2, NSubColumns::EValueType::BinaryJson).IsSuccess());
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.d", accessorTopArray, NSubColumns::EValueType::BinaryJson).IsSuccess());
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.k", accessorTopScalar1, NSubColumns::EValueType::BinaryJson).IsSuccess());
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.k.l", accessorTopObject, NSubColumns::EValueType::BinaryJson).IsSuccess());
-        UNIT_ASSERT(jsonPathAccessorTrie.Insert("$.k.m", accessorTopArray, NSubColumns::EValueType::BinaryJson).IsSuccess());
+        const auto check = [&](const TStringBuf path, const std::optional<TStringBuf> expected) {
+            const auto pathInfo = ResolvePathVerified(stats, path);
+            const auto accessor = columns.GetPathAccessor(pathInfo);
+            accessor->VisitValues([&](const std::optional<TStringBuf>& value) {
+                UNIT_ASSERT_VALUES_EQUAL_C(value, expected, path);
+            });
+        };
 
-        CheckValueByPath(jsonPathAccessorTrie, "$.a", std::nullopt);
-        CheckValueByPath(jsonPathAccessorTrie, "$.a.data", "1");
-        CheckValueByPath(jsonPathAccessorTrie, "$.a.b", "2");
-        CheckValueByPath(jsonPathAccessorTrie, "$.b", std::nullopt);
-        CheckValueByPath(jsonPathAccessorTrie, "$.b[0]", "3");
-        CheckValueByPath(jsonPathAccessorTrie, "$.b[1]", "4");
-        CheckValueByPath(jsonPathAccessorTrie, "$.d.e.f", "1");
-        CheckValueByPath(jsonPathAccessorTrie, "$.d.e.g", "2");
-        CheckValueByPath(jsonPathAccessorTrie, "$.d.e.h", "3");
-        CheckValueByPath(jsonPathAccessorTrie, "$.d.i.j", "1");
-        CheckValueByPath(jsonPathAccessorTrie, "$.d.i", "2");
-        CheckValueByPath(jsonPathAccessorTrie, "$.d", std::nullopt);
-        CheckValueByPath(jsonPathAccessorTrie, "$.d[0]", "3");
-        CheckValueByPath(jsonPathAccessorTrie, "$.d[1]", "4");
-        CheckValueByPath(jsonPathAccessorTrie, "$.k", "1");
-        CheckValueByPath(jsonPathAccessorTrie, "$.k.l", std::nullopt);
-        CheckValueByPath(jsonPathAccessorTrie, "$.k.l.data", "1");
-        CheckValueByPath(jsonPathAccessorTrie, "$.k.m", std::nullopt);
-        CheckValueByPath(jsonPathAccessorTrie, "$.k.m[0]", "3");
-        CheckValueByPath(jsonPathAccessorTrie, "$.k.m[1]", "4");
+        check("$.a", std::nullopt);
+        check("$.a.data", "1");
+        check("$.a.b", "2");
+        check("$.b", std::nullopt);
+        check("$.b[0]", "3");
+        check("$.b[1]", "4");
+        check("$.d.e.f", "1");
+        check("$.d.e.g", "2");
+        check("$.d.e.h", "3");
+        check("$.d.i.j", "1");
+        check("$.d.i", "2");
+        check("$.d", std::nullopt);
+        check("$.d[0]", "3");
+        check("$.d[1]", "4");
+        check("$.k", "1");
+        check("$.k.l", std::nullopt);
+        check("$.k.l.data", "1");
+        check("$.k.m", std::nullopt);
+        check("$.k.m[0]", "3");
+        check("$.k.m[1]", "4");
     }
 
     Y_UNIT_TEST(SubColumnNameFromDifferentPaths) {
@@ -552,6 +581,61 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
             UNIT_ASSERT_VALUES_EQUAL(expected, restorer.GetResult());
         }
     }
+
+    Y_UNIT_TEST(PartialJsonPathAccessorResolvesToAddedColumn) {
+        auto header = NSubColumns::TSubColumnsHeader(
+            BuildStats({ { R"("a")", NSubColumns::EValueType::BinaryJson }, { R"("a"."b")", NSubColumns::EValueType::BinaryJson } }),
+            NSubColumns::TDictStats::BuildEmpty(), NKikimrArrowAccessorProto::TSubColumnsAccessor(), 0);
+        TSubColumnsPartialArray partial(std::move(header), 1, arrow::binary(), NSubColumns::TSettings());
+        partial.AddColumn(partial.GetHeader().GetColumnStats().GetExactKeyIndexVerified(R"("a")"), CreateTrivialArrayAccessor(R"({"b":{"c":"value"}})"));
+
+        auto accessorResult = partial.GetPathAccessor("$.a.b.c", 1);
+        UNIT_ASSERT_C(accessorResult.IsSuccess(), accessorResult.GetErrorMessage());
+        accessorResult.DetachResult()->VisitValues([](const std::optional<TStringBuf>& value) {
+            UNIT_ASSERT_VALUES_EQUAL(value, "value");
+        });
+    }
+
+    Y_UNIT_TEST(PartialArrayNeedsFetchForMoreSpecificOthersPath) {
+        auto header = NSubColumns::TSubColumnsHeader(
+            BuildStats({ { R"("a")", NSubColumns::EValueType::BinaryJson }, { R"("a"."b"."c")", NSubColumns::EValueType::BinaryJson } }),
+            BuildStats({ { R"("a"."b")", NSubColumns::EValueType::BinaryJson } }), NKikimrArrowAccessorProto::TSubColumnsAccessor(), 0);
+        TSubColumnsPartialArray partial(std::move(header), 1, arrow::binary(), NSubColumns::TSettings());
+        partial.AddColumn(partial.GetHeader().GetColumnStats().GetExactKeyIndexVerified(R"("a")"), CreateTrivialArrayAccessor(R"({"b":"columns"})"));
+
+        UNIT_ASSERT(!partial.HasSubColumnData(R"("a"."b")"));
+    }
+
+    Y_UNIT_TEST(JsonPathAccessorReturnsNullForMissingPath) {
+        auto array = BuildArrayWithStoredPaths({ { R"("a")", R"("columns")" } }, R"("b")", R"("others")");
+        auto accessorResult = array->GetPathAccessor("$.missing", 1);
+        UNIT_ASSERT_C(accessorResult.IsSuccess(), accessorResult.GetErrorMessage());
+        accessorResult.DetachResult()->VisitValues([](const std::optional<TStringBuf>& value) {
+            UNIT_ASSERT(!value);
+        });
+
+        auto header = NSubColumns::TSubColumnsHeader(
+            BuildStats({ { R"("a")", NSubColumns::EValueType::BinaryJson } }), NSubColumns::TDictStats::BuildEmpty(),
+            NKikimrArrowAccessorProto::TSubColumnsAccessor(), 0);
+        TSubColumnsPartialArray partial(std::move(header), 1, arrow::binary(), NSubColumns::TSettings());
+        accessorResult = partial.GetPathAccessor("$.missing", 1);
+        UNIT_ASSERT_C(accessorResult.IsSuccess(), accessorResult.GetErrorMessage());
+        accessorResult.DetachResult()->VisitValues([](const std::optional<TStringBuf>& value) {
+            UNIT_ASSERT(!value);
+        });
+    }
+
+    Y_UNIT_TEST(JsonPathAccessorPreferBestMatchOthers) {
+        // Others have an exact match while separated only a prefix
+        CheckMostSpecificStoredPath({ { R"("a")", R"({"b":"columns"})" }, { R"("a"."b"."c")", R"("descendant")" } }, R"("a"."b")",
+            R"("others")", "$.a.b", "others");
+    }
+
+    // Others have an exact match while separated only a prefix
+    Y_UNIT_TEST(JsonPathAccessorPreferBestMatchSeparated) {
+        CheckMostSpecificStoredPath({ { R"("a"."b")", R"("columns")" } }, R"("a")", R"({"c":"others"})", "$.a.b", "columns");
+    }
+
 };
 
 Y_UNIT_TEST_SUITE(SubColumnsDictStats) {

@@ -757,6 +757,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
         const auto& result = ev->Get()->Result;
         if (!result.IsSuccess()) {
+            const auto dataKey = Settings.GetDataKey(DataFormat, CompressionCodec);
             switch (result.GetError().GetErrorType()) {
             case S3Errors::RESOURCE_NOT_FOUND:
             case S3Errors::NO_SUCH_KEY:
@@ -764,9 +765,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             default:
                 YDB_LOG_ERROR("[Import] HeadObject request failed",
                     {"logPrefix", LogPrefix()},
-                    {"key", Settings.GetDataKey(DataFormat, CompressionCodec)},
+                    {"key", dataKey},
                     {"error", result});
-                return RetryOrFinish(result.GetError(), Settings.GetDataKey(DataFormat, CompressionCodec));
+                return RetryOrFinish(result.GetError(), dataKey);
             }
 
             CompressionCodec = NBackupRestoreTraits::NextCompressionCodec(CompressionCodec);
@@ -775,7 +776,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
                     << ": " << Settings.GetObjectKeyPattern());
             }
 
-            return HeadObject(Settings.GetDataKey(DataFormat, CompressionCodec));
+            return HeadObject(dataKey);
         }
 
         THolder<IReadController> reader;

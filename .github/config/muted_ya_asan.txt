@@ -52,6 +52,7 @@ ydb/core/http_proxy/ut TestMalformedRequest.CompressedGzipContentLengthCorrect
 ydb/core/http_proxy/ut TestMalformedRequest.CompressedGzipContentLengthHigher
 ydb/core/http_proxy/ut TestMalformedRequest.CompressedGzipContentLengthNone
 ydb/core/http_proxy/ut TestMalformedRequest.ContentLengthLower
+ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine0
 ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine1
 ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine4
 ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine6
@@ -240,6 +241,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestKinesisSigV4Servic
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestListQueuesConvertsConsumerNameInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestNoAuthCreateQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestNoAuthDeleteMessage
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestNoAuthDeleteQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestNoAuthGetQueueUrl
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestNoAuthGetQueueUrlEmpty
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestNoAuthGetQueueUrlOfNotExistingQueue
@@ -387,6 +389,7 @@ ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion
 ydb/core/kqp/ut/olap/types KqpOlapJson.BloomCategoryIndexesVariants[false,false,0,10,1000,0,CATEGORY_BLOOM_FILTER]
 ydb/core/kqp/ut/olap/types KqpOlapJson.QuotedFilterVariants[10,true,1024,1000,0,0]
 ydb/core/kqp/ut/rbo KqpRboOlap.BlockChannelScalar
+ydb/core/kqp/ut/rbo KqpRboOlap.CountWhereColumnIsNull
 ydb/core/kqp/ut/rbo KqpRboOlap.DisableBlockExecutionPerQuery
 ydb/core/kqp/ut/rbo KqpRboOlap.DisableBlocksOnColumnsLimit
 ydb/core/kqp/ut/rbo KqpRboOlap.DoubleOutOfRangeInJson

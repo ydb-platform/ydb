@@ -128,9 +128,6 @@ Y_UNIT_TEST_SUITE(TQueryIntervalTest) {
             EndOfQueryMetricsHourInterval(boundary + TDuration::MicroSeconds(1)),
             boundary + ONE_HOUR_BUCKET_SIZE);
 
-        // The interval ending exactly at 11:00 is the last one in the bucket
-        // ending at 11:00. Reset switches the accumulator only when the next
-        // interval end moves past that boundary.
         UNIT_ASSERT_VALUES_UNEQUAL(
             EndOfQueryMetricsHourInterval(boundary),
             EndOfQueryMetricsHourInterval(boundary + ONE_MINUTE_BUCKET_SIZE));

@@ -20,14 +20,6 @@ TSysViewProcessor::TSysViewProcessor(const NActors::TActorId& tablet, TTabletSto
     , ExternalGroup(new ::NMonitoring::TDynamicCounters)
     , LabeledGroup(new ::NMonitoring::TDynamicCounters)
 {
-    TabletCountersPtr.Reset(new TProtobufTabletCounters<
-        ESimpleCounters_descriptor,
-        ECumulativeCounters_descriptor,
-        EPercentileCounters_descriptor,
-        ETxTypes_descriptor
-    >());
-    TabletCounters = TabletCountersPtr.Get();
-
     InternalGroups["kqp_serverless"] = new ::NMonitoring::TDynamicCounters;
     InternalGroups["tablets_serverless"] = new ::NMonitoring::TDynamicCounters;
     InternalGroups["grpc_serverless"] = new ::NMonitoring::TDynamicCounters;
@@ -51,7 +43,7 @@ void TSysViewProcessor::OnActivateExecutor(const TActorContext& ctx) {
     YDB_LOG_INFO("TSysViewProcessor::OnActivateExecutor",
         {"tabletId", TabletID()});
 
-    Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
+    // TODO: tablet counters
     Execute(CreateTxInitSchema(), ctx);
 }
 
@@ -964,8 +956,7 @@ bool TSysViewProcessor::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                 str << "CurrentHourMetrics" << Endl
                     << "  HourEnd: " << CurrentHourEnd << Endl
                     << "  Count: " << CurrentHourMetrics.size() << Endl
-                    << "  LastMergedIntervalEnd: " << LastMergedQueryMetricsIntervalEnd << Endl
-                    << "  CleanupInFlight: " << HourMetricsCleanupInFlight << Endl << Endl;
+                    << "  LastMergedIntervalEnd: " << LastMergedQueryMetricsIntervalEnd << Endl << Endl;
                 str << "TopByDurationOneMinute" << Endl
                     << "  Count: " << TopByDurationOneMinute.size() << Endl << Endl;
                 str << "TopByDurationOneHour" << Endl

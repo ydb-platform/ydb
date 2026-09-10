@@ -38,6 +38,7 @@ namespace NYdb::NConsoleClient {
         ui32 GroupsAmount;
         ui32 WorkersCount;
         ui32 RequestTimeoutMs;
+        bool AwsSdkLog = false;
         bool UseXmlAPI;
         bool ValidateMessagesOrder;
 

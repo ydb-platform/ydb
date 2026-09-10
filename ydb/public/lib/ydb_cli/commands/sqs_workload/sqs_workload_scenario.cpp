@@ -38,7 +38,9 @@ namespace NYdb::NConsoleClient {
     TSqsWorkloadScenario::~TSqsWorkloadScenario() {}
 
     void TSqsWorkloadScenario::InitAwsSdk() {
-        AwsOptions.loggingOptions.logLevel = Aws::Utils::Logging::LogLevel::Debug;
+        if (AwsSdkLog) {
+            AwsOptions.loggingOptions.logLevel = Aws::Utils::Logging::LogLevel::Debug;
+        }
         Aws::InitAPI(AwsOptions);
     }
 
@@ -59,6 +61,7 @@ namespace NYdb::NConsoleClient {
             Aws::String(Endpoint.c_str(), Endpoint.size());
         sqsClientConfiguration.scheme = Aws::Http::Scheme::HTTP;
         sqsClientConfiguration.httpRequestTimeoutMs = RequestTimeoutMs;
+        sqsClientConfiguration.disableExpectHeader = true;
         sqsClientConfiguration.maxConnections = WorkersCount * 4;
         sqsClientConfiguration.executor =
             Aws::MakeShared<Aws::Utils::Threading::PooledThreadExecutor>(

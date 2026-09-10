@@ -62,6 +62,57 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
     }
 
     FetchResult<IBlockLayoutConverter::TPackResult> FetchRow() {
+        auto fetched = FetchColumns();
+        const auto status = AsStatus(fetched);
+        if (status != NYql::NUdf::EFetchStatus::Ok) {
+            if (status == NYql::NUdf::EFetchStatus::Finish) {
+                return Finish{};
+            }
+            return Yield{};
+        }
+
+        auto& block = GetPayload(fetched);
+        IBlockLayoutConverter::TPackResult result;
+        if (block.Columns.empty()) {
+            MKQL_ENSURE(Meta_->Kind == EJoinKind::Cross, "empty payload side is only allowed for Cross join");
+            const auto* layout = ArrowBlockToInternalConverter_->GetTupleLayout();
+            result.PackedTuples.resize(layout->TotalRowSize * block.NRows, 0);
+            result.NTuples = block.NRows;
+            return One{std::move(result)};
+        }
+
+        ArrowBlockToInternalConverter_->Pack(block.Columns, result);
+        return One{std::move(result)};
+    }
+
+    struct DirectBucketPack {};
+
+    template <TSpillerSettings S>
+    NYql::NUdf::EFetchStatus TryDirectPackInto(TBucketsSpiller<S>& spiller) {
+        auto fetched = FetchColumns();
+        const auto status = AsStatus(fetched);
+        if (status != NYql::NUdf::EFetchStatus::Ok) {
+            return status;
+        }
+        auto& block = GetPayload(fetched);
+        MKQL_ENSURE(!block.Columns.empty(), "direct bucket pack needs columns");
+        TPaddedPtr<TPackResult> pages(&spiller.GetBuckets()[0].BuildingPage, sizeof(TBucket));
+        const bool ok = ArrowBlockToInternalConverter_->PackIntoBucketPages(
+            block.Columns, pages, S.Buckets, S.BucketSizeBytes,
+            [&](ui32 bucket) {
+                spiller.GetBuckets()[bucket].template DetatchBuildingPageIfLimitReached<S.BucketSizeBytes>();
+            });
+        MKQL_ENSURE(ok, "direct bucket pack rejected a fixed-width layout");
+        return NYql::NUdf::EFetchStatus::Ok;
+    }
+
+  private:
+    struct TFetchedColumns {
+        TVector<arrow::Datum> Columns;
+        ui64 NRows = 0;
+    };
+
+    FetchResult<TFetchedColumns> FetchColumns() {
         if (Finished()) {
             return Finish{};
         }
@@ -74,15 +125,12 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
             return Yield{};
         }
 
-        IBlockLayoutConverter::TPackResult result;
+        TFetchedColumns block;
         const size_t cols = UserDataCols();
         if (cols == 0) {
             MKQL_ENSURE(Meta_->Kind == EJoinKind::Cross, "empty payload side is only allowed for Cross join");
-            const auto* layout = ArrowBlockToInternalConverter_->GetTupleLayout();
-            const ui64 n = GetBlockCount(Buff_[0]);
-            result.PackedTuples.resize(layout->TotalRowSize * n, 0);
-            result.NTuples = n;
-            return One{std::move(result)};
+            block.NRows = GetBlockCount(Buff_[0]);
+            return One{std::move(block)};
         }
 
         TVector<arrow::Datum> columns = ArrowFromUV({Buff_.data(), cols});
@@ -94,11 +142,10 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
             columns = std::move(permuted);
         }
         NormalizeScalarColumns(columns);
-        ArrowBlockToInternalConverter_->Pack(columns, result);
-        return One{std::move(result)};
+        block.Columns = std::move(columns);
+        block.NRows = block.Columns.front().array()->length;
+        return One{std::move(block)};
     }
-
-  private:
     TVector<arrow::Datum> ArrowFromUV(std::span<const NYql::NUdf::TUnboxedValue> UVs) {
         TVector<arrow::Datum> arrow;
         for (const auto& uv : UVs) {

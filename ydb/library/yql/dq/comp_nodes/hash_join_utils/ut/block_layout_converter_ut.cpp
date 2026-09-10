@@ -11,6 +11,13 @@
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
+#include <util/system/unaligned_mem.h>
+
+#include <algorithm>
+#include <array>
+#include <chrono>
+#include <limits>
+
 using namespace NYql::NUdf;
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -680,5 +687,164 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
             }
         }
         UNIT_ASSERT_EQUAL(hashsum, bhashsum);
+    }
+
+    struct TBucketPages {
+        static constexpr ui32 NBuckets = 64;
+        static constexpr ui32 PageSizeBytes = 1 << 16;
+
+        std::array<TPackResult, NBuckets> Building;
+        std::array<std::vector<TPackResult>, NBuckets> Closed;
+
+        void OnFull(ui32 bucket) {
+            Closed[bucket].push_back(std::move(Building[bucket]));
+            Building[bucket] = TPackResult{};
+        }
+
+        TPaddedPtr<TPackResult> Pages() {
+            return TPaddedPtr<TPackResult>(Building.data());
+        }
+
+        void AddRowBaseline(TSingleTuple tuple, const NPackedTuple::TTupleLayout* layout) {
+            const ui32 bucket = NPackedTuple::Hash(tuple.PackedData) & (NBuckets - 1);
+            Building[bucket].AppendTuple(tuple, layout);
+            if (Building[bucket].AllocatedBytes() > PageSizeBytes) {
+                OnFull(bucket);
+            }
+        }
+    };
+
+    void AssertBucketPagesEqual(TBucketPages& lhs, TBucketPages& rhs) {
+        for (ui32 b = 0; b < TBucketPages::NBuckets; ++b) {
+            UNIT_ASSERT_VALUES_EQUAL_C(lhs.Closed[b].size(), rhs.Closed[b].size(), "bucket " << b);
+            for (size_t p = 0; p < lhs.Closed[b].size(); ++p) {
+                UNIT_ASSERT_VALUES_EQUAL(lhs.Closed[b][p].NTuples, rhs.Closed[b][p].NTuples);
+                UNIT_ASSERT_EQUAL(lhs.Closed[b][p].PackedTuples, rhs.Closed[b][p].PackedTuples);
+                UNIT_ASSERT_EQUAL(lhs.Closed[b][p].Overflow, rhs.Closed[b][p].Overflow);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(lhs.Building[b].NTuples, rhs.Building[b].NTuples);
+            UNIT_ASSERT_EQUAL(lhs.Building[b].PackedTuples, rhs.Building[b].PackedTuples);
+            UNIT_ASSERT_EQUAL(lhs.Building[b].Overflow, rhs.Building[b].Overflow);
+        }
+    }
+
+    TVector<arrow::Datum> MakeInt32Columns(TBlockLayoutConverterTestData& data, ui32 nCols, ui32 nRows, bool withNulls) {
+        const auto type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int32, true);
+        size_t itemSize = nCols * NMiniKQL::CalcMaxBlockItemSize(type);
+        size_t blockLen = std::max<size_t>(NMiniKQL::CalcBlockLen(itemSize), nRows);
+
+        TVector<arrow::Datum> columns;
+        columns.reserve(nCols);
+        for (ui32 c = 0; c < nCols; ++c) {
+            auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), type, *data.ArrowPool, blockLen, nullptr);
+            for (ui32 r = 0; r < nRows; ++r) {
+                if (withNulls && ((r + c) % 17 == 0)) {
+                    builder->Add(TBlockItem());
+                } else {
+                    builder->Add(TBlockItem(i32(c * 100000 + r)));
+                }
+            }
+            columns.emplace_back(builder->Build(true));
+        }
+        return columns;
+    }
+
+    IBlockLayoutConverter::TPtr MakeInt32Converter(TBlockLayoutConverterTestData& data, ui32 nCols) {
+        const auto type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int32, true);
+        TVector<NKikimr::NMiniKQL::TType*> types(nCols, type);
+        TVector<NPackedTuple::EColumnRole> roles(nCols, NPackedTuple::EColumnRole::Payload);
+        roles[0] = NPackedTuple::EColumnRole::Key;
+        return MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
+    }
+
+    Y_UNIT_TEST(TestPackSelectedMatchesPackInt32) {
+        TBlockLayoutConverterTestData data;
+        constexpr ui32 nRows = 384;
+        auto converter = MakeInt32Converter(data, 1);
+        auto columns = MakeInt32Columns(data, 1, nRows, true);
+
+        TPackResult packed;
+        converter->Pack(columns, packed);
+        UNIT_ASSERT_VALUES_EQUAL(packed.NTuples, nRows);
+        UNIT_ASSERT(converter->GetTupleLayout()->SupportsDirectBucketPack());
+
+        TPackResult gathered;
+        UNIT_ASSERT(converter->PackIntoBucketPages(
+            columns, TPaddedPtr<TPackResult>(&gathered), 1,
+            std::numeric_limits<ui32>::max(), [](ui32) {}));
+        UNIT_ASSERT_VALUES_EQUAL(gathered.NTuples, nRows);
+        UNIT_ASSERT_EQUAL(gathered.PackedTuples, packed.PackedTuples);
+        UNIT_ASSERT_EQUAL(gathered.Overflow, packed.Overflow);
+    }
+
+    void RunDirectVsAddRow(ui32 nCols, ui32 nRows, bool withNulls, bool bench) {
+        TBlockLayoutConverterTestData data;
+        auto converter = MakeInt32Converter(data, nCols);
+        auto columns = MakeInt32Columns(data, nCols, nRows, withNulls);
+        const auto* layout = converter->GetTupleLayout();
+        UNIT_ASSERT(layout->SupportsDirectBucketPack());
+
+        auto baseline = [&] {
+            TBucketPages pages;
+            TPackResult packed;
+            converter->Pack(columns, packed);
+            for (TSingleTuple tuple : packed) {
+                pages.AddRowBaseline(tuple, layout);
+            }
+            return pages;
+        };
+
+        auto direct = [&] {
+            TBucketPages pages;
+            UNIT_ASSERT(converter->PackIntoBucketPages(
+                columns, pages.Pages(), TBucketPages::NBuckets, TBucketPages::PageSizeBytes,
+                [&](ui32 b) { pages.OnFull(b); }));
+            return pages;
+        };
+
+        if (bench) {
+            auto expected = baseline();
+            auto got = direct();
+            AssertBucketPagesEqual(expected, got);
+
+            constexpr int kIters = 7;
+            i64 baseUs = std::numeric_limits<i64>::max();
+            i64 directUs = std::numeric_limits<i64>::max();
+            for (int i = 0; i < kIters; ++i) {
+                auto t0 = std::chrono::steady_clock::now();
+                Y_UNUSED(baseline());
+                auto t1 = std::chrono::steady_clock::now();
+                Y_UNUSED(direct());
+                auto t2 = std::chrono::steady_clock::now();
+                baseUs = std::min(baseUs, (i64)std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
+                directUs = std::min(directUs, (i64)std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count());
+            }
+            i64 packedBytes = 0;
+            for (ui32 b = 0; b < TBucketPages::NBuckets; ++b) {
+                packedBytes += got.Building[b].AllocatedBytes();
+                for (const auto& page : got.Closed[b]) {
+                    packedBytes += page.AllocatedBytes();
+                }
+            }
+            Cerr << "DirectArrowBucketPack cols=" << nCols << " rows=" << nRows
+                 << " packedBytes=" << packedBytes
+                 << " baselineUs=" << baseUs
+                 << " directUs=" << directUs
+                 << Endl;
+        } else {
+            auto expected = baseline();
+            auto got = direct();
+            AssertBucketPagesEqual(expected, got);
+        }
+    }
+
+    Y_UNIT_TEST(TestDirectBucketPackInt32) {
+        RunDirectVsAddRow(1, 384, true, false);
+        RunDirectVsAddRow(1, 65536, false, true);
+    }
+
+    Y_UNIT_TEST(TestDirectBucketPackWide64) {
+        RunDirectVsAddRow(64, 1024, true, false);
+        RunDirectVsAddRow(64, 65536, false, true);
     }
 }

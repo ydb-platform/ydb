@@ -763,6 +763,25 @@ public:
         }
     }
 
+    bool PackIntoBucketPages(const TVector<arrow::Datum>& columns, TPaddedPtr<TPackResult> pages,
+                             ui32 nBuckets, ui32 pageSizeBytes,
+                             const std::function<void(ui32)>& onPageFull) override {
+        if (!TupleLayout_->SupportsDirectBucketPack()) {
+            return false;
+        }
+        if (columns.empty()) {
+            return false;
+        }
+
+        TVector<std::shared_ptr<arrow::Buffer>> nullBitmapRelocationBuffer;
+        auto [columnsData, columnsNullBitmap] = GetColumns_(columns, nullBitmapRelocationBuffer);
+        const ui32 tuplesToPack = columns.front().array()->length;
+        TupleLayout_->PackIntoBucketPages(
+            columnsData.data(), columnsNullBitmap.data(),
+            0, tuplesToPack, pages, nBuckets, pageSizeBytes, onPageFull);
+        return true;
+    }
+
     void Unpack(const TPackResult& packed, TVector<arrow::Datum>& columns) override {
         columns.resize(Extractors_.size());
         if (columns.empty()) {

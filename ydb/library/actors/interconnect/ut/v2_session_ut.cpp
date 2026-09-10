@@ -59,7 +59,18 @@ namespace {
     private:
         STRICT_STFUNC(StateFunc,
             hFunc(TEvTestResponse, Handle)
+            hFunc(TEvents::TEvUndelivered, HandleUndelivered)
         )
+
+        void HandleUndelivered(const TEvents::TEvUndelivered::TPtr& ev) {
+            const auto* msg = ev->Get();
+            Y_ABORT_UNLESS(msg->SourceType == TEvTest::EventType);
+            Y_ABORT_UNLESS(msg->Reason == TEvents::TEvUndelivered::Disconnected && !msg->Unsure);
+            // Initial handshake failure is definite nondelivery. Back off while the proxy
+            // leaves its error state, then retry the same request through the actor system.
+            TActivationContext::Schedule(TDuration::MilliSeconds(100), new IEventHandle(
+                ev->Sender, SelfId(), new TEvTest(ev->Cookie), IEventHandle::FlagTrackDelivery, ev->Cookie));
+        }
 
         void Handle(TEvTestResponse::TPtr& ev) {
             {
@@ -423,15 +434,10 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
         auto* collector = new TResponseCollectorActor;
         const TActorId collectorId = cluster->RegisterActor(collector, 1);
 
-        // A failed initial handshake drops untracked messages. Wait for the monitor,
-        // which re-subscribes after a disconnect, before testing established-session delivery.
-        auto* monitor = new TConnectionMonitorActor(2);
-        cluster->RegisterActor(monitor, 1);
-        WaitFor(TDuration::Seconds(10), [&] { return monitor->Connects() >= 1; }, "connection established");
-
         constexpr ui64 N = 32;
         for (ui64 i = 0; i < N; ++i) {
-            cluster->GetNode(1)->GetActorSystem()->Send(new IEventHandle(echoId, collectorId, new TEvTest(i)));
+            cluster->GetNode(1)->GetActorSystem()->Send(new IEventHandle(
+                echoId, collectorId, new TEvTest(i), IEventHandle::FlagTrackDelivery, i));
         }
 
         WaitFor(TDuration::Seconds(20), [&] { return collector->GetCount() >= N; },

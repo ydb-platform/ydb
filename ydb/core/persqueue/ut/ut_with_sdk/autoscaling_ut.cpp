@@ -651,6 +651,8 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         UNIT_ASSERT(writeSession_1->Write(Msg("message_4", 4)));
         UNIT_ASSERT(writeSession_1->Write(Msg("message_5", 5)));
         UNIT_ASSERT(writeSession_2->Write(Msg("message_6", 6)));
+        UNIT_ASSERT(writeSession_1->Close(TDuration::Seconds(1)));
+        UNIT_ASSERT(writeSession_2->Close(TDuration::Seconds(1)));
 
         ui64 txId = 1023;
         SplitPartition(setup, ++txId, 0, "a");

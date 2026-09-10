@@ -3259,19 +3259,12 @@ private:
     template <bool Final>
     TStatus AggregateWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         if (const auto* c = input->Head().GetConstraint<TStreamingConstraintNode>()) {
-            const auto isHopping = HasSetting(input->Tail(), "hopping");
-            if (!isHopping && !input->IsCallable("Aggregate")) {
+            if (!input->IsCallable("Aggregate")) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Aggregation of streaming input without windows is not supported"));
                 return TStatus::Error;
             }
 
             input->AddConstraint(c);
-
-            if (!isHopping) {
-                return FromFirst<TEmptyConstraintNode>(input, output, ctx);
-            }
-        } else if (HasSetting(input->Tail(), "streaming")) {
-            return FromFirst<TEmptyConstraintNode>(input, output, ctx);
         }
 
         if (HasSetting(input->Tail(), "session")) {

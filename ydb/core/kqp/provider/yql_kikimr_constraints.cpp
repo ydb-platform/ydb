@@ -8,6 +8,7 @@
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 
 #include <yql/essentials/core/yql_expr_constraint.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/providers/common/transform/yql_visit.h>
 
 namespace NYql {
@@ -28,14 +29,45 @@ TStatus ConstraintKqpWriteConstraint(const TExprNode::TPtr& input, TExprContext&
     return TStatus::Ok;
 }
 
-TStatus ConstraintKqpStreamingAggregation(const TExprNode::TPtr& input) {
-    // Each input row produces an update; repeated keys are neither unique nor distinct.
+TStatus ConstraintKqpStreamingAggregation(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (const auto status = UpdateAllChildLambdasConstraints(*input); status != TStatus::Ok) {
+        return status;
+    }
+
     if (const auto* c = input->Head().GetConstraint<TStreamingConstraintNode>()) {
         input->AddConstraint(c);
     }
+
+    const auto size = input->Child(1)->ChildrenSize();
+    if (!size) {
+        return TStatus::Ok;
+    }
+
+    bool allKeysInOutput = true;
+    if (auto outputColumnsSetting = NYql::GetSetting(input->Tail(), "output_columns")) {
+        THashSet<TStringBuf> outputColumns;
+        for (auto& col : outputColumnsSetting->Child(1)->Children()) {
+            YQL_ENSURE(col->IsAtom());
+            outputColumns.insert(col->Content());
+        }
+
+        allKeysInOutput = AllOf(input->Child(1)->Children(), [&](const auto& key) { return outputColumns.contains(key->Content()); });
+    }
+
+    if (allKeysInOutput) {
+        std::vector<std::string_view> columns;
+        columns.reserve(size);
+        for (const auto& child: input->Child(1)->Children()) {
+            columns.emplace_back(child->Content());
+        }
+        input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(columns));
+        input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(columns));
+    }
+
     if (const auto* c = input->Head().GetConstraint<TEmptyConstraintNode>()) {
         input->AddConstraint(c);
     }
+
     return TStatus::Ok;
 }
 
@@ -103,7 +135,7 @@ TAutoPtr<IGraphTransformer> CreateKiSinkConstraintsTransformer(TIntrusivePtr<TKi
         output = input;
 
         if (TKqpStreamingAggregation::Match(input.Get())) {
-            return ConstraintKqpStreamingAggregation(input);
+            return ConstraintKqpStreamingAggregation(input, ctx);
         }
 
         if (TKqpWriteConstraint::Match(input.Get())) {

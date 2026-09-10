@@ -4117,26 +4117,23 @@ Y_UNIT_TEST(MatchRecognize) {
 
 Y_UNIT_TEST(StreamingConstraintAggregate) {
     for (const bool streamingInput : {false, true}) {
-        for (const TStringBuf settings : {"'()", "'('('streaming '()))", "'('('streaming '('/Root/state)))"}) {
-            for (const bool empty : {false, true}) {
-                const TString s = TStringBuilder() << R"((
-                    (let rowType (StructType '('key (DataType 'String))))
-                    (let list )" << (empty ? "(List (ListType rowType))" : "(AsList (AsStruct '('key (String '1))))") << ")"
-                    << (streamingInput ? R"((let list (AssumeConstraints list '"{\"Streaming\" = #}")))" : "")
-                    << "(let aggr (Aggregate list '('key) '() " << settings << R"())
-                    (let res (DataSink 'result))
-                    (let world (Write! world res (Key) aggr '()))
-                    (return (Commit! world res))
-                ))";
+        for (const bool empty : {false, true}) {
+            const TString s = TStringBuilder() << R"((
+                (let rowType (StructType '('key (DataType 'String))))
+                (let list )" << (empty ? "(List (ListType rowType))" : "(AsList (AsStruct '('key (String '1))))") << ")"
+                << (streamingInput ? R"((let list (AssumeConstraints list '"{\"Streaming\" = #}")))" : "")
+                << "(let aggr (Aggregate list '('key) '() " << "'()" << R"())
+                (let res (DataSink 'result))
+                (let world (Write! world res (Key) aggr '()))
+                (return (Commit! world res))
+            ))";
 
-                TExprContext exprCtx;
-                const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-                CheckConstraint<TStreamingConstraintNode>(exprRoot, "Aggregate", streamingInput ? "Streaming" : "");
-                CheckConstraint<TEmptyConstraintNode>(exprRoot, "Aggregate", empty ? "Empty" : "");
-                const bool unique = !streamingInput && settings == "'()";
-                CheckConstraint<TUniqueConstraintNode>(exprRoot, "Aggregate", unique ? "Unique((key))" : "");
-                CheckConstraint<TDistinctConstraintNode>(exprRoot, "Aggregate", unique ? "Distinct((key))" : "");
-            }
+            TExprContext exprCtx;
+            const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+            CheckConstraint<TStreamingConstraintNode>(exprRoot, "Aggregate", streamingInput ? "Streaming" : "");
+            CheckConstraint<TEmptyConstraintNode>(exprRoot, "Aggregate", empty ? "Empty" : "");
+            CheckConstraint<TUniqueConstraintNode>(exprRoot, "Aggregate", "Unique((key))");
+            CheckConstraint<TDistinctConstraintNode>(exprRoot, "Aggregate", "Distinct((key))");
         }
     }
 

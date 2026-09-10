@@ -6005,6 +6005,129 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             + GetFullPath(BenchmarkQueryPath[EBenchType::TPCH], ToString(queryId) + ".yql");
     }
 
+    Y_UNIT_TEST(PushFilterBeforeInlining) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                id Int64 NOT NULL,
+                a Int64 NOT NULL,
+                b Int64 NOT NULL,
+                c Double,
+                d Int64,
+                PRIMARY KEY(id)
+            ) WITH (STORE = COLUMN);
+
+            CREATE TABLE `/Root/t2` (
+                a Int64 NOT NULL,
+                PRIMARY KEY(a)
+            ) WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        struct TRow {
+            i64 Id;
+            i64 A;
+            i64 B;
+            double C;
+            i64 D;
+        };
+        const TVector<TRow> t1Rows = {
+            {1, 1, 1, 10.0, 100},
+            {2, 1, 2, 30.0, 200},
+            {3, 2, 1, 50.0, 1000},
+            {4, 2, 2, 100.0, 2000},
+        };
+
+        NYdb::TValueBuilder t1Builder;
+        t1Builder.BeginList();
+        for (const auto& row : t1Rows) {
+            t1Builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(row.Id)
+                .AddMember("a").Int64(row.A)
+                .AddMember("b").Int64(row.B)
+                .AddMember("c").Double(row.C)
+                .AddMember("d").Int64(row.D)
+                .EndStruct();
+        }
+        t1Builder.EndList();
+        auto upsertResult = tableClient.BulkUpsert("/Root/t1", t1Builder.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder t2Builder;
+        t2Builder.BeginList();
+        for (const auto a : {1, 2}) {
+            t2Builder.AddListItem().BeginStruct().AddMember("a").Int64(a).EndStruct();
+        }
+        t2Builder.EndList();
+        upsertResult = tableClient.BulkUpsert("/Root/t2", t2Builder.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+
+        const auto check = [&](const TString& name, const TString& query, const TString& expected) {
+            auto explainResult = querySession.ExecuteQuery(query,
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(), name + ": " + explainResult.GetIssues().ToString());
+
+            const auto plan = TString{*explainResult.GetStats()->GetPlan()};
+            UNIT_ASSERT_C(!plan.Contains("CrossJoin"), name + ":\n" + plan);
+
+            auto result = querySession.ExecuteQuery(query,
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute)
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), name + ": " + result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(result.GetResultSet(0)), expected, name);
+        };
+
+        check("uncorrelated scalar subquery in ==", R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA AnsiImplicitCrossJoin;
+
+            SELECT SUM(d) AS total
+            FROM `/Root/t1` AS t1, `/Root/t2` AS t2
+            WHERE t1.a == t2.a
+              AND d == (SELECT MAX(d) FROM `/Root/t1` AS t3);
+        )", R"([[[2000]]])");
+
+        check("correlated scalar subquery with non-eliminable domain", R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA AnsiImplicitCrossJoin;
+
+            SELECT SUM(d) AS total
+            FROM `/Root/t1` AS t1, `/Root/t2` AS t2
+            WHERE t1.a == t2.a
+              AND c < (SELECT AVG(t3.c) FROM `/Root/t1` AS t3
+                       WHERE t3.a == t2.a AND t3.b != t1.b);
+        )", R"([[[1100]]])");
+
+        check("correlated exists and not exists with non-eliminable domains", R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA AnsiImplicitCrossJoin;
+
+            SELECT SUM(d) AS total
+            FROM `/Root/t1` AS t1, `/Root/t2` AS t2
+            WHERE t1.a == t2.a
+              AND EXISTS (SELECT * FROM `/Root/t1` AS t3
+                          WHERE t3.a == t1.a AND t3.b != t1.b AND t3.c > t1.c)
+              AND NOT EXISTS (SELECT * FROM `/Root/t1` AS t4
+                              WHERE t4.a == t1.a AND t4.b != t1.b AND t4.d > 1500);
+        )", R"([[[100]]])");
+    }
+
     Y_UNIT_TEST(CorrelatedScalarSubqueryCBO4KeepsOuterJoinKey) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

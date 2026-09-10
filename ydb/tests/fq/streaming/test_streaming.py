@@ -2524,39 +2524,43 @@ FROM `{table_name}`"""
 
         retry_count_before_scaling = retry_count()
 
-        kikimr.cluster.register_and_start_slots(kikimr.get_database_name(), count=3)
-        kikimr.cluster.wait_tenant_up(kikimr.get_database_name(), token="root@builtin")
-        assert len(kikimr.cluster.slots) == 5
+        added_slots = kikimr.cluster.register_and_start_slots(kikimr.get_database_name(), count=3)
+        try:
+            kikimr.cluster.wait_tenant_up(kikimr.get_database_name(), token="root@builtin")
+            assert len(kikimr.cluster.slots) == 5
 
-        retry_count_increased = wait_for(
-            lambda: retry_count() > retry_count_before_scaling,
-            timeout_seconds=60 if should_restart else 30,
-            step_seconds=1,
-        )
-        if should_restart:
-            assert retry_count_increased, "Streaming query RetryCount did not increase after adding slots"
-        else:
-            assert not retry_count_increased, "Streaming query restarted after adding slots"
+            retry_count_increased = wait_for(
+                lambda: retry_count() > retry_count_before_scaling,
+                timeout_seconds=60 if should_restart else 30,
+                step_seconds=1,
+            )
+            if should_restart:
+                assert retry_count_increased, "Streaming query RetryCount did not increase after adding slots"
+            else:
+                assert not retry_count_increased, "Streaming query restarted after adding slots"
 
-        # TODO
-        # assert wait_for(
-        #     lambda: streaming_query_tasks_count() > tasks_before_scaling,
-        #     timeout_seconds=60,
-        #     step_seconds=1
-        # ), "The total number of streaming query tasks did not increase after adding slots"
+            # TODO
+            # assert wait_for(
+            #     lambda: streaming_query_tasks_count() > tasks_before_scaling,
+            #     timeout_seconds=60,
+            #     step_seconds=1
+            # ), "The total number of streaming query tasks did not increase after adding slots"
 
-        # def read_tasks_are_on_every_slot() -> bool:
-        #     for node_id in kikimr.cluster.slots:
-        #         sensor = get_sensors(kikimr.cluster, node_id, "kqp").find_sensor(
-        #             {"subsystem": "DqSourceTracker", "source": "PqRead", "sensor": "InFlyAsyncInputData"}
-        #         )
-        #         if sensor is None:
-        #             return False
-        #     return True
+            # def read_tasks_are_on_every_slot() -> bool:
+            #     for node_id in kikimr.cluster.slots:
+            #         sensor = get_sensors(kikimr.cluster, node_id, "kqp").find_sensor(
+            #             {"subsystem": "DqSourceTracker", "source": "PqRead", "sensor": "InFlyAsyncInputData"}
+            #         )
+            #         if sensor is None:
+            #             return False
+            #     return True
 
-        # assert wait_for(read_tasks_are_on_every_slot,
-        #     timeout_seconds=60,
-        #     step_seconds=1
-        # ), "Read tasks were not placed on every tenant slot"
+            # assert wait_for(read_tasks_are_on_every_slot,
+            #     timeout_seconds=60,
+            #     step_seconds=1
+            # ), "Read tasks were not placed on every tenant slot"
 
-        
+            kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+
+        finally:
+            kikimr.cluster.unregister_and_stop_slots(added_slots)        

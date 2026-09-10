@@ -1,3 +1,5 @@
+* Fixed topic producer and distributed lock namespaces to make their ABI consistent between GCC and Clang.
+
 * Added `EQ_HEIGHT_HISTOGRAM` to `EMultiColumnStatisticsType`.
 
 # v3.22.0

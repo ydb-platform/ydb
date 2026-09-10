@@ -7,7 +7,7 @@
 
 #include <ydb/core/protos/data_integrity_trails.pb.h>
 
-using namespace NActors::NStructuredLog;
+using NActors::NStructuredLog::TStructuredMessage;
 
 namespace NKikimr {
 namespace NDataIntegrity {

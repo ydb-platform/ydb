@@ -34,9 +34,10 @@ inline void CheckRegexMatch(
         unsigned matchCount = 0;
 
         for(auto& row: logRows) {
-            std::smatch expressionMatch;
-            std::regex_search(row.data(), expressionMatch, expression);
-            matchCount += expressionMatch.size();
+            auto rowMatchCount = std::distance(
+                std::sregex_iterator(row.begin(), row.end(), expression),
+                std::sregex_iterator());
+            matchCount += rowMatchCount;
         }
 
         UNIT_ASSERT_VALUES_EQUAL_C(expectedMatchCount, matchCount,

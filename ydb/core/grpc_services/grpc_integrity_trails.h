@@ -20,6 +20,10 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table:
 }
 
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Table::ExecuteDataQueryRequest& request, NKqp::TEvKqp::TEvQueryResponse::TPtr& response, const TActorContext& ctx) {
+    if (!IS_CTX_LOG_PRIORITY_ENABLED(ctx, NActors::NLog::PRI_TRACE, NKikimrServices::DATA_INTEGRITY, 0ull)) {
+        return ;
+    }
+
     auto& record = response->Get()->Record;
     auto message = YDB_LOG_CREATE_MESSAGE(
         {"component", "Grpc"},
@@ -145,6 +149,10 @@ inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Query:
 }
 
 inline void LogIntegrityTrails(const TMaybe<TString>& traceId, const Ydb::Query::ExecuteQueryRequest& request, NKqp::TEvKqp::TEvQueryResponse::TPtr& response, const TActorContext& ctx) {
+    if (!IS_CTX_LOG_PRIORITY_ENABLED(ctx, NActors::NLog::PRI_TRACE, NKikimrServices::DATA_INTEGRITY, 0ull)) {
+        return ;
+    }
+
     if (request.exec_mode() != Ydb::Query::EXEC_MODE_EXECUTE) {
         return;
     }

@@ -84,8 +84,6 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
                         continue;
                     }
 
-                    YDB_LOG_UPDATE_MESSAGE(message, {"tableId", ToString(keyDef->TableId)});
-
                     auto& range = keyDef->Range;
                     TString rowOp;
                     switch (keyDef->RowOperation) {
@@ -111,6 +109,7 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
 
                     YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
                         message,
+                        {"tableId", ToString(keyDef->TableId)},
                         {"op", rowOp},
                         {"keys", keysStr.Str()});
                 }

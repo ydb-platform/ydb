@@ -217,7 +217,7 @@ inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ct
     } else {
         YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
             message,
-            {"querySpanId", isBreaker ? params.BreakerQuerySpanId.GetRef() : params.VictimQuerySpanId.GetRef()},
+            {"querySpanId", parentQueryId},
             {"queryText", isBreaker ? params.QueryText : params.VictimQueryText});
         if (params.IsCommitAction) {
             YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",

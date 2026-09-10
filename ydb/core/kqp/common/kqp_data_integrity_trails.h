@@ -17,7 +17,7 @@ namespace NDataIntegrity {
 
 inline void LogQueryTextImpl(TStructuredMessage& message, const TString& queryText, bool hashed) {
     if (!hashed) {
-        YDB_LOG_UPDATE_CONTEXT(message,
+        YDB_LOG_UPDATE_MESSAGE(message,
             {"queryText", queryText});
         return;
     }
@@ -74,6 +74,11 @@ inline void LogIntegrityTrails(const NKqp::TEvKqp::TEvQueryRequest::TPtr& reques
     if (!ShouldBeLogged(request->Get()->GetAction(), request->Get()->GetType())) {
         return;
     }
+
+    if (!IS_CTX_LOG_PRIORITY_ENABLED(ctx, NActors::NLog::PRI_DEBUG, NKikimrServices::DATA_INTEGRITY, 0)) {
+         return;
+    }
+
     auto message = YDB_LOG_CREATE_MESSAGE(
         {"component", "SessionActor"},
         {"sessionId", request->Get()->GetSessionId()},
@@ -132,11 +137,20 @@ inline TStructuredMessage ToStructuredMessage(const NKikimrDataEvents::TLock& lo
     if (lock.HasPathId()) {
         YDB_LOG_UPDATE_MESSAGE(result , {"pathId", lock.GetPathId()});
     }
+
+    if (lock.HasHasWrites()) {
+        YDB_LOG_UPDATE_MESSAGE(result , {"hasWrites", lock.GetHasWrites()});
+    }
+
     return result;
 }
 
 // DataExecuter
 inline void LogIntegrityTrails(const TString& state, const TString& traceId, const NEvents::TDataEvents::TEvWriteResult::TPtr& ev, const TActorContext& ctx) {
+    if (!IS_CTX_LOG_PRIORITY_ENABLED(ctx, NActors::NLog::PRI_INFO, NKikimrServices::DATA_INTEGRITY, 0)) {
+         return;
+    }
+
     const auto& record = ev->Get()->Record;
 
     NYql::TIssues issues;
@@ -164,6 +178,10 @@ inline void LogIntegrityTrails(const TString& state, const TString& traceId, con
 }
 
 inline void LogIntegrityTrails(const TString& state, const TString& traceId, const TEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
+    if (!IS_CTX_LOG_PRIORITY_ENABLED(ctx, NActors::NLog::PRI_INFO, NKikimrServices::DATA_INTEGRITY, 0)) {
+         return;
+    }
+
     const auto& record = ev->Get()->Record;
 
     auto message = YDB_LOG_CREATE_MESSAGE(

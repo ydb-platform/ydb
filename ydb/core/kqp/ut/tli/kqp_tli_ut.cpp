@@ -106,8 +106,7 @@ namespace {
             return std::nullopt;
         }
         TString result = resultOpt.GetRef();
-        auto unescapedResult = UnescapeC(result);
-        return unescapedResult;
+        return result;
     }
 
     std::optional<TString> ExtractQueryText(const TString& logs, const TString& messagePattern,

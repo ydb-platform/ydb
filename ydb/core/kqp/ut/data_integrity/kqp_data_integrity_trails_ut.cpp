@@ -22,9 +22,10 @@ namespace {
             unsigned matchCount = 0;
 
             for(auto& row: logRows) {
-                std::smatch expressionMatch;
-                std::regex_search(row.data(), expressionMatch, expression);
-                matchCount += expressionMatch.size();
+                auto rowMatchCount = std::distance(
+                    std::sregex_iterator(row.begin(), row.end(), expression),
+                    std::sregex_iterator());
+                matchCount += rowMatchCount;
             }
 
             UNIT_ASSERT_VALUES_EQUAL(expectedMatchCount, matchCount);
@@ -268,7 +269,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
 
             // we need to find row with info about broken locks and extract lock id
             if (row.Contains("component=DataShard") && row.Contains("type=Locks")) {
-                std::regex lockIdRegex(R"(brokenLock=(\d+) )");
+                std::regex lockIdRegex(R"(brokenLock=(\d+)\b)");
                 std::smatch lockIdMatch;
                 UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) || lockIdMatch.size() != 2, "failed to extract broken lock id");
                 brokenLock = lockIdMatch[1].str();

@@ -2728,7 +2728,9 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
             const localMetricLabel=()=>'';
             const localMetricDirection=()=>null;
             const localComparisonDelta=()=>'';
-            const mountLocalYdbComparisonCurves=()=>{};
+            const localPreferredSlo=()=>['p99','p99_ms'];
+            const localSearchAxisLabel=()=> 'YDB CLI threads';
+            const enc=encodeURIComponent;
             const sectionTabs=()=>'';
             const bindSectionTabs=()=>{};
             """
@@ -2761,9 +2763,76 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
         result = json.loads(completed.stdout)
         self.assertIn("fresh cluster", result["fresh"])
         self.assertIn("retained search cluster", result["search"])
-        self.assertIn("Comparable with warnings", result["comparison"])
         self.assertIn("Verification cluster", result["comparison"])
-        self.assertIn("retained search cluster → fresh cluster", result["comparison"])
+        self.assertIn("retained search cluster", result["comparison"])
+        self.assertIn("fresh cluster", result["comparison"])
+        self.assertIn("Only differences", result["comparison"])
+        self.assertIn("data-comparison-profile", result["comparison"])
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the comparison UI test")
+    def test_comparison_profile_selection_and_slo(self):
+        start = web._JS.index("function mountLocalYdbComparison(container")
+        finish = web._JS.index("const localPhaseLabels", start)
+        script = (
+            """
+        const esc=x=>String(x??''),enc=encodeURIComponent,metricLabel=x=>String(x);
+        const localComparisonKey=x=>JSON.stringify([x.run,x.profile]);
+        const localComparisonId=x=>x.run+'/'+x.profile;
+        const localResultSchema=()=>({throughput_unit:'query operations/s'});
+        const localResultMetrics=x=>({metrics:x.selected_metrics||{},source:x.source||'Search'});
+        const localComparisonSemantic=()=>({same:true});
+        const localPreferredSlo=(schema,objective)=>[objective.percentile,objective.percentile+'_ms'];
+        const localSearchAxisLabel=()=> 'YDB CLI threads';
+        const localComparisonConfig=x=>({threads:x.parameters.client.threads});
+        const localComparisonContext=()=>({}),localComparisonBuild=()=>({});
+        const localComparisonStable=x=>x;
+        const localComparisonDelta=(value,base)=>'DELTA:'+((value/base-1)*100).toFixed(1);
+        const sectionTabs=()=>'',bindSectionTabs=()=>{};
+        const memory=new Map;
+        const sessionStorage={getItem:key=>memory.get(key),setItem:(key,value)=>memory.set(key,value)};
+        const controls={};let checked=[];
+        const container={dataset:{},querySelector:s=>controls[s]||(controls[s]={}),querySelectorAll:()=>checked};
+        const entry=(profile,latency,threads)=>({run:'run',profile,state:'passed',
+          parameters:{client:{threads},load:{parameter:'threads',objective:{type:'latency-slo',percentile:'p95',max_ms:20}}},
+          result:{selected_load:threads,selected_metrics:{throughput:threads,p95_ms:latency,errors:0}}
+        });
+        const data={entries:[entry('base',20,10),entry('candidate',21,20),entry('missing',null,30)]};
+        """
+            + web._JS[start:finish]
+            + """
+        mountLocalYdbComparison(container,data);
+        const initial=container.innerHTML;
+        controls['[data-baseline]'].onchange({target:{value:localComparisonKey(data.entries[1])}});
+        const changedBaseline=container.innerHTML;
+        checked=[{value:localComparisonKey(data.entries[1])}];
+        controls['[data-apply-profiles]'].onclick();
+        const selected=container.innerHTML;
+        const restored={dataset:{},querySelector:()=>({})};
+        mountLocalYdbComparison(restored,data);
+        checked=[];controls['[data-apply-profiles]'].onclick();
+        const empty=container.innerHTML;
+        data.entries[1].result.source='Holdout';
+        const mixed={dataset:{},querySelector:()=>({})};memory.clear();
+        mountLocalYdbComparison(mixed,data);
+        process.stdout.write(JSON.stringify({initial,changedBaseline,selected,restored:restored.innerHTML,empty,mixed:mixed.innerHTML}));
+        """
+        )
+        completed = subprocess.run(
+            [shutil.which("node"), "-e", script], check=True, capture_output=True, text=True, timeout=10
+        )
+        result = json.loads(completed.stdout)
+        self.assertIn("Satisfied", result["initial"])
+        self.assertIn("Exceeded", result["initial"])
+        self.assertIn("Unknown", result["initial"])
+        self.assertIn("p95 ≤ 20 ms", result["initial"])
+        self.assertIn("DELTA:100.0", result["initial"])
+        self.assertIn("DELTA:-50.0", result["changedBaseline"])
+        self.assertIn("Profiles · 1", result["selected"])
+        self.assertNotIn("<strong>base</strong>", result["selected"])
+        self.assertIn("0 differing parameters", result["selected"])
+        self.assertIn("Profiles · 1", result["restored"])
+        self.assertIn("Select profiles to compare", result["empty"])
+        self.assertIn("Incompatible metric source", result["mixed"])
 
     @unittest.skipUnless(shutil.which("node"), "node is required for the local YDB validity UI test")
     def test_local_ydb_web_hides_latency_for_empty_measurements(self):
@@ -7809,7 +7878,7 @@ class WebTest(unittest.TestCase):
     @unittest.skipUnless(shutil.which("node"), "node is required for the compact Runs UI test")
     def test_web_compact_runs_sorting_and_tabs(self):
         helpers = web._JS[web._JS.index("function sectionTabs") : web._JS.index("let activeBannerLoading")]
-        runs = web._JS[web._JS.index("const selectedComparisonRuns") : web._JS.index("async function renderRuns")]
+        runs = web._JS[web._JS.index("let runsSort") : web._JS.index("async function renderRuns")]
         script = helpers + runs + """
         const assert=require('assert');
         const esc=value=>String(value??'').replaceAll('<','&lt;').replaceAll('"','&quot;');
@@ -7820,9 +7889,10 @@ class WebTest(unittest.TestCase):
         assert.deepEqual(sortRuns(records,'oldest').map(item=>item.id),['older','newer']);
         assert.deepEqual(sortRuns(records,'longest').map(item=>item.id),['older','newer']);
         assert.equal(records[0].id,'older');
-        selectedComparisonRuns.add('older');
         const html=compactRun({...records[0],profile_names:['first','<second>'],profiles:2,repetitions:4});
-        assert(html.includes('checked'));
+        assert(!html.includes('type=checkbox'));
+        assert(html.includes('class=dense-run-id'));
+        assert(html.includes('Actions'));
         assert(html.includes('first')&&html.includes('&lt;second>'));
         assert(html.includes('2 profiles · 4 steps'));
         const storage=new Map;
@@ -7904,6 +7974,83 @@ class WebTest(unittest.TestCase):
             BenchmarkError, "selected chart data has too many rows"
         ):
             chart_data(self.root, ["first", "second"])
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for browser logic checks")
+    def test_comparison_run_filters_preserve_selection(self):
+        script = "function sortRuns" + web._JS.split("function sortRuns", 1)[1].split("function compactRun", 1)[0]
+        script += (
+            "function filterComparisonRuns"
+            + web._JS.split("function filterComparisonRuns", 1)[1].split("async function renderSavedComparisons", 1)[0]
+        )
+        script += """
+            const runs=[
+              {id:'old',started_at:'2026-09-08T10:00:00Z',status:'completed',profile_names:['stable'],benchmarks:['local-ydb']},
+              {id:'new',started_at:'2026-09-10T10:00:00Z',status:'failed',profile_names:['united'],benchmarks:['local-ydb']},
+              {id:'ping',queued_at:'2026-09-09T10:00:00Z',status:'completed',profile_names:['ping'],benchmarks:['ping-bench']}
+            ],selected=new Set(['old','new']);
+            const ids=filters=>filterComparisonRuns(runs,filters,selected).map(run=>run.id);
+            process.stdout.write(JSON.stringify({all:ids({}),query:ids({query:'UNITED'}),
+              status:ids({status:'completed'}),date:ids({since:'2026-09-09'}),
+              benchmark:ids({benchmark:'ping-bench'}),only:ids({only:true,sort:'oldest'}),
+              empty:ids({query:'missing'}),selected:[...selected]}));
+        """
+        result = json.loads(
+            subprocess.run(
+                [shutil.which("node"), "-e", script], capture_output=True, text=True, check=True, timeout=10
+            ).stdout
+        )
+        self.assertEqual(
+            result,
+            {
+                "all": ["new", "ping", "old"],
+                "query": ["new"],
+                "status": ["ping", "old"],
+                "date": ["new", "ping"],
+                "benchmark": ["ping"],
+                "only": ["old", "new"],
+                "empty": [],
+                "selected": ["old", "new"],
+            },
+        )
+
+    def test_saved_comparisons_are_explicit_and_durable(self):
+        service = RunService(self.root)
+        service.select_comparisons(["legacy"])
+        self.assertEqual(service.saved_comparisons(), [])
+        value = {
+            "name": " United pool ",
+            "profiles": [["run", "baseline"], ["run", "united"]],
+            "baseline": ["run", "baseline"],
+        }
+        record = service.save_comparison(value)
+        self.assertEqual(record["name"], "United pool")
+        self.assertEqual(record["revision"], 1)
+        self.assertEqual(RunService(self.root).saved_comparisons(), [record])
+        updated = service.save_comparison({**record, "name": "Renamed", "baseline": ["run", "united"]})
+        self.assertEqual(updated["revision"], 2)
+        with self.assertRaisesRegex(BenchmarkError, "changed elsewhere"):
+            service.save_comparison(record)
+        with self.assertRaisesRegex(BenchmarkError, "changed or no longer"):
+            service.delete_comparison(record)
+        self.assertEqual(service.saved_comparisons(), [updated])
+        service.delete_comparison(updated)
+        self.assertEqual(service.saved_comparisons(), [])
+
+    def test_saved_comparisons_validate_selection(self):
+        service = RunService(self.root)
+        valid = {"name": "Comparison", "profiles": [["run", "profile"]], "baseline": ["run", "profile"]}
+        for change in (
+            {"name": " "},
+            {"name": "x" * 201},
+            {"profiles": []},
+            {"profiles": ["invalid"]},
+            {"profiles": [["run", "profile"], ["run", "profile"]]},
+            {"baseline": ["missing", "profile"]},
+            {"id": "missing"},
+        ):
+            with self.subTest(change=change), self.assertRaises(BenchmarkError):
+                service.save_comparison({**valid, **change})
+        self.assertEqual(service.saved_comparisons(), [])
 
     def test_local_ydb_summary_is_available_to_comparison_charts(self):
         self._manifest(self.root / "complete")
@@ -8131,7 +8278,7 @@ class WebTest(unittest.TestCase):
                 )
                 self.assertIn(b"function localResultSchema", script)
                 self.assertIn(b"result_schema_id:schema.schema_id", script)
-                self.assertIn(b"const metricHeaders=metricColumns.map", script)
+                self.assertIn(b"data-only-differences", script)
                 self.assertIn(b"if(option.choices.length)return localSelect", script)
                 self.assertIn(b"if(option.kind==='boolean')return localCheck", script)
                 self.assertIn(b"if(option.kind==='integer')", script)
@@ -8185,28 +8332,28 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"local-ydb-profile?profile=", script)
                 self.assertIn(b"function defaultActorCharts", script)
                 self.assertIn(b"function defaultMemoryCharts", script)
-                self.assertIn(b"Local YDB baseline comparison", script)
+                self.assertIn("Throughput · Δ vs baseline".encode(), script)
                 self.assertIn(b"function mountLocalYdbComparison", script)
-                self.assertIn(b"function mountLocalYdbComparisonCurves", script)
+                self.assertNotIn(b"function mountLocalYdbComparisonCurves", script)
                 self.assertIn(b"function localComparisonSemantic", script)
-                self.assertIn(b"sameMetricSource=metricView.source===baselineView.source", script)
-                self.assertIn(b"<th>Metric source</th>", script)
+                self.assertIn(b"currentView.source===view.source", script)
+                self.assertIn(b"Only differences", script)
+                self.assertNotIn(b"save-comparisons", script)
+                self.assertIn(b"Select runs in Runs", script)
                 self.assertIn(b"function localComparisonKey", script)
                 self.assertIn(b"Incompatible", script)
                 self.assertIn(b"reference===0", script)
                 self.assertIn(b"value===null", script)
                 self.assertIn(b"Load values", script)
-                self.assertIn(b"...Object.keys(config)", script)
-                self.assertIn(b"series.benchmark!=='local-ydb'", script)
-                self.assertIn(b"const curveMetrics=localComparisonCurveMetrics", script)
-                self.assertIn(b"metric.repetition_aggregation==='sum'?'sum_':'median_'", script)
-                self.assertIn(b"['errors','sum_errors','Errors across repetitions']", script)
+                self.assertIn(b"values.flatMap(Object.keys)", script)
+                self.assertIn(b"item.benchmark!=='local-ydb'", script)
+                self.assertIn(b"data-apply-profiles", script)
+                self.assertIn(b"data-comparison-cpu", script)
                 self.assertIn(b"localMetricLabel(schema,metric.name)", script)
                 self.assertIn(b"dynamicNodes", script)
                 self.assertIn(b"connectMeasuredPoints", script)
                 self.assertIn(b"item.rows.has(String(x))", script)
-                self.assertIn(b"no values are synthesized", script)
-                self.assertIn(b"loadChartData(value.selected,'local-ydb')", script)
+                self.assertNotIn(b"loadChartData(value.selected,'local-ydb')", script)
                 self.assertIn(b"Promise.allSettled", script)
                 self.assertIn(b"function defaultChartScope", script)
                 self.assertIn(b"['actorPairs','in_flight']", script)
@@ -8239,7 +8386,6 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"const chartPointLimit=10000", script)
                 self.assertIn(b"function chartExtent", script)
                 self.assertIn(b"Chart omitted because it has more than", script)
-                self.assertIn(b"Search curves omitted because they have more than", script)
                 self.assertNotIn(b"Math.min(...values)", script)
                 self.assertNotIn(b"Math.max(...values)", script)
                 self.assertNotIn(b"Math.min(...numericX)", script)

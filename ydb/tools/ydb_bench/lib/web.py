@@ -200,6 +200,15 @@ _CSS = (
 .local-activity-command{grid-column:2;margin:.15rem 0}.local-activity-command summary{cursor:pointer;color:var(--muted)}
 .attempt-pass{color:var(--good);font-weight:650}.attempt-fail{color:var(--bad);font-weight:650}
 .comparison-delta{font-weight:650}.comparison-delta.good{color:var(--good)}.comparison-delta.bad{color:var(--bad)}
+.comparison-config-changed{background:var(--panel);font-weight:600;overflow-wrap:anywhere}
+#local-ydb-comparison table{width:100%;min-width:620px;table-layout:fixed}
+#local-ydb-comparison td,#local-ydb-comparison th{white-space:normal;overflow-wrap:anywhere}
+#local-ydb-comparison .comparison-results th:first-child{width:34%}
+#local-ydb-comparison td.good{color:var(--good);background:transparent}
+#local-ydb-comparison td.bad{color:var(--bad)}
+#local-ydb-comparison .view-tabs{gap:.35rem;border-bottom:1px solid #d0d5dd;margin:1rem 0}
+#local-ydb-comparison .view-tabs button{padding:.6rem .8rem;border:1px solid transparent;border-radius:6px 6px 0 0;background:transparent;color:var(--muted);margin-bottom:-1px}
+#local-ydb-comparison .view-tabs button[aria-pressed=true]{background:#fff;color:var(--text);font-weight:650;border-color:#d0d5dd;border-bottom-color:#fff}
 .verification-badge{display:inline-flex;align-items:center;margin-left:.35rem;padding:.08rem .42rem;border:1px solid #d0d5dd}
 .verification-badge{border-radius:999px;background:var(--panel);color:var(--text);font-size:.75rem;font-weight:650;vertical-align:middle}
 .verification-badge.bad{border-color:#fecdca;background:#fff0f0;color:var(--bad)}
@@ -213,16 +222,21 @@ _CSS = (
 width:15rem;max-width:70vw;padding:.6rem;background:#fff;border:1px solid #d0d5dd;border-radius:5px;color:var(--text)}
 .actor-flag:hover .flag-help,.actor-flag:focus-within .flag-help{display:block}
 .view-tabs{display:flex;gap:.4rem;flex-wrap:wrap;margin:.8rem 0}.view-tabs button[aria-pressed=true]{background:var(--accent);color:#fff}
-.dense-run{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:.6rem;padding:.65rem 0;border-bottom:1px solid #d0d5dd}
+.dense-run{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.6rem;padding:.65rem 0;border-bottom:1px solid #d0d5dd}
 .dense-run-meta{display:flex;flex-wrap:wrap;gap:.2rem .8rem;font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
 .dense-run-profiles{font-size:.9rem;margin:.2rem 0;overflow-wrap:anywhere}.dense-run-id{font-size:.8rem;overflow-wrap:anywhere}
 .dense-run-actions{position:relative}.dense-run-actions .actions{position:absolute;right:0;z-index:10;background:#fff;
-padding:.6rem;border:1px solid #d0d5dd;min-width:8rem;flex-direction:column}.dense-run-select{padding-top:.15rem}
+padding:.6rem;border:1px solid #d0d5dd;min-width:8rem;flex-direction:column}
 .dense-run summary{cursor:pointer}.runs-toolbar{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin:.8rem 0}
+.runs-actions{display:flex;gap:.6rem;flex-wrap:wrap;margin-left:auto}
+.import-dialog{width:min(30rem,calc(100vw - 2rem));padding:1.2rem;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--text)}
+.import-dialog::backdrop{background:rgb(0 0 0 / 35%)}
+.import-dialog h2{margin-top:0}.import-dialog input{max-width:100%;margin:.8rem 0}
+.import-dialog .toolbar{justify-content:flex-end;margin-bottom:0}
 .dense-run{position:relative}.dense-run:hover{background:#f5f7fb}
 .dense-run-id::after{content:"";position:absolute;inset:0}
 .dense-run-id:focus-visible::after{outline:2px solid var(--accent);outline-offset:2px}
-.dense-run-select,.dense-run-actions{position:relative;z-index:1}
+.dense-run-actions{position:relative;z-index:1}
 .dense-run-actions[open]{z-index:2}
 .report-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem 2rem}
 .report-table{width:100%;font-variant-numeric:tabular-nums}.report-table th,.report-table td{text-align:right}
@@ -280,6 +294,14 @@ _CSS += (
     "ound:#fff;border:1px solid #ced6e2;border-radius:4px;z-index:20;box-shadow:0 4px 12px #18223722;font-size:13px}\n@media(max-width:600px){#cpu"
     "-topology .cpu-node{grid-template-columns:1fr;gap:8px}#cpu-topology .cpu-node-name{padding:0;display:flex;justify-content:space-between}}\n@m"
     "edia(pointer:coarse){#cpu-topology .cpu-core{min-height:44px}#cpu-topology #cpu-help-button{width:44px;height:44px}}\n"
+)
+
+_CSS += (
+    '.comparison-profile-choice{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--line)}'
+    '.comparison-profile-choice span:first-of-type{flex:1;min-width:180px}'
+    '#comparison-runs tr[data-picker-run]{cursor:pointer}'
+    '#comparison-runs tr:hover,#comparison-runs .comparison-run-selected{background:var(--panel)}'
+    '#comparison-runs td{white-space:normal;overflow-wrap:anywhere}'
 )
 
 _JS = (
@@ -1087,7 +1109,6 @@ async function refreshActiveBanner(){
     if(banner)banner.textContent='Run status unavailable';
   }finally{activeBannerLoading=false}
 }
-const selectedComparisonRuns=new Set;
 let runsSort='newest';
 function sortRuns(items,order){
   const timestamp=run=>Date.parse(run.started_at||run.queued_at||'')||0;
@@ -1099,9 +1120,7 @@ function sortRuns(items,order){
 }
 function compactRun(run){
   const profiles=Array.isArray(run.profile_names)?run.profile_names:[],benchmarks=Array.isArray(run.benchmarks)?run.benchmarks:[];
-  return '<article class=dense-run><label class=dense-run-select><input type=checkbox class=run-compare value="'+esc(run.id)+
-    '" aria-label="Select '+esc(run.id)+' for comparison" '+(selectedComparisonRuns.has(run.id)?'checked':'')+'></label>'+
-    '<div><div class=dense-run-meta>'+status(run.status)+'<time title="'+esc(run.started_at||run.queued_at||'')+'">'+
+  return '<article class=dense-run><div><div class=dense-run-meta>'+status(run.status)+'<time title="'+esc(run.started_at||run.queued_at||'')+'">'+
     esc(humanTime(run.started_at||run.queued_at))+'</time><span>'+duration(run)+'</span><span>'+
     esc(run.profiles)+' profiles · '+esc(run.repetitions)+' steps</span><span>perf '+(run.perf?'on':'off')+
     '</span><span>'+esc(run.source)+'</span></div><div class=dense-run-profiles>'+
@@ -1116,30 +1135,23 @@ function compactRun(run){
 async function renderRuns(){
   clearRefresh();
   app.innerHTML=shell('runs','<h1 class=page-title>Runs</h1>'+runFilters()+
-    '<div class=toolbar><input id=import-file type=file accept=.zip><button id=import-run>Import results</button>'+
-    '<button id=apply-filters>Apply filters</button></div><div class=runs-toolbar><label>Sort <select id=runs-sort>'+
+    '<div class=runs-toolbar><label>Sort <select id=runs-sort>'+
     '<option value=newest>Newest first</option><option value=oldest>Oldest first</option>'+
-    '<option value=longest>Longest first</option></select></label><button id=compare-selected>Compare selected</button>'+
-    '<button id=clear-selected>Clear selection</button><span id=selection-count aria-live=polite></span></div><div id=runs-table></div>');
+    '<option value=longest>Longest first</option></select></label><div class=runs-actions><button id=open-import>Import</button>'+
+    '<button id=apply-filters>Apply filters</button></div></div><div id=runs-table></div>'+
+    '<dialog id=import-dialog class=import-dialog aria-labelledby=import-title><h2 id=import-title>Import results</h2>'+
+    '<label for=import-file>Portable ZIP archive</label><input id=import-file type=file accept=".zip,application/zip">'+
+    '<div id=import-error role=alert></div><div id=import-status role=status></div><div class=toolbar>'+
+    '<button id=cancel-import>Cancel</button><button id=import-run class=primary>Import</button></div></dialog>');
   const target=document.querySelector('#runs-table'),sort=document.querySelector('#runs-sort');
   let records=[],request=0;
   sort.value=runsSort;
-  function selection(){
-    document.querySelector('#selection-count').textContent=selectedComparisonRuns.size+' selected';
-    document.querySelector('#compare-selected').disabled=!selectedComparisonRuns.size;
-  }
   function draw(){
     target.innerHTML=records.length?sortRuns(records,runsSort).map(compactRun).join(''):
       '<div class=empty>No runs match these filters.</div>';
-    for(const input of target.querySelectorAll('.run-compare'))input.onchange=()=>{
-      if(input.checked&&selectedComparisonRuns.size>=20){input.checked=false;alert('Select at most 20 runs.');return}
-      if(input.checked)selectedComparisonRuns.add(input.value);else selectedComparisonRuns.delete(input.value);
-      selection();
-    };
     for(const item of target.querySelectorAll('[data-repeat]'))item.onclick=event=>{
       event.preventDefault();reuseRun(item.dataset.repeat)
     };
-    selection()
   }
   async function load(){
     const current=++request,query=new URLSearchParams();
@@ -1151,15 +1163,30 @@ async function renderRuns(){
   }
   sort.onchange=()=>{runsSort=sort.value;draw()};
   document.querySelector('#apply-filters').onclick=load;
-  document.querySelector('#clear-selected').onclick=()=>{selectedComparisonRuns.clear();draw()};
-  document.querySelector('#compare-selected').onclick=async()=>{
-    try{await api('/api/comparisons/selection',jsonOptions([...selectedComparisonRuns]));setRoute('comparisons')}
-    catch(error){alert(error.message)}
+  const dialog=document.querySelector('#import-dialog'),fileInput=document.querySelector('#import-file'),
+    importButton=document.querySelector('#import-run'),cancelButton=document.querySelector('#cancel-import'),
+    importError=document.querySelector('#import-error'),importStatus=document.querySelector('#import-status');
+  let importing=false;
+  document.querySelector('#open-import').onclick=()=>{
+    fileInput.value='';importError.textContent='';importStatus.textContent='';dialog.showModal()
   };
-  document.querySelector('#import-run').onclick=async()=>{
-    try{const file=document.querySelector('#import-file').files[0];if(!file)throw Error('Choose a portable ZIP archive first.');
-      await api('/api/import',{method:'POST',body:await file.arrayBuffer()});await load()}
-    catch(error){target.innerHTML=displayError(error)}
+  cancelButton.onclick=()=>dialog.close();
+  dialog.addEventListener('cancel',event=>{if(importing)event.preventDefault()});
+  importButton.onclick=async()=>{
+    if(importing)return;
+    const file=fileInput.files[0];
+    importError.textContent='';
+    if(!file){importError.textContent='Choose a portable ZIP archive first.';fileInput.focus();return}
+    importing=true;importButton.disabled=true;cancelButton.disabled=true;fileInput.disabled=true;
+    importStatus.textContent='Importing…';
+    try{
+      await api('/api/import',{method:'POST',body:await file.arrayBuffer()});
+      if(dialog.isConnected){dialog.close();await load()}
+    }catch(error){if(dialog.isConnected)importError.textContent=error.message}
+    finally{
+      importing=false;importButton.disabled=false;cancelButton.disabled=false;fileInput.disabled=false;
+      importStatus.textContent=''
+    }
   };
   await load()
 }
@@ -1543,158 +1570,118 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     "  return '<span class=\"comparison-delta '+(good?'good':bad?'bad':'')+'\">'+(delta>0?'+':'')+delta.toFixed(1)+'%</span>'\n"
     '}\n'
     """
-function mountLocalYdbComparisonCurves(container,comparisonData,chartData,baseline){
-  if(!chartData){
-    container.innerHTML='<div class=empty>Search curves are unavailable because summary data could not be loaded.</div>';
-    return
-  }
-  const entries=new Map((comparisonData.entries||[]).map(item=>[localComparisonKey(item),item]));
-  const baselineSemantic=JSON.stringify(localComparisonSemantic(baseline)),groups=[];
-  for(const series of chartData.series||[]){
-    if(series.benchmark!=='local-ydb'||series.affinity!=='roles')continue;
-    const entry=entries.get(JSON.stringify([series.run,series.profile]));
-    if(!entry||JSON.stringify(localComparisonSemantic(entry))!==baselineSemantic)continue;
-    const byNodes=new Map;
-    for(const row of series.rows||[]){
-      const load=chartNumber(row.load);if(!Number.isFinite(load))continue;
-      const dynamicNodes=String(row.dynamic_nodes??entry.result?.dynamic_nodes??'—');
-      if(!byNodes.has(dynamicNodes))byNodes.set(dynamicNodes,new Map);
-      byNodes.get(dynamicNodes).set(String(load),row)
-    }
-    for(const [dynamicNodes,rows] of byNodes)groups.push({
-      rows,label:localComparisonId(entry)+' · '+dynamicNodes+' dynamic',connectMeasuredPoints:true
-    })
-  }
-  groups.sort((left,right)=>left.label.localeCompare(right.label,undefined,{numeric:true}));
-  groups.forEach((group,index)=>group.colorIndex=index);
-  if(!groups.some(group=>group.rows.size)){
-    container.innerHTML='<div class=empty>No compatible local YDB search summaries are available.</div>';
-    return
-  }
-  const schema=localResultSchema(baseline);
-  const objective=baseline.parameters?.load?.objective||{};
-  const curveMetrics=localComparisonCurveMetrics(schema,objective);
-  const cpuSpecifications=[
-    ['static_cpu','median_static_cpu_mean','Static node CPU (%)'],
-    ['dynamic_cpu','median_dynamic_cpu_mean','Dynamic node CPU (%)'],
-    ['cli_cpu','median_cli_cpu_mean','YDB CLI CPU (%)']
-  ];
-  const customSpecifications=curveMetrics.map(metric=>[
-    'workload_'+metric.name,(metric.repetition_aggregation==='sum'?'sum_':'median_')+metric.name,
-    localMetricLabel(schema,metric.name)+' ('+metric.unit+')'
-  ]);
-  const [percentile,sloMetric]=localPreferredSlo(schema,objective);
-  const specifications=(schema.schema_id==='generic-total-v1'?[
-    ['throughput','median_throughput','Achieved throughput ('+schema.throughput_unit+')'],
-    ['latency_ms','median_'+sloMetric,percentile+' latency (ms)'],
-    ...cpuSpecifications,
-    ['errors','sum_errors','Errors across repetitions']
-  ]:customSpecifications.concat(cpuSpecifications)).filter(([,metric])=>groups.some(group=>[...group.rows.values()]
-    .some(row=>Number.isFinite(chartNumber(row[metric])))));
-  if(!specifications.length){
-    container.innerHTML='<div class=empty>No numeric local YDB search metrics are available.</div>';
-    return
-  }
-  let pointCount=0;
-  for(const [,metric] of specifications)for(const group of groups)for(const row of group.rows.values()){
-    if(Number.isFinite(chartNumber(row[metric]))&&++pointCount>chartPointLimit){
-      container.innerHTML='<div class=notice>Search curves omitted because they have more than '+chartPointLimit+
-        ' numeric points. Select fewer runs.</div>';
-      return
-    }
-  }
-  const xValues=[...new Set(groups.flatMap(group=>[...group.rows.keys()].map(Number)))]
-    .sort((left,right)=>left-right);
-  const seriesByMetric=Object.fromEntries(specifications.map(([alias,metric])=>[
-    alias,groups.map(group=>({...group,metric}))
-  ]));
-  const xName=localSearchAxisLabel(
-    baseline.parameters?.load?.parameter||'load',baseline.parameters?.workload?.type
-  );
-  const legend='<div class=chart-legend>'+groups.map(group=>'<span><i class="legend-swatch chart-bg-'+
-    group.colorIndex%chartColors.length+'"></i>'+esc(group.label)+'</span>').join('')+'</div>';
-  container.innerHTML='<h3>Search measurements</h3><p class=muted>Only search measurements; holdout is not included. Lines connect each profile&apos;s own measured loads; '+
-    'no values are synthesized at loads measured only by another profile.</p>'+legend+'<div class=local-charts>'+
-    specifications.map(([alias,,title])=>localChart(title,alias,xName,xValues,seriesByMetric[alias])).join('')+'</div>';
-  bindChartTooltips(
-    container,xName,xValues,seriesByMetric,specifications.map(([alias])=>alias),chartColors,true
-  )
-}
 function mountLocalYdbComparison(container,data,chartData=null){
-  const entries=data.entries||[];if(!entries.length){container.closest('.card').hidden=true;return}
-  const previous=container.dataset.baseline;
-  const baseline=entries.find(item=>localComparisonKey(item)===previous)||entries.find(item=>{
-    const schema=localResultSchema(item);return Object.keys(localResultMetrics(item.result,schema).metrics).length
-  })||entries[0];
-  const baselineSchema=localResultSchema(baseline);
-  container.dataset.baseline=localComparisonKey(baseline);
-  const baselineView=localResultMetrics(baseline.result,baselineSchema),baselineMetrics=baselineView.metrics;
-  const metricColumns=localDisplayedMetrics(baselineSchema,baseline.parameters?.load?.objective||{});
-  const baselineConfig=localComparisonConfig(baseline),baselineContext=localComparisonContext(baseline);
-  const baselineBuild=localComparisonBuild(baseline);
-  const baselineSemantic=JSON.stringify(localComparisonSemantic(baseline));
-  const rows=entries.map(item=>{
-    const itemSchema=localResultSchema(item);
-    const metricView=localResultMetrics(item.result,itemSchema),metrics=metricView.metrics;
-    const config=localComparisonConfig(item),context=localComparisonContext(item),build=localComparisonBuild(item);
-    const sameResultSchema=itemSchema.schema_id===baselineSchema.schema_id&&
-      itemSchema.throughput_unit===baselineSchema.throughput_unit;
-    const semanticCompatible=JSON.stringify(localComparisonSemantic(item))===baselineSemantic;
-    const sameMetricSource=metricView.source===baselineView.source;
-    const compatible=sameResultSchema&&semanticCompatible&&sameMetricSource;
-    const differences=[...new Set([...Object.keys(baselineConfig),...Object.keys(config)])].sort()
-      .filter(name=>String(config[name])!==String(baselineConfig[name]));
-    const contextDifferences=[...new Set([...Object.keys(baselineContext),...Object.keys(context)])].sort()
-      .filter(name=>String(context[name])!==String(baselineContext[name]));
-    const buildDifferences=[...new Set([...Object.keys(baselineBuild),...Object.keys(build)])].sort()
-      .filter(name=>String(build[name])!==String(baselineBuild[name]));
-    const details=[...differences.map(name=>'<li><strong>'+esc(name)+':</strong> '+esc(baselineConfig[name])+
-      ' → '+esc(config[name])+'</li>'),...contextDifferences.map(name=>'<li><strong>'+esc(name)+':</strong> '+
-      esc(baselineContext[name])+' → '+esc(context[name])+'</li>'),...buildDifferences.map(name=>'<li><strong>'+
-      esc(name)+':</strong> '+esc(baselineBuild[name])+' → '+esc(build[name])+'</li>')];
-    if(!sameResultSchema)details.unshift('<li><strong>Result schema:</strong> '+esc(baselineSchema.schema_id)+' → '+
-      esc(itemSchema.schema_id)+'</li>');
-    if(!sameMetricSource)details.unshift('<li><strong>Metric source:</strong> '+esc(baselineView.source)+' → '+
-      esc(metricView.source)+'</li>');
-    const comparisonState=!sameResultSchema?'Incompatible result schema':
-      !semanticCompatible?'Incompatible workload':!sameMetricSource?'Incompatible metric source':
-      differences.length||contextDifferences.length?'Comparable with warnings':'Comparable · build changed';
-    const differenceText=item===baseline?'Baseline':details.length?'<details><summary class="'+
-      (compatible?'':'attempt-fail')+'">'+comparisonState+' · '+differences.length+' config · '+
-      contextDifferences.length+' environment · '+buildDifferences.length+' build'+
-      (sameMetricSource?'':' · metric source')+'</summary><ul>'+details.join('')+
-      '</ul></details>':'Same configuration, environment and build';
-    const metricCells=metricColumns.map(metric=>'<td>'+esc(metricLabel(metrics[metric.name]??'—'))+' '+
-      localComparisonDelta(
-        metrics[metric.name],baselineMetrics[metric.name],localMetricDirection(baselineSchema,metric.name),compatible
-      )+'</td>').join('');
-    return '<tr><td>'+esc(localComparisonId(item))+'</td><td>'+esc(item.state??'—')+
-      localVerificationBadge(item.result,item.parameters,item.verification)+'</td><td>'+esc(metricView.source)+
-      '</td><td><code>'+esc(String(item.binaries?.ydbd?.sha256??'—').slice(0,12))+'</code></td><td>'+
-      esc(metricLabel(item.result?.selected_load??'—'))+'</td>'+metricCells+
-      '<td>'+esc(metricLabel(metrics.static_cpu_mean??'—'))+'%</td><td>'+esc(metricLabel(metrics.dynamic_cpu_mean??'—'))+'%</td>'+
-      '<td>'+esc(metricLabel(metrics.cli_cpu_mean??'—'))+'%</td><td>'+esc(item.result?.dynamic_nodes??'—')+'</td><td>'+
-      differenceText+'</td></tr>'
-  }).join('');
-  const metricHeaders=metricColumns.map(metric=>'<th title="'+esc(metric.description||'')+'">'+
-    esc(localMetricLabel(baselineSchema,metric.name))+' ('+esc(metric.unit)+')</th>').join('');
-  container.innerHTML='<div class=run-section-title><h2>Local YDB baseline comparison</h2><label>Baseline '+
-    '<select id=local-comparison-baseline>'+entries.map(item=>'<option value="'+esc(localComparisonKey(item))+'" '+
-    (item===baseline?'selected':'')+'>'+esc(localComparisonId(item))+'</option>').join('')+'</select></label></div>'+
-    sectionTabs('comparison',[['final','Final results'],['search','Search measurements']])+
-    '<div data-section-panel="comparison:final"><p class=muted>Deltas compare metrics only when both rows use the same result schema and source: search or '+
-    'independent holdout. Expand configuration differences before interpreting a regression.</p>'+
-    '<div class=local-attempts-scroll><table class=local-attempts><thead><tr><th>Run / profile</th><th>State</th>'+
-    '<th>Metric source</th><th>ydbd</th><th>Selected load</th>'+metricHeaders+
-    '<th>Static CPU</th><th>Dynamic CPU</th><th>CLI CPU</th><th>Dynamic nodes</th>'+
-    '<th>Compatibility</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
-    '</div><div data-section-panel="comparison:search" hidden><div id=local-comparison-curves></div></div>';
-  mountLocalYdbComparisonCurves(
-    container.querySelector('#local-comparison-curves'),data,chartData,baseline
-  );
-  bindSectionTabs(container,'comparison');
-  container.querySelector('#local-comparison-baseline').onchange=event=>{
-    container.dataset.baseline=event.target.value;mountLocalYdbComparison(container,data,chartData)
+  const all=data.entries||[];
+  if(!all.length){container.innerHTML='<div class=empty>No local YDB profiles in the selected runs.</div>';return}
+  const stateKey='ydb-bench-comparison-profiles:'+JSON.stringify([...new Set(all.map(item=>item.run))].sort());
+  if(!container.dataset.restored&&!data.readonly){
+    try{Object.assign(container.dataset,JSON.parse(sessionStorage.getItem(stateKey)||'{}'))}catch{}
+    container.dataset.restored='true';
+  }
+  const remember=()=>{
+    if(data.readonly)return;
+    const state=Object.fromEntries(['profiles','baseline','cpu','allConfig'].filter(key=>container.dataset[key]!==undefined)
+      .map(key=>[key,container.dataset[key]]));
+    try{sessionStorage.setItem(stateKey,JSON.stringify(state))}catch{}
+  };
+  const saved=container.dataset.profiles?JSON.parse(container.dataset.profiles):all.map(localComparisonKey);
+  const entries=all.filter(item=>saved.includes(localComparisonKey(item)));
+  const baseline=entries.find(item=>localComparisonKey(item)===container.dataset.baseline)||entries[0];
+  const options=all.map(item=>'<label><input type=checkbox data-comparison-profile value="'+
+    esc(localComparisonKey(item))+'" '+(entries.includes(item)?'checked':'')+'> '+esc(localComparisonId(item))+'</label>').join('');
+  const toolbar=data.readonly?'':'<div class=toolbar><details><summary>Profiles · '+entries.length+'</summary><div class=series-picker>'+
+    options+'</div><button type=button data-apply-profiles>Apply</button></details>'+
+    (baseline?'<label>Baseline <select data-baseline>'+entries.map(item=>'<option value="'+esc(localComparisonKey(item))+
+      '" '+(item===baseline?'selected':'')+'>'+esc(localComparisonId(item))+'</option>').join('')+'</select></label>':'')+'</div>';
+  if(!baseline){
+    container.innerHTML=toolbar+'<div class=empty>Select profiles to compare.</div>';
+  }else{
+    container.dataset.baseline=localComparisonKey(baseline);
+    const schema=localResultSchema(baseline),view=localResultMetrics(baseline.result,schema);
+    const semantic=JSON.stringify(localComparisonSemantic(baseline));
+    const showCpu=container.dataset.cpu==='true';
+    const rows=entries.map(item=>{
+      const currentSchema=localResultSchema(item),currentView=localResultMetrics(item.result,currentSchema);
+      const metrics=currentView.metrics,objective=item.parameters?.load?.objective||{};
+      const [percentile,latencyMetric]=localPreferredSlo(currentSchema,objective);
+      const latency=metrics[latencyMetric];
+      const compatible=JSON.stringify(localComparisonSemantic(item))===semantic&&currentView.source===view.source;
+      const incompatibility=currentView.source!==view.source?'Incompatible metric source':'Incompatible workload or result schema';
+      const slo=objective.type==='latency-slo';
+      const known=latency!==null&&latency!==undefined&&Number.isFinite(Number(latency));
+      const passing=known&&Number(latency)<=Number(objective.max_ms);
+      const href='#run/'+enc(item.run)+'/profile/'+enc('local-ydb/'+item.profile);
+      return '<tr><td><a href="'+esc(href)+'"><strong>'+esc(item.profile)+'</strong></a>'+
+        (item===baseline?' <span class=muted>Baseline</span>':'')+
+        '<div class=muted title="'+esc(item.run)+'">'+esc(item.started_at?humanTime(item.started_at):item.run)+' · '+esc(currentView.source)+'</div>'+
+        '<div class=muted>'+esc(localSearchAxisLabel(item.parameters?.load?.parameter||'load',
+          item.parameters?.workload?.type))+': '+esc(metricLabel(item.result?.selected_load??'—'))+'</div>'+
+        (['passed','completed'].includes(item.state)?'':'<div class=muted>Profile state: '+esc(item.state??'—')+'</div>')+'</td>'+
+        '<td>'+esc(metricLabel(metrics.throughput??'—'))+' <span class=muted>'+esc(currentSchema.throughput_unit)+'</span>'+
+        '<div>'+(item===baseline?'—':compatible?localComparisonDelta(metrics.throughput,view.metrics.throughput):
+          '<span class=muted>'+esc(incompatibility)+'</span>')+'</div></td>'+
+        '<td>'+esc(metricLabel(latency??'—'))+(known?' ms':'')+' <span class=muted>'+esc(percentile??'')+'</span></td>'+
+        '<td>'+esc(metricLabel(metrics.errors??'—'))+(item.parameters?.load?.allow_errors?' <span class=muted>allowed</span>':'')+'</td>'+
+        '<td'+(slo&&known?' class="'+(passing?'good':'bad')+'"':'')+'>'+
+        (slo?(known?(passing?'Satisfied':'Exceeded'):'Unknown'):'—')+
+        (slo?'<div class=muted>'+esc(objective.percentile)+' ≤ '+esc(objective.max_ms)+' ms</div>':'')+'</td>'+
+        (showCpu?['static_cpu_mean','dynamic_cpu_mean','cli_cpu_mean'].map(key=>'<td>'+
+          esc(metricLabel(metrics[key]??'—'))+(metrics[key]!==undefined?'%':'')+'</td>').join(''):'')+'</tr>'
+    }).join('');
+    const groups=[
+      ['Profile configuration',localComparisonConfig],
+      ['Environment',localComparisonContext],
+      ['Build',localComparisonBuild]
+    ];
+    let configRows='',differenceCount=0;
+    for(const [title,project] of groups){
+      const values=entries.map(project);
+      const names=[...new Set(values.flatMap(Object.keys))];
+      let groupRows='';
+      for(const name of names){
+        const cells=values.map(value=>value[name]??'—');
+        const different=new Set(cells.map(value=>JSON.stringify(localComparisonStable(value)))).size>1;
+        if(different)differenceCount++;
+        if(!different&&container.dataset.allConfig!=='true')continue;
+        const reference=cells[entries.indexOf(baseline)];
+        groupRows+='<tr><th>'+esc(name)+'</th>'+cells.map(value=>{
+          const full=typeof value==='object'?JSON.stringify(localComparisonStable(value)):String(value);
+          const revision=value&&typeof value==='object'?(value.commit_id||value.hash):null;
+          const short=revision?String(revision).slice(0,12)+' · '+(value.build_type||'unknown build'):
+            /^[a-f0-9]{40,64}$/.test(full)?full.slice(0,12):full;
+          return '<td'+(JSON.stringify(value)!==JSON.stringify(reference)?' class=comparison-config-changed':'')+
+            '><span title="'+esc(full)+'">'+esc(short)+'</span></td>'
+        }).join('')+'</tr>';
+      }
+      if(groupRows)configRows+='<tr><th colspan="'+(entries.length+1)+'">'+esc(title)+'</th></tr>'+groupRows;
+    }
+    container.innerHTML=toolbar+sectionTabs('comparison',[['results','Results'],['configuration','Configuration']])+
+      '<div data-section-panel="comparison:results"><label><input type=checkbox data-comparison-cpu '+
+      (showCpu?'checked':'')+'> CPU metrics</label><div class=local-attempts-scroll><table class="local-attempts comparison-results">'+
+      '<thead><tr><th>Profile</th><th>Throughput · Δ vs baseline</th><th>Latency</th><th>Errors</th><th>SLO</th>'+
+      (showCpu?'<th>Static CPU</th><th>Dynamic CPU</th><th>YDB CLI CPU</th>':'')+'</tr></thead><tbody>'+
+      rows+'</tbody></table></div></div><div data-section-panel="comparison:configuration" hidden>'+
+      '<label><input type=checkbox data-only-differences '+(container.dataset.allConfig==='true'?'':'checked')+
+      '> Only differences</label> <span class=muted>'+differenceCount+' differing parameters</span>'+
+      '<div class=local-attempts-scroll><table class=local-attempts><thead><tr><th>Parameter</th>'+
+      entries.map(item=>'<th>'+esc(item.profile)+'<div class=muted>'+esc(item.run)+
+        (item===baseline?' · Baseline':'')+'</div></th>').join('')+'</tr></thead><tbody>'+
+      (configRows||'<tr><td colspan="'+(entries.length+1)+'">No configuration differences.</td></tr>')+
+      '</tbody></table></div></div>';
+    bindSectionTabs(container,'comparison');
+    if(!data.readonly)container.querySelector('[data-baseline]').onchange=event=>{
+      container.dataset.baseline=event.target.value;remember();mountLocalYdbComparison(container,data)
+    };
+    container.querySelector('[data-comparison-cpu]').onchange=event=>{
+      container.dataset.cpu=String(event.target.checked);remember();mountLocalYdbComparison(container,data)
+    };
+    container.querySelector('[data-only-differences]').onchange=event=>{
+      container.dataset.allConfig=String(!event.target.checked);remember();mountLocalYdbComparison(container,data)
+    };
+  }
+  if(!data.readonly)container.querySelector('[data-apply-profiles]').onclick=()=>{
+    container.dataset.profiles=JSON.stringify([...container.querySelectorAll('[data-comparison-profile]:checked')].map(input=>input.value));
+    remember();mountLocalYdbComparison(container,data)
   }
 }
     """
@@ -2883,40 +2870,215 @@ function parseLocalYdbProfileSelection(groups,selected){
     "'';c.style.color=''});target.querySelectorAll('[data-node-usage]').forEach(e=>e.textContent='—');details()}}\n      finally{loading=false}\n  "
     "  };\n    refreshTimer=setInterval(refresh,2000);await refresh();\n  }catch(error){if(location.hash==='#topology')app.innerHTML=shell('topolog"
     "y',displayError(error))}\n}\n"
-    'async function renderComparisons(){\n'
-    '  clearRefresh();\n'
-    '  try{\n'
-    "    const value=await api('/api/comparisons');\n"
-    "    let content='<h1 class=page-title>Comparisons</h1><p class=muted>Select runs, then choose a benchmark, profile, axes"
-    ' and exact affinity lines. Charts use the common X intersection and report incomplete coverage.</p><section class=card><'
-    "h2>Selected runs: '+value.selected.length+'</h2><a href=\"#runs\">Choose runs in Runs</a><details><summary>Change selection here</summary>'+ "
-    "(value.runs.length?'<div class=series-picker>'+value.runs.map(run=>'<label><input class=compare type=chec"
-    'kbox value="\'+esc(run.id)+\'" \'+(value.selected.includes(run.id)?\'checked\':\'\')+\'> \'+esc(run.id)+\' <span class=muted>(\'+es'
-    "c(run.source)+')</span></label>').join('')+'</div>':'<div class=empty>No runs are available.</div>')+'<div class=toolbar"
-    "><button class=primary id=save-comparisons>Update comparison</button></div></details></section><section class=card><div id=local-ydb-comparison>'+"
-    "(value.selected.length?'Loading local YDB results…':'Select one or more runs.')+'</div></section><section class=card><h2>Comparison "
-    "charts</h2><div id=comparison-chart>'+(value.selected.length?'Loading summary data…':'Select one or more runs.')+'</div><"
-    "/section>';\n"
-    "    app.innerHTML=shell('comparisons',content);\n"
-    "    document.querySelector('#save-comparisons').onclick=async()=>{await api('/api/comparisons/selection',jsonOptions([.."
-    ".document.querySelectorAll('.compare:checked')].map(input=>input.value)));renderComparisons()};\n"
-    "    if(value.selected.length){const [localResult,localChartResult,chartResult]=await Promise.allSettled([\n"
-    "      loadLocalYdbComparison(value.selected),loadChartData(value.selected,'local-ydb'),loadChartData(value.selected)\n"
-    '    ]);\n'
-    "      const localTarget=document.querySelector('#local-ydb-comparison');\n"
-    "      const chartTarget=document.querySelector('#comparison-chart');\n"
-    "      if(localResult.status==='fulfilled')mountLocalYdbComparison(\n"
-    "        localTarget,localResult.value,localChartResult.status==='fulfilled'?localChartResult.value:null\n"
-    '      );\n'
-    '      else localTarget.innerHTML=displayError(localResult.reason);\n'
-    "      if(chartResult.status==='fulfilled')mountChartBuilder(chartTarget,chartResult.value);\n"
-    '      else chartTarget.innerHTML=displayError(chartResult.reason)\n'
-    '    }\n'
-    "  }catch(error){app.innerHTML=shell('comparisons',displayError(error))}\n"
-    '}\n'
+    """
+function filterComparisonRuns(runs,filters,selected){
+  const query=(filters.query||'').trim().toLowerCase();
+  return sortRuns(runs.filter(run=>{
+    const names=Array.isArray(run.profile_names)?run.profile_names:[];
+    const benchmarks=Array.isArray(run.benchmarks)?run.benchmarks:[];
+    const date=(run.started_at||run.queued_at||'').slice(0,10);
+    return (!filters.only||selected.has(run.id))&&(!filters.status||run.status===filters.status)&&
+      (!filters.benchmark||benchmarks.includes(filters.benchmark))&&(!filters.since||date>=filters.since)&&
+      (!query||[run.id,...names,...benchmarks].join(' ').toLowerCase().includes(query))
+  }),filters.sort||'newest')
+}
+async function renderSavedComparisons(){
+  clearRefresh();
+  const route=location.hash,parts=route.slice(1).split('?')[0].split('/'),id=parts[1];
+  const active=()=>location.hash===route;
+  try{
+    const records=await api('/api/saved-comparisons');
+    if(!active())return;
+    if(!id){
+      app.innerHTML=shell('comparisons','<div class=toolbar><h1 class=page-title>Comparisons</h1>'+
+        '<a href="#comparisons/new">New comparison</a></div>'+(!records.length?'<div class=empty>No saved comparisons.</div>':
+        '<div class=table-scroll><table><thead><tr><th>Comparison</th><th>Created</th><th>Profiles</th></tr></thead><tbody>'+
+        records.map(record=>'<tr data-comparison-id="'+esc(record.id)+'"><td><a href="#comparisons/'+enc(record.id)+'">'+
+          esc(record.name)+'</a><div class=muted>'+record.profiles.map(pair=>esc(pair[1])).join(' · ')+
+          '</div></td><td>'+esc(humanTime(record.created_at))+'</td><td>'+record.profiles.length+'</td></tr>').join('')+
+        '</tbody></table></div>'));
+      for(const row of app.querySelectorAll('[data-comparison-id]'))row.onclick=event=>{
+        if(event.target.closest('a,button,input,select')||event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
+        setRoute('comparisons/'+row.dataset.comparisonId)
+      };
+      return
+    }
+    const record=id==='new'?null:records.find(item=>item.id===id);
+    if(id!=='new'&&!record)throw Error('Comparison not found');
+    const editing=id==='new'||parts[2]==='edit';
+    const crumb='<div class=breadcrumbs><a href="#comparisons">Comparisons</a> / '+esc(record?.name||'New comparison')+'</div>';
+    if(editing){
+      const runs=await api('/api/runs');if(!active())return;
+      const selected=new Map((record?.profiles||[]).map(pair=>[JSON.stringify(pair),pair]));
+      const seeds=record?[...new Set(record.profiles.map(pair=>pair[0]))]:new URLSearchParams(route.split('?')[1]||'').getAll('run');
+      const chosenRuns=new Set(seeds),cache=new Map(),pending=new Map(),errors=new Map(),autoSelect=new Set(record?[]:seeds);
+      let baseline=record?JSON.stringify(record.baseline):'',saving=false;
+      const options=values=>'<option value="">All</option>'+[...new Set(values)].sort().map(value=>'<option value="'+esc(value)+'">'+esc(value)+'</option>').join('');
+      app.innerHTML=shell('comparisons',crumb+'<h1 class=page-title>'+(record?'Edit comparison':'New comparison')+'</h1>'+
+        '<div class=toolbar><label>Name <input id=comparison-name maxlength=200 value="'+esc(record?.name||'')+'"></label>'+
+        '<button id=save-saved-comparison>'+(record?'Save':'Create comparison')+'</button><a href="#comparisons'+
+        (record?'/'+enc(record.id):'')+'">Cancel</a></div><div id=comparison-error role=alert></div>'+
+        '<div class=filters><div class=field><label for=comparison-query>Run or profile</label><input id=comparison-query placeholder="Name, profile or run ID"></div>'+
+        '<div class=field><label for=comparison-status>Status</label><select id=comparison-status>'+options(runs.map(run=>run.status))+'</select></div>'+
+        '<div class=field><label for=comparison-benchmark>Benchmark</label><select id=comparison-benchmark>'+
+        options(runs.flatMap(run=>run.benchmarks||[]))+'</select></div><div class=field><label for=comparison-since>Started since</label>'+
+        '<input id=comparison-since type=date></div></div><div class=runs-toolbar><span id=comparison-selection-count aria-live=polite></span>'+
+        '<label><input id=comparison-selected-only type=checkbox> Selected only</label><button id=comparison-reset>Reset filters</button>'+
+        '<label>Sort <select id=comparison-sort><option value=newest>Newest first</option><option value=oldest>Oldest first</option>'+
+        '<option value=longest>Longest first</option></select></label></div><div class=table-scroll><table><thead><tr>'+
+        '<th></th><th>Run / profiles</th><th>Started</th><th>Duration</th><th>Status</th></tr></thead><tbody id=comparison-runs></tbody></table></div>'+
+        '<h3 id=comparison-profiles-title>Profiles</h3><div id=comparison-load-status aria-live=polite></div>'+
+        '<div id=comparison-profile-options></div><label>Baseline <select id=comparison-baseline></select></label>');
+      const element=id=>document.querySelector('#'+id);
+      const drawProfiles=()=>{
+        const available=[...chosenRuns].flatMap(id=>cache.get(id)||[]);
+        const choices=new Map(available.map(item=>[localComparisonKey(item),[item.run,item.profile]]));
+        for(const [key,pair] of selected)if(!choices.has(key))choices.set(key,pair);
+        element('comparison-profile-options').innerHTML=[...choices].map(([key,pair])=>
+          '<label class=comparison-profile-choice><input type=checkbox data-saved-profile value="'+esc(key)+'" '+(selected.has(key)?'checked':'')+'>'+
+          '<span>'+esc(pair[1])+'</span><span class=muted>'+esc(pair[0])+'</span></label>').join('')||
+          '<div class=muted>Select runs above to load profiles.</div>';
+        element('comparison-profiles-title').textContent='Profiles · '+selected.size;
+        if(!selected.has(baseline))baseline=selected.keys().next().value||'';
+        element('comparison-baseline').innerHTML=[...selected].map(([key,pair])=>'<option value="'+esc(key)+'" '+
+          (key===baseline?'selected':'')+'>'+esc(pair.join(' / '))+'</option>').join('');
+        const loading=[...chosenRuns].filter(id=>pending.has(id));
+        element('save-saved-comparison').disabled=saving||!!loading.length||!selected.size||!element('comparison-name').value.trim();
+        element('comparison-load-status').innerHTML=(loading.length?'<div class=muted>Loading profiles for '+loading.length+' runs…</div>':'')+
+          [...chosenRuns].filter(id=>errors.has(id)).map(id=>'<div class=notice>'+esc(id+': '+errors.get(id))+
+          ' <button data-retry-run="'+esc(id)+'">Retry</button></div>').join('');
+        for(const input of app.querySelectorAll('[data-saved-profile]'))input.onchange=()=>{
+          if(input.checked)selected.set(input.value,JSON.parse(input.value));else selected.delete(input.value);drawProfiles()
+        };
+        for(const button of app.querySelectorAll('[data-retry-run]'))button.onclick=()=>loadRun(button.dataset.retryRun);
+      };
+      const drawRuns=()=>{
+        const visible=filterComparisonRuns(runs,{
+          query:element('comparison-query').value,status:element('comparison-status').value,
+          benchmark:element('comparison-benchmark').value,since:element('comparison-since').value,
+          only:element('comparison-selected-only').checked,sort:element('comparison-sort').value
+        },chosenRuns);
+        const outside=[...chosenRuns].filter(id=>!visible.some(run=>run.id===id)).length;
+        element('comparison-selection-count').textContent=chosenRuns.size+' selected'+(outside?' · '+outside+' outside filters':'')+' · '+visible.length+' shown';
+        element('comparison-runs').innerHTML=visible.map(run=>'<tr data-picker-run="'+esc(run.id)+'" class="'+
+          (chosenRuns.has(run.id)?'comparison-run-selected':'')+'"><td><input type=checkbox aria-label="Select '+esc(run.id)+
+          '" '+(chosenRuns.has(run.id)?'checked':'')+'></td><td><div>'+esc((run.profile_names||[]).join(' · ')||'No profiles')+
+          '</div><div class=muted>'+esc((run.benchmarks||[]).join(' · '))+' · '+esc(run.id)+'</div></td><td>'+
+          esc(humanTime(run.started_at||run.queued_at))+'</td><td>'+duration(run)+'</td><td>'+status(run.status)+'</td></tr>').join('')||
+          '<tr><td colspan=5>No runs match these filters.</td></tr>';
+        for(const row of app.querySelectorAll('[data-picker-run]')){
+          row.onclick=event=>{
+            if(event.target.closest('input,button,a,select')||event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
+            toggleRun(row.dataset.pickerRun)
+          };
+          row.querySelector('input').onchange=()=>toggleRun(row.dataset.pickerRun)
+        }
+      };
+      const loadRun=async id=>{
+        if(pending.has(id))return;
+        errors.delete(id);
+        const request=loadLocalYdbComparison([id]);pending.set(id,request);drawProfiles();
+        try{
+          const result=await request;if(!active())return;
+          cache.set(id,result.entries||[]);
+          if(chosenRuns.has(id)&&autoSelect.has(id)){
+            for(const item of result.entries||[])selected.set(localComparisonKey(item),[item.run,item.profile]);
+            autoSelect.delete(id)
+          }
+          if(!(result.entries||[]).length)errors.set(id,'No local YDB profiles in this run')
+        }catch(error){if(active())errors.set(id,error.message)}
+        finally{pending.delete(id);if(active())drawProfiles()}
+      };
+      const toggleRun=id=>{
+        element('comparison-error').innerHTML='';
+        if(chosenRuns.has(id)){
+          chosenRuns.delete(id);autoSelect.delete(id);
+          for(const [key,pair] of selected)if(pair[0]===id)selected.delete(key)
+        }else{
+          if(chosenRuns.size>=20){element('comparison-error').textContent='Select at most 20 runs.';return}
+          chosenRuns.add(id);autoSelect.add(id);
+          if(cache.has(id)){
+            for(const item of cache.get(id))selected.set(localComparisonKey(item),[item.run,item.profile]);
+            autoSelect.delete(id)
+          }else loadRun(id)
+        }
+        drawRuns();drawProfiles()
+      };
+      element('comparison-baseline').onchange=event=>{baseline=event.target.value};
+      element('comparison-name').oninput=drawProfiles;
+      element('comparison-query').oninput=drawRuns;
+      for(const id of ['comparison-status','comparison-benchmark','comparison-since','comparison-selected-only','comparison-sort'])element(id).onchange=drawRuns;
+      element('comparison-reset').onclick=()=>{
+        for(const id of ['comparison-query','comparison-status','comparison-benchmark','comparison-since'])element(id).value='';
+        element('comparison-selected-only').checked=false;drawRuns()
+      };
+      element('save-saved-comparison').onclick=async()=>{
+        if(saving)return;saving=true;drawProfiles();
+        try{
+          const saved=await api('/api/saved-comparisons',jsonOptions({...record,name:element('comparison-name').value,
+            profiles:[...selected.values()],baseline:JSON.parse(baseline)}));
+          if(active())setRoute('comparisons/'+saved.id)
+        }catch(error){if(active())element('comparison-error').innerHTML=displayError(error)}
+        finally{saving=false;if(active())drawProfiles()}
+      };
+      drawRuns();drawProfiles();for(const id of chosenRuns)loadRun(id);return
+    }
+    app.innerHTML=shell('comparisons',crumb+'<div class=toolbar><h1 class=page-title>'+esc(record.name)+'</h1>'+
+      '<a href="#comparisons/'+enc(record.id)+'/edit">Edit comparison</a><button id=delete-comparison>Delete</button></div>'+
+      '<div class=muted>'+record.profiles.length+' profiles · Baseline: '+esc(record.baseline.join(' / '))+'</div>'+
+      '<div id=comparison-error></div><div id=comparison-missing></div><section id=local-ydb-comparison>Loading profiles…</section>');
+    document.querySelector('#delete-comparison').onclick=async()=>{
+      if(!confirm('Delete comparison "'+record.name+'"? Benchmark results will be kept.'))return;
+      try{await api('/api/saved-comparisons/delete',jsonOptions({id:record.id,revision:record.revision}));if(active())setRoute('comparisons')}
+      catch(error){if(active())document.querySelector('#comparison-error').innerHTML=displayError(error)}
+    };
+    const entries=[],errors=[];
+    for(const run of [...new Set(record.profiles.map(pair=>pair[0]))]){
+      try{entries.push(...(await loadLocalYdbComparison([run])).entries)}catch(error){errors.push(run+': '+error.message)}
+      if(!active())return
+    }
+    const keys=record.profiles.map(pair=>JSON.stringify(pair)),found=entries.filter(item=>keys.includes(localComparisonKey(item)));
+    const missing=record.profiles.filter(pair=>!found.some(item=>localComparisonKey(item)===JSON.stringify(pair)));
+    document.querySelector('#comparison-missing').innerHTML=missing.map(pair=>'<div class=notice>Result unavailable: '+esc(pair.join(' / '))+'</div>').join('')+
+      errors.map(error=>displayError(error)).join('');
+    const target=document.querySelector('#local-ydb-comparison');
+    if(!found.some(item=>localComparisonKey(item)===JSON.stringify(record.baseline))){
+      target.innerHTML='<div class=empty>Baseline unavailable. Edit comparison to choose another baseline.</div>';return
+    }
+    target.dataset.profiles=JSON.stringify(keys);target.dataset.baseline=JSON.stringify(record.baseline);target.dataset.restored='true';
+    mountLocalYdbComparison(target,{entries:found,readonly:true})
+  }catch(error){if(active())app.innerHTML=shell('comparisons',displayError(error))}
+}
+async function renderComparisons(){
+  clearRefresh();
+  try{
+    const value=await api('/api/comparisons');
+    const content='<h1 class=page-title>Comparisons</h1><section><div id=local-ydb-comparison>'+
+      (value.selected.length?'Loading profiles…':'<a href="#runs">Select runs in Runs</a> to compare their profiles.')+
+      '</div></section><section id=other-comparisons hidden><h2>Other benchmarks</h2><div id=comparison-chart></div></section>';
+    app.innerHTML=shell('comparisons',content);
+    if(!value.selected.length)return;
+    const [local,charts]=await Promise.allSettled([loadLocalYdbComparison(value.selected),loadChartData(value.selected)]);
+    if(location.hash!=='#comparisons')return;
+    const target=document.querySelector('#local-ydb-comparison');
+    if(local.status==='fulfilled')mountLocalYdbComparison(target,local.value);
+    else target.innerHTML=displayError(local.reason);
+    if(charts.status==='fulfilled'){
+      const other={...charts.value,series:(charts.value.series||[]).filter(item=>item.benchmark!=='local-ydb')};
+      if(other.series.length){
+        document.querySelector('#other-comparisons').hidden=false;
+        mountChartBuilder(document.querySelector('#comparison-chart'),other)
+      }
+    }else{
+      document.querySelector('#other-comparisons').hidden=false;
+      document.querySelector('#comparison-chart').innerHTML=displayError(charts.reason)
+    }
+  }catch(error){app.innerHTML=shell('comparisons',displayError(error))}
+}
+    """
     "async function compose(){const pieces=routeParts(),current=pieces.join('/');if(current==='runs')return renderRuns();if(current==='new')return renderN"
     "ew('builder');if(current==='new/yaml')return renderNew('yaml');if(current==='topology')return renderTopology();if(curren"
-    "t==='comparisons')return renderComparisons();if(pieces[0]==='attempt'&&[4,5].includes(pieces.length))"
+    "t==='comparisons'||pieces[0]==='comparisons')return renderSavedComparisons();if(pieces[0]==='attempt'&&[4,5].includes(pieces.length))"
     "return renderLocalYdbAttempt(pieces[1],pieces[2],pieces[3],pieces[4]);if(pieces[0]==='run'){if(pieces[2]"
     "==='profile')return renderRun(pieces[1],pieces.slice(3).join('/'));return renderRun(pieces.slice(1).join('/'))}setRoute("
     "'runs')}\n"
@@ -4698,6 +4860,71 @@ class RunService:
                     raise BenchmarkError("local YDB comparison contains more than 100 profiles")
         return {"entries": entries}
 
+    def saved_comparisons(self):
+        path = self.output / ".saved-comparisons.json"
+        with self._lock:
+            if not path.exists():
+                return []
+            try:
+                records = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as error:
+                raise BenchmarkError("Cannot read saved comparisons") from error
+            if not isinstance(records, list):
+                raise BenchmarkError("Invalid saved comparisons")
+            return records
+
+    def save_comparison(self, value):
+        if not isinstance(value, dict):
+            raise BenchmarkError("Comparison must be an object")
+        name, profiles, baseline = value.get("name"), value.get("profiles"), value.get("baseline")
+        if not isinstance(name, str) or not name.strip() or len(name) > 200:
+            raise BenchmarkError("Comparison name must contain 1 to 200 characters")
+        if not isinstance(profiles, list) or not 1 <= len(profiles) <= 100:
+            raise BenchmarkError("Select between 1 and 100 profiles")
+        if any(
+            not isinstance(item, list)
+            or len(item) != 2
+            or any(not isinstance(part, str) or not part or len(part) > 500 for part in item)
+            for item in profiles
+        ):
+            raise BenchmarkError("Profiles must be run/profile pairs")
+        if len({tuple(item) for item in profiles}) != len(profiles) or len({item[0] for item in profiles}) > 20:
+            raise BenchmarkError("Select unique profiles from at most 20 runs")
+        if baseline not in profiles:
+            raise BenchmarkError("Baseline must be one of the selected profiles")
+        with self._lock:
+            records = self.saved_comparisons()
+            previous = next((item for item in records if item["id"] == value.get("id")), None)
+            if value.get("id") and previous is None:
+                raise BenchmarkError("Comparison no longer exists")
+            if previous and value.get("revision") != previous["revision"]:
+                raise BenchmarkError("Comparison changed elsewhere; reload before saving")
+            record = {
+                "id": previous["id"] if previous else uuid.uuid4().hex,
+                "name": name.strip(),
+                "profiles": profiles,
+                "baseline": baseline,
+                "created_at": previous["created_at"] if previous else datetime.now(timezone.utc).isoformat(),
+                "revision": previous["revision"] + 1 if previous else 1,
+            }
+            records = [item for item in records if item["id"] != record["id"]]
+            records.insert(0, record)
+            atomic_write_json(self.output / ".saved-comparisons.json", records)
+            return record
+
+    def delete_comparison(self, value):
+        if not isinstance(value, dict):
+            raise BenchmarkError("Comparison must be an object")
+        with self._lock:
+            records = self.saved_comparisons()
+            record = next((item for item in records if item["id"] == value.get("id")), None)
+            if record is None or record["revision"] != value.get("revision"):
+                raise BenchmarkError("Comparison changed or no longer exists; reload first")
+            atomic_write_json(
+                self.output / ".saved-comparisons.json", [item for item in records if item["id"] != record["id"]]
+            )
+        return {"deleted": record["id"]}
+
     def comparisons(self, selected=None):
         model = self.model()
         if selected is None:
@@ -5020,6 +5247,8 @@ def _handler(service):
                     "queue_position",
                 )
                 return self._json(200, [{key: item[key] for key in fields} for item in service.filtered_model(filters)])
+            if path == "/api/saved-comparisons":
+                return self._json(200, service.saved_comparisons())
             if path == "/api/comparisons":
                 return self._json(200, service.comparisons())
             if path == "/api/chart-data":
@@ -5146,6 +5375,10 @@ def _handler(service):
                     return self._json(
                         201, service.start(options["yaml"], options["perf"], options["continue_on_error"])
                     )
+                if path == "/api/saved-comparisons":
+                    return self._json(200, service.save_comparison(self._json_body()))
+                if path == "/api/saved-comparisons/delete":
+                    return self._json(200, service.delete_comparison(self._json_body()))
                 if path == "/api/comparisons/selection":
                     selected = self._json_body()
                     return self._json(200, service.select_comparisons(selected))

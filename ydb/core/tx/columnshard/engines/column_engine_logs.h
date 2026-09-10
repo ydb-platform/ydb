@@ -6,6 +6,7 @@
 #include "changes/actualization/controller/controller.h"
 #include "scheme/tier_info.h"
 #include "scheme/versions/preset_schemas.h"
+#include "storage/actualizer/move/queue_sizes.h"
 #include "storage/granule/granule.h"
 #include "storage/granule/storage.h"
 
@@ -265,6 +266,17 @@ public:
     void AddCleanupPortion(const TPortionInfo::TConstPtr& info) {
         AFL_VERIFY(info->HasRemoveSnapshot());
         CleanupPortions[info->GetRemoveSnapshotVerified().GetPlanInstant()].emplace_back(info);
+    }
+
+    // O(1): checks whether any cleanup portion has planInstant <= instant.
+    bool HasCleanupPortionsAtOrBefore(TInstant instant) const {
+        const auto earliest = CleanupPortions.empty() ? std::nullopt : std::make_optional(CleanupPortions.begin()->first);
+        return NActualizer::CleanupBlocksGate(earliest, instant);
+    }
+
+    // O(1): newest pending cleanup, used to seed the MoveData gate watermark.
+    TInstant GetMaxCleanupPortionInstant() const {
+        return CleanupPortions.empty() ? TInstant::Zero() : CleanupPortions.rbegin()->first;
     }
 
     void AddShardingInfo(const TGranuleShardingInfo& shardingInfo) {

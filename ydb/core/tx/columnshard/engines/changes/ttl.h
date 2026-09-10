@@ -39,8 +39,11 @@ private:
 
     std::vector<TPortionForEviction> PortionsToEvict;
     const NActualizer::TRWAddress RWAddress;
+    // True once any portion in PortionsToEvict came from the MoveData actualizer.
+    bool IsMoveDataRewrite = false;
 
 protected:
+    virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) override;
     virtual void DoDebugString(TStringOutput& out) const override;
@@ -116,6 +119,9 @@ public:
 
     void AddPortionToEvict(const TPortionInfo::TConstPtr& info, TPortionEvictionFeatures&& features) {
         AFL_VERIFY(!info->HasRemoveSnapshot());
+        if (features.GetForcedMove()) {
+            IsMoveDataRewrite = true;
+        }
         PortionsToEvict.emplace_back(info, std::move(features));
         PortionsToAccess.emplace_back(info);
     }

@@ -219,20 +219,44 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
 
         static constexpr bool VacuumDone = true;
         static constexpr bool HasBlobs = true;
+        static constexpr bool HasCleanup = true;
         const TMoveDataQueueSizes empty;
 
-        UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, empty, !HasBlobs) == EMoveDataGate::Ready);
+        UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, empty, !HasCleanup, !HasBlobs) == EMoveDataGate::Ready);
 
-        // Vacuum dominates everything, portions dominate GC — the order picks the sensor.
-        UNIT_ASSERT(ClassifyMoveDataGate(!VacuumDone, empty, !HasBlobs) == EMoveDataGate::BlockedByVacuum);
-        UNIT_ASSERT(ClassifyMoveDataGate(!VacuumDone, TMoveDataQueueSizes{ 1, 1, 1 }, HasBlobs) == EMoveDataGate::BlockedByVacuum);
-        UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, TMoveDataQueueSizes{ 1, 0, 0 }, HasBlobs) == EMoveDataGate::BlockedByPortions);
-        UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, empty, HasBlobs) == EMoveDataGate::BlockedByGC);
+        // Vacuum dominates everything, portions dominate cleanup and GC — the order picks the sensor.
+        UNIT_ASSERT(ClassifyMoveDataGate(!VacuumDone, empty, !HasCleanup, !HasBlobs) == EMoveDataGate::BlockedByVacuum);
+        UNIT_ASSERT(ClassifyMoveDataGate(!VacuumDone, TMoveDataQueueSizes{ 1, 1, 1 }, HasCleanup, HasBlobs) == EMoveDataGate::BlockedByVacuum);
+        UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, TMoveDataQueueSizes{ 1, 0, 0 }, HasCleanup, HasBlobs) == EMoveDataGate::BlockedByPortions);
+        UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, empty, !HasCleanup, HasBlobs) == EMoveDataGate::BlockedByGC);
 
         // Each component alone must block, InFlight included, or a submitted rewrite slips past.
-        UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, TMoveDataQueueSizes{ 1, 0, 0 }, !HasBlobs) == EMoveDataGate::BlockedByPortions);
-        UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, TMoveDataQueueSizes{ 0, 1, 0 }, !HasBlobs) == EMoveDataGate::BlockedByPortions);
-        UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, TMoveDataQueueSizes{ 0, 0, 1 }, !HasBlobs) == EMoveDataGate::BlockedByPortions);
+        UNIT_ASSERT(
+            ClassifyMoveDataGate(VacuumDone, TMoveDataQueueSizes{ 1, 0, 0 }, !HasCleanup, !HasBlobs) == EMoveDataGate::BlockedByPortions);
+        UNIT_ASSERT(
+            ClassifyMoveDataGate(VacuumDone, TMoveDataQueueSizes{ 0, 1, 0 }, !HasCleanup, !HasBlobs) == EMoveDataGate::BlockedByPortions);
+        UNIT_ASSERT(
+            ClassifyMoveDataGate(VacuumDone, TMoveDataQueueSizes{ 0, 0, 1 }, !HasCleanup, !HasBlobs) == EMoveDataGate::BlockedByPortions);
+
+        // Cleanup beats GC; once cleanup clears, GC is next.
+        UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, empty, HasCleanup, !HasBlobs) == EMoveDataGate::BlockedByCleanup);
+        UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, empty, HasCleanup, HasBlobs) == EMoveDataGate::BlockedByCleanup);
+        UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, empty, !HasCleanup, HasBlobs) == EMoveDataGate::BlockedByGC);
+    }
+
+    // Pure predicate: no TColumnEngineForLogs needed to catch a watermark regression.
+    Y_UNIT_TEST(CleanupWatermarkFiltering) {
+        using NOlap::NActualizer::CleanupBlocksGate;
+
+        const TInstant kT = TInstant::Seconds(100);
+        // No cleanup at all: never blocks.
+        UNIT_ASSERT(!CleanupBlocksGate(std::nullopt, kT));
+        // Cleanup exactly at the watermark: blocks (portion was made by this session).
+        UNIT_ASSERT(CleanupBlocksGate(kT, kT));
+        // Cleanup strictly before the watermark: blocks.
+        UNIT_ASSERT(CleanupBlocksGate(kT - TDuration::MilliSeconds(1), kT));
+        // Cleanup strictly after the watermark: must NOT block (from a different session).
+        UNIT_ASSERT(!CleanupBlocksGate(kT + TDuration::MilliSeconds(1), kT));
     }
 
     // Portions created mid-session still land in the doomed group; the deadline bounds adoption.

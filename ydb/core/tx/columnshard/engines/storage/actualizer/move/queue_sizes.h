@@ -1,6 +1,9 @@
 #pragma once
 
+#include <util/datetime/base.h>
 #include <util/system/types.h>
+
+#include <optional>
 
 namespace NKikimr::NOlap::NActualizer {
 
@@ -29,15 +32,26 @@ enum class EMoveDataGate {
     Ready,
     BlockedByVacuum,
     BlockedByPortions,
+    // Old portions rewritten by this session are in CleanupPortions awaiting DeclareRemove.
+    BlockedByCleanup,
     BlockedByGC,
 };
 
-inline EMoveDataGate ClassifyMoveDataGate(const bool vacuumCompleted, const TMoveDataQueueSizes& queues, const bool hasBlobsForGroups) {
+// Only portions at-or-before the watermark were produced by this move session.
+inline bool CleanupBlocksGate(const std::optional<TInstant>& earliestCleanupInstant, const TInstant& watermark) {
+    return earliestCleanupInstant.has_value() && *earliestCleanupInstant <= watermark;
+}
+
+inline EMoveDataGate ClassifyMoveDataGate(
+    const bool vacuumCompleted, const TMoveDataQueueSizes& queues, const bool hasCleanupPortions, const bool hasBlobsForGroups) {
     if (!vacuumCompleted) {
         return EMoveDataGate::BlockedByVacuum;
     }
     if (queues.GetTotal() != 0) {
         return EMoveDataGate::BlockedByPortions;
+    }
+    if (hasCleanupPortions) {
+        return EMoveDataGate::BlockedByCleanup;
     }
     if (hasBlobsForGroups) {
         return EMoveDataGate::BlockedByGC;

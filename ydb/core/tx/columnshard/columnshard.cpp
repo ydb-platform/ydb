@@ -677,6 +677,8 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
             auto& index = MutableIndexAs<NOlap::TColumnEngineForLogs>();
             index.StopMoveData();
             index.StartMoveData(MoveDataState.TargetGroups);
+            // The new groups get the same treatment: their pending-cleanup backlog is unmovable too.
+            MoveDataState.CleanupWatermark = Max(MoveDataState.CleanupWatermark, index.GetMaxCleanupPortionInstant());
         }
         return;
     }
@@ -695,6 +697,8 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
     }
     MoveDataState.Active = true;
     MoveDataState.VacuumCompleted = false;
+    // Actualization skips portions that already carry RemoveSnapshot, so wait out that backlog too.
+    MoveDataState.CleanupWatermark = HasIndex() ? GetIndexAs<NOlap::TColumnEngineForLogs>().GetMaxCleanupPortionInstant() : TInstant::Zero();
 
     LOG_S_INFO(
         "TColumnShard::Handle TEvMoveData: starting move for " << MoveDataState.TargetGroups.size() << " groups at tablet " << TabletID());
@@ -729,15 +733,22 @@ void TColumnShard::CheckMoveDataGate(const TActorContext& ctx) {
         Counters.GetCSCounters().OnMoveDataPortionsRejected(queues.Rejected - MoveDataState.ReportedRejections);
         MoveDataState.ReportedRejections = queues.Rejected;
     }
+    const bool hasCleanupPortions =
+        HasIndex() && GetIndexAs<NOlap::TColumnEngineForLogs>().HasCleanupPortionsAtOrBefore(MoveDataState.CleanupWatermark);
     // HasBlobsForGroups scans the GC queues, so short-circuit it behind the cheap gates.
-    const bool cheapGatesPass = MoveDataState.VacuumCompleted && queues.GetTotal() == 0;
-    switch (NOlap::NActualizer::ClassifyMoveDataGate(MoveDataState.VacuumCompleted, queues,
+    const bool cheapGatesPass = MoveDataState.VacuumCompleted && queues.GetTotal() == 0 && !hasCleanupPortions;
+    switch (NOlap::NActualizer::ClassifyMoveDataGate(MoveDataState.VacuumCompleted, queues, hasCleanupPortions,
         cheapGatesPass && GetStoragesManager()->GetDefaultOperator()->HasBlobsForGroups(MoveDataState.TargetGroups))) {
         case NOlap::NActualizer::EMoveDataGate::BlockedByVacuum:
             Counters.GetCSCounters().OnMoveDataGateBlockedByVacuum();
             return;
         case NOlap::NActualizer::EMoveDataGate::BlockedByPortions:
             Counters.GetCSCounters().OnMoveDataGateBlockedByPortions();
+            return;
+        case NOlap::NActualizer::EMoveDataGate::BlockedByCleanup:
+            Counters.GetCSCounters().OnMoveDataGateBlockedByCleanup();
+            LOG_S_INFO(
+                "TColumnShard::CheckMoveDataGate: portions still awaiting cleanup, will re-check on next wakeup at tablet " << TabletID());
             return;
         case NOlap::NActualizer::EMoveDataGate::BlockedByGC:
             Counters.GetCSCounters().OnMoveDataGateBlockedByGC();
@@ -746,7 +757,7 @@ void TColumnShard::CheckMoveDataGate(const TActorContext& ctx) {
         case NOlap::NActualizer::EMoveDataGate::Ready:
             break;
     }
-    LOG_S_INFO("TColumnShard::MoveData gate passed at tablet " << TabletID());
+    LOG_S_INFO("TColumnShard::CheckMoveDataGate: gate passed at tablet " << TabletID());
 
     if (HasIndex()) {
         MutableIndexAs<NOlap::TColumnEngineForLogs>().StopMoveData();
@@ -756,6 +767,15 @@ void TColumnShard::CheckMoveDataGate(const TActorContext& ctx) {
 
     Counters.GetCSCounters().OnMoveDataFinished();
     MoveDataState = TMoveDataState{};
+}
+
+void TColumnShard::OnMoveDataRewriteComplete(TInstant planInstant) {
+    if (!MoveDataState.Active) {
+        return;
+    }
+    if (planInstant > MoveDataState.CleanupWatermark) {
+        MoveDataState.CleanupWatermark = planInstant;
+    }
 }
 
 }   // namespace NKikimr::NColumnShard

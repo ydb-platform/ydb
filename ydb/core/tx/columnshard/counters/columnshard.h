@@ -111,6 +111,7 @@ private:
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsInFlight;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByVacuumCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByPortionsCount;
+    NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByCleanupCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByGCCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataPortionsRejectedCount;
 
@@ -241,6 +242,10 @@ public:
 
     void OnMoveDataGateBlockedByPortions() const {
         MoveDataGateBlockedByPortionsCount->Add(1);
+    }
+
+    void OnMoveDataGateBlockedByCleanup() const {
+        MoveDataGateBlockedByCleanupCount->Add(1);
     }
 
     void OnMoveDataGateBlockedByGC() const {

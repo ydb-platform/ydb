@@ -73,4 +73,11 @@ NColumnShard::ECumulativeCounters TTTLColumnEngineChanges::GetCounterIndex(const
     return isSuccess ? NColumnShard::COUNTER_TTL_SUCCESS : NColumnShard::COUNTER_TTL_FAIL;
 }
 
+void TTTLColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
+    TBase::DoWriteIndexOnComplete(self, context);
+    if (IsMoveDataRewrite && self) {
+        self->OnMoveDataRewriteComplete(context.Snapshot.GetPlanInstant());
+    }
+}
+
 }   // namespace NKikimr::NOlap

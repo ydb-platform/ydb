@@ -52,6 +52,8 @@ void RunMoveDataToCompletion(const bool ttlBackgroundDisabled, const bool moveDa
         { new NFake::TProxyDS(TGroupId::FromValue(0)), oldGroupProxy, newGroupProxy, new NFake::TProxyDS(TGroupId::FromValue(Max<ui32>())) });
     runtime.GetAppData().FeatureFlags.SetEnableColumnshardGroupDecommission(moveDataEnabled);
     auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+    // Without a real mediator the rewrite plan-step never ages, so set staleness to zero.
+    controller->SetOverrideMaxReadStaleness(TDuration::Zero());
     if (ttlBackgroundDisabled) {
         controller->DisableBackground(NYDBTest::ICSController::EBackground::TTL);
     }
@@ -84,11 +86,21 @@ void RunMoveDataToCompletion(const bool ttlBackgroundDisabled, const bool moveDa
 
     runtime.SendToPipe(tabletId, sender, new TEvTablet::TEvMoveData(std::vector<ui32>{ OldGroup }), 0, GetPipeConfigWithRetries());
 
-    // This runtime delivers no periodic wakeup, so drive the gate until the tablet answers.
+    // Drive the gate manually; at iteration 25 commit an extra write to advance minSnapshotForNewReads.
     TEvTablet::TEvMoveDataResponse::TPtr response;
-    for (ui32 i = 0; i < 100 && !response; ++i) {
+    bool advanceDone = false;
+    // readStep is updated when the advance write commits — planStep becomes too old after that.
+    auto readStep = planStep;
+    for (ui32 i = 0; i < 150 && !response; ++i) {
         Wakeup(runtime, sender, tabletId);
         runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
+        if (!advanceDone && i == 25) {
+            advanceDone = true;
+            std::vector<ui64> advIds;
+            UNIT_ASSERT(WriteData(runtime, sender, tabletId, 2, tableId, MakeTestBlob({ 1000, 1001 }, table.Schema), table.Schema, &advIds));
+            readStep = ProposeCommit(runtime, sender, tabletId, 2, advIds);
+            PlanCommit(runtime, sender, tabletId, readStep, TSet<ui64>{ 2 });
+        }
         response = runtime.GrabEdgeEventIf<TEvTablet::TEvMoveDataResponse>(sender, [](const TEvTablet::TEvMoveDataResponse::TPtr&) {
             return true;
         }, TDuration::MilliSeconds(100));
@@ -103,7 +115,7 @@ void RunMoveDataToCompletion(const bool ttlBackgroundDisabled, const bool moveDa
     } else {
         UNIT_ASSERT_VALUES_EQUAL_C(movedBlobs, 0u, "the disabled feature flag still rewrote portions");
     }
-    UNIT_ASSERT_VALUES_EQUAL(ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(planStep.Val(), 1), table.Schema)->num_rows(), 1000);
+    UNIT_ASSERT_VALUES_EQUAL(ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(readStep.Val(), 1), table.Schema)->num_rows(), 1000);
 }
 
 }   // namespace

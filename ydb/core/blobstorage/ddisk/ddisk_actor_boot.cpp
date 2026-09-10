@@ -58,7 +58,7 @@ namespace NKikimr::NDDisk {
             {"PDiskActorId", BaseInfo.PDiskActorID});
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvYardInit(BaseInfo.InitOwnerRound, TVDiskID(Info->GroupID,
             Info->GroupGeneration, BaseInfo.VDiskIdShort), BaseInfo.PDiskGuid, SelfId(), SelfId(), BaseInfo.VDiskSlotId,
-            0 /*groupSizeInUnits*/, true /*getDiskFd*/));
+            0 /*groupSizeInUnits*/, !Config.ForcePDiskFallback /*getUringRouterClient*/, Config.IdleSpinUs));
     }
 
     void TDDiskActor::Handle(NPDisk::TEvYardInitResult::TPtr ev) {
@@ -76,21 +76,25 @@ namespace NKikimr::NDDisk {
         PDiskParams = std::move(msg.PDiskParams);
         DiskFormat = std::move(msg.DiskFormat);
         OwnedChunksOnBoot = std::move(msg.OwnedChunks);
-        DiskFd = std::move(msg.DiskFd);
+#if defined(__linux__)
+        if (!Config.ForcePDiskFallback) {
+            UringRouter = std::move(msg.UringRouter);
+        }
+        if (!UringRouter) {
+            YDB_LOG_INFO("TDDiskActor::Handle(TEvYardInitResult) "
+                "UringRouter is not set, all further I/O will be routed "
+                "through PDisk",
+                {"marker", "BSDD17"},
+                {"DDiskId", DDiskId},
+                {"PDiskActorId", BaseInfo.PDiskActorID});
+        }
+#endif
 
         if (Config.EnableChecksums) {
             // The integrity manager needs the chunk size, so it is created here rather than in the ctor.
             // VDiskSlotId + PDiskGuid identify this DDisk in TIntegrityChunkHeader.
             IntegrityManager.emplace(DiskFormat->ChunkSize, BaseInfo.VDiskSlotId, BaseInfo.PDiskGuid,
                 Config.IntegrityChecksumCacheBytes);
-        }
-        if (!DiskFd.IsOpen()) {
-            YDB_LOG_INFO("TDDiskActor::Handle(TEvYardInitResult) "
-                "DiskFd is invalid, all further I/O will be routed "
-                "through PDisk",
-                {"marker", "BSDD17"},
-                {"DDiskId", DDiskId},
-                {"PDiskActorId", BaseInfo.PDiskActorID});
         }
 
         if (const auto it = msg.StartingPoints.find(TLogSignature::SignatureDDiskChunkMap); it != msg.StartingPoints.end()) {
@@ -242,7 +246,12 @@ namespace NKikimr::NDDisk {
         }
         auto pbActor = std::make_unique<TDDiskActor>(TVDiskConfig::TBaseInfo(BaseInfo),
             Info, TPersistentBufferFormat(PersistentBufferFormat), TDDiskConfig(Config), CountersParent,
-            PersistentBufferChunks, PersistentBufferUniqueId, PDiskParams, std::move(format), std::move(DiskFd.Duplicate()));
+            PersistentBufferChunks, PersistentBufferUniqueId, PDiskParams, std::move(format)
+#if defined(__linux__)
+            , UringRouter
+#endif
+            );
+        pbActor->ParentDDiskId = SelfId();
         auto *as = TActivationContext::ActorSystem();
         PersistentBufferActorId = as->Register(pbActor.release(), TMailboxType::Revolving, AppData()->SystemPoolId);
         auto pbServiceId = MakeBlobStoragePersistentBufferId(BaseInfo.PDiskActorID.NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
@@ -256,100 +265,16 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::InitUring() {
 #if defined(__linux__)
-        NPDisk::TUringRouterConfig config;
-        config.QueueDepth = MaxInFlight;
-        if (!UringRouter) {
-            if (!Config.ForcePDiskFallback && DiskFd != INVALID_FHANDLE && DiskFormat && NPDisk::TUringRouter::Probe(config)) {
-                UringRouter = std::make_unique<NPDisk::TUringRouter>(
-                    DiskFd,
-                    TActivationContext::ActorSystem(),
-                    config,
-                    &Counters.UringCounters);
-                UringRouter->RegisterFile();
-
-                // Device overestimation tracking: reuse PDisk's measured seek/speed
-                // constants for the first iteration.
-                // SetSampleSink must be called before Start().
-                if (PDiskParams) {
-                    DeviceOverestimationReadSpeedBps = PDiskParams->ReadSpeedBps;
-                    DeviceOverestimationWriteSpeedBps = PDiskParams->WriteSpeedBps;
-                }
-                UringRouter->SetSampleSink([this](const NPDisk::TDeviceIoSample& sample) {
-                    OnDeviceIoSample(sample);
-                });
-
-                UringRouter->Start();
-
-                if (!UringRouter->IsFileRegistered()) {
-                    YDB_LOG_WARN("TDDiskActor::InitUring failed to register fixed file for io_uring",
-                        {"marker", "BSDD18"},
-                        {"DDiskId", DDiskId},
-                        {"errno", UringRouter->GetRegisterFileErrno()});
-                }
-
-                // Periodically flush buffered samples to the owning PDisk actor so it
-                // can merge them with samples from other sources sharing this device.
-                Schedule(DeviceOverestimationFlushPeriod,
-                    new TEvents::TEvWakeup(EWakeupTag::WakeupFlushDeviceOverestimationSamples));
-            }
+        if (Config.ForcePDiskFallback) {
+            UringRouter.reset();
         }
-
         if (UringRouter) {
-            const NPDisk::EUringFavor actualFavor = UringRouter->GetUringFavor();
-            const bool usedModernFlags = actualFavor == NPDisk::EUringFavor::SingleIssuer;
-            *Counters.DirectIO.RegularUringCount = usedModernFlags ? 1 : 0;
-            *Counters.DirectIO.FallbackUringCount = usedModernFlags ? 0 : 1;
-            *Counters.DirectIO.FallbackPDiskCount = 0;
-            if (!usedModernFlags) {
-                YDB_LOG_WARN("TDDiskActor::InitUring io_uring mode fallback",
-                    {"marker", "BSDD19"},
-                    {"DDiskId", DDiskId},
-                    {"actualFavor", actualFavor});
-            }
-            YDB_LOG_INFO("TDDiskActor::InitUring started io_uring with config",
+            YDB_LOG_INFO("TDDiskActor::InitUring using shared PDisk io_uring",
                 {"marker", "BSDD20"},
                 {"DDiskId", DDiskId},
-                {"config", UringRouter->GetConfig()});
-        } else {
-            *Counters.DirectIO.RegularUringCount = 0;
-            *Counters.DirectIO.FallbackUringCount = 0;
-            *Counters.DirectIO.FallbackPDiskCount = 1;
+                {"config", UringRouter->GetConfig().ToString()});
         }
 #endif
-    }
-
-    void TDDiskActor::OnDeviceIoSample(const NPDisk::TDeviceIoSample& sample) {
-        // Called from the io_uring I/O thread (via UringRouter's
-        // sample sink). Keep this cheap: just fill BaseCostNs using the flat
-        // model and append under a mutex.
-        NPDisk::TDeviceIoSample sampleWithCost = sample;
-        sampleWithCost.BaseCostNs = EstimateDeviceIoBaseCostNs(sample.IsWrite, sample.Size);
-
-        TGuard<TMutex> guard(DeviceOverestimationSamplesMutex);
-        if (DeviceOverestimationSamples.size() >= MaxBufferedDeviceOverestimationSamples) {
-            // Drop oldest half under sustained overflow rather than the actor
-            // never keeping up; this is a monitoring signal, not correctness-critical.
-            const size_t toDrop = DeviceOverestimationSamples.size() / 2 + 1;
-            DeviceOverestimationSamples.erase(
-                DeviceOverestimationSamples.begin(), DeviceOverestimationSamples.begin() + toDrop);
-        }
-        DeviceOverestimationSamples.push_back(sampleWithCost);
-    }
-
-    void TDDiskActor::FlushDeviceOverestimationSamples() {
-        std::vector<NPDisk::TDeviceIoSample> batch;
-        {
-            TGuard<TMutex> guard(DeviceOverestimationSamplesMutex);
-            batch.swap(DeviceOverestimationSamples);
-        }
-
-        if (!batch.empty() && BaseInfo.PDiskActorID) {
-            TVector<NPDisk::TDeviceIoSample> samples(batch.begin(), batch.end());
-            Send(BaseInfo.PDiskActorID, new NPDisk::TEvDeviceOverestimationSamples(std::move(samples)));
-        }
-
-        Schedule(DeviceOverestimationFlushPeriod,
-            new TEvents::TEvWakeup(EWakeupTag::WakeupFlushDeviceOverestimationSamples));
     }
 
     void TDDiskActor::StartHandlingQueries() {

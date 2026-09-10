@@ -7,6 +7,7 @@ import requests
 from flask import Blueprint, request, jsonify
 
 from ydb.tests.stability.nemesis.internal.config import Settings
+from ydb.tests.stability.nemesis.internal.models import parse_warden_time_window
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_state import ChaosOrchestratorStore
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.schedule_loop import OrchestratorNemesisSchedule
 from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_checker import OrchestratorWardenChecker
@@ -632,9 +633,25 @@ def start_warden_checks_on_all_hosts():
     Start warden checks:
     - Liveness checks run centrally on orchestrator (HTTP monitoring)
     - Safety checks run on each agent (local log/dmesg access)
+
+    Optional JSON body is forwarded to every agent and bounds log search:
+    - ``start_time`` / ``end_time`` — unix timestamps
+    - ``since`` / ``until`` — ISO-8601 datetimes
+    - ``hours_back`` — relative window ending at now (default 24)
     """
-    logger.info(f"Starting warden checks on all hosts. Total hosts: {len(hosts)}")
-    results = {"agents": {}, "orchestrator": {}}
+    data = request.get_json(silent=True) or {}
+    ok, error, window = parse_warden_time_window(data)
+    if not ok:
+        return jsonify({"status": "error", "message": error}), 400
+    payload = window.to_json()
+
+    logger.info(
+        "Starting warden checks on all hosts. Total hosts: %d start_time=%s end_time=%s",
+        len(hosts),
+        window.start_ts,
+        window.end_ts,
+    )
+    results = {"agents": {}, "orchestrator": {}, **payload}
 
     # Start safety checks on all agents
     def start_safety_on_host(host):
@@ -642,11 +659,11 @@ def start_warden_checks_on_all_hosts():
             logger.debug(f"Starting safety checks on agent: {host}")
             if is_local_host(host):
                 # Direct call to avoid HTTP deadlock
-                result = agent_router.start_warden_checks_helper()
+                result = agent_router.start_warden_checks_helper(window)
                 logger.debug(f"Agent {host} (local): {result.get('status', 'unknown')}")
                 return host, result
             else:
-                resp = requests.post(agent_url(host, "/api/warden/start"), timeout=10)
+                resp = requests.post(agent_url(host, "/api/warden/start"), json=payload, timeout=10)
                 result = resp.json()
                 logger.debug(f"Agent {host} (remote): {result.get('status', 'unknown')}")
                 return host, result
@@ -656,7 +673,8 @@ def start_warden_checks_on_all_hosts():
 
     # Use ThreadPoolExecutor to run tasks in parallel (since start_warden_checks_helper is now sync)
     with ThreadPoolExecutor() as executor:
-        executor.map(start_safety_on_host, hosts)
+        for host, result in executor.map(start_safety_on_host, hosts):
+            results["agents"][host] = result
 
     logger.info("Agent safety checks initiated")
 

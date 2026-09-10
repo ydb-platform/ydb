@@ -18,6 +18,25 @@
 namespace NKikimr {
 namespace NStat {
 
+namespace {
+
+void CheckTableSummaryRowCount(TTestActorRuntime& runtime, const TPathId& pathId, ui64 expected) {
+    auto responses = GetStatistics(runtime, pathId, EStatType::TABLE_SUMMARY, {std::nullopt});
+    UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
+    UNIT_ASSERT_C(responses[0].Success, "TABLE_SUMMARY was not saved");
+    UNIT_ASSERT(responses[0].TableSummary.Data);
+    UNIT_ASSERT_VALUES_EQUAL(responses[0].TableSummary.Data->GetRowCount(), expected);
+}
+
+TTableInfo ResolveRowTable(TTestActorRuntime& runtime, const TString& path) {
+    TTableInfo tableInfo;
+    tableInfo.Path = path;
+    tableInfo.PathId = ResolvePathId(runtime, path, &tableInfo.DomainKey, &tableInfo.SaTabletId);
+    return tableInfo;
+}
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
 
     Y_UNIT_TEST_TWIN(Analyze, ColumnShard) {
@@ -44,7 +63,13 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
 
     Y_UNIT_TEST_TWIN(AnalyzeEqHeightHistogram, ColumnShard) {
         TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
-            settings.AppConfig->MutableStatisticsConfig()->SetAnalyzeCollectPrimaryKeyHistogram(true);
+            auto* cfg = settings.AppConfig->MutableStatisticsConfig();
+            cfg->SetAnalyzeCollectPrimaryKeyHistogram(true);
+            if constexpr (ColumnShard) {
+                cfg->SetAnalyzeColumnTableWholeTableScanMaxBytes(0);
+            } else {
+                cfg->SetAnalyzeRowTableWholeTableScanMaxBytes(0);
+            }
         });
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
@@ -793,7 +818,7 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
                     PRIMARY KEY (key)
                 )
                 PARTITION BY HASH(key)
-                WITH (STORE = COLUMN);
+                WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4);
             )");
         } else {
             ExecuteYqlScript(env, R"(
@@ -870,6 +895,58 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
 
         ValidateStatistics(runtime, tableInfo.PathId);
+    }
+
+    Y_UNIT_TEST(AnalyzeRangeScanCountsNullKeys) {
+        TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+            settings.AppConfig->MutableStatisticsConfig()->SetAnalyzeRowTableWholeTableScanMaxBytes(0);
+        });
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        ExecuteYqlScript(env, R"(
+            CREATE TABLE `Root/Database/Table` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            WITH (PARTITION_AT_KEYS = (10));
+        )");
+        ExecuteYqlScript(env, R"(
+            UPSERT INTO `Root/Database/Table` (Key, Value) VALUES
+                (NULL, "null"),
+                (1, "one"),
+                (11, "eleven");
+        )");
+
+        const auto tableInfo = ResolveRowTable(runtime, "/Root/Database/Table");
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+        CheckTableSummaryRowCount(runtime, tableInfo.PathId, 3);
+    }
+
+    Y_UNIT_TEST(AnalyzePgKeyFallsBackToWholeTableScan) {
+        TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+            settings.SetEnableTablePgTypes(true);
+            settings.AppConfig->MutableFeatureFlags()->SetEnableTablePgTypes(true);
+            settings.AppConfig->MutableStatisticsConfig()->SetAnalyzeRowTableWholeTableScanMaxBytes(0);
+        });
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        ExecuteYqlScript(env, R"(
+            CREATE TABLE `Root/Database/Table` (
+                Key pgint8,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )");
+        ExecuteYqlScript(env, R"(
+            UPSERT INTO `Root/Database/Table` (Key, Value) VALUES
+                (1pb, "one"),
+                (2pb, "two");
+        )");
+
+        const auto tableInfo = ResolveRowTable(runtime, "/Root/Database/Table");
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+        CheckTableSummaryRowCount(runtime, tableInfo.PathId, 2);
     }
 }
 

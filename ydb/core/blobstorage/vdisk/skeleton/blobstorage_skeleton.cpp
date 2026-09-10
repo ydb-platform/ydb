@@ -1225,18 +1225,21 @@ namespace NKikimr {
                 return;
             }
 
+            const std::optional<ui32> version = record.HasVersion()
+                ? std::optional<ui32>(record.GetVersion()) : std::nullopt;
+
             YDB_LOG_DEBUG_CTX_COMP(ctx, BS_VDISK_BLOCK, "TEvVBlock",
                 {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
                 {"tabletId", tabletId},
                 {"gen", gen},
-                {"version", record.GetVersion()},
+                {"version", version},
                 {"marker", "BSVS00"});
 
             TLsnSeg seg;
             ui32 actGen = 0;
             bool versionChanged = false;
             const auto writeSource = WriteSourceFromProto(record.GetWriteSourceOp());
-            auto checkStatus = Hull->CheckBlockCmdAndAllocLsn(tabletId, gen, issuerGuid, record.GetVersion(),
+            auto checkStatus = Hull->CheckBlockCmdAndAllocLsn(tabletId, gen, issuerGuid, version,
                 writeSource, &actGen, &seg, &versionChanged);
             TEvBlobStorage::TEvVBlockResult::TTabletActGen act(tabletId, actGen);
             std::unique_ptr<TEvBlobStorage::TEvVBlockResult> result(CreateResult(VCtx, checkStatus.Status,

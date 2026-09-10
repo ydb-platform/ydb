@@ -203,7 +203,7 @@ std::vector<std::pair<TExprBase, TExprBase>> ExtractComparisonParameters(const T
 }
 
 TMaybeNode<TExprBase> ComparisonPushdown(const std::vector<std::pair<TExprBase, TExprBase>>& parameters, const TCoCompare& predicate, TExprContext& ctx,
-                                         TPositionHandle pos);
+                                         TPositionHandle pos, const TPushdownOptions& pushdownOptions);
 
 TMaybeNode<TExprBase> CoalescePushdown(const TCoCoalesce& coalesce, const TExprNode& argument, TExprContext& ctx, const TPushdownOptions& pushdownOptions) {
     if (const auto params = ExtractBinaryFunctionParameters(coalesce, argument, ctx, coalesce.Pos(), pushdownOptions)) {
@@ -250,7 +250,7 @@ TMaybeNode<TExprBase> SimplePredicatePushdown(const TCoCompare& predicate, const
         return NullNode;
     }
 
-    return ComparisonPushdown(parameters, predicate, ctx, pos);
+    return ComparisonPushdown(parameters, predicate, ctx, pos, pushdownOptions);
 }
 
 TMaybeNode<TExprBase> SafeCastPredicatePushdown(const TCoFlatMap& inputFlatmap, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos,
@@ -287,7 +287,7 @@ TMaybeNode<TExprBase> SafeCastPredicatePushdown(const TCoFlatMap& inputFlatmap, 
         parameters.emplace_back(std::move(std::make_pair(left[i], right[i])));
     }
 
-    return ComparisonPushdown(parameters, predicate, ctx, pos);
+    return ComparisonPushdown(parameters, predicate, ctx, pos, pushdownOptions);
 }
 
 namespace {
@@ -457,7 +457,7 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
 
         if (const auto maybeCompare = node.Maybe<TCoCompare>()) {
             if (const auto params = ExtractComparisonParameters(maybeCompare.Cast(), argument, ctx, pos, pushdownOptions); !params.empty()) {
-                return ComparisonPushdown(params, maybeCompare.Cast(), ctx, pos);
+                return ComparisonPushdown(params, maybeCompare.Cast(), ctx, pos, pushdownOptions);
             }
         }
 
@@ -514,7 +514,7 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
 }
 
 TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& parameter, const TCoCompare& predicate,
-    TExprContext& ctx, TPositionHandle pos, bool forceStrictComparison)
+    TExprContext& ctx, TPositionHandle pos, bool forceStrictComparison, const TPushdownOptions& pushdownOptions)
 {
     auto isNull = [](const TExprBase& node) {
         if (node.Maybe<TCoNull>()) {
@@ -537,7 +537,16 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
             .Done();
     }
 
-    if (const auto* stringUdfFunction = IgnoreCaseSubstringMatchFunctions.FindPtr(predicate.CallableName())) {
+    // Opt-in Memchr-based UDF (OlapKernels._yql_AsciiContainsIgnoreCase) via YQL_KERNEL ScalarApply.
+    // Default remains TKqpOlapApply + String._yql_AsciiContainsIgnoreCase.
+    TString udfName;
+    if (pushdownOptions.FastAsciiIgnoreCaseContains && predicate.CallableName() == "StringContainsIgnoreCase") {
+        udfName = "OlapKernels._yql_AsciiContainsIgnoreCase";
+    } else if (const auto* stringUdfFunction = IgnoreCaseSubstringMatchFunctions.FindPtr(predicate.CallableName())) {
+        udfName = *stringUdfFunction;
+    }
+
+    if (!udfName.empty()) {
         const auto& leftArg = ctx.NewArgument(pos, "left");
         const auto& rightArg = ctx.NewArgument(pos, "right");
 
@@ -545,7 +554,7 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
             ctx.Builder(pos)
                 .Callable("Apply")
                     .Callable(0, "Udf")
-                        .Atom(0, *stringUdfFunction)
+                        .Atom(0, udfName)
                     .Seal()
                     .Add(1, leftArg)
                     .Add(2, rightArg)
@@ -559,7 +568,7 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
                 .Add(parameter.first)
                 .Add(parameter.second)
             .Build()
-            .KernelName(ctx.NewAtom(pos, *stringUdfFunction))
+            .KernelName(ctx.NewAtom(pos, udfName))
         .Done();
     }
 
@@ -599,12 +608,12 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
 }
 
 TMaybeNode<TExprBase> ComparisonPushdown(const std::vector<std::pair<TExprBase, TExprBase>>& parameters, const TCoCompare& predicate,
-    TExprContext& ctx, TPositionHandle pos)
+    TExprContext& ctx, TPositionHandle pos, const TPushdownOptions& pushdownOptions)
 {
     ui32 conditionsCount = parameters.size();
 
     if (conditionsCount == 1) {
-        auto condition = BuildOneElementComparison(parameters[0], predicate, ctx, pos, false);
+        auto condition = BuildOneElementComparison(parameters[0], predicate, ctx, pos, false, pushdownOptions);
         return IsFalseLiteral(condition) ? NullNode : condition;
     }
 
@@ -614,7 +623,7 @@ TMaybeNode<TExprBase> ComparisonPushdown(const std::vector<std::pair<TExprBase, 
         bool hasFalseCondition = false;
 
         for (ui32 i = 0; i < conditionsCount; ++i) {
-            auto condition = BuildOneElementComparison(parameters[i], predicate, ctx, pos, false);
+            auto condition = BuildOneElementComparison(parameters[i], predicate, ctx, pos, false, pushdownOptions);
             if (IsFalseLiteral(condition)) {
                 hasFalseCondition = true;
             } else {
@@ -646,7 +655,7 @@ TMaybeNode<TExprBase> ComparisonPushdown(const std::vector<std::pair<TExprBase, 
 
         // We need strict < and > in beginning columns except the last one
         // For example: (c1, c2, c3) >= (1, 2, 3) ==> (c1 > 1) OR (c2 > 2 AND c1 = 1) OR (c3 >= 3 AND c2 = 2 AND c1 = 1)
-        auto condition = BuildOneElementComparison(parameters[i], predicate, ctx, pos, i < conditionsCount - 1);
+        auto condition = BuildOneElementComparison(parameters[i], predicate, ctx, pos, i < conditionsCount - 1, pushdownOptions);
         if (IsFalseLiteral(condition)) {
             continue;
         }
@@ -1060,7 +1069,8 @@ TExprBase KqpPushOlapProjections(TExprBase node, TExprContext& ctx, const TKqpOp
 
 TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, TTypeAnnotationContext& typesCtx) {
     const TPushdownOptions pushdownOptions(kqpCtx.Config->GetEnableOlapScalarApply(), kqpCtx.Config->GetEnableOlapSubstringPushdown(),
-        /*stripAliasPrefixFromColName=*/false, kqpCtx.Config->GetEnableOlapPushdownRegexp());
+        /*stripAliasPrefixFromColName=*/false, kqpCtx.Config->GetEnableOlapPushdownRegexp(),
+        kqpCtx.Config->GetEnableOlapFastAsciiIgnoreCase());
     if (!kqpCtx.Config->HasOptEnableOlapPushdown()) {
         return node;
     }
@@ -1159,8 +1169,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             predicate = maybeIf.Cast().Predicate();
             TOLAPPredicateNode predicateTree;
             predicateTree.ExprNode = predicate.Ptr();
-            CollectPredicates(predicate, predicateTree, &lArg, lArg.GetTypeAnn(),
-                {true, pushdownOptions.PushdownSubstring, pushdownOptions.StripAliasPrefixFromColName, pushdownOptions.PushdownRegexp});
+            CollectPredicates(predicate, predicateTree, &lArg, lArg.GetTypeAnn(), pushdownOptions.WithAllowOlapApply(true));
 
             YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
             auto [pushable, remaining] = SplitForPartialPushdown(predicateTree, true);

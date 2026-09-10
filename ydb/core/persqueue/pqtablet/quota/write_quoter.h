@@ -32,7 +32,7 @@ public:
     void Bootstrap(const TActorContext &ctx) override;
     THolder<TAccountQuoterHolder> CreateAccountQuotaTracker() const;
 
-    TString BuildLogPrefix() const override;
+    TLogPrefix BuildLogPrefix() const override;
 
 protected:
     void HandleQuotaRequestImpl(TRequestContext& context) override;

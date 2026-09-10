@@ -19,17 +19,14 @@ namespace NActors {
 
     class TActorSystemStatsSubSystem : public ISubSystem {
     public:
-        explicit TActorSystemStatsSubSystem(TCpuManager *cpuManager);
-
-        void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const;
-        void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy,
-            TVector<TExecutorThreadStats>& sharedStats) const;
-        void GetExecutorPoolState(i16 poolId, TExecutorPoolState& state) const;
-        void GetExecutorPoolStates(std::vector<TExecutorPoolState>& states) const;
-        void GetHarmonizerStats(THarmonizerStats& stats) const;
-    
-    protected:
-        TCpuManager *CpuManager;
+        virtual void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats,
+            TVector<TExecutorThreadStats>& statsCopy) const = 0;
+        virtual void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats,
+            TVector<TExecutorThreadStats>& statsCopy,
+            TVector<TExecutorThreadStats>& sharedStats) const = 0;
+        virtual void GetExecutorPoolState(i16 poolId, TExecutorPoolState& state) const = 0;
+        virtual void GetExecutorPoolStates(std::vector<TExecutorPoolState>& states) const = 0;
+        virtual void GetHarmonizerStats(THarmonizerStats& stats) const = 0;
     };
 
     std::unique_ptr<TActorSystemStatsSubSystem> MakeActorSystemStatsSubSystem(TCpuManager *cpuManager);

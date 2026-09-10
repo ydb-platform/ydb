@@ -18,7 +18,7 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     struct TAddHostRequest
     {
         size_t DirectBlockGroupId = 0;
-        size_t NewHostIndex = 0;
+        ui32 DBGConnectionsConfigGeneration = 0;
     };
 
     struct TUpdateConfigRequest
@@ -32,6 +32,14 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         ui32 VChunkIndex = 0;
         TDirtyMapStateProto Proto;
         TPersistResultPromise Promise;
+    };
+
+    struct TPersistHostHealthRequest
+    {
+        size_t DirectBlockGroupId = 0;
+        size_t HostIndex = 0;
+        EHostHealth OldHealth = EHostHealth::Online;
+        EHostHealth NewHealth = EHostHealth::Online;
     };
 
     explicit TPartitionDirectServiceMock(bool dropScheduledCallbacks = false)
@@ -49,6 +57,7 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     TDuration CopyRangeBudgetDelay;
     TVector<TUpdateConfigRequest> UpdateConfigRequests;
     TVector<TUpdateDirtyMapStateRequest> UpdateDirtyMapStateRequests;
+    TVector<TPersistHostHealthRequest> PersistHostHealthRequests;
 
     [[nodiscard]] TVolumeConfigPtr GetVolumeConfig() const override
     {
@@ -87,11 +96,13 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         return UpdateDirtyMapStateRequests.back().Promise.GetFuture();
     }
 
-    void QueryAddHost(size_t directBlockGroupId, size_t newHostIndex) override
+    void QueryAddHost(
+        size_t directBlockGroupId,
+        ui32 dbgConnectionsConfigGeneration) override
     {
         AddHostRequests.push_back(TAddHostRequest{
             .DirectBlockGroupId = directBlockGroupId,
-            .NewHostIndex = newHostIndex});
+            .DBGConnectionsConfigGeneration = dbgConnectionsConfigGeneration});
     }
 
     ui64 GenerateLsn() override
@@ -119,6 +130,16 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         ++CopyRangeBudgetRequestCount;
         LastCopyRangeBudgetByteCount = byteCount;
         return CopyRangeBudgetDelay;
+    }
+
+    void PersistHostHealth(
+        size_t directBlockGroupId,
+        THostIndex hostIndex,
+        EHostHealth oldHealth,
+        EHostHealth newHealth) override
+    {
+        PersistHostHealthRequests
+            .emplace_back(directBlockGroupId, hostIndex, oldHealth, newHealth);
     }
 };
 

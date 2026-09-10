@@ -22,7 +22,7 @@ namespace NKqp {
 
 using namespace NYql;
 
-enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, DependentJoin, Aggregate, Limit, Sort, UnionAll, TableLookup, IndexLookupJoin, CBOTree, Root };
+enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, DependentJoin, Aggregate, GroupingSets, Window, Limit, Sort, UnionAll, TableLookup, IndexLookupJoin, CBOTree, TableEffect, Root };
 
 // clang-format off
 #define PHASE_ENUM(X) \
@@ -621,6 +621,128 @@ protected:
     void ComputeOutputIUs() override;
 };
 
+class TOpGroupingSets: public IUnaryOperator {
+public:
+    TOpGroupingSets(TIntrusivePtr<TOpAggregate> input, TVector<TVector<TInfoUnit>> groupingSets, TPositionHandle pos);
+
+    const TVector<TVector<TInfoUnit>>& GetGroupingSets() const {
+        return GroupingSets;
+    }
+
+    virtual TString ToString(TExprContext& ctx) override;
+    // This op is not present is explain, but we have to define a function, because it's a pure virtual.
+    virtual TString GetExplainName() const override { return "GroupingSets"; }
+
+protected:
+    void ComputeOutputIUs() override;
+
+private:
+    TVector<TVector<TInfoUnit>> GroupingSets;
+};
+
+enum class EWindowFuncKind : ui32 {
+    Aggregate,
+    Native,
+};
+
+TString ToStringWindowFuncKind(EWindowFuncKind kind);
+EWindowFuncKind WindowFuncKindFromString(const TString& kind);
+
+struct TOpWindowFunc {
+    TOpWindowFunc() = default;
+    TOpWindowFunc(const TString& function, EWindowFuncKind kind, const TVector<TInfoUnit>& arguments, const TInfoUnit& resultColName)
+        : Function(function)
+        , Kind(kind)
+        , Arguments(arguments)
+        , ResultColName(resultColName) {
+    }
+
+    TString Function;
+    EWindowFuncKind Kind = EWindowFuncKind::Aggregate;
+    TVector<TInfoUnit> Arguments;
+    TInfoUnit ResultColName;
+};
+
+enum class EWindowFrameType : ui32 {
+    Rows,
+    Range,
+    Groups,
+};
+
+enum class EWindowFrameBound : ui32 {
+    UnboundedPreceding,
+    Preceding,
+    CurrentRow,
+    Following,
+    UnboundedFollowing,
+};
+
+TString ToStringWindowFrameType(EWindowFrameType type);
+EWindowFrameType WindowFrameTypeFromString(const TString& type);
+TString ToStringWindowFrameBound(EWindowFrameBound bound);
+EWindowFrameBound WindowFrameBoundFromString(const TString& bound);
+
+struct TOpWindowFrame {
+    EWindowFrameType Type = EWindowFrameType::Rows;
+    EWindowFrameBound BeginKind = EWindowFrameBound::UnboundedPreceding;
+    ui64 BeginValue = 0;
+    EWindowFrameBound EndKind = EWindowFrameBound::CurrentRow;
+    ui64 EndValue = 0;
+
+    bool IsPrefixFrame() const {
+        return EndKind == EWindowFrameBound::CurrentRow ||
+               (EndKind == EWindowFrameBound::Preceding) ||
+               (EndKind == EWindowFrameBound::Following && EndValue == 0);
+    }
+};
+
+// Represents a window function.
+class TOpWindow: public IUnaryOperator {
+public:
+    TOpWindow(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TOpWindowFunc>& windowFuncs,
+              const TVector<TInfoUnit>& partitionKeys, const TVector<TSortElement>& sortElements, const TOpWindowFrame& frame);
+
+    virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
+    virtual void PropagateLiveness(ILivenessContext& ctx) override;
+    void RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) override;
+    void RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) override;
+    virtual TString ToString(TExprContext& ctx) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
+    virtual TString GetExplainName() const override {
+        return "Window";
+    }
+
+    const TVector<TOpWindowFunc>& GetWindowFuncs() const {
+        return WindowFuncs;
+    }
+    TVector<TOpWindowFunc>& GetWindowFuncs() {
+        return WindowFuncs;
+    }
+    const TVector<TInfoUnit>& GetPartitionKeys() const {
+        return PartitionKeys;
+    }
+    TVector<TInfoUnit>& GetPartitionKeys() {
+        return PartitionKeys;
+    }
+    const TVector<TSortElement>& GetSortElements() const {
+        return SortElements;
+    }
+    TVector<TSortElement>& GetSortElements() {
+        return SortElements;
+    }
+    const TOpWindowFrame& GetFrame() const {
+        return Frame;
+    }
+
+    TVector<TOpWindowFunc> WindowFuncs;
+    TVector<TInfoUnit> PartitionKeys;
+    TVector<TSortElement> SortElements;
+    TOpWindowFrame Frame;
+
+protected:
+    void ComputeOutputIUs() override;
+};
+
 class TOpFilter: public IUnaryOperator {
 public:
     TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& filterExpr);
@@ -934,6 +1056,55 @@ protected:
 
 private:
     void RebuildChildren();
+};
+
+// Table Effects operator inserts/updates/deletes rows based on input tuples
+
+enum class EEffectType : ui32 {
+    InsertRows,
+    InsertRowsIndex,
+    UpdateRows,
+    UpdateRowsIndex,
+    UpsertRows,
+    UpsertRowsIndex,
+    DeleteRows,
+    DeleteRowsIndex
+};
+
+struct TEffectOptions {
+    std::optional<TVector<TString>> Columns;
+    std::optional<TVector<TString>> ReturningColumns;
+    std::optional<TVector<TString>> DefaultColumns;
+    std::optional<TString> OnConflict;
+    std::optional<bool> IsBatch;
+    std::optional<TVector<TExprNode::TPtr>> Settings;
+};
+
+class TOpTableEffect: public IUnaryOperator {
+
+public:
+    TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table, EEffectType type, TEffectOptions options);
+    virtual TString GetExplainName() const override;
+    virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
+
+    virtual void PropagateLiveness(ILivenessContext& ctx) override;
+    //virtual void RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) override;
+    //virtual void RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) override;
+    virtual TString ToString(TExprContext& ctx) override;
+
+    TExprNode::TPtr BuildSettings(TExprContext& ctx);
+
+    //virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
+    //virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
+
+    TExprNode::TPtr Table;
+    EEffectType EffectType;
+    TEffectOptions Options;
+    TVector<TInfoUnit> OutputIUs;
+    TVector<TInfoUnit> UsedIUs;
+
+protected:
+    void ComputeOutputIUs() override;
 };
 
 // End-of-traversal sentinel for TOpIterator

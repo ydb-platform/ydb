@@ -136,7 +136,9 @@ public:
         ui32 vChunkIndex,
         TDirtyMapStateProto state) override;
 
-    void QueryAddHost(size_t directBlockGroupId, size_t newHostIndex) override;
+    void QueryAddHost(
+        size_t directBlockGroupId,
+        ui32 dbgConnectionsConfigGeneration) override;
 
     ui64 GenerateLsn() override;
 
@@ -147,6 +149,12 @@ public:
         ui64 lsn) override;
 
     TDuration TakeVolumeCopyRangeBudget(ui64 byteCount) override;
+
+    void PersistHostHealth(
+        size_t directBlockGroupId,
+        THostIndex hostIndex,
+        EHostHealth oldHealth,
+        EHostHealth newHealth) override;
 
     // Read-only info for the monitoring UI.
     [[nodiscard]] TFastPathServiceInfo GetMonInfo() const;

@@ -411,6 +411,57 @@ TStatus ComputeTypes(TIntrusivePtr<TOpAggregate> aggregate, TRBOContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus ComputeTypes(TIntrusivePtr<TOpGroupingSets> groupingSets, TRBOContext& ctx) {
+    const auto aggregate = CastOperator<TOpAggregate>(groupingSets->GetInput());
+    const auto* structType = aggregate->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> keysPresentInEverySet;
+    bool first = true;
+    bool hasEmptySet = false;
+    for (const auto& groupingSet : groupingSets->GetGroupingSets()) {
+        THashSet<TInfoUnit, TInfoUnit::THashFunction> currentKeys(groupingSet.begin(), groupingSet.end());
+        hasEmptySet = hasEmptySet || groupingSet.empty();
+        if (first) {
+            keysPresentInEverySet = std::move(currentKeys);
+            first = false;
+        } else {
+            THashSet<TInfoUnit, TInfoUnit::THashFunction> intersection;
+            for (const auto& key : keysPresentInEverySet) {
+                if (currentKeys.contains(key)) {
+                    intersection.insert(key);
+                }
+            }
+            keysPresentInEverySet = std::move(intersection);
+        }
+    }
+
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> keyColumns(aggregate->KeyColumns.begin(), aggregate->KeyColumns.end());
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> scalarOptionalResults;
+    if (hasEmptySet) {
+        for (const auto& traits : aggregate->AggregationTraitsList) {
+            if (traits.AggFunction == "min" || traits.AggFunction == "max" || traits.AggFunction == "sum" || traits.AggFunction == "avg" ||
+                traits.AggFunction == "variance_1_1") {
+                scalarOptionalResults.insert(traits.ResultColName);
+            }
+        }
+    }
+
+    TVector<const TItemExprType*> resultItems;
+    resultItems.reserve(structType->GetSize());
+    for (const auto* item : structType->GetItems()) {
+        const TInfoUnit iu(TString(item->GetName()));
+        const auto* itemType = item->GetItemType();
+        const bool nonCommonKey = keyColumns.contains(iu) && !keysPresentInEverySet.contains(iu);
+        if ((nonCommonKey || scalarOptionalResults.contains(iu)) && !itemType->IsOptionalOrNull()) {
+            itemType = ctx.ExprCtx.MakeType<TOptionalExprType>(itemType);
+        }
+        resultItems.push_back(ctx.ExprCtx.MakeType<TItemExprType>(item->GetName(), itemType));
+    }
+
+    groupingSets->Type = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TStructExprType>(resultItems));
+    return TStatus::Ok;
+}
+
 TVector<const TItemExprType*> AddOptional(const TVector<const TItemExprType*>& types, TRBOContext& rboCtx) {
     auto& ctx = rboCtx.ExprCtx;
     TVector<const TItemExprType*> optionalTypes;
@@ -533,6 +584,43 @@ TStatus ComputeTypes(TIntrusivePtr<TOpSort> sort, TRBOContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus ComputeTypes(TIntrusivePtr<TOpWindow> window, TRBOContext& ctx) {
+    const auto* inputType = window->GetInput()->Type;
+    const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+    TVector<const TItemExprType*> itemTypes(structType->GetItems().begin(), structType->GetItems().end());
+    for (const auto& func : window->GetWindowFuncs()) {
+        const TTypeAnnotationNode* resultType = nullptr;
+        if (func.Kind == EWindowFuncKind::Native) {
+            resultType = ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Uint64);
+        } else {
+            Y_ENSURE(func.Arguments.size() == 1, "Window aggregate " << func.Function << " expects a single argument");
+            const auto* argType = structType->FindItemType(func.Arguments[0].GetFullName());
+            Y_ENSURE(argType, "Unknown window function argument " << func.Arguments[0].GetFullName());
+
+            if (func.Function == "count") {
+                itemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(func.ResultColName.GetFullName(),
+                                                                        ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+                continue;
+            }
+            if (func.Function == "sum") {
+                Y_ENSURE(GetSumResultType(window->Pos, *argType, resultType, ctx.ExprCtx), "Unsupported type for sum over a window");
+            } else if (func.Function == "avg" || func.Function == "variance_1_1") {
+                Y_ENSURE(GetAvgResultType(window->Pos, *argType, resultType, ctx.ExprCtx), "Unsupported type for avg over a window");
+            } else {
+                resultType = argType;
+            }
+            if (!resultType->IsOptionalOrNull()) {
+                resultType = ctx.ExprCtx.MakeType<TOptionalExprType>(resultType);
+            }
+        }
+        itemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(func.ResultColName.GetFullName(), resultType));
+    }
+
+    window->Type = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TStructExprType>(itemTypes));
+    return TStatus::Ok;
+}
+
 TStatus ComputeTypes(TIntrusivePtr<TOpTableLookup> lookup, TRBOContext& ctx) {
     const auto table = ResolveTable(lookup->Table.Get(), ctx.ExprCtx, ctx.KqpCtx.Cluster, *ctx.KqpCtx.Tables);
     if (!table.second) {
@@ -640,6 +728,12 @@ TStatus ComputeTypes(TIntrusivePtr<TOpCBOTree> cboTree, TRBOContext& ctx, TPlanP
     return TStatus::Ok;
 }
 
+TStatus ComputeTypes(TIntrusivePtr<TOpTableEffect> tableEffect, TRBOContext& ctx, TPlanProps& props) {
+    Y_UNUSED(props);
+    tableEffect->Type = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TResourceExprType>(KqpEffectTag));
+    return TStatus::Ok;
+}
+
 TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& props) {
     if (MatchOperator<TOpEmptySource>(op)) {
         return ComputeTypes(CastOperator<TOpEmptySource>(op), ctx);
@@ -677,11 +771,19 @@ TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& 
     else if (MatchOperator<TOpIndexLookupJoin>(op)) {
         return ComputeTypes(CastOperator<TOpIndexLookupJoin>(op), ctx);
     }
+    else if (MatchOperator<TOpGroupingSets>(op)) {
+        return ComputeTypes(CastOperator<TOpGroupingSets>(op), ctx);
+    }
     else if(MatchOperator<TOpAggregate>(op)) {
         return ComputeTypes(CastOperator<TOpAggregate>(op), ctx);
     }
+    else if (MatchOperator<TOpWindow>(op)) {
+        return ComputeTypes(CastOperator<TOpWindow>(op), ctx);
+    }
     else if (MatchOperator<TOpCBOTree>(op)) {
         return ComputeTypes(CastOperator<TOpCBOTree>(op), ctx, props);
+    } else if (MatchOperator<TOpTableEffect>(op)) {
+        return ComputeTypes(CastOperator<TOpTableEffect>(op), ctx, props);
     }
     else {
         Y_ENSURE(false, "Invalid operator type in RBO type inference");

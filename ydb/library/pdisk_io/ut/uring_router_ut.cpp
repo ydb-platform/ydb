@@ -1,20 +1,35 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/pdisk_io/uring_router.h>
+#include <ydb/library/pdisk_io/uring_router_backend.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/scope.h>
 #include <util/system/tempfile.h>
+#include <util/stream/file.h>
 #include <util/system/file.h>
 #include <util/system/event.h>
 
 #include <sys/uio.h>
+#include <sys/file.h>
+#include <sys/wait.h>
+#include <sys/resource.h>
+#include <poll.h>
 
 #include <unistd.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstring>
+#include <memory>
+#include <deque>
+#include <vector>
 #include <thread>
+
+// Keep liburing after project/system headers that may define conflicting macros.
+#include <ydb/library/pdisk_io/uring_router_test_peer.h>
+#include <ydb/library/pdisk_io/uring_test_support.h>
 
 using NActors::TActorSystem;
 using namespace NKikimr::NPDisk;
@@ -61,7 +76,7 @@ struct TTestOp : TUringOperationBase {
         }
     }
 
-    void OnDrop() noexcept override {
+    void OnDrop(NActors::TActorSystem*) noexcept override {
         if (Event) {
             Event->Signal();
         }
@@ -86,7 +101,7 @@ struct TCountingOp : TUringOperationBase {
         CountAndMaybeSignal();
     }
 
-    void OnDrop() noexcept override {
+    void OnDrop(NActors::TActorSystem*) noexcept override {
         CountAndMaybeSignal();
     }
 };
@@ -103,7 +118,7 @@ struct TTerminalOp : TUringOperationBase {
         Completions->fetch_add(1, std::memory_order_relaxed);
     }
 
-    void OnDrop() noexcept override {
+    void OnDrop(NActors::TActorSystem*) noexcept override {
         TerminalCallbacks.fetch_add(1, std::memory_order_relaxed);
         Drops->fetch_add(1, std::memory_order_relaxed);
     }
@@ -119,72 +134,25 @@ struct TSamplingOp : TUringOperationBase {
         Event->Signal();
     }
 
-    void OnDrop() noexcept override {
+    void OnDrop(NActors::TActorSystem*) noexcept override {
     }
 };
 
-// Exercises resubmission of the same fixed-buffer operation after a short
-// read. The first read reaches EOF part-way through the registered buffer;
-// the callback advances the active iovec window and submits the remainder.
-struct TFixedShortRetryOp : TUringOperationBase {
-    TUringRouter* Router = nullptr;
+// Short reads and the final EOF are handled internally; clients receive one
+// terminal error while sampling still describes both physical requests.
+struct TShortCompletionOp : TUringOperationBase {
     TManualEvent* Event = nullptr;
     std::atomic<int> Callbacks{0};
     std::atomic<int> Drops{0};
-    std::atomic<i32> Results[2] = {};
-    std::atomic<bool> RetryAccepted{false};
+    std::atomic<i64> Result{0};
 
     void OnComplete(TActorSystem*) noexcept override {
-        const int callback = Callbacks.fetch_add(1, std::memory_order_relaxed);
-        if (callback < 2) {
-            Results[callback].store(GetResult(), std::memory_order_relaxed);
-        }
-
-        if (callback == 0 && GetResult() > 0 && static_cast<size_t>(GetResult()) < GetOperationBytes()) {
-            AdvanceIov(GetResult());
-            const bool accepted = Router->Read(this);
-            RetryAccepted.store(accepted, std::memory_order_release);
-            if (accepted) {
-                return;
-            }
-        }
+        Callbacks.fetch_add(1, std::memory_order_relaxed);
+        Result.store(GetResult(), std::memory_order_relaxed);
         Event->Signal();
     }
 
-    void OnDrop() noexcept override {
-        Drops.fetch_add(1, std::memory_order_relaxed);
-        Event->Signal();
-    }
-};
-
-// Exercises a short read whose active window contracts from two iovecs to one,
-// so the retry uses the router's scalar singleton preparation path.
-struct TScatterGatherShortRetryOp : TUringOperationBase {
-    TUringRouter* Router = nullptr;
-    TManualEvent* Event = nullptr;
-    std::atomic<int> Callbacks{0};
-    std::atomic<int> Drops{0};
-    std::atomic<i32> Results[2] = {};
-    std::atomic<bool> RetryAccepted{false};
-
-    void OnComplete(TActorSystem*) noexcept override {
-        const int callback = Callbacks.fetch_add(1, std::memory_order_relaxed);
-        if (callback < 2) {
-            Results[callback].store(GetResult(), std::memory_order_relaxed);
-        }
-
-        if (callback == 0 && GetResult() > 0 && static_cast<size_t>(GetResult()) < GetOperationBytes()) {
-            AdvanceIov(GetResult());
-            const bool accepted = Router->Read(this);
-            RetryAccepted.store(accepted, std::memory_order_release);
-            if (accepted) {
-                return;
-            }
-        }
-        Event->Signal();
-    }
-
-    void OnDrop() noexcept override {
+    void OnDrop(NActors::TActorSystem*) noexcept override {
         Drops.fetch_add(1, std::memory_order_relaxed);
         Event->Signal();
     }
@@ -192,8 +160,7 @@ struct TScatterGatherShortRetryOp : TUringOperationBase {
 
 #define SKIP_IF_NO_URING(config) \
     do { \
-        if (!TUringRouter::Probe(config)) { \
-            Cerr << "io_uring not available on this system, skipping test" << Endl; \
+        if (!RequireUring(config)) { \
             return; \
         } \
     } while (false)
@@ -208,14 +175,20 @@ void PrepareReadOp(TUringOperationBase& op, void* buf, ui32 size, ui64 offset) {
     op.PrepareIov(buf, size, offset);
 }
 
+TFileHandle DupOwned(const TFile& f) {
+    const FHANDLE dup = ::dup(f.GetHandle());
+    Y_ABORT_UNLESS(dup != INVALID_FHANDLE);
+    return TFileHandle(dup);
+}
+
 void DoCreateAndDestroy(TUringRouterConfig config) {
     SKIP_IF_NO_URING(config);
     TTempFile tmp(MakeTempName(nullptr, "uring_test"));
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20); // 1 MB
-    TUringRouter router(f.GetHandle(), nullptr, config);
-    router.Start();
-    router.Stop();
+    auto router = std::make_unique<TUringRouter>(DupOwned(f), nullptr, config);
+    router->Start();
+    router.reset();
 }
 
 void DoWriteAndReadBack(TUringRouterConfig config, bool registerFile = true) {
@@ -223,14 +196,14 @@ void DoWriteAndReadBack(TUringRouterConfig config, bool registerFile = true) {
     TTempFile tmp(MakeTempName(nullptr, "uring_test"));
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
-    TUringRouter router(f.GetHandle(), nullptr, config);
+    auto router = std::make_unique<TUringRouter>(DupOwned(f), nullptr, config);
     if (registerFile) {
-        router.RegisterFile();
+        router->RegisterFile();
     }
-    router.Start();
+    router->Start();
     if (registerFile) {
-        UNIT_ASSERT_C(router.IsFileRegistered(),
-            TStringBuilder() << "file registration failed with errno=" << router.GetRegisterFileErrno());
+        UNIT_ASSERT_C(router->IsFileRegistered(),
+            TStringBuilder() << "file registration failed with errno=" << router->GetRegisterFileErrno());
     }
 
     constexpr ui32 size = 4096;
@@ -244,8 +217,7 @@ void DoWriteAndReadBack(TUringRouterConfig config, bool registerFile = true) {
     writeOp.Event = &writeEv;
 
     PrepareWriteOp(writeOp, writeBuf.Data(), size, 0);
-    UNIT_ASSERT(router.Write(&writeOp));
-    router.Flush();
+    UNIT_ASSERT(router->Write(&writeOp));
     writeEv.WaitI();
     UNIT_ASSERT_VALUES_EQUAL(writeOp.GetResult(), (i32)size);
 
@@ -258,13 +230,12 @@ void DoWriteAndReadBack(TUringRouterConfig config, bool registerFile = true) {
     readOp.Event = &readEv;
 
     PrepareReadOp(readOp, readBuf.Data(), size, 0);
-    UNIT_ASSERT(router.Read(&readOp));
-    router.Flush();
+    UNIT_ASSERT(router->Read(&readOp));
     readEv.WaitI();
     UNIT_ASSERT_VALUES_EQUAL(readOp.GetResult(), (i32)size);
     UNIT_ASSERT(memcmp(writeBuf.Data(), readBuf.Data(), size) == 0);
 
-    router.Stop();
+    router.reset();
 }
 
 void DoMultipleConcurrentOps(TUringRouterConfig config) {
@@ -272,9 +243,9 @@ void DoMultipleConcurrentOps(TUringRouterConfig config) {
     TTempFile tmp(MakeTempName(nullptr, "uring_test"));
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
-    TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
-    router.Start();
+    auto router = std::make_unique<TUringRouter>(DupOwned(f), nullptr, config);
+    router->RegisterFile();
+    router->Start();
 
     constexpr int N = 8;
     constexpr ui32 size = 4096;
@@ -296,9 +267,8 @@ void DoMultipleConcurrentOps(TUringRouterConfig config) {
             ops[i].Event = &allDone;
 
             PrepareWriteOp(ops[i], writeBufs[i].Data(), size, i * size);
-            UNIT_ASSERT(router.Write(&ops[i]));
+            UNIT_ASSERT(router->Write(&ops[i]));
         }
-        router.Flush();
         allDone.WaitI();
 
         for (int i = 0; i < N; ++i) {
@@ -323,9 +293,8 @@ void DoMultipleConcurrentOps(TUringRouterConfig config) {
             ops[i].Event = &allDone;
 
             PrepareReadOp(ops[i], readBufs[i].Data(), size, i * size);
-            UNIT_ASSERT(router.Read(&ops[i]));
+            UNIT_ASSERT(router->Read(&ops[i]));
         }
-        router.Flush();
         allDone.WaitI();
 
         for (int i = 0; i < N; ++i) {
@@ -334,7 +303,7 @@ void DoMultipleConcurrentOps(TUringRouterConfig config) {
         }
     }
 
-    router.Stop();
+    router.reset();
 }
 
 void DoOverloadBeyondQueueDepth(TUringRouterConfig config) {
@@ -344,9 +313,9 @@ void DoOverloadBeyondQueueDepth(TUringRouterConfig config) {
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
 
-    TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
-    router.Start();
+    auto router = std::make_unique<TUringRouter>(DupOwned(f), nullptr, config);
+    router->RegisterFile();
+    router->Start();
 
     constexpr ui32 size = 4096;
     TAlignedBuf buf(size);
@@ -360,7 +329,7 @@ void DoOverloadBeyondQueueDepth(TUringRouterConfig config) {
     for (int i = 0; i < N; ++i) {
         ops[i].Event = &events[i];
         PrepareWriteOp(ops[i], buf.Data(), size, 0);
-        UNIT_ASSERT(router.Write(&ops[i]));
+        UNIT_ASSERT(router->Write(&ops[i]));
     }
 
     for (int i = 0; i < N; ++i) {
@@ -368,7 +337,7 @@ void DoOverloadBeyondQueueDepth(TUringRouterConfig config) {
         UNIT_ASSERT_VALUES_EQUAL(ops[i].GetResult(), (i32)size);
     }
 
-    router.Stop();
+    router.reset();
 }
 
 void DoRegisterBuffersAndFixedIO(TUringRouterConfig config) {
@@ -376,7 +345,7 @@ void DoRegisterBuffersAndFixedIO(TUringRouterConfig config) {
     TTempFile tmp(MakeTempName(nullptr, "uring_test"));
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
-    TUringRouter router(f.GetHandle(), nullptr, config);
+    auto router = std::make_unique<TUringRouter>(DupOwned(f), nullptr, config);
 
     constexpr ui32 size = 4096;
     TAlignedBuf writeBuf(size);
@@ -385,28 +354,27 @@ void DoRegisterBuffersAndFixedIO(TUringRouterConfig config) {
     memset(readBuf.Data(), 0, size);
 
     // Register file and buffers before Start()
-    router.RegisterFile();
+    router->RegisterFile();
 
     struct iovec iovs[2];
     iovs[0].iov_base = writeBuf.Data();
     iovs[0].iov_len = size;
     iovs[1].iov_base = readBuf.Data();
     iovs[1].iov_len = size;
-    router.RegisterBuffers(iovs, 2);
+    router->RegisterBuffers(iovs, 2);
 
-    router.Start();
-    UNIT_ASSERT_C(router.IsFileRegistered(),
-        TStringBuilder() << "file registration failed with errno=" << router.GetRegisterFileErrno());
-    UNIT_ASSERT_C(router.AreBuffersRegistered(),
-        TStringBuilder() << "buffer registration failed with errno=" << router.GetRegisterBuffersErrno());
+    router->Start();
+    UNIT_ASSERT_C(router->IsFileRegistered(),
+        TStringBuilder() << "file registration failed with errno=" << router->GetRegisterFileErrno());
+    UNIT_ASSERT_C(router->AreBuffersRegistered(),
+        TStringBuilder() << "buffer registration failed with errno=" << router->GetRegisterBuffersErrno());
 
     // WriteFixed using buffer index 0
     TManualEvent writeEv;
     TTestOp writeOp;
     writeOp.Event = &writeEv;
 
-    UNIT_ASSERT(router.WriteFixed(writeBuf.Data(), size, 0, /*bufIndex=*/0, &writeOp));
-    router.Flush();
+    UNIT_ASSERT(router->WriteFixed(writeBuf.Data(), size, 0, /*bufIndex=*/0, &writeOp));
     writeEv.WaitI();
     UNIT_ASSERT_VALUES_EQUAL(writeOp.GetResult(), (i32)size);
 
@@ -415,13 +383,12 @@ void DoRegisterBuffersAndFixedIO(TUringRouterConfig config) {
     TTestOp readOp;
     readOp.Event = &readEv;
 
-    UNIT_ASSERT(router.ReadFixed(readBuf.Data(), size, 0, /*bufIndex=*/1, &readOp));
-    router.Flush();
+    UNIT_ASSERT(router->ReadFixed(readBuf.Data(), size, 0, /*bufIndex=*/1, &readOp));
     readEv.WaitI();
     UNIT_ASSERT_VALUES_EQUAL(readOp.GetResult(), (i32)size);
     UNIT_ASSERT(memcmp(writeBuf.Data(), readBuf.Data(), size) == 0);
 
-    router.Stop();
+    router.reset();
 }
 
 void DoSubmitDirect(TUringRouterConfig config) {
@@ -430,9 +397,9 @@ void DoSubmitDirect(TUringRouterConfig config) {
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
 
-    TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
-    router.Start();
+    auto router = std::make_unique<TUringRouter>(DupOwned(f), nullptr, config);
+    router->RegisterFile();
+    router->Start();
 
     constexpr ui32 size = 4096;
     TAlignedBuf buf(size);
@@ -442,11 +409,11 @@ void DoSubmitDirect(TUringRouterConfig config) {
     TTestOp op;
     op.Event = &event;
     PrepareWriteOp(op, buf.Data(), size, 0);
-    UNIT_ASSERT(router.Submit(&op));
+    UNIT_ASSERT(router->Submit(&op));
     UNIT_ASSERT(event.WaitT(TDuration::Seconds(5)));
     UNIT_ASSERT_VALUES_EQUAL(op.GetResult(), (i32)size);
 
-    router.Stop();
+    router.reset();
 }
 
 void DoLargeMultiPageIO(TUringRouterConfig config) {
@@ -455,9 +422,9 @@ void DoLargeMultiPageIO(TUringRouterConfig config) {
     TFile f(tmp.Name(), CreateAlways | RdWr);
     constexpr ui32 size = 256 * 1024; // 256 KB
     f.Resize(size);
-    TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
-    router.Start();
+    auto router = std::make_unique<TUringRouter>(DupOwned(f), nullptr, config);
+    router->RegisterFile();
+    router->Start();
 
     // Write 256K of a pattern
     TAlignedBuf writeBuf(size);
@@ -470,8 +437,7 @@ void DoLargeMultiPageIO(TUringRouterConfig config) {
     writeOp.Event = &writeEv;
 
     PrepareWriteOp(writeOp, writeBuf.Data(), size, 0);
-    UNIT_ASSERT(router.Write(&writeOp));
-    router.Flush();
+    UNIT_ASSERT(router->Write(&writeOp));
     writeEv.WaitI();
     UNIT_ASSERT_VALUES_EQUAL(writeOp.GetResult(), (i32)size);
 
@@ -484,13 +450,12 @@ void DoLargeMultiPageIO(TUringRouterConfig config) {
     readOp.Event = &readEv;
 
     PrepareReadOp(readOp, readBuf.Data(), size, 0);
-    UNIT_ASSERT(router.Read(&readOp));
-    router.Flush();
+    UNIT_ASSERT(router->Read(&readOp));
     readEv.WaitI();
     UNIT_ASSERT_VALUES_EQUAL(readOp.GetResult(), (i32)size);
     UNIT_ASSERT(memcmp(writeBuf.Data(), readBuf.Data(), size) == 0);
 
-    router.Stop();
+    router.reset();
 }
 
 void DoNonZeroOffsets(TUringRouterConfig config) {
@@ -498,9 +463,9 @@ void DoNonZeroOffsets(TUringRouterConfig config) {
     TTempFile tmp(MakeTempName(nullptr, "uring_test"));
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
-    TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
-    router.Start();
+    auto router = std::make_unique<TUringRouter>(DupOwned(f), nullptr, config);
+    router->RegisterFile();
+    router->Start();
 
     constexpr ui32 size = 4096;
 
@@ -520,8 +485,7 @@ void DoNonZeroOffsets(TUringRouterConfig config) {
         op.Event = &ev;
 
         PrepareWriteOp(op, writeBufs[i].Data(), size, offsets[i]);
-        UNIT_ASSERT(router.Write(&op));
-        router.Flush();
+        UNIT_ASSERT(router->Write(&op));
         ev.WaitI();
         UNIT_ASSERT_VALUES_EQUAL(op.GetResult(), (i32)size);
     }
@@ -536,60 +500,63 @@ void DoNonZeroOffsets(TUringRouterConfig config) {
         op.Event = &ev;
 
         PrepareReadOp(op, readBuf.Data(), size, offsets[i]);
-        UNIT_ASSERT(router.Read(&op));
-        router.Flush();
+        UNIT_ASSERT(router->Read(&op));
         ev.WaitI();
         UNIT_ASSERT_VALUES_EQUAL(op.GetResult(), (i32)size);
         UNIT_ASSERT(memcmp(writeBufs[i].Data(), readBuf.Data(), size) == 0);
     }
 
-    router.Stop();
+    router.reset();
 }
 
-void DoDoubleStop(TUringRouterConfig config) {
+void DoStopAsyncIsIdempotent(TUringRouterConfig config) {
     SKIP_IF_NO_URING(config);
     TTempFile tmp(MakeTempName(nullptr, "uring_test"));
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
-    TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
-    router.Start();
+    auto router = std::make_unique<TUringRouter>(DupOwned(f), nullptr, config);
+    router->RegisterFile();
+    router->Start();
+    UNIT_ASSERT(!router->IsBroken());
 
-    // Explicit stop, then destructor calls Stop() again -- must not crash
-    router.Stop();
-    router.Stop();
-    // Destructor will call Stop() a third time
+    router->StopAsync();
+    UNIT_ASSERT(!router->IsBroken());
+    router->StopAsync();
+    router->StopAsync(true);
+    UNIT_ASSERT(router->IsBroken());
+    router->StopAsync();
+    UNIT_ASSERT(router->IsBroken());
+    router.reset();
 }
 
-void DoFlushWithNothingPending(TUringRouterConfig config) {
+void DoStopAsyncStoppingBrokenAndIsBroken(TUringRouterConfig config) {
     SKIP_IF_NO_URING(config);
     TTempFile tmp(MakeTempName(nullptr, "uring_test"));
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
-    TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
-    router.Start();
 
-    // The compatibility no-op must remain harmless.
-    router.Flush();
-    router.Flush();
+    auto router = std::make_unique<TUringRouter>(DupOwned(f), nullptr, config);
+    router->RegisterFile();
+    router->Start();
+    UNIT_ASSERT(!router->IsBroken());
 
-    // Verify I/O still works after compatibility flush calls.
+    router->StopAsync(true);
+    UNIT_ASSERT(router->IsBroken());
+
     constexpr ui32 size = 4096;
     TAlignedBuf buf(size);
-    memset(buf.Data(), 0x42, size);
+    memset(buf.Data(), 0x31, size);
 
-    TManualEvent ev;
-    TTestOp op;
-    op.Event = &ev;
+    TManualEvent afterEvent;
+    TTestOp after;
+    after.Event = &afterEvent;
+    PrepareWriteOp(after, buf.Data(), size, 0);
+    UNIT_ASSERT(!router->Write(&after));
+    UNIT_ASSERT(!afterEvent.WaitT(TDuration::MilliSeconds(10)));
 
-    PrepareWriteOp(op, buf.Data(), size, 0);
-    UNIT_ASSERT(router.Write(&op));
-    router.Flush();
-    ev.WaitI();
-    UNIT_ASSERT_VALUES_EQUAL(op.GetResult(), (i32)size);
-
-    router.Stop();
+    router->StopAsync(true);
+    UNIT_ASSERT(router->IsBroken());
+    router.reset();
 }
 
 void DoErrorResultPropagation(TUringRouterConfig config) {
@@ -600,9 +567,9 @@ void DoErrorResultPropagation(TUringRouterConfig config) {
     constexpr ui32 fileSize = 4096;
     f.Resize(fileSize);
 
-    TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
-    router.Start();
+    auto router = std::make_unique<TUringRouter>(DupOwned(f), nullptr, config);
+    router->RegisterFile();
+    router->Start();
 
     constexpr ui32 ioSize = 4096;
     TAlignedBuf buf(ioSize);
@@ -618,102 +585,66 @@ void DoErrorResultPropagation(TUringRouterConfig config) {
     op.Event = &ev;
 
     PrepareWriteOp(op, buf.Data(), ioSize, badOffset);
-    UNIT_ASSERT(router.Write(&op));
-    router.Flush();
+    UNIT_ASSERT(router->Write(&op));
     ev.WaitI();
     // The kernel should have rejected this; Result should be negative errno
     UNIT_ASSERT_LT(op.GetResult(), 0);
 
-    router.Stop();
+    router.reset();
 }
 
-void DoStopAfterFlush(TUringRouterConfig config) {
+void DoDestroyWithPendingOperations(TUringRouterConfig config) {
     SKIP_IF_NO_URING(config);
     TTempFile tmp(MakeTempName(nullptr, "uring_test"));
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
 
-    TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
-    router.Start();
+    auto router = std::make_unique<TUringRouter>(DupOwned(f), nullptr, config);
+    router->RegisterFile();
+    router->Start();
 
     constexpr ui32 size = 4096;
     TAlignedBuf buf(size);
     memset(buf.Data(), 0xDD, size);
 
-    // Submit several ops, call the compatibility flush, then immediately stop.
+    // Destroy the router without waiting for the accepted operations first.
     constexpr int N = 4;
     TTestOp ops[N];
     TManualEvent events[N];
     for (int i = 0; i < N; ++i) {
         ops[i].Event = &events[i];
         PrepareWriteOp(ops[i], buf.Data(), size, 0);
-        UNIT_ASSERT(router.Write(&ops[i]));
+        UNIT_ASSERT(router->Write(&ops[i]));
     }
-    router.Flush();
 
-    // Don't wait for completion -- just stop. The I/O thread must drain every
-    // accepted operation before shutdown.
-    router.Stop();
+    // Destruction must deliver one terminal callback per accepted operation.
+    router.reset();
     for (int i = 0; i < N; ++i) {
         UNIT_ASSERT(events[i].WaitT(TDuration::Seconds(1)));
     }
 }
 
-void DoStopWithoutFlush(TUringRouterConfig config) {
+void DoDestroyAfterIdle(TUringRouterConfig config) {
     SKIP_IF_NO_URING(config);
     TTempFile tmp(MakeTempName(nullptr, "uring_test"));
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
 
-    TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
-    router.Start();
+    auto router = std::make_unique<TUringRouter>(DupOwned(f), nullptr, config);
+    router->RegisterFile();
+    router->Start();
 
-    constexpr ui32 size = 4096;
-    TAlignedBuf buf(size);
-    memset(buf.Data(), 0xEE, size);
-
-    // Enqueue operations without calling the compatibility Flush() API.
-    constexpr int N = 4;
-    TTestOp ops[N];
-    TManualEvent events[N];
-    for (int i = 0; i < N; ++i) {
-        ops[i].Event = &events[i];
-        PrepareWriteOp(ops[i], buf.Data(), size, 0);
-        UNIT_ASSERT(router.Write(&ops[i]));
-    }
-
-    // Stop must drain queued and kernel-submitted operations alike.
-    router.Stop();
-    for (int i = 0; i < N; ++i) {
-        UNIT_ASSERT(events[i].WaitT(TDuration::Seconds(1)));
-    }
-}
-
-void DoStopAfterIdle(TUringRouterConfig config) {
-    SKIP_IF_NO_URING(config);
-    TTempFile tmp(MakeTempName(nullptr, "uring_test"));
-    TFile f(tmp.Name(), CreateAlways | RdWr);
-    f.Resize(1 << 20);
-
-    TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
-    router.Start();
-
-    UNIT_ASSERT_VALUES_EQUAL(router.GetInflight(), 0u);
-    // Allow the I/O thread to leave its idle spin and park. This covers the
-    // public stop-after-idle contract, not a specific internal timeout branch.
+    UNIT_ASSERT_VALUES_EQUAL(router->GetInflight(), 0u);
+    // Allow the I/O thread to leave its idle spin and park.
     usleep(20000);
 
     const auto start = std::chrono::steady_clock::now();
-    router.Stop();
+    router.reset();
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - start);
 
     UNIT_ASSERT_C(elapsed < std::chrono::seconds(5),
-        TStringBuilder() << "idle router stop took " << elapsed.count() << " ms");
-    UNIT_ASSERT_VALUES_EQUAL(router.GetInflight(), 0u);
+        TStringBuilder() << "idle router destruction took " << elapsed.count() << " ms");
 }
 
 // Completion op that signals "entered" then blocks until "proceed" is signaled or times out
@@ -733,22 +664,22 @@ struct TBlockingOp : TUringOperationBase {
         }
     }
 
-    void OnDrop() noexcept override {
+    void OnDrop(NActors::TActorSystem*) noexcept override {
     }
 };
 
-void DoStopWhileCallbackRunning(TUringRouterConfig config) {
+void DoDestroyWhileCallbackRunning(TUringRouterConfig config) {
     // Block the sole I/O thread in the first callback while additional
-    // accepted operations and the stop sentinel accumulate behind it.
+    // accepted operations accumulate behind it.
     config.QueueDepth = 1;
     SKIP_IF_NO_URING(config);
     TTempFile tmp(MakeTempName(nullptr, "uring_test"));
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
 
-    TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
-    router.Start();
+    auto router = std::make_unique<TUringRouter>(DupOwned(f), nullptr, config);
+    router->RegisterFile();
+    router->Start();
 
     constexpr ui32 size = 4096;
     TAlignedBuf buf(size);
@@ -761,8 +692,7 @@ void DoStopWhileCallbackRunning(TUringRouterConfig config) {
     op.ProceedEvent = &proceedEvent;
 
     PrepareWriteOp(op, buf.Data(), size, 0);
-    UNIT_ASSERT(router.Write(&op));
-    router.Flush();
+    UNIT_ASSERT(router->Write(&op));
 
     // Wait until the callback is actively running on the I/O thread.
     enteredEvent.WaitI();
@@ -775,28 +705,27 @@ void DoStopWhileCallbackRunning(TUringRouterConfig config) {
         tailOp.Completions = &completions;
         tailOp.Drops = &drops;
         PrepareWriteOp(tailOp, buf.Data(), size, 0);
-        UNIT_ASSERT(router.Write(&tailOp));
+        UNIT_ASSERT(router->Write(&tailOp));
     }
-    UNIT_ASSERT_VALUES_EQUAL(router.GetInflight(), TailOps + 1);
+    UNIT_ASSERT_VALUES_EQUAL(router->GetInflight(), TailOps + 1);
 
-    // Stop must not return while an accepted operation is still inside its
-    // completion callback, nor leave the saturated queued tail behind.
-    std::atomic<bool> stopReturned{false};
+    // Destruction must wait for the active callback. The queued tail has not
+    // reached the kernel, so shutdown must finish it through OnDrop().
+    std::atomic<bool> destructionReturned{false};
     std::thread stopper([&] {
-        router.Stop();
-        stopReturned.store(true, std::memory_order_release);
+        router.reset();
+        destructionReturned.store(true, std::memory_order_release);
     });
     usleep(20000);
-    UNIT_ASSERT(!stopReturned.load(std::memory_order_acquire));
+    UNIT_ASSERT(!destructionReturned.load(std::memory_order_acquire));
     proceedEvent.Signal();
     stopper.join();
-    UNIT_ASSERT(stopReturned.load(std::memory_order_acquire));
-    UNIT_ASSERT_VALUES_EQUAL(completions.load(std::memory_order_relaxed), TailOps);
-    UNIT_ASSERT_VALUES_EQUAL(drops.load(std::memory_order_relaxed), 0);
+    UNIT_ASSERT(destructionReturned.load(std::memory_order_acquire));
+    UNIT_ASSERT_VALUES_EQUAL(completions.load(std::memory_order_relaxed), 0);
+    UNIT_ASSERT_VALUES_EQUAL(drops.load(std::memory_order_relaxed), TailOps);
     for (const auto& tailOp : tailOps) {
         UNIT_ASSERT_VALUES_EQUAL(tailOp.TerminalCallbacks.load(std::memory_order_relaxed), 1);
     }
-    UNIT_ASSERT_VALUES_EQUAL(router.GetInflight(), 0u);
 }
 
 void DoDeviceSampleSink(TUringRouterConfig config) {
@@ -805,16 +734,16 @@ void DoDeviceSampleSink(TUringRouterConfig config) {
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
 
-    TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    auto router = std::make_unique<TUringRouter>(DupOwned(f), nullptr, config);
+    router->RegisterFile();
 
     TDeviceIoSample sample;
     std::atomic<bool> sampleSeen{false};
-    router.SetSampleSink([&](const TDeviceIoSample& value) {
+    router->SetSampleSink([&](const TDeviceIoSample& value) {
         sample = value;
         sampleSeen.store(true, std::memory_order_release);
     });
-    router.Start();
+    router->Start();
 
     constexpr ui32 size = 4096;
     constexpr ui64 offset = 8192;
@@ -827,7 +756,7 @@ void DoDeviceSampleSink(TUringRouterConfig config) {
     op.CallbackSawSample = &callbackSawSample;
     op.Event = &event;
     PrepareWriteOp(op, buf.Data(), size, offset);
-    UNIT_ASSERT(router.Write(&op));
+    UNIT_ASSERT(router->Write(&op));
     UNIT_ASSERT(event.WaitT(TDuration::Seconds(5)));
 
     UNIT_ASSERT(callbackSawSample.load(std::memory_order_relaxed));
@@ -836,7 +765,7 @@ void DoDeviceSampleSink(TUringRouterConfig config) {
     UNIT_ASSERT_VALUES_EQUAL(sample.Offset, offset);
     UNIT_ASSERT_VALUES_EQUAL(sample.Size, size);
     UNIT_ASSERT(sample.IsWrite);
-    router.Stop();
+    router.reset();
 }
 
 void DoFixedShortRetrySampling(TUringRouterConfig config) {
@@ -848,39 +777,37 @@ void DoFixedShortRetrySampling(TUringRouterConfig config) {
     constexpr ui32 bufferSize = 8192;
     f.Resize(fileSize);
 
-    TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    auto router = std::make_unique<TUringRouter>(DupOwned(f), nullptr, config);
+    router->RegisterFile();
 
     TAlignedBuf buf(bufferSize);
     memset(buf.Data(), 0, bufferSize);
     struct iovec registeredBuffer = {buf.Data(), bufferSize};
-    router.RegisterBuffers(&registeredBuffer, 1);
+    router->RegisterBuffers(&registeredBuffer, 1);
 
     TDeviceIoSample samples[2];
     std::atomic<int> sampleCount{0};
-    router.SetSampleSink([&](const TDeviceIoSample& sample) {
+    router->SetSampleSink([&](const TDeviceIoSample& sample) {
         const int index = sampleCount.fetch_add(1, std::memory_order_relaxed);
         if (index < 2) {
             samples[index] = sample;
         }
     });
-    router.Start();
-    UNIT_ASSERT_C(router.AreBuffersRegistered(),
-        TStringBuilder() << "buffer registration failed with errno=" << router.GetRegisterBuffersErrno());
+    router->Start();
+    UNIT_ASSERT_C(router->AreBuffersRegistered(),
+        TStringBuilder() << "buffer registration failed with errno=" << router->GetRegisterBuffersErrno());
 
     TManualEvent event;
-    TFixedShortRetryOp op;
-    op.Router = &router;
+    TShortCompletionOp op;
     op.Event = &event;
-    UNIT_ASSERT(router.ReadFixed(buf.Data(), bufferSize, 0, /*bufIndex=*/0, &op));
+    UNIT_ASSERT(router->ReadFixed(buf.Data(), bufferSize, 0, /*bufIndex=*/0, &op));
     UNIT_ASSERT(event.WaitT(TDuration::Seconds(5)));
-    router.Stop();
+    router.reset();
 
-    UNIT_ASSERT(op.RetryAccepted.load(std::memory_order_acquire));
-    UNIT_ASSERT_VALUES_EQUAL(op.Callbacks.load(std::memory_order_relaxed), 2);
+    UNIT_ASSERT_VALUES_EQUAL(op.Callbacks.load(std::memory_order_relaxed), 1);
     UNIT_ASSERT_VALUES_EQUAL(op.Drops.load(std::memory_order_relaxed), 0);
-    UNIT_ASSERT_VALUES_EQUAL(op.Results[0].load(std::memory_order_relaxed), (i32)fileSize);
-    UNIT_ASSERT_VALUES_EQUAL(op.Results[1].load(std::memory_order_relaxed), 0);
+    UNIT_ASSERT_VALUES_EQUAL(op.Result.load(std::memory_order_relaxed), -EIO);
+    UNIT_ASSERT_VALUES_EQUAL(op.TakeShortIoCount(), 1u);
     UNIT_ASSERT_VALUES_EQUAL(sampleCount.load(std::memory_order_relaxed), 2);
 
     UNIT_ASSERT_VALUES_EQUAL(samples[0].Offset, 0u);
@@ -910,18 +837,18 @@ void DoScatterGatherShortRetrySampling(TUringRouterConfig config) {
     constexpr ui32 segmentSize = 4096;
     f.Resize(fileSize);
 
-    TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    auto router = std::make_unique<TUringRouter>(DupOwned(f), nullptr, config);
+    router->RegisterFile();
 
     TDeviceIoSample samples[2];
     std::atomic<int> sampleCount{0};
-    router.SetSampleSink([&](const TDeviceIoSample& sample) {
+    router->SetSampleSink([&](const TDeviceIoSample& sample) {
         const int index = sampleCount.fetch_add(1, std::memory_order_relaxed);
         if (index < 2) {
             samples[index] = sample;
         }
     });
-    router.Start();
+    router->Start();
 
     TAlignedBuf first(segmentSize);
     TAlignedBuf second(segmentSize);
@@ -929,22 +856,20 @@ void DoScatterGatherShortRetrySampling(TUringRouterConfig config) {
     memset(second.Data(), 0, segmentSize);
 
     TManualEvent event;
-    TScatterGatherShortRetryOp op;
-    op.Router = &router;
+    TShortCompletionOp op;
     op.Event = &event;
     op.SetOperationType(TUringOperationBase::EREAD);
     op.PrepareScatterGather(2, 0);
     op.AddIov(first.Data(), segmentSize);
     op.AddIov(second.Data(), segmentSize);
-    UNIT_ASSERT(router.Read(&op));
+    UNIT_ASSERT(router->Read(&op));
     UNIT_ASSERT(event.WaitT(TDuration::Seconds(5)));
-    router.Stop();
+    router.reset();
 
-    UNIT_ASSERT(op.RetryAccepted.load(std::memory_order_acquire));
-    UNIT_ASSERT_VALUES_EQUAL(op.Callbacks.load(std::memory_order_relaxed), 2);
+    UNIT_ASSERT_VALUES_EQUAL(op.Callbacks.load(std::memory_order_relaxed), 1);
     UNIT_ASSERT_VALUES_EQUAL(op.Drops.load(std::memory_order_relaxed), 0);
-    UNIT_ASSERT_VALUES_EQUAL(op.Results[0].load(std::memory_order_relaxed), (i32)fileSize);
-    UNIT_ASSERT_VALUES_EQUAL(op.Results[1].load(std::memory_order_relaxed), 0);
+    UNIT_ASSERT_VALUES_EQUAL(op.Result.load(std::memory_order_relaxed), -EIO);
+    UNIT_ASSERT_VALUES_EQUAL(op.TakeShortIoCount(), 1u);
     UNIT_ASSERT_VALUES_EQUAL(sampleCount.load(std::memory_order_relaxed), 2);
 
     UNIT_ASSERT_VALUES_EQUAL(samples[0].Offset, 0u);
@@ -969,8 +894,8 @@ void DoSubmissionLifecycle(TUringRouterConfig config) {
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
 
-    TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
+    auto router = std::make_unique<TUringRouter>(DupOwned(f), nullptr, config);
+    router->RegisterFile();
 
     constexpr ui32 size = 4096;
     TAlignedBuf buf(size);
@@ -980,22 +905,23 @@ void DoSubmissionLifecycle(TUringRouterConfig config) {
     TTestOp beforeStart;
     beforeStart.Event = &beforeStartEvent;
     PrepareWriteOp(beforeStart, buf.Data(), size, 0);
-    UNIT_ASSERT(!router.Write(&beforeStart));
-    UNIT_ASSERT_VALUES_EQUAL(router.GetInflight(), 0u);
+    UNIT_ASSERT(!router->Write(&beforeStart));
+    UNIT_ASSERT_VALUES_EQUAL(router->GetInflight(), 0u);
 
-    router.Start();
-    UNIT_ASSERT(router.Write(&beforeStart));
+    router->Start();
+    UNIT_ASSERT(router->Write(&beforeStart));
     UNIT_ASSERT(beforeStartEvent.WaitT(TDuration::Seconds(5)));
 
-    router.Stop();
+    router->StopAsync();
 
-    TManualEvent afterStopEvent;
-    TTestOp afterStop;
-    afterStop.Event = &afterStopEvent;
-    PrepareWriteOp(afterStop, buf.Data(), size, 0);
-    UNIT_ASSERT(!router.Write(&afterStop));
-    UNIT_ASSERT(!afterStopEvent.WaitT(TDuration::MilliSeconds(10)));
-    UNIT_ASSERT_VALUES_EQUAL(router.GetInflight(), 0u);
+    TManualEvent afterStopAsyncEvent;
+    TTestOp afterStopAsync;
+    afterStopAsync.Event = &afterStopAsyncEvent;
+    PrepareWriteOp(afterStopAsync, buf.Data(), size, 0);
+    UNIT_ASSERT(!router->Write(&afterStopAsync));
+    UNIT_ASSERT(!afterStopAsyncEvent.WaitT(TDuration::MilliSeconds(10)));
+    UNIT_ASSERT_VALUES_EQUAL(router->GetInflight(), 0u);
+    router.reset();
 }
 
 void DoWakeAfterIdle(TUringRouterConfig config) {
@@ -1004,9 +930,9 @@ void DoWakeAfterIdle(TUringRouterConfig config) {
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
 
-    TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
-    router.Start();
+    auto router = std::make_unique<TUringRouter>(DupOwned(f), nullptr, config);
+    router->RegisterFile();
+    router->Start();
 
     constexpr ui32 size = 4096;
     constexpr int N = 64;
@@ -1021,11 +947,11 @@ void DoWakeAfterIdle(TUringRouterConfig config) {
         usleep(1000);
         ops[i].Event = &events[i];
         PrepareWriteOp(ops[i], buf.Data(), size, 0);
-        UNIT_ASSERT(router.Write(&ops[i]));
+        UNIT_ASSERT(router->Write(&ops[i]));
         UNIT_ASSERT(events[i].WaitT(TDuration::Seconds(5)));
     }
 
-    router.Stop();
+    router.reset();
 }
 
 void DoMultiProducerConcurrentSubmit(TUringRouterConfig config) {
@@ -1035,9 +961,9 @@ void DoMultiProducerConcurrentSubmit(TUringRouterConfig config) {
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
 
-    TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
-    router.Start();
+    auto router = std::make_unique<TUringRouter>(DupOwned(f), nullptr, config);
+    router->RegisterFile();
+    router->Start();
 
     constexpr int NumThreads = 8;
     constexpr int OpsPerThread = 64;
@@ -1060,7 +986,7 @@ void DoMultiProducerConcurrentSubmit(TUringRouterConfig config) {
             go.WaitI();
             const int begin = threadIdx * OpsPerThread;
             for (int i = begin; i < begin + OpsPerThread; ++i) {
-                if (!router.Write(&ops[i])) {
+                if (!router->Write(&ops[i])) {
                     allAccepted.store(false, std::memory_order_relaxed);
                 }
             }
@@ -1076,20 +1002,20 @@ void DoMultiProducerConcurrentSubmit(TUringRouterConfig config) {
         UNIT_ASSERT(events[i].WaitT(TDuration::Seconds(10)));
         UNIT_ASSERT_VALUES_EQUAL(ops[i].GetResult(), (i32)size);
     }
-    router.Stop();
-    UNIT_ASSERT_VALUES_EQUAL(router.GetInflight(), 0u);
+    UNIT_ASSERT_VALUES_EQUAL(router->GetInflight(), 0u);
+    router.reset();
 }
 
-void DoSubmitStopRace(TUringRouterConfig config) {
+void DoSubmitStopAsyncRace(TUringRouterConfig config, bool sync = false) {
     config.QueueDepth = 4;
     SKIP_IF_NO_URING(config);
     TTempFile tmp(MakeTempName(nullptr, "uring_test"));
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
 
-    TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
-    router.Start();
+    auto router = std::make_shared<TUringRouter>(DupOwned(f), nullptr, config);
+    router->RegisterFile();
+    router->Start();
 
     constexpr int NumThreads = 8;
     constexpr int N = 1024;
@@ -1108,14 +1034,15 @@ void DoSubmitStopRace(TUringRouterConfig config) {
         PrepareWriteOp(ops[i], buf.Data(), size, 0);
     }
 
-    // Guarantee that Stop has at least one accepted operation to drain.
-    UNIT_ASSERT(router.Write(&ops[0]));
+    // Guarantee that StopAsync has at least one accepted operation to finish.
+    UNIT_ASSERT(router->Write(&ops[0]));
     accepted.store(1, std::memory_order_relaxed);
 
     TManualEvent go;
     std::thread producers[NumThreads];
     for (auto& producer : producers) {
-        producer = std::thread([&] {
+        auto submitter = router;
+        producer = std::thread([&, submitter] {
             go.WaitI();
             for (;;) {
                 const int i = next.fetch_add(1, std::memory_order_relaxed);
@@ -1123,7 +1050,7 @@ void DoSubmitStopRace(TUringRouterConfig config) {
                     break;
                 }
                 attempted.fetch_add(1, std::memory_order_relaxed);
-                if (router.Write(&ops[i])) {
+                if (submitter->Write(&ops[i])) {
                     accepted.fetch_add(1, std::memory_order_relaxed);
                 }
             }
@@ -1134,10 +1061,15 @@ void DoSubmitStopRace(TUringRouterConfig config) {
     while (attempted.load(std::memory_order_relaxed) < NumThreads) {
         std::this_thread::yield();
     }
-    router.Stop();
+    if (sync) {
+        router->StopSync();
+    } else {
+        router->StopAsync();
+    }
     for (auto& producer : producers) {
         producer.join();
     }
+    router.reset();
 
     int terminalCallbacks = 0;
     for (const auto& op : ops) {
@@ -1146,20 +1078,20 @@ void DoSubmitStopRace(TUringRouterConfig config) {
         terminalCallbacks += callbacks;
     }
     UNIT_ASSERT_VALUES_EQUAL(terminalCallbacks, accepted.load(std::memory_order_relaxed));
-    UNIT_ASSERT_VALUES_EQUAL(completions.load(std::memory_order_relaxed), accepted.load(std::memory_order_relaxed));
-    UNIT_ASSERT_VALUES_EQUAL(drops.load(std::memory_order_relaxed), 0);
-    UNIT_ASSERT_VALUES_EQUAL(router.GetInflight(), 0u);
+    UNIT_ASSERT_VALUES_EQUAL(
+        completions.load(std::memory_order_relaxed) + drops.load(std::memory_order_relaxed),
+        accepted.load(std::memory_order_relaxed));
 }
 
-void DoConcurrentStop(TUringRouterConfig config) {
+void DoConcurrentStopAsync(TUringRouterConfig config, bool sync = false) {
     SKIP_IF_NO_URING(config);
     TTempFile tmp(MakeTempName(nullptr, "uring_test"));
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(1 << 20);
 
-    TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
-    router.Start();
+    auto router = std::make_unique<TUringRouter>(DupOwned(f), nullptr, config);
+    router->RegisterFile();
+    router->Start();
 
     constexpr int N = 64;
     constexpr ui32 size = 4096;
@@ -1172,22 +1104,24 @@ void DoConcurrentStop(TUringRouterConfig config) {
         op.Completions = &completions;
         op.Drops = &drops;
         PrepareWriteOp(op, buf.Data(), size, 0);
-        UNIT_ASSERT(router.Write(&op));
+        UNIT_ASSERT(router->Write(&op));
     }
 
     TManualEvent go;
-    std::thread stopper1([&] { go.WaitI(); router.Stop(); });
-    std::thread stopper2([&] { go.WaitI(); router.Stop(); });
+    auto stop = [&] { go.WaitI(); if (sync) { router->StopSync(); } else { router->StopAsync(); } };
+    std::thread stopper1(stop);
+    std::thread stopper2(stop);
     go.Signal();
     stopper1.join();
     stopper2.join();
 
-    UNIT_ASSERT_VALUES_EQUAL(completions.load(std::memory_order_relaxed), N);
-    UNIT_ASSERT_VALUES_EQUAL(drops.load(std::memory_order_relaxed), 0);
+    router.reset();
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        completions.load(std::memory_order_relaxed) + drops.load(std::memory_order_relaxed), N);
     for (const auto& op : ops) {
         UNIT_ASSERT_VALUES_EQUAL(op.TerminalCallbacks.load(std::memory_order_relaxed), 1);
     }
-    UNIT_ASSERT_VALUES_EQUAL(router.GetInflight(), 0u);
 }
 
 // Prepare a vectored write op from a pre-built iovec array.
@@ -1214,9 +1148,9 @@ void DoScatterGatherWriteReadBack(TUringRouterConfig config) {
     constexpr ui32 totalSize = N * segSize;
     f.Resize(totalSize);
 
-    TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
-    router.Start();
+    auto router = std::make_unique<TUringRouter>(DupOwned(f), nullptr, config);
+    router->RegisterFile();
+    router->Start();
 
     // Three distinct page-aligned write buffers
     TAlignedBuf wBufs[N] = {TAlignedBuf(segSize), TAlignedBuf(segSize), TAlignedBuf(segSize)};
@@ -1234,8 +1168,7 @@ void DoScatterGatherWriteReadBack(TUringRouterConfig config) {
     TTestOp writeOp;
     writeOp.Event = &writeEv;
     PrepareWriteVectored(writeOp, iovs, N, /*offset=*/0);
-    UNIT_ASSERT(router.Write(&writeOp));
-    router.Flush();
+    UNIT_ASSERT(router->Write(&writeOp));
     writeEv.WaitI();
     UNIT_ASSERT_VALUES_EQUAL(writeOp.GetResult(), (i32)totalSize);
 
@@ -1247,8 +1180,7 @@ void DoScatterGatherWriteReadBack(TUringRouterConfig config) {
     TTestOp readOp;
     readOp.Event = &readEv;
     PrepareReadOp(readOp, readBuf.Data(), totalSize, 0);
-    UNIT_ASSERT(router.Read(&readOp));
-    router.Flush();
+    UNIT_ASSERT(router->Read(&readOp));
     readEv.WaitI();
     UNIT_ASSERT_VALUES_EQUAL(readOp.GetResult(), (i32)totalSize);
 
@@ -1258,7 +1190,7 @@ void DoScatterGatherWriteReadBack(TUringRouterConfig config) {
                            segSize) == 0);
     }
 
-    router.Stop();
+    router.reset();
 }
 
 void DoScatterGatherSingleIovec(TUringRouterConfig config) {
@@ -1268,9 +1200,9 @@ void DoScatterGatherSingleIovec(TUringRouterConfig config) {
     constexpr ui32 size = 4096;
     f.Resize(size);
 
-    TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
-    router.Start();
+    auto router = std::make_unique<TUringRouter>(DupOwned(f), nullptr, config);
+    router->RegisterFile();
+    router->Start();
 
     TAlignedBuf writeBuf(size);
     memset(writeBuf.Data(), 0xBB, size);
@@ -1283,8 +1215,7 @@ void DoScatterGatherSingleIovec(TUringRouterConfig config) {
     TTestOp writeOp;
     writeOp.Event = &writeEv;
     PrepareWriteVectored(writeOp, &iov, 1, 0);
-    UNIT_ASSERT(router.Write(&writeOp));
-    router.Flush();
+    UNIT_ASSERT(router->Write(&writeOp));
     writeEv.WaitI();
     UNIT_ASSERT_VALUES_EQUAL(writeOp.GetResult(), (i32)size);
 
@@ -1295,13 +1226,12 @@ void DoScatterGatherSingleIovec(TUringRouterConfig config) {
     TTestOp readOp;
     readOp.Event = &readEv;
     PrepareReadOp(readOp, readBuf.Data(), size, 0);
-    UNIT_ASSERT(router.Read(&readOp));
-    router.Flush();
+    UNIT_ASSERT(router->Read(&readOp));
     readEv.WaitI();
     UNIT_ASSERT_VALUES_EQUAL(readOp.GetResult(), (i32)size);
     UNIT_ASSERT(memcmp(writeBuf.Data(), readBuf.Data(), size) == 0);
 
-    router.Stop();
+    router.reset();
 }
 
 void DoScatterGatherErrorPropagation(TUringRouterConfig config) {
@@ -1310,9 +1240,9 @@ void DoScatterGatherErrorPropagation(TUringRouterConfig config) {
     TFile f(tmp.Name(), CreateAlways | RdWr);
     f.Resize(4096);
 
-    TUringRouter router(f.GetHandle(), nullptr, config);
-    router.RegisterFile();
-    router.Start();
+    auto router = std::make_unique<TUringRouter>(DupOwned(f), nullptr, config);
+    router->RegisterFile();
+    router->Start();
 
     TAlignedBuf buf1(4096), buf2(4096);
     memset(buf1.Data(), 0xCC, 4096);
@@ -1328,12 +1258,11 @@ void DoScatterGatherErrorPropagation(TUringRouterConfig config) {
     TTestOp op;
     op.Event = &ev;
     PrepareWriteVectored(op, iovs, 2, badOffset);
-    UNIT_ASSERT(router.Write(&op));
-    router.Flush();
+    UNIT_ASSERT(router->Write(&op));
     ev.WaitI();
     UNIT_ASSERT_LT(op.GetResult(), 0);
 
-    router.Stop();
+    router.reset();
 }
 
 } // anonymous namespace
@@ -1457,6 +1386,10 @@ Y_UNIT_TEST_SUITE(TUringOperationBaseTest) {
 
 Y_UNIT_TEST_SUITE(TUringRouterTest) {
 
+    Y_UNIT_TEST(DefaultIdleSpinIs10Microseconds) {
+        UNIT_ASSERT_VALUES_EQUAL(10u, TUringRouterConfig{}.IdleSpinUs);
+    }
+
     Y_UNIT_TEST(CreateAndDestroy) {
         DoCreateAndDestroy(DefaultConfig());
     }
@@ -1493,32 +1426,28 @@ Y_UNIT_TEST_SUITE(TUringRouterTest) {
         DoNonZeroOffsets(DefaultConfig());
     }
 
-    Y_UNIT_TEST(DoubleStop) {
-        DoDoubleStop(DefaultConfig());
+    Y_UNIT_TEST(StopAsyncIsIdempotent) {
+        DoStopAsyncIsIdempotent(DefaultConfig());
     }
 
-    Y_UNIT_TEST(FlushWithNothingPending) {
-        DoFlushWithNothingPending(DefaultConfig());
+    Y_UNIT_TEST(StopAsyncStoppingBrokenAndIsBroken) {
+        DoStopAsyncStoppingBrokenAndIsBroken(DefaultConfig());
     }
 
     Y_UNIT_TEST(ErrorResultPropagation) {
         DoErrorResultPropagation(DefaultConfig());
     }
 
-    Y_UNIT_TEST(StopAfterFlush) {
-        DoStopAfterFlush(DefaultConfig());
+    Y_UNIT_TEST(DestroyWithPendingOperations) {
+        DoDestroyWithPendingOperations(DefaultConfig());
     }
 
-    Y_UNIT_TEST(StopWithoutFlush) {
-        DoStopWithoutFlush(DefaultConfig());
+    Y_UNIT_TEST(DestroyAfterIdle) {
+        DoDestroyAfterIdle(DefaultConfig());
     }
 
-    Y_UNIT_TEST(StopAfterIdle) {
-        DoStopAfterIdle(DefaultConfig());
-    }
-
-    Y_UNIT_TEST(StopWhileCallbackRunning) {
-        DoStopWhileCallbackRunning(DefaultConfig());
+    Y_UNIT_TEST(DestroyWhileCallbackRunning) {
+        DoDestroyWhileCallbackRunning(DefaultConfig());
     }
 
     Y_UNIT_TEST(DeviceSampleSink) {
@@ -1545,12 +1474,20 @@ Y_UNIT_TEST_SUITE(TUringRouterTest) {
         DoMultiProducerConcurrentSubmit(DefaultConfig());
     }
 
-    Y_UNIT_TEST(SubmitStopRace) {
-        DoSubmitStopRace(DefaultConfig());
+    Y_UNIT_TEST(SubmitStopSyncRaceWithSurvivingClients) {
+        DoSubmitStopAsyncRace(DefaultConfig(), true);
     }
 
-    Y_UNIT_TEST(ConcurrentStop) {
-        DoConcurrentStop(DefaultConfig());
+    Y_UNIT_TEST(ConcurrentStopSync) {
+        DoConcurrentStopAsync(DefaultConfig(), true);
+    }
+
+    Y_UNIT_TEST(SubmitStopAsyncRace) {
+        DoSubmitStopAsyncRace(DefaultConfig());
+    }
+
+    Y_UNIT_TEST(ConcurrentStopAsync) {
+        DoConcurrentStopAsync(DefaultConfig());
     }
 
     Y_UNIT_TEST(ScatterGatherWriteReadBack) {
@@ -1563,5 +1500,1290 @@ Y_UNIT_TEST_SUITE(TUringRouterTest) {
 
     Y_UNIT_TEST(ScatterGatherErrorPropagation) {
         DoScatterGatherErrorPropagation(DefaultConfig());
+    }
+}
+
+namespace {
+
+struct TScriptedUringBackend : NUringPrivate::IUringRouterBackend {
+    struct TSubmission {
+        io_uring_sqe Sqe{};
+        std::vector<iovec> Iovs;
+    };
+
+    struct TSubmitStep {
+        int Result;
+        unsigned Consumed = 0;
+    };
+
+    struct TStats {
+        std::vector<unsigned> InitFlags;
+        unsigned EnableCalls = 0;
+        unsigned FileRegistrationCalls = 0;
+        unsigned BufferRegistrationCalls = 0;
+        unsigned ExitCalls = 0;
+        unsigned WaitCalls = 0;
+        std::vector<ui32> Backoffs;
+        std::vector<std::vector<TSubmission>> Attempts;
+        std::vector<TSubmission> Consumed;
+    };
+
+    std::shared_ptr<TStats> Stats = std::make_shared<TStats>();
+    std::deque<int> InitResults;
+    std::deque<int> EnableResults;
+    std::deque<int> FileResults;
+    std::deque<int> BufferResults;
+    std::deque<TSubmitStep> SubmitResults;
+    std::deque<int> PeekResults;
+    std::deque<int> WaitResults;
+    std::deque<int> ControlResults;
+    unsigned Features = IORING_FEAT_EXT_ARG;
+    bool AutoComplete = false;
+    bool HoldControls = false;
+    std::function<void()> OnBackoff;
+    std::function<void()> OnWait;
+    std::function<std::chrono::steady_clock::time_point()> Clock;
+    std::chrono::steady_clock::time_point Now() const override {
+        return Clock ? Clock() : IUringRouterBackend::Now();
+    }
+
+    io_uring* Ring = nullptr;
+    unsigned SqHead = 0;
+    unsigned SqTail = 0;
+    unsigned SqFlags = 0;
+    unsigned SqDropped = 0;
+    unsigned CqHead = 0;
+    unsigned CqTail = 0;
+    unsigned CqFlags = 0;
+    unsigned CqOverflow = 0;
+    std::vector<unsigned> SqArray;
+    std::vector<io_uring_sqe> Sqes;
+    std::vector<io_uring_cqe> Cqes;
+    std::vector<ui64> Outstanding;
+
+    static int Next(std::deque<int>& results, int fallback = 0) {
+        if (results.empty()) {
+            return fallback;
+        }
+        const int result = results.front();
+        results.pop_front();
+        return result;
+    }
+
+    int Init(unsigned entries, io_uring* ring, io_uring_params* params) override {
+        Stats->InitFlags.push_back(params->flags);
+        const int result = Next(InitResults);
+        if (result) {
+            return result;
+        }
+        Y_ABORT_UNLESS(entries && !(entries & (entries - 1)));
+        Ring = ring;
+        *ring = {};
+        SqArray.resize(entries);
+        Sqes.resize(entries);
+        Cqes.resize(4 * entries);
+        for (unsigned index = 0; index < entries; ++index) {
+            SqArray[index] = index;
+        }
+        ring->sq.khead = &SqHead;
+        ring->sq.ktail = &SqTail;
+        ring->sq.kflags = &SqFlags;
+        ring->sq.kdropped = &SqDropped;
+        ring->sq.sqes = Sqes.data();
+        ring->sq.array = SqArray.data();
+        ring->sq.ring_entries = entries;
+        ring->sq.ring_mask = entries - 1;
+        ring->cq.khead = &CqHead;
+        ring->cq.ktail = &CqTail;
+        ring->cq.kflags = &CqFlags;
+        ring->cq.koverflow = &CqOverflow;
+        ring->cq.cqes = Cqes.data();
+        ring->cq.ring_entries = Cqes.size();
+        ring->cq.ring_mask = Cqes.size() - 1;
+        ring->features = params->features = Features;
+        ring->flags = params->flags;
+        return 0;
+    }
+
+    int Enable(io_uring*) override {
+        ++Stats->EnableCalls;
+        return Next(EnableResults);
+    }
+
+    int RegisterFiles(io_uring*, const int*, unsigned) override {
+        ++Stats->FileRegistrationCalls;
+        return Next(FileResults);
+    }
+
+    int RegisterBuffers(io_uring*, const iovec*, unsigned) override {
+        ++Stats->BufferRegistrationCalls;
+        return Next(BufferResults);
+    }
+
+    TSubmission Snapshot(unsigned index) const {
+        TSubmission submission;
+        submission.Sqe = Sqes[index & Ring->sq.ring_mask];
+        if (submission.Sqe.opcode == IORING_OP_READV || submission.Sqe.opcode == IORING_OP_WRITEV) {
+            const auto* iovs = reinterpret_cast<const iovec*>(submission.Sqe.addr);
+            submission.Iovs.assign(iovs, iovs + submission.Sqe.len);
+        }
+        return submission;
+    }
+
+    void PushCqe(ui64 userData, int result) {
+        Y_ABORT_UNLESS(CqTail - CqHead < Cqes.size());
+        auto& cqe = Cqes[CqTail++ & Ring->cq.ring_mask];
+        cqe = {};
+        cqe.user_data = userData;
+        cqe.res = result;
+    }
+
+    void ConsumePublished(unsigned count) {
+        Y_ABORT_UNLESS(count <= SqTail - SqHead);
+        for (unsigned index = 0; index < count; ++index) {
+            const auto submission = Snapshot(SqHead++);
+            Stats->Consumed.push_back(submission);
+            if (submission.Sqe.opcode == IORING_OP_NOP || submission.Sqe.opcode == IORING_OP_POLL_ADD) {
+                if (!HoldControls) {
+                    PushCqe(submission.Sqe.user_data,
+                        Next(ControlResults, submission.Sqe.opcode == IORING_OP_POLL_ADD ? POLLIN : 0));
+                }
+            } else if (AutoComplete) {
+                size_t bytes = submission.Sqe.len;
+                if (!submission.Iovs.empty()) {
+                    bytes = 0;
+                    for (const auto& iov : submission.Iovs) {
+                        bytes += iov.iov_len;
+                    }
+                }
+                PushCqe(submission.Sqe.user_data, bytes);
+            } else {
+                Outstanding.push_back(submission.Sqe.user_data);
+            }
+        }
+    }
+
+    int Submit(io_uring* ring) override {
+        // Exactly as __io_uring_flush_sq: publish before returning any result,
+        // including an error, and distinguish local from kernel SQ heads.
+        ring->sq.sqe_head = ring->sq.sqe_tail;
+        SqTail = ring->sq.sqe_tail;
+        std::vector<TSubmission> attempt;
+        for (unsigned index = SqHead; index != SqTail; ++index) {
+            attempt.push_back(Snapshot(index));
+        }
+        Stats->Attempts.push_back(std::move(attempt));
+        TSubmitStep step{static_cast<int>(SqTail - SqHead), SqTail - SqHead};
+        if (!SubmitResults.empty()) {
+            step = SubmitResults.front();
+            SubmitResults.pop_front();
+        }
+        ConsumePublished(step.Consumed);
+        return step.Result;
+    }
+
+    int PeekCqe(io_uring*, io_uring_cqe** cqe) override {
+        *cqe = nullptr;
+        const int result = Next(PeekResults);
+        if (result) {
+            return result;
+        }
+        if (CqHead == CqTail) {
+            return -EAGAIN;
+        }
+        *cqe = &Cqes[CqHead & Ring->cq.ring_mask];
+        return 0;
+    }
+
+    int WaitCqeTimeout(io_uring*, io_uring_cqe** cqe, __kernel_timespec*) override {
+        ++Stats->WaitCalls;
+        if (OnWait) { OnWait(); }
+        *cqe = nullptr;
+        const int result = Next(WaitResults, CqHead == CqTail ? -ETIME : 0);
+        if (!result) {
+            *cqe = &Cqes[CqHead & Ring->cq.ring_mask];
+        }
+        return result;
+    }
+
+    void Exit(io_uring*) override {
+        ++Stats->ExitCalls;
+    }
+
+    void Backoff(ui32 micros) override {
+        Stats->Backoffs.push_back(micros);
+        if (OnBackoff) {
+            OnBackoff();
+        }
+    }
+
+    void Complete(TUringOperationBase& op, int result) {
+        const ui64 userData = reinterpret_cast<uintptr_t>(&op);
+        auto found = std::find(Outstanding.begin(), Outstanding.end(), userData);
+        Y_ABORT_UNLESS(found != Outstanding.end(), "fake completed an unconsumed operation");
+        Outstanding.erase(found);
+        PushCqe(userData, result);
+    }
+};
+
+struct TScriptedRouter {
+    TScriptedUringBackend* Backend;
+    std::unique_ptr<TUringRouter> Router;
+
+    explicit TScriptedRouter(ui32 depth = 16,
+            std::unique_ptr<TScriptedUringBackend> backend = std::make_unique<TScriptedUringBackend>())
+        : Backend(backend.get())
+        , Router(TUringRouterTestPeer::Create(std::move(backend), depth))
+    {}
+
+    ~TScriptedRouter() {
+        TUringRouterTestPeer::AbandonFakeOperations(*Router);
+    }
+
+    void Initialize() { TUringRouterTestPeer::Initialize(*Router); }
+    void Issue() {
+        TUringRouterTestPeer::Drain(*Router);
+        TUringRouterTestPeer::Submit(*Router);
+    }
+    void Complete(TUringOperationBase& op, int result) {
+        Backend->Complete(op, result);
+        UNIT_ASSERT_VALUES_EQUAL(TUringRouterTestPeer::Reap(*Router), 1u);
+    }
+};
+
+struct TScriptedOp : TUringOperationBase {
+    unsigned Completions = 0;
+    unsigned Drops = 0;
+    std::function<void()> Callback;
+
+    void OnComplete(TActorSystem*) noexcept override {
+        ++Completions;
+        if (Callback) {
+            Callback();
+        }
+    }
+    void OnDrop(NActors::TActorSystem*) noexcept override { ++Drops; }
+};
+
+void AssertSqe(const TScriptedUringBackend::TSubmission& submission, int opcode,
+        const void* buffer, size_t size, ui64 offset) {
+    UNIT_ASSERT_VALUES_EQUAL(submission.Sqe.opcode, opcode);
+    UNIT_ASSERT_VALUES_EQUAL(submission.Sqe.addr, reinterpret_cast<uintptr_t>(buffer));
+    UNIT_ASSERT_VALUES_EQUAL(submission.Sqe.len, size);
+    UNIT_ASSERT_VALUES_EQUAL(submission.Sqe.off, offset);
+}
+
+} // anonymous namespace
+
+Y_UNIT_TEST_SUITE(TUringRouterScriptedTest) {
+    Y_UNIT_TEST(StopSyncWaitsForEveryPublisherPhase) {
+        for (ui32 phase = 0; phase != 3; ++phase) {
+            auto backend = std::make_unique<TScriptedUringBackend>();
+            backend->AutoComplete = true;
+            auto stats = backend->Stats;
+            auto router = TUringRouterTestPeer::Create(std::move(backend));
+            TTempFile tmp(MakeTempName(nullptr, "uring_publisher_stop"));
+            TFile file(tmp.Name(), CreateAlways | RdWr);
+            TUringRouterTestPeer::SetFd(*router, DupOwned(file));
+            TManualEvent entered, release, waiting;
+            std::atomic<bool> returned = false;
+            NUringPrivate::TRouterHooks hooks;
+            auto gate = [&] { entered.Signal(); release.WaitI(); };
+            if (phase == 0) { hooks.AfterAdmission = gate; }
+            if (phase == 1) { hooks.AfterPublication = gate; }
+            if (phase == 2) { hooks.AfterWake = gate; }
+            hooks.WaitingForPublishers = [&] { waiting.Signal(); };
+            TUringRouterTestPeer::SetHooks(*router, std::move(hooks));
+            router->Start();
+            TScriptedOp op;
+            char buffer[4096] = {};
+            PrepareWriteOp(op, buffer, sizeof(buffer), 0);
+            bool accepted = false;
+            std::thread producer([&] { accepted = router->Write(&op); });
+            std::thread stopper;
+            Y_DEFER {
+                release.Signal();
+                if (producer.joinable()) { producer.join(); }
+                if (stopper.joinable()) { stopper.join(); }
+            };
+            entered.WaitI();
+            stopper = std::thread([&] { router->StopSync(); returned.store(true); });
+            waiting.WaitI();
+            const bool premature = returned.load();
+            release.Signal();
+            producer.join();
+            stopper.join();
+            UNIT_ASSERT(!premature);
+            UNIT_ASSERT(accepted);
+            UNIT_ASSERT_VALUES_EQUAL(router->GetInflight(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(op.Completions + op.Drops, 1);
+            UNIT_ASSERT(TUringRouterTestPeer::Retired(*router));
+            UNIT_ASSERT(fcntl(TUringRouterTestPeer::WakeFd(*router), F_GETFD) >= 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats->ExitCalls, 1);
+            TScriptedOp rejected;
+            PrepareWriteOp(rejected, buffer, sizeof(buffer), 0);
+            UNIT_ASSERT(!router->Write(&rejected));
+            UNIT_ASSERT_VALUES_EQUAL(rejected.Completions + rejected.Drops, 0);
+        }
+    }
+
+    Y_UNIT_TEST(BrokenUpgradeWinsFinalStopCasWithConcurrentStopSync) {
+        auto backend = std::make_unique<TScriptedUringBackend>();
+        auto stats = backend->Stats;
+        auto router = TUringRouterTestPeer::Create(std::move(backend));
+        TManualEvent loaded, release;
+        NUringPrivate::TRouterHooks hooks;
+        hooks.BeforeFinalStopCas = [&] { loaded.Signal(); release.WaitI(); };
+        TUringRouterTestPeer::SetHooks(*router, std::move(hooks));
+        router->Start();
+        std::thread first([&] { router->StopSync(); });
+        std::thread second;
+        Y_DEFER {
+            release.Signal();
+            if (first.joinable()) { first.join(); }
+            if (second.joinable()) { second.join(); }
+        };
+        loaded.WaitI();
+        router->StopAsync(true);
+        second = std::thread([&] { router->StopSync(); });
+        release.Signal();
+        first.join();
+        second.join();
+        UNIT_ASSERT(TUringRouterTestPeer::State(*router) == EUringRouterState::StoppedBroken);
+        UNIT_ASSERT(TUringRouterTestPeer::Retired(*router));
+        UNIT_ASSERT_VALUES_EQUAL(stats->ExitCalls, 1);
+    }
+
+    Y_UNIT_TEST(StopSyncReleasesDeviceLockWithRetainedClient) {
+        TTempFile tmp(MakeTempName(nullptr, "uring_retained_lock"));
+        TFile file(tmp.Name(), CreateAlways | RdWr);
+        UNIT_ASSERT_VALUES_EQUAL(flock(file.GetHandle(), LOCK_EX | LOCK_NB), 0);
+        auto backend = std::make_unique<TScriptedUringBackend>();
+        auto stats = backend->Stats;
+        std::shared_ptr<TUringRouter> router = TUringRouterTestPeer::Create(std::move(backend));
+        TUringRouterTestPeer::SetFd(*router, DupOwned(file));
+        file.Close();
+        std::shared_ptr<IUringRouterClient> retained = router;
+        TFile replacement(tmp.Name(), OpenExisting | RdWr);
+        UNIT_ASSERT_VALUES_EQUAL(flock(replacement.GetHandle(), LOCK_EX | LOCK_NB), -1);
+        router->StopSync();
+        UNIT_ASSERT_VALUES_EQUAL(stats->ExitCalls, 1);
+        UNIT_ASSERT_VALUES_EQUAL(flock(replacement.GetHandle(), LOCK_EX | LOCK_NB), 0);
+        router->StopSync();
+        UNIT_ASSERT_VALUES_EQUAL(stats->ExitCalls, 1);
+        router.reset();
+        TScriptedOp rejected;
+        char buffer[4096] = {};
+        PrepareWriteOp(rejected, buffer, sizeof(buffer), 0);
+        UNIT_ASSERT(!retained->Write(&rejected));
+        UNIT_ASSERT_VALUES_EQUAL(rejected.Completions + rejected.Drops, 0);
+    }
+
+    Y_UNIT_TEST(FatalStopAbortsBeforeReleasingUnresolvedResourcesInEveryPhase) {
+        for (ui32 phase = 0; phase != 5; ++phase) {
+            TTempFile diagnostic(MakeTempName(nullptr, "uring_fatal_deadline"));
+            const pid_t pid = fork();
+            UNIT_ASSERT(pid >= 0);
+            if (!pid) {
+                const rlimit noCore{0, 0};
+                setrlimit(RLIMIT_CORE, &noCore);
+                alarm(5);
+                TFile output(diagnostic.Name(), CreateAlways | WrOnly);
+                Y_ABORT_UNLESS(dup2(output.GetHandle(), STDERR_FILENO) >= 0);
+                TScriptedRouter fixture;
+                if (phase != 4) {
+                    fixture.Initialize();
+                }
+                TScriptedOp op;
+                char buffer[4096] = {};
+                if (phase < 2) {
+                    PrepareWriteOp(op, buffer, sizeof(buffer), 0);
+                    Y_ABORT_UNLESS(fixture.Router->Write(&op));
+                    if (phase == 1) {
+                        fixture.Backend->SubmitResults = {{-EBADF, 0}};
+                    }
+                    fixture.Issue();
+                } else {
+                    fixture.Backend->HoldControls = true;
+                    if (phase == 2) {
+                        TUringRouterTestPeer::Park(*fixture.Router);
+                    }
+                }
+                fixture.Backend->PeekResults = {-EBADF};
+                if (phase != 3 && phase != 4) {
+                    TUringRouterTestPeer::Reap(*fixture.Router);
+                }
+                unsigned clockCalls = 0;
+                fixture.Backend->Clock = [&] {
+                    Y_ABORT_UNLESS(fixture.Backend->Stats->ExitCalls == 0);
+                    Y_ABORT_UNLESS(op.Completions + op.Drops == 0);
+                    const unsigned millis = clockCalls++ == 0 ? 0 : clockCalls == 2 ? 199 : 200;
+                    Cerr << "fatal phase=" << phase << " elapsed=" << millis << Endl;
+                    return std::chrono::steady_clock::time_point{} + std::chrono::milliseconds(millis);
+                };
+                if (phase == 4) {
+                    // Force a fatal published stop marker through the public issuer path.
+                    fixture.Backend->PeekResults.clear();
+                    fixture.Backend->SubmitResults = {{-EBADF, 0}};
+                    fixture.Router->Start();
+                    fixture.Router->StopSync();
+                } else {
+                    fixture.Router->StopAsync();
+                    TUringRouterTestPeer::Stop(*fixture.Router);
+                }
+                _exit(1);
+            }
+            int status = 0;
+            UNIT_ASSERT_VALUES_EQUAL(waitpid(pid, &status, 0), pid);
+            UNIT_ASSERT(WIFSIGNALED(status));
+            UNIT_ASSERT_VALUES_EQUAL(WTERMSIG(status), SIGABRT);
+            const auto output = TFileInput(diagnostic.Name()).ReadAll();
+            UNIT_ASSERT_STRING_CONTAINS(output, "elapsed=199");
+            UNIT_ASSERT_STRING_CONTAINS(output, "elapsed=200");
+            UNIT_ASSERT_STRING_CONTAINS(output, "io_uring fatal shutdown timed out:");
+        }
+    }
+
+    Y_UNIT_TEST(FatalStopAcceptsLateCompletionWithinDrainDeadline) {
+        TScriptedRouter fixture;
+        fixture.Initialize();
+        TScriptedOp op;
+        char buffer[4096] = {};
+        PrepareWriteOp(op, buffer, sizeof(buffer), 0);
+        UNIT_ASSERT(fixture.Router->Write(&op));
+        fixture.Issue();
+        fixture.Backend->PeekResults = {-EBADF};
+        TUringRouterTestPeer::Reap(*fixture.Router);
+        bool completed = false;
+        fixture.Backend->OnBackoff = [&] {
+            if (!std::exchange(completed, true)) {
+                fixture.Backend->Complete(op, sizeof(buffer));
+            }
+        };
+        TUringRouterTestPeer::Stop(*fixture.Router);
+        UNIT_ASSERT_VALUES_EQUAL(op.Completions, 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0);
+    }
+
+    Y_UNIT_TEST(HealthyDrainHasNoFatalDeadline) {
+        TScriptedRouter fixture;
+        fixture.Initialize();
+        TScriptedOp op;
+        char buffer[4096] = {};
+        PrepareWriteOp(op, buffer, sizeof(buffer), 0);
+        UNIT_ASSERT(fixture.Router->Write(&op));
+        fixture.Issue();
+        ui32 elapsed = 0;
+        ui32 clockCalls = 0;
+        fixture.Backend->Clock = [&] {
+            ++clockCalls;
+            return std::chrono::steady_clock::time_point{} + std::chrono::milliseconds(elapsed);
+        };
+        fixture.Backend->OnWait = [&] {
+            elapsed += 100;
+            if (elapsed == 500) { fixture.Backend->Complete(op, sizeof(buffer)); }
+        };
+        fixture.Router->StopAsync();
+        TUringRouterTestPeer::Stop(*fixture.Router);
+        UNIT_ASSERT_VALUES_EQUAL(elapsed, 500);
+        UNIT_ASSERT_VALUES_EQUAL(clockCalls, 0);
+        UNIT_ASSERT_VALUES_EQUAL(op.Completions, 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0);
+    }
+
+    Y_UNIT_TEST(FatalDrainRetiresLateDataAndControlAt199Milliseconds) {
+        for (ui32 phase = 0; phase != 4; ++phase) {
+            TScriptedRouter fixture;
+            fixture.Initialize();
+            TScriptedOp op;
+            char buffer[4096] = {};
+            if (phase < 2) {
+                PrepareWriteOp(op, buffer, sizeof(buffer), 0);
+                UNIT_ASSERT(fixture.Router->Write(&op));
+                if (phase == 1) { fixture.Backend->SubmitResults = {{-EBADF, 0}}; }
+                fixture.Issue();
+            } else {
+                fixture.Backend->HoldControls = true;
+                if (phase == 2) { TUringRouterTestPeer::Park(*fixture.Router); }
+            }
+            fixture.Backend->PeekResults = {-EBADF};
+            if (phase != 3) { TUringRouterTestPeer::Reap(*fixture.Router); }
+            unsigned elapsed = 0;
+            bool deadlineStarted = false;
+            fixture.Backend->Clock = [&] {
+                deadlineStarted = true;
+                return std::chrono::steady_clock::time_point{} + std::chrono::milliseconds(elapsed);
+            };
+            bool retired = false;
+            fixture.Backend->OnBackoff = [&] {
+                if (!deadlineStarted) { return; }
+                if (std::exchange(retired, true)) { return; }
+                elapsed = 199;
+                if (phase == 1) {
+                    fixture.Backend->ConsumePublished(TUringRouterTestPeer::Ready(*fixture.Router));
+                }
+                if (phase < 2) {
+                    fixture.Backend->Complete(op, sizeof(buffer));
+                } else {
+                    const auto& marker = fixture.Backend->Stats->Consumed.back().Sqe;
+                    fixture.Backend->PushCqe(marker.user_data, phase == 2 ? POLLIN : 0);
+                }
+            };
+            fixture.Router->StopAsync();
+            TUringRouterTestPeer::Stop(*fixture.Router);
+            UNIT_ASSERT(retired);
+            UNIT_ASSERT_VALUES_EQUAL(elapsed, 199);
+            UNIT_ASSERT_VALUES_EQUAL(op.Completions, phase < 2 ? 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(TUringRouterTestPeer::Ready(*fixture.Router), 0);
+        }
+    }
+
+    Y_UNIT_TEST(IssuerRetriesWithoutNewIngressAndBacksOffUntilProgress) {
+        auto backend = std::make_unique<TScriptedUringBackend>();
+        auto stats = backend->Stats;
+        backend->Features = 0; // Idle polling must not consume the data script.
+        backend->AutoComplete = true;
+        backend->SubmitResults = {{-EINTR}, {-EAGAIN}, {-EBUSY}, {0}};
+        backend->OnBackoff = [] { std::this_thread::yield(); };
+        char buffer[8] = {};
+        TManualEvent event;
+        TTestOp op;
+        op.Event = &event;
+        PrepareReadOp(op, buffer, sizeof(buffer), 0);
+        auto router = TUringRouterTestPeer::Create(std::move(backend));
+        router->Start();
+        UNIT_ASSERT(router->Read(&op));
+        UNIT_ASSERT(event.WaitT(TDuration::Seconds(5)));
+        router.reset(); // Join before inspecting issuer-owned script history.
+        UNIT_ASSERT_VALUES_EQUAL(op.GetResult(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(stats->InitFlags.size(), 1u);
+        UNIT_ASSERT(stats->InitFlags.front() & IORING_SETUP_SUBMIT_ALL);
+        UNIT_ASSERT(stats->InitFlags.front() & IORING_SETUP_SINGLE_ISSUER);
+        unsigned dataAttempts = 0;
+        for (const auto& attempt : stats->Attempts) {
+            if (attempt.front().Sqe.user_data == reinterpret_cast<uintptr_t>(&op)) {
+                ++dataAttempts;
+                UNIT_ASSERT_VALUES_EQUAL(attempt.size(), 1u);
+                AssertSqe(attempt.front(), IORING_OP_READ, buffer, sizeof(buffer), 0);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(dataAttempts, 5u);
+        unsigned retryBackoffs = 0;
+        for (const ui32 micros : stats->Backoffs) {
+            if (micros <= 1000) {
+                ++retryBackoffs;
+            }
+        }
+        UNIT_ASSERT_GE(retryBackoffs, 4u);
+    }
+
+    Y_UNIT_TEST(IssuerObservesStopBetweenInterruptedSubmissionAttempts) {
+        auto backend = std::make_unique<TScriptedUringBackend>();
+        auto* fake = backend.get();
+        auto stats = backend->Stats;
+        backend->Features = 0;
+        backend->SubmitResults = {{-EINTR}, {-EINTR}, {-EINTR}};
+        char buffer[8] = {};
+        TManualEvent event;
+        TTestOp op;
+        op.Event = &event;
+        PrepareReadOp(op, buffer, sizeof(buffer), 0);
+        auto router = TUringRouterTestPeer::Create(std::move(backend));
+        bool stopped = false; // Accessed only by the issuer's Backoff callback.
+        fake->OnBackoff = [&] {
+            if (!stopped && !stats->Attempts.empty()) {
+                stopped = true;
+                router->StopAsync();
+                // Settle the fake published request so StopSync does not abort
+                // on unresolved ownership during teardown.
+                fake->ConsumePublished(1);
+                fake->Complete(op, 8);
+                fake->SubmitResults.clear();
+            }
+            std::this_thread::yield();
+        };
+        router->Start();
+        UNIT_ASSERT(router->Read(&op));
+        UNIT_ASSERT(event.WaitT(TDuration::Seconds(5)));
+        UNIT_ASSERT(!router->Read(&op));
+        router.reset();
+        UNIT_ASSERT(stopped);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetResult(), 8);
+        unsigned dataAttempts = 0;
+        for (const auto& attempt : stats->Attempts) {
+            if (attempt.front().Sqe.user_data == reinterpret_cast<uintptr_t>(&op)) {
+                ++dataAttempts;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(dataAttempts, 1u);
+    }
+
+    Y_UNIT_TEST(CallbackCanImmediatelyRecycleAndReadmitOperation) {
+        TScriptedRouter fixture;
+        fixture.Initialize();
+        char buffer[8] = {};
+        TScriptedOp op;
+        PrepareReadOp(op, buffer, sizeof(buffer), 0);
+        op.Callback = [&] {
+            Y_ABORT_UNLESS(fixture.Backend->CqHead == fixture.Backend->CqTail);
+            if (op.Completions == 1) {
+                op.ResetSubmissionState();
+                PrepareWriteOp(op, buffer, 4, 32);
+                Y_ABORT_UNLESS(fixture.Router->Write(&op));
+            }
+        };
+        UNIT_ASSERT(fixture.Router->Read(&op));
+        fixture.Issue();
+        fixture.Complete(op, 3);
+        fixture.Issue();
+        fixture.Complete(op, 5);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(op.TakeShortIoCount(), 0u);
+        fixture.Issue();
+        AssertSqe(fixture.Backend->Stats->Consumed.back(), IORING_OP_WRITE, buffer, 4, 32);
+        fixture.Complete(op, 4);
+        UNIT_ASSERT_VALUES_EQUAL(op.Completions, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetResult(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0u);
+    }
+
+    Y_UNIT_TEST(TerminalCallbackCanDeleteOperationAfterShorts) {
+        struct TDeletingOp : TUringOperationBase {
+            TScriptedUringBackend* Backend = nullptr;
+            unsigned* Completions = nullptr;
+            void OnComplete(TActorSystem*) noexcept override {
+                Y_ABORT_UNLESS(Backend->CqHead == Backend->CqTail);
+                Y_ABORT_UNLESS(GetResult() == 8);
+                ++*Completions;
+                delete this;
+            }
+            void OnDrop(NActors::TActorSystem*) noexcept override { delete this; }
+        };
+        TScriptedRouter fixture;
+        fixture.Initialize();
+        unsigned completions = 0;
+        char buffer[8] = {};
+        auto owner = std::make_unique<TDeletingOp>();
+        owner->Backend = fixture.Backend;
+        owner->Completions = &completions;
+        PrepareReadOp(*owner, buffer, sizeof(buffer), 0);
+        auto* op = owner.release();
+        UNIT_ASSERT(fixture.Router->Read(op));
+        fixture.Issue();
+        fixture.Complete(*op, 3);
+        fixture.Issue();
+        fixture.Complete(*op, 5);
+        UNIT_ASSERT_VALUES_EQUAL(completions, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0u);
+    }
+
+    Y_UNIT_TEST(AggregateSuccessResultExceedsSignedCqeWidth) {
+        TScriptedRouter fixture;
+        fixture.Initialize();
+        // Repeated segments refer to valid storage without allocating the full
+        // logical 2 GiB. The fake never accesses write payload bytes.
+        constexpr size_t segmentSize = 32u << 20;
+        TAlignedBuf buffer(segmentSize);
+        TScriptedOp op;
+        op.SetOperationType(TUringOperationBase::EWRITE);
+        op.PrepareScatterGather(64, 0);
+        for (unsigned index = 0; index < 64; ++index) {
+            op.AddIov(buffer.Data(), segmentSize);
+        }
+        UNIT_ASSERT(fixture.Router->Write(&op));
+        fixture.Issue();
+        fixture.Complete(op, Max<i32>());
+        fixture.Issue();
+        fixture.Complete(op, 1);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetResult(), i64{1} << 31);
+        UNIT_ASSERT_VALUES_EQUAL(op.Completions, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0u);
+    }
+
+    Y_UNIT_TEST(ScalarAndFixedShortsCompleteOnceWithAggregateResult) {
+        for (const bool write : {false, true}) {
+            for (const bool fixed : {false, true}) {
+                TScriptedRouter fixture;
+                char buffer[24] = {};
+                iovec registrations[8];
+                for (auto& registration : registrations) {
+                    registration = {buffer, sizeof(buffer)};
+                }
+                if (fixed) {
+                    fixture.Router->RegisterBuffers(registrations, 8);
+                    fixture.Router->RegisterFile();
+                }
+                fixture.Initialize();
+                std::vector<TDeviceIoSample> samples;
+                fixture.Router->SetSampleSink([&](const TDeviceIoSample& sample) { samples.push_back(sample); });
+                TScriptedOp op;
+                op.Callback = [&] {
+                    // The completing CQE is retired before clients can recycle.
+                    Y_ABORT_UNLESS(fixture.Backend->CqHead == fixture.Backend->CqTail);
+                    Y_ABORT_UNLESS(samples.size() == 3);
+                };
+                if (fixed) {
+                    const bool accepted = write
+                        ? fixture.Router->WriteFixed(buffer, sizeof(buffer), 100, 7, &op)
+                        : fixture.Router->ReadFixed(buffer, sizeof(buffer), 100, 7, &op);
+                    UNIT_ASSERT(accepted);
+                } else {
+                    op.SetOperationType(write ? TUringOperationBase::EWRITE : TUringOperationBase::EREAD);
+                    op.PrepareIov(buffer, sizeof(buffer), 100);
+                    UNIT_ASSERT(fixture.Router->Submit(&op));
+                }
+                const int opcode = fixed
+                    ? (write ? IORING_OP_WRITE_FIXED : IORING_OP_READ_FIXED)
+                    : (write ? IORING_OP_WRITE : IORING_OP_READ);
+                for (const unsigned progress : {0u, 4u, 12u}) {
+                    fixture.Issue();
+                    AssertSqe(fixture.Backend->Stats->Consumed.back(), opcode,
+                        buffer + progress, sizeof(buffer) - progress, 100 + progress);
+                    if (fixed) {
+                        UNIT_ASSERT_VALUES_EQUAL(fixture.Backend->Stats->Consumed.back().Sqe.buf_index, 7u);
+                        UNIT_ASSERT(fixture.Backend->Stats->Consumed.back().Sqe.flags & IOSQE_FIXED_FILE);
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 1u);
+                    UNIT_ASSERT_VALUES_EQUAL(op.Completions, 0u);
+                    fixture.Complete(op, progress == 0 ? 4 : progress == 4 ? 8 : 12);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(op.Completions, 1u);
+                UNIT_ASSERT_VALUES_EQUAL(op.Drops, 0u);
+                UNIT_ASSERT_VALUES_EQUAL(op.GetResult(), sizeof(buffer));
+                UNIT_ASSERT_VALUES_EQUAL(op.GetOperationBytes(), 0u);
+                UNIT_ASSERT_VALUES_EQUAL(op.GetDiskOffset(), 124u);
+                UNIT_ASSERT_VALUES_EQUAL(op.TakeShortIoCount(), 2u);
+                UNIT_ASSERT_VALUES_EQUAL(op.TakeShortIoCount(), 0u);
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0u);
+                for (size_t index = 0; index < samples.size(); ++index) {
+                    const unsigned progress = index == 0 ? 0 : index == 1 ? 4 : 12;
+                    UNIT_ASSERT_VALUES_EQUAL(samples[index].Offset, 100 + progress);
+                    UNIT_ASSERT_VALUES_EQUAL(samples[index].Size, sizeof(buffer) - progress);
+                    UNIT_ASSERT_VALUES_EQUAL(samples[index].IsWrite, write);
+                    UNIT_ASSERT(samples[index].SubmitCycles);
+                    UNIT_ASSERT_GE(samples[index].CompleteCycles, samples[index].SubmitCycles);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(VectoredShortCrossesSegmentsThenUsesScalarRemainder) {
+        for (const bool write : {false, true}) {
+            TScriptedRouter fixture;
+            fixture.Initialize();
+            char first[4] = {}, second[8] = {}, third[12] = {};
+            TScriptedOp op;
+            op.SetOperationType(write ? TUringOperationBase::EWRITE : TUringOperationBase::EREAD);
+            op.PrepareScatterGather(3, 64);
+            op.AddIov(first, sizeof(first));
+            op.AddIov(second, sizeof(second));
+            op.AddIov(third, sizeof(third));
+            UNIT_ASSERT(fixture.Router->Submit(&op));
+            fixture.Issue();
+            const auto& initial = fixture.Backend->Stats->Consumed.back();
+            UNIT_ASSERT(initial.Sqe.opcode == (write ? IORING_OP_WRITEV : IORING_OP_READV));
+            UNIT_ASSERT_VALUES_EQUAL(initial.Iovs.size(), 3u);
+            fixture.Complete(op, 6);
+            fixture.Issue();
+            const auto& middle = fixture.Backend->Stats->Consumed.back();
+            UNIT_ASSERT_VALUES_EQUAL(middle.Iovs.size(), 2u);
+            UNIT_ASSERT_EQUAL(middle.Iovs[0].iov_base, second + 2);
+            UNIT_ASSERT_VALUES_EQUAL(middle.Iovs[0].iov_len, 6u);
+            UNIT_ASSERT_VALUES_EQUAL(middle.Sqe.off, 70u);
+            fixture.Complete(op, 6);
+            fixture.Issue();
+            AssertSqe(fixture.Backend->Stats->Consumed.back(), write ? IORING_OP_WRITE : IORING_OP_READ,
+                third, sizeof(third), 76);
+            fixture.Complete(op, 12);
+            UNIT_ASSERT_VALUES_EQUAL(op.Completions, 1u);
+            UNIT_ASSERT_VALUES_EQUAL(op.GetResult(), 24);
+            UNIT_ASSERT_VALUES_EQUAL(op.TakeShortIoCount(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0u);
+        }
+    }
+
+    Y_UNIT_TEST(ShortThenZeroOrNegativeCompletesWithoutRetryingDataError) {
+        for (const int result : {0, -EIO, -EAGAIN, -EBUSY, -EINTR}) {
+            TScriptedRouter fixture;
+            fixture.Initialize();
+            char buffer[8] = {};
+            TScriptedOp op;
+            PrepareReadOp(op, buffer, sizeof(buffer), 0);
+            UNIT_ASSERT(fixture.Router->Read(&op));
+            fixture.Issue();
+            fixture.Complete(op, 3);
+            fixture.Issue();
+            fixture.Complete(op, result);
+            fixture.Issue();
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Backend->Stats->Consumed.size(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(op.Completions, 1u);
+            UNIT_ASSERT_VALUES_EQUAL(op.Drops, 0u);
+            UNIT_ASSERT_VALUES_EQUAL(op.GetResult(), result ? result : -EIO);
+            UNIT_ASSERT_VALUES_EQUAL(op.GetDiskOffset(), 3u);
+            UNIT_ASSERT_VALUES_EQUAL(op.GetOperationBytes(), 5u);
+            UNIT_ASSERT_VALUES_EQUAL(op.TakeShortIoCount(), 1u);
+            UNIT_ASSERT(!fixture.Router->IsBroken());
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0u);
+        }
+    }
+
+    Y_UNIT_TEST(StopCancelsQueuedAndStagedContinuationsButDropsFreshOperations) {
+        for (const bool staged : {false, true}) {
+            TScriptedRouter fixture;
+            fixture.Initialize();
+            char buffer[8] = {};
+            TScriptedOp partial, fresh;
+            PrepareWriteOp(partial, buffer, sizeof(buffer), 0);
+            PrepareWriteOp(fresh, buffer, sizeof(buffer), 0);
+            UNIT_ASSERT(fixture.Router->Write(&partial));
+            fixture.Issue();
+            fixture.Complete(partial, 3);
+            UNIT_ASSERT(fixture.Router->Write(&fresh));
+            if (staged) {
+                TUringRouterTestPeer::Drain(*fixture.Router);
+                UNIT_ASSERT_VALUES_EQUAL(TUringRouterTestPeer::Staged(*fixture.Router), 2u);
+            }
+            fixture.Router->StopAsync();
+            fixture.Issue();
+            UNIT_ASSERT_VALUES_EQUAL(partial.Completions, 1u);
+            UNIT_ASSERT_VALUES_EQUAL(partial.GetResult(), -ECANCELED);
+            UNIT_ASSERT_VALUES_EQUAL(partial.Drops, 0u);
+            UNIT_ASSERT_VALUES_EQUAL(fresh.Completions, 0u);
+            UNIT_ASSERT_VALUES_EQUAL(fresh.Drops, 1u);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Backend->Stats->Consumed.size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0u);
+        }
+    }
+
+    Y_UNIT_TEST(ShortCompletionAfterStopDoesNotPrepareAnotherSqe) {
+        TScriptedRouter fixture;
+        fixture.Initialize();
+        char buffer[8] = {};
+        TScriptedOp op;
+        PrepareReadOp(op, buffer, sizeof(buffer), 0);
+        UNIT_ASSERT(fixture.Router->Read(&op));
+        fixture.Issue();
+        fixture.Router->StopAsync();
+        fixture.Complete(op, 3);
+        fixture.Issue();
+        UNIT_ASSERT_VALUES_EQUAL(op.Completions, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetResult(), -ECANCELED);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Backend->Stats->Consumed.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0u);
+    }
+
+    Y_UNIT_TEST(FullSqDefersContinuationWithoutReadmission) {
+        TScriptedRouter fixture(1);
+        fixture.Initialize();
+        char buffer[8] = {};
+        TScriptedOp partial, blocker;
+        PrepareReadOp(partial, buffer, sizeof(buffer), 0);
+        PrepareWriteOp(blocker, buffer, sizeof(buffer), 0);
+        UNIT_ASSERT(fixture.Router->Read(&partial));
+        fixture.Issue();
+        UNIT_ASSERT(fixture.Router->Write(&blocker));
+        TUringRouterTestPeer::Drain(*fixture.Router);
+        fixture.Complete(partial, 3);
+        TUringRouterTestPeer::Drain(*fixture.Router);
+        UNIT_ASSERT_VALUES_EQUAL(TUringRouterTestPeer::Staged(*fixture.Router), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 2u);
+        TUringRouterTestPeer::Submit(*fixture.Router);
+        fixture.Complete(blocker, 8);
+        fixture.Issue();
+        AssertSqe(fixture.Backend->Stats->Consumed.back(), IORING_OP_READ, buffer + 3, 5, 3);
+        fixture.Complete(partial, 5);
+        UNIT_ASSERT_VALUES_EQUAL(partial.Completions, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(blocker.Completions, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0u);
+    }
+
+    Y_UNIT_TEST(TransientSubmitErrorsReusePublishedSqesAndReapBetweenAttempts) {
+        TScriptedRouter fixture;
+        fixture.Initialize();
+        char buffer[8] = {};
+        TScriptedOp first, second, third;
+        for (auto* op : {&first, &second, &third}) {
+            PrepareReadOp(*op, buffer, sizeof(buffer), 0);
+            UNIT_ASSERT(fixture.Router->Read(op));
+        }
+        fixture.Backend->SubmitResults = {{1, 1}, {-EINTR}, {-EAGAIN}, {-EBUSY}, {0}, {2, 2}};
+        fixture.Issue();
+        fixture.Complete(first, 8);
+        UNIT_ASSERT_VALUES_EQUAL(first.Completions, 1u);
+        for (unsigned attempt = 0; attempt < 5; ++attempt) {
+            UNIT_ASSERT(!TUringRouterTestPeer::Drain(*fixture.Router));
+            TUringRouterTestPeer::Submit(*fixture.Router);
+            TUringRouterTestPeer::Reap(*fixture.Router);
+            UNIT_ASSERT(!fixture.Router->IsBroken());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Backend->Stats->Attempts.size(), 6u);
+        for (size_t attempt = 1; attempt < fixture.Backend->Stats->Attempts.size(); ++attempt) {
+            const auto& suffix = fixture.Backend->Stats->Attempts[attempt];
+            UNIT_ASSERT_VALUES_EQUAL(suffix.size(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(suffix[0].Sqe.user_data, reinterpret_cast<uintptr_t>(&second));
+            UNIT_ASSERT_VALUES_EQUAL(suffix[1].Sqe.user_data, reinterpret_cast<uintptr_t>(&third));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Backend->Stats->Consumed.size(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(TUringRouterTestPeer::Ready(*fixture.Router), 0u);
+        fixture.Complete(second, 8);
+        fixture.Complete(third, 8);
+        UNIT_ASSERT_VALUES_EQUAL(second.Completions, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(third.Completions, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0u);
+    }
+
+    Y_UNIT_TEST(FatalSubmissionRetainsPublishedSuffixAndFreezesEverySubmitPath) {
+        for (const bool alreadyStopping : {false, true}) {
+            TScriptedRouter fixture;
+            fixture.Initialize();
+            char buffer[8] = {};
+            TScriptedOp consumed, published, fresh;
+            for (auto* op : {&consumed, &published}) {
+                PrepareReadOp(*op, buffer, sizeof(buffer), 0);
+                UNIT_ASSERT(fixture.Router->Read(op));
+            }
+            PrepareReadOp(fresh, buffer, sizeof(buffer), 0);
+            fixture.Backend->SubmitResults = {{-EAGAIN, 1}, {-EBADF}};
+            fixture.Issue();
+            UNIT_ASSERT(fixture.Router->Read(&fresh));
+            if (alreadyStopping) {
+                fixture.Router->StopAsync();
+            }
+            TUringRouterTestPeer::Submit(*fixture.Router, true);
+            UNIT_ASSERT(fixture.Router->IsBroken());
+            UNIT_ASSERT_EQUAL(TUringRouterTestPeer::State(*fixture.Router), EUringRouterState::StoppingBroken);
+            UNIT_ASSERT(!fixture.Router->Read(&fresh));
+            fixture.Issue();
+            UNIT_ASSERT_VALUES_EQUAL(fresh.Drops, 1u);
+            UNIT_ASSERT_VALUES_EQUAL(consumed.Completions + consumed.Drops, 0u);
+            UNIT_ASSERT_VALUES_EQUAL(published.Completions + published.Drops, 0u);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(TUringRouterTestPeer::Ready(*fixture.Router), 1u);
+            TUringRouterTestPeer::Park(*fixture.Router);
+            TUringRouterTestPeer::Submit(*fixture.Router, true);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Backend->Stats->Attempts.size(), 2u);
+            // Artificially settle fake ownership so StopSync does not abort
+            // during teardown. This is not a claim that a real non-SQPOLL ring
+            // consumes a suffix without enter.
+            fixture.Backend->ConsumePublished(1);
+            fixture.Complete(consumed, 8);
+            fixture.Complete(published, 8);
+            TUringRouterTestPeer::Stop(*fixture.Router);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Backend->Stats->Attempts.size(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0u);
+            UNIT_ASSERT_VALUES_EQUAL(consumed.Completions, 1u);
+            UNIT_ASSERT_VALUES_EQUAL(published.Completions, 1u);
+        }
+    }
+
+    Y_UNIT_TEST(FatalSubmitResultIsClassifiedEvenIfKernelConsumedWholeBatch) {
+        TScriptedRouter fixture;
+        fixture.Initialize();
+        char buffer[8] = {};
+        TScriptedOp op;
+        PrepareReadOp(op, buffer, sizeof(buffer), 0);
+        UNIT_ASSERT(fixture.Router->Read(&op));
+        fixture.Backend->SubmitResults = {{-EBADF, 1}};
+        fixture.Issue();
+        UNIT_ASSERT(fixture.Router->IsBroken());
+        UNIT_ASSERT_VALUES_EQUAL(TUringRouterTestPeer::Ready(*fixture.Router), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 1u);
+        fixture.Complete(op, 8);
+        UNIT_ASSERT_VALUES_EQUAL(op.Completions, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(op.Drops, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0u);
+    }
+
+    Y_UNIT_TEST(PeekErrorsRetryTransientFailuresAndBreakOnFatalFailure) {
+        TScriptedRouter fixture;
+        fixture.Initialize();
+        char buffer[8] = {};
+        TScriptedOp op;
+        PrepareReadOp(op, buffer, sizeof(buffer), 0);
+        UNIT_ASSERT(fixture.Router->Read(&op));
+        fixture.Issue();
+        fixture.Backend->Complete(op, 8);
+        fixture.Backend->PeekResults = {-EINTR, -EBUSY, -EAGAIN};
+        for (unsigned pass = 0; pass < 4 && !op.Completions; ++pass) {
+            TUringRouterTestPeer::Reap(*fixture.Router);
+            UNIT_ASSERT(!fixture.Router->IsBroken());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(op.Completions, 1u);
+        fixture.Backend->PeekResults = {-EINVAL};
+        TUringRouterTestPeer::Reap(*fixture.Router);
+        UNIT_ASSERT(fixture.Router->IsBroken());
+        UNIT_ASSERT_EQUAL(TUringRouterTestPeer::State(*fixture.Router), EUringRouterState::StoppingBroken);
+    }
+
+    Y_UNIT_TEST(FatalWaitOrPeekRetiresOutstandingWakePollWithoutStopSubmission) {
+        for (const bool failWait : {false, true}) {
+            TScriptedRouter fixture;
+            fixture.Initialize();
+            if (failWait) {
+                fixture.Backend->WaitResults = {-EBADF};
+            }
+            TUringRouterTestPeer::Park(*fixture.Router);
+            if (!failWait) {
+                fixture.Backend->PeekResults = {-EBADF};
+                TUringRouterTestPeer::Reap(*fixture.Router);
+            }
+            UNIT_ASSERT(fixture.Router->IsBroken());
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Backend->Stats->Attempts.size(), 1u);
+            UNIT_ASSERT(fixture.Backend->Stats->Consumed.front().Sqe.opcode == IORING_OP_POLL_ADD);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Backend->CqTail - fixture.Backend->CqHead, 1u);
+            TUringRouterTestPeer::Stop(*fixture.Router);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Backend->Stats->Attempts.size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Backend->CqTail, fixture.Backend->CqHead);
+        }
+    }
+
+    Y_UNIT_TEST(ControlCqeFailureBreaksRingAndRetiresControlOwnership) {
+        for (const bool failPoll : {false, true}) {
+            TScriptedRouter fixture;
+            fixture.Initialize();
+            fixture.Backend->ControlResults = {-EIO};
+            if (failPoll) {
+                TUringRouterTestPeer::Park(*fixture.Router);
+                TUringRouterTestPeer::Reap(*fixture.Router);
+            } else {
+                fixture.Router->StopAsync();
+                TUringRouterTestPeer::Stop(*fixture.Router);
+            }
+            UNIT_ASSERT(fixture.Router->IsBroken());
+            UNIT_ASSERT_EQUAL(TUringRouterTestPeer::State(*fixture.Router), EUringRouterState::StoppingBroken);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Backend->CqTail, fixture.Backend->CqHead);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Backend->Stats->Attempts.size(), 1u);
+        }
+    }
+
+    Y_UNIT_TEST(InitializationRetriesInterruptsAndFallsBackToPlainRing) {
+        auto backend = std::make_unique<TScriptedUringBackend>();
+        backend->InitResults = {-EINTR, -EINVAL, -EINTR, 0};
+        backend->EnableResults = {-EINTR, 0};
+        backend->FileResults = {-EINTR, -EPERM};
+        backend->BufferResults = {-EINTR, -ENOMEM};
+        TScriptedRouter fixture(16, std::move(backend));
+        fixture.Router->RegisterFile();
+        char buffer[8] = {};
+        iovec registration{buffer, sizeof(buffer)};
+        fixture.Router->RegisterBuffers(&registration, 1);
+        fixture.Initialize();
+        const auto& stats = *fixture.Backend->Stats;
+        UNIT_ASSERT_VALUES_EQUAL(stats.InitFlags.size(), 4u);
+        UNIT_ASSERT(stats.InitFlags[0] & IORING_SETUP_SINGLE_ISSUER);
+        UNIT_ASSERT_VALUES_EQUAL(stats.InitFlags[0], stats.InitFlags[1]);
+        UNIT_ASSERT(!(stats.InitFlags[2] & IORING_SETUP_SINGLE_ISSUER));
+        UNIT_ASSERT_VALUES_EQUAL(stats.InitFlags[2], stats.InitFlags[3]);
+        for (const unsigned flags : stats.InitFlags) {
+            UNIT_ASSERT(flags & IORING_SETUP_SUBMIT_ALL);
+            UNIT_ASSERT(flags & IORING_SETUP_R_DISABLED);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(stats.EnableCalls, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(stats.FileRegistrationCalls, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(stats.BufferRegistrationCalls, 2u);
+        UNIT_ASSERT_EQUAL(fixture.Router->GetUringFavor(), EUringFavor::Plain);
+        UNIT_ASSERT(!fixture.Router->IsFileRegistered());
+        UNIT_ASSERT(!fixture.Router->AreBuffersRegistered());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetRegisterFileErrno(), EPERM);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetRegisterBuffersErrno(), ENOMEM);
+        UNIT_ASSERT(!fixture.Router->IsBroken());
+        TScriptedOp op;
+        PrepareReadOp(op, buffer, sizeof(buffer), 0);
+        UNIT_ASSERT(fixture.Router->Read(&op));
+        fixture.Issue();
+        UNIT_ASSERT(!(stats.Consumed.back().Sqe.flags & IOSQE_FIXED_FILE));
+        fixture.Complete(op, 8);
+    }
+
+    Y_UNIT_TEST(UnsupportedSubmitAllFallsBackAndRetriesPartialSubmission) {
+        auto backend = std::make_unique<TScriptedUringBackend>();
+        backend->InitResults = {-EINVAL, -EINTR, -EINVAL, -EINTR, 0};
+        TScriptedRouter fixture(16, std::move(backend));
+        fixture.Initialize();
+        const auto& stats = *fixture.Backend->Stats;
+        UNIT_ASSERT_VALUES_EQUAL(stats.InitFlags.size(), 5u);
+        UNIT_ASSERT(stats.InitFlags[0] & IORING_SETUP_SINGLE_ISSUER);
+        UNIT_ASSERT(stats.InitFlags[0] & IORING_SETUP_SUBMIT_ALL);
+        UNIT_ASSERT_VALUES_EQUAL(stats.InitFlags[1], IORING_SETUP_R_DISABLED | IORING_SETUP_SUBMIT_ALL);
+        UNIT_ASSERT_VALUES_EQUAL(stats.InitFlags[1], stats.InitFlags[2]);
+        UNIT_ASSERT_VALUES_EQUAL(stats.InitFlags[3], IORING_SETUP_R_DISABLED);
+        UNIT_ASSERT_VALUES_EQUAL(stats.InitFlags[3], stats.InitFlags[4]);
+        UNIT_ASSERT_EQUAL(fixture.Router->GetUringFavor(), EUringFavor::Plain);
+
+        char buffer[8] = {};
+        TScriptedOp failed, later;
+        for (auto* op : {&failed, &later}) {
+            PrepareReadOp(*op, buffer, sizeof(buffer), 0);
+            UNIT_ASSERT(fixture.Router->Read(op));
+        }
+        // Without SUBMIT_ALL, a submission-time failure can stop the batch
+        // after its failing SQE. That SQE still receives an error CQE.
+        fixture.Backend->SubmitResults = {{1, 1}, {1, 1}};
+        fixture.Issue();
+        fixture.Complete(failed, -EINVAL);
+        UNIT_ASSERT(!fixture.Router->IsBroken());
+        UNIT_ASSERT_VALUES_EQUAL(failed.GetResult(), -EINVAL);
+        UNIT_ASSERT_VALUES_EQUAL(failed.Completions, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(later.Completions, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(TUringRouterTestPeer::Ready(*fixture.Router), 1u);
+        fixture.Issue();
+        UNIT_ASSERT_VALUES_EQUAL(stats.Attempts.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(stats.Attempts.back().size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(stats.Attempts.back().front().Sqe.user_data,
+            reinterpret_cast<uintptr_t>(&later));
+        fixture.Complete(later, 8);
+        UNIT_ASSERT_VALUES_EQUAL(later.Completions, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0u);
+    }
+
+    Y_UNIT_TEST(SubmitAllFallbackDoesNotHideFatalSetupErrors) {
+        for (const int error : {EPERM, ENOMEM, EOPNOTSUPP}) {
+            for (const bool unsupportedSubmitAll : {false, true}) {
+                auto backend = std::make_unique<TScriptedUringBackend>();
+                const auto stats = backend->Stats;
+                backend->InitResults = {-EINVAL};
+                if (unsupportedSubmitAll) {
+                    backend->InitResults.push_back(-EINVAL);
+                }
+                backend->InitResults.push_back(-error);
+                auto router = TUringRouterTestPeer::Create(std::move(backend));
+                router->Start();
+                UNIT_ASSERT(router->IsBroken());
+                UNIT_ASSERT_EQUAL(router->GetUringFavor(), EUringFavor::FallbackPDisk);
+                UNIT_ASSERT_VALUES_EQUAL(stats->InitFlags.size(), unsupportedSubmitAll ? 3u : 2u);
+                UNIT_ASSERT_VALUES_EQUAL(stats->InitFlags.back(), IORING_SETUP_R_DISABLED
+                    | (unsupportedSubmitAll ? 0u : IORING_SETUP_SUBMIT_ALL));
+                router.reset();
+                UNIT_ASSERT_VALUES_EQUAL(stats->EnableCalls, 0u);
+                UNIT_ASSERT_VALUES_EQUAL(stats->ExitCalls, 0u);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(FailedInitializationAndEnableReleaseStartAndExitOnlyInitializedRing) {
+        for (const bool failInit : {false, true}) {
+            auto backend = std::make_unique<TScriptedUringBackend>();
+            auto stats = backend->Stats;
+            if (failInit) {
+                backend->InitResults = {-EPERM, -EPERM};
+            } else {
+                backend->EnableResults = {-EINVAL};
+            }
+            auto router = TUringRouterTestPeer::Create(std::move(backend));
+            router->Start();
+            UNIT_ASSERT(router->IsBroken());
+            char buffer[8] = {};
+            TScriptedOp op;
+            PrepareReadOp(op, buffer, sizeof(buffer), 0);
+            UNIT_ASSERT(!router->Read(&op));
+            UNIT_ASSERT_VALUES_EQUAL(op.Completions + op.Drops, 0u);
+            router.reset();
+            UNIT_ASSERT_VALUES_EQUAL(stats->EnableCalls, failInit ? 0u : 1u);
+            UNIT_ASSERT_VALUES_EQUAL(stats->ExitCalls, failInit ? 0u : 1u);
+        }
+    }
+
+    Y_UNIT_TEST(TimedWaitFeatureGateAvoidsImplicitTimeoutSqes) {
+        for (const bool extArg : {false, true}) {
+            auto backend = std::make_unique<TScriptedUringBackend>();
+            backend->Features = extArg ? IORING_FEAT_EXT_ARG : 0;
+            TScriptedRouter fixture(16, std::move(backend));
+            fixture.Initialize();
+            TUringRouterTestPeer::WaitProgress(*fixture.Router);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Backend->Stats->WaitCalls, extArg ? 1u : 0u);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Backend->Stats->Attempts.size(), 0u);
+            UNIT_ASSERT_VALUES_EQUAL(TUringRouterTestPeer::Staged(*fixture.Router), 0u);
+            if (!extArg) {
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Backend->Stats->Backoffs.size(), 1u);
+                UNIT_ASSERT_LE(fixture.Backend->Stats->Backoffs.back(), 5000u);
+                TUringRouterTestPeer::Park(*fixture.Router);
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Backend->Stats->Attempts.size(), 0u);
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Backend->Stats->Backoffs.back(), 5000u);
+            }
+            UNIT_ASSERT(!fixture.Router->IsBroken());
+
+            char buffer[8] = {};
+            TScriptedOp op;
+            PrepareReadOp(op, buffer, sizeof(buffer), 0);
+            UNIT_ASSERT(fixture.Router->Read(&op));
+            fixture.Backend->SubmitResults = {{-EAGAIN}};
+            fixture.Issue();
+            const auto waitsBefore = fixture.Backend->Stats->WaitCalls;
+            TUringRouterTestPeer::WaitProgress(*fixture.Router);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Backend->Stats->WaitCalls, waitsBefore);
+            UNIT_ASSERT_LE(fixture.Backend->Stats->Backoffs.back(), 1000u);
+            fixture.Issue();
+            fixture.Complete(op, 8);
+        }
+    }
+
+    Y_UNIT_TEST(TimedWaitErrorsPreserveRetryPolicyAndFatalStoppingUpgrade) {
+        TScriptedRouter fixture;
+        fixture.Initialize();
+        for (const int result : {-EINTR, -EAGAIN, -EBUSY, -ETIME}) {
+            fixture.Backend->WaitResults = {result};
+            TUringRouterTestPeer::WaitProgress(*fixture.Router);
+            UNIT_ASSERT(!fixture.Router->IsBroken());
+        }
+        fixture.Router->StopAsync();
+        fixture.Backend->WaitResults = {-EBADF};
+        TUringRouterTestPeer::WaitProgress(*fixture.Router);
+        UNIT_ASSERT(fixture.Router->IsBroken());
+        UNIT_ASSERT_EQUAL(TUringRouterTestPeer::State(*fixture.Router), EUringRouterState::StoppingBroken);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Backend->Stats->Attempts.size(), 0u);
+    }
+
+    Y_UNIT_TEST(ExternalRetryKeepsProgressAndResetsAdmissionBookkeeping) {
+        TScriptedRouter fixture;
+        fixture.Initialize();
+        char buffer[8] = {};
+        TScriptedOp op;
+        PrepareReadOp(op, buffer, sizeof(buffer), 0);
+        UNIT_ASSERT(fixture.Router->Read(&op));
+        fixture.Issue();
+        fixture.Complete(op, 3);
+        fixture.Issue();
+        fixture.Complete(op, -EAGAIN);
+        UNIT_ASSERT_VALUES_EQUAL(op.TakeShortIoCount(), 1u);
+        UNIT_ASSERT(fixture.Router->Read(&op));
+        fixture.Issue();
+        AssertSqe(fixture.Backend->Stats->Consumed.back(), IORING_OP_READ, buffer + 3, 5, 3);
+        fixture.Complete(op, 5);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetResult(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(op.Completions, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(op.TakeShortIoCount(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0u);
+    }
+
+    Y_UNIT_TEST(PreparingNewRequestClearsUnconsumedShortCount) {
+        for (const bool scatter : {false, true}) {
+            TScriptedRouter fixture;
+            fixture.Initialize();
+            char buffer[8] = {};
+            TScriptedOp op;
+            PrepareReadOp(op, buffer, sizeof(buffer), 0);
+            UNIT_ASSERT(fixture.Router->Read(&op));
+            fixture.Issue();
+            fixture.Complete(op, 3);
+            fixture.Issue();
+            fixture.Complete(op, -EIO);
+            if (scatter) {
+                op.PrepareScatterGather(2, 16);
+                op.AddIov(buffer, 4);
+                op.AddIov(buffer + 4, 4);
+            } else {
+                op.PrepareIov(buffer, sizeof(buffer), 16);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(op.TakeShortIoCount(), 0u);
+            UNIT_ASSERT_VALUES_EQUAL(op.GetOperationBytes(), 8u);
+            UNIT_ASSERT_VALUES_EQUAL(op.GetDiskOffset(), 16u);
+            UNIT_ASSERT(fixture.Router->Read(&op));
+            fixture.Issue();
+            fixture.Complete(op, 8);
+            UNIT_ASSERT_VALUES_EQUAL(op.Completions, 2u);
+            UNIT_ASSERT_VALUES_EQUAL(op.GetResult(), 8);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0u);
+        }
     }
 }

@@ -185,7 +185,9 @@ void TNodeWarden::RenderWholePage(IOutputStream& out) {
             DIV() {
                 out << "PDiskRestartInFlight# [";
                 for (const auto& item : PDiskRestartInFlight) {
-                    out << "pdiskId:" << item.first << " -> needsAnotherRestart: " << item.second << ", ";
+                    out << "pdiskId:" << item.first << " -> needsAnotherRestart: " << item.second.RequiresAnotherRestart
+                        << " phase: " << (item.second.Phase == TPDiskRestart::EPhase::WaitingForDDisks ? "waiting for DDisks" : "restart sent")
+                        << " waitingFor: " << FormatList(item.second.WaitingFor) << ", ";
                 }
                 out << "]";
             }

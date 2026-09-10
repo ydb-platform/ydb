@@ -22,6 +22,7 @@ For example, you can generate a [load on Distributed Storage](load-actors-storag
 | [KqpLoad](load-actors-kqp.md) | Generates a load on the Query Processor layer and loads all cluster components. |
 | [KeyValueLoad](load-actors-key-value.md) | Loads a key-value tablet. |
 | [StorageLoad](load-actors-storage.md) | Loads Distributed Storage without using tablet and Query Processor layers. |
+| [NbsDbgLikeLoad](load-actors-nbs-dbg-like.md) | Generates an NBS-like block workload through a persistent load tablet, Direct Block Groups, PersistentBuffer, and DDisk. |
 | [VDiskLoad](load-actors-vdisk.md) | Tests the performance of writes to the VDisk. |
 | [PDiskWriteLoad](load-actors-pdisk-write.md) | Tests the performance of writes to the PDisk. |
 | [PDiskReadLoad](load-actors-pdisk-read.md) | Tests the performance of reads from the PDisk. |

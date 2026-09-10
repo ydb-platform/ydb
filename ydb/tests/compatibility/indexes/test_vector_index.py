@@ -188,7 +188,7 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
                 for row in rows:
                     assert row['target'] is not None, "the distance is None"
 
-    def _indexed_search(self):
+    def _indexed_search(self, variants):
         queries = []
 
         def predicate():
@@ -200,7 +200,6 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
                 raise ex
             return True
 
-        variants = self._all_variants()
         with ydb.QuerySessionPool(self.driver) as session_pool:
             for [prefixed, vector_type, distance, distance_func, overlap] in variants:
                 table_name = f"{vector_type}_{distance}_{distance_func}{prefixed}_{overlap}"
@@ -243,7 +242,16 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
                 vector_type=vector_type,
                 table_name=table_name,
             )
-        for _ in self.roll():
+
+        roll_steps = 1 + 2 * (len(self.cluster.nodes) + len(self.cluster.slots))
+        tested_variants = 0
+        for step, _ in enumerate(self.roll()):
             self._knn_search()
-        for _ in self.roll():
-            self._indexed_search()
+
+            # Exercise indexed DDL and DML at every rolling state without
+            # rebuilding the complete variant matrix at every state.
+            step_variants = variants[step::roll_steps]
+            self._indexed_search(step_variants)
+            tested_variants += len(step_variants)
+
+        assert tested_variants == len(variants), "Not all vector index variants were tested"

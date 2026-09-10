@@ -888,7 +888,7 @@ class TStateUpdater: public TUpdaterBase<TEvSentinel::TEvStateUpdated, TStateUpd
         MarkNode(nodeId, TNodeInfo::ENodeState::GOOD);
 
         if (!record.PDiskStateInfoSize()) {
-            YDB_LOG_ERROR("There is no pdisk info",
+            YDB_LOG_DEBUG("There is no pdisk info",
                 {"name", Name()},
                 {"nodeId", nodeId});
             MarkNodePDisks(nodeId, NKikimrBlobStorage::TPDiskState::Missing);

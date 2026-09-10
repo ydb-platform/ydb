@@ -4556,6 +4556,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                             const TString issues(result.GetIssues().ToOneLineString());
                             if (issues.Contains("Streaming query already under operation")
                                 || issues.Contains("path version mistmach")
+                                || issues.Contains("path exists but creating right now")
                                 || issues.Contains("path is under operation")
                                 || issues.Contains("path is being deleted right now")) {
                                 return TStatus(EStatus::UNAVAILABLE, NYdb::NIssue::TIssues(result.GetIssues()));

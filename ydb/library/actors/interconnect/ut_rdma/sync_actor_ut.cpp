@@ -456,26 +456,37 @@ TEST_P(TRdmaSyncActorTest, HandshakeStopsSyncActorWhenProxyDisconnects) {
     const TActorId peerProxyId = runtime.GetInterconnectProxy(1, 0);
     TActorId outgoingHandshakeId;
     TActorId syncActorId;
+    TActorId peerHandshakeId;
+    TActorId peerSyncActorId;
+    TActorId preinitializedSessionId;
+    bool localSessionCreationInProgress = false;
     THashMap<TActorId, TActorId> parents;
     runtime.SetRegistrationObserverFunc([&](TTestActorRuntimeBase&, const TActorId& parentId, const TActorId& actorId) {
         parents.emplace(actorId, parentId);
+        if (localSessionCreationInProgress && !preinitializedSessionId) {
+            preinitializedSessionId = actorId;
+        }
     });
 
     bool peerSessionCreationBlocked = false;
     bool localSessionCreated = false;
     runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-        if (ev->Recipient == proxyId && ev->GetTypeRewrite() == TEvProxyCall::EventType) {
+        if (!syncActorId && ev->Recipient == proxyId && ev->GetTypeRewrite() == TEvProxyCall::EventType) {
             syncActorId = ev->Sender;
             outgoingHandshakeId = parents.at(syncActorId);
+            localSessionCreationInProgress = true;
         } else if (ev->Recipient == peerProxyId && ev->GetTypeRewrite() == TEvProxyCall::EventType) {
             // Do not let the peer create its preinitialized session, so it cannot
             // send StartSync back over the real TCP connection.
+            peerSyncActorId = ev->Sender;
+            peerHandshakeId = parents.at(peerSyncActorId);
             peerSessionCreationBlocked = true;
             return TTestActorRuntimeBase::EEventAction::DROP;
         } else if (syncActorId && ev->Recipient == syncActorId && ev->GetTypeRewrite() == TEvProxyCall::EventType) {
             // The local sync actor will process this response, send StartSync and
             // suspend waiting for the peer's StartSync.
             localSessionCreated = true;
+            localSessionCreationInProgress = false;
         }
         return TTestActorRuntimeBase::EEventAction::PROCESS;
     });
@@ -491,16 +502,26 @@ TEST_P(TRdmaSyncActorTest, HandshakeStopsSyncActorWhenProxyDisconnects) {
     ASSERT_TRUE(runtime.DispatchEvents(waitForSessionCreation, TDuration::Seconds(30)));
     ASSERT_TRUE(outgoingHandshakeId);
     ASSERT_TRUE(syncActorId);
+    ASSERT_TRUE(peerHandshakeId);
+    ASSERT_TRUE(peerSyncActorId);
+    ASSERT_TRUE(preinitializedSessionId);
     ASSERT_NE(runtime.FindActor(outgoingHandshakeId), nullptr);
     ASSERT_NE(runtime.FindActor(syncActorId), nullptr);
+    ASSERT_NE(runtime.FindActor(peerHandshakeId), nullptr);
+    ASSERT_NE(runtime.FindActor(peerSyncActorId), nullptr);
+    ASSERT_NE(runtime.FindActor(preinitializedSessionId), nullptr);
 
     // Exercise the production ownership chain: proxy -> handshake -> RDMA sync actor.
     runtime.Send(new IEventHandle(proxyId, edge, new TEvInterconnect::TEvDisconnect), 0, true);
+    runtime.Send(new IEventHandle(peerProxyId, edge, new TEvInterconnect::TEvDisconnect), 1, true);
 
     TDispatchOptions waitForActorsTermination;
     waitForActorsTermination.CustomFinalCondition = [&] {
         return runtime.FindActor(outgoingHandshakeId) == nullptr
-            && runtime.FindActor(syncActorId) == nullptr;
+            && runtime.FindActor(syncActorId) == nullptr
+            && runtime.FindActor(peerHandshakeId) == nullptr
+            && runtime.FindActor(peerSyncActorId) == nullptr
+            && runtime.FindActor(preinitializedSessionId) == nullptr;
     };
     waitForActorsTermination.Quiet = true;
     ASSERT_TRUE(runtime.DispatchEvents(waitForActorsTermination, TDuration::Seconds(1)));

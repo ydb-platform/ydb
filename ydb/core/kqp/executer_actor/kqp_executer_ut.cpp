@@ -101,8 +101,24 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
         bool resuming = false;
         ui64 rowsWhilePaused = 0;
         ui64 rowsAfterResume = 0;
+        auto streamSender = runtime.AllocateEdgeActor();
+        bool receivedCurrentStats = false;
+        ui64 reportedCpuTimeUs = 0;
+        ui64 reportedReadBytes = 0;
 
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvKqpExecuter::TEvExecuterProgress::EventType
+                && ev->Recipient == streamSender) {
+                const auto& progress = ev->Get<TEvKqpExecuter::TEvExecuterProgress>()->Record;
+                UNIT_ASSERT(progress.HasCurrentExecutionStats());
+                const auto& current = progress.GetCurrentExecutionStats();
+                UNIT_ASSERT_GE(current.GetCpuTimeUs(), reportedCpuTimeUs);
+                UNIT_ASSERT_GE(current.GetTableReadBytes(), reportedReadBytes);
+                reportedCpuTimeUs = current.GetCpuTimeUs();
+                reportedReadBytes = current.GetTableReadBytes();
+                receivedCurrentStats = true;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
             if (ev->GetTypeRewrite() == TEvKqpExecuter::TEvStreamData::EventType) {
                 auto& record = ev->Get<TEvKqpExecuter::TEvStreamData>()->Record;
                 auto resp = MakeHolder<TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
@@ -124,14 +140,19 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-        auto streamSender = runtime.AllocateEdgeActor();
-        NDataShard::NKqpHelpers::SendRequest(runtime, streamSender,
-            NDataShard::NKqpHelpers::MakeStreamRequest(streamSender, "SELECT * FROM `/Root/ManyShardsTable`;", false));
+        auto request = NDataShard::NKqpHelpers::MakeStreamRequest(
+            streamSender, "SELECT * FROM `/Root/ManyShardsTable`;", false);
+        request->Record.MutableRequest()->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC);
+        request->SetProgressStatsPeriod(TDuration::MilliSeconds(1));
+        NDataShard::NKqpHelpers::SendRequest(runtime, streamSender, std::move(request));
 
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT(!pausedChannels.empty());
         UNIT_ASSERT_LT_C(rowsWhilePaused, totalRows,
             "not all rows should be delivered while every result channel is paused");
+        UNIT_ASSERT_C(receivedCurrentStats, "expected execution stats before the query completes");
+        UNIT_ASSERT_GT(reportedCpuTimeUs, 0);
+        UNIT_ASSERT_GT(reportedReadBytes, 0);
 
         resuming = true;
         // StreamExecuteScanQuery historically resumes with ChannelId=0 while result channel ids start from 1.

@@ -196,7 +196,7 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
         Y_UNUSED(consumerName);
         Y_UNUSED(settings);
 
-        PartitionEndWatcher.SetCommittedOffset(offset - 1, ev->Sender);
+        PartitionEndWatcher.SetCommittedOffset(offset - 1, Client);
     }
 
     void WaitEvent() {

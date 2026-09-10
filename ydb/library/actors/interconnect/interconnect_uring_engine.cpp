@@ -3,6 +3,7 @@
 #include "uring_context.h" // for TUringContext::IsAvailable() / SqThreadIdleMs
 
 #include "v2_event_serializer.h"
+#include "v2_io_buffers.h"
 #include "v2_serialize_window.h"
 #include "interconnect_common.h"
 #include "interconnect_direct_session.h"
@@ -66,6 +67,12 @@ namespace NActors {
             n |= n >> 8;
             n |= n >> 16;
             return n + 1;
+        }
+
+        ui32 ClampIoSize(ui32 minSize, ui32 maxSize, ui32 tcpSocketBufferSize) {
+            return tcpSocketBufferSize
+                ? Max(minSize, Min(maxSize, tcpSocketBufferSize))
+                : maxSize;
         }
 
         TDuration CalculateDeadPeerTimeout(const TInterconnectSettings& settings) {
@@ -152,7 +159,7 @@ namespace NActors {
             TEventSerializer Serializer;
             TEventDeserializer Deserializer;
             TRcBuf ReadBuffer;
-            size_t ReadBufferSize = 0;
+            TReadTarget ReadTarget;
             bool Terminated = false;
             bool ReadPending = false;
             bool WritePending = false;
@@ -162,7 +169,8 @@ namespace NActors {
             const bool SendPings;
             TRcBuf WriteBuffer;
             TRcBuf XdcWriteBuffer;
-            size_t WriteBufferSize = 0;
+            TScratchTarget MainScratch;
+            TScratchTarget XdcScratch;
             std::vector<TContiguousSpan> OutgoingSpans;
             std::vector<TContiguousSpan> XdcOutgoingSpans;
             iovec Iov[MaxSpansPerWrite];
@@ -237,51 +245,44 @@ namespace NActors {
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // deserialization/receiving
 
-            TMutableContiguousSpan GetReadSpan(size_t minReadBufferSize) {
-                if (ReadBuffer.size() < minReadBufferSize) {
-                    ReadBuffer = TRcBuf::Uninitialized(ReadBufferSize);
+            TMutableContiguousSpan GetReadSpan() {
+                if (ReadBuffer.size() < ReadTarget.GetMinSize()) {
+                    ReadBuffer = TRcBuf::Uninitialized(ReadTarget.GetSize());
                     NSan::Poison(ReadBuffer.data(), ReadBuffer.size());
                 }
-                return ReadBuffer.UnsafeGetContiguousSpanMut();
+                auto span = ReadBuffer.UnsafeGetContiguousSpanMut();
+                const size_t n = ReadTarget.Advertise(span.size());
+                return {span.data(), n};
             }
 
-            void ApplyBytesRead(size_t num, size_t minReadBufferSize, size_t maxReadBufferSize) {
+            void ApplyBytesRead(size_t num) {
                 BytesReceived += num;
-                Y_DEBUG_ABORT_UNLESS(num <= ReadBuffer.size());
+                const size_t available = ReadBuffer.size();
+                const size_t requested = ReadTarget.Advertise(available);
+                Y_DEBUG_ABORT_UNLESS(num <= requested);
                 NSan::Unpoison(ReadBuffer.data(), num);
-                Deserializer.Push(num == ReadBuffer.size()
-                        ? std::move(ReadBuffer)
-                        : TRcBuf(TRcBuf::Piece, ReadBuffer.data(), num, ReadBuffer),
-                    this,
-                    SessionId);
-                const size_t readSpanSize = ReadBuffer.size();
-                const size_t remain = readSpanSize - num;
-                ReadBuffer.TrimFront(remain - remain % 64); // make only this number of bytes remaining in buffer
-
-                if (num == readSpanSize && num >= ReadBufferSize / 2 && ReadBufferSize < maxReadBufferSize) {
-                    // we have read all the provided buffer and it's more than a half of original read buffer
-                    ReadBufferSize *= 2;
-                } else if (num < readSpanSize && readSpanSize >= ReadBufferSize / 2 && ReadBufferSize > minReadBufferSize) {
-                    // we haven't read all the provided buffer and we have asked for more than its half
-                    ReadBufferSize /= 2;
-                    if (ReadBufferSize == minReadBufferSize) {
-                        // reset read buffer so the reads go into the pool
-                        ReadBuffer = {};
-                    }
+                if (num == available) {
+                    Deserializer.Push(std::move(ReadBuffer), this, SessionId);
+                    ReadBuffer = {};
+                } else {
+                    Deserializer.Push(TRcBuf(TRcBuf::Piece, ReadBuffer.data(), num, ReadBuffer),
+                        this, SessionId);
+                    const size_t remain = available - num;
+                    ReadBuffer.TrimFront(remain - remain % 64);
+                }
+                if (ReadTarget.OnCompletion(num, requested)) {
+                    ReadBuffer = {};
                 }
             }
 
             // Copy-out path for shared-pool completions: pool memory cannot be moved into the deserializer.
-            void ApplyBytesReadCopy(const char *data, size_t num, size_t minReadBufferSize, size_t maxReadBufferSize) {
+            void ApplyBytesReadCopy(const char *data, size_t num, size_t poolBufSize) {
                 BytesReceived += num;
                 NSan::Unpoison(data, num);
                 Deserializer.Push(TRcBuf::Copy({data, num}), this, SessionId);
 
-                Y_DEBUG_ABORT_UNLESS(num <= minReadBufferSize);
-                if (num == minReadBufferSize && ReadBufferSize < maxReadBufferSize) {
-                    // we have read all the provided buffer and probably have more, so double it
-                    ReadBufferSize *= 2;
-                }
+                Y_DEBUG_ABORT_UNLESS(num <= poolBufSize);
+                ReadTarget.OnPoolCompletion(num, poolBufSize);
             }
 
             void PushEvent(std::unique_ptr<IEventHandle> ev) override {
@@ -301,6 +302,17 @@ namespace NActors {
 
             void Serialize(size_t minWriteBufferSize, size_t maxWriteBufferSize) {
                 Serializer.ResetCounters();
+                MainScratch.SetMaxSize(Min(maxWriteBufferSize,
+                    Max(minWriteBufferSize, SerializeWindow.GetMainSize())));
+                if (XdcSocket) {
+                    XdcScratch.SetMaxSize(Min(maxWriteBufferSize,
+                        Max(minWriteBufferSize, SerializeWindow.GetXdcSize())));
+                }
+
+                size_t mainCopied = 0;
+                size_t xdcCopied = 0;
+                bool offeredFullMain = false;
+                bool offeredFullXdc = false;
 
                 for (;;) {
                     if (OutgoingSpans.size() >= MaxSpansPerWrite) {
@@ -323,11 +335,17 @@ namespace NActors {
                         mainBudget = minWriteBufferSize;
                     }
                     if (WriteBuffer.size() < minWriteBufferSize) {
-                        WriteBuffer = TRcBuf::Uninitialized(WriteBufferSize);
+                        const size_t alloc = MainScratch.AllocSize(mainBudget);
+                        WriteBuffer = TRcBuf::Uninitialized(alloc);
+                        offeredFullMain |= alloc >= MainScratch.GetSize();
                     }
-                    if (XdcSocket && XdcWriteBuffer.size() < minWriteBufferSize) {
-                        XdcWriteBuffer = TRcBuf::Uninitialized(WriteBufferSize);
+                    if (XdcSocket && xdcBudget && XdcWriteBuffer.size() < minWriteBufferSize) {
+                        const size_t alloc = XdcScratch.AllocSize(xdcBudget);
+                        XdcWriteBuffer = TRcBuf::Uninitialized(alloc);
+                        offeredFullXdc |= alloc >= XdcScratch.GetSize();
                     }
+                    const size_t mainScratchBefore = WriteBuffer.size();
+                    const size_t xdcScratchBefore = XdcWriteBuffer.size();
                     const ui64 mainBefore = Serializer.GetCumulativeProducedMain();
                     const ui64 xdcBefore = Serializer.GetCumulativeProducedXdc();
                     const size_t numBytesProduced = XdcSocket
@@ -338,15 +356,19 @@ namespace NActors {
                     if (!numBytesProduced) {
                         break;
                     }
+                    if (mainScratchBefore > WriteBuffer.size()) {
+                        mainCopied += mainScratchBefore - WriteBuffer.size();
+                    }
+                    if (xdcScratchBefore > XdcWriteBuffer.size()) {
+                        xdcCopied += xdcScratchBefore - XdcWriteBuffer.size();
+                    }
                     UnsentBytes += Serializer.GetCumulativeProducedMain() - mainBefore;
                     XdcUnsentBytes += Serializer.GetCumulativeProducedXdc() - xdcBefore;
                 }
 
-                const size_t numb = Serializer.GetNumBytesInScratchBuffers();
-                if (numb >= WriteBufferSize * 2 && WriteBufferSize < maxWriteBufferSize) {
-                    WriteBufferSize *= 2;
-                } else if (numb < WriteBufferSize / 2 && WriteBufferSize > minWriteBufferSize) {
-                    WriteBufferSize /= 2;
+                MainScratch.OnProduce(mainCopied, offeredFullMain);
+                if (XdcSocket) {
+                    XdcScratch.OnProduce(xdcCopied, offeredFullXdc);
                 }
             }
 
@@ -550,7 +572,9 @@ namespace NActors {
                                     PARAM(UnregisterRequested)
                                     PARAM(SendPings)
                                     PARAM2("WriteBuffer size", WriteBuffer.size())
-                                    PARAM(WriteBufferSize)
+                                    PARAM2("WriteBufferSize", MainScratch.GetSize())
+                                    PARAM2("XdcWriteBuffer size", XdcWriteBuffer.size())
+                                    PARAM2("XdcWriteBufferSize", XdcScratch.GetSize())
                                     PARAM2("OutgoingSpans size", OutgoingSpans.size())
                                     PARAM2("XdcOutgoingSpans size", XdcOutgoingSpans.size())
                                     PARAM(UnsentBytes)
@@ -560,7 +584,7 @@ namespace NActors {
                                     PARAM(FixedFileIndex)
                                     PARAM(XdcFixedFileIndex)
                                     PARAM2("ReadBuffer size", ReadBuffer.size())
-                                    PARAM(ReadBufferSize)
+                                    PARAM2("ReadBufferSize", ReadTarget.GetSize())
                                     PARAM2("IncomingSeqNo", IncomingSeqNo.load())
                                     PARAM(ExpectedSeqNo)
                                     PARAM(MigrateTargetShard)
@@ -729,9 +753,9 @@ namespace NActors {
             std::unique_ptr<TEvDestroyEvents> EvDestroyEvents = std::make_unique<TEvDestroyEvents>();
 
             const ui32 MinReadBufferSize;
-            const ui32 MaxReadBufferSize;
             const ui32 MinWriteBufferSize;
             const ui32 MaxWriteBufferSize;
+            const ui32 MaxXdcReadBytes;
 
         private:
             NMonitoring::TDynamicCounters::TCounterPtr *SwitchActivity(
@@ -956,9 +980,9 @@ namespace NActors {
 #undef COUNTER
                 , Load(load)
                 , MinReadBufferSize(v2.MinReadBufferSize)
-                , MaxReadBufferSize(v2.MaxReadBufferSize)
                 , MinWriteBufferSize(v2.MinWriteBufferSize)
                 , MaxWriteBufferSize(v2.MaxWriteBufferSize)
+                , MaxXdcReadBytes(v2.MaxXdcReadBytes)
             {
                 const ui32 sqThreadIdleMs = v2.SqThreadIdleMs
                     ? v2.SqThreadIdleMs
@@ -1688,7 +1712,7 @@ namespace NActors {
                 } else if (res == -ENOBUFS) {
                     // no pool buffer available: allocate buffer for ordinary read and retry
                     ++*ReadsNoBufs;
-                    session.GetReadSpan(MinReadBufferSize);
+                    session.GetReadSpan();
                 } else if (res < 0) {
                     session.Disconnect(TDisconnectReason::FromErrno(-res));
                 } else if (res == 0) {
@@ -1704,10 +1728,10 @@ namespace NActors {
                         session.LastInputActivityTimestamp = LastActivitySwitchTimestamp;
 
                         if (poolData) {
-                            session.ApplyBytesReadCopy(poolData, res, MinReadBufferSize, MaxReadBufferSize);
+                            session.ApplyBytesReadCopy(poolData, res, MinReadBufferSize);
                             ++*ReadsToPool;
                         } else {
-                            session.ApplyBytesRead(res, MinReadBufferSize, MaxReadBufferSize);
+                            session.ApplyBytesRead(res);
                             ++*ReadsToBuffer;
                         }
 
@@ -1749,13 +1773,13 @@ namespace NActors {
 
                 TMutableContiguousSpan span(nullptr, MinReadBufferSize);
 
-                if (session.ReadBufferSize == MinReadBufferSize && slot.ProvidedBuffersEnabled && session.ReadBuffer.empty()) {
+                if (session.ReadTarget.AtMinimum() && slot.ProvidedBuffersEnabled && session.ReadBuffer.empty()) {
                     // we're reading into automatically located pool buffer
                     sqe->flags |= IOSQE_BUFFER_SELECT;
                     sqe->buf_group = slot.BufGroupId;
                 } else {
                     // we're reading into session's ReadBuffer, so we need to possibly allocate buffer and get its read span
-                    span = session.GetReadSpan(MinReadBufferSize);
+                    span = session.GetReadSpan();
                 }
 
                 Y_DEBUG_ABORT_UNLESS(span.size());
@@ -1891,7 +1915,7 @@ namespace NActors {
                 }
 
                 TIoVec tmp[MaxSpansPerWrite];
-                const size_t n = session.Deserializer.PrepareXdcReadv(tmp, MaxSpansPerWrite, 1 << 20);
+                const size_t n = session.Deserializer.PrepareXdcReadv(tmp, MaxSpansPerWrite, MaxXdcReadBytes);
                 if (!n) {
                     return;
                 }
@@ -2009,16 +2033,19 @@ namespace NActors {
             }
 
             const auto& v2 = Common->Settings.V2;
-            const ui32 maxSerializeWindowSize = Common->Settings.TCPSocketBufferSize
-                ? Max(v2.MinSerializeWindowSize,
-                    Min(v2.MaxSerializeWindowSize, Common->Settings.TCPSocketBufferSize))
-                : v2.MaxSerializeWindowSize;
+            const ui32 tcpBuf = Common->Settings.TCPSocketBufferSize;
+            const ui32 maxSerializeWindowSize = ClampIoSize(v2.MinSerializeWindowSize,
+                v2.MaxSerializeWindowSize, tcpBuf);
+            const ui32 maxReadBufferSize = ClampIoSize(v2.MinReadBufferSize, v2.MaxReadBufferSize, tcpBuf);
 
             auto session = std::make_unique<TSession>(shardIdx, std::move(socket), sessionActorId,
                 ChecksumEvents, peerScopeId, std::move(onDisconnectCallback), ActorSystem, sendPings,
                 std::move(clockSkew), std::move(pingRTT), std::move(xdcSocket));
-            session->ReadBufferSize = v2.MinReadBufferSize;
-            session->WriteBufferSize = v2.MinWriteBufferSize;
+            session->ReadTarget = TReadTarget(v2.MinReadBufferSize, maxReadBufferSize);
+            session->MainScratch = TScratchTarget(v2.MinWriteBufferSize, v2.MaxWriteBufferSize);
+            if (session->XdcSocket) {
+                session->XdcScratch = TScratchTarget(v2.MinWriteBufferSize, v2.MaxWriteBufferSize);
+            }
             session->SerializeWindow = TSerializeWindow(v2.MinSerializeWindowSize, maxSerializeWindowSize,
                 /*hasXdc=*/ bool(session->XdcSocket));
             const ui64 conn = reinterpret_cast<ui64>(session.get());

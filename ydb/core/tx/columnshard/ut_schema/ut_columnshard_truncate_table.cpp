@@ -121,6 +121,9 @@ bool WaitForPathsToDropEmpty(TDefaultTestsController& controller, TTestBasicRunt
     const TInstant end = TInstant::Now() + deadline;
     while (TInstant::Now() < end) {
         Wakeup(runtime, sender, TTestTxConfig::TxTablet0);
+        // Re-evaluate snapshot usage so the read-staleness floor can advance past the drop version
+        // of the finalized generation; otherwise recently-used read snapshots keep blocking GC.
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new NColumnShard::TEvPrivate::TEvPingSnapshotsUsage());
         if (advancePlanStep) {
             advancePlanStep();
         }
@@ -460,21 +463,25 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             UNIT_ASSERT(!reader.IsError());
         }
 
+        // TTL eviction commits at a fresh plan step, so it is invisible at dataSnapshot (MVCC).
+        // Advance the plan step with an empty commit and read the latest state at that step
+        // (TxId = Max<ui64>()) to observe eviction of the stale row.
+        auto readLatestRowCount = [&]() -> ui64 {
+            planStep = planStep + 1;
+            PlanCommit(runtime, sender, planStep, TSet<ui64>{});
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, NOlap::TSnapshot(planStep, Max<ui64>()));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(reader.IsCorrectlyFinished());
+            return rb ? rb->num_rows() : 0;
+        };
+        ui64 evictedRowCount = 0;
         csController.WaitCondition(TDuration::Seconds(30), [&] {
             runtime.SimulateSleep(TDuration::MilliSeconds(200));
-            TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, dataSnapshot);
-            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
-            auto rb = reader.ReadAll();
-            return rb && rb->num_rows() == 1 && !reader.IsError();
+            evictedRowCount = readLatestRowCount();
+            return evictedRowCount == 1;
         });
-        {
-            TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, dataSnapshot);
-            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
-            auto rb = reader.ReadAll();
-            UNIT_ASSERT(rb);
-            UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), 1);
-            UNIT_ASSERT(!reader.IsError());
-        }
+        UNIT_ASSERT_VALUES_EQUAL(evictedRowCount, 1);
     }
 
     // ALTER after TRUNCATE must apply to the new generation. Pre-truncate time-travel on the old
@@ -596,7 +603,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(!rb);
-            UNIT_ASSERT(!reader.IsError());
+            UNIT_ASSERT(reader.IsError());
         }
         {
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, moveSnapshot);
@@ -634,12 +641,12 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(!rb);
-            UNIT_ASSERT(!reader.IsError());
+            UNIT_ASSERT(reader.IsError());
         }
     }
 
-    // COPY after TRUNCATE aliases the new (empty) generation. Later writes to the source are
-    // visible on the copy because both paths share the live InternalPathId.
+    // COPY after TRUNCATE aliases the new (empty) generation. The copy is pinned at its CopyVersion,
+    // so later writes to the source are NOT visible on the copy.
     Y_UNIT_TEST(TruncateThenCopy) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
@@ -715,11 +722,12 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             UNIT_ASSERT(!reader.IsError());
         }
         {
+            // The copy is pinned at CopyVersion (taken right after the truncate, when the new
+            // generation was still empty), so the later source write is invisible on dst.
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, NOlap::TSnapshot(planStep, txId));
             reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
             auto rb = reader.ReadAll();
-            UNIT_ASSERT(rb);
-            UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), 50);
+            UNIT_ASSERT(!rb);
             UNIT_ASSERT(!reader.IsError());
         }
 
@@ -965,6 +973,10 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         PlanSchemaTx(runtime, sender, { planStep, txId });
         UNIT_ASSERT(restartedShard->GetTablesManager().GetTable(*oldInternalPathId, true).IsDropped());
 
+        // The old generation is pinned by read snapshots taken above; expire them immediately and
+        // enable the cleanup background so GC can finalize the drop within the wait deadline.
+        csControllerGuard->SetOverrideUsedSnapshotLivetime(TDuration::Zero());
+        csControllerGuard->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Cleanup);
         auto advancePlanStep = [&] {
             AdvanceShardPlanStep(runtime, sender, txId, writeId, srcPathId, testTable);
         };
@@ -976,11 +988,13 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             UNIT_ASSERT(!finalizedShard->GetTablesManager().HasTable(*oldInternalPathId));
         }
         {
+            // After GC finalizes the old generation, the read-staleness floor has advanced past
+            // snapshotBeforeTruncate, so the time-travel read is rejected ("Snapshot too old").
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, srcPathId, snapshotBeforeTruncate);
             reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(!rb);
-            UNIT_ASSERT(!reader.IsError());
+            UNIT_ASSERT(reader.IsError());
         }
     }
 
@@ -1105,7 +1119,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(!rb);
-            UNIT_ASSERT(!reader.IsError());
+            UNIT_ASSERT(reader.IsError());
         }
     }
 
@@ -1170,8 +1184,8 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         UNIT_ASSERT(ev);
         const auto& res = ev->Get()->Record;
         UNIT_ASSERT_VALUES_EQUAL(res.GetTxId(), truncateTxId);
-        UNIT_ASSERT_VALUES_EQUAL(res.GetTxKind(), NKikimrTxColumnShard::TX_KIND_SCHEMA);
-        UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NKikimrTxColumnShard::PREPARED);
+        UNIT_ASSERT_EQUAL(res.GetTxKind(), NKikimrTxColumnShard::TX_KIND_SCHEMA);
+        UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::PREPARED);
         const auto truncatePlanStep = TPlanStep{ res.GetMinStep() };
         UNIT_ASSERT(commitPlanStep.Val() < truncatePlanStep.Val());
 
@@ -1252,8 +1266,12 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         UNIT_ASSERT(ev);
         const auto& res = ev->Get()->Record;
         UNIT_ASSERT_VALUES_EQUAL(res.GetTxId(), truncateTxId);
-        UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NKikimrTxColumnShard::PREPARED);
-        const auto truncatePlanStep = TPlanStep{ res.GetMinStep() };
+        UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::PREPARED);
+        // Plan at MaxStep, not MinStep: MinStep is frozen at propose-start time, but while TRUNCATE
+        // waits in TWaitTxs the test advances the plan step (the aux CreateTable tx and the in-flight
+        // commit are planned at auxPlan/auxPlan+1), pushing LastPlannedStep past MinStep. A plan at
+        // MinStep would be silently dropped by TTxPlanStep ("Ignore old txIds") and the test would hang.
+        const auto truncatePlanStep = TPlanStep{ res.GetMaxStep() };
         PlanSchemaTx(runtime, sender, { truncatePlanStep, truncateTxId });
         {
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, NOlap::TSnapshot(truncatePlanStep, truncateTxId));
@@ -1307,7 +1325,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         UNIT_ASSERT(ev);
         const auto& res = ev->Get()->Record;
         UNIT_ASSERT_VALUES_EQUAL(res.GetTxId(), truncateTxId);
-        UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NKikimrTxColumnShard::PREPARED);
+        UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::PREPARED);
         const auto planStep = TPlanStep{ res.GetMinStep() };
         PlanSchemaTx(runtime, sender, { planStep, truncateTxId });
         {
@@ -1486,6 +1504,10 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             UNIT_ASSERT(!reader.IsError());
         }
 
+        // The old generation is pinned by the time-travel read above; expire used snapshots
+        // immediately and enable the cleanup background so GC can finalize the drop.
+        csControllerGuard->SetOverrideUsedSnapshotLivetime(TDuration::Zero());
+        csControllerGuard->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Cleanup);
         auto advancePlanStep = [&] {
             AdvanceShardPlanStep(runtime, sender, txId, writeId, pathId, testTable);
         };
@@ -1500,18 +1522,20 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             UNIT_ASSERT(!tables.contains(oldInternalPathId));
         }
         {
+            // GC advanced the read-staleness floor past the truncate snapshot, so this read is rejected.
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, truncateSnapshot);
             reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(!rb);
-            UNIT_ASSERT(!reader.IsError());
+            UNIT_ASSERT(reader.IsError());
         }
         {
+            // Likewise, snapshotBeforeTruncate is below the floor after GC finalized the old generation.
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, snapshotBeforeTruncate);
             reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(!rb);
-            UNIT_ASSERT(!reader.IsError());
+            UNIT_ASSERT(reader.IsError());
         }
     }
 }

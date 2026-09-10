@@ -24,6 +24,7 @@
 #include <ydb/public/lib/value/value.h>
 
 #include <library/cpp/testing/hook/hook.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 
 #include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
 

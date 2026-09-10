@@ -10,6 +10,7 @@
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 
 namespace NKikimr::NReplication::NTestHelpers {
 

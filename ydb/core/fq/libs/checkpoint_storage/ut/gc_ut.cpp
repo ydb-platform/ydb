@@ -17,6 +17,7 @@
 
 #include <library/cpp/retry/retry.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 
 #include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/testlib/basics/runtime.h>

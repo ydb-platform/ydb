@@ -16,7 +16,7 @@ def strategy():
     info = balance.ClusterInfo()
     info.base_config = balance.common.kikimr_bsconfig.TBaseConfig()
     for node in range(1, 4):
-        info.base_config.PDisk.add(NodeId=node, PDiskId=1, DriveStatus=1)
+        info.base_config.PDisk.add(NodeId=node, PDiskId=1, DriveStatus=balance.common.kikimr_bs3.EDriveStatus.ACTIVE)
         vslot = info.base_config.VSlot.add(GroupId=node, Status='READY')
         vslot.VSlotId.NodeId = node
         vslot.VSlotId.PDiskId = 1
@@ -177,8 +177,8 @@ def test_cluster_with_unknown_capacity(strategy, monkeypatch, only_overpopulated
 
 @pytest.mark.parametrize('unknown_capacity', [False, True])
 @pytest.mark.parametrize('dry_run', [False, True])
-@pytest.mark.parametrize('blocking_result', ['success', 'missing', 'failed'])
-def test_blocking_reassignment(strategy, monkeypatch, dry_run, blocking_result, unknown_capacity):
+@pytest.mark.parametrize('failed_command_index', [None, 0, 1, 2, 3, 4])
+def test_blocking_reassignment(strategy, monkeypatch, dry_run, failed_command_index, unknown_capacity):
     strategy.args.dry_run = dry_run
     info = strategy.cluster_info
     if unknown_capacity:
@@ -204,20 +204,23 @@ def test_blocking_reassignment(strategy, monkeypatch, dry_run, blocking_result, 
             restored = commands[3 + i].UpdateDriveStatus
             assert (inactive.HostKey.NodeId, inactive.PDiskId) == (node, 1)
             assert inactive.Status == balance.common.kikimr_bs3.EDriveStatus.INACTIVE
-            assert (restored.HostKey.NodeId, restored.PDiskId, restored.Status) == (node, 1, 1)
+            assert (restored.HostKey.NodeId, restored.PDiskId) == (node, 1)
+            assert restored.Status == balance.common.kikimr_bs3.EDriveStatus.ACTIVE
         assert commands[2].ReassignGroupDisk.GroupId == 1
         response = response_to(3, index=2)
-        if blocking_result == 'missing':
-            del response.Status[2:]  # Exactly index statuses: no reassignment status.
-        elif blocking_result == 'failed':
-            response.Status[2].Success = False
-        else:
-            response.Status.add(Success=True)
-            response.Status.add(Success=True)
+        response.Status.add(Success=True)
+        response.Status.add(Success=True)
+        if failed_command_index is not None:
+            # BSC stops processing commands at the first failure.
+            del response.Status[failed_command_index + 1:]
+            response.Status[failed_command_index].Success = False
+            response.Status[failed_command_index].ClearField('ReassignedItem')
+            response.Success = False
+            response.ErrorDescription = 'Simulated command failure'
         return response
 
     monkeypatch.setattr(balance.common, 'invoke_bsc_request', invoke)
-    assert strategy.reassign_vslot(strategy.cluster_info.base_config.VSlot[0], True) == (blocking_result == 'success')
-    assert [r.Rollback for r in requests] == ([True, True, dry_run] if blocking_result == 'success' else [True, True])
-    if blocking_result == 'success':
+    assert strategy.reassign_vslot(strategy.cluster_info.base_config.VSlot[0], True) == (failed_command_index is None)
+    assert [r.Rollback for r in requests] == ([True, True, dry_run] if failed_command_index is None else [True, True])
+    if failed_command_index is None:
         assert requests[1].Command == requests[2].Command

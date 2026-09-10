@@ -356,7 +356,7 @@ class BalancingStrategy(IBalancingStrategy):
             for pdisk in inactive:
                 self._add_update_drive_status(request, pdisk, pdisk.DriveStatus)
             response = common.invoke_bsc_request(request)
-            if len(response.Status) <= index or not response.Status[index].Success:
+            if len(response.Status) != len(request.Command) or not all(status.Success for status in response.Status):
                 return False
 
         request.Rollback = self.args.dry_run

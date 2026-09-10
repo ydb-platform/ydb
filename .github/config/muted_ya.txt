@@ -10,6 +10,7 @@ ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapC
 ydb/core/kafka_proxy/ut/protocol KafkaProtocol.TopicsCompactionGapFromRetention
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CreateAndAlterStreamingQuery
 ydb/core/kqp/ut/federated_query/datastreams unittest.[*/*] chunk
+ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/ut TOracle.ShouldPersistHostHealthIfChangesToOnline
 ydb/core/persqueue/public/schema/ut unittest.sole chunk
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ManySessions_NoCommits_AutoscaleAwareSDK
 ydb/library/actors/interconnect/ut InterconnectDirectSession.UnregisterRestoresActorSystemDelivery

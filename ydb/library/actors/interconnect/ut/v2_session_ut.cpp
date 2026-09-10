@@ -40,11 +40,12 @@ namespace {
         }
     };
 
-    // Collects TEvTestResponse delivered through the normal actor system.
+    // Collects replies and retries definitely undelivered requests with their original payload.
     class TResponseCollectorActor: public TActor<TResponseCollectorActor> {
     public:
-        TResponseCollectorActor()
+        explicit TResponseCollectorActor(const TString& retryPayload = {})
             : TActor(&TThis::StateFunc)
+            , RetryPayload(retryPayload)
         {}
 
         size_t GetCount() const {
@@ -68,8 +69,12 @@ namespace {
             Y_ABORT_UNLESS(msg->Reason == TEvents::TEvUndelivered::Disconnected && !msg->Unsure);
             // Initial handshake failure is definite nondelivery. Back off while the proxy
             // leaves its error state, then retry the same request through the actor system.
+            auto request = MakeHolder<TEvTest>(ev->Cookie);
+            if (!RetryPayload.empty()) {
+                request->Record.SetPayload(RetryPayload);
+            }
             TActivationContext::Schedule(TDuration::MilliSeconds(100), new IEventHandle(
-                ev->Sender, SelfId(), new TEvTest(ev->Cookie), IEventHandle::FlagTrackDelivery, ev->Cookie));
+                ev->Sender, SelfId(), request.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie));
         }
 
         void Handle(TEvTestResponse::TPtr& ev) {
@@ -80,6 +85,7 @@ namespace {
             Count.fetch_add(1, std::memory_order_release);
         }
 
+        const TString RetryPayload;
         mutable TMutex Lock;
         TVector<ui64> Received;
         std::atomic<size_t> Count = 0;
@@ -302,18 +308,25 @@ namespace {
 
     class TDirectSessionGrabber: public TActorBootstrapped<TDirectSessionGrabber> {
     public:
-        TDirectSessionGrabber(ui32 peerNodeId, NThreading::TPromise<std::shared_ptr<IDirectSession>> promise)
-            : PeerNodeId(peerNodeId)
+        TDirectSessionGrabber(TActorId proxyId, NThreading::TPromise<std::shared_ptr<IDirectSession>> promise)
+            : ProxyId(proxyId)
             , Promise(std::move(promise))
         {}
 
         void Bootstrap() {
             Become(&TThis::StateFunc);
-            Send(TActivationContext::ActorSystem()->InterconnectProxy(PeerNodeId), new TEvInterconnect::TEvConnectNode);
+            Connect();
         }
 
     private:
+        void Connect() {
+            if (!Resolved) {
+                Send(ProxyId, new TEvInterconnect::TEvConnectNode);
+            }
+        }
+
         STRICT_STFUNC(StateFunc,
+            cFunc(TEvents::TEvWakeup::EventType, Connect)
             hFunc(TEvInterconnect::TEvNodeConnected, Handle)
             cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, HandleDisconnected)
         )
@@ -325,11 +338,72 @@ namespace {
             }
         }
 
-        void HandleDisconnected() {}
+        void HandleDisconnected() {
+            if (!Resolved) {
+                // The failed handshake consumed our request; retry within the original deadline.
+                Schedule(TDuration::MilliSeconds(100), new TEvents::TEvWakeup);
+            }
+        }
 
-        const ui32 PeerNodeId;
+        const TActorId ProxyId;
         NThreading::TPromise<std::shared_ptr<IDirectSession>> Promise;
         bool Resolved = false;
+    };
+
+    // Reject one request before forwarding subsequent attempts to the real proxy.
+    class TRejectFirstConnect: public TActor<TRejectFirstConnect> {
+    public:
+        explicit TRejectFirstConnect(TActorId proxyId)
+            : TActor(&TThis::StateFunc)
+            , ProxyId(proxyId)
+        {}
+
+    private:
+        STRICT_STFUNC(StateFunc,
+            hFunc(TEvInterconnect::TEvConnectNode, Handle)
+        )
+
+        void Handle(TEvInterconnect::TEvConnectNode::TPtr& ev) {
+            if (!Rejected) {
+                Rejected = true;
+                Send(ev->Sender, new TEvInterconnect::TEvNodeDisconnected(2), 0, ev->Cookie);
+            } else {
+                TActivationContext::Send(IEventHandle::Forward(ev, ProxyId));
+            }
+        }
+
+        const TActorId ProxyId;
+        bool Rejected = false;
+    };
+
+    // Exercise the nondelivery path without requiring a timing-dependent TCP failure.
+    class TRejectFirstTestEvent: public TActor<TRejectFirstTestEvent> {
+    public:
+        explicit TRejectFirstTestEvent(const TString& expectedPayload)
+            : TActor(&TThis::StateFunc)
+            , ExpectedPayload(expectedPayload)
+        {}
+
+    private:
+        STRICT_STFUNC(StateFunc,
+            hFunc(TEvTest, Handle)
+        )
+
+        void Handle(const TEvTest::TPtr& ev) {
+            Y_ABORT_UNLESS(ev->Flags & IEventHandle::FlagTrackDelivery);
+            Y_ABORT_UNLESS(ev->Cookie == 42 && ev->Get()->Record.GetSequenceNumber() == 42);
+            Y_ABORT_UNLESS(ev->Get()->Record.GetPayload() == ExpectedPayload);
+            if (!Rejected) {
+                Rejected = true;
+                Send(ev->Sender, new TEvents::TEvUndelivered(TEvTest::EventType,
+                    TEvents::TEvUndelivered::Disconnected), 0, ev->Cookie);
+            } else {
+                Send(ev->Sender, new TEvTestResponse(42), 0, ev->Cookie);
+            }
+        }
+
+        const TString ExpectedPayload;
+        bool Rejected = false;
     };
 
     // Subscribes to a peer's connection state and counts connect/disconnect notifications, re-subscribing
@@ -391,7 +465,7 @@ namespace {
     std::shared_ptr<IDirectSession> GrabDirectSession(TTestICCluster& cluster, ui32 fromNode, ui32 peerNode) {
         auto promise = NThreading::NewPromise<std::shared_ptr<IDirectSession>>();
         auto future = promise.GetFuture();
-        cluster.RegisterActor(new TDirectSessionGrabber(peerNode, promise), fromNode);
+        cluster.RegisterActor(new TDirectSessionGrabber(cluster.InterconnectProxy(peerNode, fromNode), promise), fromNode);
         UNIT_ASSERT_C(future.Wait(TDuration::Seconds(10)), "timed out waiting for TEvNodeConnected");
         return future.GetValueSync();
     }
@@ -421,6 +495,35 @@ namespace {
 } // namespace
 
 Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
+
+    // These helper regressions use local/classic actors and intentionally run without io_uring.
+    Y_UNIT_TEST(RetriesInitialConnectionFailure) {
+        TTestICCluster cluster(2);
+        const TActorId proxyId = cluster.RegisterActor(
+            new TRejectFirstConnect(cluster.InterconnectProxy(2, 1)), 1);
+        auto promise = NThreading::NewPromise<std::shared_ptr<IDirectSession>>();
+        auto future = promise.GetFuture();
+        cluster.RegisterActor(new TDirectSessionGrabber(proxyId, promise), 1);
+        UNIT_ASSERT_C(future.Wait(TDuration::Seconds(10)), "did not retry initial connection failure");
+        UNIT_ASSERT(future.GetValueSync());
+    }
+
+    Y_UNIT_TEST(RetriesUndeliveredRequestWithPayload) {
+        TTestICCluster cluster(1);
+        for (const size_t size : {size_t(0), size_t(200000)}) {
+            const TString payload = MakeLoadPayload(42, size);
+            const TActorId receiver = cluster.RegisterActor(new TRejectFirstTestEvent(payload), 1);
+            auto* collector = new TResponseCollectorActor(payload);
+            const TActorId sender = cluster.RegisterActor(collector, 1);
+            cluster.GetNode(1)->GetActorSystem()->Send(new IEventHandle(
+                receiver, sender, new TEvTest(42, payload), IEventHandle::FlagTrackDelivery, 42));
+            WaitFor(TDuration::Seconds(10), [&] { return collector->GetCount() >= 1; },
+                "reply after definite nondelivery");
+            const auto received = collector->GetReceived();
+            UNIT_ASSERT_VALUES_EQUAL(received.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(received.front(), 42);
+        }
+    }
 
     // Normal actor-system traffic must round-trip over a v2 session.
     Y_UNIT_TEST(ActorSystemRoundTrip) {
@@ -501,8 +604,9 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
             payload[i] = static_cast<char>('a' + (i % 26));
         }
 
-        const TActorId sender(1, 0, 0xBEEF, 0);
-        cluster->GetNode(1)->GetActorSystem()->Send(new IEventHandle(collectorId, sender, new TEvTest(1, payload)));
+        const TActorId sender = cluster->RegisterActor(new TResponseCollectorActor(payload), 1);
+        cluster->GetNode(1)->GetActorSystem()->Send(new IEventHandle(
+            collectorId, sender, new TEvTest(1, payload), IEventHandle::FlagTrackDelivery, 1));
 
         WaitFor(TDuration::Seconds(20), [&] { return collector->GetCount() >= 1; },
             "large payload event received over v2");
@@ -918,8 +1022,10 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
         runLoad(2000, "initial load stalled");
         WaitFor(TDuration::Seconds(20), [&] { return monitor->Connects() >= 1; }, "connection observed");
 
+        // Initial connection attempts may already have produced disconnect notifications.
+        const size_t disconnectsBeforeClose = monitor->Disconnects();
         cluster->GetNode(1)->Send(cluster->InterconnectProxy(2, 1), new TEvInterconnect::TEvClosePeerSocket);
-        WaitFor(TDuration::Seconds(20), [&] { return monitor->Disconnects() >= 1; },
+        WaitFor(TDuration::Seconds(20), [&] { return monitor->Disconnects() > disconnectsBeforeClose; },
             "disconnect observed after ClosePeerSocket");
 
         runLoad(2000, "load after ClosePeerSocket stalled -- reconnect broken");

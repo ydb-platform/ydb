@@ -620,6 +620,7 @@ namespace {
             error = "cannot set use_filter_snowball and use_filter_superlemmer at the same time";
             return false;
         }
+        const auto languages = ParseLanguages(settings.has_language() ? settings.language() : "english");
         if (settings.use_filter_snowball()) {
             if (settings.use_filter_ngram() || settings.use_filter_edge_ngram()) {
                 error = "cannot set use_filter_snowball with use_filter_ngram or use_filter_edge_ngram at the same time";
@@ -632,7 +633,7 @@ namespace {
             }
 
             ui32 scripts = 0;
-            for (const auto& language : ParseLanguages(settings.language())) {
+            for (const auto& language : languages) {
                 const auto languageScripts = GetSnowballLanguageScripts(language);
                 if (!languageScripts) {
                     error = "language is not supported by snowball";
@@ -657,7 +658,7 @@ namespace {
                 return false;
             }
 
-            for (const auto& language : ParseLanguages(settings.language())) {
+            for (const auto& language : languages) {
                 if (!IsSuperLemmerSupportedLanguage(language)) {
                     error = "language is not supported by superlemmer";
                     return false;
@@ -673,7 +674,6 @@ namespace {
         }
 
         if (settings.use_filter_stopwords()) {
-            const auto languages = ParseLanguages(settings.has_language() ? settings.language() : "english");
             for (const auto& language : languages) {
                 if (!GetStopwords(language)) {
                     error = "language is not supported by stopword filter";
@@ -789,6 +789,7 @@ Ydb::Table::FulltextIndexSettings::Analyzers GetAnalyzersForQuery(Ydb::Table::Fu
 
 TVector<TString> Analyze(const TStringBuf text, const Ydb::Table::FulltextIndexSettings::Analyzers& settings, const std::unordered_set<wchar32>& ignoredDelimiters) {
     TVector<TString> tokens = Tokenize(text, settings.tokenizer(), ignoredDelimiters);
+    const auto languages = ParseLanguages(settings.has_language() ? settings.language() : "english");
 
     if (settings.use_filter_lowercase()) {
         for (auto i : xrange(tokens.size())) {
@@ -797,7 +798,6 @@ TVector<TString> Analyze(const TStringBuf text, const Ydb::Table::FulltextIndexS
     }
 
     if (settings.use_filter_stopwords()) {
-        const auto languages = ParseLanguages(settings.has_language() ? settings.language() : "english");
         tokens.erase(std::remove_if(tokens.begin(), tokens.end(), [&](const TString& token) {
             const TString lowerToken = ToLowerUTF8(token);
             for (const auto& language : languages) {
@@ -825,7 +825,7 @@ TVector<TString> Analyze(const TStringBuf text, const Ydb::Table::FulltextIndexS
     }
 
     if (settings.use_filter_snowball()) {
-        const auto languages = ParseLanguages(settings.language());
+        Y_ENSURE(settings.has_language());
         if (languages.size() == 1) {
             auto& stemmer = GetSnowballStemmer(languages.front());
             for (auto& token : tokens) {
@@ -854,8 +854,10 @@ TVector<TString> Analyze(const TStringBuf text, const Ydb::Table::FulltextIndexS
     }
 
     if (settings.use_filter_superlemmer()) {
+        Y_ENSURE(settings.has_language());
+        const TString languageMask = JoinSeq(",", languages);
         for (auto& token : tokens) {
-            ApplySuperLemmerInplace(settings.language(), token);
+            ApplySuperLemmerInplace(languageMask, token);
         }
     }
 

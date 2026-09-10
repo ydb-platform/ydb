@@ -8,6 +8,7 @@ a browser connection cannot stop a benchmark.
 import csv
 import hashlib
 import json
+import os
 import math
 import mimetypes
 import re
@@ -24,6 +25,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from ydb.tools.ydb_bench.benchmarks import BENCHMARKS
+from ydb.tools.ydb_bench.lib.linux_telemetry import LogicalCpuSampler
 from ydb.tools.ydb_bench.lib.common import BenchmarkError, BenchmarkInterrupted, atomic_write_json, atomic_write_text
 from ydb.tools.ydb_bench.lib.config import BACKGROUND_LOAD_MODES, build_run_plan, load_config
 from ydb.tools.ydb_bench.lib.results import ResultStore, _non_finite_json_as_null, load_manifest
@@ -256,6 +258,30 @@ padding:.6rem;border:1px solid #d0d5dd;min-width:8rem;flex-direction:column}.den
 """
     '.status.queued{color:var(--warn)}\n'
 )
+_CSS += (
+    '#cpu-topology .view-tabs{gap:.35rem;border-bottom:1px solid #d0d5dd;padding:0;margin:1rem 0;flex-wrap:wrap}'
+    '#cpu-topology .view-tabs button{padding:.6rem .8rem;border:1px solid transparent;border-radius:6px 6px 0 0;'
+    'background:none;color:var(--muted);margin-bottom:-1px;box-shadow:none}'
+    '#cpu-topology .view-tabs button:hover{background:var(--panel)}'
+    '#cpu-topology .view-tabs button[aria-pressed=true]{background:#fff;color:var(--text);font-weight:650;'
+    'border-color:#d0d5dd;border-bottom-color:#fff}'
+    "\n#cpu-topology .cpu-node{display:grid;grid-template-columns:75px minmax(0,1fr);gap:16px;padding:10px 0;border-bottom:1px solid #ced6e2}\n#cpu"
+    "-topology .cpu-node-name{padding-top:20px;font-size:13px}\n#cpu-topology small{display:inline-block;color:#60708b;font-size:12px}\n#cpu-topolo"
+    "gy .cpu-node-name small{display:block}\n#cpu-topology .cpu-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1"
+    "fr));gap:16px}\n#cpu-topology .cpu-group-label{font-size:12px;color:#60708b;margin-bottom:5px}\n#cpu-topology .cpu-core-grid{display:grid;grid"
+    "-template-columns:repeat(8,minmax(0,1fr));gap:4px}\n#cpu-topology .cpu-core{display:flex;flex-direction:column;gap:2px;padding:0;border:0;min"
+    "-width:0;background:none;font-size:12px;font-variant-numeric:tabular-nums;border-radius:3px}\n#cpu-topology .cpu-core[aria-pressed=true]{outl"
+    "ine:2px solid #2167b9;outline-offset:1px}\n#cpu-topology .cpu-cell{display:block;width:100%;padding:3px 0;background:#edf2f8;border-radius:2p"
+    "x}\n#cpu-topology .cpu-map-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}\n#cpu-topology .cpu-"
+    "selection{display:flex;align-items:center;gap:12px 20px;flex-wrap:wrap;min-height:72px;font-size:13px;padding:12px 0}\n#cpu-topology .cpu-sel"
+    "ection small{display:block}\n#cpu-topology .cpu-heat-scale{display:inline-block;width:64px;height:8px;background:linear-gradient(90deg,#edf2f"
+    "8,#2167b9)}\n#cpu-topology .cpu-help{position:relative}\n#cpu-topology #cpu-help-button{border:1px solid #60708b;border-radius:50%;width:26px;"
+    "height:26px;padding:0;color:#60708b}\n#cpu-topology #cpu-map-help{position:absolute;top:34px;left:0;width:min(300px,75vw);padding:12px;backgr"
+    "ound:#fff;border:1px solid #ced6e2;border-radius:4px;z-index:20;box-shadow:0 4px 12px #18223722;font-size:13px}\n@media(max-width:600px){#cpu"
+    "-topology .cpu-node{grid-template-columns:1fr;gap:8px}#cpu-topology .cpu-node-name{padding:0;display:flex;justify-content:space-between}}\n@m"
+    "edia(pointer:coarse){#cpu-topology .cpu-core{min-height:44px}#cpu-topology #cpu-help-button{width:44px;height:44px}}\n"
+)
+
 _JS = (
     "\n"
     '/* Offline UI: every request goes to the loopback ydb_bench service. */\n'
@@ -2778,44 +2804,58 @@ function parseLocalYdbProfileSelection(groups,selected){
     "'<span class=availability-badge>Unavailable</span><span class=affinity-reason>'+esc(item.reason||'Not supported by thi"
     "s topology.')+'</span>':'')+'</div>'+(child.ch"
     "ildren.size?render(child):'')+'</li>'}).join('')+'</ul>';return render(root)}\n"
-    'async function renderTopology(){\n'
-    '  clearRefresh();\n'
-    '  try{\n'
-    "    const value=await api('/api/system-topology'),topology=value.topology;\n"
-    '    const chipletsByNode=new Map,coreIndex=new Map,siblingsByCpu=new Map;\n'
-    '    for(const chiplet of topology.chiplets)chipletsByNode.set(chiplet.numa_node,[...(chipletsByNode.get(chiplet.numa_nod'
-    'e)||[]),chiplet]);\n'
-    '    topology.physical_cores.forEach((cpus,index)=>cpus.forEach(cpu=>coreIndex.set(cpu,{index,cpus})));for(const siblings '
-    'of topology.smt_siblings)for(const cpu of siblings)siblingsByCpu.set(cpu,siblings);\n'
-    '    const coresFor=cpus=>{const allowed=new Set(cpus),seen=new Set,result=[];for(const cpu of cpus){const core=coreIndex.'
-    'get(cpu);if(!core||seen.has(core.index))continue;seen.add(core.index);const visible=core.cpus.filter(item=>allowed.has(it'
-    'em)),siblings=[...new Set(visible.flatMap(item=>siblingsByCpu.get(item)||[item]))].filter(item=>allowed.has(item));resu'
-    'lt.push({...core,cpus:visible,siblings})}return result};\n'
-    "    const coreList=cpus=>'<ul class=core-list>'+coresFor(cpus).map(core=>'<li class=core-item><strong>Core '+core.index"
-    "+'</strong><span class=cpu-ranges>vCPU '+esc(cpuRanges(core.cpus))+'</span><small>'+(core.siblings.length>1?core.si"
-    "blings.length+' SMT threads':'1 hardware thread')+'</small></li>').join('')+'</ul>';\n"
-    '    const numaBlocks=topology.numa_nodes.map(node=>{\n'
-    '      const chiplets=chipletsByNode.get(node.id)||[];\n'
-    "      const children=chiplets.length?chiplets.map((chiplet,index)=>'<li><div class=topology-node><div class=topology-no"
-    "de-header><strong>'+esc(chiplet.label||'L3 / chiplet '+(index+1))+'</strong><span class=cpu-ranges>CPU '+esc(cpuRanges(chiplet.cpus))+'</span></"
-    "div>'+coreList(chiplet.cpus)+'</div></li>').join(''):'<li><div class=topology-node>'+coreList(node.cpus)+'</div></li>';"
-    "return '<article class=numa-block><div class=numa-header><strong>NUMA '+esc(node.id)+'</strong><small class=muted>'+node"
-    ".cpus.length+' CPUs</small></div><div class=cpu-ranges>CPU '+esc(cpuRanges(node.cpus))+'</div><ul class=topology-tree>'"
-    "+children+'</ul></article>'\n"
-    "    }).join('');\n"
-    "    let content='<h1 class=page-title>System topology</h1><p class=muted>Only CPUs allowed by this process cpuset are sh"
-    'own. Unsupported modes are never silently substituted.</p><section class="card topology-summary"><div><div class=metric>'
-    "'+topology.allowed_cpus.length+' allowed CPUs</div><div class=muted>Compressed CPU ranges</div></div><div class=cpu-rang"
-    "es>'+esc(cpuRanges(topology.allowed_cpus))+'</div></section>'+sectionTabs('topology',[['layout','Topology'],"
-    "['affinity','Affinity availability']])+'<div data-section-panel=\"topology:layout\"><section class=card><h2>NUMA, cache and cores</h2><p cla"
-    "ss=muted>Physical cores include their visible SMT thread count.</p><div class=topology-map>'+numaBlocks+'</div></section"
-    "></div><div data-section-panel=\"topology:affinity\" hidden><section class=card><h2>Affinity availability</h2>'+affinityTree(value.affinity)+'</section></div>'+(topology.hierarchy"
-    "_reasons.length?'<section class=card><h2>Topology notes</h2><ul>'+topology.hierarchy_reasons.map(item=>'<li><strong>'+es"
-    "c(item.level)+':</strong> '+esc(item.reason)+'</li>').join('')+'</ul></section>':'');\n"
-    "    app.innerHTML=shell('topology',content);\n"
-    "    bindSectionTabs(app,'topology');\n"
-    "  }catch(error){app.innerHTML=shell('topology',displayError(error))}\n"
-    '}\n'
+    "\nfunction topologyGroups(topology){\n  const allowed=new Set(topology.allowed_cpus),seen=new Set();\n  const cores=(topology.physical_cores||["
+    "]).map((cpus,index)=>({index,cpus:cpus.filter(cpu=>allowed.has(cpu))})).filter(core=>core.cpus.length);\n  for(const core of cores)for(const "
+    "cpu of core.cpus)seen.add(cpu);\n  for(const cpu of allowed)if(!seen.has(cpu))cores.push({index:cores.length,cpus:[cpu]});\n  const nodes=topo"
+    "logy.numa_nodes.length?topology.numa_nodes:[{id:'—',cpus:[...allowed]}];\n  return nodes.map(node=>{\n    const assigned=new Set(),groups=[];\n"
+    "    for(const chiplet of topology.chiplets.filter(item=>item.numa_node===node.id)){\n      const cpus=chiplet.cpus.filter(cpu=>allowed.has(cp"
+    "u)&&node.cpus.includes(cpu)&&!assigned.has(cpu));\n      if(!cpus.length)continue;cpus.forEach(cpu=>assigned.add(cpu));\n      groups.push({la"
+    "bel:chiplet.label||'L3 / chiplet '+groups.length,cpus});\n    }\n    const rest=node.cpus.filter(cpu=>allowed.has(cpu)&&!assigned.has(cpu));\n "
+    "   if(rest.length)groups.push({label:groups.length?'Other CPUs':'Cache grouping unavailable',cpus:rest});\n    return {...node,groups:groups."
+    "map(group=>({...group,cores:cores.map(core=>({...core,cpus:core.cpus.filter(cpu=>group.cpus.includes(cpu))})).filter(core=>core.cpus.length)"
+    "}))};\n  });\n}\nasync function renderTopology(){\n  clearRefresh();\n  try{\n    const value=await api('/api/system-topology'),t=value.topology;\n"
+    "    if(location.hash!=='#topology')return;\n    const nodes=topologyGroups(t),all=nodes.flatMap(n=>n.groups.flatMap(g=>g.cores));\n    const l"
+    "ayout=nodes.map(node=>'<section class=cpu-node><div class=cpu-node-name><strong>NUMA '+esc(node.id)+'</strong><small data-node-usage=\"'+esc("
+    "node.id)+'\">—</small></div><div class=cpu-groups>'+node.groups.map(group=>\n      '<div class=cpu-group><div class=cpu-group-label>'+esc(grou"
+    "p.label)+'</div><div class=cpu-core-grid>'+group.cores.map(core=>\n        '<button class=cpu-core data-core=\"'+core.index+'\" aria-pressed=fa"
+    "lse aria-label=\"Core '+core.index+'; vCPU '+esc(core.cpus.join(', '))+'\">'+core.cpus.map(cpu=>'<span class=cpu-cell data-cpu=\"'+cpu+'\">'+cpu"
+    "+'</span>').join('')+'</button>'\n      ).join('')+'</div></div>').join('')+'</div></section>').join('');\n    app.innerHTML=shell('topology',"
+    "'<div id=cpu-topology><h1 class=page-title>System topology</h1><p class=muted>'+t.physical_cores.length+' physical cores · '+t.allowed_cpus."
+    "length+' allowed vCPUs · '+t.numa_nodes.length+' NUMA nodes</p>'+\n      sectionTabs('topology',[['layout','Topology & CPU usage'],['affinity"
+    "','Affinity availability']])+\n      '<section data-section-panel=\"topology:layout\"><div class=cpu-map-toolbar><div class=cpu-help><button id"
+    "=cpu-help-button aria-label=\"About the CPU map\" aria-expanded=false aria-controls=cpu-map-help>?</button><div id=cpu-map-help hidden role=no"
+    "te><p>Each column is a physical core; its cells are visible SMT threads. Numbers are vCPU IDs.</p><p>Colour shows busy CPU usage, excluding "
+    "idle and iowait. Hover for values; click to keep a core selected. User includes nice; system includes IRQ time. Steal is reported separately"
+    ".</p><p>Only CPUs allowed by this process cpuset are shown. Missing counters are not zero usage.</p>'+t.hierarchy_reasons.map(item=>'<p>'+es"
+    "c(item.level)+': '+esc(item.reason)+'</p>').join('')+'</div></div><small id=cpu-sample-status>Waiting for CPU samples…</small><small>0% <spa"
+    "n class=cpu-heat-scale></span> 100%</small></div><div id=cpu-selection class=cpu-selection>Select a core to inspect its vCPUs.</div>'+layout"
+    "+'</section>'+\n      '<section data-section-panel=\"topology:affinity\" hidden><h2>Affinity availability</h2>'+affinityTree(value.affinity)+'<"
+    "/section></div>');\n    const target=document.querySelector('#cpu-topology');bindSectionTabs(target,'topology');\n    const help=target.queryS"
+    "elector('#cpu-map-help'),helpButton=target.querySelector('#cpu-help-button');\n    const closeHelp=()=>{help.hidden=true;helpButton.setAttrib"
+    "ute('aria-expanded','false')};\n    helpButton.onclick=()=>{help.hidden=!help.hidden;helpButton.setAttribute('aria-expanded',String(!help.hid"
+    "den))};\n    target.addEventListener('keydown',e=>{if(e.key==='Escape')closeHelp()});\n    target.addEventListener('click',e=>{if(!e.target.cl"
+    "osest('.cpu-help'))closeHelp()});\n    let selected=null,hovered=null,samples={},loading=false;\n    const pct=v=>Number.isFinite(v)?v.toFixed"
+    "(2)+'%':'—';\n    function details(){\n      const index=hovered??selected,core=all.find(c=>c.index===index),box=target.querySelector('#cpu-se"
+    "lection');\n      box.innerHTML=core?'<strong>Core '+core.index+'</strong>'+core.cpus.map(cpu=>{\n        const s=samples[cpu];return '<div><s"
+    "trong>vCPU '+cpu+' · '+pct(s?.busy)+'</strong><small>User '+pct(s?.user)+' · system '+pct(s?.system)+' · iowait '+pct(s?.iowait)+' · steal '"
+    "+pct(s?.steal)+'</small></div>'\n      }).join(''):'Select a core to inspect its vCPUs.';\n    }\n    for(const button of target.querySelectorA"
+    "ll('[data-core]')){\n      const id=Number(button.dataset.core);\n      button.onclick=()=>{selected=id;target.querySelectorAll('[data-core]')"
+    ".forEach(b=>b.setAttribute('aria-pressed',String(Number(b.dataset.core)===id)));details()};\n      button.onmouseenter=button.onfocus=()=>{ho"
+    "vered=id;details()};\n      button.onmouseleave=button.onblur=()=>{hovered=null;details()};\n    }\n    const refresh=async()=>{\n      if(loadi"
+    "ng||!target.isConnected||location.hash!=='#topology')return;loading=true;\n      try{\n        const data=await api('/api/cpu-usage');if(!targ"
+    "et.isConnected)return;samples=data.cpus||{};\n        target.querySelector('#cpu-sample-status').textContent=!data.available?'CPU usage unava"
+    "ilable on this host':Object.values(samples).some(v=>v!==null)?'Updated '+new Date().toLocaleTimeString():'Waiting for second CPU sample…';\n "
+    "       for(const cell of target.querySelectorAll('[data-cpu]')){\n          const busy=samples[cell.dataset.cpu]?.busy,valid=Number.isFinite("
+    "busy);\n          cell.style.background=valid?'color-mix(in srgb, #2167b9 '+busy+'%, #edf2f8)':'';\n          cell.style.color=valid&&busy>55?"
+    "'#fff':'';\n          cell.parentElement.setAttribute('aria-label','Core '+cell.parentElement.dataset.core+'; '+[...cell.parentElement.childr"
+    "en].map(c=>'vCPU '+c.dataset.cpu+' '+pct(samples[c.dataset.cpu]?.busy)).join('; '));\n        }\n        for(const node of nodes){\n          c"
+    "onst values=node.cpus.map(cpu=>samples[cpu]?.busy).filter(Number.isFinite);\n          const el=[...target.querySelectorAll('[data-node-usage"
+    "]')].find(e=>e.dataset.nodeUsage===String(node.id));\n          if(el)el.textContent=values.length===node.cpus.length&&values.length?pct(valu"
+    "es.reduce((a,b)=>a+b,0)/values.length)+' busy':'—';\n        }\n        details();\n      }catch(error){if(target.isConnected){samples={};targe"
+    "t.querySelector('#cpu-sample-status').textContent='CPU sampling failed';target.querySelectorAll('.cpu-cell').forEach(c=>{c.style.background="
+    "'';c.style.color=''});target.querySelectorAll('[data-node-usage]').forEach(e=>e.textContent='—');details()}}\n      finally{loading=false}\n  "
+    "  };\n    refreshTimer=setInterval(refresh,2000);await refresh();\n  }catch(error){if(location.hash==='#topology')app.innerHTML=shell('topolog"
+    "y',displayError(error))}\n}\n"
     'async function renderComparisons(){\n'
     '  clearRefresh();\n'
     '  try{\n'
@@ -3569,6 +3609,7 @@ class RunService:
         self.event_limit, self.tail_limit = event_limit, tail_limit
         self.perf_available = perf_available
         self._runs, self._lock = {}, threading.RLock()
+        self._cpu_sampler = LogicalCpuSampler()
         self._accepting_runs = True
         self._queue = deque()
         self._active_run_id = None
@@ -3968,6 +4009,11 @@ class RunService:
                 for mode in AFFINITY_MODES
             ],
         }
+
+    def cpu_usage(self):
+        result = self._cpu_sampler.sample()
+        allowed = os.sched_getaffinity(0) if hasattr(os, "sched_getaffinity") else set()
+        return {**result, "cpus": {cpu: value for cpu, value in result["cpus"].items() if cpu in allowed}}
 
     def filtered_model(self, filters):
         def matches(record):
@@ -4913,6 +4959,8 @@ def _handler(service):
                 return self._json(200, service.activity_status())
             if path == "/api/benchmarks":
                 return self._json(200, benchmark_catalog())
+            if path == "/api/cpu-usage":
+                return self._json(200, service.cpu_usage())
             if path == "/api/system-topology":
                 return self._json(200, service.topology())
             if path == "/api/runs":

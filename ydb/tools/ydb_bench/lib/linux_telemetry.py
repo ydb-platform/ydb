@@ -18,6 +18,59 @@ def _is_finite_number(value):
         return False
 
 
+class LogicalCpuSampler:
+    """Shared, bounded on-demand sampler; requests within one second reuse a sample."""
+
+    def __init__(self, proc_root=Path("/proc")):
+        self.proc_root = Path(proc_root)
+        self._lock = threading.Lock()
+        self._previous = {}
+        self._time = None
+        self._result = None
+
+    def sample(self):
+        with self._lock:
+            now = time.monotonic()
+            if self._time is not None and now - self._time < 1:
+                return self._result
+            try:
+                current = {}
+                for line in self.proc_root.joinpath("stat").read_text().splitlines():
+                    fields = line.split()
+                    if fields and fields[0].startswith("cpu") and fields[0][3:].isdigit():
+                        ticks = tuple(map(int, fields[1:9]))
+                        if len(ticks) != 8 or any(value < 0 for value in ticks):
+                            continue
+                        current[int(fields[0][3:])] = ticks
+            except (OSError, ValueError):
+                current = {}
+            cpus = {}
+            for cpu, ticks in current.items():
+                previous = self._previous.get(cpu)
+                cpus[cpu] = None
+                if previous is None:
+                    continue
+                delta = [value - old for value, old in zip(ticks, previous)]
+                total = sum(delta)
+                if total <= 0 or any(value < 0 for value in delta):
+                    continue
+                cpus[cpu] = {
+                    "busy": 100 * (total - delta[3] - delta[4]) / total,
+                    "user": 100 * (delta[0] + delta[1]) / total,
+                    "system": 100 * (delta[2] + delta[5] + delta[6]) / total,
+                    "iowait": 100 * delta[4] / total,
+                    "steal": 100 * delta[7] / total,
+                }
+            self._result = {
+                "cpus": cpus,
+                "interval_seconds": None if self._time is None else now - self._time,
+                "available": bool(current),
+            }
+            self._time = now
+            self._previous = current
+            return self._result
+
+
 class LinuxCpuMonitor:
     def __init__(self, role_pids, role_cpu_counts, interval=0.5, proc_root=Path("/proc")):
         self.role_pids = role_pids

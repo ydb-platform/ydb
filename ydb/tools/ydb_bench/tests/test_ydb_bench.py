@@ -2173,6 +2173,40 @@ class YdbBenchTest(unittest.TestCase):
                     )
                 )
 
+    def test_logical_cpu_sampler_deltas_and_resets(self):
+        sampler = linux_telemetry.LogicalCpuSampler()
+        samples = [
+            "cpu0 100 10 20 400 10 2 3 5 50 2\ncpu7 1 0 0 1 0 0 0 0\n",
+            "cpu0 120 10 30 450 20 4 6 10 60 2\ncpu7 2 0 0 2 0 0 0 0\n",
+            "cpu0 1 0 0 1 0 0 0 0\n",
+        ]
+        with mock.patch.object(Path, "read_text", side_effect=samples) as read, mock.patch.object(
+            linux_telemetry.time, "monotonic", side_effect=[10, 10.2, 12, 14]
+        ):
+            first = sampler.sample()
+            self.assertIsNone(first["cpus"][0])
+            self.assertIs(sampler.sample(), first)
+            second = sampler.sample()
+            self.assertEqual(second["cpus"][0], {"busy": 40, "user": 20, "system": 15, "iowait": 10, "steal": 5})
+            self.assertEqual(second["interval_seconds"], 2)
+            self.assertIsNone(sampler.sample()["cpus"][0])
+            self.assertEqual(read.call_count, 3)
+        with mock.patch.object(Path, "read_text", side_effect=OSError), mock.patch.object(
+            linux_telemetry.time, "monotonic", return_value=16
+        ):
+            self.assertFalse(sampler.sample()["available"])
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for browser logic checks")
+    def test_topology_groups_preserve_sparse_cpu_ids(self):
+        script = web._JS[web._JS.index("function topologyGroups(") : web._JS.index("async function renderTopology(")]
+        script += """
+const t={allowed_cpus:[2,9,130],physical_cores:[[2,130]],numa_nodes:[{id:7,cpus:[2,9,130]}],chiplets:[{numa_node:7,cpus:[2,130],label:'L3'}]};
+const groups=topologyGroups(t)[0].groups;
+if(JSON.stringify(groups.flatMap(g=>g.cores.flatMap(c=>c.cpus)).sort((a,b)=>a-b))!=='[2,9,130]')throw Error('CPU lost or duplicated');
+if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Error('Grouping lost');
+"""
+        subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True, timeout=10)
+
     def test_local_ydb_actor_cpu_count_is_independent_of_affinity(self):
         profile = {"workload": {"type": "kv", "operation": "upsert"}, "load": {"parameter": "threads", "values": [1]}}
         profile["actor-system"] = {"static-nodes": {"cpu-count": 8}, "dynamic-nodes": {"cpu-count": 4}}
@@ -7726,11 +7760,11 @@ class WebTest(unittest.TestCase):
             with urllib.request.urlopen(base + "/app.js") as response:
                 script = response.read()
                 self.assertIn(b"System topology", script)
-                self.assertIn(b"NUMA, cache and cores", script)
+                self.assertIn(b"Topology & CPU usage", script)
                 self.assertIn(b"function affinityTree", script)
                 self.assertIn(b"class=affinity-tree", script)
                 self.assertIn(b"SMT threads", script)
-                self.assertIn(b"<span class=cpu-ranges>vCPU ", script)
+                self.assertIn(b"data-cpu=", script)
                 self.assertNotIn(b"(core.index+1)", script)
                 self.assertIn(b"Unavailable", script)
                 self.assertNotIn(b"Use in new run", script)

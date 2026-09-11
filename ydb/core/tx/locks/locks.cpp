@@ -1593,9 +1593,9 @@ void TSysLocks::EraseLock(const TArrayRef<const TCell>& key) {
     }
 }
 
-void TSysLocks::CommitLock(const TArrayRef<const TCell>& key) {
+void TSysLocks::CommitLock(ui64 lockId) {
     Y_ENSURE(Update);
-    if (auto* lock = Locker.FindLockPtr(GetLockId(key))) {
+    if (auto* lock = Locker.FindLockPtr(lockId)) {
         bool foundStoredBreakerQuerySpanId = false;
         for (auto& pr : lock->ConflictLocks) {
             if (!!(pr.second.Flags & ELockConflictFlags::BreakThemOnOurCommit) && !pr.first->IsRemoved()) {

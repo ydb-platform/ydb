@@ -1203,6 +1203,10 @@ public:
         , Locker(self)
     {}
 
+    ui64 SelfShardId() const {
+        return Self->TabletID();
+    }
+
     void SetupUpdate(TLocksUpdate* update, ILocksDb* db = nullptr) {
         Y_ENSURE(!Update, "Cannot setup a recursive update");
         Y_ENSURE(update, "Cannot setup a nullptr update");
@@ -1248,7 +1252,7 @@ public:
     TLock GetLock(const TArrayRef<const TCell>& syslockKey) const;
     void EraseLock(ui64 lockId);
     void EraseLock(const TArrayRef<const TCell>& syslockKey);
-    void CommitLock(const TArrayRef<const TCell>& syslockKey);
+    void CommitLock(ui64 lockId);
     void SetLock(const TTableId& tableId, const TArrayRef<const TCell>& key);
     void SetLock(const TTableId& tableId, const TTableRange& range);
     void SetWriteLock(const TTableId& tableId, const TArrayRef<const TCell>& key);

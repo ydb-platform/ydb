@@ -17,27 +17,38 @@
 namespace NKikimr {
 namespace NDataShard {
 
-void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLocks& sysLocks, TKeyValidator& keyValidator, std::optional<ui64> localTabletId);
+void KqpSetTxLocksKeys(
+    const NKikimrDataEvents::TKqpLocks& locks, const TSysLocks& sysLocks,
+    TKeyValidator& keyValidator, bool allowAncestorLocks);
 
 void KqpPrepareInReadsets(TInputOpData::TInReadSets& inReadSets,
     const NKikimrDataEvents::TKqpLocks& kqpLocks, ui64 tabletId);
 
-std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateLocks(ui64 tabletId, TSysLocks& sysLocks,
-    const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, const TInputOpData::TInReadSets& inReadSets,
-    std::optional<ui64> localTabletId = std::nullopt);
-std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 tabletId, TSysLocks& sysLocks,
-    const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, ui64 txId, const TVector<NKikimrTx::TEvReadSet>& delayedInReadSets,
-    TInputOpData::TAwaitingDecisions& awaitingDecisions, TOutputOpData::TOutReadSets& outReadSets);
-void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks* kqpLocks,
+std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateLocks(
+    TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks,
+    bool useGenericReadSets, const TInputOpData::TInReadSets& inReadSets,
+    bool allowAncestorLocks);
+std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(
+    TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks,
+    bool useGenericReadSets, ui64 txId, const TVector<NKikimrTx::TEvReadSet>& delayedInReadSets,
+    TInputOpData::TAwaitingDecisions& awaitingDecisions, TOutputOpData::TOutReadSets& outReadSets,
+    bool allowAncestorLocks);
+void KqpFillOutReadSets(
+    TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks* kqpLocks,
     NKikimrTx::TReadSetData::EDecision decision, ui64 origin);
-void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks& kqpLocks, bool useGenericReadSets, TSysLocks& sysLocks, ui64 tabletId);
+void KqpFillOutReadSets(
+    TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks& kqpLocks,
+    bool useGenericReadSets, TSysLocks& sysLocks, bool allowAncestorLocks);
 
 
 bool KqpLocksHasArbiter(const NKikimrDataEvents::TKqpLocks* kqpLocks);
 bool KqpLocksIsArbiter(ui64 tabletId, const NKikimrDataEvents::TKqpLocks* kqpLocks);
 
-void KqpEraseLocks(ui64 tabletId, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks, std::optional<ui64> localTabletId = std::nullopt);
-void KqpCommitLocks(ui64 tabletId, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks, IDataShardUserDb& userDb, std::optional<ui64> localTabletId = std::nullopt);
+void KqpEraseLocks(
+    const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks, bool allowAncestorLocks);
+void KqpCommitLocks(
+    const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks,
+    IDataShardUserDb& userDb, bool allowAncestorLocks);
 
 void KqpUpdateDataShardStatCounters(TDataShard& dataShard, const NMiniKQL::TEngineHostCounters& counters);
 

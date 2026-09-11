@@ -79,7 +79,8 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
 
     if (record.HasLocks()) {
         KqpLocks = record.GetLocks();
-        KqpSetTxLocksKeys(record.GetLocks(), self->SysLocksTable(), KeyValidator, TabletId);
+        const bool allowAncestorLocks = AppData()->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
+        KqpSetTxLocksKeys(record.GetLocks(), self->SysLocksTable(), KeyValidator, allowAncestorLocks);
     }
     KeyValidator.GetInfo().SetLoaded();
 }

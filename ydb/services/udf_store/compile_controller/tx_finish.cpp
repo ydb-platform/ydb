@@ -32,6 +32,9 @@ public:
                     NIceDb::TUpdate<Schema::Attempts::LastError>(attempt.LastError),
                     NIceDb::TUpdate<Schema::Attempts::Poisoned>(attempt.Poisoned));
         }
+        for (const ui32 nodeId : Update.ErasedWorkers) {
+            db.Table<Schema::Workers>().Key(nodeId).Delete();
+        }
 
         return true;
     }

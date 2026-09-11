@@ -6,6 +6,7 @@
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/services/metadata/request/common.h>
@@ -14,6 +15,12 @@
 namespace NKikimr::NUdfStore {
 
 namespace {
+
+//! The YQL request behind a reconcile settles a future rather than answering an
+//! event, so nothing else would ever wake this actor if that future is dropped.
+//! The controller keeps one reconcile per platform in flight, so an actor that
+//! never replies would freeze that platform's artifact view until the leader moves.
+constexpr TDuration ReconcileTimeout = TDuration::Minutes(5);
 
 class TReconcileActor : public NActors::TActorBootstrapped<TReconcileActor> {
 public:
@@ -28,6 +35,7 @@ public:
 
     void Bootstrap() {
         Become(&TReconcileActor::StateMain);
+        Schedule(ReconcileTimeout, new NActors::TEvents::TEvWakeup());
 
         auto request = NMetadata::NRequest::TDialogYQLRequest::TRequest();
         request.mutable_query()->set_yql_text(
@@ -45,12 +53,22 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NMetadata::NRequest::TEvRequestResult<NMetadata::NRequest::TDialogYQLRequest>, HandleResult);
             hFunc(NMetadata::NRequest::TEvRequestFailed, HandleFailed);
+            cFunc(NActors::TEvents::TEvWakeup::EventType, HandleTimeout);
+            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
             default:
                 break;
         }
     }
 
 private:
+    void HandleTimeout() {
+        // Reported as a plain failure: the controller then keeps the platform's
+        // gaps unresolved and is free to start a fresh reconcile for it.
+        ALS_WARN(NKikimrServices::METADATA_PROVIDER)
+            << "TReconcileActor: timed out reading " << ArtifactTablePath_;
+        Reply(false, {});
+    }
+
     void HandleResult(
         NMetadata::NRequest::TEvRequestResult<NMetadata::NRequest::TDialogYQLRequest>::TPtr& ev)
     {

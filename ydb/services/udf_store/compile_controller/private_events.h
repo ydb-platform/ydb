@@ -12,6 +12,8 @@ struct TEvControllerPrivate {
     enum EEv {
         EvReconcileResult = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvScheduleTick,
+        EvReconcileTick,
+        EvHintTick,
         EvEnd
     };
 
@@ -33,6 +35,19 @@ struct TEvControllerPrivate {
     //! Periodic wakeup that expires assignments and drains the queue.
     struct TEvScheduleTick
         : public NActors::TEventLocal<TEvScheduleTick, EvScheduleTick>
+    {};
+
+    //! Periodic wakeup that re-reads the artifact tables. Separate from the tick
+    //! above because a full scan per platform is far more expensive than
+    //! expiring assignments and has its own, longer, interval.
+    struct TEvReconcileTick
+        : public NActors::TEventLocal<TEvReconcileTick, EvReconcileTick>
+    {};
+
+    //! Fires once after a burst of NeedArtifact hints, so that a snapshot
+    //! refresh seen by every dinode costs one scheduling round, not one per hint.
+    struct TEvHintTick
+        : public NActors::TEventLocal<TEvHintTick, EvHintTick>
     {};
 };
 

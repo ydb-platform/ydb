@@ -336,6 +336,26 @@ Y_UNIT_TEST_SUITE(WasmCompileControllerClient) {
             static_cast<int>(key.GetKind()), static_cast<int>(NKikimrUdfStore::ARTIFACT_KIND_MODULE));
     }
 
+    Y_UNIT_TEST(GapIsReportedOncePerUid) {
+        TDinodeEnv env;
+        env.InitializeService();
+
+        // Every refresh rediscovers the same gap. Repeating it costs the
+        // controller a full rebuild per hint, times every node of the platform.
+        env.SendSnapshot({{.Name = "m1", .Uid = "u1"}});
+        env.SendSnapshot({{.Name = "m1", .Uid = "u1"}});
+        env.SendSnapshot({{.Name = "m1", .Uid = "u1"}});
+
+        UNIT_ASSERT_VALUES_EQUAL_C(env.NeedArtifacts().size(), 1,
+            "an unchanged gap was reported again on every snapshot refresh");
+
+        // A re-upload is a different gap and has to reach the controller.
+        env.SendSnapshot({{.Name = "m1", .Uid = "u2"}});
+
+        UNIT_ASSERT_VALUES_EQUAL_C(env.NeedArtifacts().size(), 2, "a re-upload was not reported");
+        UNIT_ASSERT_VALUES_EQUAL(env.NeedArtifacts().back().GetKey().GetUid(), "u2");
+    }
+
     Y_UNIT_TEST(FlagOffKeepsTheSnapshotPath) {
         TDinodeEnv env({.EnableController = false});
         env.InitializeService();
@@ -372,6 +392,50 @@ Y_UNIT_TEST_SUITE(WasmCompileControllerClient) {
         const auto& record = env.Heartbeats().back();
         UNIT_ASSERT_VALUES_EQUAL_C(record.ActiveAssignmentIdsSize(), 0,
             "the node accepted an assignment for object code it cannot produce");
+
+        // Silence would leave the platform's slot taken until the assignment
+        // expires, which under MaxPerCpuSpec = 1 stalls the whole platform.
+        UNIT_ASSERT_VALUES_EQUAL_C(env.Failed().size(), 1, "the refusal was never reported");
+        UNIT_ASSERT_VALUES_EQUAL(env.Failed().front().GetAssignmentId(), 42);
+        UNIT_ASSERT_C(env.Failed().front().GetStale(),
+            "a refusal was charged to the module's retry budget");
+    }
+
+    Y_UNIT_TEST(SecondUidForTheSameNameIsRejected) {
+        TDinodeEnv env;
+        env.InitializeService();
+        env.SendAssignment("m1", "u1", /*assignmentId=*/42);
+
+        // A re-upload while the previous compile is still running. This node
+        // cannot take it, and saying nothing would make the controller re-issue
+        // it here on every heartbeat for as long as the first compile lasts.
+        env.SendAssignment("m1", "u2", /*assignmentId=*/43);
+        env.Settle(TickTime);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(env.Failed().size(), 1, "the second assignment was dropped silently");
+        UNIT_ASSERT_VALUES_EQUAL(env.Failed().front().GetAssignmentId(), 43);
+        UNIT_ASSERT_C(env.Failed().front().GetStale(), "a refusal was counted as a compile failure");
+
+        const auto& record = env.Heartbeats().back();
+        UNIT_ASSERT_VALUES_EQUAL_C(record.ActiveAssignmentIdsSize(), 1,
+            "the node claims an assignment it refused");
+        UNIT_ASSERT_VALUES_EQUAL(record.GetActiveAssignmentIds(0), 42);
+    }
+
+    Y_UNIT_TEST(RepeatedAssignmentIsIdempotent) {
+        TDinodeEnv env;
+        env.InitializeService();
+
+        // The same right delivered twice, e.g. after a pipe hiccup. Refusing
+        // the copy would release a slot this node is legitimately working on.
+        env.SendAssignment("m1", "u1", /*assignmentId=*/42);
+        env.SendAssignment("m1", "u1", /*assignmentId=*/42);
+        env.Settle(TickTime);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(env.Failed().size(), 0, "a re-delivered assignment was refused");
+        const auto& record = env.Heartbeats().back();
+        UNIT_ASSERT_VALUES_EQUAL(record.ActiveAssignmentIdsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetActiveAssignmentIds(0), 42);
     }
 
     Y_UNIT_TEST(AssignmentFromAPreviousLeaderIsRejected) {
@@ -385,6 +449,9 @@ Y_UNIT_TEST_SUITE(WasmCompileControllerClient) {
 
         UNIT_ASSERT_VALUES_EQUAL_C(env.Heartbeats().back().ActiveAssignmentIdsSize(), 0,
             "the node took an exclusive right from a leader that no longer holds it");
+        UNIT_ASSERT_VALUES_EQUAL_C(env.Failed().size(), 1, "the refusal was never reported");
+        UNIT_ASSERT_C(env.Failed().front().GetStale(),
+            "a refusal was charged to the module's retry budget");
     }
 
     Y_UNIT_TEST(AssignmentFromANewerLeaderIsAccepted) {

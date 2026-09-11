@@ -19,6 +19,11 @@ namespace {
 
 constexpr TDuration TickInterval = TDuration::Seconds(5);
 
+//! How long a burst of NeedArtifact hints is collected before it is acted upon.
+//! Short enough to stay a latency shortcut over the periodic tick, long enough
+//! that a refresh seen by every dinode collapses into one scheduling round.
+constexpr TDuration HintCoalesceInterval = TDuration::Seconds(1);
+
 const TString& ModuleKindString() {
     static const TString kind = WasmArtifactKindToString(EWasmArtifactKind::Module);
     return kind;
@@ -73,11 +78,21 @@ TWasmCompileController::TWasmCompileController(
 }
 
 void TWasmCompileController::OnDetach(const TActorContext& ctx) {
+    Cleanup();
     Die(ctx);
 }
 
 void TWasmCompileController::OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorContext& ctx) {
+    Cleanup();
     Die(ctx);
+}
+
+void TWasmCompileController::Cleanup() {
+    // Everything this leader generation owns outside its own mailbox: a
+    // subscription the provider would keep feeding, and reconcile actors that
+    // would answer into the void.
+    UnsubscribeFromSnapshot();
+    StopReconciles();
 }
 
 void TWasmCompileController::OnActivateExecutor(const TActorContext& ctx) {
@@ -102,6 +117,7 @@ void TWasmCompileController::SwitchToWork(const TActorContext& ctx) {
     SubscribeToSnapshot();
     StartReconcileForAllPlatforms();
     ScheduleTick();
+    ScheduleReconcileTick();
 }
 
 void TWasmCompileController::ApplyConfig(const NKikimrConfig::TUdfStoreConfig& config) {
@@ -114,6 +130,15 @@ void TWasmCompileController::ApplyConfig(const NKikimrConfig::TUdfStoreConfig& c
     }
     if (const ui32 seconds = config.GetWasmCompileHeartbeatTimeoutSeconds()) {
         HeartbeatTimeout = TDuration::Seconds(seconds);
+    }
+    if (const ui32 seconds = config.GetWasmCompileAssignGraceSeconds()) {
+        AssignGrace = TDuration::Seconds(seconds);
+    }
+    if (const ui32 seconds = config.GetWasmCompileReconcileIntervalSeconds()) {
+        ReconcileInterval = TDuration::Seconds(seconds);
+    }
+    if (const ui32 seconds = config.GetWasmCompileWorkerRetentionSeconds()) {
+        WorkerRetention = TDuration::Seconds(seconds);
     }
 }
 
@@ -148,17 +173,33 @@ void TWasmCompileController::Handle(TEvSubDomain::TEvConfigure::TPtr& ev) {
 }
 
 void TWasmCompileController::SubscribeToSnapshot() {
-    if (SnapshotSubscribed) {
+    if (SnapshotFetcher) {
         return;
     }
-    SnapshotSubscribed = true;
+    SnapshotFetcher = std::make_shared<TSnapshotsFetcher>();
     Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
-        new NMetadata::NProvider::TEvSubscribeExternal(std::make_shared<TSnapshotsFetcher>()));
+        new NMetadata::NProvider::TEvSubscribeExternal(SnapshotFetcher));
+}
+
+void TWasmCompileController::UnsubscribeFromSnapshot() {
+    if (!SnapshotFetcher) {
+        return;
+    }
+    // Without this the provider keeps this dead actor in its subscriber list
+    // and broadcasts every refresh to it, once per leader generation forever.
+    Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
+        new NMetadata::NProvider::TEvUnsubscribeExternal(SnapshotFetcher));
+    SnapshotFetcher.reset();
 }
 
 void TWasmCompileController::ScheduleTick() {
     NActors::TActor<TWasmCompileController>::Schedule(
         TickInterval, new TEvControllerPrivate::TEvScheduleTick());
+}
+
+void TWasmCompileController::ScheduleReconcileTick() {
+    NActors::TActor<TWasmCompileController>::Schedule(
+        ReconcileInterval, new TEvControllerPrivate::TEvReconcileTick());
 }
 
 void TWasmCompileController::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
@@ -210,6 +251,13 @@ void TWasmCompileController::Handle(NMetadata::NProvider::TEvRefreshSubscriberDa
         }
     }
 
+    ModuleIndex.clear();
+    ModuleIndex.reserve(Modules.size());
+    for (size_t index = 0; index < Modules.size(); ++index) {
+        const auto& entry = Modules[index];
+        ModuleIndex[MakeArtifactKey(entry.Name, entry.Kind, entry.Uid)] = index;
+    }
+
     ALS_INFO(NKikimrServices::METADATA_PROVIDER)
         << "TWasmCompileController[" << TabletID() << "]: snapshot with " << Modules.size()
         << " compilable modules";
@@ -221,12 +269,30 @@ void TWasmCompileController::Handle(NMetadata::NProvider::TEvRefreshSubscriberDa
     ScheduleAssignments();
 }
 
+bool TWasmCompileController::IsKnownPlatform(const TString& cpuSpec) const {
+    for (const auto& [nodeId, worker] : Workers) {
+        Y_UNUSED(nodeId);
+        if (worker.CpuSpec == cpuSpec) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void TWasmCompileController::StartReconcile(const TString& cpuSpec) {
     if (cpuSpec.empty() || ReconcileInFlight.contains(cpuSpec)) {
         return;
     }
-    ReconcileInFlight.insert(cpuSpec);
-    Register(CreateReconcileActor(SelfId(), cpuSpec, GetArtifactTablePath(cpuSpec)));
+    ReconcileInFlight[cpuSpec] =
+        Register(CreateReconcileActor(SelfId(), cpuSpec, GetArtifactTablePath(cpuSpec)));
+}
+
+void TWasmCompileController::StopReconciles() {
+    for (const auto& [cpuSpec, actorId] : ReconcileInFlight) {
+        Y_UNUSED(cpuSpec);
+        Send(actorId, new NActors::TEvents::TEvPoison());
+    }
+    ReconcileInFlight.clear();
 }
 
 void TWasmCompileController::StartReconcileForAllPlatforms() {
@@ -237,10 +303,21 @@ void TWasmCompileController::StartReconcileForAllPlatforms() {
         Y_UNUSED(nodeId);
         platforms.insert(worker.CpuSpec);
     }
+
+    // A platform exists as long as some node has a Workers row for it. Once the
+    // last one is forgotten, keeping the platform here would mean scanning its
+    // artifact table every interval for the lifetime of the tenant.
+    TVector<TString> forgotten;
     for (const auto& [cpuSpec, artifacts] : ArtifactsByCpuSpec) {
         Y_UNUSED(artifacts);
-        platforms.insert(cpuSpec);
+        if (!platforms.contains(cpuSpec)) {
+            forgotten.push_back(cpuSpec);
+        }
     }
+    for (const auto& cpuSpec : forgotten) {
+        ArtifactsByCpuSpec.erase(cpuSpec);
+    }
+
     for (const auto& cpuSpec : platforms) {
         StartReconcile(cpuSpec);
     }
@@ -260,12 +337,27 @@ void TWasmCompileController::Handle(TEvControllerPrivate::TEvReconcileResult::TP
 void TWasmCompileController::Handle(TEvControllerPrivate::TEvScheduleTick::TPtr&) {
     TStateUpdate update;
     CollectExpiredAssignments(update);
+    CollectStaleRows(update);
     ApplyStateUpdate(std::move(update));
 
-    StartReconcileForAllPlatforms();
     RebuildQueue();
     ScheduleAssignments();
     ScheduleTick();
+}
+
+void TWasmCompileController::Handle(TEvControllerPrivate::TEvReconcileTick::TPtr&) {
+    StartReconcileForAllPlatforms();
+    ScheduleReconcileTick();
+}
+
+void TWasmCompileController::Handle(TEvControllerPrivate::TEvHintTick::TPtr&) {
+    HintTickScheduled = false;
+    for (const auto& cpuSpec : DirtyPlatforms) {
+        StartReconcile(cpuSpec);
+    }
+    DirtyPlatforms.clear();
+    RebuildQueue();
+    ScheduleAssignments();
 }
 
 bool TWasmCompileController::HasArtifact(
@@ -295,12 +387,8 @@ bool TWasmCompileController::AreLibrariesReady(const TModuleEntry& entry, const 
 }
 
 const TWasmCompileController::TModuleEntry* TWasmCompileController::FindModule(const TGapKey& key) const {
-    for (const auto& entry : Modules) {
-        if (entry.Name == key.Name && entry.Kind == key.Kind && entry.Uid == key.Uid) {
-            return &entry;
-        }
-    }
-    return nullptr;
+    const auto it = ModuleIndex.find(MakeArtifactKey(key.Name, key.Kind, key.Uid));
+    return it == ModuleIndex.end() ? nullptr : &Modules[it->second];
 }
 
 void TWasmCompileController::RebuildQueue() {
@@ -309,12 +397,21 @@ void TWasmCompileController::RebuildQueue() {
     MissingByCpuSpec.clear();
     PoisonedGaps = 0;
 
-    THashSet<TString> platforms;
+    // Two different sets on purpose. A gap is only assignable on a platform
+    // that has someone to compile it, but it is still missing on a platform
+    // whose workers all went away - which is exactly when the alarm matters.
+    THashSet<TString> livePlatforms;
+    THashSet<TString> knownPlatforms;
     for (const auto& [nodeId, worker] : Workers) {
         Y_UNUSED(nodeId);
+        knownPlatforms.insert(worker.CpuSpec);
         if (worker.Alive) {
-            platforms.insert(worker.CpuSpec);
+            livePlatforms.insert(worker.CpuSpec);
         }
+    }
+    for (const auto& [cpuSpec, artifacts] : ArtifactsByCpuSpec) {
+        Y_UNUSED(artifacts);
+        knownPlatforms.insert(cpuSpec);
     }
 
     // Libraries go in their own earlier pass: a module is only assignable once
@@ -325,7 +422,7 @@ void TWasmCompileController::RebuildQueue() {
             if (isLibrary != librariesPass) {
                 continue;
             }
-            for (const auto& cpuSpec : platforms) {
+            for (const auto& cpuSpec : knownPlatforms) {
                 if (HasArtifact(cpuSpec, entry.Name, entry.Kind, entry.Uid)) {
                     continue;
                 }
@@ -336,6 +433,12 @@ void TWasmCompileController::RebuildQueue() {
                     .CpuSpec = cpuSpec,
                 };
                 MissingByCpuSpec[cpuSpec] += 1;
+
+                if (!livePlatforms.contains(cpuSpec)) {
+                    // Nobody can be asked to compile it, but the gap is real and
+                    // has to keep showing up in WasmModulesMissingArtifact.
+                    continue;
+                }
 
                 const auto attemptIt = Attempts.find(key);
                 if (attemptIt != Attempts.end() && attemptIt->second.Poisoned) {
@@ -352,6 +455,20 @@ void TWasmCompileController::RebuildQueue() {
                     Queue.push_back(std::move(key));
                 }
             }
+        }
+    }
+}
+
+void TWasmCompileController::RecountInflight() {
+    for (auto& [nodeId, worker] : Workers) {
+        Y_UNUSED(nodeId);
+        worker.Inflight = 0;
+    }
+    for (const auto& [key, assignment] : Assignments) {
+        Y_UNUSED(key);
+        const auto it = Workers.find(assignment.NodeId);
+        if (it != Workers.end()) {
+            it->second.Inflight += 1;
         }
     }
 }
@@ -456,6 +573,13 @@ void TWasmCompileController::ScheduleAssignments() {
     TVector<TPendingAssign> pending;
     std::deque<TGapKey> deferred;
 
+    // The budget is derived here rather than maintained across events: a
+    // reconnect, a leader change or a release all used to leave it disagreeing
+    // with the assignment table, and every disagreement overshoots MaxPerDinode.
+    RecountInflight();
+
+    const TInstant now = TActivationContext::Now();
+
     while (!Queue.empty()) {
         TGapKey key = std::move(Queue.front());
         Queue.pop_front();
@@ -483,8 +607,9 @@ void TWasmCompileController::ScheduleAssignments() {
         TAssignment assignment{
             .AssignmentId = NextAssignmentId++,
             .NodeId = worker->NodeId,
-            .Deadline = TInstant::Now() + AssignmentTimeout,
+            .Deadline = now + AssignmentTimeout,
             .Generation = Executor()->Generation(),
+            .IssuedAt = now,
         };
 
         auto event = std::make_unique<TEvCompileController::TEvAssignCompile>();
@@ -545,10 +670,9 @@ void TWasmCompileController::ReleaseAssignment(const TGapKey& key, TStringBuf re
     if (it == Assignments.end()) {
         return;
     }
-    const auto workerIt = Workers.find(it->second.NodeId);
-    if (workerIt != Workers.end() && workerIt->second.Inflight > 0) {
-        workerIt->second.Inflight -= 1;
-    }
+    // No decrement here: the next scheduling round recounts the budget from
+    // `Assignments`, and decrementing a count this assignment may never have
+    // been part of is what used to drive it below the truth.
     ALS_INFO(NKikimrServices::METADATA_PROVIDER)
         << "TWasmCompileController[" << TabletID() << "]: release " << key.ToString()
         << " (" << reason << ")";
@@ -556,7 +680,7 @@ void TWasmCompileController::ReleaseAssignment(const TGapKey& key, TStringBuf re
 }
 
 void TWasmCompileController::CollectExpiredAssignments(TStateUpdate& update) {
-    const TInstant now = TInstant::Now();
+    const TInstant now = TActivationContext::Now();
     update.Reason = "expired";
 
     for (auto& [nodeId, worker] : Workers) {
@@ -578,11 +702,35 @@ void TWasmCompileController::CollectExpiredAssignments(TStateUpdate& update) {
     }
 }
 
+void TWasmCompileController::CollectStaleRows(TStateUpdate& update) {
+    // Only meaningful once a snapshot has arrived: before that every gap would
+    // look like one whose module has been dropped.
+    if (CurrentSnapshot) {
+        for (const auto& [key, attempt] : Attempts) {
+            Y_UNUSED(attempt);
+            if (!ModuleIndex.contains(MakeArtifactKey(key.Name, key.Kind, key.Uid))) {
+                // The upload this attempt counted failures for is gone, either
+                // dropped or superseded by a new uid. Nothing will ever ask
+                // about it again.
+                update.ErasedAttempts.push_back(key);
+            }
+        }
+    }
+
+    const TInstant now = TActivationContext::Now();
+    for (const auto& [nodeId, worker] : Workers) {
+        if (!worker.Alive && now - worker.LastHeartbeat > WorkerRetention) {
+            update.ErasedWorkers.push_back(nodeId);
+        }
+    }
+}
+
 void TWasmCompileController::ApplyStateUpdate(TStateUpdate&& update) {
     if (update.ErasedAssignments.empty()
         && update.ErasedAttempts.empty()
         && update.UpdatedAttempts.empty()
-        && update.ReadyBroadcasts.empty())
+        && update.ReadyBroadcasts.empty()
+        && update.ErasedWorkers.empty())
     {
         return;
     }
@@ -595,6 +743,19 @@ void TWasmCompileController::ApplyStateUpdate(TStateUpdate&& update) {
     }
     for (const auto& [key, attempt] : update.UpdatedAttempts) {
         Attempts[key] = attempt;
+    }
+    // After the releases above, so that a forgotten node takes no assignment
+    // with it into a state nothing refers to.
+    for (const ui32 nodeId : update.ErasedWorkers) {
+        const auto it = Workers.find(nodeId);
+        if (it == Workers.end()) {
+            continue;
+        }
+        ALS_INFO(NKikimrServices::METADATA_PROVIDER)
+            << "TWasmCompileController[" << TabletID() << "]: forgetting node " << nodeId
+            << " of cpu_spec " << it->second.CpuSpec;
+        NodeByPipeServer.erase(it->second.PipeServer);
+        Workers.erase(it);
     }
 
     RunTxFinish(std::move(update));
@@ -609,11 +770,8 @@ void TWasmCompileController::Handle(TEvCompileController::TEvRegister::TPtr& ev)
     worker.CpuSpec = record.GetCpuSpec();
     worker.Capacity = Max<ui32>(1, record.GetCapacity());
     worker.PipeServer = ev->Recipient;
-    worker.LastHeartbeat = TInstant::Now();
+    worker.LastHeartbeat = TActivationContext::Now();
     worker.Alive = true;
-    // A worker that has just (re)connected runs nothing this leader knows
-    // about yet; its first heartbeat re-declares whatever it still holds.
-    worker.Inflight = 0;
     NodeByPipeServer[ev->Recipient] = nodeId;
 
     auto response = std::make_unique<TEvCompileController::TEvRegisterResult>();
@@ -634,8 +792,9 @@ void TWasmCompileController::Handle(TEvCompileController::TEvHeartbeat::TPtr& ev
         return;
     }
 
+    const TInstant now = TActivationContext::Now();
     auto& worker = it->second;
-    worker.LastHeartbeat = TInstant::Now();
+    worker.LastHeartbeat = now;
     worker.Alive = true;
     worker.PipeServer = ev->Recipient;
     if (record.GetCapacity()) {
@@ -649,9 +808,16 @@ void TWasmCompileController::Handle(TEvCompileController::TEvHeartbeat::TPtr& ev
     TStateUpdate update;
     update.Reason = "not claimed by the worker";
     for (const auto& [key, assignment] : Assignments) {
-        if (assignment.NodeId == worker.NodeId && !claimed.contains(assignment.AssignmentId)) {
-            update.ErasedAssignments.push_back(key);
+        if (assignment.NodeId != worker.NodeId || claimed.contains(assignment.AssignmentId)) {
+            continue;
         }
+        if (now - assignment.IssuedAt < AssignGrace) {
+            // This heartbeat was on the wire before the worker could learn of
+            // the assignment, so its silence says nothing yet. Reclaiming here
+            // would hand the same gap to a second node while the first starts.
+            continue;
+        }
+        update.ErasedAssignments.push_back(key);
     }
 
     const bool changed = !update.ErasedAssignments.empty();
@@ -664,11 +830,22 @@ void TWasmCompileController::Handle(TEvCompileController::TEvHeartbeat::TPtr& ev
 
 void TWasmCompileController::Handle(TEvCompileController::TEvNeedArtifact::TPtr& ev) {
     const TGapKey key = GapKeyFromProto(ev->Get()->Record.GetKey());
+    if (!IsKnownPlatform(key.CpuSpec)) {
+        // A node always registers before it reports anything, so a cpu_spec no
+        // Workers row mentions cannot be a platform this tenant compiles for.
+        // Taking it would add an artifact table to scan forever.
+        return;
+    }
+
     // Only a hint: it says this platform is worth looking at sooner than the
-    // next periodic tick would.
-    StartReconcile(key.CpuSpec);
-    RebuildQueue();
-    ScheduleAssignments();
+    // next periodic tick would. Every dinode sends one per gap on every
+    // snapshot refresh, so the work it triggers is done once per burst.
+    DirtyPlatforms.insert(key.CpuSpec);
+    if (!HintTickScheduled) {
+        HintTickScheduled = true;
+        NActors::TActor<TWasmCompileController>::Schedule(
+            HintCoalesceInterval, new TEvControllerPrivate::TEvHintTick());
+    }
 }
 
 void TWasmCompileController::Handle(TEvCompileController::TEvCompileDone::TPtr& ev) {

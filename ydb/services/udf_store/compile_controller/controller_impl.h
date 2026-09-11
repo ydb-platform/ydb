@@ -92,6 +92,8 @@ public:
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
             hFunc(TEvControllerPrivate::TEvReconcileResult, Handle);
             hFunc(TEvControllerPrivate::TEvScheduleTick, Handle);
+            hFunc(TEvControllerPrivate::TEvReconcileTick, Handle);
+            hFunc(TEvControllerPrivate::TEvHintTick, Handle);
             hFunc(TEvCompileController::TEvRegister, Handle);
             hFunc(TEvCompileController::TEvHeartbeat, Handle);
             hFunc(TEvCompileController::TEvNeedArtifact, Handle);
@@ -128,6 +130,10 @@ private:
         ui32 NodeId = 0;
         TInstant Deadline;
         ui64 Generation = 0;
+        //! When this leader handed the assignment out. Deliberately not
+        //! persisted: after a leader change it means "when the new leader
+        //! learned of it", which is exactly what the grace below needs.
+        TInstant IssuedAt;
     };
 
     struct TAttemptState {
@@ -174,6 +180,7 @@ private:
         TVector<TGapKey> ErasedAttempts;
         TVector<std::pair<TGapKey, TAttemptState>> UpdatedAttempts;
         TVector<TGapKey> ReadyBroadcasts;
+        TVector<ui32> ErasedWorkers;
     };
 
 public:
@@ -197,6 +204,8 @@ private:
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev);
     void Handle(TEvControllerPrivate::TEvReconcileResult::TPtr& ev);
     void Handle(TEvControllerPrivate::TEvScheduleTick::TPtr& ev);
+    void Handle(TEvControllerPrivate::TEvReconcileTick::TPtr& ev);
+    void Handle(TEvControllerPrivate::TEvHintTick::TPtr& ev);
     void Handle(TEvCompileController::TEvRegister::TPtr& ev);
     void Handle(TEvCompileController::TEvHeartbeat::TPtr& ev);
     void Handle(TEvCompileController::TEvNeedArtifact::TPtr& ev);
@@ -205,14 +214,24 @@ private:
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev);
 
+    //! Releases what this leader generation holds outside the tablet itself.
+    void Cleanup();
     void ApplyConfig(const NKikimrConfig::TUdfStoreConfig& config);
     void SubscribeForConfigChanges(const TActorContext& ctx);
     void SubscribeToSnapshot();
+    void UnsubscribeFromSnapshot();
     void ScheduleTick();
+    void ScheduleReconcileTick();
 
     void StartReconcile(const TString& cpuSpec);
     void StartReconcileForAllPlatforms();
+    void StopReconciles();
+    bool IsKnownPlatform(const TString& cpuSpec) const;
     void RebuildQueue();
+    //! Derives the per-node budget from `Assignments` instead of tracking it
+    //! incrementally: a reconnect or a leader change would otherwise leave the
+    //! counter and the assignment table disagreeing.
+    void RecountInflight();
     void ScheduleAssignments();
     void ApplyStateUpdate(TStateUpdate&& update);
     void BroadcastArtifactReady(const TGapKey& key);
@@ -221,6 +240,9 @@ private:
     //! wait for the erase to become durable.
     void ReleaseAssignment(const TGapKey& key, TStringBuf reason);
     void CollectExpiredAssignments(TStateUpdate& update);
+    //! Rows nothing can ever refer to again: attempts of a gap the snapshot no
+    //! longer has, and nodes that stopped registering long ago.
+    void CollectStaleRows(TStateUpdate& update);
     TPlatformCounters& GetPlatformCounters(const TString& cpuSpec);
     void ReportCounters();
 
@@ -237,16 +259,29 @@ private:
     ui32 MaxCompileAttempts = 3;
     TDuration AssignmentTimeout = TDuration::Seconds(900);
     TDuration HeartbeatTimeout = TDuration::Seconds(60);
+    TDuration AssignGrace = TDuration::Seconds(30);
+    TDuration ReconcileInterval = TDuration::Seconds(30);
+    TDuration WorkerRetention = TDuration::Hours(24);
 
     ui64 NextAssignmentId = 1;
 
     THashMap<ui32, TWorkerState> Workers;
     THashMap<NActors::TActorId, ui32> NodeByPipeServer;
     THashMap<TString, THashSet<TString>> ArtifactsByCpuSpec;
-    THashSet<TString> ReconcileInFlight;
+    //! Platforms with a reconcile running, and the actor doing it, so that a
+    //! leader that goes away does not leave it talking to a dead tablet.
+    THashMap<TString, NActors::TActorId> ReconcileInFlight;
 
     std::shared_ptr<TSnapshot> CurrentSnapshot;
     TVector<TModuleEntry> Modules;
+    //! `MakeArtifactKey(name, kind, uid)` of every entry above, so that looking
+    //! a gap up does not walk the whole snapshot.
+    THashMap<TString, size_t> ModuleIndex;
+
+    //! Platforms a hint pointed at since the last coalescing tick. Hints arrive
+    //! at nodes x gaps per refresh; the work they trigger is done once instead.
+    THashSet<TString> DirtyPlatforms;
+    bool HintTickScheduled = false;
 
     std::deque<TGapKey> Queue;
     THashSet<TGapKey, TGapKeyHash> Queued;
@@ -263,7 +298,9 @@ private:
     NMonitoring::TDynamicCounterPtr PlatformCountersRoot;
     THashMap<TString, TPlatformCounters> PlatformCounters;
 
-    bool SnapshotSubscribed = false;
+    //! Kept rather than built on the spot: unsubscribing needs a fetcher of the
+    //! same component, and this is also what says a subscription is live.
+    NMetadata::NFetcher::ISnapshotsFetcher::TPtr SnapshotFetcher;
 };
 
 } // namespace NKikimr::NUdfStore

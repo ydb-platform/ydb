@@ -106,6 +106,10 @@ private:
     ui64 ControllerGeneration = 0;
     THashMap<TString, TActiveAssignment> ModuleAssignments;
     THashMap<TString, TActiveAssignment> LibraryAssignments;
+    //! Name to uid of the gaps already reported over the current pipe. The
+    //! snapshot handler re-derives every gap on every refresh, and repeating
+    //! them all costs the controller a scheduling round each.
+    THashMap<TString, TString> ReportedGaps;
 
     bool IsNamePending(const TString& name, EUdfType type) const;
     bool IsLibraryPending(const TString& name) const;
@@ -140,6 +144,9 @@ private:
         bool success,
         bool stale,
         const TString& error);
+    //! Tells the controller this node will not run an assignment it was given.
+    //! Without it the exclusive slot stays taken until the assignment expires.
+    void RejectAssignment(const NKikimrUdfStore::TEvAssignCompile& record, const TString& reason);
 
 protected:
     void Handle(TEvStoreInitialized::TPtr& ev);

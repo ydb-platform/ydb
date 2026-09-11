@@ -113,6 +113,9 @@ void TUdfStoreService::SendRegister() {
     if (!CompileControllerPipe) {
         return;
     }
+    // A new leader knows nothing of what was reported to the previous one, so
+    // the gaps this node sees have to be offered again.
+    ReportedGaps.clear();
     auto request = std::make_unique<TEvCompileController::TEvRegister>();
     request->Record.SetCpuSpec(LocalCpuSpec);
     request->Record.SetNodeId(SelfId().NodeId());
@@ -181,6 +184,7 @@ void TUdfStoreService::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
     // The tablet may have moved, so the id is resolved again rather than reused.
     CompileControllerTabletId = 0;
     ControllerResolveStage = EControllerResolveStage::Initial;
+    ReportedGaps.clear();
     ResolveCompileController();
 }
 
@@ -205,6 +209,15 @@ void TUdfStoreService::RequestArtifact(const TString& name, const TString& uid, 
             << (isLibrary ? "library " : "module ") << name << " uid " << uid;
         return;
     }
+    // The snapshot handler rediscovers every gap on every refresh, so without
+    // this the controller gets nodes x gaps identical hints per refresh. A new
+    // uid is a different gap and is always worth reporting.
+    const auto reported = ReportedGaps.find(name);
+    if (reported != ReportedGaps.end() && reported->second == uid) {
+        return;
+    }
+    ReportedGaps[name] = uid;
+
     auto request = std::make_unique<TEvCompileController::TEvNeedArtifact>();
     auto& key = *request->Record.MutableKey();
     key.SetName(name);
@@ -243,6 +256,23 @@ void TUdfStoreService::ReportCompileResult(
     NTabletPipe::SendData(SelfId(), CompileControllerPipe, failed.release());
 }
 
+void TUdfStoreService::RejectAssignment(
+    const NKikimrUdfStore::TEvAssignCompile& record,
+    const TString& reason)
+{
+    if (!CompileControllerPipe) {
+        return;
+    }
+    auto failed = std::make_unique<TEvCompileController::TEvCompileFailed>();
+    failed->Record.SetAssignmentId(record.GetAssignmentId());
+    *failed->Record.MutableKey() = record.GetKey();
+    failed->Record.SetError(reason);
+    // A refusal says nothing about the module, so it must not count towards the
+    // poison pill: it only releases the slot the controller reserved for us.
+    failed->Record.SetStale(true);
+    NTabletPipe::SendData(SelfId(), CompileControllerPipe, failed.release());
+}
+
 void TUdfStoreService::Handle(TEvCompileController::TEvAssignCompile::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     const auto& key = record.GetKey();
@@ -255,6 +285,7 @@ void TUdfStoreService::Handle(TEvCompileController::TEvAssignCompile::TPtr& ev) 
         ALS_WARN(NKikimrServices::METADATA_PROVIDER)
             << "TUdfStoreService: rejecting assignment for cpu_spec " << key.GetCpuSpec()
             << ", local cpu_spec is " << LocalCpuSpec;
+        RejectAssignment(record, "cpu_spec mismatch");
         return;
     }
 
@@ -267,12 +298,25 @@ void TUdfStoreService::Handle(TEvCompileController::TEvAssignCompile::TPtr& ev) 
         ALS_WARN(NKikimrServices::METADATA_PROVIDER)
             << "TUdfStoreService: rejecting assignment from controller generation " << generation
             << ", already registered with generation " << ControllerGeneration;
+        RejectAssignment(record, "stale controller generation");
         return;
     }
     ControllerGeneration = generation;
 
     auto& assignments = isLibrary ? LibraryAssignments : ModuleAssignments;
-    if (assignments.contains(name)) {
+    const auto existing = assignments.find(name);
+    if (existing != assignments.end()) {
+        if (existing->second.AssignmentId != record.GetAssignmentId()) {
+            // A second assignment for a name already being compiled, typically
+            // a re-upload. Refusing it outright is what lets the controller
+            // hand it to someone else instead of waiting for a claim that this
+            // node cannot make while the previous compile runs.
+            ALS_WARN(NKikimrServices::METADATA_PROVIDER)
+                << "TUdfStoreService: rejecting assignment " << record.GetAssignmentId()
+                << " for '" << name << "', still compiling " << existing->second.AssignmentId;
+            RejectAssignment(record, "another uid of the same name is being compiled");
+        }
+        // The same id twice is just a re-delivery and is already accounted for.
         return;
     }
     assignments[name] = TActiveAssignment{

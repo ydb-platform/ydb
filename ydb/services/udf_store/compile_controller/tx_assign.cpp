@@ -47,6 +47,15 @@ public:
             if (!item.Event) {
                 continue;
             }
+            // The right may have been withdrawn while this was being written,
+            // typically because the node disconnected. Handing it out now would
+            // point a second node at a gap somebody else has already been given.
+            const auto it = Self->Assignments.find(item.Key);
+            if (it == Self->Assignments.end()
+                || it->second.AssignmentId != item.Assignment.AssignmentId)
+            {
+                continue;
+            }
             Self->Send(MakeServiceId(item.Assignment.NodeId), item.Event.release());
         }
     }

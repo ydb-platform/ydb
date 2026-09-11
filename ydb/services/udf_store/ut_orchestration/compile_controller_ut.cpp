@@ -68,9 +68,14 @@ public:
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-        CreateTestBootstrapper(Runtime,
+        const TActorId bootstrapper = CreateTestBootstrapper(Runtime,
             CreateTestTabletInfo(ControllerTabletId, TTabletTypes::WasmCompileController),
             &CreateWasmCompileController);
+        // Anything an actor schedules for itself is dropped unless it is on this
+        // whitelist, and the tablet inherits it from the bootstrapper that starts
+        // it. Without this the controller's periodic tick never fires here, so
+        // neither the heartbeat timeout nor any housekeeping can be tested.
+        Runtime.EnableScheduleForActor(bootstrapper, true);
 
         TDispatchOptions options;
         options.FinalEvents.emplace_back(TEvTablet::EvBoot);
@@ -153,13 +158,36 @@ public:
             new NMetadata::NProvider::TEvRefreshSubscriberData(MakeSnapshot(modules)));
     }
 
-    void SetBudgets(ui32 maxPerCpuSpec, ui32 maxPerDinode, ui32 maxAttempts = 3) {
+    //! One config notification carries the whole TUdfStoreConfig, so everything
+    //! a test wants to change has to travel together: a second notification
+    //! would reset whatever the first one set. Zero means "keep the default".
+    void SetBudgets(
+        ui32 maxPerCpuSpec,
+        ui32 maxPerDinode,
+        ui32 maxAttempts = 3,
+        ui32 heartbeatTimeoutSeconds = 0,
+        ui32 assignGraceSeconds = 0)
+    {
         auto ev = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         auto& config = *ev->Record.MutableConfig()->MutableUdfStoreConfig();
         config.SetWasmCompileMaxPerCpuSpec(maxPerCpuSpec);
         config.SetWasmCompileMaxPerDinode(maxPerDinode);
         config.SetWasmMaxCompileAttempts(maxAttempts);
+        config.SetWasmCompileHeartbeatTimeoutSeconds(heartbeatTimeoutSeconds);
+        config.SetWasmCompileAssignGraceSeconds(assignGraceSeconds);
         ForwardToTablet(Runtime, ControllerTabletId, Sender, ev.release());
+    }
+
+    //! Index of the node an assignment went to, so that a test can tell the
+    //! assignee and its peers apart without assuming which one was picked.
+    ui32 NodeIndexOf(const TSeenAssignment& assignment, ui32 nodeCount) {
+        for (ui32 nodeIndex = 0; nodeIndex < nodeCount; ++nodeIndex) {
+            if (Runtime.GetNodeId(nodeIndex) == assignment.NodeId) {
+                return nodeIndex;
+            }
+        }
+        UNIT_FAIL("assignment went to a node outside the runtime");
+        return 0;
     }
 
     void ReportDone(const TSeenAssignment& assignment) {
@@ -303,6 +331,150 @@ Y_UNIT_TEST_SUITE(WasmCompileController) {
         UNIT_ASSERT_VALUES_EQUAL_C(assignments.size(), 2, "the surviving peer never picked the gap up");
         UNIT_ASSERT_VALUES_UNEQUAL(assignments[1].NodeId, firstNodeId);
         UNIT_ASSERT_VALUES_EQUAL(assignments[1].Name(), "m1");
+    }
+
+    Y_UNIT_TEST(FreshAssignmentSurvivesAnInFlightHeartbeat) {
+        TTestEnv env(2);
+        env.RegisterWorker(0, CpuSpecX86);
+        env.RegisterWorker(1, CpuSpecX86);
+        env.SetArtifacts(CpuSpecX86, {});
+        env.SetSnapshot({{.Name = "m1", .Uid = "u1"}});
+        env.Settle();
+
+        auto assignments = env.Assignments();
+        UNIT_ASSERT_VALUES_EQUAL(assignments.size(), 1);
+        const ui32 assigneeIndex = env.NodeIndexOf(assignments[0], 2);
+
+        // A heartbeat composed before the assignment reached the node cannot
+        // possibly mention it. Reading that as a refusal frees the gap while
+        // the assignee is starting on it, and the peer picks up the same work.
+        env.SendHeartbeat(assigneeIndex);
+        env.Settle();
+
+        assignments = env.Assignments();
+        UNIT_ASSERT_VALUES_EQUAL_C(assignments.size(), 1,
+            "the gap was handed out again after a heartbeat crossed the assignment");
+    }
+
+    Y_UNIT_TEST(UnclaimedAssignmentIsReleasedAfterGrace) {
+        TTestEnv env(2);
+        env.SetBudgets(/*maxPerCpuSpec=*/1, /*maxPerDinode=*/1, /*maxAttempts=*/3,
+            /*heartbeatTimeoutSeconds=*/0, /*assignGraceSeconds=*/5);
+        env.RegisterWorker(0, CpuSpecX86);
+        env.RegisterWorker(1, CpuSpecX86);
+        env.SetArtifacts(CpuSpecX86, {});
+        env.SetSnapshot({{.Name = "m1", .Uid = "u1"}});
+        env.Settle();
+        UNIT_ASSERT_VALUES_EQUAL(env.Assignments().size(), 1);
+
+        const ui32 assigneeIndex = env.NodeIndexOf(env.Assignments()[0], 2);
+
+        // Past the grace the same silence is real information: the node has had
+        // every chance to declare the assignment and does not.
+        env.Settle(TDuration::Seconds(8));
+        env.SendHeartbeat(assigneeIndex);
+        env.Settle();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(env.Assignments().size(), 2,
+            "an assignment the worker keeps disowning is never handed to anybody else");
+    }
+
+    Y_UNIT_TEST(ReRegisterKeepsPerDinodeBudget) {
+        TTestEnv env(1);
+        env.SetBudgets(/*maxPerCpuSpec=*/4, /*maxPerDinode=*/1);
+        env.RegisterWorker(0, CpuSpecX86, /*capacity=*/4);
+        env.SetArtifacts(CpuSpecX86, {});
+        env.SetSnapshot({
+            {.Name = "m1", .Uid = "u1"},
+            {.Name = "m2", .Uid = "u2"},
+        });
+        env.Settle();
+        UNIT_ASSERT_VALUES_EQUAL(env.Assignments().size(), 1);
+
+        // Reconnecting does not finish the AOT the node is running, so the
+        // budget it is already spending has to survive the new registration.
+        env.RegisterWorker(0, CpuSpecX86, /*capacity=*/4);
+        env.Settle(TDuration::Seconds(7));
+
+        UNIT_ASSERT_VALUES_EQUAL_C(env.Assignments().size(), 1,
+            "a second AOT was started on one dinode with MaxPerDinode = 1");
+    }
+
+    Y_UNIT_TEST(HeartbeatTimeoutReassignsGap) {
+        TTestEnv env(2);
+        env.SetBudgets(/*maxPerCpuSpec=*/1, /*maxPerDinode=*/1, /*maxAttempts=*/3,
+            /*heartbeatTimeoutSeconds=*/20);
+        env.RegisterWorker(0, CpuSpecX86);
+        env.RegisterWorker(1, CpuSpecX86);
+        env.SetArtifacts(CpuSpecX86, {});
+        env.SetSnapshot({{.Name = "m1", .Uid = "u1"}});
+        env.Settle();
+
+        auto assignments = env.Assignments();
+        UNIT_ASSERT_VALUES_EQUAL(assignments.size(), 1);
+        const ui32 firstNodeId = assignments[0].NodeId;
+        const ui32 peerIndex = env.NodeIndexOf(assignments[0], 2) == 0 ? 1 : 0;
+
+        // The assignee goes quiet mid-compile while holding its pipe open, so
+        // only the heartbeat timeout can notice. The peer keeps reporting in,
+        // otherwise the platform would simply lose both of its workers.
+        for (size_t round = 0; round < 4; ++round) {
+            env.SendHeartbeat(peerIndex);
+            env.Settle(TDuration::Seconds(8));
+        }
+
+        assignments = env.Assignments();
+        UNIT_ASSERT_VALUES_EQUAL_C(assignments.size(), 2,
+            "a worker that stopped heartbeating kept the gap forever");
+        UNIT_ASSERT_VALUES_UNEQUAL(assignments[1].NodeId, firstNodeId);
+    }
+
+    Y_UNIT_TEST(MissingArtifactSurvivesWorkerLoss) {
+        TTestEnv env(1);
+        env.RegisterWorker(0, CpuSpecX86);
+        env.SetArtifacts(CpuSpecX86, {});
+        env.SetSnapshot({
+            {.Name = "m1", .Uid = "u1"},
+            {.Name = "m2", .Uid = "u2"},
+        });
+        env.Settle();
+        UNIT_ASSERT_VALUES_EQUAL(env.PlatformCounter(CpuSpecX86, "WasmModulesMissingArtifact"), 2);
+
+        env.DisconnectWorker(0);
+        env.Settle();
+
+        // Losing the last worker of a platform is exactly what this gauge is
+        // for; reading zero here would silence the alarm at the moment it fires.
+        UNIT_ASSERT_VALUES_EQUAL_C(env.PlatformCounter(CpuSpecX86, "WasmModulesMissingArtifact"), 2,
+            "an uncovered platform reports nothing missing");
+        UNIT_ASSERT_VALUES_EQUAL(env.PlatformCounter(CpuSpecX86, "WasmCompileWorkersRegistered"), 0);
+    }
+
+    Y_UNIT_TEST(AttemptsOfADroppedModuleAreForgotten) {
+        TTestEnv env(1);
+        env.RegisterWorker(0, CpuSpecX86);
+        env.SetArtifacts(CpuSpecX86, {});
+        env.SetSnapshot({{.Name = "m1", .Uid = "u1"}});
+        env.Settle();
+
+        for (size_t attempt = 0; attempt < 3; ++attempt) {
+            const auto assignments = env.Assignments();
+            UNIT_ASSERT_VALUES_EQUAL(assignments.size(), attempt + 1);
+            env.ReportFailed(assignments.back(), /*stale=*/false);
+            env.Settle();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(env.Assignments().size(), 3);
+
+        // The module is gone, so its failure count refers to nothing. Keeping
+        // the row would leave it in local DB for the lifetime of the tenant.
+        env.SetSnapshot({});
+        env.Settle(TDuration::Seconds(7));
+
+        env.SetSnapshot({{.Name = "m1", .Uid = "u1"}});
+        env.Settle();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(env.Assignments().size(), 4,
+            "the poison pill of a module that no longer exists was kept");
     }
 
     Y_UNIT_TEST(StaleFailureDoesNotPoison) {

@@ -14,8 +14,9 @@ public:
         return TXTYPE_INIT;
     }
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         NIceDb::TNiceDb db(txc.DB);
+        const TInstant now = ctx.Now();
 
         auto sysParams = db.Table<Schema::SysParams>().Range().Select();
         auto workers = db.Table<Schema::Workers>().Range().Select();
@@ -49,6 +50,10 @@ public:
             worker.CpuSpec = workers.GetValue<Schema::Workers::CpuSpec>();
             worker.Capacity = Max<ui32>(1, workers.GetValue<Schema::Workers::Capacity>());
             worker.Alive = false;
+            // Retention is counted from the moment this leader took over, not
+            // from a heartbeat it never saw, so a rolling restart cannot make
+            // every node look abandoned at once.
+            worker.LastHeartbeat = now;
             Self->Workers[worker.NodeId] = std::move(worker);
             if (!workers.Next()) {
                 return false;
@@ -72,6 +77,10 @@ public:
                 .Deadline = TInstant::Seconds(
                     assignments.GetValue<Schema::Assignments::DeadlineSeconds>()),
                 .Generation = assignments.GetValue<Schema::Assignments::Generation>(),
+                // This leader has only just learned of the assignment, so the
+                // worker gets the usual grace to re-declare it in a heartbeat
+                // before anybody else is offered the gap.
+                .IssuedAt = now,
             };
             Self->NextAssignmentId = Max(Self->NextAssignmentId, assignment.AssignmentId + 1);
             Self->Assignments[std::move(key)] = assignment;

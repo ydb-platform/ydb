@@ -19,7 +19,7 @@ static void AddFakeCredRecord(NActorsInterconnect::TRdmaCreds& creds) noexcept {
     // fixed64, fixed32 - any value
     cred->SetAddress(0);
     cred->SetRkey(12345);
-    // uint64 - protobuf uses VLC - max possible value 
+    // uint64 - protobuf uses VLC - max possible value
     cred->SetSize(Max<ui64>());
 }
 
@@ -62,20 +62,19 @@ namespace NActors {
                         auto memReg = NInterconnect::NRdma::TryExtractFromRcBuf(buf);
                         if (memReg.Empty()) {
                             if (NActors::TlsActivationContext) {
-                                LOG_WARN_S(*NActors::TlsActivationContext, NActorsServices::INTERCONNECT_SESSION,
-                                    TStringBuilder() << "IsRdmaSectionLayoutConsistentWithData: RDMA preflight failed,"
-                                        << " eventType# " << event.Descr.Type
-                                        << " eventSerializedSize# " << event.EventSerializedSize
-                                        << " bufferSize# " << event.Buffer->GetSize()
-                                        << " sectionIndex# " << sectionIndex
-                                        << " sectionSize# " << section.Size
-                                        << " bytesLeft# " << bytesLeft
-                                        << " chunkIndex# " << chunkIndex
-                                        << " chunkOffset# " << offset
-                                        << " chunkSize# " << chunkSize
-                                        << " chunkBufSize# " << buf.GetSize()
-                                        << " rdmaDeviceIndex# " << rdmaDeviceIndex
-                                        << " sections# " << SerializeEventSections(event.Buffer->GetSerializationInfo()));
+                                YDB_LOG_WARN_COMP(NActorsServices::INTERCONNECT_SESSION, "IsRdmaSectionLayoutConsistentWithData: RDMA preflight failed",
+                                    {"eventType", event.Descr.Type},
+                                    {"eventSerializedSize", event.EventSerializedSize},
+                                    {"bufferSize", event.Buffer->GetSize()},
+                                    {"sectionIndex", sectionIndex},
+                                    {"sectionSize", section.Size},
+                                    {"bytesLeft", bytesLeft},
+                                    {"chunkIndex", chunkIndex},
+                                    {"chunkOffset", offset},
+                                    {"chunkSize", chunkSize},
+                                    {"chunkBufSize", buf.GetSize()},
+                                    {"rdmaDeviceIndex", rdmaDeviceIndex},
+                                    {"sections", SerializeEventSections(event.Buffer->GetSerializationInfo())});
                             }
                             return false;
                         }
@@ -139,7 +138,8 @@ namespace NActors {
     }
 
     void TEventOutputChannel::DropConfirmed(ui64 confirm, TEventHolderPool& pool) {
-        LOG_DEBUG_IC_SESSION("ICOCH98", "Dropping confirmed messages");
+        YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT_SESSION, "Dropping confirmed messages",
+            {"marker", "ICOCH98"});
         for (auto it = NotYetConfirmed.begin(); it != NotYetConfirmed.end() && it->Serial <= confirm; ) {
             pool.Release(NotYetConfirmed, it++);
         }
@@ -545,7 +545,7 @@ namespace NActors {
 
         // For backwards compatibility use of _NO_CHECKSUMS cmd is gated by Params.AllowDisablingPayloadChecksums
         //  \todo replace with checksumsDisabled
-        *ptr++ = static_cast<ui8>(checksumsDisabledForEvent ? EXdcCommand::RDMA_READ_NO_CHECKSUMS : EXdcCommand::RDMA_READ); 
+        *ptr++ = static_cast<ui8>(checksumsDisabledForEvent ? EXdcCommand::RDMA_READ_NO_CHECKSUMS : EXdcCommand::RDMA_READ);
         WriteUnaligned<ui16>(ptr, credsSerializedSize);
         ptr += sizeof(ui16);
 
@@ -580,7 +580,7 @@ namespace NActors {
     }
 
     std::optional<bool> TEventOutputChannel::FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event) {
-        const bool disableChecksumsForEvent = Params.AllowDisablingPayloadChecksums 
+        const bool disableChecksumsForEvent = Params.AllowDisablingPayloadChecksums
             && (event.Descr.Flags & IEventHandle::FlagDisablePayloadChecksums);
         const bool disableChecksums = Params.Encryption || disableChecksumsForEvent;
 
@@ -636,7 +636,10 @@ namespace NActors {
     }
 
     void TEventOutputChannel::ProcessUndelivered(TEventHolderPool& pool, NInterconnect::IZcGuard* zg) {
-        LOG_DEBUG_IC_SESSION("ICOCH89", "Notyfying about Undelivered messages! NotYetConfirmed size: %zu, Queue size: %zu", NotYetConfirmed.size(), Queue.size());
+        YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT_SESSION, "Notifying about Undelivered messages!",
+            {"marker", "ICOCH89"},
+            {"notYetConfirmed", NotYetConfirmed.size()},
+            {"queue", Queue.size()});
         if (State == EState::BODY && Queue.front().Event) {
             Y_ABORT_UNLESS(!Chunker.IsComplete()); // chunk must have an event being serialized
             Y_ABORT_UNLESS(!Queue.empty()); // this event must be the first event in queue

@@ -46,6 +46,12 @@ namespace NTabletFlatExecutor {
     public:
         TLoadBlobQueueConfig Config;
 
+        NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
+            return YDB_LOG_CREATE_MESSAGE(
+                {"role", (Config.Follower ? "Follower" : "Leader")},
+                {"tabletId", Config.TabletID},
+                {"generation", Config.Generation});
+        }
     private:
         ui64 ActiveBytesInFly = 0;
 

@@ -8,6 +8,8 @@
 
 #include <variant>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NActorsServices::INTERCONNECT_SESSION
+
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
@@ -260,9 +262,12 @@ namespace NActors {
             Become(&TThis::WorkingState, DeadPeerTimeout, new TEvCheckDeadPeer);
         }
         if (RdmaQp) {
-            LOG_DEBUG_IC_SESSION("ICRDMA", "InputSession created, rdma qp num: %d", RdmaQp->GetQpNum());
+            YDB_LOG_DEBUG("InputSession created, rdma qp",
+                {"marker", "ICRDMA"},
+                {"num", RdmaQp->GetQpNum()});
         } else {
-            LOG_DEBUG_IC_SESSION("ICIS01", "InputSession created");
+            YDB_LOG_DEBUG("InputSession created",
+                {"marker", "ICIS01"});
         }
         LastReceiveTimestamp = TActivationContext::Monotonic();
         TActivationContext::Send(new IEventHandle(EvResumeReceiveData, 0, SelfId(), {}, nullptr, 0));
@@ -278,10 +283,14 @@ namespace NActors {
         try {
             WorkingStateImpl(ev);
         } catch (const TExReestablishConnection& ex) {
-            LOG_DEBUG_IC_SESSION("ICIS09", "ReestablishConnection, reason# %s", ex.Reason.ToString().data());
+            YDB_LOG_DEBUG("ReestablishConnection",
+                {"marker", "ICIS09"},
+                {"reason", ex.Reason});
             termEv = std::make_unique<TEvSocketDisconnect>(std::move(ex.Reason));
         } catch (const TExDestroySession& ex) {
-            LOG_DEBUG_IC_SESSION("ICIS13", "DestroySession, reason# %s", ex.Reason.ToString().data());
+            YDB_LOG_DEBUG("DestroySession",
+                {"marker", "ICIS13"},
+                {"reason", ex.Reason});
             termEv.reset(TInterconnectSessionTCP::NewEvTerminate(std::move(ex.Reason)));
         }
 
@@ -552,8 +561,10 @@ namespace NActors {
 
     void TInputSessionTCP::Handle(NInterconnect::NRdma::TEvRdmaReadDone::TPtr& ev) {
         if (!ev->Get()->Event->IsSuccess()) {
-            LOG_ERROR_IC_SESSION("ICRDMA", "Rdma IO failed, err source: %s, code %d",
-                ev->Get()->Event->GetErrSource().data(), ev->Get()->Event->GetErrCode());
+            YDB_LOG_ERROR("Rdma IO failed",
+                {"marker", "ICRDMA"},
+                {"source", ev->Get()->Event->GetErrSource().data()},
+                {"errCode", ev->Get()->Event->GetErrCode()});
             throw TExDestroySession({TDisconnectReason::RdmaError()});
         }
         TMonotonic cur = TMonotonic::Now();
@@ -566,7 +577,8 @@ namespace NActors {
         TTimeLimit limit(GetMaxCyclesPerEvent());
         ui64 numDataBytes = 0;
 
-        LOG_DEBUG_IC_SESSION("ICIS02", "ReceiveData called");
+        YDB_LOG_DEBUG("ReceiveData called",
+            {"marker", "ICIS02"});
 
         bool enoughCpu = true;
         bool progress = false;
@@ -689,12 +701,14 @@ namespace NActors {
                 Checksum = Crc32cExtendMSanCompatible(0, &header, sizeof(header)); // start calculating checksum now
             }
             if (!PayloadSize && Checksum != ChecksumExpected) {
-                LOG_ERROR_IC_SESSION("ICIS10", "payload checksum error");
+                YDB_LOG_ERROR("Payload checksum error",
+                    {"marker", "ICIS10"});
                 throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
             }
         }
         if (PayloadSize >= 65536) {
-            LOG_CRIT_IC_SESSION("ICIS07", "payload is way too big");
+            YDB_LOG_CRIT("Payload is way too big",
+                {"marker", "ICIS07"});
             throw TExDestroySession{TDisconnectReason::FormatError()};
         }
         if (ConfirmedByInput < confirm) {
@@ -716,13 +730,12 @@ namespace NActors {
             const ui64 expectedMax = Context->LastProcessedSerial + 1;
             Y_DEBUG_ABORT_UNLESS(expectedMin <= expectedMax);
             if (CurrentSerial ? serial != CurrentSerial + 1 : (serial == 0 || serial > expectedMin)) {
-                LOG_CRIT_IC_SESSION("ICIS06", "%s", TString(TStringBuilder()
-                        << "packet serial number mismatch"
-                        << " Serial# " << serial
-                        << " ExpectedMin# " << expectedMin
-                        << " ExpectedMax# " << expectedMax
-                        << " CurrentSerial# " << CurrentSerial
-                    ).data());
+                YDB_LOG_CRIT("Packet serial number mismatch",
+                    {"marker", "ICIS06"},
+                    {"serial", serial},
+                    {"expectedMin", expectedMin},
+                    {"expectedMax", expectedMax},
+                    {"currentSerial", CurrentSerial});
                 throw TExDestroySession{TDisconnectReason::FormatError()};
             }
             IgnorePayload = serial != expectedMax;
@@ -765,7 +778,8 @@ namespace NActors {
                 Checksum = XXH3_64bits_digest(&XxhashState);
             }
             if (Checksum != ChecksumExpected) { // validate payload checksum
-                LOG_ERROR_IC_SESSION("ICIS04", "payload checksum error");
+                YDB_LOG_ERROR("Payload checksum error",
+                    {"marker", "ICIS04"});
                 throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
             }
         }
@@ -773,10 +787,13 @@ namespace NActors {
             // extract channel part header from the payload stream
             TChannelPart part;
             if (!Payload.ExtractFrontPlain(&part, sizeof(part))) {
-                LOG_CRIT_IC_SESSION("ICIS14", "missing TChannelPart header in payload");
+                YDB_LOG_CRIT("Missing TChannelPart header in payload",
+                    {"marker", "ICIS14"});
                 throw TExDestroySession{TDisconnectReason::FormatError()};
             } else if (Payload.GetSize() < part.Size) {
-                LOG_CRIT_IC_SESSION("ICIS08", "payload format error ChannelPart# %s", part.ToString().data());
+                YDB_LOG_CRIT("Payload format error",
+                    {"marker", "ICIS08"},
+                    {"channelPart", part});
                 throw TExDestroySession{TDisconnectReason::FormatError()};
             }
 
@@ -799,7 +816,8 @@ namespace NActors {
                 TEventDescr2 v2;
 
                 if (part.Size != sizeof(v2)) {
-                    LOG_CRIT_IC_SESSION("ICIS11", "incorrect last part of an event");
+                    YDB_LOG_CRIT("Incorrect last part of an event",
+                        {"marker", "ICIS11"});
                     throw TExDestroySession{TDisconnectReason::FormatError()};
                 }
 
@@ -935,7 +953,8 @@ namespace NActors {
                     const ui64 tailroom = NInterconnect::NDetail::DeserializeNumber(&ptr, end);
                     const ui64 alignment = NInterconnect::NDetail::DeserializeNumber(&ptr, end);
                     if (headroom == Max<ui64>() || size == Max<ui64>() || tailroom == Max<ui64>() || alignment == Max<ui64>()) {
-                        LOG_CRIT_IC_SESSION("ICIS00", "XDC command format error");
+                        YDB_LOG_CRIT("XDC command format error",
+                            {"marker", "ICIS00"});
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
 
@@ -951,7 +970,10 @@ namespace NActors {
                             const bool isRdma = cmd == EXdcCommand::DECLARE_SECTION_RDMA;
                             auto buffer = AllocateRcBuf(size, headroom, tailroom, alignment, isRdma);
                             if (!buffer) {
-                                LOG_CRIT_IC_SESSION("ICRDMA", "Unable to allocate rcbuf for section, sz: %d, use_rdma: %d", size, isRdma);
+                                YDB_LOG_CRIT("Unable to allocate rcbuf for section",
+                                    {"marker", "ICRDMA"},
+                                    {"sz", size},
+                                    {"useRdma", isRdma});
                                 throw TExDestroySession{TDisconnectReason::FormatError()};
                             }
                             if (isRdma) {
@@ -981,13 +1003,15 @@ namespace NActors {
                 case EXdcCommand::PUSH_DATA_NO_CHECKSUMS: {
                     const size_t cmdLen = sizeof(ui16) + ((Params.Encryption || (cmd == EXdcCommand::PUSH_DATA_NO_CHECKSUMS)) ? 0 : sizeof(ui32));
                     if (static_cast<size_t>(end - ptr) < cmdLen) {
-                        LOG_CRIT_IC_SESSION("ICIS18", "XDC command format error");
+                        YDB_LOG_CRIT("XDC command format error",
+                            {"marker", "ICIS18"});
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
 
                     const ui16 size = ReadUnaligned<ui16>(ptr);
                     if (!size) {
-                        LOG_CRIT_IC_SESSION("ICIS03", "XDC empty payload");
+                        YDB_LOG_CRIT("XDC empty payload",
+                            {"marker", "ICIS03"});
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
 
@@ -1016,7 +1040,8 @@ namespace NActors {
                     } else {
                         // find buffers and acquire data buffer pointers
                         if (context.FetchBuffers(channel, size, XdcInputQ) == -1) {
-                            LOG_CRIT_IC_SESSION("ICIS28", "FetchBuffers: end of buffers");
+                            YDB_LOG_CRIT("FetchBuffers: end of buffers",
+                                {"marker", "ICIS28"});
                             throw TExDestroySession{TDisconnectReason::FormatError()};
                         }
                     }
@@ -1030,7 +1055,8 @@ namespace NActors {
                 case NActors::EXdcCommand::RDMA_READ_NO_CHECKSUMS: {
                     using namespace NInterconnect::NRdma;
                     if (!RdmaQp || !RdmaCq) {
-                        LOG_CRIT_IC_SESSION("ICIS22", "unexpected XDC RDMA_READ command without RDMA QP");
+                        YDB_LOG_CRIT("Unexpected XDC RDMA_READ command without RDMA QP",
+                            {"marker", "ICIS22"});
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
                     TQueuePair& qp = *RdmaQp.get();
@@ -1039,32 +1065,39 @@ namespace NActors {
                     // allows to prevent such situations
                     TQueuePair::TQpState res = qp.GetState(false);
                     if (std::holds_alternative<TQueuePair::TQpErr>(res)) {
-                        LOG_ERROR_IC_SESSION("ICRDMA", "unable to get qp state, %d err is: %s",
-                            qp.GetQpNum(), std::get<TQueuePair::TQpErr>(res).Err);
+                        YDB_LOG_ERROR("Unable to get qp state",
+                            {"marker", "ICRDMA"},
+                            {"qpNum", qp.GetQpNum()},
+                            {"err", std::get<TQueuePair::TQpErr>(res).Err});
                         throw TExDestroySession{TDisconnectReason::RdmaError()};
                     }
                     TQueuePair::TQpS* qpState = std::get_if<TQueuePair::TQpS>(&res);
                     Y_ABORT_UNLESS(qpState);
                     if (!TQueuePair::IsRtsState(*qpState)) {
-                        LOG_ERROR_IC_SESSION("ICRDMA", "qp is not ready, unable to submit rdma READ, %d state is: %d",
-                            qp.GetQpNum(), qpState->State);
+                        YDB_LOG_ERROR("Qp is not ready, unable to submit rdma READ",
+                            {"marker", "ICRDMA"},
+                            {"qpNum", qp.GetQpNum()},
+                            {"state", qpState->State});
                         throw TExDestroySession{TDisconnectReason::RdmaError()};
                     }
 
                     if (ptr + sizeof(ui16) > end) {
-                        LOG_CRIT_IC_SESSION("ICRDMA", "XDC command format error, no cred size");
+                        YDB_LOG_CRIT("XDC command format error, no cred size",
+                            {"marker", "ICRDMA"});
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
 
                     const ui16 credsSerializedSize = ReadUnaligned<ui16>(ptr);
                     ptr += sizeof(ui16);
                     if (!credsSerializedSize) {
-                        LOG_CRIT_IC_SESSION("ICRDMA", "XDC RDMA_READ command with zero size");
+                        YDB_LOG_CRIT("XDC RDMA_READ command with zero size",
+                            {"marker", "ICRDMA"});
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
 
                     if (ptr + credsSerializedSize + sizeof(ui32) > end) {
-                        LOG_CRIT_IC_SESSION("ICRDMA", "XDC command format error, invalid cred data");
+                        YDB_LOG_CRIT("XDC command format error, invalid cred data",
+                            {"marker", "ICRDMA"});
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
 
@@ -1081,10 +1114,12 @@ namespace NActors {
                     ptr += sizeof(ui32);
                     auto err = context.ScheduleRdmaReadRequests(creds, RdmaCq, SelfId(), channel);
                     if (std::holds_alternative<ICq::TBusy>(err)) {
-                        LOG_CRIT_IC_SESSION("ICIS20", "RDMA_READ error: can not allocate cq work request: busy");
+                        YDB_LOG_CRIT("RDMA_READ error: can not allocate cq work request: busy",
+                            {"marker", "ICIS20"});
                         throw TExDestroySession{TDisconnectReason::RdmaError()};
                     } else if (std::holds_alternative<ICq::TErr>(err)) {
-                        LOG_CRIT_IC_SESSION("ICIS21", "RDMA_READ error: can not allocate cq work request: error");
+                        YDB_LOG_CRIT("RDMA_READ error: can not allocate cq work request: error",
+                            {"marker", "ICIS21"});
                         throw TExDestroySession{TDisconnectReason::RdmaError()};
                     }
                     auto& packet = InboundPacketQ.back();
@@ -1097,7 +1132,8 @@ namespace NActors {
                 }
             }
 
-            LOG_CRIT_IC_SESSION("ICIS15", "unexpected XDC command");
+            YDB_LOG_CRIT("Unexpected XDC command",
+                {"marker", "ICIS15"});
             throw TExDestroySession{TDisconnectReason::FormatError()};
         }
     }
@@ -1162,9 +1198,11 @@ namespace NActors {
                 flushAccumulated(prev, accumSize);
 
                 if (pendingEvent.InternalPayload || pendingEvent.ExternalPayload) {
-                    LOG_CRIT_IC_SESSION("ICIS19", "unprocessed payload remains after shuffling"
-                        " Type# 0x%08" PRIx32 " InternalPayload.size# %zu ExternalPayload.size# %zu",
-                        descr.Type, pendingEvent.InternalPayload.size(), pendingEvent.ExternalPayload.size());
+                    YDB_LOG_CRIT("Unprocessed payload remains after shuffling",
+                        {"marker", "ICIS19"},
+                        {"descrType", descr.Type},
+                        {"internalPayloadSize", pendingEvent.InternalPayload.size()},
+                        {"externalPayloadSize", pendingEvent.ExternalPayload.size()});
                     Y_DEBUG_ABORT_UNLESS(false);
                     throw TExReestablishConnection{TDisconnectReason::FormatError()};
                 }
@@ -1179,8 +1217,11 @@ namespace NActors {
 
 #if IC_FORCE_HARDENED_PACKET_CHECKS
             if (descr.Len != payload.GetSize()) {
-                LOG_CRIT_IC_SESSION("ICIS17", "event length mismatch Type# 0x%08" PRIx32 " received# %zu expected# %" PRIu32,
-                    descr.Type, payload.GetSize(), descr.Len);
+                YDB_LOG_CRIT("Event length mismatch",
+                    {"marker", "ICIS17"},
+                    {"descrType", descr.Type},
+                    {"expected", payload.GetSize()},
+                    {"descrLen", descr.Len});
                 throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
             }
 #endif
@@ -1191,7 +1232,9 @@ namespace NActors {
                     checksum = Crc32cExtendMSanCompatible(checksum, data, size);
                 }
                 if (checksum != descr.Checksum) {
-                    LOG_CRIT_IC_SESSION("ICIS05", "event checksum error Type# 0x%08" PRIx32, descr.Type);
+                    YDB_LOG_CRIT("Event checksum error",
+                        {"marker", "ICIS05"},
+                        {"descrType", descr.Type});
                     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
                 }
             }
@@ -1206,7 +1249,9 @@ namespace NActors {
                 }
                 checksum = XXH3_64bits_digest(&state);
                 if (checksum != *pendingEvent.RdmaCumulativeCheckSum) {
-                    LOG_CRIT_IC_SESSION("ICIS05", "event rdma checksum error Type# 0x%08" PRIx32, descr.Type);
+                    YDB_LOG_CRIT("Event rdma checksum error",
+                        {"marker", "ICIS05"},
+                        {"descrType", descr.Type});
                     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
                 }
             }
@@ -1225,10 +1270,13 @@ namespace NActors {
                 std::move(descr.TraceId));
             if (Common->EventFilter && !Common->EventFilter->CheckIncomingEvent(*ev, Common->LocalScopeId)) {
                 Metrics->IncScopeErrors();
-                LOG_CRIT_IC_SESSION("ICIC03", "Event dropped due to scope error PeerNodeId# %" PRIu32 " Peer# %s"
-                    " LocalScopeId# %s PeerScopeId# %s Type# 0x%08" PRIx32,
-                    NodeId, Metrics->GetHumanFriendlyPeerHostName().data(),
-                    ScopeIdToString(Common->LocalScopeId).data(), ScopeIdToString(Params.PeerScopeId).data(), descr.Type);
+                YDB_LOG_CRIT("Event dropped due to scope error",
+                    {"marker", "ICIC03"},
+                    {"peerNodeId", NodeId},
+                    {"peer", Metrics->GetHumanFriendlyPeerHostName().data()},
+                    {"localScopeId", ScopeIdToString(Common->LocalScopeId).data()},
+                    {"peerScopeId", ScopeIdToString(Params.PeerScopeId).data()},
+                    {"descrType", descr.Type});
                 ev.reset();
             }
             if (ev) {
@@ -1269,7 +1317,11 @@ namespace NActors {
                 } while (recvres == -EINTR);
             }
 
-            LOG_DEBUG_IC_SESSION("ICIS12", "Read recvres# %zd num# %zu err# %s", recvres, num, err.data());
+            YDB_LOG_DEBUG("Read",
+                {"marker", "ICIS12"},
+                {"recvres", recvres},
+                {"num", num},
+                {"err", err.data()});
 
             if (recvres <= 0 || CloseInputSessionRequested) {
                 if ((-recvres != EAGAIN && -recvres != EWOULDBLOCK) || CloseInputSessionRequested) {
@@ -1277,7 +1329,12 @@ namespace NActors {
                         : recvres == 0 ? "connection closed by peer"
                         : err ? err
                         : Sprintf("socket: %s", strerror(-recvres));
-                    LOG_NOTICE_NET(NodeId, "%s", message.data());
+
+                    YDB_LOG_NOTICE_COMP(::NActorsServices::INTERCONNECT_NETWORK, message,
+                        {"selfNodeId", ::NActors::TActivationContext::AsActorContext().SelfID.NodeId()},
+                        {"peerNodeId", NodeId},
+                    );
+
                     throw TExReestablishConnection{CloseInputSessionRequested ? TDisconnectReason::Debug() :
                         recvres == 0 ? TDisconnectReason::EndOfStream() : TDisconnectReason::FromErrno(-recvres)};
                 } else if (token && !*readPending) {
@@ -1550,7 +1607,8 @@ namespace NActors {
                         XXH3_64bits_reset(&XxhashXdcState);
                     }
                     if (XdcCurrentChecksum != *expected) {
-                        LOG_ERROR_IC_SESSION("ICIS16", "payload checksum error");
+                        YDB_LOG_ERROR("Payload checksum error",
+                            {"marker", "ICIS16"});
                         throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
                     }
                 }
@@ -1583,19 +1641,20 @@ namespace NActors {
                 // dead. On the idle-keepalive failure this shows whether ANY recv completion ever
                 // arrived (peer truly silent / recv not armed) and whether the multishot is still
                 // active, plus the ring's submit accounting.
-                LOG_NOTICE_IC_SESSION("ICIS30", "DeadPeer snapshot uring# %d lastRecvAge# %.3fs"
-                    " bytesRead# %" PRIu64 " mainRecvCompletions# %" PRIu64 " mainRecvBytes# %" PRIu64
-                    " mainMsActive# %d pendingRecvs# %" PRIu32 " submitCalls# %" PRIu64
-                    " submitErrors# %" PRIu64 " submitPartials# %" PRIu64 " lastSubmitRet# %d sqeFull# %" PRIu64,
-                    (UringContext ? 1 : 0), (now - LastReceiveTimestamp).SecondsFloat(),
-                    BytesReadFromSocket, UringMainRecvCompletions, UringMainRecvBytes,
-                    (int)MainRecvMultishotActive,
-                    (UringContext ? UringContext->GetPendingRecvs() : 0),
-                    (UringContext ? UringContext->GetSubmitCalls() : 0),
-                    (UringContext ? UringContext->GetSubmitErrors() : 0),
-                    (UringContext ? UringContext->GetSubmitPartials() : 0),
-                    (UringContext ? UringContext->GetLastSubmitRet() : 0),
-                    (UringContext ? UringContext->GetSqeFull() : 0));
+                YDB_LOG_NOTICE("DeadPeer snapshot",
+                    {"marker", "ICIS30"},
+                    {"uring", (UringContext ? 1 : 0)},
+                    {"lastRecvAgeSeconds", (now - LastReceiveTimestamp).SecondsFloat()},
+                    {"bytesRead", BytesReadFromSocket},
+                    {"mainRecvCompletions", UringMainRecvCompletions},
+                    {"mainRecvBytes", UringMainRecvBytes},
+                    {"mainMsActive", (int)MainRecvMultishotActive},
+                    {"pendingRecvs", (UringContext ? UringContext->GetPendingRecvs() : 0)},
+                    {"submitCalls", (UringContext ? UringContext->GetSubmitCalls() : 0)},
+                    {"submitErrors", (UringContext ? UringContext->GetSubmitErrors() : 0)},
+                    {"submitPartials", (UringContext ? UringContext->GetSubmitPartials() : 0)},
+                    {"lastSubmitRet", (UringContext ? UringContext->GetLastSubmitRet() : 0)},
+                    {"sqeFull", (UringContext ? UringContext->GetSqeFull() : 0)});
                 // nothing has changed, terminate session
                 throw TExDestroySession{TDisconnectReason::DeadPeer()};
             }
@@ -1603,12 +1662,14 @@ namespace NActors {
         // Recv-side heartbeat (DEBUG): fires roughly once per DeadPeerTimeout on a healthy idle
         // session. Paired with the output ICS42 send heartbeat to confirm keepalives are flowing.
         if (UringContext) {
-            LOG_DEBUG_IC_SESSION("ICIS31", "uring recv hb lastRecvAge# %.3fs bytesRead# %" PRIu64
-                " mainRecvCompletions# %" PRIu64 " mainRecvBytes# %" PRIu64 " mainMsActive# %d"
-                " pendingRecvs# %" PRIu32,
-                (now - LastReceiveTimestamp).SecondsFloat(), BytesReadFromSocket,
-                UringMainRecvCompletions, UringMainRecvBytes, (int)MainRecvMultishotActive,
-                UringContext->GetPendingRecvs());
+            YDB_LOG_DEBUG("Uring recv hb",
+                {"marker", "ICIS31"},
+                {"lastRecvAge", (now - LastReceiveTimestamp).SecondsFloat()},
+                {"bytesRead", BytesReadFromSocket},
+                {"mainRecvCompletions", UringMainRecvCompletions},
+                {"mainRecvBytes", UringMainRecvBytes},
+                {"mainMsActive", (int)MainRecvMultishotActive},
+                {"pendingRecvs", UringContext->GetPendingRecvs()});
         }
         Schedule(LastReceiveTimestamp + DeadPeerTimeout, new TEvCheckDeadPeer);
     }

@@ -1,4 +1,3 @@
-#include "logging.h"
 #include "service.h"
 #include "topic_reader_stats.h"
 #include "worker.h"
@@ -9,11 +8,14 @@
 #include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_SERVICE
 
 namespace NKikimr::NReplication::NService {
 
@@ -169,30 +171,27 @@ class TWorker: public TActorBootstrapped<TWorker> {
         }
     };
 
-    TStringBuf GetLogPrefix() const {
-        if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[Worker]"
-                << SelfId() << " ";
-        }
-
-        return LogPrefix.GetRef();
+    NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "Worker"},
+            {"selfId", SelfId()});
     }
 
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
 
         if (ev->Sender == Reader) {
-            LOG_I("Handshake with reader"
-                << ": sender# " << ev->Sender);
+            YDB_LOG_INFO("Handshake with reader",
+                {"sender", ev->Sender});
 
             Reader.Registered();
             if (!InFlightData && !TerminateWriter) {
                 Send(Reader, new TEvWorker::TEvPoll());
             }
         } else if (ev->Sender == Writer) {
-            LOG_I("Handshake with writer"
-                << ": sender# " << ev->Sender);
+            YDB_LOG_INFO("Handshake with writer",
+                {"sender", ev->Sender});
 
             Writer.Registered();
             if (InFlightData) {
@@ -201,18 +200,19 @@ class TWorker: public TActorBootstrapped<TWorker> {
                 Send(Writer, new TEvWorker::TEvTerminateWriter(TerminateWriter->PartitionId));
             }
         } else {
-            LOG_W("Handshake from unknown actor"
-                << ": sender# " << ev->Sender);
+            YDB_LOG_WARN("Handshake from unknown actor",
+                {"sender", ev->Sender});
             return;
         }
     }
 
     void Handle(TEvWorker::TEvPoll::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
 
         if (ev->Sender != Writer) {
-            LOG_W("Poll from unknown actor"
-                << ": sender# " << ev->Sender);
+            YDB_LOG_WARN("Poll from unknown actor",
+                {"sender", ev->Sender});
             return;
         }
 
@@ -235,11 +235,12 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void Handle(TEvWorker::TEvCommit::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
 
         if (ev->Sender != Writer) {
-            LOG_W("Commit from unknown actor"
-                << ": sender# " << ev->Sender);
+            YDB_LOG_WARN("Commit from unknown actor",
+                {"sender", ev->Sender});
             return;
         }
 
@@ -249,11 +250,12 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
 
         if (ev->Sender != Reader) {
-            LOG_W("Data from unknown actor"
-                << ": sender# " << ev->Sender);
+            YDB_LOG_WARN("Data from unknown actor",
+                {"sender", ev->Sender});
             return;
         }
 
@@ -270,11 +272,12 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void Handle(TEvWorker::TEvTerminateWriter::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
 
         if (ev->Sender != Reader) {
-            LOG_W("Terminate writer from unknown actor"
-                << ": sender# " << ev->Sender);
+            YDB_LOG_WARN("Terminate writer from unknown actor",
+                {"sender", ev->Sender});
             return;
         }
 
@@ -288,26 +291,27 @@ class TWorker: public TActorBootstrapped<TWorker> {
 
     void Handle(TEvWorker::TEvGone::TPtr& ev) {
         if (ev->Sender == Reader) {
-            LOG_I("Reader has gone"
-                << ": sender# " << ev->Sender
-                << ": " << ev->Get()->ToString());
+            YDB_LOG_INFO("Reader has gone",
+                {"sender", ev->Sender},
+                {"ev", ev->Get()->ToString()});
             MaybeRecreateActor(ev, Reader);
         } else if (ev->Sender == Writer) {
-            LOG_I("Writer has gone"
-                << ": sender# " << ev->Sender
-                << ": " << ev->Get()->ToString());
+            YDB_LOG_INFO("Writer has gone",
+                {"sender", ev->Sender},
+                {"ev", ev->Get()->ToString()});
             MaybeRecreateActor(ev, Writer);
         } else {
-            LOG_W("Unknown actor has gone"
-                << ": sender# " << ev->Sender);
+            YDB_LOG_WARN("Unknown actor has gone",
+                {"sender", ev->Sender});
         }
     }
 
     void Handle(TEvWorker::TEvStatus::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
         if (!ev->Get()->DetailedStats) {
-            LOG_W("Unexpected TEvWorker::TEvStatus with no stats, ignored"
-                << ": sender# " << ev->Sender);
+            YDB_LOG_WARN("Unexpected TEvWorker::TEvStatus with no stats, ignored",
+                {"sender", ev->Sender});
             return;
         }
         Forward(ev);
@@ -333,9 +337,9 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void Leave(TEvWorker::TEvGone::TPtr& ev) {
-        LOG_I("Leave"
-            << ": status# " << ev->Get()->Status
-            << ", error# " << ev->Get()->ErrorDescription);
+        YDB_LOG_INFO("Leave",
+            {"status", ev->Get()->Status},
+            {"error", ev->Get()->ErrorDescription});
 
         ev->Sender = SelfId();
         Send(ev->Forward(Parent));
@@ -344,13 +348,15 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void Handle(TEvService::TEvTxIdResult::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
         Send(ev->Forward(Writer));
     }
 
     template <typename TEventPtr>
     void Forward(TEventPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
 
         ev->Sender = SelfId();
         Send(ev->Forward(Parent));
@@ -406,6 +412,7 @@ public:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvPoll, Handle);
@@ -428,7 +435,6 @@ private:
     static constexpr TDuration LagReportInterval = TDuration::Seconds(7);
 
     const TActorId Parent;
-    mutable TMaybe<TString> LogPrefix;
     TActorInfo Reader;
     TActorInfo Writer;
     THolder<TEvWorker::TEvData> InFlightData;

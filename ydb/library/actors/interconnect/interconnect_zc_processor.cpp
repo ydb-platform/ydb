@@ -21,6 +21,8 @@
 #include <linux/netlink.h>
 #include <linux/socket.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NActorsServices::INTERCONNECT_SESSION
+
 #ifndef MSG_ZEROCOPY
 #define MSG_ZEROCOPY 0x4000000
 #endif
@@ -362,8 +364,9 @@ void TGuardActor::DoGc()
     std::visit(TOverloaded{
         [this](const TErr& err) {
             // Nothing can do here (( VERIFY, or just drop buffer probably unsafe from network perspective
-            LOG_ERROR_IC_SESSION("ICZC01", "error during ERRQUEUE processing: %s",
-                err.Reason.data());
+            YDB_LOG_ERROR("Error during ERRQUEUE",
+                {"marker", "ICZC01"},
+                {"processing", err.Reason.data()});
             Pool->Release(Delayed);
             Pool->Trim();
             TActor::PassAway();

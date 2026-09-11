@@ -23,7 +23,7 @@ class TestLogbroker(StreamingTestBase):
             for topic in (input_topic, output_topic):
                 driver.topic_client.create_topic(
                     topic,
-                    min_active_partitions=1,
+                    min_active_partitions=4,
                     consumers=[f"/logbroker-federation/prod/{consumer}"],
                 )
 
@@ -39,9 +39,19 @@ class TestLogbroker(StreamingTestBase):
                 """)
                 try:
                     self.wait_completed_checkpoints(kikimr, query_name)
-                    messages = ["hello from logbroker"]
-                    logbroker.topic_write(input_topic, messages)
-                    assert logbroker.topic_read(output_topic, consumer, len(messages)) == messages
+                    messages = ["hello from cluster_a", "hello from cluster_b"]
+                    logbroker.topic_write(input_topic, [messages[0]])
+                    logbroker_b = YdbClient.from_driver_config(
+                        f"grpc://localhost:{os.environ['cluster_b_port']}", database
+                    )
+                    try:
+                        logbroker_b.topic_write(input_topic, [messages[1]])
+                    finally:
+                        logbroker_b.stop()
+
+                    # Messages from different clusters and partitions may arrive in any order.
+                    actual = logbroker.topic_read(output_topic, consumer, len(messages))
+                    assert sorted(actual) == sorted(messages)
                 finally:
                     kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
             finally:

@@ -1,6 +1,7 @@
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher.h>
+#include <ydb/core/fq/libs/row_dispatcher/probes.h>
 #include <ydb/core/fq/libs/row_dispatcher/actors_factory.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
@@ -295,6 +296,22 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(RowDispatcherTests) {
+
+    Y_UNIT_TEST_F(FirstCoordinatorChangeWithTracing, TFixture) {
+        NLWTrace::TProbeRegistry registry;
+        registry.AddProbesList(LWTRACE_GET_PROBES(FQ_ROW_DISPATCHER_PROVIDER));
+        NLWTrace::TManager manager(registry, true);
+        NLWTrace::TQuery query;
+        auto* block = query.AddBlocks();
+        block->MutableProbeDesc()->SetName("CoordinatorChanged");
+        block->MutableProbeDesc()->SetProvider("FQ_ROW_DISPATCHER_PROVIDER");
+        block->AddAction()->MutableLogAction();
+        manager.New("first_coordinator", query);
+        Runtime.Send(new IEventHandle(RowDispatcher, EdgeActor,
+            new TEvRowDispatcher::TEvCoordinatorChanged(Coordinator1, 0)));
+        Runtime.GrabEdgeEvent<NActors::TEvents::TEvPing>(Coordinator1);
+    }
+
     Y_UNIT_TEST_F(OneClientOneSession, TFixture) {
         MockAddSession(Source1, {PartitionId0}, ReadActorId1);
         auto topicSessionId = ExpectRegisterTopicSession();
@@ -575,4 +592,3 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
 }
 
 }
-

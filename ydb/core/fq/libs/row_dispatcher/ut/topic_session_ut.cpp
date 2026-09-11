@@ -336,6 +336,85 @@ using TMockTopicFixture = TFixture<true>;
 
 Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
+    Y_UNIT_TEST(FatalErrorWithLateCompileResponse) {
+        NActors::TTestActorRuntime runtime;
+        TAutoPtr<TAppPrepare> app = new TAppPrepare();
+        runtime.Initialize(app->Unwrap());
+        const auto registry = NKikimr::NMiniKQL::CreateFunctionRegistry(
+            &PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {});
+        const auto dispatcher = runtime.AllocateEdgeActor();
+        const auto compiler = runtime.AllocateEdgeActor();
+        const auto notifier = runtime.AllocateEdgeActor();
+        const auto reader1 = runtime.AllocateEdgeActor();
+        const auto reader2 = runtime.AllocateEdgeActor();
+        const auto gateway = CreateMockPqGateway({.Runtime = &runtime, .Notifier = notifier});
+        NConfig::TRowDispatcherConfig config;
+        config.SetTimeoutBeforeStartSessionSec(0);
+        NYdb::TDriver driver(NYdb::TDriverConfig{});
+        const auto topic = runtime.Register(NewTopicSession(
+            "read_group", "topic", "endpoint", "database", config, registry.Get(), dispatcher,
+            compiler, 0, driver, {}, MakeIntrusive<NMonitoring::TDynamicCounters>(),
+            MakeIntrusive<NMonitoring::TDynamicCounters>(), gateway, 16000000, false).release());
+        runtime.EnableScheduleForActor(topic);
+
+        NYql::NPq::NProto::TDqPqTopicSource source;
+        source.SetTopicPath("topic");
+        source.SetConsumerName("consumer");
+        source.SetFormat("raw");
+        source.AddColumns("data");
+        source.AddColumnTypes("[DataType; String]");
+        runtime.SendAsync(new IEventHandle(topic, reader1, new TEvRowDispatcher::TEvStartSession(
+            source, {0}, "", {}, 0, "query1")));
+        runtime.GrabEdgeEvent<TEvMockPqEvents::TEvCreateSession>(notifier);
+        const auto readSession = gateway->ExtractReadSession("topic");
+        UNIT_ASSERT(readSession);
+        readSession->AddStartSessionEvent();
+
+        source.SetPredicate("TRUE");
+        runtime.SendAsync(new IEventHandle(topic, reader2, new TEvRowDispatcher::TEvStartSession(
+            source, {0}, "", {}, 0, "query2")));
+        const auto request = runtime.GrabEdgeEvent<TEvRowDispatcher::TEvPurecalcCompileRequest>(compiler);
+        const auto formatHandler = request->Sender;
+        bool shutdownQueued = false;
+        bool lateResponseDelivered = false;
+        auto oldFilter = runtime.SetEventFilter([&](auto&, TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvRowDispatcher::TEvSessionError::EventType) {
+                UNIT_ASSERT_C(runtime.FindActor(topic), "Client callback used a destroyed topic session");
+                if (event->Get<TEvRowDispatcher::TEvSessionError>()->IsFatalError && !shutdownQueued) {
+                    shutdownQueued = true;
+                    // The dispatcher and compiler can enqueue these while FatalError is still running.
+                    runtime.SendAsync(new IEventHandle(topic, dispatcher, new NActors::TEvents::TEvPoisonPill()));
+                    runtime.SendAsync(new IEventHandle(formatHandler, compiler,
+                        new TEvRowDispatcher::TEvPurecalcCompileResponse(EStatusId::INTERNAL_ERROR, {}),
+                        0, request->Cookie));
+                }
+            }
+            return false;
+        });
+        auto oldObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (event->Recipient == formatHandler &&
+                event->GetTypeRewrite() == TEvRowDispatcher::TEvPurecalcCompileResponse::EventType) {
+                UNIT_ASSERT(!runtime.FindActor(topic));
+                lateResponseDelivered = true;
+            }
+            return NActors::TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER {
+            runtime.SetEventFilter(std::move(oldFilter));
+            runtime.SetObserverFunc(std::move(oldObserver));
+        };
+        readSession->AddCloseSessionEvent(NYdb::EStatus::UNAVAILABLE);
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back([&](IEventHandle& event) {
+            return event.Recipient == formatHandler && event.GetTypeRewrite() == NActors::TEvents::TEvPoison::EventType;
+        });
+        runtime.DispatchEvents(options);
+        UNIT_ASSERT(shutdownQueued);
+        UNIT_ASSERT(lateResponseDelivered);
+        UNIT_ASSERT(!runtime.FindActor(topic));
+        UNIT_ASSERT(!runtime.FindActor(formatHandler));
+    }
+
     Y_UNIT_TEST_F(MemoryQuotaLimitsSdkReadBuffer, TRealTopicFixture) {
         auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(8_MB, 8_MB);
         MemoryQuotaManager = manager;

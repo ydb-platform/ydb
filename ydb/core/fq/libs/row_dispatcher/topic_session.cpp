@@ -141,7 +141,7 @@ private:
         using TPtr = TIntrusivePtr<TClientsInfo>;
 
         TClientsInfo(TTopicSession& self, const TString& logPrefix, const ITopicFormatHandler::TSettings& handlerSettings, const NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev, const NMonitoring::TDynamicCounterPtr& counters, const TString& readGroup, TMaybe<ui64> offset, bool enableStreamingQueriesCounters)
-            : Self(self)
+            : Self(&self)
             , LogPrefix(logPrefix)
             , HandlerSettings(handlerSettings)
             , QueryId(ev->Get()->Record.GetQueryId())
@@ -188,7 +188,11 @@ private:
         }
 
         bool IsStarted() const override {
-            return ClientStarted;
+            return Self && ClientStarted;
+        }
+
+        void Detach() {
+            Self = nullptr;
         }
 
         TActorId GetClientId() const override {
@@ -216,15 +220,23 @@ private:
         }
 
         void OnClientError(TStatus status) override {
-            Self.SendSessionError(ReadActorId, status, false);
+            if (Self) {
+                Self->SendSessionError(ReadActorId, status, false);
+            }
         }
 
         void StartClientSession() override {
+            if (!Self) {
+                return;
+            }
             ClientStarted = true;
-            Self.StartClientSession(*this);
+            Self->StartClientSession(*this);
         }
 
         void AddDataToClient(ui64 offset, ui64 numberRows, ui64 rowSize, TMaybe<TInstant> watermark) override {
+            if (!Self) {
+                return;
+            }
             Y_ENSURE(!NextMessageOffset || offset >= *NextMessageOffset, "Unexpected historical offset");
 
             YDB_LOG_TRACE("AddDataToClient",
@@ -238,13 +250,16 @@ private:
             NextMessageOffset = offset + 1;
             QueuedRows += numberRows;
             QueuedBytes += rowSize;
-            Self.QueuedBytes += rowSize;
+            Self->QueuedBytes += rowSize;
             Watermark = watermark;
-            Self.SendDataArrived(*this);
-            Self.Metrics.QueuedBytes->Add(rowSize);
+            Self->SendDataArrived(*this);
+            Self->Metrics.QueuedBytes->Add(rowSize);
         }
 
         void UpdateClientOffset(ui64 offset) override {
+            if (!Self) {
+                return;
+            }
             YDB_LOG_TRACE("UpdateClientOffset",
                 {"logPrefix", LogPrefix},
                 {"readActorId", ReadActorId},
@@ -261,8 +276,9 @@ private:
         }
 
         // Settings
-        TTopicSession& Self;
-        const TString& LogPrefix;
+        // Format handlers and pending compilations may outlive the topic actor.
+        TTopicSession* Self;
+        const TString LogPrefix;
         const ITopicFormatHandler::TSettings HandlerSettings;
         const TString QueryId;
         const bool EnabledLLVM;
@@ -503,6 +519,7 @@ void TTopicSession::PassAway() {
         {"logPrefix", LogPrefix});
     StopReadSession();
     for (const auto& [actorId, clientInfo] : Clients) {
+        clientInfo->Detach();
         if (const auto formatIt = FormatHandlers.find(clientInfo->HandlerSettings); formatIt != FormatHandlers.end()) {
             formatIt->second->RemoveClient(clientInfo->GetClientId());
         }
@@ -1015,6 +1032,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
 
     QueuedBytes -= info.QueuedBytes;
     Metrics.QueuedBytes->Sub(info.QueuedBytes);
+    info.Detach();
     if (const auto formatIt = FormatHandlers.find(info.HandlerSettings); formatIt != FormatHandlers.end()) {
         formatIt->second->RemoveClient(info.GetClientId());
         if (!formatIt->second->HasClients()) {
@@ -1073,6 +1091,7 @@ void TTopicSession::FatalError(const TStatus& status) {
         {"fatalError", status.GetErrorMessage()});
 
     for (auto& [readActorId, info] : Clients) {
+        info->Detach();
         YDB_LOG_DEBUG("Send TEvSessionError",
             {"logPrefix", LogPrefix},
             {"readActorId", readActorId});

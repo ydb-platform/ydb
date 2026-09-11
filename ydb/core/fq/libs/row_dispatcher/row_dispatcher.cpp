@@ -601,7 +601,7 @@ void TRowDispatcher::Bootstrap() {
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
-    LWPROBE(CoordinatorChanged, ev->Sender.ToString(), ev->Get()->Generation, ev->Get()->CoordinatorActorId.ToString(), CoordinatorGeneration, CoordinatorActorId->ToString());
+    LWPROBE(CoordinatorChanged, ev->Sender.ToString(), ev->Get()->Generation, ev->Get()->CoordinatorActorId.ToString(), CoordinatorGeneration, CoordinatorActorId ? CoordinatorActorId->ToString() : TString());
     YDB_LOG_DEBUG("Coordinator changed",
         {"logPrefix", LogPrefix},
         {"coordinatorActorId", CoordinatorActorId},

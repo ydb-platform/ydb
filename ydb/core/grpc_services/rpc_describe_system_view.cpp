@@ -28,7 +28,7 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         TBase::Bootstrap(ctx);
 
-        const auto& path = GetProtoRequest()->path();
+        const TString path = Request_->GetDatabaseRelativePath(GetProtoRequest()->path());
         const auto paths = NKikimr::SplitPath(path);
         if (paths.empty()) {
             Request_->RaiseIssue(NYql::TIssue("Invalid path"));

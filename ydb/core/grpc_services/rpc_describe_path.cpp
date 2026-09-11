@@ -31,6 +31,7 @@ public:
 
     void Bootstrap(const TActorContext &ctx) {
         TBase::Bootstrap(ctx);
+        Path = this->Request_->GetDatabaseRelativePath(this->GetProtoRequest()->path());
         ResolvePath(ctx);
     }
 
@@ -41,7 +42,7 @@ private:
 
         auto& entry = request->ResultSet.emplace_back();
         entry.Operation = TSchemeCacheNavigate::OpList; // we need ListNodeEntry
-        entry.Path = NKikimr::SplitPath(this->GetProtoRequest()->path());
+        entry.Path = NKikimr::SplitPath(Path);
 
         ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
         this->Become(&TDerived::StateResolvePath);
@@ -62,7 +63,7 @@ private:
 
         const auto& entry = request->ResultSet.front();
         if (entry.Status != TSchemeCacheNavigate::EStatus::Ok) {
-            return SendProposeRequest(ctx, this->GetProtoRequest()->path());
+            return SendProposeRequest(ctx, Path);
         }
 
         switch (entry.Kind) {
@@ -70,11 +71,11 @@ private:
             case TSchemeCacheNavigate::EKind::KindIndex:
                 break;
             default:
-                return SendProposeRequest(ctx, this->GetProtoRequest()->path());
+                return SendProposeRequest(ctx, Path);
         }
 
         if (!entry.Self || !entry.ListNodeEntry) {
-            return SendProposeRequest(ctx, this->GetProtoRequest()->path());
+            return SendProposeRequest(ctx, Path);
         }
 
         if (entry.ListNodeEntry->Children.size() != 1) {
@@ -86,7 +87,7 @@ private:
         const auto& childName = entry.ListNodeEntry->Children.at(0).Name;
 
         return SendProposeRequest(ctx,
-            NKikimr::JoinPath(NKikimr::ChildPath(NKikimr::SplitPath(this->GetProtoRequest()->path()), childName)));
+            NKikimr::JoinPath(NKikimr::ChildPath(NKikimr::SplitPath(Path), childName)));
     }
 
     void SendProposeRequest(const TActorContext& ctx, const TString& path) {
@@ -149,6 +150,7 @@ private:
     }
 
 private:
+    TString Path;
     TMaybe<TString> OverrideName;
 };
 

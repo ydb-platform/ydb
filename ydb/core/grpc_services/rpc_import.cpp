@@ -101,11 +101,15 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         createImport.MutableOperationParams()->CopyFrom(request.operation_params());
         if constexpr (IsS3Import) {
             createImport.MutableImportFromS3Settings()->CopyFrom(request.settings());
+            createImport.MutableImportFromS3Settings()->set_destination_path(
+                this->Request->GetDatabaseRelativePath(request.settings().destination_path()));
         }
         if constexpr (IsFsImport) {
             auto* fsSettings = createImport.MutableImportFromFsSettings();
             fsSettings->CopyFrom(request.settings());
             fsSettings->set_base_path(StripTrailingSlashes(fsSettings->base_path()));
+            fsSettings->set_destination_path(
+                this->Request->GetDatabaseRelativePath(fsSettings->destination_path()));
         }
 
         return ev.Release();

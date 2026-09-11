@@ -333,7 +333,7 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
 }
 
 std::string FullTopicPath(const std::string& dbPath, std::string_view topic) {
-    if (topic.starts_with(dbPath)) {
+    if (!dbPath.starts_with('/') || topic.starts_with(dbPath)) {
         return std::string(topic);
     }
     std::string full;
@@ -377,7 +377,7 @@ void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& del
     Cancel(prevDescribePartitionContext);
 
     Ydb::Topic::DescribePartitionRequest request;
-    // Currently, the whole topic path needs to be sent in the DescribePartitionRequest.
+    // Preserve the full path for absolute databases for compatibility with old servers.
     request.set_path(FullTopicPath(DbDriverState->Database, Settings.Path_));
     request.set_partition_id(partition_id);
     request.set_include_location(true);

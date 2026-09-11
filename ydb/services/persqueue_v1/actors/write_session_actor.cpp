@@ -460,6 +460,11 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWriteInit::TPtr& ev, const
         CloseSession("no topic in init request",  PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
     }
+    if constexpr (Protocol == EProtocol::Topic) {
+        if (TopicsController.GetConverterFactory()->GetNoDCMode()) {
+            topic_path = Request->GetDatabaseRelativePath(topic_path);
+        }
+    }
 
     if constexpr (Protocol == EProtocol::PQv1) {
         if (InitRequest.message_group_id().empty()) {

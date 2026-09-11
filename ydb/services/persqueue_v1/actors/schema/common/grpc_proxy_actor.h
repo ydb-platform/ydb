@@ -58,6 +58,12 @@ protected:
         return CanonizePath(this->Request_->GetDatabaseName().GetOrElse(""));
     }
 
+    TString ResolveTopicPath(TStringBuf path) const {
+        return AppData()->PQConfig.GetTopicsAreFirstClassCitizen()
+            ? this->Request_->GetDatabaseRelativePath(path)
+            : TString(path);
+    }
+
     void ReplyWithError(Ydb::StatusIds::StatusCode status, const TString& messageText) {
         ReplyWithError(status, messageText, AsIssueCode(status));
     }

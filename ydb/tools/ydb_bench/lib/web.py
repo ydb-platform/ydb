@@ -3285,7 +3285,8 @@ async function renderComparisons(){
   }catch(error){app.innerHTML=shell('comparisons',displayError(error))}
 }
     """
-    "async function compose(){const pieces=routeParts(),current=pieces.join('/');if(current==='hosts')return renderHosts();if(current==='runs')return renderRuns();if(current==='new')return renderN"
+    "async function compose(){if(!location.hash.slice(1))history.replaceState(history.state,'',location.pathname+location.search+'#runs');"
+    "const pieces=routeParts(),current=pieces.join('/');if(current==='hosts')return renderHosts();if(current==='runs')return renderRuns();if(current==='new')return renderN"
     "ew('builder');if(current==='new/yaml')return renderNew('yaml');if(current==='topology')return renderTopology();if(curren"
     "t==='comparisons'||pieces[0]==='comparisons')return renderSavedComparisons();if(pieces[0]==='attempt'&&[4,5].includes(pieces.length))"
     "return renderLocalYdbAttempt(pieces[1],pieces[2],pieces[3],pieces[4]);if(pieces[0]==='run'){if(pieces[2]"

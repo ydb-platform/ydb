@@ -8052,6 +8052,36 @@ class WebTest(unittest.TestCase):
         """
         subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True, timeout=10)
 
+    @unittest.skipUnless(shutil.which("node"), "node is required for initial route checks")
+    def test_web_empty_route_is_normalized_before_render(self):
+        routes = 'function routeParts' + web._JS.split('function routeParts', 1)[1].split('function setRoute', 1)[0]
+        compose = (
+            'async function compose'
+            + web._JS.split('async function compose', 1)[1].split("addEventListener('hashchange'", 1)[0]
+        )
+        script = routes + compose + """
+const assert=require('assert');
+let location,history,rendered;
+const renderRuns=()=>{assert.strictEqual(location.hash,'#runs');rendered='runs'};
+const renderTopology=()=>{rendered='topology'};
+(async()=>{
+  for(const hash of ['', '#', '#runs', '#topology']){
+    for(const search of ['', '?host=peer-id']){
+      location={hash,pathname:'/',search};rendered=null;
+      const state={kept:true},calls=[];
+      history={state,replaceState:(value,title,url)=>{
+        assert.strictEqual(value,state);calls.push(url);location.hash=new URL(url,'http://host:31999').hash;
+      }};
+      await compose();
+      assert.strictEqual(rendered,hash==='#topology'?'topology':'runs');
+      assert.deepStrictEqual(calls,hash===''||hash==='#'?['/'+search+'#runs']:[]);
+      assert.strictEqual(location.search,search);
+    }
+  }
+})().catch(error=>{console.error(error);process.exitCode=1});
+"""
+        subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True, timeout=10)
+
     def test_new_comparison_link_matches_new_run_style(self):
         comparisons = web._JS.split("async function renderSavedComparisons(){", 1)[1]
         self.assertNotIn('<div class=runs-heading><h1 class=page-title>Comparisons</h1>', comparisons)

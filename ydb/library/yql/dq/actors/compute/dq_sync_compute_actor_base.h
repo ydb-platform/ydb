@@ -376,7 +376,8 @@ protected:
         auto* alloc = guard.GetMutex();
         alloc->SetLimit(this->MemoryQuota->GetMkqlMemoryLimit());
 
-        this->MemoryQuota->TrySetIncreaseMemoryLimitCallback(alloc);
+        this->MemoryQuota->BindScopedAlloc(alloc);
+        this->MemoryQuota->TrySetIncreaseMemoryLimitCallback();
 
         TDqTaskRunnerMemoryLimits limits;
         limits.ChannelBufferSize = this->MemoryLimits.ChannelBufferSize;

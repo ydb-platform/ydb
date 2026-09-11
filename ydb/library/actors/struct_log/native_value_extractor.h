@@ -34,7 +34,7 @@ public:
         return Result;
     }
 
-    const TResult& ExtractValue(const TStructuredMessage& message, const TString& name) {
+    const TResult& ExtractValue(const TStructuredMessage& message, const std::vector<TKeyName>& name) {
         auto index = message.GetValueIndex(name);
         if (!index.has_value()) {
             Result.first = TResultKind::NoValue;

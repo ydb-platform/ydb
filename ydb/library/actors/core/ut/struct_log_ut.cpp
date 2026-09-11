@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
     #define TEST_MESSAGE_EXTRACT_TO_STRING(M, S)                          \
         {                                                                 \
             TStringValueExtractor extractor;                              \
-            auto stringValue = extractor.ExtractValue(M, "value");        \
+            auto stringValue = extractor.ExtractValue(M, {"value"});      \
             UNIT_ASSERT(stringValue.has_value());                         \
             UNIT_ASSERT_STRINGS_EQUAL(stringValue.value(), S);            \
         }
@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
         using TExtractorType = TNativeValueExtractor<A>;
         TExtractorType extractor;
 
-        auto result = extractor.ExtractValue(msg, "value");
+        auto result = extractor.ExtractValue(msg, {"value"});
         UNIT_ASSERT_EQUAL(result.first, OK ? TExtractorType::TResultKind::Ok : TExtractorType::TResultKind::NoCast);
         if constexpr(OK) {
             UNIT_ASSERT(result.second.has_value());

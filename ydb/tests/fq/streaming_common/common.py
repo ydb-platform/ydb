@@ -485,7 +485,9 @@ def read_and_check_data(
             assert sorted(read_data) == sorted(expected_output)
             return
 
-        while len(read_data) < len(expected_output) or sorted(read_data[-len(expected_output) :]) != sorted(expected_output):
+        while len(read_data) < len(expected_output) or sorted(read_data[-len(expected_output) :]) != sorted(
+            expected_output
+        ):
             remaining_timeout = deadline - time.time()
             assert remaining_timeout > 0, f"Timed out waiting for expected data: {expected_output}, got: {read_data}"
             read_data.extend(

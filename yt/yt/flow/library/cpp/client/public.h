@@ -53,6 +53,9 @@ constexpr std::string_view MonitoringProjectAttribute = "monitoring_project";
 constexpr std::string_view MonitoringClusterAttribute = "monitoring_cluster";
 constexpr std::string_view IdAttribute = "id";
 
+//! Cypress node under the pipeline path that the Cypress election backend locks exclusively.
+inline constexpr TStringBuf LeaderControllerLockName = "leader_controller_lock";
+
 //! Row key in the flow_control dynamic table whose value is the YSON-serialized leader
 //! controller node info (see TNodeInfo). Supersedes the deprecated
 //! LeaderControllerAddressAttribute Cypress attribute.

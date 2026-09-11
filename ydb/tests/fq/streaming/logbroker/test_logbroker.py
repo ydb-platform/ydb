@@ -11,7 +11,7 @@ class TestLogbroker(StreamingTestBase):
         endpoint = f"localhost:{os.environ['cluster_a_port']}"
         input_topic = "streaming-input"
         output_topic = "streaming-output"
-        consumer = "consumer"
+        consumer = "/logbroker-federation/prod/consumer"
         query_name = "logbroker-copy"
 
         # Create both topics through the federation's config manager.
@@ -24,7 +24,7 @@ class TestLogbroker(StreamingTestBase):
                 driver.topic_client.create_topic(
                     topic,
                     min_active_partitions=4,
-                    consumers=[f"/logbroker-federation/prod/{consumer}"],
+                    consumers=[consumer],
                 )
 
         logbroker = YdbClient.from_driver_config(f"grpc://{endpoint}", database)

@@ -36,6 +36,17 @@ namespace NKikimr::NPQ {
     }
 
     ui64 TQuotaTracker::ComputeMaxBurstQuota(const ui64 maxBurst, const ui64 speedPerSecond) const {
+        // Available is a token bucket that still refills while traffic is going.
+        // Capping it at TransformToQuota(burst) therefore dumps ~burst immediately and
+        // another ~speed over the next second (2× when burst == speed).
+        //
+        // Want ~burst bytes over any busy second:
+        //   extra = max(0, burst - speed)  — idle dump above the sustained rate
+        //   tick  = speed * 50ms           — one WAKE_UP quantum so the limiter can start;
+        //                                     20 ticks/s then refill the rest of `speed`
+        // burst == speed → cap is one tick (~1.05×, not 2×)
+        // burst >  speed → idle dump is the extra, then refill speed
+        // burst <  speed → extra is 0, cap is one tick
         ui64 extra = 0;
         if (maxBurst > speedPerSecond) {
             extra = TransformToQuota(maxBurst - speedPerSecond);

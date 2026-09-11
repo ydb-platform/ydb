@@ -2,6 +2,8 @@
 
 Storage SelfHeal is a mechanism for automatically restoring {{ ydb-short-name }} storage fault tolerance.
 
+For an overview of the mechanisms and their operating conditions, see [SelfHeal](selfheal.md). Recovery of State Storage, Board, and SchemeBoard replicas is described in [Metadata Distribution SelfHeal](selfheal-metadata-distribution.md).
+
 ## How storage SelfHeal works {#how-it-works}
 
 Sentinel, a component of [CMS](../../concepts/glossary.md#cms), continuously monitors the state of [PDisks](../../concepts/glossary.md#pdisk) and nodes. If a fault persists long enough (about one hour by default), Sentinel initiates relocation of the affected [VDisks](../../concepts/glossary.md#vdisk) to healthy hardware so that the [failure model](../../concepts/topology.md#cluster-config) is satisfied again.

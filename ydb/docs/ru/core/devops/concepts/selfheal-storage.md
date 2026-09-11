@@ -2,6 +2,8 @@
 
 SelfHeal хранилища — механизм автоматического восстановления отказоустойчивости хранилища {{ ydb-short-name }}.
 
+Общий обзор механизмов и условий их работы приведён в разделе [SelfHeal](selfheal.md). Восстановление реплик State Storage, Board и SchemeBoard описано в разделе [SelfHeal подсистем распространения метаданных](selfheal-metadata-distribution.md).
+
 ## Как работает SelfHeal хранилища {#how-it-works}
 
 Компонент Sentinel, входящий в [CMS](../../concepts/glossary.md#cms), постоянно следит за состоянием [PDisk](../../concepts/glossary.md#pdisk) и узлов. Если неисправность сохраняется достаточно долго (по умолчанию около часа), Sentinel инициирует перенос затронутых [VDisk](../../concepts/glossary.md#vdisk) на исправное оборудование, чтобы снова соблюдалась [модель отказа](../../concepts/topology.md#cluster-config).

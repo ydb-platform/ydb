@@ -348,8 +348,6 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     virtual void MoveDataCompleted(const TActorContext& ctx) override;
     // Split out of MoveDataCompleted so the wakeup can drive it without claiming vacuum finished.
     void CheckMoveDataGate(const TActorContext& ctx);
-    // Called from TTTLColumnEngineChanges::DoWriteIndexOnComplete for ForcedMove rewrites.
-    void OnMoveDataRewriteComplete(TInstant planInstant);
 
     void Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx);
     void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
@@ -554,8 +552,8 @@ private:
         TInstant LastGateCheckAt;
         // The actualizer count is cumulative; track what was reported to keep the sensor a rate.
         ui64 ReportedRejections = 0;
-        // Max plan instant among portions rewritten by this session; gate blocks until cleanup drains past it.
-        TInstant CleanupWatermark;
+        // Newest pending cleanup when the queues last drained; the gate waits for cleanup to pass it.
+        std::optional<TInstant> CleanupWatermark;
     };
 
     static constexpr TDuration MoveDataGateCheckCadence = TDuration::Seconds(5);

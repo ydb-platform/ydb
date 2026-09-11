@@ -37,7 +37,7 @@ enum class EMoveDataGate {
     BlockedByGC,
 };
 
-// Only portions at-or-before the watermark were produced by this move session.
+// Portions retired after the queues drained hold no target data, so only earlier ones block the gate.
 inline bool CleanupBlocksGate(const std::optional<TInstant>& earliestCleanupInstant, const TInstant& watermark) {
     return earliestCleanupInstant.has_value() && *earliestCleanupInstant <= watermark;
 }

@@ -6,18 +6,26 @@ import ydb
 from ydb.tests.fq.streaming_common.common import StreamingTestBase, YdbClient
 
 
-def wait_topic_path(driver, cluster_name, path, timeout=60):
+def wait_topic_consumer(driver, cluster_name, path, consumer, timeout=60):
     deadline = time.monotonic() + timeout
+    consumer_names = []
+    last_error = None
     while True:
         try:
-            driver.scheme_client.describe_path(
-                path, settings=ydb.BaseRequestSettings().with_timeout(5)
-            )
-            return
+            description = driver.topic_client.describe_topic(path)
+            consumer_names = [item.name for item in description.consumers]
+            last_error = None
+            # Federation consumer paths may be returned without the leading slash.
+            if consumer.lstrip("/") in {name.lstrip("/") for name in consumer_names}:
+                return
         except (ydb.SchemeError, ydb.NotFound) as error:
-            if time.monotonic() >= deadline:
-                raise AssertionError(f"Topic {path} did not appear in {cluster_name}") from error
-            time.sleep(1)
+            last_error = error
+        if time.monotonic() >= deadline:
+            raise AssertionError(
+                f"Consumer {consumer!r} did not appear in topic {path!r} on {cluster_name}; "
+                f"last observed consumers: {consumer_names!r}"
+            ) from last_error
+        time.sleep(1)
 
 
 class TestLogbroker(StreamingTestBase):
@@ -42,7 +50,7 @@ class TestLogbroker(StreamingTestBase):
                     consumers=[consumer],
                 )
 
-        # Config manager creation may finish before the paths are visible on the clusters.
+        # Config manager creation may finish before consumers are visible on the clusters.
         for cluster_name in ("cluster_a", "cluster_b"):
             with ydb.Driver(
                 endpoint=f"grpc://localhost:{os.environ[f'{cluster_name}_port']}",
@@ -51,7 +59,7 @@ class TestLogbroker(StreamingTestBase):
             ) as driver:
                 driver.wait(timeout=10, fail_fast=True)
                 for topic in (input_topic, output_topic):
-                    wait_topic_path(driver, cluster_name, f"{database}/{topic}")
+                    wait_topic_consumer(driver, cluster_name, f"{database}/{topic}", consumer)
 
         logbroker = YdbClient.from_driver_config(f"grpc://{endpoint}", database)
         try:

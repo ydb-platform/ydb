@@ -35,7 +35,7 @@ public:
     void PassAway() override;
 
 protected:
-    TString BuildLogPrefix() const override;
+    TLogPrefix BuildLogPrefix() const override;
 
 private:
     void Queue(TEvPQ::TEvMLPReadRequest::TPtr&);
@@ -95,6 +95,7 @@ private:
     void InitializeDetailedMetrics();
 
     size_t RequiredToFetchMessageCount() const;
+    size_t FifoUnlockedGroupDeficit() const;
     void SendToPQTablet(std::unique_ptr<IEventBase> ev);
 
     void UpdateMetrics();

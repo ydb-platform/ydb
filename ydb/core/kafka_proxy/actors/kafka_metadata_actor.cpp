@@ -66,8 +66,10 @@ public:
         Become(&TTopicLocationActor::StateWork);
     }
 
-    TString BuildLogPrefix() const override {
-        return TStringBuilder() << "[TTopicLocationActor][" << Path << "]";
+    TLogPrefix BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TopicLocationActor"},
+            {"path", Path});
     }
 
     bool OnUnhandledException(const std::exception& exc) override {
@@ -112,7 +114,7 @@ private:
         const auto it = ev->Get()->Topics.find(Path);
         AFL_ENSURE(it != ev->Get()->Topics.end())("path", Path);
         const auto& topicInfo = it->second;
-        if (topicInfo.Status != NDescriber::EStatus::SUCCESS) {
+        if (topicInfo.Status != NDescriber::EStatus::Success) {
             auto status = NDescriber::Convert(topicInfo.Status);
             // Missing topic → SCHEME_ERROR so Kafka auto-create / UNKNOWN_TOPIC still work.
             if (status == Ydb::StatusIds::NOT_FOUND) {

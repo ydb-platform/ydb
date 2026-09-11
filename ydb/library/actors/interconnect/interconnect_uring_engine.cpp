@@ -3,6 +3,7 @@
 #include "uring_context.h" // for TUringContext::IsAvailable() / SqThreadIdleMs
 
 #include "v2_event_serializer.h"
+#include "v2_serialize_window.h"
 #include "interconnect_common.h"
 #include "interconnect_direct_session.h"
 #include "interconnect_uring_event_queue.h"
@@ -173,6 +174,10 @@ namespace NActors {
             size_t XdcUnsentBytes = 0;
             size_t BytesToWriteLastTime = 0;
             size_t XdcBytesToWriteLastTime = 0;
+            // Absolute end of the main byte range in the currently submitted writev. This is a
+            // speculative frontier: XDC may be issued through its corresponding PUSH checkpoints
+            // before the main CQE arrives.
+            ui64 MainWriteEnd = 0;
             int ReadPendingRingIdx = -1;
             int XdcReadPendingRingIdx = -1;
             ui32 PreferredRingIdx = 0;
@@ -191,7 +196,7 @@ namespace NActors {
 
             std::vector<TIncomingEventQueue::TRecord> PendingRecordsHeap;
 
-            size_t SerializeWindowSize = 0;
+            TSerializeWindow SerializeWindow;
 
             ui64 BytesSent = 0;
             ui64 BytesReceived = 0;
@@ -304,19 +309,18 @@ namespace NActors {
                     if (XdcSocket && XdcOutgoingSpans.size() >= MaxSpansPerWrite) {
                         break;
                     }
-                    const size_t unsent = UnsentBytes + XdcUnsentBytes;
-                    size_t budget = unsent < SerializeWindowSize ? SerializeWindowSize - unsent : 0;
-                    if (!budget) {
-                        // The window is exhausted, which on a session with XDC can mean the XDC socket
-                        // alone is backed up. Liveness must not depend on payload progress: the peer
-                        // declares us dead if it stops seeing pings, so out-of-band system traffic gets
-                        // its own small budget on top of the window. It is emitted first (the system
-                        // channel sits at the head of the quota heap), and the loop ends as soon as it
-                        // drains, so the overshoot is bounded by one grant.
+                    size_t mainBudget = SerializeWindow.RemainingMain(UnsentBytes);
+                    size_t xdcBudget = XdcSocket ? SerializeWindow.RemainingXdc(XdcUnsentBytes) : 0;
+                    if (!mainBudget && !xdcBudget) {
+                        // Both per-socket caps are exhausted. Liveness must not depend on payload
+                        // progress: the peer declares us dead if it stops seeing pings, so out-of-band
+                        // system traffic gets a small extra main-socket budget. It is emitted first
+                        // (the system channel sits at the head of the quota heap), and the loop ends
+                        // as soon as it drains, so the overshoot is bounded by one grant.
                         if (!Serializer.HasOutOfBandTraffic()) {
                             break;
                         }
-                        budget = minWriteBufferSize;
+                        mainBudget = minWriteBufferSize;
                     }
                     if (WriteBuffer.size() < minWriteBufferSize) {
                         WriteBuffer = TRcBuf::Uninitialized(WriteBufferSize);
@@ -326,10 +330,10 @@ namespace NActors {
                     }
                     const ui64 mainBefore = Serializer.GetCumulativeProducedMain();
                     const ui64 xdcBefore = Serializer.GetCumulativeProducedXdc();
-                    const size_t numBytesProduced = Serializer.ProduceOutputStream(WriteBuffer, &OutgoingSpans,
-                        XdcSocket ? &XdcWriteBuffer : nullptr,
-                        XdcSocket ? &XdcOutgoingSpans : nullptr,
-                        budget);
+                    const size_t numBytesProduced = XdcSocket
+                        ? Serializer.ProduceOutputStream(WriteBuffer, &OutgoingSpans,
+                            &XdcWriteBuffer, &XdcOutgoingSpans, mainBudget, xdcBudget)
+                        : Serializer.ProduceOutputStream(WriteBuffer, &OutgoingSpans, mainBudget);
 
                     if (!numBytesProduced) {
                         break;
@@ -347,28 +351,36 @@ namespace NActors {
             }
 
             static bool PrepareIovecFromSpans(std::vector<TContiguousSpan>& spans, iovec *iov, size_t *iovLen,
-                    size_t *bytesToWrite) {
+                    size_t *bytesToWrite, size_t maxBytes = Max<size_t>()) {
                 *iovLen = 0;
                 *bytesToWrite = 0;
                 for (const TContiguousSpan& span : spans) {
-                    if (*iovLen >= MaxSpansPerWrite) {
+                    if (*iovLen >= MaxSpansPerWrite || *bytesToWrite >= maxBytes) {
+                        break;
+                    }
+                    const size_t size = Min(span.size(), maxBytes - *bytesToWrite);
+                    if (!size) {
                         break;
                     }
                     iov[(*iovLen)++] = {
                         .iov_base = const_cast<char*>(span.data()),
-                        .iov_len = span.size(),
+                        .iov_len = size,
                     };
-                    *bytesToWrite += span.size();
+                    *bytesToWrite += size;
                 }
                 return *iovLen != 0;
             }
 
             bool PrepareIovec() {
-                return PrepareIovecFromSpans(OutgoingSpans, Iov, &IovLen, &BytesToWriteLastTime);
+                const bool res = PrepareIovecFromSpans(OutgoingSpans, Iov, &IovLen, &BytesToWriteLastTime);
+                MainWriteEnd = BytesSent + BytesToWriteLastTime;
+                Serializer.IssueMainBytes(MainWriteEnd);
+                return res;
             }
 
-            bool PrepareXdcIovec() {
-                return PrepareIovecFromSpans(XdcOutgoingSpans, XdcIov, &XdcIovLen, &XdcBytesToWriteLastTime);
+            bool PrepareXdcIovec(size_t maxBytes = Max<size_t>()) {
+                return PrepareIovecFromSpans(XdcOutgoingSpans, XdcIov, &XdcIovLen, &XdcBytesToWriteLastTime,
+                    maxBytes);
             }
 
             static void DropFrontSpans(std::vector<TContiguousSpan>& spans, size_t num) {
@@ -390,30 +402,23 @@ namespace NActors {
                 spans.erase(spans.begin(), spans.begin() + index);
             }
 
-            void ApplyBytesWritten(size_t num, bool xdc, size_t minSerializeWindowSize, size_t maxSerializeWindowSize,
+            void ApplyBytesWritten(size_t num, bool xdc,
                     std::vector<ui64> *eventToWireTime, std::vector<std::unique_ptr<IEventBase>> *events,
                     std::vector<TIntrusivePtr<TEventSerializedData>> *buffers) {
                 (xdc ? BytesSentXdc : BytesSent) += num;
 
                 size_t& unsent = xdc ? XdcUnsentBytes : UnsentBytes;
                 const size_t bytesToWrite = xdc ? XdcBytesToWriteLastTime : BytesToWriteLastTime;
-                const size_t unsentSumBefore = UnsentBytes + XdcUnsentBytes;
-
-                if (num == bytesToWrite && unsentSumBefore >= SerializeWindowSize) {
-                    SerializeWindowSize = Min(SerializeWindowSize + minSerializeWindowSize, maxSerializeWindowSize);
-                } else if (UnsentBytes + XdcUnsentBytes - num < SerializeWindowSize) {
-                    SerializeWindowSize = Max(SerializeWindowSize - minSerializeWindowSize, minSerializeWindowSize);
-                }
 
                 DropFrontSpans(xdc ? XdcOutgoingSpans : OutgoingSpans, num);
 
                 Y_ABORT_UNLESS(num <= unsent, "num# %zu unsent# %zu xdc# %d", num, unsent, int(xdc));
                 unsent -= num;
-
                 size_t numEvents = events->size();
                 size_t numBuffers = buffers->size();
                 size_t bytes = 0;
                 Serializer.CommitProducedBytes(xdc ? 0 : num, xdc ? num : 0, eventToWireTime, events, buffers);
+                SerializeWindow.CompleteWrite(num, bytesToWrite, xdc);
                 for (size_t i = numEvents, count = events->size(); i < count; ++i) {
                     bytes += (*events)[i]->CalculateSerializedSizeCached();
                 }
@@ -567,7 +572,9 @@ namespace NActors {
                                     PARAM2("PingPeriod", pingPeriod)
                                     PARAM2("ReceiveCallbacks size", ReceiveCallbacks.size())
                                     PARAM2("PendingRecordsHeap size", PendingRecordsHeap.size())
-                                    PARAM(SerializeWindowSize)
+                                    PARAM2("SerializeWindowSize", SerializeWindow.GetSize())
+                                    PARAM2("SerializeWindowSizeMain", SerializeWindow.GetMainSize())
+                                    PARAM2("SerializeWindowSizeXdc", SerializeWindow.GetXdcSize())
                                     PARAM2("NumBytesInScratchBuffers", Serializer.GetNumBytesInScratchBuffers())
                                     PARAM(BytesSent)
                                     PARAM(BytesReceived)
@@ -725,8 +732,6 @@ namespace NActors {
             const ui32 MaxReadBufferSize;
             const ui32 MinWriteBufferSize;
             const ui32 MaxWriteBufferSize;
-            const ui32 MinSerializeWindowSize;
-            const ui32 MaxSerializeWindowSize;
 
         private:
             NMonitoring::TDynamicCounters::TCounterPtr *SwitchActivity(
@@ -954,8 +959,6 @@ namespace NActors {
                 , MaxReadBufferSize(v2.MaxReadBufferSize)
                 , MinWriteBufferSize(v2.MinWriteBufferSize)
                 , MaxWriteBufferSize(v2.MaxWriteBufferSize)
-                , MinSerializeWindowSize(v2.MinSerializeWindowSize)
-                , MaxSerializeWindowSize(v2.MaxSerializeWindowSize)
             {
                 const ui32 sqThreadIdleMs = v2.SqThreadIdleMs
                     ? v2.SqThreadIdleMs
@@ -1284,7 +1287,6 @@ namespace NActors {
                         MaybeIssueReadForSession(*session);
                         MaybeIssueXdcReadForSession(*session);
                         MaybeIssueWriteForSession(*session);
-                        MaybeIssueXdcWriteForSession(*session);
                         if (MaybeFinishMigrate(*session)) {
                             continue;
                         }
@@ -1786,7 +1788,7 @@ namespace NActors {
                 } else {
                     *BytesSent += res;
                     ACTIVITY(&ApplyBytesWrittenTotalTime) {
-                        session.ApplyBytesWritten(res, xdc, MinSerializeWindowSize, MaxSerializeWindowSize,
+                        session.ApplyBytesWritten(res, xdc,
                             &EventToWireTimeVec, &EvDestroyEvents->Events, &EvDestroyEvents->Buffers);
                         for (const ui64 time : EventToWireTimeVec) {
                             EventToWireTime->Collect(time * Freq, 1u);
@@ -1802,14 +1804,14 @@ namespace NActors {
                 if (session.Terminated || session.MigrateTargetShard != ShardIdx) {
                     return;
                 }
-                // Produce only when neither socket has a write in flight. Producing XDC payload while
-                // the corresponding PUSH commands are stuck behind an in-flight main write fills the
-                // XDC TCP buffer with bytes the receiver cannot place (no destinations yet) and stalls
-                // under small socket buffers. Out-of-band system traffic is exempt: pings are what keep
-                // dead-peer detection quiet, so they must never queue behind payload on either socket.
-                const bool xdcWriteBusy = session.XdcSocket && session.XdcWritePending;
-                const bool idle = !session.WritePending && !xdcWriteBusy;
-                if (session.Serializer.IsTrafficPending() && (idle || session.Serializer.HasOutOfBandTraffic())) {
+                // Serialization is bounded per socket so it can continue while a write is in flight
+                // (pipeline depth of unsent data, one SQE per fd). XDC submission below is separately
+                // limited by the main write's speculative coverage frontier. Out-of-band system traffic
+                // is exempt from the window: pings are what keep dead-peer detection quiet.
+                const bool windowHasRoom = session.SerializeWindow.RemainingMain(session.UnsentBytes)
+                    || (session.XdcSocket && session.SerializeWindow.RemainingXdc(session.XdcUnsentBytes));
+                if (session.Serializer.IsTrafficPending()
+                        && (windowHasRoom || session.Serializer.HasOutOfBandTraffic())) {
                     ACTIVITY(&SerializeTotalTime) {
                         session.Serialize(MinWriteBufferSize, MaxWriteBufferSize);
                         const ui64 serializeEventTime = session.Serializer.GetSerializeEventTime();
@@ -1819,10 +1821,7 @@ namespace NActors {
                         *BytesAliased += session.Serializer.GetBytesAliased();
                     }
                 }
-                if (session.WritePending) {
-                    return;
-                }
-                if (session.PrepareIovec()) {
+                if (!session.WritePending && session.PrepareIovec()) {
                     io_uring_sqe *sqe = GetSQE(&session, kOpWrite, session.PreferredRingIdx);
                     Y_ABORT_UNLESS(sqe);
                     const int fdOrIndex = session.FixedFileIndex >= 0
@@ -1834,14 +1833,11 @@ namespace NActors {
                     }
                     session.WritePending = true;
                 }
-            }
-
-            void MaybeIssueXdcWriteForSession(TSession& session) {
-                if (!session.XdcSocket || session.XdcWritePending || session.Terminated
-                        || session.MigrateTargetShard != ShardIdx) {
-                    return;
-                }
-                if (session.PrepareXdcIovec()) {
+                const ui64 xdcLimit = session.Serializer.GetXdcAllowedToSend();
+                const size_t xdcBytesAllowed = xdcLimit > session.BytesSentXdc
+                    ? static_cast<size_t>(xdcLimit - session.BytesSentXdc)
+                    : 0;
+                if (!session.XdcWritePending && session.XdcSocket && session.PrepareXdcIovec(xdcBytesAllowed)) {
                     io_uring_sqe *sqe = GetSQE(&session, kOpXdcWrite, session.PreferredRingIdx);
                     Y_ABORT_UNLESS(sqe);
                     const int fdOrIndex = session.XdcFixedFileIndex >= 0
@@ -2013,13 +2009,18 @@ namespace NActors {
             }
 
             const auto& v2 = Common->Settings.V2;
+            const ui32 maxSerializeWindowSize = Common->Settings.TCPSocketBufferSize
+                ? Max(v2.MinSerializeWindowSize,
+                    Min(v2.MaxSerializeWindowSize, Common->Settings.TCPSocketBufferSize))
+                : v2.MaxSerializeWindowSize;
 
             auto session = std::make_unique<TSession>(shardIdx, std::move(socket), sessionActorId,
                 ChecksumEvents, peerScopeId, std::move(onDisconnectCallback), ActorSystem, sendPings,
                 std::move(clockSkew), std::move(pingRTT), std::move(xdcSocket));
             session->ReadBufferSize = v2.MinReadBufferSize;
             session->WriteBufferSize = v2.MinWriteBufferSize;
-            session->SerializeWindowSize = v2.MinSerializeWindowSize;
+            session->SerializeWindow = TSerializeWindow(v2.MinSerializeWindowSize, maxSerializeWindowSize,
+                /*hasXdc=*/ bool(session->XdcSocket));
             const ui64 conn = reinterpret_cast<ui64>(session.get());
             Shards[shardIdx]->Register(std::move(session));
             return conn;

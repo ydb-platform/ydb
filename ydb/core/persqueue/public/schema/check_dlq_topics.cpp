@@ -139,7 +139,7 @@ private:
 
     std::optional<TStatusAndMessage> MapStatus(const TString& path, const NDescriber::TTopicInfo& info) const {
         switch (info.Status) {
-            case NDescriber::EStatus::SUCCESS:
+            case NDescriber::EStatus::Success:
                 if (IsCdcDlqTarget(info)) {
                     return TStatusAndMessage{
                         Ydb::StatusIds::BAD_REQUEST,
@@ -147,28 +147,28 @@ private:
                     };
                 }
                 return std::nullopt;
-            case NDescriber::EStatus::NOT_TOPIC:
+            case NDescriber::EStatus::NotTopic:
                 return TStatusAndMessage{
                     Ydb::StatusIds::BAD_REQUEST,
                     TStringBuilder() << "Dead letter queue path must be a topic, got " << path
                 };
-            case NDescriber::EStatus::NOT_FOUND:
+            case NDescriber::EStatus::NotFound:
                 return TStatusAndMessage{
                     Ydb::StatusIds::SCHEME_ERROR,
                     TStringBuilder() << "Path `" << path << "` does not exist"
                 };
-            case NDescriber::EStatus::UNAUTHORIZED:
-            case NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
+            case NDescriber::EStatus::Unauthorized:
+            case NDescriber::EStatus::UnauthorizedWithDescribeAccess:
                 return TStatusAndMessage{
                     Ydb::StatusIds::UNAUTHORIZED,
                     AccessDeniedMessage(Settings.UserToken, path)
                 };
-            case NDescriber::EStatus::BAD_REQUEST:
+            case NDescriber::EStatus::BadRequest:
                 return TStatusAndMessage{
                     Ydb::StatusIds::BAD_REQUEST,
                     NDescriber::Description(path, info.Status)
                 };
-            case NDescriber::EStatus::UNKNOWN_ERROR:
+            case NDescriber::EStatus::UnknownError:
                 return TStatusAndMessage{
                     Ydb::StatusIds::INTERNAL_ERROR,
                     NDescriber::Description(path, info.Status)

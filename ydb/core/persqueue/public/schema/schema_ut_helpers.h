@@ -209,7 +209,7 @@ inline NKikimrPQ::TPartitionConfig DescribePartitionConfig(
     auto response = runtime.GrabEdgeEvent<NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
     UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1u);
     const auto& topic = response->Topics.begin()->second;
-    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NDescriber::EStatus::Success);
     return topic.Info->Description.GetPQTabletConfig().GetPartitionConfig();
 }
 
@@ -223,7 +223,7 @@ inline NKikimrPQ::TPQTabletConfig DescribeTabletConfig(
     auto response = runtime.GrabEdgeEvent<NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
     UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1u);
     const auto& topic = response->Topics.begin()->second;
-    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NDescriber::EStatus::Success);
     return topic.Info->Description.GetPQTabletConfig();
 }
 

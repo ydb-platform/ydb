@@ -73,19 +73,21 @@ public:
         SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
         Become(&TRequestUnitsQuoter::StateWork);
         if (Settings_.Ru == 0) {
-            return Reply(EStatus::SUCCESS);
+            return Reply(EStatus::Success);
         }
         SendDatabaseNavigate();
     }
 
-    TString BuildLogPrefix() const override {
-        return TStringBuilder() << "[" << Settings_.Database << "] ";
+    TLogPrefix BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "RequestUnitsQuoter"},
+            {"database", Settings_.Database});
     }
 
     void OnException(const std::exception& exc) override {
         // Do not PassAway here: TBaseActor::OnUnhandledException will.
         Send(Parent_, new TEvChargeRequestUnitsResponse(
-            EStatus::UNKNOWN_ERROR,
+            EStatus::UnknownError,
             TStringBuilder() << "Unhandled exception: " << exc.what()));
     }
 
@@ -140,7 +142,7 @@ private:
             return;
         }
         WriteBill(ctx);
-        Reply(EStatus::SUCCESS);
+        Reply(EStatus::Success);
     }
 
     void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev) {
@@ -150,13 +152,13 @@ private:
         switch (tag) {
             case EWakeupTag::RlAllowed:
                 WriteBill(ctx);
-                Reply(EStatus::SUCCESS);
+                Reply(EStatus::Success);
                 return;
             case EWakeupTag::RlNoResource:
-                Reply(EStatus::THROTTLED);
+                Reply(EStatus::Throttled);
                 return;
             default:
-                Reply(EStatus::UNKNOWN_ERROR);
+                Reply(EStatus::UnknownError);
                 return;
         }
     }
@@ -213,22 +215,22 @@ NActors::IActor* CreateRequestUnitsQuoter(const NActors::TActorId& parent, TRequ
 
 Ydb::StatusIds::StatusCode Convert(const EStatus status) {
     switch (status) {
-        case EStatus::SUCCESS:
+        case EStatus::Success:
             return Ydb::StatusIds::SUCCESS;
-        case EStatus::THROTTLED:
+        case EStatus::Throttled:
             return Ydb::StatusIds::OVERLOADED;
-        case EStatus::UNKNOWN_ERROR:
+        case EStatus::UnknownError:
             return Ydb::StatusIds::INTERNAL_ERROR;
     }
 }
 
 TString Description(const EStatus status) {
     switch (status) {
-        case EStatus::SUCCESS:
+        case EStatus::Success:
             return "Request units have been charged";
-        case EStatus::THROTTLED:
+        case EStatus::Throttled:
             return "Request was throttled by the rate limiter";
-        case EStatus::UNKNOWN_ERROR:
+        case EStatus::UnknownError:
             return "Unexpected rate limiter wakeup";
     }
 }

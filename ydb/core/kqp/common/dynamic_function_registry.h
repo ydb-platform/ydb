@@ -4,19 +4,39 @@
 
 namespace NKikimr::NKqp {
 
+//! Hot-mutable UDF registry with RemoveModule (WASM / dynamic load).
+//!
+//! Concurrency model (actor-friendly):
+//! - Readers (Find* / Get* / IsLoaded*) are wait-free via an immutable snapshot
+//!   (THotSwap): no registry lock is held across module callbacks.
+//! - Mutations (AddModule / RemoveModule / Set* / committing LoadUdfs) publish a
+//!   new snapshot under a short writer lock (COW). Concurrent mutations from
+//!   multiple threads/actors are supported; writers briefly serialize on publish.
+//! - After RemoveModule publishes, new lookups do not observe the module
+//!   (no phantom re-fetch). An in-flight call that already held shared_ptr may
+//!   still finish — never use-after-free.
+//! - LoadUdfs is for native .so modules only (WASM registers via AddModule).
+//!   Per libraryPath it serializes dlopen / Register so the same .so is not
+//!   opened/registered concurrently; different paths do not block each other.
+//!   Prefer not holding an actor mailbox across that work when possible.
+//! - Clone() copies the current snapshot (including BackTraceCallback /
+//!   SupportsSizedAllocators); module Impl pointers are shared.
+//! - Native per-path load mutexes are dropped when the last module for that
+//!   libraryPath is removed.
 class IDynamicFunctionRegistry: public NMiniKQL::IMutableFunctionRegistry {
 public:
     using TPtr = TIntrusivePtr<IDynamicFunctionRegistry>;
 
     //! Unloads a dynamically registered module by YQL module name. No-op if missing.
-    //! Drops the LoadedLibraries_ entry when no modules from that path remain.
-    //! Does not modify SystemModulePaths_: FindUdfPath may still return a system
+    //! Drops the LoadedLibraries entry when no modules from that path remain.
+    //! Does not modify SystemModulePaths: FindUdfPath may still return a system
     //! catalog path after unload (same as for never-loaded system modules).
     virtual void RemoveModule(const TStringBuf& moduleName) = 0;
 };
 
 //! Creates a dynamic registry (full mutable UDF registry + RemoveModule).
 //! Returned as IMutableFunctionRegistry; cast to IDynamicFunctionRegistry for RemoveModule.
+//! The returned instance is thread-safe (see IDynamicFunctionRegistry).
 TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> CreateDynamicFunctionRegistry(
     NMiniKQL::IBuiltinFunctionRegistry::TPtr&& builtins);
 

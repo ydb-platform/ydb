@@ -233,7 +233,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpFilter> filter, TRBOContext& ctx, TPlanPro
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
+TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx, TPlanProps& props) {
     TVector<const TItemExprType*> resStructItemTypes;
     const TTypeAnnotationNode* inputType = map->GetInput()->Type;
     auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
@@ -257,7 +257,21 @@ TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
         // This is type annotation update inplace, which is different comparing to yql type annotation.
         auto expression = mapElement.GetExpression();
         auto lambda = expression.Node;
-        if (!UpdateLambdaAllArgumentsTypes(lambda, {structType}, ctx.ExprCtx)) {
+
+        auto lambdaIUs = expression.GetInputIUs(true,false);
+        TVector<TInfoUnit> subplanContextIUs;
+        for (const auto& iu : lambdaIUs) {
+            if (iu.IsSubplanContext()) {
+                subplanContextIUs.push_back(iu);
+            }
+        }
+
+        auto currStructType = structType;
+        if (!subplanContextIUs.empty()) {
+            currStructType = AddSubplanTypes(currStructType, subplanContextIUs, ctx, props);
+        }
+
+        if (!UpdateLambdaAllArgumentsTypes(lambda, {currStructType}, ctx.ExprCtx)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -584,6 +598,43 @@ TStatus ComputeTypes(TIntrusivePtr<TOpSort> sort, TRBOContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus ComputeTypes(TIntrusivePtr<TOpWindow> window, TRBOContext& ctx) {
+    const auto* inputType = window->GetInput()->Type;
+    const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+    TVector<const TItemExprType*> itemTypes(structType->GetItems().begin(), structType->GetItems().end());
+    for (const auto& func : window->GetWindowFuncs()) {
+        const TTypeAnnotationNode* resultType = nullptr;
+        if (func.Kind == EWindowFuncKind::Native) {
+            resultType = ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Uint64);
+        } else {
+            Y_ENSURE(func.Arguments.size() == 1, "Window aggregate " << func.Function << " expects a single argument");
+            const auto* argType = structType->FindItemType(func.Arguments[0].GetFullName());
+            Y_ENSURE(argType, "Unknown window function argument " << func.Arguments[0].GetFullName());
+
+            if (func.Function == "count") {
+                itemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(func.ResultColName.GetFullName(),
+                                                                        ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+                continue;
+            }
+            if (func.Function == "sum") {
+                Y_ENSURE(GetSumResultType(window->Pos, *argType, resultType, ctx.ExprCtx), "Unsupported type for sum over a window");
+            } else if (func.Function == "avg" || func.Function == "variance_1_1") {
+                Y_ENSURE(GetAvgResultType(window->Pos, *argType, resultType, ctx.ExprCtx), "Unsupported type for avg over a window");
+            } else {
+                resultType = argType;
+            }
+            if (!resultType->IsOptionalOrNull()) {
+                resultType = ctx.ExprCtx.MakeType<TOptionalExprType>(resultType);
+            }
+        }
+        itemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(func.ResultColName.GetFullName(), resultType));
+    }
+
+    window->Type = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TStructExprType>(itemTypes));
+    return TStatus::Ok;
+}
+
 TStatus ComputeTypes(TIntrusivePtr<TOpTableLookup> lookup, TRBOContext& ctx) {
     const auto table = ResolveTable(lookup->Table.Get(), ctx.ExprCtx, ctx.KqpCtx.Cluster, *ctx.KqpCtx.Tables);
     if (!table.second) {
@@ -708,7 +759,7 @@ TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& 
         return ComputeTypes(CastOperator<TOpFilter>(op), ctx, props);
     }
     else if(MatchOperator<TOpMap>(op)) {
-        return ComputeTypes(CastOperator<TOpMap>(op), ctx);
+        return ComputeTypes(CastOperator<TOpMap>(op), ctx, props);
     }
     else if(MatchOperator<TOpAddDependencies>(op)) {
         return ComputeTypes(CastOperator<TOpAddDependencies>(op), ctx);
@@ -739,6 +790,9 @@ TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& 
     }
     else if(MatchOperator<TOpAggregate>(op)) {
         return ComputeTypes(CastOperator<TOpAggregate>(op), ctx);
+    }
+    else if (MatchOperator<TOpWindow>(op)) {
+        return ComputeTypes(CastOperator<TOpWindow>(op), ctx);
     }
     else if (MatchOperator<TOpCBOTree>(op)) {
         return ComputeTypes(CastOperator<TOpCBOTree>(op), ctx, props);

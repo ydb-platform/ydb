@@ -313,7 +313,7 @@ Y_UNIT_TEST_SUITE(SqsTopicDescribeStatus) {
         using NKikimr::NPQ::NDescriber::EStatus;
 
         TTopicInfo notTopic;
-        notTopic.Status = EStatus::NOT_TOPIC;
+        notTopic.Status = EStatus::NotTopic;
         {
             auto error = MapTopicInfoToSqsError("/Root/q", notTopic, ExistingQueuePolicy());
             UNIT_ASSERT(error.Defined());
@@ -328,12 +328,12 @@ Y_UNIT_TEST_SUITE(SqsTopicDescribeStatus) {
         }
 
         TTopicInfo missing;
-        missing.Status = EStatus::NOT_FOUND;
+        missing.Status = EStatus::NotFound;
         UNIT_ASSERT(MapTopicInfoToSqsError("/Root/q", missing, ExistingQueuePolicy()).Defined());
         UNIT_ASSERT(!MapTopicInfoToSqsError("/Root/q", missing, CreateQueueDescribePolicy()).Defined());
 
         TTopicInfo cdc;
-        cdc.Status = EStatus::SUCCESS;
+        cdc.Status = EStatus::Success;
         cdc.CdcStream = true;
         cdc.Info = new NKikimr::NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo();
         {
@@ -351,7 +351,7 @@ Y_UNIT_TEST_SUITE(SqsTopicDescribeStatus) {
         using NKikimr::NPQ::NDescriber::EStatus;
 
         TTopicInfo unauthorized;
-        unauthorized.Status = EStatus::UNAUTHORIZED;
+        unauthorized.Status = EStatus::Unauthorized;
         for (const auto& policy : {
                  ExistingQueuePolicy(),
                  CreateQueueDescribePolicy(),
@@ -367,7 +367,7 @@ Y_UNIT_TEST_SUITE(SqsTopicDescribeStatus) {
         }
 
         TTopicInfo describeDenied;
-        describeDenied.Status = EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS;
+        describeDenied.Status = EStatus::UnauthorizedWithDescribeAccess;
         {
             auto error = MapTopicInfoToSqsError("/Root/q", describeDenied, ExistingQueuePolicy());
             UNIT_ASSERT(error.Defined());

@@ -95,6 +95,11 @@ TDictStats::TDictStats(const std::shared_ptr<arrow::RecordBatch>& original)
     DataSize = std::static_pointer_cast<arrow::UInt32Array>(Original->column(2));
     AccessorType = std::static_pointer_cast<arrow::UInt8Array>(Original->column(3));
     ValueType = std::static_pointer_cast<arrow::UInt8Array>(Original->column(4));
+    ColumnIndexes.reserve(DataNames->length());
+    for (ui32 i = 0; i < DataNames->length(); ++i) {
+        const auto insertResult = ColumnIndexes.emplace(GetColumnName(i), i);
+        AFL_VERIFY(insertResult.second)("name", GetColumnName(i));
+    }
 }
 
 TConstructorContainer TDictStats::GetAccessorConstructor(const ui32 columnIndex, const TEncodingParams& encodingParams) const {

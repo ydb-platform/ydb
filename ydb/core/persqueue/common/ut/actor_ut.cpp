@@ -48,8 +48,8 @@ public:
     {
     }
 
-    TString BuildLogPrefix() const override {
-        return " [prefix] ";
+    TLogPrefix BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE({"actorClassName", "prefix"});
     }
 
     void Bootstrap() {
@@ -62,10 +62,10 @@ public:
         LOG_E("error");
         LOG_C("crit");
         LOG_A("alert");
-        const TString& first = GetLogPrefix();
-        const TString& second = GetLogPrefix();
+        const TLogPrefix& first = GetLogPrefix();
+        const TLogPrefix& second = GetLogPrefix();
         Y_UNUSED(second);
-        Send(Parent, new TEvText(TStringBuilder() << LogBuilder() << first));
+        Send(Parent, new TEvText(TStringBuilder() << StructuredLogPrefixText(LogBuilder()) << StructuredLogPrefixText(first)));
     }
 
     void Handle(TEvents::TEvWakeup::TPtr& ev) {
@@ -94,8 +94,8 @@ public:
     {
     }
 
-    TString BuildLogPrefix() const override {
-        return " [exc] ";
+    TLogPrefix BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE({"actorClassName", "exc"});
     }
 
     void Bootstrap() {
@@ -127,7 +127,7 @@ public:
 
     void Bootstrap() {
         Become(&TThis::StateWork);
-        Send(Parent, new TEvText(GetLogPrefix()));
+        Send(Parent, new TEvText(StructuredLogPrefixText(GetLogPrefix())));
         std::runtime_error exc("default-hooks");
         const bool handled = OnUnhandledException(exc);
         Send(Parent, new TEvHandled(handled));
@@ -149,13 +149,13 @@ public:
     {
     }
 
-    TString BuildLogPrefix() const override {
-        return " [tablet] ";
+    TLogPrefix BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE({"actorClassName", "tablet"});
     }
 
     void Bootstrap() {
         Become(&TThis::StateWork);
-        Send(TabletActorId, new TEvText(TString(LogBuilder()) + GetLogPrefix()));
+        Send(TabletActorId, new TEvText(StructuredLogPrefixText(NPQ_LOG_PREFIX)));
         std::runtime_error exc("tablet-boom");
         OnUnhandledException(exc);
     }
@@ -175,8 +175,8 @@ public:
     {
     }
 
-    TString BuildLogPrefix() const override {
-        return " [pipe] ";
+    TLogPrefix BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE({"actorClassName", "pipe"});
     }
 
     void Bootstrap() {
@@ -227,7 +227,7 @@ Y_UNIT_TEST(LogPrefixEventStrAndMacros) {
 
     auto prefix = runtime.GrabEdgeEvent<TEvText>(edge, TDuration::Seconds(5));
     UNIT_ASSERT(prefix);
-    UNIT_ASSERT(prefix->Get()->Value.Contains("[prefix]"));
+    UNIT_ASSERT(prefix->Get()->Value.Contains("actorClassName=prefix"));
 
     runtime.Send(new IEventHandle(actorId, edge, new TEvents::TEvWakeup()), 0, true);
     auto eventStr = runtime.GrabEdgeEvent<TEvText>(edge, TDuration::Seconds(5));
@@ -273,7 +273,7 @@ Y_UNIT_TEST(DefaultOnExceptionAndLogPrefix) {
 
     auto prefix = runtime.GrabEdgeEvent<TEvText>(edge, TDuration::Seconds(5));
     UNIT_ASSERT(prefix);
-    UNIT_ASSERT_VALUES_EQUAL(prefix->Get()->Value, " ");
+    UNIT_ASSERT_VALUES_EQUAL(prefix->Get()->Value, "");
 
     auto handled = runtime.GrabEdgeEvent<TEvHandled>(edge, TDuration::Seconds(5));
     UNIT_ASSERT(handled);
@@ -288,7 +288,7 @@ Y_UNIT_TEST(TabletActorRestartsOnException) {
 
     auto prefix = runtime.GrabEdgeEvent<TEvText>(tablet, TDuration::Seconds(5));
     UNIT_ASSERT(prefix);
-    UNIT_ASSERT(prefix->Get()->Value.Contains("[42]"));
+    UNIT_ASSERT(prefix->Get()->Value.Contains("tabletId=42"));
 
     auto poison = runtime.GrabEdgeEvent<TEvents::TEvPoison>(tablet, TDuration::Seconds(5));
     UNIT_ASSERT(poison);

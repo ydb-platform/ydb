@@ -23,4 +23,10 @@ Trace the changed event from sender through the handler to its reply and cleanup
 
 For lifetime changes, account for late events while cancellation is pending and for cleanup during forced teardown. For a tablet, identify which state is durable and which state must be reconstructed after restart; actor serialization does not itself provide persistence.
 
-Select tests from the affected component. Add runtime tests when changing runtime guarantees, and component tests when changing a component protocol. Follow active build instructions for the target. Update the canonical topic page if the observable contract changes.
+Select tests from the affected component. Add runtime tests when changing runtime guarantees, and component tests when changing a component protocol. Follow active build instructions for the target.
+
+## Documentation Updates
+
+Read linked documentation as context. During code changes, update documentation only when the change alters a documented contract or makes an existing statement inaccurate, or when the user explicitly requests documentation work. For contributor pages under `ydb/docs/en/` or `ydb/docs/ru/`, update the corresponding path in the other language in the same change.
+
+Delegate needed documentation updates to a subagent with forked conversation context (`fork_turns: "all"` when supported). Give it the affected paths, the final behavior change, and relevant validation results; scope its edits to documentation. Review its changes for accuracy and English/Russian consistency before completing the task.

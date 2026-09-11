@@ -94,6 +94,19 @@ private:
     void HandleConnectResult(
         const NKikimr::NDDisk::TEvConnectResult::TPtr& ev,
         const NActors::TActorContext& ctx);
+    void HandleRegisterPersistentBufferResult(
+        const NKikimr::NDDisk::TEvRegisterPersistentBufferResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    void HandleRegisterPersistentBufferUndelivery(
+        const NKikimr::NDDisk::TEvRegisterPersistentBuffer::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    void CompletePBufferConnection(ui64 requestId, ui32 status, TString reason);
+    void SendPBufferRegistration(
+        ui64 requestId,
+        const NActors::TActorContext& ctx);
+    void HandleRegistrationRetry(
+        const NActors::TEvents::TEvWakeup::TPtr& ev,
+        const NActors::TActorContext& ctx);
 
     void HandleWritePersistentBuffer(
         const TEvTransportPrivate::TEvWriteToPBuffer::TPtr& ev,

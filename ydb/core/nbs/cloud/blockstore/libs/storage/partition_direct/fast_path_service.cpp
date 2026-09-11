@@ -458,6 +458,19 @@ void TFastPathService::QueryAddHost(
     ActorSystem->Send(PartitionActorId, event.release());
 }
 
+void TFastPathService::QueryRemoveHost(
+    size_t directBlockGroupId,
+    size_t hostIndex,
+    ui32 dbgConnectionsConfigGeneration)
+{
+    auto event =
+        std::make_unique<TEvPartitionDirectPrivate::TEvRemoveHostFromDBG>(
+            directBlockGroupId,
+            hostIndex,
+            dbgConnectionsConfigGeneration);
+    ActorSystem->Send(PartitionActorId, event.release());
+}
+
 ui64 TFastPathService::GenerateLsn()
 {
     const ui64 lsn = ++SequenceGenerator;
@@ -497,6 +510,21 @@ TDuration TFastPathService::TakeVolumeCopyRangeBudget(ui64 byteCount)
 
     auto guard = Guard(CopyRangeBucketLock);
     return CopyRangeBucket->Register(ActorSystem->Timestamp(), byteCount);
+}
+
+void TFastPathService::PersistHostHealth(
+    size_t directBlockGroupId,
+    THostIndex hostIndex,
+    EHostHealth oldHealth,
+    EHostHealth newHealth)
+{
+    auto event =
+        std::make_unique<TEvPartitionDirectPrivate::TEvPersistHostHealth>(
+            directBlockGroupId,
+            hostIndex,
+            oldHealth,
+            newHealth);
+    ActorSystem->Send(PartitionActorId, event.release());
 }
 
 TFastPathServiceInfo TFastPathService::GetMonInfo() const

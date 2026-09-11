@@ -22,6 +22,15 @@ public:
     void Bootstrap();
     void PassAway() override;
 
+protected:
+    TLogPrefix BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "MLPMessageEnricher"},
+            {"tabletId", TabletId},
+            {"partition", PartitionId},
+            {"consumer", ConsumerName});
+    }
+
 private:
     struct TOffsetEntry {
         ui64 Offset;

@@ -367,7 +367,7 @@ private: // stored in local db
         TPathId PathId;
         TVector<ui32> ColumnTags;
         TString Path;            // full table path, persisted in ForceTraversalTables
-        ui32 ShardsTotal = 0;   // set by TEvAnalyzeActorProgress; 1 for row tables
+        ui32 ShardsTotal = 0;   // set by TEvAnalyzeActorProgress
         ui32 ShardsDone  = 0;   // incremented per scan completion (current batch)
 
         enum class EStatus : ui8 {

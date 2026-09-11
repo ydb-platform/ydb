@@ -15,6 +15,12 @@ Read the actual caller when changing a boundary. DDisk and its PB child have sep
 
 Distinguish router modes, optional registered files, and the caller's PDisk raw-event fallback. Tests that cover one mode do not establish behavior for every backend. Do not copy DDisk quorum, PB erase, or PDisk owner policy into this library's contract.
 
+## Documentation Updates
+
+Read linked documentation as context. During code changes, update documentation only when the change alters a documented contract or makes an existing statement inaccurate, or when the user explicitly requests documentation work. For contributor pages under `ydb/docs/en/` or `ydb/docs/ru/`, update the corresponding path in the other language in the same change.
+
+Delegate needed documentation updates to a subagent with forked conversation context (`fork_turns: "all"` when supported). Give it the affected paths, the final behavior change, and relevant validation results; scope its edits to documentation. Review its changes for accuracy and English/Russian consistency before completing the task.
+
 ## Validation
 
 Use the focused suites in `ydb/library/pdisk_io/ut` following active build instructions. For resource registration or shutdown changes, select cases with outstanding work, rejected submissions, initialization failure, and delayed completion as applicable. For changed DDisk integration, inspect the DDisk/PDisk caller tests as well.

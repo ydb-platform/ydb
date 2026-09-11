@@ -224,6 +224,21 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         }
 
         YQL_CLOG(TRACE, CoreDq) << "Assign stage to aggregation ";
+    } else if (input->Kind == EOperator::Window) {
+        auto window = CastOperator<TOpWindow>(input);
+        const auto inputStageId = *(window->GetInput()->Props.StageId);
+        const auto outputIndex = props.StageGraph.GetOutputIndex(inputStageId);
+
+        const auto newStageId = props.StageGraph.AddStage();
+        window->Props.StageId = newStageId;
+        if (!window->GetPartitionKeys().empty()) {
+            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TShuffleConnection>(window->GetPartitionKeys(), outputIndex));
+        } else {
+            // Without partition by we assume the whole input is one partition, so do it in one task.
+            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TUnionAllConnection>(outputIndex));
+        }
+
+        YQL_CLOG(TRACE, CoreDq) << "Assign stage to window";
     } else if (input->Kind == EOperator::TableLookup) {
         auto lookup = CastOperator<TOpTableLookup>(input);
         auto& exprCtx = ctx.ExprCtx;

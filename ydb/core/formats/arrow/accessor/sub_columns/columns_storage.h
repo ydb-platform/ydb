@@ -19,13 +19,9 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TGeneralContainer>, Records);
 
 public:
-    TConclusion<std::shared_ptr<TJsonPathAccessor>> GetPathAccessor(const std::string_view path) const {
-        auto jsonPathAccessorTrie = std::make_shared<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie>();
-        for (ui32 i = 0; i < Stats.GetColumnsCount(); ++i) {
-            auto insertResult = jsonPathAccessorTrie->Insert(ToJsonPath(Stats.GetColumnName(i)), Records->GetColumnVerified(i), Stats.GetValueType(i));
-            AFL_VERIFY(insertResult.IsSuccess())("error", insertResult.GetErrorMessage());
-        }
-        return jsonPathAccessorTrie->GetAccessor(path);
+    std::shared_ptr<TJsonPathAccessor> GetPathAccessor(TDictStats::TResolvedPath path) const {
+        return std::make_shared<TJsonPathAccessor>(
+            Records->GetColumnVerified(path.ColumnIndex), std::move(path.RemainingPath), path.ValueType);
     }
 
     NJson::TJsonValue DebugJson() const {

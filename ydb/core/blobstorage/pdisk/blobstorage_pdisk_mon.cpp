@@ -139,6 +139,12 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT(DeviceGroup, DeviceIoErrors, true);
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceWaitTimeMs, true);
 
+    COUNTER_INIT(DeviceGroup, RegularUringCount, false);
+    COUNTER_INIT(DeviceGroup, FallbackUringCount, false);
+    COUNTER_INIT(DeviceGroup, FallbackPDiskCount, false);
+    COUNTER_INIT(DeviceGroup, UringCompletionThreadCPU, true);
+    COUNTER_INIT(DeviceGroup, UringCompletionThreadBusyTimeNs, true);
+
     UpdateDurationTracker.SetPDiskId(PDiskId);
     UpdateDurationTracker.SetCounter(DeviceGroup->GetCounter("PDiskThreadBusyTimeNs", true));
 

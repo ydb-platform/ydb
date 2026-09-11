@@ -573,7 +573,7 @@ protected:
             for (ui32 i = 0; i < tx->ResultsSize(); ++i) {
                 const auto& result = tx->GetResults(i);
                 const auto& connection = result.GetConnection();
-                const auto& inputStageInfo = TasksGraph.GetStageInfo(NYql::NDq::TStageId(txIdx, connection.GetStageIndex()));
+                const auto& inputStageInfo = TasksGraph.GetStageInfo(TasksGraph.MakeStageId(txIdx, connection.GetStageIndex()));
                 if (inputStageInfo.Tasks.size() >= 1) {
                     continue;
                 }

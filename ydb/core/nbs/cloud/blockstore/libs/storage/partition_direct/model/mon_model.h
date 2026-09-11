@@ -33,7 +33,7 @@ struct THostSnapshot
     EHostState State = EHostState::Offline;
     EHostHealth Health = EHostHealth::Offline;
     TInflightByOperation InflightByOperation{};
-    THostStat::TErrorsInfo Errors;
+    THostErrorsInfo Errors;
     TCountAndSize PBuffersUsage;
     TCountAndSize AheadBlocks;
     TCountAndSize BehindBlocks;

@@ -32,25 +32,29 @@ public:
     }
 
     void OnException(const std::exception& exc) override {
-        YDB_LOG_ERROR("Catch exception",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"onException", exc.what()});
+        LOG_E(
+            "Catch exception",
+            {"onException", exc.what()}
+        );
 
         TEvSchemaResponse response(Path, Ydb::StatusIds::INTERNAL_ERROR, exc.what());
 
         Promise.SetValue(std::move(response));
     }
 
-    TString BuildLogPrefix() const override {
-        return TStringBuilder() << "[" << Path << "] ";
+    TLogPrefix BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "CreateTopicInternal"},
+            {"path", Path});
     }
 
 private:
     void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle TEvSchemaResponse",
-            {"logPrefix", NPQ_LOG_PREFIX},
+        LOG_D(
+            "Handle TEvSchemaResponse",
             {"status", ev->Get()->Status},
-            {"errorMessage", ev->Get()->ErrorMessage});
+                    {"errorMessage", ev->Get()->ErrorMessage}
+        );
 
         Promise.SetValue({
             .Path = Path,

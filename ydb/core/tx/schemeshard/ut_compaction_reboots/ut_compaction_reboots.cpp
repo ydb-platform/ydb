@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(SchemeshardForcedCompactionTestReboots) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForceCompactWithIndexCreation, 2, 2, false) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForceCompactWithIndexCreation, 4, 4, false) {
         t.EnvOpts.EnableBackgroundCompaction(false);
         t.NoRebootEventTypes.insert(TEvForcedCompaction::EvCreateRequest);
         t.NoRebootEventTypes.insert(TEvForcedCompaction::EvGetRequest);

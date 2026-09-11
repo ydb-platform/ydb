@@ -20,7 +20,7 @@ public:
 
 public:
     TRawParser(IParsedDataConsumer::TPtr consumer, const TSchemaColumn& schema, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters, std::shared_ptr<NYql::NDq::IMemoryQuotaManager> memoryQuotaManager)
-        : TBase(std::move(consumer), __LOCATION__, functionRegistry, counters, std::move(memoryQuotaManager))
+        : TBase(std::move(consumer), __LOCATION__, functionRegistry, counters, std::move(memoryQuotaManager), "RawParserAlloc")
         , Schema(schema)
         , LogPrefix("TRawParser: ")
     {}

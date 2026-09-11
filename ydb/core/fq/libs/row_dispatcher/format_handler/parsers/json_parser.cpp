@@ -852,12 +852,12 @@ public:
 
 public:
     TJsonParser(IParsedDataConsumer::TPtr consumer, const TJsonParserConfig& config, const TCountersDesc& counters)
-        : TBase(std::move(consumer), __LOCATION__, config.FunctionRegistry, counters, config.MemoryQuotaManager)
+        : TBase(std::move(consumer), __LOCATION__, config.FunctionRegistry, counters, config.MemoryQuotaManager, "JsonParserAlloc")
         , Config(config)
         , MaxNumberRows(CalculateMaxNumberRows())
         , LogPrefix("TJsonParser: ")
-        , ColumnIndexMemory(config.MemoryQuotaManager, "JSON column index")
-        , SimdJsonMemory(config.MemoryQuotaManager, "JSON parser scratch space")
+        , ColumnIndexMemory(config.MemoryQuotaManager, "ColumnIndexMemory", counters.ReadGroupSubgroup)
+        , SimdJsonMemory(config.MemoryQuotaManager, "SimdJsonMemory", counters.ReadGroupSubgroup)
         , Buffer(Alloc)
         , Counters(counters.CountersSubgroup)
         , PartitionParsingErrors(Counters->GetCounter("ParsingErrors", true))
@@ -1255,19 +1255,17 @@ private:
         const TGuard<NKikimr::NMiniKQL::TScopedAlloc> guard(Alloc);
         const auto& consumerColumns = Consumer->GetColumns();
 
-        constexpr size_t indexSlotSize = sizeof(decltype(ColumnsIndex)::value_type) + 1;
-        constexpr size_t indexOverhead = 128;
         if (consumerColumns.size() > ColumnsIndex.size()) {
+            constexpr size_t indexSlotSize = sizeof(decltype(ColumnsIndex)::value_type) + 1;
+            constexpr size_t indexOverhead = 128;
             ColumnIndexMemory.Reserve(3 * (std::max(ColumnsIndex.capacity(), consumerColumns.size()) + 1) * indexSlotSize + indexOverhead);
         }
 
         ColumnsIndex.clear();
         ColumnsIndex.reserve(consumerColumns.size());
-
         for (ui64 i = 0; i < consumerColumns.size(); ++i) {
             ColumnsIndex.emplace(std::string_view(consumerColumns[i].Name), i);
         }
-        ColumnIndexMemory.Resize(ColumnsIndex.capacity() * indexSlotSize + indexOverhead);
 
         const auto columns = consumerColumns.size();
         const auto cells = columns * MaxNumberRows;

@@ -2,6 +2,10 @@
 #include <ydb/core/fq/libs/events/events.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/topic_session.h>
+#include <ydb/core/fq/libs/row_dispatcher/format_handler/format_handler.h>
+#include <ydb/core/fq/libs/row_dispatcher/memory/memory_quota.h>
+
+#include <mutex>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/ut/common/ut_common.h>
 
@@ -9,6 +13,7 @@
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/actor_helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/library/testlib/pq_helpers/mock_pq_gateway.h>
 #include <ydb/tests/fq/pq_async_io/ut_helpers.h>
 
@@ -30,6 +35,34 @@ using namespace NTestUtils;
 constexpr ui64 TimeoutBeforeStartSessionSec = 3;
 constexpr ui64 GrabTimeoutSec = 4 * TimeoutBeforeStartSessionSec;
 static_assert(GrabTimeoutSec <= WAIT_TIMEOUT.Seconds());
+
+class TCountingQuotaManager : public TGuaranteeQuotaManager {
+public:
+    using TGuaranteeQuotaManager::TGuaranteeQuotaManager;
+
+    bool AllocateQuota(ui64 size, bool isOptional) override {
+        std::lock_guard lock(Mutex);
+        ++Requests;
+        return TGuaranteeQuotaManager::AllocateQuota(size, isOptional);
+    }
+
+    void FreeQuota(ui64 size) override {
+        std::lock_guard lock(Mutex);
+        ++Releases;
+        TGuaranteeQuotaManager::FreeQuota(size);
+    }
+
+    ui64 GetCurrentQuota() const override {
+        std::lock_guard lock(Mutex);
+        return TGuaranteeQuotaManager::GetCurrentQuota();
+    }
+
+    std::atomic<ui64> Requests = 0;
+    std::atomic<ui64> Releases = 0;
+
+private:
+    mutable std::mutex Mutex;
+};
 
 template <bool MockTopicSession>
 class TFixture : public NTests::TBaseFixture {
@@ -95,7 +128,7 @@ public:
             0,
             Driver,
             CredentialsProviderFactory,
-            MakeIntrusive<NMonitoring::TDynamicCounters>(),
+            RowDispatcherCounters,
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             !MockTopicSession ? CreatePqNativeGateway(pqServices) : MockPqGateway,
             16000000,
@@ -286,6 +319,7 @@ public:
     ui32 PartitionId = 0;
     NConfig::TRowDispatcherConfig Config;
     NYql::NDq::IMemoryQuotaManager::TPtr MemoryQuotaManager;
+    NMonitoring::TDynamicCounterPtr RowDispatcherCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
     TIntrusivePtr<IMockPqGateway> MockPqGateway;
     IMockPqReadSession::TPtr MockReadSession;
 
@@ -310,6 +344,237 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         ExpectSessionError(ReadActorId1, EStatusId::OVERLOADED, "Row dispatcher memory limit exceeded");
         StartSession(ReadActorId2, BuildSource(true), Nothing(), true);
         ExpectSessionError(ReadActorId2, EStatusId::OVERLOADED, "Row dispatcher memory limit exceeded");
+    }
+
+    Y_UNIT_TEST_TWIN_F(BoundedBatchesRetainQuotaAndPreserveOffsets, WithMemoryManager, TMockTopicFixture) {
+        auto manager = std::make_shared<TCountingQuotaManager>(128_MB, 128_MB);
+        if constexpr (WithMemoryManager) {
+            MemoryQuotaManager = manager;
+        }
+        Init("fake_topic", 1);
+        auto source = BuildSource(true);
+        source.SetFormat("raw");
+        source.ClearColumns();
+        source.ClearColumnTypes();
+        source.AddColumns("data");
+        source.AddColumnTypes("[DataType; String]");
+        StartSession(ReadActorId1, source);
+
+        const TString large(MAX_BATCH_SIZE + 1, 'x');
+        PQWrite({large, large, "last"}, 42);
+        auto readBatch = [&](ui64 offset, const TString& data) {
+            ExpectNewDataArrived({ReadActorId1});
+            Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
+            auto event = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvMessageBatch>(RowDispatcherActorId, WAIT_TIMEOUT);
+            UNIT_ASSERT(event);
+            const auto& record = event->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.MessagesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(record.GetNextMessageOffset(), offset + 1);
+            const auto& message = record.GetMessages(0);
+            UNIT_ASSERT_VALUES_EQUAL(message.OffsetsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(message.GetOffsets(0), offset);
+            CheckMessageBatch(event->Get()->GetPayload(message.GetPayloadId()), TBatch().AddRow(TRow().AddString(data)));
+        };
+        readBatch(42, large);
+        ExpectStatistics({{ReadActorId1, 43}});
+        readBatch(43, large);
+        readBatch(44, "last");
+        ExpectStatistics({{ReadActorId1, 45}});
+
+        const auto requests = manager->Requests.load();
+        const auto releases = manager->Releases.load();
+        const auto retainedQuota = manager->GetCurrentQuota();
+        for (ui64 offset = 45; offset < 55; ++offset) {
+            PQWrite({"small"}, offset);
+            readBatch(offset, "small");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(manager->Requests.load(), requests);
+        UNIT_ASSERT_VALUES_EQUAL(manager->Releases.load(), releases);
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), retainedQuota);
+        const auto memoryCounters = RowDispatcherCounters->GetSubgroup("topic", "fake_topic")->GetSubgroup("read_group", "read_group")->FindSubgroup("component", "MemoryQuota");
+        UNIT_ASSERT(memoryCounters);
+        TVector<NMonitoring::TDynamicCounters::TCounterPtr> sensors;
+        ui64 reportedQuota = 0;
+        for (const auto* name : {"ReadSessionMemory", "InFlightMemory", "PackingMemory", "ClientDataMemory", "FormatHandlerAlloc", "RawParserAlloc"}) {
+            const auto sensor = memoryCounters->FindCounter(name);
+            UNIT_ASSERT_C(sensor, name);
+            UNIT_ASSERT_GT(sensor->Val(), 0);
+            reportedQuota += sensor->Val();
+            sensors.push_back(sensor);
+        }
+        if constexpr (WithMemoryManager) {
+            UNIT_ASSERT_VALUES_EQUAL(reportedQuota, retainedQuota);
+        } else {
+            UNIT_ASSERT_GT(reportedQuota, 0);
+            UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+        }
+        UNIT_ASSERT(!memoryCounters->FindCounter("JsonParserAlloc"));
+        PassAway();
+        NTestUtils::WaitFor(WAIT_TIMEOUT, "topic session quota release", [&] {
+            for (const auto& sensor : sensors) {
+                if (sensor->Val()) {
+                    return false;
+                }
+            }
+            return manager->GetCurrentQuota() == 0;
+        });
+    }
+
+    Y_UNIT_TEST_TWIN_F(MemoryQuotaSensorsCoverJsonAndFilter, WithMemoryManager, TMockTopicFixture) {
+        auto manager = std::make_shared<TCountingQuotaManager>(128_MB, 128_MB);
+        if constexpr (WithMemoryManager) {
+            MemoryQuotaManager = manager;
+        }
+        Init("fake_topic");
+        auto source = BuildSource();
+        auto* taskSensor = source.AddTaskSensorLabel();
+        taskSensor->SetLabel("query_name");
+        taskSensor->SetValue("memory_sensor_test");
+        StartSession(ReadActorId1, source);
+        PQWrite({Json1}, 42);
+        ExpectMessageBatch(ReadActorId1, {JsonMessage(1)});
+        ExpectStatistics({{ReadActorId1, 43}});
+
+        const auto sessionMemoryCounters = RowDispatcherCounters->GetSubgroup("topic", "fake_topic")->GetSubgroup("read_group", "read_group")->FindSubgroup("component", "MemoryQuota");
+        UNIT_ASSERT(sessionMemoryCounters);
+        const auto readSessionSensor = sessionMemoryCounters->FindCounter("ReadSessionMemory");
+        UNIT_ASSERT(readSessionSensor);
+        UNIT_ASSERT_GT(readSessionSensor->Val(), 0);
+        const auto memoryCounters = RowDispatcherCounters->GetSubgroup("query_name", "memory_sensor_test")
+            ->GetSubgroup("topic", "fake_topic")->GetSubgroup("read_group", "read_group")->FindSubgroup("component", "MemoryQuota");
+        UNIT_ASSERT(memoryCounters);
+        TVector<NMonitoring::TDynamicCounters::TCounterPtr> sensors{readSessionSensor};
+        ui64 reportedQuota = readSessionSensor->Val();
+        for (const auto* name : {"InFlightMemory", "PackingMemory", "ClientDataMemory", "FormatHandlerAlloc", "JsonParserAlloc", "ColumnIndexMemory", "SimdJsonMemory", "FilterAlloc"}) {
+            const auto sensor = memoryCounters->FindCounter(name);
+            UNIT_ASSERT_C(sensor, name);
+            UNIT_ASSERT_GT(sensor->Val(), 0);
+            reportedQuota += sensor->Val();
+            sensors.push_back(sensor);
+        }
+        if constexpr (WithMemoryManager) {
+            UNIT_ASSERT_VALUES_EQUAL(reportedQuota, manager->GetCurrentQuota());
+        } else {
+            UNIT_ASSERT_GT(reportedQuota, 0);
+            UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+        }
+        UNIT_ASSERT(!memoryCounters->FindCounter("RawParserAlloc"));
+        UNIT_ASSERT(!RowDispatcherCounters->FindSubgroup("component", "MemoryQuota"));
+
+        PassAway();
+        NTestUtils::WaitFor(WAIT_TIMEOUT, "memory quota sensors released", [&] {
+            for (const auto& sensor : sensors) {
+                if (sensor->Val()) {
+                    return false;
+                }
+            }
+            return manager->GetCurrentQuota() == 0;
+        });
+    }
+
+    Y_UNIT_TEST_F(InflightQuotaFailurePrecedesSending, TMockTopicFixture) {
+        constexpr ui64 limit = 128_MB;
+        auto manager = std::make_shared<TCountingQuotaManager>(limit, limit);
+        MemoryQuotaManager = manager;
+        Init("fake_topic");
+        auto source = BuildSource(true);
+        source.SetFormat("raw");
+        source.ClearColumns();
+        source.ClearColumnTypes();
+        source.AddColumns("data");
+        source.AddColumnTypes("[DataType; String]");
+        StartSession(ReadActorId1, source);
+        const auto baseline = manager->GetCurrentQuota();
+        PQWrite({TString(MAX_BATCH_SIZE + 1, 'x')});
+        // The large row finishes packing before the read actor requests it.
+        NTestUtils::WaitFor(WAIT_TIMEOUT, "input, packer and completed batch reservations", [&] {
+            return manager->GetCurrentQuota() >= baseline + 3 * MAX_BATCH_SIZE;
+        });
+        {
+            TMemoryQuota competingBuffer(manager);
+            competingBuffer.Resize(limit - manager->GetCurrentQuota());
+            ExpectNewDataArrived({ReadActorId1});
+            Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
+            TAutoPtr<IEventHandle> handle;
+            auto [batch, error] = Runtime.GrabEdgeEvents<TEvRowDispatcher::TEvMessageBatch, TEvRowDispatcher::TEvSessionError>(handle, WAIT_TIMEOUT);
+            UNIT_ASSERT(!batch);
+            UNIT_ASSERT(error);
+            UNIT_ASSERT(error->Record.GetStatusCode() == EStatusId::OVERLOADED);
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(error->Record.GetIssues(), issues);
+            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "bytes for InFlightMemory");
+        }
+        PassAway();
+        NTestUtils::WaitFor(WAIT_TIMEOUT, "topic session quota release", [&] {
+            return manager->GetCurrentQuota() == 0;
+        });
+    }
+
+    Y_UNIT_TEST_F(BoundedBatchesPreserveTrailingWatermark, TMockTopicFixture) {
+        Init("fake_topic");
+        auto source = BuildSource();
+        source.SetPredicate("value != 'skip'");
+        source.SetWatermarkExpr("CAST(dt AS Timestamp?)");
+        StartSession(ReadActorId1, source);
+        const TString large(MAX_BATCH_SIZE + 1, 'x');
+        PQWrite({TStringBuilder() << R"({"dt":100,"value":")" << large << R"("})", R"({"dt":200,"value":"skip"})"}, 42);
+        // Wait until both rows, including the filtered one, have been parsed.
+        NTestUtils::WaitFor(WAIT_TIMEOUT, "trailing watermark parsed", [&] {
+            auto stat = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvSessionStatistic>(RowDispatcherActorId, WAIT_TIMEOUT);
+            return stat && stat->Get()->Stat.Clients.size() == 1 && stat->Get()->Stat.Clients.front().ReadLagMessages == 0;
+        });
+        for (ui64 offset = 42; offset <= 43; ++offset) {
+            ExpectNewDataArrived({ReadActorId1});
+            Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
+            auto event = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvMessageBatch>(RowDispatcherActorId, WAIT_TIMEOUT);
+            UNIT_ASSERT(event);
+            const auto& record = event->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.GetNextMessageOffset(), offset + 1);
+            UNIT_ASSERT_VALUES_EQUAL(record.MessagesSize(), 1);
+            const auto& message = record.GetMessages(0);
+            UNIT_ASSERT_VALUES_EQUAL(message.OffsetsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(message.GetOffsets(0), offset);
+            UNIT_ASSERT_VALUES_EQUAL(message.WatermarksUsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(message.GetWatermarksUs(0), (offset - 41) * 100);
+            if (offset == 42) {
+                CheckMessageBatch(event->Get()->GetPayload(message.GetPayloadId()), TBatch().AddRow(TRow().AddUint64(100).AddString(large)));
+            }
+        }
+        PassAway();
+    }
+
+    Y_UNIT_TEST_F(WatermarkOnlyBatchKeepsProcessedOffsetUntilSent, TMockTopicFixture) {
+        Init("fake_topic");
+        auto source = BuildSource();
+        source.SetPredicate("FALSE");
+        source.SetWatermarkExpr("CAST(dt AS Timestamp?)");
+        StartSession(ReadActorId1, source);
+        PQWrite({Json1}, 42);
+        ExpectNewDataArrived({ReadActorId1});
+
+        NTestUtils::WaitFor(WAIT_TIMEOUT, "watermark-only row parsed", [&] {
+            auto stat = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvSessionStatistic>(RowDispatcherActorId, WAIT_TIMEOUT);
+            if (!stat || stat->Get()->Stat.Clients.size() != 1) {
+                return false;
+            }
+            const auto& client = stat->Get()->Stat.Clients.front();
+            if (!client.ReadBytes || client.ReadLagMessages) {
+                return false;
+            }
+            UNIT_ASSERT(!client.Offset);
+            return true;
+        });
+
+        Runtime.Send(new IEventHandle(TopicSession, ReadActorId1, new TEvRowDispatcher::TEvGetNextBatch()));
+        auto event = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvMessageBatch>(RowDispatcherActorId, WAIT_TIMEOUT);
+        UNIT_ASSERT(event);
+        const auto& record = event->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(record.GetNextMessageOffset(), 43);
+        UNIT_ASSERT_VALUES_EQUAL(record.MessagesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetMessages(0).WatermarksUsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetMessages(0).GetWatermarksUs(0), 100);
+        ExpectStatistics({{ReadActorId1, 43}});
+        PassAway();
     }
 
     Y_UNIT_TEST_F(TwoSessionsWithoutOffsets, TRealTopicFixture) {

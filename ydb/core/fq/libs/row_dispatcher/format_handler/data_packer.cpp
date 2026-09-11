@@ -1,58 +1,64 @@
 #include "data_packer.h"
 
+#include <ydb/library/yverify_stream/yverify_stream.h>
+
 namespace NFq::NRowDispatcher {
 
-namespace {
-
-ui64 EstimateMemoryUsage(size_t packedSize) {
-    using namespace NKikimr::NMiniKQL;
-    constexpr size_t pageSize = TBufferPage::DefaultPageAllocSize;
-    constexpr size_t pageCapacity = pageSize - sizeof(TBufferPage) - sizeof(NYql::NDecimal::TInt128);
-    return ((packedSize + pageCapacity - 1) / pageCapacity) * pageSize;
-}
-
-} // anonymous namespace
-
-TMemoryLimitedDataPacker::TMemoryLimitedDataPacker(const NKikimr::NMiniKQL::TType* type, NYql::NDq::IMemoryQuotaManager::TPtr manager)
-    : Manager(std::move(manager))
-    , Memory(std::make_shared<TMemoryQuota>(Manager, "packed output"))
-    , Packer(type, NKikimr::NMiniKQL::EValuePackerVersion::V0, NYql::DefaultDatumValidationMode)
-{
-    Y_ENSURE(!Packer.IsBlock());
-}
-
-void TMemoryLimitedDataPacker::AddWideItem(const NYql::NUdf::TUnboxedValuePod* values, ui32 count) {
-    try {
-        Packer.AddWideItem(values, count);
-        Memory->Resize(EstimateMemoryUsage(Packer.PackedSizeEstimate()));
-    } catch (...) {
-        Packer.Clear();
-        Memory->Resize(0);
-        throw;
-    }
-}
+TMemoryLimitedDataPacker::TMemoryLimitedDataPacker(NYql::NDq::IMemoryQuotaManager::TPtr manager, ui64 itemSizeOverhead, NMonitoring::TDynamicCounterPtr counters)
+    : ItemSizeOverhead(itemSizeOverhead)
+    , PackingMemory(std::move(manager), "PackingMemory", std::move(counters))
+{}
 
 size_t TMemoryLimitedDataPacker::PackedSizeEstimate() const {
-    return Packer.PackedSizeEstimate();
+    Y_VALIDATE(Packer, "Packer is not initialized");
+    return Packer->PackedSizeEstimate();
 }
 
 bool TMemoryLimitedDataPacker::IsEmpty() const {
-    return Packer.IsEmpty();
+    Y_VALIDATE(Packer, "Packer is not initialized");
+    return Packer->IsEmpty();
 }
 
-NYql::TChunkedBuffer TMemoryLimitedDataPacker::Finish() {
+void TMemoryLimitedDataPacker::SetPackerType(const NKikimr::NMiniKQL::TType* type) {
+    Packer = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(type, NKikimr::NMiniKQL::EValuePackerVersion::V0, NYql::DefaultDatumValidationMode);
+    Y_VALIDATE(!Packer->IsBlock(), "Block type is not supported");
+    ItemsCount = 0;
+}
+
+void TMemoryLimitedDataPacker::AddWideItem(const NYql::NUdf::TUnboxedValuePod* values, ui32 count) {
+    Y_VALIDATE(Packer, "Packer is not initialized");
+
     try {
-        auto data = Packer.Finish();
-        Memory->Resize(EstimateMemoryUsage(data.Size()));
-        auto nextMemory = std::make_shared<TMemoryQuota>(Manager, "packed output");
-        auto result = HoldMemoryQuota(std::move(data), Memory);
-        Memory = std::move(nextMemory);
-        return result;
+        Packer->AddWideItem(values, count);
+        ItemsCount++;
+        PackingMemory.Reserve(EstimateMemoryUsage(Packer->PackedSizeEstimate()));
     } catch (...) {
-        Packer.Clear();
-        Memory->Resize(0);
+        Packer->Clear();
+        ItemsCount = 0;
         throw;
     }
+}
+
+std::pair<NYql::TChunkedBuffer, ui64> TMemoryLimitedDataPacker::Finish() {
+    Y_VALIDATE(Packer, "Packer is not initialized");
+    try {
+        auto data = Packer->Finish();
+        const auto finalSize = EstimateMemoryUsage(data.Size());
+        ItemsCount = 0;
+        PackingMemory.Reserve(finalSize);
+        return {std::move(data), finalSize};
+    } catch (...) {
+        Packer->Clear();
+        ItemsCount = 0;
+        throw;
+    }
+}
+
+ui64 TMemoryLimitedDataPacker::EstimateMemoryUsage(size_t packedSize) const {
+    using namespace NKikimr::NMiniKQL;
+    constexpr size_t pageSize = TBufferPage::DefaultPageAllocSize;
+    constexpr size_t pageCapacity = pageSize - sizeof(TBufferPage) - sizeof(NYql::NDecimal::TInt128);
+    return ((packedSize + pageCapacity - 1) / pageCapacity) * pageSize + ItemSizeOverhead * ItemsCount;
 }
 
 } // namespace NFq::NRowDispatcher

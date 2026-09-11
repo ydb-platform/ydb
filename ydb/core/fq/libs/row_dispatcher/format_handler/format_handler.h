@@ -36,6 +36,9 @@ struct TDataBatch {
     TRope SerializedData;
     TVector<ui64> Offsets;
     TMaybe<TInstant> Watermark;
+    ui64 TotalSize = 0;
+    ui64 Rows = 0;
+    ui64 DataSize = 0; // Packed bytes reported by AddDataToClient, before finalizing the batch.
 };
 
 class ITopicFormatHandler : public TNonCopyable {
@@ -57,7 +60,8 @@ public:
 public:
     virtual void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) = 0;
 
-    virtual TQueue<TDataBatch> ExtractClientData(NActors::TActorId clientId) = 0;
+    virtual TQueue<TDataBatch> ExtractClientData(NActors::TActorId clientId, ui64 maxBatchSize) = 0;
+    virtual bool HasClientData(NActors::TActorId clientId) const = 0;
 
     virtual TStatus AddClient(IClientDataConsumer::TPtr client) = 0;
     virtual void RemoveClient(NActors::TActorId clientId) = 0;

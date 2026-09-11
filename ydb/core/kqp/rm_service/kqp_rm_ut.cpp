@@ -402,12 +402,12 @@ void KqpRm::ServiceMemoryQuota() {
     auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
     {
         auto quota = NRm::CreateMemoryQuotaManager(rm);
-        UNIT_ASSERT(quota->AllocateQuota(600));
-        UNIT_ASSERT(!quota->AllocateQuota(500));
+        UNIT_ASSERT(quota->AllocateQuota(600, /* isOptional */ false));
+        UNIT_ASSERT(!quota->AllocateQuota(500, /* isOptional */ false));
         UNIT_ASSERT_VALUES_EQUAL(quota->GetCurrentQuota(), 600);
         AssertResourceManagerStats(rm, 400, 100);
         quota->FreeQuota(200);
-        UNIT_ASSERT(quota->AllocateQuota(500));
+        UNIT_ASSERT(quota->AllocateQuota(500, /* isOptional */ false));
         UNIT_ASSERT_VALUES_EQUAL(quota->GetCurrentQuota(), 900);
         quota->FreeQuota(900);
         AssertResourceManagerStats(rm, 1000, 100);
@@ -423,7 +423,7 @@ void KqpRm::ConcurrentServiceMemoryQuota() {
         NPar::LocalExecutor().RunAdditionalThreads(4);
         NPar::LocalExecutor().ExecRange([&](int) {
             for (ui32 i = 0; i < 100; ++i) {
-                if (quota->AllocateQuota(300)) {
+                if (quota->AllocateQuota(300, /* isOptional */ false)) {
                     quota->FreeQuota(300);
                 }
             }

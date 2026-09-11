@@ -11,7 +11,7 @@ namespace NFq::NRowDispatcher {
 
 class TTypeParser {
 public:
-    TTypeParser(const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager = {});
+    TTypeParser(const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager = {}, TString memoryName = "ParserAlloc");
     virtual ~TTypeParser();
 
     TValueStatus<NKikimr::NMiniKQL::TType*> ParseTypeYson(const TString& typeYson) const;
@@ -40,7 +40,7 @@ public:
     using TPtr = TIntrusivePtr<TTopicParserBase>;
 
 public:
-    TTopicParserBase(IParsedDataConsumer::TPtr consumer, const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager = {});
+    TTopicParserBase(IParsedDataConsumer::TPtr consumer, const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager = {}, TString memoryName = "ParserAlloc");
     virtual ~TTopicParserBase() = default;
 
 public:

@@ -70,7 +70,7 @@ protected:
     IProgramHolder::TPtr ProgramHolder_;
 };
 
-IProgramHolder::TPtr CreateProgramHolder(IProcessedDataConsumer::TPtr consumer, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager = {});
+IProgramHolder::TPtr CreateProgramHolder(IProcessedDataConsumer::TPtr consumer, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager = {}, NMonitoring::TDynamicCounterPtr memoryQuotaCounters = {});
 
 IProgramCompileHandler::TPtr CreateProgramCompileHandler(
     IProcessedDataConsumer::TPtr consumer,

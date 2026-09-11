@@ -12,10 +12,13 @@ public:
         , State(MakeIntrusive<TTxState>(ResourceManager, /* txId */ static_cast<ui64>(0), TInstant::Now(), /* poolId */ "", /* memoryPoolPercent */ 100.0, /* database */ "", /* collectBacktrace */ false))
     {}
 
-    bool AllocateQuota(ui64 size) final {
+    bool AllocateQuota(ui64 size, bool isOptional) final {
+        Y_UNUSED(isOptional);
+
         if (size && !ResourceManager->AllocateResources(*State, /* taskId */ 0, {.Memory = size})) {
             return false;
         }
+
         Allocated.fetch_add(size);
         return true;
     }
@@ -36,8 +39,8 @@ public:
         return GetCurrentQuota();
     }
 
-    bool IsReasonableToUseSpilling() const final {
-        return false;
+    i64 GetMemoryAvailability() const final {
+        return 1;
     }
 
     TString MemoryConsumptionDetails() const final {

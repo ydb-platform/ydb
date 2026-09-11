@@ -16,13 +16,15 @@ class TThreadSafeQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
 public:
     using TGuaranteeQuotaManager::TGuaranteeQuotaManager;
 
-    bool AllocateQuota(ui64 size) override {
+    bool AllocateQuota(ui64 size, bool isOptional) override {
         std::lock_guard lock(Mutex);
-        return TGuaranteeQuotaManager::AllocateQuota(size);
+        ++Requests;
+        return TGuaranteeQuotaManager::AllocateQuota(size, isOptional);
     }
 
     void FreeQuota(ui64 size) override {
         std::lock_guard lock(Mutex);
+        ++Releases;
         TGuaranteeQuotaManager::FreeQuota(size);
     }
 
@@ -30,6 +32,9 @@ public:
         std::lock_guard lock(Mutex);
         return TGuaranteeQuotaManager::GetCurrentQuota();
     }
+
+    std::atomic<ui64> Requests = 0;
+    std::atomic<ui64> Releases = 0;
 
 private:
     mutable std::mutex Mutex;
@@ -319,7 +324,10 @@ public:
     TCallback BatchCheck(TVector<TMessages> messages) const {
         return [this, expectedIndex = 0ull, expectedMessages = std::move(messages)](NActors::TActorId clientId, TQueue<TDataBatch>&& data) mutable {
             while (!data.empty()) {
-                auto [actualMessages, actualOffsets, actualWatermark] = std::move(data.front());
+                auto batch = std::move(data.front());
+                auto& actualMessages = batch.SerializedData;
+                auto& actualOffsets = batch.Offsets;
+                auto& actualWatermark = batch.Watermark;
                 data.pop();
 
                 UNIT_ASSERT_LT_C(expectedIndex, expectedMessages.size(), "Expected less messages, clientId: " << clientId << ", got " << data.size() << " batches");
@@ -343,7 +351,7 @@ public:
 private:
     void ExtractClientsData() {
         for (auto& client : Clients) {
-            auto data = FormatHandler->ExtractClientData(client->GetClientId());
+            auto data = FormatHandler->ExtractClientData(client->GetClientId(), Max<ui64>());
             if (client->IsFinished()) {
                 UNIT_ASSERT_VALUES_EQUAL_C(data.size(), 0, "Expected empty data for finished clients");
             } else {
@@ -385,7 +393,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         FormatHandler->ParseMessages({GetMessage(45, "3")});
         FormatHandler->ForceRefresh();
         for (const auto clientId : ClientIds) {
-            UNIT_ASSERT(FormatHandler->ExtractClientData(clientId).empty());
+            UNIT_ASSERT(FormatHandler->ExtractClientData(clientId, Max<ui64>()).empty());
         }
         CheckError(MakeClient(columns, "", "", EmptyCheck(), 0), EStatusId::BAD_REQUEST, error);
 
@@ -417,7 +425,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
 
             FormatHandler->ForceRefresh();
             FormatHandler->ParseMessages({GetMessage(43, R"({"data": "valid"})")});
-            UNIT_ASSERT(FormatHandler->ExtractClientData(ClientIds.back()).empty());
+            UNIT_ASSERT(FormatHandler->ExtractClientData(ClientIds.back(), Max<ui64>()).empty());
             RemoveClient(ClientIds.back());
             UNIT_ASSERT(!FormatHandler->HasClients());
         });
@@ -458,7 +466,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         }
     }
 
-    Y_UNIT_TEST_F(OffsetsUseHandlerAllocator, TFormatHandlerFixture) {
+    Y_UNIT_TEST_F(OffsetsAndBatchesRetainQuotaUntilClientDestruction, TFormatHandlerFixture) {
         auto manager = std::make_shared<TThreadSafeQuotaManager>(64_MB, 64_MB);
         TCountersDesc counters;
         NKikimr::TAlignedPagePoolCounters poolCounters(counters.CountersRoot, "row_dispatcher");
@@ -480,8 +488,8 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
             }, 2 * rows));
         }
 
-        const auto allocatedBefore = poolCounters.TotalBytesAllocatedCntr->Val();
-        i64 allocatedAfter = 0;
+        ui64 requests = 0;
+        ui64 releases = 0;
         with_lock(Alloc) {
             NYql::NUdf::TUnboxedValue foreignValue = NKikimr::NMiniKQL::MakeStringNotFilled(1_KB);
             const auto foreignAllocated = Alloc.GetAllocated();
@@ -496,10 +504,11 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
                 UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
                 UNIT_ASSERT_VALUES_EQUAL(Alloc.GetAllocated(), foreignAllocated);
                 if (!batch) {
-                    allocatedAfter = poolCounters.TotalBytesAllocatedCntr->Val();
-                    UNIT_ASSERT_GT(allocatedAfter, allocatedBefore);
+                    requests = manager->Requests.load();
+                    releases = manager->Releases.load();
                 } else {
-                    UNIT_ASSERT_VALUES_EQUAL(poolCounters.TotalBytesAllocatedCntr->Val(), allocatedAfter);
+                    UNIT_ASSERT_VALUES_EQUAL(manager->Requests.load(), requests);
+                    UNIT_ASSERT_VALUES_EQUAL(manager->Releases.load(), releases);
                 }
             }
             for (auto clientId : ClientIds) {
@@ -514,7 +523,9 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
             return poolCounters.TotalBytesAllocatedCntr->Val() == 0;
         });
         UNIT_ASSERT_VALUES_EQUAL(poolCounters.LostPagesBytesFreeCntr->Val(), 0);
-        UNIT_ASSERT_GT(manager->GetCurrentQuota(), 0);
+        NTestUtils::WaitFor(WAIT_TIMEOUT, "client quota release", [&] {
+            return manager->GetCurrentQuota() == 0;
+        });
         UNIT_ASSERT_VALUES_EQUAL(completed.size(), 4);
 
         bool allocatorRestored = false;
@@ -535,35 +546,49 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         });
     }
 
-    Y_UNIT_TEST_F(OffsetReleaseQuotaRejection, TFormatHandlerFixture) {
+    Y_UNIT_TEST_F(QueuedOutputQuotaRejection, TFormatHandlerFixture) {
         constexpr ui64 limit = 8_MB;
         auto manager = std::make_shared<TThreadSafeQuotaManager>(limit, limit);
         CreateFormatHandler(
             {.FunctionRegistry = FunctionRegistry, .JsonParserConfig = {.FunctionRegistry = FunctionRegistry}, .FiltersConfig = {.CompileServiceId = CompileService}, .MemoryQuotaManager = manager},
             {.ParsingFormat = "raw"});
-        CheckSuccess(MakeClient({{"data", "[DataType; String]"}}, "", "",
-            BatchCheck({{{42}, {}, TBatch().AddRow(TRow().AddString("x"))}}), 1));
+        CheckSuccess(MakeClient({{"data", "[DataType; String]"}}, "", "", EmptyCheck(), 1));
 
         Clients.back()->ExpectOffsets({42});
         with_lock(Alloc) {
             FormatHandler->ParseMessages({GetMessage(42, "x")});
-            {
-                TMemoryQuota competingBuffer(manager);
-                competingBuffer.Resize(limit - manager->GetCurrentQuota() - sizeof(ui64) + 1);
-                UNIT_ASSERT_EXCEPTION(FormatHandler->ExtractClientData(ClientIds.back()), NKikimr::TMemoryLimitExceededException);
-                UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
-
-                // Releasing one byte leaves exactly enough quota for one offset.
-                competingBuffer.Resize(competingBuffer.GetSize() - 1);
-                Clients.back()->Callback(ClientIds.back(), FormatHandler->ExtractClientData(ClientIds.back()));
-            }
-            RemoveClient(ClientIds.back());
+            TMemoryQuota competingBuffer(manager);
+            competingBuffer.Resize(limit - manager->GetCurrentQuota());
+            UNIT_ASSERT_EXCEPTION(FormatHandler->ExtractClientData(ClientIds.back(), Max<ui64>()), NKikimr::TMemoryLimitExceededException);
             UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
+            RemoveClient(ClientIds.back());
         }
         FormatHandler.Reset();
         NTestUtils::WaitFor(WAIT_TIMEOUT, "format handler quota release", [&] {
             return manager->GetCurrentQuota() == 0;
         });
+    }
+
+    Y_UNIT_TEST_F(BoundedExtractionPreservesRemainingBatches, TFormatHandlerFixture) {
+        CreateFormatHandler({.FunctionRegistry = FunctionRegistry, .FiltersConfig = {.CompileServiceId = CompileService}}, {.ParsingFormat = "raw"});
+        CheckSuccess(MakeClient({{"data", "[DataType; String]"}}, "", "", EmptyCheck(), 3));
+        const auto clientId = ClientIds.back();
+        Clients.back()->ExpectOffsets({42, 43, 44});
+        const TString data(MAX_BATCH_SIZE + 1, 'x');
+        FormatHandler->ParseMessages({GetMessage(42, data), GetMessage(43, data), GetMessage(44, "last")});
+        for (ui64 offset = 42; offset <= 44; ++offset) {
+            // Always make progress, including when the first batch exceeds the limit.
+            auto batches = FormatHandler->ExtractClientData(clientId, 1);
+            UNIT_ASSERT_VALUES_EQUAL(batches.size(), 1);
+            const auto& batch = batches.front();
+            UNIT_ASSERT_VALUES_EQUAL(batch.Offsets, TVector<ui64>{offset});
+            UNIT_ASSERT_VALUES_EQUAL(batch.Rows, 1);
+            UNIT_ASSERT_GT(batch.TotalSize, batch.DataSize);
+            CheckMessageBatch(batch.SerializedData, TBatch().AddRow(TRow().AddString(offset < 44 ? data : TString("last"))));
+            UNIT_ASSERT_VALUES_EQUAL(FormatHandler->HasClientData(clientId), offset < 44);
+        }
+        UNIT_ASSERT(FormatHandler->ExtractClientData(clientId, Max<ui64>()).empty());
+        RemoveClient(clientId);
     }
 
     Y_UNIT_TEST_F(ManyJsonClients, TFormatHandlerFixture) {

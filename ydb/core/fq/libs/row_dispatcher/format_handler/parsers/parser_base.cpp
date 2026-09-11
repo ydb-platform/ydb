@@ -9,12 +9,12 @@ namespace NFq::NRowDispatcher {
 
 //// TTypeParser
 
-TTypeParser::TTypeParser(const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager)
+TTypeParser::TTypeParser(const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager, TString memoryName)
     : Alloc(location, NKikimr::TAlignedPagePoolCounters(counters.CountersRoot, counters.MkqlCountersName), true, false)
     , FunctionRegistry(functionRegistry)
     , MemInfo("SharedReadingParser")
 {
-    LimitAllocator(Alloc, memoryQuotaManager, "parser data");
+    LimitAllocator(Alloc, memoryQuotaManager, std::move(memoryName), counters.ReadGroupSubgroup);
     TypeEnv = std::make_unique<NKikimr::NMiniKQL::TTypeEnvironment>(Alloc);
     ProgramBuilder = std::make_unique<NKikimr::NMiniKQL::TProgramBuilder>(*TypeEnv, *FunctionRegistry);
     HolderFactory = std::make_unique<NKikimr::NMiniKQL::THolderFactory>(Alloc.Ref(), MemInfo, functionRegistry);
@@ -60,8 +60,8 @@ void TTopicParserBase::TStats::Clear() {
 
 //// TTopicParserBase
 
-TTopicParserBase::TTopicParserBase(IParsedDataConsumer::TPtr consumer, const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager)
-    : TTypeParser(location, functionRegistry, counters, std::move(memoryQuotaManager))
+TTopicParserBase::TTopicParserBase(IParsedDataConsumer::TPtr consumer, const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager, TString memoryName)
+    : TTypeParser(location, functionRegistry, counters, std::move(memoryQuotaManager), std::move(memoryName))
     , Consumer(std::move(consumer))
 {}
 

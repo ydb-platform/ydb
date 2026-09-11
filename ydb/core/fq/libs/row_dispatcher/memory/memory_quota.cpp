@@ -8,6 +8,8 @@ namespace NFq::NRowDispatcher {
 
 namespace {
 
+constexpr ui64 MIN_MEMORY_DELTA = 1_MB;
+
 class TMemoryQuotaExceededException : public NKikimr::TMemoryLimitExceededException {
 public:
     explicit TMemoryQuotaExceededException(TString details)
@@ -19,37 +21,50 @@ public:
 
 } // anonymous namespace
 
-TMemoryQuota::TMemoryQuota(NYql::NDq::IMemoryQuotaManager::TPtr manager, TString memoryName)
+TMemoryQuota::TMemoryQuota(NYql::NDq::IMemoryQuotaManager::TPtr manager, TString memoryName, NMonitoring::TDynamicCounterPtr counters)
     : Manager(std::move(manager))
     , MemoryName(std::move(memoryName))
+    , ReservedBytes(counters ? counters->GetSubgroup("component", "MemoryQuota")->GetCounter(MemoryName) : nullptr)
 {}
 
 TMemoryQuota::~TMemoryQuota() {
-    Resize(0);
+    if (Manager && AllocatedSize) {
+        Manager->FreeQuota(AllocatedSize);
+    }
+    if (ReservedBytes) {
+        ReservedBytes->Sub(AllocatedSize);
+    }
 }
 
 void TMemoryQuota::Resize(ui64 size) {
-    if (Manager) {
-        if (size > Size && !Manager->AllocateQuota(size - Size)) {
+    if (size > AllocatedSize) {
+        const ui64 delta = AlignUp(size - AllocatedSize, MIN_MEMORY_DELTA);
+        if (Manager && !Manager->AllocateQuota(delta, /* isOptional */ false)) {
             throw TMemoryQuotaExceededException(TStringBuilder()
-                << "failed to reserve " << size - Size << " bytes for " << MemoryName
-                << " (already reserved: " << Size << " bytes)");
+                << "failed to reserve " << delta << " bytes for " << MemoryName
+                << " (already reserved: " << AllocatedSize << " bytes, actually used bytes " << CurrentSize << ")");
         }
-        if (size < Size) {
-            Manager->FreeQuota(Size - size);
+        AllocatedSize += delta;
+        if (ReservedBytes) {
+            ReservedBytes->Add(delta);
         }
     }
-    Size = size;
+
+    CurrentSize = size;
+}
+
+void TMemoryQuota::Add(ui64 delta) {
+    Resize(CurrentSize + delta);
 }
 
 void TMemoryQuota::Reserve(ui64 size) {
-    if (size > Size) {
+    if (size > CurrentSize) {
         Resize(size);
     }
 }
 
 ui64 TMemoryQuota::GetSize() const {
-    return Size;
+    return CurrentSize;
 }
 
 TString GetMemoryLimitExceededMessage(const NKikimr::TMemoryLimitExceededException& error, TStringBuf context) {
@@ -64,33 +79,19 @@ TString GetMemoryLimitExceededMessage(const NKikimr::TMemoryLimitExceededExcepti
     return message;
 }
 
-void LimitAllocator(NKikimr::NMiniKQL::TScopedAlloc& alloc, const NYql::NDq::IMemoryQuotaManager::TPtr& manager, TString memoryName) {
-    if (!manager) {
+void LimitAllocator(NKikimr::NMiniKQL::TScopedAlloc& alloc, const NYql::NDq::IMemoryQuotaManager::TPtr& manager, TString memoryName, NMonitoring::TDynamicCounterPtr counters) {
+    if (!manager && !counters) {
         return;
     }
 
-    auto quota = std::make_shared<TMemoryQuota>(manager, std::move(memoryName));
-    quota->Resize(std::max<ui64>(alloc.GetAllocated(), 1));
+    // Without a manager, account the same reservations but allow unlimited growth.
+    auto quota = std::make_shared<TMemoryQuota>(manager, std::move(memoryName), std::move(counters));
+    quota->Resize(AlignUp(std::max<ui64>(alloc.GetAllocated(), 1), MIN_MEMORY_DELTA));
     alloc.SetLimit(quota->GetSize());
     alloc.Ref().SetIncreaseMemoryLimitCallback([quota, &alloc](ui64, ui64 required) {
-        constexpr ui64 step = 1_MB;
-        quota->Resize(AlignUp(required, step));
+        quota->Resize(AlignUp(required, MIN_MEMORY_DELTA));
         alloc.SetLimit(quota->GetSize());
     });
-}
-
-NYql::TChunkedBuffer HoldMemoryQuota(NYql::TChunkedBuffer buffer, std::shared_ptr<TMemoryQuota> quota) {
-    struct TOwner {
-        std::shared_ptr<TMemoryQuota> Quota;
-        std::shared_ptr<const void> Data;
-    };
-    NYql::TChunkedBuffer result;
-    while (!buffer.Empty()) {
-        const auto& chunk = buffer.Front();
-        result.Append(chunk.Buf, std::make_shared<TOwner>(TOwner{quota, chunk.Owner}));
-        buffer.Erase(chunk.Buf.size());
-    }
-    return result;
 }
 
 } // namespace NFq::NRowDispatcher

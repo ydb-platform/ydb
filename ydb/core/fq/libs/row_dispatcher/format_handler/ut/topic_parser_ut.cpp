@@ -14,9 +14,9 @@ class TCountingQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
 public:
     using TGuaranteeQuotaManager::TGuaranteeQuotaManager;
 
-    bool AllocateQuota(ui64 size) override {
+    bool AllocateQuota(ui64 size, bool isOptional) override {
         ++Requests;
-        const bool result = TGuaranteeQuotaManager::AllocateQuota(size);
+        const bool result = TGuaranteeQuotaManager::AllocateQuota(size, isOptional);
         PeakQuota = std::max(PeakQuota, GetCurrentQuota());
         return result;
     }
@@ -278,8 +278,9 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         Config.MemoryQuotaManager = manager;
         Config.BatchSize = 4_KB;
         CheckSuccess(MakeParser({"a"}, "[DataType; Bool]"));
+        // Exceed the retained 1 MiB index reservation before growing column buffers.
         TVector<TSchemaColumn> columns;
-        for (size_t i = 0; i < 128; ++i) {
+        for (size_t i = 0; i < 20000; ++i) {
             columns.push_back({ToString(i), "[DataType; Bool]"});
         }
         auto consumer = MakeIntrusive<TParsedDataConsumer>(*this, columns, [](auto, auto) {});
@@ -287,7 +288,11 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             TMemoryQuota competingBuffer(manager);
             competingBuffer.Resize(limit - manager->GetCurrentQuota());
             with_lock(Alloc) {
-                UNIT_ASSERT_EXCEPTION(Parser->ChangeConsumer(consumer), NKikimr::TMemoryLimitExceededException);
+                UNIT_ASSERT_EXCEPTION_SATISFIES(Parser->ChangeConsumer(consumer), NKikimr::TMemoryLimitExceededException,
+                    [](const auto& error) {
+                        UNIT_ASSERT_STRING_CONTAINS(GetMemoryLimitExceededMessage(error), "bytes for ColumnIndexMemory");
+                        return true;
+                    });
                 Parser.Reset();
                 UNIT_ASSERT_VALUES_EQUAL(NKikimr::NMiniKQL::TlsAllocState, &Alloc.Ref());
             }

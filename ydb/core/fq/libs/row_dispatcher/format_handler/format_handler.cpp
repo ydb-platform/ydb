@@ -137,16 +137,10 @@ private:
             , Columns(Client->GetColumns())
             , LogPrefix(TStringBuilder() << Self.LogPrefix << "TClientHandler " << Client->GetClientId() << ": ")
             , FilteredRow(Columns.size())
+            , DataPacker(Self.Config.MemoryQuotaManager, sizeof(ui64), Self.Counters.Desc.ReadGroupSubgroup)
+            , ClientDataMemory(Self.Config.MemoryQuotaManager, "ClientDataMemory", Self.Counters.Desc.ReadGroupSubgroup)
         {
             ColumnsIds.reserve(Columns.size());
-        }
-
-        ~TClientHandler() override {
-            if (FilteredOffsets.capacity()) {
-                with_lock(Self.Alloc) {
-                    decltype(FilteredOffsets)().swap(FilteredOffsets);
-                }
-            }
         }
 
         IClientDataConsumer::TPtr GetClient() const {
@@ -195,10 +189,29 @@ private:
             return SetupPacker();
         }
 
-        TQueue<TDataBatch> ExtractClientData() {
+        bool HasData() const {
+            return NumberRows || Watermark || !ClientData.empty();
+        }
+
+        TQueue<TDataBatch> ExtractClientData(ui64 maxBatchSize) {
             FinishPacking();
+
             TQueue<TDataBatch> result;
-            result.swap(ClientData);
+
+            if (ClientDataMemory.GetSize() <= maxBatchSize) {
+                result.swap(ClientData);
+                ClientDataMemory.Resize(0);
+            } else {
+                ui64 extractedSize = 0;
+                while (!ClientData.empty() && (result.empty() || extractedSize + ClientData.front().TotalSize <= maxBatchSize)) {
+                    extractedSize += ClientData.front().TotalSize;
+                    result.emplace(std::move(ClientData.front()));
+                    ClientData.pop();
+                }
+
+                ClientDataMemory.Resize(ClientDataMemory.GetSize() - extractedSize);
+            }
+
             YDB_LOG_TRACE("ExtractClientData",
                 {"logPrefix", LogPrefix},
                 {"numberBatches", result.size()});
@@ -299,6 +312,8 @@ private:
             auto newNumberRows = NumberRows;
             auto newDataPackerSize = DataPackerSize;
             if (filter) {
+                FilteredOffsets.push_back(Offset);
+
                 Y_DEFER {
                     // Values allocated on parser allocator and should be released
                     FilteredRow.assign(Columns.size(), NYql::NUdf::TUnboxedValue());
@@ -312,12 +327,11 @@ private:
                     FilteredRow[i++] = parsedData[rowId];
                 }
                 with_lock(Self.Alloc) {
-                    FilteredOffsets.push_back(Offset);
-                    DataPacker->AddWideItem(FilteredRow.data(), FilteredRow.size());
+                    DataPacker.AddWideItem(FilteredRow.data(), FilteredRow.size());
                 }
 
                 ++newNumberRows;
-                newDataPackerSize = DataPacker->PackedSizeEstimate();
+                newDataPackerSize = DataPacker.PackedSizeEstimate();
             }
 
             OnWatermark(Offset, maybeWatermark);
@@ -358,14 +372,13 @@ private:
             }
 
             with_lock(Self.Alloc) {
-                const auto rowType = Self.ProgramBuilder->NewMultiType(columnTypes);
-                DataPacker = std::make_unique<TMemoryLimitedDataPacker>(rowType, Self.Config.MemoryQuotaManager);
+                DataPacker.SetPackerType(Self.ProgramBuilder->NewMultiType(columnTypes));
             }
             return TStatus::Success();
         }
 
         void FinishPacking() {
-            if (!DataPacker->IsEmpty() || !Watermark.Empty()) {
+            if (!DataPacker.IsEmpty() || !Watermark.Empty()) {
                 const TGuard<NKikimr::NMiniKQL::TScopedAlloc> guard(Self.Alloc);
                 YDB_LOG_TRACE("FinishPacking",
                     {"logPrefix", LogPrefix},
@@ -375,11 +388,10 @@ private:
                     FilteredOffsets.push_back(Offset);
                 }
 
-                auto offsetsMemory = std::make_shared<TMemoryQuota>(Self.Config.MemoryQuotaManager, "output offsets");
-                offsetsMemory->Resize(FilteredOffsets.size() * sizeof(ui64));
-                TVector<ui64> offsets(FilteredOffsets.begin(), FilteredOffsets.end());
-                auto data = HoldMemoryQuota(DataPacker->Finish(), std::move(offsetsMemory));
-                ClientData.emplace(NYql::MakeReadOnlyRope(std::move(data)), std::move(offsets), Watermark);
+                auto [data, size] = DataPacker.Finish();
+                ClientDataMemory.Add(size);
+                ClientData.emplace(NYql::MakeReadOnlyRope(std::move(data)), std::move(FilteredOffsets), Watermark, size, NumberRows, DataPackerSize);
+
                 NumberRows = 0;
                 DataPackerSize = 0;
                 FilteredOffsets.clear();
@@ -402,16 +414,17 @@ private:
         ui64 NumberRows = 0;
         ui64 DataPackerSize = 0;
         TVector<NYql::NUdf::TUnboxedValue> FilteredRow;  // Temporary value holder for DataPacket
-        std::unique_ptr<TMemoryLimitedDataPacker> DataPacker;
-        TVector<ui64, NKikimr::NMiniKQL::TMKQLAllocator<ui64>> FilteredOffsets;  // Offsets of current batch in DataPacker
+        TMemoryLimitedDataPacker DataPacker;
+        TVector<ui64> FilteredOffsets;  // Offsets of current batch in DataPacker
         TMaybe<TInstant> Watermark;
         TQueue<TDataBatch> ClientData;
+        TMemoryQuota ClientDataMemory;
     };
 
 public:
     TTopicFormatHandler(const TFormatHandlerConfig& config, const TSettings& settings, const TCountersDesc& counters)
         : TBase(&TTopicFormatHandler::StateFunc)
-        , TTypeParser(__LOCATION__, config.FunctionRegistry, counters.CopyWithNewMkqlCountersName("row_dispatcher"), config.MemoryQuotaManager)
+        , TTypeParser(__LOCATION__, config.FunctionRegistry, counters.CopyWithNewMkqlCountersName("row_dispatcher"), config.MemoryQuotaManager, "FormatHandlerAlloc")
         , Config(config)
         , Settings(settings)
         , LogPrefix(TStringBuilder() << "TTopicFormatHandler [" << Settings.ParsingFormat << "]: ")
@@ -503,7 +516,7 @@ public:
         }
     }
 
-    TQueue<TDataBatch> ExtractClientData(NActors::TActorId clientId) override {
+    TQueue<TDataBatch> ExtractClientData(NActors::TActorId clientId, ui64 maxBatchSize) override {
         if (FatalErrorStatus) {
             return {};
         }
@@ -512,7 +525,13 @@ public:
         if (it == Clients.end()) {
             return {};
         }
-        return it->second->ExtractClientData();
+
+        return it->second->ExtractClientData(maxBatchSize);
+    }
+
+    bool HasClientData(NActors::TActorId clientId) const override {
+        const auto it = Clients.find(clientId);
+        return !FatalErrorStatus && it != Clients.end() && it->second->HasData();
     }
 
     TStatus AddClient(IClientDataConsumer::TPtr client) override {
@@ -555,7 +574,7 @@ public:
 
         CreateFilters();
 
-        auto programHolder = CreateProgramHolder(clientHandler, Config.MemoryQuotaManager);
+        auto programHolder = CreateProgramHolder(clientHandler, Config.MemoryQuotaManager, Counters.Desc.ReadGroupSubgroup);
         if (auto status = Filters->AddPrograms(clientHandler, std::move(programHolder)); status.IsFail()) {
             RemoveClient(client->GetClientId());
             return status.AddParentIssue("Failed to create filter for new client");

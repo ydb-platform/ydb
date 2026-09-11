@@ -27,6 +27,21 @@ using namespace NRowDispatcher;
 
 namespace {
 
+NMonitoring::TDynamicCounterPtr GetReadGroupSubgroup(
+    NMonitoring::TDynamicCounterPtr counters,
+    const TString& topicPath,
+    const TString& readGroup,
+    const NYql::NPq::NProto::TDqPqTopicSource* source = nullptr)
+{
+    if (source) {
+        for (const auto& sensor : source->GetTaskSensorLabel()) {
+            counters = counters->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+        }
+    }
+    return counters->GetSubgroup("topic", SanitizeLabel(topicPath))
+        ->GetSubgroup("read_group", SanitizeLabel(readGroup));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TTopicSessionMetrics {
@@ -36,8 +51,7 @@ struct TTopicSessionMetrics {
         PartitionId = partitionId;
         EnableStreamingQueriesCounters = enableStreamingQueriesCounters;
         if (EnableStreamingQueriesCounters) {
-            const auto topicGroup = counters->GetSubgroup("topic", SanitizeLabel(topicPath));
-            ReadGroup = topicGroup->GetSubgroup("read_group", SanitizeLabel(readGroupName));
+            ReadGroup = GetReadGroupSubgroup(counters, topicPath, readGroupName);
             PartitionGroup = ReadGroup->GetSubgroup("partition", ToString(partitionId));
             PartitionGroup = PartitionGroup->GetSubgroup("host", "");   // This partition report metrics only on one host.
         }
@@ -140,6 +154,7 @@ private:
             , UseSsl(ev->Get()->Record.GetSource().GetUseSsl())
             , UseActorSystemThreads(ev->Get()->Record.GetSource().GetUseActorSystemThreadsInTopicClient())
             , ReadActorId(ev->Sender)
+            , InFlightMemory(self.Config.GetMemoryQuotaManager(), "InFlightMemory", GetReadGroupSubgroup(counters, self.TopicPath, readGroup, &ev->Get()->Record.GetSource()))
             , Counters(counters)
         {
             if (offset) {
@@ -237,7 +252,8 @@ private:
             if (!NextMessageOffset || *NextMessageOffset < offset + 1) {
                 NextMessageOffset = offset + 1;
             }
-            if (!QueuedRows) {
+            // A watermark-only batch must be sent before checkpointing its offset.
+            if (!QueuedRows && !Watermark) {
                 if (!ProcessedNextMessageOffset || *ProcessedNextMessageOffset < offset + 1) {
                     ProcessedNextMessageOffset = offset + 1;
                 }
@@ -268,6 +284,7 @@ private:
         bool DataArrivedSent = false;
         std::optional<ui64> NextMessageOffset;          // offset to restart topic session
         TMaybe<ui64> ProcessedNextMessageOffset;        // offset of fully processed data (to save to checkpoint)
+        TMemoryQuota InFlightMemory;
 
         // Metrics
         ui64 InitialOffset = 0;
@@ -464,7 +481,7 @@ TTopicSession::TTopicSession(
     , FunctionRegistry(functionRegistry)
     , BufferSize(maxBufferSize)
     , LogPrefix("TopicSession")
-    , ReadSessionMemory(config.GetMemoryQuotaManager(), "topic read session")
+    , ReadSessionMemory(config.GetMemoryQuotaManager(), "ReadSessionMemory", GetReadGroupSubgroup(counters, topicPath, readGroup))
     , Counters(counters)
     , CountersRoot(countersRoot)
     , EnableStreamingQueriesCounters(enableStreamingQueriesCounters)
@@ -606,7 +623,7 @@ void TTopicSession::CreateTopicSession() {
     if (!ReadSession) {
         // Use any sourceParams.
         const auto& client = Clients.begin()->second;
-        ReadSessionMemory.Resize(BufferSize);
+        ReadSessionMemory.Reserve(BufferSize);
         ReadSession = GetTopicClient(client->UseSsl, client->UseActorSystemThreads).CreateReadSession(GetReadSessionSettings(client->ConsumerName));
         StartingMessageTimestamp = GetMinStartingMessageTimestamp();
         SubscribeOnNextEvent();
@@ -665,13 +682,16 @@ void TTopicSession::Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
         {"logPrefix", LogPrefix},
         {"sender", ev->Sender});
     Metrics.InFlyAsyncInputData->Set(0);
-    auto it = Clients.find(ev->Sender);
+
+    const auto it = Clients.find(ev->Sender);
     if (it == Clients.end()) {
         YDB_LOG_ERROR("TEvGetNextBatch, got wrong client",
             {"logPrefix", LogPrefix},
             {"sender", ev->Sender});
         return;
     }
+
+    it->second->InFlightMemory.Resize(0);
     SendData(*it->second);
     SubscribeOnNextEvent();
 }
@@ -716,7 +736,6 @@ void TTopicSession::CloseTopicSession() {
         {"logPrefix", LogPrefix});
     ReadSession->Close(TDuration::Zero());
     ReadSession.reset();
-    ReadSessionMemory.Resize(0);
 }
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
@@ -834,8 +853,10 @@ void TTopicSession::SendToParsing(const std::vector<NYdb::NTopic::TReadSessionEv
 
 void TTopicSession::SendData(TClientsInfo& info) {
     TQueue<TDataBatch> buffer;
+    bool hasMoreData = false;
     if (const auto formatIt = FormatHandlers.find(info.HandlerSettings); formatIt != FormatHandlers.end()) {
-        buffer = formatIt->second->ExtractClientData(info.GetClientId());
+        buffer = formatIt->second->ExtractClientData(info.GetClientId(), MAX_BATCH_SIZE);
+        hasMoreData = formatIt->second->HasClientData(info.GetClientId());
     }
 
     info.DataArrivedSent = false;
@@ -843,8 +864,6 @@ void TTopicSession::SendData(TClientsInfo& info) {
         YDB_LOG_TRACE("Buffer empty",
             {"logPrefix", LogPrefix});
     }
-    ui64 dataSize = 0;
-    ui64 eventsSize = info.QueuedRows;
 
     if (!info.NextMessageOffset) {
         YDB_LOG_ERROR("Try SendData() without NextMessageOffset",
@@ -855,51 +874,51 @@ void TTopicSession::SendData(TClientsInfo& info) {
         return;
     }
 
-    do {
-        auto event = std::make_unique<TEvRowDispatcher::TEvMessageBatch>();
-        event->Record.SetPartitionId(PartitionId);
-        event->ReadActorId = info.ReadActorId;
+    auto event = std::make_unique<TEvRowDispatcher::TEvMessageBatch>();
+    event->Record.SetPartitionId(PartitionId);
+    event->ReadActorId = info.ReadActorId;
 
-        ui64 batchSize = 0;
-        while (!buffer.empty()) {
-            auto [serializedData, offsets, watermark] = std::move(buffer.front());
-            Y_ENSURE(!offsets.empty(), "Expected non empty message batch");
-            buffer.pop();
+    ui64 memorySize = 0;
+    ui64 eventsSize = 0;
+    ui64 queuedBytes = 0;
+    while (!buffer.empty()) {
+        auto [serializedData, offsets, watermark, totalSize, rows, batchDataSize] = std::move(buffer.front());
+        Y_ENSURE(!offsets.empty(), "Expected non empty message batch");
+        buffer.pop();
 
-            batchSize += serializedData.GetSize();
+        memorySize += totalSize;
+        eventsSize += rows;
+        queuedBytes += batchDataSize;
 
-            event->Record.SetNextMessageOffset(offsets.back() + 1);
-            auto* message = event->Record.AddMessages();
-            message->SetPayloadId(event->AddPayload(std::move(serializedData)));
-            message->MutableOffsets()->Assign(offsets.begin(), offsets.end());
-            if (watermark) {
-                message->AddWatermarksUs(watermark->MicroSeconds());
-            }
-
-            if (batchSize > MAX_BATCH_SIZE) {
-                break;
-            }
+        event->Record.SetNextMessageOffset(offsets.back() + 1);
+        auto* message = event->Record.AddMessages();
+        message->SetPayloadId(event->AddPayload(std::move(serializedData)));
+        message->MutableOffsets()->Assign(offsets.begin(), offsets.end());
+        if (watermark) {
+            message->AddWatermarksUs(watermark->MicroSeconds());
         }
-        dataSize += batchSize;
-        if (buffer.empty()) {
-            event->Record.SetNextMessageOffset(*info.NextMessageOffset);
-        }
-        YDB_LOG_TRACE("SendData to read actor",
-            {"logPrefix", LogPrefix},
-            {"readActorId", info.ReadActorId},
-            {"messagesSize", event->Record.MessagesSize()});
-        Send(RowDispatcherActorId, event.release());
-    } while(!buffer.empty());
+    }
 
-    QueuedBytes -= info.QueuedBytes;
-    Metrics.QueuedBytes->Sub(info.QueuedBytes);
-    info.QueuedRows = 0;
-    info.QueuedBytes = 0;
-    info.Watermark.Clear();
+    info.InFlightMemory.Add(memorySize);
+    Y_ENSURE(info.QueuedRows >= eventsSize && info.QueuedBytes >= queuedBytes);
+    info.QueuedRows -= eventsSize;
+    info.QueuedBytes -= queuedBytes;
+    QueuedBytes -= queuedBytes;
+    Metrics.QueuedBytes->Sub(queuedBytes);
 
-    info.FilteredStat.Add(dataSize, eventsSize);
-    info.FilteredDataRate->Add(dataSize);
-    info.ProcessedNextMessageOffset = *info.NextMessageOffset;
+    if (!hasMoreData) {
+        event->Record.SetNextMessageOffset(*info.NextMessageOffset);
+        info.Watermark.Clear();
+    }
+    YDB_LOG_TRACE("SendData to read actor",
+        {"logPrefix", LogPrefix},
+        {"readActorId", info.ReadActorId},
+        {"messagesSize", event->Record.MessagesSize()});
+    info.ProcessedNextMessageOffset = event->Record.GetNextMessageOffset();
+    Send(RowDispatcherActorId, event.release());
+    info.FilteredStat.Add(queuedBytes, eventsSize);
+    info.FilteredDataRate->Add(queuedBytes);
+    SendDataArrived(info);
 }
 
 void TTopicSession::StartClientSession(TClientsInfo& info) {
@@ -952,12 +971,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     if (formatIt == FormatHandlers.end()) {
         auto config = CreateFormatHandlerConfig(Config, FunctionRegistry, CompileServiceActorId, source.GetSkipJsonErrors());
 
-        auto readGroupSubgroup = Counters;
-        for (const auto& sensor : ev->Get()->Record.GetSource().GetTaskSensorLabel()) {
-            readGroupSubgroup = readGroupSubgroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
-        }
-        readGroupSubgroup = readGroupSubgroup->GetSubgroup("topic", SanitizeLabel(TopicPath));
-        readGroupSubgroup = readGroupSubgroup->GetSubgroup("read_group", SanitizeLabel(ReadGroup));
+        auto readGroupSubgroup = GetReadGroupSubgroup(Counters, TopicPath, ReadGroup, &source);
 
         formatIt = FormatHandlers.emplace(handlerSettings, CreateTopicFormatHandler(
             ActorContext(),
@@ -1100,7 +1114,6 @@ void TTopicSession::StopReadSession() {
         ReadSession.reset();
     }
     TopicClient.Reset();
-    ReadSessionMemory.Resize(0);
 }
 
 void TTopicSession::SendDataArrived(TClientsInfo& info) {

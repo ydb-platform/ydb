@@ -87,11 +87,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "database"_a = TStreamingTestFixture::YDB_DATABASE));
     }
 
-    void WaitForRowDispatcherMemoryLimit(TStreamingTestFixture& self, const TString& expectedReason) {
+    void WaitForRowDispatcherMemoryLimit(TStreamingTestFixture& self, const TString& memoryName) {
         WaitFor(TDuration::Seconds(60), "Row Dispatcher memory limit", [&](TString& error) {
             error = self.GetStreamingQueryIssues("memoryLimitQuery");
             return error.contains("Row dispatcher memory limit exceeded")
-                && error.contains(expectedReason) && error.contains("failed with code OVERLOADED");
+                && error.contains("bytes for " + memoryName) && error.contains("failed with code OVERLOADED");
         });
         UNIT_ASSERT_GT(self.GetCounters()->GetCounter("RM/NotEnoughMemory", true)->Val(), 0);
         self.ExecQuery("ALTER STREAMING QUERY memoryLimitQuery SET (RUN = FALSE);");
@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 );
             END DO;)", "columns"_a = TString(columns), "schema"_a = TString(schema)));
 
-        WaitForRowDispatcherMemoryLimit(*this, "bytes for parser data");
+        WaitForRowDispatcherMemoryLimit(*this, "JsonParserAlloc");
         const auto formatCounters = GetCounters()->GetSubgroup("subsystem", "row_dispatcher")->GetSubgroup("format", "json_each_row");
         UNIT_ASSERT(!formatCounters->FindCounter("ActiveFilters"));
         UNIT_ASSERT(!pqGateway->ExtractReadSession("memoryLimitInput"));
@@ -139,7 +139,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             END DO;
         )");
 
-        WaitForRowDispatcherMemoryLimit(*this, "failed to reserve 16000000 bytes for topic read session");
+        WaitForRowDispatcherMemoryLimit(*this, "ReadSessionMemory");
         const auto formatCounters = GetCounters()->GetSubgroup("subsystem", "row_dispatcher")->GetSubgroup("format", "raw");
         UNIT_ASSERT(formatCounters->FindCounter("ActiveFilters"));
         UNIT_ASSERT(!pqGateway->ExtractReadSession("memoryLimitInput"));
@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         });
         ReadTopicMessages("memoryLimitOutput", {"small"});
         WriteTopicMessage("memoryLimitInput", "{\"value\":\"" + std::string(8_MB, 'x') + "\"}");
-        WaitForRowDispatcherMemoryLimit(*this, "bytes for JSON parser scratch space");
+        WaitForRowDispatcherMemoryLimit(*this, "SimdJsonMemory");
     }
 
     Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingWithSchemaSecretsTestFixture) {

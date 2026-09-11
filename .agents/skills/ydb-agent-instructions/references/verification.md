@@ -10,7 +10,7 @@
 
 ## Safe commands
 
-Run these freely: help and version commands; dry runs (`git add -n`, `scaffold.py --dry-run`); script tests; a build of one small target (`./ya make --build relwithdebinfo <small folder>`); the discovery commands from `tool-compatibility.md`. `./ya`, `codex`, `opencode` and `claude -p` write under the home directory; in a sandbox that forbids this, run them outside the sandbox.
+Run these freely: help and version commands; dry runs (`git add -n`, `scaffold.py --dry-run`); script tests; a build of one small target (`./ya make --build relwithdebinfo <small folder>`); the discovery commands from `tool-compatibility.md`.
 
 Do not run these only to check a document: test runs with `-tA` of large folders; anything that needs credentials or a cluster; anything that writes outside your change. The first `./ya` run downloads the tool into the home directory; that is allowed.
 
@@ -64,11 +64,11 @@ Do not trust the author. Do not guess. Read every file in the list and every fil
 Check and report:
 1. Steps. Can a mid-size model follow every step without extra knowledge? Name each step that needs a guess.
 2. Minimum. For each sentence and section, ask whether removing it would change what an agent does. Name each one that can be removed.
-3. Duplication. Run python3 ydb/agents/.agents/skills/ydb-agent-instructions/scripts/find.py "<topic>" and read the listed files. Name each overlap and each contradiction.
+3. Duplication. Run python3 .agents/skills/ydb-agent-instructions/scripts/find.py "<topic>" and read the listed files. Name each overlap and each contradiction.
 4. Placement. Is each file in the narrowest directory that fits? Name each file that could move closer to the code.
 5. Links and paths. Resolve each relative link and each path in text. Name each one that does not exist.
 6. Commands. Run each command that is safe: help commands, dry runs, and
-   python3 ydb/agents/.agents/skills/ydb-agent-instructions/scripts/check.py <dir>
+   python3 .agents/skills/ydb-agent-instructions/scripts/check.py <dir>
    Name each command that fails or that you could not run.
 7. Scripts. For each scripts/<name>.py run
    python3.9 -m unittest discover -s <skill>/scripts/tests   (or python3 when 3.9 is absent)

@@ -41,10 +41,9 @@ class Fixture(unittest.TestCase):
         owner = os.path.join(self.root, rel_dir)
         skill_md = os.path.join(owner, ".agents", "skills", name, "SKILL.md")
         write(skill_md, skill_text(name, body=body) if body else skill_text(name))
-        pointer = ".agents/skills/%s/SKILL.md" % name
-        write(os.path.join(owner, "AGENTS.md"), agents_text if agents_text is not None else "# Foo\n\nRead %s.\n" % pointer)
+        write(os.path.join(owner, "AGENTS.md"), agents_text if agents_text is not None else "# Foo\n\nA rule.\n")
         if with_claude_md:
-            write(os.path.join(owner, "CLAUDE.md"), "@./AGENTS.md\n")
+            write(os.path.join(owner, "CLAUDE.md"), "%s\n\n%s\n- .agents/skills/%s/SKILL.md: Demo skill. Not for real use.\n" % (check.CLAUDE_INCLUDE, check.CLAUDE_SKILLS_HEADER, name))
         return owner, skill_md
 
     def run_check(self, *paths, **kwargs):
@@ -75,7 +74,7 @@ class SkillTests(Fixture):
             owner = os.path.join(self.root, "ydb", "bad")
             shutil.rmtree(owner, ignore_errors=True)
             write(os.path.join(owner, ".agents", "skills", bad, "SKILL.md"), skill_text(bad))
-            write(os.path.join(owner, "AGENTS.md"), "# Bad\n\nRead .agents/skills/%s/SKILL.md.\n" % bad)
+            write(os.path.join(owner, "AGENTS.md"), "# Bad\n\nA rule.\n")
             code, out = self.run_check(owner)
             self.assertEqual(code, 1, bad)
             self.assertTrue("name must be ydb-" in out or "limit is 64" in out, (bad, out))
@@ -124,20 +123,26 @@ class SkillTests(Fixture):
         code, out = self.run_check(owner)
         self.assertEqual(code, 1)
         self.assertIn("description still holds TODO", out)
+        # a changed description is checked on the skill file alone; CLAUDE.md would need the new text
         write(skill_md, "---\nname: ydb-demo-skill\ndescription: \"first line\n  second line\"\n---\n\n# D\n")
-        code, out = self.run_check(owner, strict=True)
+        code, out = self.run_check(skill_md, strict=True)
         self.assertEqual(code, 0, out)
         write(skill_md, "---\nname: ydb-demo-skill\ndescription: >\n  first\n  second\n---\n\n# D\n")
+        code, out = self.run_check(skill_md, strict=True)
+        self.assertEqual(code, 0, out)
+
+    def test_extra_frontmatter_keys_are_allowed(self):
+        owner, skill_md = self.make_skill()
+        write(skill_md, "---\nname: ydb-demo-skill\ndescription: \"Demo skill. Not for real use.\"\nallowed-tools: Read Grep\npaths:\n  - \"**/*.md\"\nmetadata:\n  owner: x\n---\n\n# D\n")
         code, out = self.run_check(owner, strict=True)
         self.assertEqual(code, 0, out)
 
-    def test_extra_frontmatter_key_is_warning(self):
+    def test_claude_md_must_follow_a_changed_description(self):
         owner, skill_md = self.make_skill()
-        write(skill_md, "---\nname: ydb-demo-skill\ndescription: \"d\"\nmodel: opus\n---\n\n# D\n")
+        write(skill_md, skill_text("ydb-demo-skill", description="New text."))
         code, out = self.run_check(owner)
-        self.assertEqual(code, 0)
-        self.assertIn("not portable", out)
-        self.assertEqual(self.run_check(owner, strict=True)[0], 1)
+        self.assertEqual(code, 1)
+        self.assertIn("must list the skill ydb-demo-skill as: - .agents/skills/ydb-demo-skill/SKILL.md: New text.", out)
 
     def test_todo_line_is_warning(self):
         owner, _ = self.make_skill(body="# D\n\nTODO: fill me.\n")
@@ -151,22 +156,32 @@ class SkillTests(Fixture):
         code, out = self.run_check(owner)
         self.assertEqual(code, 1)
         self.assertIn("every skill needs a sibling AGENTS.md", out)
-        owner, _ = self.make_skill(rel_dir="ydb/bar", name="ydb-bar-skill", agents_text="# Bar\n", with_claude_md=False)
+        owner, _ = self.make_skill(rel_dir="ydb/bar", name="ydb-bar-skill", with_claude_md=False)
         code, out = self.run_check(owner)
         self.assertEqual(code, 0)
-        self.assertIn("does not point to", out)
         self.assertIn("CLAUDE.md:0: missing", out)
 
     def test_claude_md_content(self):
         owner, _ = self.make_skill()
-        write(os.path.join(owner, "CLAUDE.md"), "Some rules\n")
+        claude_md = os.path.join(owner, "CLAUDE.md")
+        write(claude_md, "Some rules\n")
         code, out = self.run_check(owner)
         self.assertEqual(code, 1)
-        self.assertIn("must contain the single line", out)
-        write(os.path.join(owner, "CLAUDE.md"), "@./AGENTS.md\n\nExtra.\n")
+        self.assertIn("must contain the line @./AGENTS.md", out)
+        write(claude_md, "@./AGENTS.md\n")
+        code, out = self.run_check(owner)
+        self.assertEqual(code, 1)
+        self.assertIn("must contain the line: Skills, read the one", out)
+        self.assertIn("must list the skill ydb-demo-skill as: - .agents/skills/ydb-demo-skill/SKILL.md: Demo skill. Not for real use.", out)
+        write(claude_md, "%s\n%s\n- .agents/skills/ydb-demo-skill/SKILL.md: Demo skill. Not for real use.\nExtra.\n" % (check.CLAUDE_INCLUDE, check.CLAUDE_SKILLS_HEADER))
         code, out = self.run_check(owner)
         self.assertEqual(code, 0)
         self.assertIn("has extra content", out)
+        path = os.path.join(self.root, "ydb", "plain", "CLAUDE.md")
+        write(path, "@./AGENTS.md\n")
+        write(os.path.join(self.root, "ydb", "plain", "AGENTS.md"), "# Plain\n")
+        code, out = self.run_check(path, strict=True)
+        self.assertEqual(code, 0, out)
 
     def test_claude_symlink_and_claude_skills_are_errors(self):
         owner, _ = self.make_skill()
@@ -283,6 +298,13 @@ class AgentsAndClaudeTests(Fixture):
             code, out = self.run_check(path)
             self.assertEqual(code, 0)
             self.assertIn("budget is %d" % check.AGENTS_MAX_LINES, out)
+
+    def test_todo_in_agents_is_warning(self):
+        path = os.path.join(self.root, "ydb", "bar", "AGENTS.md")
+        write(path, "# Bar\n\nTODO: rules.\n")
+        code, out = self.run_check(path)
+        self.assertEqual(code, 0)
+        self.assertIn("TODO line left", out)
 
     def test_agents_chain_over_limit_is_error(self):
         write(os.path.join(self.root, "AGENTS.md"), "x" * (check.AGENTS_CHAIN_MAX_BYTES + 1))

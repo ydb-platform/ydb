@@ -1,6 +1,7 @@
 /*.md @ydb-platform/docs
 
 /AGENTS.md @ydb-platform/ai-reviewers
+/.agents/ @ydb-platform/ai-reviewers
 
 /BUILD.md @ydb-platform/ci
 

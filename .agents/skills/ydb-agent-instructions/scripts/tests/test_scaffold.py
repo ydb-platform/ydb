@@ -65,9 +65,9 @@ class ScaffoldTests(unittest.TestCase):
         self.assertEqual(code, 0, out)
         parts = self.parts()
         self.assertIn("name: ydb-demo-skill", read(parts["skill"]))
-        self.assertIn("read .agents/skills/ydb-demo-skill/SKILL.md.", read(parts["agents"]))
+        self.assertIn("TODO: one or two rules", read(parts["agents"]))
         self.assertIn("Build and test commands: ydb/agents/GUIDE.md.", read(parts["agents"]))
-        self.assertEqual(read(parts["claude"]), "@./AGENTS.md\n")
+        self.assertEqual(read(parts["claude"]), "@./AGENTS.md\n\nSkills, read the one that matches your task:\n- .agents/skills/ydb-demo-skill/SKILL.md: %s\n" % DESCRIPTION)
         self.assertFalse(os.path.lexists(os.path.join(self.target, ".claude")))
         self.assertIn("0 errors", out)
         self.assertNotIn("ERROR", out)
@@ -96,17 +96,27 @@ class ScaffoldTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("is not a file", out)
 
-    def test_claude_md_with_include_and_extra_text_is_accepted(self):
-        write(os.path.join(self.target, "CLAUDE.md"), "@./AGENTS.md\n\nExtra.\n")
+    def test_claude_md_with_include_only_gets_a_manual_step(self):
+        write(os.path.join(self.target, "CLAUDE.md"), "@./AGENTS.md\n")
         code, out = self.run_scaffold(self.target, "ydb-demo-skill")
+        self.assertIn("MANUAL STEP", out)
+        self.assertIn("- .agents/skills/ydb-demo-skill/SKILL.md: " + DESCRIPTION, out)
+        self.assertEqual(read(os.path.join(self.target, "CLAUDE.md")), "@./AGENTS.md\n")
+
+    def test_second_skill_is_added_to_a_new_claude_md_list(self):
+        self.run_scaffold(self.target, "ydb-demo-skill")
+        os.remove(os.path.join(self.target, "CLAUDE.md"))
+        code, out = self.run_scaffold(self.target, "ydb-other-skill", "--description", "Other.")
         self.assertEqual(code, 0, out)
-        self.assertIn("exists with the include line", out)
+        text = read(os.path.join(self.target, "CLAUDE.md"))
+        self.assertIn("- .agents/skills/ydb-demo-skill/SKILL.md: " + DESCRIPTION, text)
+        self.assertIn("- .agents/skills/ydb-other-skill/SKILL.md: Other.", text)
 
     def test_existing_agents_md_is_not_edited(self):
         write(os.path.join(self.target, "AGENTS.md"), "# Foo\n")
         code, out = self.run_scaffold(self.target, "ydb-demo-skill")
-        self.assertEqual(code, 0)
-        self.assertIn("MANUAL STEP", out)
+        self.assertEqual(code, 0, out)
+        self.assertIn("exists, not touched", out)
         self.assertEqual(read(os.path.join(self.target, "AGENTS.md")), "# Foo\n")
 
     def test_root_dir_is_named_in_text(self):

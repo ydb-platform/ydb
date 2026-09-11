@@ -11,9 +11,19 @@ Every row comes from the linked documentation. When you change this file, read t
 | GitHub Copilot | `.github/skills`, `.claude/skills`, `.agents/skills` | `AGENTS.md` anywhere in the repo, the nearest one wins; `.github/copilot-instructions.md`; a root `CLAUDE.md` or `GEMINI.md` | the nearest `AGENTS.md` in the directory tree | https://docs.github.com/en/copilot/concepts/agents/about-agent-skills, https://docs.github.com/en/copilot/how-tos/configure-custom-instructions/add-repository-instructions |
 | Gemini CLI | `.gemini/skills` or its alias `.agents/skills` | `GEMINI.md` by default; `AGENTS.md` only when `context.fileName` in `settings.json` lists it; `@file.md` imports | context files load from the root and from subdirectories on demand | https://geminicli.com/docs/cli/skills/, https://geminicli.com/docs/cli/gemini-md/ |
 
-Frontmatter that every tool accepts: `name` and `description`; Codex, Cursor and OpenCode require both, Claude Code treats them as optional. Use the folder name as `name`; Cursor and OpenCode require that. Other keys are tool specific; do not use them.
+Frontmatter that every tool accepts: `name` and `description`; Codex, Cursor and OpenCode require both, Claude Code treats them as optional. Use the folder name as `name`; Cursor and OpenCode require that.
 
-The layout in `placement.md` follows from the table. `.agents/skills` serves every tool except Claude Code. `AGENTS.md` holds the text and `CLAUDE.md` includes it, so Claude Code loads the text when it works on files in that directory and then reaches the skill by the path written there. Symlinks are not used: they break repository synchronization. The link line in the root `AGENTS.md` serves every tool for sessions that start at the repo root. Gemini CLI reads `AGENTS.md` only when the user configured it; there is no repo-wide `GEMINI.md`.
+Other keys are read by some tools and ignored by the rest, so add them when a tool works better with them. A key costs no context: tools parse the frontmatter and show only the description. Claude Code and OpenCode document that unknown keys are ignored; Codex and OpenCode were checked with a skill that carried `allowed-tools`, `paths` and `metadata` and still listed it. When two tools name the same thing differently, set both.
+
+| Key | Meaning | Read by | Source |
+|---|---|---|---|
+| `allowed-tools` | tools pre-approved while the skill runs, space-separated | Claude Code; Agent Skills specification (experimental) | https://code.claude.com/docs/en/skills, https://agentskills.io/specification |
+| `paths` | globs of files the skill applies to | Claude Code, Cursor | https://code.claude.com/docs/en/skills, https://cursor.com/docs/skills |
+| `disable-model-invocation` | only the user may start the skill | Claude Code, Cursor; Codex uses `policy.allow_implicit_invocation: false` in `agents/openai.yaml` | https://cursor.com/docs/skills, https://learn.chatgpt.com/docs/build-skills |
+| `model`, `context`, `agent`, `hooks`, `effort` | Claude Code run options | Claude Code | https://code.claude.com/docs/en/skills |
+| `license`, `compatibility`, `metadata` | notes for humans and tools | Agent Skills specification, OpenCode, Cursor (`metadata`) | https://agentskills.io/specification, https://opencode.ai/docs/skills/ |
+
+The layout in `placement.md` follows from the table. `.agents/skills` serves every tool except Claude Code. `AGENTS.md` holds the text; `CLAUDE.md` includes it and lists every skill of the directory with its path and description, so Claude Code loads both when it works on files in that directory and then reads the matching `SKILL.md`. A line that only names the `.agents/skills` directory is not enough: a small model then picks a skill from another directory. Symlinks are not used: they break repository synchronization. Gemini CLI reads `AGENTS.md` only when the user configured it; there is no repo-wide `GEMINI.md`.
 
 ## Forms that only some tools read
 
@@ -37,7 +47,7 @@ Use them only after the human chose "keep the limit" (Rule 7).
 
 ## Test that a tool sees the files
 
-Run from the directory that holds the new `AGENTS.md`. The commands read the repo only, but the tools write their own state under the home directory.
+Run from the directory that holds the new `AGENTS.md`.
 
 ```bash
 # Claude Code: the pointer reaches the model; expect the sentence from AGENTS.md
@@ -47,8 +57,9 @@ claude -p "Quote the line of your project instructions that names a SKILL.md fil
 # grep a phrase from the description, because the name also appears in AGENTS.md; expect 1 or more
 codex debug prompt-input "hi" | grep -c '<a phrase from the description>'
 
-# OpenCode: the skill is listed once (the command is described by `opencode debug --help`); expect 1
-opencode debug skill | grep -c '"name": "<skill-name>"'
+# OpenCode: the skill is listed once (the command is described by `opencode debug --help`); expect 1.
+# Write to a file first: on a pipe OpenCode 1.2 exits before the output is flushed and the JSON is cut off
+opencode debug skill > skills.json; grep -c '"name": "<skill-name>"' skills.json; rm skills.json
 ```
 
 Cursor, Copilot and Gemini CLI have no command line check here. Open the repo in the tool, edit a file in the directory, and confirm the skill is listed once.

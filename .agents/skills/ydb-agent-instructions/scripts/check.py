@@ -30,6 +30,7 @@ AGENTS_MAX_LINES = 50
 AGENTS_CHAIN_MAX_BYTES = 32 * 1024
 SENTENCE_MAX_WORDS = 40
 CLAUDE_INCLUDE = "@./AGENTS.md"
+CLAUDE_SKILLS_HEADER = "Skills, read the one that matches your task:"
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 PATH_RE = re.compile(r"(?<![\w@/.-])((?:\.\.?/)?[\w.-]+(?:/[\w.-]+)+\.(?:md|py))\b")
 TODO_RE = re.compile(r"^\s*(?:[-*]\s+)?TODO\b")
@@ -345,29 +346,21 @@ def check_skill(path, root, report):
         report.error(path, 1, "description has %d characters; limit is %d" % (len(description), DESCRIPTION_MAX_CHARS))
     elif "TODO" in description:
         report.error(path, 1, "description still holds TODO; write the real description")
-    for key in fields:
-        if key not in ("name", "description"):
-            report.warn(path, 1, "frontmatter key %r is not portable; keep only name and description" % key)
     if len(lines) > SKILL_HARD_LINES:
         report.error(path, len(lines), "SKILL.md has %d lines; hard limit is %d" % (len(lines), SKILL_HARD_LINES))
     elif len(lines) > SKILL_SOFT_LINES:
         report.warn(path, len(lines), "SKILL.md has %d lines; move detail to references/" % len(lines))
     check_paths(path, text, root, report)
     check_sentences(path, text, body_start + 1, report)
-    for number, line in enumerate(lines, start=1):
-        if TODO_RE.match(line):
-            report.warn(path, number, "TODO line left from the template; replace it")
+    check_todo_lines(path, lines, report)
 
     skill_dir = os.path.dirname(path)
-    rel_skill = os.path.relpath(path, owner_dir)
     agents_md = os.path.join(owner_dir, "AGENTS.md")
     if not os.path.isfile(agents_md):
-        report.error(agents_md, 0, "missing; every skill needs a sibling AGENTS.md that points to it")
-    elif rel_skill not in (load_text(agents_md, report) or ""):
-        report.warn(agents_md, 0, "does not point to %s" % rel_skill)
+        report.error(agents_md, 0, "missing; every skill needs a sibling AGENTS.md with the rules of its directory")
     claude_md = os.path.join(owner_dir, "CLAUDE.md")
     if not os.path.isfile(claude_md):
-        report.warn(claude_md, 0, "missing; Claude Code reads CLAUDE.md, create it with the single line %s" % CLAUDE_INCLUDE)
+        report.warn(claude_md, 0, "missing; Claude Code reads CLAUDE.md, create it with %s, the line %r and one line per skill" % (CLAUDE_INCLUDE, CLAUDE_SKILLS_HEADER))
     claude_dir = os.path.join(owner_dir, ".claude")
     if os.path.islink(claude_dir):
         report.error(claude_dir, 0, "is a symlink; symlinks are not used, Claude Code reaches the skill through CLAUDE.md")
@@ -388,6 +381,12 @@ def check_skill(path, root, report):
     ignored = ignored_paths(committed, root)
     for item in sorted(ignored or ()):
         report.error(item, 0, "is ignored by git; it must be committed")
+
+
+def check_todo_lines(path, lines, report):
+    for number, line in enumerate(lines, start=1):
+        if TODO_RE.match(line):
+            report.warn(path, number, "TODO line left from the template; replace it")
 
 
 def agents_chain_bytes(path, root):
@@ -416,21 +415,49 @@ def check_agents(path, root, report):
         report.error(path, 0, "AGENTS.md files from the repo root to here total %d bytes; Codex drops files once the total reaches 32 KiB" % chain)
     check_paths(path, text, root, report)
     check_sentences(path, text, 1, report)
+    check_todo_lines(path, lines, report)
+
+
+def skill_lines(owner_dir):
+    """The CLAUDE.md line expected for every skill in <owner_dir>/.agents/skills."""
+    skills_dir = os.path.join(owner_dir, ".agents", "skills")
+    expected = {}
+    if not os.path.isdir(skills_dir):
+        return expected
+    for name in sorted(os.listdir(skills_dir)):
+        skill_md = os.path.join(skills_dir, name, "SKILL.md")
+        if not os.path.isfile(skill_md):
+            continue
+        try:
+            fields, _, error = parse_frontmatter(read_text(skill_md).splitlines())
+        except UnicodeDecodeError:
+            continue
+        description = (fields or {}).get("description", "") if not error else ""
+        expected[name] = "- .agents/skills/%s/SKILL.md: %s" % (name, description)
+    return expected
 
 
 def check_claude(path, root, report):
     text = load_text(path, report)
     if text is None:
         return
-    agents_md = os.path.join(os.path.dirname(path), "AGENTS.md")
-    if text.strip() == CLAUDE_INCLUDE:
-        if not os.path.isfile(agents_md):
-            report.error(path, 1, "includes AGENTS.md but AGENTS.md does not exist next to it")
-        return
-    if CLAUDE_INCLUDE in text:
-        report.warn(path, 1, "has extra content; keep only the line %s and put rules into AGENTS.md" % CLAUDE_INCLUDE)
-    else:
-        report.error(path, 1, "must contain the single line %s; rules belong in AGENTS.md" % CLAUDE_INCLUDE)
+    owner_dir = os.path.dirname(path)
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if CLAUDE_INCLUDE not in lines:
+        report.error(path, 1, "must contain the line %s; rules belong in AGENTS.md" % CLAUDE_INCLUDE)
+    elif not os.path.isfile(os.path.join(owner_dir, "AGENTS.md")):
+        report.error(path, 1, "includes AGENTS.md but AGENTS.md does not exist next to it")
+    expected = skill_lines(owner_dir)
+    if expected and CLAUDE_SKILLS_HEADER not in lines:
+        report.error(path, 1, "must contain the line: %s" % CLAUDE_SKILLS_HEADER)
+    for name, line in expected.items():
+        if line not in lines:
+            report.error(path, 1, "must list the skill %s as: %s" % (name, line))
+    allowed = {CLAUDE_INCLUDE, CLAUDE_SKILLS_HEADER} | set(expected.values())
+    for line in lines:
+        if line not in allowed:
+            report.warn(path, 1, "has extra content; keep only the include and the skill lines, put rules into AGENTS.md")
+            break
 
 
 def classify(path):

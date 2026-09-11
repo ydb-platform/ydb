@@ -5,11 +5,11 @@
 | The rule is about | Put it in | Form |
 |---|---|---|
 | One directory, one or two sentences | `<dir>/AGENTS.md` | a line |
-| One directory, a task with steps | `<dir>/.agents/skills/<name>/SKILL.md` | a skill, plus one pointer line in `<dir>/AGENTS.md` |
+| One directory, a task with steps | `<dir>/.agents/skills/<name>/SKILL.md` | a skill |
 | Several directories changed together by one team | the closest common parent, same forms as above | |
 | A directory that already has `RULES.md` or `rules/*.md` (plain files reached by a pointer from `AGENTS.md`; no tool loads them on its own) | that existing file | keep its form; do not start a second one |
-| The whole repo (build, tests, style, safety) | `ydb/agents/<FILE>.md` | a doc, pointed to from `ydb/agents/GUIDE.md` |
-| Every session of every developer | root `AGENTS.md` | one link line, with a written reason |
+| The whole repo (build, tests, style, safety) | `ydb/agents/<FILE>.md` | a doc, plus one line in the root `AGENTS.md`: what it is and when to read it |
+| Every session of every developer | root `.agents/skills/<name>/` or root `AGENTS.md` | a skill, or one line, with a written reason |
 
 `<dir>` is the directory that holds the code the rule is about, for example `ydb/core/blobstorage/pdisk`.
 
@@ -19,13 +19,13 @@ A rule in a file that loads at start is paid for in every session, also when the
 
 ## Root placement needs a reason
 
-Answer these questions in the pull request:
+Every tool shows the description of every root skill in every session, so answer these questions in the pull request:
 
 1. Which tasks need this rule in every session, in every directory?
-2. Why is a link from the root file to a nested file not enough?
-3. How many lines does it add to the root file?
+2. Why is a nested file not enough?
+3. How much does it add to what every session loads?
 
-Example, the reason for the root line that points to this skill: the task "change agent instructions" can start in any directory, so no nested file is loaded for it. Tools find this skill on their own only when the session starts in or below `ydb/agents/` or edits files there. The root line is the only path that works everywhere. It adds a heading and one sentence.
+Example, the reason for this skill being in the root `.agents/skills`: the task "change agent instructions" can start in any directory, and a nested skill is found only from its own directory. It adds one description of one sentence.
 
 ## Budgets
 
@@ -36,7 +36,7 @@ Example, the reason for the root line that points to this skill: the task "chang
 | `description` | 1024 characters | Agent Skills specification: https://agentskills.io/specification |
 | All `AGENTS.md` from root to `<dir>` | 32 KiB | Codex stops adding files once the total reaches this size, so the nested file is dropped whole: https://learn.chatgpt.com/docs/agent-configuration/agents-md. Claude Code reads the same text through `CLAUDE.md` and only skips a file above 4 MiB: https://code.claude.com/docs/en/memory |
 | Skill name | `ydb-` plus words of lowercase letters and digits joined by single dashes, at most 64 characters, unique in the repo | this repo; the length and dash rules come from the Agent Skills specification |
-| Frontmatter keys | `name`, `description` | the only keys every tool understands, see `tool-compatibility.md` |
+| Frontmatter keys | `name` and `description` required; other keys allowed | every tool ignores keys it does not know, see `tool-compatibility.md` |
 
 `check.py` reports these; line budgets and frontmatter keys as warnings, the rest as errors.
 
@@ -44,8 +44,8 @@ Example, the reason for the root line that points to this skill: the task "chang
 
 ```text
 <dir>/
-  AGENTS.md                      loaded by Codex when the session starts here or below, by OpenCode when it is the nearest one, by Cursor and Copilot when files here are edited; Claude Code reads it through CLAUDE.md
-  CLAUDE.md                      one line: @./AGENTS.md; Claude Code loads it when files here are edited and then reaches the skill by the path in AGENTS.md
+  AGENTS.md                      the rules of the directory; loaded by Codex when the session starts here or below, by OpenCode when it is the nearest one, by Cursor and Copilot when files here are edited; Claude Code reads it through CLAUDE.md
+  CLAUDE.md                      @./AGENTS.md plus one line per skill (path and description); Claude Code loads it when files here are edited and then reads the matching SKILL.md
   .agents/skills/<name>/
     SKILL.md                     frontmatter name + description, then short numbered text
     references/*.md              long tables and background, read on demand

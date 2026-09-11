@@ -8,8 +8,8 @@ DIR is the directory the skill is about. SKILL_NAME starts with ydb- and
 uses lowercase letters, digits and dashes. The script creates:
 
     DIR/.agents/skills/SKILL_NAME/SKILL.md   skill text with TODO lines
-    DIR/AGENTS.md                            short router, only when absent
-    DIR/CLAUDE.md                            the single line @./AGENTS.md
+    DIR/AGENTS.md                            rules of the directory, only when absent
+    DIR/CLAUDE.md                            @./AGENTS.md plus one line per skill with its path and description
 
 It never overwrites a file. When anything conflicts it writes nothing and
 exits with code 1. A second run with the same arguments does nothing.
@@ -52,10 +52,14 @@ AGENTS_TEMPLATE = """# {title}
 
 These instructions apply to {dir_text}.
 
-For work in this directory, read {skill_link}.{guide_line}
+TODO: one or two rules that always apply here; steps of a task go to the skill.{guide_line}
 """
 
-CLAUDE_CONTENT = check.CLAUDE_INCLUDE + "\n"
+def claude_content(owner_dir, name, description):
+    """CLAUDE.md for owner_dir: the include, the header and one line per skill (the new one included)."""
+    lines = check.skill_lines(owner_dir)
+    lines[name] = "- .agents/skills/%s/SKILL.md: %s" % (name, description)
+    return check.CLAUDE_INCLUDE + "\n\n" + check.CLAUDE_SKILLS_HEADER + "\n" + "\n".join(lines[key] for key in sorted(lines)) + "\n"
 
 
 def title_from_name(name):
@@ -85,13 +89,11 @@ def plan_actions(args, root):
     dir_text = "the repo root" if rel_dir == "." else "`%s/`" % rel_dir
     guide = os.path.join(root, "ydb", "agents", "GUIDE.md")
     has_guide = os.path.isfile(guide)
-    skill_link = relative_link(target_dir, skill_md)
     fields = {
         "name": args.skill_name,
         "title": title_from_name(args.skill_name),
         "description": yaml_double_quoted(args.description),
         "dir_text": dir_text,
-        "skill_link": skill_link,
         "guide_line": "",
         "guide_note": "",
     }
@@ -107,24 +109,25 @@ def plan_actions(args, root):
         actions.append((skill_md, SKILL_TEMPLATE.format(**fields)))
 
     if os.path.isfile(agents_md):
-        if skill_link in check.read_text(agents_md):
-            notes.append("exists and points to the skill: %s" % agents_md)
-        else:
-            notes.append("MANUAL STEP: add this line to %s:\n    For work in this directory, read %s." % (agents_md, skill_link))
+        notes.append("exists, not touched: %s" % agents_md)
     elif os.path.exists(agents_md):
         conflicts.append("%s exists but is not a file" % agents_md)
     else:
         actions.append((agents_md, AGENTS_TEMPLATE.format(**fields)))
 
+    skill_line = "- .agents/skills/%s/SKILL.md: %s" % (args.skill_name, " ".join(args.description.split()))
     if os.path.isfile(claude_md):
-        if check.CLAUDE_INCLUDE in check.read_text(claude_md):
-            notes.append("exists with the include line: %s" % claude_md)
-        else:
+        claude_lines = [line.strip() for line in check.read_text(claude_md).splitlines()]
+        if check.CLAUDE_INCLUDE not in claude_lines:
             conflicts.append("%s exists without the line %s; add it or move its rules to AGENTS.md" % (claude_md, check.CLAUDE_INCLUDE))
+        elif skill_line not in claude_lines:
+            notes.append("MANUAL STEP: add these lines to %s (the first one only if it is not there yet):\n    %s\n    %s" % (claude_md, check.CLAUDE_SKILLS_HEADER, skill_line))
+        else:
+            notes.append("exists and lists the skill: %s" % claude_md)
     elif os.path.exists(claude_md):
         conflicts.append("%s exists but is not a file" % claude_md)
     else:
-        actions.append((claude_md, CLAUDE_CONTENT))
+        actions.append((claude_md, claude_content(target_dir, args.skill_name, " ".join(args.description.split()))))
 
     names = check.repo_skill_names(root)
     taken = None if names is None else names.get(args.skill_name)
@@ -184,7 +187,7 @@ def main(argv=None):
     apply_actions(actions)
     print("")
     print("next steps:")
-    print("  1. replace every TODO line in the new SKILL.md")
+    print("  1. replace every TODO line in the new SKILL.md and AGENTS.md")
     print("  2. python3 %s %s" % (os.path.join(os.path.dirname(os.path.abspath(__file__)), "check.py"), target))
     print("")
     return check.main([target, "--root", root])

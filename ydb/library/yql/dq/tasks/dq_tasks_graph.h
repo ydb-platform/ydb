@@ -160,6 +160,7 @@ struct TTaskOutputType {
         Broadcast,
         Effects,
         Sink,
+        Scatter,
         COMMON_TASK_OUTPUT_TYPE_END
     };
 };

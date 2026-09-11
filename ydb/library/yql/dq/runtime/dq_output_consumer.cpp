@@ -13,7 +13,9 @@
 
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <algorithm>
 #include <type_traits>
+#include <utility>
 #include <ydb/library/formats/arrow/hash/xx_hash.h>
 
 #include <util/string/builder.h>
@@ -1009,6 +1011,109 @@ private:
     std::shared_ptr<TDqFillAggregator> Aggregator;
 };
 
+class TDqOutputScatterConsumer : public IDqOutputConsumer {
+public:
+    TDqOutputScatterConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth)
+        : Outputs(std::move(outputs))
+        , OutputWidth(outputWidth)
+    {
+        YQL_ENSURE(!Outputs.empty());
+        Aggregator = std::make_shared<TDqFillAggregator>();
+        for (auto output : Outputs) {
+            output->SetFillAggregator(Aggregator);
+        }
+    }
+
+    EDqFillLevel GetFillLevel() const override {
+        const auto [output, level] = FindWritableOutput();
+        if (output) {
+            LastWritableOutput = output;
+        }
+        return level;
+    }
+
+    void Consume(TUnboxedValue&& value) final {
+        YQL_ENSURE(!OutputWidth.Defined());
+        Next()->Push(std::move(value));
+    }
+
+    void WideConsume(TUnboxedValue* values, ui32 count) final {
+        YQL_ENSURE(OutputWidth.Defined() && OutputWidth == count);
+        Next()->WidePush(values, count);
+    }
+
+    void Consume(NDqProto::TCheckpoint&& checkpoint) override {
+        for (auto& output : Outputs) {
+            output->Push(NDqProto::TCheckpoint(checkpoint));
+        }
+    }
+
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        for (auto& output : Outputs) {
+            output->Push(NDqProto::TWatermark(watermark));
+        }
+    }
+
+    void Finish() override {
+        for (auto& output : Outputs) {
+            output->Finish();
+        }
+    }
+
+    void Flush() override {
+        for (auto& output : Outputs) {
+            output->Flush();
+        }
+    }
+
+    bool IsFinished() const override {
+        return Aggregator->IsFinished();
+    }
+
+    bool IsEarlyFinished() const override {
+        return Aggregator->IsEarlyFinished();
+    }
+
+    TString DebugString() override {
+        return TStringBuilder() << "TDqOutputScatterConsumer channels=" << Outputs.size();
+    }
+
+private:
+    std::pair<TMaybe<size_t>, EDqFillLevel> FindWritableOutput() const {
+        if (Aggregator->UnboundCount.load()) {
+            return {Nothing(), HardLimit};
+        }
+        if (Aggregator->GetCount(NoLimit) == Outputs.size() && Aggregator->TotalCount.load() == Outputs.size()) {
+            return {RoundRobin, NoLimit};
+        }
+        EDqFillLevel result = NoLimit;
+        for (size_t offset = 0; offset < Outputs.size(); ++offset) {
+            const size_t index = (RoundRobin + offset) % Outputs.size();
+            const auto level = Outputs[index]->UpdateFillLevel();
+            if (level == NoLimit) {
+                return {index, NoLimit};
+            }
+            result = std::max(result, level);
+        }
+        return {Nothing(), result};
+    }
+
+    IDqOutput::TPtr& Next() {
+        // Fill checks do not reserve capacity. If pressure changed after Fetch began, retain the already fetched row
+        // on the last writable output; the next GetFillLevel applies backpressure before fetching another row.
+        const size_t selected = FindWritableOutput().first.GetOrElse(LastWritableOutput.GetOrElse(RoundRobin));
+        LastWritableOutput.Clear();
+        RoundRobin = (selected + 1) % Outputs.size();
+        return Outputs[selected];
+    }
+
+    TVector<IDqOutput::TPtr> Outputs;
+    const TMaybe<ui32> OutputWidth;
+    std::shared_ptr<TDqFillAggregator> Aggregator;
+    size_t RoundRobin = 0;
+    mutable TMaybe<size_t> LastWritableOutput;
+};
+
 } // namespace
 
 IDqOutputConsumer::TPtr CreateOutputMultiConsumer(TVector<IDqOutputConsumer::TPtr>&& consumers) {
@@ -1124,6 +1229,10 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
 
 IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth) {
     return MakeIntrusive<TDqOutputBroadcastConsumer>(std::move(outputs), outputWidth);
+}
+
+IDqOutputConsumer::TPtr CreateOutputScatterConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth) {
+    return MakeIntrusive<TDqOutputScatterConsumer>(std::move(outputs), outputWidth);
 }
 
 } // namespace NYql::NDq

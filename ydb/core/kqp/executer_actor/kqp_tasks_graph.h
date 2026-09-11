@@ -244,6 +244,8 @@ struct TGraphMeta {
 
     ui32 DqChannelVersion = 1u;
 
+    bool EnableParallelUnionAllConsumerSizing = false;
+
     const TIntrusivePtr<TProtoArenaHolder>& GetArenaIntrusivePtr() const {
         return Arena;
     }
@@ -409,7 +411,8 @@ public:
         const TKqpRequestCounters::TPtr& counters,
         TActorId bufferActorId,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-        bool useKqpTasksGraphV2
+        bool useKqpTasksGraphV2,
+        bool enableParallelUnionAllConsumerSizing = false
     );
     ~TKqpTasksGraph();
 
@@ -483,6 +486,8 @@ private:
         ui64 targetTaskId, ui32 inputIndex, ui32 outputIndex, bool enableSpilling, const NYql::NDq::TChannelLogFunc& logFunc);
     void BuildParallelUnionAllChannels(const TStageInfo& stageInfo, ui32 inputIndex,
         const TStageInfo& inputStageInfo, ui32 outputIndex, bool enableSpilling, const NYql::NDq::TChannelLogFunc& logFunc, ui64& nextOriginTaskId);
+    void BuildScatterChannels(const TStageInfo& stageInfo, ui32 inputIndex,
+        const TStageInfo& inputStageInfo, ui32 outputIndex, bool enableSpilling, const NYql::NDq::TChannelLogFunc& logFunc);
     void BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32 inputIndex,
         const TStageInfo& inputStageInfo, ui32 outputIndex,
         const NKqpProto::TKqpPhyCnStreamLookup& streamLookup, bool enableSpilling, const NYql::NDq::TChannelLogFunc& logFunc);
@@ -503,7 +508,7 @@ private:
 
     void SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDqTask* result, bool serializeAsyncIoSettings) const;
 
-    std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> GetMaxTasksAggregation(const TStageInfo& stageInfo, ui32 previousTasksCount, ui32 nodesCount);
+    std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> GetMaxTasksAggregation(const TStageInfo& stageInfo, std::optional<ui32> previousTasksCount, ui32 nodesCount);
     std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> GetScanTasksPerNode(const TStageInfo& stageInfo, bool isOlapScan, ui64 nodeId, bool enableShuffleElimination = false) const;
 
     void FillSecureParamsFromStage(THashMap<TString, TString>& secureParams, const NKqpProto::TKqpPhyStage& stage) const;

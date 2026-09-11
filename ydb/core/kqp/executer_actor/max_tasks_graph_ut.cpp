@@ -40,10 +40,11 @@ public:
     void AddNodes(const TVector<NKikimrKqp::TKqpNodeResources>& snapshot) { Graph.AddNodes(snapshot); }
 
     void AddStage(const NYql::NDq::TStageId& stage, TMaxTasksGraph::EStageType type,
-        const std::list<NYql::NDq::TStageId>& inputs, std::optional<NYql::NDq::TStageId> copyInput = std::nullopt)
+        const std::list<NYql::NDq::TStageId>& inputs, std::optional<NYql::NDq::TStageId> copyInput = std::nullopt,
+        const std::set<size_t>& parallelUnionAllInputs = {}, bool enableScatter = false)
     {
         auto& info = StageInfos.emplace_back(MakeStageInfo(stage));
-        Graph.AddStage(info, type, inputs, copyInput);
+        Graph.AddStage(info, type, inputs, copyInput, parallelUnionAllInputs, enableScatter);
     }
 
     void AddTask(const TTask& task, std::optional<ui64> node) { Graph.AddTask(task, node); }
@@ -53,6 +54,7 @@ public:
 
     size_t GetStageTasksCount(const NYql::NDq::TStageId& stage, ui64 node) const { return Graph.GetStageTasksCount(stage, node); }
     size_t GetStageTasksCount(const NYql::NDq::TStageId& stage) const { return Graph.GetStageTasksCount(stage); }
+    size_t GetChannelCountOnNode(ui64 node) const { return Graph.GetChannelCountOnNode(node); }
 
 private:
     TMaxTasksGraph Graph;
@@ -84,6 +86,55 @@ TTestGraph InitGraph(size_t maxChannelsCount, size_t snapshotSize) {
         graph.AddNodes(snapshot);
     }
     return graph;
+}
+
+struct TReferenceInput {
+    std::vector<ui64> ProducerNodes;
+    bool ParallelUnionAll = true;
+};
+
+std::vector<size_t> CountReferenceEndpoints(const std::vector<TReferenceInput>& inputs,
+    const std::vector<ui64>& consumerNodes, bool enableScatter, size_t nodeCount)
+{
+    std::vector<size_t> result(nodeCount, 0);
+    size_t nextConsumer = 0;
+    const auto connect = [&](ui64 producerNode, size_t consumer) {
+        ++result[producerNode];
+        ++result[consumerNodes[consumer]];
+    };
+    for (const auto& input : inputs) {
+        const auto& producers = input.ProducerNodes;
+        if (!input.ParallelUnionAll) {
+            for (ui64 node : producers) {
+                for (size_t consumer = 0; consumer < consumerNodes.size(); ++consumer) {
+                    connect(node, consumer);
+                }
+            }
+        } else if (!producers.empty() && enableScatter && consumerNodes.size() > producers.size()) {
+            size_t consumer = 0;
+            for (size_t producer = 0; producer < producers.size(); ++producer) {
+                const size_t degree = consumerNodes.size() / producers.size()
+                    + (producer < consumerNodes.size() % producers.size());
+                for (size_t channel = 0; channel < degree; ++channel) {
+                    connect(producers[producer], consumer++);
+                }
+            }
+        } else {
+            for (ui64 node : producers) {
+                connect(node, nextConsumer);
+                nextConsumer = (nextConsumer + 1) % consumerNodes.size();
+            }
+        }
+    }
+    return result;
+}
+
+std::vector<ui64> StageNodes(const TTestGraph& graph, const NYql::NDq::TStageId& stage, size_t nodeCount) {
+    std::vector<ui64> result;
+    for (size_t node = 0; node < nodeCount; ++node) {
+        result.insert(result.end(), graph.GetStageTasksCount(stage, node), node);
+    }
+    return result;
 }
 
 } // namespace
@@ -158,6 +209,133 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         // Проверяем, что каналы теперь в лимите
         // channels = tasksA * tasksB + tasksB * tasksA = 2 * tasksA * tasksB
         UNIT_ASSERT_LE(2 * tasksA * tasksB, 100u);
+    }
+
+    Y_UNIT_TEST(ScatterAccountingFollowsPostShrinkTopology) {
+        auto graph = InitGraph(4, 1);
+
+        auto producer = MakeStageId(0, 0);
+        auto consumer = MakeStageId(0, 1);
+        graph.AddStage(producer, TMaxTasksGraph::FIXED, {});
+        graph.AddStage(consumer, TMaxTasksGraph::ANY, {producer}, std::nullopt, {0}, true);
+
+        AddTasks(graph, producer, 0, 2);
+        AddTasks(graph, consumer, 0, 16);
+
+        graph.Shrink();
+
+        UNIT_ASSERT_VALUES_EQUAL(graph.GetStageTasksCount(producer), 2);
+        UNIT_ASSERT_VALUES_EQUAL(graph.GetStageTasksCount(consumer), 2);
+        UNIT_ASSERT_VALUES_EQUAL(graph.GetChannelCountOnNode(0), 4);
+    }
+
+    Y_UNIT_TEST(ParallelUnionAllEqualWidthsHaveLinearCostWithEitherFlag) {
+        for (bool enableScatter : {false, true}) {
+            auto graph = InitGraph(384, 1);
+            const auto producer = MakeStageId(0, 0);
+            const auto consumer = MakeStageId(0, 1);
+            graph.AddStage(producer, TMaxTasksGraph::ANY, {});
+            graph.AddStage(consumer, TMaxTasksGraph::ANY, {producer, producer}, std::nullopt, {0, 1}, enableScatter);
+            AddTasks(graph, producer, 0, 96);
+            AddTasks(graph, consumer, 0, 96);
+
+            graph.Shrink();
+
+            UNIT_ASSERT_VALUES_EQUAL(graph.GetStageTasksCount(producer), 96);
+            UNIT_ASSERT_VALUES_EQUAL(graph.GetStageTasksCount(consumer), 96);
+            UNIT_ASSERT_VALUES_EQUAL(graph.GetChannelCountOnNode(0), 384);
+        }
+    }
+
+    Y_UNIT_TEST(ParallelUnionAllEndpointsMatchWiringPerNode) {
+        for (bool enableScatter : {false, true}) {
+            for (size_t n = 0; n <= 9; ++n) {
+                for (size_t m = 1; m <= 11; ++m) {
+                    for (size_t layout = 0; layout < 4; ++layout) {
+                        auto graph = InitGraph(10000, 3);
+                        const auto a = MakeStageId(0, 0);
+                        const auto b = MakeStageId(0, 1);
+                        const auto consumer = MakeStageId(0, 2);
+                        graph.AddStage(a, TMaxTasksGraph::FIXED, {});
+                        graph.AddStage(b, TMaxTasksGraph::FIXED, {});
+                        // Reuse a source with both PUA and mesh connections. Scatter inputs must not advance the Map cursor.
+                        graph.AddStage(consumer, TMaxTasksGraph::FIXED, {a, b, a, a}, std::nullopt, {0, 1, 2}, enableScatter);
+                        for (size_t i = 0; i < n; ++i) {
+                            AddTasks(graph, a, layout == 3 ? 2 : (i + layout) % 3, 1);
+                        }
+                        for (size_t i = 0; i < (n + 3) % 10; ++i) {
+                            AddTasks(graph, b, layout == 3 ? 0 : (i + 1) % 3, 1);
+                        }
+                        for (size_t i = 0; i < m; ++i) {
+                            AddTasks(graph, consumer, layout == 3 ? 1 : (i + 2 * layout) % 3, 1);
+                        }
+                        const auto aNodes = StageNodes(graph, a, 3);
+                        const auto bNodes = StageNodes(graph, b, 3);
+                        const auto expected = CountReferenceEndpoints({{aNodes}, {bNodes}, {aNodes}, {aNodes, false}},
+                            StageNodes(graph, consumer, 3), enableScatter, 3);
+                        for (ui64 node = 0; node < 3; ++node) {
+                            UNIT_ASSERT_VALUES_EQUAL_C(graph.GetChannelCountOnNode(node), expected[node],
+                                "scatter=" << enableScatter << " N=" << n << " M=" << m << " layout=" << layout << " node=" << node);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ParallelUnionAllShrinkRespectsEveryNodeBudget) {
+        for (bool enableScatter : {false, true}) {
+            auto graph = InitGraph(32, 3);
+            const auto a = MakeStageId(0, 0);
+            const auto b = MakeStageId(0, 1);
+            const auto consumer = MakeStageId(0, 2);
+            graph.AddStage(a, TMaxTasksGraph::ANY, {});
+            graph.AddStage(b, TMaxTasksGraph::ANY, {});
+            graph.AddStage(consumer, TMaxTasksGraph::ANY, {a, b, a}, std::nullopt, {0, 1, 2}, enableScatter);
+            AddTasks(graph, a, 0, 17);
+            AddTasks(graph, a, 2, 6);
+            AddTasks(graph, b, 1, 31);
+            AddTasks(graph, consumer, 0, 5);
+            AddTasks(graph, consumer, 1, 8);
+            AddTasks(graph, consumer, 2, 28);
+
+            graph.Shrink();
+
+            UNIT_ASSERT_LT(graph.GetStageTasksCount(consumer), 41);
+            const auto aNodes = StageNodes(graph, a, 3);
+            const auto expected = CountReferenceEndpoints({{aNodes}, {StageNodes(graph, b, 3)}, {aNodes}},
+                StageNodes(graph, consumer, 3), enableScatter, 3);
+            for (ui64 node = 0; node < 3; ++node) {
+                UNIT_ASSERT_VALUES_EQUAL(graph.GetChannelCountOnNode(node), expected[node]);
+                UNIT_ASSERT_LE(expected[node], 32);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ParallelUnionAllUsesSnapshotNodeOrder) {
+        for (bool enableScatter : {false, true}) {
+            TTestGraph graph(100);
+            TVector<NKikimrKqp::TKqpNodeResources> snapshot;
+            for (ui64 node : {2, 0, 1}) {
+                snapshot.emplace_back().SetNodeId(node);
+            }
+            graph.AddNodes(snapshot);
+            const auto producer = MakeStageId(0, 0);
+            const auto consumer = MakeStageId(0, 1);
+            graph.AddStage(producer, TMaxTasksGraph::FIXED, {});
+            graph.AddStage(consumer, TMaxTasksGraph::FIXED, {producer, producer}, std::nullopt, {0, 1}, enableScatter);
+            AddTasks(graph, producer, 0, 2);
+            AddTasks(graph, producer, 1, 1);
+            AddTasks(graph, producer, 2, 1);
+            AddTasks(graph, consumer, 1, 5);
+            AddTasks(graph, consumer, 0, 1);
+
+            const std::vector<ui64> producerNodes = {2, 0, 0, 1};
+            const auto expected = CountReferenceEndpoints({{producerNodes}, {producerNodes}}, {0, 1, 1, 1, 1, 1}, enableScatter, 3);
+            for (ui64 node = 0; node < 3; ++node) {
+                UNIT_ASSERT_VALUES_EQUAL(graph.GetChannelCountOnNode(node), expected[node]);
+            }
+        }
     }
 
     Y_UNIT_TEST(FixedStageNotScaled) {

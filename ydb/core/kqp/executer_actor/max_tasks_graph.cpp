@@ -51,7 +51,9 @@ void TMaxTasksGraph::AddNode(TNodeId node) {
     CheckInvariants();
 }
 
-void TMaxTasksGraph::AddStage(TStageInfo& stageInfo, EStageType type, const std::list<TStageId>& inputs, std::optional<TStageId> copyInput) {
+void TMaxTasksGraph::AddStage(TStageInfo& stageInfo, EStageType type, const std::list<TStageId>& inputs, std::optional<TStageId> copyInput,
+    const std::set<size_t>& parallelUnionAllInputs, bool enableScatter)
+{
     TStage newStage;
     newStage.Info = &stageInfo;
     newStage.Type = type;
@@ -72,6 +74,11 @@ void TMaxTasksGraph::AddStage(TStageInfo& stageInfo, EStageType type, const std:
     for (const auto& input : inputs) {
         newStage.Inputs.push_back(StageIds.at(input));
     }
+    for (size_t input : parallelUnionAllInputs) {
+        Y_ENSURE(input < inputs.size());
+    }
+    newStage.ParallelUnionAllInputs = parallelUnionAllInputs;
+    newStage.EnableScatter = enableScatter;
 
     const TStageIdx newStageIdx = Stages.size();
     for (TStageIdx inputIdx : newStage.Inputs) {
@@ -594,6 +601,10 @@ size_t TMaxTasksGraph::GetStageTasksCount(const TStageId& stage) const {
     return Stages.at(StageIds.at(stage)).Tasks.size();
 }
 
+size_t TMaxTasksGraph::GetChannelCountOnNode(TNodeId node) const {
+    return CountChannelsOnNode(GroupColumns(), NodeIds.at(node));
+}
+
 bool TMaxTasksGraph::IsFeasible(const std::vector<TColumnsPerNode>& base, double alpha) const {
     auto columns = ComputeScaledColumns(base, alpha);
 
@@ -668,33 +679,58 @@ TMaxTasksGraph::TColumnsPerNode TMaxTasksGraph::ScaleColumns(const TColumnsPerNo
 
 size_t TMaxTasksGraph::CountChannelsOnNode(const std::vector<TColumnsPerNode>& columns, TNodeIdx nodeIdx) const {
     std::vector<size_t> groupTotal(columns.size());
+    std::vector<size_t> groupStart(columns.size());
     for (TGroupIdx g = 0; g < columns.size(); ++g) {
         groupTotal[g] = Total(columns[g]);
+        groupStart[g] = std::accumulate(columns[g].begin(), columns[g].begin() + nodeIdx, size_t{0});
     }
 
     ui64 totalChannels = 0;
 
-    for (TStageIdx stageIdx = 0; stageIdx < Stages.size(); ++stageIdx) {
-        const auto& stage = Stages[stageIdx];
-        const auto tasksOnNode = columns[stage.Group][nodeIdx];
-        if (tasksOnNode == 0) {
-            continue;
-        }
-
-        ui64 channelsPerTask = 0;
-
-        // An edge within the same group is a copy connection: 1 local channel per task (the paired task is co-located).
-        // An edge to another group is a full mesh: a channel to every task of the other stage.
+    // PlaceTasks emits tasks in node-major order. Count both endpoints of each edge using the same task indices
+    // as BuildParallelUnionAllChannels, including its cursor shared by all Map-mode PUA inputs of a stage.
+    for (const auto& stage : Stages) {
+        const size_t consumers = groupTotal[stage.Group];
+        const size_t consumersOnNode = columns[stage.Group][nodeIdx];
+        size_t nextConsumer = 0;
+        size_t inputIndex = 0;
         for (TStageIdx input : stage.Inputs) {
             const TGroupIdx inputGroup = Stages[input].Group;
-            channelsPerTask += (inputGroup == stage.Group) ? 1 : groupTotal[inputGroup];
+            const size_t producers = groupTotal[inputGroup];
+            const size_t producersOnNode = columns[inputGroup][nodeIdx];
+            const bool isParallelUnionAll = stage.ParallelUnionAllInputs.contains(inputIndex++);
+            if (isParallelUnionAll) {
+                if (!producers) {
+                    continue;
+                }
+                Y_ENSURE(consumers);
+                if (stage.EnableScatter && consumers > producers) {
+                    const size_t firstProducer = groupStart[inputGroup];
+                    const size_t extra = consumers % producers;
+                    totalChannels += consumersOnNode + producersOnNode * (consumers / producers)
+                        + std::min(firstProducer + producersOnNode, extra) - std::min(firstProducer, extra);
+                } else {
+                    const size_t firstConsumer = groupStart[stage.Group];
+                    const size_t endConsumer = firstConsumer + consumersOnNode;
+                    const auto overlap = [&](size_t begin, size_t end) {
+                        const size_t left = std::max(firstConsumer, begin);
+                        const size_t right = std::min(endConsumer, end);
+                        return right > left ? right - left : 0;
+                    };
+                    const size_t end = nextConsumer + producers % consumers;
+                    totalChannels += producersOnNode + consumersOnNode * (producers / consumers)
+                        + overlap(nextConsumer, std::min(end, consumers));
+                    if (end > consumers) {
+                        totalChannels += overlap(0, end - consumers);
+                    }
+                    nextConsumer = end % consumers;
+                }
+            } else if (inputGroup == stage.Group) {
+                totalChannels += producersOnNode + consumersOnNode;
+            } else {
+                totalChannels += producersOnNode * consumers + consumersOnNode * producers;
+            }
         }
-        for (TStageIdx output : stage.Outputs) {
-            const TGroupIdx outputGroup = Stages[output].Group;
-            channelsPerTask += (outputGroup == stage.Group) ? 1 : groupTotal[outputGroup];
-        }
-
-        totalChannels += tasksOnNode * channelsPerTask;
     }
 
     return totalChannels;

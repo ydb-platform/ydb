@@ -1,4 +1,5 @@
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
+#include <ydb/library/yql/dq/runtime/dq_channel_service_impl.h>
 #include <ydb/library/yql/dq/runtime/dq_output_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
@@ -9,6 +10,8 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <algorithm>
 
 using namespace NActors;
 using namespace NKikimr;
@@ -1086,6 +1089,407 @@ Y_UNIT_TEST(BackPressureWithSpillingMulti) {
 Y_UNIT_TEST(BackPressureWithSpillingLoad) {
     TTestContext ctx(WIDE_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
     TestBackPressureWithSpillingLoad(ctx);
+}
+
+}
+
+Y_UNIT_TEST_SUITE(Scatter) {
+
+namespace {
+
+TVector<IDqOutputChannel::TPtr> MakeChannels(TTestContext& ctx, ui32 count, ui64 maxStoredBytes = 1_MB, bool spilling = false) {
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = maxStoredBytes,
+        .MaxChunkBytes = 100
+    };
+
+    TVector<IDqOutputChannel::TPtr> channels;
+    for (ui32 i = 0; i < count; ++i) {
+        settings.ChannelId = i;
+        if (spilling) {
+            settings.ChannelStorage = MakeIntrusive<TMockChannelStorage>(1_MB);
+        }
+        channels.emplace_back(CreateDqOutputChannel(settings, Log));
+    }
+    return channels;
+}
+
+IDqOutputConsumer::TPtr MakeScatterConsumer(TTestContext& ctx, const TVector<IDqOutputChannel::TPtr>& channels) {
+    TVector<IDqOutput::TPtr> outputs;
+    for (auto c : channels) {
+        outputs.emplace_back(c);
+    }
+    return CreateOutputScatterConsumer(std::move(outputs),
+        ctx.IsWide ? TMaybe<ui32>(ctx.Width()) : TMaybe<ui32>());
+}
+
+TVector<ui32> DrainRows(TTestContext& ctx, const IDqOutputChannel::TPtr& channel) {
+    TDqSerializedBatch data;
+    UNIT_ASSERT(channel->PopAll(data));
+    TUnboxedValueBatch batch(ctx.GetOutputType());
+    ctx.Ds.Deserialize(std::move(data), ctx.GetOutputType(), batch);
+    TVector<ui32> result;
+    const auto append = [&](ui32 value, ui64 square) {
+        UNIT_ASSERT_VALUES_EQUAL(square, ui64(value) * value);
+        result.push_back(value);
+    };
+    if (ctx.IsWide) {
+        batch.ForEachRowWide([&](const NUdf::TUnboxedValue* values, ui32 width) {
+            UNIT_ASSERT_VALUES_EQUAL(width, ctx.Width());
+            append(values[0].Get<ui32>(), values[1].Get<ui64>());
+        });
+    } else {
+        batch.ForEachRow([&](const NUdf::TUnboxedValue& value) {
+            append(value.GetElement(0).Get<ui32>(), value.GetElement(1).Get<ui64>());
+        });
+    }
+    return result;
+}
+
+class TControlledChannelBuffer : public IChannelBuffer {
+public:
+    explicit TControlledChannelBuffer(const TChannelFullInfo& info)
+        : IChannelBuffer(info)
+    {}
+
+    EDqFillLevel GetFillLevel() const override { return Level; }
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) override {
+        Aggregator = std::move(aggregator);
+        Aggregator->AddCount(Level);
+    }
+    void SetLevel(EDqFillLevel level) {
+        if (Aggregator) {
+            Aggregator->UpdateCount(Level, level);
+        }
+        Level = level;
+    }
+    void Push(TDataChunk&& data) override {
+        Rows += data.Rows;
+        FinishCount += data.Finished;
+        CheckpointCount += data.Checkpoint.Defined();
+        WatermarkCount += data.Watermark.Defined();
+    }
+    bool IsFinished() override { return false; }
+    bool IsEarlyFinished() override { return false; }
+    bool IsEmpty() override { return true; }
+    bool Pop(TDataChunk&) override { return false; }
+    void EarlyFinish() override {}
+    void ExportPushStats(TDqAsyncStats& stats) override { stats.Rows = Rows; }
+    void ExportPopStats(TDqAsyncStats&) override {}
+
+    ui64 Rows = 0;
+    ui32 FinishCount = 0;
+    ui32 CheckpointCount = 0;
+    ui32 WatermarkCount = 0;
+
+private:
+    EDqFillLevel Level = NoLimit;
+    std::shared_ptr<TDqFillAggregator> Aggregator;
+};
+
+} // namespace
+
+Y_UNIT_TEST(RowsSpreadEvenly) {
+    TTestContext ctx(WIDE_CHANNEL);
+    constexpr ui32 CHANNEL_COUNT = 4;
+    constexpr ui32 ROWS_PER_CHANNEL = 5;
+
+    auto channels = MakeChannels(ctx, CHANNEL_COUNT);
+    auto consumer = MakeScatterConsumer(ctx, channels);
+
+    for (ui32 i = 0; i < CHANNEL_COUNT * ROWS_PER_CHANNEL; ++i) {
+        ConsumeRow(ctx, ctx.CreateRow(i), consumer);
+    }
+
+    for (auto c : channels) {
+        UNIT_ASSERT_VALUES_EQUAL(ROWS_PER_CHANNEL, c->GetValuesCount());
+    }
+}
+
+Y_UNIT_TEST(UnevenRowCountDiffersByOne) {
+    TTestContext ctx(WIDE_CHANNEL);
+    constexpr ui32 CHANNEL_COUNT = 4;
+    constexpr ui32 ROWS = 4 * 3 + 2;
+
+    auto channels = MakeChannels(ctx, CHANNEL_COUNT);
+    auto consumer = MakeScatterConsumer(ctx, channels);
+
+    for (ui32 i = 0; i < ROWS; ++i) {
+        ConsumeRow(ctx, ctx.CreateRow(i), consumer);
+    }
+
+    ui32 total = 0;
+    for (auto c : channels) {
+        const auto count = c->GetValuesCount();
+        UNIT_ASSERT_C(count == ROWS / CHANNEL_COUNT || count == ROWS / CHANNEL_COUNT + 1,
+            "channel got " << count << " rows, expected " << (ROWS / CHANNEL_COUNT) << " or one more");
+        total += count;
+    }
+    UNIT_ASSERT_VALUES_EQUAL(ROWS, total);
+}
+
+Y_UNIT_TEST(FullChannelIsBypassed) {
+    for (auto width : {NARROW_CHANNEL, WIDE_CHANNEL}) {
+        TTestContext ctx(width, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+        auto channels = MakeChannels(ctx, 2, /* maxStoredBytes */ 100);
+        auto consumer = MakeScatterConsumer(ctx, channels);
+
+        ConsumeRow(ctx, ctx.CreateBigRow(0, 10000), consumer);
+        UNIT_ASSERT_VALUES_EQUAL(HardLimit, channels[0]->UpdateFillLevel());
+        for (ui32 row : {1, 2}) {
+            UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+            ConsumeRow(ctx, ctx.CreateRow(row), consumer);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(1, channels[0]->GetValuesCount());
+        UNIT_ASSERT_VALUES_EQUAL(2, channels[1]->GetValuesCount());
+        UNIT_ASSERT(DrainRows(ctx, channels[0]) == (TVector<ui32>{0}));
+        UNIT_ASSERT(DrainRows(ctx, channels[1]) == (TVector<ui32>{1, 2}));
+    }
+}
+
+Y_UNIT_TEST(AllFullBlocksUntilAnyChannelDrains) {
+    for (auto width : {NARROW_CHANNEL, WIDE_CHANNEL}) {
+        TTestContext ctx(width, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+        auto channels = MakeChannels(ctx, 3, 100);
+        auto consumer = MakeScatterConsumer(ctx, channels);
+        for (ui32 row = 0; row < channels.size(); ++row) {
+            UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+            ConsumeRow(ctx, ctx.CreateBigRow(row, 10000), consumer);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(HardLimit, consumer->GetFillLevel());
+        UNIT_ASSERT(DrainRows(ctx, channels[1]) == (TVector<ui32>{1}));
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+        ConsumeRow(ctx, ctx.CreateRow(3), consumer);
+        UNIT_ASSERT_VALUES_EQUAL(1, channels[0]->GetValuesCount());
+        UNIT_ASSERT_VALUES_EQUAL(1, channels[2]->GetValuesCount());
+        UNIT_ASSERT(DrainRows(ctx, channels[1]) == (TVector<ui32>{3}));
+    }
+}
+
+Y_UNIT_TEST(WritableChannelsRemainRoundRobin) {
+    for (auto width : {NARROW_CHANNEL, WIDE_CHANNEL}) {
+        TTestContext ctx(width, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+        auto channels = MakeChannels(ctx, 3, 1000);
+        auto consumer = MakeScatterConsumer(ctx, channels);
+        ConsumeRow(ctx, ctx.CreateBigRow(0, 10000), consumer);
+        for (ui32 row = 1; row <= 12; ++row) {
+            UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+            ConsumeRow(ctx, ctx.CreateRow(row), consumer);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(1, channels[0]->GetValuesCount());
+        UNIT_ASSERT_VALUES_EQUAL(6, channels[1]->GetValuesCount());
+        UNIT_ASSERT_VALUES_EQUAL(6, channels[2]->GetValuesCount());
+        UNIT_ASSERT(DrainRows(ctx, channels[0]) == (TVector<ui32>{0}));
+        for (ui32 row = 13; row <= 15; ++row) {
+            UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+            ConsumeRow(ctx, ctx.CreateRow(row), consumer);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(1, channels[0]->GetValuesCount());
+        UNIT_ASSERT_VALUES_EQUAL(7, channels[1]->GetValuesCount());
+        UNIT_ASSERT_VALUES_EQUAL(7, channels[2]->GetValuesCount());
+    }
+}
+
+Y_UNIT_TEST(SingleChannelKeepsBackpressure) {
+    for (auto width : {NARROW_CHANNEL, WIDE_CHANNEL}) {
+        TTestContext ctx(width, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+        auto channels = MakeChannels(ctx, 1, 100);
+        auto consumer = MakeScatterConsumer(ctx, channels);
+        ConsumeRow(ctx, ctx.CreateBigRow(0, 10000), consumer);
+        UNIT_ASSERT_VALUES_EQUAL(HardLimit, consumer->GetFillLevel());
+        UNIT_ASSERT(DrainRows(ctx, channels[0]) == (TVector<ui32>{0}));
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+        ConsumeRow(ctx, ctx.CreateRow(1), consumer);
+        UNIT_ASSERT(DrainRows(ctx, channels[0]) == (TVector<ui32>{1}));
+    }
+}
+
+Y_UNIT_TEST(PressureChangingAfterFillCheckPreservesFetchedRow) {
+    for (auto width : {NARROW_CHANNEL, WIDE_CHANNEL}) {
+        TTestContext ctx(width, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+        auto channels = MakeChannels(ctx, 2, 100);
+        auto consumer = MakeScatterConsumer(ctx, channels);
+        PushRow(ctx, ctx.CreateBigRow(0, 10000), channels[0]);
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+        // Inject a pressure change between the task runner's check and Consume.
+        PushRow(ctx, ctx.CreateBigRow(1, 10000), channels[1]);
+        ConsumeRow(ctx, ctx.CreateRow(2), consumer);
+        UNIT_ASSERT_VALUES_EQUAL(HardLimit, consumer->GetFillLevel());
+        UNIT_ASSERT(DrainRows(ctx, channels[0]) == (TVector<ui32>{0}));
+        UNIT_ASSERT(DrainRows(ctx, channels[1]) == (TVector<ui32>{1, 2}));
+    }
+}
+
+Y_UNIT_TEST(V2WaitsForBindingAndBypassesFullBoundChannel) {
+    for (auto width : {NARROW_CHANNEL, WIDE_CHANNEL}) {
+        for (bool local : {false, true}) {
+            TTestContext ctx(width, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+            const TChannelFullInfo info(0, {}, {}, 0, 1, TCollectStatsLevel::Profile);
+            auto ready = std::make_shared<TControlledChannelBuffer>(info);
+            TDqChannelSettings settings = {
+                .RowType = ctx.GetOutputType(),
+                .HolderFactory = &ctx.HolderFactory,
+                .MaxChunkBytes = 100
+            };
+            TVector<IDqOutputChannel::TPtr> channels;
+            auto pending = MakeIntrusive<TFastDqOutputChannel>(std::weak_ptr<TDqChannelService>{}, settings,
+                std::make_shared<TChannelStub>(info), local);
+            channels.push_back(pending);
+            channels.push_back(MakeIntrusive<TFastDqOutputChannel>(std::weak_ptr<TDqChannelService>{}, settings, ready, local));
+            auto consumer = MakeScatterConsumer(ctx, channels);
+            UNIT_ASSERT_VALUES_EQUAL(HardLimit, channels[0]->UpdateFillLevel());
+            UNIT_ASSERT_VALUES_EQUAL(HardLimit, consumer->GetFillLevel());
+            UNIT_ASSERT_VALUES_EQUAL(pending->Aggregator->UnboundCount.load(), 1);
+
+            auto bound = std::make_shared<TControlledChannelBuffer>(info);
+            bound->SetLevel(HardLimit);
+            // Mirror Bind's buffer replacement without creating channel transport.
+            bound->SetFillAggregator(pending->Aggregator);
+            pending->Serializer->Buffer = bound;
+            UNIT_ASSERT_VALUES_EQUAL(pending->Aggregator->UnboundCount.load(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(pending->Aggregator->TotalCount.load(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+            ready->SetLevel(HardLimit);
+            ConsumeRow(ctx, ctx.CreateBigRow(0, 10000), consumer);
+            consumer->Flush();
+            UNIT_ASSERT_VALUES_EQUAL(ready->Rows, 1);
+            UNIT_ASSERT_VALUES_EQUAL(HardLimit, consumer->GetFillLevel());
+            ready->SetLevel(NoLimit);
+            UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+            ConsumeRow(ctx, ctx.CreateBigRow(1, 10000), consumer);
+            consumer->Flush();
+            UNIT_ASSERT_VALUES_EQUAL(ready->Rows, 2);
+            UNIT_ASSERT_VALUES_EQUAL(bound->Rows, 0);
+
+            NDqProto::TWatermark watermark;
+            watermark.SetTimestampUs(12345);
+            consumer->Consume(std::move(watermark));
+            NDqProto::TCheckpoint checkpoint;
+            checkpoint.SetId(42);
+            consumer->Consume(std::move(checkpoint));
+            consumer->Finish();
+            for (const auto& buffer : {bound, ready}) {
+                UNIT_ASSERT_VALUES_EQUAL(buffer->WatermarkCount, 1);
+                UNIT_ASSERT_VALUES_EQUAL(buffer->CheckpointCount, 1);
+                UNIT_ASSERT_VALUES_EQUAL(buffer->FinishCount, 1);
+            }
+        }
+    }
+}
+
+Y_UNIT_TEST(SoftChannelIsSkippedWhenAnotherIsWritable) {
+    for (auto width : {NARROW_CHANNEL, WIDE_CHANNEL}) {
+        TTestContext ctx(width, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+        auto channels = MakeChannels(ctx, 2, 100);
+        channels[0] = MakeChannels(ctx, 1, 100, /* spilling */ true)[0];
+        auto consumer = MakeScatterConsumer(ctx, channels);
+        PushRow(ctx, ctx.CreateBigRow(0, 10000), channels[0]);
+        UNIT_ASSERT_VALUES_EQUAL(SoftLimit, channels[0]->UpdateFillLevel());
+        for (ui32 row : {1, 2}) {
+            UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+            ConsumeRow(ctx, ctx.CreateRow(row), consumer);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(1, channels[0]->GetValuesCount());
+        ConsumeRow(ctx, ctx.CreateBigRow(3, 10000), consumer);
+        UNIT_ASSERT_VALUES_EQUAL(HardLimit, channels[1]->UpdateFillLevel());
+        UNIT_ASSERT_VALUES_EQUAL(HardLimit, consumer->GetFillLevel());
+        UNIT_ASSERT(DrainRows(ctx, channels[1]) == (TVector<ui32>{1, 2, 3}));
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+    }
+}
+
+Y_UNIT_TEST(AllSoftKeepsBackpressure) {
+    for (auto width : {NARROW_CHANNEL, WIDE_CHANNEL}) {
+        TTestContext ctx(width, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+        auto channels = MakeChannels(ctx, 2, 100, /* spilling */ true);
+        auto consumer = MakeScatterConsumer(ctx, channels);
+        for (ui32 row = 0; row < channels.size(); ++row) {
+            UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+            ConsumeRow(ctx, ctx.CreateBigRow(row, 10000), consumer);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(SoftLimit, consumer->GetFillLevel());
+        UNIT_ASSERT(DrainRows(ctx, channels[0]) == (TVector<ui32>{0}));
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+    }
+}
+
+Y_UNIT_TEST(RepeatedFillAndDrainDeliversEveryRowOnce) {
+    for (auto width : {NARROW_CHANNEL, WIDE_CHANNEL}) {
+        TTestContext ctx(width, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+        auto channels = MakeChannels(ctx, 3, 100);
+        auto consumer = MakeScatterConsumer(ctx, channels);
+        TVector<ui32> received;
+        for (ui32 row = 0; row < 90; ++row) {
+            if (consumer->GetFillLevel() == HardLimit) {
+                const auto drained = DrainRows(ctx, channels[(row / 3) % channels.size()]);
+                received.insert(received.end(), drained.begin(), drained.end());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+            ConsumeRow(ctx, ctx.CreateBigRow(row, 10000), consumer);
+        }
+        for (auto& channel : channels) {
+            const auto drained = DrainRows(ctx, channel);
+            received.insert(received.end(), drained.begin(), drained.end());
+        }
+        std::sort(received.begin(), received.end());
+        UNIT_ASSERT_VALUES_EQUAL(received.size(), 90);
+        for (ui32 row = 0; row < received.size(); ++row) {
+            UNIT_ASSERT_VALUES_EQUAL(received[row], row);
+        }
+    }
+}
+
+Y_UNIT_TEST(ControlMessagesGoToEveryChannel) {
+    TTestContext ctx(WIDE_CHANNEL);
+    constexpr ui32 CHANNEL_COUNT = 3;
+
+    auto channels = MakeChannels(ctx, CHANNEL_COUNT);
+    auto consumer = MakeScatterConsumer(ctx, channels);
+
+    NDqProto::TWatermark watermark;
+    watermark.SetTimestampUs(12345);
+    consumer->Consume(std::move(watermark));
+
+    for (auto c : channels) {
+        NDqProto::TWatermark popped;
+        UNIT_ASSERT_C(c->Pop(popped), "channel did not receive the watermark");
+        UNIT_ASSERT_VALUES_EQUAL(12345, popped.GetTimestampUs());
+    }
+}
+
+Y_UNIT_TEST(ControlMessagesAndFinishReachFullChannels) {
+    for (auto width : {NARROW_CHANNEL, WIDE_CHANNEL}) {
+        TTestContext ctx(width, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+        auto channels = MakeChannels(ctx, 3, 100);
+        auto consumer = MakeScatterConsumer(ctx, channels);
+        for (ui32 row = 0; row < channels.size(); ++row) {
+            UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+            ConsumeRow(ctx, ctx.CreateBigRow(row, 10000), consumer);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(HardLimit, consumer->GetFillLevel());
+        NDqProto::TWatermark watermark;
+        watermark.SetTimestampUs(12345);
+        consumer->Consume(std::move(watermark));
+        NDqProto::TCheckpoint checkpoint;
+        checkpoint.SetId(42);
+        consumer->Consume(std::move(checkpoint));
+        consumer->Finish();
+        for (ui32 i = 0; i < channels.size(); ++i) {
+            UNIT_ASSERT(DrainRows(ctx, channels[i]) == (TVector<ui32>{i}));
+            NDqProto::TWatermark poppedWatermark;
+            UNIT_ASSERT(channels[i]->Pop(poppedWatermark));
+            UNIT_ASSERT_VALUES_EQUAL(poppedWatermark.GetTimestampUs(), 12345);
+            NDqProto::TCheckpoint poppedCheckpoint;
+            UNIT_ASSERT(channels[i]->Pop(poppedCheckpoint));
+            UNIT_ASSERT_VALUES_EQUAL(poppedCheckpoint.GetId(), 42);
+            UNIT_ASSERT(channels[i]->IsFinished());
+        }
+    }
 }
 
 }

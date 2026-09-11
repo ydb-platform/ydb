@@ -81,6 +81,7 @@ struct TTaskDistribution {
     // pair same-index tasks positionally, without checking node equality themselves (see BuildMapChannels /
     // BuildTransformChannels), relying entirely on the placement stage keeping copy-group columns co-located.
     TVector<TString> CrossNodeCopyChannels;
+    ui32 ScatterOutputs = 0;
 
     // ColumnShardHashV1 shuffle-elimination mapping check (see CheckShuffleEliminationHashMapping): one entry per
     // hash bucket routed to a task that does not read the matching shard. Should always be empty.
@@ -186,6 +187,8 @@ struct TBuildConfig {
     // production the RM board delivers the snapshot in arbitrary order, so reversing it here is a legitimate
     // scenario - and the only way to make that difference observable.
     bool ReverseSnapshotNodeOrder = false;
+
+    bool EnableParallelUnionAllConsumerSizing = false;
 };
 
 namespace {
@@ -283,7 +286,8 @@ public:
             NKikimrConfig::TTableServiceConfig::TResourceManager{},
             NKikimrConfig::TTableServiceConfig::TAggregationConfig{},
             MakeIntrusive<TKqpRequestCounters>(),
-            NActors::TActorId{}, nullptr, true);
+            NActors::TActorId{}, nullptr, true,
+            Config.EnableParallelUnionAllConsumerSizing);
 
         Graph->GetMeta().IsScan             = Config.IsScan;
         Graph->GetMeta().AllowOlapDataQuery = true;
@@ -384,6 +388,11 @@ public:
             reply->Result.TasksPerStage[stageId] = static_cast<ui32>(stageInfo.Tasks.size());
             for (ui64 taskId : stageInfo.Tasks) {
                 const auto& task = Graph->GetTask(taskId);
+                for (const auto& output : task.Outputs) {
+                    if (output.Type == TTaskOutputType::Scatter) {
+                        ++reply->Result.ScatterOutputs;
+                    }
+                }
                 if (task.Meta.ExpectedNodeId) {
                     reply->Result.TasksPerStageNode[stageId][*task.Meta.ExpectedNodeId]++;
                 } else {
@@ -683,12 +692,18 @@ public:
         });
     }
 
+    const NKqpProto::TKqpPhyQuery& LastPhysicalQuery() const {
+        UNIT_ASSERT_C(LastPlan, "BuildTasks has not been called yet");
+        return LastPlan->GetPhysicalQuery();
+    }
+
     // Compile sql, run the full TKqpTasksGraph init sequence, return task counts.
     TTaskDistribution BuildTasks(const TString& sql, TBuildConfig cfg = {}) {
         auto plan = CompileQuery(sql);
         UNIT_ASSERT_C(plan, "Failed to compile: " << sql);
 
         DumpExplain(*plan);
+        LastPlan = plan;
 
         auto edge = Runtime->AllocateEdgeActor();
         Runtime->Register(new TBuildTasksActor(edge, std::move(plan), std::move(cfg)));
@@ -769,6 +784,7 @@ private:
 private:
     std::optional<TKikimrRunner> Kikimr;
     TTestActorRuntime* Runtime = nullptr;
+    std::shared_ptr<const TPreparedQueryHolder> LastPlan;
 };
 
 class TKqpTasksGraphTpchFixture : public TKqpTasksGraphBuildFixture<32> {
@@ -2866,28 +2882,28 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         UNIT_ASSERT_VALUES_EQUAL(dist.TasksPerStage.size(), 25u);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  0), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  1), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 234);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 234);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  2), 253);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  3), 253);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  4), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 93);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  5), 101);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  6), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 93);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  8), 100);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  9), 93);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  7), 101);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  8), 108);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0,  9), 101);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 10), 256);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 11), 256);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 12), 93);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 13), 100);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 14), 93);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 12), 101);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 13), 108);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 14), 101);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 15), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 16), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 16), 2);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 17), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 18), 93);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 18), 101);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 19), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 20), 93);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 21), 187);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 22), 93);
-        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 23), 281);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 20), 101);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 21), 202);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 22), 101);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 23), 303);
         UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 24), 1);
 
         UNIT_ASSERT_VALUES_EQUAL(dist.NodesUsed(), NODE_COUNT);
@@ -2896,28 +2912,28 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
         AssertNodeDistribution(dist, 0, {
             /* stage 0 */ { {2, 104}, {3, 16} },
             /* stage 1 */ { {2, 104}, {3, 16} },
-            /* stage 2 */ { {1, 6}, {2, 114} },
-            /* stage 3 */ { {1, 6}, {2, 114} },
+            /* stage 2 */ { {2, 107}, {3, 13} },
+            /* stage 3 */ { {2, 107}, {3, 13} },
             /* stage 4 */ { {2, 104}, {3, 16} },
-            /* stage 5 */ { {1, 93} },
+            /* stage 5 */ { {1, 101} },
             /* stage 6 */ { {2, 104}, {3, 16} },
-            /* stage 7 */ { {1, 93} },
-            /* stage 8 */ { {1, 100} },
-            /* stage 9 */ { {1, 93} },
+            /* stage 7 */ { {1, 101} },
+            /* stage 8 */ { {1, 108} },
+            /* stage 9 */ { {1, 101} },
             /* stage 10 */ { {2, 104}, {3, 16} },
             /* stage 11 */ { {2, 104}, {3, 16} },
-            /* stage 12 */ { {1, 93} },
-            /* stage 13 */ { {1, 100} },
-            /* stage 14 */ { {1, 93} },
+            /* stage 12 */ { {1, 101} },
+            /* stage 13 */ { {1, 108} },
+            /* stage 14 */ { {1, 101} },
             /* stage 15 */ { {1, 1} },
-            /* stage 16 */ { {1, 1} },
+            /* stage 16 */ { {2, 1} },
             /* stage 17 */ { {1, 1} },
-            /* stage 18 */ { {1, 93} },
+            /* stage 18 */ { {1, 101} },
             /* stage 19 */ { {1, 1} },
-            /* stage 20 */ { {1, 93} },
-            /* stage 21 */ { {1, 53}, {2, 67} },
-            /* stage 22 */ { {1, 93} },
-            /* stage 23 */ { {2, 79}, {3, 41} },
+            /* stage 20 */ { {1, 101} },
+            /* stage 21 */ { {1, 38}, {2, 82} },
+            /* stage 22 */ { {1, 101} },
+            /* stage 23 */ { {2, 57}, {3, 63} },
             /* stage 24 */ { {1, 1} },
         });
     }
@@ -2954,5 +2970,201 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
     }
 
 } // Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild)
+
+Y_UNIT_TEST_SUITE(TKqpTasksGraphParallelUnionAll) {
+
+    class TFixture : public TKqpTasksGraphBuildFixture<16> {
+    public:
+        void SetUp(NUnitTest::TTestContext& ctx) override {
+            TKqpTasksGraphBuildFixture::SetUp(ctx);
+            Execute(R"(
+                CREATE TABLE pua_src (
+                    k Int64 NOT NULL,
+                    part Int32 NOT NULL,
+                    v Double NOT NULL,
+                    PRIMARY KEY (k)
+                ) PARTITION BY HASH (k)
+                WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4);
+
+                CREATE TABLE pua_src_wide (
+                    k Int64 NOT NULL,
+                    part Int32 NOT NULL,
+                    v Double NOT NULL,
+                    PRIMARY KEY (k)
+                ) PARTITION BY HASH (k)
+                WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 8);
+            )");
+        }
+
+        TTaskDistribution Build(TStringBuf query, bool enableSizing) {
+            TBuildConfig cfg;
+            cfg.NodeCount = 1;
+            cfg.NodeComputeActors = 1u << 20;
+            cfg.NodeTotalMemoryBytes = 256ULL << 30;
+            cfg.EnableParallelUnionAllConsumerSizing = enableSizing;
+
+            return TKqpTasksGraphBuildFixture::BuildTasks(TString(query), cfg);
+        }
+
+        TTaskDistribution Build(bool enableSizing) {
+            return Build(Query, enableSizing);
+        }
+
+        // Both branches share one scan. Fix only that stage so consumer sizing remains automatic.
+        static constexpr TStringBuf Query = R"(
+            PRAGMA ydb.OptimizerHints = 'Rows(pua_src # 1e9)';
+            PRAGMA ydb.OverridePlanner = @@ [
+                {"tx": 0, "stage": 0, "tasks": 2}
+            ] @@;
+            SELECT k, SUM(v) AS s, MIN(v) AS mn, MAX(v) AS mx, COUNT(*) AS c FROM (
+                SELECT k, v FROM pua_src WHERE part = 0
+                UNION ALL
+                SELECT k, v FROM pua_src WHERE part = 1
+            ) GROUP BY k;
+        )";
+
+        static constexpr TStringBuf LimitQuery = R"(
+            PRAGMA ydb.OptimizerHints = 'Rows(pua_src # 1e9)';
+            PRAGMA ydb.OverridePlanner = @@ [
+                {"tx": 0, "stage": 0, "tasks": 2}
+            ] @@;
+            SELECT k, v * RandomNumber(CAST(k AS Uint64)) AS r FROM (
+                SELECT k, v FROM pua_src WHERE part = 0
+                UNION ALL
+                SELECT k, v FROM pua_src WHERE part = 1
+            ) LIMIT 10;
+        )";
+
+        static constexpr TStringBuf WideAggregationQuery = R"(
+            PRAGMA ydb.OptimizerHints = 'Rows(pua_src # 1e9)';
+            PRAGMA ydb.OverridePlanner = @@ [
+                {"tx": 0, "stage": 0, "tasks": 8}
+            ] @@;
+            SELECT k, SUM(v) AS s, MIN(v) AS mn, MAX(v) AS mx, COUNT(*) AS c FROM (
+                SELECT k, v FROM pua_src WHERE part = 0
+                UNION ALL
+                SELECT k, v FROM pua_src WHERE part = 1
+            ) GROUP BY k;
+        )";
+
+        // OFF must retain Map outputs even when one input is narrower than the consumer.
+        static constexpr TStringBuf UnequalInputsQuery = R"(
+            SELECT k, SUM(v) AS s FROM (
+                SELECT k, v FROM pua_src
+                UNION ALL
+                SELECT k, v FROM pua_src_wide
+            ) GROUP BY k;
+        )";
+
+        static constexpr TStringBuf EmptyRangeQuery = R"(
+            SELECT k, SUM(v) AS s FROM (
+                SELECT k, v FROM pua_src WHERE k > 10 AND k < 10
+                UNION ALL
+                SELECT k, v FROM pua_src_wide
+            ) GROUP BY k;
+        )";
+    };
+
+    // Returns {consumer task count, maximum producer task count}.
+    static std::pair<ui32, ui32> FindPuaConsumer(const TTaskDistribution& dist, const NKqpProto::TKqpPhyQuery& phy) {
+        for (ui32 stageIdx = 0; stageIdx < phy.GetTransactions(0).StagesSize(); ++stageIdx) {
+            const auto& stage = phy.GetTransactions(0).GetStages(stageIdx);
+            ui32 producers = 0;
+            bool allPua = stage.InputsSize() > 0;
+            for (const auto& input : stage.GetInputs()) {
+                if (input.GetTypeCase() != NKqpProto::TKqpPhyConnection::kParallelUnionAll) {
+                    allPua = false;
+                    break;
+                }
+                producers = std::max(producers, dist.Count(0, input.GetStageIndex()));
+            }
+            if (allPua) {
+                return {dist.Count(0, stageIdx), producers};
+            }
+        }
+        return {0, 0};
+    }
+
+    Y_UNIT_TEST_F(ConsumerCopiesProducerCountByDefault, TFixture) {
+        auto dist = Build(/* enableSizing */ false);
+        AssertNoCrossNodeCopyChannels(dist);
+
+        auto [consumers, producers] = FindPuaConsumer(dist, LastPhysicalQuery());
+        UNIT_ASSERT_C(producers > 0, "no ParallelUnionAll consumer stage found in the plan");
+        UNIT_ASSERT_VALUES_EQUAL_C(consumers, producers,
+            "without the flag the consumer stage must copy the producer count");
+    }
+
+    Y_UNIT_TEST_F(FeatureFlagOffDoesNotEmitScatterWireType, TFixture) {
+        auto dist = Build(UnequalInputsQuery, /* enableSizing */ false);
+        AssertNoCrossNodeCopyChannels(dist);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(dist.ScatterOutputs, 0,
+            "the kill-switch must preserve the legacy Map wire type for rolling-upgrade compatibility");
+    }
+
+    Y_UNIT_TEST_F(EmptyPrunedProducerIsAnEmptyUnionInput, TFixture) {
+        auto dist = Build(EmptyRangeQuery, /* enableSizing */ true);
+        AssertNoCrossNodeCopyChannels(dist);
+
+        bool foundEmpty = false;
+        bool foundNonEmpty = false;
+        for (const auto& tx : LastPhysicalQuery().GetTransactions()) {
+            for (const auto& stage : tx.GetStages()) {
+                for (const auto& input : stage.GetInputs()) {
+                    if (input.GetTypeCase() != NKqpProto::TKqpPhyConnection::kParallelUnionAll) {
+                        continue;
+                    }
+                    const ui32 tasks = dist.Count(0, input.GetStageIndex());
+                    foundEmpty |= tasks == 0;
+                    foundNonEmpty |= tasks > 0;
+                }
+            }
+        }
+        UNIT_ASSERT_C(foundEmpty && foundNonEmpty,
+            "test plan must retain one empty and one non-empty ParallelUnionAll producer");
+    }
+
+    Y_UNIT_TEST_F(ConsumerSizedFromResources, TFixture) {
+        auto dist = Build(/* enableSizing */ true);
+        AssertNoCrossNodeCopyChannels(dist);
+
+        auto [consumers, producers] = FindPuaConsumer(dist, LastPhysicalQuery());
+        UNIT_ASSERT_C(producers > 0, "no ParallelUnionAll consumer stage found in the plan");
+        UNIT_ASSERT_C(consumers > producers,
+            "consumer stage must exceed the producer count when sized from resources, got "
+                << consumers << " consumers for " << producers << " producers");
+    }
+
+    Y_UNIT_TEST_F(NonAggregatingLimitConsumerKeepsProducerCount, TFixture) {
+        auto dist = Build(LimitQuery, /* enableSizing */ true);
+        AssertNoCrossNodeCopyChannels(dist);
+
+        auto [consumers, producers] = FindPuaConsumer(dist, LastPhysicalQuery());
+        UNIT_ASSERT_C(producers > 0, "no ParallelUnionAll consumer stage found in the LIMIT plan");
+        UNIT_ASSERT_VALUES_EQUAL_C(consumers, producers,
+            "a non-aggregating LIMIT consumer must keep the producer count");
+    }
+
+    Y_UNIT_TEST_F(WideAggregatingConsumerSizedFromResources, TFixture) {
+        auto offDist = Build(WideAggregationQuery, /* enableSizing */ false);
+        AssertNoCrossNodeCopyChannels(offDist);
+
+        auto [offConsumers, offProducers] = FindPuaConsumer(offDist, LastPhysicalQuery());
+        UNIT_ASSERT_VALUES_EQUAL(offProducers, 8);
+        UNIT_ASSERT_VALUES_EQUAL(offConsumers, offProducers);
+        UNIT_ASSERT_VALUES_EQUAL(offDist.ScatterOutputs, 0);
+
+        auto dist = Build(WideAggregationQuery, /* enableSizing */ true);
+        AssertNoCrossNodeCopyChannels(dist);
+
+        auto [consumers, producers] = FindPuaConsumer(dist, LastPhysicalQuery());
+        UNIT_ASSERT_VALUES_EQUAL(producers, offProducers);
+        UNIT_ASSERT_C(consumers > producers,
+            "a wide aggregation consumer must expand when resources allow, got "
+                << consumers << " consumers for " << producers << " producers");
+        UNIT_ASSERT_C(dist.ScatterOutputs > 0, "expanded consumer must receive Scatter outputs");
+    }
+}
 
 } // namespace NKikimr::NKqp

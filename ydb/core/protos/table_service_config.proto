@@ -590,4 +590,7 @@ message TTableServiceConfig {
     // the full YQL peephole; false uses focused KQP compatibility lowering and prunes unused aggregation
     // outputs. Can be overridden per query with PRAGMA ydb.EnableNewRBOPhysicalStagePeephole.
     optional bool EnableNewRBOPhysicalStagePeephole = 147 [default = true, (InvalidateCompileCache) = true];
+
+    // Enables consumer expansion and Scatter outputs; all participating nodes must support the Scatter wire type.
+    optional bool EnableParallelUnionAllConsumerSizing = 148 [default = false, (InvalidateCompileCache) = true];
 };

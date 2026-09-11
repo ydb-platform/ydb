@@ -51,6 +51,8 @@ message TProgram {
 
         bool HasWatermarkGenerator = 17;
         optional uint64 WatermarkGeneratorIdleTimeoutUs = 18;
+        // Planner permits automatic consumer expansion; the executer applies topology and resource limits.
+        bool CanExpandParallelUnionAllConsumer = 19;
     }
 
     uint32 RuntimeVersion = 1;
@@ -140,6 +142,11 @@ message TTaskOutputRangePartition {
 message TTaskOutputBroadcast {
 }
 
+// Each data row goes to one channel; row placement is unconstrained and may depend on channel availability.
+// Checkpoints and watermarks must reach every channel.
+message TTaskOutputScatter {
+}
+
 message THashV1 {
 }
 
@@ -180,6 +187,7 @@ message TTaskOutput {
         TTaskOutputBroadcast Broadcast = 13;
         TTaskOutputEffects Effects = 14;
         TTaskOutputSink Sink = 15;
+        TTaskOutputScatter Scatter = 16;
     }
     TDqTransform Transform = 30;
 }

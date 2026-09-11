@@ -1,5 +1,6 @@
 #include "kqp_tasks_graph.h"
 #include "max_tasks_graph.h"
+#include "kqp_scatter_topology.h"
 
 #include "kqp_partition_helper.h"
 
@@ -953,8 +954,17 @@ void TKqpTasksGraph::BuildParallelUnionAllChannels(const TStageInfo& stageInfo, 
 {
     const ui64 inputStageTasksSize = inputStageInfo.Tasks.size();
     const ui64 originStageTasksSize = stageInfo.Tasks.size();
+    // A pruned UNION ALL input is an empty stream and needs no channels.
+    if (!inputStageTasksSize) {
+        return;
+    }
     Y_ENSURE(originStageTasksSize);
     Y_ENSURE(nextOriginTaskId < originStageTasksSize);
+
+    if (GetMeta().EnableParallelUnionAllConsumerSizing && originStageTasksSize > inputStageTasksSize) {
+        BuildScatterChannels(stageInfo, inputIndex, inputStageInfo, outputIndex, enableSpilling, logFunc);
+        return;
+    }
 
     for (ui64 i = 0; i < inputStageTasksSize; ++i) {
         const auto originTaskId = inputStageInfo.Tasks[i];
@@ -962,6 +972,45 @@ void TKqpTasksGraph::BuildParallelUnionAllChannels(const TStageInfo& stageInfo, 
         BuildChannelBetweenTasks(stageInfo, inputStageInfo, originTaskId, targetTaskId, inputIndex, outputIndex, enableSpilling, logFunc);
         nextOriginTaskId = (nextOriginTaskId + 1) % originStageTasksSize;
     }
+}
+
+// For this input, each consumer has exactly one producer; producer fan-outs differ by at most one.
+// Channel accounting in TMaxTasksGraph must match this wiring.
+void TKqpTasksGraph::BuildScatterChannels(const TStageInfo& stageInfo, ui32 inputIndex, const TStageInfo& inputStageInfo,
+    ui32 outputIndex, bool enableSpilling, const TChannelLogFunc& logFunc)
+{
+    const ui64 producers = inputStageInfo.Tasks.size();
+    const ui64 consumers = stageInfo.Tasks.size();
+    Y_ENSURE(producers);
+    Y_ENSURE(consumers >= producers);
+
+    std::vector<std::optional<ui64>> producerNodes;
+    std::vector<std::optional<ui64>> consumerNodes;
+    producerNodes.reserve(producers);
+    consumerNodes.reserve(consumers);
+    for (ui64 taskId : inputStageInfo.Tasks) {
+        producerNodes.push_back(GetTask(taskId).Meta.ExpectedNodeId);
+    }
+    for (ui64 taskId : stageInfo.Tasks) {
+        consumerNodes.push_back(GetTask(taskId).Meta.ExpectedNodeId);
+    }
+    const auto topology = MakeLocalScatterTopology(producerNodes, consumerNodes);
+    for (ui64 i = 0; i < producers; ++i) {
+        const auto originTaskId = inputStageInfo.Tasks[i];
+        for (size_t consumer : topology[i]) {
+            const auto targetTaskId = stageInfo.Tasks[consumer];
+            BuildChannelBetweenTasks(stageInfo, inputStageInfo, originTaskId, targetTaskId, inputIndex, outputIndex,
+                enableSpilling, logFunc);
+        }
+        // BuildChannelBetweenTasks sets Map, which requires a single output channel.
+        GetTask(originTaskId).Outputs[outputIndex].Type = TTaskOutputType::Scatter;
+    }
+    YDB_LOG_DEBUG("Built ParallelUnionAll scatter channels",
+        {"srcStageId", inputStageInfo.Id.StageId},
+        {"dstStageId", stageInfo.Id.StageId},
+        {"producers", producers},
+        {"consumers", consumers},
+        {"channels", consumers});
 }
 
 void TKqpTasksGraph::BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32 inputIndex, const TStageInfo& inputStageInfo, ui32 outputIndex,
@@ -1659,6 +1708,12 @@ void TKqpTasksGraph::FillOutputDesc(NYql::NDqProto::TTaskOutput& outputDesc, con
             break;
         }
 
+        case TTaskOutputType::Scatter: {
+            YQL_ENSURE(!output.Channels.empty());
+            outputDesc.MutableScatter();
+            break;
+        }
+
         case TTaskOutputType::Effects: {
             outputDesc.MutableEffects();
             break;
@@ -2247,6 +2302,10 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
                     newOutput.Type = TTaskOutputType::Broadcast;
                     break;
                 }
+                case NDqProto::TTaskOutput::kScatter: {
+                    newOutput.Type = TTaskOutputType::Scatter;
+                    break;
+                }
                 case NDqProto::TTaskOutput::kEffects: {
                     newOutput.Type = TTaskOutputType::Effects;
                     break;
@@ -2378,7 +2437,7 @@ void TKqpTasksGraph::BuildSysViewScanTasks(TStageInfo& stageInfo) {
     }
 }
 
-std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> TKqpTasksGraph::GetMaxTasksAggregation(const TStageInfo& stageInfo, const ui32 previousTasksCount, const ui32 nodesCount) {
+std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> TKqpTasksGraph::GetMaxTasksAggregation(const TStageInfo& stageInfo, const std::optional<ui32> previousTasksCount, const ui32 nodesCount) {
     TTaskType::ECreateReason taskReason = TTaskType::MINIMUM_COMPUTE;
     ui32 result = 1;
 
@@ -2391,7 +2450,9 @@ std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> TKqpTasksGraph::GetMax
     } else if (nodesCount) {
         const TStagePredictor& predictor = stageInfo.Meta.Tx.Body->GetCalculationPredictor(stageInfo.Meta.GetStageIdx(stageInfo.Id));
         taskReason = TTaskType::LEVEL_PREDICTED; // TODO: need to store also params for predictor
-        result = predictor.CalcTasksOptimalCount(TStagePredictor::GetUsableThreads(), previousTasksCount / nodesCount) * nodesCount;
+        const std::optional<ui32> previousTasksPerNode = previousTasksCount
+            ? std::make_optional(*previousTasksCount / nodesCount) : std::nullopt;
+        result = predictor.CalcTasksOptimalCount(TStagePredictor::GetUsableThreads(), previousTasksPerNode) * nodesCount;
     }
 
     return {result, taskReason};
@@ -3649,6 +3710,28 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
         BuildResultChannels(tx.Body, txIdx);
     }
 
+    if (UseKqpTasksGraphV2) {
+        YDB_LOG_DEBUG("Task graph channel accounting", {"nodes", ([&] {
+            THashMap<ui64, size_t> actual;
+            for (const auto& channel : GetChannels()) {
+                if (!channel.SrcTask || !channel.DstTask) {
+                    continue; // External result endpoints are outside the inter-stage budget.
+                }
+                for (ui64 taskId : {channel.SrcTask, channel.DstTask}) {
+                    if (const auto& node = GetTask(taskId).Meta.ExpectedNodeId) {
+                        ++actual[*node];
+                    }
+                }
+            }
+            TStringStream result;
+            for (const auto& [node, endpoints] : actual) {
+                result << " node=" << node << " estimated=" << MaxTasksGraph->GetChannelCountOnNode(node)
+                    << " actual=" << endpoints;
+            }
+            return result.Str();
+        })()});
+    }
+
     return sourceScanPartitionsCount;
 }
 
@@ -3680,7 +3763,8 @@ TKqpTasksGraph::TKqpTasksGraph(
     const TKqpRequestCounters::TPtr& counters,
     TActorId bufferActorId,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-    bool useKqpTasksGraphV2)
+    bool useKqpTasksGraphV2,
+    bool enableParallelUnionAllConsumerSizing)
     : Transactions(transactions)
     , TxAlloc(txAlloc)
     , AggregationSettings(aggregationSettings)
@@ -3700,6 +3784,7 @@ TKqpTasksGraph::TKqpTasksGraph(
     GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
     GetMeta().Database = database;
     GetMeta().RequestIsolationLevel = NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SERIALIZABLE;
+    GetMeta().EnableParallelUnionAllConsumerSizing = enableParallelUnionAllConsumerSizing;
 
     if (Transactions.empty()) {
         return;
@@ -4073,8 +4158,11 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
     bool isShuffle = false;
     bool forceMapTasks = false;
     ui32 mapConnectionCount = 0;
+    ui32 parallelUnionAllTasks = 0;
+    bool isParallelUnionAll = false;
 
     std::list<TStageId> inputs;
+    std::set<size_t> parallelUnionAllInputs;
     std::optional<TStageId> copyInput;
     TMaxTasksGraph::EStageType stageType = TMaxTasksGraph::ANY;
     for (ui32 inputIndex = 0; inputIndex < stage.InputsSize(); ++inputIndex) {
@@ -4146,6 +4234,9 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
             }
             case NKqpProto::TKqpPhyConnection::kParallelUnionAll: {
                 partitionsCount = std::max<ui64>(partitionsCount, MaxTasksGraph->GetStageTasksCount(inputStageId));
+                parallelUnionAllTasks += MaxTasksGraph->GetStageTasksCount(inputStageId);
+                parallelUnionAllInputs.insert(inputIndex);
+                isParallelUnionAll = true;
                 break;
             }
             case NKqpProto::TKqpPhyConnection::kVectorResolve:
@@ -4170,6 +4261,26 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
             auto [newPartitionCount, _] = GetMaxTasksAggregation(stageInfo, inputTasks, nodesCount);
             partitionsCount = std::max(newPartitionCount, partitionsCount);
         }
+    } else if (isParallelUnionAll && !forceMapTasks && GetMeta().EnableParallelUnionAllConsumerSizing) {
+        const auto& settings = stage.GetProgram().GetSettings();
+        const bool planAllowsExpansion = settings.GetCanExpandParallelUnionAllConsumer();
+
+        // Explicit TaskCount takes precedence over planner eligibility for automatic expansion.
+        if (stage.GetTaskCount()) {
+            stageType = TMaxTasksGraph::FIXED;
+            partitionsCount = stage.GetTaskCount();
+        } else if (planAllowsExpansion) {
+            // An absent previous-stage count lifts the producer-count cap. Zero is an explicit limit in the predictor.
+            auto [newPartitionCount, _] = GetMaxTasksAggregation(stageInfo, std::nullopt, nodesCount);
+            partitionsCount = std::max(newPartitionCount, partitionsCount);
+        }
+        YDB_LOG_DEBUG("Selected ParallelUnionAll consumer stage size",
+            {"stageId", stageInfo.Id.StageId},
+            {"producers", parallelUnionAllTasks},
+            {"consumers", partitionsCount},
+            {"explicitTaskCount", stage.GetTaskCount()},
+            {"planAllowsExpansion", planAllowsExpansion},
+            {"nodes", nodesCount});
     }
 
     // Tasks writing through the shared per-query buffer actor must run on the executer's own node (see
@@ -4180,7 +4291,8 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
         pinnedNode = GetMeta().ExecuterId.NodeId();
     }
 
-    MaxTasksGraph->AddStage(stageInfo, stageType, inputs, copyInput);
+    MaxTasksGraph->AddStage(stageInfo, stageType, inputs, copyInput, parallelUnionAllInputs,
+        GetMeta().EnableParallelUnionAllConsumerSizing);
     if (partitionsCount) {
         // It's possible to have zero partitions in case we COPY from input stage, which is empty because of non-intersecting param values:
         // i.e. "WHERE a > $1 AND a < $2", where $1 = $2 = 10

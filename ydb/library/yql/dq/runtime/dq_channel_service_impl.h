@@ -126,6 +126,7 @@ public:
     ~TChannelStub() override {
         if (Aggregator) {
             Aggregator->SubCount(EDqFillLevel::HardLimit);
+            --Aggregator->UnboundCount;
         }
     }
 
@@ -135,6 +136,7 @@ public:
 
     void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) override {
         Aggregator = aggregator;
+        ++Aggregator->UnboundCount;
         Aggregator->AddCount(EDqFillLevel::HardLimit);
     }
 

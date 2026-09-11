@@ -7,6 +7,7 @@
 
 #include <list>
 #include <optional>
+#include <set>
 #include <vector>
 
 namespace NKikimr::NKqp {
@@ -39,7 +40,8 @@ public:
     void AddNodes(const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot);
     void AddNode(TNodeId node); // TODO: it's workaround. remove later.
 
-    void AddStage(TStageInfo& stageInfo, EStageType type, const std::list<TStageId>& inputs, std::optional<TStageId> copyInput = std::nullopt);
+    void AddStage(TStageInfo& stageInfo, EStageType type, const std::list<TStageId>& inputs, std::optional<TStageId> copyInput = std::nullopt,
+        const std::set<size_t>& parallelUnionAllInputs = {}, bool enableScatter = false);
 
     void AddTask(const TTask& task, std::optional<TNodeId> node);
 
@@ -58,6 +60,7 @@ public:
 
     size_t GetStageTasksCount(const TStageId& stage, TNodeId node) const;
     size_t GetStageTasksCount(const TStageId& stage) const;
+    size_t GetChannelCountOnNode(TNodeId node) const;
 
     TString DumpToString() const;
 
@@ -79,6 +82,10 @@ private:
 
         std::list<TStageIdx> Inputs;
         std::list<TStageIdx> Outputs;
+
+        // Input positions, not source stage IDs: one stage can feed multiple connection kinds.
+        std::set<size_t> ParallelUnionAllInputs;
+        bool EnableScatter = false;
 
         // Task Ids in creation order; the position is the column index. Every stage of a group holds exactly one task
         // per column, so all of them have the same number of tasks (== the group's column count).

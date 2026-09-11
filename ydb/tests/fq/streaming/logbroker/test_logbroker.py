@@ -7,6 +7,10 @@ from ydb.tests.fq.streaming_common.common import StreamingTestBase, YdbClient
 
 
 def wait_topic_consumer(driver, cluster_name, path, consumer, timeout=60):
+    def normalize_consumer_name(name):
+        return name.lstrip("/").removeprefix("logbroker-federation/")
+
+    expected_consumer = normalize_consumer_name(consumer)
     deadline = time.monotonic() + timeout
     consumer_names = []
     last_error = None
@@ -15,8 +19,8 @@ def wait_topic_consumer(driver, cluster_name, path, consumer, timeout=60):
             description = driver.topic_client.describe_topic(path)
             consumer_names = [item.name for item in description.consumers]
             last_error = None
-            # Federation consumer paths may be returned without the leading slash.
-            if consumer.lstrip("/") in {name.lstrip("/") for name in consumer_names}:
+            # Cluster descriptions may omit the federation prefix and leading slash.
+            if expected_consumer in {normalize_consumer_name(name) for name in consumer_names}:
                 return
         except (ydb.SchemeError, ydb.NotFound) as error:
             last_error = error

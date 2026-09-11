@@ -20,17 +20,22 @@ namespace NFwd {
     public:
         const TSharedData* Get(TPageOffset offset) const
         {
-            if (!FirstUnseenOffset.IsMax() && offset <= FirstUnseenOffset) {
+            if (!MaxSeenOffset.IsMax() && offset <= MaxSeenOffset) {
                 for (const auto& page : LoadedPages) {
                     if (page.Location.Offset == offset) {
                         return &page.Data;
                     }
                 }
 
+                // Contract violation, not a reloadable page: the forward cache is
+                // a forward read-ahead, and a client that goes back resets it
+                // first (TEnv::Reset). Kept fatal for V1 and V2 alike, and
+                // untested because no supported scenario reaches it.
                 Y_TABLET_ERROR("Failed to locate page within forward trace");
             }
 
-            // next pages may be requested, ignore them
+            // Not in buffer (or offset beyond what was ever loaded) —
+            // caller falls through to load the page.
             return nullptr;
         }
 
@@ -48,7 +53,7 @@ namespace NFwd {
             LoadedPages[Position].Location.Offset = page.Offset;
             LoadedPages[Position].Location.Size = page.Size;
             LoadedPages[Position].Location.Crc32 = page.Crc32;
-            FirstUnseenOffset = FirstUnseenOffset.IsMax() ? page.Offset : Max(FirstUnseenOffset, page.Offset);
+            MaxSeenOffset = MaxSeenOffset.IsMax() ? page.Offset : Max(MaxSeenOffset, page.Offset);
 
             return releasedDataSize;
         }
@@ -61,7 +66,7 @@ namespace NFwd {
         std::array<NPageCollection::TLoadedPage, Capacity> LoadedPages;
         ui32 Position = 0;
         ui64 DataSize = 0;
-        TPageOffset FirstUnseenOffset;
+        TPageOffset MaxSeenOffset;
     };
 
     class TIndexPageLocator {

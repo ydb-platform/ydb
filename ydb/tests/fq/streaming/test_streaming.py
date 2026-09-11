@@ -1277,11 +1277,11 @@ FROM `{table_name}`"""
                 INSERT INTO {out} SELECT data FROM $in;
             END DO;'''
 
-        path = f"/Root/{name}"
+        path = f"{kikimr.get_database_name()}//{name}"
         kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out, data_type="String", data_expr="data"))
         self.wait_completed_checkpoints(kikimr, path)
         name_int = name + '_int'
-        path_int = f"/Root/{name_int}"
+        path_int = f"{kikimr.get_database_name()}//{name_int}"
         kikimr.ydb_client.query(sql.format(query_name=name_int, inp=f'`{source_name2}`.{self.input_topic}', out=out, data_type="Int64", data_expr='"from_integer_" || CAST(data AS String)'))
         self.wait_completed_checkpoints(kikimr, path_int)
 

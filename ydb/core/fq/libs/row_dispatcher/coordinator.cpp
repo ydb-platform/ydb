@@ -218,6 +218,7 @@ public:
         NActors::TActorId nodesManagerId);
 
     void Bootstrap();
+    void PassAway() override;
 
     static constexpr char ActorName[] = "FQ_RD_COORDINATOR";
 
@@ -236,6 +237,7 @@ public:
 
     STRICT_STFUNC(
         StateFunc, {
+        cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
         hFunc(NActors::TEvents::TEvPing, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
         hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
@@ -298,6 +300,14 @@ void TActorCoordinator::Bootstrap() {
         {"rebalancingTimeout", RebalancingTimeout});
     auto nodeGroup = Metrics.Counters->GetSubgroup("node", ToString(SelfId().NodeId()));
     Metrics.IsActive = nodeGroup->GetCounter("IsActive");
+}
+
+void TActorCoordinator::PassAway() {
+    for (const auto& sessionId : InterconnectSessions) {
+        Send(sessionId, new NActors::TEvents::TEvUnsubscribe());
+    }
+    Metrics.IsActive->Set(0);
+    TActorBootstrapped::PassAway();
 }
 
 void TActorCoordinator::UpdateKnownRowDispatchers(NActors::TActorId actorId, bool isLocal) {

@@ -357,6 +357,8 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     const TRowDispatcherSettings Config;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     TActorId CompileServiceActorId;
+    TActorId LocalCoordinatorActorId;
+    TActorId LeaderElectionActorId;
     TMaybe<TActorId> CoordinatorActorId;
     ui64 CoordinatorGeneration = 0;
     TSet<TActorId> CoordinatorChangedSubscribers;
@@ -466,6 +468,7 @@ public:
     );
 
     void Bootstrap();
+    void PassAway() override;
 
     static constexpr char ActorName[] = "FQ_ROW_DISPATCHER";
 
@@ -508,6 +511,7 @@ public:
 
     STRICT_STFUNC(
         StateFunc, {
+        cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
         hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
@@ -577,11 +581,11 @@ void TRowDispatcher::Bootstrap() {
         {"tenant", Tenant});
 
     const auto& config = Config.GetCoordinator();
-    auto coordinatorId = Register(NewCoordinator(SelfId(), config, Tenant, Counters, NodesManagerId).release());
+    LocalCoordinatorActorId = Register(NewCoordinator(SelfId(), config, Tenant, Counters, NodesManagerId).release());
     auto leaderElection = !config.GetCoordinationNodePath().empty()
-        ? NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, Driver, Tenant, Counters)
-        : NewLocalLeaderElection(SelfId(), coordinatorId, Counters);
-    Register(leaderElection.release(), TMailboxType::HTSwap, NKikimr::AppData()->SystemPoolId);
+        ? NewLeaderElection(SelfId(), LocalCoordinatorActorId, config, CredentialsProviderFactory, Driver, Tenant, Counters)
+        : NewLocalLeaderElection(SelfId(), LocalCoordinatorActorId, Counters);
+    LeaderElectionActorId = Register(leaderElection.release(), TMailboxType::HTSwap, NKikimr::AppData()->SystemPoolId);
 
     CompileServiceActorId = Register(NRowDispatcher::CreatePurecalcCompileService(Config.GetCompileService(), Counters));
 
@@ -598,6 +602,18 @@ void TRowDispatcher::Bootstrap() {
             TlsActivationContext->ActorSystem(), SelfId());
     }
     NodesTracker.Init(SelfId());
+}
+
+void TRowDispatcher::PassAway() {
+    for (const auto& [_, topic] : TopicSessions) {
+        for (const auto& [sessionId, session] : topic.Sessions) {
+            Send(sessionId, new NActors::TEvents::TEvPoisonPill());
+        }
+    }
+    Send(LeaderElectionActorId, new NActors::TEvents::TEvPoison());
+    Send(LocalCoordinatorActorId, new NActors::TEvents::TEvPoison());
+    Send(CompileServiceActorId, new NActors::TEvents::TEvPoison());
+    TActorBootstrapped::PassAway();
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {

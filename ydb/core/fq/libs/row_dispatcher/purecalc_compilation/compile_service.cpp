@@ -129,10 +129,18 @@ public:
     static constexpr char ActorName[] = "FQ_ROW_DISPATCHER_COMPILE_SERVICE";
 
     STRICT_STFUNC(StateFunc,
+        cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
         hFunc(TEvRowDispatcher::TEvPurecalcCompileRequest, Handle);
         hFunc(TEvRowDispatcher::TEvPurecalcCompileAbort, Handle)
         hFunc(TEvPrivate::TEvCompileFinished, Handle);
     )
+
+    void PassAway() override {
+        Counters.CompileQueueSize->Sub(RequestsQueue.size());
+        Counters.ActiveCompileActors->Sub(InFlightCompilations.size());
+        // Running compilation actors own their factories and finish independently.
+        TBase::PassAway();
+    }
 
     void Handle(TEvRowDispatcher::TEvPurecalcCompileRequest::TPtr& ev) {
         const auto requestActor = ev->Sender;

@@ -821,7 +821,13 @@ private:
             return;
         }
 
-        resultValue = NYql::NUdf::TUnboxedValuePod(static_cast<TResult>(jsonNumber.value()));
+        const double number = jsonNumber.value();
+        if (Y_UNLIKELY(number < std::numeric_limits<TResult>::lowest() || number > std::numeric_limits<TResult>::max())) {
+            status = TStatus::Fail(EStatusId::BAD_REQUEST, "Floating point number is out of range");
+            return;
+        }
+
+        resultValue = NYql::NUdf::TUnboxedValuePod(static_cast<TResult>(number));
     }
 
     static void SetParsingError(simdjson::error_code error, simdjson::builtin::ondemand::value jsonValue, const TString& description, TStatus& status) {

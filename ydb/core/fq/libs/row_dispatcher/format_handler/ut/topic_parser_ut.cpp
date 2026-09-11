@@ -1082,6 +1082,44 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         CheckColumnError(R"({"a1": "456", "a2": 42, "a3": 1.11.1})", 2, EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json string at offset " << FIRST_OFFSET + 3 << ", got parsing error for column 'a3' with type [OptionalType; [DataType; Float]] subissue: { <main>: Error: Failed to parse data type Float from json number (raw: '1.11.1') subissue: { <main>: Error: Failed to extract json float number, error: NUMBER_ERROR: Problem while parsing a number } }");
     }
 
+    Y_UNIT_TEST_F(FloatRangeValidation, TJsonParserFixture) {
+        CheckSuccess(MakeParser({{"value", "[DataType; Float]"}}));
+        for (const auto* number : {"3.5e38", "-3.5e38", "1e100", "-1e100"}) {
+            CheckColumnError(TStringBuilder() << "{\"value\":" << number << "}", 0,
+                EStatusId::BAD_REQUEST, "Floating point number is out of range");
+        }
+    }
+
+    Y_UNIT_TEST_F(FloatRangeBoundaries, TJsonParserFixture) {
+        const TVector<float> expected = {Max<float>(), -Max<float>(), 0.0f, 1.5f};
+        size_t row = 0;
+        CheckSuccess(MakeParser({{"value", "[DataType; Float]"}, {"wide", "[DataType; Double]"}},
+            [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
+                UNIT_ASSERT_VALUES_EQUAL(numberRows, 1);
+                UNIT_ASSERT_VALUES_EQUAL(result[0][0].Get<float>(), expected.at(row++));
+                UNIT_ASSERT_VALUES_EQUAL(result[1][0].Get<double>(), 1e100);
+            }));
+        for (const auto* number : {"3.40282346638528859811704183484516925440e38", "-3.40282346638528859811704183484516925440e38", "0", "1.5"}) {
+            PushToParser(FIRST_OFFSET + row, TStringBuilder() << "{\"value\":" << number << ",\"wide\":1e100}");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(row, expected.size());
+    }
+
+    Y_UNIT_TEST_F(SkipOutOfRangeFloats, TJsonParserFixtureSkipErrors) {
+        CheckSuccess(MakeParser({{"value", "[DataType; Float]"}},
+            [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
+                UNIT_ASSERT_VALUES_EQUAL(numberRows, 1);
+                UNIT_ASSERT_VALUES_EQUAL(result[0][0].Get<float>(), 1.5f);
+                UNIT_ASSERT_VALUES_EQUAL(Parser->GetOffsets()[0], FIRST_OFFSET + 1);
+            }, false));
+        ++ExpectedBatches;
+        Parser->ParseMessages({
+            GetMessage(FIRST_OFFSET, R"({"value":1e100})"),
+            GetMessage(FIRST_OFFSET + 1, R"({"value":1.5})"),
+            GetMessage(FIRST_OFFSET + 2, R"({"value":-1e100})")
+        });
+    }
+
     Y_UNIT_TEST_F(StringsValidation, TJsonParserFixture) {
         CheckSuccess(MakeParser({{"a1", "[OptionalType; [DataType; Uint8]]"}}));
         CheckColumnError(R"({"a1": "-456"})", 0, EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json string at offset " << FIRST_OFFSET << ", got parsing error for column 'a1' with type [OptionalType; [DataType; Uint8]] subissue: { <main>: Error: Failed to parse data type Uint8 from json string: '-456' }");

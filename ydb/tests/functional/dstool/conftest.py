@@ -123,6 +123,7 @@ class BaseConfigBuilder:
                 if expected_slot_count is not None:
                     pdisk.ExpectedSlotCount = expected_slot_count
                     pdisk.PDiskConfig.ExpectedSlotCount = expected_slot_count
+                    pdisk.PDiskMetrics.SlotCount = expected_slot_count
                 if slot_count is not None:
                     pdisk.PDiskMetrics.SlotCount = slot_count
                 break

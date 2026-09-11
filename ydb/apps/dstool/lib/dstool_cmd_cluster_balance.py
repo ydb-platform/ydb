@@ -242,15 +242,14 @@ class BalancingStrategy(IBalancingStrategy):
         return False
 
     def filter_must_first_vslots(self, candidate_vslots):
-        """Restrict candidates to healthy VSlots on overpopulated PDisks when requested.
+        """Restrict candidates to VSlots on overpopulated PDisks when requested.
 
         In normal mode, retain all candidates so regular balancing remains possible
         after overpopulated sources are exhausted. Prioritization is handled by
         partition_candidate_vslots.
         """
         if self.args.only_from_overpopulated_pdisks:
-            return self.groups_info.filter_healthy_vslots(
-                filter_vslots_by_pdisks(candidate_vslots, self.overpopulated_pdisks))
+            return filter_vslots_by_pdisks(candidate_vslots, self.overpopulated_pdisks)
         return candidate_vslots
 
     def partition_candidate_vslots(self, candidate_vslots):

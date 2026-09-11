@@ -370,17 +370,6 @@ TDirectBlockGroupMock::BatchEraseFromPBuffer(
     return BatchEraseFromPBufferHandler(hostIndex, segments, traceId);
 }
 
-void TDirectBlockGroupMock::BarrierEraseFromPBuffer(ui64 lsn)
-{
-    Y_UNUSED(lsn);
-}
-
-NThreading::TFuture<std::optional<TPBufferKey>>
-TDirectBlockGroupMock::GatherSafeBarrierForErase()
-{
-    return NThreading::MakeFuture<std::optional<TPBufferKey>>(std::nullopt);
-}
-
 NThreading::TFuture<TDBGRestoreResponse>
 TDirectBlockGroupMock::RestoreDBGPBuffers(ui32 vChunkIndex)
 {

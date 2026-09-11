@@ -157,7 +157,7 @@ TDBGFixture::MakeDirectBlockGroup(
 {
     return std::make_shared<TDirectBlockGroup>(
         Runtime->GetActorSystem(0),
-        std::make_shared<TStorageConfig>(NProto::TStorageServiceConfig()),
+        std::make_shared<TStorageConfig>(StorageServiceConfig),
         executor,
         DiskDescription,
         DefaultBlockSize,

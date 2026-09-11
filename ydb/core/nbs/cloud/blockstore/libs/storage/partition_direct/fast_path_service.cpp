@@ -460,9 +460,7 @@ void TFastPathService::QueryAddHost(
 
 ui64 TFastPathService::GenerateLsn()
 {
-    const ui64 lsn = ++SequenceGenerator;
-    MaybeTriggerPBufferCleanup(lsn);
-    return lsn;
+    return ++SequenceGenerator;
 }
 
 void TFastPathService::StopTablet(const TString& reason)
@@ -470,23 +468,6 @@ void TFastPathService::StopTablet(const TString& reason)
     // Just forward the signal to the actor thread.
     auto event = std::make_unique<TEvPartitionDirectPrivate::TEvPoison>(reason);
     ActorSystem->Send(PartitionActorId, event.release());
-}
-
-bool TFastPathService::TryAdvancePBufferBarrier(
-    const NKikimr::NBsController::TDDiskId& pbufferDDiskId,
-    ui64 lsn)
-{
-    auto guard = Guard(PBufferBarrierLock);
-    auto [it, inserted] =
-        LastSentBarrierByPBuffer.try_emplace(pbufferDDiskId, lsn);
-    if (inserted) {
-        return true;
-    }
-    if (lsn > it->second) {
-        it->second = lsn;
-        return true;
-    }
-    return false;
 }
 
 TDuration TFastPathService::TakeVolumeCopyRangeBudget(ui64 byteCount)
@@ -518,7 +499,6 @@ TFastPathServiceInfo TFastPathService::GetMonInfo() const
 {
     return {
         .LsnCounter = SequenceGenerator.load(),
-        .LastSafeBarrier = LastSafeBarrier.load(),
         .TotalVChunks =
             Regions.size() * GetVChunksPerRegion(VolumeConfig->VChunkSize),
         .DbgCount = DirectBlockGroups.size(),
@@ -691,77 +671,6 @@ void TFastPathService::OnAllRegionsStopped()
         NKikimrServices::NBS_PARTITION,
         "%s OnAllRegionsStopped",
         LogTitle.GetWithTime().c_str());
-}
-
-void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)
-{
-    const ui64 step = StorageConfig->GetPBufferCleanupLsnStep();
-    if (!step || lsn % step != 0) {
-        return;
-    }
-    // lsn values are unique, so exactly one generator hits each multiple of
-    // step. Skip if a previous cleanup is still gathering, to avoid overlap.
-    bool expected = false;
-    if (!CleanupGather.Active.compare_exchange_strong(expected, true)) {
-        return;
-    }
-    PBufferCleanup();
-}
-
-void TFastPathService::PBufferCleanup()
-{
-    // Pull the smallest inflight record id from every DirectBlockGroup. Each
-    // group writes its own result slot; the last responder computes the global
-    // minimum (see FinishPBufferCleanup).
-    const size_t dbgCount = DirectBlockGroups.size();
-    CleanupGather.SafeBarriers.assign(dbgCount, std::nullopt);
-    CleanupGather.PendingResponses.store(dbgCount);
-
-    for (size_t i = 0; i < dbgCount; ++i) {
-        DirectBlockGroups[i]->GatherSafeBarrierForErase().Subscribe(
-            [weakSelf = weak_from_this(), i]   //
-            (const NThreading::TFuture<std::optional<TPBufferKey>>& f)
-            {
-                if (auto self = weakSelf.lock()) {
-                    self->OnGatherSafeBarrierForErase(i, f.GetValue());
-                }
-            });
-    }
-}
-
-void TFastPathService::OnGatherSafeBarrierForErase(
-    size_t dbgIndex,
-    std::optional<TPBufferKey> safeBarrier)
-{
-    CleanupGather.SafeBarriers[dbgIndex] = safeBarrier;
-    if (CleanupGather.PendingResponses.fetch_sub(1) == 1) {
-        FinishPBufferCleanup();
-    }
-}
-
-void TFastPathService::FinishPBufferCleanup()
-{
-    std::optional<TPBufferKey> globalMin;
-    for (const auto& safeBarrier: CleanupGather.SafeBarriers) {
-        if (safeBarrier && (!globalMin || *safeBarrier < *globalMin)) {
-            globalMin = safeBarrier;
-        }
-    }
-
-    CleanupGather.Active.store(false);
-
-    // Lsn 0 is the blocking bound: some vchunk has not finished restoring its
-    // dirty map, so its records are not accounted for yet. Skip the tick.
-    if (!globalMin || globalMin->Lsn == 0) {
-        return;
-    }
-
-    LastSafeBarrier.store(globalMin->Lsn);
-
-    const ui64 cleanupBound = globalMin->Lsn - 1;
-    for (const auto& dbg: DirectBlockGroups) {
-        dbg->BarrierEraseFromPBuffer(cleanupBound);
-    }
 }
 
 void TFastPathService::ScheduleDirtyMapDebugPrint()

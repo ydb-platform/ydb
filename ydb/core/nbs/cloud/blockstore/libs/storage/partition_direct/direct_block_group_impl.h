@@ -124,11 +124,6 @@ public:
         const TEraseSegments& segments,
         const NWilson::TTraceId& traceId) override;
 
-    void BarrierEraseFromPBuffer(ui64 lsn) override;
-
-    NThreading::TFuture<std::optional<TPBufferKey>>
-    GatherSafeBarrierForErase() override;
-
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) override;
 
@@ -258,6 +253,12 @@ private:
     [[nodiscard]] TString PrintHostAndNode(THostIndex host) const;
 
     NActors::TActorSystem* const ActorSystem = nullptr;
+    // PBuffer cleanup: on every lsn step take the minimum inflight key of the
+    // vchunks and send the barrier to the pbuffers. Executor thread.
+    void OnPBufferKeyMinted(TPBufferKey pBufferKey);
+    void PBufferCleanup();
+    [[nodiscard]] std::optional<TPBufferKey> ComputeSafeBarrierForErase() const;
+
     const TStorageConfigPtr StorageConfig;
     const TExecutorPtr Executor;
     const TThreadChecker ExecutorThreadChecker{Executor};
@@ -273,6 +274,14 @@ private:
 
     TDBGConnections Connections;
     TVector<TVChunkWeakPtr> VChunks;
+
+    // Largest lsn this DBG has minted: every record of it minted before the
+    // current cleanup tick is at most this, so it bounds what an idle DBG may
+    // drop.
+    ui64 MaxMintedLsn = 0;
+    // Last barrier sent per pbuffer host; a non-advancing MoveBarrier is
+    // logged by the DDisk as an error, so it is not re-sent.
+    TMap<THostIndex, ui64> LastSentBarrierByPBufferHost;
     TOracle Oracle;
     TDirectBlockGroupCounters Counters;
 

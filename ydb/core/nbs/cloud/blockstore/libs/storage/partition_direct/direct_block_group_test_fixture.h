@@ -32,6 +32,7 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
     std::unique_ptr<NActors::TTestActorRuntime> Runtime;
     TVector<TExecutorPtr> Executors;
 
+    NProto::TStorageServiceConfig StorageServiceConfig;
     TDiskDescription DiskDescription{
         .DiskId = "disk-id",
         .TabletId = 100,

@@ -71,16 +71,6 @@ struct IPartitionDirectService
     // seen a newer tablet generation. The current tablet instance must suicide.
     virtual void StopTablet(const TString& reason) = 0;
 
-    // Several DBGs of the tablet may share one pbuffer ddisk, and each of them
-    // broadcasts the same tablet-wide barrier, so the ddisk may have already
-    // received this lsn. Called from DBG executor threads.
-    // True: the lsn advances the ddisk's barrier - send it.
-    // False: the ddisk already holds a barrier >= lsn; re-sending it would be
-    // a non-advancing MoveBarrier that DDisk logs as an error - skip the send.
-    virtual bool TryAdvancePBufferBarrier(
-        const NKikimr::NBsController::TDDiskId& pbufferDDiskId,
-        ui64 lsn) = 0;
-
     // Reserves byteCount from the disk-wide range-copy bandwidth budget.
     // Returns the delay before the operation may start. Zero means it may start
     // immediately or throttling is disabled. Called from DBG executor threads.

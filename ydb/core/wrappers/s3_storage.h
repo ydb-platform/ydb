@@ -158,10 +158,13 @@ private:
                 {"uuid", ctx->GetUUID()},
                 {"request", ev->Get()->GetRequest()});
         }
-        func(Client.Get(), ctx->PrepareRequest(ev), callback, ctx);
 
-        std::unique_lock guard(RunningQueriesMutex);
-        ++RunningQueriesCount;
+        {
+            std::unique_lock guard(RunningQueriesMutex);
+            ++RunningQueriesCount;
+        }
+
+        func(Client.Get(), ctx->PrepareRequest(ev), callback, ctx);
     }
 
 public:

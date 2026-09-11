@@ -1,6 +1,10 @@
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_streaming_query_common.h"
 #include "schemeshard_impl.h"
+
+#include <ydb/library/actors/core/event_pb.h>
+#include <ydb/services/metadata/abstract/service.h>
 
 #define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -65,6 +69,40 @@ private:
 
 private:
     const TOperationId OperationId;
+};
+
+class TDone : public NKikimr::NSchemeShard::TDone {
+    using TBase = NKikimr::NSchemeShard::TDone;
+
+public:
+    using TBase::TBase;
+
+private:
+    bool ProgressState(TOperationContext& context) override {
+        const auto* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        if (context.SS->StreamingQueries.at(txState->TargetPathId)->OperationOwnerActorId) {
+            context.OnComplete.PublishAndWaitPublication(OperationId, txState->TargetPathId);
+            return false;
+        }
+
+        return TBase::ProgressState(context);
+    }
+
+    bool HandleReply(TEvPrivate::TEvCompletePublication::TPtr& ev, TOperationContext& context) override {
+        const auto* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(ev->Get()->PathId == txState->TargetPathId);
+        const auto& query = context.SS->StreamingQueries.at(txState->TargetPathId);
+        if (query->OperationOwnerActorId) {
+            context.OnComplete.Send(
+                NMetadata::NProvider::MakeServiceId(context.Ctx.SelfID.NodeId()),
+                MakeStreamingOperationTrackerRequest(TPath::Init(txState->TargetPathId, context.SS), context.SS->Generation(), *query)
+            );
+        }
+
+        return TBase::ProgressState(context);
+    }
 };
 
 class TCreateStreamingQuery : public TSubOperation {
@@ -147,6 +185,12 @@ class TCreateStreamingQuery : public TSubOperation {
     }
 
     bool IsDescriptionValid(const THolder<TProposeResponse>& result) const {
+        const auto& info = Transaction.GetCreateStreamingQuery();
+        if (info.HasOperationOwnerActorId() && !ActorIdFromProto(info.GetOperationOwnerActorId())) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Operation owner actor id must not be empty");
+            return false;
+        }
+
         if (const ui64 propertiesSize = Transaction.GetCreateStreamingQuery().GetProperties().ByteSizeLong(); propertiesSize > MAX_PROTOBUF_SIZE) {
             result->SetError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Maximum size of properties must be less or equal equal to " << MAX_PROTOBUF_SIZE << " but got " << propertiesSize);
             return false;
@@ -202,9 +246,12 @@ class TCreateStreamingQuery : public TSubOperation {
             streamingQuery->ApplyACL(acl);
         }
 
+        const auto& info = Transaction.GetCreateStreamingQuery();
         const auto streamingQueryInfo = MakeIntrusive<TStreamingQueryInfo>(TStreamingQueryInfo{
             .AlterVersion = 1,
-            .Properties = Transaction.GetCreateStreamingQuery().GetProperties(),
+            .Properties = info.GetProperties(),
+            .OperationOwnerActorId = info.HasOperationOwnerActorId() ? ActorIdFromProto(info.GetOperationOwnerActorId()) : TActorId(),
+            .OperationOwnerUserToken = info.HasOperationOwnerActorId() && context.UserToken ? std::make_optional<NACLib::TUserToken>(context.UserToken->GetUserSID(), context.UserToken->GetGroupSIDs()) : std::nullopt,
         });
         const auto [it, inserted] = context.SS->StreamingQueries.emplace(dstPath.Base()->PathId, streamingQueryInfo);
         if (inserted) {

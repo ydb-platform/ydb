@@ -1,6 +1,9 @@
 #pragma once
-#include <ydb/services/metadata/abstract/common.h>
+
 #include <ydb/library/actors/core/event_local.h>
+#include <ydb/services/metadata/abstract/common.h>
+#include <ydb/services/metadata/abstract/service.h>
+
 #include <shared_mutex>
 
 namespace NKikimr::NMetadata::NProvider {
@@ -77,8 +80,6 @@ public:
         Y_ABORT_UNLESS(!!Manager);
     }
 };
-
-NActors::TActorId MakeServiceId(const ui32 node);
 
 class TConfig;
 

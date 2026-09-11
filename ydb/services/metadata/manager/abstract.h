@@ -78,25 +78,36 @@ public:
     };
 
     class TExternalModificationContext {
-    private:
+        using TActorSystemPtr = TActorSystem*;
+
         YDB_ACCESSOR_DEF(std::optional<NACLib::TUserToken>, UserToken);
         YDB_ACCESSOR_DEF(TString, Database);
         YDB_ACCESSOR_DEF(TString, DatabaseId);
-        using TActorSystemPtr = TActorSystem*;
         YDB_ACCESSOR_DEF(TActorSystemPtr, ActorSystem);
         YDB_ACCESSOR_DEF(NSQLTranslation::TTranslationSettings, TranslationSettings);
     };
 
     class TInternalModificationContext {
-    private:
         YDB_READONLY_DEF(TExternalModificationContext, ExternalData);
         YDB_ACCESSOR(EActivityType, ActivityType, EActivityType::Undefined);
-    public:
-        TInternalModificationContext(const TExternalModificationContext& externalData)
-            : ExternalData(externalData)
-        {
 
-        }
+    public:
+        TInternalModificationContext(TExternalModificationContext externalData)
+            : ExternalData(std::move(externalData))
+        {}
+    };
+
+    class TOperationTrackContext {
+        YDB_READONLY_DEF(TExternalModificationContext, ExternalData);
+        YDB_ACCESSOR_DEF(TPathId, PathId);
+        YDB_ACCESSOR_DEF(ui64, RequestGeneration);
+        YDB_ACCESSOR_DEF(ui64, ObjectGeneration);
+        YDB_ACCESSOR_DEF(NActors::TActorId, OperationOwner);
+
+    public:
+        explicit TOperationTrackContext(TExternalModificationContext externalData)
+            : ExternalData(std::move(externalData))
+        {}
     };
 
 private:
@@ -142,6 +153,8 @@ public:
 
     virtual NThreading::TFuture<TYqlConclusionStatus> ExecutePrepared(const NKqpProto::TKqpSchemeOperation& schemeOperation,
         const ui32 nodeId, const IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const = 0;
+
+    virtual NThreading::TFuture<TYqlConclusionStatus> TrackObjectOperation(const TString& objectId, const TOperationTrackContext& context) const;
 
     TTableSchema GetSchema() const;
 

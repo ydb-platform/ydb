@@ -1174,16 +1174,14 @@ message TStreamingQueryState {
     optional string CheckpointId = 11;
 
     // Inflight streaming query operation info
-    optional string OperationName = 4;
     optional string OperationActorId = 5;
-    optional google.protobuf.Timestamp OperationStartedAt = 6;
+    optional uint64 OperationOwnerGeneration = 13;
 
     // Streaming query properties stored in schemeshard
     optional TSchemeInfo SchemeInfo = 7;
-    optional string QueryText = 8;
-    optional bool Run = 9;
-    optional string ResourcePool = 10;
     optional uint64 QueryTextRevision = 12;
+
+    reserved 4, 6, 8, 9, 10;
 }
 
 // Cross-node lookup of QuerySpanId -> QueryText for TLI logging.

@@ -39,6 +39,8 @@ TStreamingQuerySettings& TStreamingQuerySettings::FromProto(const NKikimrSchemeO
 
                 CheckpointInterval = TDuration::MicroSeconds(signedDuration);
             }
+        } else if (name == TStreamingQueryMeta::TProperties::InflightOperation) {
+            InflightOperation = value;
         }
     }
 

@@ -2279,7 +2279,12 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
         creds, selector, lsn, NDDisk::TWriteInstruction(0), pbIds,
         TabletConfig.GetPBufferReplyTimeoutMicroseconds());
 
-    wireEv->AddPayloadThenChecksum(std::move(ev->Get()->Payload));
+    if (TabletConfig.GetEnableChecksums()) {
+        std::vector<ui64> checksums(msg.GetChecksums().begin(), msg.GetChecksums().end());
+        wireEv->AddPayloadWithChecksum(std::move(ev->Get()->Payload), checksums);
+    } else {
+        wireEv->AddPayload(std::move(ev->Get()->Payload));
+    }
 
     Send(dbg.PBActor[coord], wireEv.release(), 0, lsn, it->second.Span.GetTraceId().Clone());
 
@@ -3359,7 +3364,8 @@ void TNbsDbgLikeActor::HandleConfigureTablet(
         << " EraseBatchSize# " << cfg.GetEraseBatchSize()
         << " SyncRequestsBatchSize# " << cfg.GetSyncRequestsBatchSize()
         << " NumDirectBlockGroupsToUse# " << cfg.GetNumDirectBlockGroupsToUse()
-        << " IoSizeBytes# " << cfg.GetIoSizeBytes());
+        << " IoSizeBytes# " << cfg.GetIoSizeBytes()
+        << " EnableChecksums# " << cfg.GetEnableChecksums());
 
     InitWorkerCounters();
 

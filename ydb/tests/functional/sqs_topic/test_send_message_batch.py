@@ -48,20 +48,11 @@ class TestSqsTopicSendMessageBatch(KikimrSqsTopicTestBase):
             ],
         )
 
-        # TODO: Per-message DelaySeconds does not delay delivery on receive. Fix it.
         assert_that(response['Successful'], has_length(len(message_bodies)))
         for entry in response['Successful']:
             assert_that(entry['MessageId'], not_none())
 
-        receive_response = self._boto_client.receive_message(
-            QueueUrl=self._queue_url,
-            WaitTimeSeconds=20,
-            MaxNumberOfMessages=len(message_bodies),
-        )
-
-        messages = receive_response.get('Messages')
-        assert_that(messages, not_none())
-        assert_that(messages, has_length(len(message_bodies)))
+        messages = self._receive_messages(len(message_bodies), wait_time_seconds=20)
         received_bodies = sorted(message['Body'] for message in messages)
         assert_that(received_bodies, equal_to(sorted(message_bodies)))
 

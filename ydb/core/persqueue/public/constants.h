@@ -14,6 +14,13 @@ constexpr TStringBuf MESSAGE_ATTRIBUTE_DEDUPLICATION_ID = "message_deduplication
 constexpr TStringBuf MESSAGE_ATTRIBUTE_ATTRIBUTES = "__message_attributes";
 constexpr TStringBuf MESSAGE_ATTRIBUTE_DELAY_SECONDS = "__delay_seconds";
 
+// Database user-attribute keys for the serverless rate limiter and billing ids.
+constexpr TStringBuf RL_COORDINATION_NODE_ATTR = "serverless_rt_coordination_node_path";
+constexpr TStringBuf RL_TOPIC_RESOURCE_ATTR = "serverless_rt_topic_resource_ru";
+constexpr TStringBuf CLOUD_ID_ATTR = "cloud_id";
+constexpr TStringBuf FOLDER_ID_ATTR = "folder_id";
+constexpr TStringBuf DATABASE_ID_ATTR = "database_id";
+
 constexpr ui32 METRICS_LEVEL_DISABLED = 0;
 constexpr ui32 METRICS_LEVEL_DATABASE = 1;
 constexpr ui32 METRICS_LEVEL_OBJECT = 2;

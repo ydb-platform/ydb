@@ -61,8 +61,10 @@ public:
         Become(&TThis::StateFunc);
     }
 
-    TString BuildLogPrefix() const override {
-        return TStringBuilder() <<"[ReadProxy][" << SelfId() << "] ";
+    TLogPrefix BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "ReadProxy"},
+            {"selfId", SelfId()});
     }
 
 private:
@@ -115,14 +117,9 @@ private:
             ctx.Send(BatchProcessorActor, new NBatching::TEvProcessBatch(NBatching::TReadProcessingContext{
                 .User = cmdRead.GetClientId(),
                 .PartitionId = static_cast<ui32>(Request.GetPartitionRequest().GetPartition()),
-                .Destination = 0,
                 .Offset = InitialReadOffset,
                 .Count = cmdRead.HasCount() ? static_cast<ui32>(cmdRead.GetCount()) : std::numeric_limits<ui32>::max(),
                 .LastOffset = cmdRead.GetLastOffset() > 0 ? static_cast<ui64>(cmdRead.GetLastOffset()) : 0,
-                .PartNo = 0,
-                .Size = static_cast<ui64>(proxyEvent->Response->ByteSize()),
-                .IsInternal = false,
-                .ReplyTo = TActorId{},
                 .ResponseActor = SelfId(),
                 .Event = std::move(proxyEvent)}));
             return;
@@ -222,11 +219,12 @@ private:
                 // There must be some data in response already.
                 if (partResp->ResultSize() == 0) {
                     makeErrorResponse("Internal error - got message part on followup read request with empty current response");
-                    YDB_LOG_CRIT("Handle TEvRead got message part on followup read request with empty current response. Readed now full",
-                        {"logPrefix", NPQ_LOG_PREFIX},
+                    LOG_C(
+                        "Handle TEvRead got message part on followup read request with empty current response. Readed now full",
                         {"seqNo", currentReadResult.GetSeqNo()},
                         {"partNo", currentReadResult.GetPartNo()},
-                        {"requestNow", Request});
+                        {"requestNow", Request}
+                    );
                     break;
                 }
                 if (currentReadResult.GetPartNo() == 0) {
@@ -254,13 +252,14 @@ private:
                     const auto& back = partResp->GetResult(partResp->ResultSize() - 1);
                     if (back.GetPartNo() + 1 < back.GetTotalParts()) {
                         makeErrorResponse("Internal error - got message part from the middle when expecting first part");
-                        YDB_LOG_CRIT("Handle TEvRead last read pos readed now full",
-                            {"logPrefix", NPQ_LOG_PREFIX},
+                        LOG_C(
+                            "Handle TEvRead last read pos readed now full",
                             {"seqNoPartNo", back.GetSeqNo()},
                             {"partNo", back.GetPartNo()},
                             {"seqNo", currentReadResult.GetSeqNo()},
                             {"currentPartNo", currentReadResult.GetPartNo()},
-                            {"requestNow", Request});
+                            {"requestNow", Request}
+                        );
                         break;
                     }
                 }
@@ -273,24 +272,27 @@ private:
             } else { // Glue next part to prevous otherwise
                 if(partResp->ResultSize() == 0) {
                     // This is error, Must have some data at this point;
-                    YDB_LOG_CRIT("Handle TEvRead, have last read pos, readed now full",
-                        {"logPrefix", NPQ_LOG_PREFIX},
+                    LOG_C(
+                        "Handle TEvRead, have last read pos, readed now full",
                         {"seqNo", currentReadResult.GetSeqNo()},
                         {"partNo", currentReadResult.GetPartNo()},
-                        {"requestNow", Request});
+                        {"requestNow", Request}
+                    );
                     makeErrorResponse("Internal error - got message part from the middle when current response if empty");
                     break;
 
                 }
                 auto* rr = partResp->MutableResult(partResp->ResultSize() - 1);
                 if (rr->GetSeqNo() != currentReadResult.GetSeqNo() || rr->GetPartNo() + 1 != currentReadResult.GetPartNo()) {
-                    YDB_LOG_CRIT("Handle TEvRead last read pos readed now full",
-                        {"logPrefix", NPQ_LOG_PREFIX},
+                    LOG_C(
+                        "Handle TEvRead last read pos readed now full",
                         {"seqNoPartNo", rr->GetSeqNo()},
-                        {"partNo", rr->GetPartNo()},
-                        {"seqNo", currentReadResult.GetSeqNo()},
-                        {"currentPartNo", currentReadResult.GetPartNo()},
-                        {"requestNow", Request});
+                                            {"partNo",
+                        rr->GetPartNo()},
+                                            {"seqNo", currentReadResult.GetSeqNo()},
+                                            {"currentPartNo", currentReadResult.GetPartNo()},
+                                            {"requestNow", Request}
+                    );
                     makeErrorResponse("Internal error - got message with wrong SeqNo/PartNo when expecting");
                     break;
                 }

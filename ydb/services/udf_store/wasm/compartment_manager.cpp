@@ -20,7 +20,7 @@ thread_local TQueryCompartmentHandle* CurrentQueryCompartment = nullptr;
 
 ui64 NextCompartmentGeneration() {
     static std::atomic<ui64> counter{0};
-    return counter.fetch_add(1, std::memory_order_relaxed) + 1;
+    return BridgeGenerationFromTicket(counter.fetch_add(1, std::memory_order_relaxed));
 }
 
 void BindExport(
@@ -97,9 +97,11 @@ TQueryCompartmentHandlePtr TWasmCompartmentManager::Acquire(
 
     auto handle = std::make_unique<TQueryCompartmentHandle>();
     handle->Generation = NextCompartmentGeneration();
+    handle->BridgeNodes = std::make_unique<TWasmBridgeNodeTable>(handle->Generation);
     // CreateRegistryCompartment clones SDK from CreateImageFromSdk cache ("env");
-    // only then do we AddPrecompiledModule the UDF (e.g. Md5).
+    // only then do we AddPrecompiledModule the UDF (e.g. BridgeTypes).
     handle->Compartment = CreateRegistryCompartment(libraries);
+    handle->Resident = std::make_unique<TCompartmentResidentCache>(handle->Compartment.get());
 
     for (const auto& artifact : artifacts) {
         AddPrecompiledModule(

@@ -1,0 +1,42 @@
+LIBRARY()
+
+SRCS(
+    actors.h
+    bulk_mkql_upsert.cpp
+    common.cpp
+    common.h
+    defs.h
+    info_collector.cpp
+    info_collector.h
+    kqp_select.cpp
+    kqp_upsert.cpp
+    test_load_actor.cpp
+    test_load_actor.h
+    test_load_read_iterator.cpp
+)
+
+PEERDIR(
+    library/cpp/histogram/hdr
+    library/cpp/monlib/service/pages
+    ydb/core/base
+    ydb/core/kqp/common
+    ydb/core/load_test/common
+    ydb/core/protos
+    ydb/core/tx/columnshard
+    ydb/core/tx/datashard
+    ydb/core/tx/schemeshard
+    ydb/core/tx/tx_proxy
+    ydb/core/ydb_convert
+    ydb/library/actors/core
+    ydb/library/services
+    ydb/public/api/protos
+    ydb/public/lib/base
+    ydb/public/sdk/cpp/src/client/proto
+    ydb/public/sdk/cpp/src/library/operation_id
+    ydb/services/kesus
+    ydb/services/metadata
+    ydb/services/persqueue_cluster_discovery
+    ydb/services/ydb
+)
+
+END()

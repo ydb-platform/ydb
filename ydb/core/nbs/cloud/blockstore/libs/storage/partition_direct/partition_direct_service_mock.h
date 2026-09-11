@@ -21,6 +21,13 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         ui32 DBGConnectionsConfigGeneration = 0;
     };
 
+    struct TRemoveHostRequest
+    {
+        size_t DirectBlockGroupId = 0;
+        size_t HostIndex = 0;
+        ui32 DBGConnectionsConfigGeneration = 0;
+    };
+
     struct TUpdateConfigRequest
     {
         NStorage::NPartitionDirect::TVChunkConfig Config;
@@ -34,6 +41,14 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         TPersistResultPromise Promise;
     };
 
+    struct TPersistHostHealthRequest
+    {
+        size_t DirectBlockGroupId = 0;
+        size_t HostIndex = 0;
+        EHostHealth OldHealth = EHostHealth::Online;
+        EHostHealth NewHealth = EHostHealth::Online;
+    };
+
     explicit TPartitionDirectServiceMock(bool dropScheduledCallbacks = false)
         : DropScheduledCallbacks(dropScheduledCallbacks)
     {}
@@ -41,6 +56,7 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     TVolumeConfigPtr VolumeConfig;
     bool DropScheduledCallbacks = false;
     TVector<TAddHostRequest> AddHostRequests;
+    TVector<TRemoveHostRequest> RemoveHostRequests;
     ui64 LsnGenerator = 0;
     size_t BlockedGenerationCount = 0;
     TString LastBlockedReason;
@@ -49,6 +65,7 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     TDuration CopyRangeBudgetDelay;
     TVector<TUpdateConfigRequest> UpdateConfigRequests;
     TVector<TUpdateDirtyMapStateRequest> UpdateDirtyMapStateRequests;
+    TVector<TPersistHostHealthRequest> PersistHostHealthRequests;
 
     [[nodiscard]] TVolumeConfigPtr GetVolumeConfig() const override
     {
@@ -96,6 +113,17 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
             .DBGConnectionsConfigGeneration = dbgConnectionsConfigGeneration});
     }
 
+    void QueryRemoveHost(
+        size_t directBlockGroupId,
+        size_t hostIndex,
+        ui32 dbgConnectionsConfigGeneration) override
+    {
+        RemoveHostRequests.push_back(TRemoveHostRequest{
+            .DirectBlockGroupId = directBlockGroupId,
+            .HostIndex = hostIndex,
+            .DBGConnectionsConfigGeneration = dbgConnectionsConfigGeneration});
+    }
+
     ui64 GenerateLsn() override
     {
         return ++LsnGenerator;
@@ -121,6 +149,16 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         ++CopyRangeBudgetRequestCount;
         LastCopyRangeBudgetByteCount = byteCount;
         return CopyRangeBudgetDelay;
+    }
+
+    void PersistHostHealth(
+        size_t directBlockGroupId,
+        THostIndex hostIndex,
+        EHostHealth oldHealth,
+        EHostHealth newHealth) override
+    {
+        PersistHostHealthRequests
+            .emplace_back(directBlockGroupId, hostIndex, oldHealth, newHealth);
     }
 };
 

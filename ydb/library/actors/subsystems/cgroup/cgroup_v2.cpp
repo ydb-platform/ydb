@@ -16,6 +16,7 @@
 #include <util/string/cast.h>
 #include <util/string/split.h>
 #include <util/string/strip.h>
+#include <util/system/mutex.h>
 
 namespace NActors {
 
@@ -412,16 +413,35 @@ namespace NActors {
             bool CacheInitialized = false;
         };
 
+        class TCGroupV2StatsSubSystemImpl final : public TCGroupV2StatsSubSystem {
+        public:
+            explicit TCGroupV2StatsSubSystemImpl(TCGroupV2StatsConfig config);
+
+            void ReadStats(const TActorId& recipient, ui64 cookie) const override;
+            void ReadMemoryStats(const TActorId& recipient, ui64 cookie) const override;
+
+            void OnAfterStart(TActorSystem& actorSystem) override;
+            void OnBeforeStop(TActorSystem& actorSystem) override;
+            void OnAfterStop(TActorSystem& actorSystem) override;
+
+        private:
+            const TCGroupV2StatsConfig Config;
+            mutable TMutex Mutex;
+            TActorSystem* ActorSystem = nullptr;
+            TActorId ReaderActorId;
+            bool Stopping = false;
+        };
+
     } // namespace
 
-    TCGroupV2StatsSubSystem::TCGroupV2StatsSubSystem(TCGroupV2StatsConfig config)
+    TCGroupV2StatsSubSystemImpl::TCGroupV2StatsSubSystemImpl(TCGroupV2StatsConfig config)
         : Config(std::move(config))
     {
         Y_ABORT_UNLESS(Config.RefreshPeriod >= TDuration::Zero(),
             "cgroup v2 stats refresh period must not be negative");
     }
 
-    void TCGroupV2StatsSubSystem::ReadStats(const TActorId& recipient, ui64 cookie) const {
+    void TCGroupV2StatsSubSystemImpl::ReadStats(const TActorId& recipient, ui64 cookie) const {
         Y_ABORT_UNLESS(recipient, "cannot send cgroup v2 stats to an empty actor id");
         TActorSystem* actorSystem = nullptr;
         TActorId readerActorId;
@@ -440,7 +460,7 @@ namespace NActors {
         }
     }
 
-    void TCGroupV2StatsSubSystem::ReadMemoryStats(
+    void TCGroupV2StatsSubSystemImpl::ReadMemoryStats(
             const TActorId& recipient,
             ui64 cookie) const {
         Y_ABORT_UNLESS(recipient, "cannot send cgroup v2 memory stats to an empty actor id");
@@ -461,7 +481,7 @@ namespace NActors {
         }
     }
 
-    void TCGroupV2StatsSubSystem::OnAfterStart(TActorSystem& actorSystem) {
+    void TCGroupV2StatsSubSystemImpl::OnAfterStart(TActorSystem& actorSystem) {
         const TActorId readerActorId = actorSystem.Register(
             new TCGroupV2StatsActor(Config), TMailboxType::Simple, Config.ExecutorPoolId);
 
@@ -471,7 +491,7 @@ namespace NActors {
         Stopping = false;
     }
 
-    void TCGroupV2StatsSubSystem::OnBeforeStop(TActorSystem& actorSystem) {
+    void TCGroupV2StatsSubSystemImpl::OnBeforeStop(TActorSystem& actorSystem) {
         TActorId readerActorId;
         {
             TGuard<TMutex> guard(Mutex);
@@ -483,14 +503,14 @@ namespace NActors {
         }
     }
 
-    void TCGroupV2StatsSubSystem::OnAfterStop(TActorSystem&) {
+    void TCGroupV2StatsSubSystemImpl::OnAfterStop(TActorSystem&) {
         TGuard<TMutex> guard(Mutex);
         ActorSystem = nullptr;
         ReaderActorId = {};
     }
 
     std::unique_ptr<TCGroupV2StatsSubSystem> MakeCGroupV2StatsSubSystem(TCGroupV2StatsConfig config) {
-        return std::make_unique<TCGroupV2StatsSubSystem>(std::move(config));
+        return std::make_unique<TCGroupV2StatsSubSystemImpl>(std::move(config));
     }
 
     const TCGroupV2StatsSubSystem& GetCGroupV2StatsSubSystem(const TActorSystem& actorSystem) {

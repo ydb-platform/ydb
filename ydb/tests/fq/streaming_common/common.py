@@ -12,6 +12,7 @@ import pytest
 import random
 import requests
 
+from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.tools.datastreams_helpers.control_plane import Endpoint
@@ -504,6 +505,22 @@ class StreamingTestBase(TestYdsBase):
     def get_endpoint(self, kikimr: Kikimr, local_topics: bool) -> Endpoint:
         return kikimr.endpoint if local_topics else kikimr.external_endpoint
 
+    def set_cloud_id(self, kikimr: Kikimr, cloud_id: str = "test-cloud-id") -> None:
+        """Set the cloud_id user attribute on the root of the database under test.
+
+        DescribeResourceId describes the database path itself and looks for the
+        cloud_id attribute there, so we must use ESchemeOpAlterUserAttributes
+        rather than ALTER TABLE which only supports table-level settings.
+
+        The database is the tenant created by the kikimr fixture (/Root/my_tenant),
+        not /Root, so the attribute has to be set on the tenant path: an attribute
+        on /Root is never read by DescribeResourceId and leaves resource_id empty,
+        which silently degrades the IAM token to no-auth.
+        """
+        database = kikimr.get_database_name().rstrip("/")
+        working_dir, _, name = database.rpartition("/")
+        kikimr.cluster.client.add_attr(working_dir or "/", name, {"cloud_id": cloud_id}, token="root@builtin")
+
     def get_ydb_client(self, kikimr: Kikimr, local_topics: bool) -> YdbClient:
         return kikimr.ydb_client if local_topics else kikimr.external_ydb_client
 
@@ -519,11 +536,32 @@ class StreamingTestBase(TestYdsBase):
         timeout: int = plain_or_under_sanitizer_wrapper(120, 150),
         checkpoints_count=2,
     ) -> None:
+
         path = f"{kikimr.get_database_name()}/{query_name}"
-        print(f"wait_completed_checkpoints {path}")
-        wait_completed_checkpoints(
-            kikimr.cluster, path, timeout=timeout, checkpoints_count=checkpoints_count, wait_delta=True
-        )
+        try:
+            wait_completed_checkpoints(
+                kikimr.cluster, path, timeout=timeout, checkpoints_count=checkpoints_count, wait_delta=True
+            )
+        except AssertionError as error:
+            diagnostics = "failed to retrieve Status / Issues"
+            try:
+                result_sets = kikimr.ydb_client.query(
+                    f'SELECT Status, Issues FROM `.sys/streaming_queries` WHERE Path = "{path}";'
+                )
+                diagnostics = (
+                    "\n".join(
+                        "Status: {status}\nIssues:\n{issues}".format(
+                            status=row["Status"],
+                            issues=json.dumps(json.loads(row["Issues"]), indent=2, ensure_ascii=False),
+                        )
+                        for row in result_sets[0].rows
+                    )
+                    if result_sets
+                    else []
+                )
+            except Exception as diagnostics_error:
+                diagnostics = f"failed to retrieve Status / Issues: {diagnostics_error}"
+            raise AssertionError(f"{error}\n{diagnostics}") from error
 
     def get_actor_count(self, kikimr: Kikimr, node_id: int, activity: str) -> int:
         result = get_sensors(kikimr.cluster, node_id, "utils").find_sensor(
@@ -542,12 +580,19 @@ class StreamingTestBase(TestYdsBase):
     def restart_streaming_node(self, kikimr: Kikimr) -> int:
         """Find and restart the node hosting the streaming query (DQ_PQ_READ_ACTOR).
         Returns the restarted node ID."""
-        restart_node_id = None
-        for node_id in kikimr.cluster.slots:
-            count = self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
-            if count:
-                restart_node_id = node_id
-                break
+
+        def _find_node():
+            for node_id in kikimr.cluster.slots:
+                if self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR"):
+                    return node_id
+            return None
+
+        wait_for(
+            lambda: _find_node() is not None,
+            timeout_seconds=30,
+            step_seconds=1,
+        )
+        restart_node_id = _find_node()
         assert restart_node_id is not None, "No node found with DQ_PQ_READ_ACTOR"
         self.restart_node(kikimr, restart_node_id)
         return restart_node_id

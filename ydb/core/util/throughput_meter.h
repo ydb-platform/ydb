@@ -70,6 +70,17 @@ namespace NKikimr {
             }
             Histogram.clear();
         }
+
+        void Reset() {
+            CumTimeNs = 0;
+            CumBytes = 0;
+            Timer.Reset();
+            WindowNs = 0;
+            Histogram.clear();
+            for (const auto& item : Counters) {
+                *item.second = 0;
+            }
+        }
     };
 
 } // NKikimr

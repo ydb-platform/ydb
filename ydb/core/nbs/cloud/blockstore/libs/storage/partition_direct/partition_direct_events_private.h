@@ -40,7 +40,10 @@ struct TEvPartitionDirectPrivate
         EvFastPathServiceStopped,
         EvPoisonByBlockedGeneration,
         EvAddHostToDBG,
+        EvRemoveHostFromDBG,
         EvPartitionCleanupCompleted,
+
+        EvPersistHostHealth,
 
         EvEnd,
     };
@@ -118,6 +121,24 @@ struct TEvPartitionDirectPrivate
         {}
     };
 
+    // Asks the partition to durably remove the host from the group.
+    struct TEvRemoveHostFromDBG
+        : public NActors::TEventLocal<TEvRemoveHostFromDBG, EvRemoveHostFromDBG>
+    {
+        const size_t DirectBlockGroupId;
+        const size_t HostIndex;
+        const ui32 DBGConnectionsConfigGeneration;
+
+        TEvRemoveHostFromDBG(
+            size_t dbgId,
+            size_t hostIndex,
+            ui32 dbgConnectionsConfigGeneration)
+            : DirectBlockGroupId(dbgId)
+            , HostIndex(hostIndex)
+            , DBGConnectionsConfigGeneration(dbgConnectionsConfigGeneration)
+        {}
+    };
+
     // Cleanup actor reports wipe + BSC deallocate outcome to the tablet.
     struct TEvPartitionCleanupCompleted
         : public NActors::TEventLocal<
@@ -130,6 +151,26 @@ struct TEvPartitionDirectPrivate
 
         explicit TEvPartitionCleanupCompleted(NProto::TError error)
             : Error(std::move(error))
+        {}
+    };
+
+    struct TEvPersistHostHealth
+        : public NActors::TEventLocal<TEvPersistHostHealth, EvPersistHostHealth>
+    {
+        size_t DirectBlockGroupId;
+        size_t HostIndex;
+        EHostHealth OldHealth;
+        EHostHealth NewHealth;
+
+        TEvPersistHostHealth(
+            size_t direct_block_group_id,
+            size_t host_index,
+            EHostHealth old_health,
+            EHostHealth new_health)
+            : DirectBlockGroupId(direct_block_group_id)
+            , HostIndex(host_index)
+            , OldHealth(old_health)
+            , NewHealth(new_health)
         {}
     };
 };

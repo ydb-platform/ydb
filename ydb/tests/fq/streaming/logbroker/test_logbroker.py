@@ -1,8 +1,23 @@
 import os
+import time
 
 import ydb
 
 from ydb.tests.fq.streaming_common.common import StreamingTestBase, YdbClient
+
+
+def wait_topic_path(driver, cluster_name, path, timeout=60):
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            driver.scheme_client.describe_path(
+                path, settings=ydb.BaseRequestSettings().with_timeout(5)
+            )
+            return
+        except (ydb.SchemeError, ydb.NotFound) as error:
+            if time.monotonic() >= deadline:
+                raise AssertionError(f"Topic {path} did not appear in {cluster_name}") from error
+            time.sleep(1)
 
 
 class TestLogbroker(StreamingTestBase):
@@ -26,6 +41,17 @@ class TestLogbroker(StreamingTestBase):
                     min_active_partitions=4,
                     consumers=[consumer],
                 )
+
+        # Config manager creation may finish before the paths are visible on the clusters.
+        for cluster_name in ("cluster_a", "cluster_b"):
+            with ydb.Driver(
+                endpoint=f"grpc://localhost:{os.environ[f'{cluster_name}_port']}",
+                database=database,
+                auth_token="root@builtin",
+            ) as driver:
+                driver.wait(timeout=10, fail_fast=True)
+                for topic in (input_topic, output_topic):
+                    wait_topic_path(driver, cluster_name, f"{database}/{topic}")
 
         logbroker = YdbClient.from_driver_config(f"grpc://{endpoint}", database)
         try:

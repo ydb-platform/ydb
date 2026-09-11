@@ -117,8 +117,7 @@ std::optional<TInternalPathId> TTablesManager::ResolveInternalPathIdForSnapshot(
             continue;
         }
         AFL_VERIFY(!table->GetVersions().empty())("gen", genPathId)("ss", schemeShardLocalPathId);
-        const NOlap::TSnapshot appearVersion =
-            table->GetCopyVersionOptional(schemeShardLocalPathId).value_or(*table->GetVersions().begin());
+        const NOlap::TSnapshot appearVersion = table->GetCopyVersionOptional(schemeShardLocalPathId).value_or(*table->GetVersions().begin());
         if (appearVersion > readSnapshot) {
             continue;
         }
@@ -1037,8 +1036,7 @@ TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::Buil
         if (Generations(externalPathId)) {
             const auto live = ResolveLivePathId(externalPathId);
             AFL_VERIFY(live)("ss", externalPathId)("snapshot", readSnapshot.DebugString());
-            return std::make_shared<NOlap::TAbsentTableAccessor>(
-                tablePath, NColumnShard::TUnifiedPathId::BuildValid(*live, externalPathId));
+            return std::make_shared<NOlap::TAbsentTableAccessor>(tablePath, NColumnShard::TUnifiedPathId::BuildValid(*live, externalPathId));
         }
         return TConclusionStatus::Fail("incorrect table name and table id for scan start: " + tablePath + "::" + externalPathId.DebugString());
     } else {

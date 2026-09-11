@@ -50,12 +50,12 @@
 - `client_cancelled` — клиент закрыл незавершённый поток результатов запроса;
 - `attach_closed` — сервер закрыл работающий поток `AttachSession`;
 - `transport_error` — сессия выведена из работы из-за транспортной ошибки, в том числе ошибки `Unavailable` при выполнении запроса или ошибки потока `AttachSession`;
-- `node_shutdown` — получен server hint `NodeShutdown` (`shutdown_node`);
-- `session_shutdown` — получен server hint `SessionShutdown`;
+- `node_shutdown` — сервер сообщил клиенту о завершении работы узла (`NodeShutdown`; значение в протоколе — `shutdown_node`);
+- `session_shutdown` — сервер сообщил клиенту о завершении сессии (`SessionShutdown`);
 - `bad_session` — сервер вернул статус `BadSession` или `SessionExpired`;
 - `session_busy` — сервер вернул статус `SessionBusy`.
 
-Конкретный SDK публикует только те причины, которые он может различить в своём жизненном цикле сессии.
+Поддерживаемые значения `reason` зависят от SDK: каждый SDK передаёт только те причины закрытия сессии, которые распознаёт его реализация.
 
 ## Подключение к SDK {#integration}
 

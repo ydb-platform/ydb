@@ -515,6 +515,7 @@ namespace {
             }
             auto state = std::move(ev->Get()->State);
             if (!state->StreamProcessor) {
+                YDB_LOG_ERROR("TEvQueryExecuteQueryResponsePart called ater CleanupStreamProcessor, should be impossible", COMMON_LOG);
                 return;
             }
             auto& response = ev->Get()->Response;
@@ -580,14 +581,18 @@ namespace {
             if (Y_UNLIKELY(PendingPassAway)) {
                 return;
             }
-            if (!session->StreamProcessor) {
-                return;
-            }
             auto& response = ev->Get()->Response;
             YDB_LOG_TRACE("TEvQuerySessionState",
                     COMMON_LOG,
                     {"sessionId", session->SessionId},
                     {"response", response.DebugString()});
+            if (!session->StreamProcessor) {
+                YDB_LOG_DEBUG("TEvQuerySessionState called afte CleanupStreamProcessor", COMMON_LOG);
+                // possible; TEvQuerySessionState is sent, but in queue; FinalizeRequest calls CleanupStreamProcessor, then handler for TEvQuerySessionState invoked
+                Y_ENSURE(!session->PendingLookup);
+                Y_ENSURE(session->SessionId.empty());
+                return;
+            }
             auto status = response.status();
             if (response.has_session_shutdown()) {
                 status = Ydb::StatusIds::SESSION_EXPIRED;

@@ -1,4 +1,5 @@
 import functools
+import shlex
 import re
 import os
 from enum import auto, StrEnum
@@ -1507,3 +1508,12 @@ def _TS_CONF_ERROR(unit: ymake.Unit, *messages: str) -> None:
 def _TS_CHECK_PREPARE_DEPS_CONFIGURE(unit: ymake.Unit) -> None:
     test_mod = unit.get("TS_TEST_FOR_PATH")
     unit.onpeerdir([test_mod])
+
+
+@ymake.macro
+@_with_report_configure_error
+def _TS_OUTPUT_PREFIX(unit: ymake.Unit, *args: str) -> None:
+    if len(args) > 1:
+        raise ValueError("TS_OUTPUT_PREFIX accepts at most one path")
+    prefix = args[0] if args else unit.get("MODDIR")
+    unit.set(["_TS_OUTPUT_PREFIX_ARG", shlex.quote("--output-prefix=" + prefix)])

@@ -1247,6 +1247,26 @@ int GetFileDescriptorCount()
     return descriptorCount;
 }
 
+std::optional<i64> GetFileDescriptorLimit()
+{
+#ifdef _unix_
+    struct rlimit limit;
+    if (getrlimit(RLIMIT_NOFILE, &limit) != 0) {
+        YT_TLOG_ERROR("Error getting RLIMIT_NOFILE")
+            .With(TError::FromSystem());
+        return std::nullopt;
+    }
+
+    if (limit.rlim_cur == RLIM_INFINITY) {
+        return std::nullopt;
+    }
+
+    return static_cast<i64>(limit.rlim_cur);
+#else
+    return std::nullopt;
+#endif
+}
+
 void SafeCreateStderrFile(std::string fileName)
 {
 #ifdef _unix_

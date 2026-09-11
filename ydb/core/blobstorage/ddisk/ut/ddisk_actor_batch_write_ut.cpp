@@ -58,7 +58,7 @@ using NKikimrBlobStorage::NDDisk::TReplyStatus;
 
 constexpr ui32 NodeId = 1;
 constexpr ui32 BlockSize = 4096;
-constexpr ui32 MinChunksReserved = 2;
+constexpr ui32 MinChunksReserved = 4;
 constexpr ui32 PersistentBufferInitChunks = 4;
 
 struct TDiskHandle {

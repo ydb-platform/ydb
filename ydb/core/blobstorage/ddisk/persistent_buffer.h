@@ -19,9 +19,17 @@ namespace NKikimr::NDDisk {
         ui64 Checksum : 64;
     };
 
+    // DirectBlockGroupIndex extends the persistent buffer key from plain TabletId to
+    // (TabletId, DirectBlockGroupIndex): a direct block group number that fits in a single byte
+    // (0-255). It is appended as the LAST field (with a default of 0) so that every existing
+    // 2-/3-argument positional aggregate initialization (e.g. {tabletId, generation}) keeps working
+    // unchanged and defaults to group 0 - preserving today's "one persistent buffer namespace per
+    // tablet" behavior. Callers that want independent per-direct-block-group persistent buffer
+    // namespaces can opt in by supplying the extra value explicitly.
     struct TPersistentBufferId {
         ui64 TabletId;
         ui32 Generation;
+        ui8 DirectBlockGroupIndex = 0;
 
         friend constexpr std::strong_ordering operator <=>(const TPersistentBufferId& x, const TPersistentBufferId& y) = default;
     };
@@ -30,6 +38,7 @@ namespace NKikimr::NDDisk {
         ui64 TabletId;
         ui32 Generation;
         ui64 Lsn;
+        ui8 DirectBlockGroupIndex = 0;
 
         friend constexpr std::strong_ordering operator <=>(const TPersistentBufferRecordId& x, const TPersistentBufferRecordId& y) = default;
     };
@@ -58,7 +67,7 @@ namespace NKikimr::NDDisk {
     template <>
     struct hash<NKikimr::NDDisk::TPersistentBufferRecordId> {
         inline size_t operator()(const NKikimr::NDDisk::TPersistentBufferRecordId& r) const {
-            return MultiHash(r.TabletId, r.Generation, r.Lsn);
+            return MultiHash(r.TabletId, r.Generation, r.Lsn, r.DirectBlockGroupIndex);
         }
     };
 

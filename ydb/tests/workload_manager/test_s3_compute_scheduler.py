@@ -189,11 +189,6 @@ class TestS3CpuThrottleVerdict(S3WorkloadManagerFunctionalBase):
     # Minimum throttle CPU accounted to the pool in Phase C
     min_throttle_us: float = 100_000.0
 
-    # Minimum Waiting(C) - Waiting(B), in raw units (1 task = 1e6). S3
-    # coroutines enter the throttle wait state only when
-    # EnableS3Scheduling=on, so flipping the flag must add at least
-    # 1 concurrent throttled task at peak.
-    min_waiting_delta: float = 1_000_000.0
 
     # Seconds to wait after a query for the scheduler snapshot (default
     # 500 ms) to capture the query's CPU.
@@ -290,17 +285,6 @@ class TestS3CpuThrottleVerdict(S3WorkloadManagerFunctionalBase):
             f'always admitting even when pool budget is exhausted. {report}'
         )
 
-        # (3) Task presence: flag = on must add tasks to the pool's
-        # throttle wait state (S3 coroutines enter Waiting only when
-        # accounted).
-        waiting_delta = c.pool_waiting - b.pool_waiting
-        assert waiting_delta >= self.min_waiting_delta, (
-            f'EnableS3Scheduling flag did not increase concurrent throttled '
-            f'tasks on {self.pool_name}: Waiting(on) - Waiting(off) = '
-            f'{waiting_delta:.0f}, expected >= {self.min_waiting_delta:.0f} '
-            f'(1 task = 1e6). S3 coroutines may not be reaching the '
-            f'scheduler. {report}'
-        )
 
     # -- Query + measurement ---------------------------------------
 

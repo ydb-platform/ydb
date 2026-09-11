@@ -1180,7 +1180,8 @@ TBSNodeWardenInitializer::TBSNodeWardenInitializer(const TKikimrRunConfig& runCo
 
 void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                   const NKikimr::TAppData* appData) {
-    TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig(new TRealPDiskServiceFactory()));
+    setup->RegisterSubSystem<IPDiskSubsystem>(CreatePDiskSubsystem());
+    TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig());
     nodeWardenConfig->BlobStorageExecutorPoolIds =
         NActorSystemConfigHelpers::GetBlobStorageExecutorPoolIds(Config.GetActorSystemConfig());
     if (Config.HasBlobStorageConfig()) {
@@ -1273,6 +1274,13 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
             }
             nodeWardenConfig->DDiskConfig->SetIdleSpinUs(
                 storageConfig.GetIdleSpinUs());
+        }
+        if (storageConfig.HasIntegrityChecksumCacheBytes()) {
+            if (!nodeWardenConfig->DDiskConfig) {
+                nodeWardenConfig->DDiskConfig.emplace();
+            }
+            nodeWardenConfig->DDiskConfig->SetIntegrityChecksumCacheBytes(
+                storageConfig.GetIntegrityChecksumCacheBytes());
         }
         if (storageConfig.HasGlobalPBufferConfig()) {
             nodeWardenConfig->PBufferConfig = storageConfig.GetGlobalPBufferConfig();

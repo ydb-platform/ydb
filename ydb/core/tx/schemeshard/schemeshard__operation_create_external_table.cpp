@@ -311,8 +311,7 @@ public:
                                                 externalTable,
                                                 dstPath);
 
-        context.SS->ExternalTables[newPathId] = externalTableInfo;
-        context.SS->IncrementPathDbRefCount(newPathId);
+        context.SS->ExternalTables.Set(newPathId, externalTableInfo);
         if (!acl.empty()) {
             externalTable->ApplyACL(acl);
         }

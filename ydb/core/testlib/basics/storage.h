@@ -44,12 +44,7 @@ namespace NKikimr {
                 }
             }
 
-            const bool strandedPDisk = STRAND_PDISK && !Runtime.IsRealThreads();
-            if (strandedPDisk) {
-                Factory = new TStrandedPDiskServiceFactory(Runtime);
-            } else {
-                Factory = new TRealPDiskServiceFactory();
-            }
+            SetupPDiskSubsystem(&Runtime, STRAND_PDISK);
 
             NPDisk::TKey mainKey = NPDisk::YdbDefaultPDiskSequence;
 
@@ -87,7 +82,7 @@ namespace NKikimr {
 
         TIntrusivePtr<TNodeWardenConfig> MakeWardenConf(const TDomainsInfo &domains, const NKikimrProto::TKeyConfig& keyConfig) const
         {
-            TIntrusivePtr<TNodeWardenConfig> conf(new TNodeWardenConfig(Factory));
+            TIntrusivePtr<TNodeWardenConfig> conf(new TNodeWardenConfig());
 
             {
                 auto text = MakeTextConf(domains);
@@ -181,7 +176,6 @@ namespace NKikimr {
 
     private:
         TTestActorRuntime &Runtime;
-        TIntrusivePtr<IPDiskServiceFactory> Factory;
         TString PDiskPath;
         TIntrusivePtr<NPDisk::TSectorMap> SectorMap;
     };

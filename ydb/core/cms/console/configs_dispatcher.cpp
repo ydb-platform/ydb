@@ -73,6 +73,7 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::PrivateDatabaseConfigItem,
     (ui32)NKikimrConsole::TConfigItem::ColumnShardConfigItem,
     (ui32)NKikimrConsole::TConfigItem::UdfStoreConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::CompositeConveyorConfigItem,
 });
 
 const THashSet<ui32> NON_YAML_KINDS({

@@ -8,6 +8,8 @@
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/sql/v1/translation/node.h>
 
+#include <util/string/cast.h>
+
 namespace NKikimr::NKqp {
 
 TString TStreamingQueryMeta::GetTablesPath() {
@@ -38,6 +40,22 @@ TStreamingQuerySettings& TStreamingQuerySettings::FromProto(const NKikimrSchemeO
                 Y_VALIDATE(signedDuration >= 0, "CheckpointInterval must be non-negative");
 
                 CheckpointInterval = TDuration::MicroSeconds(signedDuration);
+            }
+        } else if (name == TStreamingQueryMeta::TProperties::CreatedBy) {
+            CreatedBy = value;
+        } else if (name == TStreamingQueryMeta::TProperties::ModifiedBy) {
+            ModifiedBy = value;
+        } else if (name == TStreamingQueryMeta::TProperties::StartedBy) {
+            StartedBy = value;
+        } else if (name == TStreamingQueryMeta::TProperties::StoppedBy) {
+            StoppedBy = value;
+        } else if (name == TStreamingQueryMeta::TProperties::CreatedAt) {
+            if (const auto us = TryFromString<ui64>(value)) {
+                CreatedAt = TInstant::MicroSeconds(*us);
+            }
+        } else if (name == TStreamingQueryMeta::TProperties::ModifiedAt) {
+            if (const auto us = TryFromString<ui64>(value)) {
+                ModifiedAt = TInstant::MicroSeconds(*us);
             }
         }
     }

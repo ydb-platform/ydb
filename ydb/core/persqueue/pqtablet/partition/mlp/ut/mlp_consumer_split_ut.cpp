@@ -29,24 +29,32 @@ namespace {
             Offset.fetch_add(duration.MicroSeconds());
         }
 
+        void Reset() {
+            Offset.store(0);
+        }
+
+    private:
         std::atomic<i64> Offset = 0;
     };
 
-    // Install before actor system start; restore the previous provider after actors
-    // are stopped (declare this before setup so dtor runs after setup). Avoids
-    // TSAN data race on TAppData::TimeProvider swap vs concurrent actor reads
-    // (#40339 / #47065).
+    // TAppData::TimeProvider is a process-global TIntrusivePtr. Actor threads
+    // (coordinator, metadata, pingers) read it without synchronization.
+    // Swapping it after the actor system has started is a TSAN data race
+    // (YDBBUGS-508 / #40339). Install once per process before CreateSetup() and
+    // never restore: TTestActorRuntime also skips the global reset under real
+    // threads. Add()/Reset() are atomic; Offset=0 matches the wall clock.
     class TScopedLeapTimeProvider: TNonCopyable {
     public:
         TScopedLeapTimeProvider()
-            : Leap_(MakeIntrusive<TLeapTimeProvider>())
-            , Previous_(Leap_)
+            : Leap_(Installed())
         {
-            DoSwap(TAppData::TimeProvider, Previous_);
-        }
-
-        ~TScopedLeapTimeProvider() {
-            DoSwap(TAppData::TimeProvider, Previous_);
+            if (!Leap_) {
+                Leap_ = MakeIntrusive<TLeapTimeProvider>();
+                Installed() = Leap_;
+                TIntrusivePtr<ITimeProvider> previous = Leap_;
+                DoSwap(TAppData::TimeProvider, previous);
+            }
+            Leap_->Reset();
         }
 
         TLeapTimeProvider* operator->() const {
@@ -54,8 +62,12 @@ namespace {
         }
 
     private:
+        static TIntrusivePtr<TLeapTimeProvider>& Installed() {
+            static TIntrusivePtr<TLeapTimeProvider> leap;
+            return leap;
+        }
+
         TIntrusivePtr<TLeapTimeProvider> Leap_;
-        TIntrusivePtr<ITimeProvider> Previous_;
     };
 
     class TBufferedCerr: TNonCopyable {

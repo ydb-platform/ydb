@@ -61,6 +61,9 @@ private:
     TAverageCalcer<TDuration> DeliveringDuration;
     std::deque<TDuration> DeliveryDurations;
     ui64 MaxBatchSize = 30;
+    std::vector<NConfig::THeavyLimit> HeavyLimits;
+
+    bool DrainOnWorkers(const std::vector<ui32>& workerIdxs);
 
 public:
     static constexpr double Eps = 1e-6;
@@ -84,6 +87,10 @@ public:
 
     [[nodiscard]] bool DrainTasks();
 
+    bool HasHeavyLimits() const {
+        return !HeavyLimits.empty();
+    }
+
     void AddDeliveryDuration(const TDuration d) {
         DeliveringDuration.Add(d);
     }
@@ -91,6 +98,7 @@ public:
     void PutTaskResults(std::vector<TWorkerTaskResult>&& result, const ui64 workersPoolId = 0, const ui64 workerIdx = 0);
     bool HasFreeWorker() const;
     void RunTask(std::vector<TWorkerTask>&& tasksBatch);
+    void RunTask(std::vector<TWorkerTask>&& tasksBatch, const ui32 workerIdx);
     void ReleaseWorker(const ui32 workerIdx);
 };
 

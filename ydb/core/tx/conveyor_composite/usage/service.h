@@ -7,7 +7,12 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actorid.h>
 
+#include <optional>
+
 namespace NKikimr::NConveyorComposite {
+
+std::optional<bool> GetScanDefaultUseBatchPool();
+bool ResolveCompactionUseBatchPool();
 
 class TServiceOperator {
 private:
@@ -22,10 +27,14 @@ public:
 public:
     static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, const ESpecialTaskCategory category, const ui64 internalProcessId,
         const bool useBatchPool = false) {
+        bool batchPool = useBatchPool;
+        if (category == ESpecialTaskCategory::Compaction) {
+            batchPool = ResolveCompactionUseBatchPool();
+        }
         if (TSelf::IsEnabled() && NActors::TlsActivationContext) {
             auto& context = NActors::TActorContext::AsActorContext();
             const NActors::TActorId& selfId = context.SelfID;
-            context.Send(MakeServiceId(selfId.NodeId(), useBatchPool),
+            context.Send(MakeServiceId(selfId.NodeId(), batchPool),
                 new NConveyorComposite::TEvExecution::TEvNewTask(task, category, internalProcessId));
             return true;
         } else {

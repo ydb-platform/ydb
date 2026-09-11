@@ -81,6 +81,9 @@ public:
 
     virtual TString GetTaskClassIdentifier() const = 0;
 
+    virtual void OnAssignedToWorker(const ui64 /*workerIdx*/) {
+    }
+
     void OnCannotExecute(const TString& reason) {
         return DoOnCannotExecute(reason);
     }

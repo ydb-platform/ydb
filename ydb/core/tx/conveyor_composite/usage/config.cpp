@@ -114,6 +114,94 @@ TConfig TConfig::BuildDefault() {
     return result;
 }
 
+TConclusionStatus THeavyLimit::DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::THeavyLimit& proto) {
+    if (!proto.HasCpuLimitUs() || !proto.GetCpuLimitUs()) {
+        return TConclusionStatus::Fail("heavy_limits cpu_limit_us must be greater than 0");
+    }
+    if (!proto.HasThreadLimit() || !proto.GetThreadLimit()) {
+        return TConclusionStatus::Fail("heavy_limits thread_limit must be greater than 0");
+    }
+    CpuLimit = TDuration::MicroSeconds(proto.GetCpuLimitUs());
+    ThreadLimit = proto.GetThreadLimit();
+    return TConclusionStatus::Success();
+}
+
+TString THeavyLimit::DebugString() const {
+    TStringBuilder sb;
+    sb << "{cpu_us=" << CpuLimit.MicroSeconds() << ";threads=" << ThreadLimit << "}";
+    return sb;
+}
+
+TConclusion<bool> ParseActorSystemPoolName(const TString& name) {
+    if (name == "User") {
+        return false;
+    }
+    if (name == "Batch") {
+        return true;
+    }
+    return TConclusionStatus::Fail("unknown actor system pool name '" + name + "', expected User or Batch");
+}
+
+TConclusion<NKikimrConfig::TCompositeConveyorConfig> TConfig::OverlayYamlOnDefaults(
+    const NKikimrConfig::TCompositeConveyorConfig& defaults, const NKikimrConfig::TCompositeConveyorConfig& yaml) {
+    bool allHaveLinks = yaml.GetWorkerPools().size() > 0;
+    for (const auto& pool : yaml.GetWorkerPools()) {
+        if (!pool.GetLinks().size()) {
+            allHaveLinks = false;
+            break;
+        }
+    }
+    if (allHaveLinks) {
+        return yaml;
+    }
+
+    NKikimrConfig::TCompositeConveyorConfig result = defaults;
+    if (yaml.HasEnabled()) {
+        result.SetEnabled(yaml.GetEnabled());
+    }
+    if (yaml.GetCategories().size()) {
+        result.ClearCategories();
+        result.MutableCategories()->CopyFrom(yaml.GetCategories());
+    }
+
+    for (const auto& yamlPool : yaml.GetWorkerPools()) {
+        if (!yamlPool.HasName() || yamlPool.GetName().empty()) {
+            return TConclusionStatus::Fail("worker pool overlay requires a name");
+        }
+        NKikimrConfig::TCompositeConveyorConfig::TWorkersPool* existing = nullptr;
+        for (auto& pool : *result.MutableWorkerPools()) {
+            if (pool.GetName() == yamlPool.GetName()) {
+                existing = &pool;
+                break;
+            }
+        }
+        if (yamlPool.GetLinks().size()) {
+            if (existing) {
+                *existing = yamlPool;
+            } else {
+                *result.AddWorkerPools() = yamlPool;
+            }
+            continue;
+        }
+        if (!existing) {
+            return TConclusionStatus::Fail("unknown worker pool name for overlay: '" + yamlPool.GetName() + "'");
+        }
+        if (yamlPool.GetHeavyLimits().size()) {
+            existing->MutableHeavyLimits()->CopyFrom(yamlPool.GetHeavyLimits());
+        }
+        if (yamlPool.HasWorkersCount()) {
+            existing->SetWorkersCount(yamlPool.GetWorkersCount());
+        }
+        if (yamlPool.HasDefaultFractionOfThreadsCount()) {
+            existing->SetDefaultFractionOfThreadsCount(yamlPool.GetDefaultFractionOfThreadsCount());
+        }
+        if (yamlPool.HasMaxBatchSize()) {
+            existing->SetMaxBatchSize(yamlPool.GetMaxBatchSize());
+        }
+    }
+    return result;
+}
+
 TWorkersPool::TWorkersPool(const ui32 wpId, const std::optional<double> workersCountDouble, const std::optional<double> workersFraction)
     : WorkersPoolId(wpId)
     , WorkersCountInfo(workersCountDouble, workersFraction) {
@@ -152,6 +240,22 @@ TConclusionStatus TWorkersPool::DeserializeFromProto(const NKikimrConfig::TCompo
     if (proto.HasMaxBatchSize()) {
         MaxBatchSize = proto.GetMaxBatchSize();
     }
+    for (const auto& protoLimit : proto.GetHeavyLimits()) {
+        THeavyLimit limit;
+        auto conclusion = limit.DeserializeFromProto(protoLimit);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+        if (!HeavyLimits.empty()) {
+            if (limit.GetCpuLimit() <= HeavyLimits.back().GetCpuLimit()) {
+                return TConclusionStatus::Fail("heavy_limits cpu_limit_us must be strictly increasing");
+            }
+            if (limit.GetThreadLimit() >= HeavyLimits.back().GetThreadLimit()) {
+                return TConclusionStatus::Fail("heavy_limits thread_limit must be strictly decreasing");
+            }
+        }
+        HeavyLimits.emplace_back(std::move(limit));
+    }
 
     return TConclusionStatus::Success();
 }
@@ -168,6 +272,15 @@ TString TWorkersPool::DebugString() const {
     }
     sbLinks << "]";
     sb << "links=" << sbLinks << ";";
+    if (HeavyLimits.size()) {
+        TStringBuilder sbLimits;
+        sbLimits << "[";
+        for (auto&& l : HeavyLimits) {
+            sbLimits << l.DebugString() << ";";
+        }
+        sbLimits << "]";
+        sb << "heavy_limits=" << sbLimits << ";";
+    }
     sb << "}";
     return sb;
 }

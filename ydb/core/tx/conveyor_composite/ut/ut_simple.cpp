@@ -15,6 +15,9 @@
 #include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/xrange.h>
+#include <util/generic/ylimits.h>
+
+#include <array>
 
 using namespace NKikimr::NConveyorComposite;
 
@@ -62,6 +65,55 @@ public:
         , Counter(&c) {
     }
 };
+
+class TWorkerRecordingTask: public NKikimr::NConveyor::ITask {
+private:
+    const TDuration ExecutionTime;
+    TAtomicCounter* Counter;
+    std::array<TAtomicCounter, 16>* PerWorker = nullptr;
+    ui64 AssignedWorker = Max<ui64>();
+
+    virtual void DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override {
+        const TMonotonic start = TMonotonic::Now();
+        while (TMonotonic::Now() - start < ExecutionTime) {
+        }
+        if (PerWorker) {
+            AFL_VERIFY(AssignedWorker < PerWorker->size())("worker", AssignedWorker);
+            (*PerWorker)[AssignedWorker].Inc();
+        }
+        Counter->Inc();
+    }
+
+public:
+    virtual TString GetTaskClassIdentifier() const override {
+        return "SLEEP_RECORDING";
+    }
+
+    virtual void OnAssignedToWorker(const ui64 workerIdx) override {
+        AssignedWorker = workerIdx;
+    }
+
+    TWorkerRecordingTask(const TDuration d, TAtomicCounter& c, std::array<TAtomicCounter, 16>* perWorker)
+        : ExecutionTime(d)
+        , Counter(&c)
+        , PerWorker(perWorker) {
+    }
+};
+
+void WaitCounter(TAtomicCounter& counter, const i64 expected) {
+    const TMonotonic deadline = TMonotonic::Now() + TDuration::Seconds(30);
+    while (counter.Val() < expected) {
+        UNIT_ASSERT_C(TMonotonic::Now() < deadline, "timeout waiting for conveyor tasks");
+        Sleep(TDuration::MilliSeconds(10));
+    }
+    UNIT_ASSERT_VALUES_EQUAL(counter.Val(), expected);
+}
+
+NConfig::TConfig ParseConveyorProto(const TString& textProto) {
+    NKikimrConfig::TCompositeConveyorConfig protoConfig;
+    AFL_VERIFY(google::protobuf::TextFormat::ParseFromString(textProto, &protoConfig));
+    return NConfig::TConfig::BuildFromProto(protoConfig).DetachResult();
+}
 
 class IRequestProcessor {
 private:
@@ -501,5 +553,393 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
     };
     Y_UNIT_TEST(TestUniformDistribution) {
         TTestingExecutorUniformDistribution().Execute();
+    }
+
+    Y_UNIT_TEST(ParseActorSystemPoolName) {
+        {
+            auto parsed = NConfig::ParseActorSystemPoolName("User");
+            UNIT_ASSERT(parsed.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(*parsed, false);
+        }
+        {
+            auto parsed = NConfig::ParseActorSystemPoolName("Batch");
+            UNIT_ASSERT(parsed.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(*parsed, true);
+        }
+        UNIT_ASSERT(NConfig::ParseActorSystemPoolName("user").IsFail());
+        UNIT_ASSERT(NConfig::ParseActorSystemPoolName("USER").IsFail());
+        UNIT_ASSERT(NConfig::ParseActorSystemPoolName("batch").IsFail());
+        UNIT_ASSERT(NConfig::ParseActorSystemPoolName("System").IsFail());
+        UNIT_ASSERT(NConfig::ParseActorSystemPoolName("").IsFail());
+    }
+
+    Y_UNIT_TEST(HeavyLimitsParseErrors) {
+        auto expectFail = [](const TString& textProto) {
+            NKikimrConfig::TCompositeConveyorConfig protoConfig;
+            AFL_VERIFY(google::protobuf::TextFormat::ParseFromString(textProto, &protoConfig));
+            UNIT_ASSERT(NConfig::TConfig::BuildFromProto(protoConfig).IsFail());
+        };
+        expectFail(R"(
+            WorkerPools {
+                Name: "scan"
+                WorkersCount: 16
+                Links { Category: "scan" Weight: 1 }
+                HeavyLimits { CpuLimitUs: 25000000 ThreadLimit: 0 }
+            }
+            Categories { Name: "scan" }
+        )");
+        expectFail(R"(
+            WorkerPools {
+                Name: "scan"
+                WorkersCount: 16
+                Links { Category: "scan" Weight: 1 }
+                HeavyLimits { CpuLimitUs: 50000000 ThreadLimit: 4 }
+                HeavyLimits { CpuLimitUs: 25000000 ThreadLimit: 8 }
+            }
+            Categories { Name: "scan" }
+        )");
+        expectFail(R"(
+            WorkerPools {
+                Name: "scan"
+                WorkersCount: 16
+                Links { Category: "scan" Weight: 1 }
+                HeavyLimits { CpuLimitUs: 25000000 ThreadLimit: 8 }
+                HeavyLimits { CpuLimitUs: 50000000 ThreadLimit: 8 }
+            }
+            Categories { Name: "scan" }
+        )");
+        expectFail(R"(
+            WorkerPools {
+                Name: "scan"
+                WorkersCount: 16
+                Links { Category: "scan" Weight: 1 }
+                HeavyLimits { CpuLimitUs: 0 ThreadLimit: 8 }
+            }
+            Categories { Name: "scan" }
+        )");
+    }
+
+    Y_UNIT_TEST(OverlayYamlOnDefaultsByName) {
+        NKikimrConfig::TCompositeConveyorConfig defaults;
+        {
+            auto* pool = defaults.AddWorkerPools();
+            pool->SetName("scan");
+            pool->SetDefaultFractionOfThreadsCount(0.4);
+            auto* link = pool->AddLinks();
+            link->SetCategory("scan");
+            link->SetWeight(1);
+            auto* cat = defaults.AddCategories();
+            cat->SetName("scan");
+        }
+        {
+            auto* pool = defaults.AddWorkerPools();
+            pool->SetName("compaction");
+            pool->SetDefaultFractionOfThreadsCount(0.33);
+            auto* link = pool->AddLinks();
+            link->SetCategory("compaction");
+            link->SetWeight(1);
+            auto* cat = defaults.AddCategories();
+            cat->SetName("compaction");
+        }
+
+        NKikimrConfig::TCompositeConveyorConfig yaml;
+        {
+            auto* pool = yaml.AddWorkerPools();
+            pool->SetName("scan");
+            auto* limit = pool->AddHeavyLimits();
+            limit->SetCpuLimitUs(25000000);
+            limit->SetThreadLimit(8);
+            auto* limit2 = pool->AddHeavyLimits();
+            limit2->SetCpuLimitUs(50000000);
+            limit2->SetThreadLimit(4);
+        }
+
+        auto overlaid = NConfig::TConfig::OverlayYamlOnDefaults(defaults, yaml).DetachResult();
+        UNIT_ASSERT_VALUES_EQUAL(overlaid.GetWorkerPools().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(overlaid.GetWorkerPools(0).GetName(), "scan");
+        UNIT_ASSERT_VALUES_EQUAL(overlaid.GetWorkerPools(0).GetHeavyLimits().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(overlaid.GetWorkerPools(0).GetLinks().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(overlaid.GetWorkerPools(1).GetName(), "compaction");
+        UNIT_ASSERT_VALUES_EQUAL(overlaid.GetWorkerPools(1).GetHeavyLimits().size(), 0);
+
+        NKikimrConfig::TCompositeConveyorConfig unknown;
+        auto* unknownPool = unknown.AddWorkerPools();
+        unknownPool->SetName("Scan");
+        unknownPool->AddHeavyLimits()->SetCpuLimitUs(1);
+        unknownPool->MutableHeavyLimits(0)->SetThreadLimit(1);
+        UNIT_ASSERT(NConfig::TConfig::OverlayYamlOnDefaults(defaults, unknown).IsFail());
+    }
+
+    Y_UNIT_TEST(NoHeavyLimitsUsesWorkersBeyondLimit) {
+        const ui64 threadsCount = 64;
+        THolder<NActors::TActorSystemSetup> actorSystemSetup = NKikimr::BuildActorSystemSetup(threadsCount, 1);
+        NActors::TActorSystem actorSystem(actorSystemSetup);
+        actorSystem.Start();
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        const auto config = ParseConveyorProto(R"(
+            WorkerPools {
+                WorkersCount: 16
+                MaxBatchSize: 1
+                Links { Category: "scan" Weight: 1 }
+            }
+            Categories { Name: "scan" }
+        )");
+        const auto actorId = actorSystem.Register(CreateService(config, counters));
+        const ui64 processId = 1;
+        actorSystem.Send(actorId, new TEvExecution::TEvRegisterProcess(TCPULimitsConfig(1000, 1), ESpecialTaskCategory::Scan, "s", processId));
+
+        TAtomicCounter recordedDone;
+        std::array<TAtomicCounter, 16> perWorker;
+        const ui32 recordedTasks = 32;
+        for (ui32 i = 0; i < recordedTasks; ++i) {
+            actorSystem.Send(actorId, new TEvExecution::TEvNewTask(
+                std::make_shared<TWorkerRecordingTask>(TDuration::MilliSeconds(2), recordedDone, &perWorker),
+                ESpecialTaskCategory::Scan, processId));
+        }
+        WaitCounter(recordedDone, recordedTasks);
+
+        ui32 unrestrictedCount = 0;
+        for (ui32 i = 8; i < perWorker.size(); ++i) {
+            unrestrictedCount += perWorker[i].Val();
+        }
+        UNIT_ASSERT_C(unrestrictedCount > 0, "without heavy_limits a scan must use workers beyond index 8");
+
+        actorSystem.Send(actorId, new TEvExecution::TEvUnregisterProcess(ESpecialTaskCategory::Scan, processId));
+        actorSystem.Stop();
+        actorSystem.Cleanup();
+    }
+
+    Y_UNIT_TEST(PessimizedProcessUsesOnlyFirstWorkers) {
+        const ui64 threadsCount = 64;
+        THolder<NActors::TActorSystemSetup> actorSystemSetup = NKikimr::BuildActorSystemSetup(threadsCount, 1);
+        NActors::TActorSystem actorSystem(actorSystemSetup);
+        actorSystem.Start();
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        const auto config = ParseConveyorProto(R"(
+            WorkerPools {
+                WorkersCount: 16
+                MaxBatchSize: 1
+                Links { Category: "scan" Weight: 1 }
+                HeavyLimits { CpuLimitUs: 50000 ThreadLimit: 8 }
+            }
+            Categories { Name: "scan" }
+        )");
+        const auto actorId = actorSystem.Register(CreateService(config, counters));
+        const ui64 processId = 1;
+        actorSystem.Send(actorId, new TEvExecution::TEvRegisterProcess(TCPULimitsConfig(1000, 1), ESpecialTaskCategory::Scan, "s", processId));
+
+        {
+            TAtomicCounter warmupDone;
+            const ui32 warmupTasks = 4;
+            for (ui32 i = 0; i < warmupTasks; ++i) {
+                actorSystem.Send(actorId, new TEvExecution::TEvNewTask(
+                    std::make_shared<TSleepTask>(TDuration::MilliSeconds(20), warmupDone), ESpecialTaskCategory::Scan, processId));
+            }
+            WaitCounter(warmupDone, warmupTasks);
+        }
+
+        TAtomicCounter recordedDone;
+        std::array<TAtomicCounter, 16> perWorker;
+        const ui32 recordedTasks = 32;
+        for (ui32 i = 0; i < recordedTasks; ++i) {
+            actorSystem.Send(actorId, new TEvExecution::TEvNewTask(
+                std::make_shared<TWorkerRecordingTask>(TDuration::MilliSeconds(2), recordedDone, &perWorker),
+                ESpecialTaskCategory::Scan, processId));
+        }
+        WaitCounter(recordedDone, recordedTasks);
+
+        ui32 restrictedCount = 0;
+        ui32 unrestrictedCount = 0;
+        for (ui32 i = 0; i < perWorker.size(); ++i) {
+            if (i < 8) {
+                restrictedCount += perWorker[i].Val();
+            } else {
+                unrestrictedCount += perWorker[i].Val();
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(restrictedCount, recordedTasks);
+        UNIT_ASSERT_VALUES_EQUAL(unrestrictedCount, 0);
+
+        actorSystem.Send(actorId, new TEvExecution::TEvUnregisterProcess(ESpecialTaskCategory::Scan, processId));
+        actorSystem.Stop();
+        actorSystem.Cleanup();
+    }
+
+    Y_UNIT_TEST(TwoTierHeavyLimits) {
+        const ui64 threadsCount = 64;
+        THolder<NActors::TActorSystemSetup> actorSystemSetup = NKikimr::BuildActorSystemSetup(threadsCount, 1);
+        NActors::TActorSystem actorSystem(actorSystemSetup);
+        actorSystem.Start();
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        const auto config = ParseConveyorProto(R"(
+            WorkerPools {
+                WorkersCount: 16
+                MaxBatchSize: 1
+                Links { Category: "scan" Weight: 1 }
+                HeavyLimits { CpuLimitUs: 50000 ThreadLimit: 8 }
+                HeavyLimits { CpuLimitUs: 150000 ThreadLimit: 4 }
+            }
+            Categories { Name: "scan" }
+        )");
+        const auto actorId = actorSystem.Register(CreateService(config, counters));
+
+        const auto runRecorded = [&](const ui64 processId, const ui32 warmupTasks, const ui32 warmupMs) {
+            actorSystem.Send(actorId, new TEvExecution::TEvRegisterProcess(TCPULimitsConfig(1000, 1), ESpecialTaskCategory::Scan, "s", processId));
+            {
+                TAtomicCounter warmupDone;
+                for (ui32 i = 0; i < warmupTasks; ++i) {
+                    actorSystem.Send(actorId, new TEvExecution::TEvNewTask(
+                        std::make_shared<TSleepTask>(TDuration::MilliSeconds(warmupMs), warmupDone), ESpecialTaskCategory::Scan, processId));
+                }
+                WaitCounter(warmupDone, warmupTasks);
+            }
+            TAtomicCounter recordedDone;
+            std::array<TAtomicCounter, 16> perWorker;
+            const ui32 recordedTasks = 32;
+            for (ui32 i = 0; i < recordedTasks; ++i) {
+                actorSystem.Send(actorId, new TEvExecution::TEvNewTask(
+                    std::make_shared<TWorkerRecordingTask>(TDuration::MilliSeconds(2), recordedDone, &perWorker),
+                    ESpecialTaskCategory::Scan, processId));
+            }
+            WaitCounter(recordedDone, recordedTasks);
+            actorSystem.Send(actorId, new TEvExecution::TEvUnregisterProcess(ESpecialTaskCategory::Scan, processId));
+            return perWorker;
+        };
+
+        {
+            const auto perWorker = runRecorded(1, 4, 20);
+            ui32 midCount = 0;
+            ui32 unrestrictedCount = 0;
+            for (ui32 i = 0; i < perWorker.size(); ++i) {
+                if (i >= 8) {
+                    unrestrictedCount += perWorker[i].Val();
+                } else if (i >= 4) {
+                    midCount += perWorker[i].Val();
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(unrestrictedCount, 0);
+            UNIT_ASSERT_C(midCount > 0, "between 50ms and 150ms the process must still use workers 4..7");
+        }
+        {
+            const auto perWorker = runRecorded(2, 10, 20);
+            ui32 midAndAbove = 0;
+            for (ui32 i = 4; i < perWorker.size(); ++i) {
+                midAndAbove += perWorker[i].Val();
+            }
+            UNIT_ASSERT_VALUES_EQUAL(midAndAbove, 0);
+        }
+
+        actorSystem.Stop();
+        actorSystem.Cleanup();
+    }
+
+    Y_UNIT_TEST(InsertProcessIsNotPessimized) {
+        const ui64 threadsCount = 64;
+        THolder<NActors::TActorSystemSetup> actorSystemSetup = NKikimr::BuildActorSystemSetup(threadsCount, 1);
+        NActors::TActorSystem actorSystem(actorSystemSetup);
+        actorSystem.Start();
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        const auto config = ParseConveyorProto(R"(
+            WorkerPools {
+                Name: "scan"
+                WorkersCount: 16
+                MaxBatchSize: 1
+                Links { Category: "scan" Weight: 1 }
+                HeavyLimits { CpuLimitUs: 50000 ThreadLimit: 8 }
+            }
+            WorkerPools {
+                Name: "insert"
+                WorkersCount: 16
+                MaxBatchSize: 1
+                Links { Category: "insert" Weight: 1 }
+            }
+            Categories { Name: "scan" }
+            Categories { Name: "insert" }
+        )");
+        const auto actorId = actorSystem.Register(CreateService(config, counters));
+
+        {
+            TAtomicCounter warmupDone;
+            const ui32 warmupTasks = 4;
+            for (ui32 i = 0; i < warmupTasks; ++i) {
+                actorSystem.Send(actorId, new TEvExecution::TEvNewTask(
+                    std::make_shared<TSleepTask>(TDuration::MilliSeconds(20), warmupDone), ESpecialTaskCategory::Insert, 0));
+            }
+            WaitCounter(warmupDone, warmupTasks);
+        }
+
+        TAtomicCounter recordedDone;
+        std::array<TAtomicCounter, 16> perWorker;
+        const ui32 recordedTasks = 32;
+        for (ui32 i = 0; i < recordedTasks; ++i) {
+            actorSystem.Send(actorId, new TEvExecution::TEvNewTask(
+                std::make_shared<TWorkerRecordingTask>(TDuration::MilliSeconds(2), recordedDone, &perWorker),
+                ESpecialTaskCategory::Insert, 0));
+        }
+        WaitCounter(recordedDone, recordedTasks);
+
+        ui32 unrestrictedCount = 0;
+        for (ui32 i = 8; i < perWorker.size(); ++i) {
+            unrestrictedCount += perWorker[i].Val();
+        }
+        UNIT_ASSERT_C(unrestrictedCount > 0, "insert must keep using workers beyond the scan heavy_limits");
+
+        actorSystem.Stop();
+        actorSystem.Cleanup();
+    }
+
+    Y_UNIT_TEST(CompactionProcessIsNotPessimized) {
+        const ui64 threadsCount = 64;
+        THolder<NActors::TActorSystemSetup> actorSystemSetup = NKikimr::BuildActorSystemSetup(threadsCount, 1);
+        NActors::TActorSystem actorSystem(actorSystemSetup);
+        actorSystem.Start();
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        const auto config = ParseConveyorProto(R"(
+            WorkerPools {
+                Name: "scan"
+                WorkersCount: 16
+                MaxBatchSize: 1
+                Links { Category: "scan" Weight: 1 }
+                HeavyLimits { CpuLimitUs: 50000 ThreadLimit: 8 }
+            }
+            WorkerPools {
+                Name: "compaction"
+                WorkersCount: 16
+                MaxBatchSize: 1
+                Links { Category: "compaction" Weight: 1 }
+            }
+            Categories { Name: "scan" }
+            Categories { Name: "compaction" }
+        )");
+        const auto actorId = actorSystem.Register(CreateService(config, counters));
+
+        {
+            TAtomicCounter warmupDone;
+            const ui32 warmupTasks = 4;
+            for (ui32 i = 0; i < warmupTasks; ++i) {
+                actorSystem.Send(actorId, new TEvExecution::TEvNewTask(
+                    std::make_shared<TSleepTask>(TDuration::MilliSeconds(20), warmupDone), ESpecialTaskCategory::Compaction, 0));
+            }
+            WaitCounter(warmupDone, warmupTasks);
+        }
+
+        TAtomicCounter recordedDone;
+        std::array<TAtomicCounter, 16> perWorker;
+        const ui32 recordedTasks = 32;
+        for (ui32 i = 0; i < recordedTasks; ++i) {
+            actorSystem.Send(actorId, new TEvExecution::TEvNewTask(
+                std::make_shared<TWorkerRecordingTask>(TDuration::MilliSeconds(2), recordedDone, &perWorker),
+                ESpecialTaskCategory::Compaction, 0));
+        }
+        WaitCounter(recordedDone, recordedTasks);
+
+        ui32 unrestrictedCount = 0;
+        for (ui32 i = 8; i < perWorker.size(); ++i) {
+            unrestrictedCount += perWorker[i].Val();
+        }
+        UNIT_ASSERT_C(unrestrictedCount > 0, "compaction must keep using workers beyond the scan heavy_limits");
+
+        actorSystem.Stop();
+        actorSystem.Cleanup();
     }
 }

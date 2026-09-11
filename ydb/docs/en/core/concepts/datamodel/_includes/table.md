@@ -167,13 +167,10 @@ The speed of renaming is determined by the type of data transactions currently r
 ### Local Bloom skip indexes {#bloom-filter}
 
 Using a [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter) allows more efficiently determining the absence of keys in a table during multiple point lookups by primary key, reducing the number of required disk I/O operations at the cost of increased memory consumption.
-<<<<<<< HEAD
 
 The recommended way to manage bloom filters on row-oriented tables is via [local Bloom skip indexes](../../glossary.md#local-bloom-skip-index) (`LOCAL USING bloom_filter`), created with [ALTER TABLE ... ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-bloom) and removed with [ALTER TABLE ... DROP INDEX](../../../yql/reference/syntax/alter_table/indexes.md#drop-index). For details, see [Bloom skip indexes](../../../dev/bloom-skip-indexes.md#row-vs-column).
 
 {% note warning %}
-=======
->>>>>>> 40b22cd2351 (added docs for bloom indexes (#38535))
 
 | Parameter name | Type | Acceptable values | Update<br/>capability | Reset<br/>capability |
 | ------------- | --- | ------------------- | --------------------- | ------------------ |

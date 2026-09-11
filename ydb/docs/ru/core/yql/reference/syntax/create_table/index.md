@@ -64,7 +64,6 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 
 ### INDEX
 
-<<<<<<< HEAD
 Определение индекса на таблице. Поддерживаются:
 
 * [вторичные индексы](secondary_index.md),
@@ -72,9 +71,6 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 * [полнотекстовые индексы](fulltext_index.md),
 * [Блум-индексы](bloom_skip_index.md),
 * [JSON-индексы](json_index.md).
-=======
-Определение индекса на таблице. Поддерживаются [вторичные индексы](secondary_index.md), [векторные индексы](vector_index.md), [полнотекстовые индексы](fulltext_index.md) и [Блум-индексы](bloom_skip_index.md).
->>>>>>> 40b22cd2351 (added docs for bloom indexes (#38535))
 
 ### PRIMARY KEY
 
@@ -325,10 +321,7 @@ CREATE TABLE <table_name> (
 * [Вторичный индекс](secondary_index.md).
 * [Векторный индекс](vector_index.md).
 * [Полнотекстовый индекс](fulltext_index.md).
-<<<<<<< HEAD
 * [JSON-индекс](json_index.md).
-=======
->>>>>>> 40b22cd2351 (added docs for bloom indexes (#38535))
 * [Блум-индекс](bloom_skip_index.md).
 * [Группы колонок](family.md).
 * [Дополнительные параметры](with.md).

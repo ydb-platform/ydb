@@ -32,14 +32,11 @@ items:
   include:
     mode: link
     path: fulltext-search/toc_p.yaml
-<<<<<<< HEAD
 - name: Поиск по JSON
   href: json-search/index.md
   include:
     mode: link
     path: json-search/toc_p.yaml
-=======
->>>>>>> 40b22cd2351 (added docs for bloom indexes (#38535))
 - name: Локальные индексы
   href: local-indexes/index.md
   include:

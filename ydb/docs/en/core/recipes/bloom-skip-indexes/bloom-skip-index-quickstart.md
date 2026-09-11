@@ -1,14 +1,8 @@
 # Bloom skip index quickstart
 
-<<<<<<< HEAD
 ## Column-oriented (OLAP) table: bloom_filter
 
 Below is a minimal example: a [column-oriented table](../../concepts/glossary.md#column-oriented-table) with a primary key and a local `bloom_filter` index on a column that is frequently used in filters.
-=======
-## Creating a table with a bloom_filter index
-
-Below is a minimal example: a column-oriented table with a primary key and a local `bloom_filter` index on a column that is frequently used in filters.
->>>>>>> 40b22cd2351 (added docs for bloom indexes (#38535))
 
 ```yql
 CREATE TABLE events (
@@ -45,11 +39,7 @@ ALTER TABLE events
 
 After you load data, selective queries that filter on indexed columns may read less data: while scanning storage, the Bloom skip index skips fragments that cannot contain the requested value (compared to reading the full column without this filter).
 
-<<<<<<< HEAD
 Sample data and queries for the column-oriented table above:
-=======
-Sample data and queries for the table above:
->>>>>>> 40b22cd2351 (added docs for bloom indexes (#38535))
 
 ```yql
 INSERT INTO events (id, resource_id, payload, message) VALUES
@@ -74,7 +64,6 @@ FROM events
 WHERE message LIKE '%timeout%';
 ```
 
-<<<<<<< HEAD
 ## Row-oriented (OLTP) table: prefix bloom filter
 
 On a [row-oriented table](../../concepts/glossary.md#row-oriented-table), a `bloom_filter` index is built over a left prefix of the primary key. The indexed columns must be a contiguous leading subset of the primary key columns:
@@ -107,8 +96,6 @@ A query that filters on the full primary key uses `idx_full_key`:
 SELECT amount FROM orders WHERE customer_id = "cust-42" AND order_id = "ord-1001";
 ```
 
-=======
->>>>>>> 40b22cd2351 (added docs for bloom indexes (#38535))
 ## How to verify index effectiveness
 
 To check that the Bloom skip index actually helps, run the same selective query on a table with enough data before and after creating the index and compare execution time.

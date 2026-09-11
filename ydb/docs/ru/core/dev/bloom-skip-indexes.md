@@ -9,7 +9,6 @@
 * `bloom_filter` — фильтр по точным значениям индексируемой колонки; подходит для условий равенства и `IN` (см. [когда применять](../concepts/query_execution/local_indexes.md#bloom-skip-indexes)).
 * `bloom_ngram_filter` — фильтр по n-граммам строковой колонки (`String`, `Utf8`); подходит для поиска подстрок и шаблонов `LIKE` в [колоночных таблицах](../concepts/glossary.md#column-oriented-table).
 
-<<<<<<< HEAD
 ### Локальные блум-индексы {#row-vs-column}
 
 Тип `bloom_filter` поддерживается как в [строковых](../concepts/glossary.md#row-oriented-table) (OLTP), так и в [колоночных](../concepts/glossary.md#column-oriented-table) (OLAP) таблицах, но реализация различается:
@@ -19,8 +18,6 @@
 
 Тип `bloom_ngram_filter` поддерживается только в колоночных таблицах.
 
-=======
->>>>>>> 40b22cd2351 (added docs for bloom indexes (#38535))
 ## Параметры и значения по умолчанию {#parameters}
 
 Полный перечень параметров `WITH (...)` и значений по умолчанию:
@@ -60,7 +57,6 @@ ALTER TABLE events
   );
 ```
 
-<<<<<<< HEAD
 Создание строковой (OLTP) таблицы с префиксными фильтрами Блума по префиксам первичного ключа. В строковых таблицах индексируемые колонки должны образовывать левый префикс первичного ключа:
 
 ```yql
@@ -79,8 +75,6 @@ CREATE TABLE orders (
 );
 ```
 
-=======
->>>>>>> 40b22cd2351 (added docs for bloom indexes (#38535))
 Изменение параметров:
 
 ```yql

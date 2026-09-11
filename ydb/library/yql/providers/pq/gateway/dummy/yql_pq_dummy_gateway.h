@@ -66,7 +66,7 @@ public:
     NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const final;
 
 private:
-    TString SkipDatabasePrefix(const TString& path, const TString& database) const;
+    TString SkipDatabasePrefix(const TString& path, const TString& database, bool isCluster = false) const;
 
     mutable TMutex Mutex;
     const bool AllowSkipDatabasePrefix = false;

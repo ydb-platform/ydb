@@ -478,7 +478,7 @@ class Kikimr:
             self.external_endpoint = Endpoint(os.getenv("YDB_ENDPOINT"), os.getenv("YDB_DATABASE"))
             self.external_ydb_client = self._setup_ydb_client(self.external_endpoint, enable_discovery)
 
-    def recreate_driver(self, node_id = None):
+    def recreate_driver(self, node_id=None):
         if hasattr(self, "ydb_client"):
             self.ydb_client.stop()
 

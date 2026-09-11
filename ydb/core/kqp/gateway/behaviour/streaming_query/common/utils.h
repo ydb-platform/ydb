@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/public/api/protos/ydb_table.pb.h>
+
 #include <yql/essentials/sql/v1/translation/node.h>
 
 #include <util/generic/string.h>
@@ -39,6 +41,7 @@ public:
         static inline constexpr char StreamingDispositionTimeAgo[] = "time_ago";
         static inline constexpr char WatermarkLateEventsPolicy[] = "watermark_late_events_policy";
         static inline constexpr char CheckpointInterval[] = "checkpoint_interval";
+        static inline constexpr char StatsCollectionMode[] = "stats_collection_mode";
 
         // Internal query info
         static inline constexpr char QueryTextRevision[] = "__query_text_revision";
@@ -63,6 +66,8 @@ public:
     std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
     TString CheckpointIntervalString;
     std::optional<TDuration> CheckpointInterval;
+    TString StatsCollectionModeString;
+    std::optional<Ydb::Table::QueryStatsCollection::Mode> StatsCollectionMode;
 };
 
 }  // namespace NKikimr::NKqp

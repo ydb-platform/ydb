@@ -4,6 +4,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/sql/v1/translation/node.h>
@@ -38,6 +39,13 @@ TStreamingQuerySettings& TStreamingQuerySettings::FromProto(const NKikimrSchemeO
                 Y_VALIDATE(signedDuration >= 0, "CheckpointInterval must be non-negative");
 
                 CheckpointInterval = TDuration::MicroSeconds(signedDuration);
+            }
+        } else if (name == TStreamingQueryMeta::TProperties::StatsCollectionMode) {
+            if (StatsCollectionModeString = value) {
+                Ydb::Table::QueryStatsCollection::Mode mode;
+                auto parsed = Ydb::Table::QueryStatsCollection::Mode_Parse(StatsCollectionModeString, &mode);
+                Y_VALIDATE(parsed, "Failed to parse StatsCollectionMode");
+                StatsCollectionMode = mode;
             }
         }
     }

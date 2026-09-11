@@ -1118,14 +1118,25 @@ inline TSides<TVector<TType*>> ForceOptionalOnNullableSide(const TSides<TVector<
     return userTypes;
 }
 
+inline i64 CalcMaxOutputRows(const TVector<TType*>& outputItemTypes) {
+    size_t widestColumn = 0;
+    for (TType* type : outputItemTypes) {
+        widestColumn = std::max(widestColumn, CalcMaxBlockItemSize(type));
+    }
+    return static_cast<i64>(CalcBlockLen(widestColumn));
+}
+
 template <TPhysicalJoin Join, typename Converter>
 struct TPackedTupleOutputBase : NNonCopyable::TMoveOnly {
     struct Empty {};
     using BuildNullIfNeeded = std::conditional_t<Join.Kind == EJoinKind::Left, TPackResult, Empty>;
 
-    TPackedTupleOutputBase(const TDqRenames<ESide>* renames, TSides<Converter*> converters)
+    TPackedTupleOutputBase(const TDqRenames<ESide>* renames, TSides<Converter*> converters,
+                           const TVector<TType*>& outputItemTypes)
         : Renames_(renames)
         , Converters_(converters)
+        , MaxRows_(CalcMaxOutputRows(outputItemTypes))
+        , MaxOverflowBytes_(CalcMaxOverflowBytes(*renames, converters))
     {}
 
     int Columns() const {
@@ -1137,8 +1148,12 @@ struct TPackedTupleOutputBase : NNonCopyable::TMoveOnly {
         return Output_.SelectSide(Join.Preserved).NTuples;
     }
 
-    i64 SizeBytes() const {
-        return Output_.Build.AllocatedBytes() + Output_.Probe.AllocatedBytes();
+    i64 OverflowBytes() const {
+        return std::ssize(Output_.Build.Overflow) + std::ssize(Output_.Probe.Overflow);
+    }
+
+    bool IsFull() const {
+        return SizeTuples() >= MaxRows_ || OverflowBytes() >= MaxOverflowBytes_;
     }
 
     auto MakeConsumeFn() {
@@ -1170,6 +1185,18 @@ struct TPackedTupleOutputBase : NNonCopyable::TMoveOnly {
     }
 
 protected:
+    static i64 CalcMaxOverflowBytes(const TDqRenames<ESide>& renames, TSides<Converter*> converters) {
+        i64 variableColumns = 0;
+        for (auto rename : renames) {
+            const auto* layout = converters.SelectSide(rename.Side)->GetTupleLayout();
+            for (const auto& column : layout->VariableColumns) {
+                variableColumns += column.OriginalColumnIndex == static_cast<ui32>(rename.Index);
+            }
+        }
+        return variableColumns ? static_cast<i64>(MaxBlockSizeInBytes) * variableColumns
+                               : std::numeric_limits<i64>::max();
+    }
+
     void AssertSizeIsSane() const {
         if constexpr (LeftSemiOrOnly(Join.Kind)) {
             MKQL_ENSURE(Output_.SelectSide(Join.NullSupplying()).NTuples == 0,
@@ -1183,6 +1210,8 @@ protected:
 
     const TDqRenames<ESide>* Renames_;
     TSides<Converter*> Converters_;
+    const i64 MaxRows_;
+    const i64 MaxOverflowBytes_;
     TSides<TPackResult> Output_;
     BuildNullIfNeeded Nulls_;
 };
@@ -1190,8 +1219,7 @@ protected:
 template <typename JoinType, typename OutputType, typename FlushSink>
 EFetchResult RunPackedHashJoinBatch(TComputationContext& ctx, JoinType& join, OutputType& output, FlushSink&& onFlush,
                                     TPackedTuplePairFilter* filter = nullptr) {
-    // Bound the batch in bytes, not rows: rows say nothing about memory once overflow columns are fat
-    auto outputIsFull = [&]() { return output.SizeBytes() >= static_cast<i64>(MaxBlockSizeInBytes); };
+    auto outputIsFull = [&]() { return output.IsFull(); };
     while (!outputIsFull()) {
         switch (join.MatchRows(ctx, output.MakeConsumeFn(), outputIsFull, filter)) {
         case EFetchResult::Finish:

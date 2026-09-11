@@ -1648,7 +1648,7 @@ TJoinTestData TrueCrossJoinTestDataLeftIsBuild() {
     return td;
 }
 
-constexpr int CrossJoinOutputBufferBoundedRows = 30000;
+constexpr int CrossJoinOutputBufferBoundedRows = 70000;
 
 TJoinTestData CrossJoinOutputBufferBoundedTestData() {
     TJoinTestData td;
@@ -1984,6 +1984,7 @@ struct TOutputBlockStats {
     i64 MaxBlockRows = 0;
     i64 MaxBlockBytes = 0;
     int BlockCount = 0;
+    int Columns = 0;
 };
 
 i64 ArrayDataBytes(const arrow::ArrayData& data) {
@@ -2015,6 +2016,7 @@ TOutputBlockStats MeasureOutputBlocks(TJoinTestData& td) {
     auto stream = graph->GetValue();
 
     TOutputBlockStats stats;
+    stats.Columns = tupleWidth - 1;
     while (true) {
         auto status = stream.WideFetch(buff.data(), tupleWidth);
         if (status == NYql::NUdf::EFetchStatus::Finish) {
@@ -2051,7 +2053,7 @@ void AssertOutputBufferBounded(const TOutputBlockStats& stats, i64 expectedTotal
     // The join checks the budget after appending a row, so a block may overshoot it by one row.
     // Rows are uniform in these tests, so the block average stands in for that last row.
     const i64 rowBytes = stats.MaxBlockBytes / std::max<i64>(stats.MaxBlockRows, 1);
-    const i64 maxBlockBytes = MaxBlockSizeInBytes + rowBytes;
+    const i64 maxBlockBytes = MaxBlockSizeInBytes * std::max(stats.Columns, 1) + rowBytes;
     UNIT_ASSERT_C(stats.MaxBlockBytes <= maxBlockBytes,
         TStringBuilder() << "Max block size " << stats.MaxBlockBytes << " bytes ("
                          << stats.MaxBlockRows << " rows) should be at most " << maxBlockBytes);

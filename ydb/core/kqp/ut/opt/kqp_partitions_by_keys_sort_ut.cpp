@@ -50,6 +50,26 @@ void CheckWindowFunctionAst(
     }
 }
 
+TString ExtractFirstCallableSexp(const TString& ast, TStringBuf name) {
+    const TString needle = TString("(") + name;
+    const auto pos = ast.find(needle);
+    if (pos == TString::npos) {
+        return {};
+    }
+    int depth = 0;
+    for (size_t i = pos; i < ast.size(); ++i) {
+        if (ast[i] == '(') {
+            ++depth;
+        } else if (ast[i] == ')') {
+            --depth;
+            if (depth == 0) {
+                return ast.substr(pos, i - pos + 1);
+            }
+        }
+    }
+    return {};
+}
+
 void CheckStandardWindowFunctionAst(const TString& projection, bool useSortForPartitionsByKeys) {
     CheckWindowFunctionAst(
         TStringBuilder()
@@ -166,6 +186,45 @@ Y_UNIT_TEST_SUITE(KqpPartitionsByKeysSort) {
             UseSortForPartitionsByKeys,
             true,
             true);
+    }
+
+    Y_UNIT_TEST_TWIN(WindowFunctionFullFrameDropsUnusedSortColumnsAst, UseSortForPartitionsByKeys) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        const TString query = TStringBuilder()
+            << "--!syntax_v1\n"
+            << "PRAGMA ydb.WindowFunctionsV2 = \""
+            << (UseSortForPartitionsByKeys ? "true" : "false") << "\";\n"
+            << "$input = SELECT\n"
+            << "    Key, Text, Data,\n"
+            << "    Unwrap(CAST(Key AS String) || Text || CAST(Data AS String)) AS unused_fat_col\n"
+            << "FROM `/Root/EightShard`;\n"
+            << "SELECT Key, Text, Data, unused_fat_col,\n"
+            << "    SUM(Data) OVER (PARTITION BY Text) AS total\n"
+            << "FROM $input;\n";
+
+        auto explain = session.ExplainDataQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(explain.GetStatus(), EStatus::SUCCESS, explain.GetIssues().ToString());
+        const TString ast{explain.GetAst()};
+
+        Cerr << "=== Explain AST, UseSortForPartitionsByKeys="
+             << (UseSortForPartitionsByKeys ? "true" : "false")
+             << " ===\n" << ast << Endl;
+
+        UNIT_ASSERT_C(ast.Contains("unused_fat_col"), ast);
+        if (UseSortForPartitionsByKeys) {
+            UNIT_ASSERT_C(ast.Contains("WideSort"), ast);
+            UNIT_ASSERT_C(!ast.Contains("SqueezeToList"), ast);
+            const auto wideSort = ExtractFirstCallableSexp(ast, "WideSort");
+            UNIT_ASSERT_C(!wideSort.empty(), ast);
+            UNIT_ASSERT_C(!wideSort.Contains("unused_fat_col"), wideSort);
+        }
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 24);
     }
 
     Y_UNIT_TEST_TWIN(WindowFunctionRebuildPlanAst, UseSortForPartitionsByKeys) {

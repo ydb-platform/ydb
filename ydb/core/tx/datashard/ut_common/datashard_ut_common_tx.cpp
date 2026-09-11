@@ -293,7 +293,7 @@ std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> TTransactionState::TWriteP
         State.Locks.push_back(lock);
         for (const auto& seqNum : lock.GetWriteSeqNums()) {
             UNIT_ASSERT_VALUES_EQUAL(State.WriterIndex.value(), seqNum.GetWriterIndex());
-            auto& curSeqNum = State.Shard2SeqNum[msg->Record.GetOrigin()];
+            auto& curSeqNum = State.Shard2SeqNum[lock.GetDataShard()];
             curSeqNum = std::max(curSeqNum, seqNum.GetWriteSeqNum());
         }
     }

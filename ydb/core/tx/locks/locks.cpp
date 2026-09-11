@@ -1333,7 +1333,7 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
         // Adding read/write conflicts implies locking
         Y_ENSURE(!Update->ReadConflictLocks);
         Y_ENSURE(!Update->WriteConflictLocks);
-        if (Update->SetWriteSeqNums.empty()) {
+        if (!Update->HasSeqNumWrites()) {
             return {TVector<TLock>(), brokenLocks};
         }
         // Seq num is still consumed when no ranges were taken (e.g. INCREMENT of a missing row).
@@ -1409,7 +1409,7 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
                 }
             }
 
-            if (!lock->IsPersistent() && (lock->GetWriteTables() || !Update->SetWriteSeqNums.empty())) {
+            if (!lock->IsPersistent() && (lock->GetWriteTables() || Update->HasSeqNumUpdates())) {
                 lock->PersistLock(Db);
                 // Persistent locks cannot expire
                 Locker.ExpireQueue.Remove(lock.Get());
@@ -1417,14 +1417,16 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
                 waitPersistent = true;
             }
 
-            for (const auto& [shardId, seqNum] : Update->SetWriteSeqNums) {
-                // Advance even if no rows were applied (e.g. UPDATE of a missing row).
-                if (shardId == 0) {
-                    if (lock->SetWriteSeqNum(seqNum.WriterIndex, seqNum.WriteSeqNum, Db)) {
+            if (Update->WriteSeqNumUpdate) {
+                const auto& seqNumUpdate = *Update->WriteSeqNumUpdate;
+                if (seqNumUpdate.SetWriteSeqNum) {
+                    auto seqNum = *seqNumUpdate.SetWriteSeqNum;
+                    if (lock->SetWriteSeqNum(seqNumUpdate.WriterIndex, seqNum, Db)) {
                         waitPersistent = true;
                     }
-                } else {
-                    if (lock->SetAncestorWriteSeqNum(shardId, seqNum.WriterIndex, seqNum.WriteSeqNum, Db)) {
+                }
+                for (const auto& [shardId, seqNum] : seqNumUpdate.SetAncestorWriteSeqNums) {
+                    if (lock->SetAncestorWriteSeqNum(shardId, seqNumUpdate.WriterIndex, seqNum, Db)) {
                         waitPersistent = true;
                     }
                 }
@@ -1446,9 +1448,26 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
     // We have to tell client that there were some locks (even if we don't set them)
     TVector<TLock> out;
     for (auto& table : Update->AffectedTables) {
-        out.emplace_back(MakeLock(Update->LockTxId, lock ? lock->GetGeneration() : Self->Generation(), counter,
+        out.push_back(MakeLock(
+            Update->LockTxId, Self->TabletID(),
+            lock ? lock->GetGeneration() : Self->Generation(), counter,
             table.GetTableId(), Update->Lock && Update->Lock->IsWriteLock(),
             Update->Lock ? Update->Lock->GetLockWriteSeqNum() : TLockWriteSeqNum{}));
+        if (Update->WriteSeqNumUpdate) {
+            for (auto shardId : Update->WriteSeqNumUpdate->AffectedAncestorShards) {
+                Y_ENSURE(Update->Lock);
+                TLockWriteSeqNum seqNum;
+                seqNum.WriterIndex = Update->WriteSeqNumUpdate->WriterIndex;
+                auto it = Update->Lock->AncestorLocks.find(shardId);
+                Y_ENSURE(it != Update->Lock->AncestorLocks.end());
+                const auto& ancestorLock = it->second;
+                seqNum.WriteSeqNum = Update->Lock->GetAncestorWriteSeqNum(shardId, seqNum.WriterIndex);
+                out.push_back(MakeLock(
+                    Update->LockTxId, shardId,
+                    ancestorLock.Generation, ancestorLock.Counter,
+                    table.GetTableId(), Update->Lock->IsWriteLock(), seqNum));
+            }
+        }
     }
     return {out, brokenLocks};
 }
@@ -1528,7 +1547,9 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
         if (key.size() == 2) { // locks v1
             const auto& tableIds = txLock->GetReadTables();
             Y_ENSURE(tableIds.size() == 1);
-            return MakeAndLogLock(lockTxId, txLock->GetGeneration(), txLock->GetCounter(checkVersion), *tableIds.begin(), txLock->IsWriteLock(), txLock->GetLockWriteSeqNum());
+            return MakeAndLogLock(
+                lockTxId, tabletId, txLock->GetGeneration(), txLock->GetCounter(checkVersion),
+                *tableIds.begin(), txLock->IsWriteLock(), txLock->GetLockWriteSeqNum());
         } else { // locks v2
             Y_ENSURE(key.size() == 4);
             TPathId tableId;
@@ -1536,7 +1557,9 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
             ok = ok && TLocksTable::ExtractKey(key, TLocksTable::EColumns::PathId, tableId.LocalPathId);
             if (ok && tableId) {
                 if (txLock->GetReadTables().contains(tableId) || txLock->GetWriteTables().contains(tableId)) {
-                    return MakeAndLogLock(lockTxId, txLock->GetGeneration(), txLock->GetCounter(checkVersion), tableId, txLock->IsWriteLock(), txLock->GetLockWriteSeqNum());
+                    return MakeAndLogLock(
+                        lockTxId, tabletId, txLock->GetGeneration(), txLock->GetCounter(checkVersion),
+                        tableId, txLock->IsWriteLock(), txLock->GetLockWriteSeqNum());
                 } else {
                     YDB_LOG_TRACE_CTX(LockLoggerContext, "TSysLocks::GetLock: lock exists, but not set for table",
                         {"lockTxId", lockTxId},
@@ -1622,6 +1645,18 @@ void TSysLocks::SetWriteLock(const TTableId& tableId, const TArrayRef<const TCel
         AddWriteConflict(tableId, key);
     }
 }
+
+void TSysLocks::AddAffectedTable(const TTableId& tableId) {
+    Y_ENSURE(Update && Update->LockTxId);
+    Y_ENSURE(!TSysTables::IsSystemTable(tableId));
+    if (!Self->IsUserTable(tableId))
+        return;
+
+    if (auto* table = Locker.FindTablePtr(tableId)) {
+        Update->AffectedTables.PushBack(table);
+    }
+}
+
 
 void TSysLocks::BreakLock(ui64 lockId) {
     if (auto* lock = Locker.FindLockPtr(lockId)) {
@@ -1810,12 +1845,13 @@ EEnsureCurrentLock TSysLocks::EnsureCurrentLock(bool createMissing) {
     return EEnsureCurrentLock::Success;
 }
 
-TSysLocks::TLock TSysLocks::MakeLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites,
-    TLockWriteSeqNum writeSeqNum) const
+TSysLocks::TLock TSysLocks::MakeLock(
+    ui64 lockTxId, ui64 shardId, ui32 generation, ui64 counter,
+    const TPathId& pathId, bool hasWrites, TLockWriteSeqNum writeSeqNum) const
 {
     TLock lock;
     lock.LockId = lockTxId;
-    lock.DataShard = Self->TabletID();
+    lock.DataShard = shardId;
     lock.Generation = generation;
     lock.Counter = counter;
     lock.SchemeShard = pathId.OwnerId;
@@ -1827,10 +1863,11 @@ TSysLocks::TLock TSysLocks::MakeLock(ui64 lockTxId, ui32 generation, ui64 counte
     return lock;
 }
 
-TSysLocks::TLock TSysLocks::MakeAndLogLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites,
-    TLockWriteSeqNum writeSeqNum) const
+TSysLocks::TLock TSysLocks::MakeAndLogLock(
+    ui64 lockTxId, ui64 shardId, ui32 generation, ui64 counter,
+    const TPathId& pathId, bool hasWrites,TLockWriteSeqNum writeSeqNum) const
 {
-    TLock lock = MakeLock(lockTxId, generation, counter, pathId, hasWrites, writeSeqNum);
+    TLock lock = MakeLock(lockTxId, shardId, generation, counter, pathId, hasWrites, writeSeqNum);
     if (AccessLog)
         AccessLog->Locks[lockTxId] = lock;
     return lock;

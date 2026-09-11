@@ -1019,9 +1019,22 @@ struct TLocksUpdate {
     ui64 ConflictBreakerQuerySpanId = 0;
     TLockInfo::TPtr Lock;
 
-    // These uncommitted writes' positions in their writers' chains; ApplyLocks persists them on the lock.
-    // Each entry may target the current shard (DataShard == 0) or an ancestor shard (DataShard != 0).
-    THashMap<ui64, TLockWriteSeqNum> SetWriteSeqNums;
+    struct TWriteSeqNumUpdate {
+        const ui64 WriterIndex;
+        bool ThisShardAffected = false;
+        // Ids of affected ancestor shard locks with this LockTxId (including duplicate writes).
+        absl::flat_hash_set<ui64> AffectedAncestorShards;
+        // These uncommitted write position in the writer chains; ApplyLocks persists them on the lock.
+        TMaybe<ui64> SetWriteSeqNum;
+        // Same for operations that touched ancestor shards;
+        THashMap<ui64, ui64> SetAncestorWriteSeqNums;
+
+        explicit TWriteSeqNumUpdate(ui64 writerIndex)
+            : WriterIndex(writerIndex)
+        {}
+    };
+
+    TMaybe<TWriteSeqNumUpdate> WriteSeqNumUpdate;
 
     // Returns effective BreakerQuerySpanId: explicit override (commit path) if set,
     // then conflict-derived SpanId (from AddBreakLock), then falls back to QuerySpanId.
@@ -1138,6 +1151,22 @@ struct TLocksUpdate {
     void BreakSetLocks() {
         BreakOwn = true;
     }
+
+    bool HasSeqNumWrites() const {
+        if (!WriteSeqNumUpdate) {
+            return false;
+        }
+        return WriteSeqNumUpdate->ThisShardAffected
+            || !WriteSeqNumUpdate->AffectedAncestorShards.empty();
+    }
+
+    bool HasSeqNumUpdates() const {
+        if (!WriteSeqNumUpdate) {
+            return false;
+        }
+        return WriteSeqNumUpdate->SetWriteSeqNum
+            || !WriteSeqNumUpdate->SetAncestorWriteSeqNums.empty();
+    }
 };
 
 struct TLocksCache {
@@ -1223,6 +1252,7 @@ public:
     void SetLock(const TTableId& tableId, const TArrayRef<const TCell>& key);
     void SetLock(const TTableId& tableId, const TTableRange& range);
     void SetWriteLock(const TTableId& tableId, const TArrayRef<const TCell>& key);
+    void AddAffectedTable(const TTableId& tableId);
     void BreakLock(ui64 lockId);
     void BreakLocks(const TTableId& tableId, const TArrayRef<const TCell>& key);
     void AddReadConflict(ui64 conflictId);
@@ -1336,10 +1366,12 @@ private:
     TLocksCache* Cache = nullptr;
     ILocksDb* Db = nullptr;
 
-    TLock MakeLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites,
-        TLockWriteSeqNum writeSeqNum = {}) const;
-    TLock MakeAndLogLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites,
-        TLockWriteSeqNum writeSeqNum = {}) const;
+    TLock MakeLock(
+        ui64 lockTxId, ui64 shardId, ui32 generation, ui64 counter,
+        const TPathId& pathId, bool hasWrites, TLockWriteSeqNum writeSeqNum) const;
+    TLock MakeAndLogLock(
+        ui64 lockTxId, ui64 shardId, ui32 generation, ui64 counter,
+        const TPathId& pathId, bool hasWrites, TLockWriteSeqNum writeSeqNum) const;
 
     static ui64 GetLockId(const TArrayRef<const TCell>& key) {
         ui64 lockId;

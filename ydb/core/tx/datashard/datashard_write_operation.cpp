@@ -236,6 +236,11 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
     }
 
     OriginalShard = recordOperation.GetOriginalShard();
+    if (OriginalShard && !recordOperation.HasWriteSeqNum()) {
+        return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder()
+            << "Retrying operation performed on OriginalShard " << OriginalShard
+            << " requires WriteSeqNum"};
+    }
 
     SetTxKeys(tableInfo, tabletId, keyValidator);
     UserCtx = NACLib::TUserContextBuilder()

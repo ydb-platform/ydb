@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         return requiredAcks;
     }
 
-    void TestPopulatorQuorum(TVector<TStateStorageInfo::TRingGroup>&& ringGroupsConfiguration) {
+    void TestPopulatorQuorum(TVector<TStateStorageInfo::TRingGroup>&& ringGroupsConfiguration, bool reorderGroups = false) {
         TTestBasicRuntime runtime;
         SetupMinimalRuntime(runtime, CreateCustomStateStorageSetupper(ringGroupsConfiguration, ReplicasInRingGroup));
 
@@ -257,6 +257,13 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
             runtime.Send(requiredAcks[i].Release());
         }
         UNIT_ASSERT_VALUES_EQUAL(CountEvents<TUpdateAck>(runtime, false, edge), 0);
+        if (reorderGroups) {
+            auto reordered = MakeIntrusive<TStateStorageInfo>();
+            reordered->RingGroups = stateStorageInfo->RingGroups;
+            Reverse(reordered->RingGroups.begin(), reordered->RingGroups.end());
+            runtime.Send(new IEventHandle(populator, edge, new TEvStateStorage::TEvListSchemeBoardResult(reordered)));
+            UNIT_ASSERT_VALUES_EQUAL(CountEvents<TUpdateAck>(runtime, false, edge), 0);
+        }
         runtime.Send(requiredAcks.back().Release());
 
         auto mainAck = runtime.GrabEdgeEvent<TUpdateAck>(edge, TDuration::Seconds(10));
@@ -270,6 +277,10 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
 
     Y_UNIT_TEST(TwoRingGroups) {
         TestPopulatorQuorum({ {.State = PRIMARY}, {.State = SYNCHRONIZED} });
+    }
+
+    Y_UNIT_TEST(ReorderRingGroupsDuringPublication) {
+        TestPopulatorQuorum({ {.State = PRIMARY}, {.State = SYNCHRONIZED} }, true);
     }
 
     Y_UNIT_TEST(OneDisconnectedRingGroup) {

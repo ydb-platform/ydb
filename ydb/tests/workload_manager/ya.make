@@ -27,7 +27,6 @@ ENV(WAIT_CLUSTER_ALIVE_TIMEOUT="60")
 PEERDIR(
     ydb/tests/functional/tpc/lib
     ydb/tests/workload_manager/common
-    ydb/tests/workload_manager/s3
 )
 
 DEPENDS(

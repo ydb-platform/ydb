@@ -13,13 +13,13 @@ TEvInternal::TEvTaskProcessedResult::TEvTaskProcessedResult(
     AFL_VERIFY(Results.size());
 }
 
-TWorkerTaskResult::TWorkerTaskResult(const TWorkerTaskContext& context, const TMonotonic start, const TMonotonic finish, ITask::TPtr task)
+TWorkerTaskResult::TWorkerTaskResult(
+    const TWorkerTaskContext& context, const TMonotonic start, const TMonotonic finish, std::function<void()> accounted)
     : TBase(context)
     , Start(start)
     , Finish(finish)
-    , Task(std::move(task)) {
+    , Accounted(std::move(accounted)) {
     AFL_VERIFY(Start <= Finish);
-    AFL_VERIFY(Task);
 }
 
 }   // namespace NKikimr::NConveyorComposite

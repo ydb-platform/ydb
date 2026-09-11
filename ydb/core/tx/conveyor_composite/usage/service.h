@@ -11,8 +11,8 @@
 
 namespace NKikimr::NConveyorComposite {
 
-std::optional<bool> GetScanDefaultUseBatchPool();
-bool ResolveCompactionUseBatchPool();
+std::optional<EActorSystemPool> GetScanDefaultActorSystemPool();
+EActorSystemPool GetCompactionActorSystemPool();
 
 class TServiceOperator {
 private:
@@ -27,16 +27,16 @@ public:
 public:
     static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, const ESpecialTaskCategory category, const ui64 internalProcessId,
         const bool useBatchPool = false) {
-        bool batchPool = useBatchPool;
+        EActorSystemPool pool = useBatchPool ? EActorSystemPool::Batch : EActorSystemPool::User;
         // Compaction has no per-call pool argument (TCompServiceOperator). ColumnShardConfig.compaction_default_pool
         // is the source of truth; unset means User. Scan query tasks go through TProcessGuard after StartProcess.
         if (category == ESpecialTaskCategory::Compaction) {
-            batchPool = ResolveCompactionUseBatchPool();
+            pool = GetCompactionActorSystemPool();
         }
         if (TSelf::IsEnabled() && NActors::TlsActivationContext) {
             auto& context = NActors::TActorContext::AsActorContext();
             const NActors::TActorId& selfId = context.SelfID;
-            context.Send(MakeServiceId(selfId.NodeId(), batchPool),
+            context.Send(MakeServiceId(selfId.NodeId(), pool),
                 new NConveyorComposite::TEvExecution::TEvNewTask(task, category, internalProcessId));
             return true;
         } else {
@@ -47,11 +47,14 @@ public:
     static bool IsEnabled() {
         return Singleton<TSelf>()->IsEnabledFlag;
     }
-    static NActors::TActorId MakeServiceId(const ui32 nodeId, const bool useBatchPool = false) {
+    static NActors::TActorId MakeServiceId(const ui32 nodeId, const EActorSystemPool pool = EActorSystemPool::User) {
         static constexpr auto kUserServiceName = "ConvCmpUser";
         static constexpr auto kBatchServiceName = "ConvCmpBatch";
 
-        return NActors::TActorId(nodeId, useBatchPool ? kBatchServiceName : kUserServiceName);
+        return NActors::TActorId(nodeId, pool == EActorSystemPool::Batch ? kBatchServiceName : kUserServiceName);
+    }
+    static NActors::TActorId MakeServiceId(const ui32 nodeId, const bool useBatchPool) {
+        return MakeServiceId(nodeId, useBatchPool ? EActorSystemPool::Batch : EActorSystemPool::User);
     }
     static TProcessGuard StartProcess(
         const ESpecialTaskCategory category, const TString& scopeId, const ui64 externalProcessId, const TCPULimitsConfig& cpuLimits,

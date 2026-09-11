@@ -5,26 +5,30 @@
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <atomic>
 #include <optional>
 
 namespace NKikimr::NConveyorComposite {
 
 namespace {
-std::optional<bool> ParseConfiguredPool(const bool hasField, const TString& name) {
+std::optional<EActorSystemPool> ParseConfiguredPool(const bool hasField, const TString& name) {
     if (!hasField) {
         return std::nullopt;
     }
-    auto parsed = NConfig::ParseActorSystemPoolName(name);
+    auto parsed = NConfig::ParseActorSystemPool(name);
     if (parsed.IsFail()) {
-        AFL_ERROR(NKikimrServices::TX_CONVEYOR)("error", "invalid actor system pool name, using default routing")(
-            "name", name)("details", parsed.GetErrorMessage());
+        static std::atomic<bool> logged{false};
+        if (!logged.exchange(true)) {
+            AFL_ERROR(NKikimrServices::TX_CONVEYOR)("error", "invalid actor system pool name, using default routing")(
+                "name", name)("details", parsed.GetErrorMessage());
+        }
         return std::nullopt;
     }
     return *parsed;
 }
 }
 
-std::optional<bool> GetScanDefaultUseBatchPool() {
+std::optional<EActorSystemPool> GetScanDefaultActorSystemPool() {
     if (!HasAppData()) {
         return std::nullopt;
     }
@@ -32,13 +36,13 @@ std::optional<bool> GetScanDefaultUseBatchPool() {
     return ParseConfiguredPool(csConfig.HasScanDefaultPool(), csConfig.GetScanDefaultPool());
 }
 
-bool ResolveCompactionUseBatchPool() {
+EActorSystemPool GetCompactionActorSystemPool() {
     if (!HasAppData()) {
-        return false;
+        return EActorSystemPool::User;
     }
     const auto& csConfig = AppDataVerified().ColumnShardConfig;
-    const auto parsed = ParseConfiguredPool(csConfig.HasCompactionDefaultPool(), csConfig.GetCompactionDefaultPool());
-    return parsed.value_or(false);
+    return ParseConfiguredPool(csConfig.HasCompactionDefaultPool(), csConfig.GetCompactionDefaultPool())
+        .value_or(EActorSystemPool::User);
 }
 
 }   // namespace NKikimr::NConveyorComposite

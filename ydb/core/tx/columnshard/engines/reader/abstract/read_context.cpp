@@ -31,8 +31,8 @@ TReadContext::TReadContext(const std::shared_ptr<IStoragesManager>& storagesMana
     , ConveyorProcessGuard(
           NConveyorComposite::TScanServiceOperator::StartProcess(ScanId, cpuLimits.GetCPUGroupNameDef(NResourcePool::DEFAULT_POOL_ID), cpuLimits,
               [&]() {
-                  if (const auto configured = NConveyorComposite::GetScanDefaultUseBatchPool()) {
-                      return *configured;
+                  if (const auto configured = NConveyorComposite::GetScanDefaultActorSystemPool()) {
+                      return *configured == NConveyorComposite::EActorSystemPool::Batch;
                   }
                   return HasAppData() && scanActorId.PoolID() != AppDataVerified().UserPoolId;
               }()))

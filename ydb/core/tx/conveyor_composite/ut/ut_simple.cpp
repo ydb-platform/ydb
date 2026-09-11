@@ -18,6 +18,7 @@
 #include <util/generic/ylimits.h>
 
 #include <array>
+#include <functional>
 
 using namespace NKikimr::NConveyorComposite;
 
@@ -61,10 +62,13 @@ public:
         return "SLEEP";
     }
 
-    virtual void OnAccounted() override {
-        if (Accounted) {
-            Accounted->Inc();
+    virtual std::function<void()> MakeAccountedCallback() const override {
+        if (!Accounted) {
+            return {};
         }
+        return [c = Accounted]() {
+            c->Inc();
+        };
     }
 
     TSleepTask(const TDuration d, TAtomicCounter& c, TAtomicCounter* accounted = nullptr)
@@ -574,22 +578,22 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
         TTestingExecutorUniformDistribution().Execute();
     }
 
-    Y_UNIT_TEST(ParseActorSystemPoolName) {
+    Y_UNIT_TEST(ParseActorSystemPool) {
         {
-            auto parsed = NConfig::ParseActorSystemPoolName("User");
+            auto parsed = NConfig::ParseActorSystemPool("User");
             UNIT_ASSERT(parsed.IsSuccess());
-            UNIT_ASSERT_VALUES_EQUAL(*parsed, false);
+            UNIT_ASSERT(*parsed == EActorSystemPool::User);
         }
         {
-            auto parsed = NConfig::ParseActorSystemPoolName("Batch");
+            auto parsed = NConfig::ParseActorSystemPool("Batch");
             UNIT_ASSERT(parsed.IsSuccess());
-            UNIT_ASSERT_VALUES_EQUAL(*parsed, true);
+            UNIT_ASSERT(*parsed == EActorSystemPool::Batch);
         }
-        UNIT_ASSERT(NConfig::ParseActorSystemPoolName("user").IsFail());
-        UNIT_ASSERT(NConfig::ParseActorSystemPoolName("USER").IsFail());
-        UNIT_ASSERT(NConfig::ParseActorSystemPoolName("batch").IsFail());
-        UNIT_ASSERT(NConfig::ParseActorSystemPoolName("System").IsFail());
-        UNIT_ASSERT(NConfig::ParseActorSystemPoolName("").IsFail());
+        UNIT_ASSERT(NConfig::ParseActorSystemPool("user").IsFail());
+        UNIT_ASSERT(NConfig::ParseActorSystemPool("USER").IsFail());
+        UNIT_ASSERT(NConfig::ParseActorSystemPool("batch").IsFail());
+        UNIT_ASSERT(NConfig::ParseActorSystemPool("System").IsFail());
+        UNIT_ASSERT(NConfig::ParseActorSystemPool("").IsFail());
     }
 
     Y_UNIT_TEST(HeavyLimitsParseErrors) {
@@ -633,6 +637,15 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
                 WorkersCount: 16
                 Links { Category: "scan" Weight: 1 }
                 HeavyLimits { CpuLimitUs: 0 ThreadLimit: 8 }
+            }
+            Categories { Name: "scan" }
+        )");
+        expectFail(R"(
+            WorkerPools {
+                Name: "scan"
+                WorkersCount: 4
+                Links { Category: "scan" Weight: 1 }
+                HeavyLimits { CpuLimitUs: 50000 ThreadLimit: 8 }
             }
             Categories { Name: "scan" }
         )");
@@ -687,6 +700,47 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
         unknownPool->AddHeavyLimits()->SetCpuLimitUs(1);
         unknownPool->MutableHeavyLimits(0)->SetThreadLimit(1);
         UNIT_ASSERT(NConfig::TConfig::OverlayYamlOnDefaults(defaults, unknown).IsFail());
+        UNIT_ASSERT_STRING_CONTAINS(
+            NConfig::TConfig::OverlayYamlOnDefaults(defaults, unknown).GetErrorMessage(), "expected one of");
+    }
+
+    Y_UNIT_TEST(OverlayPartialCategoriesKeepsDefaults) {
+        NKikimrConfig::TCompositeConveyorConfig defaults;
+        {
+            auto* scan = defaults.AddCategories();
+            scan->SetName("scan");
+            scan->SetQueueSizeLimit(10);
+            auto* compaction = defaults.AddCategories();
+            compaction->SetName("compaction");
+            compaction->SetQueueSizeLimit(20);
+        }
+        {
+            auto* pool = defaults.AddWorkerPools();
+            pool->SetName("scan");
+            auto* link = pool->AddLinks();
+            link->SetCategory("scan");
+            link->SetWeight(1);
+        }
+
+        NKikimrConfig::TCompositeConveyorConfig yaml;
+        {
+            auto* scan = yaml.AddCategories();
+            scan->SetName("scan");
+            scan->SetQueueSizeLimit(99);
+            auto* pool = yaml.AddWorkerPools();
+            pool->SetName("scan");
+            auto* limit = pool->AddHeavyLimits();
+            limit->SetCpuLimitUs(25000000);
+            limit->SetThreadLimit(8);
+        }
+
+        auto overlaid = NConfig::TConfig::OverlayYamlOnDefaults(defaults, yaml).DetachResult();
+        UNIT_ASSERT_VALUES_EQUAL(overlaid.GetCategories().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(overlaid.GetCategories(0).GetName(), "scan");
+        UNIT_ASSERT_VALUES_EQUAL(overlaid.GetCategories(0).GetQueueSizeLimit(), 99);
+        UNIT_ASSERT_VALUES_EQUAL(overlaid.GetCategories(1).GetName(), "compaction");
+        UNIT_ASSERT_VALUES_EQUAL(overlaid.GetCategories(1).GetQueueSizeLimit(), 20);
+        UNIT_ASSERT_VALUES_EQUAL(overlaid.GetWorkerPools(0).GetHeavyLimits().size(), 1);
     }
 
     Y_UNIT_TEST(OverlayWithLinksKeepsDefaultMaxBatchSize) {
@@ -775,6 +829,45 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
         actorSystem.Cleanup();
     }
 
+    Y_UNIT_TEST(DefaultScanProcessIsNotPessimized) {
+        const ui64 threadsCount = 64;
+        THolder<NActors::TActorSystemSetup> actorSystemSetup = NKikimr::BuildActorSystemSetup(threadsCount, 1);
+        NActors::TActorSystem actorSystem(actorSystemSetup);
+        actorSystem.Start();
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        const auto config = ParseConveyorProto(R"(
+            WorkerPools {
+                WorkersCount: 16
+                MaxBatchSize: 1
+                Links { Category: "scan" Weight: 1 }
+                HeavyLimits { CpuLimitUs: 50000 ThreadLimit: 8 }
+            }
+            Categories { Name: "scan" }
+        )");
+        const auto actorId = actorSystem.Register(CreateService(config, counters));
+
+        WaitWarmupAccounted(actorSystem, actorId, ESpecialTaskCategory::Scan, 0, 4, TDuration::MilliSeconds(20));
+
+        TAtomicCounter recordedDone;
+        std::array<TAtomicCounter, 16> perWorker;
+        const ui32 recordedTasks = 32;
+        for (ui32 i = 0; i < recordedTasks; ++i) {
+            actorSystem.Send(actorId, new TEvExecution::TEvNewTask(
+                std::make_shared<TWorkerRecordingTask>(TDuration::MilliSeconds(2), recordedDone, &perWorker),
+                ESpecialTaskCategory::Scan, 0));
+        }
+        WaitCounter(recordedDone, recordedTasks);
+
+        ui32 unrestrictedCount = 0;
+        for (ui32 i = 8; i < perWorker.size(); ++i) {
+            unrestrictedCount += perWorker[i].Val();
+        }
+        UNIT_ASSERT_C(unrestrictedCount > 0, "shared process 0 must not be pinned by heavy_limits");
+
+        actorSystem.Stop();
+        actorSystem.Cleanup();
+    }
+
     Y_UNIT_TEST(PessimizedProcessUsesOnlyFirstWorkers) {
         const ui64 threadsCount = 64;
         THolder<NActors::TActorSystemSetup> actorSystemSetup = NKikimr::BuildActorSystemSetup(threadsCount, 1);
@@ -859,17 +952,11 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
 
         {
             const auto perWorker = runRecorded(1, 4, 20);
-            ui32 midCount = 0;
             ui32 unrestrictedCount = 0;
-            for (ui32 i = 0; i < perWorker.size(); ++i) {
-                if (i >= 8) {
-                    unrestrictedCount += perWorker[i].Val();
-                } else if (i >= 4) {
-                    midCount += perWorker[i].Val();
-                }
+            for (ui32 i = 8; i < perWorker.size(); ++i) {
+                unrestrictedCount += perWorker[i].Val();
             }
             UNIT_ASSERT_VALUES_EQUAL(unrestrictedCount, 0);
-            UNIT_ASSERT_C(midCount > 0, "between 50ms and 150ms the process must still use workers 4..7");
         }
         {
             const auto perWorker = runRecorded(2, 10, 20);

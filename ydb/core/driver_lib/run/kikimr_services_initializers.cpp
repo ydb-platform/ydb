@@ -2801,8 +2801,8 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
                 protoWorkersPool.SetWorkersCount(Config.GetInsertConveyorConfig().GetWorkersCountDouble());
             } else if (Config.GetInsertConveyorConfig().HasWorkersCount()) {
                 protoWorkersPool.SetWorkersCount(Config.GetInsertConveyorConfig().GetWorkersCount());
-            } else if (Config.GetCompConveyorConfig().HasDefaultFractionOfThreadsCount()) {
-                protoWorkersPool.SetDefaultFractionOfThreadsCount(Config.GetCompConveyorConfig().GetDefaultFractionOfThreadsCount());
+            } else if (Config.GetInsertConveyorConfig().HasDefaultFractionOfThreadsCount()) {
+                protoWorkersPool.SetDefaultFractionOfThreadsCount(Config.GetInsertConveyorConfig().GetDefaultFractionOfThreadsCount());
             } else {
                 protoWorkersPool.SetDefaultFractionOfThreadsCount(0.2);
             }
@@ -2829,8 +2829,8 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
                 protoWorkersPool.SetWorkersCount(Config.GetScanConveyorConfig().GetWorkersCountDouble());
             } else if (Config.GetScanConveyorConfig().HasWorkersCount()) {
                 protoWorkersPool.SetWorkersCount(Config.GetScanConveyorConfig().GetWorkersCount());
-            } else if (Config.GetCompConveyorConfig().HasDefaultFractionOfThreadsCount()) {
-                protoWorkersPool.SetDefaultFractionOfThreadsCount(Config.GetCompConveyorConfig().GetDefaultFractionOfThreadsCount());
+            } else if (Config.GetScanConveyorConfig().HasDefaultFractionOfThreadsCount()) {
+                protoWorkersPool.SetDefaultFractionOfThreadsCount(Config.GetScanConveyorConfig().GetDefaultFractionOfThreadsCount());
             } else {
                 protoWorkersPool.SetDefaultFractionOfThreadsCount(0.4);
             }
@@ -2873,8 +2873,8 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
         auto overlaid = NConveyorComposite::NConfig::TConfig::OverlayYamlOnDefaults(result, Config.GetCompositeConveyorConfig());
         if (overlaid.IsFail()) {
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot overlay composite conveyor config")(
-                "error", overlaid.GetErrorMessage())("action", "using yaml composite_conveyor_config as-is");
-            return Config.GetCompositeConveyorConfig();
+                "error", overlaid.GetErrorMessage())("action", "keeping synthesized composite conveyor defaults");
+            return result;
         }
         return overlaid.DetachResult();
     }();

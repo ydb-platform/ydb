@@ -20,6 +20,27 @@ bool CategoryHeapLess(const TWeightedCategory& l, const TWeightedCategory& r) {
     }
     return r.GetCPUUsage()->CalcWeight(r.GetWeight()) < l.GetCPUUsage()->CalcWeight(l.GetWeight());
 }
+
+bool FillBatchForWorker(std::vector<TWeightedCategory>& procLocal, const ui32 workerIdx, const ui64 maxBatchSize,
+    const TDuration deliveringDuration, const std::vector<NConfig::THeavyLimit>& heavyLimits, std::vector<TWorkerTask>& tasks) {
+    TDuration predicted = TDuration::Zero();
+    THashSet<TString> scopes;
+    while (procLocal.size() && (tasks.empty() || (predicted < deliveringDuration * 10 && tasks.size() < maxBatchSize)) &&
+           procLocal.front().GetCategory()->HasTasks()) {
+        std::pop_heap(procLocal.begin(), procLocal.end(), CategoryHeapLess);
+        auto task = procLocal.back().GetCategory()->ExtractTaskWithPrediction(
+            procLocal.back().GetCounters(), scopes, workerIdx, heavyLimits);
+        if (!task) {
+            procLocal.pop_back();
+            continue;
+        }
+        tasks.emplace_back(std::move(*task));
+        procLocal.back().GetCPUUsage()->AddPredicted(tasks.back().GetPredictedDuration());
+        predicted += tasks.back().GetPredictedDuration();
+        std::push_heap(procLocal.begin(), procLocal.end(), CategoryHeapLess);
+    }
+    return !tasks.empty();
+}
 }
 
 TWorkersPool::TWorkersPool(const TString& poolName, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
@@ -91,25 +112,9 @@ bool TWorkersPool::DrainOnWorkers(const std::vector<ui32>& workerIdxs) {
     bool newTask = false;
     ui32 nextWorker = 0;
     while (nextWorker < workerIdxs.size() && procLocal.size() && procLocal.front().GetCategory()->HasTasks()) {
-        TDuration predicted = TDuration::Zero();
-        std::vector<TWorkerTask> tasks;
-        THashSet<TString> scopes;
         const ui32 workerIdx = workerIdxs[nextWorker];
-        while (procLocal.size() && (tasks.empty() || (predicted < DeliveringDuration.GetValue() * 10 && tasks.size() < MaxBatchSize)) &&
-               procLocal.front().GetCategory()->HasTasks()) {
-            std::pop_heap(procLocal.begin(), procLocal.end(), CategoryHeapLess);
-            auto task = procLocal.back().GetCategory()->ExtractTaskWithPrediction(
-                procLocal.back().GetCounters(), scopes, workerIdx, HeavyLimits);
-            if (!task) {
-                procLocal.pop_back();
-                continue;
-            }
-            tasks.emplace_back(std::move(*task));
-            procLocal.back().GetCPUUsage()->AddPredicted(tasks.back().GetPredictedDuration());
-            predicted += tasks.back().GetPredictedDuration();
-            std::push_heap(procLocal.begin(), procLocal.end(), CategoryHeapLess);
-        }
-        if (tasks.empty()) {
+        std::vector<TWorkerTask> tasks;
+        if (!FillBatchForWorker(procLocal, workerIdx, MaxBatchSize, DeliveringDuration.GetValue(), HeavyLimits, tasks)) {
             break;
         }
         RunTask(std::move(tasks), workerIdx);
@@ -131,25 +136,9 @@ bool TWorkersPool::DrainTasks() {
         AFL_VERIFY(procLocal.size());
         bool newTask = false;
         while (ActiveWorkersIdx.size() && procLocal.size() && procLocal.front().GetCategory()->HasTasks()) {
-            TDuration predicted = TDuration::Zero();
             std::vector<TWorkerTask> tasks;
-            THashSet<TString> scopes;
-            while (procLocal.size() && (tasks.empty() || (predicted < DeliveringDuration.GetValue() * 10 && tasks.size() < MaxBatchSize)) &&
-                   procLocal.front().GetCategory()->HasTasks()) {
-                std::pop_heap(procLocal.begin(), procLocal.end(), CategoryHeapLess);
-                auto task = procLocal.back().GetCategory()->ExtractTaskWithPrediction(
-                    procLocal.back().GetCounters(), scopes, ActiveWorkersIdx.back(), HeavyLimits);
-                if (!task) {
-                    procLocal.pop_back();
-                    continue;
-                }
-                tasks.emplace_back(std::move(*task));
-                procLocal.back().GetCPUUsage()->AddPredicted(tasks.back().GetPredictedDuration());
-                predicted += tasks.back().GetPredictedDuration();
-                std::push_heap(procLocal.begin(), procLocal.end(), CategoryHeapLess);
-            }
             newTask = true;
-            if (tasks.size()) {
+            if (FillBatchForWorker(procLocal, ActiveWorkersIdx.back(), MaxBatchSize, DeliveringDuration.GetValue(), HeavyLimits, tasks)) {
                 RunTask(std::move(tasks));
             }
         }

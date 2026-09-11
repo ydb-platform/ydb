@@ -1,4 +1,5 @@
 #pragma once
+#include <functional>
 #include <memory>
 #include <ydb/library/signals/owner.h>
 
@@ -85,8 +86,10 @@ public:
     virtual void OnAssignedToWorker(const ui64 /*workerIdx*/) {
     }
 
-    // Test/observability hook: called after the process accounts this task's duration into TotalCPU.
-    virtual void OnAccounted() {
+    // Optional test barrier: returns a callback that does not keep this task alive.
+    // Invoked after TotalCPU is updated on the distributor.
+    virtual std::function<void()> MakeAccountedCallback() const {
+        return {};
     }
 
     void OnCannotExecute(const TString& reason) {

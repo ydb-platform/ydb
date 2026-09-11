@@ -6,6 +6,8 @@
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
+#include <cmath>
+
 namespace NKikimr::NConveyorComposite::NConfig {
 
 TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig& config) {
@@ -132,12 +134,12 @@ TString THeavyLimit::DebugString() const {
     return sb;
 }
 
-TConclusion<bool> ParseActorSystemPoolName(const TString& name) {
+TConclusion<EActorSystemPool> ParseActorSystemPool(const TString& name) {
     if (name == "User") {
-        return false;
+        return EActorSystemPool::User;
     }
     if (name == "Batch") {
-        return true;
+        return EActorSystemPool::Batch;
     }
     return TConclusionStatus::Fail("unknown actor system pool name '" + name + "', expected User or Batch");
 }
@@ -160,8 +162,26 @@ TConclusion<NKikimrConfig::TCompositeConveyorConfig> TConfig::OverlayYamlOnDefau
         result.SetEnabled(yaml.GetEnabled());
     }
     if (yaml.GetCategories().size()) {
-        result.ClearCategories();
-        result.MutableCategories()->CopyFrom(yaml.GetCategories());
+        const ui32 allCategoryCount = GetEnumAllValues<ESpecialTaskCategory>().size();
+        if ((ui32)yaml.GetCategories().size() >= allCategoryCount) {
+            result.ClearCategories();
+            result.MutableCategories()->CopyFrom(yaml.GetCategories());
+        } else {
+            for (const auto& yamlCat : yaml.GetCategories()) {
+                NKikimrConfig::TCompositeConveyorConfig::TCategory* existing = nullptr;
+                for (auto& cat : *result.MutableCategories()) {
+                    if (cat.GetName() == yamlCat.GetName()) {
+                        existing = &cat;
+                        break;
+                    }
+                }
+                if (existing) {
+                    *existing = yamlCat;
+                } else {
+                    *result.AddCategories() = yamlCat;
+                }
+            }
+        }
     }
 
     for (const auto& yamlPool : yaml.GetWorkerPools()) {
@@ -197,7 +217,15 @@ TConclusion<NKikimrConfig::TCompositeConveyorConfig> TConfig::OverlayYamlOnDefau
             continue;
         }
         if (!existing) {
-            return TConclusionStatus::Fail("unknown worker pool name for overlay: '" + yamlPool.GetName() + "'");
+            TStringBuilder expected;
+            for (const auto& pool : result.GetWorkerPools()) {
+                if (expected) {
+                    expected << ", ";
+                }
+                expected << "'" << pool.GetName() << "'";
+            }
+            return TConclusionStatus::Fail(
+                "unknown worker pool name for overlay: '" + yamlPool.GetName() + "', expected one of: " + expected);
         }
         if (yamlPool.GetHeavyLimits().size()) {
             existing->MutableHeavyLimits()->CopyFrom(yamlPool.GetHeavyLimits());
@@ -266,6 +294,9 @@ TConclusionStatus TWorkersPool::DeserializeFromProto(const NKikimrConfig::TCompo
             if (limit.GetThreadLimit() >= HeavyLimits.back().GetThreadLimit()) {
                 return TConclusionStatus::Fail("heavy_limits thread_limit must be strictly decreasing");
             }
+        }
+        if (proto.HasWorkersCount() && limit.GetThreadLimit() >= static_cast<ui32>(std::ceil(proto.GetWorkersCount()))) {
+            return TConclusionStatus::Fail("heavy_limits thread_limit must be less than workers_count");
         }
         HeavyLimits.emplace_back(std::move(limit));
     }

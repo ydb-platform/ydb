@@ -80,8 +80,8 @@ private:
     ui32 LinksCount = 0;
     TDuration BaseWeight = TDuration::Zero();
     // Cumulative wall-clock time of finished tasks on this process (not OS CPU time). Never decays.
-    // heavy_limits must only be set on query-scoped pools (scan). Shared process-0 categories
-    // (compaction/insert/...) would stay pinned at the last staircase step for the node lifetime.
+    // Applied only to query-scoped processes (ProcessId != 0). Process 0 is the category default
+    // (accessor parsing, compaction/insert/...) and is never pinned by heavy_limits.
     TDuration TotalCPU = TDuration::Zero();
 
 public:
@@ -90,7 +90,7 @@ public:
     }
 
     bool CanRunOnWorker(const ui32 workerIdx, const std::vector<NConfig::THeavyLimit>& limits) const {
-        if (limits.empty()) {
+        if (limits.empty() || ProcessId == 0) {
             return true;
         }
         ui32 threadLimit = Max<ui32>();
@@ -141,9 +141,7 @@ public:
         AverageTaskDuration.Add(result.GetDuration());
         InProgressTasksCount.Dec();
         TotalCPU += result.GetDuration();
-        if (result.GetTask()) {
-            result.GetTask()->OnAccounted();
-        }
+        result.NotifyAccounted();
     }
 
     [[nodiscard]] bool DecRegistration() {

@@ -1248,7 +1248,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
 
         options_dict = dict(zip(islice(options, 0, None, 2), islice(options, 1, None, 2)))
 
-        path = f"{kikimr.get_database_name()}/{query_name}"
+        # path = f"{kikimr.get_database_name()}/{query_name}" # TODO YQ-5684
         try:
             kikimr.ydb_client.query(f"""
                 CREATE STREAMING QUERY {query_name} AS DO BEGIN
@@ -1297,7 +1297,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
                     ):
                         assert componentSensors.get("Fullscans", 0) == 0
 
-        if not "MultiGet true" in sql:
+        if "MultiGet true" not in sql:
             assert hits + miss == len(messages)*sql.count("/*+ streamlookup(")
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY {query_name}")

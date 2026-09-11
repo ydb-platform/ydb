@@ -1,6 +1,7 @@
 """Adaptive offered-load selection for local YDB benchmarks."""
 
 from dataclasses import dataclass
+import math
 
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
 
@@ -43,8 +44,8 @@ def _maximum_latency_attempts(search):
         previous = current
         current = _next_geometric(current, maximum, search["multiplier"])
         probes += 1
-        resolution = max(1, int(round(max(current, 1) * search["resolution_percent"] / 100.0)))
-        worst = max(worst, probes + _binary_probe_count(previous, current, resolution))
+        # A midpoint follows every predictive probe, bounding even inaccurate predictions.
+        worst = max(worst, probes + 2 * _binary_probe_count(previous, current, 1))
         if worst > MAX_AUTOMATIC_SEARCH_ATTEMPTS:
             return worst
     return worst
@@ -65,7 +66,7 @@ def validate_search_attempt_bound(config):
     if attempts > MAX_AUTOMATIC_SEARCH_ATTEMPTS:
         raise BenchmarkError(
             "automatic load search may require more than {} attempts; "
-            "narrow the range or increase multiplier/resolution-percent".format(MAX_AUTOMATIC_SEARCH_ATTEMPTS)
+            "narrow the range or increase multiplier".format(MAX_AUTOMATIC_SEARCH_ATTEMPTS)
         )
 
 
@@ -357,10 +358,28 @@ def _run_throughput(config, measure, on_attempt):
     )
 
 
-def _run_latency(config, measure, on_attempt):
+def _latency_probe(config, low, high, measured, predictive):
+    midpoint = (low + high) // 2
+    if not predictive:
+        return midpoint
+    objective = config["objective"]
+    metric = objective.get("latency_metric", objective["percentile"] + "_ms")
+    upper = measured[high].get("verification_metrics", measured[high])
+    left, right = measured[low].get(metric), upper.get(metric)
+    if not all(isinstance(value, (int, float)) and math.isfinite(value) for value in (left, right)):
+        return midpoint
+    if right <= left or right <= objective["max_ms"] or _invalid_measurement_reason(upper):
+        return midpoint
+    fraction = (objective["max_ms"] - left) / (right - left)
+    if not math.isfinite(fraction) or not 0 <= fraction <= 1:
+        return midpoint
+    return min(high - 1, max(low + 1, low + int((high - low) * fraction)))
+
+
+def _run_latency(config, measure, on_attempt, previous_attempts=()):
     search = config["search"]
-    attempts = []
-    measured = {}
+    attempts = list(previous_attempts)
+    measured = {record["load"]: record for record in attempts}
 
     def sample(load):
         if load in measured:
@@ -375,8 +394,17 @@ def _run_latency(config, measure, on_attempt):
 
     current = search["start"]
     last_pass = None
-    first_fail = None
-    while True:
+    first_fail = min((load for load, record in measured.items() if not record["passed"]), default=None)
+    if first_fail is not None:
+        last_pass = max(
+            (load for load, record in measured.items() if record["passed"] and load < first_fail), default=None
+        )
+        if last_pass is None and current < first_fail:
+            if sample(current)["passed"]:
+                last_pass = current
+            else:
+                first_fail = current
+    while first_fail is None:
         record = sample(current)
         if record["passed"]:
             last_pass = current
@@ -402,13 +430,13 @@ def _run_latency(config, measure, on_attempt):
             failing_load=first_fail,
         )
 
-    low = last_pass
-    high = first_fail
-    resolution = max(1, int(round(max(high, 1) * search["resolution_percent"] / 100.0)))
-    while high - low > resolution:
-        candidate = max(1, (low + high) // 2)
-        if candidate in measured:
-            break
+    # Reuse closer evidence when resuming after a rejected verification.
+    high = min(load for load, record in measured.items() if not record["passed"])
+    low = max(load for load, record in measured.items() if record["passed"] and load < high)
+    predictive = True
+    while high - low > 1:
+        candidate = _latency_probe(config, low, high, measured, predictive)
+        predictive = not predictive
         record = sample(candidate)
         if record["passed"]:
             low = candidate
@@ -416,13 +444,13 @@ def _run_latency(config, measure, on_attempt):
             high = candidate
 
     selected = low or None
-    invalid_reason = _invalid_measurement_reason(measured[high])
+    invalid_reason = _invalid_measurement_reason(measured[high].get("verification_metrics", measured[high]))
     if invalid_reason is not None:
         outcome = "bounded-by-invalid-sample"
         reason = "invalid measurement bounded the latency search above {}: {}".format(low, invalid_reason)
     else:
         outcome = "boundary-found"
-        reason = "latency SLO bracketed between {} and {}".format(low, high)
+        reason = "maximum passing load: {}; next load {} fails the SLO".format(low, high)
     return LoadSearchResult(
         tuple(attempts),
         selected,
@@ -433,7 +461,7 @@ def _run_latency(config, measure, on_attempt):
     )
 
 
-def search_load(config, measure, on_attempt=None):
+def search_load(config, measure, on_attempt=None, previous_attempts=()):
     """Run the configured controller using ``measure(load) -> metrics``."""
     if "values" in config:
         return _run_points(config, measure, on_attempt)
@@ -442,5 +470,5 @@ def search_load(config, measure, on_attempt=None):
     if objective_type == "maximize-throughput":
         return _run_throughput(config, measure, on_attempt)
     if objective_type == "latency-slo":
-        return _run_latency(config, measure, on_attempt)
+        return _run_latency(config, measure, on_attempt, previous_attempts)
     raise BenchmarkError("unsupported load objective: {}".format(objective_type))

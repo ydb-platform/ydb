@@ -3977,7 +3977,122 @@ const profileByKey=()=>null;
         self.assertFalse((output / "verification-repetitions.csv").exists())
         self.assertTrue((output / "repetitions.csv").is_file())
 
-    def test_local_ydb_latency_verification_reports_failed_holdout_without_changing_search(self):
+    @unittest.skipUnless(shutil.which("node"), "node is needed for browser logic tests")
+    def test_run_configuration_tab_uses_saved_yaml_and_keeps_selection(self):
+        script = web._JS[web._JS.index("function configurationLabel(") : web._JS.index("function affinityPath")]
+        script += """
+const app={innerHTML:''},buttons=new Map(),sessionStorage={setItem:()=>{}};
+let activeRun='',failConfig=false,configReads=0;
+const viewedHost='',splitRunRef=()=>null,runDisplay=value=>value;
+const document={querySelector:selector=>{
+  if(!buttons.has(selector))buttons.set(selector,{querySelectorAll:()=>[]});
+  return buttons.get(selector)
+}};
+const enc=encodeURIComponent,esc=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;');
+const sectionTabs=()=>'<nav>Summary YAML</nav>',bindSectionTabs=()=>{};
+const clearRefresh=()=>{},profileGroups=()=>({'local-ydb/one':[{}]}),
+  parseLocalYdbProfileSelection=()=>({profile:'',view:''}),breadcrumbs=()=>'',status=value=>value,
+  humanTime=()=>'',duration=()=>'',runHref=(id,kind)=>'/'+id+'/'+kind,shell=(_,body)=>body,
+  displayError=error=>'ERROR: '+error.message;
+async function api(path){
+  if(path==='/api/hosts')return {local:{id:'local',name:'Local'},hosts:[]};
+  if(path.endsWith('/config.json')){
+    configReads++;
+    if(failConfig)throw Error('Saved YAML unavailable');
+    return {yaml:'saved: <script>not markup</script>',perf:true,continue_on_error:false,structured:{'local-ydb':{
+      one:{workload:{type:'stock',operation:'add-rand-order'},load:{search:{start:'1',maximum:'256'}},
+        'actor-system':{'use-united-pool':'false'},'unknown-setting':'<script>'},
+      two:{workload:{type:'kv'},measurement:{duration:'60'}}
+    }}}
+  }
+  return {state:'completed',status:'completed',steps:[],finished_steps:0}
+}
+(async()=>{
+  await renderRun('run-id','','configuration');
+  if(!app.innerHTML.includes('saved: &lt;script>'))throw Error('Saved YAML is absent or unescaped');
+  if(!app.innerHTML.includes('perf: on'))throw Error('Run options missing');
+  if(!app.innerHTML.includes('data-config-profile="yaml"'))throw Error('YAML is not a peer profile tab');
+  if(app.innerHTML.includes('configuration:summary'))throw Error('Redundant Summary level remains');
+  for(const value of ['Workload','Load &amp; objective','Actor system','local-ydb/two','Unknown setting','false']){
+    if(!app.innerHTML.includes(value))throw Error('Structured field missing: '+value)
+  }
+  if(!app.innerHTML.includes('run-id/configuration'))throw Error('Configuration route missing');
+  if(app.innerHTML.includes('id=local-ydb-result'))throw Error('Mounted profile instead of configuration');
+  await buttons.get('#refresh-run').onclick();
+  if(configReads!==2)throw Error('Refresh lost configuration tab');
+  configurationSelections.set('run-id','YAML');await buttons.get('#refresh-run').onclick();
+  if(!app.innerHTML.includes('data-config-profile="yaml" class="selected"'))throw Error('Refresh lost YAML selection');
+  failConfig=true;await renderRun('run-id','','configuration');
+  if(!app.innerHTML.includes('Saved YAML unavailable')||!app.innerHTML.includes('class=run-tabs')){
+    throw Error('Missing YAML error must preserve navigation')
+  }
+})().catch(error=>{console.error(error);process.exitCode=1});
+"""
+        subprocess.check_call([shutil.which("node"), "-e", script], timeout=10)
+
+    @unittest.skipUnless(shutil.which("node"), "node is needed for browser logic tests")
+    def test_configuration_route_preserves_remote_owner(self):
+        script = web._JS[web._JS.index("function splitRunRef(") : web._JS.index("async function hostChoices(")]
+        start = web._JS.index("async function compose(")
+        compose = web._JS[start : web._JS.index("addEventListener(", start)]
+        script += """
+const assert=require('node:assert/strict'),enc=encodeURIComponent,viewedHost='';
+const ref='60834016-4866-405f-bdbc-63271c093b06:remote-run';
+const location={hash:'#run/'+enc(ref)+'/configuration'};
+const routeParts=()=>['run',ref,'configuration'];let rendered;
+const renderRun=(...args)=>{rendered=args};
+"""
+        script += compose
+        script += """
+(async()=>{
+  await compose();
+  assert.deepEqual(rendered,[ref,'','configuration']);
+  assert.equal(hostApiPath('/api/runs/'+enc(ref)+'/config.json'),
+    '/api/hosts/60834016-4866-405f-bdbc-63271c093b06/api/runs/remote-run/config.json');
+})().catch(error=>{console.error(error);process.exitCode=1});
+"""
+        subprocess.check_call([shutil.which("node"), "-e", script], timeout=10)
+
+    @unittest.skipUnless(shutil.which("node"), "node is needed for browser logic tests")
+    def test_new_run_queue_label_uses_selected_host_and_ignores_stale_response(self):
+        script = web._JS[web._JS.index("async function refreshEditorActivity(") : web._JS.index("function runDisplay(")]
+        script += """
+const assert=require('node:assert/strict'),location={hash:'#new'};
+let editorHost='sas',button={textContent:'Start run'},resolve;
+const document={querySelector:()=>button};
+const editorApi=path=>{assert.equal(path,'/api/activity-status');return new Promise(done=>{resolve=done})};
+(async()=>{
+  let pending=refreshEditorActivity();resolve({active_run_id:'busy'});await pending;
+  assert.equal(button.textContent,'Add to queue');
+  pending=refreshEditorActivity();editorHost='amd';button={textContent:'Start run'};
+  resolve({active_run_id:'busy'});await pending;
+  assert.equal(button.textContent,'Start run');
+  pending=refreshEditorActivity();resolve({queued:1});await pending;
+  assert.equal(button.textContent,'Add to queue');
+  pending=refreshEditorActivity();resolve({queued:0});await pending;
+  assert.equal(button.textContent,'Start run');
+})().catch(error=>{console.error(error);process.exitCode=1});
+"""
+        subprocess.check_call([shutil.which("node"), "-e", script], timeout=10)
+
+    def test_saved_configuration_view_does_not_apply_current_defaults(self):
+        snapshot = 'local-ydb:\n  old:\n    workload: {type: stock}\n    custom-option: "001"\n'
+        service = mock.Mock(output=self.root)
+        with mock.patch.object(web, "_run_directory", return_value=self.root):
+            with mock.patch.object(web, "load_manifest", return_value={"config": {"snapshot": snapshot}}):
+                saved = web.RunService.run_config(service, "old")
+        self.assertEqual(saved["yaml"], snapshot)
+        self.assertEqual(
+            saved["structured"], {"local-ydb": {"old": {"workload": {"type": "stock"}, "custom-option": "001"}}}
+        )
+        for snapshot in ("invalid: [", "cycle: &cycle {again: *cycle}"):
+            with mock.patch.object(web, "_run_directory", return_value=self.root):
+                with mock.patch.object(web, "load_manifest", return_value={"config": {"snapshot": snapshot}}):
+                    saved = web.RunService.run_config(service, "old")
+            self.assertEqual(saved["yaml"], snapshot)
+            self.assertIsNone(saved["structured"])
+
+    def test_local_ydb_latency_verification_rejects_the_only_feasible_load(self):
         configuration = load_config(self._config("""
             local-ydb:
               latency:
@@ -4002,14 +4117,74 @@ const profileByKey=()=>null;
             ],
         )
         self.assertEqual(manifest["state"], "passed")
-        self.assertEqual(manifest["result"]["selected_metrics"]["p99_ms"], 9)
-        self.assertEqual(manifest["result"]["verified_metrics"]["p99_ms"], 11)
-        self.assertEqual(manifest["result"]["metrics_source"], "verification")
+        self.assertIsNone(manifest["result"]["selected_load"])
+        self.assertEqual(manifest["result"]["outcome"], "no-feasible-point")
+        self.assertEqual(manifest["result"]["metrics_source"], "search")
         self.assertFalse(manifest["result"]["holdout_accepted"])
-        self.assertFalse(manifest["verification"]["accepted"])
-        self.assertEqual(manifest["verification"]["evaluation_kind"], "objective")
-        self.assertIn("exceeds", manifest["verification"]["decision"])
-        self.assertNotIn("saturated_repetitions", manifest["verification"])
+        self.assertEqual(manifest["verification"]["status"], "skipped")
+        self.assertFalse(manifest["attempts"][0]["passed"])
+        self.assertEqual(manifest["attempts"][0]["verification_metrics"]["p99_ms"], 11)
+        self.assertIn("exceeds", manifest["rejected_verifications"][0]["decision"])
+
+    def test_local_ydb_latency_resumes_after_rejected_verification(self):
+        configuration = load_config(self._config("""
+            local-ydb:
+              latency:
+                workload: {type: kv, operation: upsert}
+                load:
+                  parameter: threads
+                  search: {start: 4, maximum: 16, resolution-percent: 50}
+                  objective: {type: latency-slo, percentile: p99, max-ms: 10}
+                measurement: {warmup: 0, duration: 1, repetitions: 1, verification-repetitions: 1}
+                affinity:
+                  ydb-cli: {mode: none}
+                  static-nodes: {mode: none}
+                  dynamic-nodes: {mode: none}
+        """)).runs[0]
+        manifest, output, events = self._run_mock_local_ydb(
+            configuration,
+            "verification-resumed",
+            [{"throughput": 10, "p99_ms": latency} for latency in (4, 8, 16, 10, 13, 11, 11, 9, 9)],
+        )
+        self.assertEqual(manifest["result"]["selected_load"], 9)
+        self.assertEqual(manifest["result"]["failing_load"], 10)
+        self.assertTrue(manifest["result"]["holdout_accepted"])
+        self.assertEqual(manifest["result"]["verification_mode"], "adaptive")
+        self.assertEqual([attempt["load"] for attempt in manifest["attempts"]], [4, 8, 16, 10, 13, 11, 9])
+        self.assertFalse(manifest["attempts"][3]["passed"])
+        self.assertTrue(manifest["attempts"][-1]["passed"])
+        self.assertTrue((output / "verification-rejected-001" / "verification-summary.csv").is_file())
+        self.assertTrue((output / "verification" / "repeat-001" / "commands.json").is_file())
+        self.assertTrue(
+            any(event.get("fields", {}).get("progress", {}).get("phase") == "resuming-search" for event in events)
+        )
+
+    def test_latency_prediction_finds_an_exact_boundary_and_reuses_rejected_evidence(self):
+        config = {
+            "parameter": "threads",
+            "search": {"start": 10, "maximum": 100, "multiplier": 2, "resolution_percent": 50},
+            "objective": {"type": "latency-slo", "percentile": "p99", "max_ms": 82, "max_errors": 0},
+        }
+        sampled = []
+
+        def measure(load):
+            sampled.append(load)
+            return {"throughput": load, "errors": 0, "p99_ms": load}
+
+        result = load_control.search_load(config, measure)
+        self.assertEqual(result.selected_load, 82)
+        self.assertEqual(result.failing_load, 83)
+        self.assertNotIn("bracketed", result.stop_reason)
+        self.assertLessEqual(len(sampled), 9)
+        self.assertIn(82, sampled)
+        rejected = [dict(item) for item in result.attempts]
+        next(item for item in rejected if item["load"] == 82)["passed"] = False
+        sampled.clear()
+        resumed = load_control.search_load(config, measure, previous_attempts=rejected)
+        self.assertEqual(resumed.selected_load, 81)
+        self.assertEqual(resumed.failing_load, 82)
+        self.assertTrue(all(load < 82 for load in sampled))
+        self.assertEqual(len(sampled), len(set(sampled)))
 
     def test_local_ydb_verification_rejects_an_empty_repetition_when_errors_are_allowed(self):
         configuration = load_config(self._config("""

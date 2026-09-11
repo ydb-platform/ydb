@@ -22,6 +22,22 @@ using namespace NNodes;
 
 const THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "count", "distinct", "avg", "variance_1_1"};
 
+TStatus AnnotateLambda(TExprNode::TPtr& lambda, TRBOContext& ctx) {
+    // Call after UpdateLambdaAllArgumentsTypes: changed argument types replace
+    // the lambda and invalidate its annotation; unchanged types can reuse it.
+    if (lambda->GetTypeAnn() && lambda->GetState() >= TExprNode::EState::TypeComplete
+        && lambda->GetState() != TExprNode::EState::Error) {
+        return TStatus::Ok;
+    }
+
+    ctx.TypeAnnTransformer.Rewind();
+    TStatus status(TStatus::Ok);
+    do {
+        status = ctx.TypeAnnTransformer.Transform(lambda, lambda, ctx.ExprCtx);
+    } while (status == TStatus::Repeat);
+    return status;
+}
+
 std::pair<TString, const TKikimrTableDescription*> ResolveTable(const TExprNode* kqpTableNode, TExprContext& ctx,
     const TString& cluster, const TKikimrTablesData& tablesData)
 {
@@ -91,11 +107,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpRead> read, TRBOContext& ctx) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        ctx.TypeAnnTransformer.Rewind();
-        IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok, "Cannot type annotate original filter lambda.");
-        do {
-            status = ctx.TypeAnnTransformer.Transform(lambda, lambda, ctx.ExprCtx);
-        } while (status == IGraphTransformer::TStatus::Repeat);
+        const auto status = AnnotateLambda(lambda, ctx);
         Y_ENSURE(status == IGraphTransformer::TStatus::Ok && lambda->GetTypeAnn());
     }
 
@@ -106,11 +118,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpRead> read, TRBOContext& ctx) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        ctx.TypeAnnTransformer.Rewind();
-        IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok, "Cannot type annotate olap lambda.");
-        do {
-            status = ctx.TypeAnnTransformer.Transform(lambda, lambda, ctx.ExprCtx);
-        } while (status == IGraphTransformer::TStatus::Repeat);
+        const auto status = AnnotateLambda(lambda, ctx);
         Y_ENSURE(status == IGraphTransformer::TStatus::Ok && lambda->GetTypeAnn());
 
         // Clear old items list, we will update it based on olap filter/projections types.
@@ -195,12 +203,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpFilter> filter, TRBOContext& ctx, TPlanPro
         return IGraphTransformer::TStatus::Error;
     }
 
-    ctx.TypeAnnTransformer.Rewind();
-    IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
-    do {
-        status = ctx.TypeAnnTransformer.Transform(lambda, lambda, ctx.ExprCtx);
-
-    } while (status == IGraphTransformer::TStatus::Repeat);
+    const auto status = AnnotateLambda(lambda, ctx);
 
     const TTypeAnnotationNode* lambdaType = lambda->GetTypeAnn();
     if (!lambdaType) {
@@ -227,7 +230,9 @@ TStatus ComputeTypes(TIntrusivePtr<TOpFilter> filter, TRBOContext& ctx, TPlanPro
         return IGraphTransformer::TStatus::Error;
     }
 
-    filter->SetFilterExpression(TExpression(std::move(lambda), filterExpression.Ctx, filterExpression.PlanProps));
+    if (lambda != filterExpression.Node) {
+        filter->SetFilterExpression(TExpression(std::move(lambda), filterExpression.Ctx, filterExpression.PlanProps));
+    }
     filter->Type = inputType;
 
     return TStatus::Ok;
@@ -261,12 +266,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        ctx.TypeAnnTransformer.Rewind();
-        IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
-        do {
-            status = ctx.TypeAnnTransformer.Transform(lambda, lambda, ctx.ExprCtx);
-        // Could we have an infinity loop?
-        } while (status == IGraphTransformer::TStatus::Repeat);
+        const auto status = AnnotateLambda(lambda, ctx);
 
         if (status == IGraphTransformer::TStatus::Error) {
             return status;
@@ -276,7 +276,9 @@ TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
         Y_ENSURE(lambdaType);
         auto mapLambdaType = ctx.ExprCtx.MakeType<TItemExprType>(mapElement.GetElementName().GetFullName(), lambdaType);
         resStructItemTypes.push_back(mapLambdaType);
-        map->SetMapElementExpression(index, TExpression(std::move(lambda), expression.Ctx, expression.PlanProps));
+        if (lambda != expression.Node) {
+            map->SetMapElementExpression(index, TExpression(std::move(lambda), expression.Ctx, expression.PlanProps));
+        }
     }
 
     auto resultItemType = ctx.ExprCtx.MakeType<TStructExprType>(resStructItemTypes);
@@ -561,11 +563,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpLimit> limit, TRBOContext& ctx) {
         return IGraphTransformer::TStatus::Error;
     }
 
-    ctx.TypeAnnTransformer.Rewind();
-    IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
-    do {
-        status = ctx.TypeAnnTransformer.Transform(lambda, lambda, ctx.ExprCtx);
-    } while (status == IGraphTransformer::TStatus::Repeat);
+    const auto status = AnnotateLambda(lambda, ctx);
 
     if (status == IGraphTransformer::TStatus::Error) {
         return status;
@@ -624,11 +622,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpTableLookup> lookup, TRBOContext& ctx) {
             return TStatus::Error;
         }
 
-        ctx.TypeAnnTransformer.Rewind();
-        TStatus status(TStatus::Ok);
-        do {
-            status = ctx.TypeAnnTransformer.Transform(lambda, lambda, ctx.ExprCtx);
-        } while (status == TStatus::Repeat);
+        const auto status = AnnotateLambda(lambda, ctx);
 
         if (!lambda->GetTypeAnn()) {
             YQL_CLOG(TRACE, CoreDq) << "Could not infer the lookup join filter lambda type, status = " << status;

@@ -976,6 +976,11 @@ TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimize(TExprNode::TPtr input, c
 }
 
 void TPhysicalQueryBuilder::TypeAnnotate(TExprNode::TPtr& input) {
+    if (input->GetTypeAnn() && input->GetState() >= TExprNode::EState::TypeComplete
+        && input->GetState() != TExprNode::EState::Error) {
+        return;
+    }
+
     RBOCtx.TypeAnnTransformer.Rewind();
     TExprNode::TPtr output;
     IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);

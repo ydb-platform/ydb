@@ -85,9 +85,10 @@ public:
         , Counters(counters)
         , OwnerActor(owner)
         , TasksGraph({}, Request.Transactions, Request.TxAlloc, {}, {}, Counters, {}, nullptr, false)
-        , LiteralExecuterSpan(TWilsonKqp::LiteralExecuter, std::move(Request.TraceId), "LiteralExecuter")
+        , LiteralExecuterSpan(TWilsonKqp::LiteralExecuter, std::move(Request.TraceId), "Execute plan")
         , UserRequestContext(userRequestContext)
     {
+        LiteralExecuterSpan.Attribute("ydb.actor.type", TString("TKqpLiteralExecuter"));
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(
             Request.TxAlloc, TEvKqpExecuter::TEvTxResponse::EExecutionType::Literal);
 
@@ -314,7 +315,9 @@ public:
         }
 
         LWTRACK(KqpLiteralExecuterFinalize, ResponseEv->Orbit, TxId);
-        LiteralExecuterSpan.EndOk();
+        AddExecutionTraceCpuTime(LiteralExecuterSpan,
+            *ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), Stats->GetCpuTimeUs());
+        EndQueryTraceSpan(LiteralExecuterSpan, Ydb::StatusIds::SUCCESS);
         CleanupCtx();
         YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_EXECUTER, "Execution is complete",
             {"marker", "KQPLIT"},
@@ -421,7 +424,7 @@ private:
 
         LWTRACK(KqpLiteralExecuterCreateErrorResponse, ResponseEv->Orbit, TxId);
 
-        LiteralExecuterSpan.EndError(response.DebugString());
+        EndQueryTraceSpan(LiteralExecuterSpan, status);
 
         CleanupCtx();
         UpdateCounters();

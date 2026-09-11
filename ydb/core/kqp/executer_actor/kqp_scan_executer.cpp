@@ -240,7 +240,8 @@ private:
             {"count", nShardScans},
             {"traceId", TraceId()});
 
-        ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ScanExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
+        ExecuterStateSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::ScanExecuterRunTasks,
+            ExecuterSpan.GetTraceId(), EQueryTracePhase::RunTasks, NWilson::EFlags::AUTO_END);
 
         if (!ExecuteScanTx()) {
             return;
@@ -260,12 +261,9 @@ public:
         AlreadyReplied = true;
 
         ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::SUCCESS);
+        EndQueryTraceSpan(ExecuterStateSpan, Ydb::StatusIds::SUCCESS);
 
         LWTRACK(KqpScanExecuterFinalize, ResponseEv->Orbit, TxId, LastTaskId, LastComputeActorId, ResponseEv->ResultsSize());
-
-        if (ExecuterSpan) {
-            ExecuterSpan.EndOk();
-        }
 
         PassAway();
     }

@@ -1,5 +1,7 @@
 #include "kqp_read_actor.h"
 
+#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
+#include <ydb/core/kqp/tracing/kqp_shard_tracing.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -364,7 +366,7 @@ public:
         , Counters(counters)
         , UseFollowers(false)
         , PipeCacheId(MainPipeCacheId)
-        , ReadActorSpan(TWilsonKqp::ReadActor, NWilson::TTraceId(traceId), "ReadActor")
+        , ReadActorSpan(TWilsonKqp::ReadActor, NWilson::TTraceId(traceId), "Read table")
     {
         Y_ABORT_UNLESS(Arena);
         Y_ABORT_UNLESS(settings->GetArena() == Arena->Get());
@@ -561,7 +563,7 @@ public:
         ResolveShardId += 1;
 
         ReadActorStateSpan = NWilson::TSpan(TWilsonKqp::ReadActorShardsResolve, ReadActorSpan.GetTraceId(),
-            "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
+            "Locate shards", NWilson::EFlags::AUTO_END);
 
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
     }
@@ -824,6 +826,7 @@ public:
             ++TotalRetries;
 
             if (CheckShardRetriesExceeded(id)) {
+                ShardReadTrace.Retry(ReadActorSpan, state->TabletId, id);
                 ResetRead(id);
                 return ResolveShard(state);
             }
@@ -854,6 +857,7 @@ public:
             {"logPrefix", this->LogPrefix},
             {"readId", id});
 
+        ShardReadTrace.Retry(ReadActorSpan, state->TabletId, id);
         ResetRead(id);
 
         if (Reads[id].SerializedContinuationToken) {
@@ -985,7 +989,7 @@ public:
             ev.Release(), state->TabletId, TEvPipeCache::TEvForwardOptions{
                 .AutoConnect = newPipe,
                 .Subscribe = newPipe}),
-            IEventHandle::FlagTrackDelivery, 0, ReadActorSpan.GetTraceId());
+            IEventHandle::FlagTrackDelivery, 0, ShardReadTrace.Start(ReadActorSpan, state->TabletId, id));
 
         if (!FirstShardStarted) {
             state->IsFirst = true;
@@ -1036,6 +1040,9 @@ public:
             // dropped read
             return;
         }
+
+        ShardReadTrace.ReadResult(ReadActorSpan, Reads[id].Shard->TabletId,
+            ev->Sender.NodeId(), id, msg.GetRowsCount(), record.GetStatus().GetCode(), record.GetFinished());
 
         TStringBuilder txLocks;
         for (const auto& lock : record.GetTxLocks()) {
@@ -1134,6 +1141,7 @@ public:
                         NYql::NDqProto::StatusIds::UNAVAILABLE);
                 }
                 auto shard = Reads[id].Shard;
+                ShardReadTrace.Retry(ReadActorSpan, shard->TabletId, id);
                 ResetRead(id);
                 return ResolveShard(shard);
             }
@@ -1224,6 +1232,7 @@ public:
     }
 
     void ResetRead(size_t id) {
+        ShardReadTrace.Stop(id);
         if (Reads[id]) {
             Counters->SentIteratorCancels->Inc();
             auto* state = Reads[id].Shard;
@@ -1551,6 +1560,7 @@ public:
 
     void FillExtraStats(NDqProto::TDqTaskStats* stats, bool last, const NYql::NDq::TDqMeteringStats* mstats) override {
         if (last) {
+            AddReadTraceStats(ReadActorSpan, *stats, Settings->GetTable().GetTablePath(), ReceivedRowCount, TotalRetries);
             NDqProto::TDqTableStats* tableStats = nullptr;
             for (size_t i = 0; i < stats->TablesSize(); ++i) {
                 auto* table = stats->MutableTables(i);
@@ -1602,6 +1612,7 @@ public:
     void LoadState(const NYql::NDq::TSourceState&) override {}
 
     void PassAway() override {
+        ShardReadTrace.Finish(ReadActorSpan);
         Counters->ReadActorsCount->Dec();
         {
             auto guard = BindAllocator();
@@ -1614,9 +1625,10 @@ public:
                 Send(::FollowersPipeCacheId, new TEvPipeCache::TEvUnlink(0));
             }
         }
+        if (ReadActorSpan) {
+            ReadActorSpan.End();
+        }
         TBase::PassAway();
-
-        ReadActorSpan.End();
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
@@ -1628,6 +1640,7 @@ public:
         NYql::TIssues issues;
         issues.AddIssue(std::move(issue));
 
+        ShardReadTrace.Finish(ReadActorSpan);
         if (ReadActorSpan) {
             ReadActorSpan.EndError(issues.ToOneLineString());
         }
@@ -1758,6 +1771,7 @@ private:
 
     bool FirstShardStarted = false;
 
+    TShardReadTrace ShardReadTrace;
     NWilson::TSpan ReadActorSpan;
     NWilson::TSpan ReadActorStateSpan;
 

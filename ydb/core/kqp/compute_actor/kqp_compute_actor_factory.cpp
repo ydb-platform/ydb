@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/node_service/kqp_node_state.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
+#include <ydb/core/kqp/tracing/kqp_task_tracing.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
 
@@ -77,6 +78,7 @@ public:
     }
 
     TActorId CreateKqpComputeActor(TCreateArgs&& args) override {
+        args.TraceId = GetTaskTraceParent(*args.Task, args.TraceId);
         NYql::NDq::TComputeMemoryLimits memoryLimits;
         memoryLimits.ChannelBufferSize = 0;
         memoryLimits.MkqlLightProgramMemoryLimit = MkqlLightProgramMemoryLimit.load();
@@ -172,6 +174,7 @@ public:
         if (tableKind == ETableKind::Datashard || tableKind == ETableKind::Olap) {
             YQL_ENSURE(args.ComputesByStages);
             auto& info = args.ComputesByStages->UpsertTaskWithScan(*args.Task, meta);
+            info.TraceId = NWilson::TTraceId(args.TraceId);
             IActor* computeActor = CreateKqpScanComputeActor(
                 args.ExecuterId, args.TxId, args.Task, AsyncIoFactory, runtimeSettings, memoryLimits,
                 std::move(args.TraceId), std::move(args.Arena),

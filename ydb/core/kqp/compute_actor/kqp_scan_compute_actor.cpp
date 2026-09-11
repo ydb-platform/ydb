@@ -3,6 +3,8 @@
 #include "kqp_scan_common.h"
 #include "kqp_compute_actor_impl.h"
 
+#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
+#include <ydb/core/kqp/tracing/kqp_task_tracing.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/grpc_services/local_rate_limiter.h>
@@ -91,7 +93,9 @@ void TKqpScanComputeActor::AcquireRateQuota() {
 }
 
 void TKqpScanComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, bool last) {
-    Y_UNUSED(last);
+    if (last) {
+        AddKqpTaskTraceAttributes(ComputeActorSpan, *dst);
+    }
 
     if (ScanData && dst->TasksSize() > 0) {
         YQL_ENSURE(dst->TasksSize() == 1);
@@ -266,6 +270,8 @@ void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
 }
 
 void TKqpScanComputeActor::DoBootstrap() {
+    TTaskTraceDescription::Annotate(ComputeActorSpan, *GetTask().GetTask());
+    ComputeActorSpan.Attribute("ydb.actor.type", TString("TKqpScanComputeActor"));
     YDB_LOG_DEBUG("Starting KQP scan compute actor bootstrap",
         {"logPrefix", this->LogPrefix});
 

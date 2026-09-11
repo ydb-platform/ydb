@@ -1539,7 +1539,7 @@ void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {
     if (!metrics) {
         return;
     }
-    metrics->CpuTimeMs = (StorageCpuTimeUs + ComputeCpuTimeUs.Sum) / 1000;
+    metrics->CpuTimeMs = GetCpuTimeUs() / 1000;
     metrics->DurationSeconds = (TInstant::Now().MicroSeconds() - StartTs.MicroSeconds()) / 1000000;
 
     ui64 memoryUsageBytes = 0;
@@ -1717,7 +1717,7 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
         }
             [[fallthrough]];
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC:
-            stats.SetCpuTimeUs(StorageCpuTimeUs + ComputeCpuTimeUs.Sum);
+            stats.SetCpuTimeUs(GetCpuTimeUs());
             stats.SetDurationUs(TInstant::Now().MicroSeconds() - StartTs.MicroSeconds());
             [[fallthrough]];
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE:

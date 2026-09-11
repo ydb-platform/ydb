@@ -218,7 +218,8 @@ public:
     }
 
     void HandleStart(TEvKqpNode::TEvStartKqpTasksRequest::TPtr ev) {
-        NWilson::TSpan createTasksSpan(TWilsonKqp::KqpNodeCreateTasks, NWilson::TTraceId(ev->TraceId), "KqpNode.CreateTasks", NWilson::EFlags::AUTO_END);
+        NWilson::TSpan createTasksSpan(TWilsonKqp::KqpNodeCreateTasks, NWilson::TTraceId(ev->TraceId), "Start tasks", NWilson::EFlags::AUTO_END);
+        createTasksSpan.Attribute("ydb.actor.type", TString("TKqpQueryManager"));
         NHPTimer::STime workHandlerStart = ev->SendTime;
         Counters_->NodeServiceStartEventDelivery->Collect(NHPTimer::GetTimePassed(&workHandlerStart) * SecToUsec);
 
@@ -444,7 +445,7 @@ public:
             for (auto&& m : i.second.MutableMetaInfo()) {
                 Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
                     m.GetMeta(), NYql::NDq::TComputeRuntimeSettings(), msg.GetDatabase(), txId, lockTxId, lockNodeId, lockMode,
-                    CaFactory_->GetShardsScanningPolicy(), Counters_, NWilson::TTraceId(ev->TraceId), cpuLimits,
+                    CaFactory_->GetShardsScanningPolicy(), Counters_, NWilson::TTraceId(m.TraceId), cpuLimits,
                     msg.GetUseBatchPool()));
             }
         }

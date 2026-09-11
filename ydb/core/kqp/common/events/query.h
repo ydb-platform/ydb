@@ -538,10 +538,12 @@ struct TEvQueryResponse: public TEventPBWithArena<TEvQueryResponse, NKikimrKqp::
     using TBaseEv = TEventPBWithArena<TEvQueryResponse, NKikimrKqp::TEvQueryResponse, TKqpEvents::EvQueryResponse> ;
     using TBaseEv::TEventPBBase;
 
-    TEvQueryResponse() = default;
-    explicit TEvQueryResponse(TIntrusivePtr<NActors::TProtoArenaHolder> arena)
-        : TEventPBBase(arena ? std::move(arena) : MakeIntrusive<NActors::TProtoArenaHolder>())
-    {}
+    TEvQueryResponse();
+    explicit TEvQueryResponse(TIntrusivePtr<NActors::TProtoArenaHolder> arena);
+    ~TEvQueryResponse() override;
+
+    // Local worker-to-session statistics when the client did not request them.
+    std::unique_ptr<NKqpProto::TKqpStatsQuery> WorkerStats;
 };
 
 } // namespace NKikimr::NKqp

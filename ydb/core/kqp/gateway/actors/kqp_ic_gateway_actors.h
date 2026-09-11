@@ -7,6 +7,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/wilson/wilson_trace.h>
 
 
 namespace NKikimr::NKqp {
@@ -22,10 +23,12 @@ public:
         return NKikimrServices::TActivity::KQP_REQUEST_HANDLER;
     }
 
-    TRequestHandlerBase(TRequest* request, NThreading::TPromise<TResult> promise, TCallbackFunc callback)
+    TRequestHandlerBase(TRequest* request, NThreading::TPromise<TResult> promise, TCallbackFunc callback,
+            NWilson::TTraceId traceId = {})
         : Request(request)
         , Promise(promise)
-        , Callback(callback) {}
+        , Callback(callback)
+        , TraceId(std::move(traceId)) {}
 
     void HandleError(const TString &error, const TActorContext &ctx) {
         Promise.SetValue(NYql::NCommon::ResultFromError<TResult>(error));
@@ -83,6 +86,7 @@ protected:
     // the destructor.
     NThreading::TPromise<TResult> Promise;
     TCallbackFunc Callback;
+    NWilson::TTraceId TraceId;
 };
 
 template<typename TRequest, typename TResponse, typename TResult>
@@ -96,12 +100,14 @@ public:
     using TBase = typename TActorRequestHandler::TBase;
     using TCallbackFunc = typename TBase::TCallbackFunc;
 
-    TActorRequestHandler(TActorId actorId, TRequest* request, NThreading::TPromise<TResult> promise, TCallbackFunc callback)
-        : TBase(request, promise, callback)
-        , ActorId(actorId) {}
+    TActorRequestHandler(TActorId actorId, TRequest* request, NThreading::TPromise<TResult> promise,
+            TCallbackFunc callback, NWilson::TTraceId traceId = {})
+        : TBase(request, promise, std::move(callback), std::move(traceId))
+        , ActorId(actorId)
+    {}
 
     void Bootstrap(const TActorContext& ctx) {
-        ctx.Send(ActorId, this->Request.Release(), IEventHandle::FlagTrackDelivery);
+        ctx.Send(ActorId, this->Request.Release(), IEventHandle::FlagTrackDelivery, 0, std::move(this->TraceId));
 
         this->Become(&TActorRequestHandler::AwaitState);
     }
@@ -122,4 +128,4 @@ private:
     TActorId ActorId;
 };
 
-}
+} // namespace NKikimr::NKqp

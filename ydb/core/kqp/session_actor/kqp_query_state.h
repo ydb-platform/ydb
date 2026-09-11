@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
+
 #include "kqp_query_stats.h"
 #include "kqp_worker_common.h"
 
@@ -110,9 +112,13 @@ public:
         SetQueryDeadlines(tableServiceConfig, queryServiceConfig);
         KqpSessionSpan = NWilson::TSpan(
             TWilsonKqp::KqpSession, std::move(ev->TraceId),
-            "Session.query." + NKikimrKqp::EQueryAction_Name(QueryAction), NWilson::EFlags::AUTO_END);
-        if (KqpSessionSpan && AppData()) {
-            KqpSessionSpan.Attribute("database", AppData()->TenantName);
+            QueryTraceSpanName(QueryAction), NWilson::EFlags::AUTO_END);
+        AddQueryTraceAttributes(KqpSessionSpan, QueryType, QueryAction,
+            Database ? Database : AppData()->TenantName, RequestEv->GetQuery());
+        KqpSessionSpan.Attribute("ydb.actor.type", TString("TKqpSessionActor"));
+        if (KqpSessionSpan) {
+            const auto fallback = FallbackQueryTraceName(QueryType, QueryAction);
+            TraceDescription = {fallback, fallback};
         }
         if (IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
             if (KqpSessionSpan) {
@@ -192,6 +198,9 @@ public:
 
     NLWTrace::TOrbit Orbit;
     NWilson::TSpan KqpSessionSpan;
+    NWilson::TSpan AdmissionSpan;
+    NWilson::TSpan AcquireSnapshotSpan;
+    TQueryTraceDescription TraceDescription;
     ETableReadType MaxReadType = ETableReadType::Other;
 
     TQueryTxId TxId; // User tx

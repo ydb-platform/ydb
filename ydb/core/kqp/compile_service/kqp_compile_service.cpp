@@ -1,6 +1,7 @@
 #include "kqp_compile_service.h"
 #include "helpers/kqp_compile_service_helpers.h"
 
+#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -60,7 +61,7 @@ struct TKqpCompileRequest {
         TMaybe<TQueryAst> queryAst = {},
         std::shared_ptr<NYql::TExprContext> splitCtx = nullptr,
         NYql::TExprNode::TPtr splitExpr = nullptr,
-        bool usePessimisticLocks = false)
+        bool usePessimisticLocks = false, bool collectDiagnostics = false)
         : Sender(sender)
         , Query(std::move(query))
         , Uid(uid)
@@ -80,6 +81,7 @@ struct TKqpCompileRequest {
         , SplitCtx(std::move(splitCtx))
         , SplitExpr(std::move(splitExpr))
         , UsePessimisticLocks(usePessimisticLocks)
+        , CollectDiagnostics(collectDiagnostics)
     {}
 
     TActorId Sender;
@@ -105,6 +107,7 @@ struct TKqpCompileRequest {
     NYql::TExprNode::TPtr SplitExpr;
 
     bool UsePessimisticLocks;
+    bool CollectDiagnostics = false;
 
     bool FindInCache = true;
 
@@ -152,6 +155,7 @@ public:
 
             if (!request.IsIntrestedInResult()) {
                 auto result = std::move(request);
+                EndQueryTraceSpan(result.CompileServiceSpan, Ydb::StatusIds::CANCELLED);
                 YDB_LOG_DEBUG_CTX(*TlsActivationContext, "Drop compilation request because session is not longer wait for response");
                 if (auto qIt = QueryIndex.find(result.Query); qIt != QueryIndex.end()) {
                     qIt->second.erase(curIt);
@@ -436,7 +440,7 @@ private:
         YDB_LOG_DEBUG_CTX(ctx, "Performing compile request",
             {"spanIdPtr", ev->TraceId.GetSpanIdPtr()});
 
-        NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, std::move(ev->TraceId), "CompileService");
+        NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, std::move(ev->TraceId), "Get query plan");
 
         YDB_LOG_DEBUG_CTX(ctx, "Received compile request",
             {"sender", ev->Sender},
@@ -501,8 +505,6 @@ private:
 
         Counters->ReportCompileRequestCompile(dbCounters);
 
-        CollectDiagnostics = request.CollectDiagnostics;
-
         LWTRACK(KqpCompileServiceEnqueued,
             ev->Get()->Orbit,
             ev->Get()->Query ? ev->Get()->Query->UserSid : "");
@@ -521,32 +523,13 @@ private:
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
             compileSettings, request.UserToken, request.ClientAddress, dbCounters, request.GUCSettings, request.ApplicationName, ev->Cookie, std::move(ev->Get()->IntrestedInResult),
             ev->Get()->UserRequestContext, std::move(ev->Get()->Orbit), std::move(compileServiceSpan),
-            std::move(ev->Get()->TempTablesState), Nothing(), request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks);
+            std::move(ev->Get()->TempTablesState), Nothing(), request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks, request.CollectDiagnostics);
 
         if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
             return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
         }
 
-        auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
-        if (overflow.has_value()) {
-            Counters->ReportCompileRequestRejected(dbCounters);
-
-            YDB_LOG_WARN_CTX(ctx, "Requests queue size limit exceeded",
-                {"sender", ev->Sender},
-                {"queueSize", RequestsQueue.Size()});
-
-            NYql::TIssue issue(NYql::TPosition(), TStringBuilder() <<
-                "Exceeded maximum number of requests in compile service queue.");
-            ReplyError(ev->Sender, "", Ydb::StatusIds::OVERLOADED, {issue},
-                ctx, overflow->Cookie, std::move(overflow->Orbit), std::move(overflow->CompileServiceSpan));
-            return;
-        }
-
-        YDB_LOG_DEBUG_CTX(ctx, "Added request to queue",
-            {"sender", ev->Sender},
-            {"queueSize", RequestsQueue.Size()});
-
-        ProcessQueue(ctx);
+        EnqueueCompileRequest(std::move(compileRequest), ctx);
     }
 
     void Handle(TEvKqp::TEvRecompileRequest::TPtr& ev, const TActorContext& ctx) {
@@ -576,7 +559,7 @@ private:
         if (compileResult || request.Query) {
             Counters->ReportCompileRequestCompile(dbCounters);
 
-            NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, ev->Get() ? std::move(ev->TraceId) : NWilson::TTraceId(), "CompileService");
+            NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, ev->Get() ? std::move(ev->TraceId) : NWilson::TTraceId(), "Get query plan");
 
             TKqpCompileSettings compileSettings(
                 true,
@@ -602,27 +585,16 @@ private:
                 ev->Cookie, std::move(ev->Get()->IntrestedInResult),
                 ev->Get()->UserRequestContext,
                 ev->Get() ? std::move(ev->Get()->Orbit) : NLWTrace::TOrbit(),
-                std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState), Nothing(), nullptr, nullptr, request.UsePessimisticLocks);
-                compileRequest.FindInCache = false;
+                std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState), Nothing(), nullptr, nullptr,
+                request.UsePessimisticLocks, request.CollectDiagnostics);
+            compileRequest.FindInCache = false;
 
-        if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
+            if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
                 return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
             }
 
-            auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
-            if (overflow.has_value()) {
-                Counters->ReportCompileRequestRejected(dbCounters);
-
-                YDB_LOG_WARN_CTX(ctx, "Requests queue size limit exceeded",
-                    {"sender", ev->Sender},
-                    {"queueSize", RequestsQueue.Size()});
-
-                NYql::TIssue issue(NYql::TPosition(), TStringBuilder() <<
-                    "Exceeded maximum number of requests in compile service queue.");
-                ReplyError(ev->Sender, "", Ydb::StatusIds::OVERLOADED, {issue}, ctx,
-                    overflow->Cookie, std::move(overflow->Orbit), std::move(overflow->CompileServiceSpan));
-                return;
-            }
+            EnqueueCompileRequest(std::move(compileRequest), ctx);
+            return;
         } else {
             YDB_LOG_DEBUG_CTX(ctx, "Query not found",
                 {"sender", ev->Sender},
@@ -630,18 +602,12 @@ private:
 
             NYql::TIssue issue(NYql::TPosition(), TStringBuilder() << "Query not found: " << request.Uid);
 
-            NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, ev->Get() ? std::move(ev->TraceId) : NWilson::TTraceId(), "CompileService");
+            NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, ev->Get() ? std::move(ev->TraceId) : NWilson::TTraceId(), "Get query plan");
 
             ReplyError(ev->Sender, request.Uid, Ydb::StatusIds::NOT_FOUND, {issue}, ctx,
                 ev->Cookie, std::move(ev->Get()->Orbit), std::move(compileServiceSpan));
             return;
         }
-
-        YDB_LOG_DEBUG_CTX(ctx, "Added request to queue",
-            {"sender", ev->Sender},
-            {"queueSize", RequestsQueue.Size()});
-
-        ProcessQueue(ctx);
     }
 
     void Handle(TEvKqp::TEvCompileResponse::TPtr& ev, const TActorContext& ctx) {
@@ -686,6 +652,7 @@ private:
                 auto requests = RequestsQueue.ExtractByQuery(*compileResult->Query);
                 for (auto& request : requests) {
                     LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, request.Query.UserSid, compileActorId.ToString());
+                    MarkJoinedCompilation(request.CompileServiceSpan, compileRequest.CompileServiceSpan);
                     Reply(request.Sender, compileResult, compileStats, ctx,
                         request.Cookie, std::move(request.Orbit), std::move(request.CompileServiceSpan));
                 }
@@ -773,6 +740,24 @@ private:
         }
     }
 
+    void EnqueueCompileRequest(TKqpCompileRequest&& compileRequest, const TActorContext& ctx) {
+        auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
+        if (overflow) {
+            Counters->ReportCompileRequestRejected(overflow->DbCounters);
+            YDB_LOG_WARN_CTX(ctx, "Requests queue size limit exceeded",
+                {"sender", overflow->Sender},
+                {"queueSize", RequestsQueue.Size()});
+            NYql::TIssue issue(NYql::TPosition(),
+                "Exceeded maximum number of requests in compile service queue.");
+            ReplyError(overflow->Sender, "", Ydb::StatusIds::OVERLOADED, {issue}, ctx,
+                overflow->Cookie, std::move(overflow->Orbit), std::move(overflow->CompileServiceSpan));
+            return;
+        }
+        YDB_LOG_DEBUG_CTX(ctx, "Added request to queue",
+            {"queueSize", RequestsQueue.Size()});
+        ProcessQueue(ctx);
+    }
+
     void CompileByAst(const TQueryAst& queryAst, TKqpCompileRequest&& compileRequest, const TActorContext& ctx) {
         YQL_ENSURE(queryAst.Ast);
         YQL_ENSURE(queryAst.Ast->IsOk());
@@ -814,26 +799,7 @@ private:
 
         compileRequest.QueryAst = std::move(queryAst);
 
-        auto sender = compileRequest.Sender;
-        auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
-        if (overflow.has_value()) {
-            Counters->ReportCompileRequestRejected(overflow->DbCounters);
-
-            YDB_LOG_WARN_CTX(ctx, "Requests queue size limit exceeded",
-                {"sender", overflow->Sender},
-                {"queueSize", RequestsQueue.Size()});
-
-            NYql::TIssue issue(NYql::TPosition(), TStringBuilder() <<
-                "Exceeded maximum number of requests in compile service queue.");
-            ReplyError(overflow->Sender, "", Ydb::StatusIds::OVERLOADED, {issue}, ctx, overflow->Cookie, std::move(overflow->Orbit), std::move(overflow->CompileServiceSpan));
-            return;
-        }
-
-        YDB_LOG_DEBUG_CTX(ctx, "Added request to queue",
-            {"sender", sender},
-            {"queueSize", RequestsQueue.Size()});
-
-        ProcessQueue(ctx);
+        EnqueueCompileRequest(std::move(compileRequest), ctx);
     }
 
     void Handle(TEvKqp::TEvParseResponse::TPtr& ev, const TActorContext& ctx) {
@@ -920,7 +886,7 @@ private:
     void StartCompilation(TKqpCompileRequest&& request, const TActorContext& ctx) {
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, ModuleResolverState, Counters,
             request.Uid, request.Query, request.UserToken, request.ClientAddress, FederatedQuerySetup, request.DbCounters, request.GUCSettings, request.ApplicationName, request.UserRequestContext,
-            request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action, std::move(request.QueryAst), CollectDiagnostics,
+            request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action, std::move(request.QueryAst), request.CollectDiagnostics,
             request.CompileSettings.PerStatementResult, request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks);
         auto compileActorId = ctx.Register(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);
@@ -956,7 +922,10 @@ private:
         responseEv->Stats = compileStats;
 
         if (span) {
-            span.End();
+            span.Attribute("ydb.actor.type", TString("TKqpCompileService"));
+            span.Attribute("ydb.compile.cache_hit", compileStats.FromCache);
+            span.Attribute("ydb.cpu_us", static_cast<i64>(compileStats.CpuTimeUs));
+            EndQueryTraceSpan(span, compileResult->Status);
         }
 
         ctx.Send(sender, responseEv.Release(), 0, cookie);
@@ -1014,9 +983,7 @@ private:
 
         auto responseEv = MakeHolder<TEvKqp::TEvParseResponse>(std::move(query), astStatements, std::move(orbit));
 
-        if (span) {
-            span.End();
-        }
+        EndQueryTraceSpan(span, Ydb::StatusIds::SUCCESS);
 
         ctx.Send(sender, responseEv.Release(), 0, cookie);
     }
@@ -1042,7 +1009,6 @@ private:
     std::shared_ptr<IQueryReplayBackendFactory> QueryReplayFactory;
     std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
-    bool CollectDiagnostics = false;
 };
 
 

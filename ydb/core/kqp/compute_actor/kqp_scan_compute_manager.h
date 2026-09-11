@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/kqp/tracing/kqp_scan_tracing.h>
 #include "kqp_compute_actor.h"
 #include "kqp_compute_state.h"
 #include "kqp_scan_common.h"
@@ -30,6 +31,7 @@ public:
     const ui64 ScanId;
     const ui64 TabletId;
     const ui64 Generation;
+    TShardScanTrace Trace;
     i64 DataChunksInFlightCount = 0;
     bool TracingStarted = false;
     const ui64 FreeSpace = (ui64)8 << 20;
@@ -66,10 +68,12 @@ public:
     }
 
 public:
-    TShardScannerInfo(const ui64 scanId, TShardState& state, const IExternalObjectsProvider& externalObjectsProvider)
+    TShardScannerInfo(const ui64 scanId, TShardState& state, const IExternalObjectsProvider& externalObjectsProvider,
+        const NWilson::TTraceId& traceId)
         : ScanId(scanId)
         , TabletId(state.TabletId)
-        , Generation(state.Generation) {
+        , Generation(state.Generation)
+        , Trace(traceId, state.TabletId, state.TotalRetries) {
         const bool subscribed = std::exchange(state.SubscribedOnTablet, true);
 
         const auto& keyColumnTypes = externalObjectsProvider.GetKeyColumnTypes();
@@ -94,7 +98,8 @@ public:
             {"cursor", state.CursorDebugString()});
 
         NActors::TActivationContext::AsActorContext().Send(
-            MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(ev.release(), TabletId, !subscribed), IEventHandle::FlagTrackDelivery);
+            MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(ev.release(), TabletId, !subscribed),
+            IEventHandle::FlagTrackDelivery, 0, Trace.GetTraceId());
     }
 
     ui64 GetTabletId() const {
@@ -114,6 +119,7 @@ public:
     }
 
     void Stop(const bool finalFlag, const TString& message) {
+        Trace.Finish(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
         YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
             {"event", "stop_scanner"},
             {"actorId", ActorId},
@@ -387,6 +393,7 @@ private:
     THashMap<ui64, std::shared_ptr<TShardScannerInfo>> ShardScanners;
     const ui64 ScanId;
     const IExternalObjectsProvider& ExternalObjectsProvider;
+    const NWilson::TTraceId TraceId;
 
 public:
     void AbortAllScanners(const TString& errorMessage) {
@@ -469,7 +476,7 @@ public:
         AFL_ENSURE(state.TabletId);
         AFL_ENSURE(!state.ActorId)("actor_id", state.ActorId);
         state.State = NComputeActor::EShardState::Starting;
-        auto newScanner = std::make_shared<TShardScannerInfo>(ScanId, state, ExternalObjectsProvider);
+        auto newScanner = std::make_shared<TShardScannerInfo>(ScanId, state, ExternalObjectsProvider, TraceId);
         AFL_ENSURE(ShardScanners.emplace(state.TabletId, newScanner).second);
     }
 
@@ -518,9 +525,11 @@ public:
         return nullptr;
     }
 
-    TInFlightShards(const ui64 scanId, const IExternalObjectsProvider& externalObjectsProvider)
+    TInFlightShards(const ui64 scanId, const IExternalObjectsProvider& externalObjectsProvider,
+        NWilson::TTraceId traceId)
         : ScanId(scanId)
-        , ExternalObjectsProvider(externalObjectsProvider) {
+        , ExternalObjectsProvider(externalObjectsProvider)
+        , TraceId(std::move(traceId)) {
     }
     bool IsActive() const {
         return IsActiveFlag;

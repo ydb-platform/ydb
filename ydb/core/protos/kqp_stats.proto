@@ -60,6 +60,7 @@ message TKqpLockStats {
 message TKqpTaskExtraStats {
     TKqpScanTaskExtraStats ScanTaskExtraStats = 1;
     TKqpLockStats LockStats = 2;
+    uint32 ReadRetriesCount = 3;
 }
 
 message TNodeExecutionStats {
@@ -78,6 +79,12 @@ message TKqpExecutionExtraStats {
     // LWTrace probes (e.g. columnshard scan probes), so query stats can be correlated
     // with traces. Not set for literal-only phases and for batch (partitioned) operations.
     uint64 TxId = 4;
+    uint64 WaitTimeUs = 5;
+    uint64 SpilledBytes = 6;
+    double MaxTaskSkew = 7;
+    bool TaskStatsIncomplete = 8;
+    // Internal execution total, also available when client statistics are disabled.
+    optional uint64 CpuTimeUs = 9;
 
     // Profile stats
     uint64 ResolveCpuTimeUs = 100;

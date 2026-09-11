@@ -88,7 +88,7 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
         std::shared_ptr<std::atomic<bool>> intrestedInResult, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         NLWTrace::TOrbit orbit = {}, TKqpTempTablesState::TConstPtr tempTablesState = nullptr, TMaybe<TQueryAst> queryAst = Nothing(),
         bool split = false, std::shared_ptr<NYql::TExprContext> splitCtx = nullptr, NYql::TExprNode::TPtr splitExpr = nullptr,
-        bool usePessimisticLocks = false)
+        bool usePessimisticLocks = false, bool collectDiagnostics = false)
         : UserToken(userToken)
         , ClientAddress(clientAddress)
         , Uid(uid)
@@ -107,6 +107,7 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
         , SplitCtx(std::move(splitCtx))
         , SplitExpr(std::move(splitExpr))
         , UsePessimisticLocks(usePessimisticLocks)
+        , CollectDiagnostics(collectDiagnostics)
     {
     }
 
@@ -133,6 +134,7 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
     std::shared_ptr<NYql::TExprContext> SplitCtx = nullptr;
     NYql::TExprNode::TPtr SplitExpr = nullptr;
     bool UsePessimisticLocks = false;
+    bool CollectDiagnostics = false;
 };
 
 struct TEvCompileResponse: public TEventLocal<TEvCompileResponse, TKqpEvents::EvCompileResponse> {

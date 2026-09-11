@@ -205,6 +205,7 @@ public:
 
     void Finalize() {
         Y_ABORT_UNLESS(!AlreadyReplied);
+        EndQueryTraceSpan(ExecuterStateSpan, Ydb::StatusIds::SUCCESS);
 
         FillLocksFromExtraData();
         TxManager->SetHasSnapshot(GetSnapshot().IsValid());
@@ -375,7 +376,6 @@ public:
 
         LWTRACK(KqpDataExecuterFinalize, ResponseEv->Orbit, TxId, ResponseEv->ResultsSize(), ResponseEv->GetByteSize());
 
-        ExecuterSpan.EndOk();
 
         AlreadyReplied = true;
         PassAway();
@@ -902,8 +902,11 @@ private:
 
     void OnShardsResolve() {
         if (ForceAcquireSnapshot()) {
+            ExecuterStateSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::DataExecuterAcquireSnapshot,
+                ExecuterSpan.GetTraceId(), EQueryTracePhase::Snapshot);
             auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
-            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, TableIdsForSnapshot));
+            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, TableIdsForSnapshot),
+                0, 0, ExecuterStateSpan.GetTraceId());
 
             YDB_LOG_TRACE("Create temporary mvcc snapshot, become WaitSnapshotState",
                 {"marker", "KQPDATA"},
@@ -912,7 +915,6 @@ private:
                 {"ctx", *GetUserRequestContext()},
                 {"traceId", TraceId()});
             Become(&TKqpDataExecuter::WaitSnapshotState);
-            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterAcquireSnapshot, ExecuterSpan.GetTraceId(), "WaitForSnapshot");
 
             return;
         }
@@ -970,6 +972,8 @@ private:
         OnEmptyResult();
 
         StartCheckpointCoordinator();
+        ExecuterStateSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::DataExecuterRunTasks,
+            ExecuterSpan.GetTraceId(), EQueryTracePhase::RunTasks, NWilson::EFlags::AUTO_END);
 
         if (!ExecuteTasks()) {
             return;
@@ -979,7 +983,6 @@ private:
             return;
         }
 
-        ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
         YDB_LOG_DEBUG("Become ExecuteState",
             {"marker", "KQPDATA"},
             {"actorId", SelfId()},

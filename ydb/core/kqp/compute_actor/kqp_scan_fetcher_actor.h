@@ -1,4 +1,6 @@
 #pragma once
+#include <ydb/core/kqp/tracing/kqp_scan_tracing.h>
+#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
 #include "kqp_compute_actor.h"
 #include "kqp_compute_events.h"
 #include "kqp_compute_state.h"
@@ -118,12 +120,12 @@ private:
 
     std::vector<NActors::TActorId> ComputeActorIds;
 
-    void StopOnError(const TString& errorMessage) const;
+    void StopOnError(const TString& errorMessage);
     bool SendGlobalFail(
-        const NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssuesIds::EIssueCode issueCode, const TString& message) const;
+        const NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssuesIds::EIssueCode issueCode, const TString& message);
 
     bool SendGlobalFail(
-        const NYql::NDqProto::EComputeState state, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& issues) const;
+        const NYql::NDqProto::EComputeState state, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& issues);
 
     bool SendScanFinished();
 
@@ -175,6 +177,7 @@ private:
 
 private:
     void PassAway() override {
+        EndQueryTraceSpan(ScanSpan, Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
         TBase::PassAway();
     }
@@ -193,6 +196,7 @@ private:
     static inline TAtomicCounter ScanIdCounter = 0;
     const ui64 ScanId = ScanIdCounter.Inc();
 
+    NWilson::TSpan ScanSpan;
     TInFlightShards InFlightShards;
     TInFlightComputes InFlightComputes;
     const NKqp::ETableKind TableKind = NKqp::ETableKind::Unknown;

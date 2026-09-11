@@ -28,6 +28,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/services/workload_manager/query_classifier.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
+#include <ydb/core/kqp/tracing/kqp_query_stats_tracing.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
@@ -346,6 +347,9 @@ public:
         Y_VALIDATE(!QueryState->UserRequestContext->PoolConfig,
             "Cannot send to workload manager: PoolConfig is already resolved");
 
+        QueryState->AdmissionSpan = MakeQueryPhaseTraceSpan(TComponentTracingLevels::TQueryProcessor::Basic,
+            QueryState->KqpSessionSpan.GetTraceId(), EQueryTracePhase::Admission, NWilson::EFlags::AUTO_END);
+        QueryState->AdmissionSpan.Attribute("ydb.pool_id", QueryState->UserRequestContext->PoolId);
         Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvPlaceRequestIntoPool(
             QueryState->QueryId,
             QueryState->UserRequestContext->DatabaseId,
@@ -367,12 +371,14 @@ public:
             WorkerId = RegisterWithSameMailbox(workerActor.release());
         }
         TlsActivationContext->Send(new IEventHandle(*WorkerId, SelfId(), QueryState->RequestEv.release(), ev->Flags, ev->Cookie,
-                    nullptr, std::move(ev->TraceId)));
+                    nullptr, QueryState->KqpSessionSpan.GetTraceId()));
         Become(&TKqpSessionActor::ExecuteState);
     }
 
     void ForwardResponse(TEvKqp::TEvQueryResponse::TPtr& ev) {
         QueryResponse = std::unique_ptr<TEvKqp::TEvQueryResponse>(ev->Release().Release());
+        AddWorkerQueryResultAttributes(QueryState->KqpSessionSpan, QueryState->TraceDescription,
+            QueryResponse->Record, QueryResponse->WorkerStats.get());
         Cleanup();
     }
 
@@ -675,6 +681,7 @@ public:
                 {"marker", "KQPSA"},
                 {"logPrefix", LogPrefix()},
                 {"traceId", TraceId()});
+            EndQueryTraceSpan(QueryState->AdmissionSpan, Ydb::StatusIds::UNAVAILABLE);
             ContinueAfterWmAdmission();
             return;
         }
@@ -718,6 +725,7 @@ public:
             return;
         }
         QueryState->ContinueTime = TInstant::Now();
+        EndQueryTraceSpan(QueryState->AdmissionSpan, ev->Get()->Status);
 
         if (ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED) {
             YDB_LOG_TRACE("Failed to place request in resource pool, feature flag is disabled",
@@ -1267,8 +1275,8 @@ public:
             {"marker", "KQPSA"},
             {"logPrefix", LogPrefix()},
             {"traceId", TraceId()});
-        AcquireSnapshotSpan = NWilson::TSpan(TWilsonKqp::SessionAcquireSnapshot, QueryState->KqpSessionSpan.GetTraceId(),
-            "SessionActor.AcquirePersistentSnapshot");
+        QueryState->AcquireSnapshotSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::SessionAcquireSnapshot,
+            QueryState->KqpSessionSpan.GetTraceId(), EQueryTracePhase::PersistentSnapshot);
         auto timeout = QueryState->QueryDeadlines.TimeoutAt - TAppData::TimeProvider->Now();
 
         auto* snapMgr = CreateKqpSnapshotManager(Settings.Database, timeout);
@@ -1287,8 +1295,8 @@ public:
     }
 
     void AcquireMvccSnapshot() {
-        AcquireSnapshotSpan = NWilson::TSpan(TWilsonKqp::SessionAcquireSnapshot, QueryState->KqpSessionSpan.GetTraceId(),
-            "SessionActor.AcquireMvccSnapshot");
+        QueryState->AcquireSnapshotSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::SessionAcquireSnapshot,
+            QueryState->KqpSessionSpan.GetTraceId(), EQueryTracePhase::SessionSnapshot);
         YDB_LOG_DEBUG("Acquire mvcc snapshot",
             {"marker", "KQPSA"},
             {"logPrefix", LogPrefix()},
@@ -1338,11 +1346,11 @@ public:
             {"traceId", TraceId()});
         if (response->Status != NKikimrIssues::TStatusIds::SUCCESS) {
             auto& issues = response->Issues;
-            AcquireSnapshotSpan.EndError(issues.ToString());
+            EndQueryTraceSpan(QueryState->AcquireSnapshotSpan, StatusForSnapshotError(response->Status));
             ReplyQueryError(StatusForSnapshotError(response->Status), "", MessageFromIssues(issues));
             return;
         }
-        AcquireSnapshotSpan.EndOk();
+        EndQueryTraceSpan(QueryState->AcquireSnapshotSpan, Ydb::StatusIds::SUCCESS);
 
         QueryState->TxCtx->SnapshotHandle.Snapshot = response->Snapshot;
         QueryState->TxCtx->SnapshotHandle.Handle = std::move(response->SnapshotHandle);
@@ -2338,7 +2346,7 @@ public:
             TKqpBufferWriterSettings settings {
                 .SessionActorId = SelfId(),
                 .TxManager = txCtx->TxManager,
-                .TraceId = request.TraceId.GetTraceId(),
+                .TraceId = NWilson::TTraceId(request.TraceId),
                 .QuerySpanId = QueryState ? QueryState->GetQuerySpanId() : 0,
                 .Counters = Counters,
                 .TxProxyMon = RequestCounters->TxProxyMon,
@@ -3377,6 +3385,9 @@ public:
             {"traceId", TraceId()});
         auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
         response->Record.SetYdbStatus(ydbStatus);
+        if (request->TraceId) {
+            response->Record.SetRejectionStage(NKikimrKqp::TEvQueryResponse::REJECTION_STAGE_SESSION);
+        }
         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message);
         NYql::TIssues issues;
         issues.AddIssue(issue);
@@ -3462,6 +3473,13 @@ public:
             response.SetSessionId(SessionId);
         }
 
+        EndQueryTraceSpan(QueryState->AdmissionSpan, status);
+        EndQueryTraceSpan(QueryState->AcquireSnapshotSpan, status);
+        auto& querySpan = QueryState->KqpSessionSpan;
+        if (querySpan && QueryState->RequestEv) {
+            AddQueryResultAttributes(querySpan, QueryState->TraceDescription, QueryState->QueryStats,
+                CalcRequestUnit(QueryState->QueryStats), status);
+        }
         if (status == Ydb::StatusIds::SUCCESS) {
             if (QueryState) {
                 if (QueryState->KqpSessionSpan) {
@@ -3795,8 +3813,13 @@ public:
             {"isFinal", isFinal},
             {"traceId", TraceId()});
 
-        if (QueryResponse)
+        if (QueryState && !QueryResponse) {
+            QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
+            QueryResponse->Record.SetYdbStatus(Ydb::StatusIds::CANCELLED);
+        }
+        if (QueryResponse) {
             Reply();
+        }
 
         if (CleanupCtx)
             Counters->ReportSessionActorCleanupLatency(Settings.DbCounters, TInstant::Now() - CleanupCtx->Start);
@@ -4235,7 +4258,6 @@ private:
     TKqpSettings::TConstPtr KqpSettings;
     std::optional<TActorId> WorkerId;
     TActorId ExecuterId;
-    NWilson::TSpan AcquireSnapshotSpan;
 
     std::shared_ptr<TKqpQueryState> QueryState;
     std::unique_ptr<TKqpCleanupCtx> CleanupCtx;

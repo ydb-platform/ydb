@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
+#include <ydb/core/kqp/tracing/kqp_execution_tracing.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -49,6 +50,7 @@ void FillRequestFrom(IKqpGateway::TExecPhysicalRequest& request, const IKqpGatew
     request.NeedTxId = from.NeedTxId;
     request.FlushEffects = from.FlushEffects;
     request.UserTraceId = from.UserTraceId;
+    request.TraceId = NWilson::TTraceId(from.TraceId);
     request.OutputChunkMaxSize = from.OutputChunkMaxSize;
 }
 
@@ -110,6 +112,9 @@ public:
         , QuerySpanId(settings.QuerySpanId)
         , UserCtx(settings.UserCtx)
     {
+        if (Request.TraceId) {
+            TraceStats.emplace();
+        }
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc, TEvKqpExecuter::TEvTxResponse::EExecutionType::Data);
 
         if (TableServiceConfig.HasBatchOperationSettings()) {
@@ -652,7 +657,7 @@ private:
         TKqpBufferWriterSettings settings {
             .SessionActorId = SelfId(),
             .TxManager = txManager,
-            .TraceId = Request.TraceId.GetTraceId(),
+            .TraceId = NWilson::TTraceId(Request.TraceId),
             .QuerySpanId = QuerySpanId,
             .Counters = RequestCounters->Counters,
             .TxProxyMon = RequestCounters->TxProxyMon,
@@ -734,7 +739,11 @@ private:
     }
 
     void OnSuccessResponse(TBatchPartitionInfo::TPtr& partInfo, TEvKqpExecuter::TEvTxResponse* ev) {
-        Stats.TakeExecStats(std::move(*ev->Record.MutableResponse()->MutableResult()->MutableStats()));
+        auto& stats = *ev->Record.MutableResponse()->MutableResult()->MutableStats();
+        if (TraceStats) {
+            TraceStats->AddExecution(stats);
+        }
+        Stats.TakeExecStats(std::move(stats));
         Stats.AffectedPartitions.insert(partInfo->PartitionIndex);
 
         TSerializedCellVec minKey = GetMinCellVecKey(std::move(ev->BatchOperationMaxKeys), std::move(ev->BatchOperationKeyIds));
@@ -916,7 +925,11 @@ private:
                 {"issues", ReturnIssues.ToOneLineString()});
 
             Stats.FinishTs = TInstant::Now();
-            Stats.ExportExecStats(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
+            auto& stats = *ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats();
+            Stats.ExportExecStats(stats);
+            if (TraceStats) {
+                TraceStats->Export(stats);
+            }
 
             if (ReturnStatus != Ydb::StatusIds::SUCCESS) {
                 return ReplyErrorAndDie(ReturnStatus, ReturnIssues);
@@ -987,6 +1000,7 @@ private:
     NBatchOperations::TSettings Settings;
 
     TBatchOperationExecutionStats Stats;
+    std::optional<TBatchExecutionTrace> TraceStats;
     Ydb::StatusIds::StatusCode ReturnStatus = Ydb::StatusIds::SUCCESS;
     NYql::TIssues ReturnIssues;
 

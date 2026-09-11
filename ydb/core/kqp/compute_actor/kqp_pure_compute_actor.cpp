@@ -2,6 +2,8 @@
 
 #include "kqp_compute_actor_impl.h"
 
+#include <ydb/core/kqp/tracing/kqp_task_tracing.h>
+#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/services/udf_store/wasm/query_compartment_scope.h>
@@ -45,6 +47,8 @@ TKqpComputeActor::TKqpComputeActor(
 }
 
 void TKqpComputeActor::DoBootstrap() {
+    TTaskTraceDescription::Annotate(ComputeActorSpan, *GetTask().GetTask());
+    ComputeActorSpan.Attribute("ydb.actor.type", TString("TKqpComputeActor"));
     const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
 
     const auto& taskParams = GetTask().GetTaskParams();
@@ -236,6 +240,9 @@ void TKqpComputeActor::PollSources(ui64 prevFreeSpace) {
 }
 
 void TKqpComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, bool last) {
+    if (last) {
+        AddKqpTaskTraceAttributes(ComputeActorSpan, *dst);
+    }
     if (last && SysViewActorId && ScanData && dst->TasksSize() > 0) {
         YQL_ENSURE(dst->TasksSize() == 1);
 

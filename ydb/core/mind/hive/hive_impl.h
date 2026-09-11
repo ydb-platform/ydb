@@ -1064,6 +1064,7 @@ protected:
         TNodeId MaxUsageNodeId;
         double Scatter;
         TResourceNormalizedValues ScatterByResource;
+        TResourceNormalizedValues MinResourceNormValues;
         std::vector<TNodeStat> Values;
     };
 

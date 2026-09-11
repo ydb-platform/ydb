@@ -143,7 +143,7 @@ class TestS3CpuThrottleVerdict(S3WorkloadManagerFunctionalBase):
     Runs the same S3 scan query in three configurations, measures per-pool
     scheduler counters, and asserts:
     1. S3 CPU is attributed to `test_pool_10` only when flag `enable_s3_scheduling=true` is on.
-    2. The throttle branch actually executes during phase C. Waith > 0
+    2. The throttle branch actually executes during phase C. Throttle > 0
 
     Phases:
 
@@ -218,8 +218,7 @@ class TestS3CpuThrottleVerdict(S3WorkloadManagerFunctionalBase):
         ''')
 
         # EDS: name = <_tables_path>/tpch_s3/s<scale> so it exists as a
-        # scheme entry at the expected path (see history in this test's
-        # earlier iterations).
+        # scheme entry at the expected path
         eds_path = f'{YdbCluster.get_tables_path()}/tpch_s3/s{cls.scale}'
         sessions_pool.execute_with_retries(f'''
             CREATE OR REPLACE EXTERNAL DATA SOURCE `{eds_path}` WITH (

@@ -452,10 +452,16 @@ namespace NKikimr::NStorage {
             },
             [&](TCollectConfigsAndPropose&) {
                 if (status != TResult::OK && InvokePipelineGeneration == Self->InvokePipelineGeneration) {
-                    // reschedule operation
-                    TActivationContext::Schedule(Self->CollectConfigsBackoffTimer.Next(),
-                        new IEventHandle(TEvPrivate::EvRetryCollectConfigsAndPropose, 0, Self->SelfId(), {}, nullptr,
-                            InvokePipelineGeneration));
+                    InvokeOtherActor(*Self, &TDistributedConfigKeeper::UpdateQuorums);
+                    if (Self->NeedMoreNodes) {
+                        // Missing config quorum may be in another tree; release this root to resume binding.
+                        Y_ABORT_UNLESS(errorReason);
+                        switchToError.emplace(*errorReason);
+                    } else {
+                        TActivationContext::Schedule(Self->CollectConfigsBackoffTimer.Next(),
+                                                     new IEventHandle(TEvPrivate::EvRetryCollectConfigsAndPropose, 0,
+                                                                      Self->SelfId(), {}, nullptr, InvokePipelineGeneration));
+                    }
                 }
             },
             [&](TProposeConfig&) {

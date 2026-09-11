@@ -200,6 +200,7 @@ public:
                     db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::ConfirmedStorageVersion>(
                         tablet->ConfirmedStorageVersion);
                 }
+                Y_ABORT_UNLESS(tabletStorageInfo->Version < Max<ui32>());
                 ++tabletStorageInfo->Version;
                 db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::TabletStorageVersion>(tabletStorageInfo->Version);
             }

@@ -60,7 +60,8 @@ public:
                         Self->Execute(Self->CreateForceRestartTablet(tablet->GetFullTabletId()));
                     }
                 }
-            } else if (msg->Status == NKikimrProto::ERROR && !tablet->IsDeleting()) {
+            } else if (msg->Status == NKikimrProto::ERROR && !tablet->IsDeleting() && msg->ActualGeneration >= tablet->KnownGeneration) {
+                Y_DEBUG_ABORT_UNLESS(!msg->IsTabletStorageInfoVersionObsolete); // only Hive can increment version, it cannot be obsolete
                 ui32 confirmedVersion = tablet->ConfirmedStorageVersion;
 
                 struct THistoryEntry {
@@ -122,7 +123,6 @@ public:
                     tablet->AcquireAllocationUnit(channel);
                 }
 
-                tablet->ConfirmedStorageVersion = confirmedVersion;
                 if (tablet->KnownGeneration <= msg->ActualGeneration) {
                     Y_ABORT_UNLESS(msg->ActualGeneration < Max<ui32>());
                     tablet->KnownGeneration = msg->ActualGeneration + 1;

@@ -7,7 +7,10 @@
 #include "wasm_artifact_load_actor.h"
 #include "artifact_table_initializer.h"
 #include "store_initializer.h"
+#include "compile_controller/events.h"
 
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -51,6 +54,10 @@ private:
     TString KvVolumePath;
     TString UnsafeNativeUdfDir;
     YDB_READONLY_FLAG(EnableWasmUdf, false);
+    //! While unset, this node compiles straight from the metadata snapshot as
+    //! it did before the controller existed. This is the rollback switch.
+    YDB_READONLY_FLAG(EnableCompileController, false);
+    ui32 CompileCapacity = 1;
     TString WasmCpuSpecOverride;
     TString LocalCpuSpec;
     TString ModulesTablePath;
@@ -76,6 +83,30 @@ private:
     std::deque<TPendingUdf> PendingWasmLoad;
     std::deque<TPendingLibrary> PendingLibraryCompile;
 
+    //! A compile this node holds an exclusive right to. The id has to travel
+    //! back with the result, and the key tells the controller which gap closed.
+    struct TActiveAssignment {
+        ui64 AssignmentId = 0;
+        NKikimrUdfStore::TArtifactKey Key;
+    };
+
+    enum class EControllerResolveStage {
+        Initial,
+        InFlight,
+        Finished,
+    };
+
+    ui64 CompileControllerTabletId = 0;
+    NActors::TActorId CompileControllerPipe;
+    EControllerResolveStage ControllerResolveStage = EControllerResolveStage::Initial;
+    //! Highest controller generation this node has heard of. Generations only
+    //! grow, so anything below it comes from a leader that has already been
+    //! replaced and no longer owns what it hands out. Survives a broken pipe on
+    //! purpose: forgetting it would make the node gullible right after a move.
+    ui64 ControllerGeneration = 0;
+    THashMap<TString, TActiveAssignment> ModuleAssignments;
+    THashMap<TString, TActiveAssignment> LibraryAssignments;
+
     bool IsNamePending(const TString& name, EUdfType type) const;
     bool IsLibraryPending(const TString& name) const;
     void EnqueueNativeUdfIfNeeded(const TUdfModule& udf);
@@ -96,6 +127,20 @@ private:
     static TString GetModuleExtensionFromManifest(TStringBuf manifest);
     void EnsureArtifactTable();
 
+    void ResolveCompileController();
+    void ConnectToCompileController();
+    void SendRegister();
+    void SendHeartbeat();
+    void ScheduleControllerTick();
+    //! Tells the controller about a gap this node noticed. Only a hint: the
+    //! controller reconciles on its own, so losing it only costs latency.
+    void RequestArtifact(const TString& name, const TString& uid, bool isLibrary);
+    void ReportCompileResult(
+        const TActiveAssignment& assignment,
+        bool success,
+        bool stale,
+        const TString& error);
+
 protected:
     void Handle(TEvStoreInitialized::TPtr& ev);
     void Handle(TEvArtifactTableInitialized::TPtr& ev);
@@ -104,6 +149,13 @@ protected:
     void Handle(TEvReadBodyResponse::TPtr& ev);
     void Handle(TEvWasmCompileResponse::TPtr& ev);
     void Handle(TEvLibraryCompileResponse::TPtr& ev);
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev);
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev);
+    void Handle(TEvCompileController::TEvRegisterResult::TPtr& ev);
+    void Handle(TEvCompileController::TEvAssignCompile::TPtr& ev);
+    void Handle(TEvCompileController::TEvArtifactReady::TPtr& ev);
+    void HandleControllerTick();
 
 public:
     TUdfStoreService(const NKikimrConfig::TUdfStoreConfig& config, TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> functionRegistry);
@@ -119,6 +171,13 @@ public:
             hFunc(TEvReadBodyResponse, Handle);
             hFunc(TEvWasmCompileResponse, Handle);
             hFunc(TEvLibraryCompileResponse, Handle);
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+            hFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            hFunc(TEvCompileController::TEvRegisterResult, Handle);
+            hFunc(TEvCompileController::TEvAssignCompile, Handle);
+            hFunc(TEvCompileController::TEvArtifactReady, Handle);
+            cFunc(NActors::TEvents::TEvWakeup::EventType, HandleControllerTick);
             default:
                 break;
         }

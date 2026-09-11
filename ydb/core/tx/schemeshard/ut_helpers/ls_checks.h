@@ -91,6 +91,7 @@ namespace NLs {
     TCheckFunc ExtractTenantSchemeshard(ui64* tenantSchemeShardId);
     TCheckFunc ExtractTenantSysViewProcessor(ui64* tenantSVPId);
     TCheckFunc ExtractTenantStatisticsAggregator(ui64* tenantSAId);
+    TCheckFunc ExtractTenantWasmCompileController(ui64* tenantWCCId);
     TCheckFunc ExtractDomainHive(ui64* domainHiveId);
     TCheckFunc ExtractChildren(TVector<TString>* children);
 

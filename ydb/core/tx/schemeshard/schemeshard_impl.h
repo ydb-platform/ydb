@@ -412,6 +412,7 @@ public:
     bool EnableMoveIndex = true;
     bool EnableAlterDatabaseCreateHiveFirst = false;
     bool EnableStatistics = false;
+    bool EnableWasmCompileController = false;
     bool EnableServerlessExclusiveDynamicNodes = false;
     bool EnableAddColumsWithDefaults = false;
     bool EnableReplaceIfExistsForExternalEntities = false;

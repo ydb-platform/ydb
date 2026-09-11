@@ -272,6 +272,16 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
             context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
             break;
         }
+        case ETabletType::WasmCompileController: {
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Send configure request to wasm compile controller tablet: " << tabletID <<
+                " opId: " << OperationId <<
+                " schemeshard: " << ssId);
+            shard.Operation = TTxState::ConfigureParts;
+            auto event = new TEvSubDomain::TEvConfigure(processing);
+            context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
+            break;
+        }
         default:
             Y_FAIL_S("Unexpected type, we don't create tablets with type " << ETabletType::TypeToStr(type));
         }

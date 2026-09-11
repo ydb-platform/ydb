@@ -59,10 +59,11 @@ message TTabletTypes {
         // when adding a new tablet type and keeping parse compatibility with the old version
         // rename existing reserved item to desired one, and add new reserved item to
         // the end of reserved list
-        Reserved47 = 47;
+        WasmCompileController = 47;
         Reserved48 = 48;
         Reserved49 = 49;
         Reserved50 = 50;
+        Reserved51 = 51;
 
         UserTypeStart = 255;
         TypeInvalid = -1;

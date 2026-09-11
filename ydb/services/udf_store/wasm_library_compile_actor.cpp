@@ -194,12 +194,15 @@ void TWasmLibraryCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQuery
             case EStep::VerifyStillCurrent: {
                 NTableQuery::TModuleSourceRow current;
                 if (!NTableQuery::ParseModuleSourceResponse(response, current)) {
-                    ReplyError(TStringBuilder()
+                    ReplyDeferred(TStringBuilder()
                         << "Library '" << LibraryName_ << "' disappeared while compiling");
                     return;
                 }
                 if (current.Uid != LibrarySource_.Uid) {
-                    ReplyError(TStringBuilder()
+                    // Losing to a re-upload is not a failure of this library:
+                    // reported as a real one it would count against the compile
+                    // controller's retry budget for a perfectly good library.
+                    ReplyDeferred(TStringBuilder()
                         << "Library '" << LibraryName_ << "' was re-uploaded while compiling: uid="
                         << LibrarySource_.Uid << " is now " << current.Uid);
                     return;
@@ -233,12 +236,12 @@ void TWasmLibraryCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQuery
             case EStep::ConfirmStillCurrent: {
                 NTableQuery::TModuleSourceRow current;
                 if (!NTableQuery::ParseModuleSourceResponse(response, current)) {
-                    ReplyError(TStringBuilder()
+                    ReplyDeferred(TStringBuilder()
                         << "Library '" << LibraryName_ << "' disappeared while compiling");
                     return;
                 }
                 if (current.Uid != LibrarySource_.Uid) {
-                    ReplyError(TStringBuilder()
+                    ReplyDeferred(TStringBuilder()
                         << "Library '" << LibraryName_ << "' was re-uploaded while compiling: uid="
                         << LibrarySource_.Uid << " is now " << current.Uid);
                     return;
@@ -326,6 +329,13 @@ void TWasmLibraryCompileActor::FailAndPersist(const TString& message) {
 void TWasmLibraryCompileActor::ReplyError(const TString& message) {
     ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "TWasmLibraryCompileActor: " << message;
     Send(ReplyTo_, new TEvLibraryCompileResponse(false, LibraryName_, message));
+    PassAway();
+}
+
+void TWasmLibraryCompileActor::ReplyDeferred(const TString& reason) {
+    ALS_INFO(NKikimrServices::METADATA_PROVIDER)
+        << "TWasmLibraryCompileActor: deferred library '" << LibraryName_ << "': " << reason;
+    Send(ReplyTo_, new TEvLibraryCompileResponse(false, LibraryName_, reason, true));
     PassAway();
 }
 

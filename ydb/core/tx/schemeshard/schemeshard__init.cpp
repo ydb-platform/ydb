@@ -4913,6 +4913,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             case ETabletType::BackupController:
                 Self->TabletCounters->Simple()[COUNTER_BACKUP_CONTROLLER_TABLET_COUNT].Add(1);
                 break;
+            case ETabletType::WasmCompileController:
+                Self->TabletCounters->Simple()[COUNTER_WASM_COMPILE_CONTROLLER_COUNT].Add(1);
+                break;
             case ETabletType::TestShard:
                 Self->TabletCounters->Simple()[COUNTER_TEST_SHARD_COUNT].Add(1);
                 break;

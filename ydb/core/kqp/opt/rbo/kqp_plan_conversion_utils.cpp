@@ -500,6 +500,9 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSetOp(TExprNode::TPtr node)
 
     auto leftInputPtr = opSetOp.LeftInput().Ptr();
     auto rightInputPtr = opSetOp.RightInput().Ptr();
+    
+    YQL_CLOG(TRACE, CoreDq) << "Converting set op: " << PrintRBOExpression(node, Ctx);
+
     if (TMaybeNode<TKqpOpMap>(leftInputPtr)) {
         leftInputPtr = MaybeForceColumnToOptional(node->GetTypeAnn(), leftInputPtr, Ctx);
     }
@@ -529,20 +532,36 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSetOp(TExprNode::TPtr node)
     } else if (setOpKind == "intersect" || setOpKind == "except" ) {
 
         auto itemType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        TVector<TMapElement> leftNullableMap;
+        TVector<TMapElement> rightNullableMap;
+
         TVector<TInfoUnit> setOpColumns;
-        for (const auto& t : itemType->GetItems()) {
-            if (t->GetItemType()->IsOptionalOrNull()) {
-                Y_ENSURE(false, TStringBuilder() << "Intersect/except key columns cannot be nullable: " << t->GetName());
-            }
-            setOpColumns.push_back(TInfoUnit(TString(t->GetName())));
-        }
-
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
-        TVector<TExpression> joinFilters;
 
-        for (const auto& iu : setOpColumns) {
-            joinKeys.push_back(std::make_pair(iu, iu));
+        for (const auto& t : itemType->GetItems()) {
+            // Use stable pickle for nullable columns
+            if (t->GetItemType()->IsOptionalOrNull()) {
+                auto columnAccessExpr = MakeColumnAccess(TInfoUnit(TString(t->GetName())), node->Pos(), &Ctx);
+                auto pickleExpr = MakeUnaryCallable("StablePickle", columnAccessExpr);
+                TInfoUnit newLeftKey = TInfoUnit("_rbo_arg_" + std::to_string(PlanProps.InternalVarIdx++));
+                TInfoUnit newRightKey = TInfoUnit("_rbo_arg_" + std::to_string(PlanProps.InternalVarIdx++));
+                leftNullableMap.push_back(TMapElement(newLeftKey, pickleExpr));
+                rightNullableMap.push_back(TMapElement(newRightKey, pickleExpr));
+                joinKeys.push_back(std::make_pair(newLeftKey, newRightKey));
+            } else {
+                auto key = TInfoUnit(TString(t->GetName()));
+                joinKeys.push_back(std::make_pair(key, key));
+            }
         }
+
+        Y_ENSURE(leftNullableMap.size() == rightNullableMap.size());
+
+        if (leftNullableMap.size()) {
+            leftInput = MakeIntrusive<TOpMap>(leftInput, node->Pos(), leftNullableMap);
+            rightInput = MakeIntrusive<TOpMap>(rightInput, node->Pos(), rightNullableMap);
+        }
+
+        TVector<TExpression> joinFilters;
 
         TString joinKind = "LeftSemi";
         if (setOpKind == "except") {

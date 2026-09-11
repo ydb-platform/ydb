@@ -27,7 +27,9 @@ Y_UNIT_TEST_SUITE(TBlockBlobStorageTest) {
         auto blockErrors = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvBlobStorage::TEvBlock::EventType: {
-                    UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvBlobStorage::TEvBlock>()->Version, info->Version);
+                    const auto& version = ev->Get<TEvBlobStorage::TEvBlock>()->Version;
+                    UNIT_ASSERT(version);
+                    UNIT_ASSERT_VALUES_EQUAL(*version, info->Version);
                     break;
                 }
                 case TEvBlobStorage::TEvBlockResult::EventType: {

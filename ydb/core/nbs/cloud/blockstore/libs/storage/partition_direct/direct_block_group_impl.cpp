@@ -1239,6 +1239,7 @@ NThreading::TFuture<TListPBufferResponse> TDirectBlockGroup::ListPBuffers(
     if (hostIndex >= Connections.GetSlotCount()) {
         return MakeFuture(TListPBufferResponse{.Error = MakeError(E_FAIL)});
     }
+    Y_ABORT_UNLESS(!Connections.IsSlotDead(hostIndex));
 
     const auto& connection = Connections.GetPBuffer(hostIndex);
     // Hold a local copy of the connect future,
@@ -1324,6 +1325,38 @@ void TDirectBlockGroup::OnAddHostSucceeded(
     DoEstablishConnection(newHostIndex, EConnectionType::PBuffer);
 }
 
+void TDirectBlockGroup::OnRemoveHostSucceeded(
+    THostIndex removeIndex,
+    ui32 dbgConnectionsConfigGeneration)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(removeIndex < Connections.GetSlotCount());
+
+    MarkSlotDead(removeIndex, dbgConnectionsConfigGeneration);
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s RemoveHost committed: slot %s is dead",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostAndNode(removeIndex).c_str());
+}
+
+void TDirectBlockGroup::OnRemoveHostFailed(
+    THostIndex removeIndex,
+    const NProto::TError& error)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    LOG_WARN(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s RemoveHost %s request failed: %s",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostIndex(removeIndex).c_str(),
+        FormatError(error).c_str());
+}
+
 TDuration TDirectBlockGroup::TakeCopyRangeBudget(ui64 byteCount)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -1402,6 +1435,30 @@ TDirectBlockGroup::GatherVChunkStats(EVChunkStatsDetail detail) const
     return future;
 }
 
+void TDirectBlockGroup::PersistHostHealth(
+    const THostIndex hostIndex,
+    const EHostHealth oldHealth,
+    const EHostHealth newHealth)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(Service);
+
+    LOG_WARN(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s %s persisting health change: %s -> %s",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostAndNode(hostIndex).c_str(),
+        ToString(oldHealth).c_str(),
+        ToString(newHealth).c_str());
+
+    Service->PersistHostHealth(
+        DirectBlockGroupIndex,
+        hostIndex,
+        oldHealth,
+        newHealth);
+}
+
 void TDirectBlockGroup::SetHostState(
     THostIndex hostIndex,
     EHostState oldState,
@@ -1438,6 +1495,35 @@ void TDirectBlockGroup::QueryAddHost()
         Connections.GetGeneration());
 
     Service->QueryAddHost(DirectBlockGroupIndex, Connections.GetGeneration());
+}
+
+void TDirectBlockGroup::QueryRemoveHost(THostIndex hostIndex)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(Service);
+
+    if (const auto reason = ValidateRemoveHost(hostIndex); !reason.empty()) {
+        LOG_WARN(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s RemoveHost rejected (hostIndex=%s): %s",
+            LogTitle.GetWithTime().c_str(),
+            PrintHostAndNode(hostIndex).c_str(),
+            reason.c_str());
+        return;
+    }
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s QueryRemoveHost %s",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostAndNode(hostIndex).c_str());
+
+    Service->QueryRemoveHost(
+        DirectBlockGroupIndex,
+        hostIndex,
+        Connections.GetGeneration());
 }
 
 TCountAndSize TDirectBlockGroup::GetPBuffersUsage(THostIndex hostIndex) const
@@ -1477,6 +1563,9 @@ void TDirectBlockGroup::AddDDiskAndPBufferConnection(
 void TDirectBlockGroup::DoEstablishConnections()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    Y_ABORT_UNLESS(
+        Connections.GetLiveSlotCount() == Connections.GetSlotCount());
 
     for (size_t i = 0; i < Connections.GetSlotCount(); ++i) {
         DoEstablishConnection(i, EConnectionType::DDisk);
@@ -1657,6 +1746,10 @@ void TDirectBlockGroup::ReEstablishConnection(
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     TDDiskConnection& connection = Connections.Get(connectionType, hostIndex);
 
+    if (Connections.IsSlotDead(hostIndex)) {
+        return;   // nothing to reconnect to, the resources are deleted
+    }
+
     Counters.OnReconnect(ToDBGConnectionType(connectionType));
 
     if (BlockedGenerationDetected) {
@@ -1700,6 +1793,14 @@ void TDirectBlockGroup::OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId)
     ReEstablishConnection(EConnectionType::DDisk, hostIndex);
 }
 
+void TDirectBlockGroup::MarkSlotDead(
+    THostIndex slot,
+    ui32 dbgConnectionsConfigGeneration)
+{
+    Connections.MarkSlotDead(slot, dbgConnectionsConfigGeneration);
+    Oracle.OnHostRemoved(slot);
+}
+
 bool TDirectBlockGroup::HasPBufferQuorum() const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -1724,6 +1825,60 @@ bool TDirectBlockGroup::HasLockedQuorum() const
         }
     }
     return lockedCount >= MinLockedDDiskSessionsToStart;
+}
+
+TString TDirectBlockGroup::ValidateRemoveHost(THostIndex hostIndex) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    const size_t slotCount = Connections.GetSlotCount();
+    if (hostIndex >= slotCount) {
+        return TStringBuilder()
+               << "host index is out of range (have " << slotCount << ")";
+    }
+    if (Connections.IsSlotDead(hostIndex)) {
+        return "the slot is already removed";
+    }
+    // Hosts are removed only after additions, so the group never shrinks
+    // below the default host count.
+    const size_t liveCount = Connections.GetLiveSlotCount();
+    if (liveCount - 1 < DirectBlockGroupHostCount) {
+        return TStringBuilder() << "removal would shrink the group below "
+                                << DirectBlockGroupHostCount << " hosts";
+    }
+
+    for (const auto& weakVChunk: VChunks) {
+        auto vChunk = weakVChunk.lock();
+        if (!vChunk) {
+            continue;
+        }
+        const auto& cfg = vChunk->GetConfig();
+        if (cfg.GetHostCount() != slotCount) {
+            return TStringBuilder()
+                   << "vchunk " << cfg.GetVChunkIndex()
+                   << " config lags the connections (" << cfg.GetHostCount()
+                   << " vs " << slotCount << ")";
+        }
+        if (!cfg.GetDisabledHosts().Get(hostIndex)) {
+            return TStringBuilder() << "host is still enabled in vchunk "
+                                    << cfg.GetVChunkIndex();
+        }
+        // Removal is irreversible, so every vchunk must keep a quorum of
+        // healthy ddisks. The disabled host is not in that set already.
+        const auto healthyCount = cfg.GetHealthyDDisks().Count();
+        if (healthyCount < QuorumDirectBlockGroupHostCount) {
+            return TStringBuilder()
+                   << "vchunk " << cfg.GetVChunkIndex() << " has "
+                   << healthyCount << " healthy ddisks, below the "
+                   << QuorumDirectBlockGroupHostCount << "-host quorum";
+        }
+    }
+
+    if (GetPBuffersUsage(hostIndex).Size != 0) {
+        return "the removed host's pbuffer is not drained";
+    }
+
+    return {};
 }
 
 void TDirectBlockGroup::DoListPBuffers()

@@ -2,6 +2,7 @@
 #include "schemeshard_generated_column_utils.h"
 #include "schemeshard__local_index_migration.h"
 #include "schemeshard_svp_migration.h"
+#include "schemeshard_operation_registry.h"
 
 #include "olap/bg_tasks/adapter/adapter.h"
 #include "olap/bg_tasks/events/global.h"
@@ -6083,6 +6084,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvDataShard::TEvValidateUniqueIndexResponse, Handle);
         HFuncTraced(TEvDataShard::TEvBuildFulltextIndexResponse, Handle);
         HFuncTraced(TEvDataShard::TEvBuildFulltextDictResponse, Handle);
+        HFuncTraced(TEvIndexBuilder::TEvGetIndexStatsResponse, Handle);
         // } // NIndexBuilder
 
         // namespace NForcedCompaction {
@@ -6599,7 +6601,7 @@ void TSchemeShard::DropNode(TPathElement::TPtr node, TStepId step, TTxId txId, N
             // and all operations have been completed.
             break;
         case TPathElement::EPathType::EPathTypeBlobDepot:
-            Y_ABORT("not implemented");
+            AbortUnimplementedSchemeOperation<NKikimrSchemeOp::ESchemeOpDropBlobDepot>();
         case TPathElement::EPathType::EPathTypeTestShardSet:
             PersistRemoveTestShardSet(db, node->PathId);
             break;

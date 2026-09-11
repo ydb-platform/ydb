@@ -27,12 +27,15 @@ public:
 
     // IO uring callbacks
     virtual void OnComplete(NActors::TActorSystem* actorSystem) noexcept override final;
-    virtual void OnDrop() noexcept override final;
+    virtual void OnDrop(NActors::TActorSystem* actorSystem) noexcept override final;
 
     // reply should not access raw uring result field – use just status and data if status OK
     virtual void Reply(
         NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
         TString reason = {}) noexcept = 0;
+    ui32 RetryCount = 0;
+    static constexpr ui32 MaxResubmissions = 20;
+    virtual bool IsRestoreIo() const noexcept { return false; }
     virtual bool IsIntegrityIo() const noexcept { return false; }
     virtual bool IsChunkFormatIo() const noexcept { return false; }
     bool IsCriticalDDiskIo() const noexcept { return IsIntegrityIo() || IsChunkFormatIo(); }
@@ -72,7 +75,7 @@ public:
 
     using NPDisk::TUringOperationBase::SetResult;
 
-    void SetResult(i32 result, TRope&& data);
+    void SetResult(i64 result, TRope&& data);
 
 protected:
     TDDiskActor& Actor;
@@ -84,6 +87,9 @@ protected:
     void ApplyReadUsedBlocksMask(TRope& data) noexcept;
 
 private:
+    class TCompletionGuard;
+    void AccountShortIo() noexcept;
+
     NHPTimer::STime StartTs;
 
     TActorId OriginalRequester;
@@ -166,6 +172,8 @@ public:
     void SetIsErase(bool isErase) {
         IsErase = isErase;
     }
+
+    bool IsRestoreIo() const noexcept override { return IsRestore; }
 
     void SetIsRestore(bool isRestore) {
         IsRestore = isRestore;

@@ -89,6 +89,7 @@ local-ydb:
     actor-system:
       use-shared-threads: false
       use-united-pool: false
+      use-ring-queue: true
     client:
       threads: 64
     load:
@@ -128,13 +129,32 @@ Each static node gets its own `NONE`-profile SectorMap with the virtual size
 specified by `disk-size-gb`, so benchmark results are not limited by a host
 block device.
 
-`actor-system.use-shared-threads` and `actor-system.use-united-pool` are
-independent boolean switches (both default to `false`). They set YDBD's
-`use_shared_threads` and `use_united_pool` in `actor_system_config` for all
+`actor-system.use-shared-threads`, `actor-system.use-united-pool` and
+`actor-system.use-ring-queue` are independent boolean switches. The first two
+default to `false`; `use-ring-queue` defaults to `true`, matching YDBD.
+They set YDBD's `use_shared_threads`, `use_united_pool` and `use_ring_queue` in `actor_system_config` for all
 static and dynamic nodes, including scaled and verification clusters, while
 keeping automatic pool sizing enabled. They do not affect the YDB CLI.
-The Builder exposes both switches; saved profile parameters and comparisons
+The Builder exposes all three switches; saved profile parameters and comparisons
 retain their values.
+
+Set `ydbd-binary: /absolute/path/to/ydbd` in a `local-ydb` profile to
+use a different YDBD build. The Builder exposes the same optional executable
+path. It refers to a readable executable on the benchmark host (not the browser
+machine); relative paths and `~` are not accepted. Omit it to use bundled YDBD.
+The YDB CLI remains bundled. All static, dynamic, scaled, and verification
+nodes use the selected binary. At the first use of each distinct path in a run,
+the executable is copied into the temporary run directory without stripping;
+subsequent profiles using that path reuse the snapshot. Profile manifests
+record its original path, SHA-256 and size. The original file is never modified.
+
+For a version selector in Builder, arrange executable files as
+`bin/ydbd/<version>` and start the server with
+`ydb_bench web --binaries-dir /absolute/path/to/bin` (default: `./bin`).
+For example, `bin/ydbd/stable-26-3-1` is an executable file, not a directory.
+The catalog is refreshed when Builder loads; only readable executable files
+are listed. Selecting a version writes its absolute path to `ydbd-binary`.
+Manual paths and bundled YDBD remain available.
 
 An explicitly configured profile `timeout` caps every YDB CLI setup, warmup,
 measurement, and cleanup command. Workload-specific safety limits still apply
@@ -432,3 +452,17 @@ Generic configurable summary charts remain available below the baseline table.
 Run manifests use schema version 4. Earlier manifests are intentionally not
 read as resumable results because they lack the immutable step plan and durable
 per-step artifact contract.
+# Actor-system capacity and CPU placement
+
+For local YDB, `actor-system.static-nodes.cpu-count` and `actor-system.dynamic-nodes.cpu-count` independently set the vCPU count used by YDB automatic actor-system configuration **per node**. They do not set an OS affinity mask or an exact executor thread count. These positive integers remain unchanged when dynamic nodes are added. `affinity` only controls eligible logical CPUs; its mask can be larger or smaller than the configured actor-system capacity. For example:
+
+```yaml
+actor-system:
+  static-nodes: {cpu-count: 8}
+  dynamic-nodes: {cpu-count: 8}
+affinity:
+  static-nodes: {mode: pack-numa-pack-chiplet, cpus: 16}
+  dynamic-nodes: {mode: pack-numa-pack-chiplet, cpus: 32}
+```
+
+An explicit actor-system count also works with `mode: none`. Omitting it preserves YDB's automatic detection from the process affinity (or available host CPUs). Linux CPU usage remains relative to the assigned CPUs, not this actor-system setting.

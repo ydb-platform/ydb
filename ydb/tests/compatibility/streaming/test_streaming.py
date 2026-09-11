@@ -4,13 +4,12 @@ import os
 import pytest
 import time
 
-from ydb.tests.fq.streaming_common.common import wait_completed_checkpoints
-from ydb.tests.library.common.helpers import plain_or_under_sanitizer
+from ydb.tests.fq.streaming_common.common import wait_completed_checkpoints, read_and_check_data
 from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RestartToAnotherVersionFixture, RollingUpgradeAndDowngradeFixture
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.test_meta import link_test_case
 from ydb.tests.oss.ydb_sdk_import import ydb
-from ydb.tests.tools.datastreams_helpers.data_plane import write_stream, read_stream
+from ydb.tests.tools.datastreams_helpers.data_plane import write_stream
 
 logger = logging.getLogger(__name__)
 
@@ -375,17 +374,7 @@ class StreamingTestBase:
         time.sleep(2)
         logger.debug("write data to stream")
         write_stream(path=self.input_topic, data=input, database=self.database_path, endpoint=endpoint)
-        logger.debug("read data from stream")
-        read_data = read_stream(
-            path=self.output_topic,
-            messages_count=len(expected_output),
-            consumer_name=self.consumer_name,
-            database=self.database_path,
-            endpoint=endpoint,
-            timeout=plain_or_under_sanitizer(60, 300))
-        if (len(read_data) != len(expected_output)):
-            read_data = read_data[-len(expected_output):]        # deduplication disabled
-        assert sorted(read_data) == sorted(expected_output)
+        read_and_check_data(self, f"/Root/{self.query_name}", expected_output, endpoint, self.database_path, self.consumer_name, self.output_topic)
 
     def do_test_part1(self, extra_suffix=''):
         suffix = ('value1' if self.test_precompute_queries else '') + extra_suffix

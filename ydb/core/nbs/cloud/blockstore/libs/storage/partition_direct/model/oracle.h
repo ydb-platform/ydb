@@ -3,6 +3,7 @@
 #include "public.h"
 
 #include "host.h"
+#include "host_health_policy.h"
 #include "host_mask.h"
 #include "host_stat.h"
 #include "host_state.h"
@@ -46,6 +47,8 @@ public:
     virtual void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) = 0;
     virtual void OnDDiskConnected(THostIndex hostIndex, TInstant now) = 0;
     virtual void OnDDiskBroken(THostIndex hostIndex) = 0;
+
+    virtual void OnHostRemoved(THostIndex hostIndex) = 0;
 
     virtual TDuration GetHostReconnectDelay(THostIndex hostIndex) = 0;
 
@@ -116,6 +119,8 @@ public:
     // Device is permanently broken, so force the host offline.
     void OnDDiskBroken(THostIndex hostIndex) override;
 
+    void OnHostRemoved(THostIndex hostIndex) override;
+
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         THostMask hosts,
         EOperation operation) const override;
@@ -175,6 +180,7 @@ private:
     TVector<EHostHealth> HostsHealths;
     TVector<TBackoffDelayProvider> HostsReconnectDelays;
     TVector<TTimePredictor> TimePredictors;
+    std::unique_ptr<IHostHealthPolicy> HealthPolicy;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

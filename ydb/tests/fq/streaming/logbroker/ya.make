@@ -28,4 +28,8 @@ PEERDIR(
     ydb/tests/tools/datastreams_helpers
 )
 
+DEPENDS(
+    ydb/apps/ydb
+)
+
 END()

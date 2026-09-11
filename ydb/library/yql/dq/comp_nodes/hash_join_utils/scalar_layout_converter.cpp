@@ -792,6 +792,15 @@ public:
         return TupleLayout_.get();
     }
 
+    ui32 GetVariableColumnsCount(ui32 columnIndex) const override {
+        Y_ENSURE(columnIndex < InnerMapping_.size());
+        ui32 result = 0;
+        for (ui32 innerIndex : InnerMapping_[columnIndex]) {
+            result += InnerExtractors_[innerIndex]->GetElementSizeType() == NPackedTuple::EColumnSizeType::Variable;
+        }
+        return result;
+    }
+
 private:
     void UnpackImpl(const TPackResult& packed, const ui8* packedData, ui32 count,
                     NYql::NUdf::TUnboxedValue* values) {

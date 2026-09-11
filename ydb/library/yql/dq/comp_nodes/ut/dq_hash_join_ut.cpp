@@ -2512,6 +2512,12 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         UNIT_ASSERT_LT(stats.MaxBlockRows, 200);
     }
 
+    Y_UNIT_TEST(TestOutputBufferBoundedProjectedWideRows) {
+        auto td = WideRowsHighFanoutTestData();
+        td.Renames = {{0, EJoinSide::kLeft}};
+        AssertOutputBufferBounded(MeasureOutputBlocks(td), WideRowsFanout);
+    }
+
     Y_UNIT_TEST(TestOutputBufferBoundedLeftSemiLeftIsBuild) {
         auto td = OutputBufferBoundedLeftIsBuildTestData(EJoinKind::LeftSemi);
         AssertOutputBufferBounded(MeasureOutputBlocks(td), OutputBufferBoundedLeftIsBuildRows);

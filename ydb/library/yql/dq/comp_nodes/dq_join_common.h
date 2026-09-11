@@ -1137,6 +1137,7 @@ struct TPackedTupleOutputBase : NNonCopyable::TMoveOnly {
         , Converters_(converters)
         , MaxRows_(CalcMaxOutputRows(outputItemTypes))
         , MaxOverflowBytes_(CalcMaxOverflowBytes(*renames, converters))
+        , MaxPackedBytes_(CalcMaxPackedBytes(converters))
     {}
 
     int Columns() const {
@@ -1152,8 +1153,12 @@ struct TPackedTupleOutputBase : NNonCopyable::TMoveOnly {
         return std::ssize(Output_.Build.Overflow) + std::ssize(Output_.Probe.Overflow);
     }
 
+    i64 PackedBytes() const {
+        return Output_.Build.AllocatedBytes() + Output_.Probe.AllocatedBytes();
+    }
+
     bool IsFull() const {
-        return SizeTuples() >= MaxRows_ || OverflowBytes() >= MaxOverflowBytes_;
+        return SizeTuples() >= MaxRows_ || OverflowBytes() >= MaxOverflowBytes_ || PackedBytes() >= MaxPackedBytes_;
     }
 
     auto MakeConsumeFn() {
@@ -1188,13 +1193,18 @@ protected:
     static i64 CalcMaxOverflowBytes(const TDqRenames<ESide>& renames, TSides<Converter*> converters) {
         i64 variableColumns = 0;
         for (auto rename : renames) {
-            const auto* layout = converters.SelectSide(rename.Side)->GetTupleLayout();
-            for (const auto& column : layout->VariableColumns) {
-                variableColumns += column.OriginalColumnIndex == static_cast<ui32>(rename.Index);
-            }
+            variableColumns += converters.SelectSide(rename.Side)->GetVariableColumnsCount(rename.Index);
         }
         return variableColumns ? static_cast<i64>(MaxBlockSizeInBytes) * variableColumns
                                : std::numeric_limits<i64>::max();
+    }
+
+    static i64 CalcMaxPackedBytes(TSides<Converter*> converters) {
+        i64 columns = 0;
+        for (ESide side : EachSide) {
+            columns += std::ssize(converters.SelectSide(side)->GetTupleLayout()->OrigColumns) + 1;
+        }
+        return static_cast<i64>(MaxBlockSizeInBytes) * columns;
     }
 
     void AssertSizeIsSane() const {
@@ -1212,6 +1222,7 @@ protected:
     TSides<Converter*> Converters_;
     const i64 MaxRows_;
     const i64 MaxOverflowBytes_;
+    const i64 MaxPackedBytes_;
     TSides<TPackResult> Output_;
     BuildNullIfNeeded Nulls_;
 };

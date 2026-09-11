@@ -369,6 +369,19 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         }
     }
 
+    Y_UNIT_TEST(TestVariableColumnsCount) {
+        TBlockLayoutConverterTestData data;
+
+        const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64);
+        const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String);
+        const auto tupleType = data.PgmBuilder.NewTupleType({int64Type, stringType});
+        TVector<NKikimr::NMiniKQL::TType*> types{tupleType};
+        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+
+        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
+        UNIT_ASSERT_VALUES_EQUAL(converter->GetVariableColumnsCount(0), 1);
+    }
+
     Y_UNIT_TEST(TestTuple) {
         TBlockLayoutConverterTestData data;
 

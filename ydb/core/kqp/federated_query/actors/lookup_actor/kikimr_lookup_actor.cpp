@@ -514,6 +514,9 @@ namespace {
                 return;
             }
             auto state = std::move(ev->Get()->State);
+            if (!state->StreamProcessor) {
+                return;
+            }
             auto& response = ev->Get()->Response;
             YDB_LOG_TRACE("TEvQueryExecuteQueryResponsePart",
                     COMMON_LOG,
@@ -575,6 +578,9 @@ namespace {
                 }
             }
             if (Y_UNLIKELY(PendingPassAway)) {
+                return;
+            }
+            if (!session->StreamProcessor) {
                 return;
             }
             auto& response = ev->Get()->Response;

@@ -97,6 +97,30 @@ size_t TArenaAllocatorPool::TSlots::GetAllocatedSize() const
     return Slots.size() * SlotSize;
 }
 
+TArenaAllocatorStats TArenaAllocatorPool::TSlots::GetStats(
+    size_t chunkSize) const
+{
+    return {
+        .SlotSize = chunkSize,
+        .ArenaSize = SlotSize,
+        .ReservedSize = GetAllocatedSize(),
+        .UsedSize = UsedSize,
+        .MaxUsedSize = MaxUsedSize,
+        .Count = AllocationCount};
+}
+
+void TArenaAllocatorPool::TSlots::OnAllocate(size_t chunkSize)
+{
+    UsedSize += chunkSize;
+    MaxUsedSize = Max(MaxUsedSize, UsedSize);
+    ++AllocationCount;
+}
+
+void TArenaAllocatorPool::TSlots::OnDeallocate(size_t chunkSize)
+{
+    UsedSize -= chunkSize;
+}
+
 //////////////////////////////////////////////////////////////////////////////
 
 TArenaAllocatorPool::TArenaAllocatorPool(
@@ -121,6 +145,7 @@ void* TArenaAllocatorPool::Allocate(size_t size)
     }
 
     if (void* ptr = slots.CurrentSlot->Allocate()) {
+        slots.OnAllocate(size);
         UsedSize += size;
         return ptr;
     }
@@ -129,6 +154,7 @@ void* TArenaAllocatorPool::Allocate(size_t size)
     Bases.emplace(slot->Base, slot);
     void* ptr = slot->Allocate();
     Y_ABORT_UNLESS(ptr);
+    slots.OnAllocate(size);
     UsedSize += size;
     return ptr;
 }
@@ -155,15 +181,13 @@ void TArenaAllocatorPool::Deallocate(void* ptr) noexcept
         "Deallocate: unknown pointer");
 
     UsedSize -= chunkSize;
+    auto& slots = SizeMap[chunkSize];
+    slots.OnDeallocate(chunkSize);
     slot->Free(ptr);
 
     if (slot->Empty()) {
         Bases.erase(it);
-        auto& slots = SizeMap[chunkSize];
         slots.Release(slot);
-        if (slots.Empty()) {
-            SizeMap.erase(chunkSize);
-        }
     }
 }
 
@@ -180,6 +204,16 @@ size_t TArenaAllocatorPool::GetAllocatedSize() const
 size_t TArenaAllocatorPool::GetUsedSize() const
 {
     return UsedSize;
+}
+
+TVector<TArenaAllocatorStats> TArenaAllocatorPool::GetStats() const
+{
+    TVector<TArenaAllocatorStats> result;
+    result.reserve(SizeMap.size());
+    for (const auto& [chunkSize, slots]: SizeMap) {
+        result.push_back(slots.GetStats(chunkSize));
+    }
+    return result;
 }
 
 //////////////////////////////////////////////////////////////////////////////

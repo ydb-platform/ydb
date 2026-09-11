@@ -84,23 +84,16 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         constexpr THostIndex Host = 0;
         constexpr size_t ByteCount = 4096;
+        const auto pBufferKey = MakeKey(123);
+        const auto range = TBlockRange16::MakeClosedInterval(0, 0);
 
-        dirtyMap->DataToPBufferAdded(
-            Host,
-            IReadyQueue::EPBufferCounter::Total,
-            ByteCount);
-        dirtyMap->DataToPBufferAdded(
-            Host,
-            IReadyQueue::EPBufferCounter::Locked,
-            ByteCount);
-        dirtyMap->DataFromPBufferReleased(
-            Host,
-            IReadyQueue::EPBufferCounter::Locked,
-            ByteCount);
-        dirtyMap->DataFromPBufferReleased(
-            Host,
-            IReadyQueue::EPBufferCounter::Total,
-            ByteCount);
+        for (const auto host: MakePrimaryHosts()) {
+            dirtyMap->RestorePBuffer(pBufferKey, range, host);
+        }
+        dirtyMap->LockPBuffer(pBufferKey);
+        dirtyMap->UnlockPBuffer(pBufferKey);
+        FlushAll(dirtyMap->MakeFlushHint(1), *dirtyMap);
+        EraseAll(dirtyMap->MakeEraseHint(1), *dirtyMap);
 
         const auto& counters = dirtyMap->GetPBufferCounters(Host);
         UNIT_ASSERT_VALUES_EQUAL(0, counters.Current.Count);

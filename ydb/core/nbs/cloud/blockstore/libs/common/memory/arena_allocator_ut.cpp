@@ -23,17 +23,22 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorTest)
 {
     Y_UNIT_TEST(RoundAllocationSize)
     {
-        UNIT_ASSERT_VALUES_EQUAL(0, RoundAllocationSize(0));
-        UNIT_ASSERT_VALUES_EQUAL(1, RoundAllocationSize(1));
-        UNIT_ASSERT_VALUES_EQUAL(2, RoundAllocationSize(2));
-        UNIT_ASSERT_VALUES_EQUAL(4, RoundAllocationSize(3));
+        UNIT_ASSERT_VALUES_EQUAL(4, RoundAllocationSize(0));
+        UNIT_ASSERT_VALUES_EQUAL(4, RoundAllocationSize(4));
+        UNIT_ASSERT_VALUES_EQUAL(8, RoundAllocationSize(5));
+        UNIT_ASSERT_VALUES_EQUAL(128, RoundAllocationSize(128));
+        UNIT_ASSERT_VALUES_EQUAL(144, RoundAllocationSize(129));
+        UNIT_ASSERT_VALUES_EQUAL(512, RoundAllocationSize(512));
+        UNIT_ASSERT_VALUES_EQUAL(544, RoundAllocationSize(513));
+        UNIT_ASSERT_VALUES_EQUAL(10_KB, RoundAllocationSize(10_KB));
+        UNIT_ASSERT_VALUES_EQUAL(10_KB + 64, RoundAllocationSize(10_KB + 1));
         UNIT_ASSERT_VALUES_EQUAL(128 * 1024, RoundAllocationSize(128 * 1024));
         UNIT_ASSERT_VALUES_EQUAL(
-            256 * 1024,
+            128 * 1024 + 64,
             RoundAllocationSize(128 * 1024 + 1));
         UNIT_ASSERT_VALUES_EQUAL(256 * 1024, RoundAllocationSize(256 * 1024));
         UNIT_ASSERT_VALUES_EQUAL(
-            384 * 1024,
+            256 * 1024 + 64,
             RoundAllocationSize(256 * 1024 + 1));
     }
 

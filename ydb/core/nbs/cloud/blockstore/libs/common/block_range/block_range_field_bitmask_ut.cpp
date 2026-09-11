@@ -38,6 +38,11 @@ public:
         return 0;
     }
 
+    size_t UsedSize() const override
+    {
+        return 0;
+    }
+
     TVector<TArenaAllocatorStats> GetStats() const override
     {
         return {};

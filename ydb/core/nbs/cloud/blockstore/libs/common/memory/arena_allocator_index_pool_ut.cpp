@@ -43,6 +43,11 @@ struct TTrackingAllocator final: public IArenaAllocator
         return AllocatedCount;
     }
 
+    size_t UsedSize() const override
+    {
+        return AllocatedCount;
+    }
+
     TVector<TArenaAllocatorStats> GetStats() const override
     {
         return {};

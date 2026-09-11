@@ -1,5 +1,7 @@
 #pragma once
 
+#include "public.h"
+
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
 
@@ -33,34 +35,43 @@ struct IReadyQueue
 
     virtual ~IReadyQueue() = default;
 
+    [[nodiscard]] virtual TPBufferKey GetPBufferKey(
+        const TInflightInfo& inflight) const = 0;
+
     // Registers a record ready for cloning, flushing, or erasing.
     // A record can only be registered in one queue. The new registration
     // deletes the old one.
-    virtual void Register(TPBufferKey pBufferKey, EQueueType queueType) = 0;
+    virtual void Register(
+        const TInflightInfo& inflight,
+        EQueueType queueType) = 0;
 
     // Removes the record's registration from the given queue.
-    virtual void UnRegister(TPBufferKey pBufferKey, EQueueType queueType) = 0;
+    virtual void UnRegister(
+        const TInflightInfo& inflight,
+        EQueueType queueType) = 0;
 
     // Notifies that a flush request to the specified host stopped being
     // in-flight. The request may have completed successfully, failed, or been
     // dropped because the host was disabled.
     virtual void InflightFlushFinished(
-        TPBufferKey pBufferKey,
+        const TInflightInfo& inflight,
         THostIndex host) = 0;
 
     // Notifies of flushes completion to DDisks.
-    virtual void FlushCompleted(TPBufferKey pBufferKey, THostMask ddisks) = 0;
+    virtual void FlushCompleted(
+        const TInflightInfo& inflight,
+        THostMask ddisks) = 0;
 
     // Notification about the change of byte counters in PBuffer
     virtual void DataToPBufferAdded(
+        const TInflightInfo& inflight,
         THostIndex host,
-        EPBufferCounter counter,
-        size_t byteCount) = 0;
+        EPBufferCounter counter) = 0;
     // Notification about the change of byte counters in PBuffer
     virtual void DataFromPBufferReleased(
+        const TInflightInfo& inflight,
         THostIndex host,
-        EPBufferCounter counter,
-        size_t byteCount) = 0;
+        EPBufferCounter counter) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -88,7 +99,7 @@ struct TReadSource
 class TInflightInfo: public TDisableCopy
 {
 public:
-    enum class EState
+    enum class EState: ui8
     {
         // The lsn is generated but the write has not been acknowledged yet.
         // Tracked only to hold the cleanup watermark; invisible to reads (a
@@ -124,9 +135,7 @@ public:
     TInflightInfo(
         IReadyQueue* readyQueue,
         THostMask desiredDDisks,
-        THostMask disabled,
-        TPBufferKey pBufferKey,
-        size_t byteCount);
+        THostMask disabled);
 
     TInflightInfo(TInflightInfo&& other) noexcept;
 
@@ -199,15 +208,14 @@ private:
     void MaybeAdvanceToErased();
     void MaybeQueryErase();
 
-    EState State;
+    [[nodiscard]] TPBufferKey GetPBufferKey() const;
 
     IReadyQueue* ReadyQueue = nullptr;
-    TPBufferKey PBufferKey;
-    size_t ByteCount = 0;
     TInstant StartAt;
-    size_t PBuffersLockCount = 0;
     NThreading::TPromise<void> QuorumReadyPromise;
     ui32 PersistGeneration = 0;
+    ui32 PBuffersLockCount : 24 = 0;
+    EState State : 8 = EState::PBufferPendingWrite;
 
     THostMask DesiredDDisks;
     THostMask Disabled;

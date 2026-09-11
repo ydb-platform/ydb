@@ -95,6 +95,25 @@ public:
         , RangeByKey(typename TRangeByKey::allocator_type(pool))
     {}
 
+    static TKey GetKeyByValue(const TValue& value)
+    {
+        return GetItemByValue(value).Key;
+    }
+
+    static TRange GetRangeByValue(const TValue& value)
+    {
+        return GetItemByValue(value).Range;
+    }
+
+    static TItem& GetItemByValue(const TValue& value)
+    {
+        constexpr size_t valueOffset = offsetof(TItem, Value);
+        void* valueAddress = const_cast<TValue*>(&value);
+        TItem* item = reinterpret_cast<TItem*>(
+            static_cast<char*>(valueAddress) - valueOffset);
+        return *item;
+    }
+
     // Adds a block range to the collection. Returns false if the key already
     // exists in the collection.
     bool AddRange(TKey key, TBlockRange range, TValue value = {})
@@ -265,6 +284,17 @@ public:
     [[nodiscard]] size_t Size() const
     {
         return Ranges.size();
+    }
+
+    void Trim()
+    {
+        TRanges ranges(
+            typename TRanges::allocator_type(Ranges.get_allocator()));
+        Ranges.swap(ranges);
+
+        TRangeByKey rangeByKey(
+            typename TRangeByKey::allocator_type(RangeByKey.get_allocator()));
+        RangeByKey.swap(rangeByKey);
     }
 
     [[nodiscard]] THashSet<TKey> GetAllKeys() const

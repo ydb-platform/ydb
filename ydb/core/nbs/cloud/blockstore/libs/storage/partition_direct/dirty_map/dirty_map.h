@@ -141,20 +141,25 @@ public:
     void UnLockDDiskRange(TLockRangeHandle handle) override;
 
     // IReadyQueue implementation
-    void Register(TPBufferKey pBufferKey, EQueueType queueType) override;
-    void UnRegister(TPBufferKey pBufferKey, EQueueType queueType) override;
+    TPBufferKey GetPBufferKey(const TInflightInfo& inflight) const override;
+    void Register(const TInflightInfo& inflight, EQueueType queueType) override;
+    void UnRegister(
+        const TInflightInfo& inflight,
+        EQueueType queueType) override;
     void InflightFlushFinished(
-        TPBufferKey pBufferKey,
+        const TInflightInfo& inflight,
         THostIndex host) override;
-    void FlushCompleted(TPBufferKey pBufferKey, THostMask ddisks) override;
+    void FlushCompleted(
+        const TInflightInfo& inflight,
+        THostMask ddisks) override;
     void DataToPBufferAdded(
+        const TInflightInfo& inflight,
         THostIndex host,
-        EPBufferCounter counter,
-        size_t byteCount) override;
+        EPBufferCounter counter) override;
     void DataFromPBufferReleased(
+        const TInflightInfo& inflight,
         THostIndex host,
-        EPBufferCounter counter,
-        size_t byteCount) override;
+        EPBufferCounter counter) override;
 
     // IBehindAheadMonitor implementation
     void OnBehindAheadChanged() override;
@@ -171,6 +176,7 @@ public:
     // Memory usage.
     [[nodiscard]] size_t GetAllocatedSize() const;
     [[nodiscard]] size_t GetUsedSize() const;
+    void Trim();
 
     // Debug purposes
     [[nodiscard]] TString DebugPrintPBuffers();
@@ -228,7 +234,7 @@ private:
         ui16 offsetBlocks);
 
     void AddToAheadAndBehindOnFlushCompleted(
-        TPBufferKey pBufferKey,
+        const TInflightInfo& inflight,
         THostMask ddisks);
 
     [[nodiscard]] bool HasInflightFlush(THostIndex host, TBlockRange16 range);

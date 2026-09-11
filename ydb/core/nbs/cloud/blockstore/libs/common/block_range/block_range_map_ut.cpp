@@ -2,6 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/strbuf.h>
+
 #include <span>
 
 namespace NYdb::NBS::NBlockStore {
@@ -15,6 +17,21 @@ struct TEmptyType
 };
 
 using TTestRangeMap = TBlockRangeMap<ui64, TEmptyType>;
+
+void PrintAllocatorStats(
+    TStringBuf allocatorName,
+    const TVector<TArenaAllocatorStats>& allStats)
+{
+    Cout << allocatorName << ':' << Endl;
+    for (const auto& stats: allStats) {
+        Cout << "  slotSize=" << stats.SlotSize
+             << ", arenaSize=" << stats.ArenaSize
+             << ", reservedSize=" << stats.ReservedSize
+             << ", usedSize=" << stats.UsedSize
+             << ", maxUsedSize=" << stats.MaxUsedSize
+             << ", count=" << stats.Count << Endl;
+    }
+}
 
 void AddRanges(
     const std::span<const TTestRangeMap::TItem>& ranges,
@@ -469,7 +486,8 @@ Y_UNIT_TEST_SUITE(TBlockRangeMapTest)
     {
         TSet<size_t> blockMarks = {1, 10, 100, 1000, 10000, 100000, 1000000};
 
-        TArenaAllocatorPool pool(CreateArenaAllocator());
+        const auto allocator = CreateArenaAllocator();
+        TArenaAllocatorPool pool(allocator);
         using TRangeMap = TBlockRangeMap<TKey, TValue, TRange, true>;
         TRangeMap map(&pool);
 
@@ -490,6 +508,25 @@ Y_UNIT_TEST_SUITE(TBlockRangeMapTest)
                     static_cast<double>(pool.GetUsedSize()) / count;
 
                 Cout << count << ": " << averageMemPerItem << Endl;
+                PrintAllocatorStats("pool", pool.GetStats());
+
+                const auto allocatorStats = allocator->GetStats();
+                PrintAllocatorStats("allocator", allocatorStats);
+
+                size_t allocatorAllocatedSize = 0;
+                size_t allocatorUsedSize = 0;
+                for (const auto& stats: allocatorStats) {
+                    allocatorAllocatedSize += stats.ReservedSize;
+                    allocatorUsedSize += stats.UsedSize;
+                }
+                const double allocatorUsagePercent =
+                    allocatorAllocatedSize
+                        ? 100.0 * allocatorUsedSize / allocatorAllocatedSize
+                        : 0;
+                Cout << "allocator total: allocatedSize="
+                     << allocatorAllocatedSize
+                     << ", usedSize=" << allocatorUsedSize
+                     << ", usage=" << allocatorUsagePercent << '%' << Endl;
             }
         }
     }

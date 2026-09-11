@@ -33,6 +33,7 @@ public:
 
     [[nodiscard]] virtual size_t AllocatedBlocks() const = 0;
     [[nodiscard]] virtual size_t AllocatedSize() const = 0;
+    [[nodiscard]] virtual size_t UsedSize() const = 0;
     [[nodiscard]] virtual TVector<TArenaAllocatorStats> GetStats() const = 0;
 };
 

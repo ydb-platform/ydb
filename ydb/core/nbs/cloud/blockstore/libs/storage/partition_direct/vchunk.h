@@ -189,7 +189,7 @@ private:
     const TThreadChecker ExecutorThreadChecker{Executor};
     const IDirectBlockGroupPtr DirectBlockGroup;
     const ui32 BlockSize;
-    const ui64 BlocksCount;
+    const ui16 BlocksCount;
     const ui32 SyncRequestsBatchSize;
 
     TLogTitle LogTitle;

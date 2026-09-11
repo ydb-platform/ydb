@@ -28,6 +28,8 @@ public:
     [[nodiscard]] size_t GetAllocatedSize() const;
     // Returns the total size of chunks currently handed to clients.
     [[nodiscard]] size_t GetUsedSize() const;
+    // Returns allocation statistics grouped by chunk size.
+    [[nodiscard]] TVector<TArenaAllocatorStats> GetStats() const;
 
 private:
     // Intrusive free list node stored in the first bytes of a free chunk
@@ -78,12 +80,19 @@ private:
         }
 
         [[nodiscard]] size_t GetAllocatedSize() const;
+        [[nodiscard]] TArenaAllocatorStats GetStats(size_t chunkSize) const;
+
+        void OnAllocate(size_t chunkSize);
+        void OnDeallocate(size_t chunkSize);
 
         TList<TSlot> Slots;
         TSlot* CurrentSlot = nullptr;
 
     private:
         size_t SlotSize = 0;
+        size_t UsedSize = 0;
+        size_t MaxUsedSize = 0;
+        size_t AllocationCount = 0;
     };
 
     using TSizeMap = TMap<size_t, TSlots>;

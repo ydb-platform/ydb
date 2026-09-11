@@ -16,6 +16,8 @@ items:
       href: data-formats/format-arrow.md
   - name: Работа с топиками
     href: topic.md
+  - name: Батчевые кодеки
+    href: kafka-codec.md
   - name: Работа с узлами координации
     href: coordination.md
   - name: Обработка ошибок в API

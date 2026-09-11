@@ -28,17 +28,17 @@ enum Codec {
     reserved 20000 to max;
 }
 
-enum MessageBatchCodec {
+enum MessagesBatchCodec {
     MESSAGE_BATCH_CODEC_UNSPECIFIED = 0;
 
     MESSAGE_BATCH_CODEC_RAW = 1;              // Unused in protocol, needed to allow/disallow usual topic batch in settings.
-    MESSAGE_BATCH_CODEC_TOPIC_COMPRESSED = 2; // Codec value + compressed usual topic batch protobuf.
-    MESSAGE_BATCH_CODEC_KAFKA_BATCH = 3;      // Binary kafka message batch
+    MESSAGE_BATCH_CODEC_KAFKA_BATCH = 2;      // Binary kafka message batch. See doc: https://ydb.tech/docs/en/reference/ydb-sdk/kafka-codec/
+    MESSAGE_BATCH_CODEC_TOPIC_COMPRESSED = 3; // Codec value + compressed usual topic batch protobuf. // Example for extend
 
-    reserved 5 to 9999;
+    reserved 4 to 9999;
 
     // Custom codec may be added later, if need.
-    reserved 10000 to max;
+    reserved 20000 to max;
 }
 
 // Description of supported codecs.
@@ -167,7 +167,7 @@ message StreamWriteMessage {
     message WriteRequest {
         repeated MessageData messages = 1;
 
-        EncodedBatch batch_data = 11;
+        EncodedBatch encoded_batch = 11;
 
         oneof data_codec {
            // Codec that is used for data compression.
@@ -452,8 +452,8 @@ message StreamReadMessage {
 
             // List of client messages.
             repeated MessageData message_data = 1;
-            
-            repeated StreamWriteMessage.WriteRequest.EncodedBatch encoded_batches = 7; // may be message with metadata if need?
+
+            repeated StreamWriteMessage.WriteRequest.EncodedBatch encoded_batch = 7; // may be message with metadata if need?
 
             // Producer identifier provided by client for this batch of client messages.
             string producer_id = 2 [(Ydb.length).le = 2048];

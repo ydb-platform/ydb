@@ -9,24 +9,7 @@ TEndpointPool::TEndpointPool(TListEndpointsResultProvider&& provider, const IInt
     , BalancingPolicy_(client->GetBalancingSettings())
 {}
 
-TEndpointPool::~TEndpointPool() {
-    try {
-        NThreading::TFuture<TEndpointUpdateResult> future;
-        {
-            std::lock_guard guard(Mutex_);
-            if (DiscoveryPromise_.Initialized()) {
-               future = DiscoveryPromise_.GetFuture();
-            }
-        }
-        if (future.Initialized()) {
-            future.Wait();
-        }
-    } catch (...) {
-        Y_ABORT("Unexpected exception from endpoint pool dtor");
-    }
-}
-
-std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::UpdateAsync() {
+std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::UpdateAsync(std::shared_ptr<TDbDriverState> owner) {
     NThreading::TFuture<TEndpointUpdateResult> future;
     {
         std::lock_guard guard(Mutex_);
@@ -37,7 +20,8 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
             future = DiscoveryPromise_.GetFuture();
         }
     }
-    auto handler = [this](const TAsyncListEndpointsResult& future) {
+    auto handler = [this, owner = std::move(owner)](const TAsyncListEndpointsResult& future) {
+        Y_ABORT_UNLESS(owner);
         TListEndpointsResult result = future.GetValue();
         std::vector<std::string> removed;
         if (result.DiscoveryStatus.Status == EStatus::SUCCESS) {

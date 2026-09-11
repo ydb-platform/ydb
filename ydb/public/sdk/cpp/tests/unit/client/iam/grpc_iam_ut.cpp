@@ -24,6 +24,64 @@ using namespace NYdb;
 using namespace NYdb::NTest;
 using namespace yandex::cloud::iam::v1;
 
+namespace {
+
+class TQueuedIamFacility final : public ICoreFacility {
+public:
+    void AddPeriodicTask(TPeriodicCb&& callback, TDeadline::Duration) override {
+        Periodic = std::move(callback);
+    }
+
+    void PostToResponseQueue(TPostTaskCb&& callback) override {
+        Posted.set_value(std::move(callback));
+    }
+
+    TPeriodicCb Periodic;
+    std::promise<TPostTaskCb> Posted;
+};
+
+} // namespace
+
+TEST(GrpcIamCredentialsProvider, DestructionDoesNotWaitForQueuedResponse) {
+    TIamTokenServiceStub iamService;
+    iamService.SetResponseToken("late-token");
+    TIamGrpcServer server(&iamService);
+    ASSERT_TRUE(server.Start());
+
+    auto facility = std::make_shared<TQueuedIamFacility>();
+    auto posted = facility->Posted.get_future();
+    auto provider = std::make_shared<TIamOAuthCredentialsProvider<
+        CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>>(
+            MakeOAuthParams(server.Endpoint()), facility);
+    auto authInfo = provider->GetAuthInfoAsync();
+    ASSERT_TRUE(facility->Periodic({}, EStatus::SUCCESS));
+    ASSERT_EQ(posted.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+    auto response = posted.get();
+    ASSERT_FALSE(authInfo.IsReady());
+
+    auto destroyed = std::async(std::launch::async, [provider = std::move(provider)]() mutable {
+        provider.reset();
+    });
+    const auto completed = destroyed.wait_for(std::chrono::seconds(5));
+    if (completed != std::future_status::ready) {
+        // Unblock the old implementation before reporting its failed assertion.
+        response();
+    }
+    EXPECT_EQ(completed, std::future_status::ready)
+        << "provider destruction must not wait for a queued facility callback";
+    destroyed.get();
+    if (completed != std::future_status::ready) {
+        return;
+    }
+
+    ASSERT_TRUE(authInfo.IsReady());
+    EXPECT_THROW(authInfo.GetValue(), yexception);
+    response();
+    response = {};
+    EXPECT_THROW(authInfo.GetValue(), yexception);
+    EXPECT_FALSE(facility->Periodic({}, EStatus::SUCCESS));
+}
+
 TEST(GrpcIamCredentialsProvider, TeardownWhileIamCreatePendingCompletes) {
     TBlockingIamTokenService iamService;
     TBlockingIamReleaseGuard releaseGuard(iamService);

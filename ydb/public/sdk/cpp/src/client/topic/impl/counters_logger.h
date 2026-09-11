@@ -68,18 +68,16 @@ private:
         }
 
         DumpCountersContext = Connections->CreateContext();
-        if (DumpCountersContext) {
-            auto callback = [ctx = SelfContext, timeNumber](bool ok) {
-                if (ok) {
-                    if (auto borrowedSelf = ctx->LockShared()) {
-                        borrowedSelf->DumpCountersToLog(timeNumber);
-                    }
+        auto callback = [ctx = SelfContext, timeNumber](bool ok) {
+            if (ok) {
+                if (auto borrowedSelf = ctx->LockShared()) {
+                    borrowedSelf->DumpCountersToLog(timeNumber);
                 }
-            };
-            Connections->ScheduleCallback(UPDATE_PERIOD,
-                                        std::move(callback),
-                                        DumpCountersContext);
-        }
+            }
+        };
+        Connections->ScheduleCallback(UPDATE_PERIOD,
+                                    std::move(callback),
+                                    DumpCountersContext);
     }
 
     void DumpCountersToLog(size_t timeNumber = 0) {

@@ -10,6 +10,7 @@
 #include <library/cpp/logger/log.h>
 
 #include <functional>
+#include <memory>
 
 namespace NMonitoring {
     class IMetricRegistry;
@@ -25,7 +26,7 @@ namespace NYdb::inline Dev {
 class TDbDriverState;
 struct TListEndpointsResult;
 
-class IInternalClient {
+class IInternalClient : public std::enable_shared_from_this<IInternalClient> {
 public:
     virtual NThreading::TFuture<TListEndpointsResult> GetEndpoints(std::shared_ptr<TDbDriverState> dbState) = 0;
     virtual void AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) = 0;

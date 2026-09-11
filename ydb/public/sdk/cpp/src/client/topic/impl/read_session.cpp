@@ -9,8 +9,6 @@
 
 namespace NYdb::inline Dev::NTopic {
 
-static const std::string DRIVER_IS_STOPPING_DESCRIPTION = "Driver is stopping";
-
 void SetReadInTransaction(TReadSessionEvent::TEvent& event)
 {
     if (auto* e = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&event)) {
@@ -92,10 +90,6 @@ void TReadSession::CreateClusterSessionsImpl(TDeferredActions<false>& deferred) 
         GetLogPrefix() << "Starting single session"
     );
     auto context = Client->CreateContext();
-    if (!context) {
-        AbortImpl(EStatus::ABORTED, DRIVER_IS_STOPPING_DESCRIPTION, deferred);
-        return;
-    }
 
     CbContext = MakeWithCallbackContext<TSingleClusterReadSessionImpl<false>>(
         Settings,
@@ -232,10 +226,6 @@ bool TReadSession::Close(TDuration timeout) {
         };
 
         auto timeoutContext = Connections->CreateContext();
-        if (!timeoutContext) {
-            AbortImpl(EStatus::ABORTED, DRIVER_IS_STOPPING_DESCRIPTION, deferred);
-            return false;
-        }
         closeDeadline = TInstant::Now() + timeout;
         Connections->ScheduleCallback(timeout,
                                       std::move(timeoutCallback),

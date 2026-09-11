@@ -3,6 +3,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/metrics/metrics.h>
 
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <map>
 #include <mutex>
 #include <vector>
@@ -12,16 +14,31 @@ namespace NYdb::NTests {
 class TFakeCounter : public NMetrics::ICounter {
 public:
     void Inc() override {
-        Count_.fetch_add(1, std::memory_order_relaxed);
-        IncCalls_.fetch_add(1, std::memory_order_relaxed);
+        {
+            std::lock_guard lock(Mutex_);
+            Count_.fetch_add(1, std::memory_order_relaxed);
+            IncCalls_.fetch_add(1, std::memory_order_relaxed);
+        }
+        Changed_.notify_all();
     }
 
     void Add(std::uint64_t delta) override {
         if (delta == 0) {
             return;
         }
-        Count_.fetch_add(static_cast<int64_t>(delta), std::memory_order_relaxed);
-        AddCalls_.fetch_add(1, std::memory_order_relaxed);
+        {
+            std::lock_guard lock(Mutex_);
+            Count_.fetch_add(static_cast<int64_t>(delta), std::memory_order_relaxed);
+            AddCalls_.fetch_add(1, std::memory_order_relaxed);
+        }
+        Changed_.notify_all();
+    }
+
+    bool WaitForValue(int64_t expected) const {
+        std::unique_lock lock(Mutex_);
+        return Changed_.wait_for(lock, std::chrono::seconds(10), [&] {
+            return Count_.load(std::memory_order_relaxed) >= expected;
+        });
     }
 
     int64_t Get() const {
@@ -37,6 +54,8 @@ public:
     }
 
 private:
+    mutable std::mutex Mutex_;
+    mutable std::condition_variable Changed_;
     std::atomic<int64_t> Count_{0};
     std::atomic<std::uint64_t> IncCalls_{0};
     std::atomic<std::uint64_t> AddCalls_{0};
@@ -48,6 +67,7 @@ public:
         std::lock_guard lock(Mutex_);
         Values_.push_back(value);
         ++RecordCalls_;
+        Changed_.notify_all();
     }
 
     void RecordMany(const std::vector<double>& values) override {
@@ -57,11 +77,19 @@ public:
         std::lock_guard lock(Mutex_);
         Values_.insert(Values_.end(), values.begin(), values.end());
         ++RecordManyCalls_;
+        Changed_.notify_all();
     }
 
     std::vector<double> GetValues() const {
         std::lock_guard lock(Mutex_);
         return Values_;
+    }
+
+    bool WaitForCount(std::size_t expected) const {
+        std::unique_lock lock(Mutex_);
+        return Changed_.wait_for(lock, std::chrono::seconds(10), [&] {
+            return Values_.size() >= expected;
+        });
     }
 
     size_t Count() const {
@@ -81,6 +109,7 @@ public:
 
 private:
     mutable std::mutex Mutex_;
+    mutable std::condition_variable Changed_;
     std::vector<double> Values_;
     std::uint64_t RecordCalls_ = 0;
     std::uint64_t RecordManyCalls_ = 0;
@@ -88,12 +117,12 @@ private:
 
 class TFakeGauge : public NMetrics::IGauge {
 public:
-    void Add(double delta) override { Value_ += delta; }
-    void Set(double value) override { Value_ = value; }
-    double Get() const { return Value_; }
+    void Add(double delta) override { Value_.fetch_add(delta, std::memory_order_relaxed); }
+    void Set(double value) override { Value_.store(value, std::memory_order_relaxed); }
+    double Get() const { return Value_.load(std::memory_order_relaxed); }
 
 private:
-    double Value_ = 0.0;
+    std::atomic<double> Value_{0.0};
 };
 
 struct TMetricKey {

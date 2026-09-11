@@ -16,7 +16,6 @@
 #include <format>
 #include <functional>
 #include <string>
-#include <condition_variable>
 #include <mutex>
 #include <utility>
 
@@ -149,18 +148,15 @@ private:
         void Stop() {
             NThreading::TPromise<std::string> promise;
             {
-                std::unique_lock guard(Lock_);
+                std::lock_guard guard(Lock_);
                 NeedStop_ = true;
                 promise = AuthInfo_;
                 if (Context_.has_value()) {
                     Context_->TryCancel();
                 }
-                ContextReady_.wait(guard, [this]() { return !Context_.has_value(); });
             }
             promise.TrySetException(std::make_exception_ptr(
                 yexception() << "IAM-token provider stopped before token was ready"));
-            Stub_.reset();
-            Channel_.reset();
         }
 
     private:
@@ -204,16 +200,12 @@ private:
         void UpdateTicket() {
             auto response = std::make_shared<TResponse>();
 
-            std::weak_ptr<TImpl> weakSelf = TGrpcIamCredentialsProvider<TRequest, TResponse, TService>::TImpl::weak_from_this();
-            std::weak_ptr<ICoreFacility> weakFacility = ResponseFacility_;
-
-            auto cb = [weakSelf, weakFacility, response] (grpc::Status status) mutable {
-                auto work = [weakSelf, response, status = std::move(status)]() mutable {
-                    if (auto self = weakSelf.lock()) {
-                        self->ProcessIamResponse(std::move(status), std::move(*response));
-                    }
+            // The RPC and queued response retain the context, stub and channel.
+            auto cb = [self = this->shared_from_this(), response] (grpc::Status status) mutable {
+                auto work = [self, response, status = std::move(status)]() mutable {
+                    self->ProcessIamResponse(std::move(status), std::move(*response));
                 };
-                auto facility = weakFacility.lock();
+                auto facility = self->ResponseFacility_.lock();
 
                 try {
                     if (facility) {
@@ -223,13 +215,11 @@ private:
                 } catch (...) {
                 }
 
-                if (auto self = weakSelf.lock()) {
-                    {
-                        std::lock_guard guard(self->Lock_);
-                        self->ResetContextImpl();
-                    }
-                    self->Fail("IAM-token provider response facility is not available");
+                {
+                    std::lock_guard guard(self->Lock_);
+                    self->Context_.reset();
                 }
+                self->Fail("IAM-token provider response facility is not available");
             };
 
             TRequest req;
@@ -239,7 +229,7 @@ private:
                 Rpc_(Stub_.get(), &*Context_, &req, response.get(), std::move(cb));
             } catch (...) {
                 std::unique_lock guard(Lock_);
-                ResetContextImpl();
+                Context_.reset();
                 guard.unlock();
                 Fail(CurrentExceptionMessage());
             }
@@ -283,11 +273,6 @@ private:
             return true;
         }
 
-        void ResetContextImpl() {
-            Context_.reset();
-            ContextReady_.notify_all();
-        }
-
         static std::string FormatSysTimeUtcIsoMicros(SysTimePoint tp) {
             const auto t = std::chrono::time_point_cast<std::chrono::microseconds>(tp);
             const auto secs = std::chrono::floor<std::chrono::seconds>(t);
@@ -317,10 +302,10 @@ private:
                     terminalError = TStringBuilder()
                         << "Last request error was at " << FormatSysTimeUtcIsoMicros(SysClock::now())
                         << ". Failed to prepare IAM request context: " << CurrentExceptionMessage();
-                    ResetContextImpl();
+                    Context_.reset();
                 }
                 if (NeedStop_) {
-                    ResetContextImpl();
+                    Context_.reset();
                     return false;
                 }
                 if (!Context_.has_value()) {
@@ -348,6 +333,10 @@ private:
 
             {
                 std::lock_guard guard(Lock_);
+                if (NeedStop_) {
+                    Context_.reset();
+                    return;
+                }
 
                 if (!status.ok()) {
                     const std::string error = TStringBuilder()
@@ -371,7 +360,7 @@ private:
                     RescheduleOnSuccess(expiresAt);
                 }
 
-                ResetContextImpl();
+                Context_.reset();
             }
 
             if (token) {
@@ -418,7 +407,6 @@ private:
         const TIamEndpoint IamEndpoint_;
         const TRequestFiller RequestFiller_;
         std::optional<grpc::ClientContext> Context_;
-        std::condition_variable ContextReady_;
         bool NeedStop_;
         std::chrono::milliseconds BackoffTimeout_;
         std::mutex Lock_;
@@ -489,8 +477,8 @@ public:
     TIamJwtCredentialsProviderFactory(const TIamJwtParams& params): Params_(params) {}
 
     // Deprecated. Kept for backward compatibility with callers (including out-of-tree mirrors)
-    // that don't have access to an ICoreFacility. Spins up a private TSimpleCoreFacility and ties
-    // its lifetime to the returned provider via TOwningFacilityCredentialsProvider.
+    // that don't have access to an ICoreFacility. Uses the shared background runtime
+    // through the same facility adapter as the provider overload below.
     TCredentialsProviderPtr CreateProvider() const final {
         return NCredentials::NDetail::GetOrCreateCachedProvider(
             GetClientIdentity(),

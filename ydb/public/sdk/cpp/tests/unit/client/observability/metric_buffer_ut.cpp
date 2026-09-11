@@ -2,10 +2,12 @@
 #include <ydb/public/sdk/cpp/tests/common/fake_metric_registry.h>
 
 #include <library/cpp/testing/gtest/gtest.h>
+#include <util/generic/scope.h>
 
 #include <atomic>
 #include <chrono>
 #include <functional>
+#include <future>
 #include <memory>
 #include <random>
 #include <string>
@@ -152,6 +154,7 @@ TEST(MetricBufferTest, MultiThreadedIncsAreLosslessAndAggregated) {
 
     auto fakeCounter = fix.Fake->GetCounter(kCounter, {});
     ASSERT_NE(fakeCounter, nullptr);
+    ASSERT_TRUE(fakeCounter->WaitForValue(static_cast<int64_t>(kThreads) * kIncsPerThread));
     EXPECT_EQ(fakeCounter->Get(), static_cast<int64_t>(kThreads) * kIncsPerThread);
     EXPECT_EQ(fakeCounter->IncCalls(), 0u);
 
@@ -182,6 +185,7 @@ TEST(MetricBufferTest, MultiThreadedHistogramSamplesAreLosslessAndAggregated) {
 
     auto fakeHist = fix.Fake->GetHistogram(kHistogram, {});
     ASSERT_NE(fakeHist, nullptr);
+    ASSERT_TRUE(fakeHist->WaitForCount(static_cast<std::size_t>(kThreads) * kRecordsPerThread));
     EXPECT_EQ(fakeHist->Count(),
               static_cast<std::size_t>(kThreads) * kRecordsPerThread);
     EXPECT_EQ(fakeHist->RecordCalls(), 0u);
@@ -430,6 +434,7 @@ TEST(MetricBufferTest, ConcurrentMetricRegistrationAndFlushIsLossless) {
             auto name = std::string("race.counter.") + std::to_string(t) + "." + std::to_string(m);
             auto c = fix.Fake->GetCounter(name, {});
             ASSERT_NE(c, nullptr) << name;
+            ASSERT_TRUE(c->WaitForValue(expected)) << name;
             EXPECT_EQ(c->Get(), expected) << name;
         }
     }
@@ -493,7 +498,7 @@ private:
 
 } // namespace
 
-TEST(MetricBufferTest, FlushThreadSurvivesUnderlyingExceptions) {
+TEST(MetricBufferTest, BackgroundFlushSurvivesUnderlyingExceptions) {
     auto throwing = std::make_shared<TThrowingRegistry>();
     TMetricBufferSettings settings;
     settings.FlushInterval = std::chrono::milliseconds(2);
@@ -571,6 +576,150 @@ TEST(MetricBufferTest, RandomOperationSequencePreservesTotalsWithoutDropping) {
     auto fakeHist = fix.Fake->GetHistogram(kHistogram, {});
     ASSERT_NE(fakeCounter, nullptr);
     ASSERT_NE(fakeHist, nullptr);
+    ASSERT_TRUE(fakeCounter->WaitForValue(expectedCounter));
+    ASSERT_TRUE(fakeHist->WaitForCount(expectedHist));
     EXPECT_EQ(fakeCounter->Get(), expectedCounter);
     EXPECT_EQ(fakeHist->Count(), expectedHist);
+}
+
+namespace {
+
+class TCallbackCounter final : public ICounter {
+public:
+    explicit TCallbackCounter(std::function<void(std::uint64_t)> callback)
+        : Callback_(std::move(callback))
+    {
+    }
+
+    void Inc() override {
+        Add(1);
+    }
+
+    void Add(std::uint64_t delta) override {
+        Callback_(delta);
+    }
+
+private:
+    const std::function<void(std::uint64_t)> Callback_;
+};
+
+class TCallbackRegistry final : public IMetricRegistry {
+public:
+    explicit TCallbackRegistry(std::shared_ptr<ICounter> counter)
+        : Counter_(std::move(counter))
+    {
+    }
+
+    ~TCallbackRegistry() override {
+        if (Destroyed) {
+            Destroyed->set_value();
+        }
+    }
+
+    std::shared_ptr<ICounter> Counter(const std::string& name, const TLabels&,
+                                     const std::string&, const std::string&) override {
+        return name == kCounter ? Counter_ : nullptr;
+    }
+
+    std::shared_ptr<IGauge> Gauge(const std::string&, const TLabels&,
+                                 const std::string&, const std::string&) override {
+        return {};
+    }
+
+    std::shared_ptr<IHistogram> Histogram(const std::string&, const std::vector<double>&,
+                                         const TLabels&, const std::string&, const std::string&) override {
+        return {};
+    }
+
+    std::shared_ptr<std::promise<void>> Destroyed;
+
+private:
+    const std::shared_ptr<ICounter> Counter_;
+};
+
+} // namespace
+
+TEST(MetricBufferTest, BackgroundFlushCanDestroyItsRegistry) {
+    auto buffered = std::make_shared<std::shared_ptr<IMetricRegistry>>();
+    auto destroyed = std::make_shared<std::promise<void>>();
+    auto done = destroyed->get_future();
+    auto first = std::make_shared<std::atomic<bool>>(true);
+    auto total = std::make_shared<std::atomic<std::uint64_t>>(0);
+    auto counter = std::make_shared<TCallbackCounter>(
+        [buffered, destroyed, first, total](std::uint64_t delta) {
+            total->fetch_add(delta);
+            if (first->exchange(false)) {
+                buffered->reset();
+                destroyed->set_value();
+            }
+        });
+    auto backend = std::make_shared<TCallbackRegistry>(counter);
+    TMetricBufferSettings settings;
+    settings.FlushInterval = std::chrono::hours(1);
+    settings.ThreadPendingThreshold = 1;
+    *buffered = CreateBufferedMetricRegistry(backend, settings);
+    auto handle = (*buffered)->Counter(kCounter, {}, "", "");
+    handle->Inc();
+
+    ASSERT_EQ(done.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+    EXPECT_FALSE(*buffered);
+    handle->Add(2);
+    EXPECT_EQ(total->load(), 3u);
+}
+
+TEST(MetricBufferTest, DestructionDoesNotWaitForAnInFlightBackendCall) {
+    struct TState {
+        std::promise<void> Entered;
+        std::promise<void> Release;
+        std::shared_future<void> Released = Release.get_future().share();
+        std::promise<void> Completed;
+        std::atomic<bool> First{true};
+        std::atomic<std::uint64_t> Total{0};
+    };
+    auto state = std::make_shared<TState>();
+    auto entered = state->Entered.get_future();
+    auto completed = state->Completed.get_future();
+    auto counter = std::make_shared<TCallbackCounter>([state](std::uint64_t delta) {
+        if (state->First.exchange(false)) {
+            state->Entered.set_value();
+            state->Released.wait();
+            state->Total.fetch_add(delta);
+            state->Completed.set_value();
+        } else {
+            state->Total.fetch_add(delta);
+        }
+    });
+    auto backend = std::make_shared<TCallbackRegistry>(counter);
+    auto destroyed = std::make_shared<std::promise<void>>();
+    auto backendDestroyed = destroyed->get_future();
+    backend->Destroyed = destroyed;
+    std::weak_ptr<IMetricRegistry> weakBackend = backend;
+    TMetricBufferSettings settings;
+    settings.FlushInterval = std::chrono::hours(1);
+    settings.ThreadPendingThreshold = 1;
+    auto buffered = CreateBufferedMetricRegistry(backend, settings);
+    auto handle = buffered->Counter(kCounter, {}, "", "");
+    handle->Inc();
+
+    bool released = false;
+    Y_DEFER {
+        if (!released) {
+            state->Release.set_value();
+        }
+    };
+    ASSERT_EQ(entered.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+    buffered.reset();
+    handle->Add(2);
+    EXPECT_EQ(state->Total.load(), 2u);
+    handle.reset();
+    backend.reset();
+    counter.reset();
+    EXPECT_FALSE(weakBackend.expired());
+
+    state->Release.set_value();
+    released = true;
+    ASSERT_EQ(completed.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+    EXPECT_EQ(state->Total.load(), 3u);
+    ASSERT_EQ(backendDestroyed.wait_for(std::chrono::seconds(10)), std::future_status::ready);
+    EXPECT_TRUE(weakBackend.expired());
 }

@@ -6,21 +6,19 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/time/time.h>
 
-#include <util/thread/factory.h>
 #include <util/string/builder.h>
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/support/async_stream.h>
 #include <grpcpp/support/async_unary_call.h>
 
+#include <cstddef>
 #include <deque>
-#include <condition_variable>
 #include <functional>
 #include <memory>
 #include <typeinfo>
 #include <variant>
 #include <vector>
 #include <unordered_map>
-#include <unordered_set>
 #include <mutex>
 #include <shared_mutex>
 
@@ -35,8 +33,6 @@ const size_t DEFAULT_NUM_THREADS = 2;
 ////////////////////////////////////////////////////////////////////////////////
 
 void EnableGRpcTracing();
-
-bool IsGRpcCompletionThread();
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -95,47 +91,15 @@ private:
 class IQueueClientContext;
 using IQueueClientContextPtr = std::shared_ptr<IQueueClientContext>;
 
-class IQueueClientCallbackGuard {
-public:
-    virtual ~IQueueClientCallbackGuard() = default;
-    virtual bool IsEntered() const noexcept = 0;
-};
-
-class TNoopQueueClientCallbackGuard final : public IQueueClientCallbackGuard {
-public:
-    bool IsEntered() const noexcept override {
-        return true;
-    }
-};
-
-using TQueueClientCallbackGuardFactory = std::function<std::unique_ptr<IQueueClientCallbackGuard>()>;
-
-// Provider of IQueueClientContext instances
+// Provider of explicit cancellation contexts.
 class IQueueClientContextProvider {
 public:
     virtual ~IQueueClientContextProvider() = default;
 
+    // Always returns a context. Cancellation is represented by IsCancelled(),
+    // including for a child created after its parent has been cancelled.
     virtual IQueueClientContextPtr CreateContext() = 0;
-
-    virtual TQueueClientCallbackGuardFactory GetCallbackGuardFactory() {
-        return [] {
-            return std::make_unique<TNoopQueueClientCallbackGuard>();
-        };
-    }
 };
-
-template<class F>
-void RunQueueClientCallback(const TQueueClientCallbackGuardFactory& guardFactory, F&& f) {
-    std::unique_ptr<IQueueClientCallbackGuard> guard;
-    if (guardFactory) {
-        guard = guardFactory();
-    } else {
-        guard = std::make_unique<TNoopQueueClientCallbackGuard>();
-    }
-    if (guard->IsEntered()) {
-        f();
-    }
-}
 
 // Activity context for a low-level client
 class IQueueClientContext : public IQueueClientContextProvider {
@@ -246,19 +210,9 @@ protected:
 
     void GetInitialMetadata(std::unordered_multimap<std::string, std::string>* metadata);
 
-    void InitCallbackGuard(IQueueClientContextProvider* provider) {
-        CallbackGuardFactory_ = provider->GetCallbackGuardFactory();
-    }
-
-    template<class F>
-    void RunGuarded(F&& f) {
-        RunQueueClientCallback(CallbackGuardFactory_, std::forward<F>(f));
-    }
-
     grpc::Status Status;
     grpc::ClientContext Context;
     std::shared_ptr<IQueueClientContext> LocalContext;
-    TQueueClientCallbackGuardFactory CallbackGuardFactory_;
 };
 
 template<typename TStub, typename TRequest, typename TResponse>
@@ -278,9 +232,7 @@ public:
 
     ~TSimpleRequestProcessor() {
         if (!Replied_ && Callback_) {
-            RunGuarded([&] {
-                Callback_(TGrpcStatus::Internal("request left unhandled"), std::move(Reply_));
-            });
+            Callback_(TGrpcStatus::Internal("request left unhandled"), std::move(Reply_));
             Callback_ = nullptr; // free resources as early as possible
         }
     }
@@ -297,9 +249,7 @@ public:
             status = TGrpcStatus::Internal("Unexpected error");
         }
         Replied_ = true;
-        RunGuarded([&] {
-            Callback_(std::move(status), std::move(Reply_));
-        });
+        Callback_(std::move(status), std::move(Reply_));
         Callback_ = nullptr; // free resources as early as possible
         return false;
     }
@@ -315,23 +265,14 @@ private:
     }
 
     void Start(TStub& stub, TAsyncRequest asyncRequest, const TRequest& request, IQueueClientContextProvider* provider) {
-        InitCallbackGuard(provider);
         auto context = provider->CreateContext();
-        if (!context) {
-            Replied_ = true;
-            RunGuarded([&] {
-                Callback_(TGrpcStatus(grpc::StatusCode::CANCELLED, "Client is shutting down"), std::move(Reply_));
-            });
-            Callback_ = nullptr;
-            return;
-        }
         {
             std::unique_lock<std::mutex> guard(Mutex_);
             LocalContext = context;
             Reader_ = (stub.*asyncRequest)(&Context, request, context->CompletionQueue());
             Reader_->Finish(&Reply_, &Status, FinishedEvent());
         }
-        context->SubscribeStop([self = TPtr(this)] {
+        context->SubscribeCancel([self = TPtr(this)] {
             self->Stop();
         });
     }
@@ -365,9 +306,7 @@ public:
 
     ~TAdvancedRequestProcessor() {
         if (!Replied_ && Callback_) {
-            RunGuarded([&] {
-                Callback_(Context, TGrpcStatus::Internal("request left unhandled"), std::move(Reply_));
-            });
+            Callback_(Context, TGrpcStatus::Internal("request left unhandled"), std::move(Reply_));
             Callback_ = nullptr; // free resources as early as possible
         }
     }
@@ -384,9 +323,7 @@ public:
             status = TGrpcStatus::Internal("Unexpected error");
         }
         Replied_ = true;
-        RunGuarded([&] {
-            Callback_(Context, std::move(status), std::move(Reply_));
-        });
+        Callback_(Context, std::move(status), std::move(Reply_));
         Callback_ = nullptr; // free resources as early as possible
         return false;
     }
@@ -402,23 +339,14 @@ private:
     }
 
     void Start(TStub& stub, TAsyncRequest asyncRequest, const TRequest& request, IQueueClientContextProvider* provider) {
-        InitCallbackGuard(provider);
         auto context = provider->CreateContext();
-        if (!context) {
-            Replied_ = true;
-            RunGuarded([&] {
-                Callback_(Context, TGrpcStatus(grpc::StatusCode::CANCELLED, "Client is shutting down"), std::move(Reply_));
-            });
-            Callback_ = nullptr;
-            return;
-        }
         {
             std::unique_lock<std::mutex> guard(Mutex_);
             LocalContext = context;
             Reader_ = (stub.*asyncRequest)(&Context, request, context->CompletionQueue());
             Reader_->Finish(&Reply_, &Status, FinishedEvent());
         }
-        context->SubscribeStop([self = TPtr(this)] {
+        context->SubscribeCancel([self = TPtr(this)] {
             self->Stop();
         });
     }
@@ -645,9 +573,7 @@ public:
             }
         }
 
-        RunGuarded([&] {
-            callback(std::move(status));
-        });
+        callback(std::move(status));
     }
 
     void Read(TResponse* message, TReadCallback callback) override {
@@ -675,9 +601,7 @@ public:
             status = TGrpcStatus(grpc::StatusCode::OUT_OF_RANGE, "Read EOF");
         }
 
-        RunGuarded([&] {
-            callback(std::move(status));
-        });
+        callback(std::move(status));
     }
 
     void Finish(TReadCallback callback) override {
@@ -702,9 +626,7 @@ public:
             }
         }
 
-        RunGuarded([&] {
-            callback(std::move(status));
-        });
+        callback(std::move(status));
     }
 
     void AddFinishedCallback(TReadCallback callback) override {
@@ -728,23 +650,12 @@ public:
             }
         }
 
-        RunGuarded([&] {
-            callback(std::move(status));
-        });
+        callback(std::move(status));
     }
 
 private:
     void Start(TStub& stub, const TRequest& request, TAsyncRequest asyncRequest, IQueueClientContextProvider* provider) {
-        InitCallbackGuard(provider);
         auto context = provider->CreateContext();
-        if (!context) {
-            auto callback = std::move(Callback);
-            TGrpcStatus status(grpc::StatusCode::CANCELLED, "Client is shutting down");
-            RunGuarded([&] {
-                callback(std::move(status), nullptr);
-            });
-            return;
-        }
 
         {
             std::unique_lock<std::mutex> guard(Mutex);
@@ -752,7 +663,7 @@ private:
             Stream = (stub.*asyncRequest)(&Context, request, context->CompletionQueue(), OnStartDoneTag.Prepare());
         }
 
-        context->SubscribeStop([self = TPtr(this)] {
+        context->SubscribeCancel([self = TPtr(this)] {
             self->Cancel();
         });
     }
@@ -790,9 +701,7 @@ private:
             GetInitialMetadata(initialMetadata);
         }
 
-        RunGuarded([&] {
-            callback(std::move(status));
-        });
+        callback(std::move(status));
     }
 
     void OnStartDone(bool ok) {
@@ -810,9 +719,7 @@ private:
             Callback = nullptr;
         }
 
-        RunGuarded([&] {
-            callback({ }, typename TBase::TPtr(this));
-        });
+        callback({ }, typename TBase::TPtr(this));
     }
 
     void OnFinished(bool ok) {
@@ -857,18 +764,14 @@ private:
 
         for (auto& finishedCallback : finishedCallbacks) {
             auto statusCopy = status;
-            RunGuarded([&] {
-                finishedCallback(std::move(statusCopy));
-            });
+            finishedCallback(std::move(statusCopy));
         }
 
         if (startCallback) {
             if (status.Ok()) {
                 status = TGrpcStatus(grpc::StatusCode::UNKNOWN, "Unknown stream failure");
             }
-            RunGuarded([&] {
-                startCallback(std::move(status), nullptr);
-            });
+            startCallback(std::move(status), nullptr);
         } else if (readCallback) {
             if (status.Ok()) {
                 status = TGrpcStatus(grpc::StatusCode::OUT_OF_RANGE, "Read EOF");
@@ -878,13 +781,9 @@ private:
                         std::string(value.begin(), value.end()));
                 }
             }
-            RunGuarded([&] {
-                readCallback(std::move(status));
-            });
+            readCallback(std::move(status));
         } else if (finishCallback) {
-            RunGuarded([&] {
-                finishCallback(std::move(status));
-            });
+            finishCallback(std::move(status));
         }
     }
 
@@ -971,9 +870,7 @@ public:
         }
 
         if (!status.Ok() && callback) {
-            RunGuarded([&] {
-                callback(std::move(status));
-            });
+            callback(std::move(status));
         }
     }
 
@@ -1003,9 +900,7 @@ public:
             }
         }
 
-        RunGuarded([&] {
-            callback(std::move(status));
-        });
+        callback(std::move(status));
     }
 
     void Read(TResponse* message, TReadCallback callback) override {
@@ -1033,9 +928,7 @@ public:
             status = TGrpcStatus(grpc::StatusCode::OUT_OF_RANGE, "Read EOF");
         }
 
-        RunGuarded([&] {
-            callback(std::move(status));
-        });
+        callback(std::move(status));
     }
 
     void Finish(TReadCallback callback) override {
@@ -1065,9 +958,7 @@ public:
             }
         }
 
-        RunGuarded([&] {
-            callback(std::move(status));
-        });
+        callback(std::move(status));
     }
 
     void AddFinishedCallback(TReadCallback callback) override {
@@ -1091,25 +982,14 @@ public:
             }
         }
 
-        RunGuarded([&] {
-            callback(std::move(status));
-        });
+        callback(std::move(status));
     }
 
 private:
     template<typename> friend class TServiceConnection;
 
     void Start(TStub& stub, TAsyncRequest asyncRequest, IQueueClientContextProvider* provider) {
-        InitCallbackGuard(provider);
         auto context = provider->CreateContext();
-        if (!context) {
-            auto callback = std::move(ConnectedCallback);
-            TGrpcStatus status(grpc::StatusCode::CANCELLED, "Client is shutting down");
-            RunGuarded([&] {
-                callback(std::move(status), nullptr);
-            });
-            return;
-        }
 
         {
             std::unique_lock<std::mutex> guard(Mutex);
@@ -1117,7 +997,7 @@ private:
             Stream = (stub.*asyncRequest)(&Context, context->CompletionQueue(), OnConnectedTag.Prepare());
         }
 
-        context->SubscribeStop([self = TPtr(this)] {
+        context->SubscribeCancel([self = TPtr(this)] {
             self->Cancel();
         });
     }
@@ -1140,9 +1020,7 @@ private:
             ConnectedCallback = nullptr;
         }
 
-        RunGuarded([&] {
-            callback({ }, typename TBase::TPtr(this));
-        });
+        callback({ }, typename TBase::TPtr(this));
     }
 
     void OnReadDone(bool ok) {
@@ -1182,9 +1060,7 @@ private:
             GetInitialMetadata(initialMetadata);
         }
 
-        RunGuarded([&] {
-            callback(std::move(status));
-        });
+        callback(std::move(status));
     }
 
     void OnWriteDone(bool ok) {
@@ -1223,9 +1099,7 @@ private:
         }
 
         if (okCallback) {
-            RunGuarded([&] {
-                okCallback(TGrpcStatus());
-            });
+            okCallback(TGrpcStatus());
         }
     }
 
@@ -1276,26 +1150,20 @@ private:
                 if (writeStatus.Ok()) {
                     writeStatus = TGrpcStatus(grpc::StatusCode::CANCELLED, "Write request dropped");
                 }
-                RunGuarded([&] {
-                    item.Callback(std::move(writeStatus));
-                });
+                item.Callback(std::move(writeStatus));
             }
         }
 
         for (auto& finishedCallback : finishedCallbacks) {
             TGrpcStatus statusCopy = status;
-            RunGuarded([&] {
-                finishedCallback(std::move(statusCopy));
-            });
+            finishedCallback(std::move(statusCopy));
         }
 
         if (connectedCallback) {
             if (status.Ok()) {
                 status = TGrpcStatus(grpc::StatusCode::UNKNOWN, "Unknown stream failure");
             }
-            RunGuarded([&] {
-                connectedCallback(std::move(status), nullptr);
-            });
+            connectedCallback(std::move(status), nullptr);
         } else if (readCallback) {
             if (status.Ok()) {
                 status = TGrpcStatus(grpc::StatusCode::OUT_OF_RANGE, "Read EOF");
@@ -1305,13 +1173,9 @@ private:
                         std::string(value.begin(), value.end()));
                 }
             }
-            RunGuarded([&] {
-                readCallback(std::move(status));
-            });
+            readCallback(std::move(status));
         } else if (finishCallback) {
-            RunGuarded([&] {
-                finishCallback(std::move(status));
-            });
+            finishCallback(std::move(status));
         }
     }
 
@@ -1438,93 +1302,56 @@ private:
     IQueueClientContextProvider* Provider_;
 };
 
-class TGRpcClientLow
-    :  public IQueueClientContextProvider
-{
+class TGRpcClientLow : public IQueueClientContextProvider {
     class TContextImpl;
-    friend class TContextImpl;
-
-    enum ECqState : int {
-        WORKING = 0,
-        STOP_SILENT = 1,
-        STOP_EXPLICIT = 2,
-    };
+    class TNetwork;
 
 public:
+    // All handles share process-wide completion queues and network threads.
+    // The first handle selects the network configuration.
     explicit TGRpcClientLow(size_t numWorkerThread = DEFAULT_NUM_THREADS, bool useCompletionQueuePerThread = false);
-    ~TGRpcClientLow();
+    ~TGRpcClientLow() override = default;
 
-    // Tries to stop all currently running requests (via their stop callbacks)
-    // Will shutdown CQ and drain events once all requests have finished
-    // No new requests may be started after this call
-    void Stop(bool wait = false);
+    TGRpcClientLow(const TGRpcClientLow&) = delete;
+    TGRpcClientLow& operator=(const TGRpcClientLow&) = delete;
 
-    // Waits until all currently running requests finish execution
-    void WaitIdle();
+    // Compatibility no-ops. Network services live until process exit; these
+    // methods will be deprecated. Cancel individual operations explicitly.
+    void Stop(bool = false) {}
+    void WaitIdle() {}
 
-    inline bool IsStopping() const {
-        switch (GetCqState()) {
-            case WORKING:
-                return false;
-            case STOP_SILENT:
-            case STOP_EXPLICIT:
-                return true;
-        }
-
-        Y_UNREACHABLE();
+    bool IsStopping() const {
+        return false;
     }
 
+    grpc::CompletionQueue* CompletionQueue();
     IQueueClientContextPtr CreateContext() override;
 
     template<typename TGRpcService>
     std::unique_ptr<TServiceConnection<TGRpcService>> CreateGRpcServiceConnection(const TGRpcClientConfig& config) {
-        return std::unique_ptr<TServiceConnection<TGRpcService>>(new TServiceConnection<TGRpcService>(CreateChannelInterface(config), this));
+        return std::unique_ptr<TServiceConnection<TGRpcService>>(new TServiceConnection<TGRpcService>(CreateChannelInterface(config), GetContextProvider()));
     }
 
     template<typename TGRpcService>
     std::unique_ptr<TServiceConnection<TGRpcService>> CreateGRpcServiceConnection(const TGRpcClientConfig& config, const TTcpKeepAliveSettings& keepAlive, bool tcpNoDelay = true) {
         auto mutator = NImpl::CreateGRpcSocketMutator(keepAlive, tcpNoDelay);
         // will be destroyed inside grpc
-        return std::unique_ptr<TServiceConnection<TGRpcService>>(new TServiceConnection<TGRpcService>(CreateChannelInterface(config, mutator), this));
+        return std::unique_ptr<TServiceConnection<TGRpcService>>(new TServiceConnection<TGRpcService>(CreateChannelInterface(config, mutator), GetContextProvider()));
     }
 
     template<typename TGRpcService>
     std::unique_ptr<TServiceConnection<TGRpcService>> CreateGRpcServiceConnection(TStubsHolder& holder) {
-        return std::unique_ptr<TServiceConnection<TGRpcService>>(new TServiceConnection<TGRpcService>(holder, this));
+        return std::unique_ptr<TServiceConnection<TGRpcService>>(new TServiceConnection<TGRpcService>(holder, GetContextProvider()));
     }
 
-    // Tests only, not thread-safe
+    // Tests only, not thread-safe. Adds a worker to the shared network.
     void AddWorkerThreadForTest();
 
 private:
-    using IThreadRef = std::unique_ptr<IThreadFactory::IThread>;
-    using CompletionQueueRef = std::unique_ptr<grpc::CompletionQueue>;
-    void Init(size_t numWorkerThread);
+    static TNetwork& GetNetwork(std::size_t threadCount, bool queuePerThread);
+    IQueueClientContextProvider* GetContextProvider();
 
-    inline ECqState GetCqState() const {
-        return static_cast<ECqState>(CqState_.load());
-    }
-
-    inline void SetCqState(ECqState state) { 
-        CqState_.store(state);
-    }
-
-    void StopInternal(bool silent);
-    void WaitInternal();
-
-    void ForgetContext(TContextImpl* context);
-
-private:
-    bool UseCompletionQueuePerThread_;
-    std::vector<CompletionQueueRef> CQS_;
-    std::vector<IThreadRef> WorkerThreads_;
-    std::atomic<int> CqState_ = -1;
-
-    std::mutex Mtx_;
-    std::condition_variable ContextsEmpty_;
-    std::unordered_set<TContextImpl*> Contexts_;
-
-    std::mutex JoinMutex_;
+    TNetwork& Network_;
 };
 
 } // namespace NYdbGrpc

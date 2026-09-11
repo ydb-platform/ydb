@@ -23,6 +23,9 @@ struct TMetricBufferSettings {
     std::shared_ptr<NMetrics::IMetricRegistry> SelfMetricsRegistry;
 };
 
+// Uses the shared background runtime for flushing. Destruction flushes buffered
+// data without waiting for backend calls already in progress; those calls retain
+// the backend. Surviving metric handles forward updates directly to the backend.
 std::shared_ptr<NMetrics::IMetricRegistry> CreateBufferedMetricRegistry(
     std::shared_ptr<NMetrics::IMetricRegistry> underlying,
     TMetricBufferSettings settings = {});

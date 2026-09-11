@@ -23,9 +23,8 @@ public:
     virtual void PostToResponseQueue(TPostTaskCb&& f) = 0;
 };
 
-// Self-contained single-threaded ICoreFacility for cases when the SDK core is not available
-// (e.g. when a credentials provider factory's deprecated no-arg CreateProvider() is invoked
-// directly without an enclosing TDriver).
+// Shared background runtime adapter for use without an enclosing TDriver.
+// Releasing the facility does not stop tasks; periodic callbacks return false to finish.
 std::shared_ptr<ICoreFacility> CreateSimpleCoreFacility();
 
 } // namespace NYdb

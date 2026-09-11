@@ -1,139 +1,45 @@
 #include "simple_core_facility.h"
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/runtime/runtime.h>
+
 #include <util/generic/yexception.h>
 #include <util/stream/output.h>
 
 namespace NYdb::inline Dev {
+namespace {
 
-bool TSimpleCoreFacility::TScheduledTaskLess::operator()(const TScheduledTask& l, const TScheduledTask& r) const {
-    if (l.ExecuteAt != r.ExecuteAt) {
-        return l.ExecuteAt > r.ExecuteAt;
-    }
-    return l.SeqNo > r.SeqNo;
-}
+struct TPeriodicTask {
+    TPeriodicCb Callback;
+    TDeadline::Duration Period;
 
-TSimpleCoreFacility::TSimpleCoreFacility() {
-    WorkerThread_ = std::thread([this] { WorkerLoop(); });
-}
+    void operator()() {
+        bool repeat = true;
+        try {
+            repeat = Callback({}, EStatus::SUCCESS);
+        } catch (...) {
+            Cerr << "TSimpleCoreFacility periodic task failed: " << CurrentExceptionMessage() << Endl;
+        }
+        if (repeat) {
+            GetRuntime().Schedule(Period, std::move(*this));
+        }
+    }
+};
 
-TSimpleCoreFacility::~TSimpleCoreFacility() {
-    {
-        std::lock_guard lock(Mutex_);
-        Stop_ = true;
-    }
-    Cv_.notify_all();
-    if (WorkerThread_.joinable()) {
-        WorkerThread_.join();
-    }
-}
+} // namespace
 
 void TSimpleCoreFacility::AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) {
-    std::lock_guard lock(Mutex_);
-    auto periodicCb = std::make_shared<TPeriodicCb>(std::move(cb));
-    EnqueueTaskNoLock(
-        TClock::now(),
-        [this, periodicCb, period] {
-            RunPeriodicTask(periodicCb, period);
-        });
-    Cv_.notify_one();
+    GetRuntime().Post(TPeriodicTask{std::move(cb), period});
 }
 
 void TSimpleCoreFacility::PostToResponseQueue(TPostTaskCb&& f) {
-    if (!f) {
-        return;
-    }
-    std::lock_guard lock(Mutex_);
-    if (!Stop_) {
-        EnqueueTaskNoLock(TClock::now(), std::move(f));
-        Cv_.notify_one();
-    }
-}
-
-void TSimpleCoreFacility::EnqueueTaskNoLock(TTimePoint executeAt, TPostTaskCb&& task) {
-    Queue_.push({
-        .ExecuteAt = executeAt,
-        .SeqNo = NextSeqNo_++,
-        .Task = std::move(task),
-    });
-}
-
-void TSimpleCoreFacility::RunPeriodicTask(std::shared_ptr<TPeriodicCb> periodicCb, TDeadline::Duration period) {
-    bool cont = false;
-    try {
-        NYdb::NIssue::TIssues issues;
-        cont = (*periodicCb)(std::move(issues), EStatus::SUCCESS);
-    } catch (...) {
-        Cerr << "TSimpleCoreFacility periodic task failed: " << CurrentExceptionMessage() << Endl;
-        cont = true;
-    }
-    if (cont) {
-        SchedulePeriodic(periodicCb, period);
-    }
-}
-
-void TSimpleCoreFacility::SchedulePeriodic(std::shared_ptr<TPeriodicCb> periodicCb, TDeadline::Duration period) {
-    std::lock_guard lock(Mutex_);
-    if (Stop_) {
-        return;
-    }
-    EnqueueTaskNoLock(
-        TClock::now() + period,
-        [this, periodicCb, period] {
-            RunPeriodicTask(periodicCb, period);
-        });
-
-    Cv_.notify_one();
-}
-
-std::optional<TSimpleCoreFacility::TTimePoint> TSimpleCoreFacility::DrainReadyTasks(std::vector<TPostTaskCb>& ready) {
-    const auto now = TClock::now();
-    while (!Queue_.empty() && Queue_.top().ExecuteAt <= now) {
-        ready.push_back(std::move(Queue_.top().Task));
-        Queue_.pop();
-    }
-    if (Queue_.empty()) {
-        return std::nullopt;
-    }
-    return Queue_.top().ExecuteAt;
-}
-
-void TSimpleCoreFacility::WorkerLoop() {
-    for (;;) {
-        std::vector<TPostTaskCb> ready;
-        {
-            std::unique_lock lock(Mutex_);
-            while (ready.empty()) {
-                if (Stop_) {
-                    return;
-                }
-                const auto nextAt = DrainReadyTasks(ready);
-                if (!ready.empty()) {
-                    break;
-                }
-                if (!nextAt.has_value()) {
-                    Cv_.wait(lock, [this] { return Stop_ || !Queue_.empty(); });
-                } else {
-                    Cv_.wait_until(lock, *nextAt, [this, deadline = *nextAt] {
-                        return Stop_ || Queue_.empty() || Queue_.top().ExecuteAt < deadline;
-                    });
-                }
-            }
-        }
-
-        for (auto& task : ready) {
-            if (task) {
-                try {
-                    task();
-                } catch (...) {
-                    Cerr << "TSimpleCoreFacility task failed: " << CurrentExceptionMessage() << Endl;
-                }
-            }
-        }
+    if (f) {
+        GetRuntime().Post(std::move(f));
     }
 }
 
 std::shared_ptr<ICoreFacility> CreateSimpleCoreFacility() {
-    return std::make_shared<TSimpleCoreFacility>();
+    static const auto* facility = new std::shared_ptr<ICoreFacility>(std::make_shared<TSimpleCoreFacility>());
+    return *facility;
 }
 
 } // namespace NYdb::inline Dev

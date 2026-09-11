@@ -1,5 +1,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/runtime/runtime.h>
 
 #include <library/cpp/cgiparam/cgiparam.h>
 #include <library/cpp/http/misc/httpcodes.h>
@@ -13,9 +14,7 @@
 #include <util/string/cast.h>
 #include <util/system/spinlock.h>
 
-#include <condition_variable>
 #include <mutex>
-#include <thread>
 
 #define PROV_ERR "Oauth 2 token exchange credentials provider: "
 #define INV_ARG "Invalid argument for " PROV_ERR
@@ -41,8 +40,6 @@ bool LowerAsciiEqual(std::string_view str, std::string_view lowerStr) {
     }
     return true;
 }
-
-using TChronoDuration = std::chrono::duration<TDuration::TValue, std::micro>;
 
 class TFixedTokenSource: public ITokenSource {
 public:
@@ -165,65 +162,42 @@ private:
     }
 };
 
-class TOauth2TokenExchangeProviderImpl final : public ICredentialsProvider {
+class TTokenExchangeState final : public std::enable_shared_from_this<TTokenExchangeState> {
     struct TTokenExchangeResult {
         std::string Token;
         TInstant TokenRefreshTime;
     };
 
 public:
-    TOauth2TokenExchangeProviderImpl(const TPrivateOauth2TokenExchangeParams& params,
-                                     std::weak_ptr<ICoreFacility> responseFacility)
+    TTokenExchangeState(const TPrivateOauth2TokenExchangeParams& params,
+                        std::weak_ptr<ICoreFacility> responseFacility)
         : Params(params)
         , ResponseFacility(std::move(responseFacility))
         , AuthInfo(NThreading::NewPromise<std::string>())
     {
-        ResponseFacility.expired() ? Stop() : Start();
     }
 
-private:
     void Start() {
-        try {
-            WorkerThread = std::thread([this] { Run(); });
-        } catch (...) {
-            Fail(std::current_exception());
+        if (ResponseFacility.expired()) {
+            Stop();
+        } else {
+            Schedule(TDuration::Zero());
         }
     }
 
-    void Stop() {
+    void Stop(std::exception_ptr error = std::make_exception_ptr(yexception() << PROV_ERR "stopped")) {
         NThreading::TPromise<std::string> promise;
-        {
-            std::unique_lock<std::mutex> lock(StopMutex);
-            Stopping = true;
-            StopVar.notify_all();
-        }
         with_lock (Lock) {
+            Stopping = true;
             promise = AuthInfo;
         }
-        promise.TrySetException(std::make_exception_ptr(yexception() << PROV_ERR "stopped"));
-
-        if (WorkerThread.joinable()) {
-            WorkerThread.join();
-        }
+        promise.TrySetException(std::move(error));
     }
 
-public:
-    ~TOauth2TokenExchangeProviderImpl() {
-        Stop();
-    }
-
-    std::string GetAuthInfo() const override {
-        return GetAuthInfoAsync().GetValueSync();
-    }
-
-    NThreading::TFuture<std::string> GetAuthInfoAsync() const override {
+    NThreading::TFuture<std::string> GetAuthInfoAsync() const {
         with_lock (Lock) {
             return AuthInfo.GetFuture();
         }
-    }
-
-    bool IsValid() const override {
-        return true;
     }
 
 private:
@@ -370,72 +344,76 @@ private:
         return ProcessExchangeTokenResponse(now, statusCode, responseStream);
     }
 
-    void Run() {
-        while (true) {
-            TRetryPolicy::IRetryState::TPtr retryState;
-            TTokenExchangeResult result;
-            while (true) {
-                if (IsStopping()) {
-                    return;
+    void Schedule(TDuration delay, bool refresh = false) {
+        if (IsStopping()) {
+            return;
+        }
+        try {
+            GetRuntime().Schedule(delay, [weak = weak_from_this(), refresh] {
+                if (auto self = weak.lock()) {
+                    if (refresh) {
+                        with_lock (self->Lock) {
+                            if (self->Stopping) {
+                                return;
+                            }
+                            self->AuthInfo = NThreading::NewPromise<std::string>();
+                        }
+                    }
+                    self->Run();
                 }
-                try {
-                    result = ExchangeToken(TInstant::Now());
-                    break;
-                } catch (const std::exception& ex) {
-                    if (!retryState) {
-                        retryState = TRetryPolicy::GetExponentialBackoffPolicy(
-                            RetryPolicyClass,
-                            TDuration::MilliSeconds(10),
-                            TDuration::MilliSeconds(200),
-                            TDuration::Seconds(30))->CreateRetryState();
-                    }
-                    auto delay = retryState->GetNextRetryDelay(&ex);
-                    if (!delay) {
-                        Fail(std::current_exception());
-                        return;
-                    }
-                    std::unique_lock<std::mutex> lock(StopMutex);
-                    if (StopVar.wait_for(lock, TChronoDuration(delay->GetValue()), [this] { return Stopping; })) {
-                        return;
-                    }
-                } catch (...) {
-                    Fail(std::current_exception());
-                    return;
-                }
-            }
-
-            NThreading::TPromise<std::string> promise;
-            with_lock (Lock) {
-                promise = AuthInfo;
-            }
-            Complete([promise, token = std::move(result.Token)]() mutable {
-                promise.TrySetValue(std::move(token));
             });
-
-            {
-                std::unique_lock<std::mutex> lock(StopMutex);
-                const auto delay = result.TokenRefreshTime - TInstant::Now();
-                if (delay > TDuration::Zero() &&
-                    StopVar.wait_for(lock, TChronoDuration(delay.GetValue()), [this] { return Stopping; }))
-                {
-                    return;
-                }
-                if (Stopping) {
-                    return;
-                }
-            }
-            with_lock (Lock) {
-                AuthInfo = NThreading::NewPromise<std::string>();
-            }
+        } catch (...) {
+            Fail(std::current_exception());
         }
     }
 
-    bool IsStopping() const {
-        std::unique_lock<std::mutex> lock(StopMutex);
-        return Stopping;
+    void Run() {
+        if (IsStopping()) {
+            return;
+        }
+        TTokenExchangeResult result;
+        try {
+            result = ExchangeToken(TInstant::Now());
+        } catch (const std::exception& ex) {
+            if (!RetryState) {
+                RetryState = TRetryPolicy::GetExponentialBackoffPolicy(
+                    RetryPolicyClass,
+                    TDuration::MilliSeconds(10),
+                    TDuration::MilliSeconds(200),
+                    TDuration::Seconds(30))->CreateRetryState();
+            }
+            if (auto delay = RetryState->GetNextRetryDelay(&ex)) {
+                Schedule(*delay);
+            } else {
+                Fail(std::current_exception());
+            }
+            return;
+        } catch (...) {
+            Fail(std::current_exception());
+            return;
+        }
+
+        RetryState.reset();
+        NThreading::TPromise<std::string> promise;
+        with_lock (Lock) {
+            if (Stopping) {
+                return;
+            }
+            promise = AuthInfo;
+        }
+        Complete([promise, token = std::move(result.Token)]() mutable {
+            promise.TrySetValue(std::move(token));
+        });
+        Schedule(result.TokenRefreshTime - TInstant::Now(), true);
     }
 
-    void Fail(std::exception_ptr error) const {
+    bool IsStopping() const {
+        with_lock (Lock) {
+            return Stopping;
+        }
+    }
+
+    void Fail(std::exception_ptr error) {
         NThreading::TPromise<std::string> promise;
         with_lock (Lock) {
             promise = AuthInfo;
@@ -445,27 +423,64 @@ private:
         });
     }
 
-    void Complete(TPostTaskCb&& callback) const noexcept {
+    void Complete(TPostTaskCb&& callback) {
         try {
             if (auto facility = ResponseFacility.lock()) {
                 facility->PostToResponseQueue(std::move(callback));
+                return;
             }
         } catch (...) {
+            if (!GetAuthInfoAsync().IsReady()) {
+                Stop(std::current_exception());
+            }
+            return;
+        }
+        if (!GetAuthInfoAsync().IsReady()) {
+            Stop();
         }
     }
 
 private:
-    TPrivateOauth2TokenExchangeParams Params;
-    std::weak_ptr<ICoreFacility> ResponseFacility;
-
+    const TPrivateOauth2TokenExchangeParams Params;
+    const std::weak_ptr<ICoreFacility> ResponseFacility;
     mutable TAdaptiveLock Lock;
-    mutable NThreading::TPromise<std::string> AuthInfo;
-    std::thread WorkerThread;
-
-    // Stop
+    NThreading::TPromise<std::string> AuthInfo;
+    TRetryPolicy::IRetryState::TPtr RetryState;
     bool Stopping = false;
-    mutable std::mutex StopMutex;
-    mutable std::condition_variable StopVar;
+};
+
+class TOauth2TokenExchangeProviderImpl final : public ICredentialsProvider {
+public:
+    TOauth2TokenExchangeProviderImpl(const TPrivateOauth2TokenExchangeParams& params,
+                                    std::weak_ptr<ICoreFacility> facility)
+        : State(std::make_shared<TTokenExchangeState>(params, std::move(facility)))
+    {
+        State->Start();
+    }
+
+    ~TOauth2TokenExchangeProviderImpl() override {
+        // Active HTTP calls retain State, but never the provider itself.
+        try {
+            State->Stop();
+        } catch (...) {
+            // A user future continuation must not throw out of destruction.
+        }
+    }
+
+    std::string GetAuthInfo() const override {
+        return GetAuthInfoAsync().GetValueSync();
+    }
+
+    NThreading::TFuture<std::string> GetAuthInfoAsync() const override {
+        return State->GetAuthInfoAsync();
+    }
+
+    bool IsValid() const override {
+        return true;
+    }
+
+private:
+    const std::shared_ptr<TTokenExchangeState> State;
 };
 
 class TOauth2TokenExchangeFactory: public ICredentialsProviderFactory {
@@ -478,9 +493,7 @@ public:
     TCredentialsProviderPtr CreateProvider() const override {
         std::lock_guard lock(Lock);
         if (!Provider) {
-            auto facility = CreateSimpleCoreFacility();
-            Provider = std::make_shared<NCredentials::NDetail::TOwningFacilityCredentialsProvider>(
-                facility, std::make_shared<TOauth2TokenExchangeProviderImpl>(Params, facility));
+            Provider = std::make_shared<TOauth2TokenExchangeProviderImpl>(Params, CreateSimpleCoreFacility());
         }
         return Provider;
     }

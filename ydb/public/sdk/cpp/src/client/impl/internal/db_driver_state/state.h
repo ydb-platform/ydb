@@ -8,6 +8,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/ssl_credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
 
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 
@@ -22,12 +23,6 @@ class TDbDriverState
     , public ICoreFacility
 {
 public:
-    enum class ENotifyType : size_t {
-        STOP = 0,
-        COUNT = 1 // types count
-    };
-
-    using TCb = std::function<NThreading::TFuture<void>()>;
     using TPtr = std::shared_ptr<TDbDriverState>;
 
     TDbDriverState(
@@ -35,7 +30,7 @@ public:
         const std::string& discoveryEndpoint,
         EDiscoveryMode discoveryMode,
         const TSslCredentials& sslCredentials,
-        IInternalClient* client
+        std::shared_ptr<IInternalClient> client
     );
 
     NThreading::TFuture<void> DiscoveryCompleted() const;
@@ -51,7 +46,6 @@ public:
     void AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) override;
     void PostToResponseQueue(TPostTaskCb&& f) override;
 
-    void AddCb(TCb&& cb, ENotifyType type);
     void ForEachEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
     void ForEachLocalEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
     void ForEachForeignEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
@@ -64,11 +58,8 @@ public:
     const std::string DiscoveryEndpoint;
     const EDiscoveryMode DiscoveryMode;
     const TSslCredentials SslCredentials;
-    IInternalClient* Client;
+    std::shared_ptr<IInternalClient> Client;
     TEndpointPool EndpointPool;
-    // StopCb allow client to subscribe for notifications from lower layer
-    std::mutex NotifyCbsLock;
-    std::array<std::vector<TCb>, static_cast<size_t>(ENotifyType::COUNT)> NotifyCbs;
     // Status of last discovery call, used in sync mode, coresponding mutex
     std::shared_mutex LastDiscoveryStatusRWLock;
     TPlainStatus LastDiscoveryStatus;
@@ -108,7 +99,6 @@ class TDbDriverStateTracker {
     };
 public:
     TDbDriverStateTracker(IInternalClient* client);
-    using TNotificationCbRunner = std::function<NThreading::TFuture<void>(TDbDriverState::TCb& cb)>;
 
     TDbDriverState::TPtr GetDriverState(
         const std::string& database,
@@ -117,13 +107,14 @@ public:
         const TSslCredentials& sslCredentials,
         std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
     );
-    NThreading::TFuture<void> SendNotification(
-        TDbDriverState::ENotifyType type,
-        TNotificationCbRunner cbRunner = {});
     void SetMetricRegistry(::NMonitoring::TMetricRegistry *sensorsRegistry);
 private:
     IInternalClient* DiscoveryClient_;
-    std::unordered_map<TStateKey, std::weak_ptr<TDbDriverState>, TStateKeyHash> States_;
+    struct TStateEntry {
+        std::weak_ptr<TDbDriverState> State;
+        bool Initializing = false;
+    };
+    std::unordered_map<TStateKey, TStateEntry, TStateKeyHash> States_;
     std::shared_mutex Lock_;
     std::condition_variable_any Notify_;
 };

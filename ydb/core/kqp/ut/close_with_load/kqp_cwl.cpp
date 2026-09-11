@@ -2,6 +2,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/common/shutdown/state.h>
 #include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/shutdown/controller.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
@@ -10,6 +11,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <library/cpp/threading/local_executor/local_executor.h>
 #include <ydb/core/tx/datashard/datashard_failpoints.h>
+#include <ydb/core/tx/data_events/events.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -221,6 +223,275 @@ Y_UNIT_TEST_SUITE(KqpService) {
                 runtime->DispatchEvents(opts, TDuration::Seconds(10)),
                 "Session is stuck in CleanupState — active session actor count never reached zero");
         }
+    }
+
+    Y_UNIT_TEST(FinalCleanupIntentIsPreservedWhileClosingLegacyWorker) {
+        TKikimrSettings settings;
+        settings.SetUseRealThreads(false);
+        auto kikimr = TKikimrRunner(settings);
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+
+        NKqp::TKqpCounters counters(runtime->GetAppData().Counters);
+
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto createResult = kikimr.RunCall([&] { return db.CreateSession().GetValueSync(); });
+        UNIT_ASSERT_C(createResult.IsSuccess(), createResult.GetIssues().ToString());
+        auto session = createResult.GetSession();
+
+        TActorId proxyId;
+        TActorId sessionActorId;
+        bool workerRequestDropped = false;
+        runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != TEvKqp::TEvQueryRequest::EventType) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+            if (!proxyId) {
+                proxyId = ev->GetRecipientRewrite();
+            } else if (ev->Sender == proxyId) {
+                sessionActorId = ev->GetRecipientRewrite();
+            } else if (sessionActorId && ev->Sender == sessionActorId) {
+                workerRequestDropped = true;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto future = kikimr.RunInThreadPool([&] {
+            return session.ExecuteSchemeQuery(
+                "CREATE TABLE `/Root/LegacyWorkerCleanup` (Key Uint64, PRIMARY KEY (Key));")
+                .GetValueSync();
+        });
+
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back(
+                [&](IEventHandle&) { return workerRequestDropped; });
+            UNIT_ASSERT_C(runtime->DispatchEvents(opts, TDuration::Seconds(10)),
+                "Table scheme request was not forwarded to the legacy worker");
+        }
+        UNIT_ASSERT(sessionActorId);
+
+        // An unexpected event starts final cleanup while the legacy worker is alive.
+        runtime->Send(new IEventHandle(
+            sessionActorId, TActorId(), new TEvents::TEvWakeup()));
+
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back(
+                [&](IEventHandle&) { return counters.GetActiveSessionActors()->Val() == 0; });
+            UNIT_ASSERT_C(runtime->DispatchEvents(opts, TDuration::Seconds(10)),
+                "Final cleanup lost its final flag while waiting for the legacy worker");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(counters.GetActiveSessionActors()->Val(), 0);
+
+        runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+        auto result = runtime->WaitFuture(future);
+        UNIT_ASSERT_C(!result.IsSuccess(), "Fault-injected scheme query unexpectedly succeeded");
+    }
+
+    Y_UNIT_TEST(UndeliveredIdleCloseReleasesSessionQuota) {
+        TKikimrSettings settings;
+        settings.SetUseRealThreads(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetSessionsLimitPerNode(1);
+        settings.AppConfig.MutableTableServiceConfig()->SetSessionIdleDurationSeconds(1);
+
+        auto kikimr = TKikimrRunner(settings);
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto createResult = kikimr.RunCall([&] { return db.CreateSession().GetValueSync(); });
+        UNIT_ASSERT_C(createResult.IsSuccess(), createResult.GetIssues().ToString());
+
+        TActorId proxyId;
+        TActorId sessionActorId;
+        bool idleCloseDropped = false;
+        runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvKqp::TEvCloseSessionRequest::EventType) {
+                UNIT_ASSERT_C(ev->Flags & IEventHandle::FlagTrackDelivery,
+                    "Idle close request must track delivery");
+                proxyId = ev->Sender;
+                sessionActorId = ev->GetRecipientRewrite();
+                idleCloseDropped = true;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        runtime->SimulateSleep(TDuration::Seconds(3));
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back(
+                [&](IEventHandle&) { return idleCloseDropped; });
+            UNIT_ASSERT_C(runtime->DispatchEvents(opts, TDuration::Seconds(10)),
+                "Idle close request was not sent");
+        }
+        UNIT_ASSERT(proxyId);
+        UNIT_ASSERT(sessionActorId);
+
+        auto atLimit = kikimr.RunCall([&] { return db.CreateSession().GetValueSync(); });
+        UNIT_ASSERT_VALUES_EQUAL(atLimit.GetStatus(), EStatus::OVERLOADED);
+
+        runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+        runtime->Send(new IEventHandle(
+            proxyId,
+            sessionActorId,
+            new TEvents::TEvUndelivered(
+                TEvKqp::TEvCloseSessionRequest::EventType,
+                TEvents::TEvUndelivered::ReasonActorUnknown)));
+
+        auto afterUndelivered = kikimr.RunCall([&] { return db.CreateSession().GetValueSync(); });
+        UNIT_ASSERT_C(afterUndelivered.IsSuccess(), afterUndelivered.GetIssues().ToString());
+    }
+
+    // Delay the completed commit's response until timeout starts cleanup rollback.
+    Y_UNIT_TEST(TableCommitTimeoutAfterBufferCompletionReleasesSession) {
+        TStringStream logs;
+        TKikimrSettings settings;
+        settings.SetUseRealThreads(false);
+        settings.SetLogStream(&logs);
+        settings.AppConfig.MutableTableServiceConfig()->SetSessionsLimitPerNode(1);
+
+        auto kikimr = TKikimrRunner(settings);
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+        runtime->SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
+        runtime->SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
+        TKqpCounters counters(runtime->GetAppData().Counters);
+
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto createResult = kikimr.RunCall([&] { return db.CreateSession().GetValueSync(); });
+        UNIT_ASSERT_C(createResult.IsSuccess(), createResult.GetIssues().ToString());
+        auto session = createResult.GetSession();
+
+        TActorId bufferActorId;
+        TActorId commitExecuterId;
+        THolder<IEventHandle> heldCommitResult;
+        bool rollbackUndelivered = false;
+        runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvKqpBuffer::TEvCommit::EventType) {
+                bufferActorId = ev->GetRecipientRewrite();
+                commitExecuterId = ev->Sender;
+            } else if (ev->GetTypeRewrite() == TEvKqpBuffer::TEvResult::EventType
+                    && ev->Sender == bufferActorId && ev->GetRecipientRewrite() == commitExecuterId) {
+                heldCommitResult.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            } else if (ev->GetTypeRewrite() == TEvents::TEvUndelivered::EventType
+                    && ev->Get<TEvents::TEvUndelivered>()->SourceType == TEvKqpBuffer::TEvRollback::EventType) {
+                rollbackUndelivered = true;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc); };
+
+        auto queryFuture = kikimr.RunInThreadPool([&] {
+            return session.ExecuteDataQuery(
+                "UPSERT INTO `/Root/EightShard` (Key, Text) VALUES (100502u, \"commit-timeout\");",
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                TExecDataQuerySettings().OperationTimeout(TDuration::Seconds(1))).GetValueSync();
+        });
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) { return bool{heldCommitResult}; });
+            UNIT_ASSERT_C(runtime->DispatchEvents(opts, TDuration::Seconds(10)),
+                "The buffer actor did not finish the Table commit");
+        }
+
+        runtime->SimulateSleep(TDuration::Seconds(3));
+        auto result = runtime->WaitFuture(queryFuture);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::TIMEOUT, result.GetIssues().ToString());
+        UNIT_ASSERT_C(rollbackUndelivered, logs.Str());
+
+        runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+        runtime->Send(heldCommitResult.Release());
+        kikimr.RunCall([&] { return session.Close().GetValueSync(); });
+
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                return counters.GetActiveSessionActors()->Val() == 0;
+            });
+            UNIT_ASSERT_C(runtime->DispatchEvents(opts, TDuration::Seconds(10)), logs.Str());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(counters.GetActiveSessionActors()->Val(), 0);
+        auto nextCreate = kikimr.RunCall([&] { return db.CreateSession().GetValueSync(); });
+        UNIT_ASSERT_C(nextCreate.IsSuccess(), nextCreate.GetIssues().ToString());
+    }
+
+    // A no-op write rolls back read locks; timeout starts a second rollback.
+    Y_UNIT_TEST(TableNoOpWriteTimeoutDuringRollbackReleasesSession) {
+        TStringStream logs;
+        TKikimrSettings settings;
+        settings.SetUseRealThreads(false);
+        settings.SetLogStream(&logs);
+        settings.AppConfig.MutableTableServiceConfig()->SetSessionsLimitPerNode(1);
+
+        auto kikimr = TKikimrRunner(settings);
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+        runtime->SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
+        runtime->SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
+        runtime->SetLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_DEBUG);
+        TKqpCounters counters(runtime->GetAppData().Counters);
+
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto createResult = kikimr.RunCall([&] { return db.CreateSession().GetValueSync(); });
+        UNIT_ASSERT_C(createResult.IsSuccess(), createResult.GetIssues().ToString());
+        auto session = createResult.GetSession();
+
+        TActorId bufferActorId;
+        TActorId commitExecuterId;
+        TActorId rollbackExecuterId;
+        TVector<THolder<IEventHandle>> heldShardResults;
+        bool holdShardResults = true;
+        runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvKqpBuffer::TEvCommit::EventType) {
+                bufferActorId = ev->GetRecipientRewrite();
+                commitExecuterId = ev->Sender;
+            } else if (ev->GetTypeRewrite() == NEvents::TDataEvents::TEvWriteResult::EventType
+                    && bufferActorId && ev->GetRecipientRewrite() == bufferActorId && holdShardResults) {
+                heldShardResults.emplace_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            } else if (ev->GetTypeRewrite() == TEvKqpBuffer::TEvRollback::EventType
+                    && ev->GetRecipientRewrite() == bufferActorId) {
+                rollbackExecuterId = ev->Sender;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc); };
+
+        auto queryFuture = kikimr.RunInThreadPool([&] {
+            return session.ExecuteDataQuery(
+                "SELECT Key FROM `/Root/EightShard` WHERE Key = 2u; "
+                "UPDATE `/Root/EightShard` SET Text = \"unused\" "
+                "WHERE Key = 2u AND Text = \"no-such-value\";",
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                TExecDataQuerySettings().OperationTimeout(TDuration::Seconds(1))).GetValueSync();
+        });
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) { return !heldShardResults.empty(); });
+            UNIT_ASSERT_C(runtime->DispatchEvents(opts, TDuration::Seconds(10)),
+                "The no-op write did not reach buffer rollback");
+        }
+        runtime->SimulateSleep(TDuration::Seconds(3));
+        auto result = runtime->WaitFuture(queryFuture);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::TIMEOUT, result.GetIssues().ToString());
+        UNIT_ASSERT_C(rollbackExecuterId && rollbackExecuterId != commitExecuterId, logs.Str());
+
+        // The pending rollback result must reach the new cleanup executer.
+        holdShardResults = false;
+        for (auto& ev : heldShardResults) {
+            runtime->Send(ev.Release());
+        }
+        kikimr.RunCall([&] { return session.Close().GetValueSync(); });
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                return counters.GetActiveSessionActors()->Val() == 0;
+            });
+            UNIT_ASSERT_C(runtime->DispatchEvents(opts, TDuration::Seconds(10)), logs.Str());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(counters.GetActiveSessionActors()->Val(), 0);
+        auto nextCreate = kikimr.RunCall([&] { return db.CreateSession().GetValueSync(); });
+        UNIT_ASSERT_C(nextCreate.IsSuccess(), nextCreate.GetIssues().ToString());
     }
 }
 }

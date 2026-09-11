@@ -3561,6 +3561,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpBuffer::TEvTerminate, Handle);
+                hFunc(TEvKqpBuffer::TEvRollback, HandleRollback);
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandleRollback);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandleRollback);
 
@@ -5411,6 +5412,11 @@ public:
     void Handle(TEvKqpBuffer::TEvRollback::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
         Rollback(std::move(ev->TraceId), /* waitForResult */ true);
+    }
+
+    void HandleRollback(TEvKqpBuffer::TEvRollback::TPtr& ev) {
+        // A timeout can replace the executer while rollback is in progress.
+        ExecuterActorId = ev->Get()->ExecuterActorId;
     }
 
     void OnAllTasksFinised() {

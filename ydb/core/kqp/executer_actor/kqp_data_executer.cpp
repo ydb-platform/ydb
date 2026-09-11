@@ -337,6 +337,12 @@ public:
             {"ctx", *GetUserRequestContext()},
             {"sender", ev->Sender},
             {"traceId", TraceId()});
+
+        if (Request.LocksOp == ELocksOp::Rollback) {
+            // Cleanup must complete even if the buffer has already finished.
+            ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
+                NYql::TIssue("Cannot deliver rollback to the transaction buffer actor"));
+        }
     }
 
     void MakeResponseAndPassAway() {

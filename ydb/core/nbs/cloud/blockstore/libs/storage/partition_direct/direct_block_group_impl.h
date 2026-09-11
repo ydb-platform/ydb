@@ -136,6 +136,29 @@ public:
     NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         THostIndex hostIndex) override;
 
+<<<<<<< HEAD
+=======
+    void OnAddHostSucceeded(
+        THostIndex newHostIndex,
+        NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId,
+        ui32 dbgConnectionsConfigGeneration) override;
+
+    void OnAddHostFailed(const NProto::TError& error) override;
+
+    void OnRemoveHostSucceeded(
+        THostIndex removeIndex,
+        ui32 dbgConnectionsConfigGeneration) override;
+
+    void OnRemoveHostFailed(
+        THostIndex removeIndex,
+        const NProto::TError& error) override;
+
+    TDuration TakeCopyRangeBudget(ui64 byteCount) override;
+
+    ui32 GetNodeId(THostIndex host) const override;
+
+>>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061))
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
     void OnAddHostResult(
@@ -158,6 +181,7 @@ public:
         EHostState newState) override;
     ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override;
     void QueryAddHost() override;
+    void QueryRemoveHost(THostIndex hostIndex) override;
 
     // Own methods (not part of any interface).
     ui64 GetDDiskSessionSeqNo(size_t index) const;
@@ -204,8 +228,12 @@ private:
     void ReEstablishDDiskConnection(size_t index, TDuration reconnectDelay);
     void OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId);
 
+    void MarkSlotDead(THostIndex slot, ui32 dbgConnectionsConfigGeneration);
+
     [[nodiscard]] bool HasPBufferQuorum() const;
     [[nodiscard]] bool HasLockedQuorum() const;
+
+    [[nodiscard]] TString ValidateRemoveHost(THostIndex hostIndex) const;
 
     [[nodiscard]] bool IsInitialized() const
     {

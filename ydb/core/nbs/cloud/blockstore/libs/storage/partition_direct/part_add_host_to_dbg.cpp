@@ -17,6 +17,104 @@ using namespace NKikimr::NTabletFlatExecutor;
 using TDirectBlockGroupsConnections =
     ::NYdb::NBS::PartitionDirect::NProto::TDirectBlockGroupsConnections;
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_add_host_to_dbg.cpp
+=======
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Builds in `updated` the connections the add will store in the local db.
+NProto::TError AddConnection(
+    const TDirectBlockGroupsConnections& connections,
+    const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult& msg,
+    size_t dbgId,
+    ui32 expectedCurrent,
+    TDirectBlockGroupsConnections* updated)
+{
+    const auto response = ValidateAllocationResponse(
+        msg,
+        dbgId,
+        static_cast<size_t>(expectedCurrent) + 1);
+    if (HasError(response.Error)) {
+        return response.Error;
+    }
+    const auto& group = *response.Group;
+
+    const auto& newDDiskId = group.GetDDiskId(expectedCurrent);
+    const auto& newPBufferId =
+        group.GetPersistentBufferDDiskId(expectedCurrent);
+
+    const TString newDDiskIdBytes = newDDiskId.SerializeAsString();
+    const TString newPBufferIdBytes = newPBufferId.SerializeAsString();
+    for (const auto& conn:
+         connections.GetDirectBlockGroupConnections(dbgId).GetConnections())
+    {
+        // A dead slot's ids are freed in BSC and may be granted to the
+        // new host.
+        if (conn.GetRemovedFromBSC()) {
+            continue;
+        }
+        if (conn.GetDDiskId().SerializeAsString() == newDDiskIdBytes ||
+            conn.GetPersistentBufferDDiskId().SerializeAsString() ==
+                newPBufferIdBytes)
+        {
+            return MakeError(
+                E_REJECTED,
+                "BSController returned a DDisk/PBuffer already in this DBG");
+        }
+    }
+
+    *updated = connections;
+    auto* dbgConnections = updated->MutableDirectBlockGroupConnections(dbgId);
+    auto* connection = dbgConnections->AddConnections();
+    connection->MutableDDiskId()->CopyFrom(newDDiskId);
+    connection->MutablePersistentBufferDDiskId()->CopyFrom(newPBufferId);
+    dbgConnections->SetDBGConnectionsConfigGeneration(
+        dbgConnections->GetDBGConnectionsConfigGeneration() + 1);
+    return {};
+}
+
+}   // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool TPartitionActor::PrepareStartAddHost(
+    const TActorContext& ctx,
+    TTransactionContext& tx,
+    TTxPartition::TStartAddHost& args)
+{
+    Y_UNUSED(ctx);
+    Y_UNUSED(tx);
+    Y_UNUSED(args);
+
+    return true;
+}
+
+void TPartitionActor::ExecuteStartAddHost(
+    const TActorContext& ctx,
+    TTransactionContext& tx,
+    TTxPartition::TStartAddHost& args)
+{
+    Y_UNUSED(ctx);
+
+    TPartitionDatabase db(tx.DB);
+
+    TTxPartition::TAddHostInProgress proto;
+    proto.SetDirectBlockGroupId(args.DirectBlockGroupId);
+    proto.SetLiveHostCount(args.LiveHostCount);
+    proto.SetDBGConnectionsConfigGeneration(
+        args.DBGConnectionsConfigGeneration);
+    db.StoreAddHostInProgress(proto);
+}
+
+void TPartitionActor::CompleteStartAddHost(
+    const TActorContext& ctx,
+    TTxPartition::TStartAddHost& args)
+{
+    SendAllocateDDiskForAddHost(ctx, args.DirectBlockGroupId);
+}
+
+>>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_add_host_to_dbg.cpp
 ////////////////////////////////////////////////////////////////////////////////
 
 bool TPartitionActor::PrepareAddHostToDBG(
@@ -235,8 +333,20 @@ void TPartitionActor::HandleAddHostAllocationResult(
         return;
     }
 
-    const ui32 expectedCurrent = AddHostInFlight->NewHostIndex;
-    const auto newHostIndex = AddHostInFlight->NewHostIndex;
+    const auto& dbgConnections =
+        DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId);
+    // BSC lists live hosts only, dead slots have no resources there.
+    const ui32 expectedCurrent =
+        static_cast<ui32>(LiveHostCount(dbgConnections));
+    Y_ABORT_UNLESS(
+        expectedCurrent == AddHostInFlight->LiveHostCount,
+        "AddHost plan was decided on %u live hosts, the group has %u",
+        AddHostInFlight->LiveHostCount,
+        expectedCurrent);
+    // Host indices are positions in Connections, dead entries included, so
+    // the new host takes the position after the last entry.
+    const auto newHostIndex =
+        static_cast<THostIndex>(dbgConnections.ConnectionsSize());
     NTabletPipe::CloseClient(ctx, AddHostInFlight->BSPipeClient);
 
     TDirectBlockGroupsConnections updated;
@@ -268,6 +378,118 @@ void TPartitionActor::HandleAddHostAllocationResult(
         CreateTx<TAddHostToDBG>(std::move(updated), dbgId, newHostIndex));
 }
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_add_host_to_dbg.cpp
+=======
+void TPartitionActor::HandleAddHostToDBG(
+    const TEvPartitionDirectPrivate::TEvAddHostToDBG::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    Y_ABORT_UNLESS(FastPathService);
+
+    const auto* msg = ev->Get();
+    const size_t dbgId = msg->DirectBlockGroupId;
+    const ui32 dbgConnectionsConfigGeneration =
+        msg->DBGConnectionsConfigGeneration;
+
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Handle AddHost to dbgId=%lu, DBG connections config generation %u",
+        LogTitle.GetWithTime().c_str(),
+        dbgId,
+        dbgConnectionsConfigGeneration);
+
+    // The request always carries a DBG's own index so an out-of-range dbgId is
+    // a bug, not a bad request.
+    const size_t dbgCount =
+        DirectBlockGroupsConnections.DirectBlockGroupConnectionsSize();
+    Y_ABORT_UNLESS(
+        dbgId < dbgCount,
+        "AddHost for out-of-range dbgId=%lu (have %lu DBGs)",
+        dbgId,
+        dbgCount);
+
+    if (!ValidateAddHostToDBGRequest(
+            ctx,
+            dbgId,
+            dbgConnectionsConfigGeneration))
+    {
+        return;
+    }
+
+    const auto liveHostCount = static_cast<ui32>(LiveHostCount(
+        DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId)));
+
+    // Persist the intent before the BSController request (sent from the tx's
+    // completion). A crash after the DDisk is allocated but before the
+    // connection is persisted then leaves a durable intent, replayed on
+    // restart.
+    AddHostInFlight = TAddHostInFlight{
+        .DirectBlockGroupId = dbgId,
+        .LiveHostCount = liveHostCount,
+        .DBGConnectionsConfigGeneration = dbgConnectionsConfigGeneration,
+    };
+
+    ExecuteTx(
+        ctx,
+        CreateTx<TStartAddHost>(
+            dbgId,
+            liveHostCount,
+            dbgConnectionsConfigGeneration));
+}
+
+bool TPartitionActor::ValidateAddHostToDBGRequest(
+    const TActorContext& ctx,
+    size_t dbgId,
+    ui32 dbgConnectionsConfigGeneration)
+{
+    if (AddHostInFlight.has_value()) {
+        RejectAddHost(ctx, dbgId, "Another AddHost is already in progress");
+        return false;
+    }
+    if (RemoveHostInFlight.has_value()) {
+        RejectAddHost(ctx, dbgId, "A RemoveHost is already in progress");
+        return false;
+    }
+    // Authoritative AddHost gate: reads the persisted connection count under
+    // the single-in-flight guard above, so it cannot overshoot MaxHostCount or
+    // race a concurrent add. The DBG's own DDiskConnections lags, so it cannot
+    // gate.
+    const auto& dbgConn =
+        DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId);
+    const size_t currentSize = dbgConn.GetConnections().size();
+
+    if (currentSize >= MaxHostCount) {
+        RejectAddHost(
+            ctx,
+            dbgId,
+            TStringBuilder()
+                << "slot budget exhausted (" << MaxHostCount
+                << "), restart the tablet to compact the dead slots");
+        return false;
+    }
+    if (currentSize == 0) {
+        RejectAddHost(ctx, dbgId, "AddHost on an empty DBG is not supported");
+        return false;
+    }
+
+    if (dbgConnectionsConfigGeneration !=
+        dbgConn.GetDBGConnectionsConfigGeneration())
+    {
+        RejectAddHost(
+            ctx,
+            dbgId,
+            TStringBuilder()
+                << "AddHost was decided on DBG connections config generation "
+                << dbgConnectionsConfigGeneration << ", the group is at "
+                << dbgConn.GetDBGConnectionsConfigGeneration());
+        return false;
+    }
+
+    return true;
+}
+
+>>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_add_host_to_dbg.cpp
 void TPartitionActor::RejectAddHost(
     const NActors::TActorContext& ctx,
     size_t dbgId,
@@ -283,6 +505,7 @@ void TPartitionActor::RejectAddHost(
         dbgId,
         FormatError(error).c_str());
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_add_host_to_dbg.cpp
     // Notify the DBG that asked for the host. dbgId is always a valid request
     // index (see ValidateAddHostToDBGRequest), so the DBG exists.
     const auto& directBlockGroups = FastPathService->GetDirectBlockGroups();
@@ -291,6 +514,10 @@ void TPartitionActor::RejectAddHost(
         "RejectAddHost for a non-existent DBG (dbgId=%lu)",
         dbgId);
     auto dbgPtr = directBlockGroups[dbgId];
+=======
+    auto dbgPtr = FastPathService->GetDirectBlockGroup(dbgId);
+    Y_ABORT_UNLESS(dbgPtr);
+>>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_add_host_to_dbg.cpp
     auto executor = dbgPtr->GetExecutor();
     executor->ExecuteSimple([dbgPtr, error]()
                             { dbgPtr->OnAddHostResult(error, 0, {}, {}); });
@@ -323,6 +550,7 @@ bool TPartitionActor::ValidateAddHostToDBGRequest(
         DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId);
     const auto currentSize = static_cast<ui32>(dbgConn.GetConnections().size());
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_add_host_to_dbg.cpp
     if (currentSize >= MaxHostCount) {
         RejectAddHost(
             ctx,
@@ -334,6 +562,16 @@ bool TPartitionActor::ValidateAddHostToDBGRequest(
         RejectAddHost(ctx, dbgId, "AddHost on an empty DBG is not supported");
         return false;
     }
+=======
+    // NumDDisks is the desired final state in live hosts (dead slots have no
+    // resources in BSC), so a re-sent request is idempotent.
+    const ui32 numDDisks = static_cast<ui32>(
+        LiveHostCount(
+            DirectBlockGroupsConnections.GetDirectBlockGroupConnections(
+                dbgId)) +
+        1);
+    auto request = MakeAllocateDDiskBlockGroupRequest();
+>>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_add_host_to_dbg.cpp
 
     return true;
 }

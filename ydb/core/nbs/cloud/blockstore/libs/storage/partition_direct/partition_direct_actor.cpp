@@ -102,6 +102,92 @@ void TPartitionActor::DefaultSignalTabletActive(const TActorContext& ctx)
     Y_UNUSED(ctx);
 }
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.cpp
+=======
+void TPartitionActor::CleanupResources(const TActorContext& ctx)
+{
+    if (LoadActorAdapter) {
+        ctx.Send(LoadActorAdapter, new TEvents::TEvPoisonPill());
+        LoadActorAdapter = {};
+    }
+
+    if (CleanupActor) {
+        ctx.Send(CleanupActor, new TEvents::TEvPoisonPill());
+        CleanupActor = {};
+    }
+
+    NTabletPipe::CloseAndForgetClient(SelfId(), BSControllerPipeClient);
+    if (AddHostInFlight) {
+        NTabletPipe::CloseAndForgetClient(
+            SelfId(),
+            AddHostInFlight->BSPipeClient);
+        AddHostInFlight.reset();
+    }
+    if (RemoveHostInFlight) {
+        NTabletPipe::CloseAndForgetClient(
+            SelfId(),
+            RemoveHostInFlight->BSPipeClient);
+        RemoveHostInFlight.reset();
+    }
+
+    GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
+
+    // It is assumed that the transaction to the local database is always
+    // successful. If the Tablet finishes its work, then it is necessary to
+    // respond to all pending requests so that there are no leakage resources.
+    // We will do this after the initiator of the request is stopped.
+    auto failUpdateRequests =
+        [executingConfigPromises =
+             std::move(ExecutingUpdateVChunkConfigPromises),
+         pendingConfigRequests = std::move(PendingUpdateVChunkConfigRequests),
+         executingDirtyMapPromises =
+             std::move(ExecutingUpdateDirtyMapStatePromises),
+         pendingDirtyMapRequests =
+             std::move(PendingUpdateDirtyMapStateRequests)]() mutable
+    {
+        for (auto& promise: executingConfigPromises) {
+            promise.TrySetValue(EPersistResult::Cancelled);
+        }
+        for (auto& req: pendingConfigRequests) {
+            req.UpdateCompleted.TrySetValue(EPersistResult::Cancelled);
+        }
+
+        for (auto& promise: executingDirtyMapPromises) {
+            promise.TrySetValue(EPersistResult::Cancelled);
+        }
+        for (auto& req: pendingDirtyMapRequests) {
+            req.UpdateCompleted.TrySetValue(EPersistResult::Cancelled);
+        }
+    };
+
+    if (FastPathService) {
+        auto onStop = FastPathService->Stop();
+        onStop.Subscribe(
+            [failUpdateRequests = std::move(failUpdateRequests)](
+                const NThreading::TFuture<void>& stopFuture) mutable
+            {
+                Y_UNUSED(stopFuture);
+                failUpdateRequests();
+            });
+        FastPathService.reset();
+    } else {
+        failUpdateRequests();
+    }
+}
+
+void TPartitionActor::DetachEndpointAddDie(const TActorContext& ctx)
+{
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s DetachEndpointAddDie",
+        LogTitle.GetWithTime().c_str());
+
+    CleanupResources(ctx);
+    Die(ctx);
+}
+
+>>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.cpp
 void TPartitionActor::ReportTabletState(const TActorContext& ctx)
 {
     auto service =
@@ -317,20 +403,28 @@ void TPartitionActor::HandleFastPathServiceReady(
         "%s All DBGs reached initial locked quorum, opening endpoint",
         LogTitle.GetWithTime().c_str());
 
-    // Re-send the BSC request for an add-host in flight at the last restart
-    // (no live add can be in flight this early). BSController is idempotent.
+    // Re-send the BSC request for a membership op in flight at the last
+    // restart (no live op can be in flight this early). Both are idempotent.
     if (AddHostInFlight.has_value()) {
         LOG_INFO(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "%s Replaying in-flight AddHost dbgId=%lu newHostIndex=%s",
+            "%s Replaying in-flight AddHost dbgId=%lu liveHostCount=%u",
             LogTitle.GetWithTime().c_str(),
             AddHostInFlight->DirectBlockGroupId,
-            PrintHostIndex(AddHostInFlight->NewHostIndex).c_str());
-        SendAllocateDDiskForAddHost(
+            AddHostInFlight->LiveHostCount);
+        SendAllocateDDiskForAddHost(ctx, AddHostInFlight->DirectBlockGroupId);
+    }
+
+    if (RemoveHostInFlight.has_value()) {
+        LOG_INFO(
             ctx,
-            AddHostInFlight->DirectBlockGroupId,
-            AddHostInFlight->NewHostIndex);
+            NKikimrServices::NBS_PARTITION,
+            "%s Replaying in-flight RemoveHost dbgId=%lu ddisk=%s",
+            LogTitle.GetWithTime().c_str(),
+            RemoveHostInFlight->DirectBlockGroupId,
+            RemoveHostInFlight->DDiskId.ShortDebugString().c_str());
+        SendRemoveHostRequest(ctx);
     }
 
     LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, FastPathService);
@@ -446,8 +540,10 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
         ev->Get()->Record.DebugString().data());
 
     // The first allocation response sets up the group; any later one is the
-    // result of an add-host request.
-    if (DDiskBlockGroupAllocated) {
+    // result of the single in-flight membership op (add xor remove).
+    if (RemoveHostInFlight.has_value()) {
+        HandleRemoveHostAllocationResult(ev, ctx);
+    } else if (DDiskBlockGroupAllocated) {
         HandleAddHostAllocationResult(ev, ctx);
     } else {
         HandleInitialAllocationResult(ev, ctx);
@@ -688,6 +784,9 @@ STFUNC(TPartitionActor::StateWork)
         HFunc(
             TEvPartitionDirectPrivate::TEvPersistHostHealth,
             HandlePersistHostHealth);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvRemoveHostFromDBG,
+            HandleRemoveHostFromDBG);
 
         HFunc(
             TEvPartitionDirectPrivate::TEvFastPathServiceShutdown,
@@ -713,4 +812,71 @@ STFUNC(TPartitionActor::StateWork)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.cpp
+=======
+TAllocationResponse ValidateAllocationResponse(
+    const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult& msg,
+    size_t dbgId,
+    size_t expectedHostCount)
+{
+    const auto& record = msg.Record;
+
+    if (record.GetStatus() != NKikimrProto::EReplyStatus::OK) {
+        return {
+            .Error = MakeError(
+                E_REJECTED,
+                TStringBuilder()
+                    << "BSController error: " << record.GetErrorReason())};
+    }
+    if (record.DirectBlockGroupsSize() != 1) {
+        return {
+            .Error = MakeError(
+                E_REJECTED,
+                TStringBuilder() << "BSController returned "
+                                 << record.DirectBlockGroupsSize()
+                                 << " DirectBlockGroups, expected 1")};
+    }
+
+    const auto& allocated = record.GetDirectBlockGroups(0);
+    if (allocated.GetDirectBlockGroupId() != dbgId) {
+        return {
+            .Error = MakeError(
+                E_REJECTED,
+                "BSController response is for a different DirectBlockGroup")};
+    }
+    if (allocated.GetError()) {
+        return {
+            .Error = MakeError(
+                E_REJECTED,
+                "BSController reported an error for this DirectBlockGroup")};
+    }
+    if (allocated.DDiskIdSize() != expectedHostCount ||
+        allocated.PersistentBufferDDiskIdSize() != expectedHostCount)
+    {
+        return {
+            .Error = MakeError(
+                E_REJECTED,
+                TStringBuilder()
+                    << "BSController returned " << allocated.DDiskIdSize()
+                    << " ddisks / " << allocated.PersistentBufferDDiskIdSize()
+                    << " pbuffers, expected " << expectedHostCount)};
+    }
+
+    return {.Group = &allocated};
+}
+
+size_t LiveHostCount(
+    const ::NYdb::NBS::PartitionDirect::NProto::TDirectBlockGroupConnections&
+        connections)
+{
+    size_t liveCount = 0;
+    for (const auto& connection: connections.GetConnections()) {
+        if (!connection.GetRemovedFromBSC()) {
+            ++liveCount;
+        }
+    }
+    return liveCount;
+}
+
+>>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.cpp
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

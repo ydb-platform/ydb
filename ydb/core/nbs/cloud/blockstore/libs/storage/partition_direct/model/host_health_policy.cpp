@@ -51,6 +51,9 @@ EHostHealth TDefaultHostHealthPolicy::GetNewHealth(
         case EHostHealth::Broken:
             // Broken state is irrecoverable
             return EHostHealth::Broken;
+        case EHostHealth::Removed:
+            // The removed host is never restored
+            return EHostHealth::Removed;
     }
 }
 

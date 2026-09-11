@@ -16,6 +16,8 @@ class TPartitionDatabase: public NKikimr::NIceDb::TNiceDb
         ::NYdb::NBS::PartitionDirect::NProto::TDirectBlockGroupsConnections;
     using TAddHostInProgress =
         ::NYdb::NBS::PartitionDirect::NProto::TAddHostInProgress;
+    using TRemoveHostInProgress =
+        ::NYdb::NBS::PartitionDirect::NProto::TRemoveHostInProgress;
 
 public:
     enum class EBlobIndexScanProgress
@@ -51,6 +53,12 @@ public:
     bool ReadAddHostInProgress(TMaybe<TAddHostInProgress>& addHostInProgress);
     void StoreAddHostInProgress(const TAddHostInProgress& addHostInProgress);
     void ClearAddHostInProgress();
+
+    bool ReadRemoveHostInProgress(
+        TMaybe<TRemoveHostInProgress>& removeHostInProgress);
+    void StoreRemoveHostInProgress(
+        const TRemoveHostInProgress& removeHostInProgress);
+    void ClearRemoveHostInProgress();
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

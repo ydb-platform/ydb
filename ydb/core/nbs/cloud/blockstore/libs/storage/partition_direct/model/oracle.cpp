@@ -31,6 +31,11 @@ EHostState HealthToState(EHostHealth health)
         case EHostHealth::TemporaryOffline:
             return EHostState::TemporaryOffline;
         case EHostHealth::Offline:
+<<<<<<< HEAD
+=======
+        case EHostHealth::Broken:
+        case EHostHealth::Removed:
+>>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061))
             return EHostState::Offline;
     }
 }
@@ -335,6 +340,12 @@ void TOracle::OnDDiskBroken(THostIndex hostIndex)
 
         MaybeQueryAddHost();
     }
+}
+
+void TOracle::OnHostRemoved(THostIndex hostIndex)
+{
+    HostsHealths[hostIndex] = EHostHealth::Removed;
+    HostStates[hostIndex].State = EHostState::Offline;
 }
 
 TDuration TOracle::GetHostReconnectDelay(THostIndex hostIndex)

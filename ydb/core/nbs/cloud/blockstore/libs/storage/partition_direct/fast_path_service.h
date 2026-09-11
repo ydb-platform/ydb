@@ -110,6 +110,11 @@ public:
 
     void RequestAddHost(size_t directBlockGroupId) override;
 
+    void QueryRemoveHost(
+        size_t directBlockGroupId,
+        size_t hostIndex,
+        ui32 dbgConnectionsConfigGeneration) override;
+
     ui64 GenerateLsn() override;
 
 <<<<<<< HEAD

@@ -55,7 +55,18 @@ struct THostStateControllerMock: public IHostStateController
     }
 
     void QueryAddHost() override
+<<<<<<< HEAD
     {}
+=======
+    {
+        ++AddHostQueries;
+    }
+
+    void QueryRemoveHost(THostIndex hostIndex) override
+    {
+        Y_UNUSED(hostIndex);
+    }
+>>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061))
 };
 
 void THostStateControllerMock::PersistHostHealth(

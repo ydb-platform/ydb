@@ -38,7 +38,8 @@ TRegion::TRegion(
     const ui64 vChunksPerRegionCount = RegionSize / vChunkSize;
     for (size_t i = 0; i < vChunksPerRegionCount; i++) {
         const size_t vChunkIndex = (regionIndex * vChunksPerRegionCount) + i;
-        const size_t dbgIndex = vChunkIndex % directBlockGroups.size();
+        const size_t dbgIndex =
+            GetDirectBlockGroupIndex(vChunkIndex, directBlockGroups.size());
 
         NMonitoring::TDynamicCounterPtr vChunkCounters =
             counters->GetSubgroup("vchunk", ToString(vChunkIndex));

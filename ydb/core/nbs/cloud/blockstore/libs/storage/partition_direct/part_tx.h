@@ -17,6 +17,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_tx.h
 #define BLOCKSTORE_PARTITION_TRANSACTIONS(xxx, ...) \
     xxx(InitSchema, __VA_ARGS__)                    \
     xxx(LoadState, __VA_ARGS__)                     \
@@ -25,6 +26,19 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
     xxx(UpdateVChunkConfig, __VA_ARGS__)            \
     xxx(StartAddHost, __VA_ARGS__)                  \
     xxx(AddHostToDBG, __VA_ARGS__)                  \
+=======
+#define BLOCKSTORE_PARTITION_TRANSACTIONS(xxx, ...)                            \
+    xxx(InitSchema, __VA_ARGS__)                                               \
+    xxx(LoadState, __VA_ARGS__)                                                \
+    xxx(StoreVolumeConfig, __VA_ARGS__)                                        \
+    xxx(StorePartitionIds, __VA_ARGS__)                                        \
+    xxx(UpdateVChunkConfig, __VA_ARGS__)                                       \
+    xxx(UpdateDirtyMapState, __VA_ARGS__)                                      \
+    xxx(StartAddHost, __VA_ARGS__)                                             \
+    xxx(AddHostToDBG, __VA_ARGS__)                                             \
+    xxx(StartRemoveHost, __VA_ARGS__)                                          \
+    xxx(CommitRemoveHost, __VA_ARGS__)                                         \
+>>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_tx.h
     xxx(Monitoring, __VA_ARGS__)
 
 // BLOCKSTORE_PARTITION_TRANSACTIONS
@@ -37,6 +51,8 @@ struct TTxPartition
         ::NYdb::NBS::PartitionDirect::NProto::TDirectBlockGroupsConnections;
     using TAddHostInProgress =
         ::NYdb::NBS::PartitionDirect::NProto::TAddHostInProgress;
+    using TRemoveHostInProgress =
+        ::NYdb::NBS::PartitionDirect::NProto::TRemoveHostInProgress;
 
     //
     // InitSchema
@@ -61,6 +77,7 @@ struct TTxPartition
         TMaybe<TDirectBlockGroupsConnections> DirectBlockGroupsConnections;
         TVector<TVChunkConfig> VChunkConfigs;
         TMaybe<TAddHostInProgress> AddHostInProgress;
+        TMaybe<TRemoveHostInProgress> RemoveHostInProgress;
 
         explicit TLoadState()
         {}
@@ -71,6 +88,7 @@ struct TTxPartition
             DirectBlockGroupsConnections.Clear();
             VChunkConfigs.clear();
             AddHostInProgress.Clear();
+            RemoveHostInProgress.Clear();
         }
     };
 
@@ -135,11 +153,24 @@ struct TTxPartition
     struct TStartAddHost
     {
         const size_t DirectBlockGroupId;
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_tx.h
         const THostIndex NewHostIndex;
 
         TStartAddHost(size_t directBlockGroupId, THostIndex newHostIndex)
             : DirectBlockGroupId(directBlockGroupId)
             , NewHostIndex(newHostIndex)
+=======
+        const ui32 LiveHostCount;
+        const ui32 DBGConnectionsConfigGeneration;
+
+        TStartAddHost(
+            size_t directBlockGroupId,
+            ui32 liveHostCount,
+            ui32 dbgConnectionsConfigGeneration)
+            : DirectBlockGroupId(directBlockGroupId)
+            , LiveHostCount(liveHostCount)
+            , DBGConnectionsConfigGeneration(dbgConnectionsConfigGeneration)
+>>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_tx.h
         {}
 
         void Clear()
@@ -160,6 +191,41 @@ struct TTxPartition
                   std::move(directBlockGroupsConnections))
             , DirectBlockGroupId(directBlockGroupId)
             , NewHostIndex(newHostIndex)
+        {}
+
+        void Clear()
+        {}
+    };
+
+    //
+    // TStartRemoveHost
+    //
+    struct TStartRemoveHost
+    {
+        const TRemoveHostInProgress Intent;
+
+        explicit TStartRemoveHost(TRemoveHostInProgress intent)
+            : Intent(std::move(intent))
+        {}
+
+        void Clear()
+        {}
+    };
+
+    struct TCommitRemoveHost
+    {
+        const TDirectBlockGroupsConnections DirectBlockGroupsConnections;
+        const size_t DirectBlockGroupId;
+        const THostIndex RemoveIndex;
+
+        TCommitRemoveHost(
+            TDirectBlockGroupsConnections directBlockGroupsConnections,
+            size_t directBlockGroupId,
+            THostIndex removeIndex)
+            : DirectBlockGroupsConnections(
+                  std::move(directBlockGroupsConnections))
+            , DirectBlockGroupId(directBlockGroupId)
+            , RemoveIndex(removeIndex)
         {}
 
         void Clear()

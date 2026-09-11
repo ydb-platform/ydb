@@ -54,7 +54,22 @@ void TOracleMock::OnRequestCancelled(
     EOperation operation,
     TInstant now)
 {
+<<<<<<< HEAD
     Y_UNUSED(hostIndex, operation, now);
+=======
+    Y_UNUSED(hostIndex);
+}
+
+void TOracleMock::OnHostRemoved(THostIndex hostIndex)
+{
+    Y_UNUSED(hostIndex);
+}
+
+TDuration TOracleMock::GetHostReconnectDelay(THostIndex hostIndex)
+{
+    Y_UNUSED(hostIndex);
+    return TDuration::MilliSeconds(1);
+>>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061))
 }
 
 THostIndex TOracleMock::SelectBestPBufferHost(
@@ -192,7 +207,27 @@ TDirectBlockGroupMock::TDirectBlockGroupMock()
     };
     OnAddHostResultHandler = [](const auto&...)
     {
+<<<<<<< HEAD
         Y_ABORT_UNLESS(false, "Should set OnAddHostResultHandler");
+=======
+        Y_ABORT_UNLESS(false, "Should set OnAddHostSucceededHandler");
+    };
+    OnAddHostFailedHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set OnAddHostFailedHandler");
+    };
+    OnRemoveHostSucceededHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set OnRemoveHostSucceededHandler");
+    };
+    OnRemoveHostFailedHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set OnRemoveHostFailedHandler");
+    };
+    TakeCopyRangeBudgetHandler = [](ui64)
+    {
+        return TDuration::Zero();
+>>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061))
     };
 }
 
@@ -372,6 +407,51 @@ NThreading::TFuture<TListPBufferResponse> TDirectBlockGroupMock::ListPBuffers(
     return ListPBuffersHandler(hostIndex);
 }
 
+<<<<<<< HEAD
+=======
+void TDirectBlockGroupMock::OnAddHostSucceeded(
+    THostIndex newHostIndex,
+    NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+    NKikimrBlobStorage::NDDisk::TDDiskId pbufferId,
+    ui32 dbgConnectionsConfigGeneration)
+{
+    OnAddHostSucceededHandler(
+        newHostIndex,
+        std::move(ddiskId),
+        std::move(pbufferId),
+        dbgConnectionsConfigGeneration);
+}
+
+void TDirectBlockGroupMock::OnAddHostFailed(const NProto::TError& error)
+{
+    OnAddHostFailedHandler(error);
+}
+
+void TDirectBlockGroupMock::OnRemoveHostSucceeded(
+    THostIndex removeIndex,
+    ui32 dbgConnectionsConfigGeneration)
+{
+    OnRemoveHostSucceededHandler(removeIndex, dbgConnectionsConfigGeneration);
+}
+
+void TDirectBlockGroupMock::OnRemoveHostFailed(
+    THostIndex removeIndex,
+    const NProto::TError& error)
+{
+    OnRemoveHostFailedHandler(removeIndex, error);
+}
+
+TDuration TDirectBlockGroupMock::TakeCopyRangeBudget(ui64 byteCount)
+{
+    return TakeCopyRangeBudgetHandler(byteCount);
+}
+
+ui32 TDirectBlockGroupMock::GetNodeId(THostIndex host) const
+{
+    return host + 10;
+}
+
+>>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061))
 NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroupMock::Dump()
 {
     return DumpHandler();

@@ -994,8 +994,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT(env.Cutter().IsSweepInFlight());
     }
 
-    // A GC task starting right after boot makes IsDrained refuse the candidate; with no cadence in
-    // BsRange mode the entry must still be re-nominatable rather than lost until the next restart.
+    // A GC-blocked round is not a disproval: IsDrained refuses without starting a backoff, so a later pass may retry.
     Y_UNIT_TEST(BootProbeRetriesAfterGcBlockedRound) {
         TRangeProbeEnv env;
         auto& csConfig = env.Runtime.GetAppData().ColumnShardConfig;
@@ -1007,18 +1006,39 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         });
         UNIT_ASSERT_C(first, "the clean range must be nominated at boot");
 
-        // The round ends without a barrier, exactly as a GC-blocked IsDrained would leave it.
+        // A delete owed to the range lands mid-round, so the pre-barrier IsDrained refuses the survivor.
         env.RunInActor([&](const NActors::TActorContext& ctx) {
-            env.Cutter().OnBatchComplete({ env.Key }, /*exhausted=*/true, ctx);
+            env.Env.Bm->DeleteBlobOnComplete(NOlap::TTabletId(TRangeProbeEnv::TabletId),
+                MakeUnifiedBlob(MakeBlob(TRangeProbeEnv::TabletId, TRangeProbeEnv::DataChannel, TRangeProbeEnv::OldFromGen + 1)));
+            env.Cutter().OnBatchComplete({}, /*exhausted=*/true, ctx);
         });
         UNIT_ASSERT_C(!env.Cutter().IsSweepInFlight(), "the blocked round must finish");
         UNIT_ASSERT_C(env.Cutter().GetCutStateForTest(env.Key) == ECutState::None, "the entry returns to None");
+        UNIT_ASSERT_VALUES_EQUAL_C(env.Cutter().GetDisprovalAttemptsForTest(env.Key), 0, "a GC-blocked round must not start the backoff");
+    }
 
-        bool again = false;
+    // A range the probe disproved is not re-probed on every background pass; it waits out its backoff first.
+    Y_UNIT_TEST(BootProbeRespectsDisprovalCooldown) {
+        TRangeProbeEnv env;
+        auto& csConfig = env.Runtime.GetAppData().ColumnShardConfig;
+        csConfig.SetCutHistoryProofSource(NKikimrConfig::TColumnShardConfig::CUT_HISTORY_PROOF_BS_RANGE);
+        auto nominate = [&]() {
+            bool nominated = false;
+            env.RunInActor([&](const NActors::TActorContext& ctx) {
+                nominated = env.Cutter().TryNominateAtBoot(ctx);
+            });
+            return nominated;
+        };
+
+        UNIT_ASSERT_C(nominate(), "the clean range must be nominated at boot");
         env.RunInActor([&](const NActors::TActorContext& ctx) {
-            again = env.Cutter().TryNominateAtBoot(ctx);
+            env.Cutter().OnBatchComplete({ env.Key }, /*exhausted=*/true, ctx);
         });
-        UNIT_ASSERT_C(again, "a later pass must re-nominate the entry the blocked round gave up on");
+        UNIT_ASSERT_VALUES_EQUAL(env.Cutter().GetDisprovalAttemptsForTest(env.Key), 1);
+
+        UNIT_ASSERT_C(!nominate(), "a disproved range must not be re-probed before its cooldown ends");
+        env.Runtime.AdvanceCurrentTime(TDuration::Minutes(11));
+        UNIT_ASSERT_C(nominate(), "after the cooldown the range is probed again");
     }
 
     // Repeated passes must not re-nominate an entry whose round is still running.
@@ -1039,6 +1059,160 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
             second = env.Cutter().TryNominateAtBoot(ctx);
         });
         UNIT_ASSERT_C(!second, "a pass while a round is in flight must nominate nothing");
+    }
+
+    // Hive erases a cut entry wherever it sits, and the lookup then hands its generations to the previous entry.
+    Y_UNIT_TEST(MiddleEntryCutRemapsItsRangeToThePreviousGroup) {
+        auto info = MakeTabletInfo(/*tabletId=*/4040, /*nChannels=*/4, { { 1, 100 }, { 5, 200 }, { 9, 300 } });
+        auto& history = info->Channels[3].History;
+        history.erase(history.begin() + 1);
+
+        for (const ui32 gen : { 1u, 2u, 4u, 5u, 8u }) {
+            UNIT_ASSERT_VALUES_EQUAL_C(info->GroupFor(3, gen), 100u, "gen " << gen);
+        }
+        for (const ui32 gen : { 9u, 10u }) {
+            UNIT_ASSERT_VALUES_EQUAL_C(info->GroupFor(3, gen), 300u, "gen " << gen);
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(info->GroupFor(2, 5), 200u, "a cut on one channel leaves the others alone");
+    }
+
+    // Cutting (C3, 5, G) out of [1->G0, 5->G, 9->G2] puts the hard barrier into G alone, so G0 blobs are never collected.
+    Y_UNIT_TEST(MiddleEntryBarrierTargetsOnlyItsOwnGroup) {
+        TTestBasicRuntime runtime;
+        TAppPrepare app;
+        runtime.Initialize(app.Unwrap());
+        runtime.GetAppData().ColumnShardConfig.SetCutHistoryMeasureOnly(false);
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+
+        static constexpr ui64 TabletId = 4040;
+        static constexpr ui32 Channel = 3;
+        static constexpr ui32 GroupG0 = 100;
+        static constexpr ui32 GroupG = 200;
+        static constexpr ui32 GroupG2 = 300;
+        static constexpr ui32 CurrentGen = 10;
+
+        const auto edgeTablet = runtime.AllocateEdgeActor();
+        const auto edgeLauncher = runtime.AllocateEdgeActor();
+        const auto edgeG0 = runtime.AllocateEdgeActor();
+        const auto edgeG = runtime.AllocateEdgeActor();
+        const auto edgeG2 = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeBlobStorageProxyID(GroupG0), edgeG0);
+        runtime.RegisterService(MakeBlobStorageProxyID(GroupG), edgeG);
+        runtime.RegisterService(MakeBlobStorageProxyID(GroupG2), edgeG2);
+        const auto runner = runtime.Register(new TRunnerActor());
+        auto runInActor = [&](std::function<void(const NActors::TActorContext&)> fn) {
+            runtime.Send(new IEventHandle(runner, edgeTablet, new TEvRunInActor(std::move(fn))));
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        };
+
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, CurrentGen, /*nChannels=*/4, { { 1, GroupG0 }, { 5, GroupG }, { 9, GroupG2 } });
+        TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, edgeTablet, TestSignals());
+        cutter.SetLauncherActorId(edgeLauncher);
+        const TEntryKey middle{ Channel, 5 };
+
+        THashMap<ui32, ui32> collectsPerGroup;
+        auto observer = runtime.AddObserver<TEvBlobStorage::TEvCollectGarbage>([&](TEvBlobStorage::TEvCollectGarbage::TPtr& ev) {
+            for (const auto& [group, edge] : { std::pair{ GroupG0, edgeG0 }, std::pair{ GroupG, edgeG }, std::pair{ GroupG2, edgeG2 } }) {
+                if (ev->Recipient == MakeBlobStorageProxyID(group) || ev->GetRecipientRewrite() == edge) {
+                    ++collectsPerGroup[group];
+                }
+            }
+        });
+
+        cutter.StartSweepForTest({ middle });
+        cutter.SetPortionSnapshot({});
+        runInActor([&](const NActors::TActorContext& ctx) {
+            cutter.OnBatchComplete({}, /*exhausted=*/true, ctx);
+        });
+        UNIT_ASSERT(cutter.GetCutStateForTest(middle) == ECutState::SentBarrier);
+
+        auto collect = runtime.GrabEdgeEvent<TEvBlobStorage::TEvCollectGarbage>(edgeG);
+        UNIT_ASSERT(collect);
+        UNIT_ASSERT(collect->Get()->Hard);
+        UNIT_ASSERT_VALUES_EQUAL(collect->Get()->Channel, Channel);
+        UNIT_ASSERT_VALUES_EQUAL(collect->Get()->CollectGeneration, 8u);
+
+        runtime.Send(new IEventHandle(collect->Sender, edgeG,
+            new TEvBlobStorage::TEvCollectGarbageResult(NKikimrProto::OK, TabletId, CurrentGen, collect->Get()->PerGenerationCounter, Channel)));
+        auto cutReq = runtime.GrabEdgeEvent<TEvTablet::TEvCutTabletHistory>(edgeLauncher);
+        UNIT_ASSERT(cutReq);
+        UNIT_ASSERT_VALUES_EQUAL(cutReq->Get()->Record.GetChannel(), Channel);
+        UNIT_ASSERT_VALUES_EQUAL(cutReq->Get()->Record.GetFromGeneration(), 5u);
+        UNIT_ASSERT_VALUES_EQUAL(cutReq->Get()->Record.GetGroupID(), GroupG);
+
+        UNIT_ASSERT_VALUES_EQUAL(collectsPerGroup[GroupG], 1u);
+        UNIT_ASSERT_VALUES_EQUAL_C(collectsPerGroup[GroupG0], 0u, "G0 still holds the earlier generations and must get no barrier");
+        UNIT_ASSERT_VALUES_EQUAL(collectsPerGroup[GroupG2], 0u);
+    }
+
+    // After the middle cut the G0 entry's window grows to [1, 9); its live portion keeps it uncut even if the range read is empty.
+    Y_UNIT_TEST(EarlierEntryStaysPinnedAfterMiddleCut) {
+        TTestBasicRuntime runtime;
+        TAppPrepare app;
+        runtime.Initialize(app.Unwrap());
+        auto& csConfig = runtime.GetAppData().ColumnShardConfig;
+        csConfig.SetCutHistoryMeasureOnly(false);
+        csConfig.SetCutHistoryProofSource(NKikimrConfig::TColumnShardConfig::CUT_HISTORY_PROOF_BS_RANGE);
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+
+        static constexpr ui64 TabletId = 4141;
+        static constexpr ui32 Channel = 3;
+        static constexpr ui32 GroupG0 = 100;
+        static constexpr ui32 GroupG2 = 300;
+        static constexpr ui32 CurrentGen = 10;
+        static constexpr ui64 PortionP6 = 6;
+
+        const auto edgeTablet = runtime.AllocateEdgeActor();
+        const auto edgeG0 = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeBlobStorageProxyID(GroupG0), edgeG0);
+        const auto runner = runtime.Register(new TRunnerActor());
+        auto runInActor = [&](std::function<void(const NActors::TActorContext&)> fn) {
+            runtime.Send(new IEventHandle(runner, edgeTablet, new TEvRunInActor(std::move(fn))));
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        };
+
+        // Hive already erased {5, G}, so the tablet boots with C3 = [1->G0, 9->G2]; C2 has only its active entry.
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, CurrentGen, /*nChannels=*/4, { { 1, GroupG0 }, { 9, GroupG2 } });
+        info->Channels[2].History.erase(info->Channels[2].History.begin());
+        TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, edgeTablet, TestSignals());
+        const TEntryKey earlier{ Channel, 1 };
+
+        THashMap<ui64, std::vector<NOlap::TUnifiedBlobId>> portionBlobs;
+        portionBlobs[PortionP6].push_back(MakeUnifiedBlob(MakeBlob(TabletId, Channel, 1)));
+        portionBlobs[PortionP6].push_back(MakeUnifiedBlob(MakeBlob(TabletId, Channel, 2)));
+        cutter.OnBootComplete(portionBlobs);
+        // The counter counts live portions, not blobs: P6 with both g1 and g2 is one.
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(earlier), 1);
+
+        bool nominated = false;
+        runInActor([&](const NActors::TActorContext& ctx) {
+            nominated = cutter.TryNominateAtBoot(ctx);
+        });
+        UNIT_ASSERT_C(nominated, "boot nomination does not look at portions; the proof and the counter gate decide");
+
+        const auto probes = cutter.BuildRangeProbes();
+        const auto probe = std::find_if(probes.begin(), probes.end(), [](const auto& p) {
+            return p.Channel == Channel;
+        });
+        UNIT_ASSERT(probe != probes.end());
+        UNIT_ASSERT_VALUES_EQUAL(probe->FromGeneration, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(probe->NextFromGeneration, 9u);
+        UNIT_ASSERT_VALUES_EQUAL(probe->Group, GroupG0);
+
+        ui32 collectsToG0 = 0;
+        auto observer = runtime.AddObserver<TEvBlobStorage::TEvCollectGarbage>([&](TEvBlobStorage::TEvCollectGarbage::TPtr& ev) {
+            if (ev->Recipient == MakeBlobStorageProxyID(GroupG0) || ev->GetRecipientRewrite() == edgeG0) {
+                ++collectsToG0;
+            }
+        });
+
+        // Worst case: the range read wrongly reports nothing, and the live-portion counter alone must refuse the barrier.
+        runInActor([&](const NActors::TActorContext& ctx) {
+            cutter.OnRangeProbeComplete(cutter.GetSweepRound(), {}, /*failures=*/0, ctx);
+        });
+        UNIT_ASSERT(cutter.GetCutStateForTest(earlier) == ECutState::None);
+        UNIT_ASSERT_VALUES_EQUAL_C(collectsToG0, 0u, "a G0 entry pinned by a live portion must never get a hard barrier");
+        UNIT_ASSERT(guard->GetCut().empty());
     }
 
 }   // TCutHistoryCutterCounters

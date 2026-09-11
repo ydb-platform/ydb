@@ -538,6 +538,11 @@ bool THistoryCutterWrapper::TryNominateAtBoot(const TActorContext& ctx) {
             if (const auto* state = CutState.FindPtr(key); state && *state != ECutState::None) {
                 continue;
             }
+            // Every background pass lands here, so a range the probe already disproved waits out its backoff.
+            if (const auto* disproval = DisprovedAt.FindPtr(key);
+                disproval && ctx.Now() - disproval->At < GetDisprovedCooldown(disproval->Attempts)) {
+                continue;
+            }
             const ui32 nextGen = GetNextFromGeneration(key);
             if (!nextGen || !SeenGroupsCheckPasses(key)) {
                 continue;

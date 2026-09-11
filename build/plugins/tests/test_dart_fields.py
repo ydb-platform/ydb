@@ -11,28 +11,23 @@ class Unit:
     get_subst = get
 
 
-def test_facade_typecheck_uses_library_sources():
+def test_ts_check_sources_include_tests_and_spaces():
     unit = Unit(
-        _TS_LEGACY_FACADE="yes",
         MODDIR="project",
-        _TS_GLOB_FILES='${ARCADIA_ROOT}/project/src/index.ts "${ARCADIA_ROOT}/project/test/my test.ts"',
+        _TS_GLOB_FILES='${ARCADIA_ROOT}/project/src/index.ts "${ARCADIA_ROOT}/project/tests/my test.ts"',
     )
-
-    assert df.TestFiles.tsc_typecheck_input_files(unit, (), {}) == df.serialize_list(
-        ["src/index.ts", "test/my test.ts"]
-    )
+    assert df.TestFiles.ts_check_srcs(unit, (), {}) == df.serialize_list(["src/index.ts", "tests/my test.ts"])
 
 
-def test_legacy_typecheck_preserves_inputs():
+def test_ts_check_for_sources_are_relative_to_tested_module():
     unit = Unit(
-        TS_INPUT_FILES="${ARCADIA_ROOT}/project/src/index.ts",
-        TS_INPUT_TEST_FILES="${ARCADIA_ROOT}/project/test/index.ts",
+        TS_TEST_FOR="yes",
+        TS_TEST_FOR_PATH="project",
+        MODDIR="project/tests",
+        _TS_GLOB_FILES="${ARCADIA_ROOT}/project/src/index.ts",
     )
-
-    assert df.TestFiles.tsc_typecheck_input_files(unit, (), {}) == df.serialize_list(
-        ["$S/project/src/index.ts", "$S/project/test/index.ts"]
-    )
+    assert df.TestFiles.ts_check_srcs(unit, (), {}) == df.serialize_list(["src/index.ts"])
 
 
-def test_facade_typecheck_without_sources():
-    assert df.TestFiles.tsc_typecheck_input_files(Unit(_TS_LEGACY_FACADE="yes"), (), {}) == ""
+def test_ts_check_without_sources():
+    assert df.TestFiles.ts_check_srcs(Unit(), (), {}) == ""

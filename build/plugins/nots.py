@@ -13,7 +13,6 @@ import ytest
 from _common import (
     rootrel_arc_src,
     sort_uniq,
-    to_yesno,
 )
 from _dart_fields import create_dart_record
 
@@ -21,7 +20,6 @@ if TYPE_CHECKING:
     from lib.nots.erm_json_lite import ErmJsonLite
     from lib.nots.package_manager import PackageManager
     from lib.nots.semver import Version
-    from lib.nots.typescript import TsConfig
 
 # 1 is 60 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
 # 0.5 is 120 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
@@ -225,10 +223,6 @@ class PluginLogger(object):
 
 
 logger = PluginLogger()
-
-
-def _wrap_file_path(s: str) -> str:
-    return f"'{s}'" if " " in s else s
 
 
 def _escape_space(s: str) -> str:
@@ -447,67 +441,6 @@ def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
         unit.onpeerdir(dirs)
 
 
-@ymake.macro
-@_with_report_configure_error
-def _TS_CONFIGURE(unit: ymake.Unit) -> None:
-    from lib.nots.package_manager import PackageJson
-    from lib.nots.package_manager.utils import build_pj_path
-    from lib.nots.typescript import TsConfig
-
-    tsconfig_paths = unit.get("TS_CONFIG_PATH").split()
-    # for use in CMD as inputs
-    __set_append(
-        unit, "TS_CONFIG_FILES", _build_cmd_input_paths(tsconfig_paths, hide=True, disable_include_processor=True)
-    )
-
-    mod_dir = unit.get("MODDIR")
-    cur_dir = unit.get("TS_TEST_FOR_PATH") if unit.get("TS_TEST_FOR") else mod_dir
-    pj_path = build_pj_path(_arc_path(unit, cur_dir))
-    dep_paths = PackageJson.load(pj_path).get_dep_paths_by_names()
-
-    # reversed for using the first tsconfig as the config for include processor (legacy)
-    for tsconfig_path in reversed(tsconfig_paths):
-        abs_tsconfig_path = _arc_path(unit, tsconfig_path)
-        if not abs_tsconfig_path:
-            raise Exception("tsconfig not found: {}".format(tsconfig_path))
-
-        source_dir = _arc_path(unit, _get_source_path(unit))
-        tsconfig = TsConfig.load(abs_tsconfig_path, source_dir)
-        config_files = tsconfig.inline_extend(dep_paths)
-        config_files = [rootrel_arc_src(path, unit) for path in config_files]
-
-        use_tsconfig_outdir = unit.get("TS_CONFIG_USE_OUTDIR") == "yes"
-        tsconfig.validate(use_tsconfig_outdir)
-
-        # add tsconfig files from which root tsconfig files were extended
-        __set_append(
-            unit, "TS_CONFIG_FILES", _build_cmd_input_paths(config_files, hide=True, disable_include_processor=True)
-        )
-
-        # region include processor
-        unit.set(["TS_CONFIG_ROOT_DIR", tsconfig.compiler_option("rootDir")])  # also for hermione
-        if use_tsconfig_outdir:
-            unit.set(["TS_CONFIG_OUT_DIR", tsconfig.compiler_option("outDir")])  # also for hermione
-
-        unit.set(["TS_CONFIG_SOURCE_MAP", to_yesno(tsconfig.compiler_option("sourceMap"))])
-        unit.set(["TS_CONFIG_DECLARATION", to_yesno(tsconfig.compiler_option("declaration"))])
-        unit.set(["TS_CONFIG_DECLARATION_MAP", to_yesno(tsconfig.compiler_option("declarationMap"))])
-        unit.set(["TS_CONFIG_PRESERVE_JSX", to_yesno(tsconfig.compiler_option("jsx") == "preserve")])
-        # endregion
-
-        _filter_inputs_by_rules_from_tsconfig(unit, tsconfig)
-
-    # Code navigation
-    if unit.get("TS_YNDEXING") == "yes":
-        unit.on_do_ts_yndexing()
-
-    # Style tests
-    _setup_eslint(unit)
-    _setup_tsc_typecheck(unit)
-    _setup_stylelint(unit)
-    _setup_biome(unit)
-
-
 def _should_setup_build_env(unit: ymake.Unit) -> bool:
     build_env_for = unit.get("TS_BUILD_ENV_FOR")
     if build_env_for is None:
@@ -566,22 +499,6 @@ def __strip_prefix(prefix: str, line: str) -> str:
         return line[prefix_len:]
 
     return line
-
-
-def _filter_inputs_by_rules_from_tsconfig(unit: ymake.Unit, tsconfig: 'TsConfig') -> None:
-    """
-    Reduce file list from the TS_GLOB_FILES variable following tsconfig.json rules
-    """
-    mod_dir = unit.get("MODDIR")
-    target_path = os.path.join("${ARCADIA_ROOT}", mod_dir, "")  # To have "/" in the end
-
-    for from_var, to_var in [("TS_GLOB_FILES", "TS_INPUT_FILES"), ("TS_GLOB_TEST_FILES", "TS_INPUT_TEST_FILES")]:
-        # TS_GLOB_* variables contain space-separated paths.
-        # Spaces in paths cause issues, so we split by target_path instead of space.
-        # https://st.yandex-team.ru/DEVTOOLSSUPPORT-69193
-        all_files = __strip_prefix(target_path, unit.get(from_var)).split(f" {target_path}")
-        filtered_files = tsconfig.filter_files(all_files)
-        __set_append(unit, to_var, [_wrap_file_path(f) for f in filtered_files])
 
 
 @ymake.macro
@@ -669,7 +586,7 @@ def _setup_tsc_typecheck(unit: ymake.Unit) -> None:
     if unit.get("_TS_TYPECHECK_VALUE") == "none":
         return
 
-    test_files = df.TestFiles.tsc_typecheck_input_files(unit, (), {})
+    test_files = df.TestFiles.ts_check_srcs(unit, (), {})
     if not test_files:
         return
 

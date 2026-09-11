@@ -11,6 +11,7 @@ namespace NDataShard {
 TDataShard::TTxProgressTransaction::TTxProgressTransaction(TDataShard *self, TOperation::TPtr op, NWilson::TTraceId &&traceId)
     : TBase(self, std::move(traceId))
     , ActiveOp(std::move(op))
+    , KeyedOperation(ActiveOp && ActiveOp->HasKeysInfo() && ActiveOp->KeysCount() > 0)
 {}
 
 bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const TActorContext &ctx) {
@@ -72,6 +73,7 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
 
     Y_ENSURE(ActiveOp && ActiveOp->IsInProgress());
     auto status = Self->Pipeline.RunExecutionPlan(ActiveOp, CompleteList, txc, ctx);
+    KeyedOperation = KeyedOperation || (ActiveOp->HasKeysInfo() && ActiveOp->KeysCount() > 0);
 
     if (Self->Pipeline.CanRunAnotherOp())
         Self->PlanQueue.Progress(ctx);

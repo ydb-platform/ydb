@@ -527,11 +527,23 @@ struct TPartitionStats {
         return CPU;
     }
 
+    void SetSplitCpuUsage(std::optional<ui64> cpuWithKeys, std::optional<ui64> cpuWithoutKeys) {
+        CPUWithKeys = cpuWithKeys;
+        CPUWithoutKeys = cpuWithoutKeys;
+    }
+
+    ui64 GetSplitCpuUsage() const {
+        return CPUWithKeys.value_or(CPU);
+    }
+
     ui32 GetLatestMaxCpuUsagePercent(TInstant since) const {
         return TopCpuUsage.GetLatestMaxCpuUsagePercent(since);
     }
 
 private:
+    std::optional<ui64> CPUWithKeys;
+    std::optional<ui64> CPUWithoutKeys;
+
     /**
      * The last observed CPU usage for the given partition.
      *

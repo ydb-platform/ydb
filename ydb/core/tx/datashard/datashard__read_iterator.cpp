@@ -2953,6 +2953,7 @@ class TDataShard::TTxReadViaPipeline : public NTabletFlatExecutor::TTransactionB
 
     TOperation::TPtr Op;
     TVector<EExecutionUnitKind> CompleteList;
+    bool KeyedOperation = false;
     bool WaitComplete = false;
 
 public:
@@ -2962,6 +2963,7 @@ public:
     {}
 
     TTxType GetTxType() const override { return TXTYPE_READ; }
+    bool IsKeyedOperation() const override { return KeyedOperation; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_TRACE_CTX(ctx, "TTxReadViaPipeline execute",
@@ -3199,6 +3201,7 @@ public:
         Y_ENSURE(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
 
         auto status = Self->Pipeline.RunExecutionPlan(Op, CompleteList, txc, ctx);
+        KeyedOperation = KeyedOperation || (Op->HasKeysInfo() && Op->KeysCount() > 0);
 
         YDB_LOG_TRACE_CTX(ctx, "TTxReadViaPipeline Execute",
             {"txType", GetTxType()},
@@ -3292,6 +3295,7 @@ public:
 class TDataShard::TTxReadContinue : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
     const ui64 LocalReadId;
 
+    bool KeyedOperation = false;
     std::unique_ptr<TEvDataShard::TEvReadResult> Result;
     std::unique_ptr<IBlockBuilder> BlockBuilder;
     TShortTableInfo TableInfo;
@@ -3306,6 +3310,7 @@ public:
 
     // note that intentionally the same as TEvRead
     TTxType GetTxType() const override { return TXTYPE_READ; }
+    bool IsKeyedOperation() const override { return KeyedOperation; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         // note that we don't need to check shard state here:
@@ -3324,6 +3329,8 @@ public:
                 {"iterator", LocalReadId});
             return true;
         }
+
+        KeyedOperation = it->second->PathId.OwnerId != Self->TabletID();
 
         if (Self->SplitStarted) {
             LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,

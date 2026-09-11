@@ -232,6 +232,9 @@ TPartitionStats TTxStoreTableStats::PrepareStats(const T& rec,
     newStats.LocksBroken = tableStats.GetLocksBroken();
 
     newStats.SetCurrentRawCpuUsage(tabletMetrics.GetCPU(), now);
+    newStats.SetSplitCpuUsage(
+        tableStats.HasCPUWithKeys() ? std::make_optional(tableStats.GetCPUWithKeys()) : std::nullopt,
+        tableStats.HasCPUWithoutKeys() ? std::make_optional(tableStats.GetCPUWithoutKeys()) : std::nullopt);
     newStats.Memory = tabletMetrics.GetMemory();
     newStats.Network = tabletMetrics.GetNetwork();
     newStats.Storage = tabletMetrics.GetStorage();
@@ -390,7 +393,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
         TString splitReason;
 
-        if (!(table->CheckSplitByLoad(Self->SplitSettings, shardIdx, newStats.GetCurrentRawCpuUsage(), mainTableForIndex, splitReason))) {
+        if (!(table->CheckSplitByLoad(Self->SplitSettings, shardIdx, newStats.GetSplitCpuUsage(), mainTableForIndex, splitReason))) {
             LOG_DEBUG_S(
                 ctx,
                 NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -615,7 +618,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             "Do not want to split tablet " << datashardId << " by load,"
             << " its table already has "<< table->GetPartitions().size() << " out of " << table->GetMaxPartitionsCount() << " partitions");
         return true;
-    } else if (table->CheckSplitByLoad(Self->SplitSettings, shardIdx, newStats.GetCurrentRawCpuUsage(), mainTableForIndex, reason)) {
+    } else if (table->CheckSplitByLoad(Self->SplitSettings, shardIdx, newStats.GetSplitCpuUsage(), mainTableForIndex, reason)) {
         LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "Want to split tablet " << datashardId << " by load: " << reason);
         collectKeySample = true;

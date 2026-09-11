@@ -344,14 +344,15 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
 
     // The second priority is split-by-load
     if ((splitReason == ESplitReason::NO_SPLIT) && trySplitByLoad) {
-        // NOTE: When considering split-by-load, prefer using the current CPU usage
-        //       from the EvGetTableStatsResult message. It is the most recent
-        //       and the most accurate. However, it may not be present in some cases.
-        //       If this happens, use the cached CPU usage, which is reported
-        //       by the leader though the EvPeriodicTableStats messages.
-        ui64 currentCpuUsage = rec.GetTabletMetrics().GetCPU();
-
-        if (!(rec.GetTabletMetrics().HasCPU())) {
+        // Prefer keyed CPU from the most recent response. Older datashards do
+        // not report it, so preserve the previous fallback to their total CPU.
+        // If neither is present, use the cached split CPU from periodic stats.
+        ui64 currentCpuUsage = 0;
+        if (rec.GetTableStats().HasCPUWithKeys()) {
+            currentCpuUsage = rec.GetTableStats().GetCPUWithKeys();
+        } else if (rec.GetTabletMetrics().HasCPU()) {
+            currentCpuUsage = rec.GetTabletMetrics().GetCPU();
+        } else {
             const auto* stats = tableInfo->GetStats().PartitionStats.FindPtr(shardIdx);
 
             if (!stats) {
@@ -365,7 +366,7 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
                 return true;
             }
 
-            currentCpuUsage = stats->GetCurrentRawCpuUsage();
+            currentCpuUsage = stats->GetSplitCpuUsage();
         }
 
         if (tableInfo->CheckSplitByLoad(

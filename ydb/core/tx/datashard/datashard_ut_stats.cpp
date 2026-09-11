@@ -1052,6 +1052,9 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetFollowerId(), followerId, msg);
             UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetTabletMetrics().GetCPU(), 0, msg);
+            UNIT_ASSERT_C(result.GetTableStats().HasCPUWithKeys(), msg);
+            UNIT_ASSERT_C(result.GetTableStats().HasCPUWithoutKeys(), msg);
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetTableStats().GetCPUWithKeys(), 0, msg);
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().GetSplitProtocolVersion(), expectedSplitProtocolVersion, msg);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().HasKeyAccessSample(), false, msg);
@@ -1084,6 +1087,8 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetFollowerId(), followerId, msg);
             UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetTabletMetrics().GetCPU(), 0, msg);
+            UNIT_ASSERT_C(result.GetTableStats().HasCPUWithKeys(), msg);
+            UNIT_ASSERT_C(result.GetTableStats().HasCPUWithoutKeys(), msg);
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().GetSplitProtocolVersion(), expectedSplitProtocolVersion, msg);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().HasKeyAccessSample(), false, msg);

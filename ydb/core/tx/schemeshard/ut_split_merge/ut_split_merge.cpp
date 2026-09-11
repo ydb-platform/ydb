@@ -1235,6 +1235,8 @@ enum class ESendDuplicateTableStatsStrategy {
 struct TLoadAndSplitSimulator {
     std::map<ui32, NKikimrTabletBase::TMetrics> MetricsPatchByFollowerIdPeriodic;
     std::map<ui32, NKikimrTabletBase::TMetrics> MetricsPatchByFollowerIdStats;
+    std::map<ui32, NKikimrTableStats::TTableStats> TableStatsPatchByFollowerIdPeriodic;
+    std::map<ui32, NKikimrTableStats::TTableStats> TableStatsPatchByFollowerIdStats;
     NKikimrTableStats::THistogram KeyAccessHistogramPatch;
     ui64 TableLocalPathId;
     ui64 TableOwnerId;
@@ -1286,13 +1288,21 @@ struct TLoadAndSplitSimulator {
     {
         for (const auto& [followerId, targetCpuLoad] : targetCpuLoadByFollowerIdPeriodic) {
             MetricsPatchByFollowerIdPeriodic[followerId].SetCPU(CpuLoadMicroseconds(targetCpuLoad));
+            TableStatsPatchByFollowerIdPeriodic[followerId].SetCPUWithKeys(CpuLoadMicroseconds(targetCpuLoad));
+            TableStatsPatchByFollowerIdPeriodic[followerId].SetCPUWithoutKeys(0);
         }
 
         for (const auto& [followerId, targetCpuLoad] : targetCpuLoadByFollowerIdStats) {
             if (targetCpuLoad >= 0) {
                 MetricsPatchByFollowerIdStats[followerId].SetCPU(CpuLoadMicroseconds(targetCpuLoad));
+                TableStatsPatchByFollowerIdStats[followerId].SetCPUWithKeys(CpuLoadMicroseconds(targetCpuLoad));
+                TableStatsPatchByFollowerIdStats[followerId].SetCPUWithoutKeys(0);
             } else {
                 MetricsPatchByFollowerIdStats[followerId].ClearCPU();
+                // Ensure a matching (empty) entry exists so that TableStatsPatchByFollowerIdStats.find()
+                // below succeeds instead of pointing at end().
+                TableStatsPatchByFollowerIdStats[followerId].ClearCPUWithKeys();
+                TableStatsPatchByFollowerIdStats[followerId].ClearCPUWithoutKeys();
             }
         }
 
@@ -1334,6 +1344,15 @@ struct TLoadAndSplitSimulator {
                     << Endl;
             }
         }
+    }
+
+    void SetCpuWithKeys(ui32 followerId, ui32 cpuWithKeysPercent) {
+        const ui64 cpuWithKeys = CpuLoadMicroseconds(cpuWithKeysPercent);
+        const ui64 totalCpu = MetricsPatchByFollowerIdPeriodic.at(followerId).GetCPU();
+        TableStatsPatchByFollowerIdPeriodic[followerId].SetCPUWithKeys(cpuWithKeys);
+        TableStatsPatchByFollowerIdPeriodic[followerId].SetCPUWithoutKeys(totalCpu - cpuWithKeys);
+        TableStatsPatchByFollowerIdStats[followerId].SetCPUWithKeys(cpuWithKeys);
+        TableStatsPatchByFollowerIdStats[followerId].SetCPUWithoutKeys(totalCpu - cpuWithKeys);
     }
 
     /**
@@ -1439,10 +1458,12 @@ struct TLoadAndSplitSimulator {
                     }
 
                     const auto itTargetCpuForFollower = MetricsPatchByFollowerIdPeriodic.find(msg->Record.GetFollowerId());
+                    const auto itTableStatsForFollower = TableStatsPatchByFollowerIdPeriodic.find(msg->Record.GetFollowerId());
 
                     if (itTargetCpuForFollower != MetricsPatchByFollowerIdPeriodic.end()) {
                         const auto prevCPU = msg->Record.GetTabletMetrics().GetCPU();
                         msg->Record.MutableTabletMetrics()->MergeFrom(itTargetCpuForFollower->second);
+                        msg->Record.MutableTableStats()->MergeFrom(itTableStatsForFollower->second);
                         const auto newCPU = msg->Record.GetTabletMetrics().GetCPU();
 
                         Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
@@ -1504,9 +1525,11 @@ struct TLoadAndSplitSimulator {
                     }
 
                     const auto itTargetCpuForFollower = MetricsPatchByFollowerIdStats.find(msg->Record.GetFollowerId());
+                    const auto itTableStatsForFollower = TableStatsPatchByFollowerIdStats.find(msg->Record.GetFollowerId());
 
                     if (itTargetCpuForFollower != MetricsPatchByFollowerIdStats.end()) {
                         const auto prevCPU = msg->Record.GetTabletMetrics().GetCPU();
+                        msg->Record.MutableTableStats()->MergeFrom(itTableStatsForFollower->second);
 
                         if (itTargetCpuForFollower->second.HasCPU()) {
                             msg->Record.MutableTabletMetrics()->MergeFrom(itTargetCpuForFollower->second);
@@ -1519,6 +1542,13 @@ struct TLoadAndSplitSimulator {
                                 << Endl;
                         } else {
                             msg->Record.MutableTabletMetrics()->ClearCPU();
+
+                            // MergeFrom() above only copies fields that are set on the source,
+                            // so it cannot remove CPUWithKeys/CPUWithoutKeys already filled in
+                            // by the real datashard code. Clear them explicitly to fully simulate
+                            // a stats response without any CPU usage information.
+                            msg->Record.MutableTableStats()->ClearCPUWithKeys();
+                            msg->Record.MutableTableStats()->ClearCPUWithoutKeys();
 
                             Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
                                 << ", intercept EvGetTableStatsResult, from datashard " << msg->Record.GetDatashardId()
@@ -1886,6 +1916,54 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
         // Cerr << "TEST SplitByLoad, PeriodicTableStats " << simulator.PeriodicTableStatsCount << Endl;
         // Cerr << "TEST SplitByLoad, KeyAccessSampleReq " << simulator.KeyAccessSampleReqCount << Endl;
         // Cerr << "TEST SplitByLoad, SplitReq " << simulator.SplitReqCount << Endl;
+    }
+
+    Y_UNIT_TEST(KeylessCpuDoesNotTriggerSplit) {
+        TTestBasicRuntime runtime;
+        auto env = SetupEnv(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot",
+            "Name: \"Table\"\n"
+            "Columns { Name: \"key\" Type: \"Uint64\" }\n"
+            "Columns { Name: \"value\" Type: \"Uint64\" }\n"
+            "KeyColumnNames: [\"key\"]\n"
+            "PartitionConfig {\n"
+            "  PartitioningPolicy {\n"
+            "    SplitByLoadSettings { Enabled: true CpuPercentageThreshold: 50 }\n"
+            "  }\n"
+            "}\n");
+        env.TestWaitNotification(runtime, txId);
+
+        auto tableInfo = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
+        const ui64 tableLocalPathId = tableInfo.GetPathDescription().GetSelf().GetPathId();
+        const ui64 tableOwnerId = tableInfo.GetPathDescription().GetSelf().GetSchemeshardId();
+        const ui64 initialDatashardId = tableInfo.GetPathDescription().GetTablePartitions(0).GetDatashardId();
+
+        TLoadAndSplitSimulator simulator(
+            tableLocalPathId,
+            tableOwnerId,
+            initialDatashardId,
+            false,
+            ESendDuplicateTableStatsStrategy::None,
+            {{0, 100}},
+            {{0, 100}},
+            runtime);
+        simulator.SetCpuWithKeys(0, 0);
+
+        auto observerHolder = runtime.AddObserver(
+            [&simulator](IEventHandle::TPtr& event) {
+                simulator.ChangeEvent(event);
+            });
+
+        runtime.WaitFor(
+            "keyless CPU does not trigger split",
+            [&simulator]() {
+                return simulator.PeriodicTableStatsCount > 10 && simulator.KeyAccessSampleReqCount == 0;
+            },
+            TDuration::Seconds(60));
+
+        UNIT_ASSERT_VALUES_EQUAL(simulator.SplitReqCount, 0);
     }
 
     static void TableSplitsUpToMaxPartitionsCount(ui32 splitProtocolVersion) {

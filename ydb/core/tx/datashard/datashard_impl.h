@@ -3723,7 +3723,11 @@ protected:
             ev->Record.MutableTableStats()->SetRangeReads(TabletCounters->Cumulative()[COUNTER_ENGINE_HOST_SELECT_RANGE].Get());
             ev->Record.MutableTableStats()->SetRangeReadRows(TabletCounters->Cumulative()[COUNTER_ENGINE_HOST_SELECT_RANGE_ROWS].Get());
             if (resourceMetrics != nullptr) {
+                resourceMetrics->CPUWithKeys.Increment(0, now);
+                resourceMetrics->CPUWithoutKeys.Increment(0, now);
                 resourceMetrics->Fill(*ev->Record.MutableTabletMetrics());
+                ev->Record.MutableTableStats()->SetCPUWithKeys(resourceMetrics->CPUWithKeys.GetValue());
+                ev->Record.MutableTableStats()->SetCPUWithoutKeys(resourceMetrics->CPUWithoutKeys.GetValue());
             }
 
             ev->Record.MutableTableStats()->SetLocksAcquired(TabletCounters->Cumulative()[COUNTER_LOCKS_ACQUIRED].Get());

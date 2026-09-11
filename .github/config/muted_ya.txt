@@ -20,7 +20,6 @@ ydb/library/actors/interconnect/ut InterconnectSessionV2.LargePayloadRoundTrip
 ydb/library/yql/providers/generic/connector/tests/datasource/oracle py3test.sole chunk
 ydb/public/tools/local_ydb/ut test_local_ydb.py.test_deploy_stop_start_update_and_cleanup_preserve_data
 ydb/services/config/ut ConfigGRPCService.ReplaceConfig
-ydb/services/persqueue_v1/ut TPersQueueTest.TopicServiceCommitOffset
 ydb/tests/compatibility/indexes py3test.[test_vector_index.py */*] chunk
 ydb/tests/compatibility/indexes test_fulltext_index.py.TestFulltextIndex.test_fulltext_index[rolling_stable-26-3-1_to_prestable-26-4]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_prestable-26-4-lax]
@@ -33,7 +32,6 @@ ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeA
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade_join[rolling_stable-26-3-1_to_prestable-26-4-False]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade_join[rolling_stable-26-3-1_to_prestable-26-4-True]
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-2-1_to_stable-26-3-1-False]
-ydb/tests/compatibility/topics test_sqs_topic.py.TestTopicSqsRollingUpdate.test_write_and_read[rolling_stable-26-2-1_to_stable-26-3-1]
 ydb/tests/compatibility/topics test_sqs_topic.py.TestTopicSqsRollingUpdate.test_write_and_read[rolling_stable-26-3-1_to_prestable-26-4]
 ydb/tests/fq/streaming py3test.[*/*] chunk
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_issues_after_restart[kikimr0-False]
@@ -45,14 +43,6 @@ ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/config test_distconf_static_group.py.TestStaticGroupSelfHealPlacementPolicy.test_local_policy_relocates_to_spare_pdisk_on_same_node
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/kqp/kqp_query_svc NodeIdDescribe.HasDistribution
-ydb/tests/functional/nbs/F2_fault_injection F2_03_one_dbg_host_down.py.TestF2_03OneDbgHostDown.test_one_dbg_host_down
-ydb/tests/functional/nbs/F2_fault_injection F2_04_two_dbg_hosts_down.py.TestF2_04TwoDbgHostsDown.test_two_dbg_hosts_down
-ydb/tests/functional/nbs/F2_fault_injection F2_06_pdisk_broken.py.TestF2_06PdiskBroken.test_pdisk_broken
-ydb/tests/functional/nbs/F2_fault_injection F2_07_pdisk_stop_restart.py.TestF2_07PdiskStopRestart.test_pdisk_stop_restart
-ydb/tests/functional/nbs/F2_fault_injection F2_08_sigstop_slow_node.py.TestF2_08SigstopSlowNode.test_sigstop_slow_node
-ydb/tests/functional/nbs/F4_throttling_and_limits F4_07_flush_cooldown_on_errors.py.TestF4_07FlushCooldownOnErrors.test_flush_cooldown_on_errors
-ydb/tests/functional/nbs/F5_observability F5_01_parse_dbg_host_table.py.TestF5_01ParseDbgHostTable.test_parse_dbg_host_table
-ydb/tests/functional/nbs/F5_observability F5_05_ddisk_directio.py.TestF5_05DdiskDirectio.test_ddisk_directio
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestCompileCacheViewPeerWarnings.test_peer_scan_warnings_increment_on_dead_peer
 ydb/tests/functional/sqs_topic test_send_message_batch.py.TestSqsTopicSendMessageBatch.test_send_message_batch_with_delay_seconds
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
@@ -61,5 +51,4 @@ ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/reconfig_state_storage_workload/tests test_scheme_board_workload.py.TestReconfigSchemeBoardWorkload.test_scheme_board
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingWorkload.test
-ydb/tools/mnc/viewer/ut py3test.sole chunk
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite

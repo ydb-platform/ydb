@@ -15,7 +15,6 @@ struct TWasmModuleState {
     THashMap<TString, TWasmUdfDescriptor> Functions;
     TVector<TString> FunctionOrder;
     THashSet<TString> Exports;
-    TString Md5;
     TString ModuleName;
 };
 

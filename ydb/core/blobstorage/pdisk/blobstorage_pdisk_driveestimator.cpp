@@ -5,6 +5,8 @@
 #include <ydb/library/pdisk_io/wcache.h>
 
 #include <util/system/align.h>
+#include <util/generic/yexception.h>
+#include <util/string/builder.h>
 
 namespace NKikimr {
 namespace NPDisk {
@@ -19,17 +21,13 @@ TDriveEstimator::TLoadCompl::TLoadCompl(TDriveEstimator *estimator)
 
 void TDriveEstimator::TLoadCompl::Exec(TActorSystem *actorSystem) {
     Y_UNUSED(actorSystem);
-    if (AtomicIncrement(Estimator->Counter) == Estimator->Repeats) {
-        TGuard<TMutex> grd(Estimator->Mtx);
-        if (AtomicGet(Estimator->Counter) == Estimator->Repeats) {
-            Estimator->CondVar.Signal();
-        }
-    }
+    Estimator->CompleteIo();
     delete this;
 }
 
 void TDriveEstimator::TLoadCompl::Release(TActorSystem *actorSystem) {
     Y_UNUSED(actorSystem);
+    Estimator->CompleteIo(TStringBuilder() << "I/O released: result# " << Result << " " << ErrorReason);
     delete this;
 }
 
@@ -46,8 +44,7 @@ TDriveEstimator::TSeekCompl::TSeekCompl(TDriveEstimator *estimator, ui32 counter
 void TDriveEstimator::TSeekCompl::Exec(TActorSystem *actorSystem) {
     Y_UNUSED(actorSystem);
     if (Counter == Estimator->Repeats) {
-        TGuard<TMutex> grd(Estimator->Mtx);
-        Estimator->CondVar.Signal();
+        Estimator->CompleteIo();
     } else {
         const NHPTimer::STime now = HPNow();
         if (Counter > 1) {
@@ -62,6 +59,7 @@ void TDriveEstimator::TSeekCompl::Exec(TActorSystem *actorSystem) {
 
 void TDriveEstimator::TSeekCompl::Release(TActorSystem *actorSystem) {
     Y_UNUSED(actorSystem);
+    Estimator->CompleteIo(TStringBuilder() << "seek I/O released: result# " << Result << " " << ErrorReason);
     delete this;
 }
 
@@ -69,15 +67,38 @@ void TDriveEstimator::TSeekCompl::Release(TActorSystem *actorSystem) {
 // TDriveEstimator
 ////////////////////////////////////////////////////////////////////////////////
 
-ui64 TDriveEstimator::EstimateSeekTimeNs() {
+void TDriveEstimator::BeginIo() {
     TGuard<TMutex> grd(Mtx);
     Counter = 0;
+    IoError.clear();
+}
+
+void TDriveEstimator::CompleteIo(const TString& error) {
+    TGuard<TMutex> grd(Mtx);
+    if (IoError.empty()) {
+        IoError = error;
+    }
+    ++Counter;
+    CondVar.Signal();
+}
+
+void TDriveEstimator::WaitForIo(ui32 completions) {
+    TGuard<TMutex> grd(Mtx);
+    // Failed operations also retire. Drain the whole batch before unwinding
+    // can destroy the buffer or estimator referenced by other completions.
+    while (Counter < completions) {
+        CondVar.WaitI(Mtx);
+    }
+    Y_ENSURE(IoError.empty(), "Drive estimation failed for " << Filename << ": " << IoError);
+}
+
+ui64 TDriveEstimator::EstimateSeekTimeNs() {
+    BeginIo();
 
     NHPTimer::STime start = HPNow();
     Device->PwriteAsync(Buffer->Data(), SeekBufferSize, 0, new TSeekCompl(this, 0, start),
             TReqId(TReqId::EstimatorSeekTimeNs, 0), nullptr);
-    CondVar.WaitI(Mtx);
-    grd.Release();
+    WaitForIo(1);
 
     NHPTimer::STime seekTime = Durations.front();
     for (ui32 i = 0; i < Durations.size(); ++i) {
@@ -92,8 +113,7 @@ void TDriveEstimator::EstimateSpeed(const bool isAtDriveBegin, ui64 outSpeed[TDr
     NHPTimer::STime start = HPNow();
     constexpr ui64 operationSize = 1 << 20;
     static_assert(operationSize <= BufferSize, "operationSize must be less than or equal to BufferSize");
-    TGuard<TMutex> grd(Mtx);
-    Counter = 0;
+    BeginIo();
 
     for (ui32 i = 0; i < Repeats; ++i) {
         ui64 offset;
@@ -107,12 +127,12 @@ void TDriveEstimator::EstimateSpeed(const bool isAtDriveBegin, ui64 outSpeed[TDr
                 TReqId(TReqId::EstimatorSpeed1, 0), nullptr);
     }
 
-    CondVar.WaitI(Mtx);
+    WaitForIo();
 
     double elapsed = HPSecondsFloat(HPNow() - start);
     outSpeed[TDriveModel::OP_TYPE_WRITE] = (double)operationSize * Repeats / elapsed;
 
-    Counter = 0;
+    BeginIo();
     start = HPNow();
 
     for (ui32 i = 0; i < Repeats; ++i) {
@@ -127,7 +147,7 @@ void TDriveEstimator::EstimateSpeed(const bool isAtDriveBegin, ui64 outSpeed[TDr
                 TReqId(TReqId::EstimatorSpeed2, 0), nullptr);
     }
 
-    CondVar.WaitI(Mtx);
+    WaitForIo();
 
     elapsed = HPSecondsFloat(HPNow() - start);
     outSpeed[TDriveModel::OP_TYPE_READ] = (double)operationSize * Repeats / elapsed;
@@ -137,15 +157,13 @@ void TDriveEstimator::EstimateSpeed(const bool isAtDriveBegin, ui64 outSpeed[TDr
 ui64 TDriveEstimator::EstimateTrimSpeed() {
     constexpr ui64 trimSize = 1ull << 20;
     static_assert(trimSize <= BufferSize, "trimSize must be less than or equal to BufferSize");
-    TGuard<TMutex> grd(Mtx);
-    Counter = 0;
+    BeginIo();
 
     for (ui32 i = 0; i < Repeats; ++i) {
         Device->PwriteAsync(Buffer->Data(), trimSize, i * trimSize,
                 new TLoadCompl(this), TReqId(TReqId::EstimatorTrimSpeed1, 0), nullptr);
     }
-    CondVar.WaitI(Mtx);
-    Counter = 0;
+    WaitForIo();
 
     NHPTimer::STime start = HPNow();
     for (ui32 i = 0; i < Repeats; ++i) {
@@ -168,9 +186,8 @@ ui64 TDriveEstimator::MeasureOperationDuration(const ui32 type, const ui64 size)
         completions.push_back(new TLoadCompl(this));
     }
 
-    TGuard<TMutex> grd(Mtx);
+    BeginIo();
     NHPTimer::STime start = HPNow();
-    Counter = 0;
     for (ui32 repeat = 0; repeat < Repeats; ++repeat) {
         switch (type) {
             case TDriveModel::OP_TYPE_READ:
@@ -189,7 +206,7 @@ ui64 TDriveEstimator::MeasureOperationDuration(const ui32 type, const ui64 size)
         }
     }
     NHPTimer::STime now = HPNow();
-    CondVar.WaitI(Mtx);
+    WaitForIo();
     return HPNanoSeconds(now - start) / (Repeats - 1 - eventsToSkip);
 }
 
@@ -220,7 +237,9 @@ void TDriveEstimator::EstimateGlueingDeadline(ui32 outGlueingDeadline[TDriveMode
         durations.clear();
 
         ui64 glueingDeadlineMin = Max<ui64>();
-        for (ui32 size = lowerSize; size <= upperSize; size += 512) {
+        // Keep both the transfer size and repeat * size offset aligned for
+        // direct I/O on devices/filesystems requiring 4 KiB sectors.
+        for (ui32 size = lowerSize; size <= upperSize; size += SectorSize) {
             const ui64 durationNs = MeasureOperationDuration(type, size);
             glueingDeadlineMin = Min(glueingDeadlineMin, durationNs);
         }

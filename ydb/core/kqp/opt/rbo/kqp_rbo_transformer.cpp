@@ -457,6 +457,14 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     expandAggregationRules.emplace_back(std::make_unique<TExpandDistinctAggregationRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Expand aggregation", std::move(expandAggregationRules)));
 
+    // Push predicates before inlining.
+    TVector<std::unique_ptr<IRule>> earlyPushFilterRules;
+    earlyPushFilterRules.emplace_back(std::make_unique<TExtractJoinExpressionsRule>());
+    earlyPushFilterRules.emplace_back(std::make_unique<TExtractCommonConjunctsRule>());
+    earlyPushFilterRules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
+    earlyPushFilterRules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Push filters before inlining", std::move(earlyPushFilterRules)));
+
     // Subplan inlining. For correlated subqueries we create dependent join.
     TVector<std::unique_ptr<IRule>> inlineScalarSubPlanStageRules;
     inlineScalarSubPlanStageRules.emplace_back(std::make_unique<TInlineScalarSubplanRule>());

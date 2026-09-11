@@ -20,7 +20,8 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TGeneralContainer>, Records);
 
 public:
-    TConclusion<std::shared_ptr<TJsonPathAccessor>> GetPathAccessor(const std::string_view path, const ui32 recordsCount) const;
+    static std::shared_ptr<TJsonPathAccessor> BuildEmptyPathAccessor(ui32 recordsCount);
+    std::shared_ptr<TJsonPathAccessor> GetPathAccessor(TDictStats::TResolvedPath path, ui32 recordsCount) const;
 
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;

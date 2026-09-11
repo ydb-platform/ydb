@@ -9,7 +9,6 @@
 #include "blobstorage_pdisk_mon.h"
 
 #include <util/system/hp_timer.h>
-#include <library/cpp/deprecated/atomic/atomic.h>
 #include <ydb/library/actors/core/monotonic_provider.h>
 #include <ydb/core/base/resource_profile.h>
 #include <ydb/core/base/feature_flags.h>
@@ -23,6 +22,7 @@ namespace NKikimr {
 namespace NPDisk {
 
 class TDriveEstimator {
+    friend class TDriveEstimatorTestPeer;
     TString Filename;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TPDiskMon PDiskMon;
@@ -33,7 +33,8 @@ class TDriveEstimator {
     ui64 DriveSize;
     THolder<TBufferPool> BufferPool;
     TBuffer::TPtr Buffer;
-    TAtomic Counter = 0;
+    ui32 Counter = 0;
+    TString IoError;
     TMutex Mtx;
     TCondVar CondVar;
     static constexpr ui32 Repeats = 32;
@@ -41,6 +42,10 @@ class TDriveEstimator {
     static constexpr ui32 SectorSize = 4096;
     static constexpr ui32 SeekBufferSize = 4096;
     TVector<NHPTimer::STime> Durations;
+
+    void BeginIo();
+    void CompleteIo(const TString& error = {});
+    void WaitForIo(ui32 completions = Repeats);
 
     struct TLoadCompl : public NPDisk::TCompletionAction {
         TDriveEstimator *Estimator;

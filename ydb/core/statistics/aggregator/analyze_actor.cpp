@@ -1,4 +1,5 @@
 #include "analyze_actor.h"
+#include "key_range_predicate.h"
 
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/core/base/request_types.h>
@@ -36,17 +37,23 @@ std::optional<EStatType> ConvertMultiColumnStatType(NKikimrSchemeOp::EMultiColum
 
 class TAnalyzeActor::TScanActor : public TQueryBase {
 public:
-    TScanActor(TActorId parent, TString Database, TString query, size_t columnCount)
+    TScanActor(
+        TActorId parent,
+        TString Database,
+        TString query,
+        size_t columnCount,
+        std::optional<NYdb::TParamsBuilder> params)
         : TQueryBase(NKikimrServices::STATISTICS, {}, std::move(Database))
         , Parent(parent)
         , Query(std::move(query))
         , ColumnCount(columnCount)
+        , Params(std::move(params))
     {
         RequestType = TString(NRequestTypes::Analyze);
     }
 
     void OnRunQuery() override {
-        RunStreamQuery(Query);
+        RunStreamQuery(Query, Params ? &*Params : nullptr);
     }
 
     void OnStreamResult(NYdb::TResultSet&& resultSet) override {
@@ -86,7 +93,9 @@ public:
 
         YDB_LOG_WARN("ScanActor OnFinish non-success",
             {"selfId", SelfId()},
-            {"status", status});
+            {"status", status},
+            {"issues", issues.ToOneLineString()},
+            {"query", Query});
 
         if (!ResponseSent) {
             auto response = std::make_unique<TEvPrivate::TEvAnalyzeScanResult>(
@@ -115,6 +124,7 @@ private:
     TActorId Parent;
     TString Query;
     size_t ColumnCount;
+    std::optional<NYdb::TParamsBuilder> Params;
     bool ResponseSent = false;
 };
 
@@ -147,7 +157,8 @@ void TAnalyzeActor::FinishWithFailure(
         {"selfId", SelfId()},
         {"status", static_cast<int>(status)},
         {"operationId", OperationId.Quote()},
-        {"pathId", PathId});
+        {"pathId", PathId},
+        {"issue", NYql::TIssues{issue}.ToOneLineString()});
 
     auto response = std::make_unique<TEvStatistics::TEvAnalyzeActorResult>(status);
 
@@ -276,10 +287,13 @@ void TAnalyzeActor::HandleNavigateResult() {
         tag2Column[col.second.Id] = col.second;
 
         if (col.second.KeyOrder >= 0) {
-            KeyColumnTypes.resize(Max<size_t>(KeyColumnTypes.size(), col.second.KeyOrder + 1));
+            const size_t keySize = static_cast<size_t>(col.second.KeyOrder) + 1;
+            KeyColumnTypes.resize(Max(KeyColumnTypes.size(), keySize));
             KeyColumnTypes[col.second.KeyOrder] = col.second.PType;
+            KeyColumnNames.resize(Max(KeyColumnNames.size(), keySize));
+            KeyColumnNames[col.second.KeyOrder] = col.second.Name;
 
-            keyColumns.resize(Max<size_t>(keyColumns.size(), col.second.KeyOrder + 1));
+            keyColumns.resize(Max(keyColumns.size(), keySize));
             keyColumns[col.second.KeyOrder] = {col.second.Name, col.second.Id};
         }
     }
@@ -433,13 +447,18 @@ void TAnalyzeActor::HandleNavigateResult() {
         return;
     }
 
-    // Per-shard scans for column tables unless size is known and at or below
-    // the whole-table threshold. Unknown size (missing/unparsed base stats)
-    // stays per-shard to avoid a full-table scan of a potentially large table.
-    UsePerShardScans = IsColumnTable
-        && (Config.WholeTableScanMaxBytes == 0
-            || !Config.TableBytesSize
-            || *Config.TableBytesSize > Config.WholeTableScanMaxBytes);
+    // Split large/unknown-size tables: column tables by TabletId, row tables by PK range.
+    const ui64 wholeTableScanMaxBytes = IsColumnTable
+        ? Config.ColumnTableWholeTableScanMaxBytes
+        : Config.RowTableWholeTableScanMaxBytes;
+    const bool shouldSplit = wholeTableScanMaxBytes == 0
+        || !Config.TableBytesSize
+        || *Config.TableBytesSize > wholeTableScanMaxBytes;
+    if (shouldSplit) {
+        ScanMode = IsColumnTable ? EScanMode::PerShard : EScanMode::PerRange;
+    } else {
+        ScanMode = EScanMode::WholeTable;
+    }
     YDB_LOG_DEBUG("Scan strategy",
         {"selfId", SelfId()},
         {"operationId", OperationId.Quote()},
@@ -447,11 +466,29 @@ void TAnalyzeActor::HandleNavigateResult() {
         {"isColumnTable", IsColumnTable},
         {"tableBytesSizeKnown", Config.TableBytesSize.has_value()},
         {"tableBytesSize", Config.TableBytesSize.value_or(0)},
-        {"wholeTableScanMaxBytes", Config.WholeTableScanMaxBytes},
-        {"usePerShardScans", UsePerShardScans});
+        {"wholeTableScanMaxBytes", wholeTableScanMaxBytes},
+        {"scanMode", static_cast<int>(ScanMode)});
 
-    if (UsePerShardScans) {
-        // Resolve table shard ids.
+    if (ScanMode == EScanMode::PerRange) {
+        TStringBuf reason;
+        if (KeyColumnNames.empty() || AnyOf(KeyColumnNames, [](const TString& name) {
+            return name.empty();
+        })) {
+            reason = "key columns are incomplete";
+        } else if (!CanEncodeKeyRangePredicate(KeyColumnTypes)) {
+            reason = "PK type cannot be encoded as a range predicate";
+        }
+        if (reason) {
+            YDB_LOG_WARN("Falling back to whole-table ANALYZE scan",
+                {"reason", reason},
+                {"operationId", OperationId.Quote()},
+                {"pathId", PathId});
+            ScanMode = EScanMode::WholeTable;
+        }
+    }
+
+    if (IsPartitionedScan()) {
+        // Resolve shard ids (and PK range bounds for row tables).
         TVector<TCell> minusInf(KeyColumnTypes.size());
         TVector<TCell> plusInf;
         TTableRange range(minusInf, true, plusInf, true, false);
@@ -463,8 +500,8 @@ void TAnalyzeActor::HandleNavigateResult() {
         resolveRequest->ResultSet.emplace_back(std::move(keyDesc));
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(resolveRequest.release()));
     } else {
-        StartColumnStatEvalTasks();
         Become(&TThis::StateScan);
+        StartColumnStatEvalTasks();
     }
 }
 
@@ -489,8 +526,60 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& 
         return;
     }
 
-    for (const auto& part : entry.KeyDescription->GetPartitions()) {
-        TabletIdsToLocate.insert(part.ShardId);
+    if (ScanMode == EScanMode::PerRange) {
+        for (const auto& part : entry.KeyDescription->GetPartitions()) {
+            if (!part.Range) {
+                FinishWithFailure(
+                    TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
+                    NYql::TIssue("DataShard partition is missing a key range"));
+                return;
+            }
+        }
+        TString encodeError;
+        for (auto& [shardId, range] : MakeBudgetedSubranges(
+                entry.KeyDescription->GetPartitions(),
+                Config.TableBytesSize,
+                Config.RowTableWholeTableScanMaxBytes))
+        {
+            TString where;
+            TString declares;
+            TString error;
+            NYdb::TParamsBuilder params;
+            if (!TryBuildKeyRangePredicate(
+                    KeyColumnNames, KeyColumnTypes, range, where, declares, params, error))
+            {
+                encodeError = std::move(error);
+                break;
+            }
+            RangeWorkItems.push_back(TScanWorkItem{
+                .TabletId = shardId,
+                .Range = std::move(range),
+            });
+            TabletIdsToLocate.insert(shardId);
+        }
+        if (encodeError) {
+            YDB_LOG_WARN("Falling back to whole-table ANALYZE scan",
+                {"reason", encodeError},
+                {"operationId", OperationId.Quote()},
+                {"pathId", PathId});
+            RangeWorkItems.clear();
+            TabletIdsToLocate.clear();
+            ScanMode = EScanMode::WholeTable;
+            Become(&TThis::StateScan);
+            StartColumnStatEvalTasks();
+            return;
+        }
+    } else {
+        for (const auto& part : entry.KeyDescription->GetPartitions()) {
+            TabletIdsToLocate.insert(part.ShardId);
+        }
+    }
+
+    if (TabletIdsToLocate.empty()) {
+        FinishWithFailure(
+            TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
+            NYql::TIssue("ANALYZE found no table partitions to scan"));
+        return;
     }
 
     Send(SelfId(), new TEvPrivate::TEvRequestTableDistribution);
@@ -528,12 +617,12 @@ void TAnalyzeActor::Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev) {
     }
 
     // Report initial progress: shards known, none done yet
-    ui32 shardsTotal = UsePerShardScans ? static_cast<ui32>(TabletId2NodeId.size()) : 1;
+    ui32 shardsTotal = IsPartitionedScan() ? PartitionedScanCount() : 1;
     SendProgressEvent(shardsTotal, 0);
 
     Send(MakePipePerNodeCacheID(EPipePerNodeCache::Leader), new TEvPipeCache::TEvUnlink(0));
-    StartColumnStatEvalTasks();
     Become(&TThis::StateScan);
+    StartColumnStatEvalTasks();
 }
 
 void TAnalyzeActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
@@ -560,14 +649,20 @@ void TAnalyzeActor::StartColumnStatEvalTasks() {
     Y_ENSURE(InProgressTasks.empty());
     Y_ENSURE(!PendingTasks.empty());
 
-
-    if (UsePerShardScans) {
+    if (ScanMode == EScanMode::PerShard) {
         for (const auto& [tabletId, nodeId] : TabletId2NodeId) {
-            NodeId2State.try_emplace(nodeId, nodeId).first->second.PendingTablets.push_back(tabletId);
+            NodeId2State.try_emplace(nodeId, nodeId).first->second.PendingScans.push_back(
+                TScanWorkItem{.TabletId = tabletId});
+        }
+    } else if (ScanMode == EScanMode::PerRange) {
+        for (const auto& item : RangeWorkItems) {
+            auto nodeIt = TabletId2NodeId.find(item.TabletId);
+            Y_ENSURE(nodeIt != TabletId2NodeId.end());
+            NodeId2State.try_emplace(nodeIt->second, nodeIt->second).first->second.PendingScans.push_back(item);
         }
     }
 
-    SelectBuilder.emplace(/*isIntermediateAggregation=*/UsePerShardScans);
+    SelectBuilder.emplace(/*isIntermediateAggregation=*/IsPartitionedScan());
     size_t totalSize = 0;
 
     if (!CountSeq && !RowCount) {
@@ -599,25 +694,31 @@ void TAnalyzeActor::StartColumnStatEvalTasks() {
         PendingTasks.pop();
     }
 
-    DispatchSomeScanActors();
+    if (!DispatchSomeScanActors()) {
+        return;
+    }
 }
 
-void TAnalyzeActor::DispatchSomeScanActors() {
-    auto dispatchActor = [&](ui32 nodeId, std::optional<ui64> tabletId) {
+bool TAnalyzeActor::DispatchSomeScanActors() {
+    auto dispatchActor = [&](ui32 nodeId, std::optional<ui64> tabletId, TStringBuf where,
+            TStringBuf declares, std::optional<NYdb::TParamsBuilder> params)
+    {
         auto actor = std::make_unique<TScanActor>(
             SelfId(), DatabaseName,
-            SelectBuilder->Build(TableName, tabletId), SelectBuilder->ColumnCount());
+            SelectBuilder->Build(TableName, tabletId, where, declares),
+            SelectBuilder->ColumnCount(),
+            std::move(params));
         ScanActorsInFlight[Register(actor.release(), TMailboxType::HTSwap, AppData()->BatchPoolId)] = TScanActorInfo{
             .TabletNodeId = nodeId,
         };
     };
 
-    if (!UsePerShardScans) {
+    if (!IsPartitionedScan()) {
         Y_ENSURE(ScanActorsInFlight.empty());
         YDB_LOG_DEBUG("Dispatching scan actor for the whole table",
             {"selfId", SelfId()});
-        dispatchActor(0, std::nullopt);
-        return;
+        dispatchActor(0, std::nullopt, {}, {}, {});
+        return true;
     }
 
     // Run a simple scheduling algorithm, dispatching scans fairly among nodes hosting tablets,
@@ -625,13 +726,13 @@ void TAnalyzeActor::DispatchSomeScanActors() {
     // longer tablet ids queue.
 
     auto isSchedulable = [&](const TNodeState& node) {
-        return !node.PendingTablets.empty()
+        return !node.PendingScans.empty()
             && node.TabletsInFlight < Config.MaxPerNodeScanActorsInFlight;
     };
 
     auto nodeCmp = [](TNodeState* left, TNodeState* right) {
-        return std::tuple(-left->TabletsInFlight, left->PendingTablets.size())
-            < std::tuple(-right->TabletsInFlight, right->PendingTablets.size());
+        return std::tuple(-left->TabletsInFlight, left->PendingScans.size())
+            < std::tuple(-right->TabletsInFlight, right->PendingScans.size());
     };
 
     std::priority_queue<TNodeState*, std::vector<TNodeState*>, decltype(nodeCmp)> schedulableQueue;
@@ -645,21 +746,42 @@ void TAnalyzeActor::DispatchSomeScanActors() {
             && ScanActorsInFlight.size() < Config.MaxTotalScanActorsInFlight) {
         auto* node = schedulableQueue.top();
         schedulableQueue.pop();
-        Y_ENSURE(!node->PendingTablets.empty());
-        ui64 tabletId = node->PendingTablets.back();
+        Y_ENSURE(!node->PendingScans.empty());
+        TScanWorkItem work = std::move(node->PendingScans.back());
+        node->PendingScans.pop_back();
+
+        std::optional<ui64> scanTabletId;
+        TString where;
+        TString declares;
+        std::optional<NYdb::TParamsBuilder> params;
+        if (ScanMode == EScanMode::PerShard) {
+            scanTabletId = work.TabletId;
+        } else {
+            params.emplace();
+            TString error;
+            if (!TryBuildKeyRangePredicate(
+                    KeyColumnNames, KeyColumnTypes, work.Range, where, declares, *params, error))
+            {
+                FinishWithFailure(
+                    TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
+                    NYql::TIssue(error));
+                return false;
+            }
+        }
 
         YDB_LOG_DEBUG("Dispatching scan actor",
             {"selfId", SelfId()},
-            {"tabletId", tabletId},
-            {"nodeId", node->Id});
-        dispatchActor(node->Id, tabletId);
-        node->PendingTablets.pop_back();
+            {"tabletId", work.TabletId},
+            {"nodeId", node->Id},
+            {"scanMode", static_cast<int>(ScanMode)});
+        dispatchActor(node->Id, scanTabletId, where, declares, std::move(params));
         ++node->TabletsInFlight;
 
         if (isSchedulable(*node)) {
             schedulableQueue.push(node);
         }
     }
+    return true;
 }
 
 void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
@@ -669,7 +791,7 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     ScanActorsInFlight.erase(actorIt);
 
     ++ScansCompletedTotal;
-    const ui32 shardsTotal = UsePerShardScans ? static_cast<ui32>(TabletId2NodeId.size()) : 1;
+    const ui32 shardsTotal = IsPartitionedScan() ? PartitionedScanCount() : 1;
     // Cap intermediate progress below 100%: simple-stats and stage-2 rounds share
     // ScansCompletedTotal, so 100% is only emitted from the final-result branch.
     const ui32 shardsDoneCap = shardsTotal > 0 ? shardsTotal - 1 : 0;
@@ -678,6 +800,9 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     auto& result = *ev->Get();
     if (result.Status != Ydb::StatusIds::SUCCESS) {
         NYql::TIssue error(TStringBuilder() << "Statistics calculation query failed with " << result.Status);
+        for (const auto& issue : result.Issues) {
+            error.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
+        }
         FinishWithFailure(
             TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
             std::move(error));
@@ -688,11 +813,13 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
         auto nodeIt = NodeId2State.find(tabletNodeId);
         Y_ENSURE(nodeIt != NodeId2State.end());
         --nodeIt->second.TabletsInFlight;
-        if (!nodeIt->second.TabletsInFlight && nodeIt->second.PendingTablets.empty()) {
+        if (!nodeIt->second.TabletsInFlight && nodeIt->second.PendingScans.empty()) {
             NodeId2State.erase(nodeIt);
         }
 
-        DispatchSomeScanActors();
+        if (!DispatchSomeScanActors()) {
+            return;
+        }
     }
 
     if (CountSeq) {

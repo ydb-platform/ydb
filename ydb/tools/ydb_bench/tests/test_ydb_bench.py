@@ -252,7 +252,7 @@ class YdbBenchTest(unittest.TestCase):
 
         output = self.root / output_name
         binaries = {
-            name: mock.Mock(path=self.root / name, sha256=name + "-digest", size=1)
+            name: common.BinaryArtifact(path=self.root / name, sha256=name + "-digest", size=1)
             for name in ("ydbd", "ydb_cli", "process_guard")
         }
         events = []
@@ -1103,7 +1103,7 @@ class YdbBenchTest(unittest.TestCase):
             local-ydb:
               geometry-best:
                 workload: {type: kv, operation: upsert}
-                actor-system: {use-shared-threads: true, use-united-pool: true}
+                actor-system: {use-shared-threads: true, use-united-pool: true, use-ring-queue: false}
                 geometry: {preset: storage, static-nodes: 1, dynamic-nodes: 1, max-dynamic-nodes: 2}
                 load: {parameter: threads, values: [1]}
                 measurement: {warmup: 0, duration: 1, repetitions: 1, verification-repetitions: 2}
@@ -1138,8 +1138,14 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(manifest["verification"]["dynamic_nodes"], 1)
         self.assertEqual(self.last_local_ydb_cluster_constructor.call_count, 2)
         for call in self.last_local_ydb_cluster_constructor.call_args_list:
-            self.assertEqual(call.kwargs["actor_system"], {"use_shared_threads": True, "use_united_pool": True})
-        self.assertEqual(manifest["parameters"]["actor_system"], {"use_shared_threads": True, "use_united_pool": True})
+            self.assertEqual(
+                call.kwargs["actor_system"],
+                {"use_shared_threads": True, "use_united_pool": True, "use_ring_queue": False},
+            )
+        self.assertEqual(
+            manifest["parameters"]["actor_system"],
+            {"use_shared_threads": True, "use_united_pool": True, "use_ring_queue": False},
+        )
         verification_cluster = self.last_local_ydb_cluster_constructor.call_args_list[1]
         self.assertEqual(verification_cluster.args[3], self.root / "geometry-best" / "verification-cluster")
         self.assertEqual(verification_cluster.args[4]["dynamic_nodes"], 1)
@@ -2173,6 +2179,276 @@ class YdbBenchTest(unittest.TestCase):
                     )
                 )
 
+    def test_binary_catalog_and_editor_refresh(self):
+        catalog = self.root / "bin"
+        directory = catalog / "ydbd"
+        self.assertEqual(common.binary_catalog(catalog)["ydbd"], [])
+        self.assertFalse(catalog.exists())
+        directory.mkdir(parents=True)
+        for name in ("stable-26-3-1", "main"):
+            self._script("exit 0", name="bin/ydbd/" + name)
+        (directory / "readme").write_text("not executable")
+        (directory / "empty").touch(mode=0o755)
+        (directory / "subdirectory").mkdir()
+        self._script("exit 0", name="bin/ydbd/.temporary")
+        service = RunService(self.root / "results", binaries_dir=catalog)
+        result = service.editor_config("")["binary_catalog"]
+        self.assertEqual([item["version"] for item in result["ydbd"]], ["main", "stable-26-3-1"])
+        self.assertEqual(result["ydbd"][1]["path"], str(directory / "stable-26-3-1"))
+        self.assertFalse(result["truncated"])
+        self.assertTrue(common.binary_catalog(catalog, limit=1)["truncated"])
+        self._script("exit 0", name="bin/ydbd/new-build")
+        config = "local-ydb:\n  profile:\n    workload: {type: kv, operation: upsert}\n    load: {parameter: threads, values: [1]}\n"
+        refreshed = service.editor_config(config)["binary_catalog"]
+        self.assertIn("new-build", [item["version"] for item in refreshed["ydbd"]])
+        with mock.patch.object(common.os, "scandir", side_effect=PermissionError("denied")):
+            result = service.editor_config("")["binary_catalog"]
+        self.assertIn("Cannot read binary catalog", result["error"])
+        self.assertEqual(result["ydbd"], [])
+
+    def test_web_cli_passes_binary_catalog_directory(self):
+        with mock.patch.object(cli, "serve") as serve:
+            self.assertEqual(main(["web", "--binaries-dir", str(self.root / "bin")]), 0)
+        self.assertEqual(serve.call_args.kwargs["binaries_dir"], self.root / "bin")
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for browser logic checks")
+    def test_local_ydb_binary_catalog_selector(self):
+        script = """
+            const esc=value=>String(value??'');
+            const editor={model:{binary_catalog:{root:'/bin',ydbd:[{version:'stable-26-3-1',path:'/bin/ydbd/stable-26-3-1'}]}}};
+        """
+        script += web._JS[web._JS.index("function localField") : web._JS.index("function localYdbProfileEditor")]
+        script += """
+            process.stdout.write(JSON.stringify({
+              selected:localYdbBinaryFields({ydbd_binary:'/bin/ydbd/stable-26-3-1'}),
+              custom:localYdbBinaryFields({ydbd_binary:'/custom/ydbd'}),
+              bundled:localYdbBinaryFields({})
+            }));
+        """
+        result = json.loads(subprocess.check_output([shutil.which("node"), "-e", script], text=True, timeout=10))
+        self.assertIn('<option value="/bin/ydbd/stable-26-3-1" selected>stable-26-3-1</option>', result["selected"])
+        self.assertIn('<option value="/custom/ydbd" selected>Custom path</option>', result["custom"])
+        self.assertIn('<option value="" selected>Bundled ydbd</option>', result["bundled"])
+        self.assertIn('id="local-ydbd-binary" value="/bin/ydbd/stable-26-3-1"', result["selected"])
+
+    def test_local_ydb_external_binary_configuration(self):
+        profile = {"workload": {"type": "kv", "operation": "upsert"}, "load": {"parameter": "threads", "values": [1]}}
+
+        def load():
+            return load_config(self._config(yaml.safe_dump({"local-ydb": {"external": profile}}))).runs[0]
+
+        self.assertNotIn("ydbd_binary", load().parameters["local_ydb"])
+        profile["ydbd-binary"] = "/opt/build with spaces/ydbd"
+        self.assertEqual(load().parameters["local_ydb"]["ydbd_binary"], profile["ydbd-binary"])
+        for invalid in ("", "relative/ydbd", "~/ydbd", None, False, 12, [], {}, "/bad\0path"):
+            with self.subTest(invalid=invalid):
+                profile["ydbd-binary"] = invalid
+                with self.assertRaisesRegex(BenchmarkError, "ydbd-binary.*absolute path"):
+                    load()
+
+    def test_local_ydb_external_binary_snapshots_are_isolated_and_cached(self):
+        source = self._script("echo first", name="custom ydbd")
+        other = self._script("echo second", name="other-ydbd")
+        profile = {"workload": {"type": "kv", "operation": "upsert"}, "load": {"parameter": "threads", "values": [1]}}
+        profiles = {
+            "first": {**profile, "ydbd-binary": str(source)},
+            "second": {**profile, "ydbd-binary": str(other)},
+            "bundled": profile,
+        }
+        configurations = load_config(self._config(yaml.safe_dump({"local-ydb": profiles}, sort_keys=False))).runs
+        cache = {}
+        loader = mock.Mock(return_value=b"bundled")
+        artifacts = [
+            common.load_profile_binaries(config, loader, self.root / "work", cache) for config in configurations
+        ]
+        first = artifacts[0]["ydbd"]
+        self.assertEqual(first.path.read_bytes(), source.read_bytes())
+        self.assertEqual(first.sha256, hashlib.sha256(source.read_bytes()).hexdigest())
+        self.assertEqual(first.manifest_record()["source_path"], str(source))
+        self.assertEqual(first.size, source.stat().st_size)
+        self.assertEqual(artifacts[1]["ydbd"].path.read_bytes(), other.read_bytes())
+        self.assertEqual(artifacts[2]["ydbd"].path.read_bytes(), b"bundled")
+        self.assertEqual(len({item["ydbd"].path for item in artifacts}), 3)
+        self.assertNotIn("source_path", artifacts[2]["ydbd"].manifest_record())
+        source.write_text("replaced")
+        reused = common.load_profile_binaries(configurations[0], loader, self.root / "work", cache)
+        self.assertIs(reused["ydbd"], first)
+        self.assertEqual(subprocess.check_output([str(first.path)], text=True).strip(), "first")
+        self.assertEqual(sorted(call.args[0] for call in loader.call_args_list), ["process_guard", "ydb_cli", "ydbd"])
+
+    def test_external_binary_rejects_missing_directory_non_executable_and_empty(self):
+        source = self._script("", name="not-executable")
+        source.chmod(0o644)
+        empty = self.root / "empty"
+        empty.touch(mode=0o755)
+        for path in (source, empty, self.root, self.root / "missing"):
+            with self.subTest(path=path):
+                with self.assertRaisesRegex(BenchmarkError, "external executable"):
+                    common.copy_executable(path, self.root / "snapshot", "ydbd")
+
+    def test_cli_and_web_use_external_ydbd_without_loading_bundled_ydbd(self):
+        source = self._script("echo custom-ydbd")
+        config = self._config(
+            yaml.safe_dump(
+                {
+                    "local-ydb": {
+                        "external": {
+                            "ydbd-binary": str(source),
+                            "workload": {"type": "kv", "operation": "upsert"},
+                            "load": {"parameter": "threads", "values": [1]},
+                        }
+                    }
+                }
+            )
+        )
+
+        def loader(name):
+            self.assertNotEqual(name, "ydbd")
+            return b"bundled"
+
+        def execute(binaries, *args, **kwargs):
+            artifact = binaries["ydbd"]
+            self.assertEqual(artifact.source_path, str(source))
+            self.assertNotEqual(artifact.path, source)
+            self.assertEqual(subprocess.check_output([str(artifact.path)], text=True).strip(), "custom-ydbd")
+            raise BenchmarkError("stop after binary selection")
+
+        with mock.patch.object(cli, "run_local_ydb", side_effect=execute) as cli_run, redirect_stderr(io.StringIO()):
+            code = main(
+                ["run", "--config", str(config), "--output", str(self.root / "cli-result")],
+                resource_loader=loader,
+                tool_revision={},
+            )
+        self.assertEqual(code, 1)
+        cli_run.assert_called_once()
+        run = {
+            "loaded": load_config(config),
+            "root": self.root / "web-result",
+            "lock": threading.RLock(),
+            "finalized": False,
+            "continue_on_error": False,
+            "store": mock.Mock(manifest={"runs": [], "steps": []}),
+        }
+        with mock.patch.object(web, "run_local_ydb", side_effect=execute) as web_run:
+            with self.assertRaisesRegex(BenchmarkError, "stop after binary selection"):
+                web.production_executor(loader, {})(run, mock.Mock(), threading.Event())
+        web_run.assert_called_once()
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for browser logic checks")
+    def test_local_ydb_external_binary_builder_round_trip(self):
+        path = '/opt/build with spaces/quoted "ydbd"'
+        loaded = load_config(
+            self._config(
+                yaml.safe_dump(
+                    {
+                        "local-ydb": {
+                            "external": {
+                                "ydbd-binary": path,
+                                "workload": {"type": "kv", "operation": "upsert"},
+                                "load": {"parameter": "threads", "values": [1]},
+                            }
+                        }
+                    }
+                )
+            )
+        )
+        model = web.editor_model(loaded, self.root / "results")
+        script = "const editor={model:" + json.dumps(model) + "};\n"
+        script += web._JS[web._JS.index("function yamlArray") : web._JS.index("async function syncEditor")]
+        script += """
+            const profile=editor.model.profiles[0], external=[], bundled=[];
+            serializeLocalYdb(external,profile);
+            delete profile.local_ydb.ydbd_binary;
+            serializeLocalYdb(bundled,profile);
+            process.stdout.write(JSON.stringify({external:external.join('\\n'),bundled:bundled.join('\\n')}));
+        """
+        result = json.loads(subprocess.check_output([shutil.which("node"), "-e", script], text=True, timeout=10))
+        restored = load_config(self._config("local-ydb:\n  external:\n" + result["external"])).runs[0]
+        self.assertEqual(restored.parameters["local_ydb"]["ydbd_binary"], path)
+        self.assertNotIn("ydbd-binary", result["bundled"])
+
+    def test_logical_cpu_sampler_deltas_and_resets(self):
+        sampler = linux_telemetry.LogicalCpuSampler(proc_root=Path('/test-proc'))
+        samples = [
+            "cpu0 100 10 20 400 10 2 3 5 50 2\ncpu7 1 0 0 1 0 0 0 0\n",
+            "cpu0 120 10 30 450 20 4 6 10 60 2\ncpu7 2 0 0 2 0 0 0 0\n",
+            "cpu0 1 0 0 1 0 0 0 0\n",
+        ]
+        with mock.patch.object(Path, "read_text", side_effect=samples) as read, mock.patch.object(
+            linux_telemetry.time, "monotonic", side_effect=[10, 10.2, 12, 14]
+        ):
+            first = sampler.sample()
+            self.assertIsNone(first["cpus"][0])
+            self.assertIs(sampler.sample(), first)
+            second = sampler.sample()
+            self.assertEqual(second["cpus"][0], {"busy": 40, "user": 20, "system": 15, "iowait": 10, "steal": 5})
+            self.assertEqual(second["interval_seconds"], 2)
+            self.assertIsNone(sampler.sample()["cpus"][0])
+            self.assertEqual(read.call_count, 3)
+        with mock.patch.object(Path, "read_text", side_effect=OSError), mock.patch.object(
+            linux_telemetry.time, "monotonic", return_value=16
+        ):
+            self.assertFalse(sampler.sample()["available"])
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for browser logic checks")
+    def test_topology_groups_preserve_sparse_cpu_ids(self):
+        script = web._JS[web._JS.index("function topologyGroups(") : web._JS.index("async function renderTopology(")]
+        script += """
+const t={allowed_cpus:[2,9,130],physical_cores:[[2,130]],numa_nodes:[{id:7,cpus:[2,9,130]}],chiplets:[{numa_node:7,cpus:[2,130],label:'L3'}]};
+const groups=topologyGroups(t)[0].groups;
+if(JSON.stringify(groups.flatMap(g=>g.cores.flatMap(c=>c.cpus)).sort((a,b)=>a-b))!=='[2,9,130]')throw Error('CPU lost or duplicated');
+if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Error('Grouping lost');
+"""
+        subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True, timeout=10)
+
+    def test_darwin_cpu_sampler(self):
+        with mock.patch.object(linux_telemetry.sys, 'platform', 'darwin'):
+            sampler = linux_telemetry.LogicalCpuSampler()
+        with mock.patch.object(
+            linux_telemetry,
+            '_darwin_cpu_ticks',
+            side_effect=[
+                {0: (100, 0, 100, 100, 0, 0, 0, 0)},
+                {0: (120, 10, 110, 160, 0, 0, 0, 0)},
+                OSError('Unavailable'),
+            ],
+        ), mock.patch.object(linux_telemetry.time, 'monotonic', side_effect=[0, 2, 4]):
+            self.assertIsNone(sampler.sample()['cpus'][0])
+            self.assertEqual(
+                sampler.sample()['cpus'][0],
+                {
+                    'busy': 40,
+                    'user': 30,
+                    'system': 10,
+                    'iowait': None,
+                    'steal': None,
+                },
+            )
+            self.assertFalse(sampler.sample()['available'])
+
+    def test_cpu_usage_affinity_fallback(self):
+        service = object.__new__(web.RunService)
+        service._cpu_sampler = mock.Mock()
+        service._cpu_sampler.sample.return_value = {'available': True, 'cpus': {0: None, 7: None}}
+        for error in (AttributeError(), OSError()):
+            with mock.patch.object(web.os, 'sched_getaffinity', create=True, side_effect=error):
+                self.assertEqual(set(service.cpu_usage()['cpus']), {0, 7})
+        with mock.patch.object(web.os, 'sched_getaffinity', create=True, return_value={7}):
+            self.assertEqual(set(service.cpu_usage()['cpus']), {7})
+
+    def test_local_ydb_actor_cpu_count_is_independent_of_affinity(self):
+        profile = {"workload": {"type": "kv", "operation": "upsert"}, "load": {"parameter": "threads", "values": [1]}}
+        profile["actor-system"] = {"static-nodes": {"cpu-count": 8}, "dynamic-nodes": {"cpu-count": 4}}
+        loaded = load_config(self._config(yaml.safe_dump({"local-ydb": {"cpu": profile}}))).runs[0]
+        actor_system = loaded.parameters["local_ydb"]["actor_system"]
+        self.assertEqual(actor_system["static_nodes"], {"cpu_count": 8})
+        self.assertEqual(actor_system["dynamic_nodes"], {"cpu_count": 4})
+        for value in (True, 0, -1, 1.5, "8", None, 32768):
+            with self.subTest(value=value):
+                profile["actor-system"]["static-nodes"]["cpu-count"] = value
+                with self.assertRaisesRegex(BenchmarkError, "cpu-count"):
+                    load_config(self._config(yaml.safe_dump({"local-ydb": {"cpu": profile}})))
+
     def test_local_ydb_actor_system_flags_default_and_validate(self):
         profile = {"workload": {"type": "kv", "operation": "upsert"}, "load": {"parameter": "threads", "values": [1]}}
 
@@ -2184,17 +2460,30 @@ class YdbBenchTest(unittest.TestCase):
             {
                 "use_shared_threads": False,
                 "use_united_pool": False,
+                "use_ring_queue": True,
             },
         )
         for shared in (False, True):
             for united in (False, True):
-                with self.subTest(shared=shared, united=united):
-                    profile["actor-system"] = {"use-shared-threads": shared, "use-united-pool": united}
-                    flags = load().parameters["local_ydb"]["actor_system"]
-                    self.assertEqual(flags, {"use_shared_threads": shared, "use_united_pool": united})
-                    cluster = local_ydb._cluster_config([{"ic_port": 19001}], 64, "host", flags)
-                    self.assertEqual(cluster["config"]["actor_system_config"], {"use_auto_config": True, **flags})
-        for key in ("use-shared-threads", "use-united-pool"):
+                for ring in (False, True):
+                    with self.subTest(shared=shared, united=united, ring=ring):
+                        profile["actor-system"] = {
+                            "use-shared-threads": shared,
+                            "use-united-pool": united,
+                            "use-ring-queue": ring,
+                        }
+                        flags = load().parameters["local_ydb"]["actor_system"]
+                        self.assertEqual(
+                            flags, {"use_shared_threads": shared, "use_united_pool": united, "use_ring_queue": ring}
+                        )
+                        cluster = local_ydb._cluster_config([{"ic_port": 19001}], 64, "host", flags)
+                        self.assertEqual(cluster["config"]["actor_system_config"], {"use_auto_config": True, **flags})
+        self.assertTrue(
+            local_ydb._cluster_config([{"ic_port": 19001}], 64, "host")["config"]["actor_system_config"][
+                "use_ring_queue"
+            ]
+        )
+        for key in ("use-shared-threads", "use-united-pool", "use-ring-queue"):
             for value in (0, 1, "true", "false", None, [], {}):
                 with self.subTest(key=key, value=value):
                     profile["actor-system"] = {key: value}
@@ -2211,7 +2500,12 @@ class YdbBenchTest(unittest.TestCase):
               flags:
                 workload: {type: stock, operation: put-rand-order}
                 load: {parameter: threads, values: [1]}
-                actor-system: {use-shared-threads: true, use-united-pool: false}
+                actor-system:
+                  use-shared-threads: true
+                  use-united-pool: false
+                  use-ring-queue: false
+                  static-nodes: {cpu-count: 8}
+                  dynamic-nodes: {cpu-count: 4}
         """))
         model = web.editor_model(loaded, self.root / "results")
         script = "const editor={model:" + json.dumps(model) + "};\n"
@@ -2223,8 +2517,12 @@ class YdbBenchTest(unittest.TestCase):
             const profile=editor.model.profiles[0], yaml=[];
             serializeLocalYdb(yaml,profile);
             const old={parameters:{}},current={parameters:profile.local_ydb};
+            const legacy=JSON.parse(JSON.stringify(profile)),legacyYaml=[];
+            delete legacy.local_ydb.actor_system.use_ring_queue;
+            serializeLocalYdb(legacyYaml,legacy);
             process.stdout.write(JSON.stringify({
               yaml:'local-ydb:\\n  flags:\\n'+yaml.join('\\n'),
+              legacyYaml:'local-ydb:\\n  flags:\\n'+legacyYaml.join('\\n'),
               defaults:defaultLocalYdb().actor_system,
               old:localComparisonConfig(old),current:localComparisonConfig(current)
             }));
@@ -2242,10 +2540,21 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(
             load_config(self._config(result["yaml"])).runs[0].parameters["local_ydb"]["actor_system"], flags
         )
-        self.assertEqual(result["defaults"], {"use_shared_threads": False, "use_united_pool": False})
+        self.assertEqual(
+            result["defaults"], {"use_shared_threads": False, "use_united_pool": False, "use_ring_queue": True}
+        )
+        self.assertTrue(result["old"]["use_ring_queue"])
+        self.assertTrue(
+            load_config(self._config(result["legacyYaml"]))
+            .runs[0]
+            .parameters["local_ydb"]["actor_system"]["use_ring_queue"]
+        )
+        self.assertFalse(result["current"]["use_ring_queue"])
         self.assertFalse(result["old"]["use_shared_threads"])
         self.assertTrue(result["current"]["use_shared_threads"])
         self.assertFalse(result["current"]["use_united_pool"])
+        self.assertEqual(result["current"]["Static node vCPUs"], 8)
+        self.assertEqual(result["current"]["Dynamic node vCPUs"], 4)
 
     def test_local_ydb_profile_is_editable_by_web_builder(self):
         loaded = load_config(self._config("""
@@ -2419,7 +2728,11 @@ class YdbBenchTest(unittest.TestCase):
             const localMetricLabel=()=>'';
             const localMetricDirection=()=>null;
             const localComparisonDelta=()=>'';
-            const mountLocalYdbComparisonCurves=()=>{};
+            const localPreferredSlo=()=>['p99','p99_ms'];
+            const localSearchAxisLabel=()=> 'YDB CLI threads';
+            const enc=encodeURIComponent;
+            const sectionTabs=()=>'';
+            const bindSectionTabs=()=>{};
             """
             + web._JS[mount_start:mount_finish]
             + """
@@ -2450,9 +2763,76 @@ class YdbBenchTest(unittest.TestCase):
         result = json.loads(completed.stdout)
         self.assertIn("fresh cluster", result["fresh"])
         self.assertIn("retained search cluster", result["search"])
-        self.assertIn("Comparable with warnings", result["comparison"])
         self.assertIn("Verification cluster", result["comparison"])
-        self.assertIn("retained search cluster → fresh cluster", result["comparison"])
+        self.assertIn("retained search cluster", result["comparison"])
+        self.assertIn("fresh cluster", result["comparison"])
+        self.assertIn("Only differences", result["comparison"])
+        self.assertIn("data-comparison-profile", result["comparison"])
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the comparison UI test")
+    def test_comparison_profile_selection_and_slo(self):
+        start = web._JS.index("function mountLocalYdbComparison(container")
+        finish = web._JS.index("const localPhaseLabels", start)
+        script = (
+            """
+        const esc=x=>String(x??''),enc=encodeURIComponent,metricLabel=x=>String(x);
+        const localComparisonKey=x=>JSON.stringify([x.run,x.profile]);
+        const localComparisonId=x=>x.run+'/'+x.profile;
+        const localResultSchema=()=>({throughput_unit:'query operations/s'});
+        const localResultMetrics=x=>({metrics:x.selected_metrics||{},source:x.source||'Search'});
+        const localComparisonSemantic=()=>({same:true});
+        const localPreferredSlo=(schema,objective)=>[objective.percentile,objective.percentile+'_ms'];
+        const localSearchAxisLabel=()=> 'YDB CLI threads';
+        const localComparisonConfig=x=>({threads:x.parameters.client.threads});
+        const localComparisonContext=()=>({}),localComparisonBuild=()=>({});
+        const localComparisonStable=x=>x;
+        const localComparisonDelta=(value,base)=>'DELTA:'+((value/base-1)*100).toFixed(1);
+        const sectionTabs=()=>'',bindSectionTabs=()=>{};
+        const memory=new Map;
+        const sessionStorage={getItem:key=>memory.get(key),setItem:(key,value)=>memory.set(key,value)};
+        const controls={};let checked=[];
+        const container={dataset:{},querySelector:s=>controls[s]||(controls[s]={}),querySelectorAll:()=>checked};
+        const entry=(profile,latency,threads)=>({run:'run',profile,state:'passed',
+          parameters:{client:{threads},load:{parameter:'threads',objective:{type:'latency-slo',percentile:'p95',max_ms:20}}},
+          result:{selected_load:threads,selected_metrics:{throughput:threads,p95_ms:latency,errors:0}}
+        });
+        const data={entries:[entry('base',20,10),entry('candidate',21,20),entry('missing',null,30)]};
+        """
+            + web._JS[start:finish]
+            + """
+        mountLocalYdbComparison(container,data);
+        const initial=container.innerHTML;
+        controls['[data-baseline]'].onchange({target:{value:localComparisonKey(data.entries[1])}});
+        const changedBaseline=container.innerHTML;
+        checked=[{value:localComparisonKey(data.entries[1])}];
+        controls['[data-apply-profiles]'].onclick();
+        const selected=container.innerHTML;
+        const restored={dataset:{},querySelector:()=>({})};
+        mountLocalYdbComparison(restored,data);
+        checked=[];controls['[data-apply-profiles]'].onclick();
+        const empty=container.innerHTML;
+        data.entries[1].result.source='Holdout';
+        const mixed={dataset:{},querySelector:()=>({})};memory.clear();
+        mountLocalYdbComparison(mixed,data);
+        process.stdout.write(JSON.stringify({initial,changedBaseline,selected,restored:restored.innerHTML,empty,mixed:mixed.innerHTML}));
+        """
+        )
+        completed = subprocess.run(
+            [shutil.which("node"), "-e", script], check=True, capture_output=True, text=True, timeout=10
+        )
+        result = json.loads(completed.stdout)
+        self.assertIn("Satisfied", result["initial"])
+        self.assertIn("Exceeded", result["initial"])
+        self.assertIn("Unknown", result["initial"])
+        self.assertIn("p95 ≤ 20 ms", result["initial"])
+        self.assertIn("DELTA:100.0", result["initial"])
+        self.assertIn("DELTA:-50.0", result["changedBaseline"])
+        self.assertIn("Profiles · 1", result["selected"])
+        self.assertNotIn("<strong>base</strong>", result["selected"])
+        self.assertIn("0 differing parameters", result["selected"])
+        self.assertIn("Profiles · 1", result["restored"])
+        self.assertIn("Select profiles to compare", result["empty"])
+        self.assertIn("Incompatible metric source", result["mixed"])
 
     @unittest.skipUnless(shutil.which("node"), "node is required for the local YDB validity UI test")
     def test_local_ydb_web_hides_latency_for_empty_measurements(self):
@@ -2779,6 +3159,55 @@ class YdbBenchTest(unittest.TestCase):
         )
 
     @unittest.skipUnless(shutil.which("node"), "node is required for the local YDB profile panel test")
+    def test_local_ydb_finished_profile_does_not_reload_for_another_active_profile(self):
+        start = web._JS.index("async function mountLocalYdbProfile")
+        finish = web._JS.index("function parseLocalYdbProfileSelection", start)
+        script = (
+            """
+            const assert=require('node:assert/strict');
+            let refreshTimer=null, interval=null, timeout=null, renders=0, reloads=0, state='passed';
+            const enc=encodeURIComponent, displayError=error=>{throw error};
+            const api=async()=>({state});
+            const loadLocalYdbActivity=async()=>({events:[]});
+            const renderLocalYdbProfile=()=>{renders++};
+            const setInterval=callback=>{interval=callback;return 1};
+            const clearInterval=()=>{interval=null};
+            const setTimeout=callback=>{timeout=callback;return 2};
+            const renderRun=()=>{reloads++};
+        """
+            + web._JS[start:finish]
+            + """
+            (async()=>{
+              for(const terminal of ['passed','failed','cancelled']){
+                state=terminal;
+                await mountLocalYdbProfile({dataset:{}},'run','finished','running');
+                assert.equal(refreshTimer,null);
+                assert.equal(timeout,null);
+              }
+              state='preparing';
+              await mountLocalYdbProfile({dataset:{}},'run','active','running');
+              assert.ok(interval);
+              state='running';
+              await interval();
+              assert.equal(timeout,null);
+              state='passed';
+              await interval();
+              assert.equal(interval,null);
+              assert.ok(timeout);
+              const complete=timeout;
+              timeout=null;refreshTimer=null;
+              complete();
+              assert.equal(reloads,1);
+              await mountLocalYdbProfile({dataset:{}},'run','active','running');
+              assert.equal(timeout,null);
+              assert.equal(refreshTimer,null);
+              assert.equal(renders,7);
+            })().catch(error=>{console.error(error);process.exitCode=1});
+        """
+        )
+        subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True, text=True, timeout=10)
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the local YDB profile panel test")
     def test_local_ydb_profile_renders_separate_result_and_discovery_panels(self):
         schema_start = web._JS.index("function localLegacyResultSchema")
         schema_finish = web._JS.index("function localChart", schema_start)
@@ -2875,8 +3304,10 @@ class YdbBenchTest(unittest.TestCase):
               panels:Object.fromEntries(container.panels.map(item=>[item.dataset.localYdbPanel,item.hidden])),
               hasResultMarkup:container.innerHTML.includes('data-local-ydb-panel=result'),
               hasDiscoveryMarkup:container.innerHTML.includes('data-local-ydb-panel=discovery'),
-              hasResultContent:container.innerHTML.includes('Metric source'),
-              hasDiscoveryContent:container.innerHTML.includes('Geometry stages'),
+              hasResultContent:container.innerHTML.includes('Search measurement · no completed verification'),
+              hasFormattedMetrics:container.innerHTML.includes('class=report-table'),
+              hasConfiguration:container.innerHTML.includes('data-report-config'),
+              hasDiscoveryContent:container.innerHTML.includes('class=discovery-status'),
               focused:container.focused||null,preventedFocusScroll:Boolean(container.preventedFocusScroll)
             });
             process.stdout.write(JSON.stringify({finished:summarize(finished),running:summarize(running)}));
@@ -2896,6 +3327,8 @@ class YdbBenchTest(unittest.TestCase):
         self.assertTrue(result["finished"]["hasResultMarkup"])
         self.assertTrue(result["finished"]["hasDiscoveryMarkup"])
         self.assertTrue(result["finished"]["hasResultContent"])
+        self.assertTrue(result["finished"]["hasFormattedMetrics"])
+        self.assertTrue(result["finished"]["hasConfiguration"])
         self.assertTrue(result["finished"]["hasDiscoveryContent"])
         self.assertEqual(result["finished"]["focused"], "discovery")
         self.assertTrue(result["finished"]["preventedFocusScroll"])
@@ -2903,14 +3336,108 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(result["running"]["tabs"], ["result", "discovery"])
         self.assertEqual(result["running"]["panels"], {"result": True, "discovery": False})
 
+    @unittest.skipUnless(shutil.which("node"), "node is required for the attempt report test")
+    def test_local_ydb_attempt_report_tabs_and_metric_sources(self):
+        start = web._JS.index("function localAttemptReport")
+        finish = web._JS.index("async function renderLocalYdbAttempt", start)
+        schema_start = web._JS.index("function localLegacyResultSchema")
+        schema_finish = web._JS.index("function localChart", schema_start)
+        script = (
+            """
+            const assert=require('node:assert/strict');
+            const esc=v=>String(v??'').replaceAll('<','&lt;');
+            const metricLabel=v=>String(v),elapsedLabel=v=>String(v??0);
+            const localPhaseLabel=v=>v,localSearchAxisLabel=()=> 'YDB CLI threads';
+            const localCommandText=c=>c.argv.join(' ');
+            const localReportMetrics=data=>JSON.stringify(data.result.selected_metrics);
+            """
+            + web._JS[schema_start:schema_finish]
+            + web._JS[start:finish]
+            + """
+            const data={parameters:{workload:{type:'stock'},load:{parameter:'threads',
+              objective:{type:'latency-slo',percentile:'p95',max_ms:20}}},
+              verification:{accepted:false,load:64},result:{verified_metrics:{throughput:4000,p95_ms:21}}};
+            const item={passed:true,load:32,throughput:3000,p95_ms:18,p99_ms:99};
+            const header=localAttemptHeader(data,item,item);
+            assert.ok(header.includes('Latency (p95)'));
+            assert.ok(header.includes('Successful query operations'));
+            assert.ok(header.includes('3000'));
+            assert.ok(!header.includes('4000'));
+            assert.ok(!header.includes('Latency (p99)'));
+            assert.equal(localAttemptMetrics(data,data.verification).throughput,4000);
+            assert.ok(localAttemptHeader(data,data.verification,data.verification).includes('FAIL'));
+            assert.ok(localAttemptHeader(data,{...item,passed:false,error:'<bad>'},item).includes('&lt;bad>'));
+            assert.equal(localAttemptView('counters'),'counters');
+            assert.equal(localAttemptView('commands'),'commands');
+            assert.equal(localAttemptView('invalid'),'summary');
+            assert.ok(localAttemptReport(data,null).includes('No completed measurement'));
+            assert.ok(localAttemptCommands({}).includes('No recorded commands'));
+            assert.ok(localAttemptCommands({commands:[{argv:['ydb','<arg>'],phase:'measuring',exit_code:0}]}).includes('&lt;arg>'));
+            assert.ok(!localAttemptCommands({commands:[{argv:['ydb'],phase:'measuring'}]}).includes('<details'));
+            """
+        )
+        subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True, text=True, timeout=10)
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the attempt route test")
+    def test_local_ydb_attempt_tab_deep_links(self):
+        start = web._JS.index("async function compose()")
+        finish = web._JS.index("addEventListener('hashchange'", start)
+        script = (
+            """
+            const assert=require('node:assert/strict');let pieces,seen;
+            const routeParts=()=>pieces;
+            const setRoute=()=>{throw Error('Unexpected redirect')};
+            const renderLocalYdbAttempt=(...args)=>{seen=args};
+            """
+            + web._JS[start:finish]
+            + """
+            (async()=>{
+              for(const view of [undefined,'summary','counters','commands']){
+                pieces=['attempt','run','profile','7'];if(view)pieces.push(view);
+                await compose();assert.deepEqual(seen,['run','profile','7',view]);
+              }
+            })().catch(error=>{console.error(error);process.exitCode=1});
+            """
+        )
+        subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True, text=True, timeout=10)
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the attempt navigation test")
+    def test_local_ydb_attempt_row_navigation_preserves_interactive_controls(self):
+        start = web._JS.index("function bindLocalAttemptRows")
+        finish = web._JS.index("function renderLocalYdbProfile", start)
+        script = (
+            """
+            const assert=require('node:assert/strict');
+            const location={hash:''};let selection='';
+            const window={getSelection:()=>({toString:()=>selection})};
+            const row={dataset:{attemptHref:'#attempt/run/profile/7'}};
+            """
+            + web._JS[start:finish]
+            + """
+            bindLocalAttemptRows({querySelectorAll:()=>[row]});
+            const click={button:0,target:{closest:()=>null}};
+            row.onclick(click);assert.equal(location.hash,row.dataset.attemptHref);
+            for(const override of [
+              {target:{closest:()=>({})}},{ctrlKey:true},{metaKey:true},
+              {shiftKey:true},{altKey:true},{button:1},{defaultPrevented:true}
+            ]){
+              location.hash='';row.onclick({...click,...override});assert.equal(location.hash,'');
+            }
+            selection='selected text';row.onclick(click);assert.equal(location.hash,'');
+            """
+        )
+        subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True, text=True, timeout=10)
+
     @unittest.skipUnless(shutil.which("node"), "node is required for the local YDB attempts UI test")
     def test_local_ydb_web_attempts_use_objective_latency_percentile(self):
         schema_start = web._JS.index("function localLegacyResultSchema")
         schema_finish = web._JS.index("function localChart", schema_start)
-        render_start = web._JS.index("function renderLocalYdbProfile")
+        render_start = web._JS.index("function bindLocalAttemptRows")
         render_finish = web._JS.index("async function mountLocalYdbProfile", render_start)
         script = (
-            """
+            "const enc=encodeURIComponent;\n"
+            + web._JS[web._JS.index("function localAttemptHref(") : web._JS.index("function localCounterCharts(")]
+            + """
             const esc=value=>String(value??'');
             const metricLabel=value=>String(value??'—');
             const elapsedLabel=value=>String(value??0);
@@ -2967,7 +3494,7 @@ class YdbBenchTest(unittest.TestCase):
                 passed:true,decision:'within SLO',duration_seconds:1
               }]
             });
-            const table=container.innerHTML.slice(container.innerHTML.indexOf('<table class=local-attempts>'));
+            const table=container.innerHTML.slice(container.innerHTML.indexOf('<table class="local-attempts discovery-attempts">'));
             process.stdout.write(JSON.stringify({table}));
             """
         )
@@ -2983,6 +3510,9 @@ class YdbBenchTest(unittest.TestCase):
         self.assertNotIn(">p99 (ms)</th>", table)
         self.assertIn(">5.95</td>", table)
         self.assertNotIn(">99.99</td>", table)
+        self.assertIn("data-attempt-href=", table)
+        self.assertNotIn("<details", table)
+        self.assertNotIn("<th>Static CPU</th>", table)
 
     @unittest.skipUnless(shutil.which("node"), "node is required for the schema-aware Builder test")
     def test_local_ydb_web_builder_omits_unsupported_error_controls(self):
@@ -2993,7 +3523,7 @@ class YdbBenchTest(unittest.TestCase):
             const esc=value=>String(value??'');
             const localYdbGeometryKeys={static_nodes:'static-nodes',dynamic_nodes:'dynamic-nodes',max_dynamic_nodes:'max-dynamic-nodes',disk_size_gb:'disk-size-gb',storage_groups:'storage-groups'};
             const localYdbAffinityKeys={ydb_cli:'ydb-cli',static_nodes:'static-nodes',dynamic_nodes:'dynamic-nodes'};
-            const localYdbActorSystemKeys={use_shared_threads:'use-shared-threads',use_united_pool:'use-united-pool'};
+            const localYdbActorSystemKeys={use_shared_threads:'use-shared-threads',use_united_pool:'use-united-pool',use_ring_queue:'use-ring-queue'};
             const definition={type:'fake',operations:['run'],load_parameters:['rate'],options:[],
               slo_metrics:{p90:'latency_ms'},reports_errors:false,minimum_duration_seconds:1,
               maximum_total_seconds:3600};
@@ -3175,7 +3705,7 @@ class YdbBenchTest(unittest.TestCase):
         events = []
         output = self.root / "command-audit"
         binaries = {
-            name: mock.Mock(path=self.root / name, sha256=name + "-digest", size=1)
+            name: common.BinaryArtifact(path=self.root / name, sha256=name + "-digest", size=1)
             for name in ("ydbd", "ydb_cli", "process_guard")
         }
         with mock.patch.object(local_ydb, "LocalYdbCluster", return_value=cluster), mock.patch.object(
@@ -4217,7 +4747,7 @@ class YdbBenchTest(unittest.TestCase):
         monitor = mock.Mock(records=[])
         monitor.stop.return_value = {}
         binaries = {
-            name: mock.Mock(path=self.root / name, sha256=name + "-digest", size=1)
+            name: common.BinaryArtifact(path=self.root / name, sha256=name + "-digest", size=1)
             for name in ("ydbd", "ydb_cli", "process_guard")
         }
         cpu_topology = CpuTopology(
@@ -4257,7 +4787,7 @@ class YdbBenchTest(unittest.TestCase):
         cluster = mock.Mock()
         cluster.start.side_effect = KeyboardInterrupt()
         binaries = {
-            name: mock.Mock(path=self.root / name, sha256=name + "-digest", size=1)
+            name: common.BinaryArtifact(path=self.root / name, sha256=name + "-digest", size=1)
             for name in ("ydbd", "ydb_cli", "process_guard")
         }
         cpu_topology = CpuTopology(
@@ -4392,7 +4922,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(start_process.call_args.kwargs["parent_death_wrapper"], self.root / "process_guard")
 
     def test_local_ydb_actor_system_config_is_used_by_static_dynamic_and_scaled_nodes(self):
-        flags = {"use_shared_threads": True, "use_united_pool": True}
+        flags = {"use_shared_threads": True, "use_united_pool": True, "use_ring_queue": False}
         cluster = local_ydb.LocalYdbCluster(
             self.root / "ydbd",
             self.root / "ydb",
@@ -4425,6 +4955,19 @@ class YdbBenchTest(unittest.TestCase):
             self.assertEqual(command[command.index("--yaml-config") + 1], cluster.config_path)
         config = yaml.safe_load(cluster.config_path.read_text(encoding="utf-8"))
         self.assertEqual(config["config"]["actor_system_config"], {"use_auto_config": True, **flags})
+
+        cluster.actor_system.update(static_nodes={"cpu_count": 8}, dynamic_nodes={"cpu_count": 4})
+        for role, expected in (("static_nodes", 8), ("dynamic_nodes", 4)):
+            with self.subTest(role=role):
+                directory = cluster.directory / role
+                directory.mkdir()
+                path = cluster._node_config(role, directory)
+                effective = yaml.safe_load(path.read_text(encoding="utf-8"))
+                self.assertEqual(
+                    effective["config"]["actor_system_config"],
+                    {"use_auto_config": True, **flags, "cpu_count": expected},
+                )
+        self.assertNotIn("cpu_count", yaml.safe_load(cluster.config_path.read_text())["config"]["actor_system_config"])
 
     def test_local_ydb_scaling_waits_for_database_and_every_new_node(self):
         cluster_directory = self.root / "scaling-cluster"
@@ -4537,12 +5080,13 @@ class YdbBenchTest(unittest.TestCase):
 
         partial = command_result("grpc://benchmark-host:20000\n")
         complete = command_result("grpc://benchmark-host:20000\ngrpc://benchmark-host:20001 [zone-a]\n")
-        with mock.patch.object(local_ydb, "run_command", side_effect=(partial, complete)) as run, mock.patch.object(
-            local_ydb.time, "sleep"
-        ):
+        unavailable = command_result("", exit_code=1, stderr="Status: UNAVAILABLE\nDatabase nodes resolve failed")
+        with mock.patch.object(
+            local_ydb, "run_command", side_effect=(unavailable, partial, complete)
+        ) as run, mock.patch.object(local_ydb.time, "sleep"):
             cluster._wait_client_endpoints(30)
 
-        self.assertEqual(run.call_count, 2)
+        self.assertEqual(run.call_count, 3)
         command = run.call_args_list[0].args[0]
         self.assertEqual(
             command,
@@ -4558,7 +5102,12 @@ class YdbBenchTest(unittest.TestCase):
         )
         self.assertEqual(run.call_args_list[0].kwargs["cpu_affinity"], (0, 1))
         attempts = json.loads((cluster_directory / "client-discovery-attempts.json").read_text(encoding="utf-8"))
-        self.assertEqual([item["stdout"] for item in attempts], [partial.stdout, complete.stdout])
+        self.assertEqual([item["stdout"] for item in attempts], [unavailable.stdout, partial.stdout, complete.stdout])
+        with mock.patch.object(local_ydb, "run_command", return_value=unavailable) as run, mock.patch.object(
+            local_ydb.time, "monotonic", side_effect=(0, 0, 31)
+        ), self.assertRaisesRegex(BenchmarkError, "discovery exited with code 1: Status: UNAVAILABLE"):
+            cluster._wait_client_endpoints(30)
+        run.assert_called_once()
 
     def test_local_ydb_client_readiness_does_not_hide_cli_failures(self):
         cluster_directory = self.root / "client-ready-failure"
@@ -7053,6 +7602,7 @@ class WebTest(unittest.TestCase):
         manifest["parameters"]["actor_system"] = {
             "use_shared_threads": True,
             "use_united_pool": False,
+            "use_ring_queue": False,
             "private": "not projected",
         }
         manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
@@ -7084,6 +7634,7 @@ class WebTest(unittest.TestCase):
                 {
                     "use_shared_threads": True,
                     "use_united_pool": False,
+                    "use_ring_queue": False,
                 },
             )
             with self.assertRaisesRegex(BenchmarkError, "between 1 and 20"):
@@ -7324,6 +7875,43 @@ class WebTest(unittest.TestCase):
         self.assertEqual(model["complete"]["status"], "completed")
         self.assertEqual(model["imported"]["source"], "imported")
 
+    @unittest.skipUnless(shutil.which("node"), "node is required for the compact Runs UI test")
+    def test_web_compact_runs_sorting_and_tabs(self):
+        helpers = web._JS[web._JS.index("function sectionTabs") : web._JS.index("let activeBannerLoading")]
+        runs = web._JS[web._JS.index("let runsSort") : web._JS.index("async function renderRuns")]
+        script = helpers + runs + """
+        const assert=require('assert');
+        const esc=value=>String(value??'').replaceAll('<','&lt;').replaceAll('"','&quot;');
+        const enc=encodeURIComponent,status=esc,humanTime=esc,duration=()=>'',runHref=()=>'';
+        const records=[{id:'older',started_at:'2025-01-01',duration_seconds:100},
+          {id:'newer',queued_at:'2025-02-01',duration_seconds:10}];
+        assert.deepEqual(sortRuns(records,'newest').map(item=>item.id),['newer','older']);
+        assert.deepEqual(sortRuns(records,'oldest').map(item=>item.id),['older','newer']);
+        assert.deepEqual(sortRuns(records,'longest').map(item=>item.id),['older','newer']);
+        assert.equal(records[0].id,'older');
+        const html=compactRun({...records[0],profile_names:['first','<second>'],profiles:2,repetitions:4});
+        assert(!html.includes('type=checkbox'));
+        assert(html.includes('class=dense-run-id'));
+        assert(html.includes('Actions'));
+        assert(html.includes('first')&&html.includes('&lt;second>'));
+        assert(html.includes('2 profiles · 4 steps'));
+        const storage=new Map;
+        const sessionStorage={getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)};
+        const buttons=['final','search'].map(key=>({dataset:{sectionTab:'comparison:'+key},
+          setAttribute(name,value){this[name]=value}}));
+        const panels=['final','search'].map(key=>({dataset:{sectionPanel:'comparison:'+key}}));
+        const container={dataset:{},querySelectorAll:selector=>selector.includes('tab')?buttons:panels};
+        bindSectionTabs(container,'comparison');
+        assert.equal(panels[1].hidden,true);
+        buttons[1].onclick();
+        assert.equal(panels[0].hidden,true);
+        assert.equal(buttons[1]['aria-pressed'],'true');
+        container.dataset={};
+        bindSectionTabs(container,'comparison');
+        assert.equal(panels[1].hidden,false);
+        """
+        subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True)
+
     def test_web_runs_are_sorted_newest_first(self):
         self._manifest(self.root / "older")
         self._manifest(self.root / "newer")
@@ -7386,6 +7974,83 @@ class WebTest(unittest.TestCase):
             BenchmarkError, "selected chart data has too many rows"
         ):
             chart_data(self.root, ["first", "second"])
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for browser logic checks")
+    def test_comparison_run_filters_preserve_selection(self):
+        script = "function sortRuns" + web._JS.split("function sortRuns", 1)[1].split("function compactRun", 1)[0]
+        script += (
+            "function filterComparisonRuns"
+            + web._JS.split("function filterComparisonRuns", 1)[1].split("async function renderSavedComparisons", 1)[0]
+        )
+        script += """
+            const runs=[
+              {id:'old',started_at:'2026-09-08T10:00:00Z',status:'completed',profile_names:['stable'],benchmarks:['local-ydb']},
+              {id:'new',started_at:'2026-09-10T10:00:00Z',status:'failed',profile_names:['united'],benchmarks:['local-ydb']},
+              {id:'ping',queued_at:'2026-09-09T10:00:00Z',status:'completed',profile_names:['ping'],benchmarks:['ping-bench']}
+            ],selected=new Set(['old','new']);
+            const ids=filters=>filterComparisonRuns(runs,filters,selected).map(run=>run.id);
+            process.stdout.write(JSON.stringify({all:ids({}),query:ids({query:'UNITED'}),
+              status:ids({status:'completed'}),date:ids({since:'2026-09-09'}),
+              benchmark:ids({benchmark:'ping-bench'}),only:ids({only:true,sort:'oldest'}),
+              empty:ids({query:'missing'}),selected:[...selected]}));
+        """
+        result = json.loads(
+            subprocess.run(
+                [shutil.which("node"), "-e", script], capture_output=True, text=True, check=True, timeout=10
+            ).stdout
+        )
+        self.assertEqual(
+            result,
+            {
+                "all": ["new", "ping", "old"],
+                "query": ["new"],
+                "status": ["ping", "old"],
+                "date": ["new", "ping"],
+                "benchmark": ["ping"],
+                "only": ["old", "new"],
+                "empty": [],
+                "selected": ["old", "new"],
+            },
+        )
+
+    def test_saved_comparisons_are_explicit_and_durable(self):
+        service = RunService(self.root)
+        service.select_comparisons(["legacy"])
+        self.assertEqual(service.saved_comparisons(), [])
+        value = {
+            "name": " United pool ",
+            "profiles": [["run", "baseline"], ["run", "united"]],
+            "baseline": ["run", "baseline"],
+        }
+        record = service.save_comparison(value)
+        self.assertEqual(record["name"], "United pool")
+        self.assertEqual(record["revision"], 1)
+        self.assertEqual(RunService(self.root).saved_comparisons(), [record])
+        updated = service.save_comparison({**record, "name": "Renamed", "baseline": ["run", "united"]})
+        self.assertEqual(updated["revision"], 2)
+        with self.assertRaisesRegex(BenchmarkError, "changed elsewhere"):
+            service.save_comparison(record)
+        with self.assertRaisesRegex(BenchmarkError, "changed or no longer"):
+            service.delete_comparison(record)
+        self.assertEqual(service.saved_comparisons(), [updated])
+        service.delete_comparison(updated)
+        self.assertEqual(service.saved_comparisons(), [])
+
+    def test_saved_comparisons_validate_selection(self):
+        service = RunService(self.root)
+        valid = {"name": "Comparison", "profiles": [["run", "profile"]], "baseline": ["run", "profile"]}
+        for change in (
+            {"name": " "},
+            {"name": "x" * 201},
+            {"profiles": []},
+            {"profiles": ["invalid"]},
+            {"profiles": [["run", "profile"], ["run", "profile"]]},
+            {"baseline": ["missing", "profile"]},
+            {"id": "missing"},
+        ):
+            with self.subTest(change=change), self.assertRaises(BenchmarkError):
+                service.save_comparison({**valid, **change})
+        self.assertEqual(service.saved_comparisons(), [])
 
     def test_local_ydb_summary_is_available_to_comparison_charts(self):
         self._manifest(self.root / "complete")
@@ -7541,17 +8206,19 @@ class WebTest(unittest.TestCase):
         worker.start()
         try:
             base = "http://127.0.0.1:{}".format(server.server_port)
+            with urllib.request.urlopen(base + "/api/activity-status") as response:
+                self.assertEqual(json.load(response), {"active_run_id": None, "queued": 0})
             with urllib.request.urlopen(base + "/") as response:
                 self.assertIn("default-src 'self'", response.headers["Content-Security-Policy"])
                 self.assertIn(b"app.js", response.read())
             with urllib.request.urlopen(base + "/app.js") as response:
                 script = response.read()
                 self.assertIn(b"System topology", script)
-                self.assertIn(b"NUMA, cache and cores", script)
+                self.assertIn(b"Topology & CPU usage", script)
                 self.assertIn(b"function affinityTree", script)
                 self.assertIn(b"class=affinity-tree", script)
                 self.assertIn(b"SMT threads", script)
-                self.assertIn(b"<span class=cpu-ranges>vCPU ", script)
+                self.assertIn(b"data-cpu=", script)
                 self.assertNotIn(b"(core.index+1)", script)
                 self.assertIn(b"Unavailable", script)
                 self.assertNotIn(b"Use in new run", script)
@@ -7611,7 +8278,7 @@ class WebTest(unittest.TestCase):
                 )
                 self.assertIn(b"function localResultSchema", script)
                 self.assertIn(b"result_schema_id:schema.schema_id", script)
-                self.assertIn(b"const metricHeaders=metricColumns.map", script)
+                self.assertIn(b"data-only-differences", script)
                 self.assertIn(b"if(option.choices.length)return localSelect", script)
                 self.assertIn(b"if(option.kind==='boolean')return localCheck", script)
                 self.assertIn(b"if(option.kind==='integer')", script)
@@ -7650,12 +8317,13 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"Ternary resolution (%)", script)
                 self.assertIn(b"Growth multiplier", script)
                 self.assertIn(b"Geometry stages", script)
-                self.assertIn(b"Current phase", script)
+                self.assertIn(b"class=discovery-status", script)
                 self.assertIn(b"Running command", script)
                 self.assertIn(b"function localShellArg", script)
                 self.assertIn(b"function localCommandDetails", script)
                 self.assertIn(b"progress.current_command", script)
-                self.assertIn(b"<th>Commands</th>", script)
+                self.assertIn(b"function localAttemptReport", script)
+                self.assertIn(b"data-attempt-href", script)
                 self.assertIn(b"class=local-attempts-scroll", script)
                 self.assertIn(b"data-local-profile-config", script)
                 self.assertIn(b"profileConfigOpen", script)
@@ -7664,28 +8332,28 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"local-ydb-profile?profile=", script)
                 self.assertIn(b"function defaultActorCharts", script)
                 self.assertIn(b"function defaultMemoryCharts", script)
-                self.assertIn(b"Local YDB baseline comparison", script)
+                self.assertIn("Throughput · Δ vs baseline".encode(), script)
                 self.assertIn(b"function mountLocalYdbComparison", script)
-                self.assertIn(b"function mountLocalYdbComparisonCurves", script)
+                self.assertNotIn(b"function mountLocalYdbComparisonCurves", script)
                 self.assertIn(b"function localComparisonSemantic", script)
-                self.assertIn(b"sameMetricSource=metricView.source===baselineView.source", script)
-                self.assertIn(b"<th>Metric source</th>", script)
+                self.assertIn(b"currentView.source===view.source", script)
+                self.assertIn(b"Only differences", script)
+                self.assertNotIn(b"save-comparisons", script)
+                self.assertIn(b"Select runs in Runs", script)
                 self.assertIn(b"function localComparisonKey", script)
                 self.assertIn(b"Incompatible", script)
                 self.assertIn(b"reference===0", script)
                 self.assertIn(b"value===null", script)
                 self.assertIn(b"Load values", script)
-                self.assertIn(b"...Object.keys(config)", script)
-                self.assertIn(b"series.benchmark!=='local-ydb'", script)
-                self.assertIn(b"const curveMetrics=localComparisonCurveMetrics", script)
-                self.assertIn(b"metric.repetition_aggregation==='sum'?'sum_':'median_'", script)
-                self.assertIn(b"['errors','sum_errors','Errors across repetitions']", script)
+                self.assertIn(b"values.flatMap(Object.keys)", script)
+                self.assertIn(b"item.benchmark!=='local-ydb'", script)
+                self.assertIn(b"data-apply-profiles", script)
+                self.assertIn(b"data-comparison-cpu", script)
                 self.assertIn(b"localMetricLabel(schema,metric.name)", script)
                 self.assertIn(b"dynamicNodes", script)
                 self.assertIn(b"connectMeasuredPoints", script)
                 self.assertIn(b"item.rows.has(String(x))", script)
-                self.assertIn(b"no values are synthesized", script)
-                self.assertIn(b"loadChartData(value.selected,'local-ydb')", script)
+                self.assertNotIn(b"loadChartData(value.selected,'local-ydb')", script)
                 self.assertIn(b"Promise.allSettled", script)
                 self.assertIn(b"function defaultChartScope", script)
                 self.assertIn(b"['actorPairs','in_flight']", script)
@@ -7718,7 +8386,6 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"const chartPointLimit=10000", script)
                 self.assertIn(b"function chartExtent", script)
                 self.assertIn(b"Chart omitted because it has more than", script)
-                self.assertIn(b"Search curves omitted because they have more than", script)
                 self.assertNotIn(b"Math.min(...values)", script)
                 self.assertNotIn(b"Math.max(...values)", script)
                 self.assertNotIn(b"Math.min(...numericX)", script)
@@ -8086,6 +8753,7 @@ class WebTest(unittest.TestCase):
         self.assertTrue(started["first"].wait(2))
         second = service.start(config("second"))
         third = service.start(config("third"))
+        self.assertEqual(service.activity_status(), {"active_run_id": first["id"], "queued": 2})
 
         second_detail = service.detail(second["id"])
         third_detail = service.detail(third["id"])

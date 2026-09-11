@@ -32,6 +32,40 @@ static constexpr ui32 MaxRawLsns = TPersistentBufferFastErases::ErasesBufferSize
 
 Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
 
+    Y_UNIT_TEST(RestoreKeepsFastEraseVersionWithoutRecords) {
+        auto mgr = MakeManager();
+        auto alloc = MakeAllocator();
+        TPersistentBufferFastErases oldHeader{};
+        oldHeader.Header.Flags = TPersistentBufferHeader::IS_ERASE;
+        oldHeader.Header.RecordLsn = 100;
+        oldHeader.TabletId = 100;
+        oldHeader.Generation = 1;
+        const ui64 oldLsns[] = {1, 2};
+        memcpy(oldHeader.CompactLsns, oldLsns, sizeof(oldLsns));
+        UNIT_ASSERT(mgr.AddErase(&oldHeader.Header, 0, 10));
+        std::map<TPersistentBufferId, TPersistentBuffer> buffers;
+        mgr.RestoreErases(buffers, alloc);
+        UNIT_ASSERT_VALUES_EQUAL(alloc.GetFreeSpace(), 1023);
+
+        std::vector<ui64> newLsns = {564, 565};
+        auto update = mgr.Erase(100, 1, newLsns, alloc);
+        UNIT_ASSERT(update);
+        UNIT_ASSERT_VALUES_EQUAL(update->Header.Header.RecordLsn, 101);
+        UNIT_ASSERT_VALUES_EQUAL(update->OldChunkIdx, 0);
+        UNIT_ASSERT_VALUES_EQUAL(update->OldSectorIdx, 10);
+
+        // Freed sectors retain valid old headers until overwritten. Recovery must
+        // choose the newer erase even when it encounters the stale header last.
+        auto recovered = MakeManager();
+        auto recoveredAlloc = MakeAllocator();
+        UNIT_ASSERT(recovered.AddErase(&update->Header.Header, update->ChunkIdx, update->SectorIdx));
+        UNIT_ASSERT(!recovered.AddErase(&oldHeader.Header, 0, 10));
+        buffers[{100, 1}].Records[564] = {};
+        buffers[{100, 1}].Records[565] = {};
+        recovered.RestoreErases(buffers, recoveredAlloc);
+        UNIT_ASSERT(buffers.empty());
+    }
+
     Y_UNIT_TEST(RestoreKeepsBarriersWithoutRecords) {
         auto mgr = MakeManager();
         auto alloc = MakeAllocator();
@@ -771,9 +805,9 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
             "Erase must reset accumulated LSNs when generation increases");
     }
 
-    // RestoreErases must discard erase records whose generation does not match
-    // any entry in persistentBuffers (old-generation records already cleaned up).
-    Y_UNIT_TEST(RestoreErasesDropsRecordForMissingGeneration) {
+    // RestoreErases must preserve metadata for a generation without live records
+    // without applying its erases to another generation.
+    Y_UNIT_TEST(RestoreErasesKeepsMetadataForMissingGeneration) {
         auto mgr = MakeManager();
         auto alloc = MakeAllocator(1024, 0);
 
@@ -808,9 +842,10 @@ Y_UNIT_TEST_SUITE(TPersistentBufferBarriersManagerTest) {
 
         mgr.RestoreErases(pbs, alloc);
 
-        // The erase record for generation 1 must be dropped because there is no
-        // {tabletId, 1} entry in persistentBuffers.
+        // Keep the generation-1 erase metadata even without live records.
+        // Its version must survive until a replacement is persisted.
         // The generation-2 record must remain untouched.
+        UNIT_ASSERT_VALUES_EQUAL(mgr.GetErasesCount(tabletId), 3u);
         auto pbIt = pbs.find({tabletId, 2});
         UNIT_ASSERT_C(pbIt != pbs.end(), "Generation-2 record must survive");
         UNIT_ASSERT_C(pbIt->second.Records.count(5), "LSN 5 in generation 2 must not be erased");

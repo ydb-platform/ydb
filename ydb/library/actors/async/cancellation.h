@@ -178,7 +178,7 @@ namespace NActors {
      */
     template<class T>
     inline auto TAsyncCancellationScope::Wrap(async<T> wrapped) {
-        return NDetail::TWrapCancellationScopeAwaiter<T, false>(*this, [&wrapped]{ return wrapped.UnsafeMove(); });
+        return NDetail::TWrapCancellationScopeAwaiter<T, false>(*this, [&wrapped]{ return std::move(wrapped).UnsafeMove(); });
     }
 
     /**
@@ -202,7 +202,7 @@ namespace NActors {
      */
     template<class T>
     inline auto TAsyncCancellationScope::WrapShielded(async<T> wrapped) {
-        return NDetail::TWrapCancellationScopeAwaiter<T, true>(*this, [&wrapped]{ return wrapped.UnsafeMove(); });
+        return NDetail::TWrapCancellationScopeAwaiter<T, true>(*this, [&wrapped]{ return std::move(wrapped).UnsafeMove(); });
     }
 
     /**
@@ -498,7 +498,7 @@ namespace NActors {
     template<class T, NDetail::IsOnCancelCallback TOnCancelCallback>
     inline auto InterceptCancellation(async<T> wrapped, TOnCancelCallback&& onCancelCallback) {
         return NDetail::TInterceptCancellationAwaiter<T, TOnCancelCallback>(
-            [&wrapped]{ return wrapped.UnsafeMove(); },
+            [&wrapped]{ return std::move(wrapped).UnsafeMove(); },
             std::forward<TOnCancelCallback>(onCancelCallback));
     }
 

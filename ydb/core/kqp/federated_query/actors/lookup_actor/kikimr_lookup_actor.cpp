@@ -557,6 +557,7 @@ namespace {
                         CleanupStreamProcessor(session);
                         if (session->SessionId) {
                             SendDeleteSession(std::move(session->SessionId), database);
+                            session->SessionId.clear();
                         }
                     }
                     it = DatabaseStates.erase(it);

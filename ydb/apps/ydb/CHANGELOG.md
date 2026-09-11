@@ -1,4 +1,5 @@
 
+* Fixed `ydb tools restore` failing on unknown protobuf fields in backup schema files produced by newer versions.
 * Added support for column-oriented (OLAP) tables to the `ydb tools dump` and `ydb tools restore` commands. `--import-data` is not supported for column tables and automatically falls back to `--bulk-upsert`.
 * Fixed `ydb tools restore` failing on `Float` and `Double` NaN/infinity values in local backups, and added file, line, column, and value context to parsing errors.
 * Added support for `--format svg` plan format to `ydb sql` command when used with `--explain` or `--explain-analyze` options

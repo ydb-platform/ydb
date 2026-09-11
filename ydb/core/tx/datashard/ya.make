@@ -479,6 +479,7 @@ PEERDIR(
     ydb/library/actors/async
     ydb/library/actors/core
     ydb/library/actors/http
+    ydb/library/backup/proto
     ydb/library/chunks_limiter
     ydb/library/protobuf_printer
     ydb/library/yql/dq/actors/compute

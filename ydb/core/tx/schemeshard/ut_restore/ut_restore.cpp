@@ -193,6 +193,14 @@ namespace {
         }
     };
 
+    void AddUnknownFields(TDataWithChecksum& data) {
+        data = TStringBuilder() << data.Data << R"(
+            future_setting: 1048576
+            future_settings { enabled: true }
+            999: 100
+        )";
+    }
+
     struct TImportChangefeed {
         TDataWithChecksum Changefeed;
         TDataWithChecksum Topic;
@@ -6691,6 +6699,78 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestImportChangefeeds(EnableDataShardDirectPartImport, 1, AddedScheme);
     }
 
+    void TestImportChangefeedTopic(const TString& extraTopicFields, Ydb::StatusIds::StatusCode expectedStatus,
+            bool enableDataShardDirectPartImport) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
+        runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
+
+        THashMap<TString, TTestDataWithScheme> bucketContent;
+        const TString tableName = "Table";
+        const auto checkTable = AddedSchemeWithPermissions(bucketContent, "UINT32", tableName);
+        auto& table = bucketContent.at("/Table");
+        AddUnknownFields(table.Scheme);
+        AddUnknownFields(table.Permissions);
+        auto changefeed = GenChangefeed();
+        AddUnknownFields(changefeed.Changefeed.second.Changefeed.Changefeed);
+        auto& topic = changefeed.Changefeed.second.Changefeed.Topic;
+        topic = TStringBuilder() << topic.Data << extraTopicFields;
+        bucketContent.emplace(std::move(changefeed.Changefeed));
+
+        Run(runtime, env, ConvertTestData(bucketContent), R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_prefix: "Table"
+                    destination_path: "/MyRoot/Table"
+                }
+            }
+        )", expectedStatus);
+
+        if (expectedStatus == Ydb::StatusIds::SUCCESS) {
+            checkTable(runtime);
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+                NLs::HasOwner("eve"),
+                NLs::HasRight("+R:alice"),
+                NLs::HasRight("+W:alice"),
+                NLs::HasRight("+R:bob"),
+            });
+            changefeed.Checker(runtime);
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/updates_feed1/streamImpl", false, false, true), {
+                NLs::ConsumerExist("future_consumer"),
+            });
+        }
+    }
+
+    Y_UNIT_TEST_FLAG(TableAndChangefeedWithUnknownFields, EnableDataShardDirectPartImport) {
+        TestImportChangefeedTopic(R"(
+            future_write_limit: 1048576
+            future_settings {
+                enabled: true
+            }
+            consumers {
+                name: "future_consumer"
+                future_consumer_setting: true
+            }
+            999: 100
+        )", Ydb::StatusIds::SUCCESS, EnableDataShardDirectPartImport);
+    }
+
+    Y_UNIT_TEST_FLAG(ChangefeedTopicWithInvalidKnownField, EnableDataShardDirectPartImport) {
+        TestImportChangefeedTopic(R"(
+            retention_storage_mb: "invalid"
+        )", Ydb::StatusIds::CANCELLED, EnableDataShardDirectPartImport);
+    }
+
+    Y_UNIT_TEST_FLAG(ChangefeedTopicWithMalformedUnknownField, EnableDataShardDirectPartImport) {
+        TestImportChangefeedTopic(R"(
+            future_settings {
+                enabled:
+        )", Ydb::StatusIds::CANCELLED, EnableDataShardDirectPartImport);
+    }
+
     // Explicit specification of the number of partitions when creating CDC
     // is possible only if the first component of the primary key
     // of the source table is Uint32 or Uint64
@@ -7058,17 +7138,20 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         });
     }
 
-    void TestTopic(bool isCorrupted = false) {
+    void TestTopic(bool isCorrupted = false, bool unknownFields = false) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         auto topic = NDescUT::TSimpleTopic(0, 2);
 
-        const auto data = GenerateTestData({
+        auto data = GenerateTestData({
                 EPathTypePersQueueGroup,
                 isCorrupted ? topic.GetCorruptedPublicFile() : topic.GetPublicProto().DebugString()
         });
+        if (unknownFields) {
+            AddUnknownFields(data.Topic);
+        }
 
         THashMap<TString, TTestDataWithScheme> bucketContent;
 
@@ -7103,6 +7186,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST(CorruptedTopicImport) {
         TestTopic(true);
+    }
+
+    Y_UNIT_TEST(TopicImportWithUnknownFields) {
+        TestTopic(false, true);
     }
 
     Y_UNIT_TEST(TopicExportImport) {
@@ -7447,7 +7534,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_EQUAL(issues.begin()->message(), "Unsupported scheme object type");
     }
 
-    void MaterializedIndex(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode, bool enableDataShardDirectPartImport, const TString& metadata = R"({"version": 1})") {
+    void MaterializedIndex(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode, bool enableDataShardDirectPartImport,
+            const TString& metadata = R"({"version": 1})", bool unknownFields = false) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
@@ -7469,7 +7557,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
         )", {{"a", 1}}, "", metadata);
 
-        const auto b = GenerateTestData(R"(
+        auto b = GenerateTestData(R"(
             columns {
               name: "key"
               type { optional_type { item { type_id: UTF8 } } }
@@ -7481,6 +7569,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             primary_key: "value"
             primary_key: "key"
         )", {{"b", 1}}, "", metadata);
+
+        if (unknownFields) {
+            AddUnknownFields(b.Scheme);
+        }
 
         Run(runtime, env, ConvertTestData({{"/a", a}, {"/a/by_value/indexImplTable", b}}), Sprintf(R"(
             ImportFromS3Settings {
@@ -7506,6 +7598,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST_FLAG(MaterializedIndexImport, EnableDataShardDirectPartImport) {
         MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT, EnableDataShardDirectPartImport);
+    }
+
+    Y_UNIT_TEST_FLAG(MaterializedIndexImportWithUnknownFields, EnableDataShardDirectPartImport) {
+        MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT,
+            EnableDataShardDirectPartImport, R"({"version": 1})", true);
     }
 
     Y_UNIT_TEST_FLAG(MaterializedIndexAuto, EnableDataShardDirectPartImport) {
@@ -8818,7 +8915,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
     }
 
-    Y_UNIT_TEST(ShouldRestoreSystemViewPermissions) {
+    Y_UNIT_TEST_FLAG(ShouldRestoreSystemViewPermissions, UnknownFields) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
@@ -8843,7 +8940,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
         )";
 
-        const auto data = GenerateTestData(
+        auto data = GenerateTestData(
             {
                 EPathTypeSysView,
                 R"(
@@ -8854,6 +8951,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             {},
             permissions
         );
+
+        if (UnknownFields) {
+            AddUnknownFields(data.SysViewDescription);
+            AddUnknownFields(data.Permissions);
+        }
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();

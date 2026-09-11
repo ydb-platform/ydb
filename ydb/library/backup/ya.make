@@ -8,6 +8,7 @@ PEERDIR(
     yql/essentials/types/dynumber
     yql/essentials/sql/v1/format
     ydb/public/api/protos
+    ydb/library/backup/proto
     ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/dump/util
     ydb/public/lib/yson_value
@@ -35,5 +36,6 @@ SRCS(
 END()
 
 RECURSE_FOR_TESTS(
+    proto
     ut
 )

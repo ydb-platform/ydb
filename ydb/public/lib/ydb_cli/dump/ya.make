@@ -15,6 +15,7 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/string_utils/quote
     ydb/library/backup
+    ydb/library/backup/proto
     ydb/public/api/protos
     ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/dump/files

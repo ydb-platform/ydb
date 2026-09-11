@@ -7882,6 +7882,7 @@ class WebTest(unittest.TestCase):
         const assert=require('assert'),enc=encodeURIComponent;
         const esc=value=>String(value).replaceAll('<','&lt;').replaceAll('"','&quot;');
         let refreshes=0,activeRun=null;
+        const viewedHost='';
         const queueMicrotask=callback=>callback(),refreshActiveBanner=()=>{refreshes++};
         for(const page of ['runs','new','topology','comparisons']){
           const html=shell(page,'<h1>Content</h1>','<div>Breadcrumb</div>');

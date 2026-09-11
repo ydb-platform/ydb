@@ -36,6 +36,8 @@ from ydb.tools.ydb_bench.lib.local_ydb import run_local_ydb
 from ydb.tools.ydb_bench.lib.local_ydb_workloads import web_workload_catalog
 from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES, discover_topology, plan_affinity, topology_record
 from ydb.tools.ydb_bench.lib.ydb_telemetry import read_metrics
+from ydb.tools.ydb_bench.lib.hosts import HostDirectory, allowed_path, allowed_post_path, open_peer, request_peer
+from ydb.tools.ydb_bench.lib.federation import Federation, split_reference
 
 _CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
 _STREAM_CHUNK_SIZE = 1024 * 1024
@@ -320,7 +322,29 @@ _JS = (
     "\\n    repetitions: 1\\n    affinity: [none]\\n',perf:false,continueOnError:false,model:null,error:null,selected:null};\n"
     "let activeRun=sessionStorage.getItem('ydb-bench-active-run')||'';\n"
     'let refreshTimer=null;\n'
-    "async function api(path,options={}){const response=await fetch(path,options);const type=response.headers.get('content-ty"
+    "const viewedHost=new URLSearchParams(location.search).get('host')||'';\n"
+    """
+function splitRunRef(value){const match=/^([0-9a-f]{8}-[0-9a-f-]{27}):(.*)$/.exec(value);return match?{host:match[1],id:match[2]}:null}
+let editorHost='',editorHostOptions='',editorRenderVersion=0;
+function editorApi(path,options){return api(editorHost?'/api/hosts/'+enc(editorHost)+path:path,options)}
+function runDisplay(value){return splitRunRef(value)?.id||value}
+function hostApiPath(path){
+  if(path.startsWith('/api/federation/')||path.startsWith('/api/hosts'))return path;
+  const match=/^[/]api[/]runs[/]([^/?]+)(.*)$/.exec(path),ref=match&&splitRunRef(decodeURIComponent(match[1]));
+  if(ref)return '/api/hosts/'+enc(ref.host)+'/api/runs/'+enc(ref.id)+match[2];
+  const routeRef=splitRunRef(decodeURIComponent(location.hash.split('/')[1]||''));
+  if(match&&routeRef&&/^#(?:run|attempt)[/]/.test(location.hash))return '/api/hosts/'+enc(routeRef.host)+path;
+  return viewedHost&&(/#(?:run|attempt)[/]/.test(location.hash)||path==='/api/system-topology'||path==='/api/cpu-usage')?
+    '/api/hosts/'+enc(viewedHost)+path:path
+}
+function federationErrors(errors){return (errors||[]).map(item=>'<div class=notice>'+esc(item.host_name)+': '+esc(item.error)+'</div>').join('')}
+async function hostChoices(selected='',all=true){
+  const value=await api('/api/hosts'),hosts=[value.local,...value.hosts];
+  return (all?'<option value="">All hosts</option>':'')+hosts.map(host=>'<option value="'+esc(host.id===value.local.id&&!all?'':host.id)+'" '+
+    ((selected||value.local.id)===host.id&&!all||selected===host.id?'selected':'')+'>'+esc(host.name)+(host.id===value.local.id?' (this host)':'')+'</option>').join('')
+}
+"""
+    "async function api(path,options={}){const response=await fetch(hostApiPath(path),options);const type=response.headers.get('content-ty"
     "pe')||'';const body=type.includes('application/json')?await response.json():await response.text();if(!response.ok)throw "
     'Error(body.error||body||response.statusText);return body}\n'
     "function jsonOptions(value){return {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)"
@@ -346,15 +370,76 @@ _JS = (
     "ndsLabel((Date.now()-Date.parse(step.started_at))/1000);return '—'}\n"
     'function status(value){return \'<span class="status \'+esc(value||\'unknown\')+\'">\'+esc(value||\'unknown\')+\'</span>\'}\n'
     """
+async function renderHosts(){
+  clearRefresh();
+  try{
+    const value=await api('/api/hosts');
+    if(location.hash!=='#hosts')return;
+    app.innerHTML=shell('hosts','<div class=runs-toolbar><span class=muted>Benchmark hosts</span><div class=runs-actions>'+
+      '<button id=refresh-hosts>Refresh</button><button id=add-host class=primary>Add host</button></div></div>'+
+      '<div class=table-scroll><table><thead><tr><th>Host</th><th>Port</th><th>Connection</th><th>Activity</th><th>Views</th><th></th></tr></thead><tbody>'+
+      '<tr><td>'+esc(value.local.name)+'<div class=muted>This server</div></td><td>'+esc(value.local.port??'—')+'</td><td>Online</td><td>—</td><td>'+
+      '<a href="/?#runs">Runs</a> · <a href="/?#topology">Topology</a></td><td><button id=copy-host-token>Copy token</button></td></tr>'+
+      value.hosts.map(host=>'<tr data-host="'+esc(host.id)+'"><td>'+esc(host.name)+'<div class=muted>'+esc(host.endpoint)+
+      '</div></td><td>'+esc(host.port??'—')+'</td><td data-connection>Checking…</td><td data-activity>—</td><td><a href="/?host='+enc(host.id)+
+      '#runs">Runs</a> · <a href="/?host='+enc(host.id)+'#topology">Topology</a></td><td><button data-remove>Remove</button></td></tr>').join('')+
+      '</tbody></table></div><div id=hosts-error role=alert></div>'+
+      '<dialog id=host-dialog class=import-dialog><h2>Add host</h2><label class=field>Name<input id=host-name maxlength=120></label>'+
+      '<label class=field>Server endpoint<input id=host-endpoint placeholder="http://127.0.0.1:42420"></label>'+
+      '<label class=field>Peer token<input id=host-token type=password autocomplete=off></label>'+
+      '<p class=muted>HTTP sends the token and data unencrypted; use it only on trusted networks. Open Hosts on the server you want to add and click Copy token.</p>'+
+      '<div id=host-error role=alert></div><div class=toolbar><button id=cancel-host>Cancel</button><button id=save-host>Add host</button></div></dialog>');
+    const dialog=app.querySelector('#host-dialog');
+    app.querySelector('#refresh-hosts').onclick=renderHosts;
+    app.querySelector('#copy-host-token').onclick=async event=>{
+      const button=event.currentTarget;
+      button.disabled=true;
+      app.querySelector('#hosts-error').textContent='';
+      try{
+        if(!navigator.clipboard)throw new Error('Clipboard access requires HTTPS or localhost.');
+        const token=api('/api/hosts/token',jsonOptions({})).then(value=>value.token);
+        if(window.ClipboardItem&&navigator.clipboard.write){
+          await navigator.clipboard.write([new ClipboardItem({'text/plain':token.then(value=>new Blob([value],{type:'text/plain'}))})]);
+        }else await navigator.clipboard.writeText(await token);
+        button.textContent='Copied';
+      }catch(error){app.querySelector('#hosts-error').textContent='Could not copy token: '+error.message}
+      finally{button.disabled=false}
+    };
+    app.querySelector('#add-host').onclick=()=>dialog.showModal();
+    app.querySelector('#cancel-host').onclick=()=>dialog.close();
+    app.querySelector('#save-host').onclick=async event=>{
+      event.target.disabled=true;
+      try{await api('/api/hosts/add',jsonOptions({name:app.querySelector('#host-name').value,
+        endpoint:app.querySelector('#host-endpoint').value,token:app.querySelector('#host-token').value}));await renderHosts()}
+      catch(error){app.querySelector('#host-error').textContent=error.message;event.target.disabled=false}
+    };
+    for(const row of app.querySelectorAll('[data-host]')){
+      row.querySelector('[data-remove]').onclick=async()=>{
+        if(!confirm('Remove this host from the directory? Its processes and results will not be changed.'))return;
+        try{await api('/api/hosts/remove',jsonOptions({id:row.dataset.host}));await renderHosts()}
+        catch(error){app.querySelector('#hosts-error').textContent=error.message}
+      };
+      api('/api/hosts/'+enc(row.dataset.host)+'/api/activity-status').then(activity=>{
+        if(!row.isConnected)return;
+        row.querySelector('[data-connection]').textContent='Online';
+        row.querySelector('[data-activity]').textContent=activity.active_run_id||'Idle';
+      }).catch(()=>{if(row.isConnected){row.querySelector('[data-connection]').textContent='Offline';
+        row.querySelector('[data-activity]').textContent='Unknown'}});
+    }
+  }catch(error){app.innerHTML=shell('hosts',displayError(error))}
+}
 function shell(current,body,breadcrumb=''){
   queueMicrotask(refreshActiveBanner);
-  const navigation=[['runs','Runs'],['topology','System topology'],['comparisons','Comparisons']];
+  const navigation=[['runs','Runs'],['topology','System topology'],['comparisons','Comparisons'],['hosts','Hosts']];
   const section=current==='new'?'runs':current;
   return '<div class=shell><div class=content><header class=topbar><a class=brand href="#runs">YDB benchmark</a>'+
     '<nav class=primary-nav aria-label="Main navigation">'+navigation.map(([id,label])=>
-      '<a href="#'+id+'"'+(section===id?' aria-current="page"':'')+'>'+label+'</a>').join('')+
+      '<a href="'+(id==='hosts'?'/?#hosts':'#'+id)+'"'+(section===id?' aria-current="page"':'')+'>'+label+'</a>').join('')+
     '</nav><span class=active-run>'+(activeRun?'<a href="#run/'+enc(activeRun)+'">Active run: '+esc(activeRun)+'</a>':
-      'No active run')+'</span></header><main>'+breadcrumb+body+'</main></div></div>'
+      'No active run')+'</span></header><main>'+
+      (viewedHost&&/^#(?:run|attempt)[/]/.test(location.hash)?
+        '<p class=muted>Remote host · '+esc(viewedHost)+' · <a href="/?#hosts">Back to hosts</a></p>':'')+
+      breadcrumb+body+'</main></div></div>'
 }
 """
     "function breadcrumbs(items){return items.length?'<div class=breadcrumbs>'+items.map((item,index)=>index===items.length-1"
@@ -503,9 +588,10 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     ";lines.push('    affinity: '+yamlArray(profile.affinity));lines.push('    background-load: '+yamlArray(profile.background_"
     "load||['none']));if(profile.timeout!==null&&profile.timeout!==undefined&&profil"
     "e.timeout!=='')lines.push('    timeout: '+profile.timeout)}}return lines.join('\\n')+'\\n'}\n"
-    "async function syncEditor(){try{const value=await api('/api/editor-config',jsonOptions({yaml:editor.yaml,perf:editor.per"
-    'f}));editor.model=value;editor.error=null;if(!editor.selected&&value.profiles.length)editor.selected=value.profiles[0].k'
-    'ey;return value}catch(error){editor.model=null;editor.error=error.message;return null}}\n'
+    "async function syncEditor(){const host=editorHost,yaml=editor.yaml,perf=editor.perf;try{const value=await editorApi('/api/editor-config',jsonOptions({yaml,perf}));"
+    "if(host!==editorHost||yaml!==editor.yaml||perf!==editor.perf)return null;"
+    'editor.model=value;editor.error=null;if(!editor.selected&&value.profiles.length)editor.selected=value.profiles[0].key;return value}'
+    "catch(error){if(host===editorHost&&yaml===editor.yaml&&perf===editor.perf){editor.model=null;editor.error=error.message}return null}}\n"
     'function profileByKey(key){return (editor.model?.profiles||[]).find(profile=>profile.key===key)}\n'
     'function updateProfile(key,mutate){const profile=profileByKey(key);if(!profile)return;mutate(profile);editor.yaml=serial'
     'izeConfig(editor.model);saveDraft()}\n'
@@ -514,7 +600,8 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     '(item=>item.matrix).reduce((total,item)=>total*(profile.parameters[item.name]?.length||1),1),processes=profile.affinity.'
     "length*(profile.background_load||['none']).length*profile.threads.length*profile.repetitions*cases;count+=processes;seconds+=processes*profile.duration}return {cou"
     'nt,seconds}}\n'
-    "function editorControls(){return '<div class=toolbar><button id=validate>Validate</button><button id=download-yaml>Downl"
+    "function editorControls(){return '<div class=toolbar><label>Host <select id=run-host>'+editorHostOptions+"
+    "'</select></label><button id=validate>Validate</button><button id=download-yaml>Downl"
     "oad YAML</button><button id=save-host>Save YAML on host</button><label><input id=perf type=checkbox '+(editor.perf?'chec"
     "ked':'')+'> perf</label><label><input id=continue type=checkbox '+(editor.continueOnError?'checked':'')+'> continue on e"
     "rror</label><button class=primary id=start-run>Start run</button></div><div id=editor-message></div>'}\n"
@@ -522,6 +609,7 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     'matrix)){const values=profile.parameters[parameter.name]||parameter.default;cases=cases.flatMap(parts=>values.map(value='
     ">[...parts,parameter.name+'='+value]))}return cases}\n"
     'function bindEditorControls(){\n'
+    "  document.querySelector('#run-host').onchange=async event=>{editorHost=event.target.value;clearTimeout(window.ydbBenchYamlTimer);await renderNew()};\n"
     "  const message=document.querySelector('#editor-message');\n"
     '  const showMessage=(text,kind=\'good\')=>{message.innerHTML=\'<div class="notice \'+kind+\'">\'+esc(text)+\'</div>\'};\n'
     "  if(editor.model&&document.querySelector('.profile-list')){\n"
@@ -537,7 +625,7 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     '};\n'
     "  document.querySelector('#continue').onchange=event=>{editor.continueOnError=event.target.checked};\n"
     "  document.querySelector('#validate').onclick=async()=>{\n"
-    "    try {const value=await api('/api/validate',jsonOptions({yaml:editor.yaml,perf:editor.perf}));showMessage(value.valid"
+    "    try {const value=await editorApi('/api/validate',jsonOptions({yaml:editor.yaml,perf:editor.perf}));showMessage(value.valid"
     "?'Valid configuration: '+value.steps+' planned processes.':value.error,value.valid?'good':'error')}\n"
     "    catch(error){showMessage(error.message,'error')}\n"
     '  };\n'
@@ -546,15 +634,17 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     "    link.href=URL.createObjectURL(blob);link.download='ydb-bench.yaml';link.click();URL.revokeObjectURL(link.href)\n"
     '  };\n'
     "  document.querySelector('#save-host').onclick=async()=>{\n"
-    "    try {const value=await api('/api/drafts',jsonOptions({yaml:editor.yaml}));showMessage('Saved on host: '+value.path)}"
+    "    try {const value=await editorApi('/api/drafts',jsonOptions({yaml:editor.yaml}));showMessage('Saved on host: '+value.path)}"
     '\n'
     "    catch(error){showMessage(error.message,'error')}\n"
     '  };\n'
-    "  document.querySelector('#start-run').onclick=async()=>{\n"
-    "    try {const value=await api('/api/runs',jsonOptions({yaml:editor.yaml,perf:editor.perf,continue_on_error:editor.conti"
-    "nueOnError}));activeRun=value.id;sessionStorage.setItem('ydb-bench-active-run',activeRun);setRoute('run/'+enc(value.id))"
+    "  document.querySelector('#start-run').onclick=async event=>{\n"
+    "    const button=event.currentTarget,host=editorHost;button.disabled=true;document.querySelector('#run-host').disabled=true;\n"
+    "    try {const value=await editorApi('/api/runs',jsonOptions({yaml:editor.yaml,perf:editor.perf,continue_on_error:editor.conti"
+    "nueOnError}));activeRun=host?host+':'+value.id:value.id;sessionStorage.setItem('ydb-bench-active-run',activeRun);setRoute('run/'+enc(activeRun))"
     '}\n'
     "    catch(error){showMessage(error.message,'error')}\n"
+    "    finally{button.disabled=false;const hostSelect=document.querySelector('#run-host');if(hostSelect)hostSelect.disabled=false}\n"
     '  }\n'
     '}\n'
     """
@@ -1052,8 +1142,10 @@ function addProfile(){
   editor.model.profiles.push(profile);editor.selected=profile.key;editor.yaml=serializeConfig(editor.model);saveDraft();renderNew()
 }
 """
-    "async function renderNew(tab){clearRefresh();if(tab)sessionStorage.setItem('ydb-bench-editor-tab',tab);tab=sessionStorag"
-    "e.getItem('ydb-bench-editor-tab')||'builder';await syncEditor();const summary=planSummary();let content='<h1 class=page-"
+    "async function renderNew(tab){clearRefresh();const version=++editorRenderVersion;if(tab)sessionStorage.setItem('ydb-bench-editor-tab',tab);tab=sessionStorag"
+    "e.getItem('ydb-bench-editor-tab')||'builder';const hostOptions=await hostChoices(editorHost,false);await syncEditor();"
+    "if(version!==editorRenderVersion||!['#new','#new/yaml'].includes(location.hash))return;editorHostOptions=hostOptions;"
+    "const summary=planSummary();let content='<h1 class=page-"
     'title>New run</h1><div class=tabs><a class="\'+(tab===\'builder\'?\'active\':\'\')+\'" href="#new">Builder</a><a class="\'+(tab=='
     '=\'yaml\'?\'active\':\'\')+\'" href="#new/yaml">YAML</a></div>\'+editorControls();if(tab===\'yaml\'){content+=\'<textarea class=yam'
     "l id=yaml-editor spellcheck=false>'+esc(editor.yaml)+'</textarea><div class=muted>Invalid YAML remains editable and is n"
@@ -1082,7 +1174,7 @@ function addProfile(){
     'e"></div><div class=field><label>Source</label><select id=f-source><option value="">Any</option><option value=local>Loca'
     'l</option><option value=imported>Imported</option></select></div><div class=field><label>From</label><input id=f-since t'
     "ype=date></div><div class=field><label>To</label><input id=f-until type=date></div></div>'}\n"
-    "function runHref(id,kind){return '/api/runs/'+enc(id)+'/'+kind}\n"
+    "function runHref(id,kind){return hostApiPath('/api/runs/'+enc(id)+'/'+kind)}\n"
     """
 function sectionTabs(name,items){
   return '<div class=view-tabs aria-label="'+esc(name)+' views">'+items.map(([key,label],index)=>
@@ -1133,10 +1225,10 @@ function compactRun(run){
   return '<article class=dense-run><div><div class=dense-run-meta>'+status(run.status)+'<time title="'+esc(run.started_at||run.queued_at||'')+'">'+
     esc(humanTime(run.started_at||run.queued_at))+'</time><span>'+duration(run)+'</span><span>'+
     esc(run.profiles)+' profiles · '+esc(run.repetitions)+' steps</span><span>perf '+(run.perf?'on':'off')+
-    '</span><span>'+esc(run.source)+'</span></div><div class=dense-run-profiles>'+
+    '</span><span>'+esc(run.source)+'</span><span>'+esc(run.host_name||'')+'</span></div><div class=dense-run-profiles>'+
     profiles.map(name=>'<span>'+esc(name)+'</span>').join(' · ')+
     '</div><div class=dense-run-meta><span>'+esc(benchmarks.join(' · '))+'</span><a class=dense-run-id href="#run/'+
-    enc(run.id)+'">'+esc(run.id)+'</a><span>'+esc(run.config_path||'config snapshot')+'</span></div></div>'+
+    enc(run.id)+'">'+esc(run.run_id||run.id)+'</a><span>'+esc(run.config_path||'config snapshot')+'</span></div></div>'+
     '<details class=dense-run-actions><summary>Actions</summary><div class=actions>'+
     '<a href="#run/'+enc(run.id)+'">Open</a><a href="#new" data-repeat="'+esc(run.id)+'">Repeat</a>'+
     '<a href="'+runHref(run.id,'config')+'">YAML</a><a href="'+runHref(run.id,'manifest')+'">run.json</a>'+
@@ -1155,8 +1247,10 @@ function bindAutomaticFilters(fields,reset,apply,connected){
 }
 async function renderRuns(){
   clearRefresh();
+  const hostOptions=await hostChoices();
+  if(location.hash!=='#runs')return;
   app.innerHTML=shell('runs',runFilters()+
-    '<div class=runs-toolbar><label>Sort <select id=runs-sort>'+
+    '<div class=runs-toolbar><label>Host <select id=runs-host>'+hostOptions+'</select></label><label>Sort <select id=runs-sort>'+
     '<option value=newest>Newest first</option><option value=oldest>Oldest first</option>'+
     '<option value=longest>Longest first</option></select></label><div class=runs-actions><button id=open-import>Import</button>'+
     '<button id=reset-run-filters hidden>Reset filters</button>'+
@@ -1166,11 +1260,11 @@ async function renderRuns(){
     '<div id=import-error role=alert></div><div id=import-status role=status></div><div class=toolbar>'+
     '<button id=cancel-import>Cancel</button><button id=import-run class=primary>Import</button></div></dialog>');
   const target=document.querySelector('#runs-table'),sort=document.querySelector('#runs-sort');
-  let records=[],request=0;
+  let records=[],request=0,hostErrors=[];
   sort.value=runsSort;
   function draw(){
-    target.innerHTML=records.length?sortRuns(records,runsSort).map(compactRun).join(''):
-      '<div class=empty>No runs match these filters.</div>';
+    target.innerHTML=federationErrors(hostErrors)+(records.length?sortRuns(records,runsSort).map(compactRun).join(''):
+      '<div class=empty>No runs match these filters.</div>');
     for(const item of target.querySelectorAll('[data-repeat]'))item.onclick=event=>{
       event.preventDefault();reuseRun(item.dataset.repeat)
     };
@@ -1180,11 +1274,12 @@ async function renderRuns(){
     for(const [name,id] of Object.entries({status:'f-status',benchmark:'f-benchmark',profile:'f-profile',source:'f-source',since:'f-since',until:'f-until'})){
       const value=document.querySelector('#'+id).value.trim();if(value)query.set(name,value)
     }
-    try{const value=await api('/api/runs?'+query);if(current!==request||!target.isConnected)return;records=value;draw()}
+    if(app.querySelector('#runs-host').value)query.set('host',app.querySelector('#runs-host').value);
+    try{const value=await api('/api/federation/runs?'+query);if(current!==request||!target.isConnected)return;records=value.entries;hostErrors=value.errors;draw()}
     catch(error){if(current===request&&target.isConnected)target.innerHTML=displayError(error)}
   }
   sort.onchange=()=>{runsSort=sort.value;draw()};
-  bindAutomaticFilters([...app.querySelectorAll('.filters input,.filters select')],
+  bindAutomaticFilters([...app.querySelectorAll('.filters input,.filters select'),app.querySelector('#runs-host')],
     app.querySelector('#reset-run-filters'),load,()=>target.isConnected);
   const dialog=document.querySelector('#import-dialog'),fileInput=document.querySelector('#import-file'),
     importButton=document.querySelector('#import-run'),cancelButton=document.querySelector('#cancel-import'),
@@ -1319,9 +1414,11 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
   }
 }
 """
-    "async function loadChartData(runIds,benchmark=null){const query=new URLSearchParams;for(const run of runIds)query.append"
-    "('run',run);if(benchmark)query.set('benchmark',benchmark);return api('/api/chart-data?'+query)}\n"
-    "async function loadLocalYdbComparison(runIds){const query=new URLSearchParams;for(const run of runIds)query.append('run',run);return api('/api/local-ydb-comparison?'+query)}\n"
+    "async function loadChartData(runIds,benchmark=null){const ref=runIds.length===1?splitRunRef(runIds[0]):null;"
+    "const query=new URLSearchParams;for(const run of runIds)query.append('run',ref?ref.id:run);"
+    "if(benchmark)query.set('benchmark',benchmark);return api((ref?'/api/hosts/'+enc(ref.host):'')+'/api/chart-data?'+query)}\n"
+    "async function loadLocalYdbComparison(runIds){const query=new URLSearchParams;for(const run of runIds)query.append('run',run);"
+    "const result=await api('/api/federation/profiles?'+query);if(result.errors?.length)throw Error(result.errors.map(e=>e.host_name+': '+e.error).join('; '));return result}\n"
     "async function loadLocalYdbActivity(runId,profile,after){const query=new URLSearchParams({profile,after:String(after)});return api('/api/runs/'+enc(runId)+'/local-ydb-activity?'+query)}\n"
     "function chartMetricTitle(data,metric){const metadata=data.metric_metadata?.[metric]||{};return metadata.unit?metric+' ('+metadata.unit+')':metric}\n"
     "function globLabelMatch(value,pattern){value=String(value);pattern=String(pattern||'*');return pattern.split('|').map(it"
@@ -1504,7 +1601,7 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     '  renderBoard()\n'
     '}\n'
     "function localComparisonKey(item){return JSON.stringify([item.run,item.profile])}\n"
-    "function localComparisonId(item){return item.run+' / '+item.profile}\n"
+    "function localComparisonId(item){return (item.host_name?item.host_name+' / ':'')+(item.run_id||item.run)+' / '+item.profile}\n"
     'function localComparisonConfig(item){\n'
     '  const parameters=item.parameters||{},workload=parameters.workload||{},geometry=parameters.geometry||{},client=parameters.client||{};\n'
     '  const measurement=parameters.measurement||{},load=parameters.load||{},objective=load.objective||{};\n'
@@ -1636,7 +1733,8 @@ function mountLocalYdbComparison(container,data,chartData=null){
       const href='#run/'+enc(item.run)+'/profile/'+enc('local-ydb/'+item.profile);
       return '<tr><td><a href="'+esc(href)+'"><strong>'+esc(item.profile)+'</strong></a>'+
         (item===baseline?' <span class=muted>Baseline</span>':'')+
-        '<div class=muted title="'+esc(item.run)+'">'+esc(item.started_at?humanTime(item.started_at):item.run)+' · '+esc(currentView.source)+'</div>'+
+        '<div class=muted>'+esc(item.host_name||'')+'</div><div class=muted title="'+esc(item.run_id||item.run)+'">'+
+        esc(item.started_at?humanTime(item.started_at):(item.run_id||item.run))+' · '+esc(currentView.source)+'</div>'+
         '<div class=muted>'+esc(localSearchAxisLabel(item.parameters?.load?.parameter||'load',
           item.parameters?.workload?.type))+': '+esc(metricLabel(item.result?.selected_load??'—'))+'</div>'+
         (['passed','completed'].includes(item.state)?'':'<div class=muted>Profile state: '+esc(item.state??'—')+'</div>')+'</td>'+
@@ -1687,7 +1785,7 @@ function mountLocalYdbComparison(container,data,chartData=null){
       '<label><input type=checkbox data-only-differences '+(container.dataset.allConfig==='true'?'':'checked')+
       '> Only differences</label> <span class=muted>'+differenceCount+' differing parameters</span>'+
       '<div class=local-attempts-scroll><table class=local-attempts><thead><tr><th>Parameter</th>'+
-      entries.map(item=>'<th>'+esc(item.profile)+'<div class=muted>'+esc(item.run)+
+      entries.map(item=>'<th>'+esc(item.profile)+'<div class=muted>'+esc(item.host_name||'')+' · '+esc(item.run_id||item.run)+
         (item===baseline?' · Baseline':'')+'</div></th>').join('')+'</tr></thead><tbody>'+
       (configRows||'<tr><td colspan="'+(entries.length+1)+'">No configuration differences.</td></tr>')+
       '</tbody></table></div></div>';
@@ -2723,7 +2821,7 @@ async function renderLocalYdbAttempt(runId,profile,attempt,requestedView='summar
       summary.innerHTML=localAttemptReport(data,item);
       document.querySelector('#attempt-commands').innerHTML=localAttemptCommands(context);
       document.querySelector('#attempt-downloads').hidden=!metrics.artifact;
-      document.querySelector('#attempt-artifacts').innerHTML=metrics.artifact?'<a href="'+esc(metrics.artifact)+
+      document.querySelector('#attempt-artifacts').innerHTML=metrics.artifact?'<a href="'+esc(hostApiPath(metrics.artifact))+
         '">Profile YDB counters (JSONL)</a>':'';
       samples=metrics.samples||[];
       const errors=[...new Set(samples.flatMap(sample=>[
@@ -2771,6 +2869,8 @@ function parseLocalYdbProfileSelection(groups,selected){
     '  clearRefresh();\n'
     '  try{\n'
     "    const run=await api('/api/runs/'+enc(id));\n"
+    "    const directory=await api('/api/hosts'),owner=splitRunRef(id)?.host||viewedHost||directory.local.id;\n"
+    "    const hostName=[directory.local,...directory.hosts].find(host=>host.id===owner)?.name||owner;\n"
     "    activeRun=run.current_run_id||(['running','recovery_required'].includes(run.state)?id:'');\n"
     "    const queueNotice=run.state==='queued'?'<div class=notice>Queue position: '+esc(run.queue_position??'—')+'. '+(run.c"
     'urrent_run_id?\'<a href="#run/\'+enc(run.current_run_id)+\'">Currently running: \'+esc(run.current_run_id)+\'</a>\':\'Waiting f'
@@ -2779,13 +2879,14 @@ function parseLocalYdbProfileSelection(groups,selected){
     '    const groups=profileGroups(run.steps||[]),profileKeys=Object.keys(groups),selection=parseLocalYdbProfileSelection('
     "groups,selectedProfile),activeProfile=selection.profile||(profileKeys.length===1?profileKeys[0]:''),requestedLocalView="
     "selection.profile?selection.view:'',activeBenchmark=activeProfile?activeProfile.split('/')[0]:'';\n"
-    "    const crumbs=[{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:id}];if(activeProfile&&profileKeys.length>1)cr"
+    "    const crumbs=[{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:runDisplay(id)}];if(activeProfile&&profileKeys.length>1)cr"
     "umbs.push({route:'run/'+enc(id)+'/profile/'+enc(activeProfile),label:activeProfile});\n"
-    "    let content=breadcrumbs(crumbs)+queueNotice+'<div class=run-header><h1 class=page-title>'+esc(activeProfile||id)+'</h1><div class=toolbar><button id=ref"
-    "resh-run>Refresh</button>'+(['queued','running'].includes(run.state)?'<button class=danger id=cancel-run>Cancel</button>'"
+    "    let content=breadcrumbs(crumbs)+queueNotice+'<div class=run-header><h1 class=page-title>'+esc(activeProfile||runDisplay(id))+'</h1>"
+    "<div class=toolbar><button id=refresh-run>Refresh</button>'+(['queued','running'].includes(run.state)?"
+    "'<button class=danger id=cancel-run>Cancel</button>'"
     ":'')+'<button id=repeat-run>Repeat with this YAML</button><details class=downloads><summary>Downloads</summary><div cla"
     "ss=actions><a href=\"'+runHref(id,'config')+'\">YAML</a><a href=\"'+runHref(id,'manifest')+'\">run.json</a><a href=\"'+r"
-    "unHref(id,'archive')+'\">Archive.zip</a></div></details></div></div><p class=muted>'+status(run.status)+' · '+"
+    "unHref(id,'archive')+'\">Archive.zip</a></div></details></div></div><p class=muted>'+esc(hostName)+' · '+status(run.status)+' · '+"
     "esc(humanTime(run.started_at))+' · Run duration '+duration(run)+' · '+run.finished_steps+' / '+run.steps.length+"
     "' steps</p><div class=grid>';\n"
     "    if(run.state==='recovery_required')content+='<div class=\"notice error\"><strong>Interrupted.</strong> The web servi"
@@ -2819,7 +2920,7 @@ function parseLocalYdbProfileSelection(groups,selected){
     "    document.querySelector('#refresh-run').onclick=()=>renderRun(id,selectedRoute());\n"
     "    document.querySelector('#repeat-run').onclick=()=>reuseRun(id);\n"
     "    const cancel=document.querySelector('#cancel-run');\n"
-    "    if(cancel)cancel.onclick=async()=>{try{await api('/api/runs/'+enc(id)+'/cancel',{method:'POST'});renderRun(id,sele"
+    "    if(cancel)cancel.onclick=async()=>{try{await api('/api/runs/'+enc(id)+'/cancel',jsonOptions({}));renderRun(id,sele"
     'ctedRoute())}catch(error){alert(error.message)}};\n'
     "    if(activeProfile){const pieces=activeProfile.split('/'),benchmark=pieces.shift(),profile=pieces.join('/');if("
     "benchmark==='local-ydb')await mountLocalYdbProfile(document.querySelector('#local-ydb-result'),id,profile,run.state,requestedLocalView);"
@@ -2848,14 +2949,16 @@ function parseLocalYdbProfileSelection(groups,selected){
     "bel:chiplet.label||'L3 / chiplet '+groups.length,cpus});\n    }\n    const rest=node.cpus.filter(cpu=>allowed.has(cpu)&&!assigned.has(cpu));\n "
     "   if(rest.length)groups.push({label:groups.length?'Other CPUs':'Cache grouping unavailable',cpus:rest});\n    return {...node,groups:groups."
     "map(group=>({...group,cores:cores.map(core=>({...core,cpus:core.cpus.filter(cpu=>group.cpus.includes(cpu))})).filter(core=>core.cpus.length)"
-    "}))};\n  });\n}\nasync function renderTopology(){\n  clearRefresh();\n  try{\n    const value=await api('/api/system-topology'),t=value.topology;\n"
+    "}))};\n  });\n}\nasync function renderTopology(){\n  clearRefresh();\n  try{\n    const hostOptions=await hostChoices(viewedHost,false);\n"
+    "    const value=await api('/api/system-topology'),t=value.topology;\n"
     "    if(location.hash!=='#topology')return;\n    const nodes=topologyGroups(t),all=nodes.flatMap(n=>n.groups.flatMap(g=>g.cores));\n    const l"
     "ayout=nodes.map(node=>'<section class=cpu-node><div class=cpu-node-name><strong>NUMA '+esc(node.id)+'</strong><small data-node-usage=\"'+esc("
     "node.id)+'\">—</small></div><div class=cpu-groups>'+node.groups.map(group=>\n      '<div class=cpu-group><div class=cpu-group-label>'+esc(grou"
     "p.label)+'</div><div class=cpu-core-grid>'+group.cores.map(core=>\n        '<button class=cpu-core data-core=\"'+core.index+'\" aria-pressed=fa"
     "lse aria-label=\"Core '+core.index+'; vCPU '+esc(core.cpus.join(', '))+'\">'+core.cpus.map(cpu=>'<span class=cpu-cell data-cpu=\"'+cpu+'\">'+cpu"
     "+'</span>').join('')+'</button>'\n      ).join('')+'</div></div>').join('')+'</div></section>').join('');\n    app.innerHTML=shell('topology',"
-    "'<div id=cpu-topology><p class=muted>'+t.physical_cores.length+' physical cores · '+t.allowed_cpus."
+    "'<div class=runs-toolbar><label>Host <select id=topology-host>'+hostOptions+'</select></label></div>"
+    "<div id=cpu-topology><p class=muted>'+t.physical_cores.length+' physical cores · '+t.allowed_cpus."
     "length+' allowed vCPUs · '+t.numa_nodes.length+' NUMA nodes</p>'+\n      sectionTabs('topology',[['layout','Topology & CPU usage'],['affinity"
     "','Affinity availability']])+\n      '<section data-section-panel=\"topology:layout\"><div class=cpu-map-toolbar><div class=cpu-help><button id"
     "=cpu-help-button aria-label=\"About the CPU map\" aria-expanded=false aria-controls=cpu-map-help>?</button><div id=cpu-map-help hidden role=no"
@@ -2867,7 +2970,8 @@ function parseLocalYdbProfileSelection(groups,selected){
     "c(item.level)+': '+esc(item.reason)+'</p>').join('')+'</div></div><small id=cpu-sample-status>Waiting for CPU samples…</small><small>0% <spa"
     "n class=cpu-heat-scale></span> 100%</small></div><div id=cpu-selection class=cpu-selection>Select a core to inspect its vCPUs.</div>'+layout"
     "+'</section>'+\n      '<section data-section-panel=\"topology:affinity\" hidden><h2>Affinity availability</h2>'+affinityTree(value.affinity)+'<"
-    "/section></div>');\n    const target=document.querySelector('#cpu-topology');bindSectionTabs(target,'topology');\n    const help=target.queryS"
+    "/section></div>');\n    app.querySelector('#topology-host').onchange=event=>{location.href='/?host='+enc(event.target.value)+'#topology'};\n"
+    "    const target=document.querySelector('#cpu-topology');bindSectionTabs(target,'topology');\n    const help=target.queryS"
     "elector('#cpu-map-help'),helpButton=target.querySelector('#cpu-help-button');\n    const closeHelp=()=>{help.hidden=true;helpButton.setAttrib"
     "ute('aria-expanded','false')};\n    helpButton.onclick=()=>{help.hidden=!help.hidden;helpButton.setAttribute('aria-expanded',String(!help.hid"
     "den))};\n    target.addEventListener('keydown',e=>{if(e.key==='Escape')closeHelp()});\n    target.addEventListener('click',e=>{if(!e.target.cl"
@@ -2919,14 +3023,14 @@ function filterComparisonRuns(runs,filters,selected){
 }
 async function renderSavedComparisons(){
   clearRefresh();
-  const route=location.hash,parts=route.slice(1).split('?')[0].split('/'),id=parts[1];
+  const route=location.hash,parts=route.slice(1).split('?')[0].split('/').map(decodeURIComponent),id=parts[1];
   const active=()=>location.hash===route;
   try{
-    const records=await api('/api/saved-comparisons');
+    const catalog=await api('/api/federation/comparisons'),records=catalog.entries;
     if(!active())return;
     if(!id){
       app.innerHTML=shell('comparisons',
-        '<div class=filters><label class=field>Comparison, profile or run<input id=saved-comparison-query type=search placeholder="Search comparisons"></label>'+
+        federationErrors(catalog.errors)+'<div class=filters><label class=field>Comparison, profile or run<input id=saved-comparison-query type=search placeholder="Search comparisons"></label>'+
         '<label class=field>Created from (UTC)<input id=saved-comparison-since type=date></label>'+
         '<label class=field>Created to (UTC)<input id=saved-comparison-until type=date></label></div>'+
         '<div class=runs-toolbar><label>Sort <select id=saved-comparison-sort><option value=newest>Newest first</option>'+
@@ -2944,7 +3048,7 @@ async function renderSavedComparisons(){
           !filtered.length?'<div class=empty>No comparisons match these filters.</div>':
           '<div class=table-scroll><table><thead><tr><th>Comparison</th><th>Created</th><th>Profiles</th></tr></thead><tbody>'+
           filtered.map(record=>'<tr data-comparison-id="'+esc(record.id)+'"><td><a href="#comparisons/'+enc(record.id)+'">'+
-            esc(record.name)+'</a><div class=muted>'+record.profiles.map(pair=>esc(pair[1])).join(' · ')+
+            esc(record.name)+'</a><div class=muted>'+esc(record.host_name)+' · '+record.profiles.map(pair=>esc(pair[1])).join(' · ')+
             '</div></td><td>'+esc(humanTime(record.created_at))+'</td><td>'+record.profiles.length+'</td></tr>').join('')+
           '</tbody></table></div>';
         for(const row of list.querySelectorAll('[data-comparison-id]'))row.onclick=event=>{
@@ -2957,12 +3061,13 @@ async function renderSavedComparisons(){
       draw();
       return
     }
-    const record=id==='new'?null:records.find(item=>item.id===id);
+    const record=id==='new'?null:records.find(item=>item.id===id||(!item.remote&&!splitRunRef(id)&&runDisplay(item.id)===id));
     if(id!=='new'&&!record)throw Error('Comparison not found');
     const editing=id==='new'||parts[2]==='edit';
     const crumb='<div class=breadcrumbs><a href="#comparisons">Comparisons</a> / '+esc(record?.name||'New comparison')+'</div>';
     if(editing){
-      const runs=await api('/api/runs');if(!active())return;
+      if(record?.remote)throw Error('Edit this comparison on its owning host: '+record.host_name);
+      const runCatalog=await api('/api/federation/runs'),runs=runCatalog.entries,hostOptions=await hostChoices();if(!active())return;
       const selected=new Map((record?.profiles||[]).map(pair=>[JSON.stringify(pair),pair]));
       const seeds=record?[...new Set(record.profiles.map(pair=>pair[0]))]:new URLSearchParams(route.split('?')[1]||'').getAll('run');
       const chosenRuns=new Set(seeds),cache=new Map(),pending=new Map(),errors=new Map(),autoSelect=new Set(record?[]:seeds);
@@ -2971,8 +3076,9 @@ async function renderSavedComparisons(){
       app.innerHTML=shell('comparisons',crumb+'<h1 class=page-title>'+(record?'Edit comparison':'New comparison')+'</h1>'+
         '<div class=toolbar><label>Name <input id=comparison-name maxlength=200 value="'+esc(record?.name||'')+'"></label>'+
         '<button id=save-saved-comparison>'+(record?'Save':'Create comparison')+'</button><a href="#comparisons'+
-        (record?'/'+enc(record.id):'')+'">Cancel</a></div><div id=comparison-error role=alert></div>'+
+        (record?'/'+enc(record.id):'')+'">Cancel</a></div>'+federationErrors(runCatalog.errors)+'<div id=comparison-error role=alert></div>'+
         '<div class=filters><div class=field><label for=comparison-query>Run or profile</label><input id=comparison-query placeholder="Name, profile or run ID"></div>'+
+        '<div class=field><label for=comparison-host>Host</label><select id=comparison-host>'+hostOptions+'</select></div>'+
         '<div class=field><label for=comparison-status>Status</label><select id=comparison-status>'+options(runs.map(run=>run.status))+'</select></div>'+
         '<div class=field><label for=comparison-benchmark>Benchmark</label><select id=comparison-benchmark>'+
         options(runs.flatMap(run=>run.benchmarks||[]))+'</select></div><div class=field><label for=comparison-since>Started since</label>'+
@@ -2990,12 +3096,12 @@ async function renderSavedComparisons(){
         for(const [key,pair] of selected)if(!choices.has(key))choices.set(key,pair);
         element('comparison-profile-options').innerHTML=[...choices].map(([key,pair])=>
           '<label class=comparison-profile-choice><input type=checkbox data-saved-profile value="'+esc(key)+'" '+(selected.has(key)?'checked':'')+'>'+
-          '<span>'+esc(pair[1])+'</span><span class=muted>'+esc(pair[0])+'</span></label>').join('')||
+          '<span>'+esc(pair[1])+'</span><span class=muted>'+esc(runs.find(run=>run.id===pair[0])?.host_name||'')+' · '+esc(runDisplay(pair[0]))+'</span></label>').join('')||
           '<div class=muted>Select runs above to load profiles.</div>';
         element('comparison-profiles-title').textContent='Profiles · '+selected.size;
         if(!selected.has(baseline))baseline=selected.keys().next().value||'';
         element('comparison-baseline').innerHTML=[...selected].map(([key,pair])=>'<option value="'+esc(key)+'" '+
-          (key===baseline?'selected':'')+'>'+esc(pair.join(' / '))+'</option>').join('');
+          (key===baseline?'selected':'')+'>'+esc((runs.find(run=>run.id===pair[0])?.host_name||'')+' / '+runDisplay(pair[0])+' / '+pair[1])+'</option>').join('');
         const loading=[...chosenRuns].filter(id=>pending.has(id));
         element('save-saved-comparison').disabled=saving||!!loading.length||!selected.size||!element('comparison-name').value.trim();
         element('comparison-load-status').innerHTML=(loading.length?'<div class=muted>Loading profiles for '+loading.length+' runs…</div>':'')+
@@ -3007,7 +3113,7 @@ async function renderSavedComparisons(){
         for(const button of app.querySelectorAll('[data-retry-run]'))button.onclick=()=>loadRun(button.dataset.retryRun);
       };
       const drawRuns=()=>{
-        const visible=filterComparisonRuns(runs,{
+        const visible=filterComparisonRuns(runs.filter(run=>!element('comparison-host').value||run.host_id===element('comparison-host').value),{
           query:element('comparison-query').value,status:element('comparison-status').value,
           benchmark:element('comparison-benchmark').value,since:element('comparison-since').value,
           only:element('comparison-selected-only').checked,sort:element('comparison-sort').value
@@ -3017,7 +3123,7 @@ async function renderSavedComparisons(){
         element('comparison-runs').innerHTML=visible.map(run=>'<tr data-picker-run="'+esc(run.id)+'" class="'+
           (chosenRuns.has(run.id)?'comparison-run-selected':'')+'"><td><input type=checkbox aria-label="Select '+esc(run.id)+
           '" '+(chosenRuns.has(run.id)?'checked':'')+'></td><td><div>'+esc((run.profile_names||[]).join(' · ')||'No profiles')+
-          '</div><div class=muted>'+esc((run.benchmarks||[]).join(' · '))+' · '+esc(run.id)+'</div></td><td>'+
+          '</div><div class=muted>'+esc(run.host_name)+' · '+esc((run.benchmarks||[]).join(' · '))+' · '+esc(run.run_id||runDisplay(run.id))+'</div></td><td>'+
           esc(humanTime(run.started_at||run.queued_at))+'</td><td>'+duration(run)+'</td><td>'+status(run.status)+'</td></tr>').join('')||
           '<tr><td colspan=5>No runs match these filters.</td></tr>';
         for(const row of app.querySelectorAll('[data-picker-run]')){
@@ -3061,9 +3167,9 @@ async function renderSavedComparisons(){
       element('comparison-baseline').onchange=event=>{baseline=event.target.value};
       element('comparison-name').oninput=drawProfiles;
       element('comparison-query').oninput=drawRuns;
-      for(const id of ['comparison-status','comparison-benchmark','comparison-since','comparison-selected-only','comparison-sort'])element(id).onchange=drawRuns;
+      for(const id of ['comparison-host','comparison-status','comparison-benchmark','comparison-since','comparison-selected-only','comparison-sort'])element(id).onchange=drawRuns;
       element('comparison-reset').onclick=()=>{
-        for(const id of ['comparison-query','comparison-status','comparison-benchmark','comparison-since'])element(id).value='';
+        for(const id of ['comparison-query','comparison-host','comparison-status','comparison-benchmark','comparison-since'])element(id).value='';
         element('comparison-selected-only').checked=false;drawRuns()
       };
       element('save-saved-comparison').onclick=async()=>{
@@ -3078,10 +3184,12 @@ async function renderSavedComparisons(){
       drawRuns();drawProfiles();for(const id of chosenRuns)loadRun(id);return
     }
     app.innerHTML=shell('comparisons',crumb+'<div class=toolbar><h1 class=page-title>'+esc(record.name)+'</h1>'+
-      '<a href="#comparisons/'+enc(record.id)+'/edit">Edit comparison</a><button id=delete-comparison>Delete</button></div>'+
-      '<div class=muted>'+record.profiles.length+' profiles · Baseline: '+esc(record.baseline.join(' / '))+'</div>'+
+      (record.remote?'<span class=muted>Stored on '+esc(record.host_name)+' · read-only</span>':
+        '<a href="#comparisons/'+enc(record.id)+'/edit">Edit comparison</a><button id=delete-comparison>Delete</button>')+'</div>'+
+      '<div class=muted>'+record.profiles.length+' profiles · Baseline: '+esc(runDisplay(record.baseline[0])+' / '+record.baseline[1])+'</div>'+
       '<div id=comparison-error></div><div id=comparison-missing></div><section id=local-ydb-comparison>Loading profiles…</section>');
-    document.querySelector('#delete-comparison').onclick=async()=>{
+    const deleteComparison=document.querySelector('#delete-comparison');
+    if(deleteComparison)deleteComparison.onclick=async()=>{
       if(!confirm('Delete comparison "'+record.name+'"? Benchmark results will be kept.'))return;
       try{await api('/api/saved-comparisons/delete',jsonOptions({id:record.id,revision:record.revision}));if(active())setRoute('comparisons')}
       catch(error){if(active())document.querySelector('#comparison-error').innerHTML=displayError(error)}
@@ -3130,7 +3238,7 @@ async function renderComparisons(){
   }catch(error){app.innerHTML=shell('comparisons',displayError(error))}
 }
     """
-    "async function compose(){const pieces=routeParts(),current=pieces.join('/');if(current==='runs')return renderRuns();if(current==='new')return renderN"
+    "async function compose(){const pieces=routeParts(),current=pieces.join('/');if(current==='hosts')return renderHosts();if(current==='runs')return renderRuns();if(current==='new')return renderN"
     "ew('builder');if(current==='new/yaml')return renderNew('yaml');if(current==='topology')return renderTopology();if(curren"
     "t==='comparisons'||pieces[0]==='comparisons')return renderSavedComparisons();if(pieces[0]==='attempt'&&[4,5].includes(pieces.length))"
     "return renderLocalYdbAttempt(pieces[1],pieces[2],pieces[3],pieces[4]);if(pieces[0]==='run'){if(pieces[2]"
@@ -3850,6 +3958,7 @@ class RunService:
     ):
         self.output = Path(output).resolve()
         self.output.mkdir(parents=True, exist_ok=True)
+        self.hosts = HostDirectory(self.output)
         self.executor = executor or self._unsupported_executor
         self.event_limit, self.tail_limit = event_limit, tail_limit
         self.perf_available = perf_available
@@ -4927,6 +5036,28 @@ class RunService:
                 raise BenchmarkError("Invalid saved comparisons")
             return records
 
+    def run_list(self, filters):
+        fields = (
+            'id',
+            'status',
+            'state',
+            'source',
+            'queued_at',
+            'started_at',
+            'finished_at',
+            'duration_seconds',
+            'profiles',
+            'repetitions',
+            'perf',
+            'config_path',
+            'output_directory',
+            'benchmarks',
+            'profile_names',
+            'current_run_id',
+            'queue_position',
+        )
+        return [{key: item[key] for key in fields} for item in self.filtered_model(filters)]
+
     def save_comparison(self, value):
         if not isinstance(value, dict):
             raise BenchmarkError("Comparison must be an object")
@@ -5257,8 +5388,66 @@ def _handler(service):
             return value
 
         def do_GET(self):
+            if self.path.startswith("/peer/"):
+                if not service.hosts.authorized(self.headers.get("Authorization")):
+                    return self._json(401, {"error": "peer authentication required"})
+                peer_path = self.path[len("/peer") :]
+                if not allowed_path(peer_path):
+                    return self._json(403, {"error": "peer route not allowed"})
+                self.path = peer_path
             parsed = urlparse(self.path)
             path = parsed.path
+            if path.startswith('/api/federation/'):
+                try:
+                    federation = Federation(service)
+                    query = parse_qs(parsed.query)
+                    if path == '/api/federation/runs':
+                        filters = {
+                            name: values[-1]
+                            for name, values in query.items()
+                            if name in ('status', 'benchmark', 'profile', 'source', 'since', 'until')
+                        }
+                        return self._json(200, federation.runs(filters, query.get('host', [None])[-1]))
+                    if path == '/api/federation/comparisons':
+                        return self._json(200, federation.comparisons())
+                    if path == '/api/federation/profiles':
+                        return self._json(200, federation.profiles(query.get('run', [])))
+                    return self._json(404, {'error': 'not found'})
+                except BenchmarkError as error:
+                    return self._json(400, {'error': str(error)})
+            if path == "/api/host-info":
+                return self._json(200, service.hosts.identity(self.server.server_port))
+            if path == "/api/hosts":
+                return self._json(
+                    200, {"local": service.hosts.identity(self.server.server_port), "hosts": service.hosts.list()}
+                )
+            if path.startswith("/api/hosts/"):
+                try:
+                    host_id, suffix = path[len("/api/hosts/") :].split("/", 1)
+                    target = "/" + suffix + ("?" + parsed.query if parsed.query else "")
+                    if host_id == service.hosts.id:
+                        if not allowed_path(target):
+                            raise BenchmarkError('route is not allowed')
+                        self.path = target
+                        return self.do_GET()
+                    record = service.hosts.get(host_id)
+                    with open_peer(record, target) as response:
+                        self.send_response(response.status)
+                        self.send_header(
+                            "Content-Type", response.headers.get("Content-Type", "application/octet-stream")
+                        )
+                        self.send_header("Content-Security-Policy", _CSP)
+                        self.send_header("X-Content-Type-Options", "nosniff")
+                        self.send_header("Connection", "close")
+                        self.end_headers()
+                        self.close_connection = True
+                        try:
+                            _copy_stream(response, self.wfile)
+                        except OSError:
+                            pass
+                        return
+                except (BenchmarkError, ValueError) as error:
+                    return self._json(502, {"error": str(error)})
             if path == "/":
                 return self._send(200, "text/html; charset=utf-8", _HTML.encode())
             if path == "/app.css":
@@ -5281,26 +5470,7 @@ def _handler(service):
                     for name, values in parse_qs(parsed.query).items()
                     if name in ("status", "benchmark", "profile", "source", "since", "until")
                 }
-                fields = (
-                    "id",
-                    "status",
-                    "state",
-                    "source",
-                    "queued_at",
-                    "started_at",
-                    "finished_at",
-                    "duration_seconds",
-                    "profiles",
-                    "repetitions",
-                    "perf",
-                    "config_path",
-                    "output_directory",
-                    "benchmarks",
-                    "profile_names",
-                    "current_run_id",
-                    "queue_position",
-                )
-                return self._json(200, [{key: item[key] for key in fields} for item in service.filtered_model(filters)])
+                return self._json(200, service.run_list(filters))
             if path == "/api/saved-comparisons":
                 return self._json(200, service.saved_comparisons())
             if path == "/api/comparisons":
@@ -5410,6 +5580,92 @@ def _handler(service):
         def do_POST(self):
             path = urlparse(self.path).path
             try:
+                if path.startswith('/peer/api/'):
+                    if not service.hosts.authorized(self.headers.get('Authorization')):
+                        return self._json(401, {'error': 'peer authentication required'})
+                    if (
+                        self.headers.get('Origin')
+                        or self.headers.get('Content-Type', '').split(';')[0] != 'application/json'
+                    ):
+                        return self._json(403, {'error': 'server-to-server JSON request required'})
+                    target = path[len('/peer') :]
+                    if not allowed_post_path(target):
+                        return self._json(403, {'error': 'peer operation not allowed'})
+                    self.path = target
+                    return self.do_POST()
+                if path.startswith('/api/hosts/'):
+                    parts = path[len('/api/hosts/') :].split('/', 1)
+                    if len(parts) == 2 and allowed_post_path('/' + parts[1]):
+                        origin = self.headers.get('Origin')
+                        if self.headers.get('Content-Type', '').split(';')[0] != 'application/json' or (
+                            origin and urlparse(origin).netloc != self.headers.get('Host')
+                        ):
+                            return self._json(403, {'error': 'same-origin JSON request required'})
+                        if parts[0] == service.hosts.id:
+                            self.path = '/' + parts[1]
+                            return self.do_POST()
+                        options = self._json_body() if parts[1].endswith('/cancel') else self._options()
+                        if not isinstance(options, dict):
+                            raise BenchmarkError('request must be an object')
+                        status, content_type, body = request_peer(service.hosts.get(parts[0]), '/' + parts[1], options)
+                        return self._send(status, content_type, body, {'Cache-Control': 'no-store'})
+                local_prefix = '/api/hosts/' + service.hosts.id
+                if path.startswith(local_prefix + '/api/runs/'):
+                    self.path = self.path[len(local_prefix) :]
+                    return self.do_POST()
+                if path in ('/api/saved-comparisons', '/api/saved-comparisons/delete'):
+                    options = self._json_body()
+                    if isinstance(options, dict) and isinstance(options.get('id'), str):
+                        owner, item_id = split_reference(options['id'], service.hosts.id)
+                        if owner != service.hosts.id:
+                            return self._json(403, {'error': 'edit this comparison on its owning host'})
+                        options['id'] = item_id
+                    if path.endswith('/delete'):
+                        return self._json(200, service.delete_comparison(options))
+                    return self._json(201, service.save_comparison(options))
+                if path in ('/peer/cluster/snapshot', '/peer/cluster/validate', '/peer/cluster/merge'):
+                    if not service.hosts.authorized(self.headers.get('Authorization')):
+                        return self._json(401, {'error': 'peer authentication required'})
+                    if (
+                        self.headers.get('Origin')
+                        or self.headers.get('Content-Type', '').split(';')[0] != 'application/json'
+                    ):
+                        return self._json(403, {'error': 'server-to-server JSON request required'})
+                    options = self._json_body()
+                    if not isinstance(options, dict):
+                        raise BenchmarkError('expected cluster object')
+                    if path.endswith('/snapshot'):
+                        return self._send(
+                            200,
+                            'application/json',
+                            json.dumps(service.hosts.snapshot()).encode(),
+                            {'Cache-Control': 'no-store'},
+                        )
+                    if path.endswith('/validate'):
+                        service.hosts.validate_merge(options.get('members'))
+                        return self._json(200, {'valid': True})
+                    return self._json(200, service.hosts.merge(options.get('members')))
+                if path in ("/api/hosts/add", "/api/hosts/remove", "/api/hosts/token"):
+                    origin = self.headers.get("Origin")
+                    if self.headers.get("Content-Type", "").split(";")[0] != "application/json" or (
+                        origin and urlparse(origin).netloc != self.headers.get("Host")
+                    ):
+                        return self._json(403, {"error": "same-origin JSON request required"})
+                    options = self._json_body()
+                    if path == "/api/hosts/token":
+                        return self._send(
+                            200,
+                            "application/json",
+                            json.dumps({"token": service.hosts.token}).encode(),
+                            {"Cache-Control": "no-store"},
+                        )
+                    if path.endswith("/add"):
+                        return self._json(201, service.hosts.join(options))
+                    if not isinstance(options, dict) or not isinstance(options.get("id"), str):
+                        raise BenchmarkError("host id is required")
+                    return self._json(200, service.hosts.remove(options["id"]))
+                if path.startswith(("/peer/", "/api/hosts/")):
+                    return self._json(403, {"error": "remote operation is not allowed"})
                 if path == "/api/import":
                     return self._json(201, import_archive(service.output, self._raw_body()))
                 if path == "/api/validate":
@@ -5453,6 +5709,11 @@ def make_server(listen, port, output, allow_remote=False, executor=None, perf_av
     server_class = _IPv6ThreadingHTTPServer if ":" in listen else _RunServiceHTTPServer
     service = RunService(output, executor=executor, perf_available=perf_available, binaries_dir=binaries_dir)
     server = server_class((listen, port), _handler(service))
+    peer_host = socket.getfqdn() if listen in ('0.0.0.0', '::') else listen
+    service.hosts.port = server.server_port
+    service.hosts.endpoint = 'http://{}:{}'.format(
+        '[' + peer_host + ']' if ':' in peer_host else peer_host, server.server_port
+    )
     server.service = service
     return server
 

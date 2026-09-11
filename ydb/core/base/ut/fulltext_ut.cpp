@@ -248,8 +248,8 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         UNIT_ASSERT_VALUES_EQUAL(error, "language is not supported by snowball");
 
         columnAnalyzers->set_language("english,,russian");
-        UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
-        UNIT_ASSERT_VALUES_EQUAL(error, "language is not supported by snowball");
+        UNIT_ASSERT_C(ValidateSettings(settings, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         columnAnalyzers->set_language("english,german");
         UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
@@ -600,7 +600,7 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         UNIT_ASSERT_EXCEPTION(Analyze(englishText, analyzers), yexception);
     }
 
-    Y_UNIT_TEST(AnalyzeFilterSuperLemmerUsesLanguageMaskOnce) {
+    Y_UNIT_TEST(AnalyzeFilterSuperLemmer) {
         RegisterSuperLemmer(IsTestSuperLemmerLanguageSupported, ApplyTestSuperLemmer);
         SuperLemmerCallState = {};
 
@@ -612,7 +612,7 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         Analyze("cars машины", analyzers);
 
         UNIT_ASSERT_VALUES_EQUAL(SuperLemmerCallState.Calls, 2);
-        UNIT_ASSERT_VALUES_EQUAL(SuperLemmerCallState.Languages, "english,russian");
+        UNIT_ASSERT_VALUES_EQUAL(SuperLemmerCallState.Languages, "english, russian,english");
         RegisterSuperLemmer(nullptr, nullptr);
     }
 

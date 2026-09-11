@@ -14,7 +14,7 @@ TOperationServiceSettings::TOperationServiceSettings(TString endpoint, TStringBu
     UserAgentPrefix = BuildUserAgentPrefix(userAgentHint);
 }
 
-class TOperationService : public NActors::TActor<TOperationService>, NGrpcActorClient::TGrpcServiceClient<yandex::cloud::priv::iam::v1::OperationService> {
+class TOperationService : public NActors::TActor<TOperationService>, public NActors::IActorExceptionHandler, NGrpcActorClient::TGrpcServiceClient<yandex::cloud::priv::iam::v1::OperationService> {
     using TThis = TOperationService;
     using TBase = NActors::TActor<TOperationService>;
 
@@ -41,6 +41,12 @@ public:
             hFunc(TEvOperationService::TEvGetOperationRequest, Handle);
             cFunc(TEvents::TSystem::PoisonPill, PassAway);
         }
+    }
+
+    bool OnUnhandledException(const std::exception& e) override {
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::GRPC_CLIENT,
+            "OperationService: unhandled exception: " << e.what());
+        return true;
     }
 };
 

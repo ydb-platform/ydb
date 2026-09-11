@@ -14,7 +14,7 @@ TServiceControlServiceSettings::TServiceControlServiceSettings(TString endpoint,
     UserAgentPrefix = BuildUserAgentPrefix(userAgentHint);
 }
 
-class TServiceControlService : public NActors::TActor<TServiceControlService>, NGrpcActorClient::TGrpcServiceClient<yandex::cloud::priv::iam::v1::ServiceControlService> {
+class TServiceControlService : public NActors::TActor<TServiceControlService>, public NActors::IActorExceptionHandler, NGrpcActorClient::TGrpcServiceClient<yandex::cloud::priv::iam::v1::ServiceControlService> {
     using TThis = TServiceControlService;
     using TBase = NActors::TActor<TServiceControlService>;
 
@@ -52,6 +52,12 @@ public:
             hFunc(TEvServiceControlService::TEvRevokeDelegationRequest, Handle);
             cFunc(TEvents::TSystem::PoisonPill, PassAway);
         }
+    }
+
+    bool OnUnhandledException(const std::exception& e) override {
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::GRPC_CLIENT,
+            "ServiceControlService: unhandled exception: " << e.what());
+        return true;
     }
 };
 

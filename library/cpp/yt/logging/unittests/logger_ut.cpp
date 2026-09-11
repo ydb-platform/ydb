@@ -320,10 +320,10 @@ TEST(TTaggedApiTest, WithIfLazy)
     YT_TLOG_INFO("Message")
         .WithIf(true, "Kept", YT_LAZY((++calls, 1)))
         .WithIf(false, "Dropped", YT_LAZY((++calls, 2)))
-        .WithFormatIf(true, "KeptFormat", "%v.%v", YT_LAZY("MyService"), "MyMethod")
+        .WithFormatIf(true, "KeptFormat", "%v.%v", YT_LAZY((++calls, "MyService")), "MyMethod")
         .WithFormatIf(false, "DroppedFormat", "%v", YT_LAZY((++calls, 3)));
 
-    EXPECT_EQ(calls, 1);
+    EXPECT_EQ(calls, 2);
 
     auto decoded = DecodeSingleEvent(manager);
     ASSERT_EQ(decoded.Tags.size(), 2u);

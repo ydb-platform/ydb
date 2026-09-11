@@ -239,6 +239,27 @@ TEST(TErrorTest, WithIfLazy)
     EXPECT_FALSE(skipped.Attributes().Contains("key"));
 }
 
+TEST(TErrorTest, WithIfLazyInnerError)
+{
+    int calls = 0;
+    auto makeInnerError = [&] {
+        ++calls;
+        return TError("Inner error");
+    };
+
+    // NB: A named error exercises the |const &| overload; the temporaries above cover |&&|.
+    const auto error = TError("Error");
+
+    auto attached = error.WithIf(true, YT_LAZY(makeInnerError()));
+    EXPECT_EQ(calls, 1);
+    ASSERT_EQ(attached.InnerErrors().size(), 1u);
+    EXPECT_EQ(attached.InnerErrors()[0].GetMessage(), "Inner error");
+
+    auto skipped = error.WithIf(false, YT_LAZY(makeInnerError()));
+    EXPECT_EQ(calls, 1);
+    EXPECT_TRUE(skipped.InnerErrors().empty());
+}
+
 TEST(TErrorTest, WithIfGuardsOKInnerError)
 {
     TError okError;

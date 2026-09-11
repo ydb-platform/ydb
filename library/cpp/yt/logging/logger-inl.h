@@ -10,6 +10,7 @@
 #include <library/cpp/yt/yson_string/convert.h>
 #include <library/cpp/yt/yson_string/string.h>
 
+#include <library/cpp/yt/misc/lazy.h>
 #include <library/cpp/yt/misc/tls.h>
 
 namespace NYT::NLogging {
@@ -451,7 +452,7 @@ public:
     template <class TValue>
     TTaggedLoggingGuard& WithIf(bool condition, TLoggingTagKey tag, const TValue& value) &
     {
-        return condition ? DoWith(tag, Unlazy(value), "v"_sb) : *this;
+        return condition ? DoWith(tag, Force(value), "v"_sb) : *this;
     }
 
     //! Attaches a keyed tag composed from several values, e.g. |.WithFormat("Method", "%v.%v", service, method)|.
@@ -466,10 +467,14 @@ public:
     //! Attaches a composed tag only when #condition holds.
     //! NB: #args are evaluated either way unless wrapped in |YT_LAZY|.
     template <class... TArgs>
-    TTaggedLoggingGuard& WithFormatIf(bool condition, TLoggingTagKey tag, TFormatString<TUnlazy<TArgs>...> format, TArgs&&... args) &
+    TTaggedLoggingGuard& WithFormatIf(
+        bool condition,
+        TLoggingTagKey tag,
+        TFormatString<TForced<TArgs>...> format,
+        TArgs&&... args) &
     {
         return condition
-            ? WithFormat(tag, format, Unlazy(std::forward<TArgs>(args))...)
+            ? WithFormat(tag, format, Force(std::forward<TArgs>(args))...)
             : *this;
     }
 

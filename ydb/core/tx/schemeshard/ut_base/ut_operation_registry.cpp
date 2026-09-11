@@ -29,18 +29,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardOperationRegistry) {
             if (!descriptor->FindValueByNumber(value)) {
                 const auto type = static_cast<NKikimrSchemeOp::EOperationType>(value);
                 UNIT_ASSERT(!FindSchemeOperation(type));
-                UNIT_ASSERT(GetSchemeOperationSupport(type) == ESchemeOperationSupport::Unknown);
             }
         }
     }
 
-    Y_UNIT_TEST(SupportKindsRemainDistinct) {
+    Y_UNIT_TEST(SupportCategories) {
         using namespace NKikimrSchemeOp;
         UNIT_ASSERT(GetSchemeOperationSupport(ESchemeOpMkDir) == ESchemeOperationSupport::Implemented);
         UNIT_ASSERT(GetSchemeOperationSupport(ESchemeOpCreateCdcStreamAtTable) == ESchemeOperationSupport::Internal);
         UNIT_ASSERT(GetSchemeOperationSupport(ESchemeOpAlterView) == ESchemeOperationSupport::Unsupported);
-        UNIT_ASSERT(GetSchemeOperationSupport(ESchemeOpAlterBlobDepot) == ESchemeOperationSupport::Stub);
-        UNIT_ASSERT(GetSchemeOperationSupport(ESchemeOpRestoreMultipleIncrementalBackups) == ESchemeOperationSupport::Retired);
-        UNIT_ASSERT(GetSchemeOperationSupport(ESchemeOp_DEPRECATED_35) == ESchemeOperationSupport::Deprecated);
+        UNIT_ASSERT(GetSchemeOperationSupport(ESchemeOpAlterBlobDepot) == ESchemeOperationSupport::Unsupported);
+        UNIT_ASSERT(GetSchemeOperationSupport(ESchemeOpRestoreMultipleIncrementalBackups) == ESchemeOperationSupport::Rejected);
+        UNIT_ASSERT(GetSchemeOperationSupport(ESchemeOp_DEPRECATED_35) == ESchemeOperationSupport::Unsupported);
     }
 }

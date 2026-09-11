@@ -23,13 +23,10 @@ using TSchemeOperationFactory = TSchemeOperationParts(
     const TOperation&, const NKikimrSchemeOp::TModifyScheme&, TOperationContext&);
 
 enum class ESchemeOperationSupport {
-    Implemented,
-    Internal,
-    Unsupported,
-    Deprecated,
-    Stub,
-    Retired,
-    Unknown,
+    Implemented, // Has a working operation factory.
+    Internal, // Handled within another operation.
+    Unsupported, // Not implemented or obsolete; dispatch aborts or invokes an incomplete legacy factory.
+    Rejected, // Handler returns an explicit unsupported-operation response.
 };
 
 namespace NOperationFactories {
@@ -252,7 +249,7 @@ inline constexpr TSchemeOperationInfo SchemeOperations[] = {
         nullptr, ESchemeOperationSupport::Internal, "multipart operations are handled before, also they require transaction details"},
     {NKikimrSchemeOp::ESchemeOpRotateCdcStreamAtTable,
         nullptr, ESchemeOperationSupport::Internal, "multipart operations are handled before, also they require transaction details"},
-    {NKikimrSchemeOp::ESchemeOp_DEPRECATED_35, nullptr, ESchemeOperationSupport::Deprecated},
+    {NKikimrSchemeOp::ESchemeOp_DEPRECATED_35, nullptr, ESchemeOperationSupport::Unsupported, "impossible"},
     {NKikimrSchemeOp::ESchemeOpMoveTable, &NOperationFactories::MakeMoveTable},
     {NKikimrSchemeOp::ESchemeOpMoveTableIndex, &NOperationFactories::MakeMoveTableIndex},
     {NKikimrSchemeOp::ESchemeOpMoveIndex, &NOperationFactories::MakeMoveIndex},
@@ -266,8 +263,8 @@ inline constexpr TSchemeOperationInfo SchemeOperations[] = {
     {NKikimrSchemeOp::ESchemeOpDropTransfer, &NOperationFactories::MakeDropTransfer},
     {NKikimrSchemeOp::ESchemeOpDropTransferCascade, &NOperationFactories::MakeDropTransferCascade},
     {NKikimrSchemeOp::ESchemeOpCreateBlobDepot, &NOperationFactories::MakeCreateBlobDepot},
-    {NKikimrSchemeOp::ESchemeOpAlterBlobDepot, &NOperationFactories::MakeAlterBlobDepot, ESchemeOperationSupport::Stub},
-    {NKikimrSchemeOp::ESchemeOpDropBlobDepot, &NOperationFactories::MakeDropBlobDepot, ESchemeOperationSupport::Stub},
+    {NKikimrSchemeOp::ESchemeOpAlterBlobDepot, &NOperationFactories::MakeAlterBlobDepot, ESchemeOperationSupport::Unsupported},
+    {NKikimrSchemeOp::ESchemeOpDropBlobDepot, &NOperationFactories::MakeDropBlobDepot, ESchemeOperationSupport::Unsupported},
     {NKikimrSchemeOp::ESchemeOpCreateExternalTable, &NOperationFactories::MakeCreateExternalTable},
     {NKikimrSchemeOp::ESchemeOpDropExternalTable, &NOperationFactories::MakeDropExternalTable},
     {NKikimrSchemeOp::ESchemeOpAlterExternalTable, nullptr, ESchemeOperationSupport::Unsupported},
@@ -284,7 +281,7 @@ inline constexpr TSchemeOperationInfo SchemeOperations[] = {
     {NKikimrSchemeOp::ESchemeOpDropResourcePool, &NOperationFactories::MakeDropResourcePool},
     {NKikimrSchemeOp::ESchemeOpAlterResourcePool, &NOperationFactories::MakeAlterResourcePool},
     {NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups,
-        &NOperationFactories::MakeRestoreMultipleIncrementalBackups, ESchemeOperationSupport::Retired},
+        &NOperationFactories::MakeRestoreMultipleIncrementalBackups, ESchemeOperationSupport::Rejected},
     {NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable,
         nullptr, ESchemeOperationSupport::Internal, "multipart operations are handled before, also they require transaction details"},
     {NKikimrSchemeOp::ESchemeOpCreateBackupCollection, &NOperationFactories::MakeCreateBackupCollection},
@@ -326,12 +323,24 @@ constexpr size_t CountEntries(NKikimrSchemeOp::EOperationType type) {
 
 constexpr bool ValidFactories() {
     for (const auto& entry : SchemeOperations) {
-        const bool needsFactory = entry.Support == ESchemeOperationSupport::Implemented
-            || entry.Support == ESchemeOperationSupport::Stub
-            || entry.Support == ESchemeOperationSupport::Retired;
-        if (entry.Support == ESchemeOperationSupport::Unknown
-                || bool(entry.Factory) != needsFactory
-                || (entry.Reason != nullptr) != (entry.Support == ESchemeOperationSupport::Internal)) {
+        switch (entry.Support) {
+        case ESchemeOperationSupport::Implemented:
+        case ESchemeOperationSupport::Rejected:
+            if (!entry.Factory || entry.Reason) {
+                return false;
+            }
+            break;
+        case ESchemeOperationSupport::Internal:
+            if (entry.Factory || !entry.Reason) {
+                return false;
+            }
+            break;
+        case ESchemeOperationSupport::Unsupported:
+            if (entry.Factory && entry.Reason) {
+                return false;
+            }
+            break;
+        default:
             return false;
         }
     }
@@ -359,7 +368,8 @@ constexpr const TSchemeOperationInfo* FindSchemeOperation(NKikimrSchemeOp::EOper
 
 constexpr ESchemeOperationSupport GetSchemeOperationSupport(NKikimrSchemeOp::EOperationType type) {
     const auto* entry = FindSchemeOperation(type);
-    return entry ? entry->Support : ESchemeOperationSupport::Unknown;
+    Y_ABORT_UNLESS(entry);
+    return entry->Support;
 }
 
 [[noreturn]] inline void AbortUnimplementedSchemeOperation(NKikimrSchemeOp::EOperationType type) {
@@ -368,8 +378,7 @@ constexpr ESchemeOperationSupport GetSchemeOperationSupport(NKikimrSchemeOp::EOp
 
 template <NKikimrSchemeOp::EOperationType Type>
 [[noreturn]] void AbortUnimplementedSchemeOperation() {
-    static_assert(GetSchemeOperationSupport(Type) == ESchemeOperationSupport::Unsupported
-            || GetSchemeOperationSupport(Type) == ESchemeOperationSupport::Stub,
+    static_assert(GetSchemeOperationSupport(Type) == ESchemeOperationSupport::Unsupported,
         "Replace the unsupported dispatch when implementing an operation");
     AbortUnimplementedSchemeOperation(Type);
 }

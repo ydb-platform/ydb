@@ -490,11 +490,8 @@ TSchemeOperationParts MakeRegisteredOperationParts(
     if (entry->Factory) {
         return entry->Factory(op, tx, context);
     }
-    if (entry->Support == ESchemeOperationSupport::Internal) {
+    if (entry->Reason) {
         Y_ABORT("%s", entry->Reason);
-    }
-    if (entry->Support == ESchemeOperationSupport::Deprecated) {
-        Y_ABORT("impossible");
     }
     AbortUnimplementedSchemeOperation(entry->Type);
 }

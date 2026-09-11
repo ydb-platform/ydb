@@ -19,10 +19,6 @@ class StreamingTestBase:
     def setup_cluster(self):
         logger.debug(f"setup_cluster, versions {self.versions}")
 
-        if min(self.versions) < (25, 4):
-            logger.debug("skip test, only available since 25-4")
-            pytest.skip("Only available since 25-4")
-
         extra_feature_flags = [
             "enable_external_data_sources",
             "enable_streaming_queries",

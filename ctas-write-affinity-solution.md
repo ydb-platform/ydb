@@ -125,50 +125,14 @@ Write! (Callable)
   ]
 ```
 
-##### 2.2.1.1 IO Rewrite: Write! → TKiWriteTable
+Преобразование `Write!` → `TKiWriteTable` (стандартный `RewriteIO()` в `yql_kikimr_datasink.cpp`) и типизация `TKiWriteTable` (`HandleWriteTable()` в `yql_kikimr_type_ann.cpp`) **не изменяются в этой ветке**: настройка `CtasShardingColumns` проходит сквозь них транзитно через `settings.Other`, а `HandleWriteTable()` для `mode="fill_table"` лишь устанавливает тип узла как тип `World` (валидация `CtasShardingColumns` происходит позже в `AnnotateFillTable()`, раздел 2.2.1.2).
 
-[`RewriteIO()`](ydb/core/kqp/provider/yql_kikimr_datasink.cpp:1117) преобразует `Write!` в `TKiWriteTable`:
-
-```cpp
-// yql_kikimr_datasink.cpp:1293-1301
-return Build<TKiWriteTable>(ctx, node->Pos())
-    .World(node->Child(0))
-    .DataSink(node->Child(1))
-    .Table().Build(key.GetTablePath())
-    .Input(node->Child(3))
-    .Mode(mode)
-    .Settings(settings.Other)
-    .ReturningColumns(returningColumns)
-    .Done()
-    .Ptr();
-```
-
-**Было:** `RewriteIO()` преобразует `Write!` в `TKiWriteTable` без `CtasShardingColumns` в settings.
-
-**Стало (без аффинити):** `RewriteIO()` преобразует `Write!` в `TKiWriteTable` без `CtasShardingColumns` в settings (логика не изменилась).
-
-**Стало (с аффинити):** `RewriteIO()` преобразует `Write!` в `TKiWriteTable` с `CtasShardingColumns` в settings (из Rewrite, раздел 2.1.1).
-
-##### 2.2.1.2 Типизация TKiWriteTable
-
-[`HandleWriteTable()`](ydb/core/kqp/provider/yql_kikimr_type_ann.cpp:931) в type annotation валидирует `TKiWriteTable`:
-- Проверяет тип `World`
-- Проверяет тип `DataSink` (должен быть `kikimr`)
-- Для `mode="fill_table"` — устанавливает тип узла как тип `World` и завершает работу (без проверки `CtasShardingColumns` — проверка происходит позже в `AnnotateFillTable()`, раздел 2.2.1.4)
-- Для других режимов — проверяет тип `Input` (должен быть списком или stream структур), соответствие схеме таблицы, наличие ключевых колонок
-
-**Было:** `HandleWriteTable()` для `mode="fill_table"` устанавливает тип узла как тип `World` и завершает работу. `CtasShardingColumns` не проверяется.
-
-**Стало (без аффинити):** `HandleWriteTable()` для `mode="fill_table"` устанавливает тип узла как тип `World` и завершает работу. `CtasShardingColumns` не проверяется (логика не изменилась).
-
-**Стало (с аффинити):** `HandleWriteTable()` для `mode="fill_table"` устанавливает тип узла как тип `World` и завершает работу (логика не изменилась — проверка `CtasShardingColumns` происходит в `AnnotateFillTable()`, раздел 2.2.1.4).
-
-##### 2.2.1.3 BuildFillTable: TKiWriteTable → TKqlFillTable
+##### 2.2.1.1 BuildFillTable: TKiWriteTable → TKqlFillTable
 
 Оптимизатор вызывает `HandleWriteTable()`, который при `mode="fill_table"` вызывает [`BuildFillTable()`](ydb/core/kqp/opt/kqp_opt_kql.cpp:485):
 
 ```cpp
-// kqp_opt_kql.cpp:1456-1457
+// kqp_opt_kql.cpp:1463-1464
 if (GetTableOp(write) == TYdbOperation::FillTable) {
     return BuildFillTable(write, ctx).Ptr();
 }
@@ -177,7 +141,7 @@ if (GetTableOp(write) == TYdbOperation::FillTable) {
 `BuildFillTable()` извлекает компоненты из `TKiWriteTable` и создаёт `TKqlFillTable` через builder:
 
 ```cpp
-// kqp_opt_kql.cpp:485-494
+// kqp_opt_kql.cpp:485-501
 TExprBase BuildFillTable(const TKiWriteTable& write, TExprContext& ctx) {
     auto originalPathNode = GetSetting(write.Settings().Ref(), "OriginalPath");
     AFL_ENSURE(originalPathNode);
@@ -205,7 +169,7 @@ TExprBase BuildFillTable(const TKiWriteTable& write, TExprContext& ctx) {
 
 **Стало (с аффинити):** `BuildFillTable()` создаёт `TKqlFillTable` с 5 аргументами (извлекает `CtasShardingColumns` из settings и передаёт в `TKqlFillTable`).
 
-##### 2.2.1.4 Типизация TKqlFillTable
+##### 2.2.1.2 Типизация TKqlFillTable
 
 [`AnnotateFillTable()`](ydb/core/kqp/opt/kqp_type_ann.cpp:833) валидирует `TKqlFillTable`:
 1. `EnsureMinMaxArgsCount(*node, 4, 5, ctx)` — проверяет, что аргументов 4 или 5
@@ -218,7 +182,7 @@ TExprBase BuildFillTable(const TKiWriteTable& write, TExprContext& ctx) {
 
 **Стало (с аффинити):** `AnnotateFillTable()` проверяет 4-5 аргументов, проверяет тип `CtasShardingColumns` (список строк) при наличии.
 
-##### 2.2.1.5 Выход: TKqlFillTable
+##### 2.2.1.3 Выход: TKqlFillTable
 
 Результат — типизированный узел `TKqlFillTable`:
 ```
@@ -260,7 +224,7 @@ TKqlFillTable (Callable "KqlFillTable")
 
 [`BuildFillTableEffect()`](ydb/core/kqp/opt/kqp_opt_effects.cpp:220) строит физический план (DQ-граф стадий) для `TKqlFillTable`. Результат — узел `TKqpSinkEffect`, который сериализуется в `TKqpPhyTx` proto (раздел 2.2.4).
 
-**Вход:** Типизированный узел `TKqlFillTable` (раздел 2.2.1.5):
+**Вход:** Типизированный узел `TKqlFillTable` (раздел 2.2.1.3):
 ```
 TKqlFillTable (Callable "KqlFillTable")
 ├── Child[0] (Input): TExprBase — SELECT-данные
@@ -271,6 +235,8 @@ TKqlFillTable (Callable "KqlFillTable")
     ├── Child[0]: TCoAtom("Col1")
     └── Child[1]: TCoAtom("Col2")
 ```
+
+Построение `TKqpTable` (метаданные целевой таблицы: путь, пустые PathId/SysView/Version), `settings` (`OriginalPath` — путь к исходной таблице до CTAS-декомпозиции) и определение типа Input **не изменяются в этой ветке**: при `IsDqPureExpr(node.Input())` выбирается путь A (раздел 2.2.2.2), иначе ожидается `TDqCnUnionAll` (`EnsureDqUnion`) — путь B (раздел 2.2.2.3). Изменение добавляет ветку `csWriteAffinity` в каждый из двух путей.
 
 ##### 2.2.2.1 Определение режима: `csWriteAffinity`
 
@@ -287,61 +253,12 @@ const bool csWriteAffinity = node.CtasShardingColumns().IsValid();
 
 **Стало (с аффинити):** `csWriteAffinity` = `true` (поле `CtasShardingColumns` заполнено при `EnableCsWriteAffinity=true`).
 
-##### 2.2.2.2 Построение `TKqpTable` и `settings`
-
-```cpp
-// kqp_opt_effects.cpp:227-239
-const TKqpTable table = Build<TKqpTable>(ctx, node.Pos())
-    .Path(node.Table())
-    .PathId(ctx.NewAtom(node.Pos(), ""))
-    .SysView(ctx.NewAtom(node.Pos(), ""))
-    .Version(ctx.NewAtom(node.Pos(), ""))
-    .Done();
-
-TVector<TCoNameValueTuple> settings;
-settings.emplace_back(
-    Build<TCoNameValueTuple>(ctx, node.Pos())
-        .Name().Build("OriginalPath")
-        .Value<TCoAtom>().Build(node.OriginalPath())
-        .Done());
-```
-
-Создаётся `TKqpTable` (метаданные целевой таблицы: путь, пустые PathId/SysView/Version) и `settings` (содержит `OriginalPath` — путь к исходной таблице до CTAS-декомпозиции).
-
-**Было:** Создаётся `TKqpTable` и `settings` с `OriginalPath`.
-
-**Стало (без аффинити):** Создаётся `TKqpTable` и `settings` с `OriginalPath` (логика не изменилась).
-
-**Стало (с аффинити):** Создаётся `TKqpTable` и `settings` с `OriginalPath` (логика не изменилась).
-
-##### 2.2.2.3 Определение типа Input: pure expression или DQ-union
-
-```cpp
-// kqp_opt_effects.cpp:241
-if (IsDqPureExpr(node.Input())) {
-    // ... путь 2.2.2.4
-}
-// kqp_opt_effects.cpp:281
-if (!EnsureDqUnion(node.Input(), ctx)) {
-    return false;
-}
-// ... путь 2.2.2.5
-```
-
-`node.Input()` — это либо чистое выражение (pure expression, нет входных данных из таблиц), либо `TDqCnUnionAll` (результат DQ-оптимизации SELECT с чтением из таблиц). Код проверяет `IsDqPureExpr()` первым; если `false` — ожидает `TDqCnUnionAll`.
-
-**Было:** Определение типа Input (логика не изменилась).
-
-**Стало (без аффинити):** Определение типа Input (логика не изменилась).
-
-**Стало (с аффинити):** Определение типа Input (логика не изменилась).
-
-##### 2.2.2.4 Путь A: pure expression (нет входных данных)
+##### 2.2.2.2 Путь A: pure expression (нет входных данных)
 
 Если `IsDqPureExpr(node.Input())` — `true` (CTAS без чтения из таблиц, например `CREATE TABLE t AS SELECT 1 AS x`):
 
 ```cpp
-// kqp_opt_effects.cpp:241-278
+// kqp_opt_effects.cpp:241-279
 if (IsDqPureExpr(node.Input())) {
     if (csWriteAffinity) {
         auto sink = BuildTableSink(ctx, node.Pos(), table, ...);
@@ -377,12 +294,12 @@ if (IsDqPureExpr(node.Input())) {
 
 **Стало (с аффинити):** Строится план: Pure Stage → HashShuffle(`ColumnShardHashV1`) → Sink Stage (N per-shard задач).
 
-##### 2.2.2.5 Путь B: DQ-union (есть входные данные)
+##### 2.2.2.3 Путь B: DQ-union (есть входные данные)
 
 Если `node.Input()` — `TDqCnUnionAll` (CTAS с чтением из таблиц, стандартный случай):
 
 ```cpp
-// kqp_opt_effects.cpp:281-345
+// kqp_opt_effects.cpp:281-347
 if (!EnsureDqUnion(node.Input(), ctx)) {
     return false;
 }
@@ -444,7 +361,7 @@ if (csWriteAffinity) {
 
 **Стало (с аффинити):** Строится план: Transform Stage → `Map` → HashShuffle(`ColumnShardHashV1`) → Sink Stage (N per-shard задач).
 
-##### 2.2.2.6 Выход: `TKqpSinkEffect`
+##### 2.2.2.4 Выход: `TKqpSinkEffect`
 
 Результат — узел `TKqpSinkEffect` с физическим планом (DQ-граф стадий):
 
@@ -593,7 +510,7 @@ Sink Stage — конечная стадия: принимает строки ч
 
 ##### 2.2.3.4 Выход: Sink Stage
 
-Функция возвращает `sinkStage.Ptr()` — узел `TDqStage`, который становится `Stage` в `TKqpSinkEffect` (раздел 2.2.2.6).
+Функция возвращает `sinkStage.Ptr()` — узел `TDqStage`, который становится `Stage` в `TKqpSinkEffect` (раздел 2.2.2.4).
 
 **Итоговая топология:**
 ```
@@ -619,34 +536,7 @@ TDqSink → WriteActor → ColumnShard[i] (локально)
 
 #### 2.2.4 Code Generation и Proto finalization
 
-Компилятор сериализует физический план (DQ-граф из разделов 2.2.2–2.2.3) в `TKqpPhyTx` proto — единственный канал передачи данных от компилятора к исполнителю.
-
-**Вход:** Физический план (DQ-граф стадий) из `BuildFillTableEffect()` (раздел 2.2.2)
-
-##### 2.2.4.1 Сериализация физического плана
-
-Компилятор обходит все стадии DQ-графа и сериализует каждую в `TKqpPhyTx.Stages[]`:
-
-```cpp
-// kqp_query_compiler.cpp:1202-1206
-for (const auto& stage : tx.Stages()) {
-    physicalStageByID[stage.Ref().UniqueId()] = txProto.AddStages();
-    CompileStage(stage, *physicalStageByID[stage.Ref().UniqueId()], ctx, ...);
-    stagesMap[stage.Ref().UniqueId()] = txProto.StagesSize() - 1;
-}
-// ... (hasEffectStage, hasPqSources checks)
-```
-
-Каждая стадия (`TDqStage`) сериализуется в `TKqpPhyStage`: Sources, Program, Connections (включая `TDqCnHashShuffle` → `TKqpPhyCnHashShuffle`), Sinks.
-
-**Было:** Сериализация плана Transform → Map → Sink.
-
-**Стало (без аффинити):** Сериализация плана Transform → Map → Sink (логика не изменилась).
-
-**Стало (с аффинити):** Сериализация плана Transform → HashShuffle(`ColumnShardHashV1`) → Sink.
-
-
-##### 2.2.4.2 Выход: `TKqpPhyTx` proto
+Компилятор сериализует физический план (DQ-граф из разделов 2.2.2–2.2.3) в `TKqpPhyTx` proto — единственный канал передачи данных от компилятора к исполнителю. Механизм сериализации (`kqp_query_compiler.cpp`) **не изменяется в этой ветке**: стандартный `CompileStage()` преобразует `TDqCnHashShuffle` в `TKqpPhyCnHashShuffle` с использованием существующих proto-полей.
 
 Сводная таблица ключевых данных в proto:
 
@@ -669,7 +559,7 @@ for (const auto& stage : tx.Stages()) {
 
 KqpExecuter превращает физический план (`TKqpPhyTx`) в исполняемые задачи и маршрутизирует данные к целевым ColumnShard'ам. Для CTAS с write affinity ключевая задача — создать **N per-shard задач** (по одной на шард), пиннить каждую к ноде своего шарда и настроить HashShuffle-маршрутизацию, чтобы каждая строка попала в задачу, владеющую её шардом.
 
-Исполнитель обрабатывает `TKqpPhyTx` proto последовательно, проходя 7 этапов построения графа задач (разделы 2.3.1–2.3.7) и этап runtime-исполнения (раздел 2.4). Ниже для каждого этапа описано состояние **до оптимизации** (старый код), **после оптимизации без аффинити** (план без HashShuffle) и **после оптимизации с аффинити** (план с HashShuffle).
+Исполнитель обрабатывает `TKqpPhyTx` proto последовательно, строя граф задач. В этой ветке изменены 5 этапов (разделы 2.3.1–2.3.5); остальные этапы (`TKqpShardsResolver`, `ResolveShards`, `PlaceTasks`, `BuildComputeTasks`) не изменяются и упоминаются только там, где это необходимо для понимания изменений. Далее — этап runtime-исполнения (раздел 2.4). Ниже для каждого этапа описано состояние **до оптимизации** (старый код), **после оптимизации без аффинити** (план без HashShuffle) и **после оптимизации с аффинити** (план с HashShuffle).
 
 **Было** — логический план (3 стадии):
 ```
@@ -769,44 +659,17 @@ Executer → TableResolver → (схемы) → TEvTableResolveStatus
    | Scan / OLAP | `IsScan() \|\| IsOlap()` | `PartitionPruner->Prune()` для каждого `TableOp` → `shardId` |
    | **Sink (CTAS)** | `else` (нет sources, не scan) | **Только при `ColumnShardHashV1`-входе:** [`GetCsWriteAffinityShardIds()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1401) — унифицированный источник: `ColumnTableInfoPtr->Description.GetSharding()` (канонический порядок) → fallback `ShardKey->GetPartitions()` |
 
-   Для sink-стадий (CTAS) дополнительно проверяются:
-   - `sink.HasInternalSink()` — настройки типа `TKqpTableSinkSettings`
+   Для sink-стадий (CTAS) в [`CollectFillSinkShards()`](ydb/core/kqp/executer_actor/kqp_executer_impl.h:224) дополнительно проверяются:
+   - `sink.HasInternalSink()` и настройки типа `TKqpTableSinkSettings`
    - `sinkSettings.GetType() == MODE_FILL`
-   - `stageInfo.Meta.ShardKey` не пуст
 
 3. Если `shardIds` не пуст → создаёт `TKqpShardsResolver` (шаг 2.3.2.2). Если пуст → сразу вызывает `TasksGraph.ResolveShards({})` и продолжает.
 
-##### 2.3.2.2 Разрешение shard → node
+##### 2.3.2.2 Разрешение shard → node и сохранение результата (не изменяется в этой ветке)
 
-[`TKqpShardsResolver`](ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver.cpp:31) для каждого `tabletId` из `shardIds` определяет, на какой ноде размещён шард:
+`TKqpShardsResolver` для каждого `tabletId` из `shardIds` определяет через pipe cache (`TEvGetTabletNode`), на какой ноде размещён шард, и возвращает `TEvShardsResolveStatus`. `HandleResolve(TEvShardsResolveStatus)` добавляет ноды в `TxManager` и вызывает `TasksGraph.ResolveShards()`, который заполняет:
 
-1. **`Bootstrap()`** — для каждого `tabletId` отправляет `TEvGetTabletNode` в pipe cache.
-2. **`HandleResolve(TEvGetTabletNodeResult)`** — для каждого ответа:
-   - `NodeId != 0` → `Result[tabletId] = nodeId`
-   - `NodeId == 0` → ретраит (до `MAX_RETRIES_COUNT`), затем ошибка
-   - Когда все ответы получены → `ReplyAndDie()`
-3. **`ReplyAndDie()`** — отправляет `TEvShardsResolveStatus { ShardsToNodes = Result }` обратно в executer.
-
-##### 2.3.2.3 Сохранение результата
-
-[`HandleResolve(TEvShardsResolveStatus)`](ydb/core/kqp/executer_actor/kqp_executer_impl.h:392):
-
-1. Проверяет статус (ошибка → `ReplyErrorAndDie`).
-2. Для каждого `nodeId` в `ShardsToNodes` → `TxManager->AddParticipantNode(nodeId)`.
-3. Вызывает [`TasksGraph.ResolveShards()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:4179):
-
-```cpp
-void TKqpTasksGraph::ResolveShards(TShardToNodeMap&& shardsToNodes) {
-    GetMeta().ShardsResolved = true;
-    GetMeta().ShardIdToNodeId = std::move(shardsToNodes);
-    for (const auto& [shardId, nodeId] : GetMeta().ShardIdToNodeId) {
-        GetMeta().ShardsOnNode[nodeId].push_back(shardId);
-    }
-}
-```
-
-**Результат:**
-- `ShardIdToNodeId`: `TMap<ui64 shardId, ui64 nodeId>` — авторитетная карта размещения
+- `ShardIdToNodeId`: `TMap<ui64 shardId, ui64 nodeId>` — авторитетная карта размещения (используется в разделе 2.3.3 для пиннинга per-shard задач к нодам)
 - `ShardsOnNode`: `TMap<ui64 nodeId, TVector<ui64 shardId>>` — обратный индекс (используется в `InvalidateNode()`)
 
 **Было:**
@@ -820,7 +683,7 @@ void TKqpTasksGraph::ResolveShards(TShardToNodeMap&& shardsToNodes) {
 - Node affinity: недостижим
 
 **Стало (с аффинити):**
-- Sink-стадии (CTAS): `ShardKey->GetPartitions()` → `shardIds` (условие: есть `ColumnShardHashV1`-вход)
+- Sink-стадии (CTAS): `GetCsWriteAffinityShardIds()` → `shardIds` (условие: есть `ColumnShardHashV1`-вход)
 - `ShardIdToNodeId`: шарды read-таблиц **+ шарды целевой таблицы**
 - Node affinity: достижим (задача пиннится к ноде своего шарда)
 
@@ -839,13 +702,13 @@ void TKqpTasksGraph::ResolveShards(TShardToNodeMap&& shardsToNodes) {
 
 **Стало (без аффинити):**
 - CTAS sink-стадия классифицируется как `COMPUTE_TASKS` (то же условие)
-- Нет `ColumnShardHashV1`-входа (оптимизатор построил `Map`) → `HasColumnShardHashV1Input=false` → условие affinity-блока не выполняется
+- Нет affinity-плана (оптимизатор построил `Map`) → `IsCsWriteAffinitySinkStage=false` → условие affinity-блока не выполняется
 - Создаётся 1 задача (стандартный путь), как в "Было"
 - `task.Meta.TaskParams` — пустой
 
 **Стало (с аффинити):**
 - CTAS sink-стадия классифицируется как `COMPUTE_TASKS` (то же условие)
-- Условие affinity-блока: `!isPureStage && HasColumnShardHashV1Input(stageInfo)` → true
+- Условие affinity-блока: `!isPureStage && IsCsWriteAffinitySinkStage(stageInfo)` → true
 - Создаются **per-shard задачи** ([`kqp_tasks_graph.cpp:4886`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:4886)):
   ```cpp
   MaxTasksGraph->AddStage(stageInfo, TMaxTasksGraph::FIXED, inputs);
@@ -858,13 +721,14 @@ void TKqpTasksGraph::ResolveShards(TShardToNodeMap&& shardsToNodes) {
 - Источник `shardNodes` — [`GetCsWriteAffinityShardIds()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1401) (унифицированный helper, объявлен в [`kqp_tasks_graph.h:204`](ydb/core/kqp/executer_actor/kqp_tasks_graph.h:204)):
   - `ColumnTableInfoPtr->Description.GetSharding()` → `GetCsShardingOrderedShardIds()` (если доступен)
   - `ShardKey->GetPartitions()` (fallback для CTAS, заполняется Table Resolver'ом)
-  - Тот же helper используется в `CollectFillSinkShards` (раздел 2.3.2.1), `BuildInternalSinks` (раздел 2.3.6) и `BuildColumnShardHashV1ForWriteAffinity` (раздел 2.3.7) — все этапы видят одинаковый набор и порядок шардов
+  - Тот же helper используется в `CollectFillSinkShards` (раздел 2.3.2.1), `BuildInternalSinks` (раздел 2.3.4) и `BuildColumnShardHashV1ForWriteAffinity` (раздел 2.3.5) — все этапы видят одинаковый набор и порядок шардов
 - Каждая задача получает `CsWriteAffinityShardId` в `TaskParams`
 - `stageType` = `FIXED` (количество задач = количество шардов, не зависит от upstream)
 - **Инварианты** (нарушение → `YQL_ENSURE` с ошибкой):
   - Каждый shardId должен присутствовать в `ShardIdToNodeId` (заполняется `ResolveShards`)
   - Хотя бы один источник шардов должен быть доступен (`ColumnTableInfoPtr` или `ShardKey`)
 - После создания per-shard задач — **early return** (стандартный путь не выполняется)
+- Последующий `PlaceTasks()` (`max_tasks_graph.cpp`, не изменяется в этой ветке) переупорядочивает задачи по нодам — позиционный индекс больше не соответствует шарду, поэтому связь задачи с шардом хранится в `TaskParams["CsWriteAffinityShardId"]` и используется в `BuildInternalSinks` (раздел 2.3.4) и `BuildColumnShardHashV1ForWriteAffinity` (раздел 2.3.5). `BuildComputeTasks()` (не изменяется) далее вызывает `BuildSinks` для каждой задачи.
 
 Логика выбора источника sharding columns инкапсулирована в [`GetEffectiveShardingColumns()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1368), который вызывается в `CountComputeTasks`, `BuildInternalSinks` и `BuildColumnShardHashV1ForWriteAffinity`:
 ```cpp
@@ -879,45 +743,7 @@ return fallbackBuffer;
 
 **CTAS fallback**: когда `ColumnTableInfoPtr == nullptr` (таблица ещё не существует на момент компиляции), `GetCsWriteAffinityShardIds()` использует `ShardKey->GetPartitions()` (заполняется Table Resolver'ом из `GetColumnShards()`). Если и `ShardKey` пуст — `YQL_ENSURE(false)` с ошибкой (оба источника недоступны — это баг). Порядок задач совпадает с порядком [`GetCsShardingOrderedShardIds()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1383) — критично для `TaskIndexByHash`.
 
-#### 2.3.4 `PlaceTasks()` — размещение задач по нодам
-
-[`PlaceTasks()`](ydb/core/kqp/executer_actor/max_tasks_graph.cpp:497) переупорядочивает задачи по нодам.
-
-**Вход:** `stageInfo.Tasks` — список задач, созданных в разделе 2.3.3. `ShardIdToNodeId` — маппинг шардов на ноды (раздел 2.3.2).
-
-**Было:**
-- 1 задача → размещается на executer-ноде
-- `stageInfo.Tasks` содержит 1 задачу
-
-**Стало (без аффинити):**
-- 1 задача → размещается на executer-ноде (как в "Было")
-- `stageInfo.Tasks` содержит 1 задачу
-
-**Стало (с аффинити):**
-- N задач (по одной на шард) → размещаются на нодах, соответствующих шардам
-- `PlaceTasks` переупорядочивает задачи по нодам → позиционный индекс больше не соответствует шарду
-- Поэтому `CsWriteAffinityShardId` хранится в `TaskParams` (не зависит от порядка)
-- `stageInfo.Tasks` содержит N задач в порядке нод
-
-#### 2.3.5 `BuildComputeTasks()` — построение задач
-
-[`BuildComputeTasks()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:3034) заполняет метаданные задач.
-
-**Вход:** `stageInfo.Tasks` — задачи, размещённые по нодам в разделе 2.3.4. `TaskParams` — параметры задач (включая `CsWriteAffinityShardId` для affinity-задач).
-
-**Было:**
-- 1 задача с пустыми `TaskParams`
-- `BuildSinks` вызывается для 1 задачи
-
-**Стало (без аффинити):**
-- 1 задача с пустыми `TaskParams` (как в "Было")
-- `BuildSinks` вызывается для 1 задачи
-
-**Стало (с аффинити):**
-- N задач, каждая с `CsWriteAffinityShardId` в `TaskParams`
-- `BuildSinks` вызывается для каждой задачи
-
-#### 2.3.6 `BuildSinks()` → `BuildInternalSinks()` — заполнение TargetShardIds
+#### 2.3.4 `BuildSinks()` → `BuildInternalSinks()` — заполнение TargetShardIds
 
 [`BuildInternalSinks()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:4022) заполняет `TargetShardIds` в sink settings.
 
@@ -947,12 +773,12 @@ return fallbackBuffer;
 
 При N>1 задач: `TargetShardIds = {shard_i}` для задачи i. `resolvedShardIds` получается через унифицированный helper [`GetCsWriteAffinityShardIds()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1401) (тот же источник и порядок, что в `CollectFillSinkShards` и `CountComputeTasks`): `ColumnTableInfoPtr` → [`GetCsShardingOrderedShardIds()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1383), fallback `ShardKey->GetPartitions()` для CTAS. Если оба источника пусты — `resolvedShardIds` остаётся пустым, `TargetShardIds` не заполняется.
 
-#### 2.3.7 `BuildKqpStageChannels()` → `BuildColumnShardHashV1ForWriteAffinity()` — построение hash routing
+#### 2.3.5 `BuildKqpStageChannels()` → `BuildColumnShardHashV1ForWriteAffinity()` — построение hash routing
 
 [`BuildKqpStageChannels()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1890) строит каналы между стадиями.
 [`BuildColumnShardHashV1ForWriteAffinity()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1548) настраивает ColumnShardHashV1 routing.
 
-**Вход:** `stageInfo` с заполненными задачами (раздел 2.3.5) и `TargetShardIds` (раздел 2.3.6). `effectiveShardingColumns` из [`GetEffectiveShardingColumns()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1368). `TaskParams["CsWriteAffinityShardId"]` — маппинг задач на шарды. `sinkSettings` (KeyColumns, Columns) — из `ResolvedSinkSettings` или raw proto.
+**Вход:** `stageInfo` с заполненными задачами (раздел 2.3.3) и `TargetShardIds` (раздел 2.3.4). `effectiveShardingColumns` из [`GetEffectiveShardingColumns()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1368). `TaskParams["CsWriteAffinityShardId"]` — маппинг задач на шарды. `sinkSettings` (KeyColumns, Columns) — из `ResolvedSinkSettings` или raw proto.
 
 **Было:**
 - Соединение между Transform и Sink — `Map` (не HashShuffle)
@@ -998,7 +824,7 @@ if (enableShuffleElimination && !isCsWriteAffinitySink && !hasMap && !isFusedWit
 
 #### 2.4.1 Выполнение задач и запись
 
-**Вход:** Граф задач, полностью построенный в разделах 2.3.1–2.3.7. Для affinity: N задач с `TargetShardIds` (раздел 2.3.6) и `ColumnShardHashV1` routing (раздел 2.3.7). Каждая задача размещена на ноде своего шарда (раздел 2.3.4).
+**Вход:** Граф задач, полностью построенный в разделах 2.3.1–2.3.5. Для affinity: N задач с `TargetShardIds` (раздел 2.3.4) и `ColumnShardHashV1` routing (раздел 2.3.5). Каждая задача размещена на ноде своего шарда (раздел 2.3.3).
 
 **Было:**
 - 1 задача вычисляет все строки и пишет во все шарды

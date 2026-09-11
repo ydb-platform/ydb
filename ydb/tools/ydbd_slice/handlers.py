@@ -48,8 +48,10 @@ class Slice:
         self.do_clear_logs = do_clear_logs
         self.yav_version = yav_version
         self.walle_provider = walle_provider
+        self._host_dynamic_slot_counts = cluster_details.host_dynamic_slot_counts or {}
+        self._host_storage_enabled_map = cluster_details.host_storage_enabled or {}
         self.__config_client = config_client.ConfigClient(
-            self.cluster_details.hosts[0].hostname,
+            self.nodes.nodes_list[0],
             self.cluster_details.grpc_config.get('port'),
             retry_count=10,
         )
@@ -251,23 +253,35 @@ class Slice:
         if 'kikimr' in self.components:
             self.__create_databases(serverless=True)  # create serverless databases if any
 
+    def _host_dynamic_slot_limit(self, node):
+        return self._host_dynamic_slot_counts.get(node)
+
+    def _host_storage_enabled(self, node):
+        return self._host_storage_enabled_map.get(node, True)
+
+    def _storage_hosts(self):
+        return [node for node in self.nodes.nodes_list if self._host_storage_enabled(node)]
+
     def _get_available_slots(self):
         if 'dynamic_slots' not in self.components:
-            return {}
+            return ({}, 0)
 
         slots_per_domain = {}
 
         all_available_slots_count = 0
         for domain in self.cluster_details.domains:
             available_slots_per_zone = defaultdict(deque)
+            domain_slots = [slot for slot in self.cluster_details.dynamic_slots if slot.domain == domain.domain_name]
 
-            for slot in self.cluster_details.dynamic_slots:
-                if slot.domain == domain.domain_name:
-                    for node in self.nodes.nodes_list:
-                        item = (slot, node)
-                        available_slots_per_zone[self.walle_provider.get_datacenter(node).lower()].append(item)
-                        available_slots_per_zone['any'].append(item)
-                        all_available_slots_count += 1
+            for slot_index, slot in enumerate(domain_slots, 1):
+                for node in self.nodes.nodes_list:
+                    host_limit = self._host_dynamic_slot_limit(node)
+                    if host_limit is not None and slot_index > host_limit:
+                        continue
+                    item = (slot, node)
+                    available_slots_per_zone[self.walle_provider.get_datacenter(node).lower()].append(item)
+                    available_slots_per_zone['any'].append(item)
+                    all_available_slots_count += 1
             slots_per_domain[domain.domain_name] = available_slots_per_zone
 
         return (slots_per_domain, all_available_slots_count, )
@@ -368,7 +382,15 @@ mon={mon}""".format(
         self.nodes.execute_async(cmd, check_retcode=False)
 
     def _start_static(self):
-        self.nodes.execute_async("sudo service kikimr start", check_retcode=True)
+        storage_hosts = self._storage_hosts()
+        storage_host_set = set(storage_hosts)
+        skip_hosts = [node for node in self.nodes.nodes_list if node not in storage_host_set]
+        if skip_hosts:
+            # Static unit only (`kikimr`). Dynnodes are kikimr-multi@<slot> and stay running.
+            # check_retcode=False: stop is idempotent; the unit may already be inactive.
+            self._stop_static_on_hosts(skip_hosts)
+        if storage_hosts:
+            self.nodes.execute_async("sudo service kikimr start", check_retcode=True, nodes=storage_hosts)
 
     def _start_dynamic(self):
         if 'dynamic_slots' in self.components:
@@ -450,8 +472,11 @@ mon={mon}""".format(
         tasks = self._stop_slot_ret(slot)
         self.nodes._check_async_execution(tasks, False)
 
+    def _stop_static_on_hosts(self, hosts):
+        self.nodes.execute_async("sudo service kikimr stop", check_retcode=False, nodes=hosts)
+
     def _stop_static(self):
-        self.nodes.execute_async("sudo service kikimr stop", check_retcode=False)
+        self._stop_static_on_hosts(self.nodes.nodes_list)
 
     def _stop_dynamic(self):
         if 'dynamic_slots' in self.components:

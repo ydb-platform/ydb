@@ -37,6 +37,7 @@ Y_UNIT_TEST_SUITE(ExtraBlockChecks) {
         result = block(10, 2);
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
         UNIT_ASSERT(!result->Get()->IsTabletStorageInfoVersionObsolete);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->ActualGeneration, 11);
 
         // The rejected version bump must not mutate either record.
         result = block(12, 1);
@@ -57,6 +58,19 @@ Y_UNIT_TEST_SUITE(ExtraBlockChecks) {
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
 
         result = block(15, 3);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT(result->Get()->IsTabletStorageInfoVersionObsolete);
+
+        // A client that omits Version (an old binary) must still be able to raise the block,
+        // and must not clobber the stored version with 0.
+        runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvBlock(tabletId, 16,
+                TInstant::Max(), issuerGuid));
+        });
+        result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvBlockResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        result = block(17, 3);
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
         UNIT_ASSERT(result->Get()->IsTabletStorageInfoVersionObsolete);
     }

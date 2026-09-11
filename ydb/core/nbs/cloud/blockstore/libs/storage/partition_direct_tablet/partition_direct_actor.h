@@ -223,6 +223,10 @@ private:
         const TEvPartitionDirectPrivate::TEvAddHostToDBG::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    void HandlePersistHostHealth(
+        const TEvPartitionDirectPrivate::TEvPersistHostHealth::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void HandleDeletePartition(
         const NYdb::NBS::NBlockStore::TEvService::TEvDeletePartitionRequest::
             TPtr& ev,
@@ -265,6 +269,10 @@ private:
 
     void HandleAddHostToDBGDuringDelete(
         const TEvPartitionDirectPrivate::TEvAddHostToDBG::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandlePersistHostHealthDuringDelete(
+        const TEvPartitionDirectPrivate::TEvPersistHostHealth::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void ReplyToDeleteWaiters(

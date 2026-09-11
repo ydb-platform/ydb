@@ -669,6 +669,146 @@ Y_UNIT_TEST_SUITE(KqpAffectedRowsPg) {
             UNIT_ASSERT_VALUES_EQUAL(HasAnyAffectedRowsField(result), static_cast<bool>(AffectedRows));
         }
     }
+
+    Y_UNIT_TEST(ReadCommittedRW_InteractiveTx_InsertThenDeleteSameKey) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto create = session.ExecuteQuery(Q_(R"(
+            CREATE TABLE `/Root/repro_affected_empty` (
+                id Int32 NOT NULL,
+                PRIMARY KEY (id)
+            );
+        )"), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+
+        auto insert = session.ExecuteQuery(Q_(R"(
+            INSERT INTO `/Root/repro_affected_empty` (id) VALUES (1);
+        )"), NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::ReadCommittedRW()), GetQuerySettingsBasic()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(insert.GetStatus(), EStatus::SUCCESS, insert.GetIssues().ToString());
+
+        auto affectedRows = GetAffectedRowsForTable(insert, "/Root/repro_affected_empty");
+        UNIT_ASSERT_VALUES_EQUAL(affectedRows, 1u);
+
+        auto tx = insert.GetTransaction();
+        UNIT_ASSERT_C(tx.has_value(), "INSERT did not return a transaction handle");
+
+        auto del = session.ExecuteQuery(Q_(R"(
+            DELETE FROM `/Root/repro_affected_empty` WHERE id = 1;
+        )"), NYdb::NQuery::TTxControl::Tx(*tx), GetQuerySettingsBasic()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(del.GetStatus(), EStatus::SUCCESS, del.GetIssues().ToString());
+
+        affectedRows = GetAffectedRowsForTable(del, "/Root/repro_affected_empty");
+        UNIT_ASSERT_VALUES_EQUAL(affectedRows, 1u);
+
+        auto commit = tx->Commit().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), EStatus::SUCCESS, commit.GetIssues().ToString());
+
+        auto leftover = session.ExecuteQuery(Q_(R"(
+            SELECT id FROM `/Root/repro_affected_empty`;
+        )"), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(leftover.GetStatus(), EStatus::SUCCESS, leftover.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(leftover.GetResultSet(0).RowsCount(), 0u);
+    }
+
+    Y_UNIT_TEST(ReadCommittedRW_InteractiveTx_InsertThenDeletePriorAndNewKeys) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto create = session.ExecuteQuery(Q_(R"(
+            CREATE TABLE `/Root/repro_affected_prior` (
+                id Int32 NOT NULL,
+                PRIMARY KEY (id)
+            );
+        )"), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+
+        auto seed = session.ExecuteQuery(Q_(R"(
+            INSERT INTO `/Root/repro_affected_prior` (id) VALUES (1), (2);
+        )"), BeginReadCommittedRW(), GetQuerySettingsBasic()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(seed.GetStatus(), EStatus::SUCCESS, seed.GetIssues().ToString());
+
+        auto affectedRows = GetAffectedRowsForTable(seed, "/Root/repro_affected_prior");
+        UNIT_ASSERT_VALUES_EQUAL(affectedRows, 2u);
+
+        auto insert = session.ExecuteQuery(Q_(R"(
+            INSERT INTO `/Root/repro_affected_prior` (id) VALUES (3);
+        )"), NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::ReadCommittedRW()), GetQuerySettingsBasic()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(insert.GetStatus(), EStatus::SUCCESS, insert.GetIssues().ToString());
+
+        affectedRows = GetAffectedRowsForTable(insert, "/Root/repro_affected_prior");
+        UNIT_ASSERT_VALUES_EQUAL(affectedRows, 1u);
+
+        auto tx = insert.GetTransaction();
+        UNIT_ASSERT_C(tx.has_value(), "INSERT did not return a transaction handle");
+
+        auto delNew = session.ExecuteQuery(Q_(R"(
+            DELETE FROM `/Root/repro_affected_prior` WHERE id = 3;
+        )"), NYdb::NQuery::TTxControl::Tx(*tx), GetQuerySettingsBasic()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(delNew.GetStatus(), EStatus::SUCCESS, delNew.GetIssues().ToString());
+
+        affectedRows = GetAffectedRowsForTable(delNew, "/Root/repro_affected_prior");
+        UNIT_ASSERT_VALUES_EQUAL(affectedRows, 1u);
+
+        auto delPrior = session.ExecuteQuery(Q_(R"(
+            DELETE FROM `/Root/repro_affected_prior` WHERE id = 1;
+        )"), NYdb::NQuery::TTxControl::Tx(*tx), GetQuerySettingsBasic()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(delPrior.GetStatus(), EStatus::SUCCESS, delPrior.GetIssues().ToString());
+
+        affectedRows = GetAffectedRowsForTable(delPrior, "/Root/repro_affected_prior");
+        UNIT_ASSERT_VALUES_EQUAL(affectedRows, 1u);
+
+        auto commit = tx->Commit().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), EStatus::SUCCESS, commit.GetIssues().ToString());
+
+        auto leftover = session.ExecuteQuery(Q_(R"(
+            SELECT id FROM `/Root/repro_affected_prior` ORDER BY id;
+        )"), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(leftover.GetStatus(), EStatus::SUCCESS, leftover.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(leftover.GetResultSet(0).RowsCount(), 1u);
+    }
+
+    Y_UNIT_TEST(ReadCommittedRW_InteractiveTx_FdwStyleInsertWithoutAffectedThenDelete) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto create = session.ExecuteQuery(Q_(R"(
+            CREATE TABLE `/Root/repro_affected_fdw` (
+                id Int32 NOT NULL,
+                PRIMARY KEY (id)
+            );
+        )"), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+
+        auto insert = session.ExecuteQuery(Q_(R"(
+            INSERT INTO `/Root/repro_affected_fdw` (id) VALUES (1);
+        )"), NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::ReadCommittedRW()), GetQuerySettingsBasicNoAffectedRows()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(insert.GetStatus(), EStatus::SUCCESS, insert.GetIssues().ToString());
+        UNIT_ASSERT_C(!HasAnyAffectedRowsField(insert), "no affected_rows expected without CollectAffectedRows");
+
+        auto tx = insert.GetTransaction();
+        UNIT_ASSERT_C(tx.has_value(), "INSERT did not return a transaction handle");
+
+        auto del = session.ExecuteQuery(Q_(R"(
+            DELETE FROM `/Root/repro_affected_fdw` WHERE id = 1;
+        )"), NYdb::NQuery::TTxControl::Tx(*tx), GetQuerySettingsBasic()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(del.GetStatus(), EStatus::SUCCESS, del.GetIssues().ToString());
+
+        auto affectedRows = GetAffectedRowsForTable(del, "/Root/repro_affected_fdw");
+        UNIT_ASSERT_VALUES_EQUAL(affectedRows, 1u);
+
+        auto commit = tx->Commit().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), EStatus::SUCCESS, commit.GetIssues().ToString());
+
+        auto leftover = session.ExecuteQuery(Q_(R"(
+            SELECT id FROM `/Root/repro_affected_fdw`;
+        )"), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(leftover.GetStatus(), EStatus::SUCCESS, leftover.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(leftover.GetResultSet(0).RowsCount(), 0u);
+    }
 }
 
 } // namespace NKqp

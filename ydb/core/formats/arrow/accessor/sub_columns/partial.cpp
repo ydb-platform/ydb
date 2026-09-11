@@ -1,10 +1,6 @@
 #include "constructor.h"
 #include "partial.h"
 
-#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
-
-#include <ydb/library/formats/arrow/simple_arrays_cache.h>
-
 namespace NKikimr::NArrow::NAccessor {
 
 void TSubColumnsPartialArray::InitOthers(const TString& blob, const TChunkConstructionData& externalInfo,
@@ -19,29 +15,47 @@ void TSubColumnsPartialArray::InitOthers(const TString& blob, const TChunkConstr
 }
 
 TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> TSubColumnsPartialArray::GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const {
-    auto jsonPathAccessorTrie = std::make_shared<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie>();
-    auto headerStats = Header.GetColumnStats();
-    for (ui32 i = 0; i < headerStats.GetDataNamesCount(); ++i) {
-        if (PartialColumnsData.HasColumn(i)) {
-            auto insertResult = jsonPathAccessorTrie->Insert(
-                NSubColumns::ToJsonPath(headerStats.GetColumnName(i)), PartialColumnsData.GetAccessorVerified(i), headerStats.GetValueType(i));
-            AFL_VERIFY(insertResult.IsSuccess())("error", insertResult.GetErrorMessage());
-        }
+    auto parsedResult = NSubColumns::ParseJsonPath(svPath);
+    if (parsedResult.IsFail()) {
+        return TConclusionStatus::Fail(parsedResult.GetErrorMessage());
     }
-
-    auto accessorResult = jsonPathAccessorTrie->GetAccessor(svPath);
-    if (accessorResult.IsSuccess() && accessorResult.GetResult()->IsValid()) {
-        return accessorResult;
+    const auto parsedPath = parsedResult.DetachResult();
+    const auto& headerStats = Header.GetColumnStats();
+    auto columnsResult = headerStats.ResolvePath(parsedPath, [this](const ui32 columnIndex) {
+        return PartialColumnsData.HasColumn(columnIndex);
+    });
+    if (columnsResult.IsFail()) {
+        return TConclusionStatus::Fail(columnsResult.GetErrorMessage());
     }
-
+    auto columnsPath = columnsResult.DetachResult();
+    std::optional<NSubColumns::TDictStats::TResolvedPath> othersPath;
     if (OthersData) {
-        return OthersData->GetPathAccessor(svPath, recordsCount);
+        auto othersResult = Header.GetOtherStats().ResolvePath(parsedPath);
+        if (othersResult.IsFail()) {
+            return TConclusionStatus::Fail(othersResult.GetErrorMessage());
+        }
+        othersPath = othersResult.DetachResult();
     }
-
-    AFL_VERIFY(!Header.GetOtherStats().GetKeyIndexOptional(svPath));
-    return std::make_shared<NSubColumns::TJsonPathAccessor>(
-        std::make_shared<TTrivialArray>(TThreadSimpleArraysCache::GetNull(arrow::binary(), recordsCount)), TString{},
-        NSubColumns::EValueType::BinaryJson);
+    if (othersPath && (!columnsPath || !NSubColumns::TDictStats::TResolvedPath::IsBetterOrEqualMatchThan(*columnsPath, *othersPath))) {
+        return OthersData->GetPathAccessor(std::move(*othersPath), recordsCount);
+    }
+    if (columnsPath) {
+        return std::make_shared<NSubColumns::TJsonPathAccessor>(PartialColumnsData.GetAccessorVerified(columnsPath->ColumnIndex),
+            std::move(columnsPath->RemainingPath), columnsPath->ValueType);
+    }
+    auto headerColumnsResult = Header.GetColumnStats().ResolvePath(parsedPath);
+    if (headerColumnsResult.IsFail()) {
+        return TConclusionStatus::Fail(headerColumnsResult.GetErrorMessage());
+    }
+    auto headerOthersResult = Header.GetOtherStats().ResolvePath(parsedPath);
+    if (headerOthersResult.IsFail()) {
+        return TConclusionStatus::Fail(headerOthersResult.GetErrorMessage());
+    }
+    // A matching path must be loaded before accessor creation.
+    // Fetch planning and lookup use the same canonical path resolution.
+    AFL_VERIFY(!headerColumnsResult.DetachResult());
+    AFL_VERIFY(!headerOthersResult.DetachResult());
+    return NSubColumns::TOthersData::BuildEmptyPathAccessor(recordsCount);
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

@@ -18,6 +18,7 @@ PEERDIR(
     ydb/core/mind
     ydb/core/mon
     ydb/core/protos
+    ydb/core/resource_pools
     ydb/core/tablet
     ydb/core/node_whiteboard
     ydb/core/util

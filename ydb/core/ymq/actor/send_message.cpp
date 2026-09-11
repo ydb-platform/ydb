@@ -439,8 +439,8 @@ private:
                 : Response_.MutableSendMessage();
             auto* currentRequest = IsBatch_ ? &BatchRequest().GetEntries(RequestToReplyIndexMapping_[i]) : &Request();
 
-            if (response->DescribeStatus != NPQ::NDescriber::EStatus::SUCCESS) {
-                if (response->DescribeStatus == NPQ::NDescriber::EStatus::NOT_FOUND) {
+            if (response->DescribeStatus != NPQ::NDescriber::EStatus::Success) {
+                if (response->DescribeStatus == NPQ::NDescriber::EStatus::NotFound) {
                     // The topic is temporarily missing (the queue is being deleted or
                     // recreated). Report a generic retryable internal failure instead of
                     // leaking the internal topic path.

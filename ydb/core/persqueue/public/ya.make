@@ -29,6 +29,7 @@ RECURSE(
     counters
     describer
     fetcher
+    ru_quoter
     list_topics
     mlp
     nameresolver

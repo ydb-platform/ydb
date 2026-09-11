@@ -28,6 +28,7 @@
 
 #include <util/digest/multi.h>
 #include <util/generic/maybe.h>
+#include <optional>
 #include <util/stream/str.h>
 #include <util/string/escape.h>
 #include <util/generic/overloaded.h>
@@ -1913,7 +1914,8 @@ namespace NKikimr {
         {}
 
         TEvVBlock(ui64 tabletId, ui32 generation, const TVDiskID &vdisk, TInstant deadline,
-                TWriteSource writeSource = UnknownWriteSource(), ui64 issuerGuid = 0, ui32 version = 0)
+                TWriteSource writeSource = UnknownWriteSource(), ui64 issuerGuid = 0,
+                std::optional<ui32> version = std::nullopt)
         {
             Record.SetTabletId(tabletId);
             Record.SetGeneration(generation);
@@ -1921,7 +1923,7 @@ namespace NKikimr {
                 Record.SetIssuerGuid(issuerGuid);
             }
             if (version) {
-                Record.SetVersion(version);
+                Record.SetVersion(*version);
             }
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
             if (deadline != TInstant::Max()) {

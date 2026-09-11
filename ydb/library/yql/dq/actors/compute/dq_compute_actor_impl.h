@@ -385,7 +385,7 @@ protected:
         return MemoryQuota->GetMkqlMemoryLimit();
     }
 
-    virtual IDqSchedulerContextPtr GetSchedulerContext() const {
+    virtual IDqSchedulableWorkFactoryPtr GetSchedulableWorkFactory() const {
         return nullptr;
     }
 
@@ -494,11 +494,7 @@ protected:
             if (!transform.OutputBuffer || !transform.AsyncOutput) {
                 continue;
             }
-            const auto level = transform.OutputBuffer->GetFillLevel();
-            if (level != EDqFillLevel::NoLimit) {
-                transform.OutputConsumerWasLimited = true;
-            } else if (transform.OutputConsumerWasLimited) {
-                transform.OutputConsumerWasLimited = false;
+            if (transform.OutputBuffer->GetFillLevel() == EDqFillLevel::NoLimit) {
                 transform.AsyncOutput->OnOutputConsumerReady();
             }
         }
@@ -1193,7 +1189,6 @@ protected:
 
     struct TAsyncOutputTransformInfo : public TAsyncOutputInfoBase {
         IDqOutputConsumer::TPtr OutputBuffer;
-        bool OutputConsumerWasLimited = false;
     };
 
 protected:
@@ -2096,7 +2091,7 @@ protected:
                         .Arena = Task.GetArena(),
                         .TraceId = ComputeActorSpan.GetTraceId(),
                         .DatumValidationMode = CoreRuntimeSettings->DatumValidation.Get(),
-                        .SchedulerContext = GetSchedulerContext(),
+                        .SchedulableWorkFactory = GetSchedulableWorkFactory(),
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create source " << inputDesc.GetSource().GetType() << ": " << ex.what();

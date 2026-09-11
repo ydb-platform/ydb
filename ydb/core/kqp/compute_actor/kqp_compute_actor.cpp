@@ -184,7 +184,7 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
     RegisterKqpVectorSearchActor(*factory, counters, std::move(vectorIndexLevelsCache));
     RegisterKqpFullTextSource(*factory, counters);
     RegisterKqpSysViewSource(*factory, counters);
-    NYql::NDq::RegisterDqInputTransformLookupActorFactory(*factory, counters ? counters->GetKqpCounters()->GetSubgroup("subsystem", "DqLookup") : nullptr);
+    NYql::NDq::RegisterDqInputTransformLookupActorFactory(*factory, counters ? counters->GetKqpCounters() : nullptr);
 
     RegisterDqSourceKikimrLookupProviderFactories(*factory);
 

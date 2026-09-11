@@ -20,8 +20,6 @@ if __name__ == '__main__':
     parser.add_argument('--batch_count', default=3, help='The number of butches to be inserted')
     parser.add_argument('--prefix', default='test_table', help='Table prefix')
     parser.add_argument('--log_file', default=None, help='Append log into specified file')
-    parser.add_argument('--phase', choices=['prepare', 'run', 'clean'], default=None,
-                        help='Phase to run: prepare (create table), run, clean. If omitted, all phases run in sequence.')
 
     args = parser.parse_args()
 
@@ -35,11 +33,4 @@ if __name__ == '__main__':
         )
 
     with Workload(args.host, args.port, args.database, args.duration, args.batch_size, args.batch_count, args.prefix) as workload:
-        if args.phase == 'prepare':
-            workload.prepare()
-        elif args.phase == 'run':
-            workload.run_on_prepared()
-        elif args.phase == 'clean':
-            workload.clean()
-        else:
-            workload.run()
+        workload.run()

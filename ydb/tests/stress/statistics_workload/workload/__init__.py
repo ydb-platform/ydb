@@ -186,7 +186,7 @@ class Workload(object):
 
     def get_planner_row_count_estimate(self, table_name):
         with InstrumentedQuerySessionPool(self.driver) as session_pool:
-            res = session_pool.explain_with_retries(f"SELECT count(*) FROM `{table_name}`")
+            res = session_pool.explain_with_retries(f"SELECT count(*) FROM {table_name}")
             logger.debug(f"SELECT count explain: {res}")
             explain = json.loads(res)
 
@@ -203,21 +203,19 @@ class Workload(object):
         logger.info(f"planner row count estimate: {rc}")
         return rc
 
-    def execute(self, table_name=None, table_path=None, drop=True):
-        create = table_name is None
-        if table_name is None:
-            table_name = table_name_with_prefix(self.table_prefix)
-        if table_path is None:
-            table_path = self.database.rstrip('/') + "/" + table_name
+    def execute(self):
+        table_name = table_name_with_prefix(self.table_prefix)
+        table_path = self.database + "/" + table_name
         table_statistics = ".metadata/statistics_v2"
         trace_id = random_string(5)
 
         try:
             logger.info(f"[{trace_id}] start new round")
 
-            if create:
-                logger.info(f"[{trace_id}] create table '{table_name}'")
-                self.create_table(table_name)
+            self.pool.acquire()
+
+            logger.info(f"[{trace_id}] create table '{table_name}'")
+            self.create_table(table_name)
 
             scheme = self.kikimr_client.send(
                 SchemeDescribeRequest(table_path).protobuf,
@@ -252,29 +250,8 @@ class Workload(object):
             raise
 
         finally:
-            if drop:
-                logger.info(f"[{trace_id}] drop table '{table_name}'")
-                self.drop_table(table_path)
-
-    def _prepared_table_name(self):
-        return self.table_prefix
-
-    def _prepared_table_path(self):
-        return self.database.rstrip('/') + "/" + self._prepared_table_name()
-
-    def prepare(self):
-        self.driver.wait(timeout=60)
-        self.create_table(self._prepared_table_name())
-
-    def clean(self):
-        self.drop_table(self._prepared_table_path())
-
-    def run_on_prepared(self):
-        started_at = time.time()
-        table_name = self._prepared_table_name()
-        table_path = self._prepared_table_path()
-        while time.time() - started_at < self.duration:
-            self.execute(table_name=table_name, table_path=table_path, drop=False)
+            logger.info(f"[{trace_id}] drop table '{table_name}'")
+            self.drop_table(table_path)
 
     def run(self):
         started_at = time.time()

@@ -81,24 +81,9 @@ def _init_stress_utils():
             'local_path': 'ydb/tests/stress/show_create/table/show_create_table'
         },
         'Statistics': {
-            'pre_nemesis_args': [
-                "--host", "{node_host}",
-                "--port", "2135",
-                "--prefix", "statistics_workload_{node_host}_{test_run_uuid}",
-                "--phase", "prepare",
-            ],
-            'args': [
-                "--host", "{node_host}",
-                "--port", "2135",
-                "--prefix", "statistics_workload_{node_host}_{test_run_uuid}",
-                "--phase", "run",
-            ],
-            'post_nemesis_args': [
-                "--host", "{node_host}",
-                "--port", "2135",
-                "--prefix", "statistics_workload_{node_host}_{test_run_uuid}",
-                "--phase", "clean",
-            ],
+            'args': ["--host", "{node_host}",
+                     "--port", "2135",
+                     "--prefix", "statistics_workload_{node_host}_iter_{iteration_num}_{uuid}"],
             'local_path': 'ydb/tests/stress/statistics_workload/statistics_workload'
         },
         'TopicKafka': {

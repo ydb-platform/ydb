@@ -16,19 +16,18 @@
 
 #include <utility>
 
-
 namespace NYql {
 
 namespace {
 
 const bool RewriteSanityCheck = false;
 
-class TExecutionTransformer : public TGraphTransformerBase {
+class TExecutionTransformer: public TGraphTransformerBase {
 public:
-    struct TState : public TThrRefBase {
+    struct TState: public TThrRefBase {
         TAdaptiveLock Lock;
 
-        struct TItem : public TIntrusiveListItem<TItem> {
+        struct TItem: public TIntrusiveListItem<TItem> {
             TExprNode* Node = nullptr;
             IDataProvider* DataProvider = nullptr;
             NThreading::TFuture<void> Future;
@@ -44,8 +43,8 @@ public:
     using TStatePtr = TIntrusivePtr<TState>;
 
     TExecutionTransformer(TTypeAnnotationContext& types,
-        TOperationProgressWriter writer,
-        bool withFinalize)
+                          TOperationProgressWriter writer,
+                          bool withFinalize)
         : Types_(types)
         , Writer_(std::move(writer))
         , WithFinalize_(withFinalize)
@@ -67,7 +66,8 @@ public:
         if (RewriteSanityCheck) {
             VisitExpr(input, [&](const TExprNode::TPtr& localInput) {
                 if (NewNodes_.cend() != NewNodes_.find(localInput.Get())) {
-                    Cerr << "found old node: #" << localInput->UniqueId() << "\n" << input->Dump();
+                    Cerr << "found old node: #" << localInput->UniqueId() << "\n"
+                         << input->Dump();
                     YQL_ENSURE(false);
                 }
                 return true;
@@ -81,7 +81,7 @@ public:
         }
 
         status = status.Combine(ExecuteNode(input, output, ctx, 0));
-        for (auto node: FreshPendingNodes_) {
+        for (auto node : FreshPendingNodes_) {
             if (TExprNode::EState::ExecutionPending == node->GetState()) {
                 node->SetState(TExprNode::EState::ConstrComplete);
             }
@@ -102,9 +102,7 @@ public:
     }
 
     NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
-        return FinalizingTransformer_ ?
-            FinalizingTransformer_->GetAsyncFuture(input) :
-            State_->Promise.GetFuture();
+        return FinalizingTransformer_ ? FinalizingTransformer_->GetAsyncFuture(input) : State_->Promise.GetFuture();
     }
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
@@ -149,7 +147,7 @@ public:
             } else if (status.Level == TStatus::Repeat) {
                 if (callableOutput != item.Node) {
                     YQL_CLOG(INFO, CoreExecution) << "Rewrite node #" << item.Node->UniqueId() << " to #" << callableOutput->UniqueId()
-                        << " in ApplyAsyncChanges()";
+                                                  << " in ApplyAsyncChanges()";
                     NewNodes_[item.Node] = callableOutput;
                     combinedStatus = combinedStatus.Combine(TStatus(TStatus::Repeat, /*hasRestart=*/true));
                     FinishNode(item.DataProvider->GetName(), *item.Node, *callableOutput);
@@ -157,7 +155,7 @@ public:
             }
             if (callableOutput == item.Node) {
                 YQL_CLOG(INFO, CoreExecution) << "State is " << item.Node->GetState()
-                        << " after apply async changes for node #" << item.Node->UniqueId();
+                                              << " after apply async changes for node #" << item.Node->UniqueId();
             }
 
             if (item.Node->GetState() == TExprNode::EState::ExecutionComplete ||
@@ -207,7 +205,8 @@ public:
         if (RewriteSanityCheck) {
             VisitExpr(output, [&](const TExprNode::TPtr& localInput) {
                 if (NewNodes_.cend() != NewNodes_.find(localInput.Get())) {
-                    Cerr << "found old node: #" << localInput->UniqueId() << "\n" << output->Dump();
+                    Cerr << "found old node: #" << localInput->UniqueId() << "\n"
+                         << output->Dump();
                     YQL_ENSURE(false);
                 }
                 return true;
@@ -239,103 +238,102 @@ public:
         }
 
         switch (output->GetState()) {
-        case TExprNode::EState::Initial:
-        case TExprNode::EState::TypeInProgress:
-        case TExprNode::EState::TypePending:
-        case TExprNode::EState::TypeComplete:
-        case TExprNode::EState::ConstrInProgress:
-        case TExprNode::EState::ConstrPending:
-            return TStatus(TStatus::Repeat, /*hasRestart=*/true);
-        case TExprNode::EState::ExecutionInProgress:
-            return TStatus::Async;
-        case TExprNode::EState::ExecutionPending:
-            return ExecuteChildren(output, output, ctx, depth + 1);
-        case TExprNode::EState::ConstrComplete:
-        case TExprNode::EState::ExecutionRequired:
-            break;
-        case TExprNode::EState::ExecutionComplete:
-            YQL_ENSURE(output->HasResult());
-            OnNodeExecutionComplete(output, ctx);
-            return changed ? TStatus(TStatus::Repeat, /*hasRestart=*/true) : TStatus(TStatus::Ok);
-        case TExprNode::EState::Error:
-            return TStatus::Error;
-        default:
-            YQL_ENSURE(false, "Unknown state");
+            case TExprNode::EState::Initial:
+            case TExprNode::EState::TypeInProgress:
+            case TExprNode::EState::TypePending:
+            case TExprNode::EState::TypeComplete:
+            case TExprNode::EState::ConstrInProgress:
+            case TExprNode::EState::ConstrPending:
+                return TStatus(TStatus::Repeat, /*hasRestart=*/true);
+            case TExprNode::EState::ExecutionInProgress:
+                return TStatus::Async;
+            case TExprNode::EState::ExecutionPending:
+                return ExecuteChildren(output, output, ctx, depth + 1);
+            case TExprNode::EState::ConstrComplete:
+            case TExprNode::EState::ExecutionRequired:
+                break;
+            case TExprNode::EState::ExecutionComplete:
+                YQL_ENSURE(output->HasResult());
+                OnNodeExecutionComplete(output, ctx);
+                return changed ? TStatus(TStatus::Repeat, /*hasRestart=*/true) : TStatus(TStatus::Ok);
+            case TExprNode::EState::Error:
+                return TStatus::Error;
+            default:
+                YQL_ENSURE(false, "Unknown state");
         }
 
         switch (output->Type()) {
-        case TExprNode::Atom:
-        case TExprNode::Argument:
-        case TExprNode::Arguments:
-            ctx.AddError(TIssue(ctx.GetPosition(output->Pos()), TStringBuilder() << "Failed to execute node with type: " << output->Type()));
-            output->SetState(TExprNode::EState::Error);
-            return TStatus::Error;
-        case TExprNode::Lambda:
-            if (output->GetTypeAnn()->GetKind() == ETypeAnnotationKind::World) {
-                YQL_ENSURE(output->ChildrenSize() == 2); // Don't support wide lambdas here
-                YQL_ENSURE(output->Head().ChildrenSize() == 1); // Expected lambda with single arg
-                auto body = output->TailPtr();
-                auto status = ExecuteNode(body, body, ctx, depth + 1);
+            case TExprNode::Atom:
+            case TExprNode::Argument:
+            case TExprNode::Arguments:
+                ctx.AddError(TIssue(ctx.GetPosition(output->Pos()), TStringBuilder() << "Failed to execute node with type: " << output->Type()));
+                output->SetState(TExprNode::EState::Error);
+                return TStatus::Error;
+            case TExprNode::Lambda:
+                if (output->GetTypeAnn()->GetKind() == ETypeAnnotationKind::World) {
+                    YQL_ENSURE(output->ChildrenSize() == 2);        // Don't support wide lambdas here
+                    YQL_ENSURE(output->Head().ChildrenSize() == 1); // Expected lambda with single arg
+                    auto body = output->TailPtr();
+                    auto status = ExecuteNode(body, body, ctx, depth + 1);
 
+                    if (status.Level == TStatus::Error) {
+                        output->SetState(TExprNode::EState::Error);
+                    } else if (status.Level == TStatus::Ok) {
+                        output->SetState(TExprNode::EState::ExecutionComplete);
+                        OnNodeExecutionComplete(output, ctx);
+                        YQL_ENSURE(body->HasResult());
+                    } else if (status.Level == TStatus::Repeat || status.Level == TStatus::Async) {
+                        output->SetState(TExprNode::EState::ExecutionPending);
+                        FreshPendingNodes_.emplace_back(output.Get());
+                    }
+                    return status;
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(output->Pos()), TStringBuilder() << "Failed to execute node with type: " << output->Type()));
+                    output->SetState(TExprNode::EState::Error);
+                    return TStatus::Error;
+                }
+
+            case TExprNode::List:
+            case TExprNode::Callable: {
+                auto prevOutput = output;
+                auto status = output->Type() == TExprNode::Callable
+                                  ? ExecuteCallable(output, output, ctx, depth)
+                                  : ExecuteList(output, ctx);
                 if (status.Level == TStatus::Error) {
                     output->SetState(TExprNode::EState::Error);
                 } else if (status.Level == TStatus::Ok) {
                     output->SetState(TExprNode::EState::ExecutionComplete);
                     OnNodeExecutionComplete(output, ctx);
-                    YQL_ENSURE(body->HasResult());
-                } else if (status.Level == TStatus::Repeat || status.Level == TStatus::Async) {
-                    output->SetState(TExprNode::EState::ExecutionPending);
-                    FreshPendingNodes_.emplace_back(output.Get());
+                    YQL_ENSURE(output->HasResult());
+                } else if (status.Level == TStatus::Repeat) {
+                    if (!status.HasRestart) {
+                        output->SetState(TExprNode::EState::ExecutionPending);
+                        status = ExecuteChildren(output, output, ctx, depth + 1);
+                        if (TExprNode::EState::ExecutionPending == output->GetState()) {
+                            FreshPendingNodes_.emplace_back(output.Get());
+                        }
+                        if (status.Level != TStatus::Repeat) {
+                            return status;
+                        }
+                    }
+                    if (output != prevOutput) {
+                        YQL_CLOG(INFO, CoreExecution) << "Rewrite node #" << node->UniqueId() << " to #" << output->UniqueId();
+                        NewNodes_[node.Get()] = output;
+                    }
+                    return TStatus(TStatus::Repeat, output != prevOutput);
+                } else if (status.Level == TStatus::Async) {
+                    output->SetState(TExprNode::EState::ExecutionInProgress);
                 }
+
                 return status;
-            } else {
-                ctx.AddError(TIssue(ctx.GetPosition(output->Pos()), TStringBuilder() << "Failed to execute node with type: " << output->Type()));
-                output->SetState(TExprNode::EState::Error);
-                return TStatus::Error;
             }
 
-        case TExprNode::List:
-        case TExprNode::Callable:
-        {
-            auto prevOutput = output;
-            auto status = output->Type() == TExprNode::Callable
-                ? ExecuteCallable(output, output, ctx, depth)
-                : ExecuteList(output, ctx);
-            if (status.Level == TStatus::Error) {
-                output->SetState(TExprNode::EState::Error);
-            } else if (status.Level == TStatus::Ok) {
+            case TExprNode::World:
                 output->SetState(TExprNode::EState::ExecutionComplete);
-                OnNodeExecutionComplete(output, ctx);
-                YQL_ENSURE(output->HasResult());
-            } else if (status.Level == TStatus::Repeat) {
-                if (!status.HasRestart) {
-                    output->SetState(TExprNode::EState::ExecutionPending);
-                    status = ExecuteChildren(output, output, ctx, depth + 1);
-                    if (TExprNode::EState::ExecutionPending == output->GetState()) {
-                        FreshPendingNodes_.emplace_back(output.Get());
-                    }
-                    if (status.Level != TStatus::Repeat) {
-                        return status;
-                    }
-                }
-                if (output != prevOutput) {
-                    YQL_CLOG(INFO, CoreExecution) << "Rewrite node #" << node->UniqueId() << " to #" << output->UniqueId();
-                    NewNodes_[node.Get()] = output;
-                }
-                return TStatus(TStatus::Repeat, output != prevOutput);
-            } else if (status.Level == TStatus::Async) {
-                output->SetState(TExprNode::EState::ExecutionInProgress);
-            }
+                return TStatus::Ok;
 
-            return status;
-        }
-
-        case TExprNode::World:
-            output->SetState(TExprNode::EState::ExecutionComplete);
-            return TStatus::Ok;
-
-        default:
-            YQL_ENSURE(false, "Unknown type");
+            default:
+                YQL_ENSURE(false, "Unknown type");
         }
     }
 
@@ -414,7 +412,7 @@ public:
 
     TStatus ExecuteCallable(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExprContext& ctx, ui32 depth) {
         YQL_CLOG(TRACE, CoreExecution) << '{' << depth << "}, callable #"
-                << node->UniqueId() << " <" << node->Content() << '>';
+                                       << node->UniqueId() << " <" << node->Content() << '>';
         if (node->Content() == CommitName) {
             auto requireStatus = RequireChild(*node, 0);
             if (requireStatus.Level != TStatus::Ok) {
@@ -459,10 +457,10 @@ public:
                         node->Child(i)->Head().Head().SetState(TExprNode::EState::ExecutionComplete);
                         node->Child(i)->Head().Head().SetResult(TExprNode::GetResult(lastWorld));
 
-                        for (const auto& p: Types_.DataSources) {
+                        for (const auto& p : Types_.DataSources) {
                             p->RegisterWorldArg(node->Child(i)->Head().HeadPtr(), lastWorld);
                         }
-                        for (const auto& p: Types_.DataSinks) {
+                        for (const auto& p : Types_.DataSinks) {
                             p->RegisterWorldArg(node->Child(i)->Head().HeadPtr(), lastWorld);
                         }
                     }
@@ -575,7 +573,9 @@ public:
         auto state = State_;
         if (DeterministicMode_) {
             TAutoPtr<TState::TItem> item = new TState::TItem;
-            item->Node = node.Get(); item->DataProvider = dataProvider; item->Future = future;
+            item->Node = node.Get();
+            item->DataProvider = dataProvider;
+            item->Future = future;
 
             TGuard<TAdaptiveLock> guard(state->Lock);
             state->Inflight.PushBack(item.Release());
@@ -587,11 +587,12 @@ public:
                 ProcessFutureResultQueue(state);
             });
         } else {
-            future.Subscribe([state, node=node.Get(), dataProvider](const NThreading::TFuture<void>& future) {
+            future.Subscribe([state, node = node.Get(), dataProvider](const NThreading::TFuture<void>& future) {
                 HandleFutureException(future);
 
                 TAutoPtr<TState::TItem> item = new TState::TItem;
-                item->Node = node; item->DataProvider = dataProvider;
+                item->Node = node;
+                item->DataProvider = dataProvider;
                 ProcessAsyncFutureResult(state, item.Release());
             });
         }
@@ -600,8 +601,8 @@ public:
     void StartNode(TStringBuf category, const TExprNode& node) {
         auto publicId = Types_.TranslateOperationId(node.UniqueId());
         if (publicId) {
-            auto x = Progresses_.insert({ *publicId,
-                TOperationProgress(TString(category), *publicId, TOperationProgress::EState::Started) });
+            auto x = Progresses_.insert({*publicId,
+                                         TOperationProgress(TString(category), *publicId, TOperationProgress::EState::Started)});
             if (x.second) {
                 Writer_(x.first->second);
             }
@@ -619,8 +620,8 @@ public:
             YQL_ENSURE(progIt != Progresses_.end());
 
             auto newState = (node.GetState() == TExprNode::EState::ExecutionComplete)
-                    ? TOperationProgress::EState::Finished
-                    : TOperationProgress::EState::Failed;
+                                ? TOperationProgress::EState::Finished
+                                : TOperationProgress::EState::Failed;
 
             if (progIt->second.State != newState) {
                 TString stage = progIt->second.Stage.first;
@@ -748,8 +749,7 @@ private:
     TAutoPtr<IGraphTransformer> FinalizingTransformer_;
     THashMap<ui32, TOperationProgress> Progresses_;
 
-    struct TTrackableNodeInfo
-    {
+    struct TTrackableNodeInfo {
         TIntrusivePtr<IDataProvider> Provider;
         TExprNode::TPtr Node;
     };
@@ -793,7 +793,7 @@ IGraphTransformer::TStatus ValidateCallable(const TExprNode::TPtr& node, TExprCo
 
     if (node->Content() == SeqName) {
         IGraphTransformer::TStatus combinedStatus = ValidateExecution(node->HeadPtr(), ctx, types, visited);
-        for (size_t i = 1; i < node->ChildrenSize(); ++i)  {
+        for (size_t i = 1; i < node->ChildrenSize(); ++i) {
             combinedStatus = combinedStatus.Combine(ValidateExecution(node->Child(i)->TailPtr(), ctx, types, visited));
         }
         return combinedStatus;
@@ -826,7 +826,7 @@ IGraphTransformer::TStatus ValidateCallable(const TExprNode::TPtr& node, TExprCo
 
     if (!dataProvider) {
         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to execute callable with name: " << node->Content()
-            << ", you possibly used cross provider/cluster operations or pulled not materialized result in refselect mode"));
+                                                                           << ", you possibly used cross provider/cluster operations or pulled not materialized result in refselect mode"));
         return TStatus::Error;
     }
 
@@ -850,7 +850,7 @@ IGraphTransformer::TStatus ValidateCallable(const TExprNode::TPtr& node, TExprCo
 }
 
 IGraphTransformer::TStatus ValidateExecution(const TExprNode::TPtr& node, TExprContext& ctx,
-    const TTypeAnnotationContext& types, TNodeSet& visited) {
+                                             const TTypeAnnotationContext& types, TNodeSet& visited) {
     using TStatus = IGraphTransformer::TStatus;
     if (node->GetState() == TExprNode::EState::ExecutionComplete) {
         return TStatus::Ok;
@@ -863,44 +863,44 @@ IGraphTransformer::TStatus ValidateExecution(const TExprNode::TPtr& node, TExprC
 
     TStatus status = TStatus::Ok;
     switch (node->Type()) {
-    case TExprNode::Atom:
-    case TExprNode::Arguments:
-    case TExprNode::Lambda:
-        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to execute node with type: " << node->Type()));
-        return TStatus::Error;
-
-    case TExprNode::Argument:
-        if (node->GetTypeAnn()->GetKind() != ETypeAnnotationKind::World) {
+        case TExprNode::Atom:
+        case TExprNode::Arguments:
+        case TExprNode::Lambda:
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to execute node with type: " << node->Type()));
             return TStatus::Error;
-        }
-        break;
-    case TExprNode::List:
-        return ValidateList(node, ctx, types, visited);
 
-    case TExprNode::Callable:
-        if (visited.cend() != visited.find(node.Get())) {
-            return TStatus::Ok;
-        }
+        case TExprNode::Argument:
+            if (node->GetTypeAnn()->GetKind() != ETypeAnnotationKind::World) {
+                ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to execute node with type: " << node->Type()));
+                return TStatus::Error;
+            }
+            break;
+        case TExprNode::List:
+            return ValidateList(node, ctx, types, visited);
 
-        status = ValidateCallable(node, ctx, types, visited);
-        if (status.Level == TStatus::Ok) {
-            visited.insert(node.Get());
-        }
+        case TExprNode::Callable:
+            if (visited.cend() != visited.find(node.Get())) {
+                return TStatus::Ok;
+            }
 
-        break;
+            status = ValidateCallable(node, ctx, types, visited);
+            if (status.Level == TStatus::Ok) {
+                visited.insert(node.Get());
+            }
 
-    case TExprNode::World:
-        break;
+            break;
 
-    default:
-        YQL_ENSURE(false, "Unknown type");
+        case TExprNode::World:
+            break;
+
+        default:
+            YQL_ENSURE(false, "Unknown type");
     }
 
     return status;
 }
 
-}
+} // namespace
 
 TAutoPtr<IGraphTransformer> CreateExecutionTransformer(
     TTypeAnnotationContext& types,
@@ -911,7 +911,7 @@ TAutoPtr<IGraphTransformer> CreateExecutionTransformer(
 
 TAutoPtr<IGraphTransformer> CreateCheckExecutionTransformer(const TTypeAnnotationContext& types, bool checkWorld) {
     return CreateFunctorTransformer([&types, checkWorld](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx)
-        -> IGraphTransformer::TStatus {
+                                        -> IGraphTransformer::TStatus {
         output = input;
         if (checkWorld) {
             TNodeSet visited;
@@ -955,7 +955,7 @@ TAutoPtr<IGraphTransformer> CreateCheckExecutionTransformer(const TTypeAnnotatio
                     ctx.AddError(err);
                 }
             } else if (node->Type() != TExprNode::Lambda &&
-                (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream || node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow)) {
+                       (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream || node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow)) {
                 auto parentsIt = parentsMap.find(node.Get());
                 if (parentsIt != parentsMap.end()) {
                     ui32 usageCount = 0;
@@ -989,7 +989,7 @@ TAutoPtr<IGraphTransformer> CreateCheckExecutionTransformer(const TTypeAnnotatio
             bool collectCalcOverWindow = true;
             return funcCheckExecution(NoExecutionList, collectCalcOverWindow, node);
         });
-        for (auto overWin: overWinNodes) {
+        for (auto overWin : overWinNodes) {
             VisitExpr(overWin, [funcCheckExecution](const TExprNode::TPtr& node) {
                 bool collectCalcOverWindow = false;
                 return funcCheckExecution(NoExecutionListForCalcOverWindow, collectCalcOverWindow, node);
@@ -1006,48 +1006,48 @@ TAutoPtr<IGraphTransformer> CreateCheckExecutionTransformer(const TTypeAnnotatio
 
 IGraphTransformer::TStatus RequireChild(const TExprNode& node, ui32 index) {
     switch (node.Child(index)->GetState()) {
-    case TExprNode::EState::Error:
-    case TExprNode::EState::ExecutionComplete:
-        return IGraphTransformer::TStatus::Ok;
-    case TExprNode::EState::ExecutionInProgress:
-    case TExprNode::EState::ExecutionPending:
-        return IGraphTransformer::TStatus::Repeat;
-    default:
-        break;
+        case TExprNode::EState::Error:
+        case TExprNode::EState::ExecutionComplete:
+            return IGraphTransformer::TStatus::Ok;
+        case TExprNode::EState::ExecutionInProgress:
+        case TExprNode::EState::ExecutionPending:
+            return IGraphTransformer::TStatus::Repeat;
+        default:
+            break;
     }
 
     node.Child(index)->SetState(TExprNode::EState::ExecutionRequired);
     return IGraphTransformer::TStatus::Repeat;
 }
 
-}
+} // namespace NYql
 
-template<>
-void Out<NYql::TOperationProgress::EState>(class IOutputStream &out, NYql::TOperationProgress::EState value) {
+template <>
+void Out<NYql::TOperationProgress::EState>(class IOutputStream& out, NYql::TOperationProgress::EState value) {
 #define YQL_OPERATION_PROGRESS_STATE_MAP_TO_STRING_IMPL(name, ...) \
-    case NYql::TOperationProgress::EState::name: \
-        out << #name; \
+    case NYql::TOperationProgress::EState::name:                   \
+        out << #name;                                              \
         return;
 
     switch (value) {
         YQL_OPERATION_PROGRESS_STATE_MAP(YQL_OPERATION_PROGRESS_STATE_MAP_TO_STRING_IMPL)
-    default:
-        out << static_cast<int>(value);
-        return;
+        default:
+            out << static_cast<int>(value);
+            return;
     }
 }
 
-template<>
-void Out<NYql::TOperationProgress::EOpBlockStatus>(class IOutputStream &out, NYql::TOperationProgress::EOpBlockStatus value) {
+template <>
+void Out<NYql::TOperationProgress::EOpBlockStatus>(class IOutputStream& out, NYql::TOperationProgress::EOpBlockStatus value) {
 #define YQL_OPERATION_BLOCK_STATUS_MAP_TO_STRING_IMPL(name, ...) \
-    case NYql::TOperationProgress::EOpBlockStatus::name: \
-        out << #name; \
+    case NYql::TOperationProgress::EOpBlockStatus::name:         \
+        out << #name;                                            \
         return;
 
     switch (value) {
         YQL_OPERATION_BLOCK_STATUS_MAP(YQL_OPERATION_BLOCK_STATUS_MAP_TO_STRING_IMPL)
-    default:
-        out << static_cast<int>(value);
-        return;
+        default:
+            out << static_cast<int>(value);
+            return;
     }
 }

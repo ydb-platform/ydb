@@ -53,6 +53,10 @@
         "min_langver": "2026.02",
         "is_backport_allowed": true
     },
+    "DecimalIntegralArithmetic": {
+        "description": "Addition and subtraction between Decimal and integral values",
+        "min_langver": "2026.02"
+    },
     "TypeErasure": {
         "min_langver": "2026.02"
     },

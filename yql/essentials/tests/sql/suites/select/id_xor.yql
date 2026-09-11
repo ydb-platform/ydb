@@ -1,1 +1,0 @@
-select Yql::Xor(true,false);

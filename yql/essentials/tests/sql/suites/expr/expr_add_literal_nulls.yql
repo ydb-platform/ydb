@@ -1,1 +1,0 @@
-select NULL + 1, NULL + NULL;

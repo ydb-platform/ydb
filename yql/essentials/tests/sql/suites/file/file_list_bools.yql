@@ -1,1 +1,0 @@
-select ParseFile('bool', "bools.lst");

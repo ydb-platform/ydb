@@ -1,8 +1,0 @@
-select Block(($parent)->{
-    $d, $r = MutDictLookup(
-        ToMutDict({"a":1,"b":2},$parent),
-        "a");
-    return (
-        ListSort(DictItems(FromMutDict($d))),
-        $r)});
-

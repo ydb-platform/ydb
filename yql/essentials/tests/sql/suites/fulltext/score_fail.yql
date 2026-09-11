@@ -1,2 +1,0 @@
-/* custom error:Fulltext score is not implemented yet*/
-select FulltextScore("some text", "text");

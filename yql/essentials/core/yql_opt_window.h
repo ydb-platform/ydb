@@ -18,8 +18,8 @@ TExprNode::TPtr MakeRowsUPCRFrameSpec(TPositionHandle pos, const TExprNode::TPtr
 bool HasWinFilters(const NNodes::TCoCalcOverWindowTuple& calc);
 TVector<TExprNodeList> SplitByWinFilter(const TExprNodeList& framesOrCalcs);
 
-using NNodes::TCoWinOnBase;
 using NNodes::TCoFrameBound;
+using NNodes::TCoWinOnBase;
 
 struct TSessionWindowParams {
     TSessionWindowParams()
@@ -30,7 +30,8 @@ struct TSessionWindowParams {
         , Init(nullptr)
         , Update(nullptr)
         , SortTraits(nullptr)
-    {}
+    {
+    }
 
     void Reset();
 
@@ -51,19 +52,19 @@ struct TSortParams {
 // Lambda(input: Stream/List<T>) -> Stream/List<Tuple<T, SessionKey, SessionState, ....>>
 // input is assumed to be partitioned by partitionKeySelector
 TExprNode::TPtr ZipWithSessionParamsLambda(TPositionHandle pos, const TExprNode::TPtr& partitionKeySelector,
-    const TExprNode::TPtr& sessionKeySelector, const TExprNode::TPtr& sessionInit,
-    const TExprNode::TPtr& sessionUpdate, TExprContext& ctx);
+                                           const TExprNode::TPtr& sessionKeySelector, const TExprNode::TPtr& sessionInit,
+                                           const TExprNode::TPtr& sessionUpdate, TExprContext& ctx);
 
 // input should be List/Stream of structs + see above
 TExprNode::TPtr AddSessionParamsMemberLambda(TPositionHandle pos,
-    TStringBuf sessionStartMemberName, TStringBuf sessionParamsMemberName,
-    const TExprNode::TPtr& partitionKeySelector,
-    const TExprNode::TPtr& sessionKeySelector, const TExprNode::TPtr& sessionInit,
-    const TExprNode::TPtr& sessionUpdate, TExprContext& ctx);
+                                             TStringBuf sessionStartMemberName, TStringBuf sessionParamsMemberName,
+                                             const TExprNode::TPtr& partitionKeySelector,
+                                             const TExprNode::TPtr& sessionKeySelector, const TExprNode::TPtr& sessionInit,
+                                             const TExprNode::TPtr& sessionUpdate, TExprContext& ctx);
 
 // input should be List/Stream of structs + see above
 TExprNode::TPtr AddSessionParamsMemberLambda(TPositionHandle pos,
-    TStringBuf sessionStartMemberName, const TExprNode::TPtr& partitionKeySelector,
-    const TSessionWindowParams& sessionWindowParams, TExprContext& ctx);
+                                             TStringBuf sessionStartMemberName, const TExprNode::TPtr& partitionKeySelector,
+                                             const TSessionWindowParams& sessionWindowParams, TExprContext& ctx);
 
-}
+} // namespace NYql

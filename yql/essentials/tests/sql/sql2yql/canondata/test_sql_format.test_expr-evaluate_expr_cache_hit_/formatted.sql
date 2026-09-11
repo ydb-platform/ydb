@@ -1,8 +1,0 @@
-PRAGMA EvaluateExprCache;
-
-$v1 = EvaluateExpr(10 + 20);
-$v2 = EvaluateExpr(10 + 20);
-
-SELECT
-    AsList($v1, $v2)
-;

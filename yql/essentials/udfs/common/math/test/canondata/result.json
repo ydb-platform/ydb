@@ -4,19 +4,9 @@
             "uri": "file://test.test_ErfInv-Results_/results.txt"
         }
     ],
-    "test.test[ErfInvNoLLVM-Results]": [
-        {
-            "uri": "file://test.test_ErfInvNoLLVM-Results_/results.txt"
-        }
-    ],
     "test.test[IR-Results]": [
         {
             "uri": "file://test.test_IR-Results_/results.txt"
-        }
-    ],
-    "test.test[IR_LLVM_OFF-Results]": [
-        {
-            "uri": "file://test.test_IR_LLVM_OFF-Results_/results.txt"
         }
     ],
     "test.test[NearbyInt-Results]": [

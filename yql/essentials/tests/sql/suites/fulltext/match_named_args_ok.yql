@@ -1,2 +1,0 @@
-/* custom error:Fulltext match is not implemented yet*/
-select FulltextMatch("some text", "text", "or" as DefaultOperator, "1" as MinimumShouldMatch);

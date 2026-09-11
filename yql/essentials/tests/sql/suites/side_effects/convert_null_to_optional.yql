@@ -1,2 +1,0 @@
-/* custom error: Condition violated */
-select if(true, WithSideEffects(ensure(null, false)), 1);

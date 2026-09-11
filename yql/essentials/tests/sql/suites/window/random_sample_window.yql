@@ -1,7 +1,0 @@
-select random_sample(x, 10) over w from 
-    AS_TABLE(ListMap(ListFromRange(1, 10), ($x) -> {return AsStruct(
-        $x as x
-    ); }))
-WINDOW w AS (
-    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-)

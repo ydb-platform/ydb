@@ -1,9 +1,0 @@
-$f = Python::f(Callable<(String,y:String)->String>,@@
-def f(x,y):
-    return x + y
-@@);
-
-$f = Udf($f, "bar" as RunConfig); -- no run config
-
-SELECT
-    $f('foo', '?')

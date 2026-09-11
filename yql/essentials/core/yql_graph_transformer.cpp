@@ -10,11 +10,12 @@ namespace NYql {
 
 namespace {
 
-class TSharedTransformerProxy : public IGraphTransformer {
+class TSharedTransformerProxy: public IGraphTransformer {
 public:
     explicit TSharedTransformerProxy(const std::shared_ptr<IGraphTransformer>& inner)
         : Inner_(inner)
-    {}
+    {
+    }
 
     TStatus Transform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         return Inner_->Transform(input, output, ctx);
@@ -40,8 +41,9 @@ private:
     const std::shared_ptr<IGraphTransformer> Inner_;
 };
 
-class TCompositeGraphTransformer : public TGraphTransformerBase {
+class TCompositeGraphTransformer: public TGraphTransformerBase {
     static constexpr ui64 MinAllocationDelta = 1000;
+
 public:
     TCompositeGraphTransformer(const TVector<TTransformStage>& stages, bool useIssueScopes, bool doCheckArguments)
         : Stages_(stages)
@@ -65,7 +67,7 @@ public:
     }
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
-//#define TRACE_NODES
+// #define TRACE_NODES
 #ifdef TRACE_NODES
         static ui64 TransformsCount = 0;
         ++TransformsCount;
@@ -134,7 +136,7 @@ public:
         for (size_t i = 0; i < Stages_.size(); ++i) {
             auto& stagePair = Statistics_.Stages[i];
             stagePair.first = Stages_[i].Name;
-            stagePair.second =  Stages_[i].GetTransformer().GetStatistics();
+            stagePair.second = Stages_[i].GetTransformer().GetStatistics();
         }
 
         return Statistics_;
@@ -198,7 +200,7 @@ void AddTooManyTransformationsError(TPositionHandle pos, const TStringBuf& where
     ctx.AddError(TIssue(ctx.GetPosition(pos), builder));
 }
 
-}
+} // namespace
 
 TAutoPtr<IGraphTransformer> CreateCompositeGraphTransformer(const TVector<TTransformStage>& stages, bool useIssueScopes) {
     return new TCompositeGraphTransformer(stages, useIssueScopes, /* doCheckArguments = */ true);
@@ -210,17 +212,18 @@ TAutoPtr<IGraphTransformer> CreateCompositeGraphTransformerWithNoArgChecks(const
 
 namespace {
 
-class TChoiceGraphTransformer : public TCompositeGraphTransformer {
+class TChoiceGraphTransformer: public TCompositeGraphTransformer {
 public:
     TChoiceGraphTransformer(
         const std::function<bool(const TExprNode::TPtr& input, TExprContext& ctx)>& condition,
         const TTransformStage& left,
         const TTransformStage& right)
         : TCompositeGraphTransformer(
-            {WrapCondition(condition), left, right},
-            /* useIssueScopes = */ false,
-            /* doCheckArguments = */ true)
-    { }
+              {WrapCondition(condition), left, right},
+              /* useIssueScopes = */ false,
+              /* doCheckArguments = */ true)
+    {
+    }
 
 private:
     void Rewind() override {
@@ -300,15 +303,15 @@ IGraphTransformer::TStatus SyncTransform(IGraphTransformer& transformer, TExprNo
             }
 
             switch (status.Level) {
-            case IGraphTransformer::TStatus::Ok:
-            case IGraphTransformer::TStatus::Error:
-                return status;
-            case IGraphTransformer::TStatus::Repeat:
-                continue;
-            case IGraphTransformer::TStatus::Async:
-                break;
-            default:
-                YQL_ENSURE(false, "Unknown status");
+                case IGraphTransformer::TStatus::Ok:
+                case IGraphTransformer::TStatus::Error:
+                    return status;
+                case IGraphTransformer::TStatus::Repeat:
+                    continue;
+                case IGraphTransformer::TStatus::Async:
+                    break;
+                default:
+                    YQL_ENSURE(false, "Unknown status");
             }
 
             auto future = transformer.GetAsyncFuture(*root);
@@ -321,29 +324,28 @@ IGraphTransformer::TStatus SyncTransform(IGraphTransformer& transformer, TExprNo
             }
 
             switch (status.Level) {
-            case IGraphTransformer::TStatus::Ok:
-            case IGraphTransformer::TStatus::Error:
-                return status;
-            case IGraphTransformer::TStatus::Repeat:
-                break;
-            case IGraphTransformer::TStatus::Async:
-                YQL_ENSURE(false, "Async status is forbidden for ApplyAsyncChanges");
-                break;
-            default:
-                YQL_ENSURE(false, "Unknown status");
+                case IGraphTransformer::TStatus::Ok:
+                case IGraphTransformer::TStatus::Error:
+                    return status;
+                case IGraphTransformer::TStatus::Repeat:
+                    break;
+                case IGraphTransformer::TStatus::Async:
+                    YQL_ENSURE(false, "Async status is forbidden for ApplyAsyncChanges");
+                    break;
+                default:
+                    YQL_ENSURE(false, "Unknown status");
             }
         }
         AddTooManyTransformationsError(root->Pos(), "SyncTransform", ctx);
-    }
-    catch (const std::exception& e) {
+    } catch (const std::exception& e) {
         ctx.AddError(ExceptionToIssue(e));
     }
     return IGraphTransformer::TStatus::Error;
 }
 
 IGraphTransformer::TStatus AsyncTransformStepImpl(IGraphTransformer& transformer, TExprNode::TPtr& root,
-                                            TExprContext& ctx, bool applyAsyncChanges, bool breakOnRestart,
-                                            const TStringBuf& name)
+                                                  TExprContext& ctx, bool applyAsyncChanges, bool breakOnRestart,
+                                                  const TStringBuf& name)
 {
     try {
         if (applyAsyncChanges) {
@@ -354,20 +356,20 @@ IGraphTransformer::TStatus AsyncTransformStepImpl(IGraphTransformer& transformer
             }
 
             switch (status.Level) {
-            case IGraphTransformer::TStatus::Ok:
-            case IGraphTransformer::TStatus::Error:
-                break;
-            case IGraphTransformer::TStatus::Repeat:
-                if (breakOnRestart && status.HasRestart) {
-                    return status;
-                }
-                return AsyncTransformStepImpl(transformer, root, ctx, /*applyAsyncChanges=*/false /* no async changes */, breakOnRestart, name);
-            case IGraphTransformer::TStatus::Async:
-                YQL_ENSURE(false, "Async status is forbidden for ApplyAsyncChanges");
-                break;
-            default:
-                YQL_ENSURE(false, "Unknown status");
-                break;
+                case IGraphTransformer::TStatus::Ok:
+                case IGraphTransformer::TStatus::Error:
+                    break;
+                case IGraphTransformer::TStatus::Repeat:
+                    if (breakOnRestart && status.HasRestart) {
+                        return status;
+                    }
+                    return AsyncTransformStepImpl(transformer, root, ctx, /*applyAsyncChanges=*/false /* no async changes */, breakOnRestart, name);
+                case IGraphTransformer::TStatus::Async:
+                    YQL_ENSURE(false, "Async status is forbidden for ApplyAsyncChanges");
+                    break;
+                default:
+                    YQL_ENSURE(false, "Unknown status");
+                    break;
             }
             return status;
         }
@@ -383,19 +385,19 @@ IGraphTransformer::TStatus AsyncTransformStepImpl(IGraphTransformer& transformer
             }
 
             switch (status.Level) {
-            case IGraphTransformer::TStatus::Ok:
-            case IGraphTransformer::TStatus::Error:
-                return status;
-            case IGraphTransformer::TStatus::Repeat:
-                if (breakOnRestart && status.HasRestart) {
+                case IGraphTransformer::TStatus::Ok:
+                case IGraphTransformer::TStatus::Error:
                     return status;
-                }
-                // if (currentTime - startTime >= threshold) return NThreading::MakeFuture(IGraphTransformer::TStatus::Yield);
-                continue;
-            case IGraphTransformer::TStatus::Async:
-                break;
-            default:
-                YQL_ENSURE(false, "Unknown status");
+                case IGraphTransformer::TStatus::Repeat:
+                    if (breakOnRestart && status.HasRestart) {
+                        return status;
+                    }
+                    // if (currentTime - startTime >= threshold) return NThreading::MakeFuture(IGraphTransformer::TStatus::Yield);
+                    continue;
+                case IGraphTransformer::TStatus::Async:
+                    break;
+                default:
+                    YQL_ENSURE(false, "Unknown status");
             }
             break;
         }
@@ -403,8 +405,7 @@ IGraphTransformer::TStatus AsyncTransformStepImpl(IGraphTransformer& transformer
             AddTooManyTransformationsError(root->Pos(), name, ctx);
             return IGraphTransformer::TStatus::Error;
         }
-    }
-    catch (const std::exception& e) {
+    } catch (const std::exception& e) {
         ctx.AddError(ExceptionToIssue(e));
         return IGraphTransformer::TStatus::Error;
     }
@@ -427,13 +428,13 @@ IGraphTransformer::TStatus InstantTransform(IGraphTransformer& transformer, TExp
 }
 
 IGraphTransformer::TStatus AsyncTransformStep(IGraphTransformer& transformer, TExprNode::TPtr& root,
-                                            TExprContext& ctx, bool applyAsyncChanges)
+                                              TExprContext& ctx, bool applyAsyncChanges)
 {
     return AsyncTransformStepImpl(transformer, root, ctx, applyAsyncChanges, /*breakOnRestart=*/false, "AsyncTransformStep");
 }
 
 NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx,
-                                                                bool applyAsyncChanges) {
+                                                               bool applyAsyncChanges) {
     ctx.ResetCycleDetector();
     IGraphTransformer::TStatus status = AsyncTransformStepImpl(transformer, root, ctx, applyAsyncChanges, /*breakOnRestart=*/false, "AsyncTransform");
     if (status.Level != IGraphTransformer::TStatus::Async) {
@@ -441,7 +442,7 @@ NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransform(IGraphTransformer
     }
 
     return transformer.GetAsyncFuture(*root).Apply(
-        [] (const NThreading::TFuture<void>&) mutable -> NThreading::TFuture<IGraphTransformer::TStatus> {
+        [](const NThreading::TFuture<void>&) mutable -> NThreading::TFuture<IGraphTransformer::TStatus> {
             return NThreading::MakeFuture(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Async));
         });
 }
@@ -450,25 +451,25 @@ void AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExpr
                     std::function<void(const IGraphTransformer::TStatus&)> asyncCallback) {
     NThreading::TFuture<IGraphTransformer::TStatus> status = AsyncTransform(transformer, root, ctx, applyAsyncChanges);
     status.Subscribe(
-       [asyncCallback](const NThreading::TFuture<IGraphTransformer::TStatus>& status) mutable -> void {
-           HandleFutureException(status);
-           asyncCallback(status.GetValue());
-       });
+        [asyncCallback](const NThreading::TFuture<IGraphTransformer::TStatus>& status) mutable -> void {
+            HandleFutureException(status);
+            asyncCallback(status.GetValue());
+        });
 }
 
-}
+} // namespace NYql
 
-template<>
-void Out<NYql::IGraphTransformer::TStatus::ELevel>(class IOutputStream &out, NYql::IGraphTransformer::TStatus::ELevel value) {
+template <>
+void Out<NYql::IGraphTransformer::TStatus::ELevel>(class IOutputStream& out, NYql::IGraphTransformer::TStatus::ELevel value) {
 #define YQL_GT_STATUS_MAP_TO_STRING_IMPL(name, ...) \
-    case NYql::IGraphTransformer::TStatus::name: \
-        out << #name; \
+    case NYql::IGraphTransformer::TStatus::name:    \
+        out << #name;                               \
         return;
 
     switch (value) {
         YQL_GT_STATUS_MAP(YQL_GT_STATUS_MAP_TO_STRING_IMPL)
-    default:
-        out << static_cast<int>(value);
-        return;
+        default:
+            out << static_cast<int>(value);
+            return;
     }
 }

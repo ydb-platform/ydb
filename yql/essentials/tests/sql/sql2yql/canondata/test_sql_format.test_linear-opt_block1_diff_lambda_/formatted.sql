@@ -1,3 +1,0 @@
-SELECT
-    ListSort(DictItems(DictInsert(Opaque(DictInsert(DictCreate(String, Int32), 'a', 1)), 'b', 2)))
-;

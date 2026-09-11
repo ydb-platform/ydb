@@ -1,3 +1,0 @@
-$p = 'http_test://' || 'foo.txt';
-pragma file('foo.txt',$p);
-select EvaluateExpr(FileContent('foo.txt'));

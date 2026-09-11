@@ -1,6 +1,0 @@
-SELECT
-    666 AS x
-EXCEPT
-SELECT
-    666 AS x
-;

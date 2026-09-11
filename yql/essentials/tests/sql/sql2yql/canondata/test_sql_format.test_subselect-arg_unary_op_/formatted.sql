@@ -1,8 +1,0 @@
-$x = -(
-    SELECT
-        1
-);
-
-SELECT
-    $x
-;

@@ -1,2 +1,0 @@
-$x = CAST(Unicode::ToUpper("foo"u) AS String);
-select 1 into result $x;

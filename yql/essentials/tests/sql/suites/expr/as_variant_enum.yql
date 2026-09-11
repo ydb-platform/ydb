@@ -1,1 +1,0 @@
-select AsVariant(1,"int"),AsEnum("monday");

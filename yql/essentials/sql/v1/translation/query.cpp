@@ -4166,6 +4166,20 @@ public:
         opts->Add(Q(Y(Q("columns"), Q(columns))));
 
         opts->Add(Q(Y(Q("mode"), Q("analyze"))));
+        if (Params_.SampleRate) {
+            if (!Params_.SampleRate->Init(ctx, FakeSource_.Get())) {
+                return false;
+            }
+            auto rate = Y("EnsureConvertibleTo", Params_.SampleRate, Y("DataType", Q("Double")),
+                          Q("ANALYZE SAMPLE rate must be numeric"));
+            rate = Y("SafeCast", rate, Y("DataType", Q("Double")));
+            auto checkedRate = Y("Ensure", "samplingRate",
+                                 Y("And", Y(">", "samplingRate", Y("Double", Q("0"))),
+                                   Y("<=", "samplingRate", Y("Double", Q("1")))),
+                                 Y("String", BuildQuotedAtom(Pos_, "ANALYZE SAMPLE rate must be a finite number in (0, 1]")));
+            rate = Y("block", Q(Y(Y("let", "samplingRate", rate), Y("return", checkedRate))));
+            opts->Add(Q(Y(Q("sampleRate"), Y("EvaluateExpr", rate))));
+        }
         Add("block", Q(Y(
                          Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos_, Service_), Scoped_->WrapCluster(Cluster_, ctx))),
                          Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(opts))),

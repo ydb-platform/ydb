@@ -1,1 +1,0 @@
-INCLUDE(../pure.make)

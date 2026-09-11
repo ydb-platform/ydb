@@ -1398,6 +1398,22 @@ static TVector<ui64> GetCsShardingOrderedShardIds(const NKikimrSchemeOp::TColumn
     return orderedShardIds;
 }
 
+TVector<ui64> GetCsWriteAffinityShardIds(const TStageInfoMeta& meta) {
+    if (meta.ColumnTableInfoPtr
+            && meta.ColumnTableInfoPtr->Description.HasSharding()) {
+        return GetCsShardingOrderedShardIds(meta.ColumnTableInfoPtr->Description.GetSharding());
+    }
+    if (meta.ShardKey) {
+        TVector<ui64> shardIds;
+        shardIds.reserve(meta.ShardKey->GetPartitions().size());
+        for (const auto& partition : meta.ShardKey->GetPartitions()) {
+            shardIds.push_back(partition.ShardId);
+        }
+        return shardIds;
+    }
+    return {};
+}
+
 // Returns true if the stage is a genuine CS write affinity sink stage, i.e. the
 // optimizer emitted the affinity plan for it:
 //   Transform → HashShuffle(ColumnShardHashV1) → Sink(OLAP table).
@@ -1656,16 +1672,10 @@ static std::optional<std::vector<TString>> BuildColumnShardHashV1ForWriteAffinit
 
     // Canonical shard order = IShardingBase::GetOrderedShardIds() order,
     // which is what SplitByShardsToArrowBatches uses at runtime.
-    TVector<ui64> orderedShardIds;
-    if (stageInfo.Meta.ColumnTableInfoPtr
-            && stageInfo.Meta.ColumnTableInfoPtr->Description.HasSharding()) {
-        orderedShardIds = GetCsShardingOrderedShardIds(
-            stageInfo.Meta.ColumnTableInfoPtr->Description.GetSharding());
-    } else if (stageInfo.Meta.ShardKey) {
-        for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
-            orderedShardIds.push_back(partition.ShardId);
-        }
-    } else {
+    // Unified shard source: same priority and order as CollectFillSinkShards,
+    // CountComputeTasks and BuildInternalSinks.
+    TVector<ui64> orderedShardIds = GetCsWriteAffinityShardIds(stageInfo.Meta);
+    if (orderedShardIds.empty()) {
         // For CTAS queries where ColumnTableInfo is unavailable, build ordered
         // shard IDs from the task params (CsWriteAffinityShardId) in ascending
         // order, matching what CountComputeTasks uses.
@@ -4062,19 +4072,10 @@ void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const T
         // ColumnShardHashV1 shuffles but must keep the standard behavior.
         if (!effectiveShardingColumns.empty()
                 && IsCsWriteAffinitySinkStage(stageInfo)) {
-            // Collect all target shards. Use GetCsShardingOrderedShardIds to match
-            // IShardingBase::GetOrderedShardIds() / SplitByShardsToArrowBatches order.
-            TVector<ui64> resolvedShardIds;
-            if (stageInfo.Meta.ColumnTableInfoPtr
-                    && stageInfo.Meta.ColumnTableInfoPtr->Description.HasSharding()) {
-                resolvedShardIds = GetCsShardingOrderedShardIds(
-                    stageInfo.Meta.ColumnTableInfoPtr->Description.GetSharding());
-            } else if (stageInfo.Meta.ShardKey) {
-                // Fallback: use ShardKey partitions (for data shards)
-                for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
-                    resolvedShardIds.push_back(partition.ShardId);
-                }
-            }
+            // Collect all target shards via the unified shard source
+            // (GetCsWriteAffinityShardIds): canonical GetOrderedShardIds() /
+            // SplitByShardsToArrowBatches order, ShardKey fallback for CTAS.
+            TVector<ui64> resolvedShardIds = GetCsWriteAffinityShardIds(stageInfo.Meta);
 
             if (!resolvedShardIds.empty()) {
                 if (stageInfo.Tasks.size() > 1) {
@@ -4905,37 +4906,25 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
         if (!isPureStage
                 && IsCsWriteAffinitySinkStage(stageInfo)) {
             // Collect (shardId, nodeId) pairs. One task per shard, pinned to the
-            // node hosting that shard.
+            // node hosting that shard. Uses the unified shard source
+            // (GetCsWriteAffinityShardIds) so the shard set and order match
+            // CollectFillSinkShards (resolution), BuildInternalSinks
+            // (TargetShardIds) and BuildColumnShardHashV1ForWriteAffinity
+            // (hash routing).
             TVector<std::pair<ui64 /* shardId */, ui64 /* nodeId */>> shardNodes;
 
-            if (stageInfo.Meta.ColumnTableInfoPtr
-                    && stageInfo.Meta.ColumnTableInfoPtr->Description.HasSharding()) {
-                const auto orderedShardIds = GetCsShardingOrderedShardIds(
-                    stageInfo.Meta.ColumnTableInfoPtr->Description.GetSharding());
-                for (const auto& shardId : orderedShardIds) {
-                    auto it = GetMeta().ShardIdToNodeId.find(shardId);
-                    YQL_ENSURE(it != GetMeta().ShardIdToNodeId.end(),
-                        "CS Write Affinity: shard " << shardId
-                        << " not found in ShardIdToNodeId (stage " << stageId
-                        << ", ShardIdToNodeId size=" << GetMeta().ShardIdToNodeId.size()
-                        << "). ResolveShards must include target table shards.");
-                    shardNodes.emplace_back(shardId, it->second);
-                }
-            } else if (stageInfo.Meta.ShardKey) {
-                for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
-                    const ui64 shardId = partition.ShardId;
-                    auto it = GetMeta().ShardIdToNodeId.find(shardId);
-                    YQL_ENSURE(it != GetMeta().ShardIdToNodeId.end(),
-                        "CS Write Affinity: shard " << shardId
-                        << " not found in ShardIdToNodeId (stage " << stageId
-                        << ", ShardIdToNodeId size=" << GetMeta().ShardIdToNodeId.size()
-                        << "). ResolveShards must include target table shards.");
-                    shardNodes.emplace_back(shardId, it->second);
-                }
-            } else {
-                YQL_ENSURE(false,
-                    "CS Write Affinity: no shard source available for OLAP sink stage "
-                    << stageId << ". ColumnTableInfoPtr and ShardKey are both null.");
+            const auto orderedShardIds = GetCsWriteAffinityShardIds(stageInfo.Meta);
+            YQL_ENSURE(!orderedShardIds.empty(),
+                "CS Write Affinity: no shard source available for OLAP sink stage "
+                << stageId << ". ColumnTableInfoPtr and ShardKey are both null.");
+            for (const auto& shardId : orderedShardIds) {
+                auto it = GetMeta().ShardIdToNodeId.find(shardId);
+                YQL_ENSURE(it != GetMeta().ShardIdToNodeId.end(),
+                    "CS Write Affinity: shard " << shardId
+                    << " not found in ShardIdToNodeId (stage " << stageId
+                    << ", ShardIdToNodeId size=" << GetMeta().ShardIdToNodeId.size()
+                    << "). ResolveShards must include target table shards.");
+                shardNodes.emplace_back(shardId, it->second);
             }
 
             YDB_LOG_DEBUG("CS Write Affinity: creating per-shard tasks",

@@ -758,7 +758,7 @@ Executer → TableResolver → (схемы) → TEvTableResolveStatus
 
 **Инициация.** При получении запроса executer создаёт `TKqpTableResolver` ([`kqp_executer_impl.h:1259`](ydb/core/kqp/executer_actor/kqp_executer_impl.h:1259)) и переходит в состояние `WaitResolveState`. TableResolver навигирует по схемам, получает `TableId` и `ShardKey` для каждой таблицы, затем отправляет `TEvTableResolveStatus` обратно.
 
-**Сбор.** [`HandleResolve(TEvTableResolveStatus)`](ydb/core/kqp/executer_actor/kqp_executer_impl.h:248) вызывается по этому событию. На этом моменте `ShardKey` уже заполнен. Для каждой стадии в `TasksGraph.GetStagesInfo()`:
+**Сбор.** [`HandleResolve(TEvTableResolveStatus)`](ydb/core/kqp/executer_actor/kqp_executer_impl.h:251) вызывается по этому событию. На этом моменте `ShardKey` уже заполнен. Для каждой стадии в `TasksGraph.GetStagesInfo()`:
 
 1. Устанавливает партиционирование в `TxManager` (`SetPartitioning`), пропускает sysview-таблицы.
 2. Определяет тип стадии и собирает `shardIds`:
@@ -767,7 +767,7 @@ Executer → TableResolver → (схемы) → TEvTableResolveStatus
    |-----------|---------|-------------------|
    | Read source | `Sources(0).Type == kReadRangesSource` | `PartitionPruner->Prune()` → `PrunedPartitions` → `shardId` |
    | Scan / OLAP | `IsScan() \|\| IsOlap()` | `PartitionPruner->Prune()` для каждого `TableOp` → `shardId` |
-   | **Sink (CTAS)** | `else` (нет sources, не scan) | **Только при `ColumnShardHashV1`-входе:** `ShardKey->GetPartitions()` → `partition.ShardId`; fallback: `ColumnTableInfoPtr->Description.GetSharding().GetColumnShards()` |
+   | **Sink (CTAS)** | `else` (нет sources, не scan) | **Только при `ColumnShardHashV1`-входе:** [`GetCsWriteAffinityShardIds()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1401) — унифицированный источник: `ColumnTableInfoPtr->Description.GetSharding()` (канонический порядок) → fallback `ShardKey->GetPartitions()` |
 
    Для sink-стадий (CTAS) дополнительно проверяются:
    - `sink.HasInternalSink()` — настройки типа `TKqpTableSinkSettings`
@@ -789,11 +789,11 @@ Executer → TableResolver → (схемы) → TEvTableResolveStatus
 
 ##### 2.3.2.3 Сохранение результата
 
-[`HandleResolve(TEvShardsResolveStatus)`](ydb/core/kqp/executer_actor/kqp_executer_impl.h:389):
+[`HandleResolve(TEvShardsResolveStatus)`](ydb/core/kqp/executer_actor/kqp_executer_impl.h:392):
 
 1. Проверяет статус (ошибка → `ReplyErrorAndDie`).
 2. Для каждого `nodeId` в `ShardsToNodes` → `TxManager->AddParticipantNode(nodeId)`.
-3. Вызывает [`TasksGraph.ResolveShards()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:4175):
+3. Вызывает [`TasksGraph.ResolveShards()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:4179):
 
 ```cpp
 void TKqpTasksGraph::ResolveShards(TShardToNodeMap&& shardsToNodes) {
@@ -826,7 +826,7 @@ void TKqpTasksGraph::ResolveShards(TShardToNodeMap&& shardsToNodes) {
 
 #### 2.3.3 `BuildAllTasks()` — подсчёт задач (`CountTasks`)
 
-[`BuildAllTasks()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:4183) вызывает `CountComputeTasks` для COMPUTE_TASKS стадий.
+[`BuildAllTasks()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:4187) вызывает `CountComputeTasks` для COMPUTE_TASKS стадий.
 
 **Вход:** `TasksGraph` с заполненными `ShardIdToNodeId` (раздел 2.3.2) и `CsShardingColumns` (раздел 2.3.1). Для affinity-стадий: `ColumnTableInfoPtr` (если доступен) или `ShardKey` (fallback для CTAS).
 
@@ -846,7 +846,7 @@ void TKqpTasksGraph::ResolveShards(TShardToNodeMap&& shardsToNodes) {
 **Стало (с аффинити):**
 - CTAS sink-стадия классифицируется как `COMPUTE_TASKS` (то же условие)
 - Условие affinity-блока: `!isPureStage && HasColumnShardHashV1Input(stageInfo)` → true
-- Создаются **per-shard задачи** ([`kqp_tasks_graph.cpp:4880`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:4880)):
+- Создаются **per-shard задачи** ([`kqp_tasks_graph.cpp:4886`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:4886)):
   ```cpp
   MaxTasksGraph->AddStage(stageInfo, TMaxTasksGraph::FIXED, inputs);
   for (const auto& [shardId, nodeId] : shardNodes) {
@@ -855,9 +855,10 @@ void TKqpTasksGraph::ResolveShards(TShardToNodeMap&& shardsToNodes) {
       MaxTasksGraph->AddTask(task, nodeId);
   }
   ```
-- Источник `shardNodes`:
+- Источник `shardNodes` — [`GetCsWriteAffinityShardIds()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1401) (унифицированный helper, объявлен в [`kqp_tasks_graph.h:204`](ydb/core/kqp/executer_actor/kqp_tasks_graph.h:204)):
   - `ColumnTableInfoPtr->Description.GetSharding()` → `GetCsShardingOrderedShardIds()` (если доступен)
   - `ShardKey->GetPartitions()` (fallback для CTAS, заполняется Table Resolver'ом)
+  - Тот же helper используется в `CollectFillSinkShards` (раздел 2.3.2.1), `BuildInternalSinks` (раздел 2.3.6) и `BuildColumnShardHashV1ForWriteAffinity` (раздел 2.3.7) — все этапы видят одинаковый набор и порядок шардов
 - Каждая задача получает `CsWriteAffinityShardId` в `TaskParams`
 - `stageType` = `FIXED` (количество задач = количество шардов, не зависит от upstream)
 - **Инварианты** (нарушение → `YQL_ENSURE` с ошибкой):
@@ -876,7 +877,7 @@ return fallbackBuffer;
 
 **Почему для CTAS используется HashShuffle proto?** CTAS создаёт новую таблицу — Table Resolver не может заполнить `ColumnTableInfoPtr`. Компилятор знает sharding columns из CREATE TABLE (PARTITION BY или PRIMARY KEY) и записывает их в `KeyColumns`. `FillStages()` извлекает эти `KeyColumns` и заполняет `CsShardingColumns`, поэтому `GetEffectiveShardingColumns` находит их в `CsShardingColumns` и не требует fallback.
 
-**CTAS fallback**: когда `ColumnTableInfoPtr == nullptr` (CTAS без PARTITION BY), `CountComputeTasks` использует `ShardKey->GetPartitions()` (заполняется Table Resolver'ом из `GetColumnShards()`). Если и `ShardKey` пуст — `YQL_ENSURE(false)` с ошибкой (оба источника недоступны — это баг). Порядок задач совпадает с порядком [`GetCsShardingOrderedShardIds()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1383) — критично для `TaskIndexByHash`.
+**CTAS fallback**: когда `ColumnTableInfoPtr == nullptr` (таблица ещё не существует на момент компиляции), `GetCsWriteAffinityShardIds()` использует `ShardKey->GetPartitions()` (заполняется Table Resolver'ом из `GetColumnShards()`). Если и `ShardKey` пуст — `YQL_ENSURE(false)` с ошибкой (оба источника недоступны — это баг). Порядок задач совпадает с порядком [`GetCsShardingOrderedShardIds()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1383) — критично для `TaskIndexByHash`.
 
 #### 2.3.4 `PlaceTasks()` — размещение задач по нодам
 
@@ -900,7 +901,7 @@ return fallbackBuffer;
 
 #### 2.3.5 `BuildComputeTasks()` — построение задач
 
-[`BuildComputeTasks()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:2910) заполняет метаданные задач.
+[`BuildComputeTasks()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:3034) заполняет метаданные задач.
 
 **Вход:** `stageInfo.Tasks` — задачи, размещённые по нодам в разделе 2.3.4. `TaskParams` — параметры задач (включая `CsWriteAffinityShardId` для affinity-задач).
 
@@ -918,9 +919,9 @@ return fallbackBuffer;
 
 #### 2.3.6 `BuildSinks()` → `BuildInternalSinks()` — заполнение TargetShardIds
 
-[`BuildInternalSinks()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:4018) заполняет `TargetShardIds` в sink settings.
+[`BuildInternalSinks()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:4022) заполняет `TargetShardIds` в sink settings.
 
-**Вход:** `stageInfo.Tasks` с `CsWriteAffinityShardId` в `TaskParams` (раздел 2.3.3). `effectiveShardingColumns` из [`GetEffectiveShardingColumns()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1368). `HasColumnShardHashV1Input(stageInfo)` — признак affinity. `ColumnTableInfoPtr` или `ShardKey` — источники `resolvedShardIds`.
+**Вход:** `stageInfo.Tasks` с `CsWriteAffinityShardId` в `TaskParams` (раздел 2.3.3). `effectiveShardingColumns` из [`GetEffectiveShardingColumns()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1368). `IsCsWriteAffinitySinkStage(stageInfo)` — признак affinity (строже, чем `HasColumnShardHashV1Input`: дополнительно проверяет, что стадия — OLAP-sink и ключевые колонки совпадают с sharding-колонками целевой таблицы, чтобы не принять shuffle-eliminated OLAP-read за affinity). `ColumnTableInfoPtr` или `ShardKey` — источники `resolvedShardIds`.
 
 **Было:**
 - `TargetShardIds` остаётся пустым
@@ -928,12 +929,12 @@ return fallbackBuffer;
 - 1 задача пишет все шарды
 
 **Стало (без аффинити):**
-- `TargetShardIds` остаётся пустым — условие `!effectiveShardingColumns.empty() && HasColumnShardHashV1Input` не выполняется (нет `ColumnShardHashV1`-входа)
+- `TargetShardIds` остаётся пустым — условие `!effectiveShardingColumns.empty() && IsCsWriteAffinitySinkStage` не выполняется (нет affinity-плана: оптимизатор построил `Map`, а не `HashShuffle(ColumnShardHashV1)`)
 - WriteActor обрабатывает все шарды (без фильтрации) — как в "Было"
 - 1 задача пишет все шарды
 
 **Стало (с аффинити):**
-- При `!effectiveShardingColumns.empty() && HasColumnShardHashV1Input`:
+- При `!effectiveShardingColumns.empty() && IsCsWriteAffinitySinkStage(stageInfo)`:
   - `resolvedShardIds` заполняется из `ColumnTableInfoPtr` или `ShardKey->GetPartitions()`
   - **Multi-task path** (N > 1): каждая задача получает ровно 1 шард:
     ```cpp
@@ -944,7 +945,7 @@ return fallbackBuffer;
   - **Single-task path** (N = 1): единственная задача получает все шарды
 - WriteActor фильтрует строки по `TargetShardIds` (отбрасывает строки для чужих шардов)
 
-При N>1 задач: `TargetShardIds = {shard_i}` для задачи i. Используется [`GetCsShardingOrderedShardIds()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1383) для корректного порядка шардов. **CTAS fallback**: когда `ColumnTableInfoPtr == nullptr`, `BuildInternalSinks` использует `ShardKey->GetPartitions()` для получения `resolvedShardIds`. Если `ShardKey` пуст — `resolvedShardIds` остаётся пустым, `TargetShardIds` не заполняется.
+При N>1 задач: `TargetShardIds = {shard_i}` для задачи i. `resolvedShardIds` получается через унифицированный helper [`GetCsWriteAffinityShardIds()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1401) (тот же источник и порядок, что в `CollectFillSinkShards` и `CountComputeTasks`): `ColumnTableInfoPtr` → [`GetCsShardingOrderedShardIds()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1383), fallback `ShardKey->GetPartitions()` для CTAS. Если оба источника пусты — `resolvedShardIds` остаётся пустым, `TargetShardIds` не заполняется.
 
 #### 2.3.7 `BuildKqpStageChannels()` → `BuildColumnShardHashV1ForWriteAffinity()` — построение hash routing
 
@@ -980,7 +981,7 @@ return fallbackBuffer;
 
 В case `kColumnShardHashV1` вызывается [`BuildColumnShardHashV1ForWriteAffinity`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1548). `TaskIndexByHash[bucket]` = индекс задачи, владеющей шардом bucket'а.
 
-**Shuffle Elimination skip:** Для CTAS sink с `ColumnShardHashV1`-входом shuffle elimination отключён. Причина: shuffle elimination использует `stageInfo.Tasks.size()` (количество задач Transform-стадии) как `SourceShardCount`, что отражает количество шардов *источника*, а не *целевой* таблицы. Это вызывает несоответствие hash bucket'ов между DQ `ColumnShardHashV1` routing и runtime `TConsistencySharding64`. В коде это реализовано добавлением условия `!isCsWriteAffinitySink` в два места [`BuildKqpStageChannels`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1945):
+**Shuffle Elimination skip:** Для CTAS sink с `ColumnShardHashV1`-входом shuffle elimination отключён. Причина: shuffle elimination использует `stageInfo.Tasks.size()` (количество задач Transform-стадии) как `SourceShardCount`, что отражает количество шардов *источника*, а не *целевой* таблицы. Это вызывает несоответствие hash bucket'ов между DQ `ColumnShardHashV1` routing и runtime `TConsistencySharding64`. В коде это реализовано добавлением условия `!isCsWriteAffinitySink` в два места [`BuildKqpStageChannels`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1922) (строки 1923 и 1948):
 ```cpp
 const bool isCsWriteAffinitySink = IsCsWriteAffinitySinkStage(stageInfo);
 if (enableShuffleElimination && !isCsWriteAffinitySink && !isFusedWithScanStage) { ... }

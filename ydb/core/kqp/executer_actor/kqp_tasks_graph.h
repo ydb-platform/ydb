@@ -192,6 +192,17 @@ struct TStageInfoMeta {
 
 };
 
+// Returns the ordered target shard IDs for a CS write affinity sink stage.
+// This is the unified shard source used by CollectFillSinkShards (shard
+// resolution), CountComputeTasks (per-shard task creation), BuildInternalSinks
+// (TargetShardIds) and BuildColumnShardHashV1ForWriteAffinity (hash routing),
+// guaranteeing that all of them see the same shard set in the same order.
+// Priority: ColumnTableInfoPtr sharding (canonical GetOrderedShardIds() order);
+// fallback: ShardKey partitions (for CTAS, where the target table does not
+// exist at compile time and ColumnTableInfo is unavailable).
+// Returns an empty vector when neither source is available.
+TVector<ui64> GetCsWriteAffinityShardIds(const TStageInfoMeta& meta);
+
 // things which are common for all tasks in the graph.
 struct TGraphMeta {
     bool IsScan = false; // indicates that ScanExecuter is in use.

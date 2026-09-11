@@ -232,15 +232,13 @@ protected:
                 NKikimrKqp::TKqpTableSinkSettings sinkSettings;
                 if (sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings)
                         && sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
-                    if (stageInfo.Meta.ShardKey) {
-                        for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
-                            shardIds.insert(partition.ShardId);
-                        }
-                    } else if (stageInfo.Meta.ColumnTableInfoPtr
-                            && stageInfo.Meta.ColumnTableInfoPtr->Description.HasSharding()) {
-                        for (const auto& shardId : stageInfo.Meta.ColumnTableInfoPtr->Description.GetSharding().GetColumnShards()) {
-                            shardIds.insert(shardId);
-                        }
+                    // Unified shard source: same priority (ColumnTableInfoPtr first,
+                    // ShardKey fallback) and order as CountComputeTasks,
+                    // BuildInternalSinks and BuildColumnShardHashV1ForWriteAffinity,
+                    // so the resolved shard set always covers the shards used for
+                    // per-shard task creation and hash routing.
+                    for (const auto& shardId : GetCsWriteAffinityShardIds(stageInfo.Meta)) {
+                        shardIds.insert(shardId);
                     }
                 }
             }

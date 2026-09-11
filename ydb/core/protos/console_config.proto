@@ -67,6 +67,7 @@ message TConfigItem {
     // Enum value is a field's number. Zero value (Auto) is used to automatically
     // detect kind for added items by checking set fields.
     enum EKind {
+        reserved 123;
         Auto = 0;
         ActorSystemConfigItem = 1;
         LogConfigItem = 2;
@@ -159,7 +160,6 @@ message TConfigItem {
         DeduGroupedMemoryLimiterConfig = 112;
         StatisticsConfigItem = 113;
         TliConfigItem = 120;
-        UserFacingTracingConfigItem = 123;
 
         // synthetic kinds for audit purposes only
         DatabaseYamlConfigChangeItem = 32767;

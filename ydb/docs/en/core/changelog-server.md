@@ -1,5 +1,48 @@
 # {{ ydb-short-name }} Server changelog
 
+## Version 26.3 {#26-3}
+
+Release date: TBD.
+
+### Functionality
+
+* [Added configurable throttling of synchronous VDisk writes](https://github.com/ydb-platform/ydb/pull/43895) based on the current amount of fresh data. This limits memory growth under intensive write workloads.
+* [Literal `DEFAULT` values can be added to write query plans at compile time](https://github.com/ydb-platform/ydb/pull/45049), avoiding their runtime materialization. The behavior is controlled by `TableServiceConfig.EnableCompileTimeDefaults`.
+* [Added JSON indexes](https://github.com/ydb-platform/ydb/pull/36478) for accelerating queries with `JSON_EXISTS` and `JSON_VALUE`. Index creation and automatic selection are controlled by the `EnableJsonIndex` and `EnableJsonIndexAutoSelect` feature flags.
+* [Added authentication through external OpenID Connect (OIDC) identity providers](https://github.com/ydb-platform/ydb/pull/39558). {{ ydb-short-name }} can validate JWT tokens using the provider's JSON Web Key Set (JWKS) and periodically refresh authentication data.
+* [Added strict serializable isolation for read-write transactions](https://github.com/ydb-platform/ydb/pull/43962), including real-time transaction ordering and commit timestamps. The mode is controlled by the `EnableStrictSerializableIsolation` feature flag.
+* Added [storage group decommissioning](./maintenance/manual/virtual_storage_groups_decommit.md?version=v26.3). Data is moved to virtual groups in the background, while applications can continue reading and writing data.
+* [Backup restoration can write SST parts directly to DataShard](https://github.com/ydb-platform/ydb/pull/45009), reducing CPU and disk usage compared to row-by-row restoration. The behavior is controlled by `EnableDataShardDirectPartImport`.
+* [Added a compact full-text index format](https://github.com/ydb-platform/ydb/pull/43404) that reduces storage consumption. The format is controlled by the `EnableCompactFulltextIndex` feature flag.
+* Full-text indexes support [filter columns](./dev/fulltext-indexes.md?version=v26.3#filtered), allowing search within a logical partition of a table.
+* [Streaming writes are enabled for secondary indexes, `RETURNING`, and `DEFAULT`](https://github.com/ydb-platform/ydb/pull/42752). The streaming execution path reduces memory consumption and latency for large write operations.
+* Workload Manager resource pool classifiers support [`ACTION="reject"`](https://github.com/ydb-platform/ydb/pull/46051), which rejects matching queries before they are routed to a resource pool.
+* Full-text indexes can be created for tables with [arbitrary primary key types](./dev/fulltext-indexes.md?version=v26.3#primary-key). The capability is controlled by the `EnableFulltextIndexRowId` feature flag and is disabled by default in this release.
+* Added [hybrid search](./dev/hybrid-search.md?version=v26.3), which combines full-text relevance and vector similarity into a single ranked result. The capability is controlled by `TableServiceConfig.EnableHybridSearch` and is disabled by default in this release.
+* [Added transfer metrics and statistics to `DescribeTransfer`](https://github.com/ydb-platform/ydb/pull/30345), improving transfer monitoring and diagnostics.
+* Kafka API supports [mutual TLS authentication](./reference/kafka-api/auth.md?version=v26.3). A client certificate is mapped to a security identifier, and SASL authentication is not required for the connection.
+* [Added a configurable limit for stored forced-compaction operations](https://github.com/ydb-platform/ydb/pull/43766). Completed and cancelled operations can be removed automatically when the limit is reached.
+* [Change Data Capture records can include the OpenTelemetry trace ID](https://github.com/ydb-platform/ydb/pull/34489) of the request that produced the change.
+* [`ANALYZE` is represented as a background operation](./yql/reference/syntax/analyze.md?version=v26.3) that can be monitored, cancelled, and forgotten through the standard operation APIs and CLI commands.
+* [Local indexes are represented as schema objects](https://github.com/ydb-platform/ydb/pull/43144), including prefix Bloom filters for row-oriented tables and local indexes for column-oriented tables. The behavior is controlled by `EnableLocalIndexAsSchemeObject`.
+* [Added the Tiling++ compaction strategy](https://github.com/ydb-platform/ydb/pull/36711) for column-oriented tables. It can be selected with the `default_compaction_preset` setting.
+* Administrators can [require non-administrative requests to static nodes to specify a database](https://github.com/ydb-platform/ydb/pull/40964) by enabling `ForbidRequestsToStaticNodesWithoutDatabase`. The restriction is disabled by default in this release.
+* [Removed the experimental PostgreSQL wire protocol and PostgreSQL SQL syntax](https://github.com/ydb-platform/ydb/pull/45922) from `ydbd`. PostgreSQL-compatible types, `Pg::` functions, and federated queries to external PostgreSQL databases are not affected.
+* [Added an in-memory KQP level cache for vector indexes](./dev/vector-indexes-kmeans-tree-type.md?version=v26.3). Configure its maximum size with `resource_manager.kqp_level_cache_max_size_bytes`.
+* [Added support for the AccessService V2 interface](https://github.com/ydb-platform/ydb/pull/43466), including batched authorization requests. The interface is controlled by `EnableAccessServiceV2Interface`.
+* [Local SyncLog data cutting is enabled by default](https://github.com/ydb-platform/ydb/pull/45158), improving full VDisk synchronization.
+* [Backup export and import are available for column-oriented tables](https://github.com/ydb-platform/ydb/pull/32930), including operations with S3-compatible storage.
+* [Min-max indexes are enabled for column-oriented tables](https://github.com/ydb-platform/ydb/pull/38585). ColumnShard can use them to skip data portions outside query ranges, reducing disk reads and query latency.
+* [Database-level small-blob quotas are enforced for column-oriented tables](https://github.com/ydb-platform/ydb/pull/43393). New writes are rejected after the quota derived from `data_size_hard_quota` is exhausted.
+* [`DISTINCT` and `DISTINCT LIMIT` are pushed down to ColumnShard](https://github.com/ydb-platform/ydb/pull/38461) for column-oriented tables, reducing intermediate data and query execution time.
+* [The Trivial Reader is enabled for column-oriented table scans](https://github.com/ydb-platform/ydb/pull/38377), providing a more efficient read path for applicable queries.
+* Column-oriented table columns support [dictionary encoding](./yql/reference/syntax/create_table/index.md?version=v26.3). Use `ENCODING(DICT)` to reduce storage consumption for low-cardinality values.
+* [Bulk authorization requests to AccessService are enabled by default](https://github.com/ydb-platform/ydb/pull/44266), reducing authorization request overhead.
+* Streaming YQL queries can [read user message attributes from topics](./concepts/query_execution/topics.md?version=v26.3#system-metadata) through the `__ydb_user_attributes` service field.
+* [Snapshot retention is enabled for long-running analytical queries](https://github.com/ydb-platform/ydb/pull/36668), preventing column shards from removing data required by active reads.
+* [Topic-only transactions use BufferActor when committing](https://github.com/ydb-platform/ydb/pull/37432), optimizing commit processing when no tables participate in the transaction.
+* [Topic reads that start from a timestamp filter out messages with earlier write timestamps](https://github.com/ydb-platform/ydb/pull/40064), including messages stored in the same blob as newer messages.
+
 ## Version 26.1 {#26-1}
 
 ### Version 26.1.1.22 {#26-1-1-22}

@@ -1,3 +1,4 @@
 * The index is always [local](../../../../concepts/glossary.md#local-index) (`LOCAL`); there is no [global](../../../../concepts/glossary.md#secondary-index) variant.
 * Queries do not use the `VIEW <index>` syntax (unlike, for example, [fulltext indexes](../../../../dev/fulltext-indexes.md)).
 * The filter is applied on read only to data fragments where an index block was already stored during a write or [portion merge](../../../../concepts/glossary.md#compaction), other fragments are not skipped by this index until merge.
+* On [row-oriented tables](../../../../concepts/glossary.md#row-oriented-table), `bloom_filter` is implemented as a **prefix bloom filter**: the indexed columns must form a left prefix of the [primary key](../../../../concepts/glossary.md#primary-key). The filter is built over that key prefix and accelerates point lookups and range scans that constrain the prefix. Multiple bloom indexes over the same prefix length are not allowed.

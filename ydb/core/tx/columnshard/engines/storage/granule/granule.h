@@ -177,8 +177,8 @@ public:
         return ActualizationIndex->CollectMetadataRequests(Portions);
     }
 
-    std::vector<TCSMetadataRequest> CollectMoveDataMetadataRequests() {
-        return ActualizationIndex->CollectMoveDataMetadataRequests(Portions);
+    std::vector<TCSMetadataRequest> CollectMoveDataMetadataRequests(const TInstant now) {
+        return ActualizationIndex->CollectMoveDataMetadataRequests(Portions, now);
     }
 
     TInsertWriteId BuildNextInsertWriteId() {

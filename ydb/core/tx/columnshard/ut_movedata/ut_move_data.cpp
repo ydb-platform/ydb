@@ -305,7 +305,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             for (ui64 portionId = 1; portionId <= PortionsCount; ++portionId) {
                 actualizer->AddToInitialAndPendingForTest(portionId);
             }
-            return actualizer->BuildMoveDataMetadataRequests(knownPortions, actualizer);
+            return actualizer->BuildMoveDataMetadataRequests(knownPortions, actualizer, TInstant::Seconds(1000));
         };
 
         auto batchSizes = [](const std::vector<NOlap::TCSMetadataRequest>& requests) {
@@ -355,10 +355,50 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         {
             auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TSoftMemoryLimitController>(3 * portionMemory);
             auto actualizer = std::make_shared<TMoveDataActualizerTestable>(targetGroups, versionedIndex);
-            UNIT_ASSERT(actualizer->BuildMoveDataMetadataRequests(portions, actualizer).empty());
+            UNIT_ASSERT(actualizer->BuildMoveDataMetadataRequests(portions, actualizer, TInstant::Seconds(1000)).empty());
         }
     }
 
+    // Every background pass and every reply rebuilds the requests, so a pending portion must be asked for once until answered.
+    Y_UNIT_TEST(PendingPortionIsRequestedOnceUntilAnswered) {
+        const auto pathId = NOlap::TInternalPathId::FromRawValue(1);
+        auto cache = std::make_shared<NOlap::TSchemaObjectsCache>();
+        NOlap::TVersionedIndex versionedIndex;
+        versionedIndex.AddIndex(NOlap::TSnapshot(1, 1), cache->UpsertIndexInfo(NOlap::NTest::MakePortionTestIndexInfo()));
+        THashMap<ui64, NOlap::TPortionInfo::TPtr> portions;
+        for (ui64 portionId = 1; portionId <= 3; ++portionId) {
+            portions.emplace(
+                portionId, NOlap::NTest::MakeTestCompactedPortion(pathId, portionId, 10, 19, 10, NOlap::TSnapshot(1, 1), std::nullopt));
+        }
+        // A zero soft limit makes every portion its own request.
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TSoftMemoryLimitController>(0);
+        auto actualizer = std::make_shared<TMoveDataActualizerTestable>(THashSet<ui32>{ 100 }, versionedIndex);
+        for (ui64 portionId = 1; portionId <= 3; ++portionId) {
+            actualizer->AddToInitialAndPendingForTest(portionId);
+        }
+        auto requested = [&](const TInstant now) {
+            TVector<ui64> result;
+            for (auto&& request : actualizer->BuildMoveDataMetadataRequests(portions, actualizer, now)) {
+                for (auto&& portionId : request.GetRequest()->GetPortionIds()) {
+                    result.emplace_back(portionId);
+                }
+            }
+            Sort(result);
+            return result;
+        };
+
+        const TInstant start = TInstant::Seconds(1000);
+        UNIT_ASSERT_VALUES_EQUAL(requested(start), (TVector<ui64>{ 1, 2, 3 }));
+        UNIT_ASSERT_VALUES_EQUAL_C(requested(start + TDuration::Seconds(1)), TVector<ui64>(), "outstanding requests must not be repeated");
+
+        // An answer that could not resolve portion 1 leaves it pending, so it is asked for again.
+        actualizer->OnMetadataRequestAnswered({ 1 });
+        UNIT_ASSERT_VALUES_EQUAL(requested(start + TDuration::Seconds(2)), (TVector<ui64>{ 1 }));
+
+        // Requests that never got an answer are repeated after the expiry; the fresh request for portion 1 is not.
+        const TInstant pastExpiry = start + NOlap::NActualizer::TMoveDataActualizer::MetadataRequestExpiry + TDuration::Seconds(1);
+        UNIT_ASSERT_VALUES_EQUAL(requested(pastExpiry), (TVector<ui64>{ 2, 3 }));
+    }
 }   // Y_UNIT_TEST_SUITE
 
 }   // namespace NKikimr

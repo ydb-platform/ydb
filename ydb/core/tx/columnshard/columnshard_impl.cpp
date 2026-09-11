@@ -912,7 +912,8 @@ void TColumnShard::SetupMoveDataMetadata() {
     if (!MoveDataState.Active || !HasIndex()) {
         return;
     }
-    StartMetadataRequests(GetIndexAs<NOlap::TColumnEngineForLogs>().CollectMoveDataMetadataRequests(), MoveDataTaskSubscription);
+    StartMetadataRequests(
+        GetIndexAs<NOlap::TColumnEngineForLogs>().CollectMoveDataMetadataRequests(NActors::TActivationContext::Now()), MoveDataTaskSubscription);
 }
 
 bool TColumnShard::SetupTtl() {

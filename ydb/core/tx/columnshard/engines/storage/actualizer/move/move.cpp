@@ -18,12 +18,14 @@ namespace {
 class TMoveDataActualizationReply: public IMetadataAccessorResultProcessor {
 private:
     std::weak_ptr<TMoveDataActualizer> MoveDataActualizer;
+    const std::vector<ui64> PortionIds;
 
     void DoApplyResult(NResourceBroker::NSubscribe::TResourceContainer<TDataAccessorsResult>&& result, TColumnEngineForLogs&) override {
         auto locked = MoveDataActualizer.lock();
         if (!locked) {
             return;
         }
+        locked->OnMetadataRequestAnswered(PortionIds);
         if (result.GetValue().HasErrors()) {
             // Affected portions stay in PendingPortionIds and are re-requested next cycle.
             YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
@@ -39,8 +41,9 @@ private:
     }
 
 public:
-    explicit TMoveDataActualizationReply(const std::shared_ptr<TMoveDataActualizer>& actualizer)
+    TMoveDataActualizationReply(const std::shared_ptr<TMoveDataActualizer>& actualizer, std::vector<ui64>&& portionIds)
         : MoveDataActualizer(actualizer)
+        , PortionIds(std::move(portionIds))
     {
         AFL_VERIFY(!!actualizer);
     }
@@ -83,6 +86,7 @@ void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExter
 void TMoveDataActualizer::DoRemovePortion(const ui64 portionId) {
     InitialPortionIds.erase(portionId);
     PendingPortionIds.erase(portionId);
+    RequestedAt.erase(portionId);
     InFlightPortionIds.erase(portionId);
     RemoveFromActiveQueue(portionId);
 }
@@ -171,16 +175,27 @@ void TMoveDataActualizer::ActualizePortionInfo(const TPortionDataAccessor& acces
     AFL_VERIFY(PortionAddress.emplace(portionId, std::move(address)).second);
 }
 
+void TMoveDataActualizer::OnMetadataRequestAnswered(const std::vector<ui64>& portionIds) {
+    for (const ui64 portionId : portionIds) {
+        RequestedAt.erase(portionId);
+    }
+}
+
 std::vector<TCSMetadataRequest> TMoveDataActualizer::BuildMoveDataMetadataRequests(
-    const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TMoveDataActualizer>& self) const {
+    const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TMoveDataActualizer>& self, const TInstant now) {
     if (PendingPortionIds.empty()) {
         return {};
     }
     const ui64 batchMemorySoftLimit = NYDBTest::TControllers::GetColumnShardController()->GetMetadataRequestSoftMemoryLimit();
     std::vector<TCSMetadataRequest> requests;
     std::shared_ptr<TDataAccessorsRequest> currentRequest;
+    std::vector<ui64> currentPortionIds;
 
     for (auto portionId : PendingPortionIds) {
+        // Every background pass and every reply lands here, so skip portions whose request is still unanswered.
+        if (const auto* requestedAt = RequestedAt.FindPtr(portionId); requestedAt && now < *requestedAt + MetadataRequestExpiry) {
+            continue;
+        }
         auto it = portions.find(portionId);
         if (it == portions.end()) {
             continue;
@@ -189,13 +204,16 @@ std::vector<TCSMetadataRequest> TMoveDataActualizer::BuildMoveDataMetadataReques
             currentRequest = std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::MOVE_DATA);
         }
         currentRequest->AddPortion(it->second);
+        currentPortionIds.emplace_back(portionId);
+        RequestedAt[portionId] = now;
         if (currentRequest->PredictAccessorsMemory(it->second->GetSchema(VersionedIndex)) >= batchMemorySoftLimit) {
-            requests.emplace_back(currentRequest, std::make_shared<TMoveDataActualizationReply>(self));
+            requests.emplace_back(currentRequest, std::make_shared<TMoveDataActualizationReply>(self, std::move(currentPortionIds)));
             currentRequest.reset();
+            currentPortionIds.clear();
         }
     }
     if (currentRequest) {
-        requests.emplace_back(std::move(currentRequest), std::make_shared<TMoveDataActualizationReply>(self));
+        requests.emplace_back(std::move(currentRequest), std::make_shared<TMoveDataActualizationReply>(self, std::move(currentPortionIds)));
     }
     return requests;
 }
@@ -216,6 +234,7 @@ void TMoveDataActualizer::Refresh(const TAddExternalContext& externalContext) {
     PortionsToMove.clear();
     PortionAddress.clear();
     InFlightPortionIds.clear();
+    RequestedAt.clear();
     RejectedPortions = 0;
 
     for (auto& [portionId, portion] : externalContext.GetPortions()) {

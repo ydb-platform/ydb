@@ -30,6 +30,8 @@ private:
     THashMap<ui64, TRWAddress> PortionAddress;
     // Still counted: old blobs reach the delete queues only on commit, so the gate must wait.
     THashSet<ui64> InFlightPortionIds;
+    // Pending portions with an unanswered accessor request; the expiry re-asks for a request that got lost.
+    THashMap<ui64, TInstant> RequestedAt;
     ui64 RejectedPortions = 0;
 
     // Keeps InitialPortionIds intact so an aborted change can re-enter PendingPortionIds.
@@ -46,6 +48,9 @@ public:
     static bool HasBlobInGroups(const std::vector<TUnifiedBlobId>& blobIds, const THashSet<ui32>& groups);
 
     void ActualizePortionInfo(const TPortionDataAccessor& accessor);
+
+    // Called for every reply, errors included: a portion the reply could not resolve stays pending and is asked for again.
+    void OnMetadataRequestAnswered(const std::vector<ui64>& portionIds);
 
 protected:
     // Protected test helpers: unit tests subclass to reach them, production code cannot.
@@ -81,7 +86,7 @@ protected:
 
 public:
     std::vector<TCSMetadataRequest> BuildMoveDataMetadataRequests(
-        const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TMoveDataActualizer>& self) const;
+        const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TMoveDataActualizer>& self, const TInstant now);
 
     TMoveDataQueueSizes GetMoveDataQueueSizes() const;
 
@@ -90,6 +95,7 @@ public:
     }
 
     static constexpr TDuration AdmissionWindow = TDuration::Minutes(10);
+    static constexpr TDuration MetadataRequestExpiry = TDuration::Minutes(5);
 
     void Refresh(const TAddExternalContext& externalContext);
 

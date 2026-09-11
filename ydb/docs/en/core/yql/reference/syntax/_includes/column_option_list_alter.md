@@ -23,12 +23,11 @@ Sets a default value for the column. If no value is specified for this column wh
 
 ### NOT NULL
 
-There are two operations:
+`DROP NOT NULL` removes the `NOT NULL` constraint from a non-key column, allowing `NULL` values. This operation is supported for both [row-oriented](../../../../concepts/datamodel/table.md#row-oriented-tables) and [column-oriented](../../../../concepts/datamodel/table.md#column-oriented-tables) tables.
 
-* `SET NOT NULL` — sets the `NOT NULL` constraint for the column.
-* `DROP NOT NULL` — removes the `NOT NULL` constraint from the column, again allowing `NULL` values.
-
-For more information about how these operations work, see [here](../alter_table/not_null.md).
+```yql
+ALTER TABLE table_name ALTER COLUMN column_name DROP NOT NULL;
+```
 
 ### COMPRESSION([algorithm=<algorithm_name>[, level=<value>]]) {#compression}
 

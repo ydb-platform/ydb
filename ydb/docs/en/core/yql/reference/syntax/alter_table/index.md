@@ -23,4 +23,3 @@ ALTER TABLE table_name action1, action2, ..., actionN;
 {% endif %}
 
 * [Running forced compaction](compact.md).
-* [Setting and resetting the NOT NULL constraint](not_null.md).

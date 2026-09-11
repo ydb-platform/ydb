@@ -40,7 +40,8 @@ public:
     //! Set number of network threads, default: 2
     TDriverConfig& SetNetworkThreadsNum(size_t sz);
 
-    //! Set number of client pool threads, if 0 adaptive thread pool will be used.
+    //! Set the process-wide callback thread count if this driver initializes the executor.
+    //! Later drivers reuse the selected executor. If 0, an adaptive thread pool is used.
     //! NOTE: in case of no zero value it is possible to get deadlock if all threads
     //! of this pool is blocked somewhere in user code.
     //! default: 0
@@ -177,8 +178,12 @@ public:
     //! Log backend.
     TDriverConfig& SetLog(std::unique_ptr<TLogBackend>&& log);
 
-    //! Set executor for async responses.
-    //! If not set, default executor will be used.
+    //! The first driver selects the process-wide executor for async responses, or starts
+    //! a default executor if none is set. Later drivers reuse it unless they explicitly
+    //! select a different instance, which throws TContractViolation.
+    //! The executor is retained for the process lifetime and is never stopped by the SDK.
+    //! The caller must keep it running. Its startup must not use the SDK runtime or wait
+    //! for another thread that does.
     TDriverConfig& SetExecutor(std::shared_ptr<IExecutor> executor);
 
     //! Set external metrics registry implementation.
@@ -204,8 +209,9 @@ public:
     //! Cancel all currently running and future requests
     //! This method is useful to make sure there are no new asynchronous
     //! callbacks and it is safe to destroy the driver
-    //! When wait is true this method will not return until the underlying
-    //! client thread pool is stopped completely
+    //! When wait is true, waits for this driver's network requests and response callbacks,
+    //! including destruction of their captures. The shared callback executor keeps running.
+    //! Calls from SDK callbacks defer shutdown to avoid waiting on the current callback.
     void Stop(bool wait = false);
 
     template<typename TExtension>

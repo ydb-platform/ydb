@@ -1185,6 +1185,143 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         }
     }
 
+    Y_UNIT_TEST(ProjectedDistanceMustUseInputRow) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(false);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForPrefixedVectorIndex(db);
+        DoCreatePrefixedVectorIndex(session, 2);
+
+        const TString query(Q1_(R"(
+            DECLARE $captured AS Struct<emb: String>;
+            DECLARE $target AS String;
+
+            SELECT pk, Knn::CosineDistance($captured.emb, $target) AS distance
+            FROM `/Root/TestTable` VIEW index
+            WHERE user = "user_a"
+            ORDER BY distance
+            LIMIT 3;
+        )"));
+        auto result = session.ExplainDataQuery(query).ExtractValueSync();
+        UNIT_ASSERT(!result.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "projection or sorting must contain distance");
+    }
+
+    Y_UNIT_TEST_TWIN(ProjectedDistanceKeepsStructMemberTarget, EnableVectorSearchActor) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(EnableVectorSearchActor);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForPrefixedVectorIndex(db);
+        DoCreatePrefixedVectorIndex(session, 2);
+
+        const TString query(Q1_(R"(
+            DECLARE $target AS Struct<emb: String>;
+
+            SELECT pk, Knn::CosineDistance(emb, $target.emb) AS distance
+            FROM `/Root/TestTable` VIEW index
+            WHERE user = "user_a"
+            ORDER BY distance
+            LIMIT 3;
+        )"));
+        const auto params = db.GetParamsBuilder()
+            .AddParam("$target")
+                .BeginStruct()
+                    .AddMember("emb").String("\x67\x68\x02")
+                .EndStruct()
+                .Build()
+            .Build();
+        auto result = session.ExecuteDataQuery(
+            query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 3u);
+    }
+
+    Y_UNIT_TEST(LegacyLeadingSubPrefixScalesFirstLevelBudgetByRootGroups) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetUseRealThreads(false)
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(false);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto* runtime = kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return DoCreateTableForPrefixedVectorIndex(db); });
+
+        kikimr.RunCall([&] {
+            for (const auto& query : {
+                TString(Q_(R"(UPDATE `/Root/TestTable` SET data="group_1" WHERE user="user_a" AND pk < 50;)")),
+                TString(Q_(R"(UPDATE `/Root/TestTable` SET data="group_2" WHERE user="user_a" AND pk >= 50;)")),
+            }) {
+                auto result = session.ExecuteDataQuery(
+                    query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (user, data, emb)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+            )"));
+            auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        });
+
+        THashSet<TActorId> levelActors;
+        for (const auto shardId : GetTableShards(
+                 &kikimr.GetTestServer(), runtime->AllocateEdgeActor(),
+                 "/Root/TestTable/index/indexImplLevelTable"))
+        {
+            levelActors.insert(ResolveTablet(*runtime, shardId));
+        }
+
+        TVector<ui64> firstLevelLimits;
+        runtime->SetEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType &&
+                levelActors.contains(ev->GetRecipientRewrite()))
+            {
+                const auto& read = ev->Get<TEvDataShard::TEvRead>()->Record;
+                if (read.HasVectorTopK()) {
+                    firstLevelLimits.push_back(read.GetVectorTopK().GetLimit());
+                }
+            }
+            return false;
+        });
+
+        const TString query(Q_(R"(
+            pragma ydb.KMeansTreeSearchTopSize = "1";
+            SELECT pk FROM `/Root/TestTable` VIEW index
+            WHERE user = "user_a"
+            ORDER BY Knn::CosineDistance(emb, "\x67\x68\x02")
+            LIMIT 6;
+        )"));
+        auto result = kikimr.RunCall([&] {
+            return session.ExecuteDataQuery(
+                query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_C(!firstLevelLimits.empty(), "expected a first-level vector TopK read");
+        for (const ui64 limit : firstLevelLimits) {
+            UNIT_ASSERT_VALUES_EQUAL(limit, 2u);
+        }
+    }
+
     Y_UNIT_TEST_QUAD(PrefixedVectorIndexTruncateTable, Covered, Overlap) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto serverSettings = TKikimrSettings().SetFeatureFlags(featureFlags);

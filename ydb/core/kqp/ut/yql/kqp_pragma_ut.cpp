@@ -248,6 +248,22 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
             [[1u];[4u]];
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
+
+    Y_UNIT_TEST(DecimalCommonTypeConversionMode) {
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetQueryClient();
+
+        auto result = client.ExecuteQuery(R"(
+            PRAGMA config.flags("DecimalCommonTypeConversionMode", "with_common_type_fixup");
+            SELECT Decimal("1.234", 4, 3) + Decimal("1234567.89", 9, 2);
+        )", NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetDecimal().ToString(), "1234569.124");
+        UNIT_ASSERT(!parser.TryNextRow());
+    }
 }
 
 } // namspace NKqp

@@ -25,7 +25,7 @@ def kikimr_udfs(request):
             "enable_topics_sql_io_operations",
             "enable_streaming_queries",
         ],
-        query_service_config={"available_external_data_sources": ["Ydb", "YdbTopics"]},
+        query_service_config={"available_external_data_sources": ["Ydb"]},
         pq_client_service_types=["yandex-query"],
         table_service_config={"enable_compile_cache_warmup": False},
         default_clusteradmin="root@builtin",

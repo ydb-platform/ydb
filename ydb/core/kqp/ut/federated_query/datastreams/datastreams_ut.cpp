@@ -33,7 +33,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "database_name"_a = YDB_DATABASE
         ), EStatus::SCHEME_ERROR);
 
-        // YdbTopics is not allowed.
+        // "YdbTopics" is not a valid EDS source type — it encodes an object
+        // kind (topic), not a connection type. Creating an EDS with it fails.
         ExecSchemeQuery(fmt::format(
             R"sql(
                 CREATE EXTERNAL DATA SOURCE `sourceName2` WITH (
@@ -43,7 +44,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     AUTH_METHOD="NONE"
                 );
             )sql",
-            "source_type"_a = ToString(NYql::EDatabaseType::YdbTopics),
+            "source_type"_a = "YdbTopics",
             "location"_a = YDB_ENDPOINT,
             "database_name"_a = YDB_DATABASE
         ), EStatus::SCHEME_ERROR);
@@ -78,57 +79,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CreatePqSource("sourceName");
     }
 
-    Y_UNIT_TEST_F(ReadTopicFailedWithoutAvailableExternalDataSourcesYdbTopics, TStreamingTestFixture) {
-        auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
-        cfg.AddAvailableExternalDataSources("Ydb");
-        cfg.SetAllExternalDataSourcesAreAvailable(false);
-
-        const std::string sourceName = "sourceName";
-        CreatePqSource(sourceName);
-
-        const std::string topicName = "topicName";
-        CreateTopic(topicName);
-
-        const auto scriptExecutionOperation = ExecAndWaitScript(fmt::format(R"(
-            SELECT * FROM `{source}`.`{topic}` WITH (
-                STREAMING = "TRUE",
-                FORMAT = "json_each_row",
-                SCHEMA = (
-                    key String NOT NULL,
-                    value String NOT NULL
-                )
-            )
-            LIMIT 1;
-            )",
-            "source"_a=sourceName,
-            "topic"_a=topicName
-        ), EExecStatus::Failed);
-
-        const auto& status = scriptExecutionOperation.Status();
-        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Unsupported. Failed to load metadata for table: /Root/sourceName.[topicName] data source generic doesn't exist");
-    }
-
-    Y_UNIT_TEST_F(ReadTopicEndpointValidationWithoutAvailableExternalDataSourcesYdbTopics, TStreamingTestFixture) {
-        auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
-        cfg.AddAvailableExternalDataSources("Ydb");
-        cfg.SetAllExternalDataSourcesAreAvailable(false);
-
-        constexpr char sourceName[] = "sourceName";
-        CreatePqSource(sourceName);
-
-        // Execute script without existing topic
-        const auto scriptExecutionOperation = ExecAndWaitScript(fmt::format(R"(
-            SELECT * FROM `{source}`.`topicName` WITH (STREAMING = "TRUE")
-            )",
-            "source"_a=sourceName
-        ), EExecStatus::Failed);
-
-        const auto& status = scriptExecutionOperation.Status();
-        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Unsupported. Failed to load metadata for table: /Root/sourceName.[topicName] data source generic doesn't exist");
-    }
-
     Y_UNIT_TEST_F(ReadTopicEndpointValidation, TStreamingTestFixture) {
         constexpr char sourceName[] = "sourceName";
         CreatePqSource(sourceName);
@@ -150,7 +100,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     Y_UNIT_TEST_F(ReadTopic, TStreamingTestFixture) {
         auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
         cfg.AddAvailableExternalDataSources("Ydb");
-        cfg.AddAvailableExternalDataSources("YdbTopics");
         cfg.SetAllExternalDataSourcesAreAvailable(false);
 
         const std::string sourceName = "sourceName";

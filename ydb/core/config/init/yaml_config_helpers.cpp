@@ -83,7 +83,7 @@ TString StripSourceLocationPrefix(TStringBuf message) {
 }
 
 [[noreturn]] void ThrowJsonToProtoError(TStringBuf source, const NYamlConfig::TBasicUnknownFieldsCollector& collector,
-                                        const yexception& e, bool allowUnknownFields) {
+    const yexception& e, bool allowUnknownFields) {
     if (!allowUnknownFields && !collector.GetUnknownKeys().empty()) {
         ThrowUnknownYamlFieldsError(source, collector);
     }
@@ -118,7 +118,7 @@ NJson::TJsonValue LoadYamlAsJsonOrThrow(const TString& config, TStringBuf source
 }
 
 void ParseJsonConfigOrThrow(const NJson::TJsonValue& json, TStringBuf source, NKikimrConfig::TAppConfig& config,
-                           bool allowUnknownFields) {
+    bool allowUnknownFields) {
     const bool hasMetadataConfig = json.Has("metadata") && json.Has("config") && json["config"].IsMap();
     TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> collector =
         new NYamlConfig::TBasicUnknownFieldsCollector(hasMetadataConfig ? "config" : "");

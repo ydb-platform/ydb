@@ -210,7 +210,7 @@ namespace NKikimr::NYaml {
     }
 
     void ExtractExtraFields(NJson::TJsonValue& json, TTransformContext& ctx,
-                            const NProtobufJson::TJson2ProtoConfig& convertConfig) {
+        const NProtobufJson::TJson2ProtoConfig& convertConfig) {
         // for static group
         const TVector<TString> path = StringSplitter(COMBINED_DISK_INFO_PATH.SubStr(1)).Split('/');
         Iterate(json, COMBINED_DISK_INFO_PATH, [&ctx, &convertConfig, &path](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {

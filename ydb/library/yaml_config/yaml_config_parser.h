@@ -66,7 +66,7 @@ namespace NKikimr::NYaml {
     TString ParseProtoToYaml(const NKikimrConfig::StorageConfig& protoConfig);
 
     void ExtractExtraFields(NJson::TJsonValue& json, TTransformContext& ctx,
-                            const NProtobufJson::TJson2ProtoConfig& convertConfig);
+        const NProtobufJson::TJson2ProtoConfig& convertConfig);
     void ClearEphemeralFields(NJson::TJsonValue& json);
     void ClearNonEphemeralFields(NJson::TJsonValue& json);
 

@@ -187,7 +187,7 @@ namespace NKikimr::NStorage {
                     Y_ABORT_UNLESS(!cookie);
                     cookie = ++ValidateRequestCookie;
                     NTabletPipe::SendData(SelfId(), ConsolePipeId,
-                                          new TEvBlobStorage::TEvControllerValidateConfigRequest(yaml, allowUnknownFields), cookie);
+                        new TEvBlobStorage::TEvControllerValidateConfigRequest(yaml, allowUnknownFields), cookie);
                 }
             } else {
                 OnConsolePipeError();
@@ -255,7 +255,7 @@ namespace NKikimr::NStorage {
     }
 
     bool TDistributedConfigKeeper::EnqueueConsoleConfigValidation(TActorId actorId, bool enablingDistconf, TString yaml,
-                                                                  bool allowUnknownFields) {
+        bool allowUnknownFields) {
         if (!ConsolePipeId) {
             ConnectToConsole(enablingDistconf);
             if (!ConsolePipeId) {
@@ -269,7 +269,7 @@ namespace NKikimr::NStorage {
         if (ConsoleConnected) {
             qCookie = ++ValidateRequestCookie;
             NTabletPipe::SendData(SelfId(), ConsolePipeId,
-                                  new TEvBlobStorage::TEvControllerValidateConfigRequest(qYaml, qAllowUnknownFields), qCookie);
+                new TEvBlobStorage::TEvControllerValidateConfigRequest(qYaml, qAllowUnknownFields), qCookie);
         }
 
         return true;

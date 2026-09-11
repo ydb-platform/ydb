@@ -732,7 +732,7 @@ namespace NKikimr::NStorage {
 
         // issue scatter task to collect configs and then bootstrap cluster with specified cluster UUID
         auto done = [this, selfAssemblyUUID = TString(selfAssemblyUUID),
-                     allowUnknownFields = request.GetAllowUnknownFields()](TEvGather *res) {
+            allowUnknownFields = request.GetAllowUnknownFields()](TEvGather *res) {
             if (!res->HasCollectConfigs()) {
                 throw TExError() << "Incorrect response to CollectConfigs";
             }

@@ -281,6 +281,7 @@ namespace NKikimr::NAutoConfigInitializer {
                 executor->SetPriority(priority);
                 executor->SetSpinThreshold(0);
                 executor->SetHasSharedThread(hasSharedThread);
+                executor->SetAllThreadsAreShared(useUnitedPool);
             };
 
             assignPool(systemExecutor, "System", 30, cpuCount >= 3);

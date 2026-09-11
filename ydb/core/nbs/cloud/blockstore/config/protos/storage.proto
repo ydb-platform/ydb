@@ -177,6 +177,10 @@ message TStorageServiceConfig
     // parking when idle. Defaults to 10.
     optional uint32 IdleSpinUs = 37;
 
+    // Maximum memory used by the integrity checksum cache, in bytes.
+    // Defaults to 64 MiB per DDisk.
+    optional uint64 IntegrityChecksumCacheBytes = 38;
+
     // Maximum aggregate bandwidth in megabytes per second for copying ranges
     // within a DirectBlockGroup. 0 disables throttling.
     optional uint32 CopyRangeBandwidthMbs = 33;

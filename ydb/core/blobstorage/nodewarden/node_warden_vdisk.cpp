@@ -236,6 +236,10 @@ namespace NKikimr::NStorage {
                 if (Cfg->DDiskConfig->HasIdleSpinUs()) {
                     ddiskConfig.IdleSpinUs = Cfg->DDiskConfig->GetIdleSpinUs();
                 }
+                if (Cfg->DDiskConfig->HasIntegrityChecksumCacheBytes()) {
+                    ddiskConfig.IntegrityChecksumCacheBytes =
+                        Cfg->DDiskConfig->GetIntegrityChecksumCacheBytes();
+                }
             }
             if (Cfg->PBufferConfig) {
                 if (Cfg->PBufferConfig->HasInitChunks()) {

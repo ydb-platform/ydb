@@ -327,6 +327,11 @@ void TSchemeShard::AbortOperationPropose(const TTxId txId, TOperationContext& co
 
     context.MemChanges.UnDo(context.SS);
 
+    // Propose-time abort runs before publication (which happens post-plan), so
+    // no publication refs should exist yet and UnDo owns the counter rollback.
+    Y_VERIFY_DEBUG_S(operation->Publications.empty(),
+        "unexpected publication refs on propose abort, tx: " << txId);
+
     // And remove aborted operation from existence
     Operations.erase(txId);
 }
@@ -1376,9 +1381,9 @@ void TOperation::AddPart(ISubOperation::TPtr part) {
     Parts.push_back(part);
 }
 
-bool TOperation::AddPublishingPath(TPathId pathId, ui64 version) {
+bool TOperation::AddPublishingPath(TSchemeShard* ss, TPathId pathId, ui64 version) {
     Y_ABORT_UNLESS(!IsReadyToNotify());
-    return Publications.emplace(pathId, version).second;
+    return Publications.emplace(TPublishPath(pathId, version), TPathDbRef(ss, pathId, "publish path")).second;
 }
 
 bool TOperation::IsPublished() const {

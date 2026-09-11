@@ -154,8 +154,8 @@ class TestS3CpuThrottleVerdict(S3WorkloadManagerFunctionalBase):
     (B.) pool_10 via SDK pool_id, flag = off -> S3 CPU is NOT accounted to
     pool_10 (SchedulerContext dropped by the factory). Only native KQP CA CPU shows up in
     `schedulerPool[test_pool_10]/Usage`. Accounts CPU for the CA in the test_pool_10.
-    
-    (C.) pool_10 via SDK pool_id, flag = on -> S3 decode CPU is accounted to pool_10. 
+
+    (C.) pool_10 via SDK pool_id, flag = on -> S3 decode CPU is accounted to pool_10.
     Usage(C) should exceed Usage(B) by an absolute margin above native KQP variance,
     and Throttle(C) should be > 0. Accounts CPU for the CA and S3 in the test_pool_10.
 
@@ -188,7 +188,6 @@ class TestS3CpuThrottleVerdict(S3WorkloadManagerFunctionalBase):
 
     # Minimum throttle CPU accounted to the pool in Phase C
     min_throttle_us: float = 100_000.0
-
 
     # Seconds to wait after a query for the scheduler snapshot (default
     # 500 ms) to capture the query's CPU.
@@ -283,7 +282,6 @@ class TestS3CpuThrottleVerdict(S3WorkloadManagerFunctionalBase):
             f'>= {self.min_throttle_us:.0f}. TryIncreaseUsage may be '
             f'always admitting even when pool budget is exhausted. {report}'
         )
-
 
     # -- Query + measurement ---------------------------------------
 

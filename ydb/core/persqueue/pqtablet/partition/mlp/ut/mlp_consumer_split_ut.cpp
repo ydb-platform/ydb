@@ -43,6 +43,8 @@ namespace {
     // (YDBBUGS-508 / #40339). Install once per process before CreateSetup() and
     // never restore: TTestActorRuntime also skips the global reset under real
     // threads. Add()/Reset() are atomic; Offset=0 matches the wall clock.
+    // Reset in the destructor so later tests without this guard see wall time
+    // (setup is declared after the guard, so actors have already stopped).
     class TScopedLeapTimeProvider: TNonCopyable {
     public:
         TScopedLeapTimeProvider()
@@ -54,6 +56,10 @@ namespace {
                 TIntrusivePtr<ITimeProvider> previous = Leap_;
                 DoSwap(TAppData::TimeProvider, previous);
             }
+            Leap_->Reset();
+        }
+
+        ~TScopedLeapTimeProvider() {
             Leap_->Reset();
         }
 

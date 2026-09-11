@@ -1196,6 +1196,7 @@ class TInitialConfiguratorImpl
 
     NKikimrConfig::TAppConfig BaseConfig;
     NKikimrConfig::TAppConfig AppConfig;
+    bool HasStaticConfig = false;
 
     NConfig::TCommonAppOptions CommonAppOptions;
     NConfig::TMbusAppOptions MbusAppOptions;
@@ -1271,6 +1272,9 @@ public:
                 throw TInitializationException("YDBE-10012") << "YAML config is not provided for static node and no seed nodes given";
             }
         }
+
+        // Track supplied files, including empty protobuf configs, independently of their contents.
+        HasStaticConfig = !freeArgs.empty() || yamlConfigs.Main.has_value();
 
         if (yamlConfigs.Main) {
             ApplyMainYamlConfig(refs, yamlConfigs, AppConfig);
@@ -1495,6 +1499,10 @@ public:
         }
 
         const auto& authConfig = AppConfig.GetAuthConfig();
+        // Supplied auth files preserve the token default even without a full static config.
+        const bool useToken = HasStaticConfig
+            || ProtoConfigFileProvider.Has("auth-file")
+            || ProtoConfigFileProvider.Has("auth-token-file");
         const TNodeRegistrationSettings settings {
             domainName,
             cf.NodeHost,
@@ -1504,7 +1512,7 @@ public:
             cf.FixedNodeID,
             cf.InterconnectPort,
             cf.CreateNodeLocation(),
-            authConfig.HasNodeRegistrationToken() ? authConfig.GetNodeRegistrationToken() : TString{},
+            useToken ? authConfig.GetNodeRegistrationToken() : TString{},
         };
 
         auto result = NodeBrokerClient.RegisterDynamicNode(cf.GrpcSslSettings, addrs, settings, Env, Logger);

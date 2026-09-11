@@ -7,10 +7,6 @@ from ydb.tests.fq.streaming_common.common import StreamingTestBase, YdbClient
 
 
 def wait_topic_consumer(driver, cluster_name, path, consumer, timeout=60):
-    def normalize_consumer_name(name):
-        return name.lstrip("/").removeprefix("logbroker-federation/")
-
-    expected_consumer = normalize_consumer_name(consumer)
     deadline = time.monotonic() + timeout
     consumer_names = []
     last_error = None
@@ -19,8 +15,7 @@ def wait_topic_consumer(driver, cluster_name, path, consumer, timeout=60):
             description = driver.topic_client.describe_topic(path)
             consumer_names = [item.name for item in description.consumers]
             last_error = None
-            # Cluster descriptions may omit the federation prefix and leading slash.
-            if expected_consumer in {normalize_consumer_name(name) for name in consumer_names}:
+            if consumer in consumer_names:
                 return
         except (ydb.SchemeError, ydb.NotFound) as error:
             last_error = error
@@ -38,7 +33,9 @@ class TestLogbroker(StreamingTestBase):
         endpoint = f"localhost:{os.environ['cluster_a_port']}"
         input_topic = "streaming-input"
         output_topic = "streaming-output"
-        consumer = "/logbroker-federation/prod/consumer"
+        # Config manager uses the full path; cluster APIs use the name without the federation prefix.
+        consumer = "prod/consumer"
+        federation_consumer = f"/logbroker-federation/{consumer}"
         query_name = "logbroker-copy"
 
         # Create both topics through the federation's config manager.
@@ -51,7 +48,7 @@ class TestLogbroker(StreamingTestBase):
                 driver.topic_client.create_topic(
                     topic,
                     min_active_partitions=4,
-                    consumers=[consumer],
+                    consumers=[federation_consumer],
                 )
 
         # Config manager creation may finish before consumers are visible on the clusters.

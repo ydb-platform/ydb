@@ -28,12 +28,14 @@ ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery22
 ydb/core/kqp/executer_actor/ut unittest.sole chunk
 ydb/core/kqp/proxy_service/ut ScriptExecutionsTest.GetOperationDuringAtomicUploadFinalization
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_BulkUpsert_Column+UseStreamIndex+UseChannelsV2
+ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_BulkUpsert_Column-UseStreamIndex+UseChannelsV2
 ydb/core/kqp/ut/arrow unittest.[*/*] chunk
 ydb/core/kqp/ut/batch_operations KqpBatchDelete.TableNotExists
 ydb/core/kqp/ut/batch_operations KqpBatchUpdate.ManyPartitions_1
 ydb/core/kqp/ut/indexes KqpIndexes.DirectAccessToIndexImplTable+UserIsClusterAdmin+HasUsePermission
 ydb/core/kqp/ut/indexes KqpIndexes.DirectAccessToIndexImplTable-UserIsClusterAdmin+HasUsePermission
 ydb/core/kqp/ut/indexes KqpIndexes.PreSharding+Unique
+ydb/core/kqp/ut/indexes KqpIndexes.PreSharding-Unique
 ydb/core/kqp/ut/indexes KqpIndexes.PreShardingMultiCol
 ydb/core/kqp/ut/opt KqpConcurrentResults.ConcurrentStreamNamedExprRandomConsistency+EnableIndexStreamWrite
 ydb/core/kqp/ut/opt KqpNamedExpressions.NamedExpressionRandomUpsertRevert+UseDataQuery+EnableIndexStreamWrite
@@ -149,8 +151,10 @@ ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestWith
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestWithPBufferReplicationTest.ShouldSucceedWithHedgingWhenPrimariesHangAndHandoffsOk
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestWithPBufferReplicationTest.ShouldWorkWithMultipleResponsesAndHedge
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut unittest.sole chunk
+ydb/core/persqueue/pqrb/ut Balancing.Balancing_ManyTopics_PQv1
 ydb/core/persqueue/pqrb/ut Balancing.Balancing_OneTopic_TopicApi
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPCountersTests.SimpleCounters
+ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPCountersTests.SimpleCountersWithKeepMessageOrder
 ydb/core/persqueue/pqtablet/quota/ut TWriteQuoterTests.WaitMessagesQuota
 ydb/core/persqueue/pqtablet/quota/ut unittest.sole chunk
 ydb/core/persqueue/public/describer/ut TDescriberTests.AccessOrAllows

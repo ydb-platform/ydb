@@ -154,6 +154,10 @@ protected:
         return defaultValue;
     }
 
+    virtual TDuration DoGetMoveDataAdmissionWindow(const TDuration defaultValue) const {
+        return defaultValue;
+    }
+
     virtual TDuration DoGetGuaranteeIndexationInterval(const TDuration defaultValue) const {
         return defaultValue;
     }
@@ -365,6 +369,10 @@ public:
     TDuration GetMaxReadStaleness() const {
         const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetMaxReadStaleness_ms());
         return DoGetMaxReadStaleness(defaultValue);
+    }
+
+    TDuration GetMoveDataAdmissionWindow(const TDuration defaultValue) const {
+        return DoGetMoveDataAdmissionWindow(defaultValue);
     }
 
     TDuration GetMaxReadStalenessInMem() const {

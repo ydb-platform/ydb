@@ -228,7 +228,8 @@ TMoveDataQueueSizes TMoveDataActualizer::GetMoveDataQueueSizes() const {
 }
 
 void TMoveDataActualizer::Refresh(const TAddExternalContext& externalContext) {
-    AdmissionDeadline = externalContext.GetNow() + AdmissionWindow;
+    AdmissionDeadline =
+        externalContext.GetNow() + NYDBTest::TControllers::GetColumnShardController()->GetMoveDataAdmissionWindow(AdmissionWindow);
     InitialPortionIds.clear();
     PendingPortionIds.clear();
     PortionsToMove.clear();

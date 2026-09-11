@@ -50,6 +50,14 @@ std::vector<TLogoBlobID> LivePortionBlobs(const NFake::TProxyDS& proxy, const ui
     return result;
 }
 
+// Private event ids repeat across components, so the type id alone does not identify TEvWriteIndex.
+const TEvPrivate::TEvWriteIndex* AsWriteIndex(IEventHandle::TPtr& ev) {
+    if (ev->GetTypeRewrite() != TEvPrivate::TEvWriteIndex::EventType || !ev->HasEvent()) {
+        return nullptr;
+    }
+    return dynamic_cast<const TEvPrivate::TEvWriteIndex*>(ev->GetBase());
+}
+
 // One shard whose portion data sits in OldGroup, driven through a MoveData session by manual wakeups.
 class TMoveDataFixture {
 public:
@@ -199,11 +207,8 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         THashSet<ui64> rewritten;
         std::vector<TAutoPtr<IEventHandle>> heldCleanups;
         bool holdCleanups = true;
-        // Private event ids repeat across components, so the type id alone does not identify TEvWriteIndex.
         auto observer = f.Runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& ev) {
-            const auto* writeIndex = ev->GetTypeRewrite() == TEvPrivate::TEvWriteIndex::EventType && ev->HasEvent()
-                                         ? dynamic_cast<const TEvPrivate::TEvWriteIndex*>(ev->GetBase())
-                                         : nullptr;
+            const auto* writeIndex = AsWriteIndex(ev);
             if (!writeIndex) {
                 return;
             }
@@ -276,6 +281,95 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         UNIT_ASSERT_C(response, "no TEvMoveDataResponse after cleanup was re-enabled");
         f.AssertDrainedSuccess(response);
         UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1000);
+    }
+
+    // Cleanup of portions retired after the queues drained holds no target data, so it must not hold the answer back.
+    Y_UNIT_TEST(SuccessIgnoresCleanupOfLaterRetiredPortions) {
+        TMoveDataFixture f;
+        f.Controller->DisableBackground(EBackground::TTL);
+        // No portion written after the move starts is adopted, so the watermark stays frozen once the queues drain.
+        f.Controller->SetOverrideMoveDataAdmissionWindow(TDuration::Zero());
+        f.Write(1, 0, 1000);
+        f.Controller->WaitCompactions(TDuration::Seconds(10));
+        f.ReassignPastWrittenData();
+
+        THashSet<ui64> rewritten;
+        THashSet<ui64> laterRetired;
+        bool watermarkFrozen = false;
+        bool targetCleanupSeen = false;
+        std::vector<TAutoPtr<IEventHandle>> heldCleanups;
+        auto observer = f.Runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& ev) {
+            const auto* writeIndex = AsWriteIndex(ev);
+            if (!writeIndex) {
+                return;
+            }
+            const auto& changes = writeIndex->IndexChanges;
+            if (const auto rewrite = std::dynamic_pointer_cast<NOlap::TTTLColumnEngineChanges>(changes)) {
+                const THashSet<ui64> ids = rewrite->GetPortionsToRemove().GetPortionIds();
+                rewritten.insert(ids.begin(), ids.end());
+            } else if (const auto cleanup = std::dynamic_pointer_cast<NOlap::TCleanupPortionsColumnEngineChanges>(changes)) {
+                const bool target = AnyOf(cleanup->GetPortionsToDrop(), [&](const NOlap::TPortionInfo::TConstPtr& portion) {
+                    return rewritten.contains(portion->GetPortionId());
+                });
+                targetCleanupSeen |= target;
+                const bool onlyLater = !cleanup->GetPortionsToDrop().empty() &&
+                                       AllOf(cleanup->GetPortionsToDrop(), [&](const NOlap::TPortionInfo::TConstPtr& portion) {
+                                           return laterRetired.contains(portion->GetPortionId());
+                                       });
+                if (targetCleanupSeen && onlyLater) {
+                    heldCleanups.emplace_back(ev.Release());
+                }
+            } else if (const auto merge = std::dynamic_pointer_cast<NOlap::TChangesWithAppend>(changes); merge && watermarkFrozen) {
+                const THashSet<ui64> ids = merge->GetPortionsToRemove().GetPortionIds();
+                laterRetired.insert(ids.begin(), ids.end());
+            }
+        });
+
+        // Cleanup and GC stay off, so the answer cannot come before the later retirements exist.
+        // Compaction stays off too: anything it retired before the watermark froze would count as target.
+        f.Controller->DisableBackground(EBackground::Compaction);
+        f.Controller->DisableBackground(EBackground::Cleanup);
+        f.Controller->DisableBackground(EBackground::GC);
+        f.StartMove();
+        UNIT_ASSERT_C(!f.DriveGate(150, {}, [&] {
+            return !rewritten.empty();
+        }), "answered before MoveData rewrote the target portions");
+        UNIT_ASSERT_C(!rewritten.empty(), "MoveData never rewrote the target portions");
+        // A gate check after the drain freezes the watermark; the write makes the target retirements cleanable.
+        f.Write(2, 1000, 1001);
+        UNIT_ASSERT(!f.DriveGate(60));
+
+        // Two overlapping writes give compaction portions to retire after the watermark froze.
+        watermarkFrozen = true;
+        f.Write(3, 5000, 5100);
+        f.Write(4, 5000, 5100);
+        f.Controller->EnableBackground(EBackground::Compaction);
+        UNIT_ASSERT(!f.DriveGate(150, {}, [&] {
+            return !laterRetired.empty();
+        }));
+        UNIT_ASSERT_C(!laterRetired.empty(), "compaction never retired a portion after the drain");
+
+        f.Controller->EnableBackground(EBackground::Cleanup);
+        UNIT_ASSERT(!f.DriveGate(150, {}, [&] {
+            return targetCleanupSeen;
+        }));
+        UNIT_ASSERT_C(targetCleanupSeen, "the target portions were never cleaned up");
+
+        // The next write makes the later retirements cleanable; their cleanup stays running from here on.
+        f.Write(5, 6000, 6001);
+        UNIT_ASSERT(!f.DriveGate(150, {}, [&] {
+            return !heldCleanups.empty();
+        }));
+        UNIT_ASSERT_C(!heldCleanups.empty(), "no cleanup of the later retirements started");
+
+        f.Controller->EnableBackground(EBackground::GC);
+        const auto response = f.DriveGate(150);
+        UNIT_ASSERT_C(response, "a cleanup of portions retired after the drain held the answer back");
+        f.AssertDrainedSuccess(response);
+        for (auto& ev : heldCleanups) {
+            f.Runtime.Send(ev.Release());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1101);
     }
 }
 

@@ -10,7 +10,7 @@ namespace {
 void CheckWindowFunctionAst(const TString& selectBody, bool useSortForPartitionsByKeys) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(useSortForPartitionsByKeys);
-    TKikimrRunner kikimr(TKikimrSettings(appConfig));
+    TKikimrRunner kikimr(appConfig);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 

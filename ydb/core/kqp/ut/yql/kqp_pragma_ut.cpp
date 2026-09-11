@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
             NKikimrConfig::TAppConfig appConfig;
             appConfig.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(serviceDefault);
 
-            TKikimrRunner kikimr(TKikimrSettings(appConfig));
+            TKikimrRunner kikimr(appConfig);
             auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
             const auto usesV2Plan = [&](TMaybe<bool> pragmaValue) {

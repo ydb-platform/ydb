@@ -27,7 +27,6 @@ PEERDIR(
     library/cpp/yson
     library/cpp/yson/node
     ydb/core/base
-    ydb/core/mind
     ydb/core/fq/libs/checkpointing
     ydb/core/fq/libs/checkpointing_common
     ydb/core/fq/libs/common
@@ -39,7 +38,6 @@ PEERDIR(
     ydb/core/fq/libs/db_id_async_resolver_impl
     ydb/core/fq/libs/db_schema
     ydb/core/fq/libs/events
-    ydb/core/fq/libs/graph_params/proto
     ydb/core/fq/libs/grpc
     ydb/core/fq/libs/metrics
     ydb/core/fq/libs/private_client
@@ -54,8 +52,6 @@ PEERDIR(
     ydb/library/actors/interconnect
     ydb/library/mkql_proto
     ydb/library/security
-    ydb/library/yql/dq/common
-    ydb/library/yql/dq/actors/compute
     ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/providers/dq/actors
@@ -66,11 +62,10 @@ PEERDIR(
     ydb/library/yql/providers/dq/worker_manager/interface
     ydb/library/yql/providers/generic/connector/libcpp
     ydb/library/yql/providers/generic/provider
-    ydb/library/yql/providers/pq/common
     ydb/library/yql/providers/pq/cm_client
     ydb/library/yql/providers/pq/gateway/abstract
     ydb/library/yql/providers/pq/provider
-    ydb/library/yql/providers/pq/proto
+    ydb/library/yql/providers/pq/task_meta
     ydb/library/yql/providers/s3/actors_factory
     ydb/library/yql/providers/s3/provider
     ydb/library/yql/utils/actor_log

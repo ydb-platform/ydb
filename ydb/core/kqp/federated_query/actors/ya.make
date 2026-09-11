@@ -10,8 +10,6 @@ PEERDIR(
     ydb/core/kqp/common/events
     ydb/core/kqp/common/simple
     ydb/core/base
-    ydb/core/fq/libs/events
-    ydb/core/fq/libs/graph_params/proto
     ydb/core/mind
     ydb/core/protos
     ydb/core/util
@@ -21,6 +19,7 @@ PEERDIR(
     ydb/library/ycloud/impl
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/common
+    ydb/library/yql/dq/proto
     ydb/library/yql/providers/pq/common
     ydb/library/yql/providers/pq/proto
     ydb/public/sdk/cpp/src/client/driver

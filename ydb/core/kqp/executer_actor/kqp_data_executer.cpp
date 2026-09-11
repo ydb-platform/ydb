@@ -446,7 +446,7 @@ private:
                 hFunc(TEvKqpBuffer::TEvError, Handle);
                 hFunc(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
                 hFunc(NFq::TEvCheckpointCoordinator::TEvRaiseTransientIssues, Handle);
-                hFunc(NFq::TEvStreamingQueryNodesManager::TEvAbortQuery, Handle);
+                hFunc(TEvStreamingQueryNodesManager::TEvAbortQuery, Handle);
                 hFunc(NActors::NMon::TEvHttpInfo, HandleHttpInfo);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 default:
@@ -478,7 +478,7 @@ private:
         }
     }
 
-    void Handle(NFq::TEvStreamingQueryNodesManager::TEvAbortQuery::TPtr& ev) {
+    void Handle(TEvStreamingQueryNodesManager::TEvAbortQuery::TPtr& ev) {
         YDB_LOG_WARN("StreamingQueryNodesManager requested query abort",
             {"marker", "KQPDATA"},
             {"actorId", SelfId()},
@@ -1093,7 +1093,7 @@ private:
         if (GetUseFollowers()) {
             Send(MakePipePerNodeCacheID(true), new TEvPipeCache::TEvUnlink(0));
         }
-      
+
         TBase::PassAway();
     }
 
@@ -1313,11 +1313,11 @@ private:
 
         if (hasPqSources) {
             StreamingQueryNodesManagerId = Register(
-                NFq::CreateStreamingQueryNodesManager(
+                CreateStreamingQueryNodesManager(
                     SelfId(),
                     Database,
                     context->StreamingQueryPath,
-                    graphParams,
+                    graphParams.GetTasks(),
                     TDuration::Seconds(10),
                     TDuration::Seconds(10),
                     Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetMaxTasksPerStage()));

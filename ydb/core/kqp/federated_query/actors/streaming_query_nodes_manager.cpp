@@ -19,7 +19,7 @@
 #define LOG_I(msg, ...) YDB_LOG_INFO(msg, {"queryId", QueryId}, ##__VA_ARGS__)
 #define LOG_W(msg, ...) YDB_LOG_WARN(msg, {"queryId", QueryId}, ##__VA_ARGS__)
 
-namespace NFq {
+namespace NKikimr::NKqp {
 
 using namespace NActors;
 
@@ -96,19 +96,18 @@ public:
         TActorId runActorId,
         TString tenantName,
         TString queryId,
-        const NProto::TGraphParams& graphParams,
+        const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& tasks,
         TDuration checkPeriod,
         TDuration startDelay,
         ui64 maxTasksPerStage)
         : RunActorId(runActorId)
         , TenantName(std::move(tenantName))
         , QueryId(std::move(queryId))
-        , GraphParams(graphParams)
         , CheckPeriod(checkPeriod)
         , StartDelay(startDelay)
         , MaxTasksPerStage(maxTasksPerStage)
     {
-        for (const auto& task : GraphParams.GetTasks()) {
+        for (const auto& task : tasks) {
             if (IsTopicSourceTask(task)) {
                 TopicSourceTaskNodes.emplace(task.GetId(), Nothing());
                 TopicPartitionsCount += GetTopicPartitionsCount(task);
@@ -249,7 +248,6 @@ private:
     const TActorId RunActorId;
     const TString TenantName;
     const TString QueryId;
-    const NProto::TGraphParams GraphParams;
     const TDuration CheckPeriod;
     const TDuration StartDelay;
     const ui64 MaxTasksPerStage;
@@ -274,7 +272,7 @@ IActor* CreateStreamingQueryNodesManager(
     TActorId runActorId,
     TString tenantName,
     TString queryId,
-    const NProto::TGraphParams& graphParams,
+    const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& tasks,
     TDuration checkPeriod,
     TDuration startDelay,
     ui64 maxTasksPerStage)
@@ -283,10 +281,10 @@ IActor* CreateStreamingQueryNodesManager(
         runActorId,
         std::move(tenantName),
         std::move(queryId),
-        graphParams,
+        tasks,
         checkPeriod,
         startDelay,
         maxTasksPerStage);
 }
 
-} // namespace NFq
+} // namespace NKikimr::NKqp

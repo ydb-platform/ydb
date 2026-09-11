@@ -11,7 +11,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NFq {
+namespace NKikimr::NKqp {
 
 using namespace NActors;
 
@@ -40,10 +40,10 @@ void InjectTaskStates(TTestActorRuntime& runtime, TActorId target, const TVector
     }
 }
 
-NProto::TGraphParams MakeTopicSourceGraph(ui64 taskCount, ui64 topicPartitionsCount) {
-    NProto::TGraphParams graphParams;
+google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask> MakeTopicSourceTasks(ui64 taskCount, ui64 topicPartitionsCount) {
+    google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask> tasks;
     for (ui64 taskId = 0; taskId < taskCount; ++taskId) {
-        auto* task = graphParams.AddTasks();
+        auto* task = tasks.Add();
         task->SetId(taskId);
         task->AddInputs()->MutableSource()->SetType(TString(NYql::NDq::PqSource));
 
@@ -54,7 +54,7 @@ NProto::TGraphParams MakeTopicSourceGraph(ui64 taskCount, ui64 topicPartitionsCo
         partitioningParams->SetDqPartitionsCount(taskCount);
         task->AddReadRanges(readTaskParams.SerializeAsString());
     }
-    return graphParams;
+    return tasks;
 }
 
 TActorId CreateManager(
@@ -69,7 +69,7 @@ TActorId CreateManager(
         edgeActor,
         "/Root/test",
         "query",
-        MakeTopicSourceGraph(taskCount, partitionsCount),
+        MakeTopicSourceTasks(taskCount, partitionsCount),
         TDuration::Seconds(1),
         TDuration::Zero(),
         maxTasksPerStage));
@@ -200,4 +200,4 @@ Y_UNIT_TEST(AbortIsSentOnlyOnce) {
 
 } // Y_UNIT_TEST_SUITE
 
-} // namespace NFq
+} // namespace NKikimr::NKqp

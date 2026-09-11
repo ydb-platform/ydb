@@ -1,22 +1,22 @@
 #pragma once
 
-#include <ydb/core/fq/libs/events/event_subspace.h>
-#include <ydb/core/fq/libs/graph_params/proto/graph_params.pb.h>
+#include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 
-namespace NFq {
+namespace NKikimr::NKqp {
 
 // Events for StreamingQueryNodesManager
 struct TEvStreamingQueryNodesManager {
     enum EEv : ui32 {
-        EvAbortQuery = YqEventSubspaceBegin(TYqEventSubspace::StreamingQueryNodesManager),
+        EvAbortQuery = TKqpStreamingQueryNodesManagerEvents::EvAbortQuery,
         EvEnd,
     };
 
-    static_assert(EvEnd <= YqEventSubspaceEnd(TYqEventSubspace::StreamingQueryNodesManager),
+    static_assert(EvEnd <= EventSpaceEnd(TKikimrEvents::ES_KQP),
         "All events must be in their subspace");
 
     // Sent by manager → run_actor when checks detect an unhealthy node ratio.
@@ -33,7 +33,7 @@ struct TEvStreamingQueryNodesManager {
 //   runActorId   – actor that receives TEvAbortQuery
 //   tenantName   – tenant path used for TenantNodeEnumeration lookup
 //   queryId      – used for logging
-//   graphParams  – serialized DQ task graph snapshot
+//   tasks        – serialized DQ tasks
 //   checkPeriod  – how often to repeat the check (default 1 minute)
 //   startDelay   – time to wait for initial compute states before first check
 //   maxTasksPerStage – resolved KQP MaxTasksPerStage pragma value
@@ -41,9 +41,9 @@ NActors::IActor* CreateStreamingQueryNodesManager(
     NActors::TActorId runActorId,
     TString tenantName,
     TString queryId,
-    const NProto::TGraphParams& graphParams,
+    const google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>& tasks,
     TDuration checkPeriod,
     TDuration startDelay,
     ui64 maxTasksPerStage);
 
-} // namespace NFq
+} // namespace NKikimr::NKqp

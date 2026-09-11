@@ -8,11 +8,7 @@ PEERDIR(
     library/cpp/retry
     library/cpp/testing/unittest
     ydb/core/fq/libs/actors
-    ydb/core/mind
     ydb/core/testlib/default
-    ydb/library/actors/testlib
-    ydb/library/yql/dq/common
-    ydb/library/yql/providers/pq/proto
 )
 
 YQL_LAST_ABI_VERSION()

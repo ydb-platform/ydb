@@ -34,7 +34,6 @@ struct TYqEventSubspace {
         TableOverFq,
         RowDispatcher,
         NodesManager,
-        StreamingQueryNodesManager,
         SubspacesEnd,
     };
 

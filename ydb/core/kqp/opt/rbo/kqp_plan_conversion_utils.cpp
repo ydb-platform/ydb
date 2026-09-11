@@ -500,7 +500,6 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSetOp(TExprNode::TPtr node)
 
     auto leftInputPtr = opSetOp.LeftInput().Ptr();
     auto rightInputPtr = opSetOp.RightInput().Ptr();
-    
     if (TMaybeNode<TKqpOpMap>(leftInputPtr)) {
         leftInputPtr = MaybeForceColumnToOptional(node->GetTypeAnn(), leftInputPtr, Ctx);
     }
@@ -533,7 +532,6 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSetOp(TExprNode::TPtr node)
         TVector<TMapElement> leftNullableMap;
         TVector<TMapElement> rightNullableMap;
 
-        TVector<TInfoUnit> setOpColumns;
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
 
         for (const auto& t : itemType->GetItems()) {

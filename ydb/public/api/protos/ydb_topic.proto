@@ -169,7 +169,6 @@ message StreamWriteMessage {
 
         EncodedBatch batch_data = 11;
 
-
         oneof data_codec {
            // Codec that is used for data compression.
            // See enum Codec above for values.
@@ -184,6 +183,8 @@ message StreamWriteMessage {
             TransactionIdentity tx = 3;
             DeferredPublishIdentity deferred_publish = 9;
         }
+
+        repeated string partition_key = 12;
 
         message MessageData {
             // Message sequence number, provided by client for deduplication. Max sequence number for batch messages.
@@ -212,7 +213,10 @@ message StreamWriteMessage {
             int64 uncompressed_size = 1;
             bytes data = 2;
 
-            // ... if need some meta
+            // Count of messages.
+            int64 messages_count = 3;
+            int64 min_seq_no = 4;
+            int64 max_seq_no = 5;
         }
     }
 
@@ -442,21 +446,18 @@ message StreamReadMessage {
             repeated MetadataItem metadata_items = 8;
         }
 
-        message EncodedBatchData {
-            int32 uncompressed_size = 1;
-
-            // Encoded batch data.
-            bytes data = 2;
-        }
-
         // Representation of sequence of client messages from one write session.
         message Batch {
+            // Filled exactly one of message_data or encoded_batches, it specified by codec or batch_codec.
+
             // List of client messages.
             repeated MessageData message_data = 1;
-            repeated EncodedBatchData encoded_batches = 7; // may be message with metadata if need?
+            
+            repeated StreamWriteMessage.WriteRequest.EncodedBatch encoded_batches = 7; // may be message with metadata if need?
 
             // Producer identifier provided by client for this batch of client messages.
             string producer_id = 2 [(Ydb.length).le = 2048];
+
             // Client metadata attached to write session, the same for all messages in batch.
             map<string, string> write_session_meta = 3;
 

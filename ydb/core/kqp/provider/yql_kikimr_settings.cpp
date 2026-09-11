@@ -303,7 +303,7 @@ TKikimrSettings::TConstPtr TKikimrConfiguration::Snapshot() const {
 
 ui64 TKikimrConfiguration::GetEnabledSpillingNodes() const {
     ui64 mask = EnableSpillingNodes.Get().GetOrElse(ParseEnableSpillingNodes(TTableServiceConfig::GetEnableSpillingNodes()));
-    if (!WindowFunctionsV2.Get().GetOrElse(false)) {
+    if (!GetWindowFunctionsV2()) {
         mask &= ~ui64(NYql::NDq::EEnabledSpillingNodes::WideSort);
     }
     return mask;
@@ -408,6 +408,10 @@ bool TKikimrConfiguration::GetEnableNewRBOPhysicalStagePeephole() const {
 
 bool TKikimrConfiguration::GetUseKqpTasksGraphV2() const {
     return UseKqpTasksGraphV2.Get().GetOrElse(TTableServiceConfig::GetUseKqpTasksGraphV2());
+}
+
+bool TKikimrConfiguration::GetWindowFunctionsV2() const {
+    return WindowFunctionsV2.Get().GetOrElse(TTableServiceConfig::GetEnableWindowFunctionsV2());
 }
 
 } // namespace NYql

@@ -1,3 +1,4 @@
+#include <ydb/core/testlib/actor_helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <ydb/library/actors/helpers/selfping_actor.h>
@@ -392,5 +393,75 @@ Y_UNIT_TEST_SUITE(TCutHistoryRestrictions) {
             config.SetCutHistoryDenyList("");
         });
         UNIT_ASSERT(hive.IsCutHistoryAllowed(TTabletTypes::DataShard));
+    }
+}
+
+Y_UNIT_TEST_SUITE(THiveScatterThresholdStatsTest) {
+    Y_UNIT_TEST(ScatterThresholdResourceMinimumUsesPerResourceFloor) {
+        TActorSystemStub actorSystem;
+        auto storage = MakeIntrusive<TTabletStorageInfo>();
+        storage->TabletType = TTabletTypes::Hive;
+        TTestHive hive(storage.Get(), TActorId());
+        hive.UpdateConfig([](NKikimrConfig::THiveConfig& config) {
+            config.SetMinNodeUsageToBalance(0.1);
+            config.SetMaxResourceCounter(100);
+        });
+        hive.MakeNodes(2);
+        hive.Node(1).ResourceMaximumValues = {100, 100, 100, 100};
+        hive.Node(2).ResourceMaximumValues = {100, 100, 100, 100};
+        auto& first = hive.Node(1).ResourceValues;
+        auto& second = hive.Node(2).ResourceValues;
+        std::get<NMetrics::EResource::Counter>(first) = 1;
+        std::get<NMetrics::EResource::Counter>(second) = 9;
+        std::get<NMetrics::EResource::CPU>(first) = 5;
+        std::get<NMetrics::EResource::CPU>(second) = 20;
+        std::get<NMetrics::EResource::Memory>(first) = 40;
+        std::get<NMetrics::EResource::Memory>(second) = 50;
+        std::get<NMetrics::EResource::Network>(first) = 2;
+        std::get<NMetrics::EResource::Network>(second) = 3;
+
+        const auto stats = hive.GetStats();
+        // No tablet eligibility is involved in computing these statistics.
+        UNIT_ASSERT_VALUES_EQUAL(stats.Values.size(), 2);
+        UNIT_ASSERT_DOUBLES_EQUAL(std::get<NMetrics::EResource::Counter>(stats.MinResourceNormValues), 0.01, 1e-12);
+        UNIT_ASSERT_DOUBLES_EQUAL(std::get<NMetrics::EResource::CPU>(stats.MinResourceNormValues), 0.1, 1e-12);
+        UNIT_ASSERT_DOUBLES_EQUAL(std::get<NMetrics::EResource::Memory>(stats.MinResourceNormValues), 0.4, 1e-12);
+        UNIT_ASSERT_DOUBLES_EQUAL(std::get<NMetrics::EResource::Network>(stats.MinResourceNormValues), 0.1, 1e-12);
+    }
+
+    Y_UNIT_TEST(ScatterThresholdResourceMinimumExcludesDownAndDeadNodes) {
+        TActorSystemStub actorSystem;
+        auto storage = MakeIntrusive<TTabletStorageInfo>();
+        storage->TabletType = TTabletTypes::Hive;
+        TTestHive hive(storage.Get(), TActorId());
+        hive.UpdateConfig([](NKikimrConfig::THiveConfig& config) {
+            config.SetMinNodeUsageToBalance(0.1);
+        });
+        hive.MakeNodes(4);
+        for (TNodeId nodeId = 1; nodeId <= 4; ++nodeId) {
+            auto& node = hive.Node(nodeId);
+            node.ResourceMaximumValues = {100, 100, 100, 100};
+            std::get<NMetrics::EResource::CPU>(node.ResourceValues) = nodeId * 10;
+        }
+        hive.Node(1).Down = true;
+        hive.Node(2).Local = TActorId();
+
+        const auto stats = hive.GetStats();
+        UNIT_ASSERT_VALUES_EQUAL(stats.Values.size(), 2);
+        for (const auto& node : stats.Values) {
+            UNIT_ASSERT_C(node.NodeId == 3 || node.NodeId == 4, node.NodeId);
+        }
+        UNIT_ASSERT_DOUBLES_EQUAL(std::get<NMetrics::EResource::CPU>(stats.MinResourceNormValues), 0.3, 1e-12);
+    }
+
+    Y_UNIT_TEST(ScatterThresholdResourceMinimumForEmptyStats) {
+        TActorSystemStub actorSystem;
+        auto storage = MakeIntrusive<TTabletStorageInfo>();
+        storage->TabletType = TTabletTypes::Hive;
+        TTestHive hive(storage.Get(), TActorId());
+        hive.UpdateConfig([](NKikimrConfig::THiveConfig&) {});
+        const auto stats = hive.GetStats();
+        UNIT_ASSERT(stats.Values.empty());
+        UNIT_ASSERT_VALUES_EQUAL(max(stats.MinResourceNormValues), 0);
     }
 }

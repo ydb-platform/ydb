@@ -85,6 +85,7 @@ class TestStreamingCompatibility(StreamingTestBase2):
             for i, _ in enumerate(kikimr.rolling()):
                 time.sleep(5)
 
+                kikimr.recreate_driver()
                 for query in Queries:
                     self.check_data(kikimr, query)
 

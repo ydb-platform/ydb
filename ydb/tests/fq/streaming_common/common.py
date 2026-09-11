@@ -22,6 +22,7 @@ from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.fq_runner.kikimr_metrics import load_metrics, Sensors
 from ydb.tests.tools.fq_runner.kikimr_runner import plain_or_under_sanitizer_wrapper
 from ydb.tests.library.common.types import Erasure
+from ydb.tests.library.harness.util import LogLevels
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +127,9 @@ def get_ydb_config(request, enable_fq_connector=None):
 
     config = KikimrConfigGenerator(
         erasure=Erasure.NONE,
+        additional_log_configs={
+            'GRPC_LIBRARY': LogLevels.CRIT,
+        },
         pq_client_service_types=["yandex-query"],
         extra_feature_flags=extra_feature_flags,
         disabled_feature_flags=disabled_feature_flags,
@@ -498,6 +502,12 @@ class Kikimr:
 
     def recreate_driver(self):
         self.ydb_client.stop()
+        logger.info(
+            "Recreating ydb driver: endpoint=grpc://%s, port=%s, database=%s",
+            self.endpoint.endpoint,
+            self.endpoint.endpoint.rsplit(":", 1)[-1],
+            self.endpoint.database,
+        )
         self.ydb_client = self._setup_ydb_client(self.endpoint, enable_discovery=False)
 
     @staticmethod
@@ -522,6 +532,7 @@ class Kikimr:
         while time.time() < deadline:
             try:
                 self.ydb_client.wait_connection(timeout=5)
+                self.ydb_client.query("SELECT 42;", fail_fast=True, timeout=5)
                 return
             except Exception as exc:
                 last_exc = exc

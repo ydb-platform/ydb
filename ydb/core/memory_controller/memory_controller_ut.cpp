@@ -9,6 +9,11 @@
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <util/generic/scope.h>
+
+#ifdef _linux_
+#include <sys/resource.h>
+#endif
 
 namespace NKikimr::NMemory {
 
@@ -140,6 +145,31 @@ Y_UNIT_TEST(Counters) {
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/CGroupLimit")->Val(), 100_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/HardLimit")->Val(), 100_MB);
 }
+
+#ifdef _linux_
+Y_UNIT_TEST(Counters_MemMapsUnavailable) {
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
+        .SetUseRealThreads(false);
+
+    auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
+    auto& runtime = *server->GetRuntime();
+
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_GT(server->MemoryControllerCounters->GetCounter("Stats/MemMapsCount")->Val(), 0);
+
+    rlimit saved;
+    UNIT_ASSERT_VALUES_EQUAL(getrlimit(RLIMIT_NOFILE, &saved), 0);
+    rlimit noFiles = saved;
+    noFiles.rlim_cur = 0;
+    UNIT_ASSERT_VALUES_EQUAL(setrlimit(RLIMIT_NOFILE, &noFiles), 0);
+    Y_DEFER { setrlimit(RLIMIT_NOFILE, &saved); };
+
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/MemMapsCount")->Val(), 0);
+}
+#endif
 
 Y_UNIT_TEST(Counters_HardLimit) {
     TPortManager pm;

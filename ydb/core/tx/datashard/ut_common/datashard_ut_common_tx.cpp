@@ -341,15 +341,17 @@ TString TTransactionState::Rollback(ui64 shardId) {
     auto sender = Runtime.AllocateEdgeActor();
     ui32 nodeIndex = sender.NodeId() - Runtime.GetNodeId(0);
 
-    const auto* pLock = FindLastLock(shardId);
-    if (!pLock) {
+    auto locks = GetLocksForShard(shardId);
+    if (locks.empty()) {
         return "<noop>";
     }
 
     auto req = MakeHolder<NEvents::TDataEvents::TEvWrite>(
         0, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
     req->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Rollback);
-    *req->Record.MutableLocks()->AddLocks() = *pLock;
+    for (auto& lock : locks) {
+        *req->Record.MutableLocks()->AddLocks() = lock;
+    }
 
     Runtime.SendToPipe(shardId, sender, req.Release(), nodeIndex);
     return TWritePromise{*this, sender}.NextString();

@@ -31,6 +31,8 @@ bool FillBatchForWorker(std::vector<TWeightedCategory>& procLocal, const ui32 wo
         auto task = procLocal.back().GetCategory()->ExtractTaskWithPrediction(
             procLocal.back().GetCounters(), scopes, workerIdx, heavyLimits);
         if (!task) {
+            // Drop from this DrainOnWorkers copy only. Processes stay queued;
+            // the next band starts with a fresh heap (see DrainTasks).
             procLocal.pop_back();
             continue;
         }
@@ -106,6 +108,7 @@ bool TWorkersPool::DrainOnWorkers(const std::vector<ui32>& workerIdxs) {
     if (workerIdxs.empty()) {
         return false;
     }
+    // Per-call copy: popping a category here does not hide it from later bands.
     std::vector<TWeightedCategory> procLocal = Processes;
     AFL_VERIFY(procLocal.size());
     std::make_heap(procLocal.begin(), procLocal.end(), CategoryHeapLess);

@@ -45,7 +45,7 @@ You can enable and disable Metadata Distribution SelfHeal by changing the config
 
     {% endnote %}
 
-    When the `state_storage_self_heal_config.enable` parameter is set to `true`, the mechanism for maintaining the operability and fault tolerance of [StateStorage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), and [SchemeBoard](../../concepts/glossary.md#scheme-board) is enabled.
+    When the `state_storage_self_heal_config.enable` parameter is set to `true`, the mechanism for maintaining the operability and fault tolerance of [State Storage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), and [SchemeBoard](../../concepts/glossary.md#scheme-board) is enabled.
 
 3. Update the cluster configuration taking into account the changes made using [ydb admin cluster config replace](../../reference/ydb-cli/commands/configuration/cluster/replace.md):
 

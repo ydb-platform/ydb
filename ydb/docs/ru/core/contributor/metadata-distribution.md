@@ -288,7 +288,7 @@ graph TD
 - переносит реплики с вышедших из строя узлов на работоспособные;
 - может добавлять новые реплики при расширении кластера с учётом настроек и доступных узлов.
 
-SelfHeal работает через тот же механизм групп колец, что и ручная реконфигурация, но выполняет все шаги автоматически. Подробнее — в разделе [SelfHeal подсистем распространения метаданных](../devops/concepts/selfheal-state-storage.md).
+SelfHeal работает через тот же механизм групп колец, что и ручная реконфигурация, но выполняет все шаги автоматически. Подробнее — в разделе [SelfHeal подсистем распространения метаданных](../devops/concepts/selfheal-metadata-distribution.md).
 
 ### Группы колец в конфигурации двух дата-центров {#two-dc}
 
@@ -313,7 +313,7 @@ SelfHeal работает через тот же механизм групп к�
 
 - [Сервисы распространения метаданных](../concepts/architecture/metadata-services.md) — обзор для пользователей документации.
 - [Конфигурирование подсистем распространения метаданных](../devops/configuration-management/configuration-v2/state-storage-reconfiguration.md) — инструкции по ручному изменению конфигурации.
-- [SelfHeal подсистем распространения метаданных](../devops/concepts/selfheal-state-storage.md) — автоматическое управление конфигурациями State Storage, Board и SchemeBoard.
+- [SelfHeal подсистем распространения метаданных](../devops/concepts/selfheal-metadata-distribution.md) — автоматическое управление конфигурациями State Storage, Board и SchemeBoard.
 - [Режим bridge](../concepts/bridge.md) — конфигурация с двумя дата-центрами и роль групп колец в ней.
 - [Топология кластера](../concepts/topology.md) — модель отказа, домены и области отказа.
 - [Глоссарий](../concepts/glossary.md) — определения терминов: StateStorage, Board, SchemeBoard, таблетка, ActorId.

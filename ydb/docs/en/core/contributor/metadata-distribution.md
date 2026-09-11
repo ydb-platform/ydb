@@ -296,7 +296,7 @@ In clusters with V2 configuration, **Metadata Distribution SelfHeal** automatica
 - Moves replicas from failed nodes to healthy ones.
 - Can add new replicas as the cluster expands, subject to the settings and available nodes.
 
-SelfHeal works through the same ring group mechanism as manual reconfiguration, but performs all steps automatically. For more details, see [Metadata Distribution SelfHeal](../devops/concepts/selfheal-state-storage.md).
+SelfHeal works through the same ring group mechanism as manual reconfiguration, but performs all steps automatically. For more details, see [Metadata Distribution SelfHeal](../devops/concepts/selfheal-metadata-distribution.md).
 
 ### Ring groups in a two-data-center configuration {#two-dc}
 
@@ -321,7 +321,7 @@ The replica placement rule (different rings in different racks; replicas of the 
 
 - [Metadata distribution services](../concepts/architecture/metadata-services.md) — an overview for documentation users.
 - Configuring metadata distribution subsystems — instructions for manually changing the configuration.
-- [Metadata Distribution SelfHeal](../devops/concepts/selfheal-state-storage.md) — automatic management of the State Storage, Board, and SchemeBoard configurations.
+- [Metadata Distribution SelfHeal](../devops/concepts/selfheal-metadata-distribution.md) — automatic management of the State Storage, Board, and SchemeBoard configurations.
 - [Bridge mode](../concepts/bridge.md) — a configuration with two data centers and the role of ring groups in it.
 - [Cluster topology](../concepts/topology.md) — the failure model, failure domains, and failure regions.
 - [Glossary](../concepts/glossary.md) — definitions of terms: StateStorage, Board, SchemeBoard, tablet, ActorId.

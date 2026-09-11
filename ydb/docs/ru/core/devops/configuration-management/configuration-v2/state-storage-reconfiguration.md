@@ -2,7 +2,7 @@
 
 Применяется если нужно изменить [конфигурацию подсистем распространения метаданных](../../../reference/configuration/domains_config.md#domains-state) состоящую из [State Storage](../../../concepts/glossary.md#state-storage), [Board](../../../concepts/glossary.md#board), [Scheme Board](../../../concepts/glossary.md#scheme-board), на кластере {{ ydb-short-name }}.
 
-При использовании конфигурации V2 подсистемы распространения метаданных частично поддерживаются автоматически за счёт механизма SelfHeal — см. [SelfHeal подсистем распространения метаданных](../../concepts/selfheal-state-storage.md) (перенос и добавление реплик при изменениях топологии). Чтобы отключить это поведение, установите `state_storage_self_heal_config.enable` в `false`, как описано в том же разделе. Отключение не обязательно для нижеприведённых шагов: конфигурация после `ydb admin cluster config replace` применится до очередного срабатывания автоматики.
+При использовании конфигурации V2 подсистемы распространения метаданных частично поддерживаются автоматически за счёт механизма SelfHeal — см. [SelfHeal подсистем распространения метаданных](../../concepts/selfheal-metadata-distribution.md) (перенос и добавление реплик при изменениях топологии). Чтобы отключить это поведение, установите `state_storage_self_heal_config.enable` в `false`, как описано в том же разделе. Отключение не обязательно для нижеприведённых шагов: конфигурация после `ydb admin cluster config replace` применится до очередного срабатывания автоматики.
 
 {% include [warning-configuration-error](../configuration-v1/_includes/warning-configuration-error.md) %}
 

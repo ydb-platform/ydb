@@ -8,7 +8,7 @@ SelfHeal automatically restores the fault tolerance of five types of {{ ydb-shor
 4. [Board](../../concepts/glossary.md#board) replicas.
 5. [SchemeBoard](../../concepts/glossary.md#scheme-board) replicas.
 
-The documentation groups the settings for these objects into two areas: Storage SelfHeal for dynamic and static groups, and Metadata Distribution SelfHeal for State Storage, Board, and SchemeBoard.
+These objects are handled by three mechanisms: SelfHeal for dynamic storage groups, a separate SelfHeal for the static storage group, and a shared SelfHeal for State Storage, Board, and SchemeBoard. The documentation groups these mechanisms into two sections: Storage SelfHeal (dynamic and static groups) and Metadata Distribution SelfHeal (State Storage, Board, and SchemeBoard).
 
 When a node or disk fails, SelfHeal waits for the failure to persist before starting relocation. If the node or disk recovers before the mechanism is triggered, relocation does not start. For disks, the default waiting time is about one hour.
 
@@ -21,4 +21,4 @@ SelfHeal for dynamic storage groups does not depend on the configuration version
 For more details about the mechanisms:
 
 - [Storage SelfHeal](selfheal-storage.md)
-- [Metadata Distribution SelfHeal](selfheal-state-storage.md)
+- [Metadata Distribution SelfHeal](selfheal-metadata-distribution.md)

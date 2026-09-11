@@ -12,7 +12,7 @@ SelfHeal подсистем распространения метаданных 
 
 Механизм обнаруживает неисправности узлов и, если их нельзя быстро восстановить, переносит затронутые реплики на другие узлы. При росте кластера он также может автоматически увеличивать число реплик с учётом конфигурации и доступных узлов.
 
-Механизм запускает Sentinel, компонент [системы управления кластером CMS](../../concepts/glossary.md#cms).
+Механизм запускается Sentinel — компонентом [системы управления кластером CMS](../../concepts/glossary.md#cms).
 
 ## Включение и выключение SelfHeal подсистем распространения метаданных {#on-off}
 
@@ -45,7 +45,7 @@ SelfHeal подсистем распространения метаданных 
 
     {% endnote %}
 
-    При значении `true` у параметра `state_storage_self_heal_config.enable` включается механизм сохранения работоспособности и отказоустойчивости [StateStorage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), [SchemeBoard](../../concepts/glossary.md#scheme-board).
+    При значении `true` у параметра `state_storage_self_heal_config.enable` включается механизм сохранения работоспособности и отказоустойчивости [State Storage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), [SchemeBoard](../../concepts/glossary.md#scheme-board).
 
 3. Обновите конфигурацию кластера с учетом выполненных изменений с помощью [ydb admin cluster config replace](../../reference/ydb-cli/commands/configuration/cluster/replace.md):
 

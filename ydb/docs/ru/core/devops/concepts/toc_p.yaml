@@ -15,6 +15,6 @@ items:
   - name: SelfHeal хранилища
     href: selfheal-storage.md
   - name: SelfHeal подсистем распространения метаданных
-    href: selfheal-state-storage.md
+    href: selfheal-metadata-distribution.md
 - name: Аутентификация и авторизация узлов баз данных
   href: node-authorization.md

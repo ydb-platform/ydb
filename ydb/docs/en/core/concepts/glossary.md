@@ -691,7 +691,7 @@ In addition, there is a **root SchemeShard** that stores information about datab
 
 #### SelfHeal {#self-heal}
 
-[**SelfHeal**](../devops/concepts/selfheal.md) is a set of mechanisms that automatically maintain and restore cluster fault tolerance. [Storage SelfHeal](../devops/concepts/selfheal-storage.md) relocates [VDisks](#vdisk) of storage groups after prolonged node or disk failures. [Metadata Distribution SelfHeal](../devops/concepts/selfheal-state-storage.md) relocates [State Storage](#state-storage), [Board](#board), and [SchemeBoard](#scheme-board) replicas after failures and can add replicas when new nodes appear.
+[**SelfHeal**](../devops/concepts/selfheal.md) is a set of mechanisms that automatically maintain and restore cluster fault tolerance. [Storage SelfHeal](../devops/concepts/selfheal-storage.md) relocates [VDisks](#vdisk) of storage groups after prolonged node or disk failures. [Metadata Distribution SelfHeal](../devops/concepts/selfheal-metadata-distribution.md) relocates [State Storage](#state-storage), [Board](#board), and [SchemeBoard](#scheme-board) replicas after failures and can add replicas when new nodes appear.
 
 #### NodeBroker {#node-broker}
 

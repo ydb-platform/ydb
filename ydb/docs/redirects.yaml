@@ -129,7 +129,9 @@ common:
   - from: /maintenance/manual/selfheal.md
     to: /devops/concepts/selfheal-storage.md
   - from: /maintenance/manual/selfheal_statestorage.md
-    to: /devops/concepts/selfheal-state-storage.md
+    to: /devops/concepts/selfheal-metadata-distribution.md
+  - from: /devops/concepts/selfheal-state-storage.md
+    to: /devops/concepts/selfheal-metadata-distribution.md
   - from: /devops/manual/upgrade.md
     to: /devops/deployment-options/manual/update-executable.md
   - from: /devops/manual/backup-and-recovery.md

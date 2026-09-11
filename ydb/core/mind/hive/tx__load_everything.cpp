@@ -541,6 +541,10 @@ public:
                 tablet.TabletStorageInfo->Version = tabletRowset.GetValueOrDefault<Schema::Tablet::TabletStorageVersion>();
                 tablet.ConfirmedStorageVersion =
                     tabletRowset.GetValueOrDefault<Schema::Tablet::ConfirmedStorageVersion>();
+                if (tablet.State == ETabletState::ReadyToWork && tablet.ConfirmedStorageVersion < tablet.TabletStorageInfo->Version) {
+                    // compatibilty
+                    tablet.ConfirmedStorageVersion = tablet.TabletStorageInfo->Version;
+                }
                 tablet.TabletStorageInfo->TenantPathId = tablet.GetTenant();
 
                 if (!tabletRowset.Next())

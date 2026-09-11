@@ -220,6 +220,7 @@ struct TTupleLayout {
     TPackResult Flatten(TArrayRef<TPackResult> chunks) const;
 
     ui32 GetTupleVarSize(const ui8* inTuple) const;
+    static ui32 GetVariableColumnSize(const ui8* inTuple, const TColumnDesc& column);
 
     bool KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow, const ui8 *rhsRow, const ui8 *rhsOverflow) const;
     bool KeysLess(const ui8 *lhsRow, const ui8 *lhsOverflow, const ui8 *rhsRow, const ui8 *rhsOverflow) const;

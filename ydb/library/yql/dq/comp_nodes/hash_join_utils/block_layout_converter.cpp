@@ -695,6 +695,7 @@ public:
     )
         : Extractors_(std::move(extractors))
         , InnerMapping_(Extractors_.size())
+        , VariableColumns_(Extractors_.size())
         , RememberNullBitmaps_(rememberNullBitmaps)
         , IsBitmapNull_(Extractors_.size(), true)
     {
@@ -702,6 +703,7 @@ public:
 
         ui32 colCounter = 0;
         TVector<NPackedTuple::TColumnDesc> columnDescrs;
+        TVector<ui32> innerToTopLevel;
         for (size_t i = 0; i < Extractors_.size(); ++i) {
             auto& extractor = Extractors_[i];
             auto& mapping = InnerMapping_[i];
@@ -713,6 +715,7 @@ public:
                 descr.Role = roles[i];
                 columnDescrs.push_back(descr);
                 mapping.push_back(colCounter);
+                innerToTopLevel.push_back(i);
                 colCounter++;
             }
         }
@@ -724,6 +727,9 @@ public:
         }
 
         TupleLayout_ = NPackedTuple::TTupleLayout::Create(columnDescrs);
+        for (const auto& column : TupleLayout_->VariableColumns) {
+            VariableColumns_[innerToTopLevel[column.OriginalColumnIndex]].push_back(column);
+        }
     }
 
     void Pack(const TVector<arrow::Datum>& columns, TPackResult& packed) override {
@@ -806,10 +812,15 @@ public:
     }
 
     ui32 GetVariableColumnsCount(ui32 columnIndex) const override {
-        Y_ENSURE(columnIndex < InnerMapping_.size());
-        ui32 result = 0;
-        for (ui32 innerIndex : InnerMapping_[columnIndex]) {
-            result += InnerExtractors_[innerIndex]->GetElementSizeType() == NPackedTuple::EColumnSizeType::Variable;
+        Y_ENSURE(columnIndex < VariableColumns_.size());
+        return VariableColumns_[columnIndex].size();
+    }
+
+    ui64 GetVariableDataSize(TSingleTuple tuple, ui32 columnIndex) const override {
+        Y_ENSURE(columnIndex < VariableColumns_.size());
+        ui64 result = 0;
+        for (const auto& column : VariableColumns_[columnIndex]) {
+            result += NPackedTuple::TTupleLayout::GetVariableColumnSize(tuple.PackedData, column);
         }
         return result;
     }
@@ -818,6 +829,7 @@ private:
     TVector<IColumnDataExtractor::TPtr> Extractors_;
     std::vector<IColumnDataExtractor*> InnerExtractors_;
     TVector<TVector<ui32>> InnerMapping_;
+    TVector<TVector<NPackedTuple::TColumnDesc>> VariableColumns_;
     THolder<NPackedTuple::TTupleLayout> TupleLayout_;
     bool RememberNullBitmaps_;
     TVector<bool> IsBitmapNull_;

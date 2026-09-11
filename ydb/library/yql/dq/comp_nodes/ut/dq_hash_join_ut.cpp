@@ -1091,6 +1091,25 @@ TJoinTestData NarrowRowsHighFanoutTestData() {
     return td;
 }
 
+constexpr int InlineStringFanout = 40000;
+constexpr int InlineStringSize = 15;
+
+TJoinTestData InlineStringsHighFanoutTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftKeys = {1};
+    TVector<TString> leftValues = {TString(InlineStringSize, 'L')};
+    TVector<ui64> rightKeys(InlineStringFanout, 1);
+    TVector<TString> rightValues(InlineStringFanout, TString(InlineStringSize, 'R'));
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Renames = {{1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
 constexpr int WideRowsFanout = 300;
 constexpr int WideRowsValueSize = 4096;
 
@@ -2503,6 +2522,15 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         const auto stats = MeasureOutputBlocks(td);
         AssertOutputBufferBounded(stats, NarrowRowsFanout);
         UNIT_ASSERT_GT(stats.MaxBlockRows, 2000);
+    }
+
+    Y_UNIT_TEST(TestOutputBufferBoundedInlineStrings) {
+        auto td = InlineStringsHighFanoutTestData();
+        const auto stats = MeasureOutputBlocks(td);
+        UNIT_ASSERT_VALUES_EQUAL(stats.TotalRows, InlineStringFanout);
+        UNIT_ASSERT_GT(stats.BlockCount, 1);
+        UNIT_ASSERT_LE(stats.MaxBlockRows * InlineStringSize,
+                       static_cast<i64>(MaxBlockSizeInBytes) + InlineStringSize);
     }
 
     Y_UNIT_TEST(TestOutputBufferBoundedWideRows) {

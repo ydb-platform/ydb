@@ -1765,15 +1765,19 @@ TPackResult TTupleLayout::Flatten(TArrayRef<TPackResult> tuples) const {
 ui32 TTupleLayout::GetTupleVarSize(const ui8* inTuple) const {
     ui32 result = 0;
     for (const auto& col: VariableColumns) {
-        ui32 size = ReadUnaligned<ui8>(inTuple + col.Offset);
-        if (size == 255) { // overflow buffer used
-            const auto prefixSize = col.DataSize - 1 - 2 * sizeof(ui32);
-            const auto overflowSize = ReadUnaligned<ui32>(inTuple + col.Offset + 1 + 1 * sizeof(ui32));
-            size = prefixSize + overflowSize;
-        }
-        result += size;
+        result += GetVariableColumnSize(inTuple, col);
     }
     return result;
+}
+
+ui32 TTupleLayout::GetVariableColumnSize(const ui8* inTuple, const TColumnDesc& column) {
+    ui32 size = ReadUnaligned<ui8>(inTuple + column.Offset);
+    if (size == 255) {
+        const auto prefixSize = column.DataSize - 1 - 2 * sizeof(ui32);
+        const auto overflowSize = ReadUnaligned<ui32>(inTuple + column.Offset + 1 + 1 * sizeof(ui32));
+        size = prefixSize + overflowSize;
+    }
+    return size;
 }
 
 std::string TTupleLayout::Stringify(TSingleTuple tuple) const {

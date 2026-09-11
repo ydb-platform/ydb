@@ -6,6 +6,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
+from helpers import YdbGrpcLog
 
 from library.python.port_manager import PortManager
 from ydb.core.protos import grpc_pb2_grpc, msgbus_pb2
@@ -13,6 +14,7 @@ from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.tls_tools import generate_selfsigned_cert
+from ydb.tests.library.harness.util import LogLevels
 
 
 @pytest.fixture(scope='module')
@@ -58,6 +60,7 @@ def cluster(certificates, tmp_path_factory, request):
         generate_grpc_tls_data=False,
         enforce_user_token_requirement=True,
         default_clusteradmin='root@builtin',
+        additional_log_configs={'GRPC_SERVER': LogLevels.DEBUG},
     )
     security = config.yaml_config['domains_config']['security_config']
     # A nonempty allowlist is essential: otherwise anonymous registration is allowed.
@@ -100,6 +103,10 @@ def node_config(cluster):
     item.UsageScope.TenantAndNodeTypeFilter.NodeType = 'node-auth-test'
     item.Config.LogConfig.DefaultLevel = 5
     with grpc.insecure_channel(f'localhost:{cluster.nodes[1].port}') as channel:
+        server_log = YdbGrpcLog(cluster)
         response = grpc_pb2_grpc.TGRpcServerStub(channel).ConsoleRequest(request, timeout=30)
-    assert response.Status.Code == StatusIds.SUCCESS, response
+        # Flush the setup response before tests capture the same RPC method.
+        server_log.response('ConsoleRequest')
+    if response.Status.Code != StatusIds.SUCCESS:
+        pytest.fail(f'Could not install the test config: {response}')
     return item.Config

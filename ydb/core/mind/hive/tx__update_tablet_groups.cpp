@@ -104,7 +104,7 @@ public:
             }
 
             TDuration timeSinceLastReassign = ctx.Now() - lastChangeTimestamp;
-            if (lastChangeTimestamp && Self->GetMinPeriodBetweenReassign() && timeSinceLastReassign < Self->GetMinPeriodBetweenReassign()) {
+            if (lastChangeTimestamp && Self->GetMinPeriodBetweenReassign() && timeSinceLastReassign < Self->GetMinPeriodBetweenReassign() && !tablet->HasUnconfirmedStorage()) {
                 YDB_LOG_WARN("THive::TTxUpdateTabletGroups::Execute space reassign too soon, ignored",
                     {"logPrefix", GetLogPrefix()},
                     {"tabletId", tablet->Id});
@@ -283,7 +283,7 @@ public:
             YDB_LOG_WARN("THive::TTxUpdateTabletGroups::Execute tablet not changed",
                 {"logPrefix", GetLogPrefix()},
                 {"tabletId", tablet->Id});
-            if (hasEmptyChannel) {
+            if (hasEmptyChannel || tablet->HasUnconfirmedStorage()) {
                 // we can't continue with partial/unsuccessfull reassign on 0 generation
                 newTabletState = ETabletState::GroupAssignment;
             } else {

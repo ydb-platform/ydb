@@ -164,7 +164,7 @@ TDBGFixture::MakeDirectBlockGroup(
         directBlockGroupIndex,
         ddisksIds,
         pbufferIds,
-        TVector{ddisksIds.size(), EHostHealth::Online},
+        TVector(ddisksIds.size(), EHostHealth::Online),
         dbgConnectionsConfigGeneration,
         std::move(transport),
         nullptr);

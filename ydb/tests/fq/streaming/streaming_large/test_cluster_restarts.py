@@ -140,11 +140,11 @@ class TestStreamingLarge(StreamingTestBase):
             shared=True,
             partitions_count=9
         )
-
-        node1 = kikimr.cluster.slots[len(kikimr.cluster.slots)]
+        node1_id = len(kikimr.cluster.slots)
+        node1 = kikimr.cluster.slots[node1_id]
         node1.stop()
 
-        kikimr.recreate_driver(2)
+        kikimr.recreate_driver(next(node_id for node_id in kikimr.cluster.slots if node_id != node1_id))
 
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -176,7 +176,7 @@ class TestStreamingLarge(StreamingTestBase):
         node2 = kikimr.cluster.slots[stop_node_id]
         node2.stop()
         node1.start()
-        kikimr.recreate_driver(1)
+        kikimr.recreate_driver(node1_id)
 
         def write_read(i):
             value = f"value {i}"
@@ -198,7 +198,7 @@ class TestStreamingLarge(StreamingTestBase):
         write_read(4)
         node2.stop()
         node1.start()
-        kikimr.recreate_driver()
+        kikimr.recreate_driver(node1_id)
         write_read(5)
         sql = R'''DROP STREAMING QUERY `{query_name}`;'''
         kikimr.ydb_client.query(sql.format(query_name=query_name1))

@@ -468,7 +468,6 @@ class Kikimr:
 
         self.first_node = random.choice(list(self.cluster.slots.values()))
         self.endpoint = Endpoint(f"{self.first_node.host}:{self.first_node.port}", tenant_database)
-        self.recreate_driver()
         logger.info(f"Creating ydb client to {self.endpoint}, database={self.endpoint.database}")
         self.ydb_client = self._setup_ydb_client(self.endpoint, enable_discovery)
 

@@ -200,16 +200,18 @@ bool IsVectorIndexMetricCompatible(const TIndexDescription& indexDesc, TStringBu
             break;
     }
 
-    return false;
+    return mismatch("a valid vector metric in the index definition");
 }
 
-bool CanUseVectorIndex(const TIndexDescription& indexDesc, const TExprBase& lambdaBody, const TCoTopBase& top, TString& error) {
+bool CanUseVectorIndex(const TIndexDescription& indexDesc, const TExprBase& lambdaBody, const TCoTopBase& top,
+    const TExprNode* expectedRow, TString& error)
+{
     Y_ASSERT(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree);
     // TODO(mbkkt) We need to account top.Count(), but not clear what to if it's value is runtime?
     const auto& col = indexDesc.KeyColumns.back();
     auto checkMember = [&] (const TExprBase& expr) {
         auto member = expr.Maybe<TCoMember>();
-        return member && member.Cast().Name().Value() == col;
+        return member && member.Cast().Struct().Raw() == expectedRow && member.Cast().Name().Value() == col;
     };
     auto checkUdf = [&] (const TExprBase& expr, bool checkMembers) {
         auto apply = expr.Maybe<TCoApply>();
@@ -244,7 +246,7 @@ bool CanUseVectorIndex(const TIndexDescription& indexDesc, const TExprBase& lamb
         auto flatMapInput = flatMap.Input();
         auto member = flatMapInput.Maybe<TCoMember>();
         if (member && member.Cast().Struct().Maybe<TCoArgument>()) {
-            if (member.Cast().Name().Value() == col) {
+            if (member.Cast().Struct().Raw() == expectedRow && member.Cast().Name().Value() == col) {
                 // First case
                 return checkUdf(flatMap.Lambda().Body(), false);
             } else {
@@ -259,7 +261,7 @@ bool CanUseVectorIndex(const TIndexDescription& indexDesc, const TExprBase& lamb
             auto innerMapInput = innerMap.Input();
             auto member = innerMapInput.Maybe<TCoMember>();
             if (member && member.Cast().Struct().Maybe<TCoArgument>()) {
-                if (member.Cast().Name().Value() == col) {
+                if (member.Cast().Struct().Raw() == expectedRow && member.Cast().Name().Value() == col) {
                     // Second case
                     return checkUdf(innerMap.Lambda().Body(), false);
                 } else {
@@ -580,13 +582,16 @@ auto LevelLambdaFrom(
     auto newLambda = NewLambdaFrom(ctx, pos, replaces, *fromArgs.Raw(), fromBody);
     replaces.clear();
     auto args = newLambda.Args().Ptr();
+    const auto inputRow = newLambda.Args().Arg(0).Raw();
 
     auto flatMap = newLambda.Body().Maybe<TCoFlatMap>();
     if (!flatMap) {
         auto apply = newLambda.Body().Cast<TCoApply>();
         for (auto arg : apply.Args()) {
             auto oldMember = arg.Maybe<TCoMember>();
-            if (oldMember && oldMember.Cast().Name().Value() == indexDesc.KeyColumns.back()) {
+            if (oldMember && oldMember.Cast().Struct().Raw() == inputRow &&
+                oldMember.Cast().Name().Value() == indexDesc.KeyColumns.back())
+            {
                 auto newMember = Build<TCoMember>(ctx, pos)
                     .Name().Build(NTableIndex::NKMeans::CentroidColumn)
                     .Struct(oldMember.Cast().Struct())
@@ -1094,7 +1099,7 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
         prefixKeys.push_back(indexDesc.KeyColumns[i]);
     }
 
-    size_t numPrefixGroups = 1;
+    TMaybe<size_t> numPrefixGroups;
     {
         THashSet<TString> possibleKeys;
         TPredicateExtractorSettings predSettings;
@@ -1136,14 +1141,37 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
     const bool withOverlap = kmeansDesc.settings().overlap_clusters() > 1;
 
     const auto levelTop = GetKMeansTreeSearchTopSize(kqpCtx, withOverlap);
-    const auto levelTopTotal = levelTop * numPrefixGroups;
+    TExprNode::TPtr levelTopTotal;
+    if (numPrefixGroups) {
+        levelTopTotal = ctx.Builder(pos)
+            .Callable("Uint64")
+            .Atom(0, std::to_string(levelTop * *numPrefixGroups), TNodeFlags::Default)
+            .Seal()
+            .Build();
+    } else {
+        const auto rootGroupCount = Build<TCoLength>(ctx, pos)
+            .List(prefixRootRows)
+            .Done();
+        const auto nonZeroRootGroupCount = Build<TCoIf>(ctx, pos)
+            .Predicate<TCoCmpEqual>()
+                .Left(rootGroupCount)
+                .Right<TCoUint64>().Literal().Build("0").Build()
+            .Build()
+            .ThenValue<TCoUint64>().Literal().Build("1").Build()
+            .ElseValue(rootGroupCount)
+            .Done();
+        levelTopTotal = Build<TCoMul>(ctx, pos)
+            .Left<TCoUint64>().Literal().Build(std::to_string(levelTop)).Build()
+            .Right(nonZeroRootGroupCount)
+            .Done().Ptr();
+    }
 
     TKqpStreamLookupSettings firstLevelSettings;
     firstLevelSettings.Strategy = EStreamLookupStrategyType::LookupRows;
     firstLevelSettings.VectorTopColumn = NTableIndex::NKMeans::CentroidColumn;
     firstLevelSettings.VectorTopIndex = indexDesc.Name;
     firstLevelSettings.VectorTopTarget = targetVector;
-    firstLevelSettings.VectorTopLimit = ctx.Builder(pos).Callable("Uint64").Atom(0, std::to_string(levelTopTotal), TNodeFlags::Default).Seal().Build();
+    firstLevelSettings.VectorTopLimit = levelTopTotal;
     auto firstLevelSettingsNode = firstLevelSettings.BuildNode(ctx, pos);
     auto levelRows = Build<TKqlStreamLookupTable>(ctx, pos)
         .Table(levelTable)
@@ -1153,14 +1181,10 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
         .Done().Ptr();
 
     {
-        auto levelTopCount = ctx.Builder(pos)
-            .Callable("Uint64")
-            .Atom(0, std::to_string(levelTopTotal), TNodeFlags::Default)
-            .Seal().Build();
         TKqpStreamLookupSettings levelSettings;
         levelSettings.Strategy = EStreamLookupStrategyType::LookupRows;
         auto levelSettingsNode = levelSettings.BuildNode(ctx, pos);
-        VectorReadLevel(indexDesc, ctx, pos, levelLambda, top, levelTable, levelColumns, levelTopCount, levelSettingsNode, levelRows);
+        VectorReadLevel(indexDesc, ctx, pos, levelLambda, top, levelTable, levelColumns, levelTopTotal, levelSettingsNode, levelRows);
     }
 
     read = Build<TCoUnionAll>(ctx, pos)
@@ -1957,6 +1981,19 @@ void VisitExprSkipOptionalIfValue(const TExprNode::TPtr& node, const TExprVisitP
     }
 }
 
+bool IsStructParameterMember(const TExprBase& value) {
+    const auto member = value.Maybe<TCoMember>();
+    if (!member) {
+        return false;
+    }
+    const auto parameter = member.Cast().Struct().Maybe<TCoParameter>();
+    if (!parameter) {
+        return false;
+    }
+    const auto parameterType = parameter.Cast().Ref().GetTypeAnn();
+    return parameterType && parameterType->GetKind() == ETypeAnnotationKind::Struct;
+}
+
 // Extract an equality binding for a prefix column from an `==` node: one side must be
 // Member(row, prefixCol), the other a parameter, a member of a struct parameter, or a literal.
 void TryExtractPrefixValuesImpl(const TExprNode::TPtr& expr, const THashSet<TString>& prefixColumnsSet,
@@ -1985,16 +2022,7 @@ void TryExtractPrefixValuesImpl(const TExprNode::TPtr& expr, const THashSet<TStr
         }
 
         auto inner = value.Maybe<TCoJust>() ? value.Cast<TCoJust>().Input() : value;
-        const auto valueMember = inner.Maybe<TCoMember>();
-
-        const bool isStructParameterMember = expectedRow && valueMember && [&] {
-            const auto parameter = valueMember.Cast().Struct().Maybe<TCoParameter>();
-            if (!parameter) {
-                return false;
-            }
-            const auto parameterType = parameter.Cast().Ref().GetTypeAnn();
-            return parameterType && parameterType->GetKind() == ETypeAnnotationKind::Struct;
-        }();
+        const bool isStructParameterMember = expectedRow && IsStructParameterMember(inner);
 
         if (!inner.Maybe<TCoParameter>() && !inner.Maybe<TCoDataCtor>() && !isStructParameterMember) {
             return false;
@@ -2011,14 +2039,14 @@ void TryExtractPrefixValuesImpl(const TExprNode::TPtr& expr, const THashSet<TStr
 }
 
 void TryExtractPrefixValues(const TExprNode::TPtr& expr, const THashSet<TString>& prefixColumnsSet,
-    TVector<std::pair<TString, TExprNode::TPtr>>& prefixValues)
+    TVector<std::pair<TString, TExprNode::TPtr>>& prefixValues, const TExprNode* expectedRow)
 {
-    TryExtractPrefixValuesImpl(expr, prefixColumnsSet, prefixValues, /* expectedRow */ nullptr);
+    TryExtractPrefixValuesImpl(expr, prefixColumnsSet, prefixValues, expectedRow);
 }
 
 TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext& ctx, std::string_view indexName, bool isNgram,
     const THashSet<TString>& indexedColumns = {}, const TVector<TString>& prefixColumns = {},
-    const TVector<std::pair<TString, TExprNode::TPtr>>& seedPrefixColumns = {})
+    const TVector<std::pair<TString, TExprNode::TPtr>>& seedPrefixColumns = {}, const TExprNode* expectedRow = nullptr)
 {
     TFullTextApplyParseResult result;
     result.PrefixColumns = seedPrefixColumns;
@@ -2047,7 +2075,7 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
             isGreenNode = false;
         }
 
-        TryExtractPrefixValues(expr, prefixColumnsSet, result.PrefixColumns);
+        TryExtractPrefixValues(expr, prefixColumnsSet, result.PrefixColumns, expectedRow);
 
         if (auto match = TFulltextQuery::Match(expr, ctx, indexedColumns) ; match.IsValid()) {
             if (match.IsScoreQuery()) {
@@ -2227,7 +2255,7 @@ TVector<std::pair<TString, TExprNode::TPtr>> ExtractSeedPrefix(TReadMatch& read,
             for (size_t i = 0; i < prefixColumns.size(); ++i) {
                 auto value = from.Arg(i);
                 auto inner = value.Maybe<TCoJust>() ? value.Cast<TCoJust>().Input() : value;
-                if (inner.Maybe<TCoParameter>() || inner.Maybe<TCoDataCtor>()) {
+                if (inner.Maybe<TCoParameter>() || inner.Maybe<TCoDataCtor>() || IsStructParameterMember(inner)) {
                     seedPrefixColumns.emplace_back(prefixColumns[i], value.Ptr());
                 }
             }
@@ -2277,7 +2305,8 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
     }
 
     auto seedPrefixColumns = ExtractSeedPrefix(read, prefixColumns);
-    auto result = FindMatchingApply(flatMap.Lambda().Body(), ctx, read.Index().Value(), isNgram, indexedColumns, prefixColumns, seedPrefixColumns);
+    auto result = FindMatchingApply(flatMap.Lambda().Body(), ctx, read.Index().Value(), isNgram, indexedColumns,
+        prefixColumns, seedPrefixColumns, flatMap.Lambda().Args().Arg(0).Raw());
     if (result.HasErrors) {
         return {};
     }
@@ -2396,7 +2425,8 @@ TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NY
         }
 
         expectedSettings = CollectJsonIndexPredicate(flatMap.Lambda().Body(), node, ctx,
-            jsonIndexedColumns, prefixColumns, {}, EJsonIndexSelectionMode::Automatic);
+            jsonIndexedColumns, prefixColumns, {}, EJsonIndexSelectionMode::Automatic,
+            flatMap.Lambda().Args().Arg(0).Raw());
 
         if (expectedSettings.has_value()) {
             selectedIndex = indexInfo.Name;
@@ -2471,7 +2501,9 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(
     }
 
     auto seedPrefixColumns = ExtractSeedPrefix(read, prefixColumns);
-    auto expectedSettings = CollectJsonIndexPredicate(flatMap.Lambda().Body(), node, ctx, jsonIndexedColumns, prefixColumns, seedPrefixColumns);
+    auto expectedSettings = CollectJsonIndexPredicate(flatMap.Lambda().Body(), node, ctx, jsonIndexedColumns,
+        prefixColumns, seedPrefixColumns, EJsonIndexSelectionMode::Explicit,
+        flatMap.Lambda().Args().Arg(0).Raw());
     if (!expectedSettings.has_value()) {
         ctx.AddError(expectedSettings.error());
         return {};
@@ -2963,7 +2995,8 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             // ---- Fulltext relevance branch ----
             if (arg != ftScore) {
                 return addError(TStringBuilder() << branchId << " must be a bare FullTextScore expression; "
-                    "wrapping it would change scoring semantics that HybridRank cannot preserve");
+                    "wrapping it would change scoring semantics that HybridRank cannot preserve; "
+                    "use Weights or ScoreLambda instead");
             }
             b.Kind = EBranchKind::Fulltext;
             b.IsSimilarity = true;
@@ -3040,6 +3073,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                 b.PrefixColumns = std::move(*prefixColumns);
             } else {
                 ui32 matches = 0;
+                const TIndexDescription* unboundPrefixedIndex = nullptr;
                 for (const auto& idx : tableDesc.Metadata->Indexes) {
                     if ((idx.Type == TIndexDescription::EType::GlobalFulltextRelevance ||
                         idx.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) &&
@@ -3048,6 +3082,9 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                     {
                         auto prefixColumns = extractPrefixColumns(idx, false);
                         if (!prefixColumns) {
+                            if (!unboundPrefixedIndex) {
+                                unboundPrefixedIndex = &idx;
+                            }
                             continue;
                         }
                         b.IndexName = idx.Name;
@@ -3056,6 +3093,10 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                     }
                 }
                 if (matches == 0) {
+                    if (unboundPrefixedIndex) {
+                        return addError(TStringBuilder() << "prefixed fulltext index '" << unboundPrefixedIndex->Name
+                            << "' requires equality predicates on every prefix column in WHERE");
+                    }
                     return addError(TStringBuilder() << "no ready fulltext relevance index found on column '" << b.ScoredColumn << "'");
                 }
                 if (matches > 1) {
@@ -3131,6 +3172,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                 b.PrefixColumns = std::move(*prefixColumns);
             } else {
                 ui32 matches = 0;
+                const TIndexDescription* unboundPrefixedIndex = nullptr;
                 for (const auto& idx : tableDesc.Metadata->Indexes) {
                     if (idx.State == TIndexDescription::EIndexState::Ready
                         && idx.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree
@@ -3139,6 +3181,9 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                     {
                         auto prefixColumns = extractPrefixColumns(idx, true);
                         if (!prefixColumns) {
+                            if (!unboundPrefixedIndex) {
+                                unboundPrefixedIndex = &idx;
+                            }
                             continue;
                         }
                         b.IndexName = idx.Name;
@@ -3147,6 +3192,10 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                     }
                 }
                 if (matches == 0) {
+                    if (unboundPrefixedIndex) {
+                        return addError(TStringBuilder() << "prefixed vector index '" << unboundPrefixedIndex->Name
+                            << "' requires equality predicates on a contiguous leading prefix in WHERE");
+                    }
                     return addError(TStringBuilder() << "no ready vector (kmeans-tree) index found on column '" << b.ScoredColumn << "'");
                 }
                 if (matches > 1) {
@@ -3331,9 +3380,12 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             }
 
             const auto vectorSortArg = ctx.NewArgument(pos, "r");
-            const auto vectorSortExpr = b.PrefixColumns.empty()
-                ? ctx.Builder(pos).Callable("Member").Add(0, vectorSortArg).Atom(1, b.ScoreCol).Seal().Build()
-                : ctx.ReplaceNode(TExprNode::TPtr(b.ScoreExpr), *rowArg, vectorSortArg);
+            const auto vectorSortExpr = ctx.Builder(pos)
+                .Callable("Member")
+                    .Add(0, vectorSortArg)
+                    .Atom(1, b.ScoreCol)
+                .Seal()
+                .Build();
             b.List = ctx.Builder(pos)
                 .Callable("TopSort")
                     .Callable(0, "FlatMap")
@@ -3834,11 +3886,54 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
         auto lambdaArgs = topBase.KeySelectorLambda().Args();
         auto lambdaBody = topBase.KeySelectorLambda().Body();
         TString error;
-        bool canUseVectorIndex = CanUseVectorIndex(*indexDesc, lambdaBody, topBase, error);
+        const auto topSortRow = topBase.KeySelectorLambda().Args().Arg(0);
+        bool canUseVectorIndex = CanUseVectorIndex(*indexDesc, lambdaBody, topBase, topSortRow.Raw(), error);
+
+        // A projection may compute the distance once and expose it as a struct member used by ORDER BY.
+        // Resolve that member back to the original Knn expression for index matching and level traversal;
+        // VectorTopMain keeps the original member selector, so the final sort reuses the projected value.
+        if (!canUseVectorIndex && maybeFlatMap) {
+            const auto member = lambdaBody.Maybe<TCoMember>();
+            const auto argument = member ? member.Cast().Struct().Maybe<TCoArgument>() : TMaybeNode<TCoArgument>{};
+            TMaybeNode<TCoAsStruct> asStruct;
+            const auto flatMapBody = maybeFlatMap.Cast().Lambda().Body();
+            if (const auto just = flatMapBody.Maybe<TCoJust>()) {
+                asStruct = just.Cast().Input().Maybe<TCoAsStruct>();
+            } else if (indexDesc->KeyColumns.size() > 1) {
+                const auto optionalIf = flatMapBody.Maybe<TCoOptionalIf>();
+                if (optionalIf) {
+                    asStruct = optionalIf.Cast().Value().Maybe<TCoAsStruct>();
+                }
+            }
+
+            if (argument && argument.Raw() == topSortRow.Raw() && asStruct) {
+                const auto memberName = member.Cast().Name().Value();
+                for (const auto& item : asStruct.Cast().Args()) {
+                    if (!item->IsList()) {
+                        continue;
+                    }
+                    const auto children = item->Children();
+                    if (children.size() != 2) {
+                        continue;
+                    }
+                    const auto name = TExprBase{children[0].Get()}.Maybe<TCoAtom>();
+                    if (!name || name.Cast().Value() != memberName) {
+                        continue;
+                    }
+                    lambdaBody = TExprBase{children[1]};
+                    const auto flatMapRow = maybeFlatMap.Cast().Lambda().Args().Arg(0);
+                    canUseVectorIndex = CanUseVectorIndex(*indexDesc, lambdaBody, topBase, flatMapRow.Raw(), error);
+                    if (canUseVectorIndex) {
+                        lambdaArgs = maybeFlatMap.Cast().Lambda().Args();
+                    }
+                    break;
+                }
+            }
+        }
+
         if (indexDesc->KeyColumns.size() > 1) {
             if (!canUseVectorIndex) {
-                return reject(TStringBuilder() << "sorting must contain distance: "
-                    << error << ", reference distance from projection not supported yet");
+                return reject(TStringBuilder() << "projection or sorting must contain distance: " << error);
             }
             if (!maybeFlatMap.Lambda().Body().Maybe<TCoOptionalIf>()) {
                 return reject("only simple conditions supported for now");
@@ -3851,45 +3946,7 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
                                                           ctx, typesCtx, kqpCtx, tableDesc, *indexDesc, *implTable);
         }
         if (!canUseVectorIndex) {
-            auto argument = lambdaBody.Maybe<TCoMember>().Struct().Maybe<TCoArgument>();
-            if (!argument) {
-                return reject(TStringBuilder() << "sorting must contain distance: " << error);
-            }
-            auto asStruct = maybeFlatMap.Lambda().Body().Maybe<TCoJust>().Input().Maybe<TCoAsStruct>();
-            if (!asStruct) {
-                return reject("only simple projection with distance referenced in sorting supported for now");
-            }
-
-            // TODO(mbkkt) I think variable name shouldn't matter, and I only need to check that result of FlatMap
-            // used as argument for member access in top lambda. The name should be same, and it's same in the tests
-            // and was same in real world, but for some reason recently it starts to fail in real-world, so I comment it out
-            // const auto argumentName = argument.Cast().Name();
-            // if (absl::c_none_of(maybeFlatMap.Cast().Lambda().Args(),
-            //         [&](const TCoArgument& argument) { return argumentName == argument.Name(); })) {
-            //     return reject("...");
-            // }
-
-            const auto memberName = lambdaBody.Cast<TCoMember>().Name().Value();
-            for (const auto& arg : asStruct.Cast().Args()) {
-                if (!arg->IsList()) {
-                    continue;
-                }
-                auto argChildren = arg->Children();
-                if (argChildren.size() != 2) {
-                    continue;
-                }
-                auto atom = TExprBase{argChildren[0].Get()}.Maybe<TCoAtom>();
-                if (!atom || atom.Cast().Value() != memberName) {
-                    continue;
-                }
-                lambdaBody = TExprBase{argChildren[1]};
-                canUseVectorIndex = CanUseVectorIndex(*indexDesc, lambdaBody, topBase, error);
-                break;
-            }
-            if (!canUseVectorIndex) {
-                return reject(TStringBuilder() << "projection or sorting must contain distance: " << error);
-            }
-            lambdaArgs = maybeFlatMap.Cast().Lambda().Args();
+            return reject(TStringBuilder() << "projection or sorting must contain distance: " << error);
         }
         if (kqpCtx.Config->GetEnableVectorSearchActor()) {
             return DoRewriteTopSortOverKMeansTreeToVectorSearch(readTableIndex, maybeFlatMap, lambdaArgs, lambdaBody, topBase,

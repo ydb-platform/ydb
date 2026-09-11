@@ -14,6 +14,7 @@ RECURSE(
     query
     result
     row_ranges
+    retry
     retry_range
     table
     value

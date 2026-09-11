@@ -222,6 +222,7 @@ namespace NKikimr::NFulltext {
                 return random;
             };
 
+<<<<<<< HEAD
             for (ui32 iteration = 0; iteration < 100; ++iteration) {
                 TVector<TDeltaItem> items;
                 ui64 docId = nextRandom() & 0xFFFF;
@@ -247,6 +248,16 @@ namespace NKikimr::NFulltext {
                 }());
             }
         }
+=======
+        columnAnalyzers->set_language("armenian,english,greek,russian,tamil,yiddish");
+        UNIT_ASSERT_C(ValidateSettings(settings, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        columnAnalyzers->set_language("english");
+        columnAnalyzers->set_use_filter_ngram(true);
+        UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "cannot set use_filter_snowball with use_filter_ngram or use_filter_edge_ngram at the same time");
+>>>>>>> dcd8e466595 (Added more languages)
 
         Y_UNIT_TEST(MultiDeltaReaderGenerationMerge) {
             auto encode = [](std::initializer_list<TDeltaItem> items) {
@@ -858,6 +869,19 @@ namespace NKikimr::NFulltext {
         UNIT_ASSERT_VALUES_EQUAL(
             Analyze("cars driving машины дорогам ελληνικά 123", analyzers),
             (TVector<TString>{"car", "drive", "машин", "дорог", "ελληνικά", "123"}));
+
+        const TVector<TString> languages = {"armenian", "english", "greek", "russian", "tamil", "yiddish"};
+        const TVector<TString> words = {"մեքենաներ", "cars", "αυτοκίνητα", "машины", "மரங்கள்", "הײַזער"};
+        TVector<TString> expected;
+        for (size_t i = 0; i < languages.size(); ++i) {
+            analyzers.set_language(languages[i]);
+            const auto stemmed = Analyze(words[i], analyzers);
+            UNIT_ASSERT_VALUES_EQUAL(stemmed.size(), 1);
+            expected.push_back(stemmed.front());
+        }
+
+        analyzers.set_language("armenian,english,greek,russian,tamil,yiddish");
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("մեքենաներ cars αυτοκίνητα машины மரங்கள் הײַזער", analyzers), expected);
 
         analyzers.set_language("klingon");
         UNIT_ASSERT_EXCEPTION(Analyze(englishText, analyzers), yexception);

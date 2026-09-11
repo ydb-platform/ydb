@@ -10,13 +10,13 @@ Release date: September 2, 2026.
 
 * [Streaming queries](./dev/streaming-query/index.md?version=v26.2) can read from local topics, write to local topics, read local tables, and contain multiple `INSERT` statements.
 * Streaming queries gained [watermarks](./dev/streaming-query/watermarks.md?version=v26.2) and evaluation of scalar expressions outside the context of an individual message.
-* Added [Bloom skip indexes](./dev/bloom-skip-indexes.md?version=main): Bloom and Bloom n-gram indexes for column-oriented tables, and prefix Bloom indexes for row-oriented tables. Column-oriented tables also gained configurable column compression.
+* Added [Bloom skip indexes](./dev/bloom-skip-indexes.md?version=v26.2): Bloom and Bloom n-gram indexes for column-oriented tables, and prefix Bloom indexes for row-oriented tables. Column-oriented tables also gained configurable column compression.
 * The [parallelism level](./yql/reference/syntax/alter_table/indexes.md?version=v26.2) can now be configured for index builds.
 * [Full-text indexes](./dev/fulltext-indexes.md?version=v26.2) are enabled by default.
 * [`ALTER TABLE`](./yql/reference/syntax/alter_table/columns.md?version=v26.2) statements `ALTER COLUMN SET DEFAULT` and `ALTER COLUMN DROP DEFAULT` are available by default.
 * YQL statements [`TRUNCATE TABLE`](./yql/reference/syntax/truncate-table.md?version=v26.2) and [`DISCARD SELECT`](./yql/reference/syntax/discard.md?version=v26.2) are available by default.
-* QueryService can return query results in [Apache Arrow format](./reference/ydb-sdk/data-formats/format-arrow.md?version=main); this capability is enabled by default.
-* Added forced [table compaction](./yql/reference/syntax/alter_table/compact.md?version=main) using `ALTER TABLE ... COMPACT`.
+* QueryService can return query results in [Apache Arrow format](./reference/ydb-sdk/data-formats/format-arrow.md?version=v26.2); this capability is enabled by default.
+* Added forced [table compaction](./yql/reference/syntax/alter_table/compact.md?version=v26.2) using `ALTER TABLE ... COMPACT`.
 * Added automatic storage balancing between groups and background validation of disk placement.
 * Table partitioning schema changes are faster.
 * Added [audit logging](./security/audit-log.md?version=v26.2) for topic operations.

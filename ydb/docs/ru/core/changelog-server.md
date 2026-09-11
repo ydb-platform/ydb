@@ -10,13 +10,13 @@
 
 * [Потоковые запросы](./dev/streaming-query/index.md?version=v26.2) поддерживают чтение из локальных топиков, запись в локальные топики, чтение локальных таблиц и несколько инструкций `INSERT` в одном запросе.
 * В потоковых запросах добавлены [watermarks](./dev/streaming-query/watermarks.md?version=v26.2) и вычисление скалярных выражений вне контекста отдельного сообщения.
-* Добавлены [Bloom-индексы](./dev/bloom-skip-indexes.md?version=main): Bloom и Bloom n-gram для колоночных таблиц и префиксные Bloom-индексы для строковых таблиц. Для колоночных таблиц также добавлена настройка сжатия колонок.
+* Добавлены [Bloom-индексы](./dev/bloom-skip-indexes.md?version=v26.2): Bloom и Bloom n-gram для колоночных таблиц и префиксные Bloom-индексы для строковых таблиц. Для колоночных таблиц также добавлена настройка сжатия колонок.
 * Для построения индексов теперь можно настраивать [уровень параллелизма](./yql/reference/syntax/alter_table/indexes.md?version=v26.2).
 * [Полнотекстовые индексы](./dev/fulltext-indexes.md?version=v26.2) включены по умолчанию.
 * В [`ALTER TABLE`](./yql/reference/syntax/alter_table/columns.md?version=v26.2) по умолчанию доступны инструкции `ALTER COLUMN SET DEFAULT` и `ALTER COLUMN DROP DEFAULT`.
 * По умолчанию доступны инструкции YQL [`TRUNCATE TABLE`](./yql/reference/syntax/truncate-table.md?version=v26.2) и [`DISCARD SELECT`](./yql/reference/syntax/discard.md?version=v26.2).
-* QueryService поддерживает выдачу результатов запросов в [формате Apache Arrow](./reference/ydb-sdk/data-formats/format-arrow.md?version=main); эта возможность включена по умолчанию.
-* Добавлен запуск принудительной [компакции таблицы](./yql/reference/syntax/alter_table/compact.md?version=main) с помощью `ALTER TABLE ... COMPACT`.
+* QueryService поддерживает выдачу результатов запросов в [формате Apache Arrow](./reference/ydb-sdk/data-formats/format-arrow.md?version=v26.2); эта возможность включена по умолчанию.
+* Добавлен запуск принудительной [компакции таблицы](./yql/reference/syntax/alter_table/compact.md?version=v26.2) с помощью `ALTER TABLE ... COMPACT`.
 * Добавлена автоматическая балансировка хранилища между группами и фоновая проверка корректности размещения дисков.
 * Ускорено изменение схемы партиционирования таблиц.
 * Добавлено [аудитное логирование](./security/audit-log.md?version=v26.2) операций с топиками.

@@ -630,15 +630,6 @@ public:
         : TTaggedLoggingGuard(logger, ELogLevel::Alert, anchorRef, message, /*alwaysBuildMessage*/ true)
     { }
 
-    //! Returns true exactly once, so the enclosing |for| runs the |.With| chain a single
-    //! time before its step expression commits the event and throws.
-    bool TryEnter()
-    {
-        bool pending = Pending_;
-        Pending_ = false;
-        return pending;
-    }
-
     //! Emits the alert event (when enabled) and returns it rendered, tags included.
     std::string Commit() &
     {
@@ -649,9 +640,6 @@ public:
         }
         return message;
     }
-
-private:
-    bool Pending_ = true;
 };
 
 //! A no-op stand-in for #TTaggedLoggingGuard used by compile-time-disabled trace logging:

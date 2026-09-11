@@ -593,12 +593,15 @@ void LogStructuredEvent(
 // -- because the logging library must not depend on the error library. The guard's
 // |Commit| logs the alert (when enabled) and returns the rendered event -- tags included,
 // so they survive in the |"message"| attribute.
+// As in #YT_TLOG_FATAL, the |for| deliberately has no condition: the step throws, so the
+// loop has no normal exit and the expansion is noreturn. A condition here would trip
+// -Wreturn-type in callers that end a non-void function with this macro.
 #define YT_TLOG_ALERT_AND_THROW(message)                                       \
     for (::NYT::NLogging::NDetail::TTaggedThrowingLoggingGuard loggingGuard__( \
             Logger(),                                                          \
             YT_TLOG_STATIC_ANCHOR_REF(),                                       \
             (message));                                                        \
-        loggingGuard__.TryEnter();                                             \
+        /*no condition*/;                                                      \
         THROW_ERROR_EXCEPTION(                                                 \
             ::NYT::EErrorCode::Fatal,                                          \
             "Malformed request or incorrect state detected")                   \

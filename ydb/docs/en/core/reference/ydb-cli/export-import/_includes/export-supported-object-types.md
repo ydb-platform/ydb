@@ -5,6 +5,7 @@ Export is available only for objects of the following types:
 - [secondary index](../../../../concepts/glossary.md#secondary-index).
 - [vector index](../../../../concepts/glossary.md#vector-index).
 - [full-text index](../../../../concepts/glossary.md#fulltext-index).
+- [local Bloom skip index](../../../../concepts/glossary.md#local-bloom-skip-index).
 - [topic](../../../../concepts/datamodel/topic.md) (schema only).
 - [view](../../../../concepts/datamodel/view.md).
 - [asynchronous replication](../../../../concepts/async-replication.md).

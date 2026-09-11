@@ -715,6 +715,7 @@ void DoBootstrapCluster(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvide
             auto& record = ev->Record;
             auto *cmd = record.MutableBootstrapCluster();
             cmd->SetSelfAssemblyUUID(request.self_assembly_uuid());
+            cmd->SetAllowUnknownFields(request.allow_unknown_fields());
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release());
         }
 

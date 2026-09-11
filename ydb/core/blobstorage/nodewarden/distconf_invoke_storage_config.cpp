@@ -50,7 +50,7 @@ namespace NKikimr::NStorage {
             Y_ABORT();
         }
 
-        static std::optional<TString> LocalYamlValidate(const TString& yaml, bool allowUnknown = true) {
+        static std::optional<TString> LocalYamlValidate(const TString& yaml, bool allowUnknown) {
             try {
                 auto doc = NFyaml::TDocument::Parse(yaml);
                 TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> unknownCollector =
@@ -62,8 +62,8 @@ namespace NKikimr::NStorage {
                     [&](NYamlConfig::TDocumentConfig&& config) {
                         auto appCfg = NYamlConfig::YamlToProto(
                             config.second,
-                            true,   // strict
-                            true,   // merge database config (if any)
+                            /*allowUnknown=*/ true,
+                            /*preTransform=*/ true,
                             unknownCollector);
                         if (NKikimr::NConfig::ValidateConfig(appCfg, errors) == NKikimr::NConfig::EValidationResult::Error) {
                             if (!errors.empty()) {
@@ -716,9 +716,10 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TInvokeRequestHandlerActor::BootstrapCluster(const TString& selfAssemblyUUID) {
+    void TInvokeRequestHandlerActor::BootstrapCluster(const TQuery::TBootstrapCluster& request) {
         RunCommonChecks();
 
+        const auto& selfAssemblyUUID = request.GetSelfAssemblyUUID();
         if (Self->StorageConfig->GetGeneration()) {
             if (Self->StorageConfig->GetSelfAssemblyUUID() == selfAssemblyUUID) { // repeated command, it's ok
                 return Finish(TResult::OK, std::nullopt);
@@ -730,7 +731,8 @@ namespace NKikimr::NStorage {
         }
 
         // issue scatter task to collect configs and then bootstrap cluster with specified cluster UUID
-        auto done = [this, selfAssemblyUUID = TString(selfAssemblyUUID)](TEvGather *res) {
+        auto done = [this, selfAssemblyUUID = TString(selfAssemblyUUID),
+                     allowUnknownFields = request.GetAllowUnknownFields()](TEvGather *res) {
             if (!res->HasCollectConfigs()) {
                 throw TExError() << "Incorrect response to CollectConfigs";
             }
@@ -749,7 +751,7 @@ namespace NKikimr::NStorage {
                         /*mainConfigVersion=*/ nullptr, /*mainConfigFetchYaml=*/ nullptr)) {
                     throw TExError() << "Failed to decompose composite config: " << *err;
                 }
-                if (auto err = LocalYamlValidate(mainYaml, /*allowUnknown=*/ true)) {
+                if (auto err = LocalYamlValidate(mainYaml, allowUnknownFields)) {
                     throw TExError() << "YAML validation failed: " << *err;
                 }
                 StartProposition(&r.ConfigToPropose.value(), /*mindPrev=*/ true, /*propositionBase=*/ nullptr,

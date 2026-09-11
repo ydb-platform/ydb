@@ -286,6 +286,7 @@ message TEvNodeConfigInvokeOnRoot {
 
     message TBootstrapCluster {
         string SelfAssemblyUUID = 1;
+        bool AllowUnknownFields = 2;
     }
 
     message TSwitchBridgeClusterState {

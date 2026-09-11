@@ -9,9 +9,10 @@ from hamcrest import assert_that
 import time
 import pytest
 import functools
+import yatest.common
 
 from ydb.tests.library.common.types import Erasure
-from ydb.tests.library.common.wait_for import wait_for
+from ydb.tests.library.common.wait_for import retry_assertions, wait_for
 import ydb.tests.library.common.cms as cms
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.clients.kikimr_dynconfig_client import DynConfigClient
@@ -625,7 +626,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         finally:
             self.cluster.remove_database(database_path)
 
-    @pytest.mark.parametrize('location', ['root', 'nested', 'selector'])
+    @pytest.mark.parametrize('location', ['root', 'nested', 'selector', 'array', 'host_config'])
     def test_replace_config_unknown_fields(self, location):
         check_replace_config_unknown_fields(self.cluster, self.cluster.config_client, location)
 
@@ -730,7 +731,8 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
 
 class TestDistConfBootstrapValidation:
 
-    def test_bootstrap_selector_validation(self):
+    @pytest.mark.parametrize('invalid_selector', [False, True])
+    def test_bootstrap_selector_validation(self, invalid_selector):
         cfg = KikimrConfigGenerator(
             Erasure.NONE,
             nodes=1,
@@ -745,16 +747,44 @@ class TestDistConfBootstrapValidation:
             extra_grpc_services=['config'],
         )
 
+        cfg.yaml_config['unknown_field_for_test'] = True
+        cfg.yaml_config.setdefault('feature_flags', {})['unknown_flag_for_test'] = True
         cfg.full_config.setdefault('selector_config', []).append({
-            'config': None,
+            'config': None if invalid_selector else {'unknown_selector_field_for_test': True},
             'description': 'test',
             'selector': {'tenant': 'test'}
         })
 
         cluster = KiKiMR(configurator=cfg)
-        with pytest.raises(Exception) as ei:
-            cluster.start()
-        assert 'YAML validation failed' in str(ei.value)
+        try:
+            cluster.prepare()
+            cluster.start_node(1)
+            node = cluster.nodes[1]
+            command = [cfg.get_ydb_cli_path(), '--endpoint', f'grpc://{node.host}:{node.grpc_port}',
+                       '-y', 'admin', 'cluster', 'bootstrap', '--uuid', 'test-cluster']
+
+            def assert_bootstrap(extra_args, expected_error=None):
+                result = yatest.common.execute(command + extra_args, check_exit_code=False, timeout=30)
+                output = (result.std_out + result.std_err).decode('utf-8', errors='replace')
+                if expected_error is None:
+                    assert result.exit_code == 0, output
+                else:
+                    assert result.exit_code != 0, output
+                    assert expected_error in output, output
+
+            error = 'YAML validation failed' if invalid_selector else 'has forbidden unknown fields'
+            retry_assertions(lambda: assert_bootstrap([], error), timeout_seconds=60)
+            error = 'YAML validation failed' if invalid_selector else None
+            retry_assertions(lambda: assert_bootstrap(['--allow-unknown-fields'], error), timeout_seconds=60)
+
+            if not invalid_selector:
+                retry_assertions(lambda: assert_bootstrap([]), timeout_seconds=60)
+                stored = yaml.safe_load(fetch_config(cluster.config_client))
+                assert stored['config']['unknown_field_for_test'] is True
+                assert stored['config']['feature_flags']['unknown_flag_for_test'] is True
+                assert stored['selector_config'][0]['config']['unknown_selector_field_for_test'] is True
+        finally:
+            cluster.stop()
 
 
 class TestDistConfWithAuth(DistConfKiKiMRTest):

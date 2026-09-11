@@ -35,7 +35,10 @@ def get_config_version(yaml_config):
 
 
 def fetch_config(config_client):
-    response = config_client.fetch_all_configs()
+    try:
+        response = config_client.fetch_all_configs()
+    except grpc.RpcError as error:
+        raise AssertionError(str(error)) from error
     assert response.operation.status == StatusIds.SUCCESS, response.operation
     result = config.FetchConfigResult()
     assert response.operation.result.Unpack(result)
@@ -45,10 +48,7 @@ def fetch_config(config_client):
 
 def check_replace_config_unknown_fields(cluster, config_client, location):
     def assert_config(expected):
-        try:
-            actual = yaml.safe_load(fetch_config(config_client))
-        except grpc.RpcError as error:
-            raise AssertionError(str(error)) from error
+        actual = yaml.safe_load(fetch_config(config_client))
         assert actual == expected
 
     original = yaml.safe_load(fetch_config(config_client))
@@ -58,6 +58,13 @@ def check_replace_config_unknown_fields(cluster, config_client, location):
         target = updated['config']
     elif location == 'nested':
         target = updated['config'].setdefault('feature_flags', {})
+    elif location == 'array':
+        target = {'component': 'BS_NODE', 'level': 3}
+        updated['config'].setdefault('log_config', {}).setdefault('entry', []).append(target)
+    elif location == 'host_config':
+        target = updated['config']['host_configs'][0]
+    elif location == 'storage':
+        target = updated['config']['blob_storage_config']['service_set']['groups'][0]['rings'][0]['fail_domains'][0]['vdisk_locations'][0]
     else:
         target = {}
         updated.setdefault('selector_config', []).append({
@@ -66,7 +73,7 @@ def check_replace_config_unknown_fields(cluster, config_client, location):
             'config': target,
         })
     target['unknown_field_for_test'] = True
-    config_yaml = yaml.safe_dump(updated)
+    config_yaml = '# Preserve the submitted YAML\n' + yaml.safe_dump(updated, sort_keys=False)
 
     for dry_run, allow_unknown_fields in [(True, False), (True, True), (False, False)]:
         response = config_client.replace_config(config_yaml, dry_run=dry_run, allow_unknown_fields=allow_unknown_fields)
@@ -80,6 +87,7 @@ def check_replace_config_unknown_fields(cluster, config_client, location):
     response = config_client.replace_config(config_yaml, allow_unknown_fields=True)
     assert response.operation.status == StatusIds.SUCCESS, response.operation
     assert_config(updated)
+    assert fetch_config(config_client) == config_yaml
 
     invalid = copy.deepcopy(updated)
     invalid['metadata']['version'] += 1
@@ -88,8 +96,17 @@ def check_replace_config_unknown_fields(cluster, config_client, location):
     assert response.operation.status != StatusIds.SUCCESS, response.operation
     assert_config(updated)
 
+    def assert_saved_config():
+        for node in cluster.nodes.values():
+            try:
+                assert node.read_node_config() == updated
+            except OSError as error:
+                raise AssertionError(str(error)) from error
+
+    retry_assertions(assert_saved_config, timeout_seconds=60)
     cluster.restart_nodes()
     retry_assertions(lambda: assert_config(updated), timeout_seconds=60)
+    assert fetch_config(config_client) == config_yaml
 
     original['metadata']['version'] = updated['metadata']['version'] + 1
     response = config_client.replace_config(yaml.safe_dump(original))
@@ -241,7 +258,7 @@ class TestKiKiMRStoreConfigDir(AbstractKiKiMRTest):
         )
         self.check_kikimr_is_operational(table_path, tablet_ids)
 
-    @pytest.mark.parametrize('unknown_field_location', ['root', 'nested', 'selector'])
+    @pytest.mark.parametrize('unknown_field_location', ['root', 'nested', 'selector', 'array', 'storage'])
     def test_config_stored_in_config_store(self, unknown_field_location):
         node = self.cluster.nodes[1]
         initial_config = node.read_node_config()

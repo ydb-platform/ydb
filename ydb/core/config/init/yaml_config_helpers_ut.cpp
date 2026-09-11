@@ -112,6 +112,12 @@ config:
         json["config"]["log_config"]["default_level"] = "not-a-number";
 
         NKikimrConfig::TAppConfig config;
-        UNIT_ASSERT_EXCEPTION(ParseJsonConfigOrThrow(json, "test.yaml", config, true), TInitializationException);
+        try {
+            ParseJsonConfigOrThrow(json, "test.yaml", config, true);
+            UNIT_FAIL("Expected invalid value error");
+        } catch (const TInitializationException& e) {
+            AssertErrorCode(e, "YDBE-10003");
+            UNIT_ASSERT_STRING_CONTAINS(e.what(), "/config/log_config/default_level");
+        }
     }
 }

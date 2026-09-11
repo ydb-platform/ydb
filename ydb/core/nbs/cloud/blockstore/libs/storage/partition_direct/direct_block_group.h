@@ -209,6 +209,33 @@ public:
     virtual NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         THostIndex hostIndex) = 0;
 
+<<<<<<< HEAD
+=======
+    virtual void OnAddHostSucceeded(
+        THostIndex newHostIndex,
+        NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId,
+        ui32 dbgConnectionsConfigGeneration) = 0;
+
+    virtual void OnAddHostFailed(const NProto::TError& error) = 0;
+
+    virtual void OnRemoveHostSucceeded(
+        THostIndex removeIndex,
+        ui32 dbgConnectionsConfigGeneration) = 0;
+
+    virtual void OnRemoveHostFailed(
+        THostIndex removeIndex,
+        const NProto::TError& error) = 0;
+
+    // Reserves byteCount from the disk-wide range-copy bandwidth budget shared
+    // by all DirectBlockGroups. Returns the delay before the operation may
+    // start. Zero means it may start immediately or throttling is disabled.
+    [[nodiscard]] virtual TDuration TakeCopyRangeBudget(ui64 byteCount) = 0;
+
+    // Translate host index to NodeId.
+    [[nodiscard]] virtual ui32 GetNodeId(THostIndex host) const = 0;
+
+>>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061))
     // Query dump for DirectBlockGroup and VChunks.
     virtual NThreading::TFuture<TDBGDumpResponse> Dump() = 0;
 

@@ -72,7 +72,15 @@ public:
 
     virtual void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) = 0;
     virtual void OnDDiskConnected(THostIndex hostIndex, TInstant now) = 0;
+<<<<<<< HEAD
     virtual TDuration GetDDiskReconnectDelay(THostIndex hostIndex) = 0;
+=======
+    virtual void OnDDiskBroken(THostIndex hostIndex) = 0;
+
+    virtual void OnHostRemoved(THostIndex hostIndex) = 0;
+
+    virtual TDuration GetHostReconnectDelay(THostIndex hostIndex) = 0;
+>>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061))
 
     // Picks the best host (by lowest inflight count) out of the provided set
     // of hosts. Ties are broken uniformly at random.
@@ -142,6 +150,8 @@ public:
     void OnHostAdded();
 
     [[nodiscard]] size_t GetHostCount() const;
+
+    void OnHostRemoved(THostIndex hostIndex) override;
 
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         THostMask hosts,

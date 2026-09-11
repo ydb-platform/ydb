@@ -34,6 +34,11 @@ struct TEvPartitionDirectPrivate
         EvFastPathServiceShutdown,
         EvFastPathServiceStopped,
         EvAddHostToDBG,
+<<<<<<< HEAD
+=======
+        EvRemoveHostFromDBG,
+        EvPartitionCleanupCompleted,
+>>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061))
 
         EvPersistHostHealth,
 
@@ -79,6 +84,43 @@ struct TEvPartitionDirectPrivate
 
         explicit TEvAddHostToDBG(size_t dbgId)
             : DirectBlockGroupId(dbgId)
+<<<<<<< HEAD
+=======
+            , DBGConnectionsConfigGeneration(dbgConnectionsConfigGeneration)
+        {}
+    };
+
+    // Asks the partition to durably remove the host from the group.
+    struct TEvRemoveHostFromDBG
+        : public NActors::TEventLocal<TEvRemoveHostFromDBG, EvRemoveHostFromDBG>
+    {
+        const size_t DirectBlockGroupId;
+        const size_t HostIndex;
+        const ui32 DBGConnectionsConfigGeneration;
+
+        TEvRemoveHostFromDBG(
+            size_t dbgId,
+            size_t hostIndex,
+            ui32 dbgConnectionsConfigGeneration)
+            : DirectBlockGroupId(dbgId)
+            , HostIndex(hostIndex)
+            , DBGConnectionsConfigGeneration(dbgConnectionsConfigGeneration)
+        {}
+    };
+
+    // Cleanup actor reports wipe + BSC deallocate outcome to the tablet.
+    struct TEvPartitionCleanupCompleted
+        : public NActors::TEventLocal<
+              TEvPartitionCleanupCompleted,
+              EvPartitionCleanupCompleted>
+    {
+        NProto::TError Error;
+
+        TEvPartitionCleanupCompleted() = default;
+
+        explicit TEvPartitionCleanupCompleted(NProto::TError error)
+            : Error(std::move(error))
+>>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061))
         {}
     };
 

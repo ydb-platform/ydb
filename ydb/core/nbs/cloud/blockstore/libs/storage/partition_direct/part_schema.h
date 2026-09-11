@@ -53,15 +53,28 @@ struct TPartitionSchema: public NKikimr::NIceDb::Schema
                 ::NYdb::NBS::PartitionDirect::NProto::TAddHostInProgress;
         };
 
+        // Set while a RemoveHost is in flight, cleared when it commits.
+        struct RemoveHostInProgress
+            : public Column<6, NKikimr::NScheme::NTypeIds::String>
+        {
+            using Type =
+                ::NYdb::NBS::PartitionDirect::NProto::TRemoveHostInProgress;
+        };
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
             StorageConfig,
             VolumeConfig,
             DirectBlockGroupsConnections,
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_schema.h
             AddHostInProgress>;
 
         using StoragePolicy = TStoragePolicy<IndexChannel>;
+=======
+            AddHostInProgress,
+            RemoveHostInProgress>;
+>>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_schema.h
     };
 
     // Persisted vchunk config overrides, keyed by vchunk index. Only vchunks

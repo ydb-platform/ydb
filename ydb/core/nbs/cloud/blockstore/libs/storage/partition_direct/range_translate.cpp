@@ -6,6 +6,23 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/range_translate.cpp
+=======
+size_t GetDirectBlockGroupIndex(
+    size_t vChunkIndex,
+    size_t directBlockGroupCount)
+{
+    return vChunkIndex % directBlockGroupCount;
+}
+
+size_t GetVChunksPerRegion(ui64 vChunkSize)
+{
+    Y_ABORT_UNLESS(vChunkSize > 0 && vChunkSize <= RegionSize);
+    Y_ABORT_UNLESS(RegionSize % vChunkSize == 0);
+    return RegionSize / vChunkSize;
+}
+
+>>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.cpp
 size_t GetRegionIndex(const TVolumeConfig& volumeConfig, TBlockRange64 range)
 {
     const ui64 blocksPerRegion = RegionSize / volumeConfig.BlockSize;

@@ -7,8 +7,8 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// The index of the host in the direct block group. Hosts can only be appended
-// to the direct block group, so you can refer to the host by its index.
+// The index of the host in the direct block group. Host indices can only
+// change at a tablet restart, so you can refer to the host by its index.
 using THostIndex = ui8;
 
 constexpr THostIndex InvalidHostIndex = 0xFF;
@@ -49,6 +49,19 @@ enum class EHostState
     Offline,
 };
 
+<<<<<<< HEAD
+=======
+enum class EHostHealth
+{
+    Online,
+    Sufferer,
+    TemporaryOffline,
+    Offline,
+    Broken,    // changes strictly outside of Oracle
+    Removed,   // changes strictly outside of Oracle
+};
+
+>>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061))
 // Determines where the data is located
 enum class EDataLocation
 {

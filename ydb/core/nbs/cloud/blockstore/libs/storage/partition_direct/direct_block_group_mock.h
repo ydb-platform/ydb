@@ -41,7 +41,14 @@ struct TOracleMock: public IOracle
 
     void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) override;
     void OnDDiskConnected(THostIndex hostIndex, TInstant now) override;
+<<<<<<< HEAD
     TDuration GetDDiskReconnectDelay(THostIndex hostIndex) override;
+=======
+    void OnDDiskBroken(THostIndex hostIndex) override;
+    void OnHostRemoved(THostIndex hostIndex) override;
+
+    TDuration GetHostReconnectDelay(THostIndex hostIndex) override;
+>>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061))
 
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         THostMask hosts,
@@ -144,6 +151,11 @@ public:
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId)>;
 
+    using TOnRemoveHostSucceededHandler = std::function<
+        void(THostIndex removeIndex, ui32 dbgConnectionsConfigGeneration)>;
+    using TOnRemoveHostFailedHandler = std::function<
+        void(THostIndex removeIndex, const NProto::TError& error)>;
+
     TExecutorPtr Executor;
     TOracleMock Oracle;
     TScheduleHandler ScheduleHandler;
@@ -157,7 +169,15 @@ public:
     TDBGRestoreHandler RestoreDBGPBuffersHandler;
     TListPBuffersHandler ListPBuffersHandler;
     TDBGDumpHandler DumpHandler;
+<<<<<<< HEAD
     TOnAddHostResultHandler OnAddHostResultHandler;
+=======
+    TOnAddHostSucceededHandler OnAddHostSucceededHandler;
+    TOnAddHostFailedHandler OnAddHostFailedHandler;
+    TOnRemoveHostSucceededHandler OnRemoveHostSucceededHandler;
+    TOnRemoveHostFailedHandler OnRemoveHostFailedHandler;
+    TTakeCopyRangeBudgetHandler TakeCopyRangeBudgetHandler;
+>>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061))
 
     TVector<TVChunkWeakPtr> VChunks;
 
@@ -240,6 +260,29 @@ public:
     NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         THostIndex hostIndex) override;
 
+<<<<<<< HEAD
+=======
+    void OnAddHostSucceeded(
+        THostIndex newHostIndex,
+        NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId,
+        ui32 dbgConnectionsConfigGeneration) override;
+
+    void OnAddHostFailed(const NProto::TError& error) override;
+
+    void OnRemoveHostSucceeded(
+        THostIndex removeIndex,
+        ui32 dbgConnectionsConfigGeneration) override;
+
+    void OnRemoveHostFailed(
+        THostIndex removeIndex,
+        const NProto::TError& error) override;
+
+    TDuration TakeCopyRangeBudget(ui64 byteCount) override;
+
+    ui32 GetNodeId(THostIndex host) const override;
+
+>>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061))
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
     void OnAddHostResult(

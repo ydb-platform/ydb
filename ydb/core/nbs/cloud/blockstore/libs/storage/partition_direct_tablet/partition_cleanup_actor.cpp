@@ -103,6 +103,7 @@ class TPartitionCleanupActor: public TActorBootstrapped<TPartitionCleanupActor>
         NActors::TActorId Target;
         ui32 NodeId = 0;
         ECleanupTarget Kind = ECleanupTarget::PBuffer;
+        ui32 DBGIndex = 0;
     };
 
 private:
@@ -138,7 +139,7 @@ public:
             LogTitle.GetWithTime().c_str());
 
         ctx.Schedule(PartitionCleanupTimeout, new TEvents::TEvWakeup());
-        StartPBufferBarrierErase(ctx);
+        StartPBufferUnregister(ctx);
     }
 
 private:
@@ -146,8 +147,8 @@ private:
     {
         switch (ev->GetTypeRewrite()) {
             HFunc(
-                NDDisk::TEvErasePersistentBufferResult,
-                HandleErasePersistentBufferResult);
+                NDDisk::TEvUnregisterPersistentBufferResult,
+                HandleUnregisterPersistentBufferResult);
             HFunc(
                 NDDisk::TEvDeleteTabletChunksResult,
                 HandleDeleteTabletChunksResult);
@@ -190,20 +191,22 @@ private:
         }
     }
 
-    void StartPBufferBarrierErase(const TActorContext& ctx)
+    void StartPBufferUnregister(const TActorContext& ctx)
     {
         Phase = ECleanupPhase::WipePBuffer;
 
-        const auto creds = NDDisk::TQueryCredentials::ForInternal(
-            Params.TabletId,
-            Params.Generation,
-            std::nullopt,
-            0);
-
-        THashSet<TActorId> targets;
-        for (const auto& group:
-             Params.Connections.GetDirectBlockGroupConnections())
+        for (ui32 dbgIndex = 0;
+             dbgIndex < Params.Connections.DirectBlockGroupConnectionsSize();
+             ++dbgIndex)
         {
+            const auto& group =
+                Params.Connections.GetDirectBlockGroupConnections(dbgIndex);
+            const auto creds = NDDisk::TQueryCredentials::ForInternal(
+                Params.TabletId,
+                Params.Generation,
+                std::nullopt,
+                dbgIndex);
+            THashSet<TActorId> targets;
             for (const auto& connection: group.GetConnections()) {
                 const auto target = MakePBufferServiceId(
                     connection.GetPersistentBufferDDiskId());
@@ -214,9 +217,9 @@ private:
                     ctx,
                     target,
                     ECleanupTarget::PBuffer,
-                    std::make_unique<NDDisk::TEvErasePersistentBuffer>(
-                        creds,
-                        Max<ui64>()));
+                    std::make_unique<NDDisk::TEvUnregisterPersistentBuffer>(
+                        creds),
+                    dbgIndex);
             }
         }
 
@@ -261,11 +264,15 @@ private:
         const TActorContext& ctx,
         const TActorId& target,
         ECleanupTarget kind,
-        std::unique_ptr<IEventBase> event)
+        std::unique_ptr<IEventBase> event,
+        ui32 dbgIndex = 0)
     {
         const ui64 cookie = NextCookie++;
-        InFlight[cookie] =
-            TRequest{.Target = target, .NodeId = target.NodeId(), .Kind = kind};
+        InFlight[cookie] = TRequest{
+            .Target = target,
+            .NodeId = target.NodeId(),
+            .Kind = kind,
+            .DBGIndex = dbgIndex};
 
         LOG_INFO(
             ctx,
@@ -314,21 +321,39 @@ private:
         }
     }
 
-    void HandleErasePersistentBufferResult(
-        const NDDisk::TEvErasePersistentBufferResult::TPtr& ev,
+    void HandleUnregisterPersistentBufferResult(
+        const NDDisk::TEvUnregisterPersistentBufferResult::TPtr& ev,
         const TActorContext& ctx)
     {
         const auto& record = ev->Get()->Record;
         LOG_INFO(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "%s HandleErasePersistentBufferResult cookie=%lu status=%s",
+            "%s HandleUnregisterPersistentBufferResult cookie=%lu status=%s",
             LogTitle.GetWithTime().c_str(),
             ev->Cookie,
             NKikimrBlobStorage::NDDisk::TReplyStatus_E_Name(record.GetStatus())
                 .c_str());
 
-        OnWipeResult(ctx, ev->Cookie, TranslateError(record));
+        // Cleanup may be retried after a lost reply or target registrations may
+        // never have been made. Their absence already satisfies cleanup.
+        if (record.GetStatus() ==
+                NKikimrBlobStorage::NDDisk::TReplyStatus::BUSY ||
+            record.GetStatus() ==
+                NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED)
+        {
+            ctx.Schedule(
+                TDuration::MilliSeconds(100),
+                new TEvents::TEvWakeup(ev->Cookie));
+            return;
+        }
+        const bool absent =
+            record.GetStatus() ==
+            NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST;
+        OnWipeResult(
+            ctx,
+            ev->Cookie,
+            absent ? NProto::TError{} : TranslateError(record));
     }
 
     void HandleDeleteTabletChunksResult(
@@ -395,7 +420,23 @@ private:
         const TEvents::TEvWakeup::TPtr& ev,
         const TActorContext& ctx)
     {
-        Y_UNUSED(ev);
+        if (const ui64 cookie = ev->Get()->Tag) {
+            if (const auto* request = InFlight.FindPtr(cookie)) {
+                const auto creds = NDDisk::TQueryCredentials::ForInternal(
+                    Params.TabletId,
+                    Params.Generation,
+                    std::nullopt,
+                    request->DBGIndex);
+                ctx.Send(new IEventHandle(
+                    request->Target,
+                    ctx.SelfID,
+                    new NDDisk::TEvUnregisterPersistentBuffer(creds),
+                    IEventHandle::FlagTrackDelivery |
+                        IEventHandle::FlagSubscribeOnSession,
+                    cookie));
+            }
+            return;
+        }
         Complete(ctx, MakeError(E_TIMEOUT, "partition cleanup timed out"));
     }
 

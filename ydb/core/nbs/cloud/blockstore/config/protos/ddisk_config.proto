@@ -76,4 +76,7 @@ message TPBufferConfig
     optional uint32 ListPersistentBufferMaxRetries = 16;
     optional uint32 ListPersistentBufferRetryPeriodMilliseconds = 17;
     optional bool EnableChecksums = 18;
+    // Maximum registration timestamp age. Retirement waits twice this interval.
+    // Default 5000 milliseconds.
+    optional uint32 RegistrationTimeoutMilliseconds = 19;
 }

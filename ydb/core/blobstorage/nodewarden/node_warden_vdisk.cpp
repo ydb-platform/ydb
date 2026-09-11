@@ -283,6 +283,9 @@ namespace NKikimr::NStorage {
                 if (Cfg->PBufferConfig->HasEnableChecksums()) {
                     pbufferFormat.EnableChecksums = Cfg->PBufferConfig->GetEnableChecksums();
                 }
+                if (Cfg->PBufferConfig->HasRegistrationTimeoutMilliseconds()) {
+                    pbufferFormat.RegistrationTimeoutMilliseconds = Cfg->PBufferConfig->GetRegistrationTimeoutMilliseconds();
+                }
                 if (Cfg->PBufferConfig->HasPreallocateFreeSpaceThresholdPercent()) {
                     auto newValue = Cfg->PBufferConfig->GetPreallocateFreeSpaceThresholdPercent();
                     if (newValue >= 100) {

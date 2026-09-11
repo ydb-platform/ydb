@@ -89,9 +89,10 @@ def check_replace_config_unknown_fields(cluster, config_client, location):
 
     invalid = copy.deepcopy(updated)
     invalid['metadata']['version'] += 1
-    invalid['config'].setdefault('log_config', {})['default_level'] = 'not-a-number'
+    invalid['config'].setdefault('log_config', {}).setdefault('entry', []).append('not-a-map')
     response = config_client.replace_config(yaml.safe_dump(invalid), dry_run=True, allow_unknown_fields=True)
     assert response.operation.status != StatusIds.SUCCESS, response.operation
+    assert 'expected json map' in str(response.operation.issues), response.operation
     assert_config(updated)
 
     def assert_saved_config():
@@ -103,6 +104,8 @@ def check_replace_config_unknown_fields(cluster, config_client, location):
 
     retry_assertions(assert_saved_config, timeout_seconds=60)
     cluster.restart_nodes()
+    config_client = cluster.config_client
+    config_client.set_auth_token('root@builtin')
     retry_assertions(lambda: assert_config(updated), timeout_seconds=60)
     assert fetch_config(config_client) == config_yaml
 

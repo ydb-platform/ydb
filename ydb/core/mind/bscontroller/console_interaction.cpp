@@ -487,8 +487,10 @@ namespace NKikimr::NBsController {
                 Self.SelfId(), TActorId(), nullptr, ExpectedValidationTimeoutCookie));
         }
 
-        auto validateConfigEv = std::make_unique<TEvBlobStorage::TEvControllerValidateConfigRequest>(
-            record.GetClusterYaml(), record.GetAllowUnknownFields(), record.GetBypassMetadataChecks());
+        auto validateConfigEv = std::make_unique<TEvBlobStorage::TEvControllerValidateConfigRequest>();
+        validateConfigEv->Record.SetYAML(record.GetClusterYaml());
+        validateConfigEv->Record.SetAllowUnknownFields(record.GetAllowUnknownFields());
+        validateConfigEv->Record.SetBypassMetadataChecks(record.GetBypassMetadataChecks());
         YDB_LOG_DEBUG("Sending TEvControllerValidateConfigRequest to console",
             {"marker", "BSC36"},
             {"consolePipe", ConsolePipe});

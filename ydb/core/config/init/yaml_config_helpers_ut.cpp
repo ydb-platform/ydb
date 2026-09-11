@@ -109,7 +109,7 @@ config:
     Y_UNIT_TEST(ParseJsonConfig_AllowUnknownFieldsRejectsInvalidKnownField) {
         auto json = LoadYamlAsJsonOrThrow(minimalValidConfig, "test.yaml");
         json["config"]["fake_field"] = 123;
-        json["config"]["log_config"]["default_level"] = "not-a-number";
+        json["config"]["log_config"]["entry"].AppendValue("not-a-map");
 
         NKikimrConfig::TAppConfig config;
         try {
@@ -117,7 +117,8 @@ config:
             UNIT_FAIL("Expected invalid value error");
         } catch (const TInitializationException& e) {
             AssertErrorCode(e, "YDBE-10003");
-            UNIT_ASSERT_STRING_CONTAINS(e.what(), "/config/log_config/default_level");
+            UNIT_ASSERT_STRING_CONTAINS(e.what(), "/config/log_config/entry/0");
+            UNIT_ASSERT_STRING_CONTAINS(e.what(), "expected json map");
         }
     }
 }

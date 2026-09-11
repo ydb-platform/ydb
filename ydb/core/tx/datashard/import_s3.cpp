@@ -776,7 +776,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
                     << ": " << Settings.GetObjectKeyPattern());
             }
 
-            return HeadObject(dataKey);
+            return HeadObject(Settings.GetDataKey(DataFormat, CompressionCodec));
         }
 
         THolder<IReadController> reader;

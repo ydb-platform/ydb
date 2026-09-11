@@ -2101,6 +2101,8 @@ private:
 
         TVector<TStringBuf> lookupColumns;
         if (shape.IsStructOfNewAndOldValues) {
+            // These values are already carried by the input's "old" struct, so NeedLookup stays false.
+            // Register them as LookupColumns only to provide runtime metadata for indexes and RETURNING.
             for (const auto& item : shape.OldStructType->GetItems()) {
                 const auto& columnName = item->GetName();
                 AFL_ENSURE(!mainKeyColumnsSet.contains(columnName));

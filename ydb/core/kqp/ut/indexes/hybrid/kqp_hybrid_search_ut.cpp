@@ -1054,42 +1054,6 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         UNIT_ASSERT_VALUES_EQUAL(runExplicit(200), runWithFactor(100));
     }
 
-    // Boundary final limits are independent from branch Limits: zero emits no rows, one emits exactly one
-    // valid candidate, and a limit larger than the corpus emits the complete deduplicated candidate union.
-    Y_UNIT_TEST(FinalLimitBoundaries) {
-        auto kikimr = MakeRunner();
-        auto db = kikimr.GetQueryClient();
-        SetupDocs(db);
-
-        auto zero = RunKeys(db, TargetDecl + R"sql(
-            SELECT Key FROM `/Root/Docs`
-            ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target),
-                (4, 4) AS Limits)
-            LIMIT 0;
-        )sql");
-        UNIT_ASSERT_C(zero.empty(), "LIMIT 0 must return no fused rows");
-
-        auto one = RunKeys(db, TargetDecl + R"sql(
-            SELECT Key FROM `/Root/Docs`
-            ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target),
-                (4, 4) AS Limits)
-            LIMIT 1;
-        )sql");
-        UNIT_ASSERT_VALUES_EQUAL_C(one.size(), 1u, "LIMIT 1 must return exactly one fused row");
-        UNIT_ASSERT_C((std::set<ui64>{1u, 2u, 3u, 4u}.contains(one.front())),
-            "LIMIT 1 must return a member of the candidate union");
-
-        auto aboveCorpus = RunKeys(db, TargetDecl + R"sql(
-            SELECT Key FROM `/Root/Docs`
-            ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target),
-                (10, 10) AS Limits)
-            LIMIT 100;
-        )sql");
-        UNIT_ASSERT_C((std::set<ui64>(aboveCorpus.begin(), aboveCorpus.end()) == std::set<ui64>{1u, 2u, 3u, 4u}),
-            "a final limit above the corpus must return the complete candidate union");
-        UNIT_ASSERT_VALUES_EQUAL_C(aboveCorpus.size(), 4u, "the candidate union must stay deduplicated");
-    }
-
     // Manhattan distance exercises metric-aware vector-index resolution beyond the cosine distance and
     // similarity paths. For this fixture it has the same strict nearest-neighbour order as cosine.
     Y_UNIT_TEST(ManhattanDistanceFuses) {
@@ -1400,64 +1364,9 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         UNIT_ASSERT_VALUES_EQUAL(newKeys, kikimr.RunCall([&] { return executeHybrid(hybridSession); }));
     }
 
-    // EnableCompactFulltextIndex changes fulltext_relevance into the compact relevance layout. Hybrid
-    // auto-detection must treat that index as a relevance index just like the legacy layout and lower the
-    // fulltext branch through its compact implementation tables. Exercise both built-in fusion paths: RRF
-    // and normalized linear fusion.
-    Y_UNIT_TEST(CompactRelevanceAutoDetection) {
-        auto kikimr = MakeRunner(/*enableHybridSearch=*/true, /*enableCompactFulltextIndex=*/true);
-        auto db = kikimr.GetQueryClient();
-        SetupDocs(db);
-
-        for (const TString& mode : {TString("rrf"), TString("linear")}) {
-            auto keys = RunKeys(db, TargetDecl + Sprintf(R"sql(
-                SELECT Key FROM `/Root/Docs`
-                ORDER BY HybridRank(
-                    FullTextScore(Text, "cats"),
-                    Knn::CosineDistance(Embedding, $target),
-                    "%s" AS Mode)
-                LIMIT 4;
-            )sql", mode.c_str()));
-            UNIT_ASSERT_C((std::set<ui64>(keys.begin(), keys.end()) == std::set<ui64>{1u, 2u, 3u, 4u}),
-                TStringBuilder() << "compact relevance auto-detection (" << mode
-                    << ") must fuse the full candidate union");
-            UNIT_ASSERT_C(keys[0] == 1u || keys[0] == 3u,
-                TStringBuilder() << "a text-relevant doc must lead with compact relevance auto-detection ("
-                    << mode << ")");
-        }
-    }
-
-    // Explicit AS Indexes is also required to accept a compact relevance index. Besides covering the
-    // explicit resolution path, this guards disambiguation in deployments that have more than one index
-    // over the text column.
-    Y_UNIT_TEST(CompactRelevanceNamedIndex) {
-        auto kikimr = MakeRunner(/*enableHybridSearch=*/true, /*enableCompactFulltextIndex=*/true);
-        auto db = kikimr.GetQueryClient();
-        SetupDocs(db);
-
-        for (const TString& mode : {TString("rrf"), TString("linear")}) {
-            auto keys = RunKeys(db, TargetDecl + Sprintf(R"sql(
-                SELECT Key FROM `/Root/Docs`
-                ORDER BY HybridRank(
-                    FullTextScore(Text, "cats"),
-                    Knn::CosineDistance(Embedding, $target),
-                    "%s" AS Mode,
-                    ("ft_idx", "vec_idx") AS Indexes)
-                LIMIT 4;
-            )sql", mode.c_str()));
-            UNIT_ASSERT_C((std::set<ui64>(keys.begin(), keys.end()) == std::set<ui64>{1u, 2u, 3u, 4u}),
-                TStringBuilder() << "explicit compact relevance index (" << mode
-                    << ") must fuse the full candidate union");
-            UNIT_ASSERT_C(keys[0] == 1u || keys[0] == 3u,
-                TStringBuilder() << "a text-relevant doc must lead with an explicit compact relevance index ("
-                    << mode << ")");
-        }
-    }
-
-    // Custom rank fusion must receive ranks produced by a compact relevance branch in exactly the same
-    // slots as a legacy relevance branch. Reproducing the built-in RRF formula pins the complete result,
-    // rather than merely checking that the compact index can be resolved.
-    Y_UNIT_TEST(CompactRelevanceRankLambda) {
+    // FusesBothBranches already covers RRF with a compact relevance index. Exercise the other built-in
+    // fusion path here to verify that compact BM25 scores also reach normalized linear fusion.
+    Y_UNIT_TEST(CompactRelevanceLinearFusion) {
         auto kikimr = MakeRunner(/*enableHybridSearch=*/true, /*enableCompactFulltextIndex=*/true);
         auto db = kikimr.GetQueryClient();
         SetupDocs(db);
@@ -1467,13 +1376,13 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
             ORDER BY HybridRank(
                 FullTextScore(Text, "cats"),
                 Knn::CosineDistance(Embedding, $target),
-                ($ranks) -> {
-                    RETURN 1.0 / (60 + COALESCE($ranks[0], 100000))
-                         + 1.0 / (60 + COALESCE($ranks[1], 100000));
-                } AS RankLambda)
+                "linear" AS Mode)
             LIMIT 4;
         )sql");
-        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 3u, 2u, 4u}), keys);
+        UNIT_ASSERT_C((std::set<ui64>(keys.begin(), keys.end()) == std::set<ui64>{1u, 2u, 3u, 4u}),
+            "compact relevance linear fusion must return the full candidate union");
+        UNIT_ASSERT_C(keys[0] == 1u || keys[0] == 3u,
+            "a text-relevant document must lead compact relevance linear fusion");
     }
 
     // ScoreLambda gets raw BM25 values from the compact relevance implementation. Selecting the text

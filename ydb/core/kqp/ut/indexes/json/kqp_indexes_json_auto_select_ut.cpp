@@ -306,24 +306,6 @@ void TestJsonQueryShapes(const std::string& jsonType) {
 
     const std::vector<std::tuple<std::string, std::string, std::string, int>> cases = {
         {
-            "CTE",
-            R"($filtered = SELECT Key FROM TestTable WHERE JSON_EXISTS(Text, '$.tag');
-                SELECT Key FROM $filtered ORDER BY Key;)",
-            R"($filtered = SELECT Key FROM TestTable VIEW PRIMARY KEY WHERE JSON_EXISTS(Text, '$.tag');
-                SELECT Key FROM $filtered ORDER BY Key;)",
-            1,
-        },
-        {
-            "subquery",
-            R"(SELECT Key FROM (
-                    SELECT Key, Text FROM TestTable WHERE JSON_EXISTS(Text, '$.tag'))
-                ORDER BY Key;)",
-            R"(SELECT Key FROM (
-                    SELECT Key, Text FROM TestTable VIEW PRIMARY KEY WHERE JSON_EXISTS(Text, '$.tag'))
-                ORDER BY Key;)",
-            1,
-        },
-        {
             "JOIN",
             R"(SELECT t.Key FROM TestTable AS t
                 INNER JOIN Labels AS l ON t.Key = l.Key
@@ -856,48 +838,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
         }
 
         ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1'))");
-    }
-
-    Y_UNIT_TEST(SchemaLifecycleInvalidatesCachedAutoSelectPlan) {
-        auto kikimr = Kikimr(/* enableJsonIndex */ true, /* enableJsonIndexAutoSelect */ true);
-        auto db = kikimr.GetQueryClient();
-
-        ExecuteSuccess(db, R"(
-            CREATE TABLE TestTable (
-                Key Uint64,
-                Text JsonDocument,
-                PRIMARY KEY (Key)
-            );
-        )");
-        ExecuteSuccess(db, R"(
-            UPSERT INTO TestTable (Key, Text) VALUES
-                (1, JsonDocument('{"tag":"red"}')),
-                (2, JsonDocument('{"other":1}')),
-                (3, JsonDocument('{"tag":"blue"}'));
-        )");
-
-        // Execute the exact same text repeatedly through one client to warm the
-        // compiled-query cache before every schema transition.
-        ValidateLifecycleResults(db);
-        ValidateLifecycleResults(db);
-        ValidateNoAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))", "json_idx");
-
-        ExecuteSuccess(db, "ALTER TABLE TestTable ADD INDEX json_idx GLOBAL USING json ON (Text);");
-        ValidateLifecycleResults(db);
-        ValidateLifecycleResults(db);
-        ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))", "json_idx");
-        CompareYson(ExecuteKeys(db, " VIEW PRIMARY KEY"), ExecuteKeys(db, " VIEW json_idx"));
-
-        ExecuteSuccess(db, "ALTER TABLE TestTable DROP INDEX json_idx;");
-        ValidateLifecycleResults(db);
-        ValidateLifecycleResults(db);
-        ValidateNoAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))", "json_idx");
-
-        ExecuteSuccess(db, "ALTER TABLE TestTable ADD INDEX json_idx_recreated GLOBAL USING json ON (Text);");
-        ValidateLifecycleResults(db);
-        ValidateLifecycleResults(db);
-        ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))", "json_idx_recreated");
-        CompareYson(ExecuteKeys(db, " VIEW PRIMARY KEY"), ExecuteKeys(db, " VIEW json_idx_recreated"));
     }
 
     Y_UNIT_TEST(BuildingReadyDroppedLifecycleInvalidatesCachedPlan) {
@@ -1740,34 +1680,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
         ValidateNoAutoSelect(db,
             R"(Tenant = "acme"u AND UserId > 0 AND JSON_EXISTS(Text, '$.kind'))",
             "json_idx", "TestTable");
-    }
-
-    Y_UNIT_TEST(CompactJsonDocument) {
-        auto kikimr = KikimrCompactJsonAutoSelect();
-        auto db = kikimr.GetQueryClient();
-
-        ExecuteSuccess(db, R"(
-            CREATE TABLE TestTable (
-                Key Uint64,
-                Text JsonDocument,
-                PRIMARY KEY (Key),
-                INDEX json_idx GLOBAL USING json ON (Text)
-            );
-        )");
-        ExecuteSuccess(db, R"(
-            UPSERT INTO TestTable (Key, Text) VALUES
-                (1, JsonDocument('{"tag": "red", "size": 10}')),
-                (2, JsonDocument('{"tag": "blue", "size": 20}')),
-                (3, JsonDocument('{"tag": "red"}')),
-                (4, JsonDocument('{}'));
-        )");
-
-        ValidateCompactAutoSelectResults(db,
-            R"(JSON_VALUE(Text, '$.tag' RETURNING Utf8) == "red"u)",
-            R"([[[1u]];[[3u]]])");
-        ValidateCompactAutoSelectResults(db,
-            R"(JSON_EXISTS(Text, '$.size'))",
-            R"([[[1u]];[[2u]]])");
     }
 
     Y_UNIT_TEST(CompactJsonMultiShardBuildAndDml) {

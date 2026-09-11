@@ -3385,6 +3385,7 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
         script = (
             """
             const assert=require('node:assert/strict');let pieces,seen;
+            const location={hash:'#attempt/run/profile/7'};
             const routeParts=()=>pieces;
             const setRoute=()=>{throw Error('Unexpected redirect')};
             const renderLocalYdbAttempt=(...args)=>{seen=args};

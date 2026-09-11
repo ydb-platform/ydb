@@ -688,23 +688,198 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     }
 }
 
-class TExampleLogWriter : public TBaseDBLogWriter {
+class TBaseTestExampleLogWriter : public TBaseDBLogWriter {
 public:
-    TExampleLogWriter(std::shared_ptr<TKikimrRunner>& runner)
-        : TBaseDBLogWriter(runner, NActorsServices::TEST, TBaseDBLogWriter::TDatabaseSettings {
+    unsigned WrittenCount{0};
+
+    TBaseTestExampleLogWriter(TKikimrRunner& runner, NLog::EComponent component, TVector<std::shared_ptr<TBaseDBLogColumn>> columns)
+        : TBaseDBLogWriter(runner, component, TBaseDBLogWriter::TDatabaseSettings {
             .TableName = "olapTable",
             .StoreName = "olapStore"
-        }, {
-            std::make_shared<TDBLogMessageIdColumn>(),
-            std::make_shared<TDBLogMessageTimeColumn>(),
-            std::make_shared<TDBLogMessagePrioColumn>(),
-            std::make_shared<TDBLogMessageTextColumn>(),
-            std::make_shared<TDBLogMessageLocationColumn>()
-        })
+        }, columns)
     {}
+
+    void Write(const NActors::NStructuredLog::TLogMessage& message) override
+    {
+        TBaseDBLogWriter::Write(message);
+        WrittenCount++;
+    }
+
+    using TQueryResult = std::vector<std::vector<std::string>>;
+    TQueryResult FetchStreamData(NYdb::NTable::TScanQueryPartIterator& it) {
+        TQueryResult rows;
+
+        for (;;) {
+            auto streamPart = it.ReadNext().GetValueSync();
+            if (!streamPart.IsSuccess()) {
+                UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                break;
+            }
+
+            if (streamPart.HasResultSet()) {
+                auto resultSet = streamPart.ExtractResultSet();
+                auto columns = resultSet.GetColumnsMeta();
+                NYdb::TResultSetParser parser(resultSet);
+                while (parser.TryNextRow()) {
+                    std::vector<std::string> row;
+                    row.reserve(columns.size());
+                    for (ui32 i = 0; i < columns.size(); ++i) {
+                        const TString value = NYdb::FormatValueYson(parser.GetValue(i));
+                        row.emplace_back(value.data(), value.size());
+                    }
+                    rows.push_back(std::move(row));
+                }
+            }
+        }
+
+        return rows;
+    }
+
+    TString GetFetchQuery() {
+        TStringBuilder selectList;
+        TStringBuilder orderBy;
+        for (const auto& column : Columns) {
+            if (!selectList.empty()) {
+                selectList << ", ";
+            }
+            selectList << "`" << column->Name << "`";
+            if (column->Settings.IsPK) {
+                if (!orderBy.empty()) {
+                    orderBy << ", ";
+                }
+                orderBy << "`" << column->Name << "`";
+            }
+        }
+
+        TStringBuilder query;
+        query << "--!syntax_v1\n";
+        query << "\n";
+        query << "SELECT " << selectList << " FROM `/Root/" << Settings.StoreName << "/" << Settings.TableName << "`";
+        if (!orderBy.empty()) {
+            query << " ORDER BY " << orderBy;
+        }
+        query << "\n";
+        return query;
+    }
+
+    void Dump(const TString& query, const TQueryResult& result) {
+        Cerr << " " << Endl;
+        Cerr << "QUERY:" << Endl << query << Endl;
+        Cerr << " " << Endl;
+        Cerr << "RESULT:" << Endl;
+        for (const auto& row : result) {
+            for (size_t i = 0; i < row.size(); ++i) {
+                if (i) {
+                    Cerr << "; ";
+                }
+                Cerr << row[i];
+            }
+            Cerr << Endl;
+        }
+    }
+
+    void CheckWrittenLogContent(const TQueryResult& requiredResult) {
+        // Wait log completely written
+        for(unsigned i=0; WrittenCount < requiredResult.size() && i < 100; i++) {
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT(WrittenCount == requiredResult.size());
+
+        // Build query
+        auto query = GetFetchQuery();
+
+        // Execute query
+        auto client = GetRunner().GetTableClient();
+        auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        // Fetch result
+        auto result = FetchStreamData(it);
+
+        // Dump result
+        Dump(query, result);
+        UNIT_ASSERT_EQUAL(result, requiredResult);
+    }
+};
+
+class TEmitTestLog : public NActors::TActorBootstrapped<TEmitTestLog> {
+public:
+    using TLogWriteFunc = const std::function<void()>;
+
+    TLogWriteFunc WriteFunc;
+    TEmitTestLog(const TLogWriteFunc& writeFunc) : WriteFunc(writeFunc) {}
+
+    void Bootstrap() {
+        if (WriteFunc) {
+            WriteFunc();
+        }
+        PassAway();
+    }
+};
+
+struct TEnvironment {
+
+    TKikimrRunner Kikimr;
+    std::shared_ptr<TBaseTestExampleLogWriter> Writer;
+
+    TEnvironment(const TVector<std::shared_ptr<TBaseDBLogColumn>>& columns): Kikimr(TKikimrSettings().SetWithSampleTables(false)) {
+        Writer = std::make_shared<TBaseTestExampleLogWriter>(Kikimr, NActorsServices::TEST, columns);
+        Writer->CreateStore();
+        Writer->CreateTable();
+        Writer->TableExists = true;
+    }
+
+    void WriteLog(const TEmitTestLog::TLogWriteFunc& writeFunc) {
+        auto* runtime = Kikimr.GetTestServer().GetRuntime();
+        for (ui32 i = 0; i < runtime->GetNodeCount(); ++i) {
+            runtime->GetLogSettings(i)->Sinks.push_back(Writer);
+        }
+        runtime->SetLogPriority(Writer->Component, NActors::NLog::PRI_TRACE);
+
+        runtime->Register(new TEmitTestLog(writeFunc));
+    }
 };
 
 Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
+    Y_UNIT_TEST(WriteSingleLine) {
+
+        TEnvironment env({
+            std::make_shared<TDBLogMessageIdColumn>(1),
+            std::make_shared<TDBLogMessagePrioColumn>(),
+            std::make_shared<TDBLogMessageTextColumn>(),
+            std::make_shared<TDBLogMessageLocationColumn>(),
+            std::make_shared<TDBLogMessageStringValueColumn>("string_value", std::vector<TKeyName>{"value"}),
+            std::make_shared<TDBLogColumnUint64>("ui64_value", std::vector<TKeyName>{"value"})
+        });
+        env.WriteLog([](){
+            YDB_LOG_INFO_COMP(NActorsServices::TEST, "Test info message",
+                {"value", 3});
+            YDB_LOG_NOTICE_COMP(NActorsServices::TEST, "Test notice message",
+                {"value", 7});
+            YDB_LOG_WARN_COMP(NActorsServices::TEST, "Test warn message",
+                {"value", "ace"});
+            YDB_LOG_ERROR_COMP(NActorsServices::TEST, "Test error message");
+        });
+
+        // Write data
+        /* NActors::NStructuredLog::TLogMessage message;
+        message.Component = NActorsServices::TEST;
+
+        message.Time = TInstant::MicroSeconds(0);
+        message.Priority = NLog::EPrio::Alert;
+        message.TextMessage = "Alert message";
+        message.FileName = "filename1";
+        message.LineNumber = 1001;
+        writer->Write(message); */
+
+        // Fetch and check data
+        env.Writer->CheckWrittenLogContent({
+            {"1u", "[6u]", R"(["Test info message"])",   R"(["write_ut.cpp:856"])", R"(["3"])",  "[3u]"},
+            {"2u", "[5u]", R"(["Test notice message"])", R"(["write_ut.cpp:858"])", R"(["7"])",   "[7u]"},
+            {"3u", "[4u]", R"(["Test warn message"])",   R"(["write_ut.cpp:860"])", R"(["ace"])", "#"},
+            {"4u", "[3u]", R"(["Test error message"])",  R"(["write_ut.cpp:861"])", R"(#)",       "#"}});
+    }
+
     Y_UNIT_TEST(CreateTable) {
         // @todo
     }
@@ -719,107 +894,6 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
     Y_UNIT_TEST(RemoveColumn) {
         // @todo
-    }
-
-    void CheckQueryResult(TKikimrRunner& kikimr, const TString& query, const TString& ysonResult) {
-        auto client = kikimr.GetTableClient();
-        TStringBuilder sql;
-        sql << "--!syntax_v1\n";
-        sql << "\n";
-        sql << query;
-        sql << "\n";
-
-        auto it = client.StreamExecuteScanQuery(sql).GetValueSync();
-
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        TString result = StreamResultToYson(it);
-
-        Y_UNUSED(ysonResult);
-        // CompareYson(result, R"([[["0"];1000000u];[["1"];1000001u]])");
-
-        Cerr << " " << Endl;
-        Cerr << "QUERY:" << Endl << sql << Endl;
-        Cerr << " " << Endl;
-        Cerr << "RESULT:" << Endl;
-        Cerr << result << Endl;
-    }
-
-    void CheckQueryResult(TKikimrRunner& kikimr, const TBaseDBLogWriter& writer, const TString& ysonResult) {
-        TStringBuilder selectList;
-        TStringBuilder orderBy;
-        for (const auto& column : writer.Columns) {
-            if (!selectList.empty()) {
-                selectList << ", ";
-            }
-            selectList << "`" << column->Name << "`";
-            if (column->Settings.IsPK) {
-                if (!orderBy.empty()) {
-                    orderBy << ", ";
-                }
-                orderBy << "`" << column->Name << "`";
-            }
-        }
-
-        TStringBuilder query;
-        query << "SELECT " << selectList << " FROM `/Root/" << writer.Settings.StoreName << "/" << writer.Settings.TableName << "`";
-        if (!orderBy.empty()) {
-            query << " ORDER BY " << orderBy;
-        }
-        CheckQueryResult(kikimr, TString(query), ysonResult);
-    }
-
-    // @todo Написать тесты для всех типов
-
-    Y_UNIT_TEST(WriteSingleLine) {
-
-        std::shared_ptr<TKikimrRunner> kikimr;
-        std::shared_ptr<TExampleLogWriter> writer;
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        kikimr = std::make_shared<TKikimrRunner>(settings);
-
-        writer = std::make_shared<TExampleLogWriter>(kikimr);
-        writer->CreateStore();
-        writer->CreateTable();
-        writer->TableExists = true;
-
-        auto* runtime = kikimr->GetTestServer().GetRuntime();
-        for (ui32 i = 0; i < runtime->GetNodeCount(); ++i) {
-            runtime->GetLogSettings(i)->Sinks.push_back(writer);
-        }
-        runtime->SetLogPriority(writer->Component, NActors::NLog::PRI_TRACE);
-
-        class TEmitTestLog : public NActors::TActorBootstrapped<TEmitTestLog> {
-        public:
-            void Bootstrap() {
-                YDB_LOG_ERROR_COMP(NActorsServices::TEST, "Test message via logger actor",
-                    {"value", 3});
-                Sleep(TDuration::MilliSeconds(1));
-                YDB_LOG_ERROR_COMP(NActorsServices::TEST, "Test message 2 via logger actor",
-                    {"value", "ace"});
-                PassAway();
-            }
-        };
-        runtime->Register(new TEmitTestLog());
-
-        // Write data
-        /* NActors::NStructuredLog::TLogMessage message;
-        message.Component = NActorsServices::TEST;
-
-        message.Time = TInstant::MicroSeconds(0);
-        message.Priority = NLog::EPrio::Alert;
-        message.TextMessage = "Alert message";
-        message.FileName = "filename1";
-        message.LineNumber = 1001;
-        writer->Write(message); */
-
-        // Fetch and check data
-        for(unsigned i=0; writer->Written != 2 && i < 30; i++) {
-            Cerr << "DEBUG: Wait write "<< i << "..." << Endl;
-            Sleep(TDuration::Seconds(1));
-        }
-
-        CheckQueryResult(*kikimr, *writer, "");
     }
 }
 

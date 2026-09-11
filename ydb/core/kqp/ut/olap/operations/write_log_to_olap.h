@@ -28,7 +28,7 @@ public:
             NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64;
     };
 
-    TBaseDBLogWriter(std::shared_ptr<TKikimrRunner>& runner, NLog::EComponent component, const TDatabaseSettings& settings, TVector<std::shared_ptr<TBaseDBLogColumn>> columns)
+    TBaseDBLogWriter(TKikimrRunner& runner, NLog::EComponent component, const TDatabaseSettings& settings, TVector<std::shared_ptr<TBaseDBLogColumn>> columns)
         : Runner(runner)
         , Component(component)
         , Settings(settings)
@@ -37,8 +37,7 @@ public:
     }
 
     TKikimrRunner& GetRunner() const {
-        Y_ABORT_UNLESS(Runner, "TKikimrRunner is not constructed yet");
-        return *Runner;
+        return Runner;
     }
 
     void Write(const NActors::NStructuredLog::TLogMessage&) override;
@@ -46,12 +45,11 @@ public:
     TString GetTableDescription();
     std::shared_ptr<arrow::Schema> GetArrowSchema() const;
 
-    std::shared_ptr<TKikimrRunner> Runner;
+    TKikimrRunner& Runner;
     const NLog::EComponent Component;
     const TDatabaseSettings Settings;
     const TVector<std::shared_ptr<TBaseDBLogColumn>> Columns;
     bool TableExists {false};
-    unsigned Written{0};
 
     void WaitForSchemeOperation(TActorId sender, ui64 txId);
     void ExecuteModifyScheme(NKikimrSchemeOp::TModifyScheme& modifyScheme);

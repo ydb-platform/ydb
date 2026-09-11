@@ -2,7 +2,10 @@
 
 #include "arrow_type_mapping.h"
 
+#include <ydb/library/actors/struct_log/key_name.h>
 #include <ydb/library/actors/struct_log/log_sink.h>
+#include <ydb/library/actors/struct_log/native_value_extractor.h>
+#include <ydb/library/actors/struct_log/string_value_extractor.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/key_value_metadata.h>
@@ -16,6 +19,8 @@
 #include <vector>
 
 namespace NKikimr::NKqp::NLogToDB {
+
+using namespace NActors::NStructuredLog;
 
 class TBaseDBLogColumn {
 public:
@@ -95,6 +100,10 @@ public:
         return TArrowTypeMapper<TValueType>::AppendValue(*Builder, value);
     }
 
+    bool AppendNull() {
+        return TArrowTypeMapper<TValueType>::AppendNull(*Builder);
+    }
+
     bool Write(const NActors::NStructuredLog::TLogMessage&) override {
         // @todo Удалить реализацию -заглушку
         TValueType value{};
@@ -111,30 +120,15 @@ public:
     }
 };
 
-/// @todo алисы не нужны
-using TDBLogColumnBool = TTypedDBLogColumn<bool>;
-using TDBLogColumnInt8 = TTypedDBLogColumn<i8>;
-using TDBLogColumnUint8 = TTypedDBLogColumn<ui8>;
-using TDBLogColumnInt16 = TTypedDBLogColumn<i16>;
-using TDBLogColumnUint16 = TTypedDBLogColumn<ui16>;
-using TDBLogColumnInt32 = TTypedDBLogColumn<i32>;
-using TDBLogColumnUint32 = TTypedDBLogColumn<ui32>;
-using TDBLogColumnInt64 = TTypedDBLogColumn<i64>;
-using TDBLogColumnUint64 = TTypedDBLogColumn<ui64>;
-using TDBLogColumnFloat = TTypedDBLogColumn<float>;
-using TDBLogColumnDouble = TTypedDBLogColumn<double>;
-using TDBLogColumnString = TTypedDBLogColumn<TString>;
-using TDBLogColumnInstant = TTypedDBLogColumn<TInstant>;
-
 // Write message unique id to column
 class TDBLogMessageIdColumn : public TTypedDBLogColumn<ui64> {
 public:
     using TBase = TTypedDBLogColumn<ui64>;
 
     ui64 CurrentValue;
-    TDBLogMessageIdColumn() : TBase("id", TDatabaseSettings::PKShardingKey())  {
-        CurrentValue = Now().MilliSeconds(); // @todo Достаточно ли уникальности?
-    }
+    TDBLogMessageIdColumn() : TBase("id", TDatabaseSettings::PKShardingKey()), CurrentValue(Now().MilliSeconds()) {} // @todo Достаточно ли уникальности?
+
+    TDBLogMessageIdColumn(ui64 currentValue) : TBase("id", TDatabaseSettings::PKShardingKey()), CurrentValue(currentValue)  {}
 
     bool Write(const NActors::NStructuredLog::TLogMessage& ) override {
         return AppendValue(CurrentValue++);
@@ -197,23 +191,61 @@ public:
     }
 };
 
-// Write message structured value to column
-/* class TDBLogMessageValueColumn : public TTypedDBLogColumn<TString> {
+// Write message structured value to column as string
+class TDBLogMessageStringValueColumn : public TTypedDBLogColumn<TString> {
 public:
     using TBase = TTypedDBLogColumn<TString>;
 
-    const std::vector<TKeyName> KeyName;
-    TDBLogMessageValueColumn(const TString& columnName, const std::vector<TKeyName>& keyName) :
+    std::vector<TKeyName> KeyName;
+
+    TDBLogMessageStringValueColumn(const TString& columnName, const std::vector<TKeyName>& keyName) :
         TBase(columnName, TDatabaseSettings()),
-        ValueName(valueName) {
+        KeyName(keyName) {
     }
 
     bool Write(const NActors::NStructuredLog::TLogMessage& message) override {
-        // @todo Поддержка NULL
-        auto value = message.StructuredMessage.GetValue();
-
-        return AppendValue(value);
+        TStringValueExtractor extractor;
+        auto value = extractor.ExtractValue(message.StructuredMessage, KeyName);
+        if (value.has_value()) {
+            return AppendValue(value.value());
+        } else {
+            return AppendNull();
+        }
     }
-}; */
+};
+
+// Write message structured value to column as typed value
+template <typename T>
+class TDBLogMessageTypedValueColumn : public TTypedDBLogColumn<T> {
+public:
+    using TBase = TTypedDBLogColumn<T>;
+
+    std::vector<TKeyName> KeyName;
+
+    TDBLogMessageTypedValueColumn(const TString& columnName, const std::vector<TKeyName>& keyName, const TBase::TDatabaseSettings& settings = {}) :
+        TBase(columnName, settings),
+        KeyName(keyName) {
+    }
+
+    bool Write(const NActors::NStructuredLog::TLogMessage& message) override {
+        using TExtractor = TNativeValueExtractor<T>;
+        TExtractor extractor;
+        auto value = extractor.ExtractValue(message.StructuredMessage, KeyName);
+        switch (value.first) {
+            case TExtractor::TResultKind::Ok:
+                if (!value.second.has_value()) {
+                    return false;
+                }
+                return TBase::AppendValue(value.second.value());
+            case TExtractor::TResultKind::NoCast:
+                return TBase::AppendNull(); // @todo Обработка ошибок
+            case TExtractor::TResultKind::NoValue:
+                return TBase::AppendNull();
+            break;
+        }
+    }
+};
+
+using TDBLogColumnUint64 = TDBLogMessageTypedValueColumn<ui64>;
 
 }

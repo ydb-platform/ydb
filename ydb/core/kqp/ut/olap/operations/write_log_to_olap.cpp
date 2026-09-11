@@ -41,7 +41,6 @@ void TBaseDBLogWriter::Write(const NActors::NStructuredLog::TLogMessage& message
     }
     auto batch = arrow::RecordBatch::Make(GetArrowSchema(), 1, arrays);
     SendDataViaActorSystem(batch);
-    Written++;
 }
 
 TString TBaseDBLogWriter::GetStoreDescription() {
@@ -118,7 +117,7 @@ TString TBaseDBLogWriter::GetTableDescription() {
 }
 
 void TBaseDBLogWriter::WaitForSchemeOperation(TActorId sender, ui64 txId) {
-    auto& server = Runner->GetTestServer();
+    auto& server = GetRunner().GetTestServer();
     auto& runtime = *server.GetRuntime();
     auto& settings = server.GetSettings();
     auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
@@ -135,7 +134,7 @@ void TBaseDBLogWriter::WaitForSchemeOperation(TActorId sender, ui64 txId) {
 }
 
 void TBaseDBLogWriter::ExecuteModifyScheme(NKikimrSchemeOp::TModifyScheme& modifyScheme) {
-    auto& server = Runner->GetTestServer();
+    auto& server = GetRunner().GetTestServer();
     auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     request->Record.SetExecTimeoutPeriod(Max<ui64>());
     *request->Record.MutableTransaction()->MutableModifyScheme() = modifyScheme;
@@ -179,7 +178,7 @@ void TBaseDBLogWriter::CreateTable() {
 
 void TBaseDBLogWriter::SendDataViaActorSystem(std::shared_ptr<arrow::RecordBatch> batch) {
 
-    auto* runtime = Runner->GetTestServer().GetRuntime();
+    auto* runtime = GetRunner().GetTestServer().GetRuntime();
 
     UNIT_ASSERT(batch);
     UNIT_ASSERT(batch->num_rows());

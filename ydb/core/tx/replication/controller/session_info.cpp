@@ -87,6 +87,10 @@ void TWorkerInfo::SetHeartbeat(const TRowVersion& value) {
     Heartbeat = value;
 }
 
+void TWorkerInfo::ClearHeartbeat() {
+    Heartbeat.Clear();
+}
+
 bool TWorkerInfo::HasHeartbeat() const {
     return Heartbeat.Defined();
 }

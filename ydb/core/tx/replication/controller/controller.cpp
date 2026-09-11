@@ -83,6 +83,8 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvDropStreamResult, Handle);
         HFunc(TEvPrivate::TEvCreateDstResult, Handle);
         HFunc(TEvPrivate::TEvAlterDstResult, Handle);
+        HFunc(TEvPrivate::TEvSchemaChangeDstAlterResult, Handle);
+        HFunc(TEvPrivate::TEvSchemaChangeDstAlterTxId, Handle);
         HFunc(TEvPrivate::TEvDropDstResult, Handle);
         HFunc(TEvPrivate::TEvResolveSecretResult, Handle);
         HFunc(TEvPrivate::TEvResolveResourceIdResult, Handle);
@@ -90,6 +92,8 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvUpdateTenantNodes, Handle);
         HFunc(TEvPrivate::TEvProcessQueues, Handle);
         HFunc(TEvPrivate::TEvRemoveWorker, Handle);
+        HFunc(TEvPrivate::TEvWorkersRegistered, Handle);
+        HFunc(TEvPrivate::TEvResumeDeferredAlter, Handle);
         HFunc(TEvPrivate::TEvDescribeTargetsResult, Handle);
         HFunc(TEvPrivate::TEvRequestCreateStream, Handle);
         HFunc(TEvPrivate::TEvRequestDropStream, Handle);
@@ -101,6 +105,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvService::TEvWorkerDataEnd, Handle);
         HFunc(TEvService::TEvGetTxId, Handle);
         HFunc(TEvService::TEvHeartbeat, Handle);
+        HFunc(TEvService::TEvSchemaChangeReport, Handle);
         HFunc(TEvTxAllocatorClient::TEvAllocateResult, Handle);
         HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
         HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
@@ -113,6 +118,11 @@ void TController::Cleanup(const TActorContext& ctx) {
     for (auto& [_, replication] : Replications) {
         replication->Shutdown(ctx);
     }
+
+    for (const auto& [_, actorId] : SchemaChangeDstAlterers) {
+        Send(actorId, new TEvents::TEvPoison());
+    }
+    SchemaChangeDstAlterers.clear();
 
     if (auto actorId = std::exchange(DiscoveryCache, {})) {
         Send(actorId, new TEvents::TEvPoison());
@@ -165,6 +175,28 @@ void TController::SwitchToWork(const TActorContext& ctx) {
         replication->Progress(ctx);
     }
 
+    // Re-drive a durable schema barrier after a controller restart.  The
+    // destination alterer describes before changing anything, while
+    // CommitWrites is idempotent for a previously flushed write id.
+    for (const auto& [key, barrier] : SchemaBarriers) {
+        switch (barrier.Phase) {
+        case ESchemaBarrierPhase::FlushingTarget:
+            StartSchemaChangeTargetFlush(key, ctx);
+            break;
+        case ESchemaBarrierPhase::Altering:
+            StartSchemaChangeDstAlter(key, ctx);
+            break;
+        default:
+            break;
+        }
+    }
+
+    for (const auto replicationId : DeferredAlters) {
+        if (!HasActiveSchemaBarrier(replicationId)) {
+            ctx.Send(SelfId(), new TEvPrivate::TEvResumeDeferredAlter(replicationId));
+        }
+    }
+
     TabletCounters->Simple()[COUNTER_UNRESOLVED_DATABASE_REPLICATIONS] = unresolvedDatabaseReplications;
 }
 
@@ -177,6 +209,25 @@ void TController::Reset() {
     Workers.clear();
     WorkersWithHeartbeat.clear();
     WorkersByHeartbeat.clear();
+    SchemaBarriers.clear();
+    WorkerSnapshots.clear();
+    DeferredAlters.clear();
+    SchemaTargetFlushes.clear();
+    ActiveSchemaTargetFlush.reset();
+}
+
+bool TController::HasActiveSchemaBarrier(ui64 replicationId) const {
+    return AnyOf(SchemaBarriers, [replicationId](const auto& item) {
+        if (item.first.first != replicationId || item.second.Phase == ESchemaBarrierPhase::Error) {
+            return false;
+        }
+
+        // DDL completion alone does not make a barrier safe to tear down:
+        // every partition must first receive the release, refresh its writer,
+        // and durably acknowledge consuming the schema record.
+        return item.second.Phase != ESchemaBarrierPhase::Applied
+            || item.second.CompletedWorkers.size() != item.second.ExpectedWorkers.size();
+    });
 }
 
 void TController::Handle(TEvController::TEvCreateReplication::TPtr& ev, const TActorContext& ctx) {
@@ -474,6 +525,7 @@ void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& c
 
         session.AttachWorker(id);
         worker->AttachSession(nodeId);
+        ReplaySchemaChangeRecovery(nodeId, id);
     }
 
     ScheduleProcessQueues();
@@ -502,6 +554,10 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
             UpdateStats(id, record.GetStats());
         } else if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_ACK) {
             UpdateStats(id, record.GetStatus());
+            // A service restart reports an empty initial worker list. The
+            // controller creates replacement workers afterwards, so replay
+            // recovery when the replacement acknowledges its successful boot.
+            ReplaySchemaChangeRecovery(nodeId, id);
         }
         break;
     case NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED:
@@ -572,30 +628,6 @@ void TController::UpdateStats(const TWorkerId& id, NKikimrReplication::TEvWorker
     }
 
     target->WorkerStatusChanged(id.WorkerId(), status);
-}
-
-void TController::Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx) {
-    YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"ev", ev->Get()->ToString()});
-
-    auto& record = ev->Get()->Record;
-    const auto id = TWorkerId::Parse(record.GetWorker());
-    auto* cmd = record.MutableCommand();
-
-    if (!IsValidWorker(id)) {
-        return;
-    }
-
-    auto* worker = GetOrCreateWorker(id, cmd);
-    if (!worker->HasCommand()) {
-        worker->SetCommand(cmd);
-    }
-
-    if (!worker->HasSession()) {
-        BootQueue.insert(id);
-    }
-
-    ScheduleProcessQueues();
 }
 
 void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorContext& ctx) {
@@ -771,6 +803,41 @@ void TController::BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrRepl
     session.AttachWorker(id);
 }
 
+void TController::ReplaySchemaChangeRecovery(ui32 nodeId, const TWorkerId& id) {
+    // A worker can restart after its post-schema topic offset commit but
+    // before its Completed report reaches this tablet. Re-send the durable
+    // applied acknowledgement to the exact session after it is attached or
+    // has acknowledged a controller-initiated boot. The worker can then infer
+    // completion only after its reader proves that the consumer has advanced
+    // beyond the retained schema record.
+    const auto key = std::make_pair(id.ReplicationId(), id.TargetId());
+    const auto barrier = SchemaBarriers.find(key);
+    if (barrier == SchemaBarriers.end()
+        || (barrier->second.Phase != ESchemaBarrierPhase::Verifying
+            && barrier->second.Phase != ESchemaBarrierPhase::Applied)
+        || !barrier->second.AppliedWorkers.contains(id)
+        || barrier->second.CompletedWorkers.contains(id)) {
+        return;
+    }
+
+    const auto offset = barrier->second.WorkerOffsets.find(id);
+    if (offset == barrier->second.WorkerOffsets.end()) {
+        YDB_LOG_ERROR("Applied schema barrier has no worker offset",
+            {"workerId", id});
+        return;
+    }
+
+    auto result = MakeHolder<TEvService::TEvSchemaChangeResult>();
+    id.Serialize(*result->Record.MutableWorker());
+    result->Record.MutableSchema()->CopyFrom(barrier->second.Schema);
+    result->Record.SetOffset(offset->second);
+    auto& controller = *result->Record.MutableController();
+    controller.SetTabletId(TabletID());
+    controller.SetGeneration(Executor()->Generation());
+    result->Record.SetApplied(true);
+    Send(MakeReplicationServiceId(nodeId), result.Release());
+}
+
 void TController::ProcessStopQueue(const TActorContext& ctx) {
     ui32 i = 0;
     for (auto iter = StopQueue.begin(); iter != StopQueue.end() && i < ProcessBatchLimit;) {
@@ -836,23 +903,7 @@ void TController::RemoveWorker(const TWorkerId& id, const TActorContext& ctx) {
         {"workerId", id});
 
     Y_ABORT_UNLESS(RemoveQueue.contains(id));
-
-    RemoveQueue.erase(id);
-    Workers.erase(id);
-    TabletCounters->Simple()[COUNTER_WORKERS] = Workers.size();
-
-    auto replication = Find(id.ReplicationId());
-    if (!replication) {
-        return;
-    }
-
-    auto* target = replication->FindTarget(id.TargetId());
-    if (!target) {
-        return;
-    }
-
-    target->RemoveWorker(id.WorkerId());
-    target->Progress(ctx);
+    RunTxRemoveWorker(id, ctx);
 }
 
 bool TController::MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx) {
@@ -917,6 +968,33 @@ void TController::Handle(TEvService::TEvHeartbeat::TPtr& ev, const TActorContext
 
     TabletCounters->Simple()[COUNTER_WORKERS_PENDING_HEARTBEAT] = PendingHeartbeats.size();
     RunTxHeartbeat(ctx);
+}
+
+void TController::Handle(TEvService::TEvSchemaChangeReport::TPtr& ev, const TActorContext& ctx) {
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
+
+    const ui32 nodeId = ev->Sender.NodeId();
+    if (!Sessions.contains(nodeId)) {
+        return;
+    }
+
+    const auto id = TWorkerId::Parse(ev->Get()->Record.GetWorker());
+    if (!Sessions[nodeId].HasWorker(id) || !IsValidWorker(id)) {
+        YDB_LOG_WARN_CTX(ctx, "Ignore schema report from unknown worker",
+            {"worker", id});
+        return;
+    }
+
+    RunTxSchemaChangeReport(ev, ctx);
+}
+
+void TController::Handle(TEvPrivate::TEvSchemaChangeDstAlterTxId::TPtr& ev, const TActorContext& ctx) {
+    RunTxSchemaChangeDstAlterTxId(ev, ctx);
+}
+
+void TController::Handle(TEvPrivate::TEvSchemaChangeDstAlterResult::TPtr& ev, const TActorContext& ctx) {
+    RunTxSchemaChangeDstAlterResult(ev, ctx);
 }
 
 void TController::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx) {

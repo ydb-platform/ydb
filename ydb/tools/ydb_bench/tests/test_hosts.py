@@ -6,16 +6,132 @@ import unittest
 from unittest import mock
 import uuid
 import threading
+import shutil
+import subprocess
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
 from ydb.tools.ydb_bench.lib import hosts
+from ydb.tools.ydb_bench.lib import web
 from ydb.tools.ydb_bench.lib.federation import Federation, reference, split_reference
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
 from ydb.tools.ydb_bench.lib.web import make_server
 
 
 class HostsTest(unittest.TestCase):
+    @unittest.skipUnless(shutil.which('node'), 'node is required for editor routing checks')
+    def test_editor_routes_to_selected_host(self):
+        helpers = web._JS.split("let editorHost=", 1)[1].split('function runDisplay', 1)[0]
+        script = "let editorHost=" + helpers + """
+const assert=require('assert'),enc=encodeURIComponent;
+const api=(path,options)=>({path,options});
+assert.deepStrictEqual(editorApi('/api/editor-config',{body:'yaml'}),{path:'/api/editor-config',options:{body:'yaml'}});
+editorHost='peer-id';
+for(const path of ['/api/editor-config','/api/validate','/api/drafts','/api/runs']){
+  assert.strictEqual(editorApi(path,{}).path,'/api/hosts/peer-id'+path);
+}
+"""
+        subprocess.run([shutil.which('node'), '-e', script], check=True, capture_output=True, timeout=10)
+
+    @unittest.skipUnless(shutil.which('node'), 'node is required for remote report checks')
+    def test_remote_run_chart_route(self):
+        split = 'function splitRunRef' + web._JS.split('function splitRunRef', 1)[1].split('let editorHost', 1)[0]
+        loader = (
+            'async function loadChartData'
+            + web._JS.split('async function loadChartData', 1)[1].split('async function loadLocalYdbComparison', 1)[0]
+        )
+        script = split + loader + """
+const assert=require('assert'),enc=encodeURIComponent,api=async path=>path;
+(async()=>{
+  const host='60834016-4866-405f-bdbc-63271c093b06';
+  assert.strictEqual(await loadChartData([host+':same-run'],'ping-bench'),
+    '/api/hosts/'+host+'/api/chart-data?run=same-run&benchmark=ping-bench');
+  assert.strictEqual(await loadChartData(['local-run']),'/api/chart-data?run=local-run');
+})().catch(error=>{console.error(error);process.exitCode=1});
+"""
+        subprocess.run([shutil.which('node'), '-e', script], check=True, capture_output=True, timeout=10)
+
+    def test_remote_editor_and_launch(self):
+        with ExitStack() as stack:
+            servers = [
+                make_server('127.0.0.1', 0, stack.enter_context(tempfile.TemporaryDirectory())) for _ in range(2)
+            ]
+            threads = [threading.Thread(target=server.serve_forever, daemon=True) for server in servers]
+            for thread in threads:
+                thread.start()
+            try:
+                local, peer = servers
+                directory = local.service.hosts
+                directory.add({'endpoint': peer.service.hosts.endpoint, 'token': peer.service.hosts.token})
+                base = directory.endpoint + '/api/hosts/' + peer.service.hosts.id
+                payload = {'yaml': 'test configuration', 'perf': True, 'continue_on_error': True}
+
+                def post(url, options=payload, headers=None):
+                    return urlopen(
+                        Request(
+                            url,
+                            data=json.dumps(options).encode(),
+                            headers={'Content-Type': 'application/json', **(headers or {})},
+                        ),
+                        timeout=5,
+                    )
+
+                for path, method, result, args in (
+                    (
+                        'editor-config',
+                        'editor_config',
+                        {'binary_catalog': {'ydbd': ['peer-binary']}},
+                        ('test configuration', True),
+                    ),
+                    (
+                        'validate',
+                        'validate',
+                        {'valid': False, 'error': 'remote validation'},
+                        ('test configuration', True),
+                    ),
+                    ('plan', 'plan', {'valid': True}, ('test configuration', True)),
+                    ('drafts', 'save_draft', {'path': 'peer-draft'}, ('test configuration',)),
+                    ('runs', 'start', {'id': 'peer-run'}, ('test configuration', True, True)),
+                ):
+                    with mock.patch.object(peer.service, method, return_value=result) as remote_call, mock.patch.object(
+                        local.service, method, side_effect=AssertionError('must not execute locally')
+                    ):
+                        with post(base + '/api/' + path) as response:
+                            self.assertEqual(json.load(response), result)
+                        remote_call.assert_called_once_with(*args)
+                with mock.patch.object(peer.service, 'start', side_effect=BenchmarkError('invalid peer binary')):
+                    with self.assertRaises(HTTPError) as error:
+                        post(base + '/api/runs')
+                    self.assertEqual(error.exception.code, 400)
+                    self.assertEqual(json.load(error.exception)['error'], 'invalid peer binary')
+                with mock.patch.object(peer.service, 'cancel', return_value={'id': 'peer-run'}) as cancel:
+                    with post(base + '/api/runs/peer-run/cancel', {}) as response:
+                        self.assertEqual(json.load(response), {'id': 'peer-run'})
+                    cancel.assert_called_once_with('peer-run')
+                for url, headers, status in (
+                    (base + '/api/runs', {'Origin': 'http://other.example'}, 403),
+                    (peer.service.hosts.endpoint + '/peer/api/runs', {}, 401),
+                    (
+                        peer.service.hosts.endpoint + '/peer/api/runs',
+                        {'Authorization': 'Bearer ' + peer.service.hosts.token, 'Origin': directory.endpoint},
+                        403,
+                    ),
+                    (
+                        peer.service.hosts.endpoint + '/peer/api/import',
+                        {'Authorization': 'Bearer ' + peer.service.hosts.token},
+                        403,
+                    ),
+                ):
+                    with self.assertRaises(HTTPError) as error:
+                        post(url, headers=headers)
+                    self.assertEqual(error.exception.code, status)
+            finally:
+                for server in servers:
+                    server.shutdown()
+                    server.server_close()
+                for thread in threads:
+                    thread.join(timeout=5)
+
     def test_cluster_join_three_hosts_and_retry(self):
         with ExitStack() as stack:
             servers = [

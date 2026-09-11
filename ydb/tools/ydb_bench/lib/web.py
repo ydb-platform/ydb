@@ -36,7 +36,7 @@ from ydb.tools.ydb_bench.lib.local_ydb import run_local_ydb
 from ydb.tools.ydb_bench.lib.local_ydb_workloads import web_workload_catalog
 from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES, discover_topology, plan_affinity, topology_record
 from ydb.tools.ydb_bench.lib.ydb_telemetry import read_metrics
-from ydb.tools.ydb_bench.lib.hosts import HostDirectory, allowed_path, open_peer
+from ydb.tools.ydb_bench.lib.hosts import HostDirectory, allowed_path, allowed_post_path, open_peer, request_peer
 from ydb.tools.ydb_bench.lib.federation import Federation, split_reference
 
 _CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
@@ -325,6 +325,8 @@ _JS = (
     "const viewedHost=new URLSearchParams(location.search).get('host')||'';\n"
     """
 function splitRunRef(value){const match=/^([0-9a-f]{8}-[0-9a-f-]{27}):(.*)$/.exec(value);return match?{host:match[1],id:match[2]}:null}
+let editorHost='',editorHostOptions='',editorRenderVersion=0;
+function editorApi(path,options){return api(editorHost?'/api/hosts/'+enc(editorHost)+path:path,options)}
 function runDisplay(value){return splitRunRef(value)?.id||value}
 function hostApiPath(path){
   if(path.startsWith('/api/federation/')||path.startsWith('/api/hosts'))return path;
@@ -436,7 +438,7 @@ function shell(current,body,breadcrumb=''){
     '</nav><span class=active-run>'+(activeRun?'<a href="#run/'+enc(activeRun)+'">Active run: '+esc(activeRun)+'</a>':
       'No active run')+'</span></header><main>'+
       (viewedHost&&/^#(?:run|attempt)[/]/.test(location.hash)?
-        '<p class=muted>Remote host · read-only · '+esc(viewedHost)+' · <a href="/?#hosts">Back to hosts</a></p>':'')+
+        '<p class=muted>Remote host · '+esc(viewedHost)+' · <a href="/?#hosts">Back to hosts</a></p>':'')+
       breadcrumb+body+'</main></div></div>'
 }
 """
@@ -586,9 +588,10 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     ";lines.push('    affinity: '+yamlArray(profile.affinity));lines.push('    background-load: '+yamlArray(profile.background_"
     "load||['none']));if(profile.timeout!==null&&profile.timeout!==undefined&&profil"
     "e.timeout!=='')lines.push('    timeout: '+profile.timeout)}}return lines.join('\\n')+'\\n'}\n"
-    "async function syncEditor(){try{const value=await api('/api/editor-config',jsonOptions({yaml:editor.yaml,perf:editor.per"
-    'f}));editor.model=value;editor.error=null;if(!editor.selected&&value.profiles.length)editor.selected=value.profiles[0].k'
-    'ey;return value}catch(error){editor.model=null;editor.error=error.message;return null}}\n'
+    "async function syncEditor(){const host=editorHost,yaml=editor.yaml,perf=editor.perf;try{const value=await editorApi('/api/editor-config',jsonOptions({yaml,perf}));"
+    "if(host!==editorHost||yaml!==editor.yaml||perf!==editor.perf)return null;"
+    'editor.model=value;editor.error=null;if(!editor.selected&&value.profiles.length)editor.selected=value.profiles[0].key;return value}'
+    "catch(error){if(host===editorHost&&yaml===editor.yaml&&perf===editor.perf){editor.model=null;editor.error=error.message}return null}}\n"
     'function profileByKey(key){return (editor.model?.profiles||[]).find(profile=>profile.key===key)}\n'
     'function updateProfile(key,mutate){const profile=profileByKey(key);if(!profile)return;mutate(profile);editor.yaml=serial'
     'izeConfig(editor.model);saveDraft()}\n'
@@ -597,7 +600,8 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     '(item=>item.matrix).reduce((total,item)=>total*(profile.parameters[item.name]?.length||1),1),processes=profile.affinity.'
     "length*(profile.background_load||['none']).length*profile.threads.length*profile.repetitions*cases;count+=processes;seconds+=processes*profile.duration}return {cou"
     'nt,seconds}}\n'
-    "function editorControls(){return '<div class=toolbar><button id=validate>Validate</button><button id=download-yaml>Downl"
+    "function editorControls(){return '<div class=toolbar><label>Host <select id=run-host>'+editorHostOptions+"
+    "'</select></label><button id=validate>Validate</button><button id=download-yaml>Downl"
     "oad YAML</button><button id=save-host>Save YAML on host</button><label><input id=perf type=checkbox '+(editor.perf?'chec"
     "ked':'')+'> perf</label><label><input id=continue type=checkbox '+(editor.continueOnError?'checked':'')+'> continue on e"
     "rror</label><button class=primary id=start-run>Start run</button></div><div id=editor-message></div>'}\n"
@@ -605,6 +609,7 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     'matrix)){const values=profile.parameters[parameter.name]||parameter.default;cases=cases.flatMap(parts=>values.map(value='
     ">[...parts,parameter.name+'='+value]))}return cases}\n"
     'function bindEditorControls(){\n'
+    "  document.querySelector('#run-host').onchange=async event=>{editorHost=event.target.value;clearTimeout(window.ydbBenchYamlTimer);await renderNew()};\n"
     "  const message=document.querySelector('#editor-message');\n"
     '  const showMessage=(text,kind=\'good\')=>{message.innerHTML=\'<div class="notice \'+kind+\'">\'+esc(text)+\'</div>\'};\n'
     "  if(editor.model&&document.querySelector('.profile-list')){\n"
@@ -620,7 +625,7 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     '};\n'
     "  document.querySelector('#continue').onchange=event=>{editor.continueOnError=event.target.checked};\n"
     "  document.querySelector('#validate').onclick=async()=>{\n"
-    "    try {const value=await api('/api/validate',jsonOptions({yaml:editor.yaml,perf:editor.perf}));showMessage(value.valid"
+    "    try {const value=await editorApi('/api/validate',jsonOptions({yaml:editor.yaml,perf:editor.perf}));showMessage(value.valid"
     "?'Valid configuration: '+value.steps+' planned processes.':value.error,value.valid?'good':'error')}\n"
     "    catch(error){showMessage(error.message,'error')}\n"
     '  };\n'
@@ -629,15 +634,17 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     "    link.href=URL.createObjectURL(blob);link.download='ydb-bench.yaml';link.click();URL.revokeObjectURL(link.href)\n"
     '  };\n'
     "  document.querySelector('#save-host').onclick=async()=>{\n"
-    "    try {const value=await api('/api/drafts',jsonOptions({yaml:editor.yaml}));showMessage('Saved on host: '+value.path)}"
+    "    try {const value=await editorApi('/api/drafts',jsonOptions({yaml:editor.yaml}));showMessage('Saved on host: '+value.path)}"
     '\n'
     "    catch(error){showMessage(error.message,'error')}\n"
     '  };\n'
-    "  document.querySelector('#start-run').onclick=async()=>{\n"
-    "    try {const value=await api('/api/runs',jsonOptions({yaml:editor.yaml,perf:editor.perf,continue_on_error:editor.conti"
-    "nueOnError}));activeRun=value.id;sessionStorage.setItem('ydb-bench-active-run',activeRun);setRoute('run/'+enc(value.id))"
+    "  document.querySelector('#start-run').onclick=async event=>{\n"
+    "    const button=event.currentTarget,host=editorHost;button.disabled=true;document.querySelector('#run-host').disabled=true;\n"
+    "    try {const value=await editorApi('/api/runs',jsonOptions({yaml:editor.yaml,perf:editor.perf,continue_on_error:editor.conti"
+    "nueOnError}));activeRun=host?host+':'+value.id:value.id;sessionStorage.setItem('ydb-bench-active-run',activeRun);setRoute('run/'+enc(activeRun))"
     '}\n'
     "    catch(error){showMessage(error.message,'error')}\n"
+    "    finally{button.disabled=false;const hostSelect=document.querySelector('#run-host');if(hostSelect)hostSelect.disabled=false}\n"
     '  }\n'
     '}\n'
     """
@@ -1135,8 +1142,10 @@ function addProfile(){
   editor.model.profiles.push(profile);editor.selected=profile.key;editor.yaml=serializeConfig(editor.model);saveDraft();renderNew()
 }
 """
-    "async function renderNew(tab){clearRefresh();if(tab)sessionStorage.setItem('ydb-bench-editor-tab',tab);tab=sessionStorag"
-    "e.getItem('ydb-bench-editor-tab')||'builder';await syncEditor();const summary=planSummary();let content='<h1 class=page-"
+    "async function renderNew(tab){clearRefresh();const version=++editorRenderVersion;if(tab)sessionStorage.setItem('ydb-bench-editor-tab',tab);tab=sessionStorag"
+    "e.getItem('ydb-bench-editor-tab')||'builder';const hostOptions=await hostChoices(editorHost,false);await syncEditor();"
+    "if(version!==editorRenderVersion||!['#new','#new/yaml'].includes(location.hash))return;editorHostOptions=hostOptions;"
+    "const summary=planSummary();let content='<h1 class=page-"
     'title>New run</h1><div class=tabs><a class="\'+(tab===\'builder\'?\'active\':\'\')+\'" href="#new">Builder</a><a class="\'+(tab=='
     '=\'yaml\'?\'active\':\'\')+\'" href="#new/yaml">YAML</a></div>\'+editorControls();if(tab===\'yaml\'){content+=\'<textarea class=yam'
     "l id=yaml-editor spellcheck=false>'+esc(editor.yaml)+'</textarea><div class=muted>Invalid YAML remains editable and is n"
@@ -1405,8 +1414,9 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
   }
 }
 """
-    "async function loadChartData(runIds,benchmark=null){const query=new URLSearchParams;for(const run of runIds)query.append"
-    "('run',run);if(benchmark)query.set('benchmark',benchmark);return api('/api/chart-data?'+query)}\n"
+    "async function loadChartData(runIds,benchmark=null){const ref=runIds.length===1?splitRunRef(runIds[0]):null;"
+    "const query=new URLSearchParams;for(const run of runIds)query.append('run',ref?ref.id:run);"
+    "if(benchmark)query.set('benchmark',benchmark);return api((ref?'/api/hosts/'+enc(ref.host):'')+'/api/chart-data?'+query)}\n"
     "async function loadLocalYdbComparison(runIds){const query=new URLSearchParams;for(const run of runIds)query.append('run',run);"
     "const result=await api('/api/federation/profiles?'+query);if(result.errors?.length)throw Error(result.errors.map(e=>e.host_name+': '+e.error).join('; '));return result}\n"
     "async function loadLocalYdbActivity(runId,profile,after){const query=new URLSearchParams({profile,after:String(after)});return api('/api/runs/'+enc(runId)+'/local-ydb-activity?'+query)}\n"
@@ -2872,7 +2882,7 @@ function parseLocalYdbProfileSelection(groups,selected){
     "    const crumbs=[{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:runDisplay(id)}];if(activeProfile&&profileKeys.length>1)cr"
     "umbs.push({route:'run/'+enc(id)+'/profile/'+enc(activeProfile),label:activeProfile});\n"
     "    let content=breadcrumbs(crumbs)+queueNotice+'<div class=run-header><h1 class=page-title>'+esc(activeProfile||runDisplay(id))+'</h1>"
-    "<div class=toolbar><button id=refresh-run>Refresh</button>'+(owner===directory.local.id&&['queued','running'].includes(run.state)?"
+    "<div class=toolbar><button id=refresh-run>Refresh</button>'+(['queued','running'].includes(run.state)?"
     "'<button class=danger id=cancel-run>Cancel</button>'"
     ":'')+'<button id=repeat-run>Repeat with this YAML</button><details class=downloads><summary>Downloads</summary><div cla"
     "ss=actions><a href=\"'+runHref(id,'config')+'\">YAML</a><a href=\"'+runHref(id,'manifest')+'\">run.json</a><a href=\"'+r"
@@ -2910,7 +2920,7 @@ function parseLocalYdbProfileSelection(groups,selected){
     "    document.querySelector('#refresh-run').onclick=()=>renderRun(id,selectedRoute());\n"
     "    document.querySelector('#repeat-run').onclick=()=>reuseRun(id);\n"
     "    const cancel=document.querySelector('#cancel-run');\n"
-    "    if(cancel)cancel.onclick=async()=>{try{await api('/api/runs/'+enc(id)+'/cancel',{method:'POST'});renderRun(id,sele"
+    "    if(cancel)cancel.onclick=async()=>{try{await api('/api/runs/'+enc(id)+'/cancel',jsonOptions({}));renderRun(id,sele"
     'ctedRoute())}catch(error){alert(error.message)}};\n'
     "    if(activeProfile){const pieces=activeProfile.split('/'),benchmark=pieces.shift(),profile=pieces.join('/');if("
     "benchmark==='local-ydb')await mountLocalYdbProfile(document.querySelector('#local-ydb-result'),id,profile,run.state,requestedLocalView);"
@@ -5570,6 +5580,35 @@ def _handler(service):
         def do_POST(self):
             path = urlparse(self.path).path
             try:
+                if path.startswith('/peer/api/'):
+                    if not service.hosts.authorized(self.headers.get('Authorization')):
+                        return self._json(401, {'error': 'peer authentication required'})
+                    if (
+                        self.headers.get('Origin')
+                        or self.headers.get('Content-Type', '').split(';')[0] != 'application/json'
+                    ):
+                        return self._json(403, {'error': 'server-to-server JSON request required'})
+                    target = path[len('/peer') :]
+                    if not allowed_post_path(target):
+                        return self._json(403, {'error': 'peer operation not allowed'})
+                    self.path = target
+                    return self.do_POST()
+                if path.startswith('/api/hosts/'):
+                    parts = path[len('/api/hosts/') :].split('/', 1)
+                    if len(parts) == 2 and allowed_post_path('/' + parts[1]):
+                        origin = self.headers.get('Origin')
+                        if self.headers.get('Content-Type', '').split(';')[0] != 'application/json' or (
+                            origin and urlparse(origin).netloc != self.headers.get('Host')
+                        ):
+                            return self._json(403, {'error': 'same-origin JSON request required'})
+                        if parts[0] == service.hosts.id:
+                            self.path = '/' + parts[1]
+                            return self.do_POST()
+                        options = self._json_body() if parts[1].endswith('/cancel') else self._options()
+                        if not isinstance(options, dict):
+                            raise BenchmarkError('request must be an object')
+                        status, content_type, body = request_peer(service.hosts.get(parts[0]), '/' + parts[1], options)
+                        return self._send(status, content_type, body, {'Cache-Control': 'no-store'})
                 local_prefix = '/api/hosts/' + service.hosts.id
                 if path.startswith(local_prefix + '/api/runs/'):
                     self.path = self.path[len(local_prefix) :]
@@ -5626,7 +5665,7 @@ def _handler(service):
                         raise BenchmarkError("host id is required")
                     return self._json(200, service.hosts.remove(options["id"]))
                 if path.startswith(("/peer/", "/api/hosts/")):
-                    return self._json(403, {"error": "remote hosts are read-only in this release"})
+                    return self._json(403, {"error": "remote operation is not allowed"})
                 if path == "/api/import":
                     return self._json(201, import_archive(service.output, self._raw_body()))
                 if path == "/api/validate":

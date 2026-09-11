@@ -116,22 +116,40 @@ def validate_endpoint(value):
     return value.rstrip("/")
 
 
-def open_peer(record, path):
-    if not allowed_path(path):
+def allowed_post_path(path):
+    parts = path.split('/')
+    return path in ('/api/editor-config', '/api/validate', '/api/plan', '/api/drafts', '/api/runs') or (
+        len(parts) == 5 and parts[:3] == ['', 'api', 'runs'] and bool(parts[3]) and parts[4] == 'cancel'
+    )
+
+
+def open_peer(record, path, options=None):
+    if not (allowed_path(path) if options is None else allowed_post_path(path)):
         raise BenchmarkError("peer route is not allowed")
     endpoint = validate_endpoint(record["endpoint"])
-    request = Request(endpoint + "/peer" + path, headers={"Authorization": "Bearer " + record["token"]})
+    headers = {"Authorization": "Bearer " + record["token"]}
+    if options is not None:
+        headers['Content-Type'] = 'application/json'
+    request = Request(
+        endpoint + "/peer" + path,
+        data=None if options is None else json.dumps(options).encode(),
+        headers=headers,
+    )
     try:
-        response = build_opener(ProxyHandler({}), NoRedirect()).open(request, timeout=5)
+        response = build_opener(ProxyHandler({}), NoRedirect()).open(request, timeout=5 if options is None else 30)
     except HTTPError as error:
         response = error
     except (OSError, URLError) as error:
-        raise BenchmarkError("host is unreachable") from error
+        raise BenchmarkError(
+            "host is unreachable"
+            if options is None
+            else "Host request failed; its outcome may be unknown. Check Runs on the selected host before retrying."
+        ) from error
     return response
 
 
-def request_peer(record, path):
-    with open_peer(record, path) as response:
+def request_peer(record, path, options=None):
+    with open_peer(record, path, options) as response:
         body = response.read(MAX_RESPONSE + 1)
         if len(body) > MAX_RESPONSE:
             raise BenchmarkError("peer metadata exceeds 32 MiB")

@@ -15,6 +15,7 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <queue>
+#include <util/generic/ylimits.h>
 
 namespace NKikimr::NConveyorComposite {
 
@@ -78,10 +79,29 @@ private:
     TAverageCalcer<TDuration> AverageTaskDuration;
     ui32 LinksCount = 0;
     TDuration BaseWeight = TDuration::Zero();
+    // Cumulative wall-clock time of finished tasks on this process (not OS CPU time). Never decays.
+    // Applied only to query-scoped processes (ProcessId != 0). Process 0 is the category default
+    // (accessor parsing, compaction/insert/...) and is never pinned by heavy_limits.
+    TDuration TotalCPU = TDuration::Zero();
 
 public:
     ui32 GetInProgressTasksCount() const {
         return InProgressTasksCount.Val();
+    }
+
+    bool CanRunOnWorker(const ui32 workerIdx, const std::vector<NConfig::THeavyLimit>& limits) const {
+        if (limits.empty() || ProcessId == 0) {
+            return true;
+        }
+        ui32 threadLimit = Max<ui32>();
+        for (const auto& limit : limits) {
+            if (TotalCPU >= limit.GetCpuLimit()) {
+                threadLimit = limit.GetThreadLimit();
+            } else {
+                break;
+            }
+        }
+        return workerIdx < threadLimit;
     }
 
     void SetBaseWeight(const TDuration d) {
@@ -120,6 +140,8 @@ public:
         CPUUsage->Exchange(result.GetPredictedDuration(), result.GetStart(), result.GetFinish());
         AverageTaskDuration.Add(result.GetDuration());
         InProgressTasksCount.Dec();
+        TotalCPU += result.GetDuration();
+        result.NotifyAccounted();
     }
 
     [[nodiscard]] bool DecRegistration() {

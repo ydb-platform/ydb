@@ -6,10 +6,14 @@ bool TProcessCategory::HasTasks() const {
     return WeightedProcesses.size();
 }
 
-std::optional<TWorkerTask> TProcessCategory::ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters, THashSet<TString>& scopeIds) {
+std::optional<TWorkerTask> TProcessCategory::ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters, THashSet<TString>& scopeIds,
+    const ui32 workerIdx, const std::vector<NConfig::THeavyLimit>& heavyLimits) {
     std::shared_ptr<TProcess> pMin;
     for (auto it = WeightedProcesses.begin(); it != WeightedProcesses.end(); ++it) {
         for (ui32 i = 0; i < it->second.size(); ++i) {
+            if (!it->second[i]->CanRunOnWorker(workerIdx, heavyLimits)) {
+                continue;
+            }
             if (!it->second[i]->GetScope()->CheckToRun()) {
                 continue;
             }

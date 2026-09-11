@@ -58,7 +58,12 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
     workersPool.ReleaseWorker(ev.GetWorkerIdx());
     workersPool.PutTaskResults(ev.DetachResults(), ev.GetWorkersPoolId(), ev.GetWorkerIdx());
     if (workersPool.HasTasks()) {
-        AFL_VERIFY(workersPool.DrainTasks());
+        if (workersPool.HasHeavyLimits()) {
+            // A restricted worker can find nothing eligible (HasTasks() is still true for heavier processes).
+            Y_UNUSED(workersPool.DrainTasks());
+        } else {
+            AFL_VERIFY(workersPool.DrainTasks());
+        }
     }
 }
 

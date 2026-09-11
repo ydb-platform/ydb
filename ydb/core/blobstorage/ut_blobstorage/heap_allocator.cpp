@@ -197,6 +197,87 @@ namespace {
 
 Y_UNIT_TEST_SUITE(VDiskHeapAllocator) {
 
+    Y_UNIT_TEST(MetadataFreshCompaction) {
+        for (bool enableProjection : {false, true}) {
+            TFeatureFlags ff;
+            ff.SetEnableVDiskHeapAllocator(true);
+            ff.SetEnableVDiskFreshSpaceProjection(enableProjection);
+            TEnvironmentSetup env({
+                .NodeCount = 1,
+                .Erasure = TBlobStorageGroupType::ErasureNone,
+                .VDiskConfigPreprocessor = [](TVDiskConfig& config) {
+                    config.HeapAllocatorMaxSstInBytes = 1_MB;
+                },
+                .FeatureFlags = ff,
+            });
+            env.CreateBoxAndPool(1, 1);
+            env.Sim(TDuration::Seconds(30));
+            const auto groups = env.GetGroups();
+            UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+            const auto info = env.GetGroupInfo(groups.front());
+            const TActorId vdiskActorId = info->GetActorId(0);
+            const ui64 blockedTabletId = 1000;
+            const ui32 blockedGeneration = 7;
+            const ui64 collectedTabletId = 1001;
+            auto deadline = [&] { return env.Runtime->GetClock() + TDuration::Minutes(1); };
+
+            TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvBlock(blockedTabletId,
+                    blockedGeneration, deadline()));
+            });
+            auto block = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvBlockResult>(edge, false, deadline());
+            UNIT_ASSERT(block);
+            UNIT_ASSERT_VALUES_EQUAL(block->Get()->Status, NKikimrProto::OK);
+
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvCollectGarbage(collectedTabletId, 1,
+                    1, 0, true, 1, 2, nullptr, nullptr, deadline(), true));
+            });
+            auto gc = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(edge, false, deadline());
+            UNIT_ASSERT(gc);
+            UNIT_ASSERT_VALUES_EQUAL(gc->Get()->Status, NKikimrProto::OK);
+
+            // CompactVDisk() covers LogoBlobs only. Both metadata databases need a HugeKeeper destination
+            // to allocate their SST stripes, even when Fresh space projection is disabled.
+            for (EHullDbType db : {EHullDbType::Blocks, EHullDbType::Barriers}) {
+                env.Runtime->Send(new IEventHandle(vdiskActorId, edge,
+                    TEvCompactVDisk::Create(db, TEvCompactVDisk::EMode::FRESH_ONLY)), vdiskActorId.NodeId());
+                auto compact = env.WaitForEdgeActorEvent<TEvCompactVDiskResult>(edge, false, deadline());
+                UNIT_ASSERT_C(compact, "metadata Fresh compaction timed out; db# "
+                    << (db == EHullDbType::Blocks ? "Blocks" : "Barriers")
+                    << " projection# " << enableProjection);
+            }
+            env.Runtime->DestroyActor(edge);
+
+            env.RestartNode(vdiskActorId.NodeId());
+            env.Sim(TDuration::Seconds(30));
+            edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvGetBlock(blockedTabletId, deadline()));
+            });
+            auto getBlock = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetBlockResult>(edge, false, deadline());
+            UNIT_ASSERT(getBlock);
+            UNIT_ASSERT_VALUES_EQUAL(getBlock->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(getBlock->Get()->BlockedGeneration, blockedGeneration);
+
+            env.WithQueueId(info->GetVDiskId(0), NKikimrBlobStorage::EVDiskQueueId::GetFastRead, [&](TActorId queueId) {
+                env.Runtime->Send(new IEventHandle(queueId, edge, new TEvBlobStorage::TEvVGetBarrier(
+                    info->GetVDiskId(0), TKeyBarrier::First(), TKeyBarrier::Inf(), nullptr, true)), queueId.NodeId());
+                auto getBarrier = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetBarrierResult>(edge, true, deadline());
+                UNIT_ASSERT(getBarrier);
+                const auto& record = getBarrier->Get()->Record;
+                UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(record.KeysSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(record.ValuesSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(record.GetKeys(0).GetTabletId(), collectedTabletId);
+                UNIT_ASSERT_VALUES_EQUAL(record.GetKeys(0).GetChannel(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(record.GetValues(0).GetCollectGen(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(record.GetValues(0).GetCollectStep(), 2);
+            });
+        }
+    }
+
     Y_UNIT_TEST(RandomWorkloadHeapOff) {
         for (ui64 seed = 1; seed <= 3; ++seed) {
             TWorkload(false, seed).Run();

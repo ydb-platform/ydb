@@ -2979,7 +2979,10 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
             }
             std::vector<TNodeId> nodeIds;
             nodeIds.reserve(stats.Values.size());
-            std::transform(nodes.begin(), nodes.end(), std::back_inserter(nodeIds), [](const TNodeInfo& node) { return node.Id; });
+            double usageThreshold = TTabletInfo::ExtractResourceUsage(GetMinNodeUsageToBalance(), *scatteredResource)
+                / TTabletInfo::ExtractResourceUsage(GetMinScatterToBalance(), *scatteredResource);
+            auto filteredNodes = nodes | std::views::filter([&](const TNodeInfo& node) { return node.GetNodeUsage(*scatteredResource) >= usageThreshold; });
+            std::transform(filteredNodes.begin(), filteredNodes.end(), std::back_inserter(nodeIds), [](const TNodeInfo& node) { return node.Id; });
             YDB_LOG_TRACE("ProcessTabletBalancer: scatter over limit triggered balancer",
                 {"logPrefix", GetLogPrefix()},
                 {"scatterByResource", stats.ScatterByResource},

@@ -110,6 +110,15 @@ def _bundle_hash(directory):
     return digest.hexdigest()
 
 
+def _rmtree_readonly(directory):
+    if not directory.exists():
+        return
+    directory.chmod(0o755)
+    for path in directory.rglob('*'):
+        path.chmod(0o755 if path.is_dir() else 0o644)
+    shutil.rmtree(directory)
+
+
 def _json_rows(result):
     return [line for line in result.stdout.splitlines() if line.strip()]
 
@@ -500,10 +509,7 @@ def test_generated_tls_bundle_is_reused_from_read_only_directory(
         assert _bundle_hash(certificates) == expected_hash
     finally:
         instance.close()
-        if certificates.exists():
-            certificates.chmod(0o755)
-            for path in certificates.iterdir():
-                path.chmod(0o644)
+        _rmtree_readonly(certificates)
 
 
 def test_partial_tls_bundle_is_rejected(tmp_path, generated_tls_bundle):

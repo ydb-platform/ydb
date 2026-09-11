@@ -284,7 +284,6 @@ class TDropBackupCollection : public TSubOperation {
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
         context.MemChanges.GrabPath(context.SS, pathId);
         context.MemChanges.GrabPath(context.SS, dstPath->ParentPathId);
-        context.MemChanges.GrabBackupCollection(context.SS, pathId);
 
         context.DbChanges.PersistTxState(OperationId);
         context.DbChanges.PersistPath(pathId);

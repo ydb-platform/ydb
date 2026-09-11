@@ -50,7 +50,7 @@ public:
             return result;
         }
 
-        TBlockStoreVolumeInfo::TPtr volume = context.SS->BlockStoreVolumes[path.Base()->PathId];
+        auto volume = context.SS->BlockStoreVolumes.Update(path.Base()->PathId);
         if (volume->AlterVersion == 0) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, "Block store volume is not created yet");
             return result;
@@ -74,6 +74,10 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
+        context.MemChanges.RecordUndo([volume, token = volume->MountToken, version = volume->TokenVersion]() {
+            volume->MountToken = token;
+            volume->TokenVersion = version;
+        });
         volume->MountToken = mountToken;
         ++volume->TokenVersion;
         context.SS->PersistBlockStoreVolumeMountToken(db, path.Base()->PathId, volume);

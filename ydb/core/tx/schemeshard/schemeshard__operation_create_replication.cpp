@@ -286,7 +286,7 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        context.SS->Replications[pathId] = alterData;
+        context.SS->Replications.SetUntracked(pathId, alterData);
         context.SS->PersistReplicationAlterRemove(db, pathId);
         context.SS->PersistReplication(db, pathId, *alterData);
 
@@ -455,14 +455,16 @@ public:
             return result;
         }
 
-        path.MaterializeLeaf(owner);
+        const TPathId pathId = context.SS->AllocatePathId();
+        context.MemChanges.GrabNewPath(context.SS, pathId);
+        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        path.MaterializeLeaf(owner, pathId);
         path->CreateTxId = OperationId.GetTxId();
         path->LastTxId = OperationId.GetTxId();
         path->PathState = TPathElement::EPathState::EPathStateCreate;
         path->PathType = Strategy->GetPathType();
-        result->SetPathId(path->PathId.LocalPathId);
+        result->SetPathId(pathId.LocalPathId);
 
-        context.SS->IncrementPathDbRefCount(path->PathId);
         IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
         parentPath.DomainInfo()->IncPathsInside(context.SS);
 
@@ -478,7 +480,7 @@ public:
 
         desc.MutableState()->MutableStandBy();
         auto replication = TReplicationInfo::Create(std::move(desc));
-        context.SS->Replications[path->PathId] = replication;
+        context.SS->Replications.Set({.Path = path->PathId, .Value = replication, .Changes = context.MemChanges});
         context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Add(1);
 
         replication->AlterData->ControllerShardIdx = context.SS->RegisterShardInfo(

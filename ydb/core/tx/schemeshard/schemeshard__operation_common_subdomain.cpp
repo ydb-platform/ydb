@@ -326,7 +326,7 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
     }
 
     Y_ABORT_UNLESS(context.SS->SubDomains.contains(pathId));
-    auto subDomain = context.SS->SubDomains.at(pathId);
+    auto& subDomain = context.SS->SubDomains.UpdateUntracked(pathId);
     auto alter = subDomain->GetAlter();
     Y_ABORT_UNLESS(alter);
     Y_VERIFY_S(subDomain->GetVersion() < alter->GetVersion(), "" << subDomain->GetVersion() << " and " << alter->GetVersion());
@@ -335,7 +335,7 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
             /* isExternal */ path->PathType == TPathElement::EPathType::EPathTypeExtSubDomain,
             context.SS);
 
-    context.SS->SubDomains[pathId] = alter;
+    context.SS->SubDomains.SetUntracked(pathId, alter);
     context.SS->PersistSubDomain(db, pathId, *alter);
     context.SS->PersistSubDomainSchemeQuotas(db, pathId, *alter);
 

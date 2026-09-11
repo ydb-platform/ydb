@@ -88,7 +88,7 @@ public:
         TString topicName = context.SS->PathsById.at(txState->TargetPathId)->Name;
         Y_VERIFY_S(topicName.size(), "topicName is empty. PathId: " << txState->TargetPathId);
 
-        TTopicInfo::TPtr pqGroup = context.SS->Topics.at(txState->TargetPathId);
+        auto pqGroup = context.SS->Topics.at(txState->TargetPathId);
         Y_VERIFY_S(pqGroup, "pqGroup is null. PathId: " << txState->TargetPathId);
 
         bool haveWork = false;
@@ -170,7 +170,7 @@ public:
         Y_ABORT_UNLESS(!path->Dropped());
         path->SetDropped(step, OperationId.GetTxId());
         context.SS->PersistDropStep(db, pathId, step, OperationId);
-        TTopicInfo::TPtr pqGroup = context.SS->Topics.at(pathId);
+        auto pqGroup = context.SS->Topics.at(pathId);
         Y_ABORT_UNLESS(pqGroup);
 
         // KIKIMR-13173
@@ -285,7 +285,7 @@ class TDropPQ: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    void SetPQBalancer(TTopicInfo::TPtr pqGroup, TTxState& txState, TOperationContext& context) {
+    void SetPQBalancer(const TIntrusiveConstPtr<TTopicInfo>& pqGroup, TTxState& txState, TOperationContext& context) {
         auto shardId = pqGroup->BalancerShardIdx;
         auto tabletId = pqGroup->BalancerTabletID;
 
@@ -301,7 +301,7 @@ public:
         }
     }
 
-    void SetPQShards(TTopicInfo::TPtr pqGroup, TTxState& txState, TOperationContext& context) {
+    void SetPQShards(const TIntrusiveConstPtr<TTopicInfo>& pqGroup, TTxState& txState, TOperationContext& context) {
         for (auto shard : pqGroup->Shards) {
             auto shardIdx = shard.first;
             TTopicTabletInfo::TPtr info = shard.second;
@@ -408,7 +408,7 @@ public:
             return result;
         }
 
-        TTopicInfo::TPtr pqGroup = context.SS->Topics.at(path.Base()->PathId);
+        auto pqGroup = context.SS->Topics.at(path.Base()->PathId);
         Y_ABORT_UNLESS(pqGroup);
 
         if (pqGroup->AlterData) {

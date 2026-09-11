@@ -685,7 +685,7 @@ public:
 
     void PrepareTableChanges(TPathElement::TPtr path, TOperationContext& context) {
         Y_ABORT_UNLESS(context.SS->Tables.contains(path->PathId));
-        TTableInfo::TPtr& table = context.SS->Tables.at(path->PathId);
+        auto table = context.SS->Tables.at(path->PathId);
 
         path->LastTxId = OperationId.GetTxId();
         path->PathState = Lock;
@@ -771,7 +771,7 @@ public:
         }
 
         if (TxType == TTxState::TxBackup && context.SS->Tables.contains(path.Base()->PathId)) {
-            TTableInfo::TPtr table = context.SS->Tables.at(path.Base()->PathId);
+            TTableInfo::TCPtr table = context.SS->Tables.at(path.Base()->PathId);
             for (const auto& [_, column] : table->Columns) {
                 if (column.DefaultKind == ETableColumnDefaultKind::FromExpression && !column.IsDropped()) {
                     result->SetError(NKikimrScheme::StatusPreconditionFailed,

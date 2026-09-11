@@ -54,7 +54,7 @@ static NKikimrSchemeOp::TModifyScheme CopyAnyTableTask(NKikimr::NSchemeShard::TP
     return scheme;
 }
 
-static std::optional<NKikimrSchemeOp::TModifyScheme> CreateIndexTask(NKikimr::NSchemeShard::TTableIndexInfo::TPtr indexInfo, NKikimr::NSchemeShard::TPath& dst) {
+static std::optional<NKikimrSchemeOp::TModifyScheme> CreateIndexTask(const TIntrusiveConstPtr<NKikimr::NSchemeShard::TTableIndexInfo>& indexInfo, NKikimr::NSchemeShard::TPath& dst) {
     using namespace NKikimr::NSchemeShard;
 
     auto scheme = TransactionTemplate(dst.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
@@ -238,7 +238,7 @@ bool CreateConsistentCopyTables(
 
         // Log table info if available
         if (context.SS->Tables.contains(srcPath.Base()->PathId)) {
-            TTableInfo::TPtr tableInfo = context.SS->Tables.at(srcPath.Base()->PathId);
+            auto tableInfo = context.SS->Tables.at(srcPath.Base()->PathId);
             const auto& tableDesc = tableInfo->TableDescription;
             LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "CreateConsistentCopyTables: Table info"
@@ -256,7 +256,7 @@ bool CreateConsistentCopyTables(
 
         // Log column table info if available
         if (context.SS->ColumnTables.contains(srcPath.Base()->PathId)) {
-            TColumnTableInfo::TPtr tableInfo = context.SS->ColumnTables.at(srcPath.Base()->PathId).GetPtr();
+            auto tableInfo = context.SS->ColumnTables.at(srcPath.Base()->PathId);
             const auto& tableDesc = tableInfo->Description;
             LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "CreateConsistentCopyTables: Column Table info"
@@ -311,7 +311,7 @@ bool CreateConsistentCopyTables(
             }
 
             Y_ABORT_UNLESS(srcIndexPath.Base()->PathId == pathId);
-            TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
+            auto indexInfo = context.SS->Indexes.at(pathId);
             if (indexInfo->State != NKikimrSchemeOp::EIndexState::EIndexStateReady) {
                 LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "CreateConsistentCopyTables: Skipping a non-ready index " << name << " in state " << indexInfo->State);
@@ -400,7 +400,7 @@ THashSet<TString> GetLocalSequences(TOperationContext& context, const TPath& src
 
         Y_ABORT_UNLESS(childPath.Base()->PathId == pathId);
 
-        TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
+        auto sequenceInfo = context.SS->Sequences.at(pathId);
         const auto& sequenceDesc = sequenceInfo->Description;
         const auto& sequenceName = sequenceDesc.GetName();
 
@@ -415,7 +415,7 @@ void AddCopySequences(TOperationId nextId, const TTxTransaction& tx, TOperationC
     for (const auto& [subName, subPathId] : srcTable.Base()->GetChildren()) {
         TPath subPath = srcTable.Child(subName);
         if (subPath.IsSequence() && !subPath.IsDeleted()) {
-            TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(subPathId);
+            auto sequenceInfo = context.SS->Sequences.at(subPathId);
             const auto& sequenceDesc = sequenceInfo->Description;
 
             auto scheme = TransactionTemplate(dstPath, NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);

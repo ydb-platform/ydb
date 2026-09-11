@@ -319,7 +319,7 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->Sequences.contains(path->PathId));
-        TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(path->PathId);
+        auto sequenceInfo = context.SS->Sequences.at(path->PathId);
         Y_ABORT_UNLESS(!sequenceInfo->AlterData);
 
         if (parent->IsTable() && !parent.IsUnderDeleting()) {

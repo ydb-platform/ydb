@@ -121,7 +121,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
 
         TSubDomainInfo::TPtr newDomain = new TSubDomainInfo(0, Self->RootPathId());
         newDomain->InitializeAsGlobal(Self->CreateRootProcessingParams(ctx));
-        Self->SubDomains[Self->RootPathId()] = newDomain;
+        Self->SubDomains.SetUntracked(Self->RootPathId(), newDomain);
 
         NACLib::TDiffACL diffAcl;
         for (const auto& defaultAccess : securityConfig.GetDefaultAccess()) {
@@ -453,7 +453,7 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
         Self->PersistUpdateNextPathId(db);
         Self->PersistUpdateNextShardIdx(db);
 
-        Self->SubDomains[Self->RootPathId()] = subdomain;
+        Self->SubDomains.SetUntracked(Self->RootPathId(), subdomain);
 
         Self->InitState = initiateMigration ? TTenantInitState::Inprogress : TTenantInitState::Done;
         Self->PersistInitState(db);

@@ -896,6 +896,36 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         WaitForCondErase(runtime, TEvCondEraseResp::ProtoRecordType::SCHEME_ERROR);
     }
 
+    Y_UNIT_TEST(RejectedAlterKeepsTTLTableConsistent) {
+        // Regression (issue #33764): a rejected AlterTable must preserve the
+        // live TTableInfo object shared with TTLEnabledTables. Update() does not
+        // snapshot or replace it; staged mutations have explicit undo. Replacing
+        // it on abort would desync the alias checked by TTxRunConditionalErase.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLEnabledTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "ts" Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+            TTLSettings { Enabled { ColumnName: "ts" } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Reaches Tables.Update() in propose, then ParseParams rejects the
+        // key-column drop -> the abort must leave the live table unchanged.
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLEnabledTable"
+            DropColumns { Name: "key" }
+        )", {NKikimrScheme::StatusInvalidParameter});
+
+        // A conditional-erase cycle cross-checks Tables against TTLEnabledTables.
+        runtime.AdvanceCurrentTime(TDuration::Minutes(1));
+        WaitForCondErase(runtime);
+    }
+
     Y_UNIT_TEST(SplitDuringInFlightCondErase) {
         // Regression: VerifyConsistency() asserted CondEraseSchedule.size() ==
         // Partitions.size(), which fails when one shard has a TTL erase in-flight

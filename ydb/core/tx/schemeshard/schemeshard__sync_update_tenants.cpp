@@ -95,7 +95,7 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
             MakeSync();
         }
 
-        TSubDomainInfo::TPtr subdomain = Self->SubDomains.at(Self->RootPathId());
+        auto subdomain = Self->SubDomains.UpdateUntracked(Self->RootPathId());
         if (record.GetSubdomainVersion() > subdomain->GetVersion()) {
             TStoragePools storagePools(record.GetStoragePools().begin(), record.GetStoragePools().end());
             subdomain->SetStoragePools(storagePools, record.GetSubdomainVersion());

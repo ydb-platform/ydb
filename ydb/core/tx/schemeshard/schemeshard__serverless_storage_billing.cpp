@@ -28,7 +28,7 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxServerlessStorageBilling.Execute");
 
         const TPathElement::TPtr dbRootEl = Self->PathsById.at(Self->RootPathId());
-        const TSubDomainInfo::TPtr domainDescr = Self->SubDomains.at(Self->RootPathId());
+        auto domainDescr = Self->SubDomains.at(Self->RootPathId());
         const TSubDomainInfo::TDiskSpaceUsage& spaceUsage = domainDescr->GetDiskSpaceUsage();
 
         if (!Self->IsServerlessDomain(TPath::Init(Self->RootPathId(), Self))) {

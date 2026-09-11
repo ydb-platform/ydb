@@ -1460,7 +1460,7 @@ public:
         p->LastCondEraseLag = TDuration::Zero();
     }
 
-    bool IsUsingSequence(const TString& name) {
+    bool IsUsingSequence(const TString& name) const {
         for (const auto& pr : Columns) {
             if (pr.second.DefaultKind == ETableColumnDefaultKind::FromSequence &&
                 pr.second.DefaultValue == name)
@@ -3537,7 +3537,7 @@ struct TBlobDepotInfo : TSimpleRefCount<TBlobDepotInfo> {
 };
 
 struct TPublicationInfo {
-    TSet<std::pair<TPathId, ui64>> Paths;
+    TMap<std::pair<TPathId, ui64>, TPathDbRef> Paths;
     THashSet<TActorId> Subscribers;
 };
 

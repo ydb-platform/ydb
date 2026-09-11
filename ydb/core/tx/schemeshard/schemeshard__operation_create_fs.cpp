@@ -96,7 +96,7 @@ public:
 
         txState->ClearShardsInProgress();
 
-        auto fs = context.SS->FileStoreInfos[txState->TargetPathId];
+        auto& fs = context.SS->FileStoreInfos.UpdateUntracked(txState->TargetPathId);
         Y_VERIFY_S(fs, "FileStore info is null. PathId: " << txState->TargetPathId);
 
         Y_ABORT_UNLESS(txState->Shards.size() == 1);
@@ -404,8 +404,11 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
         return result;
     }
 
-    dstPath.MaterializeLeaf(owner);
-    result->SetPathId(dstPath.Base()->PathId.LocalPathId);
+    const TPathId pathId = context.SS->AllocatePathId();
+    context.MemChanges.GrabNewPath(context.SS, pathId);
+    context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+    dstPath.MaterializeLeaf(owner, pathId);
+    result->SetPathId(pathId.LocalPathId);
 
     context.SS->TabletCounters->Simple()[COUNTER_FILESTORE_COUNT].Add(1);
     domainDir->ChangeFileStoreSpaceBegin(newFileStoreSpace, { });
@@ -514,9 +517,8 @@ TTxState& TCreateFileStore::PrepareChanges(
     }
     context.SS->PersistPath(db, fsPath->PathId);
 
-    context.SS->FileStoreInfos[pathId] = fs;
+    context.SS->FileStoreInfos.Set({.Path = pathId, .Value = fs, .Changes = context.MemChanges});
     context.SS->PersistFileStoreInfo(db, pathId, fs);
-    context.SS->IncrementPathDbRefCount(pathId);
 
     context.SS->PersistTxState(db, operationId);
     context.SS->PersistUpdateNextPathId(db);

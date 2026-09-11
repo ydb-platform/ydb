@@ -24,6 +24,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
+import yaml
+
 from ydb.tools.ydb_bench.benchmarks import BENCHMARKS
 from ydb.tools.ydb_bench.lib.linux_telemetry import LogicalCpuSampler
 from ydb.tools.ydb_bench.lib.common import BenchmarkError, BenchmarkInterrupted, atomic_write_json, atomic_write_text
@@ -279,6 +281,31 @@ padding:.6rem;border:1px solid #d0d5dd;min-width:8rem;flex-direction:column}
 """
     '.status.queued{color:var(--warn)}\n'
 )
+_CSS += """
+.run-configuration{white-space:pre-wrap;overflow-wrap:anywhere;max-height:none;padding:1rem;background:var(--panel)}
+.configuration-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.2rem 2rem}
+.configuration-grid h3{margin:.6rem 0}.configuration-values{margin:0}
+.configuration-values>div{display:grid;grid-template-columns:minmax(8rem,1fr) minmax(0,1.4fr);gap:1rem;padding:.5rem 0;border-bottom:1px solid #d0d5dd}
+.configuration-values dt{color:var(--muted)}.configuration-values dd{margin:0;overflow-wrap:anywhere;white-space:pre-wrap}
+.configuration-subgroup{margin:.6rem 0}.configuration-subgroup h4{margin:.8rem 0 .3rem}
+.configuration-wide{grid-column:1/-1}.configuration-role-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1.5rem}
+@media(max-width:800px){.configuration-role-grid,.configuration-grid{grid-template-columns:1fr}}
+.new-run-page .profile-list{display:flex;flex-wrap:wrap;gap:.2rem;border-bottom:1px solid #d0d5dd;margin:.8rem 0 1rem}
+.new-run-page .profile-list button{width:auto;margin:0 0 -1px;padding:.6rem .8rem;border:1px solid transparent;border-radius:5px 5px 0 0}
+.new-run-page .profile-list button.selected{background:#fff;color:var(--text);border-color:#d0d5dd;border-bottom-color:#fff;font-weight:650}
+.new-run-page .editor-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.5rem 2rem}
+.new-run-page .editor-grid h3{margin-top:0}.new-run-page .editor-wide{grid-column:1/-1}
+.new-run-page .editor-options{margin:1rem 0}.new-run-page .editor-options summary{cursor:pointer;color:var(--muted)}
+.new-run-page .editor-options[open]>.form-grid{margin-top:.8rem}
+.new-run-page .editor-role{display:grid;grid-template-columns:8rem minmax(0,1fr) minmax(8rem,.4fr);gap:1rem;align-items:start;padding:.6rem 0;border-bottom:1px solid #d0d5dd}
+.new-run-page .editor-role strong{padding-top:1.7rem}.new-run-page .editor-role .field{min-width:0}
+.new-run-page .editor-plan{margin:.8rem 0;color:var(--muted)}
+.new-run-page .page-heading{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
+.new-run-page .page-heading .toolbar{margin:0}.new-run-page .page-heading .page-title{margin:0}
+@media(max-width:800px){.new-run-page .editor-grid{grid-template-columns:1fr}}
+@media(max-width:550px){.new-run-page .editor-role{grid-template-columns:1fr}.new-run-page .editor-role strong{padding-top:0}}
+"""
+
 _CSS += (
     '#cpu-topology .view-tabs{gap:.35rem;border-bottom:1px solid #d0d5dd;padding:0;margin:1rem 0;flex-wrap:wrap}'
     '#cpu-topology .view-tabs button{padding:.6rem .8rem;border:1px solid transparent;border-radius:6px 6px 0 0;'
@@ -327,6 +354,16 @@ _JS = (
 function splitRunRef(value){const match=/^([0-9a-f]{8}-[0-9a-f-]{27}):(.*)$/.exec(value);return match?{host:match[1],id:match[2]}:null}
 let editorHost='',editorHostOptions='',editorRenderVersion=0;
 function editorApi(path,options){return api(editorHost?'/api/hosts/'+enc(editorHost)+path:path,options)}
+async function refreshEditorActivity(){
+  const button=document.querySelector('#start-run'),host=editorHost;
+  if(!button||!['#new','#new/yaml'].includes(location.hash))return;
+  try{
+    const value=await editorApi('/api/activity-status');
+    if(host===editorHost&&button===document.querySelector('#start-run')){
+      button.textContent=value.active_run_id||value.queued?'Add to queue':'Start run'
+    }
+  }catch{}
+}
 function runDisplay(value){return splitRunRef(value)?.id||value}
 function hostApiPath(path){
   if(path.startsWith('/api/federation/')||path.startsWith('/api/hosts'))return path;
@@ -596,29 +633,33 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     'function updateProfile(key,mutate){const profile=profileByKey(key);if(!profile)return;mutate(profile);editor.yaml=serial'
     'izeConfig(editor.model);saveDraft()}\n'
     'function planSummary(){const profiles=editor.model?.profiles||[];let count=0,seconds=0;for(const profile of profiles){co'
-    'nst benchmark=editor.model.benchmarks.find(item=>item.name===profile.benchmark),cases=(benchmark?.parameters||[]).filter'
+    'nst benchmark=editor.model.benchmarks.find(item=>item.name===profile.benchmark);if(profile.local_ydb){count++;continue}const cases=(benchmark?.parameters||[]).filter'
     '(item=>item.matrix).reduce((total,item)=>total*(profile.parameters[item.name]?.length||1),1),processes=profile.affinity.'
     "length*(profile.background_load||['none']).length*profile.threads.length*profile.repetitions*cases;count+=processes;seconds+=processes*profile.duration}return {cou"
     'nt,seconds}}\n'
-    "function editorControls(){return '<div class=toolbar><label>Host <select id=run-host>'+editorHostOptions+"
-    "'</select></label><button id=validate>Validate</button><button id=download-yaml>Downl"
-    "oad YAML</button><button id=save-host>Save YAML on host</button><label><input id=perf type=checkbox '+(editor.perf?'chec"
+    "function editorControls(){return '<div class=toolbar><label>Host <select id=run-host>'+editorHostOptions+'</select></label><button id=validate>Validate</button><button id=download-yaml>Downl"
+    "oad YAML</button><button id=save-host>Save YAML on host</button><button class=primary id=start-run>Start run</button></div>'}\n"
+    "function editorRunOptions(){return '<div class=toolbar><label><input id=perf type=checkbox '+(editor.perf?'chec"
     "ked':'')+'> perf</label><label><input id=continue type=checkbox '+(editor.continueOnError?'checked':'')+'> continue on e"
-    "rror</label><button class=primary id=start-run>Start run</button></div><div id=editor-message></div>'}\n"
+    "rror</label></div><div id=editor-message></div>'}\n"
     'function parameterCases(benchmark,profile){let cases=[[]];for(const parameter of benchmark.parameters.filter(item=>item.'
     'matrix)){const values=profile.parameters[parameter.name]||parameter.default;cases=cases.flatMap(parts=>values.map(value='
     ">[...parts,parameter.name+'='+value]))}return cases}\n"
     'function bindEditorControls(){\n'
+    '  refreshEditorActivity();\n'
     "  document.querySelector('#run-host').onchange=async event=>{editorHost=event.target.value;clearTimeout(window.ydbBenchYamlTimer);await renderNew()};\n"
     "  const message=document.querySelector('#editor-message');\n"
     '  const showMessage=(text,kind=\'good\')=>{message.innerHTML=\'<div class="notice \'+kind+\'">\'+esc(text)+\'</div>\'};\n'
     "  if(editor.model&&document.querySelector('.profile-list')){\n"
     '    const queue=[];\n'
     '    for(const profile of editor.model.profiles){const benchmark=editor.model.benchmarks.find(item=>item.name===profile.b'
-    "enchmark);for(const affinity of profile.affinity)for(const backgroundLoad of (profile.background_load||['none']))for(const threads of profile.threads)for(const parameters of parameterC"
+    "enchmark);if(profile.local_ydb){const local=profile.local_ydb;queue.push(profile.benchmark+' / '+profile.name+' / '+"
+    "local.workload.type+' '+local.workload.operation+' / '+(local.load.values?'fixed load points':'adaptive load search'));continue}"
+    "for(const affinity of profile.affinity)for(const backgroundLoad of (profile.background_load||['none']))"
+    "for(const threads of profile.threads)for(const parameters of parameterC"
     "ases(benchmark,profile))for(let repeat=1;repeat<=profile.repetitions;repeat++)queue.push(profile.benchmark+' / '+profile"
     ".name+' / '+affinity+' / '+backgroundLoad+' / '+threads+' threads'+(parameters.length?' / '+parameters.join(', '):'')+' / repeat '+repeat)}\n"
-    "    message.insertAdjacentHTML('beforebegin','<details class=card><summary>Expected queue ('+queue.length+' processes)</"
+    "    message.insertAdjacentHTML('beforebegin','<details class=editor-options><summary>Execution plan ('+queue.length+' profile executions)</"
     "summary><ol>'+queue.map(item=>'<li><code>'+esc(item)+'</code></li>').join('')+'</ol></details>');\n"
     '  }\n'
     "  document.querySelector('#perf').onchange=async event=>{editor.perf=event.target.checked;await syncEditor();renderNew()"
@@ -705,11 +746,13 @@ function localYdbBinaryFields(config){
   if(path&&!choices.some(([value])=>value===path))choices.push([path,'Custom path']);
   const selector='<div class=field><label for=local-ydbd-version>Version</label><select id=local-ydbd-version>'+
     choices.map(([value,label])=>'<option value="'+esc(value)+'" '+(value===path?'selected':'')+'>'+
-      esc(label)+'</option>').join('')+'</select><small class=muted>'+esc(catalog.root?catalog.root+'/ydbd/':'')+'</small></div>';
+      esc(label)+'</option>').join('')+'</select></div>';
   const notice=catalog.error?'<p class="notice error">'+esc(catalog.error)+'</p>':
     catalog.truncated?'<p class=notice>Binary catalog is truncated.</p>':'';
-  return selector+localField('local-ydbd-binary','Executable path',path,
-    'Absolute path on the benchmark host. Empty uses bundled ydbd.')+notice
+  const custom=path&&!(catalog.ydbd||[]).some(item=>item.path===path);
+  return selector+'<details class="editor-options editor-wide" data-editor-detail=binary '+(custom?'open':'')+'><summary>Custom executable path</summary>'+
+    localField('local-ydbd-binary','Executable path',path,
+      'Absolute path on the benchmark host. Empty uses bundled ydbd.')+'</details>'+notice
 }
 function localYdbProfileEditor(profile){
   const config=profile.local_ydb,workload=config.workload,geometry=config.geometry,load=config.load,measurement=config.measurement;
@@ -725,8 +768,10 @@ function localYdbProfileEditor(profile){
   const sloPercentiles=Object.keys(definition.slo_metrics||{});
   const objectiveChoices=['points','maximize-throughput',...(sloPercentiles.length?['latency-slo']:[])];
   const options=definition.options.map(option=>localYdbOptionField(option,workload.options[option.name])).join('');
-  const geometryFields=Object.entries(localYdbGeometryKeys)
-    .map(([key,label])=>localField('local-geometry-'+key,label,geometry[key],'','type=number min=1')).join('');
+  const geometryLabels={static_nodes:'Static nodes',dynamic_nodes:'Dynamic nodes',max_dynamic_nodes:'Maximum dynamic nodes',
+    disk_size_gb:'Disk size (GiB)',storage_groups:'Storage groups'};
+  const geometryFields=Object.keys(localYdbGeometryKeys)
+    .map(key=>localField('local-geometry-'+key,geometryLabels[key],geometry[key],'','type=number min=1')).join('');
   const actorSystemFields=Object.keys(localYdbActorSystemKeys)
     .map(key=>actorSystemFlag(key,Boolean(config.actor_system?.[key]??(key==='use_ring_queue')))).join('');
   const actorCpuFields=['static_nodes','dynamic_nodes'].map(role=>localField(
@@ -750,11 +795,11 @@ function localYdbProfileEditor(profile){
         'local-load-multiplier','Growth multiplier',load.search.multiplier,
         'Used to find the first failing latency point.','type=number min=1 step=any'
       ):'')+
-    localField(
+    (loadMode==='maximize-throughput'?localField(
       'local-load-search-resolution-percent',
-      loadMode==='maximize-throughput'?'Ternary resolution (%)':'Boundary resolution (%)',
+      'Ternary resolution (%)',
       load.search.resolution_percent,'','type=number min=0 max=100 step=any'
-    );
+    ):'');
   const loadFields=loadMode==='points'?
     localField('local-load-values','Values',(load.values||[]).join(', '),'Comma-separated values and ranges'):
     searchFields+(loadMode==='maximize-throughput'?
@@ -782,28 +827,26 @@ function localYdbProfileEditor(profile){
     )+'</div>':'';
   const affinity=Object.entries(localYdbAffinityKeys).map(([key,label])=>{
     const role=config.affinity[key],disabled=role.mode==='none'?'disabled':'';
-    return '<div class=card><strong>'+esc(label)+'</strong><div class=form-grid>'+
+    const roleLabel={ydb_cli:'YDB CLI',static_nodes:'Static nodes',dynamic_nodes:'Dynamic nodes'}[key]||label;
+    return '<div class=editor-role><strong>'+esc(roleLabel)+'</strong>'+
       localSelect('local-affinity-'+key+'-mode','Mode',role.mode,editor.model.affinity_modes)+
       localField(
         'local-affinity-'+key+'-cpus','CPUs',role.cpus??'','integer, one-chiplet, or remaining',disabled
-      )+'</div></div>'
+      )+'</div>'
   }).join('');
-  return '<div id=local-editor><h2 class=page-title>'+esc(profile.benchmark)+' / '+esc(profile.name)+'</h2>'+
+  return '<div id=local-editor><div class=editor-grid><section><h3>Workload</h3>'+
     '<div class=form-grid>'+localSelect(
       'benchmark','Benchmark',profile.benchmark,editor.model.benchmarks.map(item=>item.name)
     )+localField('profile-name','Profile name',profile.name,'letters, digits, . _ and -')+'</div>'+
-    '<h3>YDBD binary</h3><div class=form-grid>'+localYdbBinaryFields(config)+
-    '</div><h3>Workload</h3><div class=form-grid>'+localSelect(
+    '<div class=form-grid>'+localSelect(
       'local-workload-type','Type',workload.type,editor.model.local_ydb_workloads.map(item=>item.type)
     )+localSelect(
       'local-workload-operation','Operation',workload.operation,definition.operations
-    )+options+'</div><h3>Cluster geometry</h3><div class=form-grid>'+
-    localSelect('local-geometry-preset','Preset',geometry.preset,['single','storage','custom'])+geometryFields+
-    '</div><h3>Actor system (static and dynamic nodes)</h3><div class=actor-flags>'+actorSystemFields+
-    '</div><div class=form-grid>'+actorCpuFields+
-    '</div><h3>Client and load</h3><div class=form-grid>'+
-    localField('local-client-threads','YDB CLI threads',config.client.threads,clientThreadsHelp,'type=number min=1')+
-    loadCommon+loadFields+'</div>'+slo+'<h3>Measurement</h3><div class=form-grid>'+
+    )+'</div><div class=form-grid>'+localYdbBinaryFields(config)+
+    '</div><details class=editor-options data-editor-detail=dataset><summary>Dataset settings</summary><div class=form-grid>'+options+
+    '</div></details></section><section><h3>Load &amp; objective</h3><div class=form-grid>'+
+    loadCommon+localField('local-client-threads','YDB CLI threads',config.client.threads,clientThreadsHelp,'type=number min=1')+
+    loadFields+'</div>'+slo+'</section><section><h3>Measurement</h3><div class=form-grid>'+
     localField('local-measurement-warmup','Warmup (seconds)',measurement.warmup,warmupHelp,'type=number min=0')+
     localField(
       'local-measurement-duration','Duration (seconds)',measurement.duration,durationHelp,
@@ -819,7 +862,10 @@ function localYdbProfileEditor(profile){
     )+
     localField(
       'local-timeout','Timeout (seconds)',profile.timeout??'','empty selects the computed timeout','type=number min=1'
-    )+'</div><h3>Role affinity</h3>'+affinity+
+    )+'</div></section><section><h3>Cluster</h3><div class=form-grid>'+
+    localSelect('local-geometry-preset','Preset',geometry.preset,['single','storage','custom'])+geometryFields+
+    '</div><h3>Actor system (static and dynamic nodes)</h3><div class=actor-flags>'+actorSystemFields+
+    '</div><div class=form-grid>'+actorCpuFields+'</div></section><section class=editor-wide><h3>CPU placement</h3>'+affinity+'</section></div>'+
     '<div class=toolbar><button class=danger id=delete-profile>Delete profile</button></div></div>'
 }
 function localNumber(id,minimum=1){
@@ -979,7 +1025,8 @@ function bindLocalYdbEditor(profile){
         parameter,allow_errors,
         search:{
           start:localInteger('local-load-start'),maximum:localInteger('local-load-maximum'),multiplier,
-          resolution_percent:localNumber('local-load-search-resolution-percent',0)
+          resolution_percent:loadMode==='maximize-throughput'?localNumber('local-load-search-resolution-percent',0):
+            (config.load.search?.resolution_percent??2)
         },
         objective
       };
@@ -1041,7 +1088,7 @@ function bindLocalYdbEditor(profile){
     "ers[parameter.name]||[]):(profile.parameters[parameter.name]||[]).join(', '),parameter.description)).join('');\n"
     "  const memoryMb=profile.benchmark==='memory-bandwidth-bench'?Math.max(...profile.threads)*Math.max(...(profile.paramete"
     "rs['buffer-size-mb']||[0])):0;\n"
-    "  return '<h2 class=page-title>'+esc(profile.benchmark)+' / '+esc(profile.name)+'</h2>'+(memoryMb?'<div class=notice>Max"
+    "  return (memoryMb?'<div class=notice>Max"
     "imum private-buffer footprint per process: <strong>'+esc(memoryMb)+' MiB</strong>.</div>':'')+'<div class=form-grid><div"
     ' class=field><label>Benchmark</label><select id=benchmark>\'+editor.model.benchmarks.map(item=>\'<option value="\'+esc(item'
     '.name)+\'" \'+(item.name===profile.benchmark?\'selected\':\'\')+\'>\'+esc(item.name)+\'</option>\').join(\'\')+\'</select></div>\'+fie'
@@ -1142,26 +1189,53 @@ function addProfile(){
   editor.model.profiles.push(profile);editor.selected=profile.key;editor.yaml=serializeConfig(editor.model);saveDraft();renderNew()
 }
 """
-    "async function renderNew(tab){clearRefresh();const version=++editorRenderVersion;if(tab)sessionStorage.setItem('ydb-bench-editor-tab',tab);tab=sessionStorag"
-    "e.getItem('ydb-bench-editor-tab')||'builder';const hostOptions=await hostChoices(editorHost,false);await syncEditor();"
-    "if(version!==editorRenderVersion||!['#new','#new/yaml'].includes(location.hash))return;editorHostOptions=hostOptions;"
-    "const summary=planSummary();let content='<h1 class=page-"
-    'title>New run</h1><div class=tabs><a class="\'+(tab===\'builder\'?\'active\':\'\')+\'" href="#new">Builder</a><a class="\'+(tab=='
-    '=\'yaml\'?\'active\':\'\')+\'" href="#new/yaml">YAML</a></div>\'+editorControls();if(tab===\'yaml\'){content+=\'<textarea class=yam'
+    """
+const editorDetailState=new Map();
+function rememberEditorDetails(){
+  const page=document.querySelector('.new-run-page');
+  if(!page)return;
+  for(const detail of page.querySelectorAll('[data-editor-detail]')){
+    editorDetailState.set(page.dataset.editorProfile+'|'+detail.dataset.editorDetail,detail.open)
+  }
+}
+function restoreEditorDetails(){
+  const page=document.querySelector('.new-run-page');
+  if(!page)return;
+  for(const detail of page.querySelectorAll('[data-editor-detail]')){
+    const key=page.dataset.editorProfile+'|'+detail.dataset.editorDetail;
+    if(editorDetailState.has(key))detail.open=editorDetailState.get(key)
+  }
+}
+async function renderNew(tab){
+  rememberEditorDetails();clearRefresh();const version=++editorRenderVersion;
+  if(tab)sessionStorage.setItem('ydb-bench-editor-tab',tab);
+  tab=sessionStorage.getItem('ydb-bench-editor-tab')||'builder';
+  const hostOptions=await hostChoices(editorHost,false);await syncEditor();
+  if(version!==editorRenderVersion||!['#new','#new/yaml'].includes(location.hash))return;
+  editorHostOptions=hostOptions;
+  if(editor.model&&!profileByKey(editor.selected))editor.selected=editor.model.profiles[0]?.key||null;
+  const summary=planSummary();
+  let content='<div class="new-run-page" data-editor-profile="'+esc(editor.selected||'')+'">'+
+    '<div class=page-heading><h1 class=page-title>New run</h1>'+editorControls()+'</div>'+
+    '<div class=tabs><a class="'+(tab==='builder'?'active':'')+'" href="#new">Builder</a>'+
+    '<a class="'+(tab==='yaml'?'active':'')+'" href="#new/yaml">YAML</a></div>';
+"""
+    "if(tab==='yaml'){content+=editorRunOptions()+'<textarea class=yam"
     "l id=yaml-editor spellcheck=false>'+esc(editor.yaml)+'</textarea><div class=muted>Invalid YAML remains editable and is n"
-    "ot overwritten by Builder.</div>';app.innerHTML=shell('new',content);document.querySelector('#yaml-editor').oninput=even"
+    "ot overwritten by Builder.</div>';app.innerHTML=shell('new',content+'</div>');document.querySelector('#yaml-editor').oninput=even"
     't=>{editor.yaml=event.target.value;saveDraft();clearTimeout(window.ydbBenchYamlTimer);window.ydbBenchYamlTimer=setTimeou'
     't(async()=>{await syncEditor();document.querySelector(\'#editor-message\').innerHTML=editor.error?\'<div class="notice erro'
     'r">\'+esc(editor.error)+\'</div>\':\'<div class="notice good">Builder model is synchronized.</div>\'},350)};bindEditorControl'
     "s();return}if(editor.error){content+=displayError(editor.error)+'<p>Fix the YAML in the YAML tab before editing with Bui"
-    "lder.</p>';app.innerHTML=shell('new',content);bindEditorControls();return}const selected=profileByKey(editor.selected)||"
-    "editor.model.profiles[0];content+='<div class=notice>Plan: <strong>'+summary.count+'</strong> processes; requested measu"
-    "rement time <strong>'+Math.ceil(summary.seconds)+' s</strong>; output root is <code>'+esc(editor.model.output)+'</code>."
-    '</div><div class=split><section class="card profile-list"><div class=toolbar><strong>Profiles</strong><button id=add-pro'
-    'file>Add</button></div>\'+editor.model.profiles.map(profile=>\'<button data-profile="\'+esc(profile.key)+\'" class="\'+(profi'
-    'le.key===selected?.key?\'selected\':\'\')+\'">\'+esc(profile.benchmark)+\' / \'+esc(profile.name)+\'</button>\').join(\'\')+\'</secti'
-    "on><section class=card>'+ (selected?profileEditor(selected):'<div class=empty>Add a benchmark profile to begin.</div>')+"
-    "'</section></div>';app.innerHTML=shell('new',content);bindEditorControls();document.querySelector('#add-profile').onclic"
+    "lder.</p>'+editorRunOptions();app.innerHTML=shell('new',content+'</div>');bindEditorControls();return}const selected=profileByKey(editor.selected)||"
+    "editor.model.profiles[0];content+='<div class=editor-plan>'+editor.model.profiles.length+' profiles · '+summary.count+' executions'+"
+    "(editor.model.profiles.some(profile=>profile.local_ydb&&!profile.local_ydb.load.values)?' · Duration depends on load search and verification':"
+    "editor.model.profiles.some(profile=>profile.local_ydb)?' · Per-point measurement; startup and verification are additional':"
+    "' · '+Math.ceil(summary.seconds)+' s measurement')+'</div>'"
+    '+\'<section class=profile-list>\'+editor.model.profiles.map(profile=>\'<button data-profile="\'+esc(profile.key)+\'" class="\'+(profi'
+    'le.key===selected?.key?\'selected\':\'\')+\'">\'+esc(profile.benchmark)+\' / \'+esc(profile.name)+\'</button>\').join(\'\')+'
+    "'<button id=add-profile>+ Add profile</button></section><section>'+ (selected?profileEditor(selected):'<div class=empty>Add a benchmark profile to begin.</div>')+"
+    "'</section>'+editorRunOptions()+'</div>';app.innerHTML=shell('new',content);restoreEditorDetails();bindEditorControls();document.querySelector('#add-profile').onclic"
     "k=addProfile;for(const button of document.querySelectorAll('[data-profile]'))button.onclick=()=>{editor.selected=button."
     "dataset.profile;renderNew()};if(selected){const benchmark=editor.model.benchmarks.find(item=>item.name===selected.bench"
     "mark);if(benchmark?.profile_kind==='local-ydb')bindLocalYdbEditor(selected);else if(benchmark?.builder_supported)bindPro"
@@ -1198,6 +1272,7 @@ function bindSectionTabs(container,name){
 let activeBannerLoading=false;
 async function refreshActiveBanner(){
   if(activeBannerLoading||document.hidden)return;
+  refreshEditorActivity();
   activeBannerLoading=true;
   try{
     const value=await api('/api/activity-status');
@@ -1660,7 +1735,7 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     '  const metrics=Number(raw.empty_repetitions)>0?{\n'
     '    ...raw,...Object.fromEntries(Object.values(schema.slo_metrics||{}).map(name=>[name,null]))\n'
     '  }:raw;\n'
-    "  return {metrics,verified,source:verified?'Holdout':'Search'}\n"
+    "  return {metrics,verified,source:verified?(result.verification_mode==='adaptive'?'Adaptive verification':'Holdout'):'Search'}\n"
     '}\n'
     'function localVerificationCount(result,parameters={},verification={}){\n'
     '  return result?.verification_repetitions??verification?.configured_repetitions??verification?.completed_repetitions??\n'
@@ -1675,7 +1750,9 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     '  const view=localResultMetrics(result);if(!view.verified)return \'\';\n'
     '  const repetitions=localVerificationCount(result,parameters,verification);\n'
     '  const accepted=result?.holdout_accepted??verification?.accepted;\n'
-    "  return '<span class=\"verification-badge '+(accepted===false?'bad':'')+'\" title=\"Independent holdout measurements\">Holdout'+\n"
+    "  const adaptive=result?.verification_mode==='adaptive';\n"
+    "  return '<span class=\"verification-badge '+(accepted===false?'bad':'')+'\" title=\"'+\n"
+    "    (adaptive?'Adaptive verification participates in load selection':'Independent holdout measurements')+'\">'+(adaptive?'Verified':'Holdout')+\n"
     "    (repetitions?' · '+esc(repetitions):'')+'</span>'\n"
     '}\n'
     'function localComparisonDelta(value,baseline,direction=null,compatible=true){\n'
@@ -1816,6 +1893,7 @@ const localPhaseLabels={
   'verification-initializing':'Preparing verification workload','verification-warmup':'Warming up verification',
   'verification-measuring':'Measuring verification','verification-cleanup':'Cleaning verification workload',
   'verification-evaluating':'Evaluating verification','verification-completed':'Verification completed',
+  'resuming-search':'Resuming search after rejected verification',
   'scaling-dynamic-nodes':'Scaling dynamic nodes','restarting-verification-cluster':'Restarting verification cluster',
   'stopping-cluster':'Stopping cluster','finishing':'Writing results',
   completed:'Completed',failed:'Failed',cancelled:'Cancelled'
@@ -1896,6 +1974,7 @@ function localProfileDetails(data,open){
 }
 function localVerificationSummary(data){
   const result=data.result||{},view=localResultMetrics(result);
+  const adaptive=result.verification_mode==='adaptive';
   const verification=data.verification||{},repetitions=localVerificationCount(
     result,data.parameters,verification
   );
@@ -1903,7 +1982,7 @@ function localVerificationSummary(data){
     if(verification.status==='running'||verification.status==='pending'){
       return '<div class=notice><strong>Verification in progress.</strong> '+
         esc(verification.completed_repetitions??0)+'/'+esc(repetitions)+
-        ' independent repetitions completed; KPIs still show the search measurement.</div>'
+        (adaptive?' verification':' independent')+' repetitions completed; KPIs still show the search measurement.</div>'
     }
     if(verification.status==='skipped'){
       return '<div class=notice><strong>Search measurement only.</strong> Verification was skipped: '+
@@ -1918,8 +1997,8 @@ function localVerificationSummary(data){
       'publish independent holdout metrics.</div>'
   }
   const detail=repetitions?
-    repetitions+' independent holdout repetition'+(Number(repetitions)===1?'':'s'):
-    'Independent holdout measurements';
+    repetitions+(adaptive?' verification':' independent holdout')+' repetition'+(Number(repetitions)===1?'':'s'):
+    (adaptive?'Adaptive verification measurements':'Independent holdout measurements');
   const outcomes=[];
   if(verification.cluster)outcomes.push(localVerificationClusterLabel(verification));
   if(verification.decision){
@@ -1936,7 +2015,8 @@ function localVerificationSummary(data){
   const failed=(result.holdout_accepted??verification.accepted)===false;
   return '<div class="verification-summary '+(failed?'bad':'')+'">'+localVerificationBadge(
     result,data.parameters,verification
-  )+' <strong>Reported metrics come from the independent holdout.</strong> '+esc(detail)+
+  )+' <strong>'+(adaptive?'Reported metrics come from adaptive verification.':
+    'Reported metrics come from the independent holdout.')+'</strong> '+esc(detail)+
     ' at the selected load.'+(outcomes.length?' '+esc(outcomes.join(' · '))+'.':'')+
     ' Search measurements remain available in the attempt history.</div>'
 }
@@ -2210,7 +2290,8 @@ function localResultViewModel(data){
   }
   return {
     hasResult:true,...outcome,source:metricView.source,
-    sourceHelp:metricView.verified?'Independent verification measurement':'Selected search measurement',
+    sourceHelp:metricView.verified?(result.verification_mode==='adaptive'?
+      'Verification participates in load selection':'Independent verification measurement'):'Selected search measurement',
     primary:primary.filter(Boolean),secondary:secondary.filter(Boolean),
     config:localResultConfigFacts(data,result),cpu:localResultCpuFacts(metrics,objective)
   }
@@ -2865,7 +2946,79 @@ function parseLocalYdbProfileSelection(groups,selected){
     ".length+'</td><td>'+status(aggregateState(runs))+'</td></tr><tr class=affinity-details><td colspan=3><details><summary>D"
     'etails</summary><table><tr><th>Threads</th><th>Parameters</th><th>Repeat</th><th>State</th><th>Duration</th><th>Artifact'
     "s</th></tr>'+details+'</table></details></td></tr>'}).join('')}\n"
-    "async function renderRun(id,selectedProfile=''){\n"
+    """
+function configurationLabel(key){
+  const labels={'ydbd-binary':'YDBD binary','ydb-cli':'YDB CLI','cpus':'CPUs','max-ms':'Maximum latency (ms)',
+    'disk-size-gb':'Disk size (GiB)','warmup':'Warmup (s)','duration':'Duration (s)','timeout':'Timeout (s)',
+    'min-achieved-rate-ratio':'Minimum achieved rate ratio'};
+  return labels[key]||key.replaceAll('-',' ').replaceAll('_',' ').replace(/^./,letter=>letter.toUpperCase())
+}
+function configurationFields(value){
+  const scalar=item=>Array.isArray(item)?item.map(scalar).join(', '):item===null?'—':String(item);
+  if(!value||typeof value!=='object'||Array.isArray(value))return '<p>'+esc(scalar(value))+'</p>';
+  const fields=[],groups=[];
+  for(const [key,item] of Object.entries(value)){
+    if(item&&typeof item==='object'&&!Array.isArray(item))groups.push(
+      '<div class=configuration-subgroup><h4>'+esc(configurationLabel(key))+'</h4>'+configurationFields(item)+'</div>'
+    );
+    else fields.push('<div><dt>'+esc(configurationLabel(key))+'</dt><dd>'+esc(scalar(item))+'</dd></div>')
+  }
+  return (fields.length?'<dl class=configuration-values>'+fields.join('')+'</dl>':'')+groups.join('')
+}
+function configurationProfile(value){
+  const titles={workload:'Workload',load:'Load & objective',measurement:'Measurement',geometry:'Cluster',
+    affinity:'CPU placement','actor-system':'Actor system',client:'YDB CLI'};
+  const sections=[],general={};
+  for(const [key,item] of Object.entries(value)){
+    if(!Object.hasOwn(titles,key))Object.defineProperty(general,key,{value:item,enumerable:true})
+  }
+  const section=(title,body)=>'<section><h3>'+esc(title)+'</h3>'+body+'</section>';
+  if(value.workload){
+    sections.push(section('Workload',configurationFields(general)+configurationFields(value.workload)));
+    if(value.load||value.client)sections.push(section('Load & objective',
+      (value.load?configurationFields(value.load):'')+(value.client?'<h4>YDB CLI</h4>'+configurationFields(value.client):'')
+    ));
+    if(value.measurement)sections.push(section('Measurement',configurationFields(value.measurement)));
+    if(value.geometry||value['actor-system'])sections.push(section('Cluster',
+      (value.geometry?configurationFields(value.geometry):'')+
+      (value['actor-system']?'<h4>Actor system</h4>'+configurationFields(value['actor-system']):'')
+    ));
+    if(value.affinity)sections.push('<section class=configuration-wide><h3>CPU placement</h3><div class=configuration-role-grid>'+
+      configurationFields(value.affinity)+'</div></section>')
+  }else{
+    if(Object.keys(general).length)sections.push(section('General',configurationFields(general)));
+    for(const [key,title] of Object.entries(titles))if(Object.hasOwn(value,key))sections.push(section(title,configurationFields(value[key])))
+  }
+  return '<div class=configuration-grid>'+sections.join('')+'</div>'
+}
+const configurationSelections=new Map();
+function runConfigurationHtml(id,saved){
+  const profiles=[];
+  for(const [benchmark,items] of Object.entries(saved.structured||{})){
+    if(items&&typeof items==='object'&&!Array.isArray(items))for(const [name,value] of Object.entries(items)){
+      if(value&&typeof value==='object'&&!Array.isArray(value))profiles.push({key:benchmark+'/'+name,value})
+    }
+  }
+  const previous=configurationSelections.get(id);
+  const selected=previous==='YAML'||profiles.some(profile=>profile.key===previous)?previous:profiles[0]?.key||'YAML';
+  const tabs='<nav class=profile-list>'+profiles.map((profile,index)=>
+    '<button type=button data-config-profile="'+index+'" class="'+(profile.key===selected?'selected':'')+'">'+esc(profile.key)+'</button>'
+  ).join('')+'<button type=button data-config-profile="yaml" class="'+(selected==='YAML'?'selected':'')+'">YAML</button></nav>';
+  const panels=profiles.map((profile,index)=>'<div data-config-panel="'+index+'" '+(profile.key===selected?'':'hidden')+'>'+configurationProfile(profile.value)+'</div>').join('');
+  return '<section id=run-configuration-view class=new-run-page>'+tabs+
+    '<p class=muted>perf: '+(saved.perf?'on':'off')+' · Continue on error: '+(saved.continue_on_error?'on':'off')+'</p>'+
+    panels+'<div data-config-panel="yaml" '+(selected==='YAML'?'':'hidden')+'><pre class=run-configuration><code>'+esc(saved.yaml)+'</code></pre></div></section>'
+}
+function bindRunConfiguration(container,id){
+  if(!container)return;
+  for(const button of container.querySelectorAll('[data-config-profile]'))button.onclick=()=>{
+    for(const other of container.querySelectorAll('[data-config-profile]'))other.classList.toggle('selected',other===button);
+    for(const panel of container.querySelectorAll('[data-config-panel]'))panel.hidden=panel.dataset.configPanel!==button.dataset.configProfile;
+    configurationSelections.set(id,button.textContent)
+  }
+}
+"""
+    "async function renderRun(id,selectedProfile='',runView=''){\n"
     '  clearRefresh();\n'
     '  try{\n'
     "    const run=await api('/api/runs/'+enc(id));\n"
@@ -2877,13 +3030,12 @@ function parseLocalYdbProfileSelection(groups,selected){
     "or the dispatcher.')+'</div>':'';\n"
     "    sessionStorage.setItem('ydb-bench-active-run',activeRun);\n"
     '    const groups=profileGroups(run.steps||[]),profileKeys=Object.keys(groups),selection=parseLocalYdbProfileSelection('
-    "groups,selectedProfile),activeProfile=selection.profile||(profileKeys.length===1?profileKeys[0]:''),requestedLocalView="
+    "groups,selectedProfile),activeProfile=runView==='configuration'?'':selection.profile||(profileKeys.length===1?profileKeys[0]:''),requestedLocalView="
     "selection.profile?selection.view:'',activeBenchmark=activeProfile?activeProfile.split('/')[0]:'';\n"
     "    const crumbs=[{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:runDisplay(id)}];if(activeProfile&&profileKeys.length>1)cr"
     "umbs.push({route:'run/'+enc(id)+'/profile/'+enc(activeProfile),label:activeProfile});\n"
-    "    let content=breadcrumbs(crumbs)+queueNotice+'<div class=run-header><h1 class=page-title>'+esc(activeProfile||runDisplay(id))+'</h1>"
-    "<div class=toolbar><button id=refresh-run>Refresh</button>'+(['queued','running'].includes(run.state)?"
-    "'<button class=danger id=cancel-run>Cancel</button>'"
+    "    let content=breadcrumbs(crumbs)+queueNotice+'<div class=run-header><h1 class=page-title>'+esc(activeProfile||runDisplay(id))+'</h1><div class=toolbar><button id=ref"
+    "resh-run>Refresh</button>'+(['queued','running'].includes(run.state)?'<button class=danger id=cancel-run>Cancel</button>'"
     ":'')+'<button id=repeat-run>Repeat with this YAML</button><details class=downloads><summary>Downloads</summary><div cla"
     "ss=actions><a href=\"'+runHref(id,'config')+'\">YAML</a><a href=\"'+runHref(id,'manifest')+'\">run.json</a><a href=\"'+r"
     "unHref(id,'archive')+'\">Archive.zip</a></div></details></div></div><p class=muted>'+esc(hostName)+' · '+status(run.status)+' · '+"
@@ -2892,10 +3044,14 @@ function parseLocalYdbProfileSelection(groups,selected){
     "    if(run.state==='recovery_required')content+='<div class=\"notice error\"><strong>Interrupted.</strong> The web servi"
     "ce restarted while this run was active. Verify that the previous benchmark process stopped before repeating it.</div>'"
     ";\n"
-    "    if(profileKeys.length>1)content+='<nav class=run-tabs><a class=\"run-tab '+(!activeProfile?'active':'')+'\" href=\"#r"
-    "un/'+enc(id)+'\">Overview</a>'+profileKeys.map(key=>'<a class=\"run-tab '+(key===activeProfile?'active':'')+'\" href=\"#"
-    "run/'+enc(id)+'/profile/'+enc(key)+'\">'+esc(key)+'</a>').join('')+'</nav>';\n"
-    "    if(!activeProfile)content+='<section class=\"card profile-overview\"><h2>Profiles</h2><table><tr><th>Profile</th><th"
+    "    content+='<nav class=run-tabs>'+(profileKeys.length!==1?'<a class=\"run-tab '+(!activeProfile&&!runView?'active':'')+'\" href=\"#r"
+    "un/'+enc(id)+'\">Overview</a>':'')+profileKeys.map(key=>'<a class=\"run-tab '+(key===activeProfile?'active':'')+'\" href=\"#"
+    "run/'+enc(id)+'/profile/'+enc(key)+'\">'+esc(key)+'</a>').join('')+'<a class=\"run-tab '+(runView==='configuration'?'active':'')+'\" "
+    "href=\"#run/'+enc(id)+'/configuration\">Configuration</a></nav>';\n"
+    "    if(runView==='configuration'){try{const saved=await api('/api/runs/'+enc(id)+'/config.json');"
+    "content+=runConfigurationHtml(id,saved)}"
+    "catch(error){content+=displayError(error)}}\n"
+    "    if(!activeProfile&&!runView)content+='<section class=\"card profile-overview\"><h2>Profiles</h2><table><tr><th>Profile</th><th"
     ">Progress</th><th>State</th><th>Affinity modes</th></tr>'+profileKeys.map(key=>{const steps=groups[key],done=steps.fil"
     "ter(step=>!['pending','running'].includes(step.state)).length,affinities=new Set(steps.map(step=>step.affinity)).size;re"
     "turn '<tr><td><a href=\"#run/'+enc(id)+'/profile/'+enc(key)+'\">'+esc(key)+'</a></td><td>'+done+' / '+steps.length+'</td"
@@ -2909,19 +3065,20 @@ function parseLocalYdbProfileSelection(groups,selected){
     "table><tr><th>Affinity</th><th>Runs</th><th>State</th></tr>'+affinityRows(id,steps)+'</table></details></section>'}\n"
     "    const running=(run.steps||[]).find(step=>step.state==='running'),live=['running','queued','failed','recovery_requir"
     "ed'].includes(run.state),showLiveOutput=activeBenchmark!=='local-ydb';\n"
-    "    if(live)content+='<section class=card><h2>Current step</h2>'+ (running?'<p><strong>'+esc(running.benchmark)+' / '+e"
+    "    if(live&&!runView)content+='<section class=card><h2>Current step</h2>'+ (running?'<p><strong>'+esc(running.benchmark)+' / '+e"
     "sc(running.profile)+'</strong>, '+esc(running.affinity)+', '+esc(running.threads??'—')+' threads, repeat '+running.repe"
     "at+', elapsed '+esc(stepDuration(running))+'</p>':'<p class=muted>No step is currently running.</p>')+(showLiveOutput"
     "?'<h3>Live stdout</h3><pre class=log>'+esc(run.tail?.stdout||'No stdout captured yet.')+'</pre><h3>Live stderr</h3><p"
     "re class=log>'+esc(run.tail?.stderr||'No stderr captured yet.')+'</pre>':'')+'</section>';content+='</div>';\n"
     "    app.innerHTML=shell('runs',content);\n"
+    "    if(runView==='configuration')bindRunConfiguration(document.querySelector('#run-configuration-view'),id);\n"
     "    const selectedRoute=()=>{const local=document.querySelector('#local-ydb-result');return activeBenchmark==='local-ydb'&&"
     "local?.dataset.localYdbViewExplicit==='true'?activeProfile+'/view/'+local.dataset.localYdbView:activeProfile};\n"
-    "    document.querySelector('#refresh-run').onclick=()=>renderRun(id,selectedRoute());\n"
+    "    document.querySelector('#refresh-run').onclick=()=>renderRun(id,selectedRoute(),runView);\n"
     "    document.querySelector('#repeat-run').onclick=()=>reuseRun(id);\n"
     "    const cancel=document.querySelector('#cancel-run');\n"
     "    if(cancel)cancel.onclick=async()=>{try{await api('/api/runs/'+enc(id)+'/cancel',jsonOptions({}));renderRun(id,sele"
-    'ctedRoute())}catch(error){alert(error.message)}};\n'
+    'ctedRoute(),runView)}catch(error){alert(error.message)}};\n'
     "    if(activeProfile){const pieces=activeProfile.split('/'),benchmark=pieces.shift(),profile=pieces.join('/');if("
     "benchmark==='local-ydb')await mountLocalYdbProfile(document.querySelector('#local-ydb-result'),id,profile,run.state,requestedLocalView);"
     "else try{mountChartBuilder(document.querySelector('#run-chart'),await loadChartData([id]),{benchmark,profile,"
@@ -3238,10 +3395,12 @@ async function renderComparisons(){
   }catch(error){app.innerHTML=shell('comparisons',displayError(error))}
 }
     """
-    "async function compose(){const pieces=routeParts(),current=pieces.join('/');if(current==='hosts')return renderHosts();if(current==='runs')return renderRuns();if(current==='new')return renderN"
+    "async function compose(){if(!location.hash.slice(1))history.replaceState(history.state,'',location.pathname+location.search+'#runs');"
+    "const pieces=routeParts(),current=pieces.join('/');if(current==='hosts')return renderHosts();if(current==='runs')return renderRuns();if(current==='new')return renderN"
     "ew('builder');if(current==='new/yaml')return renderNew('yaml');if(current==='topology')return renderTopology();if(curren"
     "t==='comparisons'||pieces[0]==='comparisons')return renderSavedComparisons();if(pieces[0]==='attempt'&&[4,5].includes(pieces.length))"
-    "return renderLocalYdbAttempt(pieces[1],pieces[2],pieces[3],pieces[4]);if(pieces[0]==='run'){if(pieces[2]"
+    "return renderLocalYdbAttempt(pieces[1],pieces[2],pieces[3],pieces[4]);if(pieces[0]==='run'){"
+    "if(pieces.length===3&&pieces[2]==='configuration')return renderRun(pieces[1],'','configuration');if(pieces[2]"
     "==='profile')return renderRun(pieces[1],pieces.slice(3).join('/'));return renderRun(pieces.slice(1).join('/'))}setRoute("
     "'runs')}\n"
     "addEventListener('hashchange',compose);setInterval(refreshActiveBanner,3000);compose();\n"
@@ -4422,8 +4581,17 @@ class RunService:
         if not isinstance(yaml_text, str):
             raise BenchmarkError("run does not contain a YAML configuration")
         options = manifest.get("options", {})
+        try:
+            structured = yaml.load(yaml_text, Loader=yaml.BaseLoader)
+            # Reject recursive YAML aliases without making the original YAML unavailable.
+            json.dumps(structured)
+            if not isinstance(structured, dict):
+                structured = None
+        except (yaml.YAMLError, TypeError, ValueError, RecursionError):
+            structured = None
         return {
             "yaml": yaml_text,
+            "structured": structured,
             "perf": bool(options.get("perf", manifest.get("profiler"))),
             "continue_on_error": bool(options.get("continue_on_error", False)),
         }
@@ -4961,6 +5129,7 @@ class RunService:
                             "load",
                             "dynamic_nodes",
                             "cluster",
+                            "adaptive",
                             "configured_repetitions",
                             "completed_repetitions",
                             "accepted",
@@ -4989,6 +5158,7 @@ class RunService:
                         "passing_load",
                         "failing_load",
                         "stop_reason",
+                        "verification_mode",
                         "metrics_source",
                         "verification_repetitions",
                         "holdout_accepted",

@@ -501,8 +501,6 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSetOp(TExprNode::TPtr node)
     auto leftInputPtr = opSetOp.LeftInput().Ptr();
     auto rightInputPtr = opSetOp.RightInput().Ptr();
     
-    YQL_CLOG(TRACE, CoreDq) << "Converting set op: " << PrintRBOExpression(node, Ctx);
-
     if (TMaybeNode<TKqpOpMap>(leftInputPtr)) {
         leftInputPtr = MaybeForceColumnToOptional(node->GetTypeAnn(), leftInputPtr, Ctx);
     }

@@ -47,8 +47,10 @@ public:
         TBaseActor<TSchemaOperationActor>::PassAway();
     }
 
-    TString BuildLogPrefix() const override {
-        return TStringBuilder() << ParentId << "[" << Path << "] ";
+    TLogPrefix BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "SchemaOperation"},
+            {"path", Path});
     }
 
     void OnException(const std::exception& exc) override {
@@ -57,9 +59,10 @@ public:
 
 private:
     void DoPropose() {
-        YDB_LOG_DEBUG("DoPropose",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"retry", ProposeBackoff.GetIteration()});
+        LOG_D(
+            "DoPropose",
+            {"retry", ProposeBackoff.GetIteration()}
+        );
         Become(&TSchemaOperationActor::ProposeState);
 
         auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
@@ -80,8 +83,7 @@ private:
     }
 
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle TEvTxUserProxy::TEvProposeTransactionStatus",
-            {"logPrefix", NPQ_LOG_PREFIX});
+        LOG_D("Handle TEvTxUserProxy::TEvProposeTransactionStatus");
 
         const auto status = ev->Get()->Status();
         const auto& record = ev->Get()->Record;
@@ -115,8 +117,7 @@ private:
     }
 
     void HandleOnPropose(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        YDB_LOG_DEBUG("HandleOnPropose TEvPipeCache::TEvDeliveryProblem",
-            {"logPrefix", NPQ_LOG_PREFIX});
+        LOG_D("HandleOnPropose TEvPipeCache::TEvDeliveryProblem");
         if (TPipeCacheClient::OnUndelivered(ev)) {
             return ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
                 TStringBuilder() << "SchemeShard " << ev->Get()->TabletId << " is unavailable");
@@ -135,10 +136,11 @@ private:
 
 private:
     void DoWaitCompletion() {
-        YDB_LOG_DEBUG("DoWaitTxCompletion",
-            {"logPrefix", NPQ_LOG_PREFIX},
+        LOG_D(
+            "DoWaitTxCompletion",
             {"schemeShardTabletId", SchemeShardTabletId},
-            {"txId", TxId});
+            {"txId", TxId}
+        );
         Become(&TSchemaOperationActor::WaitCompletionState);
 
         auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(TxId);
@@ -146,14 +148,12 @@ private:
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&) {
-        YDB_LOG_DEBUG("Handle TEvSchemeShard::TEvNotifyTxCompletionResult",
-            {"logPrefix", NPQ_LOG_PREFIX});
+        LOG_D("Handle TEvSchemeShard::TEvNotifyTxCompletionResult");
         ReplyOkAndDie();
     }
 
     void HandleOnWaitCompletion(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
-            {"logPrefix", NPQ_LOG_PREFIX});
+        LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
         OnUndelivered(ev);
         if (++WaitTxCompletionRetries > MaxWaitTxCompletionRetries) {
             return ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
@@ -177,16 +177,16 @@ private:
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-        YDB_LOG_DEBUG(errorMessage,
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"replyErrorAndDie", errorCode});
+        LOG_D(
+            errorMessage,
+            {"replyErrorAndDie", errorCode}
+        );
         Send(ParentId, new TEvSchemaOperationResponse(errorCode, std::move(errorMessage)), 0, Cookie);
         PassAway();
     }
 
     void ReplyOkAndDie() {
-        YDB_LOG_DEBUG("ReplyOkAndDie",
-            {"logPrefix", NPQ_LOG_PREFIX});
+        LOG_D("ReplyOkAndDie");
         Send(ParentId, new TEvSchemaOperationResponse(), 0, Cookie);
         PassAway();
     }

@@ -95,20 +95,28 @@ struct TTaskDistribution {
     // test that means to cover the mapping must require this to be non-zero.
     ui32 ShuffleEliminationOrderSensitiveMappings = 0;
 
+    // StageId of the first stage of each transaction, see TKqpTasksGraph::GetStageIdBases(). The tests address a
+    // stage by its transaction-local index, while the graph keys stages by a graph-wide unique StageId.
+    TVector<ui64> StageIdBases;
+
+    TStageId Key(ui32 txIdx, ui32 stageIdx) const {
+        return TStageId(txIdx, StageIdBases.at(txIdx) + stageIdx);
+    }
+
     ui32 Count(ui32 txIdx = 0, ui32 stageIdx = 0) const {
-        auto it = TasksPerStage.find(TStageId(txIdx, stageIdx));
+        auto it = TasksPerStage.find(Key(txIdx, stageIdx));
         return it != TasksPerStage.end() ? it->second : 0;
     }
 
     // Number of distinct nodes the stage's tasks landed on.
     ui32 NodesUsed(ui32 txIdx = 0, ui32 stageIdx = 0) const {
-        auto it = TasksPerStageNode.find(TStageId(txIdx, stageIdx));
+        auto it = TasksPerStageNode.find(Key(txIdx, stageIdx));
         return it != TasksPerStageNode.end() ? static_cast<ui32>(it->second.size()) : 0;
     }
 
     // Tasks of the stage placed on a given node.
     ui32 OnNode(ui64 nodeId, ui32 txIdx = 0, ui32 stageIdx = 0) const {
-        auto it = TasksPerStageNode.find(TStageId(txIdx, stageIdx));
+        auto it = TasksPerStageNode.find(Key(txIdx, stageIdx));
         if (it == TasksPerStageNode.end()) {
             return 0;
         }
@@ -131,7 +139,7 @@ struct TTaskDistribution {
     // Node-count agnostic, so it stays compact and stable regardless of how many cluster nodes there are.
     THashMap<ui32, ui32> NodeHistogram(ui32 txIdx = 0, ui32 stageIdx = 0) const {
         THashMap<ui32, ui32> histogram;
-        auto it = TasksPerStageNode.find(TStageId(txIdx, stageIdx));
+        auto it = TasksPerStageNode.find(Key(txIdx, stageIdx));
         if (it != TasksPerStageNode.end()) {
             for (const auto& [_, tasks] : it->second) {
                 histogram[tasks]++;
@@ -367,6 +375,7 @@ public:
             {"tasksGraphDump", Graph->DumpToString()});
 
         auto reply = MakeHolder<TEvBuildTasksDone>();
+        reply->Result.StageIdBases = Graph->GetStageIdBases();
         for (const auto& [stageId, stageInfo] : Graph->GetStagesInfo()) {
             reply->Result.TasksPerStage[stageId] = static_cast<ui32>(stageInfo.Tasks.size());
             for (ui64 taskId : stageInfo.Tasks) {

@@ -7,6 +7,7 @@
 #include <ydb/library/wasm/api/data_transfer.h>
 #include <ydb/services/udf_store/wasm/abi/udf_cpp_abi.h>
 
+#include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -76,7 +77,28 @@ void InvokeUdfExport(
     uintptr_t result,
     const TVector<uintptr_t>& args);
 
-THashSet<TString> CollectWasmExports(
+enum class EWasmExportValueType: ui8 {
+    I32,
+    I64,
+    F32,
+    F64,
+    Other,
+};
+
+const char* WasmExportValueTypeAsStr(EWasmExportValueType type);
+
+//! Shape of an exported wasm function, enough to check that a manifest
+//! declaration and the module it describes agree on which values move across
+//! the call. Every UDF export is invoked as (i64...) -> (), because
+//! InvokeUdfExport passes context, result pointer and arguments as UintPtr
+//! and expects no result back.
+struct TWasmExportSignature {
+    size_t ParamCount = 0;
+    size_t ResultCount = 0;
+    TVector<EWasmExportValueType> ParamTypes;
+};
+
+THashMap<TString, TWasmExportSignature> CollectWasmExports(
     TStringBuf bytes,
     NYdb::NWasm::EBytecodeFormat format);
 

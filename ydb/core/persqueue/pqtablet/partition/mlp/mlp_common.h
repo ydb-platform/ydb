@@ -67,6 +67,9 @@ struct TReadResult : public TResult {
     std::deque<TReadMessage> Messages;
 };
 
+// Extrapolates from the average group density of the in-flight window
+size_t EstimateFetchCountForNewGroups(size_t inflightMessageCount, size_t inflightGroupCount, size_t desiredNewGroups);
+
 std::unique_ptr<TEvPersQueue::TEvRequest> MakeEvPQRead(
     const TString& consumerName,
     ui32 partitionId,

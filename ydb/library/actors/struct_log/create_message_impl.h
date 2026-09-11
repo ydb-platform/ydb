@@ -175,9 +175,8 @@ public:
         OutputParam(s, rest...);
     }
 
-    // Native types support
     template <typename T, typename K = TKeyName>
-    TCreateMessageArg(K&& name, const T& value) {
+    static void AddValueToCurrentMessage(K&& name, const T& value) {
         if constexpr (std::is_function<T>::value) {
             static_assert(false, "It is not allowed to pass function into structured message");
         } else if constexpr (std::is_same<T, TStructuredMessage>::value) {
@@ -195,7 +194,7 @@ public:
             // YDB uses several ways to store/pass optional values (see TOptionalTraits<T> below).
             // So, it is required to process optional data using this OutputParam<TValue> (instead of Out<T>).
             if (value) {
-                TCreateMessageArg(name, *value);
+                AddValueToCurrentMessage(name, *value);
             } else {
                 TStringStream stream;
                 stream << "<null>";
@@ -206,6 +205,12 @@ public:
             OutputParam(stream, value);
             TCreateMessageGuard::GetBuildMessage().AppendValue({std::move(name)}, stream.Str());
         }
+    }
+
+    // Support YDB_LOG_ macro syntax
+    template <typename T, typename K = TKeyName>
+    TCreateMessageArg(K&& name, const T& value) {
+        AddValueToCurrentMessage(std::move(name), value);
     }
 
     TCreateMessageArg(const TStructuredMessage& message);

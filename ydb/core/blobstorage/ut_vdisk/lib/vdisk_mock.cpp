@@ -348,7 +348,7 @@ public:
         if (!raw) {
             if (!tabletId || tabletId >> 63) {
                 status = NKikimrProto::ERROR;
-            } else {
+            } else if (record.HasVersion()) {
                 const auto versionIt = Blocks.find(~tabletId);
                 const ui32 version = versionIt != Blocks.end() ? versionIt->second : 0;
                 if (record.GetVersion() < version) {

@@ -71,6 +71,8 @@ def kikimr_grep_kernel_log_safety_warden_factory(
         executor=None,
         lines_after=5,
         hours_back=24,
+        start_time=None,
+        end_time=None,
 ):
     markers = ['Out of memory: Kill process']
 
@@ -80,5 +82,7 @@ def kikimr_grep_kernel_log_safety_warden_factory(
             list_of_markers=markers,
             lines_after=lines_after,
             hours_back=hours_back,
+            start_time=start_time,
+            end_time=end_time,
         )
     ]

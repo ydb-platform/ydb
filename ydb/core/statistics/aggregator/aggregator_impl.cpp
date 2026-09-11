@@ -627,13 +627,20 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeActorResult::TPtr& e
     case EStatus::TableNotFound:
         DeleteStatisticsFromTable();
         return;
-    case EStatus::InternalError:
+    case EStatus::InternalError: {
+        const auto* table = CurrentForceTraversalTable();
         YDB_LOG_WARN("EvAnalyzeActorResult InternalError",
             {"tabletId", TabletID()},
-            {"pathId", TraversalPathId});
+            {"operationId", ForceTraversalOperationId.Quote()},
+            {"database", TraversalDatabase},
+            {"pathId", TraversalPathId},
+            {"tablePath", table ? table->Path : TString()},
+            {"analyzeActorId", ev->Sender},
+            {"issues", ev->Get()->Issues.ToOneLineString()});
         DispatchFinishTraversalTx(
             NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR, std::move(ev->Get()->Issues));
         return;
+    }
     }
 }
 
@@ -1200,7 +1207,8 @@ void TStatisticsAggregator::StartAnalyzeActor(const TActorContext& ctx, const TS
     auto analyzeActorConfig = TAnalyzeActor::TConfig{
         .MaxTotalScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxTotalScanActorsInFlight(),
         .MaxPerNodeScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxPerNodeScanActorsInFlight(),
-        .WholeTableScanMaxBytes = StatisticsConfig.GetAnalyzeWholeTableScanMaxBytes(),
+        .ColumnTableWholeTableScanMaxBytes = StatisticsConfig.GetAnalyzeColumnTableWholeTableScanMaxBytes(),
+        .RowTableWholeTableScanMaxBytes = StatisticsConfig.GetAnalyzeRowTableWholeTableScanMaxBytes(),
         .TableBytesSize = GetTableBytesSize(pathId),
         .CollectPrimaryKeyHistogram = StatisticsConfig.GetAnalyzeCollectPrimaryKeyHistogram(),
         .HistogramOversampleFactor = oversampleFactor,

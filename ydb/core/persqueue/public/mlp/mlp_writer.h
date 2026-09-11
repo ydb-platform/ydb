@@ -20,6 +20,13 @@ public:
     void Bootstrap();
     void PassAway() override;
 
+protected:
+    TLogPrefix BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "MLPWriter"},
+            {"topic", Settings.TopicName});
+    }
+
 private:
 
     void DoDescribe();

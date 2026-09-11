@@ -11,6 +11,7 @@ PY_SRCS(
     local_ydb.py
     local_ydb_workloads.py
     linux_telemetry.py
+    ydb_telemetry.py
     runner.py
     results.py
     system_info.py

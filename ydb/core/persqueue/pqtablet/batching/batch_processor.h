@@ -69,7 +69,7 @@ public:
 
     void Bootstrap(const NActors::TActorContext& ctx);
 
-    TString BuildLogPrefix() const override;
+    TLogPrefix BuildLogPrefix() const override;
 
     void Handle(TEvProcessBatch::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvProcessBatchKeys::TPtr& ev, const NActors::TActorContext& ctx);

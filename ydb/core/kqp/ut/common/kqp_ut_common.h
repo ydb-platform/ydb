@@ -21,7 +21,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/yson/writer.h>
 #include <library/cpp/threading/future/async.h>
-
+#include <util/system/mutex.h>
 
 template <bool ForceVersionV1>
 TString MakeQuery(const TString& tmpl) {
@@ -83,6 +83,7 @@ public:
     bool NeedsStatsCollectors = false;
     TDuration KeepSnapshotTimeout = TDuration::Zero();
     IOutputStream* LogStream = nullptr;
+    std::shared_ptr<TMutex> LogStreamMutex;
     TVector<TString> StoragePoolTypes;
     TMaybe<NFake::TStorage> Storage = Nothing();
     bool InitFederatedQuerySetupFactory = false;

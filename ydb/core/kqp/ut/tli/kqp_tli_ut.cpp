@@ -475,9 +475,23 @@ namespace {
 
     // ==================== Test context and table helpers ====================
 
-    TKikimrSettings MakeKikimrSettings(TStringStream& ss) {
+    struct TTliLogs {
+        TString Snapshot() const {
+            TGuard<TMutex> guard(*Mutex_);
+            return Stream_.Str();
+        }
+
+    private:
+        friend TKikimrSettings MakeKikimrSettings(TTliLogs&);
+
+        TStringStream Stream_;
+        std::shared_ptr<TMutex> Mutex_ = std::make_shared<TMutex>();
+    };
+
+    TKikimrSettings MakeKikimrSettings(TTliLogs& ss) {
         TKikimrSettings settings;
-        settings.LogStream = &ss;
+        settings.LogStream = &ss.Stream_;
+        settings.LogStreamMutex = ss.Mutex_;
         settings.SetWithSampleTables(false);
         return settings;
     }
@@ -546,7 +560,7 @@ namespace {
         TSession Session;
         TSession VictimSession;
 
-        TTliTestContext(TStringStream& ss, bool logEnabled = true)
+        TTliTestContext(TTliLogs& ss, bool logEnabled = true)
             : Kikimr(MakeKikimrSettings(ss))
             , Client(Kikimr.GetQueryClient())
             , Session(Client.GetSession().GetValueSync().GetSession())
@@ -596,7 +610,7 @@ namespace {
         std::optional<TSession> VictimSession;
         std::optional<TSession> BreakerSession;
 
-        TTli2NodeTestContext(TStringStream& ss)
+        TTli2NodeTestContext(TTliLogs& ss)
             : Kikimr(MakeKikimrSettings(ss).SetNodeCount(2))
         {
             ConfigureKikimrForTli(Kikimr);
@@ -646,7 +660,7 @@ namespace {
         TSession Session;
         TSession VictimSession;
 
-        TTliManualDispatchTestContext(TStringStream& ss, bool logEnabled = true)
+        TTliManualDispatchTestContext(TTliLogs& ss, bool logEnabled = true)
             : Kikimr(MakeKikimrSettings(ss).SetUseRealThreads(false))
             , Client(Kikimr.RunCall([&] () { return Kikimr.GetQueryClient(); }))
             , Session(Kikimr.RunCall([&] () { return Client.GetSession().GetValueSync().GetSession(); }))
@@ -807,9 +821,9 @@ namespace {
             "VictimQuerySpanId should not be 0: " << issues);
     }
 
-    void VerifyTliIssueAndLogs(
+    TString VerifyTliIssueAndLogs(
         const TString& issues,
-        TStringStream& ss,
+        TTliLogs& ss,
         const TString& breakerQueryText,
         const TString& victimQueryText,
         const std::optional<TString>& victimExtraQueryText = std::nullopt,
@@ -817,12 +831,13 @@ namespace {
         size_t expectedVictimCount = 1
     )
     {
-        DumpTliRecords(ss.Str());
+        const TString logs = ss.Snapshot();
+        DumpTliRecords(logs);
 
         VerifyTliIssueContent(issues);
 
         const auto patterns = MakeTliLogPatterns();
-        const auto data = ExtractAllTliData(ss.Str(), patterns, breakerQueryText, victimQueryText);
+        const auto data = ExtractAllTliData(logs, patterns, breakerQueryText, victimQueryText);
         AssertCommonTliAsserts(data, breakerQueryText, victimQueryText, victimExtraQueryText);
 
         auto victimQuerySpanId = ExtractVictimQuerySpanIdFromIssue(issues);
@@ -832,13 +847,16 @@ namespace {
         UNIT_ASSERT_C(std::find(occurrences.begin(), occurrences.end(), *victimQuerySpanId) != occurrences.end(),
             "VictimQuerySpanId should match between issue and victim SessionActor log");
 
-        AssertTliRecordCounts(ss.Str(), patterns, expectedBreakerCount, expectedVictimCount);
+        AssertTliRecordCounts(logs, patterns, expectedBreakerCount, expectedVictimCount);
+        return logs;
     }
 
     void VerifyTliIssueAndLogsWhenDisabled(
         const TString& issues,
-        TStringStream& ss)
+        TTliLogs& ss)
     {
+        const TString logs = ss.Snapshot();
+
         UNIT_ASSERT_C(issues.Contains("Transaction locks invalidated"),
             "Issue should contain 'Transaction locks invalidated': " << issues);
 
@@ -851,15 +869,17 @@ namespace {
         UNIT_ASSERT_C(!victimQuerySpanId.has_value(),
             "Issue should not contain 'VictimQuerySpanId:' when TLI logs are disabled: " << issues);
 
-        UNIT_ASSERT_C(ss.Str().find("TLI INFO") == TString::npos,
+        UNIT_ASSERT_C(logs.find("TLI INFO") == TString::npos,
             "no TLI INFO logs expected when TLI logs are disabled");
     }
 
     void VerifyNoTliLogsForIgnoredTable(
         const TString& issues,
-        TStringStream& ss,
+        TTliLogs& ss,
         const TString& breakerQueryText)
     {
+        const TString logs = ss.Snapshot();
+
         UNIT_ASSERT_C(issues.Contains("Transaction locks invalidated"),
             "Issue should contain 'Transaction locks invalidated': " << issues);
 
@@ -867,7 +887,7 @@ namespace {
             "Issue should NOT contain 'BreakerQuerySpanId:': " << issues);
 
         const auto patterns = MakeTliLogPatterns();
-        auto breakerSpan = ExtractBreakerQuerySpanId(ss.Str(), "SessionActor",
+        auto breakerSpan = ExtractBreakerQuerySpanId(logs, "SessionActor",
             patterns.BreakerSessionActorMessagePattern, breakerQueryText);
         UNIT_ASSERT_C(!breakerSpan,
             "BreakerQuerySpanId for ignored table should be absent in TLI logs, breakerQuery: " << breakerQueryText);
@@ -905,7 +925,7 @@ namespace {
 Y_UNIT_TEST_SUITE(KqpTli) {
 
     Y_UNIT_TEST(LogDisabled) {
-        TStringStream ss;
+        TTliLogs ss;
         auto ctx = std::make_unique<TTliTestContext>(ss, false);
         ctx->CreateAndSeedTables(1);
 
@@ -923,7 +943,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     }
 
     Y_UNIT_TEST(Basic) {
-        TStringStream ss;
+        TTliLogs ss;
         auto ctx = std::make_unique<TTliTestContext>(ss);
         ctx->CreateAndSeedTables(1);
 
@@ -941,7 +961,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     }
 
     Y_UNIT_TEST(SeparateCommit) {
-        TStringStream ss;
+        TTliLogs ss;
         auto ctx = std::make_unique<TTliTestContext>(ss);
         ctx->CreateAndSeedTables(1);
 
@@ -968,7 +988,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // actual lock-breaking key (Key=1) is written by a query in the MIDDLE, surrounded
     // by non-conflicting writes to the same shard before AND after it.
     Y_UNIT_TEST(SeparateCommitBreakerInMiddleOfSameShard) {
-        TStringStream ss;
+        TTliLogs ss;
         auto ctx = std::make_unique<TTliTestContext>(ss);
         ctx->CreateAndSeedTables(1);
 
@@ -1007,7 +1027,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
     // Test: Many upserts in a single transaction, the breaker is the middle upsert
     Y_UNIT_TEST(ManyUpserts) {
-        TStringStream ss;
+        TTliLogs ss;
         auto ctx = std::make_unique<TTliTestContext>(ss);
         ctx->CreateAndSeedTables(6);
 
@@ -1041,7 +1061,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // Breaker writes to multiple tables in separate queries, then uses breakerTx->Commit() (QUERY_ACTION_COMMIT_TX)
     // This is different from CommitTx() on the last query (QUERY_ACTION_EXECUTE_PREPARED with commit flag)
     Y_UNIT_TEST(ManyUpsertsStandaloneCommit) {
-        TStringStream ss;
+        TTliLogs ss;
         auto ctx = std::make_unique<TTliTestContext>(ss);
         ctx->CreateAndSeedTables(6);
 
@@ -1075,7 +1095,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
     // Test: Victim reads key 1, breaker writes key 1, victim writes key 2
     Y_UNIT_TEST(DifferentKeys) {
-        TStringStream ss;
+        TTliLogs ss;
         auto ctx = std::make_unique<TTliTestContext>(ss);
         ctx->CreateAndSeedTablesWithSecondKey(1);
 
@@ -1096,7 +1116,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // Verifies that VictimQuerySpanId correctly identifies the read operation
     // (which established the lock), not the subsequent write within the same transaction.
     Y_UNIT_TEST(VictimReadThenWriteSameTable) {
-        TStringStream ss;
+        TTliLogs ss;
         auto ctx = std::make_unique<TTliTestContext>(ss);
         ctx->CreateAndSeedTablesWithSecondKey(1);
 
@@ -1120,7 +1140,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // plus reads/writes other tables. Simulates TPCC-like workload where a transaction
     // SELECTs and then UPDATEs the same row (e.g., customer table).
     Y_UNIT_TEST(VictimReadThenWriteSameTableMultiTable) {
-        TStringStream ss;
+        TTliLogs ss;
         auto ctx = std::make_unique<TTliTestContext>(ss);
         ctx->CreateAndSeedTables(3);
 
@@ -1147,7 +1167,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
     // Test: Victim reads multiple keys, breaker writes them all
     Y_UNIT_TEST(MultipleKeys) {
-        TStringStream ss;
+        TTliLogs ss;
         auto ctx = std::make_unique<TTliTestContext>(ss);
         ctx->CreateAndSeedTablesWithSecondKey(1);
         ctx->SeedTable("/Root/Tenant1/Table1", {{3, "V3"}});
@@ -1167,7 +1187,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
     // Test: Cross-table lock breakage - victim reads TableA, breaker writes TableA, victim writes TableB
     Y_UNIT_TEST(CrossTables) {
-        TStringStream ss;
+        TTliLogs ss;
         auto ctx = std::make_unique<TTliTestContext>(ss);
         ctx->CreateAndSeedTables(2);
 
@@ -1188,7 +1208,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // The breaker's SessionActor should emit two TLI log entries with different BreakerQuerySpanIds,
     // each matching the corresponding DataShard's BreakerQuerySpanId.
     Y_UNIT_TEST(TwoVictimsOneBreaker) {
-        TStringStream ss;
+        TTliLogs ss;
         auto ctx = std::make_unique<TTliTestContext>(ss);
 
         // Create two victim sessions
@@ -1229,7 +1249,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
     // Test: InvisibleRowSkips - victim reads at snapshot V1, breaker commits at V2, victim reads again
     Y_UNIT_TEST(InvisibleRowSkips) {
-        TStringStream ss;
+        TTliLogs ss;
         auto ctx = std::make_unique<TTliTestContext>(ss);
         ctx->CreateAndSeedTables(1);
 
@@ -1261,7 +1281,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
     // Test: Victim snapshots on one key, breaker commits, victim reads and writes another key
     Y_UNIT_TEST(SnapshotThenReadWrite) {
-        TStringStream ss;
+        TTliLogs ss;
         auto ctx = std::make_unique<TTliTestContext>(ss);
         ctx->CreateAndSeedTablesWithSecondKey(1);
 
@@ -1291,7 +1311,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // Like SnapshotThenReadWrite but with several UPSERTs in breaker (only the middle one conflicts)
     // and several SELECTs in victim (only the middle one detects InvisibleRowSkips).
     Y_UNIT_TEST(ManyUpsertsDeferredLock) {
-        TStringStream ss;
+        TTliLogs ss;
         auto ctx = std::make_unique<TTliTestContext>(ss);
         // Note: key 2 is needed for snapshot on Table1 in this scenario.
         ctx->CreateAndSeedTablesWithSecondKey(6);
@@ -1334,7 +1354,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // Tests that BreakerQuerySpanId and VictimQuerySpanId linkage is maintained even with
     // OLTP sink + UPSERT...SELECT where locks may be created lazily (deferred lock creation).
     Y_UNIT_TEST(ConcurrentUpsertSelect) {
-        TStringStream ss;
+        TTliLogs ss;
         auto ctx = std::make_unique<TTliTestContext>(ss);
         ctx->CreateAndSeedTables(1);
 
@@ -1373,7 +1393,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // Tests that BreakerQuerySpanId and VictimQuerySpanId linkage is maintained even with
     // OLTP sink + UPSERT...SELECT where locks may be created lazily (deferred lock creation).
     Y_UNIT_TEST(ConcurrentUpsertSelectManualDispatch) {
-        TStringStream ss;
+        TTliLogs ss;
         auto ctx = std::make_unique<TTliManualDispatchTestContext>(ss);
         ctx->CreateAndSeedTables(1);
 
@@ -1417,7 +1437,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
     // Test: 2-node version of ManyUpserts
     Y_UNIT_TEST(ManyUpserts2Node) {
-        TStringStream ss;
+        TTliLogs ss;
         auto ctx = std::make_unique<TTli2NodeTestContext>(ss);
         ctx->CreateAndSeedTables(6);
 
@@ -1449,7 +1469,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
     // Test: 2-node version of ManyUpsertsStandaloneCommit
     Y_UNIT_TEST(ManyUpsertsStandaloneCommit2Node) {
-        TStringStream ss;
+        TTliLogs ss;
         auto ctx = std::make_unique<TTli2NodeTestContext>(ss);
         ctx->CreateAndSeedTables(6);
 
@@ -1483,7 +1503,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
     // Test: 2-node version of ConcurrentUpsertSelect
     Y_UNIT_TEST(ConcurrentUpsertSelect2Node) {
-        TStringStream ss;
+        TTliLogs ss;
         auto ctx = std::make_unique<TTli2NodeTestContext>(ss);
         ctx->CreateAndSeedTables(1);
 
@@ -1520,7 +1540,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // Verifies that QuerySpanId is derived from the Wilson trace's SpanId
     // instead of a random fallback, and that TLI logging works correctly.
     Y_UNIT_TEST(BasicWithWilsonTracing) {
-        TStringStream ss;
+        TTliLogs ss;
 
         // Configure tracing: always sample all requests at max verbosity
         TKikimrSettings settings = MakeKikimrSettings(ss);
@@ -1563,10 +1583,9 @@ Y_UNIT_TEST_SUITE(KqpTli) {
             // Destroy runner to flush async logger before reading `ss`.
         }
 
-        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
+        const TString logs = VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
 
         // When Wilson tracing is active, SessionActor TLI logs must include TraceId
-        const TString logs = ss.Str();
         const auto patterns = MakeTliLogPatterns();
         bool foundTraceIdInBreaker = false;
         bool foundTraceIdInVictim = false;
@@ -1589,7 +1608,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // When the victim-shard responds before the breaker-shard, the buffer write actor
     // must still collect and propagate breaker TLI stats.
     Y_UNIT_TEST(BreakerAndVictimInSameTransaction) {
-        TStringStream ss;
+        TTliLogs ss;
         auto ctx = std::make_unique<TTliTestContext>(ss);
         ctx->CreateAndSeedTables(3);
 
@@ -1623,19 +1642,19 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         // Verify the ExternalBreaker->T victim pair and record counts.
         // expectedBreakerCount=2: ExternalBreaker's session + T's session (T broke VictimOfT).
         // Without the fix, T's breaker log is missing (count would be 1 instead of 2).
-        VerifyTliIssueAndLogs(tIssues, ss, externalBreakerWrite, tSelectTable2,
+        const TString logs = VerifyTliIssueAndLogs(tIssues, ss, externalBreakerWrite, tSelectTable2,
             /* victimExtraQueryText */ std::nullopt,
             /* expectedBreakerCount */ 2, /* expectedVictimCount */ 1);
 
         // Additionally verify T's breaker log content (T broke VictimOfT's lock on table1)
         const auto patterns = MakeTliLogPatterns();
-        auto tBreakerQueryText = ExtractQueryText(ss.Str(), patterns.BreakerSessionActorMessagePattern, tWriteTable1);
+        auto tBreakerQueryText = ExtractQueryText(logs, patterns.BreakerSessionActorMessagePattern, tWriteTable1);
         UNIT_ASSERT_C(tBreakerQueryText,
             "T should emit breaker TLI log for tWriteTable1 (T is both breaker and victim)");
     }
 
     Y_UNIT_TEST(IgnoredTableRegexes) {
-        TStringStream ss;
+        TTliLogs ss;
 
         TKikimrSettings settings = MakeKikimrSettings(ss);
         auto ctx = std::make_unique<TTliTestContext>(std::move(settings));
@@ -1684,7 +1703,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     }
 
     Y_UNIT_TEST(IgnoredTableRegexesSeparateQueries) {
-        TStringStream ss;
+        TTliLogs ss;
 
         TKikimrSettings settings = MakeKikimrSettings(ss);
         settings.AppConfig.MutableTliConfig()->AddIgnoredTableRegexes("/Root/Tenant1/Table1");
@@ -1741,7 +1760,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     // (NYdb::NTable::TTableClient / ExecuteDataQuery).
 
     Y_UNIT_TEST(BasicDataQuery) {
-        TStringStream ss;
+        TTliLogs ss;
         auto ctx = std::make_unique<TTliTestContext>(ss);
         ctx->CreateAndSeedTables(1);
 
@@ -1764,7 +1783,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
     }
 
     Y_UNIT_TEST(SeparateCommitDataQuery) {
-        TStringStream ss;
+        TTliLogs ss;
         auto ctx = std::make_unique<TTliTestContext>(ss);
         ctx->CreateAndSeedTables(1);
 

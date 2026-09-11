@@ -242,18 +242,20 @@ namespace NFake {
                     return result.release();
                 }
                 ui32& version = BlockVersions[msg->TabletId];
-                if (msg->Version < version) {
-                    result->Status = NKikimrProto::ERROR;
-                    result->IsTabletStorageInfoVersionObsolete = true;
-                    return result.release();
-                }
-                if (msg->Version > version) {
-                    if (const auto it = Blocks.find(msg->TabletId);
-                            it != Blocks.end() && msg->Generation <= it->second) {
+                if (msg->Version) {
+                    if (*msg->Version < version) {
                         result->Status = NKikimrProto::ERROR;
+                        result->IsTabletStorageInfoVersionObsolete = true;
                         return result.release();
                     }
-                    version = msg->Version;
+                    if (*msg->Version > version) {
+                        if (const auto it = Blocks.find(msg->TabletId);
+                                it != Blocks.end() && msg->Generation <= it->second) {
+                            result->Status = NKikimrProto::ERROR;
+                            return result.release();
+                        }
+                        version = *msg->Version;
+                    }
                 }
             }
 

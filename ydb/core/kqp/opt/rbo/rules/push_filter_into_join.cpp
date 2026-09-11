@@ -120,7 +120,7 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
     bool canPushRight = join->JoinKind != "LeftSemi" && join->JoinKind != "LeftOnly";
 
     for (const auto& conj : conjuncts) {
-        if (conj.MaybeEquiJoinCondition()) {
+        if (conj.MaybeEquiJoinCondition() && !ReferencesUnresolvedSubplan(conj, props)) {
             TEquiJoinCondition cond(conj);
 
             // We cannot push filter into join conditions of a LeftOnly join - will break semantics

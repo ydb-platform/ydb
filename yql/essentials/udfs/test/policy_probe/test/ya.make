@@ -1,9 +1,17 @@
-YQL_UDF_MINITEST()
+BUILD_ONLY_IF(OS_LINUX)
 
-DEPENDS(yql/essentials/udfs/test/policy_probe)
+PY3TEST()
 
-TIMEOUT(300)
+TEST_SRCS(
+    test_service_symbols.py
+)
 
-SIZE(MEDIUM)
+PEERDIR(
+    contrib/python/pyelftools
+)
+
+DEPENDS(
+    yql/essentials/udfs/test/policy_probe
+)
 
 END()

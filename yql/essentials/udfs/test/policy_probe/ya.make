@@ -20,4 +20,5 @@ YQL_UDF_CONTRIB(policy_probe_udf)
 
 RECURSE_FOR_TESTS(
     test
+    udf_test
 )

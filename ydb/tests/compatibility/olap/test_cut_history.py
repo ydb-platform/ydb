@@ -67,7 +67,7 @@ class TestCutHistoryDormant(RollingUpgradeAndDowngradeFixture):
                 )
                 assert result[0].rows[0]["cnt"] == self.rows_count
 
-        # Generation churn first, so channel history exists for the roll to stress.
+        # Restarts do NOT create channel history; this stress test is purely restart-safety.
         for _ in range(self.restart_rounds):
             restart_column_shards()
             assert_readable()
@@ -80,10 +80,9 @@ class TestCutHistoryDormant(RollingUpgradeAndDowngradeFixture):
 class TestCutHistory(RollingUpgradeAndDowngradeFixture):
     """Roll the cluster while CutHistory is trimming ColumnShard channel history.
 
-    History entries only appear on generation changes, so the tablets are restarted
-    to produce them; the cutter then nominates the drained ones on its own one-minute
-    cadence. The roll happens on top of that, and the test checks that data stays
-    readable throughout and that no channel ends up poisoned.
+    History entries are created by Hive channel reassignment (not tablet restarts).
+    Channels are reassigned before any writes so the old range is trivially empty;
+    the boot proof then cuts it, and the roll verifies data stays readable throughout.
     """
 
     rows_count = 200
@@ -99,6 +98,8 @@ class TestCutHistory(RollingUpgradeAndDowngradeFixture):
             extra_feature_flags=["enable_cut_history", "enable_columnshard_group_decommission"],
             column_shard_config={
                 "alter_object_enabled": True,
+                # This PR ships the cadence path, so keep the default PORTIONS proof source here.
+                "cut_history_measure_only": False,
             },
             # Hive's deny list carries ColumnShard by default, which would disable the cutter for these tablets.
             hive_config={
@@ -158,6 +159,29 @@ class TestCutHistory(RollingUpgradeAndDowngradeFixture):
         logger.info("restarted %s ColumnShard tablet(s)", len(tablet_ids))
         return len(tablet_ids)
 
+    def _reassign_column_shard_channels(self):
+        """Rebind channels via Hive: the only operation that creates cuttable history entries."""
+        client = kikimr_client_factory("localhost", self.cluster.nodes[1].port)
+        hives = client.tablet_state(tablet_type=TabletTypes.FLAT_HIVE)
+        hive_ids = [info.TabletId for info in hives.TabletStateInfo]
+        assert hive_ids, "no Hive tablet found, cannot create channel history"
+        reassigned = 0
+        for hive_id in hive_ids:
+            url = (
+                f"{self.http_proxy_endpoints[0]}/tablets/app?TabletID={hive_id}"
+                f"&page=ReassignTablet&tablet=all&type={int(TabletTypes.COLUMNSHARD)}"
+                "&channel=2,3,4,5,6,7&wait=1&inflight=8"
+            )
+            try:
+                request = urllib.request.Request(url, data=b"", method="POST")
+                with urllib.request.urlopen(request, timeout=120) as response:
+                    body = response.read().decode("utf-8", "replace")
+                logger.info("reassign via hive %s: %s", hive_id, body[:200])
+                reassigned += 1
+            except Exception as e:
+                logger.warning("reassign via hive %s failed: %s", hive_id, e)
+        return reassigned
+
     def _cut_history_sensors(self):
         """Sum the component=CutHistory sensors over every node, by bare name."""
         totals = {}
@@ -187,13 +211,18 @@ class TestCutHistory(RollingUpgradeAndDowngradeFixture):
     def test_cut_history_during_roll(self):
         table_name = "olap_cut_history"
         self._create_table(table_name)
+
+        assert self._column_shard_ids(), "no ColumnShard tablets found for the column table"
+
+        # Reassign before any writes: old range has zero blobs, boot proof can cut it immediately.
+        reassigned = self._reassign_column_shard_channels()
+        assert reassigned > 0, "no Hive responded to reassign; cannot create channel history"
+
         self._write_data(table_name)
         expected = self.rows_count
         self._assert_readable(table_name, expected)
 
-        assert self._column_shard_ids(), "no ColumnShard tablets found for the column table"
-
-        # Generation churn first, so there is history to cut once the roll starts.
+        # Restarts trigger the boot proof on each start.
         for round_n in range(self.restart_rounds):
             self._restart_column_shards()
             self._write_data(table_name, offset=(round_n + 1) * self.rows_count)
@@ -208,9 +237,13 @@ class TestCutHistory(RollingUpgradeAndDowngradeFixture):
             assert sensors.get("Channels/Poisoned", 0) == 0, f"cutter poisoned a channel: {sensors}"
             assert sensors.get("Barriers/Failed/Count", 0) == 0, f"barrier send failed: {sensors}"
 
-        # Give the cutter one nomination cadence on the post-roll state, then check health and data.
+        # Allow the boot proof time to settle, then verify health and data.
         time.sleep(90)
         sensors = self._cut_history_sensors()
         logger.info("cut_history sensors after settle: %s", sensors)
+        # Vacuity guard: at least one range was nominated; safety assertions are therefore meaningful.
+        assert sensors.get("Nominations/Count", 0) > 0, (
+            f"no nominations; safety assertions are vacuous: {sensors}"
+        )
         assert sensors.get("Channels/Poisoned", 0) == 0, f"cutter poisoned a channel: {sensors}"
         self._assert_readable(table_name, expected)

@@ -8,7 +8,7 @@ from ydb.tests.stress.olap_workload.workload.type.insert_delete import WorkloadI
 from ydb.tests.stress.olap_workload.workload.type.transactions import WorkloadTransactions
 from ydb.tests.stress.olap_workload.workload.type.rename_tables import WorkloadRenameTables
 from ydb.tests.stress.olap_workload.workload.type.encodings import WorkloadEncodings
-from ydb.tests.stress.olap_workload.workload.type.cut_history import WorkloadCutHistory
+from ydb.tests.stress.olap_workload.workload.type.cut_history import WorkloadCutHistory, WorkloadCutHistoryVerify
 
 
 class WorkloadRunner:
@@ -42,6 +42,8 @@ class WorkloadRunner:
             WorkloadRenameTables(self.client, self.name, stop, 10),
             WorkloadEncodings(self.client, self.name, stop),
         ]
+        # WorkloadCutHistoryVerify runs write/delete/verify cycles; restarts come from WorkloadCutHistory.
+        workloads.append(WorkloadCutHistoryVerify(self.client, self.name, stop))
         # Tablet restarts go through the message-bus client, so this needs a caller-supplied endpoint.
         if self.endpoint:
             workloads.append(WorkloadCutHistory(self.client, self.name, stop, self.endpoint))

@@ -632,10 +632,13 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     "  if(editor.model&&document.querySelector('.profile-list')){\n"
     '    const queue=[];\n'
     '    for(const profile of editor.model.profiles){const benchmark=editor.model.benchmarks.find(item=>item.name===profile.b'
-    "enchmark);for(const affinity of profile.affinity)for(const backgroundLoad of (profile.background_load||['none']))for(const threads of profile.threads)for(const parameters of parameterC"
+    "enchmark);if(profile.local_ydb){const local=profile.local_ydb;queue.push(profile.benchmark+' / '+profile.name+' / '+"
+    "local.workload.type+' '+local.workload.operation+' / '+(local.load.values?'fixed load points':'adaptive load search'));continue}"
+    "for(const affinity of profile.affinity)for(const backgroundLoad of (profile.background_load||['none']))"
+    "for(const threads of profile.threads)for(const parameters of parameterC"
     "ases(benchmark,profile))for(let repeat=1;repeat<=profile.repetitions;repeat++)queue.push(profile.benchmark+' / '+profile"
     ".name+' / '+affinity+' / '+backgroundLoad+' / '+threads+' threads'+(parameters.length?' / '+parameters.join(', '):'')+' / repeat '+repeat)}\n"
-    "    message.insertAdjacentHTML('beforebegin','<details class=card><summary>Expected queue ('+queue.length+' processes)</"
+    "    message.insertAdjacentHTML('beforebegin','<details class=editor-options><summary>Execution plan ('+queue.length+' profile executions)</"
     "summary><ol>'+queue.map(item=>'<li><code>'+esc(item)+'</code></li>').join('')+'</ol></details>');\n"
     '  }\n'
     "  document.querySelector('#perf').onchange=async event=>{editor.perf=event.target.checked;await syncEditor();renderNew()"

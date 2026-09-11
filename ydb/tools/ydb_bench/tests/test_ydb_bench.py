@@ -3473,6 +3473,7 @@ const profileByKey=()=>null;
         script = (
             """
             const assert=require('node:assert/strict');let pieces,seen;
+            const location={hash:'#attempt/run/profile/7'};
             const routeParts=()=>pieces;
             const setRoute=()=>{throw Error('Unexpected redirect')};
             const renderLocalYdbAttempt=(...args)=>{seen=args};

@@ -46,13 +46,14 @@
 
 - `pool_idle_timeout` — пул удалил неактивную сессию по таймауту;
 - `pool_graceful_shutdown` — пул штатно завершил работу и закрыл свои сессии;
-- `client_query_timeout` — клиент не дождался окончания потока результатов запроса, поэтому сессия закрыта во избежание последующей ошибки `SessionBusy`;
-- `query_stream_cancelled_by_client` — клиент отменил поток результатов запроса;
-- `attach_stream_closed_by_server` — работающий поток `AttachSession` штатно завершён сервером без server hint;
-- `attach_stream_transport_error` — работающий поток `AttachSession` завершён с transport/gRPC-ошибкой;
+- `client_timeout` — поток результатов запроса превысил клиентский транспортный таймаут;
+- `client_cancelled` — клиент закрыл незавершённый поток результатов запроса;
+- `attach_closed` — сервер закрыл работающий поток `AttachSession`;
+- `transport_error` — сессия выведена из работы из-за транспортной ошибки, в том числе ошибки `Unavailable` при выполнении запроса или ошибки потока `AttachSession`;
 - `node_shutdown` — получен server hint `NodeShutdown` (`shutdown_node`);
 - `session_shutdown` — получен server hint `SessionShutdown`;
-- `query_execution_error` — при выполнении запроса возникла ошибка, после которой сессия выведена из работы.
+- `bad_session` — сервер вернул статус `BadSession` или `SessionExpired`;
+- `session_busy` — сервер вернул статус `SessionBusy`.
 
 Конкретный SDK публикует только те причины, которые он может различить в своём жизненном цикле сессии.
 

@@ -396,26 +396,12 @@ Y_UNIT_TEST_SUITE(TCutHistoryRestrictions) {
     }
 }
 
-namespace {
-
-class TScatterThresholdStatsHive : public TTestHive {
-public:
-    using TTestHive::TTestHive;
-    using THive::GetStats;
-
-    TNodeInfo& Node(TNodeId nodeId) {
-        return Nodes.at(nodeId);
-    }
-};
-
-} // namespace
-
 Y_UNIT_TEST_SUITE(THiveScatterThresholdStatsTest) {
     Y_UNIT_TEST(ScatterThresholdResourceMinimumUsesPerResourceFloor) {
         TActorSystemStub actorSystem;
         auto storage = MakeIntrusive<TTabletStorageInfo>();
         storage->TabletType = TTabletTypes::Hive;
-        TScatterThresholdStatsHive hive(storage.Get(), TActorId());
+        TTestHive hive(storage.Get(), TActorId());
         hive.UpdateConfig([](NKikimrConfig::THiveConfig& config) {
             config.SetMinNodeUsageToBalance(0.1);
             config.SetMaxResourceCounter(100);
@@ -447,7 +433,7 @@ Y_UNIT_TEST_SUITE(THiveScatterThresholdStatsTest) {
         TActorSystemStub actorSystem;
         auto storage = MakeIntrusive<TTabletStorageInfo>();
         storage->TabletType = TTabletTypes::Hive;
-        TScatterThresholdStatsHive hive(storage.Get(), TActorId());
+        TTestHive hive(storage.Get(), TActorId());
         hive.UpdateConfig([](NKikimrConfig::THiveConfig& config) {
             config.SetMinNodeUsageToBalance(0.1);
         });
@@ -472,7 +458,7 @@ Y_UNIT_TEST_SUITE(THiveScatterThresholdStatsTest) {
         TActorSystemStub actorSystem;
         auto storage = MakeIntrusive<TTabletStorageInfo>();
         storage->TabletType = TTabletTypes::Hive;
-        TScatterThresholdStatsHive hive(storage.Get(), TActorId());
+        TTestHive hive(storage.Get(), TActorId());
         hive.UpdateConfig([](NKikimrConfig::THiveConfig&) {});
         const auto stats = hive.GetStats();
         UNIT_ASSERT(stats.Values.empty());

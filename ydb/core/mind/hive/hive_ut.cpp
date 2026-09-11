@@ -5525,10 +5525,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             app.HiveConfig.SetUseTabletUsageEstimate(false);
             app.HiveConfig.SetNodeBalanceStrategy(NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_HEAVIEST);
         });
-        // Install the override before any tablet boots. Otherwise an early
-        // real sample could remain in the one-hour maximum metric window.
         THashMap<ui64, ui64> tabletUsage;
-        bool publishMetrics = false;
         auto setResource = [resource](NKikimrTabletBase::TMetrics& metrics, ui64 value) {
             metrics.Clear();
             switch (resource) {
@@ -5551,30 +5548,6 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 UNIT_FAIL("unsupported test resource");
             }
         };
-        auto metricsObserver = runtime.AddObserver<TEvHive::TEvTabletMetrics>([&](auto&& ev) {
-            auto& record = ev->Get()->Record;
-            auto* maximum = record.MutableResourceMaximum();
-            maximum->Clear();
-            maximum->SetCPU(MAX_RESOURCE);
-            maximum->SetMemory(MAX_RESOURCE * 1'000);
-            maximum->SetNetwork(MAX_RESOURCE);
-            if (reportHigherNodeTotals) {
-                // Node totals are deliberately inconsistent with tablet sums;
-                // source selection must use the same sums as the scatter check.
-                setResource(*record.MutableTotalResourceUsage(), 80 * RESOURCE_PER_PERCENT);
-            }
-            for (auto& metric : *record.MutableTabletMetrics()) {
-                auto it = tabletUsage.find(metric.GetTabletID());
-                auto* usage = metric.MutableResourceUsage();
-                usage->Clear();
-                usage->SetCPU(0);
-                usage->SetMemory(0);
-                usage->SetNetwork(0);
-                if (publishMetrics && it != tabletUsage.end()) {
-                    setResource(*usage, it->second);
-                }
-            }
-        });
         auto limitsObserver = runtime.AddObserver<TEvLocal::TEvStatus>([](auto&& ev) {
             ev->Get()->Record.ClearResourceMaximum();
         });
@@ -5645,15 +5618,21 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         };
         UNIT_ASSERT_EQUAL(getTabletNodes(), tabletNodes);
         const auto initialTabletNodes = tabletNodes;
-        // Publish positive values only after every tablet has been created:
-        // tablet-type averages otherwise seed later probes with a larger load.
-        publishMetrics = true;
 
         for (ui32 node = 0; node < numNodes; ++node) {
             const TActorId localSender = runtime.AllocateEdgeActor(node);
             const ui32 samples = reportHigherNodeTotals ? 20 : 1;
             for (ui32 sample = 0; sample < samples; ++sample) {
                 auto metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
+                auto* maximum = metrics->Record.MutableResourceMaximum();
+                maximum->SetCPU(MAX_RESOURCE);
+                maximum->SetMemory(MAX_RESOURCE * 1'000);
+                maximum->SetNetwork(MAX_RESOURCE);
+                if (reportHigherNodeTotals) {
+                    // Node totals are deliberately inconsistent with tablet sums;
+                    // source selection must use the same sums as the scatter check.
+                    setResource(*metrics->Record.MutableTotalResourceUsage(), 80 * RESOURCE_PER_PERCENT);
+                }
                 for (ui64 tabletId : initial[node]) {
                     auto* metric = metrics->Record.AddTabletMetrics();
                     metric->SetTabletID(tabletId);
@@ -6104,6 +6083,9 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         Setup(runtime, true, 1, [](TAppPrepare& app) {
             app.HiveConfig.SetTabletKickCooldownPeriod(0);
             app.HiveConfig.SetResourceChangeReactionPeriod(0);
+            // Loads are 150%, 30%, and nearly 0%. Keep the 30% donor above
+            // the source threshold: 0.1 / (1 - 0.5) = 20%.
+            app.HiveConfig.SetMinNodeUsageToBalance(0.1);
         });
         const int nodeBase = runtime.GetNodeId(0);
         TActorId senderA = runtime.AllocateEdgeActor();
@@ -6175,6 +6157,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         auto newDistribution = getDistribution();
         UNIT_ASSERT_VALUES_EQUAL(newDistribution[0].size(), TABLETS_PER_NODE);
         UNIT_ASSERT_VALUES_EQUAL(newDistribution[1].size(), TABLETS_PER_NODE - 1);
+        UNIT_ASSERT_VALUES_EQUAL(newDistribution[2].size(), TABLETS_PER_NODE + 1);
     }
 
     Y_UNIT_TEST(TestHiveBalancerHighUsage) {

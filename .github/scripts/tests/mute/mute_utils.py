@@ -180,13 +180,15 @@ def get_suites_with_unmuted_failures(results: list[dict]) -> set[str]:
     """Suites whose previous-run failures were not covered by the mute list.
 
     Muted failures are rewritten to MUTE by transform_build_results.py, so a leftover
-    FAILED/ERROR is exactly what made this rerun happen.
+    FAILED/ERROR (test or chunk) is exactly what fail-checker counted and what made this
+    rerun happen.
 
-    Blacklisting such a suite loses those failures: `-X` restarts the whole suite
-    without per-test filters, and the blacklist then subtracts the muted test from a
-    test list that is still empty before the suite is listed. ya reads that as an
-    empty suite and drops it (unittest), or narrows it down to a placeholder name that
-    matches nothing (pytest).
+    Blacklisting such a suite can lose those failures. When a chunk itself failed (the
+    test binary died before the first test, a crashed chunk), ya marks the whole suite
+    in its last-failed cache and `-X` restarts it without per-test filters. The
+    blacklist is then applied before the suite is listed, so there is no test list to
+    subtract the muted test from: ya reads that as an empty suite and drops it
+    (unittest), or narrows it down to a placeholder name that matches nothing (pytest).
     """
     return {
         test['path']

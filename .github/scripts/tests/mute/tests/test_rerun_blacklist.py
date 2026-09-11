@@ -26,6 +26,7 @@ from mute.mute_utils import convert_muted_txt_to_yaml  # noqa: E402
 
 DATASTREAMS = 'ydb/core/kqp/ut/federated_query/datastreams'
 OLTP = 'ydb/tests/stress/oltp_workload/tests'
+RUN_UT = 'ydb/core/driver_lib/run/ut'
 
 
 def failed(path, name, subtest_name=''):
@@ -108,6 +109,19 @@ class ConvertMutedTxtToYamlTest(unittest.TestCase):
             ],
         )
         self.assertEqual(filters, {OLTP: 'test_workload.py::TestYdbWorkload::test'})
+
+    def test_failed_chunk_counts_as_unmuted_failure(self):
+        # The test binary died before the first test: the chunk is FAILED, its tests are
+        # SKIPPED, and only the chunk entry says that something is wrong on this path.
+        filters = self.filters_by_path(
+            [f'{RUN_UT} XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers'],
+            [
+                failed(RUN_UT, 'unittest', '[8/10] chunk'),
+                skipped(RUN_UT, 'RerunBlacklistDemo', 'Crashes'),
+                muted(RUN_UT, 'XdsBootstrapConfigInitializer', 'CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers'),
+            ],
+        )
+        self.assertEqual(filters, {})
 
     def test_error_status_counts_as_unmuted_failure(self):
         filters = self.filters_by_path(

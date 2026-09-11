@@ -18,6 +18,8 @@
 
 #include <ydb/library/actors/interconnect/interconnect.h>
 
+#include <util/generic/hash_multi_map.h>
+
 namespace NKikimr {
 namespace NPQ {
 
@@ -182,8 +184,6 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void TryReturnTabletStateAll(const TActorContext& ctx, NKikimrProto::EReplyStatus status = NKikimrProto::OK);
     void ReturnTabletState(const TActorContext& ctx, const TChangeNotification& req, NKikimrProto::EReplyStatus status);
 
-    void SendPlanStepAcks(const TActorContext& ctx,
-                          const TDistributedTransaction& tx);
     void SendPlanStepAcks(const TActorContext& ctx,
                           const TActorId& receiver,
                           const TEvTxProcessing::TEvPlanStep& ev);
@@ -638,6 +638,30 @@ private:
     void MovePendingDeferredReadSetAcks();
     void AddPendingDeferredReadSetAck(TDeferredReadSetAck&& ack);
     void SendDeferredReadSetAcks(const TActorContext& ctx);
+
+    // FIFO queue of pending TEvPlanStepAccepted. Acks are sent in arrival order,
+    // but only for a Ready prefix: known entries become Ready at EXECUTED of LastTxId;
+    // all-unknown entries become Ready after a successful WRITE_TX fence.
+    struct TPlanStepAckEntry {
+        TActorId Sender;
+        ui64 Step = 0;
+        std::unique_ptr<TEvTxProcessing::TEvPlanStep> Event;
+        bool Ready = false;
+        // Last known TxId from this PlanStep; undefined for all-unknown entries.
+        TMaybe<ui64> LastTxId;
+    };
+    using TPlanStepAckQueueIt = TDeque<TPlanStepAckEntry>::iterator;
+    TDeque<TPlanStepAckEntry> PlanStepAckQueue;
+    // Known entries only: LastTxId -> queue iterator (several senders may share a TxId).
+    THashMultiMap<ui64, TPlanStepAckQueueIt> PlanStepAckByTxId;
+    // All-unknown entries waiting for a WRITE_TX leadership fence. Pending gathers new
+    // steps; BeginWriteTxs moves them to InFlight; EndWriteTxs marks Ready and clears.
+    TVector<TPlanStepAckQueueIt> PendingAllUnknown;
+    TVector<TPlanStepAckQueueIt> InFlightAllUnknown;
+
+    void SendReadyPlanStepAcks(const TActorContext& ctx);
+    void MarkPlanStepAcksReadyForTx(ui64 txId);
+    void ErasePlanStepAckByTxId(TPlanStepAckQueueIt it);
 };
 
 }// NPQ

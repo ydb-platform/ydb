@@ -37,6 +37,7 @@
 #include <library/cpp/json/json_writer.h>
 
 #include <util/generic/strbuf.h>
+#include <iterator>
 
 //TODO: move this code to vieiwer
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
@@ -3658,6 +3659,45 @@ void TPersQueue::SendDeferredReadSetAcks(const TActorContext& ctx)
     DeferredReadSetAcks.clear();
 }
 
+void TPersQueue::ErasePlanStepAckByTxId(TPlanStepAckQueueIt queueIt)
+{
+    if (!queueIt->LastTxId.Defined()) {
+        return;
+    }
+
+    auto range = PlanStepAckByTxId.equal_range(*queueIt->LastTxId);
+    for (auto it = range.first; it != range.second; ++it) {
+        if (it->second == queueIt) {
+            PlanStepAckByTxId.erase(it);
+            return;
+        }
+    }
+
+    AFL_ENSURE(false)("missing PlanStepAckByTxId", *queueIt->LastTxId)("step", queueIt->Step);
+}
+
+void TPersQueue::MarkPlanStepAcksReadyForTx(ui64 txId)
+{
+    auto range = PlanStepAckByTxId.equal_range(txId);
+    for (auto it = range.first; it != range.second; ++it) {
+        it->second->Ready = true;
+    }
+}
+
+void TPersQueue::SendReadyPlanStepAcks(const TActorContext& ctx)
+{
+    while (!PlanStepAckQueue.empty() && PlanStepAckQueue.front().Ready) {
+        auto it = PlanStepAckQueue.begin();
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Send PlanStep ack",
+            {"logPrefix", LogPrefix()},
+            {"step", it->Step},
+            {"txCount", it->Event->Record.TransactionsSize()});
+        SendPlanStepAcks(ctx, it->Sender, *it->Event);
+        ErasePlanStepAckByTxId(it);
+        PlanStepAckQueue.pop_front();
+    }
+}
+
 void TPersQueue::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx)
 {
     YDB_LOG_INFO_COMP(NKikimrServices::PQ_TX, "Handle TEvTxProcessing::TEvReadSetAck",
@@ -3813,7 +3853,8 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
         CanProcessTxWrites() ||
         TxWritesChanged ||
         !DeleteTxs.empty() ||
-        !PendingDeferredReadSetAcks.empty()
+        !PendingDeferredReadSetAcks.empty() ||
+        !PendingAllUnknown.empty()
         ;
     if (!canProcess) {
         return;
@@ -3827,6 +3868,8 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
     AddCmdWriteTabletTxInfo(request->Record);
 
     MovePendingDeferredReadSetAcks();
+    AFL_ENSURE(InFlightAllUnknown.empty())("InFlightAllUnknown", InFlightAllUnknown.size());
+    InFlightAllUnknown = std::exchange(PendingAllUnknown, {});
 
     WriteTxsInProgress = true;
 
@@ -3873,6 +3916,12 @@ void TPersQueue::EndWriteTxs(const NKikimrClient::TResponse& resp,
     CheckChangedTxStates(ctx);
     CreateSupportivePartitionActors(ctx);
     SendDeferredReadSetAcks(ctx);
+
+    for (auto it : InFlightAllUnknown) {
+        it->Ready = true;
+    }
+    InFlightAllUnknown.clear();
+    SendReadyPlanStepAcks(ctx);
 
     WriteTxsInProgress = false;
 
@@ -4004,6 +4053,7 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
         }
     }
 
+    // PlanStep / PlanTxId advance only when at least one TxId from this message is in Txs.
     if ((step > PlanStep) && lastPlannedTxId.Defined()) {
         // если это план из будущего, то надо запомнить, последнюю запланированную транзакцию
         PlanStep = step;
@@ -4011,40 +4061,49 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
     }
 
     if (lastPlannedTxId.Defined()) {
-        // эту транзакцию ещё не удалили
-        auto p = Txs.find(*lastPlannedTxId);
-        TDistributedTransaction& tx = p->second;
-
-        // таблетка координатора могла перезапуститься надо обновить информацию
-        tx.AddPlanStepSender(sender, std::move(ev));
-
-        if (tx.State >= NKikimrPQ::TTransaction::EXECUTED) {
-            // таблетка PQ могла отправить подтвержение, но координатор перезапустился и его не получил
-            SendPlanStepAcks(ctx, tx);
-        }
+        // Known TxId: ack when LastTxId reaches EXECUTED (CheckTxState).
+        // Retransmits are appended as-is (duplicate PlanStepAccepted is acceptable).
+        const auto& tx = Txs.find(*lastPlannedTxId)->second;
+        PlanStepAckQueue.push_back({
+            .Sender = sender,
+            .Step = step,
+            .Event = std::move(ev),
+            .Ready = tx.State >= NKikimrPQ::TTransaction::EXECUTED,
+            .LastTxId = lastPlannedTxId,
+        });
+        auto it = std::prev(PlanStepAckQueue.end());
+        PlanStepAckByTxId.emplace(*lastPlannedTxId, it);
+        SendReadyPlanStepAcks(ctx);
     } else {
-        // No TxId from this PlanStep is in Txs: empty Transactions, unknown/future ids,
-        // or a retransmit after the step's txs were already executed and deleted.
-        // Ack immediately so the mediator sees steps in order.
-        SendPlanStepAcks(ctx, sender, *ev);
+        // All-unknown PlanStep (including an empty Transactions list).
+        // Ack waits for a successful WRITE_TX fence: PlanStep / PlanTxId may be
+        // advanced in memory before _txinfo is persisted, and a stale leader
+        // could keep that inflated watermark after losing generation.
+        // PendingAllUnknown moves to InFlightAllUnknown in BeginWriteTxs;
+        // EndWriteTxs marks those entries Ready after the KV write succeeds.
+
+        YDB_LOG_WARN_COMP(NKikimrServices::PQ_TX,
+            "All-unknown PlanStep; queueing ack until WRITE_TX completes",
+            {"logPrefix", LogPrefix()},
+            {"step", step},
+            {"planStep", PlanStep},
+            {"txCount", event.TransactionsSize()});
+
+        PlanStepAckQueue.push_back({
+            .Sender = sender,
+            .Step = step,
+            .Event = std::move(ev),
+            .Ready = false,
+            .LastTxId = Nothing(),
+        });
+        PendingAllUnknown.push_back(std::prev(PlanStepAckQueue.end()));
+        TryWriteTxs(ctx);
     }
 
     YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "PlanStep PlanTxId",
         {"logPrefix", LogPrefix()},
         {"planStep", PlanStep},
         {"planTxId", PlanTxId});
-}
-
-void TPersQueue::SendPlanStepAcks(const TActorContext& ctx,
-                                  const TDistributedTransaction& tx)
-{
-    if (tx.PlanStepSenders.empty()) {
-        return;
-    }
-
-    for (const auto& [receiver, event] : tx.PlanStepSenders) {
-        SendPlanStepAcks(ctx, receiver, *event);
-    }
 }
 
 void TPersQueue::SendPlanStepAcks(const TActorContext& ctx,
@@ -4920,7 +4979,8 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         TxQueue.pop_front();
         SetTxCompleteLagCounter();
 
-        SendPlanStepAcks(ctx, tx);
+        MarkPlanStepAcksReadyForTx(tx.TxId);
+        SendReadyPlanStepAcks(ctx);
         SendEvReadSetAckToSenders(ctx, tx);
         TryReturnTabletStateAll(ctx);
 

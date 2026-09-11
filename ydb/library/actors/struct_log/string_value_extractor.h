@@ -24,7 +24,7 @@ public:
         return ExtractedValue;
     }
 
-    const std::optional<TString>& ExtractValue(const TStructuredMessage& message, const TString& name) {
+    const std::optional<TString>& ExtractValue(const TStructuredMessage& message, const std::vector<TKeyName>& name) {
         auto index = message.GetValueIndex(name);
         if (!index.has_value()) {
             ExtractedValue.reset();

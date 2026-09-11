@@ -2992,10 +2992,7 @@ message TColumnShardConfig {
     }
 
     optional TFlowControlConfig FlowControl = 74;
-    // Actor-system executor for ColumnShard scan conveyor tasks: "User" or "Batch".
-    // Unset: follow the scan actor pool (ANALYZE / UseBatchPool). Does not move TColumnShardScan.
     optional string ScanDefaultPool = 75;
-    // Actor-system executor for compaction conveyor tasks: "User" or "Batch". Unset: User.
     optional string CompactionDefaultPool = 76;
 }
 

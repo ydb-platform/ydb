@@ -306,6 +306,8 @@ private:
 TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> params)
     : MetricRegistryPtr_(nullptr)
     , ClientThreadsNum_(params->GetClientThreadsNum())
+    , ResponseQueue_(GetSdkRuntime().CreateResponseQueue(
+          params->GetExecutor(), params->GetClientThreadsNum(), params->GetMaxQueuedRequests()))
     , DefaultDiscoveryEndpoint_(params->GetEndpoint())
     , SslCredentials_(params->GetSslCredentials())
     , DefaultDatabase_(params->GetDatabase())
@@ -356,14 +358,6 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
         AddPeriodicTask(channelPoolUpdateWrapper, SocketIdleTimeout_ / 10);
     }
 #endif
-    if (params->GetExecutor()) {
-        ResponseQueue_ = params->GetExecutor();
-    } else {
-        // TAdaptiveThreadPool ignores params
-        ResponseQueue_ = CreateThreadPoolExecutor(ClientThreadsNum_, MaxQueuedRequests_);
-    }
-
-    ResponseQueue_->Start();
     if (!DefaultDatabase_.empty()) {
         DefaultState_ = StateTracker_.GetDriverState(
             DefaultDatabase_,
@@ -527,7 +521,7 @@ void TGRpcConnectionsImpl::Stop(bool wait) {
     DriverScope_->Cancel();
     GRpcClientLow_.Stop(wait);
     if (wait) {
-        StopResponseQueue();
+        ResponseQueue_->Stop();
         DriverScope_->WaitCallbacksDrained();
     }
 }
@@ -690,12 +684,6 @@ void TGRpcConnectionsImpl::EnqueueResponse(IObjectInQueue* action) {
                     delete action;
                 }
             });
-    });
-}
-
-void TGRpcConnectionsImpl::StopResponseQueue() {
-    std::call_once(ResponseQueueStopOnce_, [this] {
-        ResponseQueue_->Stop();
     });
 }
 

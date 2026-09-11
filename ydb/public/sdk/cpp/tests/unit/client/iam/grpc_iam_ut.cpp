@@ -424,18 +424,18 @@ TEST(GrpcIamCredentialsProvider, RecoversFromOutageExceedingRetryBudget) {
     // (RetryDeadline_ is stamped slightly before the mock sees the first request, hence the slack).
     EXPECT_GE(outage.count(), static_cast<int64_t>(2 * requestTimeout.MilliSeconds()) - 500);
 
-    // IAM is back. Give the provider ample time to notice (BACKOFF_MAX is 10s).
+    // IAM is back. The next cycle starts after TERMINAL_FAILURE_RETRY_DELAY (10s).
     const int requestsBeforeRecovery = fx.IamStub.GetRequestCount();
     fx.IamStub.SetResponseToken("token-2");
     fx.IamStub.SetStatus(grpc::Status::OK);
 
     const bool retriedAfterRecovery = WaitUntil(
         [&] { return fx.IamStub.GetRequestCount() > requestsBeforeRecovery; },
-        std::chrono::seconds(15));
+        std::chrono::seconds(30));
     Cerr << "after IAM recovery the provider " << (retriedAfterRecovery ? "retried" : "never retried") << Endl;
 
     auto future = fx.Provider->GetAuthInfoAsync();
-    ASSERT_TRUE(future.Wait(TDuration::Seconds(15)));
+    ASSERT_TRUE(future.Wait(TDuration::Seconds(30)));
     EXPECT_TRUE(retriedAfterRecovery) << "provider never contacted IAM again after the outage ended";
     EXPECT_NO_THROW({
         EXPECT_EQ(future.GetValue(), "token-2");
@@ -464,11 +464,11 @@ TEST(GrpcIamCredentialsProvider, RecoversAfterTerminalStatusDuringRefresh) {
 
     const bool retriedAfterRecovery = WaitUntil(
         [&] { return fx.IamStub.GetRequestCount() > requestsBeforeRecovery; },
-        std::chrono::seconds(15));
+        std::chrono::seconds(30));
     Cerr << "after grant restore the provider " << (retriedAfterRecovery ? "retried" : "never retried") << Endl;
 
     auto future = fx.Provider->GetAuthInfoAsync();
-    ASSERT_TRUE(future.Wait(TDuration::Seconds(15)));
+    ASSERT_TRUE(future.Wait(TDuration::Seconds(30)));
     EXPECT_TRUE(retriedAfterRecovery) << "provider never contacted IAM again after PERMISSION_DENIED";
     EXPECT_NO_THROW({
         EXPECT_EQ(future.GetValue(), "token-2");

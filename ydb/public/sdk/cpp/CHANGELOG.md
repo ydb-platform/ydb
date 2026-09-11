@@ -1,5 +1,7 @@
 * Added `EQ_HEIGHT_HISTOGRAM` to `EMultiColumnStatisticsType`.
 
+* Fixed gRPC IAM credentials providers becoming permanently unusable after an IAM outage longer than the retry budget or a single non-retryable error: the provider now reports the error to current waiters and retries after a delay.
+
 # v3.22.0
 
 * Added `IWriteSession::Flush` to asynchronously wait until all previously accepted topic writes are acknowledged.

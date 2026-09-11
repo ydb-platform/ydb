@@ -38,6 +38,10 @@ void TDriverConfig::Register(TRegistrar registrar)
     registrar.Parameter("write_buffer_size", &TThis::WriteBufferSize)
         .Default(1_MB);
 
+    registrar.Parameter("max_attachment_size", &TThis::MaxAttachmentSize)
+        .GreaterThan(0)
+        .Default(4_MB);
+
     registrar.Parameter("client_cache", &TThis::ClientCache)
         .DefaultNew();
 

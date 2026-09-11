@@ -127,6 +127,8 @@ void TWriteFileCommand::DoExecute(ICommandContextPtr context)
 
     auto input = context->Request().InputStream;
 
+    i64 maxAttachmentSize = context->GetConfig()->MaxAttachmentSize;
+
     while (true) {
         auto data = WaitFor(input->Read())
             .ValueOrThrow();
@@ -135,8 +137,7 @@ void TWriteFileCommand::DoExecute(ICommandContextPtr context)
             break;
         }
 
-        WaitFor(writer->Write(std::move(data)))
-            .ThrowOnError();
+        WriteFileByBatches(writer, data, maxAttachmentSize);
     }
 
     WaitFor(writer->Close())

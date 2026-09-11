@@ -18,19 +18,6 @@ ui64 DrainWhilePossible(TQuotaTracker& quota, TInstant ts, ui64 blobSize, ui64 m
     return processed;
 }
 
-ui64 RunForDuration(TQuotaTracker& quota, TInstant& ts, TDuration duration, ui64 blobSize, TDuration step = TDuration::MicroSeconds(100)) {
-    const TInstant end = ts + duration;
-    ui64 processed = 0;
-    while (ts < end) {
-        if (quota.CanExaust(ts)) {
-            quota.Exaust(blobSize, ts);
-            ++processed;
-        }
-        ts += step;
-    }
-    return processed;
-}
-
 } // namespace
 
 Y_UNIT_TEST_SUITE(TQuotaTracker) {
@@ -96,7 +83,11 @@ Y_UNIT_TEST(OneSecondRefillMatchesSpeed) {
     const ui64 blobSize = 1_KB;
     UNIT_ASSERT_VALUES_EQUAL(DrainWhilePossible(quota, ts, blobSize) * blobSize, 2_MB);
 
-    const ui64 totalBytes = RunForDuration(quota, ts, TDuration::Seconds(1), blobSize) * blobSize;
+    ui64 totalBytes = 0;
+    for (ui32 i = 0; i < 1000; ++i) {
+        ts += TDuration::MilliSeconds(1);
+        totalBytes += DrainWhilePossible(quota, ts, blobSize) * blobSize;
+    }
     UNIT_ASSERT_GE(totalBytes, 2_MB - blobSize);
     UNIT_ASSERT_LE(totalBytes, 2_MB + blobSize);
 }

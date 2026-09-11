@@ -23,7 +23,7 @@ namespace NKikimr::NPQ {
         ui64 SpeedPerSecond;
         TInstant LastUpdateTime;
         ui64 MaxBurst;
-        ui64 ResidualMicroUnits = 0;
+        ui64 ResidualMilliUnits = 0;
 
         TDuration QuotedTime;
     };

@@ -7875,6 +7875,102 @@ class WebTest(unittest.TestCase):
         self.assertEqual(model["complete"]["status"], "completed")
         self.assertEqual(model["imported"]["source"], "imported")
 
+    @unittest.skipUnless(shutil.which("node"), "node is required for navigation checks")
+    def test_web_top_navigation(self):
+        script = web._JS[web._JS.index("function shell(") : web._JS.index("function breadcrumbs(")]
+        script += """
+        const assert=require('assert'),enc=encodeURIComponent;
+        const esc=value=>String(value).replaceAll('<','&lt;').replaceAll('"','&quot;');
+        let refreshes=0,activeRun=null;
+        const queueMicrotask=callback=>callback(),refreshActiveBanner=()=>{refreshes++};
+        for(const page of ['runs','new','topology','comparisons']){
+          const html=shell(page,'<h1>Content</h1>','<div>Breadcrumb</div>');
+          assert(html.includes('<nav class=primary-nav aria-label="Main navigation">'));
+          assert(html.includes('href="#'+(page==='new'?'runs':page)+'" aria-current="page"'));
+          assert(!html.includes('href="#new"'));
+          assert.equal((html.match(/aria-current="page"/g)||[]).length,1);
+          assert(!html.includes('sidebar')&&!html.includes('<aside'));
+          assert(html.includes('No active run'));
+          assert(html.includes('<main><div>Breadcrumb</div><h1>Content</h1></main>'));
+          for(const destination of ['runs','topology','comparisons'])assert(html.includes('href="#'+destination+'"'));
+        }
+        activeRun='run/<tag>';
+        const html=shell('runs','');
+        assert(html.includes('href="#run/run%2F%3Ctag%3E"'));
+        assert(html.includes('Active run: run/&lt;tag>'));
+        assert.equal(refreshes,5);
+        """
+        subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True, timeout=10)
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for automatic filters")
+    def test_automatic_filters(self):
+        script = (
+            "function bindAutomaticFilters"
+            + web._JS.split("function bindAutomaticFilters", 1)[1].split("async function renderRuns", 1)[0]
+        )
+        script += """
+        const assert=require('assert');
+        let pending=null,calls=0,connected=true;
+        global.setTimeout=callback=>{pending=callback;return 1};
+        global.clearTimeout=()=>{pending=null};
+        const fields=[{value:''},{value:''}],reset={hidden:false};
+        bindAutomaticFilters(fields,reset,()=>calls++,()=>connected);
+        assert.equal(reset.hidden,true);
+        fields[0].value='   ';fields[0].oninput();
+        assert.equal(reset.hidden,true);
+        fields[0].value='main';fields[0].oninput();
+        assert.equal(reset.hidden,false);assert.equal(calls,0);
+        pending();assert.equal(calls,1);
+        fields[1].value='2026-09-11';fields[1].onchange();
+        assert.equal(calls,2);assert.equal(pending,null);
+        reset.onclick();assert.deepEqual(fields.map(f=>f.value),['','']);
+        assert.equal(reset.hidden,true);assert.equal(calls,3);
+        fields[0].value='x';fields[0].oninput();connected=false;
+        pending();assert.equal(calls,3);
+        """
+        subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True, timeout=10)
+
+    def test_new_run_link_is_in_runs_toolbar(self):
+        runs = web._JS.split("async function renderRuns(){", 1)[1].split("async function", 1)[0]
+        self.assertNotIn('<h1 class=page-title>Runs</h1>', runs)
+        self.assertIn('<a class=new-run-link href="#new"><span aria-hidden=true>+</span> New run</a></div>', runs)
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for comparison filters")
+    def test_saved_comparison_filters_and_sorting(self):
+        script = (
+            "function filterSavedComparisons"
+            + web._JS.split("function filterSavedComparisons", 1)[1].split("function filterComparisonRuns", 1)[0]
+        )
+        script += """
+        const assert=require('assert');
+        const records=[
+          {id:'a',name:'Zulu',created_at:'2026-09-09T10:00:00Z',profiles:[['old-run','stable']]},
+          {id:'b',name:'Alpha',created_at:'2026-09-11T10:00:00Z',profiles:[['new-run','united']]},
+          {id:'c',name:'Beta',created_at:'2026-09-10T10:00:00Z',profiles:[['middle-run','shared']]}
+        ];
+        const ids=filters=>filterSavedComparisons(records,filters).map(record=>record.id);
+        assert.deepEqual(ids({}),['b','c','a']);
+        assert.deepEqual(ids({sort:'oldest'}),['a','c','b']);
+        assert.deepEqual(ids({sort:'name'}),['b','c','a']);
+        assert.deepEqual(ids({query:' ZULU '}),['a']);
+        assert.deepEqual(ids({query:'UNITED'}),['b']);
+        assert.deepEqual(ids({query:'middle-run'}),['c']);
+        assert.deepEqual(ids({since:'2026-09-10',until:'2026-09-10'}),['c']);
+        assert.deepEqual(ids({since:'2026-09-11',until:'2026-09-09'}),[]);
+        assert.deepEqual(ids({query:'missing'}),[]);
+        assert.deepEqual(filterSavedComparisons([],{}),[]);
+        assert.deepEqual(records.map(record=>record.id),['a','b','c']);
+        """
+        subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True, timeout=10)
+
+    def test_new_comparison_link_matches_new_run_style(self):
+        comparisons = web._JS.split("async function renderSavedComparisons(){", 1)[1]
+        self.assertNotIn('<div class=runs-heading><h1 class=page-title>Comparisons</h1>', comparisons)
+        self.assertIn(
+            '<a class=new-run-link href="#comparisons/new"><span aria-hidden=true>+</span> New comparison</a></div>',
+            comparisons,
+        )
+
     @unittest.skipUnless(shutil.which("node"), "node is required for the compact Runs UI test")
     def test_web_compact_runs_sorting_and_tabs(self):
         helpers = web._JS[web._JS.index("function sectionTabs") : web._JS.index("let activeBannerLoading")]

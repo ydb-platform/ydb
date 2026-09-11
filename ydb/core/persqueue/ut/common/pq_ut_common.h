@@ -280,7 +280,6 @@ struct TConsumerPreparationParameters {
     std::optional<TString> MonitoringProjectId;
 
     std::optional<ui64> ReadSpeedInBytesPerSecond;
-    std::optional<ui64> ReadBurstBytes;
     std::optional<ui64> ReadSpeedInMessagesPerSecond;
     std::optional<NKikimrPQ::TPQTabletConfig::EConsumerType> Type;
     bool KeepMessageOrder = false;

@@ -152,11 +152,10 @@ NKikimrPQ::TPQTabletConfig MakePQTabletConfig(
         if (u.MetricsLevel.has_value()) {
             consumer->SetMetricsLevel(*u.MetricsLevel);
         }
-        if (u.ReadSpeedInBytesPerSecond.has_value() || u.ReadSpeedInMessagesPerSecond.has_value() || u.ReadBurstBytes.has_value()) {
+        if (u.ReadSpeedInBytesPerSecond.has_value() || u.ReadSpeedInMessagesPerSecond.has_value()) {
             auto* readQuota = NPQ::GetOrAddReadQuota(tabletConfig, u.Name);
-            const ui64 speedBytes = u.ReadSpeedInBytesPerSecond.value_or(0);
-            readQuota->SetSpeedInBytesPerSecond(speedBytes);
-            readQuota->SetBurstSize(u.ReadBurstBytes.value_or(speedBytes));
+            readQuota->SetSpeedInBytesPerSecond(u.ReadSpeedInBytesPerSecond.value_or(0));
+            readQuota->SetBurstSize(u.ReadSpeedInBytesPerSecond.value_or(0));
 
             readQuota->SetSpeedInMessagesPerSecond(u.ReadSpeedInMessagesPerSecond.value_or(0));
             readQuota->SetBurstSizeInMessages(u.ReadSpeedInMessagesPerSecond.value_or(0));

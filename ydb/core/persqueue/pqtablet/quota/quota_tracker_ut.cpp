@@ -3,6 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/size_literals.h>
+#include <util/generic/ylimits.h>
 
 namespace NKikimr::NPQ {
 
@@ -40,13 +41,22 @@ Y_UNIT_TEST(TestSmallMessages) {
 
     UNIT_ASSERT(quota.CanExaust(ts));
 
+    quota.Exaust(2_MB - 1, ts);
     const ui64 blobSize = 500;
-    const ui64 processedBlobs = RunForDuration(quota, ts, TDuration::Seconds(10), blobSize);
+    ui64 processedBlobs = 0;
 
-    const ui64 totalBytes = processedBlobs * blobSize;
-    const ui64 tickBytes = 2_MB / 20;
-    UNIT_ASSERT_GE(totalBytes, 10 * 2_MB - 2_MB);
-    UNIT_ASSERT_LE(totalBytes, 10 * 2_MB + tickBytes + blobSize);
+    for (ui32 i = 0; i < 100'000; ++i) { // 10 sec total
+        if (quota.CanExaust(ts)) {
+            quota.Exaust(blobSize, ts);
+            ++processedBlobs;
+        }
+        ts += TDuration::MicroSeconds(100);
+    }
+    Cerr << "processed_blobs=" << processedBlobs << " quoted_time=" << quota.GetQuotedTime(ts) << Endl;
+    UNIT_ASSERT_GE(processedBlobs, 41800);
+    UNIT_ASSERT_LE(processedBlobs, 42000);
+    UNIT_ASSERT_GE(quota.GetQuotedTime(ts), TDuration::MilliSeconds(9900));
+    UNIT_ASSERT_LE(quota.GetQuotedTime(ts), TDuration::Seconds(10));
 }
 
 Y_UNIT_TEST(TestBigMessages) {
@@ -64,72 +74,63 @@ Y_UNIT_TEST(TestBigMessages) {
     CannotExaustAfter(TDuration::Zero());
     CannotExaustAfter(TDuration::Seconds(4));
 
-    ts += TDuration::Seconds(1);
+    ts += TDuration::MilliSeconds(1);
     UNIT_ASSERT(quota.CanExaust(ts));
 }
 
-Y_UNIT_TEST(BurstEqualsSpeedDoesNotDoubleOverOneSecond) {
+Y_UNIT_TEST(IdleRefillsUpToBurst) {
     TInstant ts = TInstant::MilliSeconds(123456789);
     TQuotaTracker quota(2_MB, 2_MB, ts);
 
     const ui64 blobSize = 1_KB;
-    const ui64 processedBlobs = RunForDuration(quota, ts, TDuration::Seconds(1), blobSize);
-    const ui64 totalBytes = processedBlobs * blobSize;
+    UNIT_ASSERT_VALUES_EQUAL(DrainWhilePossible(quota, ts, blobSize) * blobSize, 2_MB);
 
-    UNIT_ASSERT_LE(totalBytes, 2_MB + 2_MB / 20 + blobSize);
+    ts += TDuration::Seconds(5);
+    UNIT_ASSERT_VALUES_EQUAL(DrainWhilePossible(quota, ts, blobSize) * blobSize, 2_MB);
+}
+
+Y_UNIT_TEST(OneSecondRefillMatchesSpeed) {
+    TInstant ts = TInstant::MilliSeconds(123456789);
+    TQuotaTracker quota(2_MB, 2_MB, ts);
+
+    const ui64 blobSize = 1_KB;
+    UNIT_ASSERT_VALUES_EQUAL(DrainWhilePossible(quota, ts, blobSize) * blobSize, 2_MB);
+
+    const ui64 totalBytes = RunForDuration(quota, ts, TDuration::Seconds(1), blobSize) * blobSize;
     UNIT_ASSERT_GE(totalBytes, 2_MB - blobSize);
+    UNIT_ASSERT_LE(totalBytes, 2_MB + blobSize);
 }
 
-Y_UNIT_TEST(IdleDoesNotRefillBeyondTick) {
+Y_UNIT_TEST(UpdateConfigGiftsBurst) {
     TInstant ts = TInstant::MilliSeconds(123456789);
     TQuotaTracker quota(2_MB, 2_MB, ts);
 
-    const ui64 blobSize = 1_KB;
-    DrainWhilePossible(quota, ts, blobSize);
-
-    ts += TDuration::Seconds(5);
-    const ui64 processedBlobs = DrainWhilePossible(quota, ts, blobSize);
-    const ui64 totalBytes = processedBlobs * blobSize;
-
-    UNIT_ASSERT_LE(totalBytes, 2_MB / 20 + blobSize);
-    UNIT_ASSERT_GT(totalBytes, 0);
-}
-
-Y_UNIT_TEST(BurstGreaterThanSpeedAllowsExtra) {
-    TInstant ts = TInstant::MilliSeconds(123456789);
-    TQuotaTracker quota(4_MB, 2_MB, ts);
-
-    const ui64 blobSize = 1_KB;
-    const ui64 firstSecond = RunForDuration(quota, ts, TDuration::Seconds(1), blobSize) * blobSize;
-    UNIT_ASSERT_LE(firstSecond, 4_MB + 2_MB / 20 + blobSize);
-    UNIT_ASSERT_GE(firstSecond, 4_MB - blobSize);
-
-    DrainWhilePossible(quota, ts, blobSize);
-    ts += TDuration::Seconds(5);
-    const ui64 afterIdle = DrainWhilePossible(quota, ts, blobSize) * blobSize;
-    UNIT_ASSERT_LE(afterIdle, 2_MB + 2_MB / 20 + blobSize);
-    UNIT_ASSERT_GE(afterIdle, 2_MB);
-}
-
-Y_UNIT_TEST(BurstBelowSpeedUsesTickOnly) {
-    TInstant ts = TInstant::MilliSeconds(123456789);
-    TQuotaTracker quota(1_KB, 2_MB, ts);
-
-    const ui64 blobSize = 100;
-    const ui64 immediate = DrainWhilePossible(quota, ts, blobSize) * blobSize;
-    UNIT_ASSERT_LE(immediate, 2_MB / 20 + blobSize);
-}
-
-Y_UNIT_TEST(UpdateConfigDoesNotGiftBurst) {
-    TInstant ts = TInstant::MilliSeconds(123456789);
-    TQuotaTracker quota(2_MB, 2_MB, ts);
-
-    const ui64 blobSize = 1_KB;
-    DrainWhilePossible(quota, ts, blobSize);
+    DrainWhilePossible(quota, ts, 1_KB);
     UNIT_ASSERT(!quota.CanExaust(ts));
 
-    UNIT_ASSERT(quota.UpdateConfigIfChanged(4_MB, 2_MB, ts));
+    UNIT_ASSERT(quota.UpdateConfigIfChanged(4_MB, 2_MB));
+    UNIT_ASSERT_VALUES_EQUAL(DrainWhilePossible(quota, ts, 1_KB) * 1_KB, 4_MB);
+}
+
+Y_UNIT_TEST(LowSpeedAccumulatesAcrossWakeups) {
+    TInstant ts = TInstant::MilliSeconds(123456789);
+    TQuotaTracker quota(1, 1, ts);
+
+    UNIT_ASSERT(quota.CanExaust(ts));
+    quota.Exaust(1, ts);
     UNIT_ASSERT(!quota.CanExaust(ts));
+    UNIT_ASSERT(!quota.CanExaust(ts + TDuration::MilliSeconds(50)));
+    UNIT_ASSERT(quota.CanExaust(ts + TDuration::Seconds(1)));
+}
+
+Y_UNIT_TEST(HugeValuesDoNotOverflow) {
+    TInstant ts = TInstant::MilliSeconds(123456789);
+    TQuotaTracker quota(Max<ui64>(), Max<ui64>(), ts);
+
+    UNIT_ASSERT(quota.CanExaust(ts));
+    UNIT_ASSERT_VALUES_EQUAL(quota.GetTotalSpeed(), Max<ui64>());
+    quota.Exaust(Max<ui64>(), ts);
+    quota.Update(ts + TDuration::Days(365));
 }
 
 } //Y_UNIT_TEST_SUITE

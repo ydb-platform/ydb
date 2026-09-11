@@ -197,7 +197,7 @@ void TPartitionQuoterBase::HandleConfigUpdate(TEvPQ::TEvChangePartitionConfig::T
     bool totalQuotaUpdated = false;
     if (PartitionTotalQuotaTracker.Defined()) {
         totalQuotaUpdated = PartitionTotalQuotaTracker->UpdateConfigIfChanged(
-                GetTotalPartitionSpeedBurst(PQTabletConfig, ctx), GetTotalPartitionSpeed(PQTabletConfig, ctx), ctx.Now()
+                GetTotalPartitionSpeedBurst(PQTabletConfig, ctx), GetTotalPartitionSpeed(PQTabletConfig, ctx)
         );
     }
     UpdateQuotaConfigImpl(totalQuotaUpdated, ctx);

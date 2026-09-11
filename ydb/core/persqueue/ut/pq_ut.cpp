@@ -3375,21 +3375,6 @@ Y_UNIT_TEST(TestPQPartialRead) {
     });
 }
 
-void PQTabletPrepareUnthrottledReads(TTestContext& tc) {
-    const TVector<TConsumerPreparationParameters> users{
-        {.Name = "aaa", .Important = true},
-        {
-            .Name = "user",
-            .ReadSpeedInBytesPerSecond = 1_GB,
-            .ReadBurstBytes = 10_GB,
-        },
-    };
-    PQTabletPrepare(
-        {.AddDefaultConsumer = false},
-        users,
-        *tc.Runtime, tc.TabletId, tc.Edge,
-        tc.NextPqConfigTxId++, tc.NextPqConfigPlanStep++);
-}
 
 Y_UNIT_TEST(TestPQRead) {
     TTestContext tc;
@@ -3399,10 +3384,10 @@ Y_UNIT_TEST(TestPQRead) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
 
-        tc.Runtime->SetScheduledLimit(2'000);
+        tc.Runtime->SetScheduledLimit(200);
         tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
-        PQTabletPrepareUnthrottledReads(tc);
+        PQTabletPrepare({}, {{"aaa", true}}, tc); //important client - never delete
 
         activeZone = false;
         TVector<std::pair<ui64, TString>> data;
@@ -3452,10 +3437,10 @@ Y_UNIT_TEST(TestPQReadWithoutReadToBlobEnd) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
 
-        tc.Runtime->SetScheduledLimit(2'000);
+        tc.Runtime->SetScheduledLimit(200);
         tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
-        PQTabletPrepareUnthrottledReads(tc);
+        PQTabletPrepare({}, {{"aaa", true}}, tc); //important client - never delete
 
         activeZone = false;
         TVector<std::pair<ui64, TString>> data;
@@ -3547,10 +3532,10 @@ Y_UNIT_TEST(TestPQReadAhead) {
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
 
-        tc.Runtime->SetScheduledLimit(2'000);
+        tc.Runtime->SetScheduledLimit(200);
         tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
-        PQTabletPrepareUnthrottledReads(tc);
+        PQTabletPrepare({}, {{"aaa", true}}, tc); //important client - never delete
 
         TVector<std::pair<ui64, TString>> data;
 

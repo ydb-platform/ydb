@@ -762,13 +762,11 @@ void ConsumerDetailedMetrics(const TConsumerDetailedPartitionLevelMetricsTestPar
             histogram->OutputHtml(histogramStr);
             Cerr << "**** Total histogram: **** \n " << histogramStr.Str() << "**** **** **** ****" << Endl;
             auto instant = histogram->FindNamedCounter("Interval", "0ms")->Val();
-            auto hundredMs = histogram->FindNamedCounter("Interval", "100ms")->Val();
-            auto oneSec = histogram->FindNamedCounter("Interval", "1000ms")->Val();
+            auto oneSec = histogram->FindNamedCounter("Interval", "100ms")->Val();
             auto twoSec = histogram->FindNamedCounter("Interval", "2500ms")->Val();
-            // burst == speed caps the bucket at one 50ms tick, so after the first
-            // 32KB write the rest wait ~1s (2500ms bucket), not ~100ms.
-            UNIT_ASSERT_VALUES_EQUAL(hundredMs + oneSec + twoSec, 5);
+            UNIT_ASSERT_VALUES_EQUAL(oneSec + twoSec, 5);
             UNIT_ASSERT(twoSec >= 2);
+            UNIT_ASSERT(oneSec >= 1);
             UNIT_ASSERT(instant >= 1);
         }
     }

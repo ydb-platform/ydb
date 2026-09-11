@@ -27,6 +27,7 @@
 
 #include <ydb/core/blobstorage/backpressure/unisched.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_factory.h>
 #include <ydb/core/blobstorage/other/mon_get_blob_page.h>
 #include <ydb/core/blobstorage/ddisk/persistent_buffer_mon.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_event_filter.h>

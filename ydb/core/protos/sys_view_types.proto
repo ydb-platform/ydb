@@ -53,6 +53,7 @@ enum ESysViewType {
     ETablePrimaryIndexOptimizerStats = 45;
     EStreamingQueries = 46;
     EUdfModules = 47;
+    EQueryMetricsOneHour = 48;
 }
 
 message TSysViewDescription {

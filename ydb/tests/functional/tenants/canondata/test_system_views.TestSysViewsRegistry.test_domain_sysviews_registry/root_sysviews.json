@@ -787,6 +787,134 @@
       "FollowerId"
     ]
   },
+  "query_metrics_one_hour": {
+    "columns": [
+      {
+        "name": "IntervalEnd",
+        "type": "Timestamp?"
+      },
+      {
+        "name": "Rank",
+        "type": "Uint32?"
+      },
+      {
+        "name": "QueryText",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Count",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxCPUTime",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumDuration",
+        "type": "Interval?"
+      },
+      {
+        "name": "MinDuration",
+        "type": "Interval?"
+      },
+      {
+        "name": "MaxDuration",
+        "type": "Interval?"
+      },
+      {
+        "name": "MinReadRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxReadRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumReadRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinReadBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxReadBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumReadBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinUpdateRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxUpdateRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumUpdateRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinUpdateBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxUpdateBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumUpdateBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinDeleteRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxDeleteRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumDeleteRows",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MinRequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "MaxRequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SumRequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "LocksBrokenAsBreaker",
+        "type": "Uint64?"
+      },
+      {
+        "name": "LocksBrokenAsVictim",
+        "type": "Uint64?"
+      }
+    ],
+    "primary_key": [
+      "IntervalEnd",
+      "Rank"
+    ]
+  },
   "query_metrics_one_minute": {
     "columns": [
       {

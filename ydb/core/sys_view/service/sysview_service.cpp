@@ -383,6 +383,8 @@ private:
 
         auto& log = QueryLogs[database];
         log.Metrics.Report.FillSummary(*record.MutableMetrics());
+        record.SetQueryMetricsTotalCpuTimeUs(log.Metrics.Report.GetTotalCpuTimeUs());
+        record.SetQueryMetricsRetainedCpuTimeUs(log.Metrics.Report.GetRetainedCpuTimeUs());
         log.TopByDuration.Report.FillSummary(*record.MutableTopByDuration());
         log.TopByReadBytes.Report.FillSummary(*record.MutableTopByReadBytes());
         log.TopByCpuTime.Report.FillSummary(*record.MutableTopByCpuTime());

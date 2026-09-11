@@ -2556,6 +2556,94 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
         self.assertEqual(result["current"]["Static node vCPUs"], 8)
         self.assertEqual(result["current"]["Dynamic node vCPUs"], 4)
 
+    @unittest.skipUnless(shutil.which("node"), "node is required for builder layout checks")
+    def test_local_ydb_builder_compact_layout_preserves_fields(self):
+        loaded = load_config(self._config("""
+            local-ydb:
+              ui:
+                workload: {type: stock, operation: put-rand-order}
+                load:
+                  parameter: threads
+                  search: {start: 1, maximum: 256}
+                  objective: {type: latency-slo, percentile: p99, max-ms: 20}
+        """))
+        model = web.editor_model(loaded, self.root / "results")
+        script = "const editor={model:" + json.dumps(model) + "};const esc=value=>String(value??'');\n"
+        script += web._JS[
+            web._JS.index("const localYdbGeometryKeys=") : web._JS.index("function defaultLocalYdbWorkload")
+        ]
+        script += web._JS[web._JS.index("function localField") : web._JS.index("function localNumber")]
+        script += "console.log(localYdbProfileEditor(editor.model.profiles[0]));"
+        html = subprocess.check_output([shutil.which("node"), "-e", script], text=True, timeout=10)
+        for heading in ("Workload", "Load &amp; objective", "Measurement", "Cluster", "CPU placement"):
+            self.assertIn("<h3>" + heading + "</h3>", html)
+        self.assertNotIn("class=card", html)
+        for field in (
+            "local-ydbd-binary",
+            "local-ydbd-version",
+            "local-option-products",
+            "local-load-start",
+            "local-slo-percentile",
+            "local-measurement-verification-repetitions",
+            "local-timeout",
+            "local-affinity-static_nodes-mode",
+            "local-affinity-dynamic_nodes-cpus",
+            "local-affinity-ydb_cli-cpus",
+            "local-actor-system-use_united_pool",
+            "local-actor-system-use_shared_threads",
+            "local-actor-system-use_ring_queue",
+        ):
+            self.assertIn('id="' + field + '"' if field != "local-ydbd-version" else "id=" + field, html)
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for builder state checks")
+    def test_builder_preserves_details_per_profile(self):
+        script = web._JS[web._JS.index("const editorDetailState=") : web._JS.index("async function renderNew")]
+        script += """
+const detail={dataset:{editorDetail:'dataset'},open:true};
+const page={dataset:{editorProfile:'first'},querySelectorAll:()=>[detail]};
+const document={querySelector:()=>page};
+rememberEditorDetails();detail.open=false;restoreEditorDetails();
+if(!detail.open)throw Error('Lost expansion during rerender');
+page.dataset.editorProfile='second';detail.open=false;rememberEditorDetails();
+page.dataset.editorProfile='first';restoreEditorDetails();
+if(!detail.open)throw Error('Expansion leaked between profiles');
+"""
+        subprocess.check_call([shutil.which("node"), "-e", script], timeout=10)
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for editor rendering checks")
+    def test_new_run_layout_preserves_host_and_error_controls(self):
+        script = web._JS[web._JS.index("function editorControls()") : web._JS.index("function parameterCases(")]
+        script += web._JS[web._JS.index("const editorDetailState=") : web._JS.index("function clearRefresh()")]
+        script += """
+const app={innerHTML:''},elements=new Map();
+const document={querySelector:key=>{
+  if(key==='.new-run-page')return null;
+  if(!elements.has(key))elements.set(key,{});
+  return elements.get(key)
+},querySelectorAll:()=>[]};
+const sessionStorage={setItem:()=>{},getItem:()=>null},location={hash:'#new'};
+const editor={selected:null,model:{profiles:[],benchmarks:[]},yaml:'invalid: [',error:null};
+let editorHost='peer',editorHostOptions='',editorRenderVersion=0,fail=false;
+const hostChoices=async host=>'<option>'+host+'</option>',syncEditor=async()=>{editor.error=fail?'Invalid YAML':null};
+const esc=value=>String(value??''),clearRefresh=()=>{},planSummary=()=>({count:0,seconds:0});
+const shell=(_,body)=>body,displayError=error=>error,bindEditorControls=()=>{},addProfile=()=>{};
+const profileByKey=()=>null;
+(async()=>{
+  for(const mode of ['builder','yaml','invalid']){
+    fail=mode==='invalid';await renderNew(mode==='yaml'?'yaml':'builder');
+    for(const id of ['run-host','start-run','validate','perf','continue','editor-message']){
+      if(!app.innerHTML.includes('id='+id))throw Error(mode+' lost '+id)
+    }
+    if(!app.innerHTML.includes('<option>peer</option>'))throw Error('Host selector lost');
+    if(!app.innerHTML.includes('class="new-run-page"'))throw Error('Layout wrapper lost');
+    if(app.innerHTML.includes('class=card'))throw Error('Legacy cards restored');
+  }
+  location.hash='#runs';app.innerHTML='untouched';await renderNew();
+  if(app.innerHTML!=='untouched')throw Error('Stale editor replaced another page');
+})().catch(error=>{console.error(error);process.exitCode=1});
+"""
+        subprocess.check_call([shutil.which("node"), "-e", script], timeout=10)
+
     def test_local_ydb_profile_is_editable_by_web_builder(self):
         loaded = load_config(self._config("""
             local-ydb:

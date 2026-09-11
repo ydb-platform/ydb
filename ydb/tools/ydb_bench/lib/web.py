@@ -279,6 +279,23 @@ padding:.6rem;border:1px solid #d0d5dd;min-width:8rem;flex-direction:column}
 """
     '.status.queued{color:var(--warn)}\n'
 )
+_CSS += """
+.new-run-page .profile-list{display:flex;flex-wrap:wrap;gap:.2rem;border-bottom:1px solid #d0d5dd;margin:.8rem 0 1rem}
+.new-run-page .profile-list button{width:auto;margin:0 0 -1px;padding:.6rem .8rem;border:1px solid transparent;border-radius:5px 5px 0 0}
+.new-run-page .profile-list button.selected{background:#fff;color:var(--text);border-color:#d0d5dd;border-bottom-color:#fff;font-weight:650}
+.new-run-page .editor-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.5rem 2rem}
+.new-run-page .editor-grid h3{margin-top:0}.new-run-page .editor-wide{grid-column:1/-1}
+.new-run-page .editor-options{margin:1rem 0}.new-run-page .editor-options summary{cursor:pointer;color:var(--muted)}
+.new-run-page .editor-options[open]>.form-grid{margin-top:.8rem}
+.new-run-page .editor-role{display:grid;grid-template-columns:8rem minmax(0,1fr) minmax(8rem,.4fr);gap:1rem;align-items:start;padding:.6rem 0;border-bottom:1px solid #d0d5dd}
+.new-run-page .editor-role strong{padding-top:1.7rem}.new-run-page .editor-role .field{min-width:0}
+.new-run-page .editor-plan{margin:.8rem 0;color:var(--muted)}
+.new-run-page .page-heading{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
+.new-run-page .page-heading .toolbar{margin:0}.new-run-page .page-heading .page-title{margin:0}
+@media(max-width:800px){.new-run-page .editor-grid{grid-template-columns:1fr}}
+@media(max-width:550px){.new-run-page .editor-role{grid-template-columns:1fr}.new-run-page .editor-role strong{padding-top:0}}
+"""
+
 _CSS += (
     '#cpu-topology .view-tabs{gap:.35rem;border-bottom:1px solid #d0d5dd;padding:0;margin:1rem 0;flex-wrap:wrap}'
     '#cpu-topology .view-tabs button{padding:.6rem .8rem;border:1px solid transparent;border-radius:6px 6px 0 0;'
@@ -596,15 +613,15 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     'function updateProfile(key,mutate){const profile=profileByKey(key);if(!profile)return;mutate(profile);editor.yaml=serial'
     'izeConfig(editor.model);saveDraft()}\n'
     'function planSummary(){const profiles=editor.model?.profiles||[];let count=0,seconds=0;for(const profile of profiles){co'
-    'nst benchmark=editor.model.benchmarks.find(item=>item.name===profile.benchmark),cases=(benchmark?.parameters||[]).filter'
+    'nst benchmark=editor.model.benchmarks.find(item=>item.name===profile.benchmark);if(profile.local_ydb){count++;continue}const cases=(benchmark?.parameters||[]).filter'
     '(item=>item.matrix).reduce((total,item)=>total*(profile.parameters[item.name]?.length||1),1),processes=profile.affinity.'
     "length*(profile.background_load||['none']).length*profile.threads.length*profile.repetitions*cases;count+=processes;seconds+=processes*profile.duration}return {cou"
     'nt,seconds}}\n'
-    "function editorControls(){return '<div class=toolbar><label>Host <select id=run-host>'+editorHostOptions+"
-    "'</select></label><button id=validate>Validate</button><button id=download-yaml>Downl"
-    "oad YAML</button><button id=save-host>Save YAML on host</button><label><input id=perf type=checkbox '+(editor.perf?'chec"
+    "function editorControls(){return '<div class=toolbar><label>Host <select id=run-host>'+editorHostOptions+'</select></label><button id=validate>Validate</button><button id=download-yaml>Downl"
+    "oad YAML</button><button id=save-host>Save YAML on host</button><button class=primary id=start-run>Start run</button></div>'}\n"
+    "function editorRunOptions(){return '<div class=toolbar><label><input id=perf type=checkbox '+(editor.perf?'chec"
     "ked':'')+'> perf</label><label><input id=continue type=checkbox '+(editor.continueOnError?'checked':'')+'> continue on e"
-    "rror</label><button class=primary id=start-run>Start run</button></div><div id=editor-message></div>'}\n"
+    "rror</label></div><div id=editor-message></div>'}\n"
     'function parameterCases(benchmark,profile){let cases=[[]];for(const parameter of benchmark.parameters.filter(item=>item.'
     'matrix)){const values=profile.parameters[parameter.name]||parameter.default;cases=cases.flatMap(parts=>values.map(value='
     ">[...parts,parameter.name+'='+value]))}return cases}\n"
@@ -725,8 +742,10 @@ function localYdbProfileEditor(profile){
   const sloPercentiles=Object.keys(definition.slo_metrics||{});
   const objectiveChoices=['points','maximize-throughput',...(sloPercentiles.length?['latency-slo']:[])];
   const options=definition.options.map(option=>localYdbOptionField(option,workload.options[option.name])).join('');
-  const geometryFields=Object.entries(localYdbGeometryKeys)
-    .map(([key,label])=>localField('local-geometry-'+key,label,geometry[key],'','type=number min=1')).join('');
+  const geometryLabels={static_nodes:'Static nodes',dynamic_nodes:'Dynamic nodes',max_dynamic_nodes:'Maximum dynamic nodes',
+    disk_size_gb:'Disk size (GiB)',storage_groups:'Storage groups'};
+  const geometryFields=Object.keys(localYdbGeometryKeys)
+    .map(key=>localField('local-geometry-'+key,geometryLabels[key],geometry[key],'','type=number min=1')).join('');
   const actorSystemFields=Object.keys(localYdbActorSystemKeys)
     .map(key=>actorSystemFlag(key,Boolean(config.actor_system?.[key]??(key==='use_ring_queue')))).join('');
   const actorCpuFields=['static_nodes','dynamic_nodes'].map(role=>localField(
@@ -782,28 +801,26 @@ function localYdbProfileEditor(profile){
     )+'</div>':'';
   const affinity=Object.entries(localYdbAffinityKeys).map(([key,label])=>{
     const role=config.affinity[key],disabled=role.mode==='none'?'disabled':'';
-    return '<div class=card><strong>'+esc(label)+'</strong><div class=form-grid>'+
+    const roleLabel={ydb_cli:'YDB CLI',static_nodes:'Static nodes',dynamic_nodes:'Dynamic nodes'}[key]||label;
+    return '<div class=editor-role><strong>'+esc(roleLabel)+'</strong>'+
       localSelect('local-affinity-'+key+'-mode','Mode',role.mode,editor.model.affinity_modes)+
       localField(
         'local-affinity-'+key+'-cpus','CPUs',role.cpus??'','integer, one-chiplet, or remaining',disabled
-      )+'</div></div>'
+      )+'</div>'
   }).join('');
-  return '<div id=local-editor><h2 class=page-title>'+esc(profile.benchmark)+' / '+esc(profile.name)+'</h2>'+
+  return '<div id=local-editor><div class=editor-grid><section><h3>Workload</h3>'+
     '<div class=form-grid>'+localSelect(
       'benchmark','Benchmark',profile.benchmark,editor.model.benchmarks.map(item=>item.name)
     )+localField('profile-name','Profile name',profile.name,'letters, digits, . _ and -')+'</div>'+
-    '<h3>YDBD binary</h3><div class=form-grid>'+localYdbBinaryFields(config)+
-    '</div><h3>Workload</h3><div class=form-grid>'+localSelect(
+    '<div class=form-grid>'+localSelect(
       'local-workload-type','Type',workload.type,editor.model.local_ydb_workloads.map(item=>item.type)
     )+localSelect(
       'local-workload-operation','Operation',workload.operation,definition.operations
-    )+options+'</div><h3>Cluster geometry</h3><div class=form-grid>'+
-    localSelect('local-geometry-preset','Preset',geometry.preset,['single','storage','custom'])+geometryFields+
-    '</div><h3>Actor system (static and dynamic nodes)</h3><div class=actor-flags>'+actorSystemFields+
-    '</div><div class=form-grid>'+actorCpuFields+
-    '</div><h3>Client and load</h3><div class=form-grid>'+
-    localField('local-client-threads','YDB CLI threads',config.client.threads,clientThreadsHelp,'type=number min=1')+
-    loadCommon+loadFields+'</div>'+slo+'<h3>Measurement</h3><div class=form-grid>'+
+    )+'</div><div class=form-grid>'+localYdbBinaryFields(config)+
+    '</div><details class=editor-options data-editor-detail=dataset><summary>Dataset settings</summary><div class=form-grid>'+options+
+    '</div></details></section><section><h3>Load &amp; objective</h3><div class=form-grid>'+
+    loadCommon+localField('local-client-threads','YDB CLI threads',config.client.threads,clientThreadsHelp,'type=number min=1')+
+    loadFields+'</div>'+slo+'</section><section><h3>Measurement</h3><div class=form-grid>'+
     localField('local-measurement-warmup','Warmup (seconds)',measurement.warmup,warmupHelp,'type=number min=0')+
     localField(
       'local-measurement-duration','Duration (seconds)',measurement.duration,durationHelp,
@@ -819,7 +836,10 @@ function localYdbProfileEditor(profile){
     )+
     localField(
       'local-timeout','Timeout (seconds)',profile.timeout??'','empty selects the computed timeout','type=number min=1'
-    )+'</div><h3>Role affinity</h3>'+affinity+
+    )+'</div></section><section><h3>Cluster</h3><div class=form-grid>'+
+    localSelect('local-geometry-preset','Preset',geometry.preset,['single','storage','custom'])+geometryFields+
+    '</div><h3>Actor system (static and dynamic nodes)</h3><div class=actor-flags>'+actorSystemFields+
+    '</div><div class=form-grid>'+actorCpuFields+'</div></section><section class=editor-wide><h3>CPU placement</h3>'+affinity+'</section></div>'+
     '<div class=toolbar><button class=danger id=delete-profile>Delete profile</button></div></div>'
 }
 function localNumber(id,minimum=1){
@@ -1041,7 +1061,7 @@ function bindLocalYdbEditor(profile){
     "ers[parameter.name]||[]):(profile.parameters[parameter.name]||[]).join(', '),parameter.description)).join('');\n"
     "  const memoryMb=profile.benchmark==='memory-bandwidth-bench'?Math.max(...profile.threads)*Math.max(...(profile.paramete"
     "rs['buffer-size-mb']||[0])):0;\n"
-    "  return '<h2 class=page-title>'+esc(profile.benchmark)+' / '+esc(profile.name)+'</h2>'+(memoryMb?'<div class=notice>Max"
+    "  return (memoryMb?'<div class=notice>Max"
     "imum private-buffer footprint per process: <strong>'+esc(memoryMb)+' MiB</strong>.</div>':'')+'<div class=form-grid><div"
     ' class=field><label>Benchmark</label><select id=benchmark>\'+editor.model.benchmarks.map(item=>\'<option value="\'+esc(item'
     '.name)+\'" \'+(item.name===profile.benchmark?\'selected\':\'\')+\'>\'+esc(item.name)+\'</option>\').join(\'\')+\'</select></div>\'+fie'
@@ -1142,26 +1162,53 @@ function addProfile(){
   editor.model.profiles.push(profile);editor.selected=profile.key;editor.yaml=serializeConfig(editor.model);saveDraft();renderNew()
 }
 """
-    "async function renderNew(tab){clearRefresh();const version=++editorRenderVersion;if(tab)sessionStorage.setItem('ydb-bench-editor-tab',tab);tab=sessionStorag"
-    "e.getItem('ydb-bench-editor-tab')||'builder';const hostOptions=await hostChoices(editorHost,false);await syncEditor();"
-    "if(version!==editorRenderVersion||!['#new','#new/yaml'].includes(location.hash))return;editorHostOptions=hostOptions;"
-    "const summary=planSummary();let content='<h1 class=page-"
-    'title>New run</h1><div class=tabs><a class="\'+(tab===\'builder\'?\'active\':\'\')+\'" href="#new">Builder</a><a class="\'+(tab=='
-    '=\'yaml\'?\'active\':\'\')+\'" href="#new/yaml">YAML</a></div>\'+editorControls();if(tab===\'yaml\'){content+=\'<textarea class=yam'
+    """
+const editorDetailState=new Map();
+function rememberEditorDetails(){
+  const page=document.querySelector('.new-run-page');
+  if(!page)return;
+  for(const detail of page.querySelectorAll('[data-editor-detail]')){
+    editorDetailState.set(page.dataset.editorProfile+'|'+detail.dataset.editorDetail,detail.open)
+  }
+}
+function restoreEditorDetails(){
+  const page=document.querySelector('.new-run-page');
+  if(!page)return;
+  for(const detail of page.querySelectorAll('[data-editor-detail]')){
+    const key=page.dataset.editorProfile+'|'+detail.dataset.editorDetail;
+    if(editorDetailState.has(key))detail.open=editorDetailState.get(key)
+  }
+}
+async function renderNew(tab){
+  rememberEditorDetails();clearRefresh();const version=++editorRenderVersion;
+  if(tab)sessionStorage.setItem('ydb-bench-editor-tab',tab);
+  tab=sessionStorage.getItem('ydb-bench-editor-tab')||'builder';
+  const hostOptions=await hostChoices(editorHost,false);await syncEditor();
+  if(version!==editorRenderVersion||!['#new','#new/yaml'].includes(location.hash))return;
+  editorHostOptions=hostOptions;
+  if(editor.model&&!profileByKey(editor.selected))editor.selected=editor.model.profiles[0]?.key||null;
+  const summary=planSummary();
+  let content='<div class="new-run-page" data-editor-profile="'+esc(editor.selected||'')+'">'+
+    '<div class=page-heading><h1 class=page-title>New run</h1>'+editorControls()+'</div>'+
+    '<div class=tabs><a class="'+(tab==='builder'?'active':'')+'" href="#new">Builder</a>'+
+    '<a class="'+(tab==='yaml'?'active':'')+'" href="#new/yaml">YAML</a></div>';
+"""
+    "if(tab==='yaml'){content+=editorRunOptions()+'<textarea class=yam"
     "l id=yaml-editor spellcheck=false>'+esc(editor.yaml)+'</textarea><div class=muted>Invalid YAML remains editable and is n"
-    "ot overwritten by Builder.</div>';app.innerHTML=shell('new',content);document.querySelector('#yaml-editor').oninput=even"
+    "ot overwritten by Builder.</div>';app.innerHTML=shell('new',content+'</div>');document.querySelector('#yaml-editor').oninput=even"
     't=>{editor.yaml=event.target.value;saveDraft();clearTimeout(window.ydbBenchYamlTimer);window.ydbBenchYamlTimer=setTimeou'
     't(async()=>{await syncEditor();document.querySelector(\'#editor-message\').innerHTML=editor.error?\'<div class="notice erro'
     'r">\'+esc(editor.error)+\'</div>\':\'<div class="notice good">Builder model is synchronized.</div>\'},350)};bindEditorControl'
     "s();return}if(editor.error){content+=displayError(editor.error)+'<p>Fix the YAML in the YAML tab before editing with Bui"
-    "lder.</p>';app.innerHTML=shell('new',content);bindEditorControls();return}const selected=profileByKey(editor.selected)||"
-    "editor.model.profiles[0];content+='<div class=notice>Plan: <strong>'+summary.count+'</strong> processes; requested measu"
-    "rement time <strong>'+Math.ceil(summary.seconds)+' s</strong>; output root is <code>'+esc(editor.model.output)+'</code>."
-    '</div><div class=split><section class="card profile-list"><div class=toolbar><strong>Profiles</strong><button id=add-pro'
-    'file>Add</button></div>\'+editor.model.profiles.map(profile=>\'<button data-profile="\'+esc(profile.key)+\'" class="\'+(profi'
-    'le.key===selected?.key?\'selected\':\'\')+\'">\'+esc(profile.benchmark)+\' / \'+esc(profile.name)+\'</button>\').join(\'\')+\'</secti'
-    "on><section class=card>'+ (selected?profileEditor(selected):'<div class=empty>Add a benchmark profile to begin.</div>')+"
-    "'</section></div>';app.innerHTML=shell('new',content);bindEditorControls();document.querySelector('#add-profile').onclic"
+    "lder.</p>'+editorRunOptions();app.innerHTML=shell('new',content+'</div>');bindEditorControls();return}const selected=profileByKey(editor.selected)||"
+    "editor.model.profiles[0];content+='<div class=editor-plan>'+editor.model.profiles.length+' profiles · '+summary.count+' executions'+"
+    "(editor.model.profiles.some(profile=>profile.local_ydb&&!profile.local_ydb.load.values)?' · Duration depends on load search and verification':"
+    "editor.model.profiles.some(profile=>profile.local_ydb)?' · Per-point measurement; startup and verification are additional':"
+    "' · '+Math.ceil(summary.seconds)+' s measurement')+'</div>'"
+    '+\'<section class=profile-list>\'+editor.model.profiles.map(profile=>\'<button data-profile="\'+esc(profile.key)+\'" class="\'+(profi'
+    'le.key===selected?.key?\'selected\':\'\')+\'">\'+esc(profile.benchmark)+\' / \'+esc(profile.name)+\'</button>\').join(\'\')+'
+    "'<button id=add-profile>+ Add profile</button></section><section>'+ (selected?profileEditor(selected):'<div class=empty>Add a benchmark profile to begin.</div>')+"
+    "'</section>'+editorRunOptions()+'</div>';app.innerHTML=shell('new',content);restoreEditorDetails();bindEditorControls();document.querySelector('#add-profile').onclic"
     "k=addProfile;for(const button of document.querySelectorAll('[data-profile]'))button.onclick=()=>{editor.selected=button."
     "dataset.profile;renderNew()};if(selected){const benchmark=editor.model.benchmarks.find(item=>item.name===selected.bench"
     "mark);if(benchmark?.profile_kind==='local-ydb')bindLocalYdbEditor(selected);else if(benchmark?.builder_supported)bindPro"

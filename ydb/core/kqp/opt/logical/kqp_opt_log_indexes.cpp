@@ -194,7 +194,13 @@ bool IsVectorIndexMetricCompatible(const TIndexDescription& indexDesc, TStringBu
                 return true;
             }
             return mismatch(TStringBuilder() << "Knn::EuclideanDistance(" << col << ", ...) ASC");
+        case Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED:
+        case Ydb::Table::VectorIndexSettings_Metric_VectorIndexSettings_Metric_INT_MIN_SENTINEL_DO_NOT_USE_:
+        case Ydb::Table::VectorIndexSettings_Metric_VectorIndexSettings_Metric_INT_MAX_SENTINEL_DO_NOT_USE_:
+            break;
     }
+
+    return false;
 }
 
 bool CanUseVectorIndex(const TIndexDescription& indexDesc, const TExprBase& lambdaBody, const TCoTopBase& top, TString& error) {

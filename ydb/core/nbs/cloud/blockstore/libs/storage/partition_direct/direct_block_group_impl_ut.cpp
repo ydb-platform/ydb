@@ -163,7 +163,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
 
         // 3 immediate sessions -> quorum reached.
         WaitReady(initialReady);
-        const auto range = TBlockRange64::WithLength(0, 1);
+        const auto range = TBlockRange16::WithLength(0, 1);
 
         // Read from a locked host completes right away.
         {
@@ -224,7 +224,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
 
         // Three immediate sessions -> quorum reached.
         WaitReady(initialReady);
-        const auto range = TBlockRange64::WithLength(0, 1);
+        const auto range = TBlockRange16::WithLength(0, 1);
 
         // Read from the still-connecting host 3 suspends inside the method, so
         // the outer future (carrying the returned future) is not resolved.
@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                 return dbg->ReadBlocksFromDDisk(
                     0,           // VChunkIndex
                     ddiskHost,   // host
-                    TBlockRange64::WithLength(0, 3),
+                    TBlockRange16::WithLength(0, 3),
                     guardedSglist,
                     CreateTraceId());
             });
@@ -388,7 +388,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     2,   // Coordinator
                     hosts,
                     TPBufferKey{.Generation = 1, .Lsn = 100},
-                    TBlockRange64::WithLength(0, 3),
+                    TBlockRange16::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
                     CreateTraceId(),
@@ -448,7 +448,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                 TVector<TPBufferSegment> segments;
                 segments.push_back(TPBufferSegment(
                     TPBufferKey{.Generation = 1, .Lsn = 100},
-                    TBlockRange64::WithLength(0, 3)));
+                    TBlockRange16::WithLength(0, 3)));
 
                 return dbg->SyncWithPBuffer(
                     10,   // VChunkIndex
@@ -512,7 +512,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                 TVector<TPBufferSegment> segments;
                 segments.push_back(TPBufferSegment(
                     TPBufferKey{.Generation = 1, .Lsn = 100},
-                    TBlockRange64::WithLength(0, 3)));
+                    TBlockRange16::WithLength(0, 3)));
 
                 return dbg->SyncWithPBuffer(
                     10,   // VChunkIndex
@@ -595,7 +595,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     coordinatorHost,
                     hosts,
                     TPBufferKey{.Generation = 1, .Lsn = 100},
-                    TBlockRange64::WithLength(0, 3),
+                    TBlockRange16::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
                     CreateTraceId(),
@@ -675,7 +675,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     coordinatorHost,
                     hosts,
                     TPBufferKey{.Generation = 1, .Lsn = 100},
-                    TBlockRange64::WithLength(0, 3),
+                    TBlockRange16::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
                     CreateTraceId(),
@@ -745,7 +745,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                 .size();
 
         // Read on the still-connecting host[0] suspends in WaitForSessionLock.
-        const auto range = TBlockRange64::WithLength(0, 1);
+        const auto range = TBlockRange16::WithLength(0, 1);
         TString pendingBuffer(DefaultBlockSize, 'p');
         auto pendingRead = RunOnExecutor(
             executor,
@@ -803,7 +803,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         initialReady.Wait(WaitTimeout);
         UNIT_ASSERT(initialReady.HasValue());
 
-        const auto range = TBlockRange64::WithLength(0, 1);
+        const auto range = TBlockRange16::WithLength(0, 1);
         TString writeBuffer(DefaultBlockSize, 'w');
         auto pendingWrite = RunOnExecutor(
             executor,
@@ -842,7 +842,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         initialReady.Wait(WaitTimeout);
         UNIT_ASSERT(initialReady.HasValue());
 
-        const auto range = TBlockRange64::WithLength(0, 1);
+        const auto range = TBlockRange16::WithLength(0, 1);
         TString readBuffer(DefaultBlockSize, 'r');
         auto pendingRead = RunOnExecutor(
             executor,
@@ -892,7 +892,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                 TVector<TPBufferSegment> segments;
                 segments.push_back(TPBufferSegment(
                     TPBufferKey{.Generation = 1, .Lsn = 100},
-                    TBlockRange64::WithLength(0, 3)));
+                    TBlockRange16::WithLength(0, 3)));
 
                 return dbg->SyncWithPBuffer(
                     10,
@@ -931,7 +931,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         initialReady.Wait(WaitTimeout);
         UNIT_ASSERT(initialReady.HasValue());
 
-        const auto range = TBlockRange64::WithLength(0, 1);
+        const auto range = TBlockRange16::WithLength(0, 1);
         for (THostIndex host: {THostIndex(0), THostIndex(1)}) {
             TString writeBuffer(DefaultBlockSize, 'w');
             auto pendingWrite = RunOnExecutor(
@@ -1238,7 +1238,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     2,
                     hosts,
                     TPBufferKey{.Generation = 1, .Lsn = 100},
-                    TBlockRange64::WithLength(0, 3),
+                    TBlockRange16::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
                     CreateTraceId(),
@@ -1739,7 +1739,7 @@ Y_UNIT_TEST_SUITE(TSessionsWithRealTransport)
         auto initialReady = RunAndGetInitialReady(dbg);
         WaitReady(executor, initialReady);
 
-        const auto range = TBlockRange64::WithLength(0, 1);
+        const auto range = TBlockRange16::WithLength(0, 1);
         TString buffer(DefaultBlockSize, 'r');
 
         // The read on host 0 suspends inside ReadBlocksFromDDisk.
@@ -1786,7 +1786,7 @@ Y_UNIT_TEST_SUITE(TSessionsWithRealTransport)
             EConnectionType::DDisk,
             ddisks[0]);
 
-        const auto range = TBlockRange64::WithLength(0, 1);
+        const auto range = TBlockRange16::WithLength(0, 1);
         TString buffer(DefaultBlockSize, 'r');
 
         auto pendingRead = RunOnExecutor(
@@ -1843,7 +1843,7 @@ Y_UNIT_TEST_SUITE(TSessionsWithDirectSessionTransport)
         const ui64 sentBefore =
             transportPtr->GetFakeDirectSessionSentEventCount();
 
-        const auto range = TBlockRange64::WithLength(0, 1);
+        const auto range = TBlockRange16::WithLength(0, 1);
         TString buffer(DefaultBlockSize, 'r');
 
         auto pendingRead = RunOnExecutor(
@@ -1884,7 +1884,7 @@ Y_UNIT_TEST_SUITE(TSessionsWithDirectSessionTransport)
             EConnectionType::DDisk,
             ddisks[0]);
 
-        const auto range = TBlockRange64::WithLength(0, 1);
+        const auto range = TBlockRange16::WithLength(0, 1);
         TString buffer(DefaultBlockSize, 'r');
 
         auto pendingRead = RunOnExecutor(

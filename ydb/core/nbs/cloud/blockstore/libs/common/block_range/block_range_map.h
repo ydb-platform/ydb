@@ -19,21 +19,27 @@ namespace NYdb::NBS::NBlockStore {
 // key (ui64) with efficient overlap checking capabilities. It's designed to
 // store and query block ranges and it key, particularly useful for determining
 // if a given range overlaps with any of the stored ranges.
-template <typename TKey, typename TValue, bool UseArenaAllocator = false>
+template <
+    typename TKey,
+    typename TValue,
+    typename TRange = TBlockRange64,
+    bool UseArenaAllocator = false>
 class TBlockRangeMap
 {
 public:
+    using TBlockRange = TRange;
+
     struct TFindItem
     {
         const TKey Key;
-        const TBlockRange64 Range;
+        const TBlockRange Range;
         TValue& Value;
     };
 
     struct TItem
     {
         TKey Key;
-        TBlockRange64 Range;
+        TBlockRange Range;
         TValue Value;
     };
 
@@ -46,10 +52,12 @@ public:
         std::function<EEnumerateContinuation(TFindItem& item)>;
 
 private:
+    friend class TBlockRangeMapAccessor;
+
     struct TItemKey
     {
         TKey Key;
-        TBlockRange64 Range;
+        TBlockRange Range;
 
         bool operator<(const TItemKey& other) const
         {
@@ -89,12 +97,12 @@ public:
 
     // Adds a block range to the collection. Returns false if the key already
     // exists in the collection.
-    bool AddRange(TKey key, TBlockRange64 range, TValue value = {})
+    bool AddRange(TKey key, TBlockRange range, TValue value = {})
     {
         if (RangeByKey.contains(key)) {
             return false;
         }
-        MaxLength = Max(MaxLength, range.Size());
+        MaxLength = Max(MaxLength, static_cast<ui64>(range.Size()));
         auto [it, inserted] = Ranges.emplace(
             TItemKey{.Key = key, .Range = range},
             std::move(value));
@@ -152,7 +160,7 @@ public:
     // A pointer to the item describing the range will be returned. Otherwise,
     // nullptr will be returned.
     [[nodiscard]] std::optional<TFindItem> FindFirstOverlapping(
-        TBlockRange64 other)
+        TBlockRange other)
     {
         std::optional<TFindItem> result = std::nullopt;
 
@@ -168,7 +176,7 @@ public:
     }
 
     // Checks that the other range overlaps with any range in Ranges.
-    [[nodiscard]] bool HasOverlaps(TBlockRange64 other) const
+    [[nodiscard]] bool HasOverlaps(TBlockRange other) const
     {
         // 1. Find the range x which: x.end >= other.start in the list sorted
         //    by end of range + length + key.
@@ -177,7 +185,7 @@ public:
 
         auto left = TItemKey{
             .Key = {},
-            .Range = TBlockRange64::MakeClosedInterval(0, other.Start)};
+            .Range = TBlockRange::MakeClosedInterval(0, other.Start)};
         const ui64 safeRight = (Max<ui64>() - MaxLength) > other.End
                                    ? other.End + MaxLength
                                    : Max<ui64>();
@@ -194,7 +202,7 @@ public:
     }
 
     // Enumerate all overlapped ranges.
-    void EnumerateOverlapping(TBlockRange64 other, TEnumerateFunc f)
+    void EnumerateOverlapping(TBlockRange other, TEnumerateFunc f)
     {
         // 1. Find the range x which: x.end >= other.start in the list sorted
         //    by end of range + length + key.
@@ -203,7 +211,7 @@ public:
 
         auto left = TItemKey{
             .Key = {},
-            .Range = TBlockRange64::MakeClosedInterval(0, other.Start)};
+            .Range = TBlockRange::MakeClosedInterval(0, other.Start)};
         const ui64 safeRight = (Max<ui64>() - MaxLength) > other.End
                                    ? other.End + MaxLength
                                    : Max<ui64>();

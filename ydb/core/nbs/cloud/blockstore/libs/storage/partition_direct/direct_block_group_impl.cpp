@@ -73,9 +73,13 @@ TListPBufferResponse MakeListPBufferResponse(
             .Generation = segment.GetGeneration(),
             .Lsn = segment.GetLsn()};
         ui32 vChunkIndex = segment.GetSelector().GetVChunkIndex();
-        auto range = TBlockRange64::WithLength(
-            segment.GetSelector().GetOffsetInBytes() / blockSize,
-            segment.GetSelector().GetSize() / blockSize);
+        const ui64 rangeStart =
+            segment.GetSelector().GetOffsetInBytes() / blockSize;
+        const ui64 rangeSize = segment.GetSelector().GetSize() / blockSize;
+        Y_ABORT_UNLESS(rangeSize);
+        const auto range = TBlockRange16::WithLength(
+            IntegerCast<ui16>(rangeStart),
+            IntegerCast<ui16>(rangeSize));
         result.Meta.push_back(
             {.VChunkIndex = vChunkIndex,
              .PBufferKey = pBufferKey,
@@ -291,7 +295,7 @@ NThreading::TFuture<TDBGReadBlocksResponse>
 TDirectBlockGroup::ReadBlocksFromDDisk(
     ui32 vChunkIndex,
     THostIndex hostIndex,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -419,7 +423,7 @@ TDirectBlockGroup::ReadBlocksFromPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
     TPBufferKey pBufferKey,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -493,7 +497,7 @@ NThreading::TFuture<TDBGWriteBlocksResponse>
 TDirectBlockGroup::WriteBlocksToDDisk(
     ui32 vChunkIndex,
     THostIndex hostIndex,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -621,7 +625,7 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
     TPBufferKey pBufferKey,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -698,7 +702,7 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
     THostIndex coordinatorHostIndex,
     THostMask hostIndexes,
     TPBufferKey pBufferKey,
-    TBlockRange64 range,
+    TBlockRange16 range,
     TDuration replyTimeout,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId,

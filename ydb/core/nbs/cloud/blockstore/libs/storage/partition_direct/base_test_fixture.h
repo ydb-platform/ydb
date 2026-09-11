@@ -72,7 +72,7 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
         VChunkBlockCount);
 
     THostIndex ExpectedHost = 0;
-    TBlockRange64 ExpectedRange;
+    TBlockRange16 ExpectedRange;
     TString RangeData;
 
     TMutex PromisesGuard;

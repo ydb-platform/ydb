@@ -101,6 +101,26 @@ void TestOverlaps(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TBlockRangeMapAccessor
+{
+public:
+    template <typename T>
+    static auto GetItemKey(const T& t)
+    {
+        Y_UNUSED(t);
+
+        return typename T::TItemKey{};
+    }
+
+    template <typename T>
+    static auto GetRangeIt(const T& t) -> typename T::TRangeIt*
+    {
+        Y_UNUSED(t);
+        return nullptr;
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
 Y_UNIT_TEST_SUITE(TBlockRangeMapTest)
 {
     Y_UNIT_TEST(Empty)
@@ -441,7 +461,44 @@ Y_UNIT_TEST_SUITE(TBlockRangeMapTest)
     Y_UNIT_TEST(ConstructWithArena)
     {
         TArenaAllocatorPool pool(CreateArenaAllocator());
-        TBlockRangeMap<ui64, TString, true> map(&pool);
+        TBlockRangeMap<ui64, TString, TBlockRange16, true> map(&pool);
+    }
+
+    template <typename TKey, typename TRange, typename TValue>
+    void DoCheckSize()
+    {
+        TSet<size_t> blockMarks = {1, 10, 100, 1000, 10000, 100000, 1000000};
+
+        TArenaAllocatorPool pool(CreateArenaAllocator());
+        using TRangeMap = TBlockRangeMap<TKey, TValue, TRange, true>;
+        TRangeMap map(&pool);
+
+        Cout << "TKey: " << typeid(TRange).name() << Endl;
+        Cout << "TKey: " << sizeof(TKey) << Endl;
+        Cout << "TRange: " << sizeof(TRange) << Endl;
+        Cout << "TValue: " << sizeof(TValue) << Endl;
+        auto itemKey = TBlockRangeMapAccessor::GetItemKey(map);
+        Cout << "TRangeMap::TItemKey: " << sizeof(itemKey) << Endl;
+        auto* rangeIt = TBlockRangeMapAccessor::GetRangeIt(map);
+        Cout << "TRangeMap::TRangeIt: " << sizeof(*rangeIt) << Endl;
+
+        for (size_t i = 0, maxCount = *blockMarks.rbegin(); i < maxCount; ++i) {
+            map.AddRange(i, TRange::MakeOneBlock(i % 32768), TString());
+            const size_t count = i + 1;
+            if (blockMarks.contains(count)) {
+                const double averageMemPerItem =
+                    static_cast<double>(pool.GetUsedSize()) / count;
+
+                Cout << count << ": " << averageMemPerItem << Endl;
+            }
+        }
+    }
+
+    Y_UNIT_TEST(CheckSize)
+    {
+        DoCheckSize<ui64, TBlockRange16, TString>();
+        DoCheckSize<ui64, TBlockRange32, TString>();
+        DoCheckSize<ui64, TBlockRange64, TString>();
     }
 }
 

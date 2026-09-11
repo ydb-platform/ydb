@@ -71,23 +71,23 @@ public:
 
     void RestorePBuffer(
         TPBufferKey pBufferKey,
-        TBlockRange64 range,
+        TBlockRange16 range,
         THostIndex host);
 
     // MakeReadHint can work with multiple locations and returns multiple
     // RangeHints
-    [[nodiscard]] TReadHint MakeReadHint(TBlockRange64 range);
+    [[nodiscard]] TReadHint MakeReadHint(TBlockRange16 range);
     [[nodiscard]] TFlushHints MakeFlushHint(size_t batchSize);
     [[nodiscard]] TEraseHints MakeEraseHint(size_t batchSize);
     [[nodiscard]] TEraseHints MakeEraseBelatedHint();
 
     // Registers a write as pending (lsn generated, data not in any PBuffer
     // yet) so that the cleanup bound covers it from the moment of generation.
-    void RegisterInflightWrite(TPBufferKey pBufferKey, TBlockRange64 range);
+    void RegisterInflightWrite(TPBufferKey pBufferKey, TBlockRange16 range);
 
     void WriteFinished(
         TPBufferKey pBufferKey,
-        TBlockRange64 range,
+        TBlockRange16 range,
         THostMask requested,
         THostMask confirmed);
     void FlushFinished(
@@ -108,11 +108,11 @@ public:
     // Returns the first "fresh" range to be synced with data from another
     // replicas. Nullopt means that the disk is completely full of data. And you
     // can read it from anywhere.
-    [[nodiscard]] std::optional<TBlockRange64> GetFreshRange(
+    [[nodiscard]] std::optional<TBlockRange16> GetFreshRange(
         THostIndex host) const;
     // See TSyncHint for details.
     // The BeginRangeSync and EndRangeSync calls must be paired.
-    TSyncHint BeginRangeSync(THostIndex host, TBlockRange64 range);
+    TSyncHint BeginRangeSync(THostIndex host, TBlockRange16 range);
     // Should be called when the range synchronization is complete or failed.
     void EndRangeSync(ui64 syncId, bool success);
     void ClearRangeSyncs(THostIndex host);
@@ -136,7 +136,7 @@ public:
     void LockPBuffer(TPBufferKey pBufferKey) override;
     void UnlockPBuffer(TPBufferKey pBufferKey) override;
     TLockRangeHandle LockDDiskRange(
-        TBlockRange64 range,
+        TBlockRange16 range,
         THostMask mask) override;
     void UnLockDDiskRange(TLockRangeHandle handle) override;
 
@@ -187,9 +187,12 @@ public:
 
 private:
     using TPBufferKeySet = TArenaSet<TPBufferKey>;
-    using TInflightMap = TBlockRangeMap<TPBufferKey, TInflightInfo, true>;
-    using TInflightDDiskReadsMap =
-        TBlockRangeMap<ILockableRanges::TLockRangeHandle, THostMask>;
+    using TInflightMap =
+        TBlockRangeMap<TPBufferKey, TInflightInfo, TBlockRange16, true>;
+    using TInflightDDiskReadsMap = TBlockRangeMap<
+        ILockableRanges::TLockRangeHandle,
+        THostMask,
+        TBlockRange16>;
 
     struct TInfoEraseBelated
     {
@@ -208,33 +211,34 @@ private:
             NThreading::NewPromise<void>();
     };
 
-    using TInflightDDiskSyncMap = TBlockRangeMap<ui64, TInflightDDiskSync>;
+    using TInflightDDiskSyncMap =
+        TBlockRangeMap<ui64, TInflightDDiskSync, TBlockRange16>;
 
     void ResizeHosts(size_t newHostCount);
 
     [[nodiscard]] THostMask FilterLocations(
         THostMask mask,
-        TBlockRange64 range) const;
+        TBlockRange16 range) const;
 
     // Create single readRangeHint for specified parameters
     [[nodiscard]] TReadRangeHint MakeReadRangeHint(
         THostMask mask,
         TPBufferKey pBufferKey,
-        TBlockRange64 range,
-        ui64 offsetBlocks);
+        TBlockRange16 range,
+        ui16 offsetBlocks);
 
     void AddToAheadAndBehindOnFlushCompleted(
         TPBufferKey pBufferKey,
         THostMask ddisks);
 
-    [[nodiscard]] bool HasInflightFlush(THostIndex host, TBlockRange64 range);
+    [[nodiscard]] bool HasInflightFlush(THostIndex host, TBlockRange16 range);
 
     [[nodiscard]] bool HasOlderUnflushedOverlap(
         TPBufferKey pBufferKey,
-        TBlockRange64 range);
+        TBlockRange16 range);
 
     [[nodiscard]] bool CheckEraseAbility(
-        TBlockRange64 range,
+        TBlockRange16 range,
         TInflightInfo& inflightInfo);
 
     void RemovePBuffer(TPBufferKey pBufferKey);

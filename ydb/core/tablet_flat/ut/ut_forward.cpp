@@ -1629,12 +1629,16 @@ struct TV2PageEntry {
 };
 
 static TVector<TVector<TV2PageEntry>> DiscoverV2Layout(const NTest::TPartStore& part, const NPage::TBtreeIndexMeta& meta) {
+    UNIT_ASSERT_C(meta.HasRootV2(), "DiscoverV2Layout expects a V2 b-tree with RootV2 byte-offset location");
+
     TVector<TVector<TV2PageEntry>> layout;
     layout.resize(meta.LevelCount() + 1);
 
     // Root level [0] — use meta.RootV2.Size (logical page size from index meta)
-    auto rootLoc = meta.RootV2;
-    EPage rootType = meta.LevelCount() > 0 ? EPage::BTreeIndexV2 : EPage::DataPage;
+    const auto rootLoc = meta.RootV2;
+    const EPage rootType = (rootLoc.Type != EPage::Undef)
+        ? rootLoc.Type
+        : (meta.LevelCount() > 0 ? EPage::BTreeIndexV2 : EPage::DataPage);
     auto* rootData = part.Store->GetPage(0, rootLoc.Offset);
     UNIT_ASSERT(rootData);
     layout[0].push_back({rootLoc.Offset, rootType, rootLoc.Size});

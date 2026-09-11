@@ -1135,9 +1135,7 @@ struct TPackedTupleOutputBase : NNonCopyable::TMoveOnly {
                            const TVector<TType*>& outputItemTypes)
         : Renames_(renames)
         , Converters_(converters)
-        , VariableRenames_(CollectVariableRenames(*renames, converters))
         , MaxRows_(CalcMaxOutputRows(outputItemTypes))
-        , MaxVariableBytes_(CalcMaxVariableBytes(*renames, converters))
         , MaxPackedBytes_(CalcMaxPackedBytes(converters))
     {}
 
@@ -1155,7 +1153,7 @@ struct TPackedTupleOutputBase : NNonCopyable::TMoveOnly {
     }
 
     bool IsFull() const {
-        return SizeTuples() >= MaxRows_ || VariableBytes_ >= MaxVariableBytes_ || PackedBytes() >= MaxPackedBytes_;
+        return SizeTuples() >= MaxRows_ || PackedBytes() >= MaxPackedBytes_;
     }
 
     auto MakeConsumeFn() {
@@ -1163,7 +1161,6 @@ struct TPackedTupleOutputBase : NNonCopyable::TMoveOnly {
             TPackedTupleOutputBase& Self;
 
             void operator()(TSides<TSingleTuple> tuples) {
-                Self.AddVariableBytes(tuples);
                 for (ESide side : EachSide) {
                     Self.Output_.SelectSide(side).AppendTuple(tuples.SelectSide(side),
                                                               Self.Converters_.SelectSide(side)->GetTupleLayout());
@@ -1179,7 +1176,6 @@ struct TPackedTupleOutputBase : NNonCopyable::TMoveOnly {
                     row.SelectSide(Join.NullSupplying()) = null;
                     (*this)(row);
                 } else if constexpr (SemiOrOnlyJoin(Join.Kind)) {
-                    Self.AddVariableBytes(tuple);
                     Self.Output_.SelectSide(Join.Preserved)
                         .AppendTuple(tuple, Self.Converters_.SelectSide(Join.Preserved)->GetTupleLayout());
                 }
@@ -1189,49 +1185,12 @@ struct TPackedTupleOutputBase : NNonCopyable::TMoveOnly {
     }
 
 protected:
-    static TDqRenames<ESide> CollectVariableRenames(const TDqRenames<ESide>& renames,
-                                                    TSides<Converter*> converters) {
-        TDqRenames<ESide> result;
-        for (auto rename : renames) {
-            if (converters.SelectSide(rename.Side)->GetVariableColumnsCount(rename.Index)) {
-                result.push_back(rename);
-            }
-        }
-        return result;
-    }
-
-    static i64 CalcMaxVariableBytes(const TDqRenames<ESide>& renames, TSides<Converter*> converters) {
-        i64 variableColumns = 0;
-        for (auto rename : renames) {
-            variableColumns += converters.SelectSide(rename.Side)->GetVariableColumnsCount(rename.Index);
-        }
-        return variableColumns ? static_cast<i64>(MaxBlockSizeInBytes) * variableColumns
-                               : std::numeric_limits<i64>::max();
-    }
-
     static i64 CalcMaxPackedBytes(TSides<Converter*> converters) {
         i64 columns = 0;
         for (ESide side : EachSide) {
-            columns += std::ssize(converters.SelectSide(side)->GetTupleLayout()->OrigColumns) + 1;
+            columns += std::ssize(converters.SelectSide(side)->GetTupleLayout()->OrigColumns);
         }
-        return static_cast<i64>(MaxBlockSizeInBytes) * columns;
-    }
-
-    void AddVariableBytes(TSides<TSingleTuple> tuples) {
-        for (auto rename : VariableRenames_) {
-            VariableBytes_ +=
-                Converters_.SelectSide(rename.Side)->GetVariableDataSize(tuples.SelectSide(rename.Side), rename.Index);
-        }
-    }
-
-    void AddVariableBytes(TSingleTuple tuple) {
-        for (auto rename : VariableRenames_) {
-            VariableBytes_ += Converters_.SelectSide(rename.Side)->GetVariableDataSize(tuple, rename.Index);
-        }
-    }
-
-    void ResetBatchSize() {
-        VariableBytes_ = 0;
+        return static_cast<i64>(MaxBlockSizeInBytes) * std::max<i64>(columns, 1);
     }
 
     void AssertSizeIsSane() const {
@@ -1247,11 +1206,8 @@ protected:
 
     const TDqRenames<ESide>* Renames_;
     TSides<Converter*> Converters_;
-    const TDqRenames<ESide> VariableRenames_;
     const i64 MaxRows_;
-    const i64 MaxVariableBytes_;
     const i64 MaxPackedBytes_;
-    i64 VariableBytes_ = 0;
     TSides<TPackResult> Output_;
     BuildNullIfNeeded Nulls_;
 };

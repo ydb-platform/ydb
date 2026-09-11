@@ -25,8 +25,6 @@ public:
     virtual void Unpack(const TPackResult& packed, TVector<arrow::Datum>& columns) = 0;
     // virtual void UnpackApply(const TPackResult& packed, std::function<void(const char*)>);
     virtual const NPackedTuple::TTupleLayout* GetTupleLayout() const = 0;
-    virtual ui32 GetVariableColumnsCount(ui32 columnIndex) const = 0;
-    virtual ui64 GetVariableDataSize(TSingleTuple tuple, ui32 columnIndex) const = 0;
 };
 
 IBlockLayoutConverter::TPtr MakeBlockLayoutConverter(

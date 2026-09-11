@@ -173,7 +173,6 @@ struct TRenamesPackedTupleOutput : TPackedTupleOutputBase<Join, IBlockLayoutConv
         TFlushResult res;
         res.Rows = this->SizeTuples();
         res.Columns = FlushAndApplyRenames();
-        this->ResetBatchSize();
         return res;
     }
 

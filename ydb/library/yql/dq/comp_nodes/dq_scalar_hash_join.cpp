@@ -172,7 +172,6 @@ struct TRenamesScalarOutput : TPackedTupleOutputBase<Join, IScalarLayoutConverte
             }
         }
 
-        this->ResetBatchSize();
         return res;
     }
 

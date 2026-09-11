@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/provider/rewrite_io_utils.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
@@ -230,9 +231,9 @@ std::optional<TCreateTableAsResult> RewriteCreateTableAs(
     }
 
     auto primaryKey = create->Child(4)->Child(2)->Child(1);
-    THashSet<TStringBuf> primariKeyColumns;
+    TVector<TStringBuf> primaryKeyColumns;
     primaryKey->ForEachChild([&](const auto& child) {
-        primariKeyColumns.insert(child.Content());
+        primaryKeyColumns.push_back(child.Content());
     });
 
     std::vector<NYql::TExprNodePtr> columnNodes;
@@ -309,6 +310,33 @@ std::optional<TCreateTableAsResult> RewriteCreateTableAs(
         exprCtx.NewList(pos, {
             exprCtx.NewAtom(pos, "AllowInconsistentWrites"),
         }));
+
+    const bool enableCsWriteAffinity = sessionCtx->ConfigPtr()->GetEnableCsWriteAffinity();
+    if (IsOlapCreateTableAs(root, exprCtx) && enableCsWriteAffinity) {
+        NYql::TExprNode::TListType partitionColumnsList;
+        if (settings.PartitionBy.IsValid()) {
+            for (const auto& col : settings.PartitionBy.Cast()) {
+                partitionColumnsList.push_back(exprCtx.NewAtom(pos, col.Value()));
+            }
+        } else if (!primaryKeyColumns.empty()) {
+            for (const auto& col : primaryKeyColumns) {
+                partitionColumnsList.push_back(exprCtx.NewAtom(pos, TString(col)));
+            }
+        }
+
+        if (!partitionColumnsList.empty()) {
+            insertSettings.push_back(
+                exprCtx.NewList(pos, {
+                    exprCtx.NewAtom(pos, "CtasShardingColumns"),
+                    exprCtx.NewList(pos, std::move(partitionColumnsList)),
+                }));
+        } else {
+            exprCtx.AddError(NYql::TIssue(
+                exprCtx.GetPosition(pos),
+                "CTAS to ColumnShard table requires partition key"));
+            return std::nullopt;
+        }
+    }
 
     const auto insert = exprCtx.NewCallable(pos, "Write!", {
         topLevelRead == nullptr ? exprCtx.NewWorld(pos) : exprCtx.NewCallable(pos, "Left!", {topLevelRead.Get()}),

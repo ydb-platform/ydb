@@ -263,6 +263,7 @@ struct TShardedWriteControllerSettings {
     i64 MemoryLimitTotal = 0;
     i64 ColumnShardMaxOperationBytes = 0;
     bool Inconsistent = false;
+    std::optional<THashSet<ui64>> TargetShardIds;
 };
 
 IShardedWriteControllerPtr CreateShardedWriteController(

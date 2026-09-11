@@ -216,6 +216,35 @@ protected:
         WAIT_SHARDS,
     };
 
+    // CsWriteAffinity: collect shard IDs from MODE_FILL sinks for CTAS write affinity.
+    // The target column table's shards are NOT automatically added to shardIds by the
+    // scan path (because they are sinks, not scan sources). We add them here so they get
+    // resolved to nodes via the shard resolver, enabling per-shard task creation in
+    // CountComputeTasks and ColumnShardHashV1 shuffle routing.
+    static void CollectFillSinkShards(
+            const NKqpProto::TKqpPhyStage& stage,
+            const TStageInfo& stageInfo,
+            TSet<ui64>& shardIds)
+    {
+        for (const auto& sink : stage.GetSinks()) {
+            if (sink.HasInternalSink()
+                    && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                NKikimrKqp::TKqpTableSinkSettings sinkSettings;
+                if (sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings)
+                        && sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
+                    // Unified shard source: same priority (ColumnTableInfoPtr first,
+                    // ShardKey fallback) and order as CountComputeTasks,
+                    // BuildInternalSinks and BuildColumnShardHashV1ForWriteAffinity,
+                    // so the resolved shard set always covers the shards used for
+                    // per-shard task creation and hash routing.
+                    for (const auto& shardId : GetCsWriteAffinityShardIds(stageInfo.Meta)) {
+                        shardIds.insert(shardId);
+                    }
+                }
+            }
+        }
+    }
+
     [[nodiscard]]
     ETableResolveStatus HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         auto& reply = *ev->Get();
@@ -314,10 +343,25 @@ protected:
                         Counters->Counters->FullScansExecuted->Inc();
                     }
                 }
-            } else {
-                // TODO: make sure we don't miss any shards
-                // Y_DEBUG_ABORT_UNLESS(!stageInfo.Meta.IsDatashard() && !stageInfo.Meta.IsOlap());
-                // Y_DEBUG_ABORT_UNLESS(!stageInfo.Meta.ShardKey);
+
+            }
+
+            // CsWriteAffinity: For CTAS (MODE_FILL) sink stages with ColumnShardHashV1
+            // HashShuffle input, the target column table's shards are NOT automatically
+            // added to shardIds (because they are sinks, not scan sources). We add them
+            // here so they get resolved to nodes via the shard resolver, enabling
+            // per-shard task creation in CountComputeTasks and ColumnShardHashV1 shuffle
+            // routing.
+            bool hasColumnShardHashV1Input = false;
+            for (const auto& input : stage.GetInputs()) {
+                if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kHashShuffle
+                        && input.GetHashShuffle().GetHashKindCase() == NKqpProto::TKqpPhyCnHashShuffle::kColumnShardHashV1) {
+                    hasColumnShardHashV1Input = true;
+                    break;
+                }
+            }
+            if (hasColumnShardHashV1Input) {
+                CollectFillSinkShards(stage, stageInfo, shardIds);
             }
         }
 

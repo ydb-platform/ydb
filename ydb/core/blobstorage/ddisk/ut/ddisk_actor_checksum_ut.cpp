@@ -590,6 +590,14 @@ TRope MakeAlignedRope(const TString& data) {
     return TRope(std::move(buf));
 }
 
+TString GetRegistrationToken(TTestContext& ctx, const TActorId& serviceId, const NDDisk::TQueryCredentials& creds) {
+    auto result = SendToDDiskAndWait<NDDisk::TEvGetPersistentBufferRegistrationTokenResult>(ctx, serviceId,
+        new NDDisk::TEvGetPersistentBufferRegistrationToken(creds));
+    AssertStatus(result, TReplyStatus::OK);
+    UNIT_ASSERT(!result->Get()->Record.GetToken().empty());
+    return result->Get()->Record.GetToken();
+}
+
 NDDisk::TQueryCredentials Connect(TTestContext& ctx, const TActorId& serviceId, ui64 tabletId, ui32 generation) {
     const bool isPersistentBuffer = serviceId.IsService() && serviceId.ServiceId().StartsWith("NPB_");
     NDDisk::TQueryCredentials creds = isPersistentBuffer
@@ -602,7 +610,7 @@ NDDisk::TQueryCredentials Connect(TTestContext& ctx, const TActorId& serviceId, 
     creds.ConnectionToken.emplace(connectResult->Get()->Record.GetConnectionToken());
 
     if (isPersistentBuffer) {
-        SendToDDisk(ctx, serviceId, new NDDisk::TEvRegisterPersistentBuffer(creds, ctx.Runtime.GetClock()));
+        SendToDDisk(ctx, serviceId, new NDDisk::TEvRegisterPersistentBuffer(creds, GetRegistrationToken(ctx, serviceId, creds)));
         auto edges = ctx.PDiskEdges;
         edges.insert(ctx.Edge);
         for (;;) {

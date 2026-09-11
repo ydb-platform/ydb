@@ -273,6 +273,15 @@ namespace NKikimr::NDDisk {
                 EvCompleteStop,
                 EvRetryIODelayed,
                 EvProcessPersistentBufferRemoval,
+                EvExpirePersistentBufferRegistrationToken,
+            };
+
+            struct TEvExpirePersistentBufferRegistrationToken
+                : TEventLocal<TEvExpirePersistentBufferRegistrationToken, EvExpirePersistentBufferRegistrationToken> {
+                TString Token;
+                explicit TEvExpirePersistentBufferRegistrationToken(TString token)
+                    : Token(std::move(token))
+                {}
             };
 
             struct TEvProcessPersistentBufferRemoval : TEventLocal<TEvProcessPersistentBufferRemoval, EvProcessPersistentBufferRemoval> {
@@ -1219,6 +1228,15 @@ namespace NKikimr::NDDisk {
         void ReleasePersistentBufferBarrierSector(TPersistentBufferSectorInfo sector);
         void CompletePersistentBufferBarrierWrite(TPersistentBufferDiskOperationInFlight& inflight);
         NKikimrBlobStorage::NDDisk::TReplyStatus::E CheckPersistentBufferOwnership(const TQueryCredentials& creds) const;
+        struct TPersistentBufferRegistrationToken {
+            TMonotonic IssuedAt;
+            TPersistentBufferTabletKey Key;
+            ui32 Generation;
+        };
+        // Actor-local only: tokens must never survive a persistent buffer restart.
+        absl::flat_hash_map<TString, TPersistentBufferRegistrationToken> PersistentBufferRegistrationTokens;
+        void Handle(TEvGetPersistentBufferRegistrationToken::TPtr ev);
+        void Handle(TEvPrivate::TEvExpirePersistentBufferRegistrationToken::TPtr ev);
         void Handle(TEvRegisterPersistentBuffer::TPtr ev);
         void Handle(TEvUnregisterPersistentBuffer::TPtr ev);
         void Handle(TEvPrivate::TEvProcessPersistentBufferRemoval::TPtr ev);

@@ -1,6 +1,8 @@
 #include "ddisk_actor.h"
 #include "direct_io_op.h"
 
+#include <util/generic/guid.h>
+
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/util/hp_timer_helpers.h>
@@ -1884,6 +1886,33 @@ namespace NKikimr::NDDisk {
         return TStatus::OK;
     }
 
+    void TDDiskActor::Handle(TEvGetPersistentBufferRegistrationToken::TPtr ev) {
+        using TStatus = NKikimrBlobStorage::NDDisk::TReplyStatus;
+        if (!CheckQuery(*ev, nullptr)) {
+            return;
+        }
+        const TQueryCredentials creds(ev->Get()->Record.GetCredentials());
+        if (!creds.TabletId || creds.DirectBlockGroupIndex > Max<ui8>()) {
+            SendReply(*ev, std::make_unique<TEvGetPersistentBufferRegistrationTokenResult>(
+                TStatus::INCORRECT_REQUEST, "invalid persistent buffer registration"));
+            return;
+        }
+        const auto token = CreateGuidAsString();
+        PersistentBufferRegistrationTokens.emplace(token, TPersistentBufferRegistrationToken{
+            TActivationContext::Monotonic(),
+            {creds.TabletId, static_cast<ui8>(creds.DirectBlockGroupIndex)},
+            creds.Generation});
+        Schedule(TDuration::MilliSeconds(PersistentBufferFormat.RegistrationTimeoutMilliseconds),
+            new TEvPrivate::TEvExpirePersistentBufferRegistrationToken(token));
+        auto reply = std::make_unique<TEvGetPersistentBufferRegistrationTokenResult>(TStatus::OK);
+        reply->Record.SetToken(token);
+        SendReply(*ev, std::move(reply));
+    }
+
+    void TDDiskActor::Handle(TEvPrivate::TEvExpirePersistentBufferRegistrationToken::TPtr ev) {
+        PersistentBufferRegistrationTokens.erase(ev->Get()->Token);
+    }
+
     void TDDiskActor::Handle(TEvRegisterPersistentBuffer::TPtr ev) {
         using TStatus = NKikimrBlobStorage::NDDisk::TReplyStatus;
         if (!CheckQuery(*ev, nullptr)) {
@@ -1891,15 +1920,20 @@ namespace NKikimr::NDDisk {
         }
         const auto& record = ev->Get()->Record;
         const TQueryCredentials creds(record.GetCredentials());
-        const auto now = TActivationContext::Now();
-        const auto timestamp = TInstant::MicroSeconds(record.GetTimestampMicroseconds());
-        // NOTE: timestamp is the sender's wall-clock time, so this anti-replay check is sensitive
-        // to cross-node clock skew: if the client node's clock is ahead of (or behind) this node's
-        // by more than RegistrationTimeoutMilliseconds, every registration attempt fails with
-        // OUTDATED. The anti-replay property only requires "recent, not reused" - callers relying
-        // on this must keep client/DDisk clocks synchronized within the configured timeout window.
-        if (timestamp > now || now - timestamp > TDuration::MilliSeconds(PersistentBufferFormat.RegistrationTimeoutMilliseconds)) {
-            SendReply(*ev, std::make_unique<TEvRegisterPersistentBufferResult>(TStatus::OUTDATED, "registration timestamp expired or is in the future"));
+        const auto tokenIt = PersistentBufferRegistrationTokens.find(record.GetToken());
+        if (tokenIt == PersistentBufferRegistrationTokens.end()
+                || TActivationContext::Monotonic() - tokenIt->second.IssuedAt
+                    >= TDuration::MilliSeconds(PersistentBufferFormat.RegistrationTimeoutMilliseconds)) {
+            PersistentBufferRegistrationTokens.erase(record.GetToken());
+            SendReply(*ev, std::make_unique<TEvRegisterPersistentBufferResult>(
+                TStatus::OUTDATED, "registration token is unknown, expired or already used"));
+            return;
+        }
+        const auto& token = tokenIt->second;
+        if (token.Key.TabletId != creds.TabletId || token.Key.DirectBlockGroupIndex != creds.DirectBlockGroupIndex
+                || token.Generation != creds.Generation) {
+            SendReply(*ev, std::make_unique<TEvRegisterPersistentBufferResult>(
+                TStatus::INCORRECT_REQUEST, "registration token belongs to another tablet, generation or DBG"));
             return;
         }
         if (!creds.TabletId || creds.DirectBlockGroupIndex > Max<ui8>()) {
@@ -1915,6 +1949,8 @@ namespace NKikimr::NDDisk {
             }
             return;
         }
+        // Do not consume while queued: readiness replays this request and checks expiry again.
+        PersistentBufferRegistrationTokens.erase(tokenIt);
         const TPersistentBufferTabletKey key{creds.TabletId, static_cast<ui8>(creds.DirectBlockGroupIndex)};
         if (PersistentBufferBarriersManager.HasBarrier(key.TabletId, key.DirectBlockGroupIndex)
                 || PersistentBufferRemovals.contains(key)) {

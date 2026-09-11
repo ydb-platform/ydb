@@ -245,10 +245,24 @@ message TEvWritePersistentBuffer {
     repeated fixed64 Checksums = 5;
 }
 
+// Issues an ephemeral, single-use token bound to the tablet, generation and DBG.
+// Its lifetime is measured only by the persistent buffer's local monotonic clock.
+message TEvGetPersistentBufferRegistrationToken {
+    TRequestCredentials Credentials = 1;
+}
+
+message TEvGetPersistentBufferRegistrationTokenResult {
+    TReplyStatus.E Status = 1;
+    optional string ErrorReason = 2;
+    string Token = 3;
+}
+
 // A durable registration of (TabletId, DirectBlockGroupIndex), independent of connections.
+// Token is consumed when the ready buffer processes the registration. Queue overload
+// does not consume it; retries must reuse the token without extending its lifetime.
 message TEvRegisterPersistentBuffer {
     TRequestCredentials Credentials = 1;
-    uint64 TimestampMicroseconds = 2; // wall-clock time at the sender; do not refresh on retries
+    string Token = 2;
 }
 
 message TEvRegisterPersistentBufferResult {

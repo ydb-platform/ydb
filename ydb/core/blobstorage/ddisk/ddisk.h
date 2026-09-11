@@ -130,6 +130,8 @@ namespace NKikimr::NDDisk {
             EvPersistentBufferInfo,
             EvDeleteTabletChunks,
             EvDeleteTabletChunksResult,
+            EvGetPersistentBufferRegistrationToken,
+            EvGetPersistentBufferRegistrationTokenResult,
             EvRegisterPersistentBuffer,
             EvRegisterPersistentBufferResult,
             EvUnregisterPersistentBuffer,
@@ -541,12 +543,33 @@ struct TPersistentBufferFormat {
     struct TEvRegisterPersistentBufferResult;
     struct TEvUnregisterPersistentBufferResult;
 
+    struct TEvGetPersistentBufferRegistrationTokenResult;
+
+    DECLARE_DDISK_EVENT(GetPersistentBufferRegistrationToken) {
+        using TResult = TEvGetPersistentBufferRegistrationTokenResult;
+        TEvGetPersistentBufferRegistrationToken() = default;
+        explicit TEvGetPersistentBufferRegistrationToken(const TQueryCredentials& creds) {
+            creds.SerializeForRequest(Record.MutableCredentials());
+        }
+    };
+
+    DECLARE_DDISK_EVENT(GetPersistentBufferRegistrationTokenResult) {
+        TEvGetPersistentBufferRegistrationTokenResult() = default;
+        TEvGetPersistentBufferRegistrationTokenResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+                const std::optional<TString>& errorReason = std::nullopt) {
+            Record.SetStatus(status);
+            if (errorReason) {
+                Record.SetErrorReason(*errorReason);
+            }
+        }
+    };
+
     DECLARE_DDISK_EVENT(RegisterPersistentBuffer) {
         using TResult = TEvRegisterPersistentBufferResult;
         TEvRegisterPersistentBuffer() = default;
-        TEvRegisterPersistentBuffer(const TQueryCredentials& creds, TInstant timestamp) {
+        TEvRegisterPersistentBuffer(const TQueryCredentials& creds, const TString& token) {
             creds.SerializeForRequest(Record.MutableCredentials());
-            Record.SetTimestampMicroseconds(timestamp.MicroSeconds());
+            Record.SetToken(token);
         }
     };
 

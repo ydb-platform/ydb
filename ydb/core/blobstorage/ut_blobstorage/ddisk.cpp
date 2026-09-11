@@ -152,6 +152,14 @@ Y_UNIT_TEST_SUITE(DDisk) {
             return response->Get()->Record;
         }
 
+        TString GetRegistrationToken(const NDDisk::TQueryCredentials& creds) {
+            Env.Runtime->Send(new IEventHandle(PBServiceId, Edge,
+                new NDDisk::TEvGetPersistentBufferRegistrationToken(creds)), Edge.NodeId());
+            auto result = Env.WaitForEdgeActorEvent<NDDisk::TEvGetPersistentBufferRegistrationTokenResult>(Edge, false);
+            UNIT_ASSERT(result->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+            return result->Get()->Record.GetToken();
+        }
+
         void GreetDDisks() {
             Creds.TabletId = 1;
             Creds.Generation = 1;
@@ -173,7 +181,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 PBCreds[i].DDiskInstanceGuid = res->Get()->Record.GetDDiskInstanceGuid();
                 PBCreds[i].ConnectionToken.emplace(res->Get()->Record.GetConnectionToken());
                 Env.Runtime->Send(new IEventHandle(PBServiceId, Edge,
-                    new NDDisk::TEvRegisterPersistentBuffer(PBCreds[i], Env.Runtime->GetClock())), Edge.NodeId());
+                    new NDDisk::TEvRegisterPersistentBuffer(PBCreds[i], GetRegistrationToken(PBCreds[i]))), Edge.NodeId());
                 auto registration = Env.WaitForEdgeActorEvent<NDDisk::TEvRegisterPersistentBufferResult>(Edge, false);
                 const auto status = registration->Get()->Record.GetStatus();
                 UNIT_ASSERT_C(status == NKikimrBlobStorage::NDDisk::TReplyStatus::OK
@@ -866,6 +874,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
         f.ChangeTestingNode(groups.begin()->GetNodes(0));
         f.WritePB(0, 4, 0);
         f.WritePB(0, 4, 1);
+        const auto token = f.GetRegistrationToken(f.PBCreds[0]);
         const auto timestamp = f.Env.Runtime->GetClock();
         f.Env.Runtime->Send(new IEventHandle(f.PBServiceId, f.Edge,
             new NDDisk::TEvUnregisterPersistentBuffer(f.PBCreds[0])), f.Edge.NodeId());
@@ -877,7 +886,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
         // A delayed registration from before retirement must not recreate it.
         f.Env.Runtime->Send(new IEventHandle(f.PBServiceId, f.Edge,
-            new NDDisk::TEvRegisterPersistentBuffer(f.PBCreds[0], timestamp)), f.Edge.NodeId());
+            new NDDisk::TEvRegisterPersistentBuffer(f.PBCreds[0], token)), f.Edge.NodeId());
         auto stale = f.Env.WaitForEdgeActorEvent<NDDisk::TEvRegisterPersistentBufferResult>(f.Edge, false);
         UNIT_ASSERT(stale->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED);
 

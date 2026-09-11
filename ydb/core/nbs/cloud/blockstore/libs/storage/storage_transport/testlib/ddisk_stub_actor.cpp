@@ -205,6 +205,17 @@ void TDDiskStubActor::HandleConnect(
     ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
 
+void TDDiskStubActor::HandleGetPersistentBufferRegistrationToken(
+    const NDDisk::TEvGetPersistentBufferRegistrationToken::TPtr& ev,
+    const TActorContext& ctx)
+{
+    auto reply =
+        std::make_unique<NDDisk::TEvGetPersistentBufferRegistrationTokenResult>(
+            TReplyStatus::OK);
+    reply->Record.SetToken("stub-registration-token");
+    ctx.Send(ev->Sender, reply.release(), 0, ev->Cookie);
+}
+
 void TDDiskStubActor::HandleRegisterPersistentBuffer(
     const NDDisk::TEvRegisterPersistentBuffer::TPtr& ev,
     const TActorContext& ctx)
@@ -397,6 +408,9 @@ STFUNC(TDDiskStubActor::StateWork)
 {
     switch (ev->GetTypeRewrite()) {
         HFunc(NDDisk::TEvConnect, HandleConnect);
+        HFunc(
+            NDDisk::TEvGetPersistentBufferRegistrationToken,
+            HandleGetPersistentBufferRegistrationToken);
         HFunc(
             NDDisk::TEvRegisterPersistentBuffer,
             HandleRegisterPersistentBuffer);

@@ -10,6 +10,8 @@ namespace NActors {
     // only if we offered a full-target slab and used little of it. Budget-limited produces must
     // not shrink the target (the socket was not given a chance to need more scratch).
     class TScratchTarget {
+        static constexpr size_t Align = 64;
+
         size_t Target = 0;
         size_t MinSize = 0;
         size_t MaxSize = 0;
@@ -37,7 +39,15 @@ namespace NActors {
         }
 
         size_t AllocSize(size_t remainingBudget) const {
-            return Min(Target, Max(MinSize, remainingBudget));
+            size_t n = Min(Target, Max(MinSize, remainingBudget));
+            // ProduceOutputStream 64-aligns the unused tail. A non-aligned slab loses
+            // size % 64 bytes even when nothing was copied (scratchBytesUsed == 0 VERIFY).
+            const size_t up = (n + Align - 1) & ~(Align - 1);
+            if (up <= Target) {
+                return up;
+            }
+            const size_t down = n & ~(Align - 1);
+            return down ? down : MinSize;
         }
 
         void OnProduce(size_t bytesCopied, bool offeredFullTarget) {

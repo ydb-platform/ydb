@@ -16,11 +16,25 @@ Y_UNIT_TEST_SUITE(InterconnectV2IoBuffers) {
         UNIT_ASSERT_VALUES_EQUAL(scratch.GetSize(), MinSize);
         UNIT_ASSERT_VALUES_EQUAL(scratch.AllocSize(MinSize / 2), MinSize);
         UNIT_ASSERT_VALUES_EQUAL(scratch.AllocSize(MaxSize), MinSize);
+        UNIT_ASSERT_VALUES_EQUAL(scratch.AllocSize(5000) % 64, 0);
 
         scratch.OnProduce(MinSize, /*offeredFullTarget=*/ true);
         UNIT_ASSERT_VALUES_EQUAL(scratch.GetSize(), 2 * MinSize);
         UNIT_ASSERT_VALUES_EQUAL(scratch.AllocSize(MaxSize), 2 * MinSize);
         UNIT_ASSERT_VALUES_EQUAL(scratch.AllocSize(MinSize), MinSize);
+        UNIT_ASSERT_VALUES_EQUAL(scratch.AllocSize(5000), 5056);
+        for (size_t remaining = 1; remaining <= 2 * MinSize + 64; ++remaining) {
+            UNIT_ASSERT_VALUES_EQUAL(scratch.AllocSize(remaining) % 64, 0);
+        }
+    }
+
+    Y_UNIT_TEST(ScratchAllocSizeStaysAlignedWhenTargetIsNot) {
+        TScratchTarget scratch(MinSize, MaxSize);
+        scratch.OnProduce(MinSize, /*offeredFullTarget=*/ true);
+        scratch.SetMaxSize(5000);
+        UNIT_ASSERT_VALUES_EQUAL(scratch.GetSize(), 5000);
+        UNIT_ASSERT_VALUES_EQUAL(scratch.AllocSize(MaxSize), 4992);
+        UNIT_ASSERT_VALUES_EQUAL(scratch.AllocSize(MaxSize) % 64, 0);
     }
 
     Y_UNIT_TEST(ScratchBudgetLimitedProduceDoesNotShrink) {

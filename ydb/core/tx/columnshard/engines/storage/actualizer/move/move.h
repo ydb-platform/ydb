@@ -49,8 +49,8 @@ public:
 
     void ActualizePortionInfo(const TPortionDataAccessor& accessor);
 
-    // Called for every reply, errors included: a portion the reply could not resolve stays pending and is asked for again.
-    void OnMetadataRequestAnswered(const std::vector<ui64>& portionIds);
+    // Called for every reply, errors included; clears only portions still tracked under that request, not its successor.
+    void OnMetadataRequestAnswered(const std::vector<ui64>& portionIds, const TInstant requestedAt);
 
 protected:
     // Protected test helpers: unit tests subclass to reach them, production code cannot.

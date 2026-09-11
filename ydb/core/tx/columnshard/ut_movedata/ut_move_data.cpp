@@ -392,12 +392,41 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(requested(start + TDuration::Seconds(1)), TVector<ui64>(), "outstanding requests must not be repeated");
 
         // An answer that could not resolve portion 1 leaves it pending, so it is asked for again.
-        actualizer->OnMetadataRequestAnswered({ 1 });
+        actualizer->OnMetadataRequestAnswered({ 1 }, start);
         UNIT_ASSERT_VALUES_EQUAL(requested(start + TDuration::Seconds(2)), (TVector<ui64>{ 1 }));
 
         // Requests that never got an answer are repeated after the expiry; the fresh request for portion 1 is not.
         const TInstant pastExpiry = start + NOlap::NActualizer::TMoveDataActualizer::MetadataRequestExpiry + TDuration::Seconds(1);
         UNIT_ASSERT_VALUES_EQUAL(requested(pastExpiry), (TVector<ui64>{ 2, 3 }));
+    }
+
+    // Request A expires and B replaces it: a late answer to A must leave B outstanding.
+    Y_UNIT_TEST(LateAnswerToExpiredRequestKeepsItsSuccessor) {
+        const auto pathId = NOlap::TInternalPathId::FromRawValue(1);
+        auto cache = std::make_shared<NOlap::TSchemaObjectsCache>();
+        NOlap::TVersionedIndex versionedIndex;
+        versionedIndex.AddIndex(NOlap::TSnapshot(1, 1), cache->UpsertIndexInfo(NOlap::NTest::MakePortionTestIndexInfo()));
+        const THashMap<ui64, NOlap::TPortionInfo::TPtr> portions = { { 1,
+            NOlap::NTest::MakeTestCompactedPortion(pathId, 1, 10, 19, 10, NOlap::TSnapshot(1, 1), std::nullopt) } };
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TSoftMemoryLimitController>(0);
+        auto actualizer = std::make_shared<TMoveDataActualizerTestable>(THashSet<ui32>{ 100 }, versionedIndex);
+        actualizer->AddToInitialAndPendingForTest(1);
+        auto requestCount = [&](const TInstant now) {
+            return actualizer->BuildMoveDataMetadataRequests(portions, actualizer, now).size();
+        };
+
+        const TInstant first = TInstant::Seconds(1000);
+        const TInstant second = first + NOlap::NActualizer::TMoveDataActualizer::MetadataRequestExpiry + TDuration::Seconds(1);
+        UNIT_ASSERT_VALUES_EQUAL(requestCount(first), 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(requestCount(second), 1, "the unanswered first request must expire");
+
+        actualizer->OnMetadataRequestAnswered({ 1 }, first);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            requestCount(second + TDuration::Seconds(1)), 0, "a late answer to the expired request cleared its successor");
+
+        actualizer->OnMetadataRequestAnswered({ 1 }, second);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            requestCount(second + TDuration::Seconds(2)), 1, "the answered portion is still pending, so it is asked for again");
     }
 }   // Y_UNIT_TEST_SUITE
 

@@ -19,13 +19,14 @@ class TMoveDataActualizationReply: public IMetadataAccessorResultProcessor {
 private:
     std::weak_ptr<TMoveDataActualizer> MoveDataActualizer;
     const std::vector<ui64> PortionIds;
+    const TInstant RequestedAt;
 
     void DoApplyResult(NResourceBroker::NSubscribe::TResourceContainer<TDataAccessorsResult>&& result, TColumnEngineForLogs&) override {
         auto locked = MoveDataActualizer.lock();
         if (!locked) {
             return;
         }
-        locked->OnMetadataRequestAnswered(PortionIds);
+        locked->OnMetadataRequestAnswered(PortionIds, RequestedAt);
         if (result.GetValue().HasErrors()) {
             // Affected portions stay in PendingPortionIds and are re-requested next cycle.
             YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
@@ -41,9 +42,10 @@ private:
     }
 
 public:
-    TMoveDataActualizationReply(const std::shared_ptr<TMoveDataActualizer>& actualizer, std::vector<ui64>&& portionIds)
+    TMoveDataActualizationReply(const std::shared_ptr<TMoveDataActualizer>& actualizer, std::vector<ui64>&& portionIds, const TInstant requestedAt)
         : MoveDataActualizer(actualizer)
         , PortionIds(std::move(portionIds))
+        , RequestedAt(requestedAt)
     {
         AFL_VERIFY(!!actualizer);
     }
@@ -175,9 +177,12 @@ void TMoveDataActualizer::ActualizePortionInfo(const TPortionDataAccessor& acces
     AFL_VERIFY(PortionAddress.emplace(portionId, std::move(address)).second);
 }
 
-void TMoveDataActualizer::OnMetadataRequestAnswered(const std::vector<ui64>& portionIds) {
+void TMoveDataActualizer::OnMetadataRequestAnswered(const std::vector<ui64>& portionIds, const TInstant requestedAt) {
     for (const ui64 portionId : portionIds) {
-        RequestedAt.erase(portionId);
+        // A late answer to an expired request must leave the request that replaced it outstanding.
+        if (const auto* at = RequestedAt.FindPtr(portionId); at && *at == requestedAt) {
+            RequestedAt.erase(portionId);
+        }
     }
 }
 
@@ -207,13 +212,13 @@ std::vector<TCSMetadataRequest> TMoveDataActualizer::BuildMoveDataMetadataReques
         currentPortionIds.emplace_back(portionId);
         RequestedAt[portionId] = now;
         if (currentRequest->PredictAccessorsMemory(it->second->GetSchema(VersionedIndex)) >= batchMemorySoftLimit) {
-            requests.emplace_back(currentRequest, std::make_shared<TMoveDataActualizationReply>(self, std::move(currentPortionIds)));
+            requests.emplace_back(currentRequest, std::make_shared<TMoveDataActualizationReply>(self, std::move(currentPortionIds), now));
             currentRequest.reset();
             currentPortionIds.clear();
         }
     }
     if (currentRequest) {
-        requests.emplace_back(std::move(currentRequest), std::make_shared<TMoveDataActualizationReply>(self, std::move(currentPortionIds)));
+        requests.emplace_back(std::move(currentRequest), std::make_shared<TMoveDataActualizationReply>(self, std::move(currentPortionIds), now));
     }
     return requests;
 }

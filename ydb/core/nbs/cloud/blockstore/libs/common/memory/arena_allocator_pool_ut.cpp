@@ -145,16 +145,19 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorPoolTest)
         TArenaAllocatorPool pool(CreateArenaAllocator());
 
         void* ptr = pool.Allocate(ChunkSize);
+        void* livePtr = pool.Allocate(ChunkSize);
         UNIT_ASSERT(ptr);
+        UNIT_ASSERT(livePtr);
         pool.Deallocate(ptr);
 
         void* ptr2 = pool.Allocate(ChunkSize);
         UNIT_ASSERT_EQUAL(ptr, ptr2);
 
+        pool.Deallocate(livePtr);
         pool.Deallocate(ptr2);
     }
 
-    Y_UNIT_TEST(SlotIsReusedAfterFullRelease)
+    Y_UNIT_TEST(SlotIsReallocatedAfterFullRelease)
     {
         constexpr size_t SlotSize = 4096;
         constexpr size_t ChunkSize = 512;
@@ -167,17 +170,16 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorPoolTest)
         for (size_t i = 0; i < ChunksPerSlot; ++i) {
             ptrs.push_back(pool.Allocate(ChunkSize));
         }
-        const void* slotBase = ptrs[0];
-
         for (void* ptr: ptrs) {
             pool.Deallocate(ptr);
         }
         UNIT_ASSERT_VALUES_EQUAL(0, allocator->AllocatedBlocks());
 
-        // The next allocation should re-acquire a slot and hand out
-        // the same address again.
+        // The next allocation should acquire a new slot. Its address is
+        // determined by the underlying allocator and may differ.
         void* ptr = pool.Allocate(ChunkSize);
-        UNIT_ASSERT_EQUAL(slotBase, ptr);
+        UNIT_ASSERT(ptr);
+        UNIT_ASSERT_VALUES_EQUAL(1, allocator->AllocatedBlocks());
         pool.Deallocate(ptr);
     }
 
@@ -215,9 +217,11 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorPoolTest)
 
         TArenaAllocatorPool pool(CreateArenaAllocator());
 
-        // Allocate, write pattern, free.
+        // Keep another chunk alive so that the slot itself is not released.
         void* ptr1 = pool.Allocate(ChunkSize);
+        void* livePtr = pool.Allocate(ChunkSize);
         UNIT_ASSERT(ptr1);
+        UNIT_ASSERT(livePtr);
         std::memset(ptr1, 0xFF, ChunkSize);
         pool.Deallocate(ptr1);
 
@@ -230,6 +234,7 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorPoolTest)
             UNIT_ASSERT_VALUES_EQUAL(0, static_cast<unsigned char>(data[i]));
         }
 
+        pool.Deallocate(livePtr);
         pool.Deallocate(ptr2);
     }
 

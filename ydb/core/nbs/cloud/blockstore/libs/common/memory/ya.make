@@ -7,7 +7,6 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/nbs/cloud/storage/core/libs/coroutine
     util
 )
 

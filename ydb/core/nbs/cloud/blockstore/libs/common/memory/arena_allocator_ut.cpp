@@ -122,6 +122,8 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorTest)
 
     Y_UNIT_TEST(AllocationIsAligned)
     {
+        constexpr size_t Alignment = 8;
+
         auto allocator = CreateArenaAllocator();
 
         for (size_t size:
@@ -129,7 +131,9 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorTest)
         {
             void* ptr = allocator->Allocate(size);
             UNIT_ASSERT(ptr);
-            UNIT_ASSERT_VALUES_EQUAL(0, reinterpret_cast<uintptr_t>(ptr) % 16);
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                reinterpret_cast<uintptr_t>(ptr) % Alignment);
             allocator->DeAllocate(ptr);
         }
     }
@@ -139,16 +143,19 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorTest)
         auto allocator = CreateArenaAllocator();
 
         void* ptr = allocator->Allocate(1024);
+        void* livePtr = allocator->Allocate(1024);
         UNIT_ASSERT(ptr);
+        UNIT_ASSERT(livePtr);
         allocator->DeAllocate(ptr);
 
         void* ptr2 = allocator->Allocate(1024);
         UNIT_ASSERT_EQUAL(ptr, ptr2);
 
+        allocator->DeAllocate(livePtr);
         allocator->DeAllocate(ptr2);
     }
 
-    Y_UNIT_TEST(BlocksAreReused)
+    Y_UNIT_TEST(ArenaIsReallocatedAfterFullRelease)
     {
         auto allocator = CreateArenaAllocator();
 
@@ -169,8 +176,8 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorTest)
         UNIT_ASSERT_VALUES_EQUAL(0, allocator->AllocatedBlocks());
         UNIT_ASSERT_VALUES_EQUAL(0, allocator->AllocatedSize());
 
-        // After freeing everything the arena should hand out the same
-        // addresses again (the block was returned and re-acquired).
+        // After freeing everything a new arena can be allocated at any
+        // address.
         void* ptr = allocator->Allocate(512);
         UNIT_ASSERT(ptr);
         UNIT_ASSERT_VALUES_EQUAL(512, allocator->AllocatedSize());
@@ -222,9 +229,11 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorTest)
 
         auto allocator = CreateArenaAllocator();
 
-        // Allocate, write non-zero pattern, free.
+        // Keep another slot alive so that the arena itself is not released.
         void* ptr1 = allocator->Allocate(Size);
+        void* livePtr = allocator->Allocate(Size);
         UNIT_ASSERT(ptr1);
+        UNIT_ASSERT(livePtr);
         std::memset(ptr1, 0xFF, Size);
         allocator->DeAllocate(ptr1);
 
@@ -237,6 +246,7 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorTest)
             UNIT_ASSERT_VALUES_EQUAL(0, static_cast<unsigned char>(data[i]));
         }
 
+        allocator->DeAllocate(livePtr);
         allocator->DeAllocate(ptr2);
     }
 
@@ -247,9 +257,12 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorTest)
         auto allocator = CreateArenaAllocator();
 
         for (size_t slotSize: SlotSizes) {
-            // First allocation: write pattern, free.
+            // Keep another slot alive so that the arena itself is not
+            // released.
             void* ptr1 = allocator->Allocate(slotSize);
+            void* livePtr = allocator->Allocate(slotSize);
             UNIT_ASSERT(ptr1);
+            UNIT_ASSERT(livePtr);
             std::memset(ptr1, 0xFF, slotSize);
             allocator->DeAllocate(ptr1);
 
@@ -264,6 +277,7 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorTest)
                     static_cast<unsigned char>(data[i]));
             }
 
+            allocator->DeAllocate(livePtr);
             allocator->DeAllocate(ptr2);
         }
     }

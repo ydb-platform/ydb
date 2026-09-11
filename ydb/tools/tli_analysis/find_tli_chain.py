@@ -174,6 +174,7 @@ def extract_breaker_id(line: str) -> Optional[str]:
 
     return extract_field(line, "breakerQuerySpanId")
 
+
 def extract_breaker_tx_id(line: str) -> Optional[str]:
     """Extract breakerTxSpanId from line."""
 
@@ -205,6 +206,7 @@ def check_query_id_in_line(line: str, query_id: str) -> bool:
     if id and id.strip() == query_id:
         return True
     return False
+
 
 def check_victim_query_id_in_line(line: str, query_id: str) -> bool:
     """Check if query_id appears in line."""

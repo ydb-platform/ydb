@@ -365,11 +365,6 @@ void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& del
     NYdbGrpc::IQueueClientContextPtr prevDescribePartitionContext;
     NYdbGrpc::IQueueClientContextPtr describePartitionContext = Client->CreateContext();
 
-    if (!describePartitionContext) {
-        AbortImpl();
-        return;
-    }
-
     ++ConnectionGeneration;
 
     prevDescribePartitionContext = std::exchange(DescribePartitionContext, describePartitionContext);
@@ -504,7 +499,7 @@ std::optional<TEndpointKey> TWriteSessionImpl::GetPreferredEndpointImpl(ui32 par
     else
     {
         LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefixImpl() << "GetPreferredEndpoint: partitionId " << partitionId << ", nodeId " << partitionNodeId << " does not exist in the endpoint pool.");
-        DbDriverState->EndpointPool.UpdateAsync();
+        DbDriverState->EndpointPool.UpdateAsync(DbDriverState);
         return {};
     }
 }
@@ -906,15 +901,7 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
 
         ++ConnectionGeneration;
 
-        // Always probe the root, like persqueue DoConnect. Reusing a live
-        // ClientContext and checking only IsCancelled() races with
-        // TDriverScope::Cancel(): RootContext_ is already gone (CreateContext
-        // is null) while this session's context is not cancelled yet.
         auto clientContext = Client->CreateContext();
-        if (!clientContext) {
-            AbortImpl();
-            return;
-        }
         auto prevClientContext = std::exchange(ClientContext, clientContext);
 
         ServerMessage = std::make_shared<TServerMessage>();
@@ -926,20 +913,6 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
         if (delay)
             connectDelayContext = ClientContext->CreateContext();
         connectTimeoutContext = ClientContext->CreateContext();
-
-        const bool missingDelayContext = delay && !connectDelayContext;
-        if (!connectContext || !connectTimeoutContext || missingDelayContext) {
-            // Drop children before AbortImpl resets ClientContext; otherwise a
-            // live child keeps CQ Contexts_ non-empty and driver.Stop(true) hangs.
-            Cancel(connectContext);
-            Cancel(connectDelayContext);
-            Cancel(connectTimeoutContext);
-            connectContext.reset();
-            connectDelayContext.reset();
-            connectTimeoutContext.reset();
-            AbortImpl();
-            return;
-        }
 
         // Previous operations contexts.
 
@@ -2176,14 +2149,12 @@ void TWriteSessionImpl::AbortImpl() {
         Cancel(ConnectDelayContext);
         if (Processor)
             Processor->Cancel();
-        // Drop children before ClientContext: ~TContextImpl aborts if children
-        // remain, and leftover child ptrs keep CQ alive so driver.Stop(true) hangs.
         DescribePartitionContext.reset();
         ConnectContext.reset();
         ConnectTimeoutContext.reset();
         ConnectDelayContext.reset();
         Cancel(ClientContext);
-        ClientContext.reset(); // removes context from contexts set from underlying gRPC-client.
+        ClientContext.reset();
 
         CancelPendingWriteAcks();
         AbortFlushPromisesImpl();

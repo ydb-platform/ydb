@@ -588,8 +588,7 @@ void TDirectReadSession::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t c
                 cbContext = SelfContext, partitionSessionId = partitionSessionId.value()
             ]() {
                 callbacks->OnDirectReadDone(messages);
-            },
-            ClientContext->GetCallbackGuardFactory()
+            }
         );
     }
 
@@ -935,9 +934,6 @@ bool TDirectReadSession::Reconnect(const TPlainStatus& status) {
 
         connectContext = ClientContext->CreateContext();
         connectTimeoutContext = ClientContext->CreateContext();
-        if (!connectContext || !connectTimeoutContext) {
-            return false;
-        }
 
         State = EState::CONNECTING;
         for (auto& [_, partitionSession] : PartitionSessions) {
@@ -969,9 +965,6 @@ bool TDirectReadSession::Reconnect(const TPlainStatus& status) {
             }
             delay = *nextDelay;
             connectDelayContext = ClientContext->CreateContext();
-            if (!connectDelayContext) {
-                return false;
-            }
         }
 
         LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Reconnecting direct read session to node " << NodeId << " in " << delay);

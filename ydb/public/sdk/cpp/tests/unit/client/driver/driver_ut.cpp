@@ -22,6 +22,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <util/generic/mapfindptr.h>
+#include <util/generic/scope.h>
 
 #include <array>
 #include <atomic>
@@ -127,12 +128,18 @@ IGfPhGBVwOMnr+uhwtpj4PAOIrlOQD/fBsaRtYuBRdg2
 
     class TCountingCredentialsProviderFactory final : public ICredentialsProviderFactory {
     public:
-        explicit TCountingCredentialsProviderFactory(std::atomic_int& providerCount)
+        explicit TCountingCredentialsProviderFactory(
+            std::atomic_int& providerCount,
+            std::function<void(int)> onCreate = {})
             : ProviderCount_(providerCount)
+            , OnCreate_(std::move(onCreate))
         {}
 
         TCredentialsProviderPtr CreateProvider() const override {
-            ++ProviderCount_;
+            const auto count = ++ProviderCount_;
+            if (OnCreate_) {
+                OnCreate_(count);
+            }
             return std::make_shared<TCountingCredentialsProvider>();
         }
 
@@ -142,6 +149,7 @@ IGfPhGBVwOMnr+uhwtpj4PAOIrlOQD/fBsaRtYuBRdg2
 
     private:
         std::atomic_int& ProviderCount_;
+        std::function<void(int)> OnCreate_;
     };
 
     class TDeferredAuthProvider final : public ICredentialsProvider {
@@ -210,134 +218,17 @@ Y_UNIT_TEST_SUITE(SdkRuntimeTest) {
         }
     }
 
-    Y_UNIT_TEST(DriverScopesCancelIndependently) {
-        NYdbGrpc::TGRpcClientLow client(1);
-        auto scopeA = GetSdkRuntime().CreateDriverScope(client);
-        auto scopeB = GetSdkRuntime().CreateDriverScope(client);
-        auto contextA = scopeA->CreateContext();
-        auto contextB = scopeB->CreateContext();
-
-        UNIT_ASSERT(contextA);
-        UNIT_ASSERT(contextB);
-        UNIT_ASSERT(!contextA->IsCancelled());
-        UNIT_ASSERT(!contextB->IsCancelled());
-
-        scopeA->Cancel();
-
+    Y_UNIT_TEST(RequestContextsCancelIndependently) {
+        auto& network = GetSdkRuntime().GetNetwork(1);
+        auto contextA = network.CreateContext();
+        auto childA = contextA->CreateContext();
+        auto contextB = network.CreateContext();
+        contextA->Cancel();
         UNIT_ASSERT(contextA->IsCancelled());
-        UNIT_ASSERT(!scopeA->CreateContext());
-        auto childContextA = contextA->CreateContext();
-        UNIT_ASSERT(childContextA);
-        UNIT_ASSERT(childContextA->IsCancelled());
+        UNIT_ASSERT(childA->IsCancelled());
+        UNIT_ASSERT(contextA->CreateContext()->IsCancelled());
         UNIT_ASSERT(!contextB->IsCancelled());
-        auto secondContextB = scopeB->CreateContext();
-        UNIT_ASSERT(secondContextB);
-
-        childContextA.reset();
-        contextA.reset();
-        contextB.reset();
-        secondContextB.reset();
-        scopeB->Cancel();
-        scopeA->CloseCallbacksAndWait();
-        scopeB->CloseCallbacksAndWait();
-        client.Stop(true);
-    }
-
-    Y_UNIT_TEST(DriverScopeWaitsForCallbacks) {
-        NYdbGrpc::TGRpcClientLow client(1);
-        auto scope = GetSdkRuntime().CreateDriverScope(client);
-        auto guard = scope->GetCallbackGuardFactory()();
-        UNIT_ASSERT(guard->IsEntered());
-
-        std::promise<void> waiterStarted;
-        auto waiterStartedFuture = waiterStarted.get_future();
-        std::atomic_bool waiterFinished = false;
-        std::thread waiter([&] {
-            waiterStarted.set_value();
-            scope->WaitCallbacksDrained();
-            waiterFinished.store(true);
-        });
-
-        waiterStartedFuture.wait();
-        UNIT_ASSERT(!waiterFinished.load());
-        guard.reset();
-        waiter.join();
-        UNIT_ASSERT(waiterFinished.load());
-
-        scope->CloseCallbacksAndWait();
-        auto rejectedGuard = scope->GetCallbackGuardFactory()();
-        UNIT_ASSERT(!rejectedGuard->IsEntered());
-
-        rejectedGuard.reset();
-        scope->Cancel();
-        client.Stop(true);
-    }
-
-    Y_UNIT_TEST(DriverScopeCancelCreateRace) {
-        constexpr size_t Iterations = 32;
-        for (size_t i = 0; i < Iterations; ++i) {
-            NYdbGrpc::TGRpcClientLow client(1);
-            auto scope = GetSdkRuntime().CreateDriverScope(client);
-            NYdbGrpc::IQueueClientContextPtr context;
-            std::promise<void> start;
-            auto startFuture = start.get_future().share();
-
-            std::thread creator([&] {
-                startFuture.wait();
-                context = scope->CreateContext();
-            });
-            std::thread canceller([&] {
-                startFuture.wait();
-                scope->Cancel();
-            });
-
-            start.set_value();
-            creator.join();
-            canceller.join();
-
-            if (context) {
-                UNIT_ASSERT(context->IsCancelled());
-            }
-            UNIT_ASSERT(!scope->CreateContext());
-
-            context.reset();
-            scope->CloseCallbacksAndWait();
-            client.Stop(true);
-        }
-    }
-
-    Y_UNIT_TEST(DriverScopeCancelCreateChildRace) {
-        constexpr size_t Iterations = 32;
-        for (size_t i = 0; i < Iterations; ++i) {
-            NYdbGrpc::TGRpcClientLow client(1);
-            auto scope = GetSdkRuntime().CreateDriverScope(client);
-            auto parentContext = scope->CreateContext();
-            NYdbGrpc::IQueueClientContextPtr childContext;
-            std::promise<void> start;
-            auto startFuture = start.get_future().share();
-
-            std::thread creator([&] {
-                startFuture.wait();
-                childContext = parentContext->CreateContext();
-            });
-            std::thread canceller([&] {
-                startFuture.wait();
-                scope->Cancel();
-            });
-
-            start.set_value();
-            creator.join();
-            canceller.join();
-
-            UNIT_ASSERT(childContext);
-            UNIT_ASSERT(childContext->IsCancelled());
-            UNIT_ASSERT(!scope->CreateContext());
-
-            childContext.reset();
-            parentContext.reset();
-            scope->CloseCallbacksAndWait();
-            client.Stop(true);
-        }
+        UNIT_ASSERT(!network.CreateContext()->IsCancelled());
     }
 }
 
@@ -366,7 +257,7 @@ Y_UNIT_TEST_SUITE(DeferredCredentialsTest) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CLIENT_DEADLINE_EXCEEDED);
     }
 
-    Y_UNIT_TEST(DriverStopCancelsCredentialsWait) {
+    Y_UNIT_TEST(DriverStopDoesNotCancelCredentialsWait) {
         auto factory = std::make_shared<TDeferredCredentialsFactory>();
         auto driver = TDriver(TDriverConfig()
             .SetEndpoint("localhost:100")
@@ -374,13 +265,70 @@ Y_UNIT_TEST_SUITE(DeferredCredentialsTest) {
         auto result = TTableClient(driver).CreateSession();
 
         driver.Stop(true);
+        UNIT_ASSERT(!result.IsReady());
+        factory->SetReady();
         UNIT_ASSERT(result.Wait(TDuration::Seconds(10)));
-        UNIT_ASSERT_VALUES_EQUAL(result.GetValue().GetStatus(), EStatus::CLIENT_CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetValue().GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
     }
 
 }
 
 Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
+    Y_UNIT_TEST(ConcurrentClientsShareCredentialsInitializationAndRetryFailure) {
+        for (const bool failFirst : {false, true}) {
+            std::atomic_int providerCount = 0;
+            auto entered = NThreading::NewPromise<void>();
+            auto release = NThreading::NewPromise<void>();
+            auto factory = std::make_shared<TCountingCredentialsProviderFactory>(
+                providerCount, [entered, release, failFirst](int count) mutable {
+                    if (count == 1) {
+                        entered.SetValue();
+                        release.GetFuture().GetValueSync();
+                        if (failFirst) {
+                            ythrow yexception() << "Credentials initialization failed";
+                        }
+                    }
+                });
+            TDriver driver(TDriverConfig()
+                .SetEndpoint("localhost:1")
+                .SetDiscoveryMode(EDiscoveryMode::Off)
+                .SetSocketIdleTimeout(TDuration::Max())
+                .SetCredentialsProviderFactory(factory));
+            auto first = std::async(std::launch::async, [&] {
+                return std::make_shared<TTableClient>(driver);
+            });
+            std::future<std::shared_ptr<TTableClient>> second;
+            Y_SCOPE_EXIT(&release, &first, &second) {
+                release.TrySetValue();
+                if (first.valid()) {
+                    first.wait();
+                }
+                if (second.valid()) {
+                    second.wait();
+                }
+            };
+            UNIT_ASSERT(entered.GetFuture().Wait(TDuration::Seconds(10)));
+            auto secondStarted = std::make_shared<std::promise<void>>();
+            auto secondStartedFuture = secondStarted->get_future();
+            second = std::async(std::launch::async, [&, secondStarted] {
+                secondStarted->set_value();
+                return std::make_shared<TTableClient>(driver);
+            });
+            UNIT_ASSERT(secondStartedFuture.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+            UNIT_ASSERT(second.wait_for(std::chrono::seconds(0)) != std::future_status::ready);
+            release.SetValue();
+            std::shared_ptr<TTableClient> firstClient;
+            if (failFirst) {
+                UNIT_ASSERT_EXCEPTION_CONTAINS(first.get(), yexception, "Credentials initialization failed");
+            } else {
+                firstClient = first.get();
+            }
+            auto secondClient = second.get();
+            UNIT_ASSERT(secondClient);
+            UNIT_ASSERT_VALUES_EQUAL(providerCount.load(), failFirst ? 2 : 1);
+        }
+    }
+
     Y_UNIT_TEST(ReusesCredentialsProviderForSameIdentity) {
         std::atomic_int providerCount = 0;
         auto driver = TDriver(

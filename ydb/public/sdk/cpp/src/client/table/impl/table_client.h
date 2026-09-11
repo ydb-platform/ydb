@@ -27,9 +27,6 @@ namespace NTable {
 //How ofter run host scan to perform session balancing
 constexpr TDeadline::Duration HOSTSCAN_PERIODIC_ACTION_INTERVAL = std::chrono::seconds(2);
 constexpr TDuration KEEP_ALIVE_CLIENT_TIMEOUT = TDuration::Seconds(5);
-// Max wait time for Drain() to complete. Sessions are being closed with 2 seconds
-// timeout each (in parallel), plus up to 10 seconds for discovery if needed.
-constexpr TDuration DRAIN_TIMEOUT = TDuration::Seconds(30);
 
 TDuration GetMinTimeToTouch(const TSessionPoolSettings& settings);
 TDuration GetMaxTimeToTouch(const TSessionPoolSettings& settings);
@@ -43,7 +40,6 @@ public:
     ~TImpl();
 
     bool LinkObjToEndpoint(const TEndpointKey& endpoint, TEndpointObj* obj, const void* tag);
-    void InitStopper();
     NThreading::TFuture<void> Drain();
     NThreading::TFuture<void> Stop();
     void ScheduleTaskUnsafe(std::function<void()>&& fn, TDeadline::Duration timeout);

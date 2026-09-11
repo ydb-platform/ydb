@@ -19,6 +19,7 @@
 namespace NYdb::inline Dev {
 
 class TGRpcConnectionsImpl;
+class TDbDriverState;
 
 //! Represents configuration of YDB driver
 class TDriverConfig {
@@ -37,10 +38,13 @@ public:
     //! Get endpoint, returns the endpoint set via connection string or SetEndpoint()
     const std::string& GetEndpoint() const;
 
-    //! Set number of network threads, default: 2
+    //! Set the network thread count if this driver initializes the shared network, default: 2.
+    //! Later drivers reuse it. Runtime scheduling can initialize the network before any driver.
     TDriverConfig& SetNetworkThreadsNum(size_t sz);
 
-    //! Set number of client pool threads, if 0 adaptive thread pool will be used.
+    //! Set the process-wide callback thread count if this driver initializes the executor.
+    //! Later drivers reuse the selected executor. Ignored for an explicit executor.
+    //! If 0, an adaptive thread pool is used.
     //! NOTE: in case of no zero value it is possible to get deadlock if all threads
     //! of this pool is blocked somewhere in user code.
     //! default: 0
@@ -112,7 +116,8 @@ public:
     //! default: true
     TDriverConfig& SetTcpNoDelay(bool enable);
 
-    //! Enable or disable drain of client logic (e.g. session pool drain) during dtor call
+    //! Enable or disable asynchronous session pool cleanup when a table client is destroyed.
+    //! The destructor does not wait for remote session deletion.
     TDriverConfig& SetDrainOnDtors(bool allowed);
 
     //! Set policy for balancing
@@ -177,8 +182,12 @@ public:
     //! Log backend.
     TDriverConfig& SetLog(std::unique_ptr<TLogBackend>&& log);
 
-    //! Set executor for async responses.
-    //! If not set, default executor will be used.
+    //! The first driver selects the process-wide executor for async responses, or starts
+    //! a default executor if none is set. Later drivers reuse it unless they explicitly
+    //! select a different instance, which throws TContractViolation.
+    //! The executor is retained for the process lifetime and is never stopped by the SDK.
+    //! The caller must keep it running. Startup must not recursively construct a driver
+    //! or initialize the shared response executor, including through another thread.
     TDriverConfig& SetExecutor(std::shared_ptr<IExecutor> executor);
 
     //! Set external metrics registry implementation.
@@ -201,11 +210,8 @@ class TDriver {
 public:
     TDriver(const TDriverConfig& config);
 
-    //! Cancel all currently running and future requests
-    //! This method is useful to make sure there are no new asynchronous
-    //! callbacks and it is safe to destroy the driver
-    //! When wait is true this method will not return until the underlying
-    //! client thread pool is stopped completely
+    //! Compatibility no-op. The process-wide runtime remains active until process exit.
+    //! This method will be deprecated; close sessions and cancel individual operations explicitly.
     void Stop(bool wait = false);
 
     template<typename TExtension>
@@ -214,6 +220,7 @@ public:
     TDriverConfig GetConfig() const;
 private:
     std::shared_ptr<TGRpcConnectionsImpl> Impl_;
+    std::shared_ptr<TDbDriverState> DefaultState_;
 };
 
 } // namespace NYdb

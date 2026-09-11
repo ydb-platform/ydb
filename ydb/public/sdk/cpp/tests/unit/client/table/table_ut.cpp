@@ -357,7 +357,7 @@ TEST(TableTest, CheckedOutPooledSessionClosesRemotelyAfterExplicitStop) {
     }));
 }
 
-TEST(TableTest, DriverStopFromResponseCallbackRunsStopNotifications) {
+TEST(TableTest, DriverStopFromResponseCallbackPreservesSessions) {
     TMockTableService tableService;
     std::unique_ptr<grpc::Server> grpcServer;
     std::unique_ptr<TDriver> driver;
@@ -406,13 +406,11 @@ TEST(TableTest, DriverStopFromResponseCallbackRunsStopNotifications) {
     ASSERT_EQ(callbackDoneFuture.wait_for(std::chrono::seconds(10)), std::future_status::ready);
     ASSERT_TRUE(success.load());
 
-    ASSERT_TRUE(WaitUntil([&] {
-        return tableService.DeleteSessionRequests.load() >= 1u;
-    }));
-    ASSERT_TRUE(WaitUntil([&] {
-        auto stoppedSessionResult = tableClient->CreateSession().ExtractValueSync();
-        return stoppedSessionResult.GetStatus() == EStatus::CLIENT_CANCELLED;
-    }));
+    ASSERT_EQ(tableService.DeleteSessionRequests.load(), 0u);
+    auto sessionResult = tableClient->CreateSession().ExtractValueSync();
+    ASSERT_TRUE(sessionResult.IsSuccess());
+    ASSERT_TRUE(tableClient->Stop().Wait(TDuration::Seconds(10)));
+    ASSERT_GE(tableService.DeleteSessionRequests.load(), 1u);
 }
 
 TEST(TableTest, DriverStopDoesNotAffectOtherDriver) {
@@ -447,9 +445,9 @@ TEST(TableTest, DriverStopDoesNotAffectOtherDriver) {
 
     driverA.Stop(true);
 
-    auto stoppedResult = tableClientA.CreateSession().ExtractValueSync();
-    ASSERT_EQ(stoppedResult.GetStatus(), EStatus::CLIENT_CANCELLED);
-    ASSERT_FALSE(requestB.Wait(TDuration::MilliSeconds(100)));
+    auto sessionResultA = tableClientA.CreateSession().ExtractValueSync();
+    ASSERT_TRUE(sessionResultA.IsSuccess());
+    ASSERT_FALSE(requestB.IsReady());
 
     continueCreateTable.set_value();
     ASSERT_TRUE(requestB.Wait(TDuration::Seconds(10)));

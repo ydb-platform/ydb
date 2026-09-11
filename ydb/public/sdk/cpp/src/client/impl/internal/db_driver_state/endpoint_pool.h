@@ -30,8 +30,7 @@ struct TEndpointUpdateResult {
 class TEndpointPool {
 public:
     TEndpointPool(TListEndpointsResultProvider&& provider, const IInternalClient* client);
-    ~TEndpointPool();
-    std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> UpdateAsync();
+    std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> UpdateAsync(std::shared_ptr<TDbDriverState> owner);
     TEndpointRecord GetEndpoint(const TEndpointKey& preferredEndpoint, bool onlyPreferred = false) const;
     TDuration TimeSinceLastUpdate() const;
     void BanEndpoint(const std::string& endpoint);

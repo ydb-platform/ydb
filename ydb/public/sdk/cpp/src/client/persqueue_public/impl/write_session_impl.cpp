@@ -426,13 +426,6 @@ void TWriteSessionImpl::DoConnect(const TDuration& delay, const std::string& end
         ++ConnectionGeneration;
         auto subclient = Client->GetClientForEndpoint(endpoint);
         auto clientContext = subclient->CreateContext();
-        if (!clientContext) {
-            AbortImpl();
-            // Driver is stopping. Do not keep ClientContext: children of an
-            // existing context can still be created after TDriver::Stop, which
-            // leaves CQ Contexts_ non-empty and deadlocks Stop(true).
-            return;
-        }
         auto prevClientContext = std::exchange(ClientContext, clientContext);
 
         ServerMessage = std::make_shared<TServerMessage>();
@@ -444,18 +437,6 @@ void TWriteSessionImpl::DoConnect(const TDuration& delay, const std::string& end
         if (delay)
             connectDelayContext = ClientContext->CreateContext();
         connectTimeoutContext = ClientContext->CreateContext();
-
-        const bool missingDelayContext = delay && !connectDelayContext;
-        if (!connectContext || !connectTimeoutContext || missingDelayContext) {
-            Cancel(connectContext);
-            Cancel(connectDelayContext);
-            Cancel(connectTimeoutContext);
-            connectContext.reset();
-            connectDelayContext.reset();
-            connectTimeoutContext.reset();
-            AbortImpl();
-            return;
-        }
 
         // Previous operations contexts.
 
@@ -1454,7 +1435,7 @@ void TWriteSessionImpl::AbortImpl() {
         ConnectTimeoutContext.reset();
         ConnectDelayContext.reset();
         Cancel(ClientContext);
-        ClientContext.reset(); // removes context from contexts set from underlying gRPC-client.
+        ClientContext.reset();
     }
 }
 

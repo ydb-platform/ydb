@@ -10,9 +10,11 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 
 #include <util/stream/file.h>
+#include <util/generic/scope.h>
 #include <util/string/builder.h>
 #include <util/system/tempfile.h>
 
+#include <atomic>
 #include <future>
 
 using namespace NYdb;
@@ -581,6 +583,95 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
         UNIT_ASSERT(future.Wait(TDuration::Seconds(10)));
         UNIT_ASSERT_VALUES_EQUAL(future.GetValue(), "Bearer token_2");
         UNIT_ASSERT(released->get_future().wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+    }
+
+    Y_UNIT_TEST(RefreshContinuesAfterAnInlineCompletionThrows) {
+        class TThrowingFacility final : public ICoreFacility {
+        public:
+            void AddPeriodicTask(TPeriodicCb&&, TDeadline::Duration) override {
+            }
+
+            void PostToResponseQueue(TPostTaskCb&& callback) override {
+                callback();
+                ythrow yexception() << "Exception after completion";
+            }
+        };
+        auto facility = std::make_shared<TThrowingFacility>();
+        auto secondRequest = std::make_shared<std::promise<void>>();
+        auto refreshed = secondRequest->get_future();
+        auto requests = std::make_shared<std::atomic<unsigned>>(0);
+        TTestTokenExchangeServer server;
+        server.WithLock([&] {
+            server.Check.Response = R"({"access_token":"token","token_type":"bearer","expires_in":2})";
+            server.BeforeReply = [requests, secondRequest] {
+                if (++*requests == 2) {
+                    secondRequest->set_value();
+                }
+            };
+        });
+        auto factory = CreateOauth2TokenExchangeCredentialsProviderFactory(
+            TOauth2TokenExchangeParams()
+                .TokenEndpoint(server.GetEndpoint())
+                .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type")));
+        auto provider = factory->CreateProvider(facility);
+        auto token = provider->GetAuthInfoAsync();
+        UNIT_ASSERT(token.Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(token.GetValue(), "Bearer token");
+        UNIT_ASSERT(refreshed.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+    }
+
+    Y_UNIT_TEST(ProviderDestructionDoesNotWaitForHttpRequest) {
+        struct TState {
+            std::promise<void> Entered;
+            std::promise<void> Release;
+            std::shared_future<void> Released = Release.get_future().share();
+        };
+        auto state = std::make_shared<TState>();
+        auto entered = state->Entered.get_future();
+        TTestTokenExchangeServer server;
+        server.WithLock([&] {
+            server.Check.Response = R"({"access_token":"token","token_type":"bearer","expires_in":60})";
+            server.BeforeReply = [state] {
+                state->Entered.set_value();
+                state->Released.wait();
+            };
+        });
+        auto factory = CreateOauth2TokenExchangeCredentialsProviderFactory(
+            TOauth2TokenExchangeParams()
+                .TokenEndpoint(server.GetEndpoint())
+                .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type")));
+        auto provider = factory->CreateProvider(CreateSimpleCoreFacility());
+        auto token = provider->GetAuthInfoAsync();
+        bool released = false;
+        Y_DEFER {
+            if (!released) {
+                state->Release.set_value();
+            }
+        };
+        UNIT_ASSERT(entered.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+        auto stopped = std::async(std::launch::async, [provider = std::move(provider)]() mutable {
+            provider.reset();
+        });
+        // Release HTTP before an assertion unwinds through the async future.
+        Y_DEFER {
+            if (!released) {
+                state->Release.set_value();
+                released = true;
+            }
+        };
+        UNIT_ASSERT(stopped.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+        stopped.get();
+        UNIT_ASSERT(token.IsReady());
+        UNIT_ASSERT_EXCEPTION(token.GetValue(), yexception);
+
+        auto posted = std::make_shared<std::promise<void>>();
+        auto background = posted->get_future();
+        CreateSimpleCoreFacility()->PostToResponseQueue([posted] {
+            posted->set_value();
+        });
+        UNIT_ASSERT(background.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+        state->Release.set_value();
+        released = true;
     }
 
     Y_UNIT_TEST(ShutdownWhileRefreshingToken) {

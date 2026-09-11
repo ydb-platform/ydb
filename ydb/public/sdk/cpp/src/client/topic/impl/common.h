@@ -375,9 +375,8 @@ public:
             ] (bool ok)
             {
                 if (!ok) {
-                    // Delay context is cancelled (driver Stop, previous
-                    // reconnect). Notify the session so it can AbortImpl and
-                    // drop ClientContext; otherwise Stop(true) waits for CQ.
+                    // A session abort or a newer reconnect cancelled the delay.
+                    // Complete the pending connection attempt with cancellation.
                     callback(TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped"), nullptr);
                     return;
                 }

@@ -12,8 +12,6 @@
 
 namespace NYdb::inline Dev::NPersQueue {
 
-static const std::string DRIVER_IS_STOPPING_DESCRIPTION = "Driver is stopping";
-
 std::pair<uint64_t, uint64_t> GetMessageOffsetRange(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent, uint64_t index) {
     if (dataReceivedEvent.IsCompressedMessages()) {
         const auto& msg = dataReceivedEvent.GetCompressedMessages()[index];
@@ -217,10 +215,6 @@ void TReadSession::CreateClusterSessionsImpl(TDeferredActions& deferred) {
         );
         auto subclient = Client->GetClientForEndpoint(clusterSessionInfo.ClusterEndpoint);
         auto context = subclient->CreateContext();
-        if (!context) {
-            AbortImpl(EStatus::ABORTED, DRIVER_IS_STOPPING_DESCRIPTION, deferred);
-            return;
-        }
         CbContexts.push_back(MakeWithCallbackContext<TSingleClusterReadSessionImpl>(
             sessionSettings,
             DbDriverState->Database,
@@ -258,7 +252,7 @@ void TReadSession::OnClusterDiscovery(const TStatus& status, const Ydb::PersQueu
                     GetLogPrefix() << "Cluster discovery request failed. Status: " << status.GetStatus()
                         << ". Issues: \"" << IssuesSingleLineString(status.GetIssues()) << "\""
                 );
-                RestartClusterDiscoveryImpl(*retryDelay, deferred);
+                RestartClusterDiscoveryImpl(*retryDelay);
             } else {
                 AbortImpl(status.GetStatus(), MakeIssueWithSubIssues("Failed to discover clusters", status.GetIssues()), deferred);
             }
@@ -340,7 +334,7 @@ void TReadSession::OnClusterDiscovery(const TStatus& status, const Ydb::PersQueu
     SetupCountersLogger();
 }
 
-void TReadSession::RestartClusterDiscoveryImpl(TDuration delay, TDeferredActions& deferred) {
+void TReadSession::RestartClusterDiscoveryImpl(TDuration delay) {
     Y_ABORT_UNLESS(Lock.IsLocked());
     if (Aborting || Closing) {
         return;
@@ -355,10 +349,6 @@ void TReadSession::RestartClusterDiscoveryImpl(TDuration delay, TDeferredActions
     };
 
     ClusterDiscoveryDelayContext = Connections->CreateContext();
-    if (!ClusterDiscoveryDelayContext) {
-        AbortImpl(EStatus::ABORTED, DRIVER_IS_STOPPING_DESCRIPTION, deferred);
-        return;
-    }
     Connections->ScheduleCallback(delay,
                                   std::move(startCallback),
                                   ClusterDiscoveryDelayContext);
@@ -427,11 +417,6 @@ bool TReadSession::Close(TDuration timeout) {
         };
 
         auto timeoutContext = Connections->CreateContext();
-        if (!timeoutContext) {
-            std::lock_guard guard(Lock);
-            AbortImpl(EStatus::ABORTED, DRIVER_IS_STOPPING_DESCRIPTION, deferred);
-            return false;
-        }
         closeDeadline = TInstant::Now() + timeout;
         Connections->ScheduleCallback(timeout,
                                     std::move(timeoutCallback),

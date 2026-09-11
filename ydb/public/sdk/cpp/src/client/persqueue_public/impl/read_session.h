@@ -89,7 +89,7 @@ private:
     void StartClusterDiscovery();
     void OnClusterDiscovery(const TStatus& status, const Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResult& result);
     void ProceedWithoutClusterDiscovery();
-    void RestartClusterDiscoveryImpl(TDuration delay, TDeferredActions& deferred);
+    void RestartClusterDiscoveryImpl(TDuration delay);
     void CreateClusterSessionsImpl(TDeferredActions& deferred);
 
     void AbortImpl(TDeferredActions& deferred);

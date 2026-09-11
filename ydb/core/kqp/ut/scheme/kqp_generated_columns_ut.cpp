@@ -2550,6 +2550,24 @@ Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
             CheckVirtualGeneratedReturning(false);
         }
 
+        Y_UNIT_TEST(ReturningReplaceExistingRowUsesPostReplaceDefault) {
+            TTestFixture fixture(R"(
+                CREATE TABLE VReturningReplace (
+                    a Int32,
+                    b Int32 DEFAULT 7,
+                    k Int32 NOT NULL,
+                    v Int32 GENERATED ALWAYS AS (COALESCE(a, 0) * 10 + COALESCE(b, 0)) VIRTUAL,
+                    PRIMARY KEY (k),
+                    INDEX idx_b GLOBAL ON (b)
+                );
+            )", "UPSERT INTO VReturningReplace (k, a, b) VALUES (1, 1, 9);");
+
+            fixture.CheckReturning(
+                "REPLACE INTO VReturningReplace (k, a) VALUES (1, 4) RETURNING k, b, v;",
+                "SELECT k, b, v FROM VReturningReplace WHERE k = 1;",
+                "[[1;[7];[47]]]");
+        }
+
         Y_UNIT_TEST(ReturningRegressionMissingNullableDependency) {
             TTestFixture fixture(R"(
                 CREATE TABLE VReturningNullable (

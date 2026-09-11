@@ -61,7 +61,7 @@ public:
                     }
                 }
             } else if (msg->Status == NKikimrProto::ERROR && !tablet->IsDeleting() && msg->ActualGeneration >= tablet->KnownGeneration) {
-                Y_DEBUG_ABORT_UNLESS(!msg->IsTabletStorageInfoVersionObsolete); // only Hive can increment version, it cannot be obsolete
+                Y_ABORT_UNLESS(!msg->IsTabletStorageInfoVersionObsolete); // only Hive can increment version, it cannot be obsolete
                 ui32 confirmedVersion = tablet->ConfirmedStorageVersion;
 
                 struct THistoryEntry {
@@ -123,10 +123,8 @@ public:
                     tablet->AcquireAllocationUnit(channel);
                 }
 
-                if (tablet->KnownGeneration <= msg->ActualGeneration) {
-                    Y_ABORT_UNLESS(msg->ActualGeneration < Max<ui32>());
-                    tablet->KnownGeneration = msg->ActualGeneration + 1;
-                }
+                Y_ABORT_UNLESS(msg->ActualGeneration < Max<ui32>());
+                tablet->KnownGeneration = msg->ActualGeneration + 1;
                 tablet->ChannelProfileReassignReason =
                     NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_NO;
                 tablet->State = ETabletState::GroupAssignment;

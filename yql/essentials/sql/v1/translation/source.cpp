@@ -112,6 +112,10 @@ void ISource::SetCompactGroupBy(bool compactGroupBy) {
     CompactGroupBy_ = compactGroupBy;
 }
 
+void ISource::SetStreamingGroupBy(const std::optional<TStreamingGroupBySettings>& streamingGroupBy) {
+    StreamingGroupBy_ = streamingGroupBy;
+}
+
 TStringBuf ISource::GetGroupBySuffix() const {
     return GroupBySuffix_;
 }
@@ -631,7 +635,7 @@ std::pair<TNodePtr, bool> ISource::BuildAggregation(const TString& label, TConte
     auto aggrArgs = Y();
     const bool overState = GroupBySuffix_ == "CombineState" || GroupBySuffix_ == "MergeState" ||
                            GroupBySuffix_ == "MergeFinalize" || GroupBySuffix_ == "MergeManyFinalize";
-    const bool allowAggApply = !LegacyHoppingWindowSpec_ && !SessionWindow_ && !HoppingWindow_;
+    const bool allowAggApply = !LegacyHoppingWindowSpec_ && !SessionWindow_ && !HoppingWindow_ && !StreamingGroupBy_;
     for (const auto& aggr : Aggregations_) {
         auto res = aggr->AggregationTraits(listType, overState, GroupBySuffix_ == "MergeManyFinalize", allowAggApply, ctx);
         if (!res.second) {
@@ -646,6 +650,14 @@ std::pair<TNodePtr, bool> ISource::BuildAggregation(const TString& label, TConte
     auto options = Y();
     if (CompactGroupBy_ || GroupBySuffix_ == "Finalize") {
         options = L(options, Q(Y(Q("compact"))));
+    }
+
+    if (StreamingGroupBy_) {
+        auto streamingOpts = Y();
+        for (const auto& opt : StreamingGroupBy_->Options) {
+            streamingOpts = L(streamingOpts, BuildQuotedAtom(Pos_, opt));
+        }
+        options = L(options, Q(Y(Q("streaming"), Q(streamingOpts))));
     }
 
     if (LegacyHoppingWindowSpec_) {

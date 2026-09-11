@@ -6,6 +6,10 @@
 namespace NSQLTranslationV1 {
 using TColumnsSets = NSorted::TSimpleSet<NSorted::TSimpleSet<TString>>;
 
+struct TStreamingGroupBySettings {
+    TVector<TString> Options;
+};
+
 class ISource;
 using TSourcePtr = TIntrusivePtr<ISource>;
 
@@ -48,6 +52,7 @@ public:
     virtual bool AddFilter(TContext& ctx, TNodePtr filter);
     virtual bool AddGroupKey(TContext& ctx, const TString& column);
     virtual void SetCompactGroupBy(bool compactGroupBy);
+    virtual void SetStreamingGroupBy(const std::optional<TStreamingGroupBySettings>& streamingGroupBy);
     virtual TStringBuf GetGroupBySuffix() const;
     virtual void SetGroupBySuffix(const TString& suffix);
     virtual TString MakeLocalName(const TString& name);
@@ -135,6 +140,7 @@ protected:
     THashMap<TString, TString> GroupByColumnAliases_;
     TVector<TNodePtr> Filters_;
     bool CompactGroupBy_ = false;
+    std::optional<TStreamingGroupBySettings> StreamingGroupBy_;
     TString GroupBySuffix_;
     TSet<TString> GroupKeys_;
     TVector<TString> OrderedGroupKeys_;
@@ -308,6 +314,7 @@ TSourcePtr BuildSelectCore(
     const TVector<TNodePtr>& groupByExpr,
     const TVector<TNodePtr>& groupBy,
     bool compactGroupBy,
+    const std::optional<TStreamingGroupBySettings>& streamingGroupBy,
     const TString& groupBySuffix,
     bool assumeSorted,
     const TVector<TSortSpecificationPtr>& orderBy,

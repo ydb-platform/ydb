@@ -1,5 +1,6 @@
 #pragma once
 
+#include "source.h"
 #include "sql_translation.h"
 
 namespace NSQLTranslationV1 {
@@ -44,6 +45,7 @@ public:
     TMap<TString, TNodePtr>& Aliases();
     TLegacyHoppingWindowSpecPtr GetLegacyHoppingWindow() const;
     bool IsCompactGroupBy() const;
+    const std::optional<TStreamingGroupBySettings>& GetStreamingGroupBy() const;
     TString GetSuffix() const;
 
 private:
@@ -68,6 +70,7 @@ private:
     TLegacyHoppingWindowSpecPtr LegacyHoppingWindowSpec_; // stream queries
     static const TString AutogenerateNamePrefix;
     bool CompactGroupBy_;
+    std::optional<TStreamingGroupBySettings> StreamingGroupBy_;
     TString Suffix_;
 };
 

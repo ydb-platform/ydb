@@ -12,8 +12,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <cstdlib>
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 using namespace NYql;
 using namespace NYql::NCommon;
@@ -208,7 +207,7 @@ TKqpKeyRanges MakeComputedKeyRanges(const TKqlReadTableRangesBase& readTable, co
     return ranges;
 }
 
-} // namespace
+} // anonymous namespace
 
 const TKikimrTableMetadata& TKqlCompileContext::GetTableMeta(const TKqpTable& table) const {
     auto& tableData = TablesData_->ExistingTable(Cluster_, table.Path());
@@ -554,8 +553,85 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             return ctx.PgmBuilder().KqpStreamEnumerate(input);
         });
 
+    compiler->AddCallable(TKqpStreamingAggregation::CallableName(),
+        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+            YQL_ENSURE(node.ChildrenSize() == 4, "StreamingAggregation expects 4 args: input, keys, handlers, settings");
+
+            auto inputFlow = MkqlBuildExpr(*node.Child(0), buildCtx);
+            const auto* keysList = node.Child(1);
+            const auto* handlersList = node.Child(2);
+            const auto* settingsList = node.Child(3);
+            const auto* outputItemType = GetSeqItemType(*node.GetTypeAnn()).Cast<TStructExprType>();
+
+            TString stateTablePath;
+            for (const auto& setting : settingsList->Children()) {
+                if (setting->ChildrenSize() >= 1 && setting->Child(0)->IsAtom() && setting->Child(0)->Content() == "state_table_path") {
+                    if (setting->ChildrenSize() >= 2 && setting->Child(1)->IsAtom()) {
+                        stateTablePath = TString(setting->Child(1)->Content());
+                    }
+                    break;
+                }
+            }
+            auto stateTablePathArg = ctx.PgmBuilder().NewDataLiteral<NUdf::EDataSlot::String>(stateTablePath);
+
+            auto keyExtractor = [&](TRuntimeNode item) -> TRuntimeNode {
+                TVector<std::pair<std::string_view, TRuntimeNode>> members;
+                members.reserve(keysList->ChildrenSize());
+                for (const auto& keyAtom : keysList->Children()) {
+                    members.emplace_back(keyAtom->Content(), ctx.PgmBuilder().Member(item, keyAtom->Content()));
+                }
+                return ctx.PgmBuilder().NewStruct(members);
+            };
+
+            auto initLambda = [&](TRuntimeNode item) -> TRuntimeNode {
+                TVector<std::pair<std::string_view, TRuntimeNode>> members;
+                members.reserve(handlersList->ChildrenSize());
+                for (const auto& handler : handlersList->Children()) {
+                    const auto& trait = *handler->Child(1);
+                    auto initCall = MkqlBuildLambda(*trait.Child(1), buildCtx, {item});
+                    members.emplace_back(handler->Child(0)->Content(), initCall);
+                }
+                return ctx.PgmBuilder().NewStruct(members);
+            };
+
+            auto updateLambda = [&](TRuntimeNode state, TRuntimeNode item) -> TRuntimeNode {
+                TVector<std::pair<std::string_view, TRuntimeNode>> members;
+                members.reserve(handlersList->ChildrenSize());
+                for (const auto& handler : handlersList->Children()) {
+                    const auto colName = handler->Child(0)->Content();
+                    const auto& trait = *handler->Child(1);
+                    auto prev = ctx.PgmBuilder().Member(state, colName);
+                    auto updateCall = MkqlBuildLambda(*trait.Child(2), buildCtx, {item, prev});
+                    members.emplace_back(colName, updateCall);
+                }
+                return ctx.PgmBuilder().NewStruct(members);
+            };
+
+            auto finishLambda = [&](TRuntimeNode key, TRuntimeNode state) -> TRuntimeNode {
+                TVector<std::pair<std::string_view, TRuntimeNode>> members;
+                members.reserve(keysList->ChildrenSize() + handlersList->ChildrenSize());
+                for (const auto& keyAtom : keysList->Children()) {
+                    members.emplace_back(keyAtom->Content(), ctx.PgmBuilder().Member(key, keyAtom->Content()));
+                }
+                for (const auto& handler : handlersList->Children()) {
+                    const auto colName = handler->Child(0)->Content();
+                    const auto& trait = *handler->Child(1);
+                    auto stateMember = ctx.PgmBuilder().Member(state, colName);
+                    auto finishCall = MkqlBuildLambda(*trait.Child(6), buildCtx, {stateMember});
+                    // Keyless aggregation may make a non-null finish value optional.
+                    if (outputItemType->FindItemType(colName)->GetKind() == ETypeAnnotationKind::Optional
+                        && !finishCall.GetStaticType()->IsOptional()) {
+                        finishCall = ctx.PgmBuilder().NewOptional(finishCall);
+                    }
+                    members.emplace_back(colName, finishCall);
+                }
+                return ctx.PgmBuilder().NewStruct(members);
+            };
+
+            return ctx.PgmBuilder().StreamingAggregation(inputFlow, keyExtractor, initLambda, updateLambda, finishLambda, stateTablePathArg);
+        });
+
     return compiler;
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

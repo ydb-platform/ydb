@@ -7,6 +7,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/opt
     ydb/core/kqp/ut/common
     ydb/core/resource_pools
     yql/essentials/ast

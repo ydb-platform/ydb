@@ -36,6 +36,8 @@ SRCS(
     kqp_write_actor.cpp
     kqp_write_table.cpp
 
+    streaming/kqp_streaming_aggregation.cpp
+
     scheduler/kqp_compute_scheduler_service.cpp
     scheduler/kqp_schedulable_work_factory.cpp
     scheduler/kqp_schedulable_base.cpp
@@ -65,6 +67,8 @@ PEERDIR(
     ydb/core/tx/scheme_board
     ydb/core/ydb_convert
     ydb/library/aclib
+    ydb/library/actors/core
+    ydb/library/query_actor
     ydb/library/yql/dq/actors
     ydb/library/yql/dq/actors/protos
     ydb/library/yql/dq/actors/spilling
@@ -73,6 +77,7 @@ PEERDIR(
     yql/essentials/minikql/computation/llvm16
     yql/essentials/minikql/comp_nodes
     yql/essentials/utils
+    ydb/public/sdk/cpp/src/client/params
     ydb/core/kqp/common/result_set_format
 )
 

@@ -19,6 +19,7 @@ SRCS(
     datastreams_table_mode_ut.cpp
     datastreams_queries_restart_ut.cpp
     kqp_has_path_ut.cpp
+    streaming_aggregation_ut.cpp
     streaming_ddl_ut.cpp
     streaming_deferrd_commit_write_ut.cpp
     streaming_sys_view_ut.cpp

@@ -1,6 +1,7 @@
 #include "kqp_compute.h"
 #include "kqp_stream_lookup_join_helpers.h"
-#include "kqp_fulltext_analyze.h"
+
+#include <ydb/core/kqp/runtime/streaming/kqp_streaming_aggregation.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
@@ -12,11 +13,23 @@
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
+
+void TKqpComputeContextBase::SetWakeupCallback(std::function<void()> wakeupCallback) {
+    WakeupCallback = std::move(wakeupCallback);
+}
+
+const std::function<void()>& TKqpComputeContextBase::GetWakeupCallback() const {
+    return WakeupCallback;
+}
 
 TComputationNodeFactory GetKqpBaseComputeFactory(const TKqpComputeContextBase* computeCtx) {
-    return NYql::NDq::GetDqBaseComputeFactory(computeCtx);
+    return [baseFactory = NYql::NDq::GetDqBaseComputeFactory(computeCtx), computeCtx](TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+        if (callable.GetType()->GetName() == "StreamingAggregation") {
+            return WrapStreamingAggregation(callable, ctx, *computeCtx);
+        }
+        return baseFactory(callable, ctx);
+    };
 }
 
 namespace {
@@ -476,5 +489,4 @@ IComputationNode* WrapKqpIndexLookupJoin(TCallable& callable, const TComputation
     return new TKqpIndexLookupJoinWrapper(ctx.Mutables, inputNode, GetJoinKind(joinKind), std::move(leftColumnsIndices), std::move(rightColumnsIndices), cookieFormatVersion);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

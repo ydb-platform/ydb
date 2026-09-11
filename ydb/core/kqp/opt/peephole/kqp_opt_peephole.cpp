@@ -346,7 +346,8 @@ private:
         "TakeWhile"sv, "SkipWhile"sv, "TakeWhileInclusive"sv, "SkipWhileInclusive"sv,
         "WideTakeWhile"sv, "WideSkipWhile"sv, "WideTakeWhileInclusive"sv, "WideSkipWhileInclusive"sv,
         TCoPruneAdjacentKeys::CallableName(), TCoPruneKeys::CallableName(),
-        TCoMapNext::CallableName(), TCoChain1Map::CallableName(), "WideChain1Map"sv
+        TCoMapNext::CallableName(), TCoChain1Map::CallableName(), "WideChain1Map"sv,
+        TKqpStreamingAggregation::CallableName()
     };
 
     // Callables for which will be unconditionally allocated checkpoint storage slot

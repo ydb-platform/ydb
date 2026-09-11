@@ -1185,6 +1185,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
     TVector<TNodePtr> groupBy;
     TLegacyHoppingWindowSpecPtr legacyHoppingWindowSpec;
     bool compactGroupBy = false;
+    std::optional<TStreamingGroupBySettings> streamingGroupBy;
     TString groupBySuffix;
     if (node.HasBlock11()) {
         TGroupByClause clause(*this);
@@ -1201,9 +1202,10 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
         clause.SetFeatures("sql_features");
         legacyHoppingWindowSpec = clause.GetLegacyHoppingWindow();
         compactGroupBy = clause.IsCompactGroupBy();
+        streamingGroupBy = clause.GetStreamingGroupBy();
         groupBySuffix = clause.GetSuffix();
 
-        if (source->IsStream() && !hasHopping) {
+        if (source->IsStream() && !hasHopping && !streamingGroupBy) {
             Ctx_.Error() << "Streaming group by query must have a hopping window specification.";
             return nullptr;
         }
@@ -1292,7 +1294,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
     if (!ValidateSelectColumns(terms)) {
         return nullptr;
     }
-    return BuildSelectCore(Ctx_, startPos, std::move(source), groupByExpr, groupBy, compactGroupBy, groupBySuffix, assumeSorted, orderBy, having,
+    return BuildSelectCore(Ctx_, startPos, std::move(source), groupByExpr, groupBy, compactGroupBy, streamingGroupBy, groupBySuffix, assumeSorted, orderBy, having,
                            std::move(windowSpec), legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), forceWithout, selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
 }
 
@@ -1611,6 +1613,7 @@ TSourcePtr TSqlSelect::BuildStmt(TSourcePtr result, TBuildExtra extra) {
         TVector<TNodePtr> groupByExpr;
         TVector<TNodePtr> groupBy;
         bool compactGroupBy = false;
+        std::optional<TStreamingGroupBySettings> streamingGroupBy;
         TString groupBySuffix = "";
         TNodePtr having;
         TWinSpecs winSpecs;
@@ -1623,7 +1626,7 @@ TSourcePtr TSqlSelect::BuildStmt(TSourcePtr result, TBuildExtra extra) {
         TVector<TNodePtr> terms;
         terms.push_back(BuildColumn(pos, "*", ""));
 
-        result = BuildSelectCore(Ctx_, pos, std::move(result), groupByExpr, groupBy, compactGroupBy, groupBySuffix,
+        result = BuildSelectCore(Ctx_, pos, std::move(result), groupByExpr, groupBy, compactGroupBy, streamingGroupBy, groupBySuffix,
                                  assumeOrderBy, orderBy, having, std::move(winSpecs), legacyHoppingWindowSpec, std::move(terms),
                                  distinct, std::move(without), forceWithout, stream, outermostSettings, {}, {});
 

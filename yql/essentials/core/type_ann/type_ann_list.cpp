@@ -6320,6 +6320,10 @@ namespace {
                     return IGraphTransformer::TStatus::Ok;
                 }
                 outputColumns = setting->ChildPtr(1);
+            } else if (settingName == "streaming") {
+                if (!EnsureTupleSize(*setting, 2, ctx.Expr) || !EnsureTupleOfAtoms(setting->Tail(), ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
             } else {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(setting->Head().Pos()),
                     TStringBuilder() << "Unexpected setting: " << settingName));

@@ -126,6 +126,42 @@ Y_UNIT_TEST(SessionWindowInRtmr) {
 
 } // Y_UNIT_TEST_SUITE(SessionWindowNegative)
 
+Y_UNIT_TEST_SUITE(StreamingAggregationTranslation) {
+
+Y_UNIT_TEST(StreamingSourceWithoutWindow) {
+    for (const TStringBuf stateTable : {"", "'/Root/state'"}) {
+        const TString query = TStringBuilder()
+            << "SELECT key, SUM(value) AS value FROM plato.Input GROUP /*+ streaming("
+            << stateTable << ") */ BY key;";
+        const auto res = SqlToYql(query, 10, TString(NYql::RtmrProviderName));
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+        TWordCountHive stat = {"Aggregate", "streaming"};
+        VerifyProgram(res, stat);
+        UNIT_ASSERT_VALUES_EQUAL(stat["Aggregate"], 1);
+        UNIT_ASSERT_VALUES_EQUAL(stat["streaming"], 1);
+    }
+}
+
+Y_UNIT_TEST(AggApplyEmission) {
+    for (const bool emitAggApply : {false, true}) {
+        for (const TStringBuf hint : {"", "/*+ streaming() */", "/*+ streaming('/Root/state') */"}) {
+            const TString query = TStringBuilder()
+                << (emitAggApply ? "PRAGMA EmitAggApply; " : "PRAGMA DisableEmitAggApply; ")
+                << "SELECT key, COUNT(*) AS count, SUM(value) AS sum, AVG(value) AS avg, "
+                << "MIN(value) AS min, MAX(value) AS max, SOME(value) AS some "
+                << "FROM plato.Input GROUP " << hint << " BY key;";
+            const auto res = SqlToYql(query);
+            UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+            TWordCountHive stat = {"Aggregate", "AggApply"};
+            VerifyProgram(res, stat);
+            UNIT_ASSERT_VALUES_EQUAL(stat["Aggregate"], 1);
+            UNIT_ASSERT_VALUES_EQUAL_C(stat["AggApply"], emitAggApply && hint.empty() ? 6 : 0, query);
+        }
+    }
+}
+
+} // Y_UNIT_TEST_SUITE(StreamingAggregationTranslation)
+
 Y_UNIT_TEST_SUITE(MatchRecognizeMeasuresAggregation) {
 
 Y_UNIT_TEST(InsideSelect) {

@@ -246,6 +246,18 @@ public:
     }
 };
 
+using TDBLogColumnBool = TDBLogMessageTypedValueColumn<bool>;
+using TDBLogColumnInt8 = TDBLogMessageTypedValueColumn<i8>;
+using TDBLogColumnUint8 = TDBLogMessageTypedValueColumn<ui8>;
+using TDBLogColumnInt16 = TDBLogMessageTypedValueColumn<i16>;
+using TDBLogColumnUint16 = TDBLogMessageTypedValueColumn<ui16>;
+using TDBLogColumnInt32 = TDBLogMessageTypedValueColumn<i32>;
+using TDBLogColumnUint32 = TDBLogMessageTypedValueColumn<ui32>;
+using TDBLogColumnInt64 = TDBLogMessageTypedValueColumn<i64>;
 using TDBLogColumnUint64 = TDBLogMessageTypedValueColumn<ui64>;
+using TDBLogColumnFloat = TDBLogMessageTypedValueColumn<float>;
+using TDBLogColumnDouble = TDBLogMessageTypedValueColumn<double>;
+using TDBLogColumnUtf8 = TDBLogMessageTypedValueColumn<TString>;
+using TDBLogColumnTimestamp = TDBLogMessageTypedValueColumn<TInstant>;
 
 }

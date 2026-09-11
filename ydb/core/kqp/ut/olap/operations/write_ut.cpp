@@ -762,11 +762,7 @@ public:
         return query;
     }
 
-    void Dump(const TString& query, const TQueryResult& result) {
-        Cerr << " " << Endl;
-        Cerr << "QUERY:" << Endl << query << Endl;
-        Cerr << " " << Endl;
-        Cerr << "RESULT:" << Endl;
+    void Dump(const TQueryResult& result) {
         for (const auto& row : result) {
             for (size_t i = 0; i < row.size(); ++i) {
                 if (i) {
@@ -796,8 +792,18 @@ public:
         // Fetch result
         auto result = FetchStreamData(it);
 
-        // Dump result
-        Dump(query, result);
+        // Dump
+        Cerr << " " << Endl;
+        Cerr << "QUERY:" << Endl << query << Endl;
+
+        Cerr << " " << Endl;
+        Cerr << "RESULT:" << Endl;
+        Dump(result);
+
+        Cerr << " " << Endl;
+        Cerr << "REQUIRED:" << Endl;
+        Dump(requiredResult);
+
         UNIT_ASSERT_EQUAL(result, requiredResult);
     }
 };
@@ -841,7 +847,7 @@ struct TEnvironment {
 };
 
 Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
-    Y_UNIT_TEST(WriteSingleLine) {
+    Y_UNIT_TEST(WriteSimple) {
 
         TEnvironment env({
             std::make_shared<TDBLogMessageIdColumn>(1),
@@ -880,6 +886,37 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             {"4u", "[3u]", R"(["Test error message"])",  R"(["write_ut.cpp:861"])", R"(#)",       "#"}});
     }
 
+    Y_UNIT_TEST(WriteVaryValues) {
+
+        TEnvironment env({
+            std::make_shared<TDBLogMessageIdColumn>(1),
+            std::make_shared<TDBLogColumnUint64>("value1", std::vector<TKeyName>{"value1"}),
+            std::make_shared<TDBLogColumnUint64>("value2", std::vector<TKeyName>{"value2"}),
+            std::make_shared<TDBLogColumnUint64>("value3", std::vector<TKeyName>{"value3"})});
+        env.WriteLog([](){
+            YDB_LOG_INFO_COMP(NActorsServices::TEST, "Write 0 values");
+            YDB_LOG_INFO_COMP(NActorsServices::TEST, "Write 1 values",
+                {"value1", 1});
+            YDB_LOG_INFO_COMP(NActorsServices::TEST, "Write 2 values",
+                {"value1", 1},
+                {"value2", 2});
+            YDB_LOG_INFO_COMP(NActorsServices::TEST, "Write 3 values",
+                {"value1", 1},
+                {"value2", 2},
+                {"value3", 3});
+        });
+
+        // Fetch and check data
+        env.Writer->CheckWrittenLogContent({
+            {"1u", "#", "#", "#"},
+            {"2u", "[1u]", "#", "#"},
+            {"3u", "[1u]", "[2u]", "#"},
+            {"4u", "[1u]", "[2u]", "[3u]"}});
+    }
+}
+
+Y_UNIT_TEST_SUITE(KqpOlapWriteLogSchema) {
+
     Y_UNIT_TEST(CreateTable) {
         // @todo
     }
@@ -897,5 +934,131 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
     }
 }
 
-}   // namespace NKikimr::NKqp
+template <typename T>
+void AppendYdbValue(NYdb::TValueBuilder& builder, const T& value) {
+    if constexpr (std::is_same_v<T, bool>) {
+        builder.Bool(value);
+    } else if constexpr (std::is_same_v<T, i8>) {
+        builder.Int8(value);
+    } else if constexpr (std::is_same_v<T, ui8>) {
+        builder.Uint8(value);
+    } else if constexpr (std::is_same_v<T, i16>) {
+        builder.Int16(value);
+    } else if constexpr (std::is_same_v<T, ui16>) {
+        builder.Uint16(value);
+    } else if constexpr (std::is_same_v<T, i32>) {
+        builder.Int32(value);
+    } else if constexpr (std::is_same_v<T, ui32>) {
+        builder.Uint32(value);
+    } else if constexpr (std::is_same_v<T, i64>) {
+        builder.Int64(value);
+    } else if constexpr (std::is_same_v<T, ui64>) {
+        builder.Uint64(value);
+    } else if constexpr (std::is_same_v<T, float>) {
+        builder.Float(value);
+    } else if constexpr (std::is_same_v<T, double>) {
+        builder.Double(value);
+    } else if constexpr (std::is_same_v<T, TString>) {
+        builder.Utf8(std::string(value.data(), value.size()));
+    } else if constexpr (std::is_same_v<T, TInstant>) {
+        builder.Timestamp(value);
+    } else {
+        static_assert(!sizeof(T*), "Unsupported type for ValueToYson");
+    }
+}
 
+std::string FormatYdbValueToYson(const NYdb::TValue& value) {
+    const TString yson = NYdb::FormatValueYson(value);
+    return std::string(yson.data(), yson.size());
+}
+
+template <typename T>
+std::string ValueToYsonString(const T& value) {
+    NYdb::TValueBuilder builder;
+    AppendYdbValue(builder, value);
+    return FormatYdbValueToYson(builder.Build());
+}
+
+template <typename TValueType, typename TInvalidValueType>
+void TestType(const TValueType& value, const std::optional<TInvalidValueType>& invalidValue = {}) {
+    TEnvironment env({
+        std::make_shared<TDBLogMessageIdColumn>(1),
+        std::make_shared<TDBLogMessageStringValueColumn>("string_value", std::vector<TKeyName>{"value"}),
+        std::make_shared<TDBLogMessageTypedValueColumn<TValueType>>("ui64_value", std::vector<TKeyName>{"value"})
+    });
+    env.WriteLog([&](){
+        YDB_LOG_INFO_COMP(NActorsServices::TEST, "Write valid value",
+            {"value", value});
+        YDB_LOG_INFO_COMP(NActorsServices::TEST, "Write invalid value",
+            {"value", invalidValue});
+        YDB_LOG_INFO_COMP(NActorsServices::TEST, "Write no value");
+    });
+
+    TStringBuilder stringValue;
+    stringValue << TString(R"([")") << TTypesMapping::ToString(value) << TString(R"("])");
+
+    TStringBuilder stringYsonValue;
+    stringYsonValue << TString(R"([)") << ValueToYsonString(value) << TString(R"(])");
+
+    TStringBuilder stringInvalidValue;
+    if (invalidValue.has_value()) {
+        stringInvalidValue << TString(R"([")") << TTypesMapping::ToString(invalidValue.value()) << TString(R"("])");
+    } else {
+        stringInvalidValue << "#";
+    }
+
+    env.Writer->CheckWrittenLogContent(
+        {{"1u", stringValue, stringYsonValue},
+         {"2u", stringInvalidValue, "#"},
+         {"3u", "#", "#"}});
+}
+
+Y_UNIT_TEST_SUITE(KqpOlapWriteLogTypes) {
+
+    Y_UNIT_TEST(Int8) {
+        TestType<i8, TString>(i8(-8), TString("s"));
+    }
+
+    Y_UNIT_TEST(UInt8) {
+        TestType<ui8, TString>(ui8(8), TString("s"));
+    }
+
+    Y_UNIT_TEST(Int16) {
+        TestType<i16, TString>(i16(-16), TString("s"));
+    }
+
+    Y_UNIT_TEST(UInt16) {
+        TestType<ui16, TString>(ui16(16), TString("s"));
+    }
+
+    Y_UNIT_TEST(Int32) {
+        TestType<i32, TString>(-32, TString("s"));
+    }
+
+    Y_UNIT_TEST(UInt32) {
+        TestType<ui32, TString>(32, TString("s"));
+    }
+
+    Y_UNIT_TEST(Int64) {
+        TestType<i64, TString>(i64(-64), TString("s"));
+    }
+
+    Y_UNIT_TEST(UInt64) {
+        TestType<ui64, TString>(1, TString("s"));
+    }
+
+    Y_UNIT_TEST(Float) {
+        TestType<float, TString>(1.5f, TString("s"));
+    }
+
+    Y_UNIT_TEST(Double) {
+        TestType<double, TString>(2.5, TString("s"));
+    }
+
+    Y_UNIT_TEST(String) {
+        TestType<TString, ui64>(TString("s"), 1);
+    }
+
+}
+
+}   // namespace NKikimr::NKqp

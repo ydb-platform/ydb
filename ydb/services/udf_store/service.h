@@ -115,7 +115,7 @@ private:
     bool IsLibraryPending(const TString& name) const;
     void EnqueueNativeUdfIfNeeded(const TUdfModule& udf);
     void EnqueueWasmCompileIfNeeded(const TUdfModule& udf, const TSnapshot* snapshot = nullptr);
-    void EnqueueWasmLoadIfNeeded(const TUdfModule& udf);
+    void EnqueueWasmLoadIfNeeded(const TUdfModule& udf, const TSnapshot* snapshot = nullptr);
     void EnqueueLibraryCompileIfNeeded(const TUdfModule& library);
     bool AreLibraryDependenciesReady(TStringBuf manifest, const TSnapshot* snapshot = nullptr) const;
     THashMap<TString, TString> CollectLibraryUids(

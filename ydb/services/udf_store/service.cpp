@@ -174,12 +174,18 @@ void TUdfStoreService::EnqueueWasmCompileIfNeeded(const TUdfModule& udf, const T
     });
 }
 
-void TUdfStoreService::EnqueueWasmLoadIfNeeded(const TUdfModule& udf) {
+void TUdfStoreService::EnqueueWasmLoadIfNeeded(const TUdfModule& udf, const TSnapshot* snapshot) {
     if (udf.GetCompileStatus() != ECompileStatus::Ready) {
         return;
     }
     const TString& name = udf.GetName();
     if (LoadedUdfs.contains(name) || IsNamePending(name, EUdfType::WASM)) {
+        return;
+    }
+    // Same snapshot the refresh is applying: CurrentSnapshot is still the previous
+    // one until the handler finishes, and on a cold start it is null. Looking
+    // there would leave LibraryUids empty even when sdk is Ready in this refresh.
+    if (!AreLibraryDependenciesReady(udf.GetManifest(), snapshot)) {
         return;
     }
     try {
@@ -209,7 +215,7 @@ void TUdfStoreService::EnqueueWasmLoadIfNeeded(const TUdfModule& udf) {
         .Type = EUdfType::WASM,
         .Manifest = udf.GetManifest(),
         .ModuleExtension = GetModuleExtensionFromManifest(udf.GetManifest()),
-        .LibraryUids = CollectLibraryUids(udf.GetManifest()),
+        .LibraryUids = CollectLibraryUids(udf.GetManifest(), snapshot),
     });
 }
 
@@ -457,7 +463,7 @@ void TUdfStoreService::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TP
                 if (udf.GetCompileStatus() != ECompileStatus::Ready) {
                     EnqueueWasmCompileIfNeeded(udf, snapshot.get());
                 } else {
-                    EnqueueWasmLoadIfNeeded(udf);
+                    EnqueueWasmLoadIfNeeded(udf, snapshot.get());
                 }
                 break;
             case EUdfType::LIBRARY:

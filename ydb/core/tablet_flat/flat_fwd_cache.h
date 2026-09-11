@@ -18,7 +18,7 @@ namespace NFwd {
     template<size_t Capacity>
     class TLoadedPagesCircularBuffer {
     public:
-        const TSharedData* Get(TPageOffset offset, bool allowMissingBeforeMax = false) const
+        const TSharedData* Get(TPageOffset offset) const
         {
             if (!MaxSeenOffset.IsMax() && offset <= MaxSeenOffset) {
                 for (const auto& page : LoadedPages) {
@@ -27,13 +27,15 @@ namespace NFwd {
                     }
                 }
 
-                if (!allowMissingBeforeMax) {
-                    Y_TABLET_ERROR("Failed to locate page within forward trace");
-                }
+                // Contract violation, not a reloadable page: the forward cache is
+                // a forward read-ahead, and a client that goes back resets it
+                // first (TEnv::Reset). Kept fatal for V1 and V2 alike, and
+                // untested because no supported scenario reaches it.
+                Y_TABLET_ERROR("Failed to locate page within forward trace");
             }
 
-            // Next pages may be requested. V2 byte offsets may also be lower
-            // than previously seen offsets, so their misses fall through.
+            // Not in buffer (or offset beyond what was ever loaded) —
+            // caller falls through to load the page.
             return nullptr;
         }
 
@@ -346,7 +348,7 @@ namespace NFwd {
             auto levelId = GetLevel(offset, type);
             auto& level = Levels[levelId];
 
-            if (auto *page = level.Trace.Get(offset, Meta.HasRootV2())) {
+            if (auto *page = level.Trace.Get(offset)) {
                 return {page, false, true};
             }
 

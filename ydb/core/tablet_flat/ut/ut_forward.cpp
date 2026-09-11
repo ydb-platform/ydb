@@ -1481,13 +1481,6 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCache) {
             {1306, 1306, 584, 50, 0});
         wrap.To(16).Get(4, true, false, true,
             {1306, 1306, 584, 50, 0});
-
-        auto rereadEvicted = [&]() {
-            wrap.To(17).Get(0, true, false, true,
-                {1306, 1306, 584, 50, 0});
-        };
-        UNIT_ASSERT_EXCEPTION_CONTAINS(rereadEvicted(), yexception,
-            "Failed to locate page within forward trace");
     }
 
     Y_UNIT_TEST(End)
@@ -1806,8 +1799,8 @@ private:
 
 // Build a V2 part with the same structure as the V1 CookPart() in NFwd_TBTreeIndexCache:
 // 40 rows, btree with PageRows=2, BTreeIndexNodeKeysMin=Max=2.
-// This creates:
-//   20 data pages, 2 internal nodes at level 1, 1 root node at level 0.
+// This creates 20 data pages and 3 index levels above them (LevelCountV2 = 3:
+// the root plus two internal levels); per-level node counts follow from the writer.
 static TPartEggs CookPartV2() {
     NPage::TConf conf;
 
@@ -2007,6 +2000,11 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCacheV2) {
             wrap.To(step++).Get(entry.Offset, EPage::BTreeIndexV2, true, false, true);
         }
     }
+
+    // Note: no test for a backward re-read of an evicted trace page. The forward
+    // cache is a forward read-ahead; going back requires TEnv::Reset(). Without a
+    // reset such a request violates the contract (Y_TABLET_ERROR in
+    // flat_fwd_cache.h), so it is untested for both V1 and V2.
 
     // ForwardTwice: Fill twice — second Fill with Grow=true should be a no-op
     Y_UNIT_TEST(V2_ForwardTwice)

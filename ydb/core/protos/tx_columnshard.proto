@@ -307,6 +307,10 @@ message TDropTable {
     optional uint64 PathId = 1;
 }
 
+message TTruncateTable {
+    optional uint64 PathId = 1;
+}
+
 message TEnsureTables {
     repeated TCreateTable Tables = 1;
 }
@@ -339,6 +343,7 @@ message TSchemaTxBody {
         TAlterStore AlterStore = 6;
         TMoveTable MoveTable = 7;
         TCopyTable CopyTable = 8;
+        TTruncateTable TruncateTable = 9;
     }
 
     optional NKikimrSchemeOp.TGranuleShardingInfo GranuleShardingInfo = 20;

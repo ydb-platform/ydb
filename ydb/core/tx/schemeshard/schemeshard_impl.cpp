@@ -1994,6 +1994,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterSecret:
     case TTxState::TxAlterStreamingQuery:
     case TTxState::TxTruncateTable:
+    case TTxState::TxTruncateColumnTable:
         return TPathElement::EPathState::EPathStateAlter;
     case TTxState::TxDropTable:
     case TTxState::TxDropPQGroup:

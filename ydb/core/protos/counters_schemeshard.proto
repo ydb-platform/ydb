@@ -306,8 +306,8 @@ enum ESimpleCounters {
     COUNTER_TEST_SHARD_COUNT = 236                         [(CounterOpts) = {Name: "TestShardCount"}];
     COUNTER_IN_FLIGHT_OPS_TxCreateTestShardSet = 237      [(CounterOpts) = {Name: "InFlightOps/CreateTestShardSet"}];
     COUNTER_IN_FLIGHT_OPS_TxDropTestShardSet = 238        [(CounterOpts) = {Name: "InFlightOps/DropTestShardSet"}];
-
     COUNTER_RUNNING_STREAMING_QUERY_COUNT = 239           [(CounterOpts) = {Name: "RunningStreamingQueryCount"}];
+    COUNTER_IN_FLIGHT_OPS_TxTruncateColumnTable = 240 [(CounterOpts) = {Name: "InFlightOps/TruncateColumnTable"}];
 }
 
 enum ECumulativeCounters {
@@ -512,6 +512,7 @@ enum ECumulativeCounters {
 
     // Total time spent in TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats), in nanoseconds.
     COUNTER_PERIODIC_TABLE_STATS_HANDLE_TIME_NS = 151 [(CounterOpts) = {Name: "PeriodicTableStatsHandleTimeNs"}];
+    COUNTER_FINISHED_OPS_TxTruncateColumnTable = 152 [(CounterOpts) = {Name: "FinishedOps/TruncateColumnTable"}];
 }
 
 enum EPercentileCounters {

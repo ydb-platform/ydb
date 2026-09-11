@@ -12,13 +12,7 @@
 #include <library/cpp/resource/resource.h>
 #include <util/system/tempfile.h>
 #include <util/system/condvar.h>
-<<<<<<< HEAD
-=======
-#include <util/network/address.h>
-#include <util/network/sock.h>
 #include <util/random/fast.h>
-#include <netinet/in.h>
->>>>>>> d1fb885902b (KIKIMR-26996 keep streaming decompression state when the socket buffer moves (#52567))
 #include <thread>
 #include <atomic>
 #include <vector>
@@ -49,24 +43,6 @@ void EatPartialString(TIntrusivePtr<HttpType>& request, const TString& data) {
         memcpy(request->Pos(), &c, 1);
         request->Advance(1);
     }
-}
-
-<<<<<<< HEAD
-=======
-std::pair<TString, ui16> BoundHostAndPort(const TIntrusivePtr<NHttp::TSocketDescriptor>& socket) {
-    sockaddr_storage ss{};
-    socklen_t slen = sizeof(ss);
-    Y_ABORT_UNLESS(getsockname(socket->GetDescriptor(), reinterpret_cast<sockaddr*>(&ss), &slen) == 0);
-    if (ss.ss_family == AF_INET6) {
-        return {"::1", ntohs(reinterpret_cast<sockaddr_in6*>(&ss)->sin6_port)};
-    }
-    return {"127.0.0.1", ntohs(reinterpret_cast<sockaddr_in*>(&ss)->sin_port)};
-}
-
-void AssertCanConnect(const TString& host, ui16 port) {
-    TNetworkAddress addr(host, port);
-    TSocket sock(addr);
-    UNIT_ASSERT(static_cast<SOCKET>(sock) != INVALID_SOCKET);
 }
 
 class TParserCheckActor : public NActors::TActorBootstrapped<TParserCheckActor> {
@@ -393,7 +369,6 @@ void CheckStreamingReparseTcp(TStringBuf encoding) {
     UNIT_ASSERT_C(received == expected, "TCP stream body bytes differ");
 }
 
->>>>>>> d1fb885902b (KIKIMR-26996 keep streaming decompression state when the socket buffer moves (#52567))
 }
 
 Y_UNIT_TEST_SUITE(HttpProxy) {

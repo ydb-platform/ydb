@@ -11,6 +11,12 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 size_t GetVChunksPerRegion(ui64 vChunkSize);
 
+// The group that serves this vchunk. Load-time compaction relies on the same
+// answer as the vchunk creation, so both go through here.
+size_t GetDirectBlockGroupIndex(
+    size_t vChunkIndex,
+    size_t directBlockGroupCount);
+
 size_t GetRegionIndex(const TVolumeConfig& volumeConfig, TBlockRange64 range);
 
 size_t GetRegionIndexByVChunk(

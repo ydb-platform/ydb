@@ -4,6 +4,7 @@ SRCS(
     delete_partition.cpp
     load_actor_adapter.cpp
     part_add_host_to_dbg.cpp
+    part_remove_host_from_dbg.cpp
     part_database.cpp
     part_initschema.cpp
     part_loadstate.cpp

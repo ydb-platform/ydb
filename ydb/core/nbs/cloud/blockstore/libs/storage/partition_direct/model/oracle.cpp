@@ -32,6 +32,7 @@ EHostState HealthToState(EHostHealth health)
             return EHostState::TemporaryOffline;
         case EHostHealth::Offline:
         case EHostHealth::Broken:
+        case EHostHealth::Removed:
             return EHostState::Offline;
     }
 }
@@ -203,6 +204,12 @@ void TOracle::OnDDiskBroken(THostIndex hostIndex)
 
         MaybeQueryAddHost();
     }
+}
+
+void TOracle::OnHostRemoved(THostIndex hostIndex)
+{
+    HostsHealths[hostIndex] = EHostHealth::Removed;
+    HostStates[hostIndex].State = EHostState::Offline;
 }
 
 TDuration TOracle::GetHostReconnectDelay(THostIndex hostIndex)

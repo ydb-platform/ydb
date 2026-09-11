@@ -143,6 +143,14 @@ public:
 
     void OnAddHostFailed(const NProto::TError& error) override;
 
+    void OnRemoveHostSucceeded(
+        THostIndex removeIndex,
+        ui32 dbgConnectionsConfigGeneration) override;
+
+    void OnRemoveHostFailed(
+        THostIndex removeIndex,
+        const NProto::TError& error) override;
+
     TDuration TakeCopyRangeBudget(ui64 byteCount) override;
 
     ui32 GetNodeId(THostIndex host) const override;
@@ -166,6 +174,7 @@ public:
         EHostState newState) override;
     TCountAndSize GetPBuffersUsage(THostIndex hostIndex) const override;
     void QueryAddHost() override;
+    void QueryRemoveHost(THostIndex hostIndex) override;
 
 private:
     friend struct TDBGFixture;
@@ -192,8 +201,12 @@ private:
         THostIndex hostIndex);
     void OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId);
 
+    void MarkSlotDead(THostIndex slot, ui32 dbgConnectionsConfigGeneration);
+
     [[nodiscard]] bool HasPBufferQuorum() const;
     [[nodiscard]] bool HasLockedQuorum() const;
+
+    [[nodiscard]] TString ValidateRemoveHost(THostIndex hostIndex) const;
 
     [[nodiscard]] bool IsInitialized() const
     {

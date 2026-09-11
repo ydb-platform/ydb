@@ -47,13 +47,22 @@ struct TPartitionSchema: public NKikimr::NIceDb::Schema
                 ::NYdb::NBS::PartitionDirect::NProto::TAddHostInProgress;
         };
 
+        // Set while a RemoveHost is in flight, cleared when it commits.
+        struct RemoveHostInProgress
+            : public Column<6, NKikimr::NScheme::NTypeIds::String>
+        {
+            using Type =
+                ::NYdb::NBS::PartitionDirect::NProto::TRemoveHostInProgress;
+        };
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
             StorageConfig,
             VolumeConfig,
             DirectBlockGroupsConnections,
-            AddHostInProgress>;
+            AddHostInProgress,
+            RemoveHostInProgress>;
     };
 
     // Persisted vchunk config overrides, keyed by vchunk index. Only vchunks

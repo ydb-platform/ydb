@@ -22,14 +22,19 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
         TEnvironmentSetup Env;
         TActorId Edge;
 
-        explicit TFixture(ui32 numDDiskGroups = 4)
+        explicit TFixture(ui32 numDDiskGroups = 4, bool enableChecksums = true)
             : Env({
                 .NodeCount = 8,
                 .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-                .ConfigPreprocessor = [](ui32, TNodeWardenConfig& cfg) {
+                .ConfigPreprocessor = [enableChecksums](ui32, TNodeWardenConfig& cfg) {
+                    NYdb::NBS::NProto::TDDiskConfig ddisk;
+                    ddisk.SetEnableChecksums(enableChecksums);
+                    cfg.DDiskConfig = ddisk;
+
                     NYdb::NBS::NProto::TPBufferConfig pb;
                     pb.SetMaxChunks(10);
                     pb.SetMaxInMemoryCache(128_MB);
+                    pb.SetEnableChecksums(enableChecksums);
                     cfg.PBufferConfig = pb;
                 },
                 .SetupHive = true})
@@ -142,6 +147,20 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
                 Edge, /*termOnCapture=*/false, Deadline(TDuration::Seconds(10)));
         }
 
+        static void AddWritePayload(
+            TEvLoad::TEvNbsWrite& ev,
+            TRope payload,
+            bool enableChecksums = true)
+        {
+            if (enableChecksums) {
+                for (const ui64 checksum : NDDisk::CalculatePayloadChecksums(payload)) {
+                    ev.Record.AddChecksums(checksum);
+                }
+            }
+            const ui32 payloadId = ev.AddPayload(std::move(payload));
+            ev.Record.SetPayloadId(payloadId);
+        }
+
         ENbsLoadTabletStatus TabletCreate(
             TActorId pipe, ui32 numDirectBlockGroups, ui64 bscTabletId = 1)
         {
@@ -177,7 +196,8 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
         TRunResultInfo RunViaLoadActor(
             ui64 tabletId,
             ui64 tag = 1,
-            ui32 numDirectBlockGroupsToUse = 0)
+            ui32 numDirectBlockGroupsToUse = 0,
+            bool enableChecksums = true)
         {
             TEvLoadTestRequest::TNbsDbgLikeLoad cmd;
             cmd.SetNbsDbgLikeTabletId(tabletId);
@@ -195,6 +215,7 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
             auto& tcfg = *wc.MutableTabletConfig();
             tcfg.SetMaxInflightLsns(64);
             tcfg.SetPBufferReplyTimeoutMicroseconds(500000); // 500 ms - slack for sim
+            tcfg.SetEnableChecksums(enableChecksums);
 
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
             Env.Runtime->Register(
@@ -341,6 +362,82 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
 
         UNIT_ASSERT_VALUES_EQUAL(f.TabletDelete(pipe), NBSLT_OK);
         f.ClosePipe(pipe);
+    }
+
+    Y_UNIT_TEST(WriteChecksumsFollowRunConfiguration) {
+        for (const bool enableChecksums : {false, true}) {
+            TFixture f(/*numDDiskGroups=*/4, enableChecksums);
+            const ui64 tabletId = f.CreateNbsLoadTabletViaHive(/*ownerIdx=*/1);
+            TActorId pipe = f.OpenTabletPipe(tabletId);
+
+            UNIT_ASSERT_VALUES_EQUAL(f.TabletCreate(pipe, /*numDirectBlockGroups=*/1), NBSLT_OK);
+            f.Env.Sim(TDuration::Seconds(5));
+
+            ui64 nbsWrites = 0;
+            ui64 pbWrites = 0;
+            TString invalidReason;
+            auto previousFilter = std::move(f.Env.Runtime->FilterFunction);
+            f.Env.Runtime->FilterFunction =
+                [&](ui32 nodeId, std::unique_ptr<IEventHandle>& event) {
+                    if (event->GetTypeRewrite() == TEvLoad::TEvNbsWrite::EventType) {
+                        const auto* msg = event->Get<TEvLoad::TEvNbsWrite>();
+                        ++nbsWrites;
+                        const ui32 expectedCount = enableChecksums
+                            ? msg->Record.GetSizeBytes() / NDDisk::IntegrityUnitSize
+                            : 0;
+                        if (static_cast<ui32>(msg->Record.ChecksumsSize()) != expectedCount
+                                && invalidReason.empty())
+                        {
+                            invalidReason = TStringBuilder()
+                                << "TEvNbsWrite checksum count# " << msg->Record.ChecksumsSize()
+                                << " expected# " << expectedCount;
+                        }
+                    } else if (event->GetTypeRewrite() == NDDisk::TEvWritePersistentBuffers::EventType) {
+                        const auto* msg = event->Get<NDDisk::TEvWritePersistentBuffers>();
+                        ++pbWrites;
+                        const auto& record = msg->Record;
+                        const NDDisk::TWriteInstruction instruction(record.GetInstruction());
+                        if (!instruction.PayloadId
+                                || *instruction.PayloadId >= msg->GetPayloadCount())
+                        {
+                            if (invalidReason.empty()) {
+                                invalidReason = "TEvWritePersistentBuffers has no valid payload";
+                            }
+                        } else {
+                            const auto expected = enableChecksums
+                                ? NDDisk::CalculatePayloadChecksums(msg->GetPayload(*instruction.PayloadId))
+                                : std::vector<ui64>{};
+                            if (static_cast<size_t>(record.ChecksumsSize()) != expected.size()
+                                    && invalidReason.empty())
+                            {
+                                invalidReason = TStringBuilder()
+                                    << "TEvWritePersistentBuffers checksum count# " << record.ChecksumsSize()
+                                    << " expected# " << expected.size();
+                            }
+                            for (ui32 i = 0; i < expected.size() && invalidReason.empty(); ++i) {
+                                if (record.GetChecksums(i) != expected[i]) {
+                                    invalidReason = TStringBuilder()
+                                        << "TEvWritePersistentBuffers checksum mismatch at block# " << i;
+                                }
+                            }
+                        }
+                    }
+                    return previousFilter ? previousFilter(nodeId, event) : true;
+                };
+
+            auto fin = f.RunViaLoadActor(
+                tabletId, /*tag=*/1, /*numDbgsToUse=*/0, enableChecksums);
+            f.Env.Runtime->FilterFunction = std::move(previousFilter);
+
+            UNIT_ASSERT(fin.FinishedReceived);
+            UNIT_ASSERT_C(fin.ErrorReason.empty(), fin.ErrorReason);
+            UNIT_ASSERT_C(nbsWrites > 0, "no TEvNbsWrite observed");
+            UNIT_ASSERT_C(pbWrites > 0, "no TEvWritePersistentBuffers observed");
+            UNIT_ASSERT_C(invalidReason.empty(), invalidReason);
+
+            UNIT_ASSERT_VALUES_EQUAL(f.TabletDelete(pipe), NBSLT_OK);
+            f.ClosePipe(pipe);
+        }
     }
 
     // Same lifecycle with 2 DBGs - exercises the cookie scheme that routes
@@ -525,8 +622,7 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
                     /*address=*/i * kBlockSize, /*sizeBytes=*/kBlockSize);
                 TString data(kBlockSize, '\0');
                 memcpy(data.Detach(), &i, sizeof(i));
-                const ui32 payloadId = ev->AddPayload(TRope(std::move(data)));
-                ev->Record.SetPayloadId(payloadId);
+                TFixture::AddWritePayload(*ev, TRope(std::move(data)));
                 NTabletPipe::SendData(f.Edge, pipe, ev.release(), /*cookie=*/i);
             }
         });
@@ -636,8 +732,7 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
                         addressOf(dbg, i), /*sizeBytes=*/kBlockSize);
                     TString data(kBlockSize, '\0');
                     memcpy(data.Detach(), &cookie, sizeof(cookie));
-                    const ui32 payloadId = ev->AddPayload(TRope(std::move(data)));
-                    ev->Record.SetPayloadId(payloadId);
+                    TFixture::AddWritePayload(*ev, TRope(std::move(data)));
                     NTabletPipe::SendData(f.Edge, pipe, ev.release(), cookie);
                 }
             }
@@ -762,8 +857,7 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
                         addressOf(dbg, i), /*sizeBytes=*/kBlockSize);
                     TString data(kBlockSize, '\0');
                     memcpy(data.Detach(), &cookie, sizeof(cookie));
-                    const ui32 payloadId = ev->AddPayload(TRope(std::move(data)));
-                    ev->Record.SetPayloadId(payloadId);
+                    TFixture::AddWritePayload(*ev, TRope(std::move(data)));
                     NTabletPipe::SendData(f.Edge, pipe, ev.release(), cookie);
                 }
             }

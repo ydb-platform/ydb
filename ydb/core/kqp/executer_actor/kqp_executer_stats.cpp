@@ -924,7 +924,7 @@ NDqProto::TDqStageStats* GetOrCreateStageStats(const NYql::NDq::TStageId& stageI
     const TKqpTasksGraph& tasksGraph, NDqProto::TDqExecutionStats& execStats)
 {
     auto& stageInfo = tasksGraph.GetStageInfo(stageId);
-    auto& stageProto = stageInfo.Meta.Tx.Body->GetStages(stageId.StageId);
+    auto& stageProto = stageInfo.Meta.GetStage(stageId);
 
     for (auto& stage : *execStats.MutableStages()) {
         if (stage.GetStageGuid() == stageProto.GetStageGuid()) {
@@ -1014,7 +1014,7 @@ void TQueryExecutionStats::Prepare() {
                 auto& info = TasksGraph->GetStageInfo(stageStats.StageId);
                 auto& stage = info.Meta.GetStage(info.Id);
                 for (const auto& input : stage.GetInputs()) {
-                    auto& peerStageStats = StageStats[NYql::NDq::TStageId(stageStats.StageId.TxId, input.GetStageIndex())];
+                    auto& peerStageStats = StageStats[TasksGraph->MakeStageId(stageStats.StageId.TxId, input.GetStageIndex())];
                     stageStats.InputStages.push_back(&peerStageStats);
                     stageStats.Input.emplace(peerStageStats.StageId.StageId, 0);
                     peerStageStats.OutputStages.push_back(&stageStats);
@@ -1571,15 +1571,10 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
             THashMap<ui32, NDqProto::TDqStageStats*> protoStages;
 
             for (auto& [stageId, stagetype] : TasksGraph->GetStagesInfo()) {
-                if (stageId.TxId == 0) {
-                    protoStages.emplace(stageId.StageId, GetOrCreateStageStats(stageId, *TasksGraph, stats));
-                }
+                protoStages.emplace(stageId.StageId, GetOrCreateStageStats(stageId, *TasksGraph, stats));
             }
 
             for (auto& [stageId, stageStat] : StageStats) {
-                if (stageStat.StageId.TxId != 0) {
-                    continue;
-                }
                 auto it = protoStages.find(stageStat.StageId.StageId);
                 YQL_ENSURE(it != protoStages.end());
                 auto& stageStats = *it->second;

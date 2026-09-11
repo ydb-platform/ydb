@@ -24,7 +24,9 @@ namespace NKikimr::NBlobDepot {
                 block.SetTabletId(Request.TabletId);
                 block.SetBlockedGeneration(Request.Generation);
                 block.SetIssuerGuid(Request.IssuerGuid);
-                block.SetVersion(Request.Version);
+                if (Request.Version) {
+                    block.SetVersion(*Request.Version);
+                }
                 block.SetWriteSourceOp(WriteSourceToProto(Request.WriteSource));
                 Agent.Issue(std::move(block), this, std::make_shared<TBlockContext>(TActivationContext::Monotonic()));
             }

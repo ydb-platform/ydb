@@ -896,6 +896,9 @@ STFUNC(TPartitionActor::StateWork)
             TEvPartitionDirectPrivate::TEvFastPathServiceReady,
             HandleFastPathServiceReady);
         HFunc(TEvPartitionDirectPrivate::TEvAddHostToDBG, HandleAddHostToDBG);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvPersistHostHealth,
+            HandlePersistHostHealth);
 
         HFunc(
             TEvPartitionDirectPrivate::TEvFastPathServiceShutdown,

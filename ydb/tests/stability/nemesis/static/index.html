@@ -330,9 +330,9 @@
           })
       }
 
-      function runWardenChecks() {
+      function runWardenChecks(payload) {
         wardenLoading.value = true
-        axios.post('/api/hosts/warden/start')
+        axios.post('/api/hosts/warden/start', payload || {})
           .then(response => {
             console.log('Warden checks started', response.data)
             // Start polling for results

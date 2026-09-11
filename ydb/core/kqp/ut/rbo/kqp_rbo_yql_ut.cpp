@@ -5450,6 +5450,483 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    void RunWindowFunctionsTest(const bool newRbo, const bool columnStore, TVector<TString>& names, TVector<TString>& results,
+                                TVector<TString>& issues) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const TString schema = TStringBuilder() << R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b Int64,
+                c Int64,
+                d Int64,
+                e Int64,
+                PRIMARY KEY (a)
+            )
+        )" << (columnStore ? " WITH (Store = Column);" : ";");
+        auto schemeResult = tableSession.ExecuteSchemeQuery(schema).GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        {
+            // a, b (partition), c (order), d (second partition), e (measure); nullopt is NULL.
+            using TCell = std::optional<i64>;
+            const TVector<std::tuple<i64, TCell, TCell, TCell, TCell>> rowData = {
+                { 1, 1,       10,       100,      5},           // ordinary partition
+                { 2, 1,       20,       100,      3},
+                { 3, 1,       20,       200,      7},           // tie on the order key c
+                { 4, 1,       30,       200,      std::nullopt}, // NULL measure inside a partition
+                { 5, 1,       40,       100,      5},           // tie on the measure e
+                { 6, 2,       10,       100,      -2},          // negative measure
+                { 7, 2,       20,       100,      0},           // zero measure
+                { 8, 2,       30,       200,      8},
+                { 9, 3,       10,       100,      std::nullopt}, // partition where every measure is NULL
+                {10, 3,       20,       100,      std::nullopt},
+                {11, 4,       10,       100,      42},          // single row partition
+                {12, std::nullopt, 10,  100,      1},           // NULL partition key ...
+                {13, std::nullopt, 20,  100,      2},           // ... both rows form one partition
+                {14, 5,       std::nullopt, 100,  3},           // NULL order key
+                {15, 5,       10,       100,      4},
+                {16, 5,       10,       200,      6},           // tie on c, split by the second key d
+                {17, 6,       10,       std::nullopt, 9},       // NULL secondary partition key
+                {18, 6,       20,       std::nullopt, 11},
+                {19, 6,       30,       100,      13},
+                {20, 7,       10,       100,      1000000000},  // large measure
+            };
+
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (const auto& [a, b, c, d, e] : rowData) {
+                auto addCell = [](NYdb::TValueBuilder& builder, const TString& name, const TCell& cell) {
+                    builder.AddMember(name);
+                    if (cell) {
+                        builder.BeginOptional().Int64(*cell).EndOptional();
+                    } else {
+                        builder.EmptyOptional(NYdb::EPrimitiveType::Int64);
+                    }
+                };
+                rows.AddListItem().BeginStruct();
+                rows.AddMember("a").Int64(a);
+                addCell(rows, "b", b);
+                addCell(rows, "c", c);
+                addCell(rows, "d", d);
+                addCell(rows, "e", e);
+                rows.EndStruct();
+            }
+            rows.EndList();
+
+            auto seedResult = kikimr.GetTableClient().BulkUpsert("/Root/t1", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(seedResult.IsSuccess(), seedResult.GetIssues().ToString());
+        }
+
+        const TVector<std::pair<TString, TString>> queries = {
+            {"partitioned rank", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT b, c, Sum(e) AS sales,
+                    Rank() OVER (PARTITION BY b ORDER BY Sum(e) DESC) AS rank_in_group
+                FROM `/Root/t1`
+                GROUP BY b, c
+                ORDER BY b, c;
+            )"},
+            {"partitioned sum", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT b, c, Sum(e) AS sales,
+                    Sum(Sum(e)) OVER (PARTITION BY b) AS total_sales
+                FROM `/Root/t1`
+                GROUP BY b, c
+                ORDER BY b, c;
+            )"},
+            {"partitioned average", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT b, c, Sum(e) AS sales,
+                    Avg(Sum(e)) OVER (PARTITION BY b) AS average_sales
+                FROM `/Root/t1`
+                GROUP BY b, c
+                ORDER BY b, c;
+            )"},
+           {"global rank", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT c, Sum(e) AS sales,
+                    Rank() OVER (ORDER BY Sum(e) ASC) AS global_rank
+                FROM `/Root/t1`
+                GROUP BY c
+                ORDER BY c;
+            )"},
+            {"rank with rollup partition expression", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT b, c, Sum(e) AS sales,
+                    Rank() OVER (
+                        PARTITION BY
+                            Grouping(b) + Grouping(c),
+                            CASE WHEN Grouping(c) == 0 THEN b ELSE NULL END
+                        ORDER BY Sum(e) ASC, c DESC
+                    ) AS rank_within_parent
+                FROM `/Root/t1`
+                GROUP BY ROLLUP(b, c)
+                ORDER BY b, c, sales;
+            )"},
+            {"cumulative sum", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT b, c, Sum(e) AS sales,
+                    Sum(Sum(e)) OVER (
+                        PARTITION BY b
+                        ORDER BY c
+                        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                    ) AS cumulative_sales
+                FROM `/Root/t1`
+                GROUP BY b, c
+                ORDER BY b, c;
+            )"},
+            {"cumulative maximum of a value", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Max(e) OVER (
+                        PARTITION BY b
+                        ORDER BY c, a
+                        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                    ) AS cumulative_max
+                FROM `/Root/t1`
+                ORDER BY a;
+            )"},
+            {"sliding frame ending at the current row", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS sliding_sum,
+                    Max(e) OVER w AS sliding_max
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c, a
+                    ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+                )
+                ORDER BY a;
+            )"},
+            {"centred frame", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS centred_sum,
+                    Max(e) OVER w AS centred_max
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c, a
+                    ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"forward looking frame", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS ahead_sum,
+                    Min(e) OVER w AS ahead_min
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c, a
+                    ROWS BETWEEN 1 FOLLOWING AND 3 FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"trailing frame", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS trailing_sum,
+                    Max(e) OVER w AS trailing_max
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c, a
+                    ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                )
+                ORDER BY a;
+            )"},
+            {"suffix frame", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS suffix_sum,
+                    Max(e) OVER w AS suffix_max
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c, a
+                    ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"explicit whole partition frame", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS partition_sum,
+                    Max(e) OVER w AS partition_max
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c, a
+                    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"range frame with ties", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS range_sum,
+                    Count(e) OVER w AS range_count
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                    RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                )
+                ORDER BY a;
+            )"},
+            {"multi column partition", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT b, d, Sum(e) AS sales,
+                    Avg(Sum(e)) OVER (PARTITION BY b, d) AS avg_sales
+                FROM `/Root/t1`
+                GROUP BY b, d, c
+                ORDER BY b, d, sales;
+            )"},
+            {"multi column order", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT b, c, d, Sum(e) AS sales,
+                    Rank() OVER (
+                        PARTITION BY b
+                        ORDER BY d ASC, c DESC
+                    ) AS rank_in_group
+                FROM `/Root/t1`
+                GROUP BY b, c, d
+                ORDER BY b, c, d;
+            )"},
+            {"two windows sharing a specification", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Max(e) OVER (
+                        PARTITION BY b
+                        ORDER BY c, a
+                        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                    ) AS running_max,
+                    Min(e) OVER (
+                        PARTITION BY b
+                        ORDER BY c, a
+                        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                    ) AS running_min
+                FROM `/Root/t1`
+                ORDER BY a;
+            )"},
+            {"named window shared by several functions", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Rank() OVER w AS rank_in_group,
+                    Max(e) OVER w AS running_max,
+                    Sum(e) OVER w AS running_sum
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c, a
+                    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                )
+                ORDER BY a;
+            )"},
+            {"named window shared by several functions over aggregates", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT b, c, Sum(e) AS sales,
+                    Rank() OVER w AS rank_in_group,
+                    Sum(Sum(e)) OVER w AS running_sales,
+                    Max(Sum(e)) OVER w AS running_max
+                FROM `/Root/t1`
+                GROUP BY b, c
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                )
+                ORDER BY b, c;
+            )"},
+            {"named window without an order", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT b, c, Sum(e) AS sales,
+                    Avg(Sum(e)) OVER w AS avg_sales,
+                    Sum(Sum(e)) OVER w AS total_sales
+                FROM `/Root/t1`
+                GROUP BY b, c
+                WINDOW w AS (PARTITION BY b)
+                ORDER BY b, c;
+            )"},
+            {"two windows with different specifications", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT b, c, Sum(e) AS sales,
+                    Avg(Sum(e)) OVER (PARTITION BY b) AS avg_sales,
+                    Rank() OVER (PARTITION BY b ORDER BY c) AS rank_in_group
+                FROM `/Root/t1`
+                GROUP BY b, c
+                ORDER BY b, c;
+            )"},
+            {"window result inside an expression", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT b, c,
+                    Sum(e) * 100 / Sum(Sum(e)) OVER (PARTITION BY b) AS revenue_ratio
+                FROM `/Root/t1`
+                GROUP BY b, c
+                ORDER BY b, c;
+            )"},
+            {"window over a windowed subquery", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT b, c, cumulative_sales,
+                    Max(cumulative_sales) OVER (
+                        PARTITION BY b
+                        ORDER BY c
+                        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                    ) AS peak_cumulative_sales
+                FROM (
+                    SELECT b, c,
+                        Sum(Sum(e)) OVER (
+                            PARTITION BY b
+                            ORDER BY c
+                            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                        ) AS cumulative_sales
+                    FROM `/Root/t1`
+                    GROUP BY b, c
+                )
+                ORDER BY b, c;
+            )"},
+            {"filter on a window result", R"(
+                PRAGMA YqlSelect = "force";
+                PRAGMA OrderedColumns;
+
+                SELECT * FROM (
+                    SELECT b, c, Sum(e) AS sales,
+                        Rank() OVER (PARTITION BY b ORDER BY Sum(e) DESC) AS rank_in_group
+                    FROM `/Root/t1`
+                    GROUP BY b, c
+                ) WHERE rank_in_group <= 10
+                ORDER BY b, c;
+            )"},
+            {"sort and limit above a window", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT b, c, sales, rank_in_group FROM (
+                    SELECT b, c, Sum(e) AS sales,
+                        Rank() OVER (PARTITION BY b ORDER BY Sum(e) DESC) AS rank_in_group
+                    FROM `/Root/t1`
+                    GROUP BY b, c
+                ) ORDER BY rank_in_group, sales, b, c LIMIT 100;
+            )"},
+            {"join on a window result", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT x.b AS b, x.rank_in_group AS asc_rank, y.rank_in_group AS desc_rank
+                FROM (
+                    SELECT b, c, Rank() OVER (PARTITION BY b ORDER BY c ASC) AS rank_in_group
+                    FROM `/Root/t1`
+                ) AS x
+                JOIN (
+                    SELECT b, c, Rank() OVER (PARTITION BY b ORDER BY c DESC) AS rank_in_group
+                    FROM `/Root/t1`
+                ) AS y
+                ON x.b == y.b AND x.rank_in_group == y.rank_in_group
+                ORDER BY b, asc_rank;
+            )"},
+            {"two global windows in one select", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c,
+                    Rank() OVER (ORDER BY c ASC) AS asc_rank,
+                    Rank() OVER (ORDER BY c DESC) AS desc_rank
+                FROM `/Root/t1`
+                ORDER BY a;
+            )"},
+        };
+
+        for (const auto& [name, query] : queries) {
+            auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            names.push_back(name);
+            if (result.IsSuccess()) {
+                results.push_back(TString{FormatResultSetYson(result.GetResultSet(0))});
+            } else {
+                results.push_back({});
+                issues.push_back(TStringBuilder() << name << ": " << result.GetIssues().ToString());
+            }
+        }
+    }
+
+    const THashSet<TString> WindowQueriesNotLoweredYet{
+        // Aggregates over a whole partition need the frame to be folded and broadcast.
+        "partitioned sum",
+        "partitioned average",
+        "multi column partition",
+        "named window without an order",
+        "two windows with different specifications",
+        "window result inside an expression",
+        "explicit whole partition frame",
+        "suffix frame",
+        // Frames that do not run from the partition start to the current row need a row queue.
+        "sliding frame ending at the current row",
+        "centred frame",
+        "forward looking frame",
+        "trailing frame",
+        // A RANGE frame runs to the last peer row, which a per-row chain cannot express.
+        "range frame with ties",
+        "named window shared by several functions over aggregates",
+        // Grouping() is not supported yet.
+        "rank with rollup partition expression",
+    };
+
+    Y_UNIT_TEST_TWIN(WindowFunctions, ColumnStore) {
+        TVector<TString> oldNames, oldResults, oldIssues;
+        RunWindowFunctionsTest(/*newRbo=*/false, ColumnStore, oldNames, oldResults, oldIssues);
+        UNIT_ASSERT_VALUES_EQUAL_C(oldIssues.size(), 0, "The old optimizer must run every window query: "
+                                                            << JoinSeq("; ", oldIssues));
+
+        TVector<TString> newNames, newResults, newIssues;
+        RunWindowFunctionsTest(/*newRbo=*/true, ColumnStore, newNames, newResults, newIssues);
+        UNIT_ASSERT_VALUES_EQUAL(oldNames.size(), newNames.size());
+
+        const TString table = ColumnStore ? "column" : "row";
+        for (ui32 i = 0; i < oldNames.size(); ++i) {
+            const auto& name = oldNames[i];
+            const bool lowered = !newResults[i].empty();
+            if (WindowQueriesNotLoweredYet.contains(name)) {
+                UNIT_ASSERT_C(!lowered, "'" << name << "' now runs with the New RBO on a " << table
+                                            << " table, remove it from WindowQueriesNotLoweredYet");
+                continue;
+            }
+            UNIT_ASSERT_C(lowered, "The New RBO must run '" << name << "' on a " << table << " table: "
+                                                            << JoinSeq("; ", newIssues));
+            UNIT_ASSERT_VALUES_EQUAL_C(newResults[i], oldResults[i],
+                                       "New RBO returned different rows for '" << name << "' on a " << table << " table");
+        }
+    }
+
     std::set<ui32> MakePerf_YqlSingleQuerySkipList(const EBenchType type, const ui32 queryId) {
         std::set<ui32> skipList;
         for (ui32 qId = 1, e = BenchmarkQueryCount[type]; qId <= e; ++qId) {
@@ -5526,6 +6003,129 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const TString toDecimalMax = R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
         return toDecimal + "\n" + toDecimalMax + "\n"
             + GetFullPath(BenchmarkQueryPath[EBenchType::TPCH], ToString(queryId) + ".yql");
+    }
+
+    Y_UNIT_TEST(PushFilterBeforeInlining) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                id Int64 NOT NULL,
+                a Int64 NOT NULL,
+                b Int64 NOT NULL,
+                c Double,
+                d Int64,
+                PRIMARY KEY(id)
+            ) WITH (STORE = COLUMN);
+
+            CREATE TABLE `/Root/t2` (
+                a Int64 NOT NULL,
+                PRIMARY KEY(a)
+            ) WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        struct TRow {
+            i64 Id;
+            i64 A;
+            i64 B;
+            double C;
+            i64 D;
+        };
+        const TVector<TRow> t1Rows = {
+            {1, 1, 1, 10.0, 100},
+            {2, 1, 2, 30.0, 200},
+            {3, 2, 1, 50.0, 1000},
+            {4, 2, 2, 100.0, 2000},
+        };
+
+        NYdb::TValueBuilder t1Builder;
+        t1Builder.BeginList();
+        for (const auto& row : t1Rows) {
+            t1Builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(row.Id)
+                .AddMember("a").Int64(row.A)
+                .AddMember("b").Int64(row.B)
+                .AddMember("c").Double(row.C)
+                .AddMember("d").Int64(row.D)
+                .EndStruct();
+        }
+        t1Builder.EndList();
+        auto upsertResult = tableClient.BulkUpsert("/Root/t1", t1Builder.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder t2Builder;
+        t2Builder.BeginList();
+        for (const auto a : {1, 2}) {
+            t2Builder.AddListItem().BeginStruct().AddMember("a").Int64(a).EndStruct();
+        }
+        t2Builder.EndList();
+        upsertResult = tableClient.BulkUpsert("/Root/t2", t2Builder.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+
+        const auto check = [&](const TString& name, const TString& query, const TString& expected) {
+            auto explainResult = querySession.ExecuteQuery(query,
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(), name + ": " + explainResult.GetIssues().ToString());
+
+            const auto plan = TString{*explainResult.GetStats()->GetPlan()};
+            UNIT_ASSERT_C(!plan.Contains("CrossJoin"), name + ":\n" + plan);
+
+            auto result = querySession.ExecuteQuery(query,
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute)
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), name + ": " + result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(result.GetResultSet(0)), expected, name);
+        };
+
+        check("uncorrelated scalar subquery in ==", R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA AnsiImplicitCrossJoin;
+
+            SELECT SUM(d) AS total
+            FROM `/Root/t1` AS t1, `/Root/t2` AS t2
+            WHERE t1.a == t2.a
+              AND d == (SELECT MAX(d) FROM `/Root/t1` AS t3);
+        )", R"([[[2000]]])");
+
+        check("correlated scalar subquery with non-eliminable domain", R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA AnsiImplicitCrossJoin;
+
+            SELECT SUM(d) AS total
+            FROM `/Root/t1` AS t1, `/Root/t2` AS t2
+            WHERE t1.a == t2.a
+              AND c < (SELECT AVG(t3.c) FROM `/Root/t1` AS t3
+                       WHERE t3.a == t2.a AND t3.b != t1.b);
+        )", R"([[[1100]]])");
+
+        check("correlated exists and not exists with non-eliminable domains", R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA AnsiImplicitCrossJoin;
+
+            SELECT SUM(d) AS total
+            FROM `/Root/t1` AS t1, `/Root/t2` AS t2
+            WHERE t1.a == t2.a
+              AND EXISTS (SELECT * FROM `/Root/t1` AS t3
+                          WHERE t3.a == t1.a AND t3.b != t1.b AND t3.c > t1.c)
+              AND NOT EXISTS (SELECT * FROM `/Root/t1` AS t4
+                              WHERE t4.a == t1.a AND t4.b != t1.b AND t4.d > 1500);
+        )", R"([[[100]]])");
     }
 
     Y_UNIT_TEST(CorrelatedScalarSubqueryCBO4KeepsOuterJoinKey) {
@@ -8826,11 +9426,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                         /*queriesWithoutCboCheck=*/{13});
     }
 
-    // Compiled 78 from 99.
+    // Compiled 79 from 99.
     Y_UNIT_TEST(TPCDS_YQL) {
         RunPerf_YqlTest(EBenchType::TPCDS, /*columnstore=*/true,
                         {1,  2,  3,  4,  5,  6,  7,  8,  10, 11, 13, 15, 16, 18, 19, 21, 22, 24, 25, 26, 28, 29, 30, 31, 32, 33,
-                         34, 35, 37, 38, 40, 41, 42, 43, 45, 46, 48, 50, 52, 54, 55, 56, 58, 59, 60, 61, 62, 64, 65, 66, 68, 69, 71,
+                         34, 35, 37, 38, 40, 41, 42, 43, 45, 46, 48, 49, 50, 52, 54, 55, 56, 58, 59, 60, 61, 62, 64, 65, 66, 68, 69, 71,
                          72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 87, 88, 90, 91, 92, 93, 94, 95, 96, 97, 99},
                         /*rbo never finish*/ {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
                         // Still explain these queries, but do not require the CBO stats invariant when CBO is explicitly disabled

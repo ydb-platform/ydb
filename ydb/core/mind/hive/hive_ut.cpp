@@ -150,10 +150,9 @@ namespace {
     }
 
     void SetupNodeWarden(TTestActorRuntime &runtime) {
+        SetupPDiskSubsystem(&runtime, STRAND_PDISK);
         for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
-            TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig = new TNodeWardenConfig(
-                    STRAND_PDISK && !runtime.IsRealThreads() ? static_cast<IPDiskServiceFactory*>(new TStrandedPDiskServiceFactory(runtime)) :
-                    static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory()));
+            TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig = new TNodeWardenConfig();
                 //nodeWardenConfig->Monitoring = monitoring;
             auto* serviceSet = nodeWardenConfig->BlobStorageConfig->MutableServiceSet();
             serviceSet->AddAvailabilityDomains(0);

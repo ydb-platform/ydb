@@ -276,6 +276,7 @@ def _cluster_config(static_nodes, disk_size_gb, hostname=None, actor_system=None
                 "use_auto_config": True,
                 "use_shared_threads": (actor_system or {}).get("use_shared_threads", False),
                 "use_united_pool": (actor_system or {}).get("use_united_pool", False),
+                "use_ring_queue": (actor_system or {}).get("use_ring_queue", True),
             },
         },
     }
@@ -600,6 +601,16 @@ class LocalYdbCluster:
     def _node_ports(self):
         return {name: _next_available_port(candidates, name) for name, candidates in self.port_candidates.items()}
 
+    def _node_config(self, role, directory):
+        cpu_count = self.actor_system.get(role, {}).get("cpu_count")
+        if cpu_count is None:
+            return self.config_path
+        config = yaml.safe_load(self.config_path.read_text(encoding="utf-8"))
+        config["config"]["actor_system_config"]["cpu_count"] = cpu_count
+        path = directory / "cluster.yaml"
+        atomic_write_text(path, yaml.safe_dump(config, sort_keys=False))
+        return path
+
     def start(self):
         self._progress("preparing-cluster")
         self.directory.mkdir(parents=True, exist_ok=True)
@@ -618,7 +629,7 @@ class LocalYdbCluster:
                 self.ydbd,
                 "server",
                 "--yaml-config",
-                self.config_path,
+                self._node_config("static_nodes", node_directory),
                 "--node",
                 "static",
                 "--grpc-port",
@@ -722,7 +733,7 @@ class LocalYdbCluster:
                 self.ydbd,
                 "server",
                 "--yaml-config",
-                self.config_path,
+                self._node_config("dynamic_nodes", node_directory),
                 "--tenant",
                 self.database,
                 "--node-broker-port",
@@ -1466,10 +1477,7 @@ def run_local_ydb(
         "state": "running",
         "started_at": _utc_now(),
         "tool_revision": tool_revision,
-        "binaries": {
-            name: {"name": binary.path.name, "sha256": binary.sha256, "size": binary.size}
-            for name, binary in binaries.items()
-        },
+        "binaries": {name: binary.manifest_record() for name, binary in binaries.items()},
         "platform": collect_system_info(),
         "cpu_topology": topology_record(topology),
         "parameters": profile,

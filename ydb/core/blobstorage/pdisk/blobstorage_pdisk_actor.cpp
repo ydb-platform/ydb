@@ -1692,9 +1692,19 @@ IActor* CreatePDisk(const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainK
     return new NPDisk::TPDiskActor(cfg, mainKey, counters);
 }
 
-void TRealPDiskServiceFactory::Create(const TActorContext &ctx, ui32 pDiskID,
-        const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainKey &mainKey, ui32 poolId, ui32 nodeId) {
-    CreatePDiskActor(ctx.ExecutorThread, AppData(ctx)->Counters, cfg, mainKey, pDiskID, poolId, nodeId);
+namespace {
+    class TPDiskSubsystem final : public IPDiskSubsystem {
+    public:
+        void Start(const TActorContext& ctx, ui32 pdiskId, const TIntrusivePtr<TPDiskConfig>& config,
+                const NPDisk::TMainKey& mainKey, ui32 poolId, ui32 nodeId) override {
+            CreatePDiskActor(ctx.ExecutorThread, AppData(ctx)->Counters, config, mainKey, pdiskId, poolId, nodeId);
+        }
+    };
 }
+
+std::unique_ptr<IPDiskSubsystem> CreatePDiskSubsystem() {
+    return std::make_unique<TPDiskSubsystem>();
+}
+
 
 } // NKikimr

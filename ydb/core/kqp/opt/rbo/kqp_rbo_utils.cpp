@@ -57,6 +57,18 @@ TInfoUnit MakeGeneratedIgnoreIU(TPlanProps& props) {
     return TInfoUnit(TString(name));
 }
 
+bool ReferencesUnresolvedSubplan(const TExpression& expr, const TPlanProps& props) {
+    if (props.Subplans.Empty()) {
+        return false;
+    }
+    for (const auto& iu : expr.GetRawInputIUs()) {
+        if (props.Subplans.Find(iu)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 TVector<TInfoUnit> GetSubplanResultIUs(const TIntrusivePtr<IOperator>& op) {
     if (!op) {
         return {};

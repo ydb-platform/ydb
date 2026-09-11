@@ -1207,7 +1207,8 @@ void TStatisticsAggregator::StartAnalyzeActor(const TActorContext& ctx, const TS
     auto analyzeActorConfig = TAnalyzeActor::TConfig{
         .MaxTotalScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxTotalScanActorsInFlight(),
         .MaxPerNodeScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxPerNodeScanActorsInFlight(),
-        .WholeTableScanMaxBytes = StatisticsConfig.GetAnalyzeWholeTableScanMaxBytes(),
+        .ColumnTableWholeTableScanMaxBytes = StatisticsConfig.GetAnalyzeColumnTableWholeTableScanMaxBytes(),
+        .RowTableWholeTableScanMaxBytes = StatisticsConfig.GetAnalyzeRowTableWholeTableScanMaxBytes(),
         .TableBytesSize = GetTableBytesSize(pathId),
         .CollectPrimaryKeyHistogram = StatisticsConfig.GetAnalyzeCollectPrimaryKeyHistogram(),
         .HistogramOversampleFactor = oversampleFactor,

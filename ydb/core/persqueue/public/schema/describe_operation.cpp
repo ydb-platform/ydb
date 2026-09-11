@@ -76,8 +76,9 @@ public:
             }));
     }
 
-    TString BuildLogPrefix() const override {
-        return TStringBuilder() << "[" << Strategy->GetName() << "]";
+    TLogPrefix BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", Strategy->GetName()});
     }
 
     bool OnUnhandledException(const std::exception& exc) override {

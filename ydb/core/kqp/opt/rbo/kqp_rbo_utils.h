@@ -13,6 +13,7 @@ using namespace NYql;
 
 class IOperator;
 class TOpAggregate;
+class TExpression;
 
 const TInfoUnitSet& EmptyInfoUnitSet();
 bool ContainsInfoUnit(const TVector<TInfoUnit>& units, const TInfoUnit& unit);
@@ -24,6 +25,7 @@ TInfoUnitSet MakeInfoUnitSet(const TVector<TInfoUnit>& ius);
 bool IsGeneratedIgnoreIU(const TInfoUnit& iu);
 TInfoUnit MakeGeneratedIgnoreIU(TPlanProps& props);
 TVector<TInfoUnit> GetSubplanResultIUs(const TIntrusivePtr<IOperator>& op);
+bool ReferencesUnresolvedSubplan(const TExpression& expr, const TPlanProps& props);
 bool CanEliminateAggregateShuffle(const TOpAggregate& aggregate, const TRBOContext& ctx);
 
 bool JoinOutputsLeft(const TString& joinKind);

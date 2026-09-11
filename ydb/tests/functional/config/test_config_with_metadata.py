@@ -63,8 +63,6 @@ def check_replace_config_unknown_fields(cluster, config_client, location):
         updated['config'].setdefault('log_config', {}).setdefault('entry', []).append(target)
     elif location == 'host_config':
         target = updated['config']['host_configs'][0]
-    elif location == 'storage':
-        target = updated['config']['blob_storage_config']['service_set']['groups'][0]['rings'][0]['fail_domains'][0]['vdisk_locations'][0]
     else:
         target = {}
         updated.setdefault('selector_config', []).append({
@@ -258,7 +256,7 @@ class TestKiKiMRStoreConfigDir(AbstractKiKiMRTest):
         )
         self.check_kikimr_is_operational(table_path, tablet_ids)
 
-    @pytest.mark.parametrize('unknown_field_location', ['root', 'nested', 'selector', 'array', 'storage'])
+    @pytest.mark.parametrize('unknown_field_location', ['root', 'nested', 'selector', 'array'])
     def test_config_stored_in_config_store(self, unknown_field_location):
         node = self.cluster.nodes[1]
         initial_config = node.read_node_config()

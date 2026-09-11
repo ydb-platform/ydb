@@ -22,7 +22,6 @@
 #include <ydb/library/yaml_json/yaml_to_json.h>
 #include <ydb/core/config/protos/marker.pb.h>
 
-#include <util/string/split.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/string.h>
 
@@ -209,34 +208,12 @@ namespace NKikimr::NYaml {
         }
     }
 
-    void ExtractExtraFields(NJson::TJsonValue& json, TTransformContext& ctx,
-        const NProtobufJson::TJson2ProtoConfig& convertConfig) {
+    void ExtractExtraFields(NJson::TJsonValue& json, TTransformContext& ctx) {
         // for static group
-        const TVector<TString> path = StringSplitter(COMBINED_DISK_INFO_PATH.SubStr(1)).Split('/');
-        Iterate(json, COMBINED_DISK_INFO_PATH, [&ctx, &convertConfig, &path](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
+        Iterate(json, COMBINED_DISK_INFO_PATH, [&ctx](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
             Y_ENSURE_BT(ids.size() == 4);
-            auto* collector = convertConfig.UnknownFieldsCollector.Get();
-            if (collector) {
-                size_t index = 0;
-                for (const auto& piece : path) {
-                    if (piece == "*") {
-                        collector->OnEnterArrayItem(ids[index++]);
-                    } else {
-                        collector->OnEnterMapItem(piece);
-                    }
-                }
-            }
             NKikimrConfig::TCombinedDiskInfo info;
-            NProtobufJson::MergeJson2Proto(node, info, convertConfig);
-            if (collector) {
-                for (auto it = path.rbegin(); it != path.rend(); ++it) {
-                    if (*it == "*") {
-                        collector->OnLeaveArrayItem();
-                    } else {
-                        collector->OnLeaveMapItem();
-                    }
-                }
-            }
+            NProtobufJson::MergeJson2Proto(node, info, GetJsonToProtoConfig());
             TCombinedDiskInfoKey key{
                 .Group = ids[0],
                 .Ring = ids[1],
@@ -1790,7 +1767,7 @@ endDiskTypeCheck:   ;
             }
 
             if (transform) {
-                ExtractExtraFields(jsonNode, ctx, convertConfig);
+                ExtractExtraFields(jsonNode, ctx);
             }
         });
 

@@ -65,8 +65,7 @@ namespace NKikimr::NYaml {
     Ydb::Config::ReplaceConfigRequest BuildReplaceDistributedStorageCommand(const TString& data);
     TString ParseProtoToYaml(const NKikimrConfig::StorageConfig& protoConfig);
 
-    void ExtractExtraFields(NJson::TJsonValue& json, TTransformContext& ctx,
-        const NProtobufJson::TJson2ProtoConfig& convertConfig);
+    void ExtractExtraFields(NJson::TJsonValue& json, TTransformContext& ctx);
     void ClearEphemeralFields(NJson::TJsonValue& json);
     void ClearNonEphemeralFields(NJson::TJsonValue& json);
 

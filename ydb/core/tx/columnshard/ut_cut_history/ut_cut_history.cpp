@@ -248,6 +248,103 @@ struct TRangeProbeEnv {
     }
 };
 
+// Stands in for Local: observers see an edge actor's events zero or several times, so a real actor counts them.
+class TCutRequestCounter: public NActors::TActor<TCutRequestCounter> {
+public:
+    explicit TCutRequestCounter(ui32& count)
+        : NActors::TActor<TCutRequestCounter>(&TCutRequestCounter::StateWork)
+        , Count(count)
+    {
+    }
+
+    STFUNC(StateWork) {
+        if (ev->GetTypeRewrite() == TEvTablet::TEvCutTabletHistory::EventType) {
+            ++Count;
+        }
+    }
+
+private:
+    ui32& Count;
+};
+
+// One clean candidate swept into a real barrier actor; the BS proxy is an edge actor.
+struct TBarrierHarness {
+    static constexpr ui64 TabletId = 4042;
+    static constexpr ui32 DataChannel = 2;
+    static constexpr ui32 OldFromGen = 0;
+    static constexpr ui32 OldGroup = 100;
+    static constexpr ui32 CurrentGen = 5;
+    // Longer than the barrier actor's reply watchdog plus its largest retry backoff.
+    static constexpr TDuration PastWatchdog = TDuration::Seconds(125);
+
+    TAppPrepare App;
+    TTestBasicRuntime Runtime;
+    NYDBTest::TControllers::TGuard<TCutHistoryController> Controller;
+    ui32 CutRequests = 0;
+    const TActorId EdgeTablet;
+    const TActorId Launcher;
+    const TActorId EdgeBs;
+    const TActorId Runner;
+    TCutterEnv Env;
+    TTestableHistoryCutter Cutter;
+    const TEntryKey Key{ DataChannel, OldFromGen };
+
+    TBarrierHarness()
+        : Controller(InitRuntime())
+        , EdgeTablet(Runtime.AllocateEdgeActor())
+        , Launcher(Runtime.Register(new TCutRequestCounter(CutRequests)))
+        , EdgeBs(Runtime.AllocateEdgeActor())
+        , Runner(Runtime.Register(new TRunnerActor()))
+        , Env(MakeCutterEnv(TabletId, CurrentGen, /*nChannels=*/3, { { OldFromGen, OldGroup }, { CurrentGen, 200 } }))
+        , Cutter(Env.Info, CurrentGen, Env.Bm, Env.Shared, EdgeTablet, TestSignals())
+    {
+        Runtime.RegisterService(MakeBlobStorageProxyID(OldGroup), EdgeBs);
+        Cutter.SetLauncherActorId(Launcher);
+    }
+
+    void SweepCleanToBarrier() {
+        bool nominated = false;
+        RunInActor([&](const NActors::TActorContext& ctx) {
+            nominated = Cutter.TryNominate(ctx);
+        });
+        UNIT_ASSERT(nominated);
+        UNIT_ASSERT(Runtime.GrabEdgeEvent<NColumnShard::TEvPrivate::TEvStartCutHistorySweep>(EdgeTablet));
+        Cutter.SetPortionSnapshot({});
+        RunInActor([&](const NActors::TActorContext& ctx) {
+            Cutter.OnBatchComplete({}, /*exhausted=*/true, ctx);
+        });
+        UNIT_ASSERT(Cutter.GetCutStateForTest(Key) == ECutState::SentBarrier);
+    }
+
+    TEvBlobStorage::TEvCollectGarbage::TPtr GrabBarrier() {
+        auto request = Runtime.GrabEdgeEvent<TEvBlobStorage::TEvCollectGarbage>(EdgeBs);
+        UNIT_ASSERT(request);
+        return request;
+    }
+
+    void Reply(const TEvBlobStorage::TEvCollectGarbage::TPtr& request, const NKikimrProto::EReplyStatus status) {
+        Runtime.Send(new IEventHandle(request->Sender, EdgeBs, new TEvBlobStorage::TEvCollectGarbageResult(status, TabletId, CurrentGen,
+                                                                   request->Get()->PerGenerationCounter, DataChannel), 0, request->Cookie));
+    }
+
+private:
+    NYDBTest::TControllers::TGuard<TCutHistoryController> InitRuntime() {
+        Runtime.Initialize(App.Unwrap());
+        // Measure-only rounds stop before the barrier.
+        Runtime.GetAppData().ColumnShardConfig.SetCutHistoryMeasureOnly(false);
+        // The runtime drops scheduled events by default, and the barrier watchdog is one.
+        Runtime.SetScheduledEventFilter([](auto&, auto&, auto, auto&) {
+            return false;
+        });
+        return NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+    }
+
+    void RunInActor(std::function<void(const NActors::TActorContext&)> fn) {
+        Runtime.Send(new IEventHandle(Runner, EdgeTablet, new TEvRunInActor(std::move(fn))));
+        Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    }
+};
+
 Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
     // Channels 0-2, history {fromGen=0, group=100} and active {fromGen=5, group=200}; only ch >= 2 is tracked.
 
@@ -765,6 +862,46 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         tryNominate(true);
     }
 
+    // The first barrier gets no reply, so the watchdog resends it; replies to both then arrive, and only one cut may follow.
+    Y_UNIT_TEST(LostBarrierReplyIsResentAndCutsOnce) {
+        TBarrierHarness h;
+        h.SweepCleanToBarrier();
+        auto first = h.GrabBarrier();
+        h.Runtime.SimulateSleep(TBarrierHarness::PastWatchdog);
+        auto second = h.GrabBarrier();
+        UNIT_ASSERT(second->Get()->Hard);
+        UNIT_ASSERT_VALUES_EQUAL(second->Get()->Channel, TBarrierHarness::DataChannel);
+        UNIT_ASSERT_VALUES_EQUAL(second->Get()->CollectGeneration, first->Get()->CollectGeneration);
+        UNIT_ASSERT(h.Cutter.GetCutStateForTest(h.Key) == ECutState::SentBarrier);
+
+        h.Reply(first, NKikimrProto::OK);
+        auto done = h.Runtime.GrabEdgeEvent<NColumnShard::TEvPrivate::TEvCutHistoryBarrierDone>(h.EdgeTablet);
+        UNIT_ASSERT(done->Get()->Ok);
+        h.Reply(second, NKikimrProto::OK);
+        h.Runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(h.CutRequests, 1);
+
+        h.Cutter.OnBarrierResult(h.Key, done->Get()->Ok, h.Runtime.GetCurrentTime());
+        UNIT_ASSERT(h.Cutter.GetCutStateForTest(h.Key) == ECutState::Cut);
+    }
+
+    // No reply ever comes: after the retry limit the entry leaves SentBarrier for the failed-barrier cooldown.
+    Y_UNIT_TEST(UnansweredBarrierGivesUpAfterRetries) {
+        TBarrierHarness h;
+        h.SweepCleanToBarrier();
+        for (int attempt = 0; attempt < 3; ++attempt) {
+            h.GrabBarrier();
+            h.Runtime.SimulateSleep(TBarrierHarness::PastWatchdog);
+        }
+        auto done = h.Runtime.GrabEdgeEvent<NColumnShard::TEvPrivate::TEvCutHistoryBarrierDone>(h.EdgeTablet);
+        UNIT_ASSERT(!done->Get()->Ok);
+        UNIT_ASSERT_VALUES_EQUAL(h.CutRequests, 0);
+
+        h.Cutter.OnBarrierResult(h.Key, done->Get()->Ok, h.Runtime.GetCurrentTime());
+        UNIT_ASSERT(h.Cutter.GetCutStateForTest(h.Key) == ECutState::None);
+        UNIT_ASSERT_VALUES_EQUAL(h.Cutter.GetDisprovalAttemptsForTest(h.Key), 1);
+    }
+
     Y_UNIT_TEST(InFlightGCTaskPinsDrainGate) {
         TActorSystemStub actorSystemStub;
         actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
@@ -1110,11 +1247,12 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         cutter.SetLauncherActorId(edgeLauncher);
         const TEntryKey middle{ Channel, 5 };
 
-        THashMap<ui32, ui32> collectsPerGroup;
+        // An edge-bound event can pass an observer more than once, so count distinct barriers by their per-generation counter.
+        THashMap<ui32, THashSet<ui32>> collectsPerGroup;
         auto observer = runtime.AddObserver<TEvBlobStorage::TEvCollectGarbage>([&](TEvBlobStorage::TEvCollectGarbage::TPtr& ev) {
             for (const auto& [group, edge] : { std::pair{ GroupG0, edgeG0 }, std::pair{ GroupG, edgeG }, std::pair{ GroupG2, edgeG2 } }) {
                 if (ev->Recipient == MakeBlobStorageProxyID(group) || ev->GetRecipientRewrite() == edge) {
-                    ++collectsPerGroup[group];
+                    collectsPerGroup[group].insert(ev->Get()->PerGenerationCounter);
                 }
             }
         });
@@ -1140,9 +1278,9 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT_VALUES_EQUAL(cutReq->Get()->Record.GetFromGeneration(), 5u);
         UNIT_ASSERT_VALUES_EQUAL(cutReq->Get()->Record.GetGroupID(), GroupG);
 
-        UNIT_ASSERT_VALUES_EQUAL(collectsPerGroup[GroupG], 1u);
-        UNIT_ASSERT_VALUES_EQUAL_C(collectsPerGroup[GroupG0], 0u, "G0 still holds the earlier generations and must get no barrier");
-        UNIT_ASSERT_VALUES_EQUAL(collectsPerGroup[GroupG2], 0u);
+        UNIT_ASSERT_VALUES_EQUAL(collectsPerGroup[GroupG].size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL_C(collectsPerGroup[GroupG0].size(), 0u, "G0 still holds the earlier generations and must get no barrier");
+        UNIT_ASSERT_VALUES_EQUAL(collectsPerGroup[GroupG2].size(), 0u);
     }
 
     // After the middle cut the G0 entry's window grows to [1, 9); its live portion keeps it uncut even if the range read is empty.

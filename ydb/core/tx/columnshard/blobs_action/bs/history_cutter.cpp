@@ -40,14 +40,21 @@ public:
         SendBarrier(ctx);
     }
 
-    void HandleWakeup(const TActorContext& ctx) {
-        SendBarrier(ctx);
+    void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
+        if (ev->Get()->Tag == RetryTag) {
+            SendBarrier(ctx);
+            return;
+        }
+        // A watchdog is stale once its attempt got a reply or a later attempt replaced it.
+        if (AwaitingReply && ev->Get()->Tag == Attempt) {
+            OnAttemptFailed(ctx);
+        }
     }
 
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev, const TActorContext& ctx) {
         const auto status = ev->Get()->Status;
         if (status == NKikimrProto::OK || status == NKikimrProto::ALREADY) {
-            // ALREADY means the barrier is already at or beyond the requested level — safe to cut.
+            // ALREADY means the barrier is already at or beyond the requested level; any attempt's success proves the same barrier.
             auto req = MakeHolder<TEvTablet::TEvCutTabletHistory>();
             req->Record.SetTabletID(TabletId);
             req->Record.SetChannel(Channel);
@@ -58,32 +65,55 @@ public:
             Die(ctx);
             return;
         }
-        if (status == NKikimrProto::BLOCKED || ++Retries >= MaxRetries) {
-            ctx.Send(TabletActorId, new NColumnShard::TEvPrivate::TEvCutHistoryBarrierDone(Channel, FromGen, false));
-            Die(ctx);
+        if (status == NKikimrProto::BLOCKED) {
+            Fail(ctx);
             return;
         }
-        // Linear backoff: an immediate retry against an overloaded group would only add load.
-        ctx.Schedule(TDuration::Seconds(1) * Retries, new NActors::TEvents::TEvWakeup());
+        // An error from an attempt the watchdog already gave up on changes nothing.
+        if (AwaitingReply && ev->Cookie == Attempt) {
+            OnAttemptFailed(ctx);
+        }
     }
 
     STFUNC(StateWait) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
-            CFunc(NActors::TEvents::TEvWakeup::EventType, HandleWakeup);
+            HFunc(NActors::TEvents::TEvWakeup, HandleWakeup);
         }
     }
 
 private:
     static constexpr int MaxRetries = 3;
+    static constexpr ui64 RetryTag = 0;
+    // The request carries no deadline, so a reply that never comes would otherwise hold the entry in SentBarrier.
+    static constexpr TDuration ReplyTimeout = TDuration::Minutes(2);
 
+    void OnAttemptFailed(const TActorContext& ctx) {
+        AwaitingReply = false;
+        if (++Retries >= MaxRetries) {
+            Fail(ctx);
+            return;
+        }
+        // Linear backoff: an immediate retry against an overloaded group would only add load.
+        ctx.Schedule(TDuration::Seconds(1) * Retries, new NActors::TEvents::TEvWakeup(RetryTag));
+    }
+
+    void Fail(const TActorContext& ctx) {
+        ctx.Send(TabletActorId, new NColumnShard::TEvPrivate::TEvCutHistoryBarrierDone(Channel, FromGen, false));
+        Die(ctx);
+    }
+
+    // Resending is safe: a hard barrier at the same level answers OK or ALREADY.
     void SendBarrier(const TActorContext& ctx) {
         const ui32 perGenerationCounter =
             TBlobManager::AllocateGCPerGenerationCounter(TEvBlobStorage::TEvCollectGarbage::PerGenerationCounterStepSize(nullptr, nullptr));
         auto ev = MakeHolder<TEvBlobStorage::TEvCollectGarbage>(TabletId, CurrentGen, perGenerationCounter, Channel, /*collect=*/true,
             /*collectGeneration=*/NextFromGen - 1, /*collectStep=*/Max<ui32>(), /*keep=*/nullptr, /*doNotKeep=*/nullptr, TInstant::Max(),
             /*issueKeepFlag=*/false, TWriteSource::ColumnShardGC, /*hard=*/true);
-        SendToBSProxy(ctx, Group, ev.Release());
+        ++Attempt;
+        AwaitingReply = true;
+        SendToBSProxy(ctx, Group, ev.Release(), Attempt);
+        ctx.Schedule(ReplyTimeout, new NActors::TEvents::TEvWakeup(Attempt));
     }
 
     TActorId TabletActorId;
@@ -95,6 +125,9 @@ private:
     ui32 FromGen = 0;
     ui32 NextFromGen = 0;
     int Retries = 0;
+    // Starts past RetryTag, so every attempt's watchdog tag differs from the retry wakeup.
+    ui64 Attempt = 0;
+    bool AwaitingReply = false;
 };
 
 // Asks BlobStorage whether each candidate range still holds a blob of ours, instead of scanning the portion index.

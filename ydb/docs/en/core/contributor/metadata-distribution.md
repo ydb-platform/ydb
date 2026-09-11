@@ -291,12 +291,12 @@ Detailed instructions for manual configuration changes are provided in the secti
 
 ### Automatic reconfiguration (SelfHeal) {#self-heal}
 
-In clusters with V2 configuration, the **SelfHeal State Storage** mechanism is available — automatic management of subsystem configuration. It monitors the state of cluster nodes and, when necessary:
+In clusters with V2 configuration, **Metadata Distribution SelfHeal** automatically manages the State Storage, Board, and SchemeBoard configurations. It monitors the state of cluster nodes and, when necessary:
 
 - Moves replicas from failed nodes to healthy ones.
-- Adds new replicas when the cluster expands.
+- Can add new replicas as the cluster expands, subject to the settings and available nodes.
 
-SelfHeal works through the same ring group mechanism as manual reconfiguration, but performs all steps automatically. For more details, see the section [SelfHeal State Storage](../devops/concepts/selfheal-state-storage.md).
+SelfHeal works through the same ring group mechanism as manual reconfiguration, but performs all steps automatically. For more details, see [Metadata Distribution SelfHeal](../devops/concepts/selfheal-state-storage.md).
 
 ### Ring groups in a two-data-center configuration {#two-dc}
 
@@ -321,7 +321,7 @@ The replica placement rule (different rings in different racks; replicas of the 
 
 - [Metadata distribution services](../concepts/architecture/metadata-services.md) — an overview for documentation users.
 - Configuring metadata distribution subsystems — instructions for manually changing the configuration.
-- [SelfHeal State Storage](../devops/concepts/selfheal-state-storage.md) — automatic management of subsystem configuration.
+- [Metadata Distribution SelfHeal](../devops/concepts/selfheal-state-storage.md) — automatic management of the State Storage, Board, and SchemeBoard configurations.
 - [Bridge mode](../concepts/bridge.md) — a configuration with two data centers and the role of ring groups in it.
 - [Cluster topology](../concepts/topology.md) — the failure model, failure domains, and failure regions.
 - [Glossary](../concepts/glossary.md) — definitions of terms: StateStorage, Board, SchemeBoard, tablet, ActorId.

@@ -691,7 +691,7 @@ SID идентифицирует индивидуального [пользов�
 
 #### SelfHeal {#self-heal}
 
-[**SelfHeal**](../devops/concepts/selfheal.md) — механизмы автоматического поддержания и восстановления отказоустойчивости кластера. SelfHeal [хранилища](../devops/concepts/selfheal-storage.md) переносит [VDisk](#vdisk) групп хранения после длительных отказов узлов или дисков. [SelfHeal State Storage](../devops/concepts/selfheal-state-storage.md) переносит реплики подсистем распространения метаданных после отказов и добавляет реплики при появлении новых узлов.
+[**SelfHeal**](../devops/concepts/selfheal.md) — механизмы автоматического поддержания и восстановления отказоустойчивости кластера. SelfHeal [хранилища](../devops/concepts/selfheal-storage.md) переносит [VDisk](#vdisk) групп хранения после длительных отказов узлов или дисков. [SelfHeal подсистем распространения метаданных](../devops/concepts/selfheal-state-storage.md) переносит реплики [State Storage](#state-storage), [Board](#board) и [SchemeBoard](#scheme-board) после отказов и может добавлять реплики при появлении новых узлов.
 
 #### NodeBroker {#node-broker}
 

@@ -1,21 +1,24 @@
 # SelfHeal
 
-В {{ ydb-short-name }} есть два механизма автоматического восстановления — SelfHeal:
+SelfHeal автоматически восстанавливает отказоустойчивость пяти типов объектов кластера {{ ydb-short-name }}:
 
-1. **SelfHeal хранилища** — для дисков и [групп хранения](../../concepts/glossary.md#storage-group) с данными.
-2. **SelfHeal State Storage** — для реплик [State Storage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board) и [SchemeBoard](../../concepts/glossary.md#scheme-board).
+1. [Динамических групп хранения](../../concepts/glossary.md#dynamic-group).
+2. [Статической группы хранения](../../concepts/glossary.md#static-group).
+3. Реплик [State Storage](../../concepts/glossary.md#state-storage).
+4. Реплик [Board](../../concepts/glossary.md#board).
+5. Реплик [SchemeBoard](../../concepts/glossary.md#scheme-board).
 
-Оба механизма восстанавливают отказоустойчивость кластера после длительных отказов. Если неисправный узел или диск восстановлен до истечения таймаута (для дисков по умолчанию около часа), SelfHeal не начинает перенос.
+В документации настройки этих объектов сгруппированы по двум направлениям: SelfHeal хранилища для динамических и статической групп и SelfHeal подсистем распространения метаданных для State Storage, Board и SchemeBoard.
+
+При отказе узла или диска SelfHeal ожидает, что неисправность сохранится достаточно долго, прежде чем начать перенос. Если узел или диск восстановлен до срабатывания механизма, перенос не начинается. Для дисков время ожидания по умолчанию составляет около часа.
 
 {% note info %}
 
-SelfHeal State Storage доступен только при [конфигурации V2](../configuration-management/configuration-v2/config-overview.md).
-
-SelfHeal хранилища от версии конфигурации не зависит.
+SelfHeal динамических групп хранения от версии конфигурации не зависит. SelfHeal статической группы и подсистем распространения метаданных доступен только при [конфигурации V2](../configuration-management/configuration-v2/config-overview.md) и включённой распределённой конфигурации. Для статической группы также должно быть разрешено автоматическое управление с помощью параметра `automatic_static_group_management`.
 
 {% endnote %}
 
 Подробнее о механизмах:
 
 - [SelfHeal хранилища](selfheal-storage.md)
-- [SelfHeal State Storage](selfheal-state-storage.md)
+- [SelfHeal подсистем распространения метаданных](selfheal-state-storage.md)

@@ -1,4 +1,8 @@
-# SelfHeal State Storage
+# Metadata Distribution SelfHeal
+
+Metadata Distribution SelfHeal automatically manages the replica configurations of [State Storage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), and [SchemeBoard](../../concepts/glossary.md#scheme-board).
+
+The configuration uses the historical name `state_storage_self_heal_config` for this mechanism. It applies to all three subsystems.
 
 {% note warning %}
 
@@ -6,15 +10,13 @@ These instructions apply only to {{ ydb-short-name }} clusters with **V2 configu
 
 {% endnote %}
 
-During cluster operation, nodes running {{ ydb-short-name }} may fail entirely.
+The mechanism detects node failures and, if the nodes cannot recover quickly, relocates the affected replicas to other nodes. As the cluster grows, it can also automatically increase replica counts based on the configuration and available nodes.
 
-SelfHeal State Storage detects faults and, if they cannot be restored quickly, relocates [State Storage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), and [SchemeBoard](../../concepts/glossary.md#scheme-board) replicas to other nodes. In addition, when new nodes are added to the cluster, the mechanism automatically increases the number of replicas of these subsystems.
+The Sentinel component of the [CMS cluster management system](../../concepts/glossary.md#cms) triggers the mechanism.
 
-The SelfHeal State Storage component is part of the cluster management system [CMS Sentinel](../../concepts/glossary.md#cms).
+## Enabling and disabling Metadata Distribution SelfHeal {#on-off}
 
-## Enabling and disabling SelfHeal State Storage {#on-off}
-
-You can enable and disable SelfHeal State Storage by changing the configuration:
+You can enable and disable Metadata Distribution SelfHeal by changing the configuration:
 
 1. Get the current cluster configuration using the [ydb admin cluster config fetch](../../reference/ydb-cli/commands/configuration/cluster/fetch.md) command:
 
@@ -32,7 +34,7 @@ You can enable and disable SelfHeal State Storage by changing the configuration:
             sentinel_config:
                 enable: true # Enabling Sentinel
                 state_storage_self_heal_config:
-                    enable: true # Enabling selfheal state storage
+                    enable: true # Enabling Metadata Distribution SelfHeal
     ```
 
     {% note info %}
@@ -53,7 +55,7 @@ You can enable and disable SelfHeal State Storage by changing the configuration:
 
 ## Managing automatic configuration changes {#automatic-management}
 
-In addition to the general [enable/disable](#on-off) of SelfHeal State Storage (parameter `state_storage_self_heal_config.enable`), in the `self_management_config` section of the `config.yaml` configuration file, you can individually manage automatic configuration changes for each of the metadata distribution subsystems, as well as limit the set of nodes to which SelfHeal can move replicas.
+In addition to globally [enabling or disabling](#on-off) Metadata Distribution SelfHeal with the `state_storage_self_heal_config.enable` parameter, you can use the `self_management_config` section of `config.yaml` to manage automatic configuration changes separately for each metadata distribution subsystem and restrict the nodes to which SelfHeal can relocate replicas.
 
 
 ```yaml
@@ -78,9 +80,9 @@ config:
 | `state_storage_board_self_heal_allowed_nodes` | `[]` (no restrictions) | Same for [Board](../../concepts/glossary.md#board) replicas. |
 | `scheme_board_self_heal_allowed_nodes` | `[]` (no restrictions) | Same for [SchemeBoard](../../concepts/glossary.md#scheme-board) replicas. |
 
-## Additional SelfHeal State Storage parameters {#self-heal-config-parameters}
+## Additional Metadata Distribution SelfHeal parameters {#self-heal-config-parameters}
 
-In the `cms_config.sentinel_config.state_storage_self_heal_config` section of the `config.yaml` configuration file, you can configure additional parameters of the SelfHeal State Storage mechanism that affect how quickly the mechanism responds to changes and how many replicas of the metadata distribution subsystems are created. In the example below, all parameters are shown with default values:
+In the `cms_config.sentinel_config.state_storage_self_heal_config` section of the `config.yaml` configuration file, you can configure additional Metadata Distribution SelfHeal parameters. They affect how quickly the mechanism responds to changes and how many metadata distribution subsystem replicas are created. The example below shows all parameters with their default values:
 
 
 ```yaml
@@ -102,7 +104,7 @@ config:
 | Parameter | Default value | Description |
 | --- | --- | --- |
 | `wait_for_config_step` | `60000000` (microseconds, 60 seconds) | Wait time between intermediate steps of applying a new configuration of the metadata distribution subsystems (adding/removing ring groups, clearing the `WriteOnly` flag, see [Configuring State Storage](../configuration-management/configuration-v2/state-storage-reconfiguration.md#metadata-subsystems-reconfig-rules)). The value is specified in microseconds. |
-| `relax_time` | `600000000` (microseconds, 600 seconds) | Minimum interval between two consecutive SelfHeal State Storage activations. Until the specified time has elapsed since the previous activation, a repeated configuration change is not started, even if faulty nodes are detected. The value is specified in microseconds. |
+| `relax_time` | `600000000` (microseconds, 600 seconds) | Minimum interval between two consecutive Metadata Distribution SelfHeal activations. Until the specified time has elapsed since the previous activation, a repeated configuration change is not started, even if faulty nodes are detected. The value is specified in microseconds. |
 | `pileup_replicas` | `false` | Allows placing replicas of different subsystems (State Storage, Board, SchemeBoard) on the same set of nodes. When set to `false`, SelfHeal tries to use different nodes for replicas of different subsystems where possible; when set to `true`, nodes already occupied by one subsystem can be reused for the others. |
 | `override_replicas_in_ring_count` | `0` (calculated automatically) | Forcibly sets the number of replicas in one ring. If the value is `0`, the number of replicas in the ring is calculated automatically based on `replicas_specific_volume` and the number of available nodes. |
 | `override_rings_count` | `0` (calculated automatically) | Forcibly sets the number of rings in the configuration. If the value is `0`, the number of rings is calculated automatically based on the number of available nodes and the cluster topology. |
@@ -110,4 +112,4 @@ config:
 
 ## Checking the result {#verify-result}
 
-You can check that the changes have been applied in the `CMS` section of the cluster [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md) (available on port 8765): go to the `Sentinel` tab to view the status of Sentinel and SelfHeal State Storage.
+You can check that the changes have been applied in the `CMS` section of the cluster [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md) (available on port 8765): go to the `Sentinel` tab to view the status of Sentinel and Metadata Distribution SelfHeal.

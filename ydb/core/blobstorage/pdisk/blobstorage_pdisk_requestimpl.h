@@ -755,10 +755,12 @@ public:
 class TChunkReserve : public TRequestBase {
 public:
     ui32 SizeChunks;
+    bool ForHousekeeping;
 
     TChunkReserve(const NPDisk::TEvChunkReserve &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::ChunkReserve, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
         , SizeChunks(ev.SizeChunks)
+        , ForHousekeeping(ev.ForHousekeeping)
     {}
 
     ERequestType GetType() const override {

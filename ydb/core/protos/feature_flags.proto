@@ -386,4 +386,8 @@ message TFeatureFlags {
     optional bool EnableDqSourceStreamLookupJoinLocalLookups = 327 [default = false];
     optional bool EnableStreamingAggregation = 328 [default = false];
     optional bool EnableTableBackupAsSql = 329 [default = false];
+    // Judges a VDisk write by the space color the disk will be in once the Fresh
+    // it holds has been compacted, rather than by the color it is in while the
+    // write is still cheap.
+    optional bool EnableVDiskFreshSpaceProjection = 330 [default = false, (RequireRestart) = true];
 }

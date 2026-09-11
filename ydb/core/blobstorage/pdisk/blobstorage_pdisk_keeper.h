@@ -155,8 +155,17 @@ public:
         return ChunkTracker.GetSpaceStatusFlags(owner, occupancy);
     }
 
+    TSpaceHeadroom GetSpaceHeadroom(TOwner owner) const {
+        return ChunkTracker.GetSpaceHeadroom(owner);
+    }
+
     NKikimrBlobStorage::TPDiskSpaceColor::E EstimateSpaceColor(TOwner owner, i64 allocationSize, double *occupancy) const {
         return ChunkTracker.EstimateSpaceColor(owner, allocationSize, occupancy);
+    }
+
+    NKikimrBlobStorage::TPDiskSpaceColor::E EstimateAllocationColor(TOwner owner, i64 allocationSize,
+            bool housekeeping, double *occupancy) const {
+        return ChunkTracker.EstimateAllocationColor(owner, allocationSize, housekeeping, occupancy);
     }
 
     double GetPDiskUsage() const {

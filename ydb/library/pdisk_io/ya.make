@@ -33,6 +33,7 @@ ENDIF(OS_WINDOWS)
 
 PEERDIR(
     ydb/library/actors/core
+    ydb/library/actors/util
     ydb/library/actors/wilson
     library/cpp/containers/stack_vector
     library/cpp/monlib/dynamic_counters
@@ -45,6 +46,10 @@ SRCS(
     aio.cpp
     aio.h
     aio_map.cpp
+    completion.h
+    counted_queue_one_one.h
+    device_mode.h
+    request_id.h
     buffers.cpp
     buffers.h
     device_type.cpp

@@ -12,6 +12,7 @@
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet/tablet_metrics.h>
 #include <ydb/core/util/stlog.h>
+#include <ydb/library/actors/prof/tag.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/json/writer/json_value.h>
@@ -636,6 +637,7 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
     if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
         const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
 
+        TControlBoard::RegisterSharedControl(EnableMemoryProfiling, icb->KeyValueVolumeControls.EnableMemoryProfiling);
         TControlBoard::RegisterSharedControl(ReadRequestsInFlightLimit_Base, icb->KeyValueVolumeControls.ReadRequestsInFlightLimit);
         ReadRequestsInFlightLimit.ResetControl(ReadRequestsInFlightLimit_Base);
         TControlBoard::RegisterSharedControl(UsePayload_Base, icb->KeyValueVolumeControls.UsePayload);
@@ -918,6 +920,7 @@ TLogoBlobID TKeyValueState::AllocatePatchedLogoBlobId(ui32 size, ui32 storageCha
 
 void TKeyValueState::RequestExecute(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx,
         const TTabletStorageInfo *info) {
+    TMemoryProfileGuard mpg("TKeyValueState::RequestExecute", EnableMemoryProfiling);
     if (IsDamaged) {
         return;
     }
@@ -983,6 +986,7 @@ void TKeyValueState::RequestExecute(THolder<TIntermediate> &intermediate, ISimpl
 
 void TKeyValueState::RequestComplete(THolder<TIntermediate> &intermediate, const TActorContext &ctx,
         const TTabletStorageInfo *info) {
+    TMemoryProfileGuard mpg("TKeyValueState::RequestComplete", EnableMemoryProfiling);
     Reply(intermediate, ctx, info);
 }
 
@@ -1072,6 +1076,7 @@ void TKeyValueState::ProcessCmd(TIntermediate::TRead &request,
         ISimpleDb &/*db*/, const TActorContext &/*ctx*/, TRequestStat &/*stat*/, ui64 /*unixTime*/,
         TIntermediate *intermediate)
 {
+    TMemoryProfileGuard mpg("TKeyValueState::ProcessCmd::Read", EnableMemoryProfiling);
     NKikimrProto::EReplyStatus outStatus = request.CumulativeStatus();
     request.Status = outStatus;
     legacyResponse->SetStatus(outStatus);
@@ -1119,6 +1124,7 @@ void TKeyValueState::ProcessCmd(TIntermediate::TRangeRead &request,
         ISimpleDb &/*db*/, const TActorContext &/*ctx*/, TRequestStat &/*stat*/, ui64 /*unixTime*/,
         TIntermediate *intermediate)
 {
+    TMemoryProfileGuard mpg("TKeyValueState::ProcessCmd::RangeRead", EnableMemoryProfiling);
     for (ui64 r = 0; r < request.Reads.size(); ++r) {
         auto &read = request.Reads[r];
         auto *resultKv = legacyResponse->AddPair();
@@ -1196,6 +1202,7 @@ void TKeyValueState::ProcessCmd(TIntermediate::TWrite &request,
         ISimpleDb &db, const TActorContext &ctx, TRequestStat &/*stat*/, ui64 /*unixTime*/,
         TIntermediate* /*intermediate*/)
 {
+    TMemoryProfileGuard mpg("TKeyValueState::ProcessCmd::Write", EnableMemoryProfiling);
     TIndexRecord& record = Index[request.Key];
     Dereference(record, db);
 
@@ -1280,6 +1287,7 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TDelete &request,
         ISimpleDb &db, const TActorContext &/*ctx*/, TRequestStat &stat, ui64 /*unixTime*/,
         TIntermediate* /*intermediate*/)
 {
+    TMemoryProfileGuard mpg("TKeyValueState::ProcessCmd::Delete", EnableMemoryProfiling);
     TraverseRange(request.Range, [&](TIndex::iterator it) {
         stat.Deletes++;
         stat.DeleteBytes += it->second.GetFullValueSize();
@@ -2409,6 +2417,7 @@ bool PrepareOneReadFromRangeReadWithData(const TString &key, TIndexRecord &index
 
 bool TKeyValueState::PrepareCmdRead(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate, bool &outIsInlineOnly) {
+    TMemoryProfileGuard mpg("TKeyValueState::PrepareCmdRead", EnableMemoryProfiling);
     outIsInlineOnly = true;
     intermediate->Reads.resize(kvRequest.CmdReadSize());
     for (ui32 i = 0; i < kvRequest.CmdReadSize(); ++i) {
@@ -2500,6 +2509,7 @@ void ProcessOneCmdReadRange(TKeyValueState *self, const TKeyRange &range, ui64 c
 
 bool TKeyValueState::PrepareCmdReadRange(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate, bool &inOutIsInlineOnly) {
+    TMemoryProfileGuard mpg("TKeyValueState::PrepareCmdReadRange", EnableMemoryProfiling);
     intermediate->RangeReads.resize(kvRequest.CmdReadRangeSize());
     for (ui32 i = 0; i < kvRequest.CmdReadRangeSize(); ++i) {
         auto &request = kvRequest.GetCmdReadRange(i);
@@ -2561,6 +2571,7 @@ bool TKeyValueState::PrepareCmdRename(const TActorContext &ctx, NKikimrClient::T
 
 bool TKeyValueState::PrepareCmdDelete(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         THolder<TIntermediate> &intermediate) {
+    TMemoryProfileGuard mpg("TKeyValueState::PrepareCmdDelete", EnableMemoryProfiling);
     ui64 nToDelete = 0;
     for (ui32 i = 0; i < kvRequest.CmdDeleteRangeSize(); ++i) {
         auto& request = kvRequest.GetCmdDeleteRange(i);
@@ -2617,6 +2628,7 @@ void TKeyValueState::SplitIntoBlobs(TIntermediate::TWrite &cmd, bool isInline, u
 
 bool TKeyValueState::PrepareCmdWrite(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
         TEvKeyValue::TEvRequest& ev, THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info) {
+    TMemoryProfileGuard mpg("TKeyValueState::PrepareCmdWrite", EnableMemoryProfiling);
     intermediate->WriteIndices.reserve(kvRequest.CmdWriteSize());
     for (ui32 i = 0; i < kvRequest.CmdWriteSize(); ++i) {
         auto& request = kvRequest.GetCmdWrite(i);
@@ -3026,6 +3038,7 @@ TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::CopyRange &request,
 TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::Write &request, THolder<TIntermediate> &intermediate,
         const TTabletStorageInfo *info, const TActorContext &ctx, const TEvKeyValue::TEvExecuteTransaction& ev)
 {
+    TMemoryProfileGuard mpg("TKeyValueState::PrepareOneCmd::Write", EnableMemoryProfiling);
     intermediate->Commands.emplace_back(TIntermediate::TWrite());
     auto &cmd = std::get<TIntermediate::TWrite>(intermediate->Commands.back());
     cmd.Key = request.key();
@@ -3089,6 +3102,7 @@ TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::Write &request, THo
 TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::DeleteRange &request, THolder<TIntermediate> &intermediate,
         const TActorContext &ctx)
 {
+    TMemoryProfileGuard mpg("TKeyValueState::PrepareOneCmd::DeleteRange", EnableMemoryProfiling);
     intermediate->Commands.emplace_back(TIntermediate::TDelete());
     auto &cmd = std::get<TIntermediate::TDelete>(intermediate->Commands.back());
     auto convResult = ConvertRange(request.range(), &cmd.Range, "DeleteRange");
@@ -3539,6 +3553,7 @@ void TKeyValueState::ProcessPostponedTrims(const TActorContext& ctx, const TTabl
 void TKeyValueState::OnEvReadRequest(TEvKeyValue::TEvRead::TPtr &ev, const TActorContext &ctx,
         const TTabletStorageInfo *info)
 {
+    TMemoryProfileGuard mpg("TKeyValueState::OnEvReadRequest", EnableMemoryProfiling);
     THolder<TIntermediate> intermediate;
 
     ResourceMetrics->Network.Increment(ev->Get()->Record.ByteSize());
@@ -3578,6 +3593,7 @@ void TKeyValueState::OnEvReadRequest(TEvKeyValue::TEvRead::TPtr &ev, const TActo
 void TKeyValueState::OnEvReadRangeRequest(TEvKeyValue::TEvReadRange::TPtr &ev, const TActorContext &ctx,
         const TTabletStorageInfo *info)
 {
+    TMemoryProfileGuard mpg("TKeyValueState::OnEvReadRangeRequest", EnableMemoryProfiling);
     THolder<TIntermediate> intermediate;
 
     ResourceMetrics->Network.Increment(ev->Get()->Record.ByteSize());
@@ -3617,6 +3633,7 @@ void TKeyValueState::OnEvReadRangeRequest(TEvKeyValue::TEvReadRange::TPtr &ev, c
 void TKeyValueState::OnEvExecuteTransaction(TEvKeyValue::TEvExecuteTransaction::TPtr &ev, const TActorContext &ctx,
         const TTabletStorageInfo *info)
 {
+    TMemoryProfileGuard mpg("TKeyValueState::OnEvExecuteTransaction", EnableMemoryProfiling);
     THolder<TIntermediate> intermediate;
 
     ResourceMetrics->Network.Increment(ev->Get()->Record.ByteSize());
@@ -3693,6 +3710,7 @@ void TKeyValueState::OnEvIntermediate(TIntermediate &intermediate) {
 
 void TKeyValueState::OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActorContext &ctx,
         const TTabletStorageInfo *info) {
+    TMemoryProfileGuard mpg("TKeyValueState::OnEvRequest", EnableMemoryProfiling);
     THolder<TIntermediate> intermediate;
     NKikimrClient::TKeyValueRequest &request = ev->Get()->Record;
 

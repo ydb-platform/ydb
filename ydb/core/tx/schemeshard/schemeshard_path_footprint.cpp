@@ -1188,9 +1188,7 @@ void ExtractRegisteredOperation(const NKikimrSchemeOp::TModifyScheme& tx, TRefSi
         extractor(TOperationTag<Type>{});
     } else {
         constexpr auto support = GetSchemeOperationSupport(Type);
-        static_assert(support == ESchemeOperationSupport::Unsupported
-                || support == ESchemeOperationSupport::Stub
-                || support == ESchemeOperationSupport::Deprecated,
+        static_assert(support == ESchemeOperationSupport::Unsupported,
             "Implemented operations must declare a path extractor");
     }
 }

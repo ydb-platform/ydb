@@ -41,39 +41,6 @@ TOperation WithPhysicalReturningColumns(const TOperation& operation, const TKiki
     return TOperation(ctx.ChangeChild(*operation.Raw(), TOperation::idx_ReturningColumns, physicalColumns.Ptr()));
 }
 
-// A ReturningSink can only expose persisted columns. Keep the dependency-enriched
-// effect input, but let KqpBuildReturning construct results that contain virtual columns
-TExprBase WithoutReturningColumns(const TExprBase& effect, TExprContext& ctx) {
-    if (auto effects = effect.Maybe<TExprList>()) {
-        TVector<TExprBase> items;
-        items.reserve(effects.Cast().Size());
-
-        for (const auto& item : effects.Cast()) {
-            items.push_back(WithoutReturningColumns(item, ctx));
-        }
-
-        return Build<TExprList>(ctx, effect.Pos())
-            .Add(items)
-            .Done();
-    }
-
-    size_t returningColumnsIndex;
-    if (effect.Maybe<TKqlUpsertRowsBase>()) {
-        returningColumnsIndex = TKqlUpsertRows::idx_ReturningColumns;
-    } else if (effect.Maybe<TKqlInsertRowsBase>()) {
-        returningColumnsIndex = TKqlInsertRowsBase::idx_ReturningColumns;
-    } else if (effect.Maybe<TKqlUpdateRowsBase>()) {
-        returningColumnsIndex = TKqlUpdateRowsBase::idx_ReturningColumns;
-    } else if (effect.Maybe<TKqlDeleteRowsBase>()) {
-        returningColumnsIndex = TKqlDeleteRows::idx_ReturningColumns;
-    } else {
-        return effect;
-    }
-
-    auto emptyColumns = Build<TCoAtomList>(ctx, effect.Pos()).Done();
-    return TExprBase(ctx.ChangeChild(*effect.Raw(), returningColumnsIndex, emptyColumns.Ptr()));
-}
-
 TVector<TString> GetMissingInputColumnsForReturning(
     const TKiWriteTable& write, const TCoAtomList& inputColumns)
 {
@@ -1540,9 +1507,6 @@ TExprNode::TPtr HandleWriteTable(const TKiWriteTable& write, TExprContext& ctx, 
         ? WriteTableWithIndexUpdate(physicalWrite, inputColumns, defaultConstraintColumns, tableData, ctx, useStreamIndex, kqpCtx)
         : WriteTableSimple(physicalWrite, inputColumns, defaultConstraintColumns, tableData, ctx, kqpCtx);
 
-    if (useStreamIndex && physicalWrite.ReturningColumns().Raw() != write.ReturningColumns().Raw()) {
-        effect = WithoutReturningColumns(effect, ctx);
-    }
     return effect.Ptr();
 }
 
@@ -1565,9 +1529,6 @@ TExprNode::TPtr HandleUpdateTable(const TKiUpdateTable& update, TExprContext& ct
         ? BuildUpdateTableWithIndex(physicalUpdate, tableData, withSystemColumns, ctx, kqpCtx)
         : BuildUpdateTable(physicalUpdate, tableData, withSystemColumns, ctx, kqpCtx);
 
-    if (useStreamIndex && physicalUpdate.ReturningColumns().Raw() != update.ReturningColumns().Raw()) {
-        effect = WithoutReturningColumns(effect, ctx);
-    }
     return effect.Ptr();
 }
 
@@ -1589,9 +1550,6 @@ TExprNode::TPtr HandleDeleteTable(const TKiDeleteTable& del, TExprContext& ctx, 
         ? BuildDeleteTableWithIndex(physicalDelete, tableData, withSystemColumns, ctx, kqpCtx)
         : BuildDeleteTable(physicalDelete, tableData, withSystemColumns, ctx, kqpCtx);
 
-    if (useStreamIndex && physicalDelete.ReturningColumns().Raw() != del.ReturningColumns().Raw()) {
-        effect = WithoutReturningColumns(effect, ctx);
-    }
     return effect.Ptr();
 }
 

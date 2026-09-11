@@ -990,17 +990,24 @@ private:
         }
 
         // For each effects group, find which RETURNING results belong to it.
+        // A result may have consumer stages after a ReturningSink (for example,
+        // a projection over its physical output), so match every reachable stage.
         // After replaces, stages in EffectsGroups and UpdatedResults are consistent.
         THashMap<const TExprNode*, TVector<ui32>> rebuiltStageToResults;
         for (ui32 i = 0; i < collected.UpdatedResults.size(); ++i) {
-            if (auto maybeUnionAll = collected.UpdatedResults[i].Value().Maybe<TDqCnUnionAll>()) {
-                const auto stage = maybeUnionAll.Cast().Output().Stage();
-                rebuiltStageToResults[stage.Raw()].push_back(i);
-            }
+            VisitExpr(collected.UpdatedResults[i].Value().Ptr(), [](const TExprNode::TPtr& node) {
+                return !node->IsLambda();
+            }, [&](const TExprNode::TPtr& node) {
+                if (const auto maybeStage = TMaybeNode<TDqStageBase>(node)) {
+                    rebuiltStageToResults[maybeStage.Cast().Raw()].push_back(i);
+                }
+                return true;
+            });
         }
 
         for (const auto& effectsGroup : collected.EffectsGroups) {
             TVector<ui32> returningIndices;
+            THashSet<ui32> seenReturningIndices;
             VisitExpr(effectsGroup.Ptr(), [](const TExprNode::TPtr& node) {
                 return !node->IsLambda();
             }, [&](const TExprNode::TPtr& node) {
@@ -1009,7 +1016,9 @@ private:
                     auto it = rebuiltStageToResults.find(stage.Raw());
                     if (it != rebuiltStageToResults.end()) {
                         for (ui32 idx : it->second) {
-                            returningIndices.push_back(idx);
+                            if (seenReturningIndices.insert(idx).second) {
+                                returningIndices.push_back(idx);
+                            }
                         }
                     }
                 }

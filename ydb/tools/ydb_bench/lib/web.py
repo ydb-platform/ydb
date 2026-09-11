@@ -1142,14 +1142,25 @@ function compactRun(run){
     '<a href="'+runHref(run.id,'config')+'">YAML</a><a href="'+runHref(run.id,'manifest')+'">run.json</a>'+
     '<a href="'+runHref(run.id,'archive')+'">Archive</a></div></details></article>'
 }
+function bindAutomaticFilters(fields,reset,apply,connected){
+  let timer;
+  const update=()=>{reset.hidden=!fields.some(field=>field.value.trim())};
+  const run=()=>{clearTimeout(timer);update();if(connected())apply()};
+  for(const field of fields){
+    field.oninput=()=>{clearTimeout(timer);update();timer=setTimeout(run,250)};
+    field.onchange=run;
+  }
+  reset.onclick=()=>{for(const field of fields)field.value='';run()};
+  update();
+}
 async function renderRuns(){
   clearRefresh();
-  app.innerHTML=shell('runs','<div class=runs-heading><h1 class=page-title>Runs</h1>'+
-    '<a class=new-run-link href="#new"><span aria-hidden=true>+</span> New run</a></div>'+runFilters()+
+  app.innerHTML=shell('runs',runFilters()+
     '<div class=runs-toolbar><label>Sort <select id=runs-sort>'+
     '<option value=newest>Newest first</option><option value=oldest>Oldest first</option>'+
     '<option value=longest>Longest first</option></select></label><div class=runs-actions><button id=open-import>Import</button>'+
-    '<button id=apply-filters>Apply filters</button></div></div><div id=runs-table></div>'+
+    '<button id=reset-run-filters hidden>Reset filters</button>'+
+    '<a class=new-run-link href="#new"><span aria-hidden=true>+</span> New run</a></div></div><div id=runs-table></div>'+
     '<dialog id=import-dialog class=import-dialog aria-labelledby=import-title><h2 id=import-title>Import results</h2>'+
     '<label for=import-file>Portable ZIP archive</label><input id=import-file type=file accept=".zip,application/zip">'+
     '<div id=import-error role=alert></div><div id=import-status role=status></div><div class=toolbar>'+
@@ -1173,7 +1184,8 @@ async function renderRuns(){
     catch(error){if(current===request&&target.isConnected)target.innerHTML=displayError(error)}
   }
   sort.onchange=()=>{runsSort=sort.value;draw()};
-  document.querySelector('#apply-filters').onclick=load;
+  bindAutomaticFilters([...app.querySelectorAll('.filters input,.filters select')],
+    app.querySelector('#reset-run-filters'),load,()=>target.isConnected);
   const dialog=document.querySelector('#import-dialog'),fileInput=document.querySelector('#import-file'),
     importButton=document.querySelector('#import-run'),cancelButton=document.querySelector('#cancel-import'),
     importError=document.querySelector('#import-error'),importStatus=document.querySelector('#import-status');
@@ -2843,7 +2855,7 @@ function parseLocalYdbProfileSelection(groups,selected){
     "p.label)+'</div><div class=cpu-core-grid>'+group.cores.map(core=>\n        '<button class=cpu-core data-core=\"'+core.index+'\" aria-pressed=fa"
     "lse aria-label=\"Core '+core.index+'; vCPU '+esc(core.cpus.join(', '))+'\">'+core.cpus.map(cpu=>'<span class=cpu-cell data-cpu=\"'+cpu+'\">'+cpu"
     "+'</span>').join('')+'</button>'\n      ).join('')+'</div></div>').join('')+'</div></section>').join('');\n    app.innerHTML=shell('topology',"
-    "'<div id=cpu-topology><h1 class=page-title>System topology</h1><p class=muted>'+t.physical_cores.length+' physical cores · '+t.allowed_cpus."
+    "'<div id=cpu-topology><p class=muted>'+t.physical_cores.length+' physical cores · '+t.allowed_cpus."
     "length+' allowed vCPUs · '+t.numa_nodes.length+' NUMA nodes</p>'+\n      sectionTabs('topology',[['layout','Topology & CPU usage'],['affinity"
     "','Affinity availability']])+\n      '<section data-section-panel=\"topology:layout\"><div class=cpu-map-toolbar><div class=cpu-help><button id"
     "=cpu-help-button aria-label=\"About the CPU map\" aria-expanded=false aria-controls=cpu-map-help>?</button><div id=cpu-map-help hidden role=no"
@@ -2882,6 +2894,18 @@ function parseLocalYdbProfileSelection(groups,selected){
     "  };\n    refreshTimer=setInterval(refresh,2000);await refresh();\n  }catch(error){if(location.hash==='#topology')app.innerHTML=shell('topolog"
     "y',displayError(error))}\n}\n"
     """
+function filterSavedComparisons(records,filters){
+  const query=(filters.query||'').trim().toLowerCase();
+  return records.filter(record=>{
+    const date=(record.created_at||'').slice(0,10);
+    return (!query||[record.name,...record.profiles.flat()].join(' ').toLowerCase().includes(query))&&
+      (!filters.since||date>=filters.since)&&(!filters.until||date<=filters.until)
+  }).sort((a,b)=>{
+    const dates=(Date.parse(a.created_at)||0)-(Date.parse(b.created_at)||0);
+    const order=filters.sort==='name'?a.name.localeCompare(b.name):filters.sort==='oldest'?dates:-dates;
+    return order||a.id.localeCompare(b.id)
+  })
+}
 function filterComparisonRuns(runs,filters,selected){
   const query=(filters.query||'').trim().toLowerCase();
   return sortRuns(runs.filter(run=>{
@@ -2901,17 +2925,36 @@ async function renderSavedComparisons(){
     const records=await api('/api/saved-comparisons');
     if(!active())return;
     if(!id){
-      app.innerHTML=shell('comparisons','<div class=toolbar><h1 class=page-title>Comparisons</h1>'+
-        '<a href="#comparisons/new">New comparison</a></div>'+(!records.length?'<div class=empty>No saved comparisons.</div>':
-        '<div class=table-scroll><table><thead><tr><th>Comparison</th><th>Created</th><th>Profiles</th></tr></thead><tbody>'+
-        records.map(record=>'<tr data-comparison-id="'+esc(record.id)+'"><td><a href="#comparisons/'+enc(record.id)+'">'+
-          esc(record.name)+'</a><div class=muted>'+record.profiles.map(pair=>esc(pair[1])).join(' · ')+
-          '</div></td><td>'+esc(humanTime(record.created_at))+'</td><td>'+record.profiles.length+'</td></tr>').join('')+
-        '</tbody></table></div>'));
-      for(const row of app.querySelectorAll('[data-comparison-id]'))row.onclick=event=>{
-        if(event.target.closest('a,button,input,select')||event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
-        setRoute('comparisons/'+row.dataset.comparisonId)
+      app.innerHTML=shell('comparisons',
+        '<div class=filters><label class=field>Comparison, profile or run<input id=saved-comparison-query type=search placeholder="Search comparisons"></label>'+
+        '<label class=field>Created from (UTC)<input id=saved-comparison-since type=date></label>'+
+        '<label class=field>Created to (UTC)<input id=saved-comparison-until type=date></label></div>'+
+        '<div class=runs-toolbar><label>Sort <select id=saved-comparison-sort><option value=newest>Newest first</option>'+
+        '<option value=oldest>Oldest first</option><option value=name>Name A–Z</option></select></label>'+
+        '<span id=saved-comparison-count class=muted aria-live=polite></span><div class=runs-actions>'+
+        '<button id=reset-comparison-filters hidden>Reset filters</button>'+
+        '<a class=new-run-link href="#comparisons/new"><span aria-hidden=true>+</span> New comparison</a></div></div><div id=saved-comparison-list></div>');
+      const query=app.querySelector('#saved-comparison-query'),since=app.querySelector('#saved-comparison-since'),
+        until=app.querySelector('#saved-comparison-until'),sort=app.querySelector('#saved-comparison-sort'),
+        list=app.querySelector('#saved-comparison-list'),count=app.querySelector('#saved-comparison-count');
+      const draw=()=>{
+        const filtered=filterSavedComparisons(records,{query:query.value,since:since.value,until:until.value,sort:sort.value});
+        count.textContent=filtered.length+' / '+records.length+' comparisons';
+        list.innerHTML=!records.length?'<div class=empty>No saved comparisons.</div>':
+          !filtered.length?'<div class=empty>No comparisons match these filters.</div>':
+          '<div class=table-scroll><table><thead><tr><th>Comparison</th><th>Created</th><th>Profiles</th></tr></thead><tbody>'+
+          filtered.map(record=>'<tr data-comparison-id="'+esc(record.id)+'"><td><a href="#comparisons/'+enc(record.id)+'">'+
+            esc(record.name)+'</a><div class=muted>'+record.profiles.map(pair=>esc(pair[1])).join(' · ')+
+            '</div></td><td>'+esc(humanTime(record.created_at))+'</td><td>'+record.profiles.length+'</td></tr>').join('')+
+          '</tbody></table></div>';
+        for(const row of list.querySelectorAll('[data-comparison-id]'))row.onclick=event=>{
+          if(event.target.closest('a,button,input,select')||event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
+          setRoute('comparisons/'+row.dataset.comparisonId)
+        }
       };
+      bindAutomaticFilters([query,since,until],app.querySelector('#reset-comparison-filters'),draw,()=>list.isConnected);
+      sort.onchange=draw;
+      draw();
       return
     }
     const record=id==='new'?null:records.find(item=>item.id===id);

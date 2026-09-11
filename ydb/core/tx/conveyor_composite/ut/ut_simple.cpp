@@ -48,6 +48,7 @@ class TSleepTask: public NKikimr::NConveyor::ITask {
 private:
     const TDuration ExecutionTime;
     TAtomicCounter* Counter;
+    TAtomicCounter* Accounted = nullptr;
     virtual void DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override {
         const TMonotonic start = TMonotonic::Now();
         while (TMonotonic::Now() - start < ExecutionTime) {
@@ -60,9 +61,16 @@ public:
         return "SLEEP";
     }
 
-    TSleepTask(const TDuration d, TAtomicCounter& c)
+    virtual void OnAccounted() override {
+        if (Accounted) {
+            Accounted->Inc();
+        }
+    }
+
+    TSleepTask(const TDuration d, TAtomicCounter& c, TAtomicCounter* accounted = nullptr)
         : ExecutionTime(d)
-        , Counter(&c) {
+        , Counter(&c)
+        , Accounted(accounted) {
     }
 };
 
@@ -107,6 +115,17 @@ void WaitCounter(TAtomicCounter& counter, const i64 expected) {
         Sleep(TDuration::MilliSeconds(10));
     }
     UNIT_ASSERT_VALUES_EQUAL(counter.Val(), expected);
+}
+
+void WaitWarmupAccounted(NActors::TActorSystem& actorSystem, const NActors::TActorId& actorId, const ESpecialTaskCategory category,
+    const ui64 processId, const ui32 warmupTasks, const TDuration warmup) {
+    TAtomicCounter warmupDone;
+    TAtomicCounter warmupAccounted;
+    for (ui32 i = 0; i < warmupTasks; ++i) {
+        actorSystem.Send(actorId, new TEvExecution::TEvNewTask(
+            std::make_shared<TSleepTask>(warmup, warmupDone, &warmupAccounted), category, processId));
+    }
+    WaitCounter(warmupAccounted, warmupTasks);
 }
 
 NConfig::TConfig ParseConveyorProto(const TString& textProto) {
@@ -670,6 +689,53 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
         UNIT_ASSERT(NConfig::TConfig::OverlayYamlOnDefaults(defaults, unknown).IsFail());
     }
 
+    Y_UNIT_TEST(OverlayWithLinksKeepsDefaultMaxBatchSize) {
+        NKikimrConfig::TCompositeConveyorConfig defaults;
+        {
+            auto* pool = defaults.AddWorkerPools();
+            pool->SetName("scan");
+            pool->SetDefaultFractionOfThreadsCount(0.4);
+            auto* link = pool->AddLinks();
+            link->SetCategory("scan");
+            link->SetWeight(1);
+        }
+        {
+            auto* pool = defaults.AddWorkerPools();
+            pool->SetName("compaction");
+            pool->SetMaxBatchSize(1);
+            pool->SetDefaultFractionOfThreadsCount(0.33);
+            auto* link = pool->AddLinks();
+            link->SetCategory("compaction");
+            link->SetWeight(1);
+        }
+
+        NKikimrConfig::TCompositeConveyorConfig yaml;
+        {
+            auto* pool = yaml.AddWorkerPools();
+            pool->SetName("scan");
+            auto* limit = pool->AddHeavyLimits();
+            limit->SetCpuLimitUs(25000000);
+            limit->SetThreadLimit(8);
+        }
+        {
+            auto* pool = yaml.AddWorkerPools();
+            pool->SetName("compaction");
+            auto* link = pool->AddLinks();
+            link->SetCategory("compaction");
+            link->SetWeight(1);
+            pool->SetWorkersCount(4);
+        }
+
+        auto overlaid = NConfig::TConfig::OverlayYamlOnDefaults(defaults, yaml).DetachResult();
+        UNIT_ASSERT_VALUES_EQUAL(overlaid.GetWorkerPools().size(), 2);
+        const auto& compaction = overlaid.GetWorkerPools(1);
+        UNIT_ASSERT_VALUES_EQUAL(compaction.GetName(), "compaction");
+        UNIT_ASSERT_VALUES_EQUAL(compaction.GetMaxBatchSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(compaction.GetWorkersCount(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(compaction.GetDefaultFractionOfThreadsCount(), 0.33);
+        UNIT_ASSERT_VALUES_EQUAL(overlaid.GetWorkerPools(0).GetHeavyLimits().size(), 1);
+    }
+
     Y_UNIT_TEST(NoHeavyLimitsUsesWorkersBeyondLimit) {
         const ui64 threadsCount = 64;
         THolder<NActors::TActorSystemSetup> actorSystemSetup = NKikimr::BuildActorSystemSetup(threadsCount, 1);
@@ -728,15 +794,7 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
         const ui64 processId = 1;
         actorSystem.Send(actorId, new TEvExecution::TEvRegisterProcess(TCPULimitsConfig(1000, 1), ESpecialTaskCategory::Scan, "s", processId));
 
-        {
-            TAtomicCounter warmupDone;
-            const ui32 warmupTasks = 4;
-            for (ui32 i = 0; i < warmupTasks; ++i) {
-                actorSystem.Send(actorId, new TEvExecution::TEvNewTask(
-                    std::make_shared<TSleepTask>(TDuration::MilliSeconds(20), warmupDone), ESpecialTaskCategory::Scan, processId));
-            }
-            WaitCounter(warmupDone, warmupTasks);
-        }
+        WaitWarmupAccounted(actorSystem, actorId, ESpecialTaskCategory::Scan, processId, 4, TDuration::MilliSeconds(20));
 
         TAtomicCounter recordedDone;
         std::array<TAtomicCounter, 16> perWorker;
@@ -785,14 +843,7 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
 
         const auto runRecorded = [&](const ui64 processId, const ui32 warmupTasks, const ui32 warmupMs) {
             actorSystem.Send(actorId, new TEvExecution::TEvRegisterProcess(TCPULimitsConfig(1000, 1), ESpecialTaskCategory::Scan, "s", processId));
-            {
-                TAtomicCounter warmupDone;
-                for (ui32 i = 0; i < warmupTasks; ++i) {
-                    actorSystem.Send(actorId, new TEvExecution::TEvNewTask(
-                        std::make_shared<TSleepTask>(TDuration::MilliSeconds(warmupMs), warmupDone), ESpecialTaskCategory::Scan, processId));
-                }
-                WaitCounter(warmupDone, warmupTasks);
-            }
+            WaitWarmupAccounted(actorSystem, actorId, ESpecialTaskCategory::Scan, processId, warmupTasks, TDuration::MilliSeconds(warmupMs));
             TAtomicCounter recordedDone;
             std::array<TAtomicCounter, 16> perWorker;
             const ui32 recordedTasks = 32;

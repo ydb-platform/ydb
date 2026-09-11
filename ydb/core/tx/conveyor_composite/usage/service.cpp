@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/conclusion/result.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <optional>
 
@@ -14,7 +15,11 @@ std::optional<bool> ParseConfiguredPool(const bool hasField, const TString& name
         return std::nullopt;
     }
     auto parsed = NConfig::ParseActorSystemPoolName(name);
-    AFL_VERIFY(parsed.IsSuccess())("error", parsed.GetErrorMessage())("name", name);
+    if (parsed.IsFail()) {
+        AFL_ERROR(NKikimrServices::TX_CONVEYOR)("error", "invalid actor system pool name, using default routing")(
+            "name", name)("details", parsed.GetErrorMessage());
+        return std::nullopt;
+    }
     return *parsed;
 }
 }

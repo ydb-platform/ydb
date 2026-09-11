@@ -177,7 +177,20 @@ TConclusion<NKikimrConfig::TCompositeConveyorConfig> TConfig::OverlayYamlOnDefau
         }
         if (yamlPool.GetLinks().size()) {
             if (existing) {
-                *existing = yamlPool;
+                auto merged = yamlPool;
+                if (!merged.HasWorkersCount() && existing->HasWorkersCount()) {
+                    merged.SetWorkersCount(existing->GetWorkersCount());
+                }
+                if (!merged.HasDefaultFractionOfThreadsCount() && existing->HasDefaultFractionOfThreadsCount()) {
+                    merged.SetDefaultFractionOfThreadsCount(existing->GetDefaultFractionOfThreadsCount());
+                }
+                if (!merged.HasMaxBatchSize() && existing->HasMaxBatchSize()) {
+                    merged.SetMaxBatchSize(existing->GetMaxBatchSize());
+                }
+                if (!merged.GetHeavyLimits().size() && existing->GetHeavyLimits().size()) {
+                    merged.MutableHeavyLimits()->CopyFrom(existing->GetHeavyLimits());
+                }
+                *existing = merged;
             } else {
                 *result.AddWorkerPools() = yamlPool;
             }

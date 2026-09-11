@@ -2873,8 +2873,8 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
         auto overlaid = NConveyorComposite::NConfig::TConfig::OverlayYamlOnDefaults(result, Config.GetCompositeConveyorConfig());
         if (overlaid.IsFail()) {
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot overlay composite conveyor config")(
-                "error", overlaid.GetErrorMessage());
-            return result;
+                "error", overlaid.GetErrorMessage())("action", "using yaml composite_conveyor_config as-is");
+            return Config.GetCompositeConveyorConfig();
         }
         return overlaid.DetachResult();
     }();

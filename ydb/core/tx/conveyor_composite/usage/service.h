@@ -28,6 +28,8 @@ public:
     static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, const ESpecialTaskCategory category, const ui64 internalProcessId,
         const bool useBatchPool = false) {
         bool batchPool = useBatchPool;
+        // Compaction has no per-call pool argument (TCompServiceOperator). ColumnShardConfig.compaction_default_pool
+        // is the source of truth; unset means User. Scan query tasks go through TProcessGuard after StartProcess.
         if (category == ESpecialTaskCategory::Compaction) {
             batchPool = ResolveCompactionUseBatchPool();
         }

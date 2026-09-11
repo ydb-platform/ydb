@@ -79,6 +79,9 @@ private:
     TAverageCalcer<TDuration> AverageTaskDuration;
     ui32 LinksCount = 0;
     TDuration BaseWeight = TDuration::Zero();
+    // Cumulative wall-clock time of finished tasks on this process (not OS CPU time). Never decays.
+    // heavy_limits must only be set on query-scoped pools (scan). Shared process-0 categories
+    // (compaction/insert/...) would stay pinned at the last staircase step for the node lifetime.
     TDuration TotalCPU = TDuration::Zero();
 
 public:
@@ -138,6 +141,9 @@ public:
         AverageTaskDuration.Add(result.GetDuration());
         InProgressTasksCount.Dec();
         TotalCPU += result.GetDuration();
+        if (result.GetTask()) {
+            result.GetTask()->OnAccounted();
+        }
     }
 
     [[nodiscard]] bool DecRegistration() {

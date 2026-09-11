@@ -6,6 +6,22 @@
 #include <util/generic/ylimits.h>
 
 namespace NKikimr::NConveyorComposite {
+
+namespace {
+bool CategoryHeapLess(const TWeightedCategory& l, const TWeightedCategory& r) {
+    const bool hasL = l.GetCategory()->HasTasks();
+    const bool hasR = r.GetCategory()->HasTasks();
+    if (!hasL && !hasR) {
+        return false;
+    } else if (!hasL && hasR) {
+        return true;
+    } else if (hasL && !hasR) {
+        return false;
+    }
+    return r.GetCPUUsage()->CalcWeight(r.GetWeight()) < l.GetCPUUsage()->CalcWeight(l.GetWeight());
+}
+}
+
 TWorkersPool::TWorkersPool(const TString& poolName, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
     const std::shared_ptr<TWorkersPoolCounters>& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories)
     : WorkersCount(config.GetWorkersCountInfo().GetThreadsCount(NKqp::TStagePredictor::GetPossibleMaxLimitThreads()))
@@ -69,21 +85,9 @@ bool TWorkersPool::DrainOnWorkers(const std::vector<ui32>& workerIdxs) {
     if (workerIdxs.empty()) {
         return false;
     }
-    const auto predHeap = [](const TWeightedCategory& l, const TWeightedCategory& r) {
-        const bool hasL = l.GetCategory()->HasTasks();
-        const bool hasR = r.GetCategory()->HasTasks();
-        if (!hasL && !hasR) {
-            return false;
-        } else if (!hasL && hasR) {
-            return true;
-        } else if (hasL && !hasR) {
-            return false;
-        }
-        return r.GetCPUUsage()->CalcWeight(r.GetWeight()) < l.GetCPUUsage()->CalcWeight(l.GetWeight());
-    };
     std::vector<TWeightedCategory> procLocal = Processes;
     AFL_VERIFY(procLocal.size());
-    std::make_heap(procLocal.begin(), procLocal.end(), predHeap);
+    std::make_heap(procLocal.begin(), procLocal.end(), CategoryHeapLess);
     bool newTask = false;
     ui32 nextWorker = 0;
     while (nextWorker < workerIdxs.size() && procLocal.size() && procLocal.front().GetCategory()->HasTasks()) {
@@ -93,7 +97,7 @@ bool TWorkersPool::DrainOnWorkers(const std::vector<ui32>& workerIdxs) {
         const ui32 workerIdx = workerIdxs[nextWorker];
         while (procLocal.size() && (tasks.empty() || (predicted < DeliveringDuration.GetValue() * 10 && tasks.size() < MaxBatchSize)) &&
                procLocal.front().GetCategory()->HasTasks()) {
-            std::pop_heap(procLocal.begin(), procLocal.end(), predHeap);
+            std::pop_heap(procLocal.begin(), procLocal.end(), CategoryHeapLess);
             auto task = procLocal.back().GetCategory()->ExtractTaskWithPrediction(
                 procLocal.back().GetCounters(), scopes, workerIdx, HeavyLimits);
             if (!task) {
@@ -103,7 +107,7 @@ bool TWorkersPool::DrainOnWorkers(const std::vector<ui32>& workerIdxs) {
             tasks.emplace_back(std::move(*task));
             procLocal.back().GetCPUUsage()->AddPredicted(tasks.back().GetPredictedDuration());
             predicted += tasks.back().GetPredictedDuration();
-            std::push_heap(procLocal.begin(), procLocal.end(), predHeap);
+            std::push_heap(procLocal.begin(), procLocal.end(), CategoryHeapLess);
         }
         if (tasks.empty()) {
             break;
@@ -120,19 +124,9 @@ bool TWorkersPool::DrainTasks() {
         return false;
     }
     if (HeavyLimits.empty()) {
-        const auto predHeap = [](const TWeightedCategory& l, const TWeightedCategory& r) {
-            const bool hasL = l.GetCategory()->HasTasks();
-            const bool hasR = r.GetCategory()->HasTasks();
-            if (!hasL && !hasR) {
-                return false;
-            } else if (!hasL && hasR) {
-                return true;
-            } else if (hasL && !hasR) {
-                return false;
-            }
-            return r.GetCPUUsage()->CalcWeight(r.GetWeight()) < l.GetCPUUsage()->CalcWeight(l.GetWeight());
-        };
-        std::make_heap(Processes.begin(), Processes.end(), predHeap);
+        // Keep the historical drain: pop from ActiveWorkersIdx.back(), and treat "attempted" as
+        // success so AFL_VERIFY(HasTasks() => DrainTasks()) still holds when CheckToRun() skips.
+        std::make_heap(Processes.begin(), Processes.end(), CategoryHeapLess);
         std::vector<TWeightedCategory> procLocal = Processes;
         AFL_VERIFY(procLocal.size());
         bool newTask = false;
@@ -142,7 +136,7 @@ bool TWorkersPool::DrainTasks() {
             THashSet<TString> scopes;
             while (procLocal.size() && (tasks.empty() || (predicted < DeliveringDuration.GetValue() * 10 && tasks.size() < MaxBatchSize)) &&
                    procLocal.front().GetCategory()->HasTasks()) {
-                std::pop_heap(procLocal.begin(), procLocal.end(), predHeap);
+                std::pop_heap(procLocal.begin(), procLocal.end(), CategoryHeapLess);
                 auto task = procLocal.back().GetCategory()->ExtractTaskWithPrediction(
                     procLocal.back().GetCounters(), scopes, ActiveWorkersIdx.back(), HeavyLimits);
                 if (!task) {
@@ -152,7 +146,7 @@ bool TWorkersPool::DrainTasks() {
                 tasks.emplace_back(std::move(*task));
                 procLocal.back().GetCPUUsage()->AddPredicted(tasks.back().GetPredictedDuration());
                 predicted += tasks.back().GetPredictedDuration();
-                std::push_heap(procLocal.begin(), procLocal.end(), predHeap);
+                std::push_heap(procLocal.begin(), procLocal.end(), CategoryHeapLess);
             }
             newTask = true;
             if (tasks.size()) {

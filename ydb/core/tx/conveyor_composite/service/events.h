@@ -36,8 +36,9 @@ private:
     using TBase = TWorkerTaskContext;
     YDB_READONLY_DEF(TMonotonic, Start);
     YDB_READONLY_DEF(TMonotonic, Finish);
+    YDB_READONLY_DEF(ITask::TPtr, Task);
 
-    TWorkerTaskResult(const TWorkerTaskContext& context, const TMonotonic start, const TMonotonic finish);
+    TWorkerTaskResult(const TWorkerTaskContext& context, const TMonotonic start, const TMonotonic finish, ITask::TPtr task);
     friend class TWorkerTask;
 
 public:
@@ -54,7 +55,7 @@ private:
 
 public:
     TWorkerTaskResult GetResult(const TMonotonic start, const TMonotonic finish) const {
-        return TWorkerTaskResult(*this, start, finish);
+        return TWorkerTaskResult(*this, start, finish, Task);
     }
 
     TWorkerTask(const ITask::TPtr& task, const TDuration prediction, const ESpecialTaskCategory category,

@@ -81,7 +81,12 @@ public:
 
     virtual TString GetTaskClassIdentifier() const = 0;
 
+    // Test/observability hook: composite conveyor calls this with the assigned worker index.
     virtual void OnAssignedToWorker(const ui64 /*workerIdx*/) {
+    }
+
+    // Test/observability hook: called after the process accounts this task's duration into TotalCPU.
+    virtual void OnAccounted() {
     }
 
     void OnCannotExecute(const TString& reason) {

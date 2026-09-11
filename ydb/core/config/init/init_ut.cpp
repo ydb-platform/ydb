@@ -14,6 +14,29 @@ using namespace NKikimr::NConfig;
 using NYdb::NConsoleClient::TInitializationException;
 
 Y_UNIT_TEST_SUITE(Init) {
+    Y_UNIT_TEST(IgnoreRoot) {
+        for (bool configured : {false, true}) {
+            for (bool commandLine : {false, true}) {
+                NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
+                TCommonAppOptions commonOpts;
+                commonOpts.RegisterCliOptions(opts);
+                TVector<const char*> args = {"ydbd"};
+                if (commandLine) {
+                    args.push_back("--ignore-root");
+                }
+                NLastGetopt::TOptsParseResult res(&opts, args.size(), args.data());
+
+                NKikimrConfig::TAppConfig appConfig;
+                UNIT_ASSERT(!appConfig.GetGRpcConfig().GetIgnoreRoot());
+                appConfig.MutableGRpcConfig()->SetIgnoreRoot(configured);
+                TEnvMock env;
+                auto tracer = MakeDefaultConfigUpdateTracer();
+                commonOpts.ApplyFields(appConfig, env, *tracer);
+                UNIT_ASSERT_VALUES_EQUAL(appConfig.GetGRpcConfig().GetIgnoreRoot(), configured || commandLine);
+            }
+        }
+    }
+
     Y_UNIT_TEST(TWithDefaultParser) {
         {
             NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();

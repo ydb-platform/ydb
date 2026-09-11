@@ -29,7 +29,8 @@ public:
     virtual TMaybe<TString> GetTraceId() const = 0;
     virtual NWilson::TTraceId GetWilsonTraceId() const = 0;
     virtual NWilson::TTraceId GetUserFacingWilsonTraceId() const { return {}; }
-    // Returns client provided database name
+    // Returns the effective database name, or the client-provided name when
+    // the request proxy has not resolved an alias.
     virtual const TMaybe<TString> GetDatabaseName() const = 0;
     // Returns "internal" token (result of ticket parser authentication)
     virtual const TIntrusiveConstPtr<NACLib::TUserToken>& GetInternalToken() const = 0;

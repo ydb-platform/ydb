@@ -483,6 +483,16 @@ private:
 public:
     virtual ~IRequestProxyCtx() = default;
 
+    // Set by the proxy before authorization and dispatch, while it owns the
+    // request exclusively. Keep the original client metadata intact.
+    void SetResolvedDatabaseName(TString database) {
+        ResolvedDatabaseName_ = std::move(database);
+    }
+
+    const TMaybe<TString>& GetResolvedDatabaseName() const {
+        return ResolvedDatabaseName_;
+    }
+
     // auth
     virtual const TMaybe<TString> GetYdbToken() const = 0;
     virtual void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) = 0;
@@ -552,6 +562,7 @@ public:
 
 private:
     NWilson::TTraceId UserFacingTraceId;
+    TMaybe<TString> ResolvedDatabaseName_;
 };
 
 // Request context
@@ -667,6 +678,9 @@ public:
     }
 
     const TMaybe<TString> GetDatabaseName() const override {
+        if (this->GetResolvedDatabaseName()) {
+            return this->GetResolvedDatabaseName();
+        }
         return Database_;
     }
 
@@ -953,6 +967,9 @@ public:
     }
 
     const TMaybe<TString> GetDatabaseName() const override {
+        if (this->GetResolvedDatabaseName()) {
+            return this->GetResolvedDatabaseName();
+        }
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
 
@@ -1304,6 +1321,9 @@ public:
     }
 
     const TMaybe<TString> GetDatabaseName() const override {
+        if (this->GetResolvedDatabaseName()) {
+            return this->GetResolvedDatabaseName();
+        }
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
 
@@ -2064,6 +2084,9 @@ public:
     }
 
     const TMaybe<TString> GetDatabaseName() const override {
+        if (GetResolvedDatabaseName()) {
+            return GetResolvedDatabaseName();
+        }
         return Database ? TMaybe<TString>(Database) : Nothing();
     }
 

@@ -176,7 +176,7 @@ public:
             if (it != SchemeShardLocalPathIds.end() && it->second.DropVersion) {
                 if (pathInfo.DropVersion) {
                     AFL_VERIFY(*it->second.DropVersion == *pathInfo.DropVersion)("existing", it->second.DropVersion->DebugString())(
-                        "incoming", pathInfo.DropVersion->DebugString())("ss", schemeShardLocalPathId);
+                                                            "incoming", pathInfo.DropVersion->DebugString())("ss", schemeShardLocalPathId);
                 } else {
                     // V1 retention recovery: drop is stored only in V1, v0 does not carry it.
                     pathInfo.DropVersion = it->second.DropVersion;

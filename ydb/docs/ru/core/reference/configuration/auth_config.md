@@ -121,27 +121,27 @@ auth_config:
 || min_length
 | Минимальная длина пароля.
 
-Значение по умолчанию: 0 (не ограничено)
+Значение по умолчанию: `0` (не ограничено)
     ||
 || min_lower_case_count
 | Минимальное количество строчных букв в пароле.
 
-Значение по умолчанию: 0 (не ограничено)
+Значение по умолчанию: `0` (не ограничено)
     ||
 || min_upper_case_count
 | Минимальное количество прописных букв в пароле.
 
-Значение по умолчанию: 0 (не ограничено)
+Значение по умолчанию: `0` (не ограничено)
     ||
 || min_numbers_count
 | Минимальное количество цифр в пароле.
 
-Значение по умолчанию: 0 (не ограничено)
+Значение по умолчанию: `0` (не ограничено)
     ||
 || min_special_chars_count
 | Минимальное количество специальных символов в пароле из указанных в параметре `special_chars`.
 
-Значение по умолчанию: 0 (не ограничено)
+Значение по умолчанию: `0` (не ограничено)
     ||
 || special_chars
 | Перечень специальных символов, допустимых при задании пароля.
@@ -171,7 +171,7 @@ auth_config:
 
 ```yaml
 auth_config:
-  ...
+  #...
   ldap_authentication:
     hosts:
       - "ldap-hostname-01.example.net"
@@ -195,39 +195,39 @@ auth_config:
       key_file: "/path/to/client-key.pem"
   ldap_authentication_domain: "ldap"
   refresh_time: "1h"
-  ...
+  #...
 ```
 
 #|
 || Параметр | Описание ||
-|| `hosts`
+|| hosts
 | Список имен хостов, на котором работает LDAP-сервер
     ||
-|| `port`
+|| port
 | Порт для подключения к LDAP-серверу
     ||
-|| `base_dn`
+|| base_dn
 | Корень поддерева в LDAP-каталоге, начиная с которого будет производиться поиск записи пользователя
     ||
-|| `bind_dn`
+|| bind_dn
 | Отличительное имя (Distinguished Name, DN) сервисного аккаунта, от имени которого выполняется поиск записи пользователя
     ||
-|| `bind_password`
+|| bind_password
 | Пароль сервисного аккаунта, от имени которого выполняется поиск записи пользователя. Не задаётся при `extended_settings.enable_sasl_external_bind: true`
     ||
-|| `search_filter`
+|| search_filter
 | Фильтр для поиска записи пользователя в LDAP-каталоге. В строке фильтра может встречаться последовательность символов *$username*, которая будет заменена на имя пользователя, запрошенное для аутентификации в базе данных
     ||
-|| `use_tls`
+|| use_tls
 | Настройки для конфигурирования TLS-соединения между {{ ydb-short-name }} и LDAP-сервером
     ||
-|| `enable`
+|| enable
 | Определяет, будет ли произведена попытка установить TLS-соединение с [использованием запроса `StartTls`](../../security/authentication.md#starttls). При установке значения этого параметра в `true`, необходимо отключить использование схемы соединения `ldaps`, присвоив параметру `ldap_authentication.scheme` значение `ldap`
     ||
-|| `ca_cert_file`
+|| ca_cert_file
 | Путь до файла сертификата удостоверяющего центра
     ||
-|| `cert_require`
+|| cert_require
 | Уровень требований к сертификату LDAP-сервера.
 
 Возможные значения:
@@ -239,13 +239,13 @@ auth_config:
 
 Значение по умолчанию: `DEMAND`
     ||
-|| `cert_file`
+|| cert_file
 | Путь до файла клиентского сертификата. Используется в качестве аутентификационной информации для [сервисного аккаунта](../../security/authentication.md#ldap-service-account-auth).
     ||
-|| `key_file`
+|| key_file
 | Путь до файла ключа клиентского сертификата
     ||
-|| `scheme`
+|| scheme
 | Схема соединения с LDAP-сервером.
 
 Возможные значения:
@@ -256,10 +256,10 @@ auth_config:
 
 Значение по умолчанию: `ldap`
     ||
-|| `requested_group_attribute`
+|| requested_group_attribute
 | Атрибут обратного членства в группе. По умолчанию `memberOf`
     ||
-|| `extended_settings.enable_nested_groups_search`
+|| extended_settings.enable_nested_groups_search
 | Флаг определяет, будет ли выполнятся запрос для получения всего дерева групп, в которые входят непосредственные группы пользователя.
 
 Возможные значения:
@@ -269,7 +269,7 @@ auth_config:
 
 Значение по умолчанию: `false`
     ||
-|| `extended_settings.enable_sasl_external_bind`
+|| extended_settings.enable_sasl_external_bind
 | Флаг определяет, будет ли выполняться [аутентификация сервисного аккаунта](../../security/authentication.md#ldap-service-account-auth) по протоколу SASL с механизмом EXTERNAL.
 
 Возможные значения:
@@ -279,10 +279,10 @@ auth_config:
 
 Значение по умолчанию: `false`
     ||
-|| `host`
+|| host
 | Имя хоста, на котором работает LDAP-сервер. Это устаревший параметр, вместо него должен использоваться параметр `hosts`
     ||
-|| `ldap_authentication_domain`
+|| ldap_authentication_domain
 | Суффикс имени пользователя, позволяющий отличать пользователей из LDAP-каталога от пользователей аутентифицируемых с помощью других провайдеров.
 
 Значение по умолчанию: `ldap`
@@ -295,12 +295,129 @@ auth_config:
 
 #|
 || Параметр | Описание ||
-|| `certificate_authentication_domain`
+|| certificate_authentication_domain
 | Суффикс имени пользователя, позволяющий отличать пользователей, аутентифицированных по клиентскому сертификату, от пользователей, аутентифицируемых другими способами.
 
-Значение по умолчанию: `cert` (то есть суффикс SID по умолчанию — `@cert`).
-||
+Значение по умолчанию: `cert` (то есть суффикс SID по умолчанию — `@cert`)
+    ||
 |#
+
+## Конфигурация аутентификации с использованием внешнего IdP {#external-idp-auth-config}
+
+{{ ydb-short-name }} поддерживает [аутентификацию по JWT-токенам внешнего провайдера идентификации с использованием OpenID Connect](../../security/authentication.md#external-idp). Для включения аутентификации необходимо добавить секцию `external_idp_config` в `auth_config`.
+
+Пример конфигурации:
+
+```yaml
+auth_config:
+  #...
+  external_idp_config:
+    issuer: "https://idp.example.com"
+    audience: "ydb-cluster"
+    allowed_clock_skew: "30s"
+    subject_claim_name: "username"
+    groups_claim_name: "groups"
+    discovery_periodic_settings:
+      success_refresh_period: "1h"
+      min_error_refresh_period: "1s"
+      max_error_refresh_period: "5m"
+      request_timeout: "15s"
+    jwks_periodic_settings:
+      success_refresh_period: "30m"
+      min_error_refresh_period: "1s"
+      max_error_refresh_period: "10s"
+      request_timeout: "15s"
+    jwks_cache_settings:
+      timeout: "2h"
+  external_idp_authentication_domain: "sso"
+  use_access_service: false
+  #...
+```
+
+#|
+|| Параметр | Описание ||
+|| external_idp_config.issuer
+| Ожидаемое значение поля `iss` (issuer), которое идентифицирует издателя JWT-токена, и базовый URL для OIDC Discovery. Обязательный параметр; должен начинаться с `https://` и не должен заканчиваться символом `/`. Значения `issuer` в Discovery-документе и `iss` в JWT должны в точности совпадать с указанным значением.
+
+Значение по умолчанию: пустая строка
+    ||
+|| external_idp_config.audience
+| Ожидаемое значение поля `aud` (audience), которое идентифицирует получателя JWT-токена. Если параметр не задан, получатель токена не проверяется.
+
+Значение по умолчанию: пустая строка
+    ||
+|| external_idp_config.allowed_clock_skew
+| Допустимое расхождение часов при проверке полей JWT, связанных со временем: `exp` задаёт время истечения срока действия токена, `nbf` — время начала его действия, `iat` — время выпуска.
+
+Значение по умолчанию: `30s`
+    ||
+|| external_idp_config.subject_claim_name
+| Имя строкового поля JWT, из которого формируется SID пользователя. Если поле отсутствует или имеет другой тип, используется поле `sub`.
+
+Значение по умолчанию: `sub`
+    ||
+|| external_idp_config.groups_claim_name
+| Имя поля JWT с массивом групп пользователя. Из массива извлекаются только строковые элементы.
+
+Значение по умолчанию: `groups`
+    ||
+|| external_idp_config.discovery_periodic_settings.success_refresh_period
+| Период обновления Discovery-документа после успешного запроса.
+
+Значение по умолчанию: `1h`
+    ||
+|| external_idp_config.discovery_periodic_settings.min_error_refresh_period
+| Минимальный интервал перед повторным запросом Discovery-документа после ошибки.
+
+Значение по умолчанию: `1s`
+    ||
+|| external_idp_config.discovery_periodic_settings.max_error_refresh_period
+| Максимальный интервал перед повторным запросом Discovery-документа после ошибки.
+
+Значение по умолчанию: `5m`
+    ||
+|| external_idp_config.discovery_periodic_settings.request_timeout
+| Тайм-аут запроса Discovery-документа.
+
+Значение по умолчанию: `15s`
+    ||
+|| external_idp_config.jwks_periodic_settings.success_refresh_period
+| Период обновления JWKS после успешного запроса.
+
+Значение по умолчанию: `1h`
+    ||
+|| external_idp_config.jwks_periodic_settings.min_error_refresh_period
+| Минимальный интервал перед повторным запросом JWKS после ошибки.
+
+Значение по умолчанию: `1s`
+    ||
+|| external_idp_config.jwks_periodic_settings.max_error_refresh_period
+| Максимальный интервал перед повторным запросом JWKS после ошибки.
+
+Значение по умолчанию: `5m`
+    ||
+|| external_idp_config.jwks_periodic_settings.request_timeout
+| Тайм-аут запроса JWKS.
+
+Значение по умолчанию: `15s`
+    ||
+|| external_idp_config.jwks_cache_settings.timeout
+| Максимальный возраст кеша JWKS. Если обновить JWKS не удалось, после истечения этого периода ключи удаляются.
+
+Значение по умолчанию: `2h`
+    ||
+|| external_idp_authentication_domain
+| Суффикс имени пользователя, позволяющий отличать пользователей внешнего IdP от пользователей, аутентифицируемых с помощью других провайдеров. Такой же суффикс добавляется к именам групп, полученным из JWT-токена.
+
+Значение по умолчанию: `sso`
+    ||
+|#
+
+{% note warning %}
+
+Сторонний IAM-провайдер и внешний IdP по протоколу OIDC используют токены типа `Bearer`. Если параметр `use_access_service` включён, IAM-провайдер имеет приоритет и перехватывает все такие токены. Поэтому одновременное использование аутентификации через IAM-провайдер и внешний IdP по протоколу OIDC не поддерживается.
+
+{% endnote %}
 
 ## Конфигурация аутентификации с использованием стороннего IAM-провайдера {#iam-auth-config}
 
@@ -450,14 +567,14 @@ auth_config:
 - Пустая строка (`""`) — используется режим аутентификации узлов через сертификаты TLS. В этом случае узлы должны использовать сертификаты для аутентификации при регистрации в кластере. Подробнее о настройке аутентификации узлов через сертификаты см. в разделе [Аутентификация и авторизация узлов баз данных](../../devops/configuration-management/configuration-v1/node-authorization.md).
 - "root@builtin" — режим аутентификации через особый отладочный токен. Данный режим планируется к исключению в будущих релизах и не рекомендуется к использованию: для обеспечения безопасности кластера рекомендуется использовать режим аутентификации узлов через сертификаты TLS, установив пустое значение параметра.
 
-||
+    ||
 |#
 
 Пример секции `auth_config` с настройкой регистрации узлов по сертификату:
 
 ```yaml
 auth_config:
-  ...
+  #...
   node_registration_token: ""
-  ...
+  #...
 ```

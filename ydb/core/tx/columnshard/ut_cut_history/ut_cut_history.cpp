@@ -1064,6 +1064,51 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         env.AssertDisproved(/*failures=*/1);
     }
 
+    // A probe queued behind slow ones gets a full deadline of its own instead of their leftover time.
+    Y_UNIT_TEST(RangeProbeQueuedBehindSlowProbesGetsItsOwnDeadline) {
+        TRangeProbeEnv env;
+        static constexpr ui32 Window = 10;
+        const ui32 probesCount = NOlap::NBlobOperations::NBlobStorage::THistoryCutterWrapper::MaxRangeProbesInFlight + 1;
+        env.RunInActor([&](const NActors::TActorContext& ctx) {
+            TVector<NOlap::NBlobOperations::NBlobStorage::TRangeProbe> probes;
+            for (ui32 i = 0; i < probesCount; ++i) {
+                probes.push_back({ TRangeProbeEnv::DataChannel, i * Window, (i + 1) * Window, TRangeProbeEnv::OldGroup });
+            }
+            ctx.Register(NOlap::NBlobOperations::NBlobStorage::CreateCutHistoryRangeProbeActor(
+                env.EdgeTablet, TRangeProbeEnv::TabletId, std::move(probes), /*round=*/0));
+        });
+        auto reply = [&](const TEvBlobStorage::TEvRange::TPtr& request, const TVector<TEvBlobStorage::TEvRangeResult::TResponse>& responses) {
+            auto result = std::make_unique<TEvBlobStorage::TEvRangeResult>(
+                NKikimrProto::OK, request->Get()->From, request->Get()->To, TRangeProbeEnv::OldGroup);
+            result->Responses.assign(responses.begin(), responses.end());
+            env.Runtime.Send(new IEventHandle(request->Sender, env.EdgeBs, result.release(), 0, request->Cookie));
+        };
+
+        // The probes in flight answer after 40 s, each finding a live blob; only then does the queued probe start.
+        TVector<TEvBlobStorage::TEvRange::TPtr> slow;
+        for (ui32 i = 0; i + 1 < probesCount; ++i) {
+            slow.push_back(env.Runtime.GrabEdgeEvent<TEvBlobStorage::TEvRange>(env.EdgeBs, TDuration::Seconds(5)));
+            UNIT_ASSERT(slow.back());
+        }
+        env.Runtime.SimulateSleep(TDuration::Seconds(40));
+        for (const auto& request : slow) {
+            reply(request,
+                { MakeResponse(MakeBlob(TRangeProbeEnv::TabletId, TRangeProbeEnv::DataChannel, request->Get()->From.Generation() + 1)) });
+        }
+        auto queued = env.Runtime.GrabEdgeEvent<TEvBlobStorage::TEvRange>(env.EdgeBs, TDuration::Seconds(5));
+        UNIT_ASSERT(queued);
+
+        // It also takes 40 s: 80 s after the batch started, but well inside its own deadline.
+        env.Runtime.SimulateSleep(TDuration::Seconds(40));
+        reply(queued, {});
+        ui64 failures = 0;
+        const auto disproved = env.GrabVerdict(failures);
+        UNIT_ASSERT_VALUES_EQUAL_C(failures, 0, "the queued probe timed out on time the slow probes had used up");
+        UNIT_ASSERT_VALUES_EQUAL(disproved.size(), probesCount - 1);
+        UNIT_ASSERT_C(
+            !disproved.contains(TEntryKey{ TRangeProbeEnv::DataChannel, (probesCount - 1) * Window }), "the empty queued range was disproved");
+    }
+
     // The verdict feeds the ordinary sweep completion, so a disproved entry gets no barrier and stays uncut.
     Y_UNIT_TEST(RangeProbeVerdictLeavesEntryUncut) {
         TRangeProbeEnv env;

@@ -144,8 +144,6 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         Become(&TThis::StateWait);
-        Deadline = ctx.Now() + ProbeTimeout;
-        ctx.Schedule(ProbeTimeout, new NActors::TEvents::TEvWakeup());
         SendMore(ctx);
         CheckFinish(ctx);
     }
@@ -171,24 +169,27 @@ public:
         CheckFinish(ctx);
     }
 
-    void HandleTimeout(const TActorContext& ctx) {
-        for (size_t i = 0; i < Probes.size(); ++i) {
-            if (!Answered[i]) {
-                Answered[i] = true;
-                Disprove(Probes[i], /*failure=*/true);
-            }
+    void HandleTimeout(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
+        const ui64 index = ev->Get()->Tag;
+        if (index >= Probes.size() || Answered[index]) {
+            return;
         }
-        Finish(ctx);
+        Answered[index] = true;
+        --InFlight;
+        Disprove(Probes[index], /*failure=*/true);
+        SendMore(ctx);
+        CheckFinish(ctx);
     }
 
     STFUNC(StateWait) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvBlobStorage::TEvRangeResult, Handle);
-            CFunc(NActors::TEvents::TEvWakeup::EventType, HandleTimeout);
+            HFunc(NActors::TEvents::TEvWakeup, HandleTimeout);
         }
     }
 
 private:
+    // Counted from each probe's own send: a probe queued behind slow ones must not inherit their spent time.
     static constexpr TDuration ProbeTimeout = TDuration::Minutes(1);
 
     // A blob id sorts channel before generation, so the request already isolates the channel; this re-checks it anyway.
@@ -226,8 +227,10 @@ private:
         const TLogoBlobID from(TabletId, probe.FromGeneration, 0, probe.Channel, 0, 0);
         const TLogoBlobID to(
             TabletId, probe.NextFromGeneration - 1, Max<ui32>(), probe.Channel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie);
-        auto request = MakeHolder<TEvBlobStorage::TEvRange>(TabletId, from, to, /*mustRestoreFirst=*/false, Deadline, /*isIndexOnly=*/true);
+        auto request =
+            MakeHolder<TEvBlobStorage::TEvRange>(TabletId, from, to, /*mustRestoreFirst=*/false, ctx.Now() + ProbeTimeout, /*isIndexOnly=*/true);
         SendToBSProxy(ctx, probe.Group, request.Release(), index);
+        ctx.Schedule(ProbeTimeout, new NActors::TEvents::TEvWakeup(index));
         ++InFlight;
     }
 
@@ -256,7 +259,6 @@ private:
     ui64 Failures = 0;
     size_t NextProbe = 0;
     ui32 InFlight = 0;
-    TInstant Deadline;
     bool Finished = false;
 };
 

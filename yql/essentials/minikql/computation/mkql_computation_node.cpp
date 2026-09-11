@@ -35,22 +35,46 @@ TComputationUpvalues::TComputationUpvalues(TComputationContext& ctx, IComputatio
             UpvalueNodes_.push_back(uv);
         }
     }
+    if (auto ext = dynamic_cast<IComputationExternalNode*>(lambdaNode)) {
+        if (!argSet.contains(ext)) {
+            UpvalueNodes_.push_back(ext);
+        }
+    }
     for (const auto uv : UpvalueNodes_) {
         ClosedUpvalues_.push_back(uv->GetValue(ctx));
     }
-    PreservedUpvalues_.resize(ClosedUpvalues_.size());
+    ArgNodes_.assign(argNodes.cbegin(), argNodes.cend());
+
+    PreservedUpvalues_.reserve(ClosedUpvalues_.size());
+    PreservedArgs_.reserve(ArgNodes_.size());
 }
 
 void TComputationUpvalues::SetUpvalues(TComputationContext& ctx) const {
+    for (const auto uv : UpvalueNodes_) {
+        PreservedUpvalues_.push_back(uv->GetValue(ctx));
+    }
     for (size_t i = 0; i < UpvalueNodes_.size(); i++) {
-        PreservedUpvalues_[i] = UpvalueNodes_[i]->GetValue(ctx);
         UpvalueNodes_[i]->SetValue(ctx, NUdf::TUnboxedValue(ClosedUpvalues_[i]));
     }
 }
 
 void TComputationUpvalues::RestoreUpvalues(TComputationContext& ctx) const {
-    for (size_t i = 0; i < UpvalueNodes_.size(); i++) {
-        UpvalueNodes_[i]->SetValue(ctx, std::move(PreservedUpvalues_[i]));
+    for (size_t i = UpvalueNodes_.size(); i > 0; --i) {
+        UpvalueNodes_[i - 1]->SetValue(ctx, std::move(PreservedUpvalues_.back()));
+        PreservedUpvalues_.pop_back();
+    }
+}
+
+void TComputationUpvalues::SaveArgs(TComputationContext& ctx) const {
+    for (const auto node : ArgNodes_) {
+        PreservedArgs_.push_back(node->GetValue(ctx));
+    }
+}
+
+void TComputationUpvalues::RestoreArgs(TComputationContext& ctx) const {
+    for (size_t i = ArgNodes_.size(); i > 0; --i) {
+        ArgNodes_[i - 1]->SetValue(ctx, std::move(PreservedArgs_.back()));
+        PreservedArgs_.pop_back();
     }
 }
 

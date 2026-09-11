@@ -9426,31 +9426,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                         /*queriesWithoutCboCheck=*/{13});
     }
 
-    Y_UNIT_TEST(TPCDS_YQL_8) {
-        RunPerf_YqlTest(EBenchType::TPCDS, 14, true, true);
-    }
-
-    Y_UNIT_TEST(TPCDS_YQL_14) {
-        RunPerf_YqlTest(EBenchType::TPCDS, 14, true, true);
-    }
-
-    Y_UNIT_TEST(TPCDS_YQL_17) {
-        RunPerf_YqlTest(EBenchType::TPCDS, 17, true, false);
-    }
-
-    Y_UNIT_TEST(TPCDS_YQL_23) {
-        RunPerf_YqlTest(EBenchType::TPCDS, 23, true, true);
-    }
-
-    Y_UNIT_TEST(TPCDS_YQL_27) {
-        RunPerf_YqlTest(EBenchType::TPCDS, 27, true, true);
-    }
-
-
-    Y_UNIT_TEST(TPCDS_YQL_39) {
-        RunPerf_YqlTest(EBenchType::TPCDS, 39, true, true);
-    }
-
     // Compiled 78 from 99.
     Y_UNIT_TEST(TPCDS_YQL) {
         RunPerf_YqlTest(EBenchType::TPCDS, /*columnstore=*/true,

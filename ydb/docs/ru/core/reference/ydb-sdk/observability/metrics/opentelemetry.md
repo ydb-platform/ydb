@@ -16,6 +16,7 @@
 | Имя                                  | Тип         | Единица     | Описание                                                              |
 |--------------------------------------|-------------|-------------|-----------------------------------------------------------------------|
 | `ydb.query.session.create_time`      | Histogram   | `s`         | Длительность создания новой сессии.                                   |
+| `ydb.query.session.closed`           | Counter     | `{session}` | Монотонный счётчик закрытых сессий, разделённый по причинам закрытия, с момента создания пула. |
 | `ydb.query.session.pending_requests` | Counter     | `{request}` | Монотонный счётчик запросов на получение сессии, попавших в очередь ожидания, с момента создания пула. |
 | `ydb.query.session.timeouts`         | Counter     | `{timeout}` | Монотонный счётчик таймаутов при ожидании свободной сессии, с момента создания пула.                   |
 | `ydb.query.session.count`            | Gauge       | `{session}` | Текущее количество сессий в пуле, разделённое по состояниям.          |
@@ -39,6 +40,21 @@
 | `status_code`                 | `ydb.client.operation.failed`                                  | Код статуса {{ ydb-short-name }} (например, `BAD_REQUEST`, `SCHEME_ERROR`).                                     |
 | `ydb.query.session.pool.name` | Все метрики `ydb.query.session.*`                              | Имя пула сессий. По умолчанию формируется как `<endpoint>/<database>`; настраивается через API конкретного SDK. |
 | `ydb.query.session.state`     | `ydb.query.session.count`                                      | Состояние сессии: `idle` или `used`.                                                                            |
+| `reason`                      | `ydb.query.session.closed`                                     | Причина закрытия сессии. Допустимые значения перечислены ниже.                                                  |
+
+Допустимые значения атрибута `reason`:
+
+- `pool_idle_timeout` — пул удалил неактивную сессию по таймауту;
+- `pool_graceful_shutdown` — пул штатно завершил работу и закрыл свои сессии;
+- `client_query_timeout` — клиент не дождался окончания потока результатов запроса, поэтому сессия закрыта во избежание последующей ошибки `SessionBusy`;
+- `query_stream_cancelled_by_client` — клиент отменил поток результатов запроса;
+- `attach_stream_closed_by_server` — работающий поток `AttachSession` штатно завершён сервером без server hint;
+- `attach_stream_transport_error` — работающий поток `AttachSession` завершён с transport/gRPC-ошибкой;
+- `node_shutdown` — получен server hint `NodeShutdown` (`shutdown_node`);
+- `session_shutdown` — получен server hint `SessionShutdown`;
+- `query_execution_error` — при выполнении запроса возникла ошибка, после которой сессия выведена из работы.
+
+Конкретный SDK публикует только те причины, которые он может различить в своём жизненном цикле сессии.
 
 ## Подключение к SDK {#integration}
 

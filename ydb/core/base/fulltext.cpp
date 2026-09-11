@@ -121,8 +121,12 @@ namespace {
     }
 
     enum class ELanguageScript : ui8 {
-        Latin,
+        Armenian,
         Cyrillic,
+        Greek,
+        Hebrew,
+        Latin,
+        Tamil,
     };
 
     constexpr ui32 ScriptBit(ELanguageScript script) {
@@ -130,16 +134,37 @@ namespace {
     }
 
     std::optional<ui32> GetSnowballLanguageScripts(const TString& language) {
+        if (language == "armenian") {
+            return ScriptBit(ELanguageScript::Armenian);
+        }
         if (language == "english") {
             return ScriptBit(ELanguageScript::Latin);
         }
+        if (language == "greek") {
+            return ScriptBit(ELanguageScript::Greek);
+        }
         if (language == "russian") {
             return ScriptBit(ELanguageScript::Cyrillic);
+        }
+        if (language == "tamil") {
+            return ScriptBit(ELanguageScript::Tamil);
+        }
+        if (language == "yiddish") {
+            return ScriptBit(ELanguageScript::Hebrew);
         }
         return std::nullopt;
     }
 
     std::optional<ELanguageScript> GetCharacterScript(wchar32 c) {
+        if (c >= 0x0530 && c <= 0x058F) {
+            return ELanguageScript::Armenian;
+        }
+        if ((c >= 0x0370 && c <= 0x03FF) || (c >= 0x1F00 && c <= 0x1FFF)) {
+            return ELanguageScript::Greek;
+        }
+        if ((c >= 0x0590 && c <= 0x05FF) || (c >= 0xFB1D && c <= 0xFB4F)) {
+            return ELanguageScript::Hebrew;
+        }
         if ((c >= 0x0041 && c <= 0x005A) || (c >= 0x0061 && c <= 0x007A) ||
             (c >= 0x00C0 && c <= 0x024F) || (c >= 0x1E00 && c <= 0x1EFF) ||
             (c >= 0x2C60 && c <= 0x2C7F) || (c >= 0xA720 && c <= 0xA7FF) ||
@@ -151,6 +176,9 @@ namespace {
             (c >= 0x2DE0 && c <= 0x2DFF) || (c >= 0xA640 && c <= 0xA69F))
         {
             return ELanguageScript::Cyrillic;
+        }
+        if (c >= 0x0B80 && c <= 0x0BFF) {
+            return ELanguageScript::Tamil;
         }
         return std::nullopt;
     }
@@ -195,9 +223,13 @@ namespace {
     }
 
     TSnowballStemmer& GetSnowballStemmer(const TString& language) {
-        static thread_local std::array<TSnowballStemmer, 2> Stemmers = {{
+        static thread_local std::array<TSnowballStemmer, 6> Stemmers = {{
+            {"armenian", ScriptBit(ELanguageScript::Armenian), MakeSnowballStemmer("armenian")},
             {"english", ScriptBit(ELanguageScript::Latin), MakeSnowballStemmer("english")},
+            {"greek", ScriptBit(ELanguageScript::Greek), MakeSnowballStemmer("greek")},
             {"russian", ScriptBit(ELanguageScript::Cyrillic), MakeSnowballStemmer("russian")},
+            {"tamil", ScriptBit(ELanguageScript::Tamil), MakeSnowballStemmer("tamil")},
+            {"yiddish", ScriptBit(ELanguageScript::Hebrew), MakeSnowballStemmer("yiddish")},
         }};
 
         const auto stemmer = std::find_if(Stemmers.begin(), Stemmers.end(), [&](const auto& item) {

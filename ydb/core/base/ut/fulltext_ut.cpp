@@ -581,8 +581,8 @@ namespace NKikimr::NFulltext {
             UNIT_ASSERT_VALUES_EQUAL(error, "language is not supported by snowball");
 
             columnAnalyzers->set_language("english,,russian");
-            UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
-            UNIT_ASSERT_VALUES_EQUAL(error, "language is not supported by snowball");
+            UNIT_ASSERT_C(ValidateSettings(settings, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "");
 
             columnAnalyzers->set_language("english,german");
             UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
@@ -767,7 +767,126 @@ namespace NKikimr::NFulltext {
 
             analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
             analyzers.set_use_filter_lowercase(true);
-            UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"apple", "wallet", "spaced-dog_cat", "0123,456@"}));
+
+            UNIT_ASSERT_VALUES_EQUAL_C(Analyze(text, analyzers), (TVector<TString>{}), testCase);
+        }
+    }
+
+    Y_UNIT_TEST(AnalyzeFilterLength) {
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
+        TString text = "cat eats mice every day";
+
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"cat", "eats", "mice", "every", "day"}));
+
+        analyzers.set_use_filter_length(true);
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"cat", "eats", "mice", "every", "day"}));
+
+        analyzers.set_filter_length_min(4);
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"eats", "mice", "every"}));
+
+        analyzers.set_filter_length_max(4);
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"eats", "mice"}));
+
+        analyzers.clear_filter_length_min();
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"cat", "eats", "mice", "day"}));
+    }
+
+    Y_UNIT_TEST(AnalyzeFilterLengthRu) {
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
+        TString text = "кот ест мышей каждый день";
+
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"кот", "ест", "мышей", "каждый", "день"}));
+
+        analyzers.set_use_filter_length(true);
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"кот", "ест", "мышей", "каждый", "день"}));
+
+        analyzers.set_filter_length_min(4);
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"мышей", "каждый", "день"}));
+
+        analyzers.set_filter_length_max(4);
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"день"}));
+
+        analyzers.clear_filter_length_min();
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"кот", "ест", "день"}));
+    }
+
+    Y_UNIT_TEST(AnalyzeFilterNgram) {
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
+        TString text = "это текст";
+
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"это", "текст"}));
+
+        analyzers.set_use_filter_ngram(true);
+        analyzers.set_filter_ngram_min_length(2);
+        analyzers.set_filter_ngram_max_length(3);
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"эт", "это", "то", "те", "тек", "ек", "екс", "кс", "кст", "ст"}));
+
+        analyzers.set_filter_ngram_min_length(4);
+        analyzers.set_filter_ngram_max_length(10);
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("слово", analyzers), (TVector<TString>{"слов", "слово", "лово"}));
+
+        analyzers.set_filter_ngram_min_length(10);
+        analyzers.set_filter_ngram_max_length(10);
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("слово", analyzers), (TVector<TString>{}));
+
+        analyzers.set_use_filter_ngram(false);
+        analyzers.set_use_filter_edge_ngram(true);
+        analyzers.set_filter_ngram_min_length(2);
+        analyzers.set_filter_ngram_max_length(3);
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"эт", "это", "те", "тек"}));
+    }
+
+    Y_UNIT_TEST(AnalyzeFilterSnowball) {
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
+        const TString russianText = "машины ездят по дорогам исправно";
+
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(russianText, analyzers), (TVector<TString>{"машины", "ездят", "по", "дорогам", "исправно"}));
+
+        analyzers.set_use_filter_snowball(true);
+        analyzers.set_language("russian");
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(russianText, analyzers), (TVector<TString>{"машин", "езд", "по", "дорог", "исправн"}));
+
+        const TString englishText = "cars are driving properly on the roads";
+        analyzers.set_language("english");
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(englishText, analyzers), (TVector<TString>{"car", "are", "drive", "proper", "on", "the", "road"}));
+
+        analyzers.set_language("russian,english");
+        UNIT_ASSERT_VALUES_EQUAL(
+            Analyze("cars driving машины дорогам ελληνικά 123", analyzers),
+            (TVector<TString>{"car", "drive", "машин", "дорог", "ελληνικά", "123"}));
+
+        analyzers.set_language("klingon");
+        UNIT_ASSERT_EXCEPTION(Analyze(englishText, analyzers), yexception);
+
+        analyzers.clear_language();
+        UNIT_ASSERT_EXCEPTION(Analyze(englishText, analyzers), yexception);
+    }
+
+    Y_UNIT_TEST(AnalyzeFilterSuperLemmer) {
+        RegisterSuperLemmer(IsTestSuperLemmerLanguageSupported, ApplyTestSuperLemmer);
+        SuperLemmerCallState = {};
+
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
+        analyzers.set_use_filter_superlemmer(true);
+        analyzers.set_language("english, russian,english");
+
+        Analyze("cars машины", analyzers);
+
+        UNIT_ASSERT_VALUES_EQUAL(SuperLemmerCallState.Calls, 2);
+        UNIT_ASSERT_VALUES_EQUAL(SuperLemmerCallState.Languages, "english, russian,english");
+        RegisterSuperLemmer(nullptr, nullptr);
+    }
+
+    Y_UNIT_TEST(BuildNgramsUtf8) {
+        {
+            TVector<TString> ngrams;
+            BuildNgrams("abc023", 3, 3, false, ngrams);
+            UNIT_ASSERT_VALUES_EQUAL(ngrams, (TVector<TString>{"abc", "bc0", "c02", "023"}));
         }
 
         Y_UNIT_TEST(AnalyzeRu) {

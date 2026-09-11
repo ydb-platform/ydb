@@ -451,6 +451,13 @@ namespace {
             YDB_LOG_TRACE("TEvQuerySessionState",
                     {"sessionId", session->SessionId},
                     {"response", response.DebugString()});
+            if (!session->StreamProcessor) {
+                // it is possible that TEvRelease with Invalidate was processed before
+                YDB_LOG_DEBUG("Ydb::Query::SessionState for already terminated stream");
+                Y_VALIDATE(session->SessionId.empty(), "SessionId is not empty for terminated session: " << session->SessionId);
+                Y_VALIDATE(!session->Sender, "Sender is set for terminated session: " << session->Sender); // TEvRelease cannot be sent between session creation and first successful attach (which will clear Sender)
+                return;
+            }
             auto status = response.status();
             if (response.has_session_shutdown()) {
                 status = Ydb::StatusIds::SESSION_EXPIRED;

@@ -4551,14 +4551,17 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 return client.ExecuteQuery(query, TTxControl::NoTx(), TExecuteQuerySettings().RetrySettings(TRetryOperationSettings().MaxRetries(0)))
                     .Apply([](const TAsyncExecuteQueryResult& future) -> TStatus {
                         const auto& result = future.GetValue();
+                        const TString issues(result.GetIssues().ToOneLineString());
                         if (result.GetStatus() == EStatus::PRECONDITION_FAILED) {
-                            // Only retry conflicts with an operation still completing through its tracker.
-                            const TString issues(result.GetIssues().ToOneLineString());
                             if (issues.Contains("Streaming query already under operation")
                                 || issues.Contains("path version mistmach")
                                 || issues.Contains("path exists but creating right now")
                                 || issues.Contains("path is under operation")
                                 || issues.Contains("path is being deleted right now")) {
+                                return TStatus(EStatus::UNAVAILABLE, NYdb::NIssue::TIssues(result.GetIssues()));
+                            }
+                        } else if (result.GetStatus() == EStatus::SCHEME_ERROR) {
+                            if (issues.Contains("already exists")) {
                                 return TStatus(EStatus::UNAVAILABLE, NYdb::NIssue::TIssues(result.GetIssues()));
                             }
                         }

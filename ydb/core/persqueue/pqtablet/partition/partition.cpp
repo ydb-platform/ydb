@@ -1011,8 +1011,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     LOG_I(
         "Init complete for topic partition generation",
         {"topicName", TopicName()},
-        {"tabletGeneration", TabletGeneration},
-        {"selfId", ctx.SelfID}
+        {"tabletGeneration", TabletGeneration}
     );
 
     TStringBuilder ss;

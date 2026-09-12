@@ -1300,10 +1300,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
             Config.GetYdbDatabasePath(), Config.GetOffloadConfig()));
     }
 
-    LOG_I(
-        "Bootstrapping",
-        {"selfId", ctx.SelfID}
-    );
+    LOG_I("Bootstrapping");
 
     if (AppData(ctx)->Counters) {
         if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {

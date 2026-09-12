@@ -43,7 +43,7 @@ const char* CompactionStepName(TPartitionCompaction::EStep step) {
 } // namespace
 
 TStructuredLogPrefix TPartitionCompaction::MakeLogPrefix(const TPartition* actor, const char* compactionStep) {
-    TStructuredLogPrefix prefix = MakeNpqLogPrefix(actor->LogBuilder(), actor->GetLogPrefix());
+    TStructuredLogPrefix prefix = MakeRuntimeLogPrefix(*actor);
     prefix.AppendMessage(YDB_LOG_CREATE_MESSAGE({"compactionStep", compactionStep}));
     return prefix;
 }

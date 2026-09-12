@@ -64,8 +64,9 @@ public:
         LOG_A("alert");
         const TStructuredLogPrefix& first = GetLogPrefix();
         const TStructuredLogPrefix& second = GetLogPrefix();
+        Y_UNUSED(first);
         Y_UNUSED(second);
-        Send(Parent, new TEvText(TStringBuilder() << StructuredLogPrefixText(LogBuilder()) << StructuredLogPrefixText(first)));
+        Send(Parent, new TEvText(StructuredLogPrefixText(NPQ_LOG_PREFIX)));
     }
 
     void Handle(TEvents::TEvWakeup::TPtr& ev) {
@@ -228,6 +229,7 @@ Y_UNIT_TEST(LogPrefixEventStrAndMacros) {
     auto prefix = runtime.GrabEdgeEvent<TEvText>(edge, TDuration::Seconds(5));
     UNIT_ASSERT(prefix);
     UNIT_ASSERT(prefix->Get()->Value.Contains("actorClassName=prefix"));
+    UNIT_ASSERT(prefix->Get()->Value.Contains("selfId="));
 
     runtime.Send(new IEventHandle(actorId, edge, new TEvents::TEvWakeup()), 0, true);
     auto eventStr = runtime.GrabEdgeEvent<TEvText>(edge, TDuration::Seconds(5));
@@ -289,6 +291,7 @@ Y_UNIT_TEST(TabletActorRestartsOnException) {
     auto prefix = runtime.GrabEdgeEvent<TEvText>(tablet, TDuration::Seconds(5));
     UNIT_ASSERT(prefix);
     UNIT_ASSERT(prefix->Get()->Value.Contains("tabletId=42"));
+    UNIT_ASSERT(prefix->Get()->Value.Contains("selfId="));
 
     auto poison = runtime.GrabEdgeEvent<TEvents::TEvPoison>(tablet, TDuration::Seconds(5));
     UNIT_ASSERT(poison);

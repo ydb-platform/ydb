@@ -41,8 +41,7 @@ private:
     TStructuredLogPrefix BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
             {"actorClassName", "OffloadActor"},
-            {"partition", Partition},
-            {"selfId", SelfId()});
+            {"partition", Partition});
     }
 
 public:

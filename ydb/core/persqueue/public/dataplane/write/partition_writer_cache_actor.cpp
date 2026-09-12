@@ -13,9 +13,9 @@ TPartitionWriterCacheActor::TPartitionWriterCacheActor(const TActorId& owner,
                                                        ui64 tabletId,
                                                        const TPartitionWriterOpts& opts)
     : TBase(NKikimrServices::PQ_WRITE_PROXY)
+    , TabletId(tabletId)
     , Owner(owner)
     , Partition(partition)
-    , TabletId(tabletId)
     , Opts(opts)
 {
 }
@@ -30,7 +30,6 @@ void TPartitionWriterCacheActor::Bootstrap(const TActorContext& ctx)
 TStructuredLogPrefix TPartitionWriterCacheActor::BuildLogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
         {"actorClassName", "PartitionWriterCache"},
-        {"tabletId", TabletId},
         {"partition", Partition});
 }
 

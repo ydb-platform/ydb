@@ -40,7 +40,7 @@ public:
 
     bool OnUnhandledException(const std::exception& exc) override {
         if (AppData()->FeatureFlags.GetEnableTabletRestartOnUnhandledExceptions()) {
-            DoLogUnhandledException(Service, NPQ_LOG_PREFIX, exc);
+            DoLogUnhandledException(Service, MakeRuntimeLogPrefix(static_cast<const TDerived&>(*this)), exc);
 
             OnException(exc);
 
@@ -57,13 +57,8 @@ public:
         Y_UNUSED(exc);
     }
 
-    TStructuredLogPrefix LogBuilder() const {
-        return YDB_LOG_CREATE_MESSAGE(
-            {"selfId", TBase::SelfId()});
-    }
-
     TStructuredLogPrefix LogPrefix() const override {
-        return MakeNpqLogPrefix(LogBuilder(), GetLogPrefix());
+        return GetLogPrefix();
     }
 
     void PassAway() override {
@@ -102,17 +97,9 @@ public:
         self.Send(TabletActorId, new NActors::TEvents::TEvPoison());
     }
 
-    TStructuredLogPrefix LogBuilder() const {
-        return YDB_LOG_CREATE_MESSAGE(
-            {"tabletId", TabletId});
-    }
-
-    TStructuredLogPrefix LogPrefix() const override {
-        return MakeNpqLogPrefix(LogBuilder(), this->GetLogPrefix());
-    }
+    const ui64 TabletId;
 
 protected:
-    const ui64 TabletId;
     const NActors::TActorId TabletActorId;
 };
 

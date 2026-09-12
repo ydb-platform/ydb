@@ -421,7 +421,6 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
 
 TStructuredLogPrefix TPersQueueReadBalancer::LogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
-        {"tabletId", TabletID()},
         {"topic", Topic});
 }
 

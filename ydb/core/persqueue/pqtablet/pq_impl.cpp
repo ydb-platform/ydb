@@ -475,8 +475,7 @@ void TPersQueue::ReadTxInfo(const NKikimrClient::TKeyValueResponse::TReadResult&
 {
     PQ_ENSURE(read.HasStatus());
     if (read.GetStatus() != NKikimrProto::OK && read.GetStatus() != NKikimrProto::NODATA) {
-        LOG_E("Tx info read error", 
-            {"selfId", ctx.SelfID});
+        LOG_E("Tx info read error");
         ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
         return;
     }
@@ -525,8 +524,7 @@ void TPersQueue::ReadTxWrites(const NKikimrClient::TKeyValueResponse::TReadResul
 {
     PQ_ENSURE(read.HasStatus());
     if (read.GetStatus() != NKikimrProto::OK && read.GetStatus() != NKikimrProto::NODATA) {
-        LOG_E("Tx writes read error", 
-            {"selfId", ctx.SelfID});
+        LOG_E("Tx writes read error");
         ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
         return;
     }
@@ -681,8 +679,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
 {
     PQ_ENSURE(read.HasStatus());
     if (read.GetStatus() != NKikimrProto::OK && read.GetStatus() != NKikimrProto::NODATA) {
-        LOG_E("Config read error", 
-            {"selfId", ctx.SelfID},
+        LOG_E("Config read error",
             {"status", read.GetStatus()});
         ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
         return;
@@ -955,8 +952,7 @@ void TPersQueue::EndWriteTabletState(const NKikimrClient::TResponse& resp, const
             (resp.WriteResultSize() == 1) &&
             (resp.GetWriteResult(0).GetStatus() == NKikimrProto::OK);
     if (!ok) {
-        LOG_E("SelfId State write", 
-            {"selfId", ctx.SelfID},
+        LOG_E("SelfId State write",
             {"error", resp.DebugString()});
 
         ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
@@ -988,9 +984,8 @@ void TPersQueue::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         EndWriteTxs(resp, ctx);
         break;
     default:
-        LOG_E("Unexpected KV", 
-            {"response", ev->Get()->ToString()},
-            {"selfId", ctx.SelfID});
+        LOG_E("Unexpected KV",
+            {"response", ev->Get()->ToString()});
         ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
     }
 }
@@ -3761,8 +3756,7 @@ void TPersQueue::EndWriteTxs(const NKikimrClient::TResponse& resp,
     }
 
     if (!ok) {
-        LOG_E("SelfId TxInfo write", 
-            {"selfId", ctx.SelfID},
+        LOG_E("SelfId TxInfo write",
             {"error", resp.DebugString()});
 
         ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
@@ -5583,8 +5577,7 @@ void TPersQueue::BeginDeletePartitions(const TDistributedTransaction& tx)
 
 TStructuredLogPrefix TPersQueue::LogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
-        {"actorClassName", "PQ"},
-        {"tabletId", TabletID()});
+        {"actorClassName", "PQ"});
 }
 
 ui64 TPersQueue::GetGeneration() {

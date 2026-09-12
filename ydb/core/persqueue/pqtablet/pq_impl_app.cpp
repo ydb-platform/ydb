@@ -184,8 +184,7 @@ private:
 
         LOG_D(
             "Answer TEvRemoteHttpInfoRes: to self",
-            {"sender", Sender},
-            {"selfId", ctx.SelfID}
+            {"sender", Sender}
         );
         ctx.Send(Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
         Die(ctx);

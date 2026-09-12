@@ -22,6 +22,8 @@ public:
 
     TStructuredLogPrefix BuildLogPrefix() const override;
 
+    ui64 TabletId;
+
 private:
     using TPartitionWriterPtr = std::unique_ptr<TCachedPartitionWriter>;
     using EErrorCode = TEvPartitionWriter::TEvWriteResponse::EErrorCode;
@@ -78,7 +80,6 @@ private:
 
     TActorId Owner;
     ui32 Partition;
-    ui64 TabletId;
     TPartitionWriterOpts Opts;
 
     THashMap<std::pair<TString, TString>, TPartitionWriterPtr> Writers;

@@ -46,10 +46,36 @@ class ClusterTemplatesTest(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
+    def test_actor_system_settings_belong_to_runs_not_templates(self):
+        self.value["nodes"][0]["actor_system"] = {"use_united_pool": True}
+        saved = self.store.save(self.value, {"amd", "sas"})
+        for node in saved["nodes"]:
+            self.assertNotIn("vcpu", node)
+            self.assertNotIn("actor_system", node)
+        self.assertEqual(saved["nodes"][1]["affinity"]["count"], 8)
+        self.store.save(saved, {"amd", "sas"})
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required")
+    def test_view_specific_node_information_and_rack_names(self):
+        script = cluster_templates_ui.JS.split("async function renderClusterTemplates")[0] + r"""
+const assert=require('assert');
+const n={name:'compute',role:'dynamic',host_id:'amd',tenant:'/Root/bench',location:{data_center:'dc',rack:'dc-R1',body:'compute'}};
+assert.equal(ctNodeInfo(n,'physical',()=> 'AMD'),'dc / dc-R1 · Tenant: /Root/bench');
+assert.equal(ctNodeInfo(n,'logical',()=> 'AMD'),'Host: AMD · Tenant: /Root/bench');
+assert.equal(ctNodeInfo(n,'tenants',()=> 'AMD'),'Host: AMD · dc / dc-R1');
+assert.equal(ctNodeInfo({...n,role:'cli'},'physical',()=> 'AMD'),'');
+assert.equal(ctNextRack({name:'dc',racks:['dc-R1','dc-R3']}),'dc-R2');
+assert.equal(ctNextRack({name:'other',racks:[]}),'other-R1');
+assert.equal(ctShortHost('amd.example.net',['amd.example.net','sas.example.net']),'amd');
+assert.equal(ctShortHost('amd.a.net',['amd.a.net','amd.b.net']),'amd.a.net');
+assert.equal(ctDefaultNode('amd','dynamic',1).actor_system,undefined);
+"""
+        subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True, text=True)
+
     def test_durable_roundtrip_revision_and_delete(self):
         self.assertEqual(self.store.list(), [])
         saved = self.store.save(self.value, {"amd", "sas"})
-        self.assertEqual(saved["nodes"][0]["vcpu"], 8)
+        self.assertNotIn("vcpu", saved["nodes"][0])
         self.assertEqual(len(saved["nodes"][0]["affinity"]["cpus"]), 16)
         self.assertEqual(cluster_templates.ClusterTemplateStore(self.root).list(), [saved])
         changed = self.store.save(dict(saved, name="Updated"), {"amd", "sas"})
@@ -65,10 +91,8 @@ class ClusterTemplatesTest(unittest.TestCase):
         for field, value in (
             ("host_id", "missing"),
             ("host_id", []),
-            ("vcpu", True),
             ("role", "unknown"),
             ("sector_map", {"count": 0, "size_gib": 64}),
-            ("actor_system", {"use_shared_threads": "false"}),
             ("affinity", {"kind": "manual", "cpus": [0, 0]}),
             ("affinity", {"kind": "manual", "cpus": []}),
             ("affinity", {"kind": "strategy", "mode": "unknown", "count": 8}),
@@ -181,9 +205,9 @@ ctMoveNode(record,0,'physical','sas');assert.equal(n.host_id,'sas');
         for node in value["nodes"]:
             node["location"] = {"data_center": "dc"}
         saved = self.store.save(value, {"amd", "sas"})
-        self.assertEqual(saved["data_centers"], [{"name": "dc", "racks": ["rack-1"]}])
+        self.assertEqual(saved["data_centers"], [{"name": "dc", "racks": ["dc-R1"]}])
         for node in saved["nodes"]:
-            self.assertEqual(node["location"], {"data_center": "dc", "rack": "rack-1", "body": node["name"]})
+            self.assertEqual(node["location"], {"data_center": "dc", "rack": "dc-R1", "body": node["name"]})
             node["location"]["body"] = "shared-old-body"
         updated = self.store.save(saved, {"amd", "sas"})
         self.assertEqual([n["location"]["body"] for n in updated["nodes"]], ["storage-1", "compute-1"])

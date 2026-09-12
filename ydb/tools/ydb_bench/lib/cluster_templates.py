@@ -135,24 +135,13 @@ def validate_template(value, host_ids):
             raise BenchmarkError("Select an existing data center and rack for the logical server")
         if dc and not rack:
             if not racks[dc]:
-                racks[dc].append("rack-1")
+                racks[dc].append(dc + "-R1")
             rack = racks[dc][0]
         item["location"] = {"data_center": dc, "rack": rack, "body": node_name if rack else ""}
         tenant = node.get("tenant", "")
         if not isinstance(tenant, str) or (tenant and (tenant not in paths or role != "dynamic")):
             raise BenchmarkError("Only dynamic nodes can be assigned to an existing tenant")
         item["tenant"] = tenant
-        if role != "cli":
-            item["vcpu"] = _integer(node.get("vcpu"), "Actor-system vCPU")
-            flags = node.get("actor_system", {})
-            if not isinstance(flags, dict):
-                raise BenchmarkError("Actor-system settings must be an object")
-            item["actor_system"] = {}
-            for key in ("use_shared_threads", "use_united_pool", "use_ring_queue"):
-                flag = flags.get(key, key == "use_ring_queue")
-                if type(flag) is not bool:
-                    raise BenchmarkError("Actor-system flags must be boolean")
-                item["actor_system"][key] = flag
         if role == "static":
             disk = node.get("sector_map")
             if not isinstance(disk, dict):
@@ -163,7 +152,7 @@ def validate_template(value, host_ids):
             }
         result.append(item)
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "name": name,
         "nodes": result,
         "host_ids": selected_hosts,

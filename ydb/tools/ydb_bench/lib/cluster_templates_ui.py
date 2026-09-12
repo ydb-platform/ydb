@@ -1,11 +1,19 @@
 """Placement-template editor assets for the existing benchmark web application."""
 
 CSS = r"""
-.ct-hosts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:16px}
-.ct-host{padding:12px;background:var(--panel);border:1px solid var(--line);border-radius:6px;min-width:0}
+.ct-hosts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(420px,100%),1fr));gap:24px;align-items:start}
+.ct-host{padding:0;background:transparent;border:0;min-width:0}
+.ct-hosts>.ct-host{border:1px solid var(--line);border-radius:6px;padding:12px}
+.ct-host>.ct-host{margin-top:12px}
+.ct-host>.runs-toolbar,.ct-host>.ct-zone-header{border-bottom:1px solid var(--line);padding-bottom:8px;margin:0 0 10px}
+.ct-host>.ct-host>.ct-zone-header{border:0;color:var(--muted);padding:0;margin:0 0 5px}
 .ct-zone-header{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem}
 .ct-zone-header>strong{min-width:0;overflow-wrap:anywhere}
-.ct-node{display:block;width:100%;text-align:left;margin:8px 0;padding:10px;overflow-wrap:anywhere}
+.ct-remove{color:#b42332;border:0;background:transparent;font-size:22px;min-width:32px;min-height:32px;padding:0}
+.ct-node-row{position:relative;margin:7px 0}
+.ct-node-row>.ct-remove{position:absolute;top:4px;right:5px}
+.ct-node{display:block;width:100%;text-align:left;margin:0;padding:10px 12px;overflow-wrap:anywhere}
+.ct-node-title{display:block;font-weight:500;padding-right:30px}.ct-node-title em{font-style:normal;color:var(--muted);margin-left:10px}
 .ct-node span{display:block;color:var(--muted);margin-top:4px}
 .ct-node[aria-pressed=true]{border-color:var(--accent);box-shadow:inset 3px 0 var(--accent)}
 .ct-node[draggable=true]{cursor:grab}.ct-host.ct-drop{outline:2px solid var(--accent);background:var(--panel)}
@@ -40,7 +48,7 @@ overflow:auto;border:1px solid var(--line);border-radius:6px;background:#fff;col
 .ct-scope-bar.ct-double{box-shadow:0 -5px 0 var(--accent);margin-top:12px}
 .ct-pop-footer{display:flex;gap:10px;justify-content:flex-end;margin-top:14px}
 .ct-mask{overflow-wrap:anywhere;margin-top:10px}.ct-small-action{padding:2px 6px}
-@media(pointer:coarse){.ct-cpu{min-height:44px}}
+@media(pointer:coarse){.ct-cpu{min-height:44px}.ct-remove{min-width:44px;min-height:44px}.ct-node-title{padding-right:42px}}
 """
 
 JS = r"""
@@ -119,8 +127,7 @@ function ctMoveNode(record,index,kind,target,resetManual=false){
   }else throw Error('Unknown placement view');
 }
 function ctDefaultNode(host,role,index){
-  return {name:role+'-'+index,role,host_id:host,binary:'bundled',vcpu:8,
-    actor_system:{use_shared_threads:false,use_united_pool:false,use_ring_queue:true},
+  return {name:role+'-'+index,role,host_id:host,binary:'bundled',
     sector_map:{count:1,size_gib:64},affinity:{kind:'strategy',mode:'none',count:8}};
 }
 function ctNormalizeNodePlacement(n){
@@ -157,7 +164,22 @@ function ctRemoveHost(record,host,target){
   record.host_ids=record.host_ids.filter(h=>h!==host);
 }
 function ctAffinityLabel(value){const a=ctNormalizeAffinity(value);return a.kind==='manual'?'CPU '+cpuRanges(a.cpus):
-  a.mode==='none'?'No pinning':a.mode+' · '+a.count+' CPU';}
+  a.mode==='none'?'No pinning':a.mode;}
+function ctNextRack(dc){let i=1;while(dc.racks.includes(dc.name+'-R'+i))i++;return dc.name+'-R'+i;}
+function ctShortHost(name,names){
+  const short=name.split('.')[0];
+  return names.filter(other=>other.split('.')[0]===short).length>1?name:short;
+}
+function ctRemoveButton(attributes,label){return '<button class=ct-remove '+attributes+' title="'+esc(label)+'" aria-label="'+esc(label)+'">×</button>';}
+function ctNodeInfo(node,view,hostName){
+  const details=[];
+  if(view!=='physical')details.push('Host: '+hostName(node.host_id));
+  if(node.role!=='cli'){
+    if(view!=='logical')details.push([node.location?.data_center,node.location?.rack].filter(Boolean).join(' / ')||'No logical location');
+    if(view!=='tenants')details.push(node.role==='static'?'Shared infrastructure':'Tenant: '+(node.tenant||'Unassigned'));
+  }
+  return details.join(' · ');
+}
 async function renderClusterTemplates(id){
   clearRefresh();const generation=(renderClusterTemplates.version||0)+1,current=location.hash;
   renderClusterTemplates.version=generation;
@@ -166,6 +188,7 @@ async function renderClusterTemplates(id){
     const [records,directory]=await Promise.all([api('/api/cluster-templates'),api('/api/hosts')]);
     if(!active())return;
     const hosts=[directory.local,...directory.hosts],hostName=id=>hosts.find(h=>h.id===id)?.name||'Unavailable host';
+    const shortHost=id=>ctShortHost(hostName(id),hosts.map(h=>h.name));
     if(!id){
       app.innerHTML=shell('cluster-templates','<div class=runs-toolbar><span class=muted>Placement templates · this server</span>'+
         '<a class="button primary" href="#cluster-templates/new">New template</a></div>'+
@@ -184,7 +207,7 @@ async function renderClusterTemplates(id){
     record.nodes.forEach(ctNormalizeNodePlacement);
     record.nodes.forEach(n=>{
       const dc=record.data_centers.find(dc=>dc.name===n.location.data_center);
-      if(dc&&!n.location.rack){if(!dc.racks.length)dc.racks.push('rack-1');n.location.rack=dc.racks[0];ctNormalizeNodePlacement(n)}
+      if(dc&&!n.location.rack){if(!dc.racks.length)dc.racks.push(ctNextRack(dc));n.location.rack=dc.racks[0];ctNormalizeNodePlacement(n)}
     });
     let selected=0,saving=false,view='physical',dragged=null;
     let previewVersion=0;
@@ -199,7 +222,7 @@ async function renderClusterTemplates(id){
       nodes.forEach((node,i)=>{
         const p=plans.get(node),target=app.querySelector('[data-ct-plan="'+i+'"]');
         if(target){target.textContent=p.supported?(node.affinity.mode==='none'?'':
-          (p.reserved_cpus?'Reserve '+p.reserved_cpus.length+' CPU · affinity ':'')+p.cpus.length+' CPUs · '+cpuRanges(p.cpus)):p.reason;
+          'Affinity: '+cpuRanges(p.cpus)):p.reason;
           target.className=p.supported?'':'error'}
       });
     }
@@ -226,51 +249,48 @@ async function renderClusterTemplates(id){
       if(view==='physical'&&selected<0&&record.nodes.length)selected=0;
       const n=record.nodes[selected];
       const targets=[];
-      const card=(node,i)=>'<button class=ct-node draggable=true data-ct-node="'+i+'" aria-pressed="'+(selected===i)+'">'+esc(node.name)+' · '+esc(node.role)+
-        '<span>'+esc(hostName(node.host_id))+(node.role==='cli'?' · Load generator':
-        ' · '+esc([node.location?.data_center,node.location?.rack,node.location?.body].filter(Boolean).join(' / ')||'No logical location')+
-        ' · '+esc(node.role==='static'?'Shared infrastructure':node.tenant||'No tenant'))+'</span>'+
-        '<span>'+(node.role==='cli'?'':esc(node.vcpu)+' vCPU · ')+esc(ctAffinityLabel(node.affinity))+'</span>'+
-        '<span data-ct-plan="'+i+'">Calculating placement…</span></button>';
+      const card=(node,i)=>'<div class=ct-node-row><button class=ct-node draggable=true data-ct-node="'+i+'" aria-pressed="'+(selected===i)+'">'+
+        '<strong class=ct-node-title>'+esc(node.name)+'<em>'+esc(node.role)+'</em></strong>'+
+        '<span title="'+esc(hostName(node.host_id))+'">'+esc(ctNodeInfo(node,view,shortHost))+'</span>'+
+        (view==='physical'?'<span>'+esc(ctAffinityLabel(node.affinity))+'</span><span data-ct-plan="'+i+'">Calculating placement…</span>':'')+
+        '</button>'+ctRemoveButton('data-ct-remove-node="'+i+'"','Remove node '+node.name)+'</div>';
       const cards=filter=>record.nodes.map((node,i)=>(view==='physical'||node.role!=='cli')&&filter(node)?card(node,i):'').join('')||'<p class=ct-empty>No nodes</p>';
-      const zone=(title,target,filter,actions='',description='')=>{
+      const zone=(title,target,filter,actions='',description='',fullTitle='')=>{
         const index=targets.push(target)-1;
-        const content=view==='logical'&&target[1]?record.nodes.map((node,i)=>node.role!=='cli'&&filter(node)?
-          '<div class=ct-rack><span class=muted>Body · '+esc(node.name)+'</span>'+card(node,i)+'</div>':'').join('')||
-          '<p class=ct-empty>No nodes</p>':cards(filter);
-        return '<section class=ct-host data-ct-drop="'+index+'"><div class=ct-zone-header><strong>'+esc(title)+'</strong>'+
+        const content=cards(filter);
+        return '<section class=ct-host data-ct-drop="'+index+'"><div class=ct-zone-header><strong title="'+esc(fullTitle||title)+'">'+esc(title)+'</strong>'+
           (actions?'<div class=runs-actions>'+actions+'</div>':'')+'</div>'+
           (description?'<p class=muted>'+esc(description)+'</p>':'')+content+'</section>';
       };
       let layout='';
-      if(view==='physical')layout=record.host_ids.map((host,i)=>zone(hostName(host),host,node=>node.host_id===host,
-        '<button data-ct-delete-host="'+i+'">Remove host</button>')).join('');
+      if(view==='physical')layout=record.host_ids.map((host,i)=>zone(shortHost(host),host,node=>node.host_id===host,
+        ctRemoveButton('data-ct-delete-host="'+i+'"','Remove host '+hostName(host)),'',hostName(host))).join('');
       if(view==='logical'){
         layout=record.data_centers.map((dc,i)=>'<section class=ct-host><div class=runs-toolbar><strong>'+esc(dc.name)+
-          '</strong><div class=runs-actions><button data-ct-rack="'+i+'">+ Rack</button>'+
-          '<button data-ct-delete-dc="'+i+'">Delete DC</button></div></div>'+dc.racks.map((rack,j)=>
+          '</strong><div class=runs-actions><button data-ct-rack="'+i+'">Add rack</button>'+
+          ctRemoveButton('data-ct-delete-dc="'+i+'"','Remove DC '+dc.name)+'</div></div>'+dc.racks.map((rack,j)=>
             zone(rack,[dc.name,rack],node=>node.location?.data_center===dc.name&&node.location?.rack===rack,
-              '<button data-ct-delete-rack="'+i+':'+j+'">Delete rack</button>')).join('')+'</section>').join('')+
+              ctRemoveButton('data-ct-delete-rack="'+i+':'+j+'"','Remove rack '+rack))).join('')+'</section>').join('')+
           (record.nodes.some(n=>n.role!=='cli'&&!n.location?.data_center)?zone('Unassigned',['',''],node=>!node.location?.data_center):'');
       }
       if(view==='tenants')layout=record.tenants.map((tenant,i)=>zone(tenant.path,tenant.path,node=>node.role!=='static'&&node.tenant===tenant.path,
-        '<button data-ct-tenant="'+i+'">Edit</button><button data-ct-delete-tenant="'+i+'">Delete tenant</button>',
+        '<button data-ct-tenant="'+i+'">Edit</button>'+ctRemoveButton('data-ct-delete-tenant="'+i+'"','Remove tenant '+tenant.path),
         tenant.storage_kind.toUpperCase()+' · '+tenant.storage_groups+' storage groups')).join('')+
         (record.nodes.some(n=>n.role==='dynamic'&&!n.tenant)?zone('Unassigned','',node=>node.role==='dynamic'&&!node.tenant):'')+
         '<section class=ct-host><strong>Shared cluster infrastructure</strong>'+cards(node=>node.role==='static')+'</section>';
       app.innerHTML=shell('cluster-templates',
         '<div class=runs-toolbar><a href="#cluster-templates">Cluster templates</a><div class=runs-actions>'+
-        '<button id=ct-copy>Copy template</button>'+(record.id?'<button id=ct-delete>Delete</button>':'')+
+        '<button id=ct-copy>Copy template</button>'+(record.id?'<button id=ct-delete>Delete template</button>':'')+
         '<button id=ct-save class=primary>Save template</button></div></div><div id=ct-error></div>'+
         '<div class=ct-fields><label>Template name<input id=ct-name maxlength=200 value="'+esc(record.name)+'"></label></div>'+
         '<p class=muted>Placement only · does not start a cluster</p><div class="profile-tabs ct-placement-tabs">'+
         ['physical','logical','tenants'].map(v=>'<button data-ct-view="'+v+'" class="'+(view===v?'active':'')+'" aria-pressed="'+(view===v)+'">'+
           v[0].toUpperCase()+v.slice(1)+'</button>').join('')+'</div><div class="runs-toolbar ct-create-actions">'+
         (view==='physical'?'<button id=ct-add '+(!record.host_ids.length?'disabled':'')+'>Add node</button>':'')+'<button id=ct-group>'+
-        (view==='physical'?'Add host':view==='logical'?'+ DC':'Create tenant')+'</button></div><div class=ct-hosts>'+layout+'</div>'+
+        (view==='physical'?'Add host':view==='logical'?'Add DC':'Add tenant')+'</button></div><div class=ct-hosts>'+layout+'</div>'+
         (n?'<section class=ct-editor><div class=runs-toolbar><strong>'+esc(n.name)+'</strong><div class=runs-actions>'+
           (view==='physical'?'<button id=ct-duplicate>Duplicate node</button>':'')+
-          '<button id=ct-remove>Remove node</button></div></div><div class=ct-fields>'+
+          ctRemoveButton('id=ct-remove','Remove node '+n.name)+'</div></div><div class=ct-fields>'+
           '<label>Name<input data-ct-field=name maxlength=80 value="'+esc(n.name)+'"></label><label>Type<select data-ct-field=role>'+
           ['static','dynamic','cli'].map(v=>'<option '+(n.role===v?'selected':'')+'>'+v+'</option>').join('')+'</select></label>'+
           '<label>Host<select data-ct-field=host_id>'+(!hosts.some(h=>h.id===n.host_id)?'<option value="'+esc(n.host_id)+'">Unavailable host</option>':'')+
@@ -284,12 +304,10 @@ async function renderClusterTemplates(id){
           (n.role!=='dynamic'?'':'<label>Tenant<select id=ct-node-tenant><option value="">Unassigned</option>'+record.tenants.map(t=>
             '<option '+(n.tenant===t.path?'selected':'')+'>'+esc(t.path)+'</option>').join('')+'</select></label>')+
           '<label>Binary · bundled, version or path<input data-ct-field=binary value="'+esc(n.binary)+'"></label>'+
-          (n.role!=='cli'?'<label>Actor-system vCPU<input type=number min=1 max=65536 data-ct-field=vcpu value="'+n.vcpu+'"></label>':'')+
           '<label>CPU affinity<button id=ct-affinity aria-haspopup=dialog>'+esc(ctAffinityLabel(n.affinity))+'</button></label>'+
           (n.role==='static'?'<label>SectorMap count<input type=number min=1 max=64 data-ct-disk=count value="'+n.sector_map.count+'"></label>'+
             '<label>SectorMap size · GiB<input type=number min=1 max=1048576 data-ct-disk=size_gib value="'+n.sector_map.size_gib+'"></label>':'')+
-          '</div>'+(n.role!=='cli'?'<div class=ct-flags>'+['use_shared_threads','use_united_pool','use_ring_queue'].map(k=>
-            '<label><input type=checkbox data-ct-flag="'+k+'" '+(n.actor_system[k]?'checked':'')+'>'+esc(k)+'</label>').join('')+'</div>':'')+'</section>':''));
+          '</div></section>':''));
       const error=e=>{if(active())app.querySelector('#ct-error').innerHTML=displayError(e)};
       app.querySelector('#ct-name').oninput=e=>record.name=e.target.value;
       app.querySelectorAll('[data-ct-view]').forEach(b=>b.onclick=()=>{view=b.dataset.ctView;draw()});
@@ -309,7 +327,7 @@ async function renderClusterTemplates(id){
       app.querySelectorAll('[data-ct-location]').forEach(f=>f.onchange=()=>{
         if(f.dataset.ctLocation==='data_center'){
           const dc=record.data_centers.find(dc=>dc.name===f.value);
-          if(dc&&!dc.racks.length)dc.racks.push('rack-1');
+          if(dc&&!dc.racks.length)dc.racks.push(ctNextRack(dc));
           move(selected,'logical',[f.value,dc?.racks[0]||'']);
         }else move(selected,'logical',[n.location.data_center,f.value]);
       });
@@ -321,22 +339,21 @@ async function renderClusterTemplates(id){
           return;
         }
         n[field]=f.type==='number'?Number(f.value):f.value;
-        if(field==='role'){n.vcpu??=8;n.actor_system??=ctDefaultNode('',n.role,1).actor_system;n.sector_map??={count:1,size_gib:64};ctNormalizeNodePlacement(n)}
+        if(field==='role'){n.sector_map??={count:1,size_gib:64};ctNormalizeNodePlacement(n)}
         draw();
       });
       app.querySelectorAll('[data-ct-disk]').forEach(f=>f.onchange=()=>n.sector_map[f.dataset.ctDisk]=Number(f.value));
-      app.querySelectorAll('[data-ct-flag]').forEach(f=>f.onchange=()=>n.actor_system[f.dataset.ctFlag]=f.checked);
       const unique=role=>{let i=1;while(record.nodes.some(n=>n.name===role+'-'+i))i++;return role+'-'+i};
       const add=app.querySelector('#ct-add');if(add)add.onclick=()=>{if(record.nodes.length>=64)return error('At most 64 nodes');
         const node=ctDefaultNode(record.host_ids[0],'dynamic',1);node.location={data_center:'',rack:'',body:''};node.tenant='';
         node.name=unique('dynamic');record.nodes.push(node);selected=record.nodes.length-1;draw()};
-      const addName=(title,existing,submit)=>dialog(title,'<label>Name<input name=name required maxlength=80 autofocus></label>',data=>{
+      const addName=(title,existing,submit,suggested='')=>dialog(title,'<label>Name<input name=name required maxlength=80 autofocus value="'+esc(suggested)+'"></label>',data=>{
         const name=data.get('name').trim();if(!name||existing.includes(name))throw Error('Enter a unique name');
         if(existing.length>=64)throw Error('At most 64 entries');submit(name);
       });
       const editTenant=index=>{
         const t=record.tenants[index]||{path:'/Root/',storage_kind:'ssd',storage_groups:1};
-        dialog(index===undefined?'Create tenant':'Edit tenant','<label>Database path<input name=path required maxlength=80 value="'+esc(t.path)+'"></label>'+
+        dialog(index===undefined?'Add tenant':'Edit tenant','<label>Database path<input name=path required maxlength=80 value="'+esc(t.path)+'"></label>'+
           '<label>Storage kind<select name=kind>'+['ssd','hdd'].map(k=>'<option '+(t.storage_kind===k?'selected':'')+'>'+k+'</option>').join('')+'</select></label>'+
           '<label>Storage groups<input name=groups type=number min=1 max=64 required value="'+t.storage_groups+'"></label>',data=>{
             const path=data.get('path').trim();
@@ -351,7 +368,7 @@ async function renderClusterTemplates(id){
       app.querySelectorAll('[data-ct-delete-tenant]').forEach(b=>b.onclick=()=>{
         const t=record.tenants[+b.dataset.ctDeleteTenant],count=record.nodes.filter(n=>n.tenant===t.path).length;
         const remove=()=>ctRemoveTenant(record,t.path);
-        if(count)dialog('Delete tenant','<p>'+count+' nodes will have no tenant. Physical and logical placement will be kept.</p>',remove);
+        if(count)dialog('Remove tenant','<p>'+count+' nodes will have no tenant. Physical and logical placement will be kept.</p>',remove);
         else{remove();draw()}
       });
       app.querySelectorAll('[data-ct-delete-host]').forEach(b=>b.onclick=()=>{
@@ -365,12 +382,12 @@ async function renderClusterTemplates(id){
           data=>ctRemoveHost(record,host,data.get('host')));
       });
       app.querySelectorAll('[data-ct-rack]').forEach(b=>b.onclick=()=>{
-        const dc=record.data_centers[+b.dataset.ctRack];addName('Add rack',dc.racks,name=>dc.racks.push(name));
+        const dc=record.data_centers[+b.dataset.ctRack];addName('Add rack',dc.racks,name=>dc.racks.push(name),ctNextRack(dc));
       });
       const deleteLocation=(dc,rack)=>{
         const count=record.nodes.filter(n=>n.location?.data_center===dc.name&&(rack===undefined||n.location.rack===rack)).length;
         const remove=()=>ctRemoveLocation(record,dc.name,rack);
-        if(count)dialog(rack===undefined?'Delete DC':'Delete rack','<p>'+count+' nodes will move to Unassigned. '+
+        if(count)dialog(rack===undefined?'Remove DC':'Remove rack','<p>'+count+' nodes will move to Unassigned. '+
           'Physical placement and tenant assignments will be kept.</p>',remove);
         else{remove();draw()}
       };
@@ -382,12 +399,17 @@ async function renderClusterTemplates(id){
       group.disabled=view==='physical'&&!available.length;
       group.onclick=()=>{
         if(view==='tenants'){editTenant();return}
-        if(view==='logical'){addName('Add DC',record.data_centers.map(dc=>dc.name),name=>record.data_centers.push({name,racks:['rack-1']}));return}
+        if(view==='logical'){addName('Add DC',record.data_centers.map(dc=>dc.name),name=>record.data_centers.push({name,racks:[name+'-R1']}));return}
         dialog('Add host','<label>Host<select name=host>'+available.map(h=>'<option value="'+esc(h.id)+'">'+esc(h.name)+'</option>').join('')+'</select></label>',
           data=>{if(record.host_ids.length>=64)throw Error('At most 64 hosts');record.host_ids.push(data.get('host'))});
       };
+      const removeNode=index=>dialog('Remove node','<p>Remove '+esc(record.nodes[index].name)+' from this template? '+
+        'Its placement and tenant assignment will be removed. Running processes are not affected.</p>',()=>{
+        record.nodes.splice(index,1);selected=Math.max(0,Math.min(selected,record.nodes.length-1));
+      });
+      app.querySelectorAll('[data-ct-remove-node]').forEach(b=>b.onclick=()=>removeNode(+b.dataset.ctRemoveNode));
       if(n){
-        app.querySelector('#ct-remove').onclick=()=>{record.nodes.splice(selected,1);selected=Math.max(0,selected-1);draw()};
+        app.querySelector('#ct-remove').onclick=()=>removeNode(selected);
         const duplicate=app.querySelector('#ct-duplicate');if(duplicate)duplicate.onclick=()=>{if(record.nodes.length>=64)return error('At most 64 nodes');
           const copy=JSON.parse(JSON.stringify(n));copy.name=unique(n.role);ctNormalizeNodePlacement(copy);record.nodes.push(copy);selected=record.nodes.length-1;draw()};
         app.querySelector('#ct-affinity').onclick=e=>openAffinity(n,e.currentTarget);
@@ -403,7 +425,7 @@ async function renderClusterTemplates(id){
           if(id!==record.id)setRoute('cluster-templates/'+record.id);else{draw();app.querySelector('#ct-error').textContent='Saved'}
         }}catch(e){error(e)}finally{saving=false;const b=app.querySelector('#ct-save');if(b)b.disabled=false}
       };
-      refreshCards();
+      if(view==='physical')refreshCards();else previewVersion++;
     }
     async function openAffinity(node,anchor){
       const pop=document.createElement('div');pop.className='ct-pop';pop.setAttribute('popover','auto');

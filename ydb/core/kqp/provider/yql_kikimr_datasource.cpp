@@ -5,6 +5,7 @@
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/fq/libs/result_formatter/result_formatter.h>
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
@@ -590,6 +591,11 @@ private:
         source.SetPath(path);
         source.SetToken(SessionCtx->GetUserToken() ? SessionCtx->GetUserToken()->SerializeAsString() : "");
         source.SetDatabase(SessionCtx->GetDatabase());
+        if (auto userRequestContext = SessionCtx->GetUserRequestContext()) {
+            if (auto poolId = userRequestContext->PoolId) {
+                source.SetPoolId(poolId);
+            }
+        }
 
         // preserve source description for read actor
         protoSettings.PackFrom(source);

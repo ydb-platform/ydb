@@ -115,6 +115,12 @@ TMaybe<TString> BuildSelectorValues(const NSo::NProto::TDqSolomonSource& source,
         RET_ON_ERROR(InsertOrCheck(result, "cloudId", source.GetProject()));
         RET_ON_ERROR(InsertOrCheck(result, "folderId", source.GetCluster()));
         RET_ON_ERROR(InsertOrCheck(result, "service", source.GetService()));
+    } else if (source.GetClusterType() == NSo::NProto::CT_MONIUM) {
+        // The project already scopes the request, so nothing is injected for routing
+        // and the table name is only a default for "service".
+        if (const auto& service = source.GetService(); service && !result.contains("service")) {
+            result["service"] = {"=", service};
+        }
     } else {
         RET_ON_ERROR(InsertOrCheck(result, "project", source.GetProject()));
     }
@@ -165,20 +171,23 @@ NSo::NProto::ESolomonClusterType MapClusterType(TSolomonClusterConfig::ESolomonC
     }
 }
 
+bool IsMoniumProject(const TSolomonClusterConfig& config) {
+    for (const auto& attr : config.settings()) {
+        if (attr.name() == "monium_project"sv) {
+            return attr.value() == "true"sv;
+        }
+    }
+    return false;
+}
+
 NProto::TDqSolomonSource FillSolomonSource(const TSolomonClusterConfig* config, const TString& project) {
     NSo::NProto::TDqSolomonSource source;
 
-    source.SetClusterType(NSo::MapClusterType(config->GetClusterType()));
+    source.SetClusterType(IsMoniumProject(*config)
+        ? NSo::NProto::CT_MONIUM
+        : NSo::MapClusterType(config->GetClusterType()));
     source.SetUseSsl(config->GetUseSsl());
-    
-    if (source.GetClusterType() == NSo::NProto::CT_MONITORING) {
-        source.SetProject(config->GetPath().GetProject());
-        source.SetCluster(config->GetPath().GetCluster());
-        source.SetService(project);
-    } else {
-        source.SetProject(project);
-    }
-    
+
     source.SetEndpoint(config->GetCluster()); // Backward compatibility
     source.SetHttpEndpoint(config->GetCluster());
     source.SetGrpcEndpoint(config->GetCluster());
@@ -186,6 +195,17 @@ NProto::TDqSolomonSource FillSolomonSource(const TSolomonClusterConfig* config, 
         if (attr.name() == "grpc_location"sv) {
             source.SetGrpcEndpoint(attr.value());
         }
+    }
+
+    if (source.GetClusterType() == NSo::NProto::CT_MONITORING) {
+        source.SetProject(config->GetPath().GetProject());
+        source.SetCluster(config->GetPath().GetCluster());
+        source.SetService(project);
+    } else if (source.GetClusterType() == NSo::NProto::CT_MONIUM) {
+        source.SetProject(config->GetPath().GetProject());
+        source.SetService(project);
+    } else {
+        source.SetProject(project);
     }
 
     return source;

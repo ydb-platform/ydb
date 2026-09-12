@@ -122,6 +122,11 @@ TMaybe<TString> ParseLabelNames(const TString& labelNames, TVector<TString>& nam
     
 NSo::NProto::ESolomonClusterType MapClusterType(TSolomonClusterConfig::ESolomonClusterType clusterType);
 
+// A Monium project is its own request scope and has no cloud folder. Marked in the
+// cluster settings, so that gateways_config.proto, which lives in a separate
+// repository, needs no new cluster type.
+bool IsMoniumProject(const TSolomonClusterConfig& config);
+
 NProto::TDqSolomonSource FillSolomonSource(const TSolomonClusterConfig* config, const TString& project);
 
 } // namespace NYql::NSo

@@ -1931,14 +1931,17 @@ TStatus AnnotateKqpPredicateClosure(const TExprNode::TPtr& node, TExprContext& c
     }
     auto argTypesTuple = argTypesTupleRaw->Cast<TTupleExprType>();
 
-    std::vector<const TTypeAnnotationNode*> argTypes;
-    argTypes.reserve(argTypesTuple->GetSize());
+    const auto& argTypeItems = argTypesTuple->GetItems();
 
-    for (const auto& argTypeRaw : argTypesTuple->GetItems()) {
-        // The first argument is a row, the rest ones are external values (e.g. results of `KqpOlapJsonValue`) of any computable type.
-        if (argTypes.empty() && !EnsureStructType(node->Pos(), *argTypeRaw, ctx)) {
-            return TStatus::Error;
-        }
+    // The first argument is a row, the rest ones are external values (e.g. results of `KqpOlapJsonValue`) of any computable type.
+    if (!argTypeItems.empty() && !EnsureStructType(node->Pos(), *argTypeItems.front(), ctx)) {
+        return TStatus::Error;
+    }
+
+    std::vector<const TTypeAnnotationNode*> argTypes;
+    argTypes.reserve(argTypeItems.size());
+
+    for (const auto& argTypeRaw : argTypeItems) {
         if (!EnsureComputableType(node->Pos(), *argTypeRaw, ctx)) {
             return TStatus::Error;
         }

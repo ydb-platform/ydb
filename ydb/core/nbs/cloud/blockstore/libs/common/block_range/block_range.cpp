@@ -30,6 +30,7 @@ bool TBlockRange<TBlockIndex>::TryParse(
     return false;
 }
 
+template bool TBlockRange16::TryParse(TStringBuf s, TBlockRange16& range);
 template bool TBlockRange32::TryParse(TStringBuf s, TBlockRange32& range);
 template bool TBlockRange64::TryParse(TStringBuf s, TBlockRange64& range);
 
@@ -39,6 +40,7 @@ TString TBlockRange<TBlockIndex>::Print() const
     return TStringBuilder() << "[" << Start << ".." << End << "]";
 }
 
+template TString TBlockRange16::Print() const;
 template TString TBlockRange32::Print() const;
 template TString TBlockRange64::Print() const;
 
@@ -50,6 +52,7 @@ TString DescribeRange(const TBlockRange<TBlockIndex>& blockRange)
     return blockRange.Print();
 }
 
+template TString DescribeRange(const TBlockRange16& blockRange);
 template TString DescribeRange(const TBlockRange32& blockRange);
 template TString DescribeRange(const TBlockRange64& blockRange);
 
@@ -63,6 +66,7 @@ TString DescribeRange(const TVector<TBlockIndex>& blocks)
     return "<none>";
 }
 
+template TString DescribeRange(const TVector<ui16>& blocks);
 template TString DescribeRange(const TVector<ui32>& blocks);
 template TString DescribeRange(const TVector<ui64>& blocks);
 

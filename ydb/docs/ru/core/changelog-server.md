@@ -1,5 +1,53 @@
 # Список изменений {{ ydb-short-name }} Server
 
+## Версия 26.2 {#26-2}
+
+### Версия 26.2.1.13 {#26-2-1-13}
+
+Дата выхода: 2 сентября 2026.
+
+#### Функциональность
+
+* [Потоковые запросы](./dev/streaming-query/index.md?version=v26.2) поддерживают чтение из локальных топиков, запись в локальные топики, чтение локальных таблиц и несколько инструкций `INSERT` в одном запросе.
+* В потоковых запросах добавлены [watermarks](./dev/streaming-query/watermarks.md?version=v26.2) и вычисление скалярных выражений вне контекста отдельного сообщения.
+* Добавлены [Bloom-индексы](./dev/bloom-skip-indexes.md?version=v26.2): Bloom и Bloom n-gram для колоночных таблиц и префиксные Bloom-индексы для строковых таблиц. Для колоночных таблиц также добавлена настройка сжатия колонок.
+* Для построения индексов теперь можно настраивать [уровень параллелизма](./yql/reference/syntax/alter_table/indexes.md?version=v26.2).
+* [Полнотекстовые индексы](./dev/fulltext-indexes.md?version=v26.2) включены по умолчанию.
+* В [`ALTER TABLE`](./yql/reference/syntax/alter_table/columns.md?version=v26.2) по умолчанию доступны инструкции `ALTER COLUMN SET DEFAULT` и `ALTER COLUMN DROP DEFAULT`.
+* По умолчанию доступны инструкции YQL [`TRUNCATE TABLE`](./yql/reference/syntax/truncate-table.md?version=v26.2) и [`DISCARD SELECT`](./yql/reference/syntax/discard.md?version=v26.2).
+* QueryService поддерживает выдачу результатов запросов в [формате Apache Arrow](./reference/ydb-sdk/data-formats/format-arrow.md?version=v26.2); эта возможность включена по умолчанию.
+* Добавлен запуск принудительной [компакции таблицы](./yql/reference/syntax/alter_table/compact.md?version=v26.2) с помощью `ALTER TABLE ... COMPACT`.
+* Добавлена автоматическая балансировка хранилища между группами и фоновая проверка корректности размещения дисков.
+* Ускорено изменение схемы партиционирования таблиц.
+* Добавлено [аудитное логирование](./security/audit-log.md?version=v26.2) операций с топиками.
+* Добавлен [встроенный сбор минидампов на базе Google Breakpad](./devops/observability/minidumps.md?version=v26.2) для узлов Linux.
+* Добавлена подкоманда [`ydb-dstool pdisk populate`](./reference/ydb-dstool/pdisk-populate.md?version=v26.2) для воспроизведения нагрузки PDisk на другом устройстве.
+
+#### Исправления ошибок
+
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/46747) некорректные результаты некоторых сканирующих запросов к колоночным таблицам.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/50358) обработка повреждённых Kafka-запросов, которая могла приводить к избыточному потреблению памяти или выходу за границы буфера.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/49929) зависание `DirectRead` после перезапуска балансировщика чтения топика.
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/35470) состояния гонки в серверной сессии чтения топика и в [Topic SDK](https://github.com/ydb-platform/ydb/pull/42213).
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/50675) формирование `QueueUrl` в SQS API поверх топиков при работе через HTTP.
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/50897) падение и [зависание](https://github.com/ydb-platform/ydb/pull/50621) потоковых запросов при создании контрольных точек.
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/50379) состояния гонки при отмене и планировании распределённых транзакций.
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/49469) обработка слишком больших блоков при зашифрованном экспорте и [ложная ошибка повреждения данных](https://github.com/ydb-platform/ydb/pull/48986) при зашифрованном восстановлении.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/49460) состояние гонки при сборе статистики командой `ydb workload topic`.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/48174) повторное освобождение памяти при завершении `DqHashCombine` с spilling.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/40912) потеря подтверждений `ReadSet`, которая могла препятствовать завершению транзакции.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/40801) обработка ответа `NODATA` в KeyValue API: вместо падения процесса возвращается ошибка `NOT_FOUND` или `INTERNAL_ERROR`.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/41895) IAM-аутентификация для внешних источников данных в Generic Provider и [обработка возвращаемых им ошибок](https://github.com/ydb-platform/ydb/pull/40761).
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/41411) утечка памяти при загрузке метаданных внешних источников данных.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/46739) обработка трёхсоставных feature flags в YAML-конфигурации, которая могла приводить к потере следующих настроек.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/41009) копирование и экспорт таблиц со вторичными индексами после удаления внутренних таблиц индекса.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/51592) работа TLS в `local-ydb`.
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/45958) фильтрация экспортируемых объектов и операции со списками при экспорте в файловую систему.
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/47591) ответы Metadata в Kafka API, которые могли содержать пустой список брокеров или несогласованный идентификатор контроллера и приводить к тайм-аутам Kafka AdminClient и Kafka Streams.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/46033) утечка записей о выполнении скриптов, создаваемых потоковыми запросами.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/42277) перезапись пользовательского `config.yaml`, смонтированного по пути по умолчанию, при первом развёртывании `local-ydb` в Docker.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/44011) падение Hive после перезапуска, когда блокировка таблетки и сохранённый лидер указывали на разные узлы.
+
 ## Версия 26.1 {#26-1}
 
 ### Версия 26.1.1.22 {#26-1-1-22}

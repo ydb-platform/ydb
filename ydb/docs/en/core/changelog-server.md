@@ -1,5 +1,53 @@
 # {{ ydb-short-name }} Server changelog
 
+## Version 26.2 {#26-2}
+
+### Version 26.2.1.13 {#26-2-1-13}
+
+Release date: September 2, 2026.
+
+#### Functionality
+
+* [Streaming queries](./dev/streaming-query/index.md?version=v26.2) can read from local topics, write to local topics, read local tables, and contain multiple `INSERT` statements.
+* Streaming queries gained [watermarks](./dev/streaming-query/watermarks.md?version=v26.2) and evaluation of scalar expressions outside the context of an individual message.
+* Added [Bloom skip indexes](./dev/bloom-skip-indexes.md?version=v26.2): Bloom and Bloom n-gram indexes for column-oriented tables, and prefix Bloom indexes for row-oriented tables. Column-oriented tables also gained configurable column compression.
+* The [parallelism level](./yql/reference/syntax/alter_table/indexes.md?version=v26.2) can now be configured for index builds.
+* [Full-text indexes](./dev/fulltext-indexes.md?version=v26.2) are enabled by default.
+* [`ALTER TABLE`](./yql/reference/syntax/alter_table/columns.md?version=v26.2) statements `ALTER COLUMN SET DEFAULT` and `ALTER COLUMN DROP DEFAULT` are available by default.
+* YQL statements [`TRUNCATE TABLE`](./yql/reference/syntax/truncate-table.md?version=v26.2) and [`DISCARD SELECT`](./yql/reference/syntax/discard.md?version=v26.2) are available by default.
+* QueryService can return query results in [Apache Arrow format](./reference/ydb-sdk/data-formats/format-arrow.md?version=v26.2); this capability is enabled by default.
+* Added forced [table compaction](./yql/reference/syntax/alter_table/compact.md?version=v26.2) using `ALTER TABLE ... COMPACT`.
+* Added automatic storage balancing between groups and background validation of disk placement.
+* Table partitioning schema changes are faster.
+* Added [audit logging](./security/audit-log.md?version=v26.2) for topic operations.
+* Added [built-in minidump collection based on Google Breakpad](./devops/observability/minidumps.md?version=v26.2) for Linux nodes.
+* Added the [`ydb-dstool pdisk populate`](./reference/ydb-dstool/pdisk-populate.md?version=v26.2) subcommand for reproducing a PDisk workload on another device.
+
+#### Bug Fixes
+
+* [Fixed](https://github.com/ydb-platform/ydb/pull/46747) incorrect results from some scan queries over column-oriented tables.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/50358) handling of malformed Kafka requests that could cause excessive memory use or out-of-bounds access.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/49929) `DirectRead` hanging after a topic read balancer restart.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/35470) race conditions in the server-side topic read session and in the [Topic SDK](https://github.com/ydb-platform/ydb/pull/42213).
+* [Fixed](https://github.com/ydb-platform/ydb/pull/50675) `QueueUrl` generation in the SQS API over topics when using HTTP.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/50897) a crash and a [hang](https://github.com/ydb-platform/ydb/pull/50621) in streaming query checkpointing.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/50379) race conditions when cancelling and planning distributed transactions.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/49469) handling of oversized blocks during encrypted export and a [false data corruption error](https://github.com/ydb-platform/ydb/pull/48986) during encrypted restore.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/49460) a race condition when collecting statistics with `ydb workload topic`.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/48174) a double free during `DqHashCombine` spilling teardown.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/40912) lost `ReadSet` acknowledgements that could prevent a transaction from completing.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/40801) handling of `NODATA` responses in the KeyValue API: `NOT_FOUND` or `INTERNAL_ERROR` is returned instead of terminating the process.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/41895) IAM authentication for external data sources in Generic Provider and [error handling](https://github.com/ydb-platform/ydb/pull/40761) for provider responses.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/41411) a memory leak when loading external data source metadata.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/46739) parsing of tri-state feature flags in YAML configuration that could cause subsequent settings to be lost.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/41009) copying and exporting tables with secondary indexes after index implementation tables were removed.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/51592) TLS support in `local-ydb`.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/45958) object filtering and list operations during file-system export.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/47591) Kafka API Metadata responses that could return an empty broker list or an inconsistent controller ID, causing Kafka AdminClient and Kafka Streams operations to time out.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/46033) a leak of script execution records created by streaming queries.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/42277) `local-ydb` overwriting a user-provided `config.yaml` mounted at the default path during the first Docker deployment.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/44011) a Hive crash on restart when a tablet lock and its persisted leader pointed to different nodes.
+
 ## Version 26.1 {#26-1}
 
 ### Version 26.1.1.22 {#26-1-1-22}

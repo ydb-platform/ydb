@@ -1,7 +1,7 @@
 #pragma once
 
-#include "public.h"
 #include "common.h"
+#include "public.h"
 
 #include <yt/yt/client/api/public.h>
 

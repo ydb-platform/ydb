@@ -762,10 +762,11 @@ roaring_bitmap_t *roaring_bitmap_portable_deserialize_safe(const char *buf,
  * This is meant to be compatible with the Java and Go versions:
  * https://github.com/RoaringBitmap/RoaringFormatSpec
  *
- * This function is endian-sensitive. If you have a big-endian system (e.g., a
- * mainframe IBM s390x), the data format is going to be big-endian and not
- * compatible with little-endian systems. It is not a bug, it is by design,
- * since the format imitates C memory layout of roaring_bitmap_t.
+ * Returns NULL on a big-endian system (e.g., a mainframe IBM s390x). The
+ * portable format is little-endian on every host, and this function uses the
+ * container payloads where they sit rather than converting them, so there is
+ * no correct in-place view of them there. Use
+ * `roaring_bitmap_portable_deserialize_safe()`, which converts as it copies.
  *
  * The returned pointer may be NULL in case of errors.
  */

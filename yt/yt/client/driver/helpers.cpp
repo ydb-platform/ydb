@@ -1,6 +1,10 @@
 #include "helpers.h"
 
+#include <yt/yt/client/api/file_writer.h>
+
 #include <yt/yt/client/misc/io_tags.h>
+
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/guid.h>
@@ -11,6 +15,8 @@
 
 namespace NYT::NDriver {
 
+using namespace NApi;
+using namespace NConcurrency;
 using namespace NObjectClient;
 using namespace NTracing;
 
@@ -58,6 +64,16 @@ void PutMethodInfoInTraceContext(TStringBuf methodName)
         AddTagToBaggage(baggage, EAggregateIOTag::ApiMethod, methodName);
         AddTagToBaggage(baggage, EAggregateIOTag::ProxyKind, "http");
         traceContext->PackBaggage(baggage);
+    }
+}
+
+void WriteFileByBatches(const IFileWriterPtr& writer, const TSharedRef& data, i64 maxAttachmentSize)
+{
+    i64 dataSize = std::ssize(data);
+    for (i64 offset = 0; offset < dataSize; offset += maxAttachmentSize) {
+        auto batch = data.Slice(offset, std::min(offset + maxAttachmentSize, dataSize));
+        WaitFor(writer->Write(batch))
+            .ThrowOnError();
     }
 }
 

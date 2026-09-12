@@ -1,5 +1,7 @@
+{%- include "[generator]/vars.jinja" -%}
+{%- if contrib_maven_repo -%}
 val output_root = "{{ output_root }}"
-
+{%- endif %}
 pluginManagement {
     val bucketUsername = settings.providers.gradleProperty("bucketUsername")
         .orElse(settings.providers.environmentVariable("BUCKET_USERNAME")).get()
@@ -48,14 +50,6 @@ dependencyResolutionManagement {
                 metadataSources {
                     artifact()
                 }
-        }
-
-        maven {
-            name = "patched_contrib"
-            url = uri("file://$output_root/contrib/java/patched")
-            metadataSources {
-                artifact()
-            }
         }
 {%- endif %}
     {%- if yandex_qa_maven_repo %}

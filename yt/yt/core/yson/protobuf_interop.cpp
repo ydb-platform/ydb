@@ -1702,19 +1702,7 @@ private:
         FieldStack_.emplace_back(field);
         YPathStack_.PushLiteral(std::string(field->GetYsonName()));
 
-        if (field->IsYsonString()) {
-            YsonString_.clear();
-            Forward(&YsonStringWriter_, [this] {
-                YsonStringWriter_.Flush();
-
-                WriteScalar([this] {
-                    BodyCodedStream_.WriteVarint64(YsonString_.length());
-                    BodyCodedStream_.WriteRaw(YsonString_.data(), static_cast<int>(YsonString_.length()));
-                });
-            });
-        } else {
-            TryWriteCustomlyConvertibleType();
-        }
+        TryWriteCustomlyConvertibleType();
     }
 
     void OnMyKeyedItemAttributeDictionary(TStringBuf key)
@@ -2141,8 +2129,20 @@ private:
         }
 
         const auto* field = FieldStack_.back().Field;
-        const auto* converter = field->GetCustomFieldConverter<TProtobufMessageBytesFieldConverter>();
-        if (converter) {
+        if (field->IsYsonString()) {
+            if (field->IsRepeated() && !FieldStack_.back().ParsingList) {
+                return;
+            }
+            YsonString_.clear();
+            Forward(&YsonStringWriter_, [this] {
+                YsonStringWriter_.Flush();
+
+                WriteScalar([this] {
+                    BodyCodedStream_.WriteVarint64(YsonString_.length());
+                    BodyCodedStream_.WriteRaw(YsonString_.data(), static_cast<int>(YsonString_.length()));
+                });
+            });
+        } else if (const auto* converter = field->GetCustomFieldConverter<TProtobufMessageBytesFieldConverter>()) {
             if (field->IsRepeated() && !FieldStack_.back().ParsingList) {
                 return;
             }

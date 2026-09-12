@@ -1,4 +1,4 @@
-__version__ = "3.11.18"
+__version__ = "3.12.15"
 
 from typing import TYPE_CHECKING, Tuple
 
@@ -46,6 +46,13 @@ from .client import (
     WSMessageTypeError,
     WSServerHandshakeError,
     request,
+)
+from .client_middleware_digest_auth import DigestAuthMiddleware
+from .client_middlewares import ClientHandlerType, ClientMiddlewareType
+from .compression_utils import set_zlib_backend
+from .connector import (
+    AddrInfoType as AddrInfoType,
+    SocketFactoryType as SocketFactoryType,
 )
 from .cookiejar import CookieJar as CookieJar, DummyCookieJar as DummyCookieJar
 from .formdata import FormData as FormData
@@ -126,6 +133,7 @@ if TYPE_CHECKING:
 __all__: Tuple[str, ...] = (
     "hdrs",
     # client
+    "AddrInfoType",
     "BaseConnector",
     "ClientConnectionError",
     "ClientConnectionResetError",
@@ -161,6 +169,7 @@ __all__: Tuple[str, ...] = (
     "ServerDisconnectedError",
     "ServerFingerprintMismatch",
     "ServerTimeoutError",
+    "SocketFactoryType",
     "SocketTimeoutError",
     "TCPConnector",
     "TooManyRedirects",
@@ -168,6 +177,9 @@ __all__: Tuple[str, ...] = (
     "NamedPipeConnector",
     "WSServerHandshakeError",
     "request",
+    # client_middleware
+    "ClientMiddlewareType",
+    "ClientHandlerType",
     # cookiejar
     "CookieJar",
     "DummyCookieJar",
@@ -176,7 +188,9 @@ __all__: Tuple[str, ...] = (
     # helpers
     "BasicAuth",
     "ChainMapProxy",
+    "DigestAuthMiddleware",
     "ETag",
+    "set_zlib_backend",
     # http
     "HttpVersion",
     "HttpVersion10",

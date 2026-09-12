@@ -243,9 +243,18 @@ IAttributeDictionaryPtr FromProto(const NProto::TAttributeDictionary& protoAttri
 {
     auto attributes = CreateEphemeralAttributes();
     for (const auto& protoAttribute : protoAttributes.attributes()) {
-        auto key = FromProto<std::string>(protoAttribute.key());
-        auto value = FromProto<std::string>(protoAttribute.value());
-        attributes->SetYson(key, TYsonString(value));
+        attributes->SetYson(protoAttribute.key(), FromProto<TYsonString>(protoAttribute.value()));
+    }
+    return attributes;
+}
+
+IAttributeDictionaryPtr FromProto(NProto::TAttributeDictionary&& protoAttributes)
+{
+    auto attributes = CreateEphemeralAttributes();
+    for (auto& protoAttribute : *protoAttributes.mutable_attributes()) {
+        attributes->SetYson(
+            protoAttribute.key(),
+            FromProto<TYsonString>(std::move(*protoAttribute.mutable_value())));
     }
     return attributes;
 }

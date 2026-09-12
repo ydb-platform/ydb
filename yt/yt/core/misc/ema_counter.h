@@ -36,6 +36,8 @@ struct TEmaCounter
     //! i.e. #Count delta divided by the time delta measured in seconds
     //! according to the last update.
     double ImmediateRate = 0.0;
+    //! Duration of the last observed interval; zero before the first interval or after merging.
+    TDuration LastUpdateInterval;
 
     //! Durations of configured time windows.
     TEmaCounterWindowDurations<WindowCount> WindowDurations;
@@ -45,6 +47,8 @@ struct TEmaCounter
     explicit TEmaCounter(TEmaCounterWindowDurations<WindowCount> windowDurations);
 
     //! Set new value of counter, optionally providing a current timestamp.
+    //! Monotonic updates at the same timestamp contribute to the same observed interval.
+    //! Before the first interval, they only update the initial counter value.
     void Update(T newCount, TInstant newTimestamp = TInstant::Now());
 
     void Scale(double scaleFactor);

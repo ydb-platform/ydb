@@ -149,16 +149,6 @@ void SetPingDistributedWriteSessionRequestInfo(
 }
 
 template <class TPtr>
-void SetPingDistributedWriteSessionRequestInfo(
-    const TPtr& target,
-    const NTableClient::TSignedDistributedWriteSessionPtr& session)
-{
-    if (auto payload = NDetail::TryParseSignedPayload<TDistributedWriteSession>(session.Underlying())) {
-        SetPingDistributedWriteSessionRequestInfo(target, payload->PatchInfo.ObjectId);
-    }
-}
-
-template <class TPtr>
 void SetFinishDistributedWriteSessionRequestInfo(
     const TPtr& target,
     NObjectClient::TObjectId tableId)
@@ -166,16 +156,6 @@ void SetFinishDistributedWriteSessionRequestInfo(
     target->SetRequestInfo(
         "TableId: %v",
         tableId);
-}
-
-template <class TPtr>
-void SetFinishDistributedWriteSessionRequestInfo(
-    const TPtr& target,
-    const NTableClient::TSignedDistributedWriteSessionPtr& session)
-{
-    if (auto payload = NDetail::TryParseSignedPayload<TDistributedWriteSession>(session.Underlying())) {
-        SetFinishDistributedWriteSessionRequestInfo(target, payload->PatchInfo.ObjectId);
-    }
 }
 
 template <class TPtr>
@@ -188,19 +168,6 @@ void SetWriteTableFragmentRequestInfo(
         "TableId: %v, MainTransactionId: %v",
         tableId,
         mainTransactionId);
-}
-
-template <class TPtr>
-void SetWriteTableFragmentRequestInfo(
-    const TPtr& target,
-    const NTableClient::TSignedWriteFragmentCookiePtr& cookie)
-{
-    if (auto payload = NDetail::TryParseSignedPayload<TWriteFragmentCookie>(cookie.Underlying())) {
-        SetWriteTableFragmentRequestInfo(
-            target,
-            payload->PatchInfo.ObjectId,
-            payload->MainTransactionId);
-    }
 }
 
 template <class TPtr>
@@ -224,16 +191,6 @@ void SetPingDistributedWriteFileSessionRequestInfo(
 }
 
 template <class TPtr>
-void SetPingDistributedWriteFileSessionRequestInfo(
-    const TPtr& target,
-    const NFileClient::TSignedDistributedWriteFileSessionPtr& session)
-{
-    if (auto payload = NDetail::TryParseSignedPayload<TDistributedWriteFileSession>(session.Underlying())) {
-        SetPingDistributedWriteFileSessionRequestInfo(target, payload->HostData.FileId);
-    }
-}
-
-template <class TPtr>
 void SetFinishDistributedWriteFileSessionRequestInfo(
     const TPtr& target,
     NObjectClient::TObjectId fileId)
@@ -241,16 +198,6 @@ void SetFinishDistributedWriteFileSessionRequestInfo(
     target->SetRequestInfo(
         "FileId: %v",
         fileId);
-}
-
-template <class TPtr>
-void SetFinishDistributedWriteFileSessionRequestInfo(
-    const TPtr& target,
-    const NFileClient::TSignedDistributedWriteFileSessionPtr& session)
-{
-    if (auto payload = NDetail::TryParseSignedPayload<TDistributedWriteFileSession>(session.Underlying())) {
-        SetFinishDistributedWriteFileSessionRequestInfo(target, payload->HostData.FileId);
-    }
 }
 
 template <class TPtr>
@@ -263,19 +210,6 @@ void SetWriteFileFragmentRequestInfo(
         "FileId: %v, MainTransactionId: %v",
         fileId,
         mainTransactionId);
-}
-
-template <class TPtr>
-void SetWriteFileFragmentRequestInfo(
-    const TPtr& target,
-    const NFileClient::TSignedWriteFileFragmentCookiePtr& cookie)
-{
-    if (auto payload = NDetail::TryParseSignedPayload<TWriteFileFragmentCookie>(cookie.Underlying())) {
-        SetWriteFileFragmentRequestInfo(
-            target,
-            payload->CookieData.FileId,
-            payload->CookieData.MainTransactionId);
-    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -60,30 +60,15 @@ void SetPingDistributedWriteSessionRequestInfo(
     NObjectClient::TObjectId tableId);
 
 template <class TPtr>
-void SetPingDistributedWriteSessionRequestInfo(
-    const TPtr& target,
-    const NTableClient::TSignedDistributedWriteSessionPtr& session);
-
-template <class TPtr>
 void SetFinishDistributedWriteSessionRequestInfo(
     const TPtr& target,
     NObjectClient::TObjectId tableId);
-
-template <class TPtr>
-void SetFinishDistributedWriteSessionRequestInfo(
-    const TPtr& target,
-    const NTableClient::TSignedDistributedWriteSessionPtr& session);
 
 template <class TPtr>
 void SetWriteTableFragmentRequestInfo(
     const TPtr& target,
     NObjectClient::TObjectId tableId,
     NCypressClient::TTransactionId mainTransactionId);
-
-template <class TPtr>
-void SetWriteTableFragmentRequestInfo(
-    const TPtr& target,
-    const NTableClient::TSignedWriteFragmentCookiePtr& cookie);
 
 template <class TPtr>
 void SetStartDistributedWriteFileSessionRequestInfo(
@@ -96,30 +81,15 @@ void SetPingDistributedWriteFileSessionRequestInfo(
     NObjectClient::TObjectId fileId);
 
 template <class TPtr>
-void SetPingDistributedWriteFileSessionRequestInfo(
-    const TPtr& target,
-    const NFileClient::TSignedDistributedWriteFileSessionPtr& session);
-
-template <class TPtr>
 void SetFinishDistributedWriteFileSessionRequestInfo(
     const TPtr& target,
     NObjectClient::TObjectId fileId);
-
-template <class TPtr>
-void SetFinishDistributedWriteFileSessionRequestInfo(
-    const TPtr& target,
-    const NFileClient::TSignedDistributedWriteFileSessionPtr& session);
 
 template <class TPtr>
 void SetWriteFileFragmentRequestInfo(
     const TPtr& target,
     NObjectClient::TObjectId fileId,
     NCypressClient::TTransactionId mainTransactionId);
-
-template <class TPtr>
-void SetWriteFileFragmentRequestInfo(
-    const TPtr& target,
-    const NFileClient::TSignedWriteFileFragmentCookiePtr& cookie);
 
 ////////////////////////////////////////////////////////////////////////////////
 

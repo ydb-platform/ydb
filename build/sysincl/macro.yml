@@ -126,6 +126,9 @@
       - contrib/libs/llvm20/lib/Target/BPF/BPFPassRegistry.def
       - contrib/libs/llvm20/lib/Target/NVPTX/NVPTXPassRegistry.def
       - contrib/libs/llvm20/lib/Target/X86/X86PassRegistry.def
+      - contrib/libs/llvm22/lib/Target/BPF/BPFPassRegistry.def
+      - contrib/libs/llvm22/lib/Target/NVPTX/NVPTXPassRegistry.def
+      - contrib/libs/llvm22/lib/Target/X86/X86PassRegistry.def
 
 - source_filter: "^contrib/libs/pycxx"
   includes:

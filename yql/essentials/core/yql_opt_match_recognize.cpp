@@ -42,14 +42,12 @@ TExprNode::TPtr ExpandMatchRecognizeMeasuresCallables(const TExprNode::TPtr& nod
             .Add(1, node->ChildPtr(1))
             .Add(2, node->ChildPtr(2))
             .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                // clang-format on
                 const auto aggregatesItems = node->Child(3);
                 for (size_t i = 0; i < aggregatesItems->ChildrenSize(); ++i) {
                     const auto item = aggregatesItems->Child(i);
                     auto lambda = item->ChildPtr(0);
                     const auto vars = item->Child(1);
                     const auto aggregates = item->Child(2);
-                    // clang-format off
                     parent.Lambda(MeasuresLambdasStartPos + i, lambda->Pos())
                         .Param("data")
                         .Param("vars")
@@ -57,11 +55,9 @@ TExprNode::TPtr ExpandMatchRecognizeMeasuresCallables(const TExprNode::TPtr& nod
                             .With(0)
                                 .Callable("FlattenMembers")
                                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                                        // clang-format on
                                         for (size_t i = 0; i < aggregates->ChildrenSize(); ++i) {
                                             const auto var = vars->Child(i)->Content();
                                             auto aggregate = aggregates->Child(i);
-                                            // clang-format off
                                             parent
                                                 .List(i)
                                                     .Atom(0, "")
@@ -112,19 +108,15 @@ TExprNode::TPtr ExpandMatchRecognizeMeasuresCallables(const TExprNode::TPtr& nod
                                                         .Seal()
                                                     .Seal()
                                                 .Seal();
-                                            // clang-format on
                                         }
                                         return parent;
-                                    // clang-format off
                                     })
                                 .Seal()
                             .Done()
                         .Seal()
                     .Seal();
-                    // clang-format on
                 }
                 return parent;
-            // clang-format off
             })
         .Seal()
     .Build();
@@ -158,8 +150,7 @@ std::unordered_set<std::string_view> FindUsedVars(const TExprNode::TPtr& params)
                     return false;
                 }
                 return true;
-            }
-        );
+            });
     }
 
     return result;

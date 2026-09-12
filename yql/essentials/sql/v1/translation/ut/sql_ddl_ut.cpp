@@ -1387,6 +1387,34 @@ Y_UNIT_TEST(AtPoint) {
 }
 } // Y_UNIT_TEST_SUITE(Restore)
 
+Y_UNIT_TEST_SUITE(Analyze) {
+Y_UNIT_TEST(ValidSyntax) {
+    for (const TString sample : {"", " SAMPLE 0.05", " SAMPLE 5e-2", " SAMPLE 1", " SAMPLE 1.0", " SAMPLE (0.1 / 2)"}) {
+        for (const TString columns : {"", "(key)", "(key, value)"}) {
+            auto result = SqlToYql("ANALYZE plato.table1 " + columns + sample + ";");
+            UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+            UNIT_ASSERT_VALUES_EQUAL(result.Root->ToString().Contains("sampleRate"), !sample.empty());
+        }
+    }
+}
+
+Y_UNIT_TEST(ValidSyntaxWithParameter) {
+    for (const TString columns : {"", "(key)", "(key, value)"}) {
+        auto result = SqlToYql("$rate = 0.05; ANALYZE plato.table1 " + columns + " SAMPLE $rate;");
+        UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+        UNIT_ASSERT(result.Root->ToString().Contains("sampleRate"));
+    }
+}
+
+Y_UNIT_TEST(InvalidExpression) {
+    for (const TString rate : {"$rate", "key", "0.1 /", "0.1 0.2"}) {
+        auto result = SqlToYql("ANALYZE plato.table1 SAMPLE " + rate + ";");
+        UNIT_ASSERT_C(!result.IsOk(), rate);
+    }
+}
+
+} // Y_UNIT_TEST_SUITE(Analyze)
+
 Y_UNIT_TEST_SUITE(Transfer) {
 
 Y_UNIT_TEST(Lambda) {

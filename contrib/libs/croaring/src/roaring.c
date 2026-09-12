@@ -3457,6 +3457,15 @@ const roaring_bitmap_t *roaring_bitmap_frozen_view(const char *buf,
 
 CROARING_ALLOW_UNALIGNED
 roaring_bitmap_t *roaring_bitmap_portable_deserialize_frozen(const char *buf) {
+#if CROARING_IS_BIG_ENDIAN
+    // The portable format is little-endian on every host, and this function
+    // uses the container payloads where they sit rather than converting them.
+    // There is therefore no correct in-place view of them here: refuse rather
+    // than hand back a bitmap that silently reads byte-swapped values. Use
+    // roaring_bitmap_portable_deserialize_safe(), which converts as it copies.
+    (void)buf;
+    return NULL;
+#else
     char *start_of_buf = (char *)buf;
     uint32_t cookie;
     int32_t num_containers;
@@ -3613,6 +3622,7 @@ roaring_bitmap_t *roaring_bitmap_portable_deserialize_frozen(const char *buf) {
     }
 
     return rb;
+#endif
 }
 
 bool roaring_bitmap_to_bitset(const roaring_bitmap_t *r, bitset_t *bitset) {

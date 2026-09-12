@@ -30,10 +30,14 @@
         }
     ],
     "test.test[InvalidRegexFail_2025.02-Results]": [
-        ""
+        {
+            "uri": "file://test.test_InvalidRegexFail_2025.02-Results_/extracted"
+        }
     ],
     "test.test[InvalidRegexFail_2025.03-Results]": [
-        ""
+        {
+            "uri": "file://test.test_InvalidRegexFail_2025.03-Results_/extracted"
+        }
     ],
     "test.test[InvalidRegexSuccess_2025.02-Results]": [
         {

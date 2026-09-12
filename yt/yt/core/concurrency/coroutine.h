@@ -55,11 +55,10 @@ private:
 
     std::shared_ptr<NThreading::TExecutionStack> CoroutineStack_;
 
-    // Points to a TExceptionSafeContext placed on the stack of the thread that
-    // called Resume(). Owning the caller context per-invocation (rather than as
-    // a member captured once at construction) keeps TSAN's fiber and ASAN's
-    // stack bounds in sync with the thread actually driving the coroutine,
-    // which may differ from the thread that constructed it.
+    // Points to the TExceptionSafeContext on the stack of the thread that called
+    // Resume(). Capturing it per invocation rather than once at construction keeps
+    // TSAN's fiber and ASAN's stack bounds in sync with the thread actually driving
+    // the coroutine, which may differ from the one that constructed it.
     TExceptionSafeContext* CallerContext_ = nullptr;
 
     // We have to delay initialization of this object until the body

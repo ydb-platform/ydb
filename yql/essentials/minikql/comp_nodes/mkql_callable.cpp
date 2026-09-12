@@ -25,20 +25,21 @@ private:
 
     private:
         NUdf::TUnboxedValue Run(const NUdf::IValueBuilder*, const NUdf::TUnboxedValuePod* args) const override {
+            Upvalues_.SaveArgs(CompCtx_);
             for (const auto node : ArgNodes_) {
                 node->SetValue(CompCtx_, NUdf::TUnboxedValuePod(*args++));
             }
 
             if (!Upvalues_) {
-                return ResultNode_->GetValue(CompCtx_);
+                const auto result = ResultNode_->GetValue(CompCtx_);
+                Upvalues_.RestoreArgs(CompCtx_);
+                return result;
             }
 
             Upvalues_.SetUpvalues(CompCtx_);
-
             const auto result = ResultNode_->GetValue(CompCtx_);
-
             Upvalues_.RestoreUpvalues(CompCtx_);
-
+            Upvalues_.RestoreArgs(CompCtx_);
             return result;
         }
 
@@ -155,13 +156,26 @@ private:
             return GetNodeValue(ResultNode_, ctx, resultBlock);
         };
 
+        EmitFunctionCall<&TComputationUpvalues::SaveArgs>(Type::getVoidTy(context), {upvalues, ctx.Ctx}, ctx, block);
+
         const auto hasUpvalues = EmitFunctionCall < &TComputationUpvalues::operator bool>(Type::getInt1Ty(context), {upvalues}, ctx, block);
         const auto withoutUpvalues = BasicBlock::Create(context, "without_upvalues", ctx.Func);
         const auto withUpvalues = BasicBlock::Create(context, "with_upvalues", ctx.Func);
         BranchInst::Create(withUpvalues, withoutUpvalues, hasUpvalues, block);
 
         block = withoutUpvalues;
-        ReturnInst::Create(context, emitCall(block), block);
+        {
+            // XXX: Preserve the calculated result in the local storage, so further
+            // RestoreArgs call doesn't spoil the target (e.g. particular slot in
+            // Mutables), where the result is stored.
+            const auto resultStorage = new AllocaInst(valueType, 0U, "result", block);
+            new StoreInst(emitCall(block), resultStorage, block);
+            ValueAddRef(ResultNode_->GetRepresentation(), resultStorage, ctx, block);
+            EmitFunctionCall<&TComputationUpvalues::RestoreArgs>(Type::getVoidTy(context), {upvalues, ctx.Ctx}, ctx, block);
+            const auto result = new LoadInst(valueType, resultStorage, "result", block);
+            ValueRelease(ResultNode_->GetRepresentation(), resultStorage, ctx, block);
+            ReturnInst::Create(context, result, block);
+        }
 
         block = withUpvalues;
         EmitFunctionCall<&TComputationUpvalues::SetUpvalues>(Type::getVoidTy(context), {upvalues, ctx.Ctx}, ctx, block);
@@ -174,6 +188,7 @@ private:
         ValueAddRef(ResultNode_->GetRepresentation(), resultStorage, ctx, block);
 
         EmitFunctionCall<&TComputationUpvalues::RestoreUpvalues>(Type::getVoidTy(context), {upvalues, ctx.Ctx}, ctx, block);
+        EmitFunctionCall<&TComputationUpvalues::RestoreArgs>(Type::getVoidTy(context), {upvalues, ctx.Ctx}, ctx, block);
 
         const auto result = new LoadInst(valueType, resultStorage, "result", block);
         ValueRelease(ResultNode_->GetRepresentation(), resultStorage, ctx, block);

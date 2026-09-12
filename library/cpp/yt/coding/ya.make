@@ -9,6 +9,7 @@ PEERDIR(
     library/cpp/yt/assert
     library/cpp/yt/exception
     library/cpp/yt/memory
+    library/cpp/yt/mpl
 )
 
 END()

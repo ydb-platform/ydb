@@ -1251,7 +1251,7 @@ commit_stmt: COMMIT;
 
 rollback_stmt: ROLLBACK;
 
-analyze_table: simple_table_ref (LPAREN column_list RPAREN)?;
+analyze_table: simple_table_ref (LPAREN column_list RPAREN)? sample_clause?;
 analyze_table_list: analyze_table (COMMA analyze_table)* COMMA?;
 analyze_stmt: ANALYZE analyze_table_list;
 

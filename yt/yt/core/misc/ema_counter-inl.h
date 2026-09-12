@@ -27,23 +27,35 @@ void TEmaCounter<T, WindowCount>::Update(T newCount, TInstant newTimestamp)
         return;
     }
 
-    if (newTimestamp <= *LastTimestamp) {
+    if (newTimestamp < *LastTimestamp) {
         // Ignore obsolete update.
         return;
     }
 
-    auto timeDelta = (newTimestamp - *LastTimestamp).SecondsFloat();
-    auto countDelta = std::max(Count, newCount) - Count;
-    auto newRate = countDelta / timeDelta;
+    auto newInterval = newTimestamp > *LastTimestamp;
+    if (newInterval) {
+        LastUpdateInterval = newTimestamp - *LastTimestamp;
+        ImmediateRate = 0.0;
+    }
 
+    auto countDelta = std::max(Count, newCount) - Count;
     Count = newCount;
-    ImmediateRate = newRate;
     LastTimestamp = newTimestamp;
+    if (!LastUpdateInterval) {
+        return;
+    }
+
+    auto timeDelta = LastUpdateInterval.SecondsFloat();
+    auto newRate = countDelta / timeDelta;
+    ImmediateRate += newRate;
 
     for (int windowIndex = 0; windowIndex < std::ssize(WindowDurations); ++windowIndex) {
         auto exp = std::exp(-timeDelta / (WindowDurations[windowIndex].SecondsFloat() / 2.0));
         auto& rate = WindowRates[windowIndex];
-        rate = newRate * (1 - exp) + rate * exp;
+        if (newInterval) {
+            rate *= exp;
+        }
+        rate += newRate * (1 - exp);
     }
 }
 
@@ -78,6 +90,7 @@ void TEmaCounter<T, WindowCount>::Merge(const TEmaCounter<T, WindowCount>& other
         return;
     }
 
+    LastUpdateInterval = TDuration::Zero();
     Count += other.Count;
     auto timeDelta = (*LastTimestamp - *other.LastTimestamp).SecondsFloat();
 
@@ -122,6 +135,7 @@ TEmaCounter<T, WindowCount>& operator+=(TEmaCounter<T, WindowCount>& lhs, const 
     YT_VERIFY(lhs.WindowDurations == rhs.WindowDurations);
     lhs.LastTimestamp = std::max(lhs.LastTimestamp, rhs.LastTimestamp);
     lhs.StartTimestamp = std::max(lhs.StartTimestamp, rhs.StartTimestamp);
+    lhs.LastUpdateInterval = TDuration::Zero();
     lhs.Count += rhs.Count;
     lhs.ImmediateRate += rhs.ImmediateRate;
     for (int windowIndex = 0; windowIndex < std::ssize(lhs.WindowDurations); ++windowIndex) {

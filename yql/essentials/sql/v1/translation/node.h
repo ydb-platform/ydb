@@ -1407,6 +1407,7 @@ struct TTableRef;
 struct TAnalyzeParams {
     std::shared_ptr<TTableRef> Table;
     TVector<TString> Columns;
+    TNodePtr SampleRate;
 };
 
 struct TCompactEntry {

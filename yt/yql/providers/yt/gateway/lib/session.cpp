@@ -9,6 +9,7 @@ TSessionBase::TSessionBase(
     TIntrusivePtr<IRandomProvider> randomProvider,
     TIntrusivePtr<ITimeProvider> timeProvider,
     const TYqlOperationOptions& operationOptions,
+    TCredentials::TPtr credentials,
     const TOperationProgressWriter& progressWriter,
     const TSecureTmpStatePtr& useSecureTmp
 )
@@ -17,6 +18,7 @@ TSessionBase::TSessionBase(
     , TimeProvider_(timeProvider)
     , SessionId_(sessionId)
     , OperationOptions_(operationOptions)
+    , Credentials_(credentials)
     , ProgressWriter_(progressWriter)
     , UseSecureTmp_(useSecureTmp)
 {

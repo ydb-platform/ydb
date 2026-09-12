@@ -10,6 +10,7 @@
 #include <library/cpp/yt/yson_string/convert.h>
 #include <library/cpp/yt/yson_string/string.h>
 
+#include <library/cpp/yt/misc/lazy.h>
 #include <library/cpp/yt/misc/tls.h>
 
 namespace NYT::NLogging {
@@ -446,11 +447,12 @@ public:
     }
 
     //! Attaches the tag only when #condition holds, for fields a message omits rather
-    //! than renders empty. NB: #value is evaluated either way.
+    //! than renders empty.
+    //! NB: #value is evaluated either way unless wrapped in |YT_LAZY|.
     template <class TValue>
     TTaggedLoggingGuard& WithIf(bool condition, TLoggingTagKey tag, const TValue& value) &
     {
-        return condition ? DoWith(tag, value, "v"_sb) : *this;
+        return condition ? DoWith(tag, Force(value), "v"_sb) : *this;
     }
 
     //! Attaches a keyed tag composed from several values, e.g. |.WithFormat("Method", "%v.%v", service, method)|.
@@ -462,12 +464,17 @@ public:
         return *this;
     }
 
-    //! Attaches a composed tag only when #condition holds. NB: #args are evaluated either way.
+    //! Attaches a composed tag only when #condition holds.
+    //! NB: #args are evaluated either way unless wrapped in |YT_LAZY|.
     template <class... TArgs>
-    TTaggedLoggingGuard& WithFormatIf(bool condition, TLoggingTagKey tag, TFormatString<TArgs...> format, TArgs&&... args) &
+    TTaggedLoggingGuard& WithFormatIf(
+        bool condition,
+        TLoggingTagKey tag,
+        TFormatString<TForced<TArgs>...> format,
+        TArgs&&... args) &
     {
         return condition
-            ? WithFormat(tag, format, std::forward<TArgs>(args)...)
+            ? WithFormat(tag, format, Force(std::forward<TArgs>(args))...)
             : *this;
     }
 
@@ -628,15 +635,6 @@ public:
         : TTaggedLoggingGuard(logger, ELogLevel::Alert, anchorRef, message, /*alwaysBuildMessage*/ true)
     { }
 
-    //! Returns true exactly once, so the enclosing |for| runs the |.With| chain a single
-    //! time before its step expression commits the event and throws.
-    bool TryEnter()
-    {
-        bool pending = Pending_;
-        Pending_ = false;
-        return pending;
-    }
-
     //! Emits the alert event (when enabled) and returns it rendered, tags included.
     std::string Commit() &
     {
@@ -647,9 +645,6 @@ public:
         }
         return message;
     }
-
-private:
-    bool Pending_ = true;
 };
 
 //! A no-op stand-in for #TTaggedLoggingGuard used by compile-time-disabled trace logging:

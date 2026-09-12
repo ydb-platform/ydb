@@ -82,7 +82,7 @@ public:
             // NB: FormatOptionsYson is ignored, since YSON parser has no user-defined options.
             ParseYsonStringBuffer(TStringBuf(message.Begin(), message.End()), EYsonType::Node, converter.get());
         }
-        return TSharedRef::FromString(FromProto<std::string>(protoBuffer));
+        return TSharedRef::FromString(FromProto<std::string>(std::move(protoBuffer)));
     }
 
     TSharedRef ConvertTo(const TSharedRef& message, const NYson::TProtobufMessageType* messageType, const TYsonString& /*formatOptionsYson*/) override
@@ -95,7 +95,7 @@ public:
             TYsonWriter writer{&output, EYsonFormat::Text};
             ParseProtobuf(&writer, &stream, messageType);
         }
-        return TSharedRef::FromString(ysonBuffer);
+        return TSharedRef::FromString(std::move(ysonBuffer));
     }
 } YsonFormat;
 
@@ -138,7 +138,7 @@ public:
             ParseProtobuf(writer.get(), &stream, messageType);
             writer->Flush();
         }
-        return TSharedRef::FromString(ysonBuffer);
+        return TSharedRef::FromString(std::move(ysonBuffer));
     }
 } JsonFormat;
 

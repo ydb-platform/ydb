@@ -230,6 +230,7 @@ public:
     virtual ui32 GetDependentsCount() const = 0;
 
     virtual bool IsTemporaryValue() const = 0;
+    virtual bool IsSuitableForCache() const;
 
     virtual EValueRepresentation GetRepresentation() const = 0;
 
@@ -293,6 +294,8 @@ public:
     }
     void SetUpvalues(TComputationContext& ctx) const;
     void RestoreUpvalues(TComputationContext& ctx) const;
+    void SaveArgs(TComputationContext& ctx) const;
+    void RestoreArgs(TComputationContext& ctx) const;
 
 private:
     // Vector with upvalue comp nodes (i.e. set of transitively
@@ -305,11 +308,20 @@ private:
     // cоmp nodes before the callable invocation to restore the
     // valid context.
     TUnboxedValueVector ClosedUpvalues_;
-    // Mutable vector with the current values of the corresponding
-    // upvalue comp nodes. These values have to be preserved from
-    // these nodes before the callable invocation and restored
-    // back when the invocation finishes.
+    // Mutable stack of the saved current values of the corresponding
+    // upvalue comp nodes. A stack (rather than a single frame) is
+    // required because a reentrant (e.g. recursive) callable reuses
+    // the same external node slots: each invocation pushes a frame in
+    // SetUpvalues and pops it in RestoreUpvalues, so nested invocations
+    // cannot clobber an outer frame before it is restored.
     mutable TUnboxedValueVector PreservedUpvalues_;
+    // Argument comp nodes of the callable. They are saved into
+    // PreservedArgs_ before the body evaluation and restored after
+    // it to survive reentrant invocations sharing the same slots.
+    TComputationExternalNodePtrVector ArgNodes_;
+    // Mutable stack of the saved caller argument values, mirroring
+    // PreservedUpvalues_: SaveArgs pushes a frame, RestoreArgs pops it.
+    mutable TUnboxedValueVector PreservedArgs_;
 };
 
 using TDatumProvider = std::function<arrow::Datum()>;

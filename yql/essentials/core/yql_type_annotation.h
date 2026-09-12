@@ -41,7 +41,7 @@ namespace NYql {
 
 using TTypeAnnCallableFactory = std::function<TAutoPtr<IGraphTransformer>()>;
 
-class IUrlLoader : public TThrRefBase {
+class IUrlLoader: public TThrRefBase {
 public:
     ~IUrlLoader() override = default;
 
@@ -50,7 +50,7 @@ public:
     using TPtr = TIntrusivePtr<IUrlLoader>;
 };
 
-class TModuleResolver : public IModuleResolver {
+class TModuleResolver: public IModuleResolver {
 public:
     using TModuleChecker = std::function<bool(const TString& query, const TString& fileName, TExprContext& ctx)>;
 
@@ -86,7 +86,7 @@ public:
         bool optimizeLibraries,
         const TSet<TString>& knownPackages,
         const THashMap<TString,
-        THashMap<int, TLibraryCohesion>>& libs,
+                       THashMap<int, TLibraryCohesion>>& libs,
         TString fileAliasPrefix,
         TModuleChecker moduleChecker)
         : Translators_(std::move(translators))
@@ -162,7 +162,6 @@ private:
     TString SubstParameters(const TString& str);
     bool IsSExpr(bool isYql, bool isYqls, const TString& body) const;
 
-
     const NSQLTranslation::TTranslators Translators_;
     THolder<TExprContext> OwnedCtx_;
     const TModulesTable* ParentModules_ = nullptr;
@@ -213,7 +212,11 @@ public:
     struct TOrderedItem {
         TString LogicalName;
         TString PhysicalName;
-        TOrderedItem(TString logical, TString physical) : LogicalName(std::move(logical)), PhysicalName(std::move(physical)) {}
+        TOrderedItem(TString logical, TString physical)
+            : LogicalName(std::move(logical))
+            , PhysicalName(std::move(physical))
+        {
+        }
         TOrderedItem(TOrderedItem&&) = default;
         TOrderedItem(const TOrderedItem&) = default;
         TOrderedItem& operator=(const TOrderedItem&) = default;
@@ -272,7 +275,7 @@ public:
     TVector<TString> GetLogicalNames() const {
         TVector<TString> res;
         res.reserve(Order_.size());
-        for (const auto &[name, _]: Order_) {
+        for (const auto& [name, _] : Order_) {
             res.emplace_back(name);
         }
         return res;
@@ -281,20 +284,21 @@ public:
     TVector<TString> GetPhysicalNames() const {
         TVector<TString> res;
         res.reserve(Order_.size());
-        for (const auto &[_, name]: Order_) {
+        for (const auto& [_, name] : Order_) {
             res.emplace_back(name);
         }
         return res;
     }
 
     bool HasDuplicates() const {
-        for (const auto& e: Order_) {
+        for (const auto& e : Order_) {
             if (e.PhysicalName != e.LogicalName) {
                 return true;
             }
         }
         return false;
     }
+
 private:
     THashMap<TString, TString> GeneratedToOriginal_;
     THashMap<TString, uint64_t> UseCount_;
@@ -322,6 +326,7 @@ public:
     void Set(ui64 uniqueId, const TColumnOrder& order) {
         Storage_[uniqueId] = order;
     }
+
 private:
     THashMap<ui64, TColumnOrder> Storage_;
 };
@@ -334,9 +339,9 @@ enum class EHiddenMode {
 };
 
 enum class EFallbackPolicy {
-    Default     /* "default" */,
-    Never       /* "never" */,
-    Always      /* "always" */
+    Default /* "default" */,
+    Never /* "never" */,
+    Always /* "always" */
 };
 
 enum class ECostBasedOptimizerType {
@@ -398,7 +403,7 @@ struct TEvaluationStats {
 struct TLineageSettings {
     bool EnableLineage = false;
     bool EnableStandaloneLineage = false;
-    ui64 LineageOutputLimit = 40 * 1024 * 1024; // 40 mb limit for lineage representation
+    ui64 LineageOutputLimit = 40 * 1024 * 1024;  // 40 mb limit for lineage representation
     ui64 LineageMemoryLimit = 150 * 1024 * 1024; // 150 mb limit for memory allocation in lineage calculation
     ui32 LineageVersion = 1;
     ui32 LineageStandaloneVersion = 1;
@@ -520,8 +525,8 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool MatchRecognize = false;
     TMaybe<NSQLTranslation::TSqlFlags> SqlFlags;
     EMatchRecognizeStreamingMode MatchRecognizeStreaming = EMatchRecognizeStreamingMode::Force;
-    i64 TimeOrderRecoverDelay = -10'000'000; //microseconds
-    i64 TimeOrderRecoverAhead = 10'000'000; //microseconds
+    i64 TimeOrderRecoverDelay = -10'000'000; // microseconds
+    i64 TimeOrderRecoverAhead = 10'000'000;  // microseconds
     ui32 TimeOrderRecoverRowLimit = 1'000'000;
     // compatibility with v0 or raw s-expression code
     bool OrderedColumns = false;
@@ -587,7 +592,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui64 GetCachedNow() {
         if (!CachedNow) {
             if (QContext.CanRead()) {
-                auto item = QContext.GetReader()->Get({.Component=TypeAnnotationContextComponent, .Label=NowKey}).GetValueSync();
+                auto item = QContext.GetReader()->Get({.Component = TypeAnnotationContextComponent, .Label = NowKey}).GetValueSync();
                 if (!item) {
                     throw yexception() << "Missing replay data";
                 }
@@ -596,7 +601,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
             } else {
                 CachedNow = TimeProvider->Now().GetValue();
                 if (QContext.CanWrite()) {
-                    QContext.GetWriter()->Put({.Component=TypeAnnotationContextComponent, .Label=NowKey}, SerializeBinary<ui64>(*CachedNow)).GetValueSync();
+                    QContext.GetWriter()->Put({.Component = TypeAnnotationContextComponent, .Label = NowKey}, SerializeBinary<ui64>(*CachedNow)).GetValueSync();
                 }
             }
         }
@@ -609,7 +614,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     }
 
     void AddDataSource(const THashSet<TString>& names, TIntrusivePtr<IDataProvider> provider) {
-        for (auto name: names) {
+        for (auto name : names) {
             DataSourceMap[name] = provider;
         }
         DataSources.push_back(std::move(provider));
@@ -621,7 +626,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     }
 
     void AddDataSink(const THashSet<TString>& names, TIntrusivePtr<IDataProvider> provider) {
-        for (auto name: names) {
+        for (auto name : names) {
             DataSinkMap[name] = provider;
         }
         DataSinks.push_back(std::move(provider));
@@ -692,18 +697,18 @@ private:
     EDecimalConversionMode DecimalConversionMode_ = EDecimalConversionMode::WithoutCommonTypeFixup;
 };
 
-template <> inline
-double TTypeAnnotationContext::GetRandom<double>() const noexcept {
+template <>
+inline double TTypeAnnotationContext::GetRandom<double>() const noexcept {
     return RandomProvider->GenRandReal2();
 }
 
-template <> inline
-ui64 TTypeAnnotationContext::GetRandom<ui64>() const noexcept {
+template <>
+inline ui64 TTypeAnnotationContext::GetRandom<ui64>() const noexcept {
     return RandomProvider->GenRand64();
 }
 
-template <> inline
-TGUID TTypeAnnotationContext::GetRandom<TGUID>() const noexcept {
+template <>
+inline TGUID TTypeAnnotationContext::GetRandom<TGUID>() const noexcept {
     return RandomProvider->GenUuid4();
 }
 

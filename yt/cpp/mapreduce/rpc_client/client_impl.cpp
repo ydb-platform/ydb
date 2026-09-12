@@ -149,6 +149,9 @@ static NApi::IClientPtr CreateApiClientImpl(const TClientContext& context, bool 
     if (context.JobProxySocketPath) {
         clientOptions.MultiproxyTargetCluster = context.MultiproxyTargetCluster;
     }
+    // NB(achains): Failed commit must not abort the transaction,
+    //              the commit is retried by RequestWithRetry with the same mutation id.
+    clientOptions.AbandonMasterTransactionsOnFailedCommit = true;
 
     return connection->CreateClient(clientOptions);
 }

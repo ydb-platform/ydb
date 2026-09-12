@@ -334,6 +334,40 @@ TEST(TMpscFairShareQueueTest, FairNewPool)
     EXPECT_EQ(0, queue.GetPoolCount());
 }
 
+TEST(TMpscFairShareQueueTest, TruncatePoolExcessTime)
+{
+    TTestFairShareQueue queue;
+
+    for (int poolId = 0; poolId < 3; ++poolId) {
+        for (int taskIndex = 0; taskIndex < 2; ++taskIndex) {
+            queue.Enqueue({
+                .Item = New<TMockTask>(2 * poolId + taskIndex + 1),
+                .PoolId = poolId,
+                .PoolWeight = 1,
+                .FairShareTag = "request",
+            });
+        }
+    }
+
+    auto running = DequeueMany(3, queue);
+    ASSERT_EQ(std::ssize(running), 3);
+
+    const auto now = GetCpuInstant();
+    queue.MarkFinished(running[0], now + DurationToCpuDuration(TDuration::MilliSeconds(50)));
+    queue.MarkFinished(running[1], now + DurationToCpuDuration(TDuration::MilliSeconds(30)));
+    queue.MarkFinished(running[2], now + DurationToCpuDuration(TDuration::MilliSeconds(40)));
+
+    auto tasks = DequeueMany(3, queue);
+    ASSERT_EQ(std::ssize(tasks), 3);
+    EXPECT_EQ(tasks[0]->TaskId, running[1]->TaskId + 1);
+    EXPECT_EQ(tasks[1]->TaskId, running[2]->TaskId + 1);
+    EXPECT_EQ(tasks[2]->TaskId, running[0]->TaskId + 1);
+
+    MarkFinishedMany(queue, tasks);
+    queue.Cleanup();
+    EXPECT_EQ(0, queue.GetPoolCount());
+}
+
 TEST(TMpscFairShareQueueTest, Bench)
 {
     const int TaskCount = 1'000'000;

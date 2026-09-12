@@ -26,8 +26,10 @@ struct TShuffleHandle
     //! schema will eventually be required there too.
     NTableClient::TTableSchemaPtr Schema;
 
-    //! YSON-serialized TPushShuffleConfig; push-based only.
-    std::optional<NYson::TYsonString> PushConfig;
+    //! YSON-serialized TShuffleConfig.
+    // COMPAT(apollo1321): Make this field required in 26.3; a 26.1 coordinator mints handles
+    // without it.
+    std::optional<NYson::TYsonString> Config;
 
     REGISTER_YSON_STRUCT(TShuffleHandle);
 
@@ -50,18 +52,15 @@ struct TStartShuffleOptions
     bool UsePushBasedShuffle = false;
     //! Required when UsePushBasedShuffle is set.
     NTableClient::TTableSchemaPtr Schema;
-    //! YSON-serialized TPushShuffleConfig; push-based only.
-    std::optional<NYson::TYsonString> PushConfig;
+    //! YSON-serialized TShuffleConfig.
+    std::optional<NYson::TYsonString> Config;
 };
 
 struct TShuffleReaderOptions
-{
-    NTableClient::TTableReaderConfigPtr Config;
-};
+{ };
 
 struct TShuffleWriterOptions
 {
-    NTableClient::TTableWriterConfigPtr Config;
     bool OverwriteExistingWriterData = false;
 };
 

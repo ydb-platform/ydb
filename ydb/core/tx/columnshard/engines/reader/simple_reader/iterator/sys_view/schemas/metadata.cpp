@@ -15,7 +15,7 @@ std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAccessor::SelectMetadata
     const TSelectMetadataContext& context, const NReader::TReadDescription& readDescription, const NReader::EReaderClass readerClass) const {
     AFL_VERIFY(readerClass == NReader::EReaderClass::Simple);
     return std::make_unique<TConstructor>(
-        context.GetEngine(), readDescription.GetTabletId(), readDescription.PKRangesFilter, readDescription.GetSorting());
+        context.GetEngine(), readDescription.GetTabletId(), readDescription.PKRangesFilter, readDescription.GetSourcesSorting());
 }
 
 std::shared_ptr<ISnapshotSchema> TAccessor::GetSnapshotSchemaOptional(

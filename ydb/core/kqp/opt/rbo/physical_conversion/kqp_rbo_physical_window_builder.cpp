@@ -10,11 +10,27 @@ using namespace NKikimr::NKqp;
 namespace {
 
 bool IsSupportedAggregationFunction(const TString& function) {
-    return function == "sum" || function == "min" || function == "max" || function == "count";
+    return function == "sum" || function == "min" || function == "max" || function == "count" || function == "avg";
 }
 
 bool IsSupportedNativeFunction(const TString& function) {
     return function == "rank" || function == "denserank" || function == "rownumber";
+}
+
+bool IsDecimal(const TTypeAnnotationNode* type) {
+    if (type->IsOptionalOrNull()) {
+        type = type->Cast<TOptionalExprType>()->GetItemType();
+    }
+    return type->GetKind() == ETypeAnnotationKind::Data && type->Cast<TDataExprType>()->GetName().starts_with("Decimal");
+}
+
+std::pair<TString, TString> DecimalParams(const TTypeAnnotationNode* type) {
+    if (type->IsOptionalOrNull()) {
+        type = type->Cast<TOptionalExprType>()->GetItemType();
+    }
+    const auto* params = dynamic_cast<const TDataExprParamsType*>(type);
+    Y_ENSURE(params, "Expected a Decimal type");
+    return {TString(params->GetParamOne()), TString(params->GetParamTwo())};
 }
 
 } // anonymous namespace
@@ -161,6 +177,43 @@ TVector<TExprNode::TPtr> TPhysicalWindowBuilder::BuildSortKeys() const {
     return keys;
 }
 
+TExprNode::TPtr TPhysicalWindowBuilder::BuildAvgAccumulatorDataType(const TInfoUnit& column) const {
+    const auto* itemType = InputItemType(column);
+    if (!IsDecimal(itemType)) {
+        // clang-format off
+        return Ctx.Builder(Pos)
+            .Callable("DataType")
+            .Atom(0, "Double")
+        .Seal().Build();
+        // clang-format on
+    }
+
+    const auto [precision, scale] = DecimalParams(itemType);
+    Y_UNUSED(precision);
+
+    // For decimal we use 35 precision for accumulator.
+    // clang-format off
+    return Ctx.Builder(Pos)
+        .Callable("DataType")
+            .Atom(0, "Decimal")
+            .Atom(1, "35")
+            .Atom(2, scale)
+        .Seal().Build();
+    // clang-format on
+}
+
+TExprNode::TPtr TPhysicalWindowBuilder::BuildAvgAccumulatorType(const TInfoUnit& column) const {
+    // clang-format off
+    return Ctx.Builder(Pos)
+        .Callable("TupleType")
+            .Add(0, BuildAvgAccumulatorDataType(column))
+            .Callable(1, "DataType")
+                .Atom(0, "Uint64")
+            .Seal()
+        .Seal().Build();
+    // clang-format on
+}
+
 TExprNode::TPtr TPhysicalWindowBuilder::BuildKeyExtractorLambda() const {
     TExprNode::TListType args;
     for (ui32 i = 0; i < Inputs.size(); ++i) {
@@ -303,14 +356,26 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildChainLambda(bool update) const {
                 if (!update) {
                     // clang-format off
                     accumulator = isOptional
-                        ? Ctx.Builder(Pos).Callable("AggrCountInit").Add(0, value).Seal().Build()
+                        ? Ctx.Builder(Pos)
+                            .Callable("AggrCountInit")
+                                .Add(0, value)
+                        .Seal().Build()
                         : BuildUint64(1);
-                    // clang-format on
+                    // clang-format off
                 } else {
                     // clang-format off
                     accumulator = isOptional
-                        ? Ctx.Builder(Pos).Callable("AggrCountUpdate").Add(0, value).Add(1, Member(previousState, accName)).Seal().Build()
-                        : Ctx.Builder(Pos).Callable("Inc").Add(0, Member(previousState, accName)).Seal().Build();
+                        ? Ctx.Builder(Pos)
+                            .Callable("AggrCountUpdate")
+                                .Add(0, value)
+                                .Add(1, Member(previousState, accName))
+                            .Seal()
+                        .Build()
+
+                        : Ctx.Builder(Pos)
+                            .Callable("Inc")
+                            .Add(0, Member(previousState, accName))
+                        .Seal().Build();
                     // clang-format on
                 }
             } else if (func.Function == "sum") {
@@ -320,6 +385,7 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildChainLambda(bool update) const {
                         .Add(0, value)
                         .Add(1, BuildSumCastTarget(argument))
                     .Seal().Build(), isOptional);
+
                 accumulator = update
                     ? Ctx.Builder(Pos)
                         .Callable("AggrAdd")
@@ -328,6 +394,101 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildChainLambda(bool update) const {
                         .Seal().Build()
                     : casted;
                 // clang-format on
+            } else if (func.Function == "avg") {
+                auto accType = BuildAvgAccumulatorType(argument);
+                auto accData = BuildAvgAccumulatorDataType(argument);
+
+                // clang-format off
+                auto nothing = Ctx.Builder(Pos)
+                    .Callable("Nothing")
+                    .Callable(0, "OptionalType")
+                .Add(0, accType).Seal().Seal().Build();
+                // clang-format on
+
+                // clang-format off
+                auto firstPair = [&](TExprNode::TPtr present) {
+                    return Ctx.Builder(Pos)
+                        .Callable("Just")
+                            .List(0)
+                                .Callable(0, "SafeCast")
+                                    .Add(0, present)
+                                    .Add(1, accData)
+                                .Seal()
+                                .Callable(1, "Uint64").Atom(0, "1").Seal()
+                            .Seal()
+                        .Seal().Build();
+                };
+                // clang-format on
+
+                if (!update) {
+                    if (isOptional) {
+                        auto initArg = Ctx.NewArgument(Pos, "avg_init");
+                        auto initLambda = Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, {initArg}), firstPair(initArg));
+                        // clang-format off
+                        accumulator = Ctx.Builder(Pos)
+                            .Callable("IfPresent")
+                                .Add(0, value)
+                                .Add(1, initLambda)
+                                .Add(2, nothing)
+                            .Seal().Build();
+                        // clang-format on
+                    } else {
+                        accumulator = firstPair(value);
+                    }
+                } else {
+                    auto previous = Member(previousState, accName);
+                    // clang-format off
+                    auto addAndInc = [&](TExprNode::TPtr state, TExprNode::TPtr present) {
+                        return Ctx.Builder(Pos)
+                            .Callable("Just")
+                                .List(0)
+                                    .Callable(0, "AggrAdd")
+                                        .Callable(0, "Nth")
+                                            .Add(0, state)
+                                            .Atom(1, "0")
+                                        .Seal()
+                                        .Callable(1, "SafeCast")
+                                            .Add(0, present)
+                                            .Add(1, accData)
+                                        .Seal()
+                                    .Seal()
+                                    .Callable(1, "Inc")
+                                        .Callable(0, "Nth")
+                                            .Add(0, state)
+                                            .Atom(1, "1")
+                                        .Seal()
+                                    .Seal()
+                                .Seal()
+                            .Seal().Build();
+                    };
+                    // clang-format on
+
+                    auto valueArg = Ctx.NewArgument(Pos, "avg_value");
+                    auto stateArg = Ctx.NewArgument(Pos, "avg_state");
+                    auto withValue = Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, {stateArg}), addAndInc(stateArg, valueArg));
+                    // clang-format off
+                    auto merged = Ctx.Builder(Pos)
+                        .Callable("IfPresent")
+                            .Add(0, previous)
+                            .Add(1, withValue)
+                            .Add(2, firstPair(valueArg))
+                        .Seal().Build();
+                    // clang-format on
+
+                    if (isOptional) {
+                        auto outer = Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, {valueArg}), std::move(merged));
+                        // clang-format off
+                        accumulator = Ctx.Builder(Pos)
+                            .Callable("IfPresent")
+                                .Add(0, value)
+                                .Add(1, outer)
+                                .Add(2, previous)
+                            .Seal().Build();
+                        // clang-format on
+                    } else {
+                        accumulator = Ctx.ReplaceNode(std::move(merged), *valueArg, value);
+                    }
+                }
             } else {
                 auto current = MakeOptional(value, isOptional);
                 // clang-format off
@@ -343,7 +504,7 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildChainLambda(bool update) const {
         }
 
         stateMembers.emplace_back(accName, accumulator);
-        outputMembers.emplace_back(func.ResultColName.GetFullName(), accumulator);
+        outputMembers.emplace_back(func.ResultColName.GetFullName(), BuildResultFromAccumulator(func, accumulator));
     }
 
     if (NeedsPeerKey) {
@@ -361,6 +522,86 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildChainLambda(bool update) const {
     // clang-format on
 
     return Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, std::move(args)), std::move(body));
+}
+
+TExprNode::TPtr TPhysicalWindowBuilder::BuildResultFromAccumulator(const TOpWindowFunc& func, TExprNode::TPtr accumulator) const {
+    if (func.Kind == EWindowFuncKind::Native || func.Function != "avg") {
+        return accumulator;
+    }
+
+    const auto& argument = func.Arguments.front();
+    const auto* itemType = InputItemType(argument);
+
+    auto pairArg = Ctx.NewArgument(Pos, "avg_result");
+    // clang-format off
+    auto sum = Ctx.Builder(Pos)
+        .Callable("Nth")
+            .Add(0, pairArg)
+            .Atom(1, "0")
+        .Seal().Build();
+    // clang-format on
+
+    // clang-format off
+    auto count = Ctx.Builder(Pos)
+        .Callable("Nth")
+            .Add(0, pairArg)
+            .Atom(1, "1")
+        .Seal().Build();
+    // clang-format on
+
+    TExprNode::TPtr resultType;
+    TExprNode::TPtr value;
+    if (IsDecimal(itemType)) {
+        const auto [precision, scale] = DecimalParams(itemType);
+        // clang-format off
+        resultType = Ctx.Builder(Pos)
+            .Callable("DataType")
+                .Atom(0, "Decimal")
+                .Atom(1, precision)
+                .Atom(2, scale)
+            .Seal().Build();
+
+        value = Ctx.Builder(Pos)
+            .Callable("SafeCast")
+                .Callable(0, "DecimalDiv")
+                    .Add(0, sum)
+                    .Add(1, count)
+                .Seal()
+                .Add(1, resultType)
+            .Seal().Build();
+        // clang-format on
+    } else {
+        // clang-format off
+        resultType = Ctx.Builder(Pos)
+            .Callable("DataType")
+                .Atom(0, "Double")
+            .Seal().Build();
+
+        value = Ctx.Builder(Pos)
+            .Callable("Div")
+                .Add(0, sum)
+                .Add(1, count)
+            .Seal().Build();
+        // clang-format on
+    }
+
+    // clang-format off
+    auto divide = Ctx.Builder(Pos)
+        .Callable("Just")
+            .Add(0, value)
+        .Seal().Build();
+
+    return Ctx.Builder(Pos)
+        .Callable("IfPresent")
+            .Add(0, accumulator)
+            .Add(1, Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, {pairArg}), std::move(divide)))
+            .Callable(2, "Nothing")
+                .Callable(0, "OptionalType")
+                    .Add(0, resultType)
+                .Seal()
+            .Seal()
+        .Seal().Build();
+    // clang-format on
 }
 
 TExprNode::TPtr TPhysicalWindowBuilder::BuildExpandFromChain(TExprNode::TPtr chained) const {

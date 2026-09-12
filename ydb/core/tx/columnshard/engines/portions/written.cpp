@@ -69,10 +69,13 @@ bool TWrittenPortionInfo::DoIsVisible(const TSnapshot& snapshot, const bool chec
     }
 }
 
+bool TWrittenPortionInfo::IsAborted() const {
+    return HasRemoveSnapshot() && HasCommitSnapshot() && GetRemoveSnapshotVerified() <= GetCommitSnapshotVerified();
+}
+
 bool TWrittenPortionInfo::MayGetForScanAt(const TSnapshot& snapshot) const {
     // aborted portion, in fact, never existed, so there is no point to take it for scan
-    bool aborted = HasRemoveSnapshot() && HasCommitSnapshot() && GetRemoveSnapshotVerified() <= GetCommitSnapshotVerified();
-    return !aborted && !IsRemovedFor(snapshot);
+    return !IsAborted() && !IsRemovedFor(snapshot);
 }
 
 void TWrittenPortionInfo::CommitToDatabase(IDbWrapper& wrapper) {

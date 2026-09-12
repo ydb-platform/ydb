@@ -5,8 +5,9 @@
 #include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
@@ -92,6 +93,7 @@ ui32 CheckedBlockSize(ui32 blockSize, const TStorageConfig& storageConfig)
 }
 
 TVector<TRegionPtr> CreateRegions(
+    IArenaAllocatorPtr arenaAllocator,
     ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
     const TDiskDescription& diskDescription,
@@ -107,6 +109,7 @@ TVector<TRegionPtr> CreateRegions(
     TVector<TRegionPtr> regions(regionCount);
     for (size_t i = 0; i < regionCount; i++) {
         regions[i] = std::make_shared<TRegion>(
+            arenaAllocator,
             TActorContext::ActorSystem(),
             traceService,
             partitionDirectService,
@@ -147,9 +150,11 @@ TFastPathService::TFastPathService(
     , DiskDescription(diskDescription)
     , Scheduler(std::move(scheduler))
     , Timer(std::move(timer))
+    , ArenaAllocator(CreateArenaAllocator())
     , DirectBlockGroups(std::move(directBlockGroups))
     , ChaosInjectorControls(std::move(chaosInjectorControls))
     , Regions(CreateRegions(
+          ArenaAllocator,
           this,
           this,
           DiskDescription,
@@ -458,6 +463,19 @@ void TFastPathService::QueryAddHost(
     ActorSystem->Send(PartitionActorId, event.release());
 }
 
+void TFastPathService::QueryRemoveHost(
+    size_t directBlockGroupId,
+    size_t hostIndex,
+    ui32 dbgConnectionsConfigGeneration)
+{
+    auto event =
+        std::make_unique<TEvPartitionDirectPrivate::TEvRemoveHostFromDBG>(
+            directBlockGroupId,
+            hostIndex,
+            dbgConnectionsConfigGeneration);
+    ActorSystem->Send(PartitionActorId, event.release());
+}
+
 ui64 TFastPathService::GenerateLsn()
 {
     const ui64 lsn = ++SequenceGenerator;
@@ -522,6 +540,7 @@ TFastPathServiceInfo TFastPathService::GetMonInfo() const
         .TotalVChunks =
             Regions.size() * GetVChunksPerRegion(VolumeConfig->VChunkSize),
         .DbgCount = DirectBlockGroups.size(),
+        .ArenaMemoryUsage = {.Slots = ArenaAllocator->GetStats()},
     };
 }
 

@@ -11,7 +11,9 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TShardReader::BuildStartEvent
     ev->Record.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_FULL);
     ev->Record.SetTxId(Snapshot.GetTxId());
 
-    ev->Record.SetReverse(Reverse);
+    if (Reverse) {
+        ev->Record.SetReverse(*Reverse);
+    }
     ev->Record.SetItemsLimit(Limit);
 
     ev->Record.SetDataFormat(NKikimrDataEvents::FORMAT_ARROW);

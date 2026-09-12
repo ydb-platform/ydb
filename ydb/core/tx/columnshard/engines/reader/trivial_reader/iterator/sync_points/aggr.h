@@ -8,7 +8,7 @@ namespace NKikimr::NOlap::NReader::NTrivial {
 
 LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
-class TScanWithLimitCollection;
+class TOrderedResultWithLimitCollection;
 
 class TSyncPointResultsAggregationControl: public ISyncPoint {
 private:
@@ -142,7 +142,7 @@ private:
 
     virtual ESourceAction OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) override {
         LWTRACK(SyncAggrSyncPoint, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
-            source->GetDeprecatedPortionId(), GetPointName(), source->GetFilteredRowsCount(), source->GetReservedMemory(),
+            source->GetSourceId(), GetPointName(), source->GetFilteredRowsCount(), source->GetReservedMemory(),
             source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead(), DebugString());
         --InFlightControl;
         if (InFlightControl.Val() == 0) {
@@ -151,6 +151,7 @@ private:
             }
         }
         AFL_VERIFY(!Next);
+        const auto sourcesSorting = SourcesSortingToProto(Context->GetReadMetadata()->GetSourcesSorting());
         std::shared_ptr<IScanCursor> cursor;
         if (source->GetType() == IDataSource::EType::SimpleAggregation) {
             const TAggregationDataSource* aggrSource = static_cast<const TAggregationDataSource*>(source.get());
@@ -158,19 +159,13 @@ private:
                 Collection->OnSourceFinished(i);
                 --SourcesCount;
             }
-            cursor = AppDataVerified().ColumnShardConfig.GetEnableCursorV1()
-                         ? static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TNotSortedSimpleScanCursor>(
-                               aggrSource->GetLastSourceIdx(), aggrSource->GetLastSourceRecordsCount(), aggrSource->GetLastPortionIdOptional()))
-                         : static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TDeprecatedNotSortedSimpleScanCursor>(
-                               aggrSource->GetLastDeprecatedPortionId(), aggrSource->GetLastSourceRecordsCount()));
+            cursor = std::make_shared<TSourceIndexScanCursor>(sourcesSorting, nullptr, aggrSource->GetLastSourceIdx(),
+                aggrSource->GetLastSourceRecordsCount(), aggrSource->GetLastPortionIdOptional());
         } else {
             AFL_VERIFY(source->GetType() == IDataSource::EType::SimplePortion);
             Collection->OnSourceFinished(source);
-            cursor = AppDataVerified().ColumnShardConfig.GetEnableCursorV1()
-                         ? static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TNotSortedSimpleScanCursor>(
-                               source->GetSourceIdx(), source->GetRecordsCount(), source->GetPortionIdOptional()))
-                         : static_cast<std::shared_ptr<IScanCursor>>(std::make_shared<TDeprecatedNotSortedSimpleScanCursor>(
-                               source->GetDeprecatedPortionId(), source->GetRecordsCount()));
+            cursor = std::make_shared<TSourceIndexScanCursor>(
+                sourcesSorting, nullptr, source->GetSourceIdx(), source->GetRecordsCount(), source->GetPortionIdOptional());
             --SourcesCount;
         }
         AFL_VERIFY(!source->GetStageResult().IsEmpty());
@@ -203,7 +198,7 @@ private:
             {"activity", AggregationActivity});
         reader.OnIntervalResult(
             std::make_unique<TPartialReadResult>(source->ExtractResourceGuards(), source->MutableAs<IDataSource>()->ExtractGroupGuard(),
-                resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), std::nullopt, source->GetDeprecatedPortionId()));
+                resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), std::nullopt, source->GetSourceId()));
         source->MutableAs<IDataSource>()->ClearResult();
         return ESourceAction::Finish;
     }

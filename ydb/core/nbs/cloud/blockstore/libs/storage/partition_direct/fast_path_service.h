@@ -5,6 +5,7 @@
 #include "region.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_counters.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/volume_counters.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
@@ -38,6 +39,7 @@ private:
     const TDiskDescription DiskDescription;
     const ISchedulerPtr Scheduler;
     const ITimerPtr Timer;
+    const IArenaAllocatorPtr ArenaAllocator;
     const TVector<IDirectBlockGroupPtr> DirectBlockGroups;
     // Chaos controllers are indexed by DirectBlockGroup index.
     const TVector<NTransport::IChaosInjectorControlPtr> ChaosInjectorControls;
@@ -138,6 +140,11 @@ public:
 
     void QueryAddHost(
         size_t directBlockGroupId,
+        ui32 dbgConnectionsConfigGeneration) override;
+
+    void QueryRemoveHost(
+        size_t directBlockGroupId,
+        size_t hostIndex,
         ui32 dbgConnectionsConfigGeneration) override;
 
     ui64 GenerateLsn() override;

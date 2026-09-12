@@ -11,6 +11,7 @@ namespace NKikimr::NConfig {
 
 NJson::TJsonValue LoadYamlAsJsonOrThrow(const TString& config, TStringBuf source);
 
-void ParseJsonConfigOrThrow(const NJson::TJsonValue& json, TStringBuf source, NKikimrConfig::TAppConfig& config);
+void ParseJsonConfigOrThrow(const NJson::TJsonValue& json, TStringBuf source, NKikimrConfig::TAppConfig& config,
+    bool allowUnknownFields = false);
 
 } // namespace NKikimr::NConfig

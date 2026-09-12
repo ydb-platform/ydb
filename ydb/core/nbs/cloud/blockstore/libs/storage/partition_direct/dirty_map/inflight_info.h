@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/pbuffer_key.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/disable_copy.h>
@@ -114,18 +114,6 @@ public:
         PBufferErased,
     };
 
-    // Restored from PBuffer on recovery.
-    TInflightInfo(
-        IReadyQueue* readyQueues,
-        THostMask desiredDDisks,
-        THostMask disabled,
-        TPBufferKey pBufferKey,
-        size_t byteCount,
-        THostIndex host);
-
-    // Pending write: lsn is generated but data is not in any PBuffer yet.
-    // ReadMask is empty (reads wait on the quorum future) and the write is not
-    // flushable. Call OnWritten once a quorum of PBuffers confirms the write.
     TInflightInfo(
         IReadyQueue* readyQueue,
         THostMask desiredDDisks,
@@ -165,8 +153,7 @@ public:
     [[nodiscard]] THostMask GetInflightFlushes() const;
 
     void RequestErase(THostIndex host);
-    // Returns true when all erases confirmed.
-    [[nodiscard]] bool ConfirmErase(THostIndex host);
+    void ConfirmErase(THostIndex host);
     void EraseFailed(THostIndex host);
     // Hosts where a write was requested but erase is not yet
     // requested/confirmed.

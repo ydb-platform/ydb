@@ -328,6 +328,9 @@ public:
         TString sharedReading = properties.Value("shared_reading", "false");
         sharedReading.to_lower();
         cluster.SetSharedReading(sharedReading == "true"sv);
+        if (auto readingGroup = properties.FindPtr("shared_reading_group")) {
+            cluster.SetReadGroup(*readingGroup);
+        }
 
         State_->Configuration->AddCluster(cluster, State_->DatabaseIds, State_->Types->Credentials, State_->DbResolver, properties);
         Gateway_->AddCluster(cluster);

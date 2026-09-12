@@ -34,7 +34,7 @@ FROM (
         AND i_item_sk == inv_item_sk
         AND inv_warehouse_sk == w_warehouse_sk
         AND inv_date_sk == d_date_sk
-        AND d_date BETWEEN (CAST('1998-04-08' AS Date) - DateTime::IntervalFromDays(20)) AND (CAST('1998-04-08' AS Date) + DateTime::IntervalFromDays(20))
+        AND CAST(d_date AS Date) BETWEEN (CAST('1998-04-08' AS Date) - DateTime::IntervalFromDays(20)) AND (CAST('1998-04-08' AS Date) + DateTime::IntervalFromDays(20))
     GROUP BY
         w_warehouse_name,
         i_item_id

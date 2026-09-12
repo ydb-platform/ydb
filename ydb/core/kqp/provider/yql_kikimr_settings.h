@@ -262,6 +262,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetUseBlockHashJoinForCross() const;
     bool GetEnableNewRBOPhysicalStagePeephole() const;
     bool GetUseKqpTasksGraphV2() const;
+    bool GetWindowFunctionsV2() const;
     bool IsAutoIndexSelectionDisabled() const;
     bool IsAutoIndexSelectionForIndexLookupJoinEnabled() const;
 };

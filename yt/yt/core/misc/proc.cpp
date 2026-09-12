@@ -58,6 +58,9 @@
     #include <util.h>
     #include <pthread.h>
 #endif
+#ifdef _win_
+    #include <util/system/winint.h>
+#endif
 
 #ifdef _linux_
 extern "C" int memfd_create(const char *name, unsigned flags);
@@ -352,7 +355,7 @@ std::vector<size_t> GetCurrentProcessThreadIds()
 
 bool IsUserspaceThread(size_t tid)
 {
-#if defined(__linux__)
+#if defined(_linux_)
     TFileInput file(Format("/proc/%v/stat", tid));
     auto line = file.ReadLine();
     // The format of /proc/PID/stat is: "pid (comm) state ...".
@@ -380,7 +383,7 @@ bool IsUserspaceThread(size_t tid)
 
 std::string GetCurrentProcessName()
 {
-#if defined(__linux__)
+#if defined(_linux_)
     return std::string(Trim(TUnbufferedFileInput("/proc/self/comm").ReadAll(), "\n"));
 #elif defined(_win_)
     char path[MAX_PATH];
@@ -398,7 +401,7 @@ std::string GetCurrentProcessName()
 
 std::string GetCurrentProcessCommandLine()
 {
-#if defined(__linux__)
+#if defined(_linux_)
     auto cmdline = TUnbufferedFileInput("/proc/self/cmdline").ReadAll();
     auto delimiterPos = cmdline.find('\0');
     return delimiterPos == std::string::npos ? cmdline : cmdline.substr(0, delimiterPos);

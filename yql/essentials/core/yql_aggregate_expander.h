@@ -27,11 +27,13 @@ public:
         , RowType_(nullptr)
         , UseBlocks_(useBlocks)
     {
+        // clang-format off
         PreMap_ = Ctx_.Builder(node->Pos())
             .Lambda()
                 .Param("premap")
                 .Callable("Just").Arg(0, "premap").Seal()
             .Seal().Build();
+        // clang-format on
         SortParams_ = {
             .Key = VoidNode_,
             .Order = VoidNode_

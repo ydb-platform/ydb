@@ -60,6 +60,7 @@ const TTypeAnnotationNode* RemoveAllOptionals(const TTypeAnnotationNode* type);
 
 template<typename T>
 TExprNode::TPtr RemoveMembers(TPositionHandle pos, const TExprNode::TPtr& structNode, const T& members, TExprContext& ctx) {
+    // clang-format off
     return ctx.Builder(pos)
             .Callable("RemoveMembers")
                 .Add(0, structNode)
@@ -74,6 +75,7 @@ TExprNode::TPtr RemoveMembers(TPositionHandle pos, const TExprNode::TPtr& struct
                 .Seal()
             .Seal()
             .Build();
+    // clang-format on
 }
 
 TExprNode::TPtr GetSetting(const TExprNode& settings, const TStringBuf& name);

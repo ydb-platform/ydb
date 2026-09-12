@@ -258,8 +258,8 @@ private:
                         const ui64 blobBytes = blob.size();
                         const ui64 rawBytes = i.GetPartialArray()->GetHeader().GetHeaderSize();
                         LWTRACK(SubColumnsHeaderRead, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-                            source->GetTxId(), source->GetDeprecatedPortionId(), GetEntityId(), columnName, headerDuration, chunkIndex,
-                            blobBytes, rawBytes);
+                            source->GetTxId(), source->GetSourceId(), GetEntityId(), columnName, headerDuration, chunkIndex, blobBytes,
+                            rawBytes);
                         source->AddBytesRead(blobBytes);
                     }
                 } else {
@@ -286,8 +286,8 @@ private:
                         const ui64 blobBytes = i.GetOthersBlobs()->size();
                         const ui64 rawBytes = i.GetPartialArray()->GetHeader().GetOthersSize();
                         LWTRACK(SubColumnsDataRead, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-                            source->GetTxId(), source->GetDeprecatedPortionId(), GetEntityId(), columnName, dataDuration, "others", chunkIndex,
-                            blobBytes, rawBytes);
+                            source->GetTxId(), source->GetSourceId(), GetEntityId(), columnName, dataDuration, "others", chunkIndex, blobBytes,
+                            rawBytes);
                         source->AddBytesRead(blobBytes);
                     }
                 }
@@ -302,7 +302,7 @@ private:
                             const ui64 blobBytes = chunkData.GetBlobDataVerified().size();
                             const ui64 rawBytes = i.GetPartialArray()->GetHeader().GetColumnStats().GetColumnSize(columnIndex);
                             LWTRACK(SubColumnsDataRead, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-                                source->GetTxId(), source->GetDeprecatedPortionId(), GetEntityId(), columnName, dataDuration,
+                                source->GetTxId(), source->GetSourceId(), GetEntityId(), columnName, dataDuration,
                                 i.GetPartialArray()->GetHeader().GetColumnStats().GetColumnNameString(columnIndex), chunkIndex, blobBytes,
                                 rawBytes);
                             source->AddBytesRead(blobBytes);

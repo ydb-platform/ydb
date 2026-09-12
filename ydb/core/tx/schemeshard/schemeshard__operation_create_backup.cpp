@@ -140,7 +140,7 @@ struct TBackup {
         const ui64 ts = TAppData::TimeProvider->Now().Seconds();
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(txState.TargetPathId));
-        TTableInfo::TPtr table = context.SS->Tables[txState.TargetPathId];
+        TTableInfo::TPtr table = context.SS->Tables.at(txState.TargetPathId);
 
         auto& backupInfo = table->BackupHistory[opId.GetTxId()];
 

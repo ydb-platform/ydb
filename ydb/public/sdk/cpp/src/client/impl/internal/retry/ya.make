@@ -6,8 +6,8 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/threading/future
     ydb/public/api/protos
-    ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections
     ydb/public/sdk/cpp/src/client/impl/observability
     ydb/public/sdk/cpp/src/client/value
 )

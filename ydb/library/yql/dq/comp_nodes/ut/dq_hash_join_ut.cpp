@@ -893,6 +893,176 @@ TJoinTestData InnerJoinIntAndOptionalIntKeyTestData() {
     return td;
 }
 
+// INNER with EqualNulls: NULL keys match each other (IS NOT DISTINCT FROM).
+TJoinTestData InnerJoinEqualNullsTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftIds = {1, 2, 3};
+    TVector<std::optional<ui64>> leftKeys = {10, std::nullopt, 30};
+
+    TVector<ui64> rightIds = {1, 2, 3};
+    TVector<std::optional<ui64>> rightKeys = {10, std::nullopt, 40};
+
+    TVector<ui64> expLeftIds = {1, 2};
+    TVector<std::optional<ui64>> expLeftKeys = {10, std::nullopt};
+    TVector<ui64> expRightIds = {1, 2};
+    TVector<std::optional<ui64>> expRightKeys = {10, std::nullopt};
+
+    td.Left = ConvertVectorsToTuples(setup, leftIds, leftKeys);
+    td.Right = ConvertVectorsToTuples(setup, rightIds, rightKeys);
+    td.Result = ConvertVectorsToTuples(setup, expLeftIds, expLeftKeys, expRightIds, expRightKeys);
+
+    td.LeftKeyColmns = {1};
+    td.RightKeyColmns = {1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    td.JoinSettings.EqualNullsKeys = {0};
+    return td;
+}
+
+// EqualNulls still distinguishes NULL from a present value (including 0).
+TJoinTestData InnerJoinEqualNullsNullVsZeroTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftIds = {1, 2};
+    TVector<std::optional<ui64>> leftKeys = {std::nullopt, 0};
+
+    TVector<ui64> rightIds = {1, 2};
+    TVector<std::optional<ui64>> rightKeys = {0, std::nullopt};
+
+    TVector<ui64> expLeftIds = {1, 2};
+    TVector<std::optional<ui64>> expLeftKeys = {std::nullopt, 0};
+    TVector<ui64> expRightIds = {2, 1};
+    TVector<std::optional<ui64>> expRightKeys = {std::nullopt, 0};
+
+    td.Left = ConvertVectorsToTuples(setup, leftIds, leftKeys);
+    td.Right = ConvertVectorsToTuples(setup, rightIds, rightKeys);
+    td.Result = ConvertVectorsToTuples(setup, expLeftIds, expLeftKeys, expRightIds, expRightKeys);
+
+    td.LeftKeyColmns = {1};
+    td.RightKeyColmns = {1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    td.JoinSettings.EqualNullsKeys = {0};
+    return td;
+}
+
+// Composite key: (1, NULL) matches (1, NULL) and does not match (1, 0).
+TJoinTestData InnerJoinEqualNullsCompositeKeyTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftIds = {1, 2, 3};
+    TVector<ui64> leftKey0 = {1, 1, 2};
+    TVector<std::optional<ui64>> leftKey1 = {std::nullopt, 0, std::nullopt};
+
+    TVector<ui64> rightIds = {1, 2, 3};
+    TVector<ui64> rightKey0 = {1, 1, 2};
+    TVector<std::optional<ui64>> rightKey1 = {std::nullopt, 0, 0};
+
+    TVector<ui64> expLeftIds = {1, 2};
+    TVector<ui64> expLeftKey0 = {1, 1};
+    TVector<std::optional<ui64>> expLeftKey1 = {std::nullopt, 0};
+    TVector<ui64> expRightIds = {1, 2};
+    TVector<ui64> expRightKey0 = {1, 1};
+    TVector<std::optional<ui64>> expRightKey1 = {std::nullopt, 0};
+
+    td.Left = ConvertVectorsToTuples(setup, leftIds, leftKey0, leftKey1);
+    td.Right = ConvertVectorsToTuples(setup, rightIds, rightKey0, rightKey1);
+    td.Result = ConvertVectorsToTuples(setup, expLeftIds, expLeftKey0, expLeftKey1,
+                                       expRightIds, expRightKey0, expRightKey1);
+
+    td.LeftKeyColmns = {1, 2};
+    td.RightKeyColmns = {1, 2};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {2, EJoinSide::kLeft},
+                  {0, EJoinSide::kRight}, {1, EJoinSide::kRight}, {2, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    td.JoinSettings.EqualNullsKeys = {0, 1};
+    return td;
+}
+
+TJoinTestData LeftJoinEqualNullsTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftIds = {1, 2};
+    TVector<std::optional<ui64>> leftKeys = {10, std::nullopt};
+
+    TVector<ui64> rightIds = {1, 2};
+    TVector<std::optional<ui64>> rightKeys = {std::nullopt, 20};
+
+    TVector<ui64> expLeftIds = {1, 2};
+    TVector<std::optional<ui64>> expLeftKeys = {10, std::nullopt};
+    TVector<std::optional<ui64>> expRightIds = {std::nullopt, 1};
+    TVector<std::optional<ui64>> expRightKeys = {std::nullopt, std::nullopt};
+
+    td.Left = ConvertVectorsToTuples(setup, leftIds, leftKeys);
+    td.Right = ConvertVectorsToTuples(setup, rightIds, rightKeys);
+    td.Result = ConvertVectorsToTuples(setup, expLeftIds, expLeftKeys, expRightIds, expRightKeys);
+
+    td.LeftKeyColmns = {1};
+    td.RightKeyColmns = {1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Left;
+    td.JoinSettings.EqualNullsKeys = {0};
+    return td;
+}
+
+// Only the second join key allows NULL == NULL. (NULL, 1) must not match (NULL, 1).
+TJoinTestData InnerJoinEqualNullsSecondKeyOnlyTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<std::optional<ui64>> leftKey0 = {1, std::nullopt, 2};
+    TVector<std::optional<ui64>> leftKey1 = {std::nullopt, 1, 2};
+    TVector<std::optional<ui64>> rightKey0 = {1, std::nullopt, 3};
+    TVector<std::optional<ui64>> rightKey1 = {std::nullopt, 1, 3};
+
+    TVector<std::optional<ui64>> expLeftKey0 = {1};
+    TVector<std::optional<ui64>> expLeftKey1 = {std::nullopt};
+    TVector<std::optional<ui64>> expRightKey0 = {1};
+    TVector<std::optional<ui64>> expRightKey1 = {std::nullopt};
+
+    td.Left = ConvertVectorsToTuples(setup, leftKey0, leftKey1);
+    td.Right = ConvertVectorsToTuples(setup, rightKey0, rightKey1);
+    td.Result = ConvertVectorsToTuples(setup, expLeftKey0, expLeftKey1, expRightKey0, expRightKey1);
+
+    td.LeftKeyColmns = {0, 1};
+    td.RightKeyColmns = {0, 1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    td.JoinSettings.EqualNullsKeys = {1};
+    return td;
+}
+
+// Without EqualNullsKeys, NULL keys are allowed in the input but never match.
+TJoinTestData InnerJoinNullKeysDoNotMatchByDefaultTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftIds = {1, 2};
+    TVector<std::optional<ui64>> leftKeys = {10, std::nullopt};
+    TVector<ui64> rightIds = {1, 2};
+    TVector<std::optional<ui64>> rightKeys = {10, std::nullopt};
+
+    TVector<ui64> expLeftIds = {1};
+    TVector<std::optional<ui64>> expLeftKeys = {10};
+    TVector<ui64> expRightIds = {1};
+    TVector<std::optional<ui64>> expRightKeys = {10};
+
+    td.Left = ConvertVectorsToTuples(setup, leftIds, leftKeys);
+    td.Right = ConvertVectorsToTuples(setup, rightIds, rightKeys);
+    td.Result = ConvertVectorsToTuples(setup, expLeftIds, expLeftKeys, expRightIds, expRightKeys);
+
+    td.LeftKeyColmns = {1};
+    td.RightKeyColmns = {1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
 TJoinTestData SwappedKeyColumnsInnerTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -2121,6 +2291,30 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST_TWIN(TestInnerJoinIntAndOptionalIntKey, BlockJoin) {
         Test(InnerJoinIntAndOptionalIntKeyTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST(TestInnerJoinEqualNulls) {
+        Test(InnerJoinEqualNullsTestData(), /*blockJoin=*/true);
+    }
+
+    Y_UNIT_TEST(TestInnerJoinEqualNullsNullVsZero) {
+        Test(InnerJoinEqualNullsNullVsZeroTestData(), /*blockJoin=*/true);
+    }
+
+    Y_UNIT_TEST(TestInnerJoinEqualNullsCompositeKey) {
+        Test(InnerJoinEqualNullsCompositeKeyTestData(), /*blockJoin=*/true);
+    }
+
+    Y_UNIT_TEST(TestLeftJoinEqualNulls) {
+        Test(LeftJoinEqualNullsTestData(), /*blockJoin=*/true);
+    }
+
+    Y_UNIT_TEST(TestInnerJoinEqualNullsSecondKeyOnly) {
+        Test(InnerJoinEqualNullsSecondKeyOnlyTestData(), /*blockJoin=*/true);
+    }
+
+    Y_UNIT_TEST_TWIN(TestInnerJoinNullKeysDoNotMatchByDefault, BlockJoin) {
+        Test(InnerJoinNullKeysDoNotMatchByDefaultTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestEmptyFlows, BlockJoin) {

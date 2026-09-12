@@ -222,6 +222,7 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
         for(ESide side: EachSide) {
             const auto roles = MakeColumnRoles(userTypes.SelectSide(side).size(), Meta_->KeyColumns.SelectSide(side));
             layouts.SelectSide(side) = MakeBlockLayoutConverter(helper, userTypes.SelectSide(side), roles, &ctx.ArrowMemoryPool);
+            layouts.SelectSide(side)->ApplyEqualNulls(Meta_->Settings.EqualNullsKeys);
         }
         const auto& userNullTypes = userTypes.SelectSide(Join.NullSupplying());
 
@@ -368,12 +369,7 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
 
     meta.Renames = BuildImplRenames(parsed.UserRenames);
 
-    {
-        const auto settingsTuple = AS_VALUE(TTupleLiteral, callable.GetInput(7));
-        if (settingsTuple->GetValuesCount() >= 1) {
-            meta.Settings.BuildSide = static_cast<EBuildSide>(AS_VALUE(TDataLiteral, settingsTuple->GetValue(0))->AsValue().Get<ui32>());
-        }
-    }
+    meta.Settings = ParseHashJoinSettingsTuple(callable.GetInput(7));
     if (meta.Settings.LeftIsBuild()) {
         std::swap(meta.InputTypes.Build, meta.InputTypes.Probe);
         std::swap(meta.KeyColumns.Build, meta.KeyColumns.Probe);

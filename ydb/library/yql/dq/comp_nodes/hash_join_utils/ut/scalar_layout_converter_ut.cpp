@@ -755,7 +755,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         }
         UNIT_ASSERT_VALUES_EQUAL(packRes.NTuples, testSize);
 
-        const auto* layout = converter->GetTupleLayout();
+        auto* layout = converter->GetTupleLayout();
         UNIT_ASSERT_VALUES_EQUAL(layout->KeyColumnsNum, 1u);
         UNIT_ASSERT_VALUES_EQUAL(layout->Columns[0].DataSize, 0u);
 
@@ -774,5 +774,10 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         UNIT_ASSERT_C(
             !layout->KeysEqual(row0, packRes.Overflow.data(), row1, packRes.Overflow.data()),
             "Null keys must not compare equal");
+
+        converter->ApplyEqualNulls({0});
+        UNIT_ASSERT_C(
+            layout->KeysEqual(row0, packRes.Overflow.data(), row1, packRes.Overflow.data()),
+            "Null keys must compare equal when EqualNulls is set");
     }
 }

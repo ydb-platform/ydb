@@ -5,6 +5,7 @@
 #include <yql/essentials/public/udf/udf_types.h>
 
 #include <util/generic/buffer.h>
+#include <util/system/compiler.h>
 
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/simd.h>
 
@@ -169,6 +170,14 @@ struct TTupleLayout {
     ui32 PayloadEnd;    // First byte after payload
     ui32 TotalRowSize;  // Total size of bytes for packed row
     std::optional<std::vector<ui8, TMKQLAllocator<ui8>>> NullsTuple; // std::nullopt *this contains non-nullable column
+    // Bit i corresponds to packed key column i (Columns[0..KeyColumnsNum)).
+    // Set bits use IS NOT DISTINCT FROM (NULL matches NULL). Unset bits keep
+    // SQL equality (NULL never matches).
+    ui64 EqualNullsKeyMask = 0;
+
+    // Settings store 0-based join-key positions. Packed bits follow layout
+    // ColumnIndex (keys may be reordered by size), so remap via OriginalColumnIndex.
+    void ApplyEqualNulls(const std::vector<ui32>& equalNullsJoinKeys);
 
     // Creates new tuple layout based on provided columns description.
     static THolder<TTupleLayout>
@@ -223,6 +232,9 @@ struct TTupleLayout {
 
     bool KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow, const ui8 *rhsRow, const ui8 *rhsOverflow) const;
     bool KeysLess(const ui8 *lhsRow, const ui8 *lhsOverflow, const ui8 *rhsRow, const ui8 *rhsOverflow) const;
+
+    template <bool EqualNulls>
+    bool KeysEqualImpl(const ui8 *lhsRow, const ui8 *lhsOverflow, const ui8 *rhsRow, const ui8 *rhsOverflow) const;
 
     // Pretty prints a single packed tuple for debugging purposes.
     // Fixed-size fields are printed as integers, variable-length fields as strings.
@@ -304,6 +316,7 @@ template <typename TTraits> struct TTupleLayoutSIMD : public TTupleLayoutFallbac
                                                                           4, 8};
 };
 
+template <bool EqualNulls>
 bool TupleKeysEqual(const TTupleLayout *layout,
     const ui8 *lhsRow, const ui8 *lhsOverflow,
     const ui8 *rhsRow, const ui8 *rhsOverflow);
@@ -313,52 +326,67 @@ ui32 Hash(const ui8* row) {
     return ReadUnaligned<ui32>(row);
 }
 
+template <bool EqualNulls>
+Y_FORCE_INLINE bool KeyNullsCompatible(ui8 lhsBits, ui8 rhsBits, ui8 keyNullMask, ui64 equalNullsKeyMask) {
+    if constexpr (EqualNulls) {
+        const ui8 eqMask = static_cast<ui8>(equalNullsKeyMask) & keyNullMask;
+        const ui8 reqMask = keyNullMask & ~eqMask;
+        return (lhsBits & rhsBits & reqMask) == reqMask && (lhsBits & eqMask) == (rhsBits & eqMask);
+    } else {
+        return (lhsBits & rhsBits & keyNullMask) == keyNullMask;
+    }
+}
 
+template <bool EqualNulls>
 Y_FORCE_INLINE
-bool TTupleLayout::KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow,
-                             const ui8 *rhsRow, const ui8 *rhsOverflow) const {
+bool TTupleLayout::KeysEqualImpl(const ui8 *lhsRow, const ui8 *lhsOverflow,
+                                 const ui8 *rhsRow, const ui8 *rhsOverflow) const {
     const ui8 keyNullMask = (1u << KeyColumnsNum) - 1;
+    const bool nullsOk = KeyNullsCompatible<EqualNulls>(
+        ReadUnaligned<ui8>(lhsRow + BitmaskOffset),
+        ReadUnaligned<ui8>(rhsRow + BitmaskOffset),
+        keyNullMask,
+        EqualNullsKeyMask);
 
     switch (KeySizeTag_) {
     case 0:
         return ReadUnaligned<ui8>(lhsRow + KeyColumnsOffset) ==
                    ReadUnaligned<ui8>(rhsRow + KeyColumnsOffset) &&
-               (ReadUnaligned<ui8>(lhsRow + BitmaskOffset) &
-                ReadUnaligned<ui8>(rhsRow + BitmaskOffset) & keyNullMask) ==
-                   keyNullMask;
+               nullsOk;
     case 1:
         return ReadUnaligned<ui16>(lhsRow + KeyColumnsOffset) ==
                    ReadUnaligned<ui16>(rhsRow + KeyColumnsOffset) &&
-               (ReadUnaligned<ui8>(lhsRow + BitmaskOffset) &
-                ReadUnaligned<ui8>(rhsRow + BitmaskOffset) & keyNullMask) ==
-                   keyNullMask;
+               nullsOk;
 
     case 2:
         return ReadUnaligned<ui32>(lhsRow + KeyColumnsOffset) ==
                    ReadUnaligned<ui32>(rhsRow + KeyColumnsOffset) &&
-               (ReadUnaligned<ui8>(lhsRow + BitmaskOffset) &
-                ReadUnaligned<ui8>(rhsRow + BitmaskOffset) & keyNullMask) ==
-                   keyNullMask;
+               nullsOk;
 
     case 3:
         return ReadUnaligned<ui64>(lhsRow + KeyColumnsOffset) ==
                    ReadUnaligned<ui64>(rhsRow + KeyColumnsOffset) &&
-               (ReadUnaligned<ui8>(lhsRow + BitmaskOffset) &
-                ReadUnaligned<ui8>(rhsRow + BitmaskOffset) & keyNullMask) ==
-                   keyNullMask;
+               nullsOk;
 
     case 4:
         return ReadUnaligned<ui64>(lhsRow + KeyColumnsOffset) ==
                    ReadUnaligned<ui64>(rhsRow + KeyColumnsOffset) &&
                ReadUnaligned<ui64>(lhsRow + KeyColumnsOffset + 8) ==
                    ReadUnaligned<ui64>(rhsRow + KeyColumnsOffset + 8) &&
-               (ReadUnaligned<ui8>(lhsRow + BitmaskOffset) &
-                ReadUnaligned<ui8>(rhsRow + BitmaskOffset) & keyNullMask) ==
-                   keyNullMask;
+               nullsOk;
 
     default:
-        return TupleKeysEqual(this, lhsRow, lhsOverflow, rhsRow, rhsOverflow);
+        return TupleKeysEqual<EqualNulls>(this, lhsRow, lhsOverflow, rhsRow, rhsOverflow);
     }
+}
+
+Y_FORCE_INLINE
+bool TTupleLayout::KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow,
+                             const ui8 *rhsRow, const ui8 *rhsOverflow) const {
+    if (Y_UNLIKELY(EqualNullsKeyMask)) {
+        return KeysEqualImpl<true>(lhsRow, lhsOverflow, rhsRow, rhsOverflow);
+    }
+    return KeysEqualImpl<false>(lhsRow, lhsOverflow, rhsRow, rhsOverflow);
 }
 
 template <size_t Size>

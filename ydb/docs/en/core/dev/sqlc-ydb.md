@@ -6,7 +6,7 @@ This guide takes a schema and two queries through code generation and execution 
 
 ## Install the tool {#install}
 
-On Linux and macOS, run the commands below. Generation needs no Go installation, SDK or database connection. The installer selects the latest stable release, verifies SHA256 and places the executable in `~/.local/bin`. If PATH setup is needed, follow the installer’s instructions before running `sqlc-ydb version`.
+On Linux and macOS, run the commands below. Generation needs no SDK or database connection. The installer selects the latest stable release, verifies SHA256 and places the executable in `~/.local/bin`. If PATH setup is needed, follow the installer’s instructions before running `sqlc-ydb version`.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ydb-platform/sqlc-ydb/main/install.sh | bash

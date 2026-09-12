@@ -1769,14 +1769,12 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
         } else {
             auto& item = Queue.front();
 
-            if (item->SeqNo != seqNo) {
-                // allow outdates/old acks
-                if (seqNo > item->SeqNo) {
-                    LOG_W(LogPrefix << "SEQ/DESYNC, SeqNo=" << seqNo << ", item.SeqNo=" << item->SeqNo);
-                    StartReconciliation(true, 'Y');
-                    return;
-                }
-            } else {
+            // An ack behind the queue front is left to the reconciliation block below: the loop above has
+            // popped everything under seqNo and an ack ahead of SeqNo is rejected by the SEQ/LARGE check,
+            // so the only way round left is a discovery reply of a major reconciliation, which has
+            // renumbered the queue from 1 while the peer is still at its own ConfirmedSeqNo. Resending
+            // the whole queue there is exactly what such a reply asks for.
+            if (item->SeqNo == seqNo) {
                 if (status == NYql::NDqProto::TEvChannelAckV2::RESEND) {
                     if (Reconciliation.load() == 0) {
                         // the peer found a gap: this item is the 1st missing one, resend from it by a minor reconciliation

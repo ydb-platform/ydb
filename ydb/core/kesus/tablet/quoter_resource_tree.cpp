@@ -354,7 +354,7 @@ public:
         }
     }
 
-    void Deactivate() {
+    void Deactivate() override {
         Y_ABORT_UNLESS(Active);
         LWPROBE(SessionDeactivate,
                 GetResource()->GetQuoterPath(),
@@ -1257,6 +1257,10 @@ bool TQuoterResources::DeleteResource(TQuoterResourceTree* resource, TString& er
     Y_ABORT_UNLESS(resByPathIt->second == resource);
     ResourcesByPath.erase(resByPathIt);
 
+    if (Counters.QuoterCounters) {
+        Counters.QuoterCounters->RemoveSubgroup(RESOURCE_COUNTERS_LABEL, resource->GetProps().GetResourcePath());
+    }
+
     const auto resByIdIt = ResourcesById.find(resource->GetResourceId());
     Y_ABORT_UNLESS(resByIdIt != ResourcesById.end());
     Y_ABORT_UNLESS(resByIdIt->second.Get() == resource);
@@ -1423,6 +1427,22 @@ void TQuoterResources::SetPipeServerId(TQuoterSessionId sessionId, const NActors
     if (id) {
         PipeServerIdToSession[id].insert(sessionId);
     }
+}
+
+void TQuoterResources::CloseSession(const NActors::TActorId& clientId, ui64 resourceId) {
+    const TQuoterSessionId sessionId(clientId, resourceId);
+    const auto sessionIt = Sessions.find(sessionId);
+    if (sessionIt == Sessions.end()) {
+        return; // Idempotent: session was already closed/never existed.
+    }
+    TQuoterSession* session = sessionIt->second.Get();
+    if (session->IsActive()) {
+        session->Deactivate(); // Keep resource active-children tree consistent.
+    }
+    session->GetResource()->OnSessionDisconnected(clientId);
+    const NActors::TActorId pipeServerId = session->SetPipeServerId({});
+    SetPipeServerId(sessionId, pipeServerId, {}); // Erase from PipeServerIdToSession index.
+    Sessions.erase(sessionIt);
 }
 
 void TQuoterResources::DisconnectSession(const NActors::TActorId& pipeServerId) {

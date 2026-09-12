@@ -437,6 +437,12 @@ Y_UNIT_TEST_SUITE(TBlockRangeMapTest)
         UNIT_ASSERT_VALUES_EQUAL(true, extracted.has_value());
         UNIT_ASSERT_EQUAL(nullptr, extracted->Value);
     }
+
+    Y_UNIT_TEST(ConstructWithArena)
+    {
+        TArenaAllocatorPool pool(CreateArenaAllocator());
+        TBlockRangeMap<ui64, TString, true> map(&pool);
+    }
 }
 
 }   // namespace NYdb::NBS::NBlockStore

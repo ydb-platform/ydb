@@ -83,7 +83,8 @@ public:
 
     virtual void AddSourceCountersGroup(
         const TString& sourceGroupId,
-        NMonitoring::TDynamicCounterPtr sourceCounterGroup
+        NMonitoring::TDynamicCounterPtr sourceCounterGroup,
+        bool isFollowerSource
     ) override {
         const auto result = SourceCounterGroups.try_emplace(sourceGroupId);
 
@@ -102,6 +103,7 @@ public:
             sourceGroupId,
             this->SimpleCountersOpts(),
             sourceCounterGroup,
+            isFollowerSource,
             result.first->second.SimpleCounters
         );
 
@@ -114,6 +116,7 @@ public:
             sourceGroupId,
             this->CumulativeCountersOpts(),
             sourceCounterGroup,
+            isFollowerSource,
             result.first->second.CumulativeCounters
         );
 
@@ -126,6 +129,7 @@ public:
             sourceGroupId,
             this->PercentileCountersOpts(),
             sourceCounterGroup,
+            isFollowerSource,
             result.first->second.PercentileCounters
         );
     }
@@ -228,7 +232,9 @@ private:
                 //       the order, in which the counters are defined in the corresponding
                 //       .proto file. Thus, it is safe to use an index from the target counters
                 //       to access the corresponding source counter.
-                aggregator.AggregateValue((sourceCounters.*SourceCountersField)[index]);
+                if (const auto& source = (sourceCounters.*SourceCountersField)[index]) {
+                    aggregator.AggregateValue(source);
+                }
             }
 
             ++index;
@@ -245,6 +251,7 @@ private:
      * @param[in] sourceGroupId The ID of the corresponding source group
      * @param[in] counterOptions The parsed enum options for the source counters
      * @param[in] sourceCounterGroup The counter group where the source counters are looked up
+     * @param[in] isFollowerSource Leave LeaderOnly counters empty for follower sources
      * @param[in,out] sourceCounters The container where the source counters will be saved
      */
     template <
@@ -260,12 +267,18 @@ private:
         const TString& sourceGroupId,
         const TCounterOptions* counterOptions,
         NMonitoring::TDynamicCounterPtr sourceCounterGroup,
+        bool isFollowerSource,
         TSourceCounters& sourceCounters
     ) {
         sourceCounters.clear();
         sourceCounters.reserve(counterOptions->Size);
 
         for (size_t i = 0; i < counterOptions->Size; ++i) {
+            if (isFollowerSource && counterOptions->GetLeaderOnly(i)) {
+                sourceCounters.emplace_back();
+                continue;
+            }
+
             const char* counterName = counterOptions->GetNames()[i];
 
             auto sourceCounter = (sourceCounterGroup.Get()->*FindSourceCounter)(

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/tablet_types.h>
+#include <ydb/core/protos/sys_view.pb.h>
 #include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/tablet/tablet_counters.h>
@@ -111,6 +112,10 @@ public:
     virtual void ForgetTablet(ui64 tabletId, ui32 followerId) = 0;
 
     virtual void RecalculateAllCounters() = 0;
+
+    // Append a snapshot: Simple/MAX absolute, Cumulative/HIST deltas since the
+    // previous Pack. Call once per new request; transport retries reuse that request.
+    virtual void Pack(NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters>& out) = 0;
 };
 
 using TNodeDatabaseMetricsAggregatorPtr = TIntrusivePtr<TNodeDatabaseMetricsAggregator>;

@@ -364,7 +364,7 @@ namespace {
         }
 
         void Handle(IDqAsyncLookupSource::TEvLookupRequest::TPtr ev) {
-            if (PendingPassAway) {
+            if (Y_UNLIKELY(PendingPassAway)) {
                 YDB_LOG_DEBUG("TEvLookupRequest after PassAway", COMMON_LOG);
                 SendError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Request received after PassAway");
                 return;
@@ -440,7 +440,7 @@ namespace {
         }
 
         void CreateRequest(std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> request, size_t fullscanLimit) {
-            if (!request) {
+            if (Y_UNLIKELY(!request)) {
                 YDB_LOG_DEBUG("CreateRequest: parent MIA", COMMON_LOG);
                 return;
             }
@@ -509,11 +509,15 @@ namespace {
         }
 
         void Handle(TEvQueryExecuteQueryResponsePart::TPtr ev) {
-            if (PendingPassAway) { // already passed away
+            if (Y_UNLIKELY(PendingPassAway)) { // already passed away
                 YDB_LOG_DEBUG("TEvQueryExecuteQueryResponsePart after PassAway", COMMON_LOG);
                 return;
             }
             auto state = std::move(ev->Get()->State);
+            if (Y_UNLIKELY(!state->StreamProcessor)) {
+                YDB_LOG_ERROR("TEvQueryExecuteQueryResponsePart called ater CleanupStreamProcessor, should be impossible", COMMON_LOG);
+                return;
+            }
             auto& response = ev->Get()->Response;
             YDB_LOG_TRACE("TEvQueryExecuteQueryResponsePart",
                     COMMON_LOG,
@@ -582,6 +586,13 @@ namespace {
                     COMMON_LOG,
                     {"sessionId", session->SessionId},
                     {"response", response.DebugString()});
+            if (Y_UNLIKELY(!session->StreamProcessor)) {
+                YDB_LOG_DEBUG("TEvQuerySessionState called afte CleanupStreamProcessor", COMMON_LOG);
+                // possible; TEvQuerySessionState is sent, but in queue; FinalizeRequest calls CleanupStreamProcessor, then handler for TEvQuerySessionState invoked
+                Y_ENSURE(!session->PendingLookup);
+                Y_ENSURE(session->SessionId.empty());
+                return;
+            }
             auto status = response.status();
             if (response.has_session_shutdown()) {
                 status = Ydb::StatusIds::SESSION_EXPIRED;
@@ -731,7 +742,7 @@ namespace {
             auto startCycleCount = GetCycleCountFast();
             auto guard = Guard(*Alloc);
             auto request = state->Request.lock();
-            if (!request) {
+            if (Y_UNLIKELY(!request)) {
                 YDB_LOG_DEBUG("ProcessReceivedData: parent MIA", COMMON_LOG);
                 return;
             }

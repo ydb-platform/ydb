@@ -175,6 +175,10 @@ struct TTupleLayout {
     // SQL equality (NULL never matches).
     ui64 EqualNullsKeyMask = 0;
 
+    // Settings store 0-based join-key positions. Packed bits follow layout
+    // ColumnIndex (keys may be reordered by size), so remap via OriginalColumnIndex.
+    void ApplyEqualNulls(const std::vector<ui32>& equalNullsJoinKeys);
+
     // Creates new tuple layout based on provided columns description.
     static THolder<TTupleLayout>
     Create(const std::vector<TColumnDesc> &columns);

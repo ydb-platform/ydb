@@ -792,6 +792,10 @@ public:
         return TupleLayout_.get();
     }
 
+    void ApplyEqualNulls(const TVector<ui32>& equalNullsJoinKeys) override {
+        TupleLayout_->ApplyEqualNulls(equalNullsJoinKeys);
+    }
+
 private:
     void UnpackImpl(const TPackResult& packed, const ui8* packedData, ui32 count,
                     NYql::NUdf::TUnboxedValue* values) {

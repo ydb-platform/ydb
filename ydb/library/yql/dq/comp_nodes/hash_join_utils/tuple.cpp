@@ -240,6 +240,18 @@ bool TTupleLayout::KeysLess(const ui8 *lhsRow, const ui8 *lhsOverflow,
     return false;
 }
 
+void TTupleLayout::ApplyEqualNulls(const std::vector<ui32>& equalNullsJoinKeys) {
+    ui64 packed = 0;
+    for (ui32 j = 0; j < KeyColumnsNum; ++j) {
+        Y_ENSURE(j < 64, "EqualNulls supports at most 64 key columns");
+        const ui32 joinKeyIdx = KeyColumns[j].OriginalColumnIndex;
+        if (std::find(equalNullsJoinKeys.begin(), equalNullsJoinKeys.end(), joinKeyIdx) != equalNullsJoinKeys.end()) {
+            packed |= (1ull << j);
+        }
+    }
+    EqualNullsKeyMask = packed;
+}
+
 THolder<TTupleLayout>
 TTupleLayout::Create(const std::vector<TColumnDesc> &columns) {
 #ifdef USE_X86_SIMD

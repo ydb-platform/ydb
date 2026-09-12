@@ -994,20 +994,6 @@ inline TBlockHashJoinSettings ParseHashJoinSettingsTuple(TRuntimeNode node) {
     return settings;
 }
 
-// Settings store 0-based join-key positions. Packed key bits follow layout
-// ColumnIndex (keys may be reordered by size), so remap via OriginalColumnIndex.
-inline void ApplyEqualNulls(NPackedTuple::TTupleLayout* layout, const TVector<ui32>& equalNullsJoinKeys) {
-    ui64 packed = 0;
-    for (ui32 j = 0; j < layout->KeyColumnsNum; ++j) {
-        MKQL_ENSURE(j < 64, "EqualNulls supports at most 64 key columns");
-        const ui32 joinKeyIdx = layout->KeyColumns[j].OriginalColumnIndex;
-        if (std::find(equalNullsJoinKeys.begin(), equalNullsJoinKeys.end(), joinKeyIdx) != equalNullsJoinKeys.end()) {
-            packed |= (1ull << j);
-        }
-    }
-    layout->EqualNullsKeyMask = packed;
-}
-
 inline TParsedHashJoinArgs ParseCommonHashJoinArgs(TCallable& callable) {
     TParsedHashJoinArgs res;
     res.Kind = GetJoinKind(AS_VALUE(TDataLiteral, callable.GetInput(2))->AsValue().Get<ui32>());

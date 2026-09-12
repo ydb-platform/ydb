@@ -2,12 +2,12 @@
 
 ## Focused checks
 
-- `tests/test_cluster_templates.py`: schema, migration, revisions, placement,
+- `ydb/tools/ydb_bench/tests/test_cluster_templates.py`: schema, migration, revisions, placement,
   CRUD and JavaScript helpers.
-- `tests/test_ydb_bench.py`: configuration, search, execution and web behavior.
-- `tests/test_hosts.py`: membership, proxies and federation.
-- `tests/test_ydb_telemetry.py`: telemetry contracts.
-- Native targets such as `memory/ut`: only when those components change.
+- `ydb/tools/ydb_bench/tests/test_ydb_bench.py`: configuration, search, execution and web behavior.
+- `ydb/tools/ydb_bench/tests/test_hosts.py`: membership, proxies and federation.
+- `ydb/tools/ydb_bench/tests/test_ydb_telemetry.py`: telemetry contracts.
+- Native targets such as `ydb/tools/ydb_bench/memory/ut`: only when those components change.
 
 Select affected cases. Run builds/tests remotely through `ssh_ya` under root
 build instructions; do not edit sources during compilation. JS tests require
@@ -21,7 +21,7 @@ layout testing. Record coverage and gaps; API checks only supplement UI tests.
 
 ## Build and deploy
 
-The executable embeds Python assets and native binaries. Check root `ya.make`:
+The executable embeds Python assets and native binaries. Check `ydb/tools/ydb_bench/ya.make`:
 `profile` retains embedded YDB/YDB CLI symbols; other build types strip them.
 An external `ydbd-binary` path is on the selected benchmark host, not the browser
 machine, and differs from replacing the benchmark service executable.

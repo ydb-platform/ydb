@@ -6,7 +6,7 @@ description: "Develop, debug, review or operate ydb/tools/ydb_bench: configurati
 # YDB Benchmark Development
 
 Resolve the checkout and current diff. Read the relevant section of
-[README.md](../../../README.md), then trace the changed value from parser or
+`ydb/tools/ydb_bench/README.md`, then trace the changed value from parser or
 HTTP request through execution, storage and UI. A visible control alone does
 not prove that execution uses its value.
 
@@ -15,19 +15,20 @@ For tests, builds or deployment read [validation and operation](references/valid
 
 ## Architecture
 
-Paths are relative to `ydb/tools/ydb_bench/`.
+Source paths below start at the repository root. Links to skill resources are
+relative to this skill.
 
 | Area | Source and responsibility |
 |---|---|
-| Entry/package | `__main__.py`, `lib/cli.py`, root `ya.make`: CLI and bundled executable resources |
-| Configuration | `benchmarks/registry.py`, benchmark descriptors, `lib/config.py`: schema, validation, normalized profiles and run plan |
-| Execution | `lib/runner.py`: subprocess groups, cancellation and affinity; `lib/actors_core.py`, `lib/local_ydb.py`, `lib/local_ydb_workloads.py`: benchmark-specific lifecycle |
-| Search | `lib/load_control.py`: observations and load search; `lib/local_ydb.py`: measurement, verification and geometry scaling |
-| Results | `lib/results.py`, `lib/common.py`, `lib/import_results.py`: manifests, atomic writes and imports |
-| Web | `lib/web.py`: RunService, queue/lifecycle, HTTP handlers, embedded JS/CSS, reports and comparisons |
-| Federation | `lib/hosts.py`: identities, membership, tokens and peer allowlists; `lib/federation.py`: read-through aggregation and host-qualified references |
-| Topology/metrics | `lib/topology.py`: discovery and placement; `lib/system_info.py`, `lib/linux_telemetry.py`, `lib/ydb_telemetry.py`: system/process/YDB measurements |
-| Templates | `lib/cluster_templates.py`: validated revisioned specifications; `lib/cluster_templates_ui.py`: placement views and joint previews |
+| Entry/package | `ydb/tools/ydb_bench/__main__.py`, `ydb/tools/ydb_bench/lib/cli.py`, `ydb/tools/ydb_bench/ya.make`: CLI and bundled executable resources |
+| Configuration | `ydb/tools/ydb_bench/benchmarks/registry.py`, benchmark descriptors, `ydb/tools/ydb_bench/lib/config.py`: schema, validation, normalized profiles and run plan |
+| Execution | `ydb/tools/ydb_bench/lib/runner.py`: subprocess groups, cancellation and affinity; `ydb/tools/ydb_bench/lib/actors_core.py`, `ydb/tools/ydb_bench/lib/local_ydb.py`, `ydb/tools/ydb_bench/lib/local_ydb_workloads.py`: benchmark-specific lifecycle |
+| Search | `ydb/tools/ydb_bench/lib/load_control.py`: observations and load search; `ydb/tools/ydb_bench/lib/local_ydb.py`: measurement, verification and geometry scaling |
+| Results | `ydb/tools/ydb_bench/lib/results.py`, `ydb/tools/ydb_bench/lib/common.py`, `ydb/tools/ydb_bench/lib/import_results.py`: manifests, atomic writes and imports |
+| Web | `ydb/tools/ydb_bench/lib/web.py`: RunService, queue/lifecycle, HTTP handlers, embedded JS/CSS, reports and comparisons |
+| Federation | `ydb/tools/ydb_bench/lib/hosts.py`: identities, membership, tokens and peer allowlists; `ydb/tools/ydb_bench/lib/federation.py`: read-through aggregation and host-qualified references |
+| Topology/metrics | `ydb/tools/ydb_bench/lib/topology.py`: discovery and placement; `ydb/tools/ydb_bench/lib/system_info.py`, `ydb/tools/ydb_bench/lib/linux_telemetry.py`, `ydb/tools/ydb_bench/lib/ydb_telemetry.py`: system/process/YDB measurements |
+| Templates | `ydb/tools/ydb_bench/lib/cluster_templates.py`: validated revisioned specifications; `ydb/tools/ydb_bench/lib/cluster_templates_ui.py`: placement views and joint previews |
 
 Web assets are Python strings served by the executable, not a separately
 deployed frontend. Editing sources does not update a running binary. Register
@@ -55,8 +56,8 @@ new modules in the relevant `ya.make`.
 - Predictions are not measured search evidence. Verification may reject a
   boundary. A passing maximum is a lower bound, and throughput alone does not
   establish SLO success.
-- Preserve cancellation and cleanup. Read `model/README.md` and
-  `model/run_lifecycle.pml` when changing run/queue lifecycle semantics.
+- Preserve cancellation and cleanup. Read `ydb/tools/ydb_bench/model/README.md`
+  and `ydb/tools/ydb_bench/model/run_lifecycle.pml` when changing run/queue lifecycle semantics.
 
 Update guidance when a documented contract changes. Keep machine aliases,
 credentials, deployment paths and transient run IDs out of repository skills.

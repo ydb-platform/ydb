@@ -2101,9 +2101,11 @@ private:
 
         TVector<TStringBuf> lookupColumns;
         if (shape.IsStructOfNewAndOldValues) {
+            // These values are already carried by the input's "old" struct, so NeedLookup stays false.
+            // Register them as LookupColumns only to provide runtime metadata for indexes and RETURNING.
             for (const auto& item : shape.OldStructType->GetItems()) {
                 const auto& columnName = item->GetName();
-                AFL_ENSURE(!mainKeyColumnsSet.contains(columnName) && lookupColumnsSet.contains(columnName));
+                AFL_ENSURE(!mainKeyColumnsSet.contains(columnName));
 
                 const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
                 YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
@@ -2398,7 +2400,8 @@ private:
 
         const auto affectedIndexes = ComputeAffectedIndexes(settings, tableMeta, columnsSet, mainKeyColumnsSet);
 
-        const bool needOldValues = ComputeNeedOldValues(settings, tableMeta, affectedIndexes.Affected, columnsSet, mainKeyColumnsSet, localDefaultColumns.Names);
+        const bool needOldValues = shape.IsStructOfNewAndOldValues
+            || ComputeNeedOldValues(settings, tableMeta, affectedIndexes.Affected, columnsSet, mainKeyColumnsSet, localDefaultColumns.Names);
         const bool needLookup = needOldValues && !shape.IsStructOfNewAndOldValues;
         settingsProto.SetNeedLookup(needLookup);
 

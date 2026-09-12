@@ -1,4 +1,5 @@
 #include "kqp_opt_impl.h"
+#include "kqp_opt_generated_columns.h"
 
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -688,7 +689,13 @@ template <bool GroupEffectsByTable>
 TMaybeNode<TKqlQuery> BuildEffects(const TKqlQuery& query, TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx)
 {
-    TNodeMap<size_t> returningEffectsMap;
+    struct TReturningEffectInfo {
+        TExprNode::TPtr Effect;
+        size_t ResultIndex;
+        TExprNode::TPtr ReturningList;
+    };
+
+    TVector<TReturningEffectInfo> returningEffects;
     for (size_t index = 0; index < query.Results().Size(); ++index) {
         const auto& result = query.Results().Item(index);
         VisitExpr(
@@ -708,7 +715,10 @@ TMaybeNode<TKqlQuery> BuildEffects(const TKqlQuery& query, TExprContext& ctx,
                     }
                 }();
 
-                AFL_ENSURE((returningEffectsMap.emplace(effect.Raw(), index)).second);
+                AFL_ENSURE(std::none_of(returningEffects.begin(), returningEffects.end(), [&](const auto& info) {
+                    return info.Effect.Get() == effect.Raw();
+                }));
+                returningEffects.push_back({effect.Ptr(), index, returning.Cast().Ptr()});
                 return false;
             });
     }
@@ -749,7 +759,62 @@ TMaybeNode<TKqlQuery> BuildEffects(const TKqlQuery& query, TExprContext& ctx,
 
                 if (returning) {
                     AFL_ENSURE(kqpCtx.Config->GetEnableIndexStreamWrite());
-                    newReturning.emplace(returningEffectsMap[effect.Raw()], returning);
+                    auto returningInfo = std::find_if(returningEffects.begin(), returningEffects.end(), [&](const auto& info) {
+                        return info.Effect.Get() == effect.Raw();
+                    });
+
+                    if (returningInfo == returningEffects.end()) {
+                        // Specialized index rewrites may independently rebuild the effect subtree in
+                        // Effects and in ReturningList. Match those equivalent copies by statement.
+                        const auto tableEffect = effect.Cast<TKqlTableEffect>();
+                        const auto matchesStatement = [&](const auto& info) {
+                            const auto candidate = TExprBase(info.Effect).Maybe<TKqlTableEffect>();
+                            return candidate
+                                && info.Effect->Content() == effect.Ref().Content()
+                                && info.Effect->Pos() == effect.Pos()
+                                && candidate.Cast().Table().Path().Value() == tableEffect.Table().Path().Value();
+                        };
+
+                        returningInfo = std::find_if(returningEffects.begin(), returningEffects.end(), matchesStatement);
+                        AFL_ENSURE(returningInfo == returningEffects.end()
+                            || std::find_if(returningInfo + 1, returningEffects.end(), matchesStatement) == returningEffects.end());
+                    }
+
+                    AFL_ENSURE(returningInfo != returningEffects.end());
+                    const auto resultIndex = returningInfo->ResultIndex;
+                    const auto returningList = TKqlReturningList(returningInfo->ReturningList);
+                    const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, returningList.Table().Path());
+                    auto resultValue = BuildVirtualGeneratedColumnProjection(
+                        TExprBase(returning), query.Results().Item(resultIndex).ColumnHints(),
+                        table, returningList.Pos(), ctx).Ptr();
+
+                    if (resultValue.Get() != returning.Get()) {
+                        AFL_ENSURE(TDqCnUnionAll::Match(returning.Get()));
+
+                        auto rows = Build<TCoArgument>(ctx, resultValue->Pos())
+                            .Name("returning_rows")
+                            .Done();
+                        auto program = ctx.ReplaceNode(TExprNode::TPtr(resultValue), *returning, rows.Ptr());
+                        auto projectionStage = Build<TDqStage>(ctx, resultValue->Pos())
+                            .Inputs()
+                                .Add(TDqCnUnionAll(returning))
+                                .Build()
+                            .Program()
+                                .Args({rows})
+                                .Body(program)
+                                .Build()
+                            .Settings().Build()
+                            .Done();
+
+                        resultValue = Build<TDqCnUnionAll>(ctx, resultValue->Pos())
+                            .Output()
+                                .Stage(projectionStage)
+                                .Index().Build("0")
+                                .Build()
+                            .Done().Ptr();
+                    }
+
+                    newReturning.emplace(resultIndex, TExprBase(resultValue));
                 }
                 
                 return true;

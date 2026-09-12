@@ -270,6 +270,26 @@ public:
         return false;
     }
 
+    // Memoization of compiled JSON callables (`KqpOlapJsonValue` / `KqpOlapJsonExists`): the same JSON_VALUE used by several
+    // pushed predicates (e.g. by several `KqpOlapApply` callables or comparisons) is computed by the column shard only once.
+    // The key is structural (kernel, column, path, result type), so it does not depend on the identity of expression nodes.
+    struct TCompiledColumn {
+        ui64 Id = 0ULL;
+        const TTypeAnnotationNode* Type = nullptr;
+    };
+
+    static TString MakeJsonCallableKey(const TStringBuf kernel, const TKqpOlapJsonOperationBase& callable, const TTypeAnnotationNode& type) {
+        return TStringBuilder() << kernel << '|' << callable.Column().Value() << '|' << callable.Path().Literal().Value() << '|' << FormatType(&type);
+    }
+
+    const TCompiledColumn* FindCompiledJsonCallable(const TString& key) const {
+        return CompiledJsonCallables.FindPtr(key);
+    }
+
+    void AddCompiledJsonCallable(const TString& key, ui64 id, const TTypeAnnotationNode* type) {
+        YQL_ENSURE(CompiledJsonCallables.emplace(key, TCompiledColumn{id, type}).second, "JSON callable is compiled twice: " << key);
+    }
+
 private:
     const TTypeAnnotationNode* GetColumnTypeByName(const std::string_view &name) const {
         auto *rowItemType = GetSeqItemType(Row.Ptr()->GetTypeAnn());
@@ -292,6 +312,7 @@ private:
     TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> YqlKernelsFuncRegistry;
     std::unique_ptr<TKernelRequestBuilder> YqlKernelRequestBuilder;
     THashMap<std::string, ui32> KqpColumnNameToProjectionId;
+    THashMap<TString, TCompiledColumn> CompiledJsonCallables;
 };
 
 std::unordered_map<std::string, EAggFunctionType> TKqpOlapCompileContext::AggFuncTypesMap = {
@@ -431,6 +452,14 @@ struct TTypedColumn {
 };
 
 const TTypedColumn ConvertJsonValueToColumn(const TKqpOlapJsonValue& jsonValueCallable, TKqpOlapCompileContext& ctx) {
+    const auto returningTypeArg = jsonValueCallable.ReturningType();
+    const auto type = ctx.ExprCtx().MakeType<TOptionalExprType>(returningTypeArg.Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType());
+
+    const auto key = TKqpOlapCompileContext::MakeJsonCallableKey("JsonValue", jsonValueCallable, *type);
+    if (const auto* compiled = ctx.FindCompiledJsonCallable(key)) {
+        return {compiled->Id, compiled->Type};
+    }
+
     const auto columnId = GetOrCreateColumnId(jsonValueCallable.Column(), ctx);
     const auto pathId = GetOrCreateColumnId(jsonValueCallable.Path(), ctx);
 
@@ -441,8 +470,6 @@ const TTypedColumn ConvertJsonValueToColumn(const TKqpOlapJsonValue& jsonValueCa
     jsonValueFunc->AddArguments()->SetId(pathId);
 
     jsonValueFunc->SetFunctionType(TProgram::YQL_KERNEL);
-    const auto returningTypeArg = jsonValueCallable.ReturningType();
-    const auto type = ctx.ExprCtx().MakeType<TOptionalExprType>(returningTypeArg.Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType());
     const auto idx = ctx.AddYqlKernelJsonValue(
         jsonValueCallable.Column(),
         jsonValueCallable.Path(),
@@ -450,10 +477,19 @@ const TTypedColumn ConvertJsonValueToColumn(const TKqpOlapJsonValue& jsonValueCa
     jsonValueFunc->SetKernelName("JsonValue");
     jsonValueFunc->SetKernelIdx(idx);
 
-    return {command->GetColumn().GetId(), ctx.ConvertToBlockType(type)};
+    const TTypedColumn result{command->GetColumn().GetId(), ctx.ConvertToBlockType(type)};
+    ctx.AddCompiledJsonCallable(key, result.Id, result.Type);
+    return result;
 }
 
 const TTypedColumn CompileJsonExists(const TKqpOlapJsonExists& jsonExistsCallable, TKqpOlapCompileContext& ctx) {
+    const auto type = ctx.ExprCtx().MakeType<TOptionalExprType>(ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool));
+
+    const auto key = TKqpOlapCompileContext::MakeJsonCallableKey("JsonExists", jsonExistsCallable, *type);
+    if (const auto* compiled = ctx.FindCompiledJsonCallable(key)) {
+        return {compiled->Id, compiled->Type};
+    }
+
     const auto columnId = GetOrCreateColumnId(jsonExistsCallable.Column(), ctx);
     const auto pathId = GetOrCreateColumnId(jsonExistsCallable.Path(), ctx);
 
@@ -464,7 +500,6 @@ const TTypedColumn CompileJsonExists(const TKqpOlapJsonExists& jsonExistsCallabl
     jsonExistsFunc->AddArguments()->SetId(pathId);
 
     jsonExistsFunc->SetFunctionType(TProgram::YQL_KERNEL);
-    const auto type = ctx.ExprCtx().MakeType<TOptionalExprType>(ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool));
     const auto idx = ctx.AddYqlKernelJsonExists(
         jsonExistsCallable.Column(),
         jsonExistsCallable.Path(),
@@ -472,7 +507,9 @@ const TTypedColumn CompileJsonExists(const TKqpOlapJsonExists& jsonExistsCallabl
     jsonExistsFunc->SetKernelName("JsonExists");
     jsonExistsFunc->SetKernelIdx(idx);
 
-    return {ConvertSafeCastToColumn(command->GetColumn().GetId(), "Uint8", ctx), ctx.ConvertToBlockType(type)};
+    const TTypedColumn result{ConvertSafeCastToColumn(command->GetColumn().GetId(), "Uint8", ctx), ctx.ConvertToBlockType(type)};
+    ctx.AddCompiledJsonCallable(key, result.Id, result.Type);
+    return result;
 }
 
 ui64 GetOrCreateColumnId(const TExprBase& node, TKqpOlapCompileContext& ctx) {

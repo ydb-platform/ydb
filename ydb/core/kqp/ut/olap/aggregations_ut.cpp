@@ -1448,6 +1448,116 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
         }
     }
 
+    // The same JSON_VALUE used by several conjuncts which are pushed as separate `KqpOlapApply` callables
+    // must be computed by the column shard only once (a single shared `KqpOlapJsonValue`).
+    Y_UNIT_TEST(JsonValueSharedBetweenOlapApplyConjuncts) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTableWithNullsHelper(kikimr).CreateTableWithNulls();
+        WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
+        auto tableClient = kikimr.GetTableClient();
+
+        const auto countOccurrences = [](const TString& text, const TString& pattern) {
+            ui32 count = 0;
+            for (size_t pos = text.find(pattern); pos != TString::npos; pos = text.find(pattern, pos + 1)) {
+                ++count;
+            }
+            return count;
+        };
+
+        struct TCase {
+            TString Query;
+            TString ExpectedReply;
+            ui32 ExpectedJsonValues;
+            ui32 ExpectedOlapApplies;
+        };
+
+        // "col1" is "val1" in the JSON of rows 1..5.
+        const std::vector<TCase> cases = {
+            {
+                // Two Re2-based conjuncts over the same JSON_VALUE.
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.col1") ILIKE "%V%1%" AND JSON_VALUE(jsonval, "$.col1") ILIKE "%a%l%"
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])",
+                /*expectedJsonValues=*/1,
+                /*expectedOlapApplies=*/2
+            },
+            {
+                // Mixed: a Re2-based conjunct and a `CAST` conjunct over the same JSON_VALUE, plus a different JSON_VALUE.
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.col1") ILIKE "%V%1%"
+                        AND CAST(JSON_VALUE(jsonval, "$.col1") AS String) ILIKE "%a%l%"
+                        AND JSON_VALUE(jsonval, "$.\"col-abc\"") ILIKE "%A%b%"
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])",
+                /*expectedJsonValues=*/2,
+                /*expectedOlapApplies=*/3
+            },
+            {
+                // Native comparison and `KqpOlapApply` over the same JSON_VALUE (different filter levels).
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.col1") = "val1" AND JSON_VALUE(jsonval, "$.col1") ILIKE "%a%l%"
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])",
+                /*expectedJsonValues=*/1,
+                /*expectedOlapApplies=*/1
+            },
+            {
+                // Two native comparisons over the same JSON_VALUE.
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.col1") = "val1" OR JSON_VALUE(jsonval, "$.col1") = "val2"
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])",
+                /*expectedJsonValues=*/1,
+                /*expectedOlapApplies=*/0
+            },
+        };
+
+        for (const auto& testCase : cases) {
+            auto explainResult = StreamExplainQuery(testCase.Query, tableClient);
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+            const auto explain = CollectStreamResult(explainResult);
+            const auto ast = TString(explain.QueryStats->Getquery_ast());
+            Cerr << "AST: " << ast << Endl;
+
+            auto it = tableClient.StreamExecuteScanQuery(testCase.Query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CompareYson(StreamResultToYson(it), testCase.ExpectedReply);
+
+            UNIT_ASSERT_C(ast.find("Json2.") == TString::npos,
+                "JSON is processed by Json2 UDF instead of KqpOlapJsonValue. Query: " << testCase.Query);
+            UNIT_ASSERT_VALUES_EQUAL_C(countOccurrences(ast, "(KqpOlapApply "), testCase.ExpectedOlapApplies,
+                "Unexpected number of KqpOlapApply callables. Query: " << testCase.Query);
+            // Identical expression nodes are merged (CSEE), so the AST contains each distinct JSON_VALUE once.
+            UNIT_ASSERT_VALUES_EQUAL_C(countOccurrences(ast, "(KqpOlapJsonValue "), testCase.ExpectedJsonValues,
+                "Unexpected number of KqpOlapJsonValue callables in AST. Query: " << testCase.Query);
+
+            // The SSA program which is actually executed by the column shard must compute each JSON_VALUE once as well.
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(*explain.PlanJson, &plan, true);
+            // The plan contains the same read operator several times (e.g. in the simplified plan), check every copy.
+            const auto ssaPrograms = FindPlanNodes(plan, "SsaProgram");
+            UNIT_ASSERT_C(!ssaPrograms.empty(), "SSA program is not found in the plan. Query: " << testCase.Query);
+            for (const auto& ssaProgram : ssaPrograms) {
+                const auto ssa = ssaProgram.GetStringRobust();
+                Cerr << "SSA: " << ssa << Endl;
+                UNIT_ASSERT_VALUES_EQUAL_C(countOccurrences(ssa, "\"KernelName\":\"JsonValue\""), testCase.ExpectedJsonValues,
+                    "The same JSON_VALUE is computed more than once by the SSA program. Query: " << testCase.Query);
+            }
+        }
+    }
+
     // `KqpOlapJsonValue` kernel differs from `JsonValue` with an explicit RETURNING type (e.g. it does not support dates
     // and uses lenient `SqlValueConvertToUtf8` instead of strict `SqlValueUtf8` for Utf8 / String) and ignores
     // ON EMPTY / ON ERROR defaults, so such JSON_VALUE must be computed inside `KqpOlapApply` lambda via `Json2` UDFs

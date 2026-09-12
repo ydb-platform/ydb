@@ -17,7 +17,7 @@ FROM
 ,
     `/Root/test/ds/call_center`
 WHERE
-    d_date BETWEEN CAST('1999-2-01' AS Date) AND (
+    CAST(d_date AS Date) BETWEEN CAST('1999-2-01' AS Date) AND (
         CAST('1999-2-01' AS Date) + DateTime::IntervalFromDays(60)
     )
     AND cs1.cs_ship_date_sk == d_date_sk

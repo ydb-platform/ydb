@@ -1676,6 +1676,15 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 )",
                 R"([[1];[2];[3];[4];[5]])"
             },
+            {
+                // PASSING variables are not supported by `KqpOlapJsonValue`.
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.col1" PASSING "unused"u AS v) = "val1"
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])"
+            },
         };
 
         for (const auto& testCase : cases) {

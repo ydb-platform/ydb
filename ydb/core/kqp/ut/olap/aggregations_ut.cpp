@@ -1426,6 +1426,35 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 R"([[4];[5]])",
                 2
             },
+            // The following predicates contain no UDF applies at all: `KqpOlapApply` lambda consists of plain MKQL
+            // callables (`Coalesce`, `If`, `Concat`, comparison) over the external arguments.
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE COALESCE(JSON_VALUE(jsonval, "$.missing"), "dflt") = "dflt"
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5];[6];[7];[8];[9];[10]])",
+                1
+            },
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE IF(JSON_VALUE(jsonval, "$.col1") = "val1", 1, 0) = 1
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])",
+                1
+            },
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.col1") || JSON_VALUE(jsonval, "$.\"col-abc\"") = "val1val-abc"
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])",
+                2
+            },
         };
 
         for (const auto& testCase : cases) {

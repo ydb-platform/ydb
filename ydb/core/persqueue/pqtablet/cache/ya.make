@@ -8,6 +8,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/keyvalue
+    ydb/core/persqueue/common
     ydb/core/persqueue/pqtablet/blob
     ydb/core/persqueue/events
     ydb/public/api/grpc/draft

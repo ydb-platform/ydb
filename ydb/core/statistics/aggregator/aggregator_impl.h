@@ -367,6 +367,7 @@ private: // stored in local db
         TPathId PathId;
         TVector<ui32> ColumnTags;
         TString Path;            // full table path, persisted in ForceTraversalTables
+        double SampleRate = 1.0;
         ui32 ShardsTotal = 0;   // set by TEvAnalyzeActorProgress
         ui32 ShardsDone  = 0;   // incremented per scan completion (current batch)
 

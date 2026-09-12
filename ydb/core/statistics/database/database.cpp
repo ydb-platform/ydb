@@ -25,6 +25,12 @@ static TString SerializeColumnTags(const TColumnTags& tags) {
     return {};
 }
 
+static constexpr TStringBuf SampledStatisticPrefix = "sample/";
+
+static TString SampledStatisticKey(TStringBuf tags) {
+    return TStringBuilder() << SampledStatisticPrefix << tags;
+}
+
 class TStatisticsTableCreator : public TActorBootstrapped<TStatisticsTableCreator> {
 public:
     explicit TStatisticsTableCreator(std::unique_ptr<NActors::IEventBase> resultEvent, const TString& database)
@@ -116,6 +122,7 @@ public:
             DECLARE $stat_types AS List<Uint32>;
             DECLARE $column_tags AS List<String>;
             DECLARE $data AS List<String>;
+            DECLARE $sample_prefix AS String;
 
             $to_struct = ($t) -> {
                 RETURN <|
@@ -127,10 +134,16 @@ public:
                 |>;
             };
 
+            $rows = ListMap(ListZip($stat_types, $column_tags, $data), $to_struct);
+
             UPSERT INTO `)" << StatisticsTablePath << R"(`
                 (owner_id, local_path_id, stat_type, column_tags, data)
-            SELECT owner_id, local_path_id, stat_type, column_tags, data FROM
-            AS_TABLE(ListMap(ListZip($stat_types, $column_tags, $data), $to_struct));
+            SELECT owner_id, local_path_id, stat_type, column_tags, data
+            FROM AS_TABLE($rows);
+
+            DELETE FROM `)" << StatisticsTablePath << R"(` ON
+            SELECT owner_id, local_path_id, stat_type, $sample_prefix || column_tags AS column_tags
+            FROM AS_TABLE($rows) WHERE NOT StartsWith(column_tags, $sample_prefix);
         )";
 
         NYdb::TParamsBuilder params;
@@ -142,6 +155,8 @@ public:
                 .Uint64(PathId.LocalPathId)
                 .Build();
 
+        params.AddParam("$sample_prefix").String(TString(SampledStatisticPrefix)).Build();
+
         auto& statTypes = params.AddParam("$stat_types").BeginList();
         for (const auto& item : Items) {
             statTypes
@@ -152,17 +167,23 @@ public:
 
         auto& columnTags = params.AddParam("$column_tags").BeginList();
         for (const auto& item : Items) {
+            const auto tags = SerializeColumnTags(item.ColumnTags);
             columnTags
                 .AddListItem()
-                .String(SerializeColumnTags(item.ColumnTags));
+                .String(item.Sampling ? SampledStatisticKey(tags) : tags);
         }
         columnTags.EndList().Build();
 
         auto& data = params.AddParam("$data").BeginList();
         for (const auto& item : Items) {
-            data
-                .AddListItem()
-                .String(item.Data);
+            if (!item.Sampling) {
+                data.AddListItem().String(item.Data);
+                continue;
+            }
+            NKikimrStat::TSampledStatistic payload;
+            *payload.MutableSampling() = *item.Sampling;
+            payload.SetData(item.Data);
+            data.AddListItem().String(payload.SerializeAsString());
         }
         data.EndList().Build();
 
@@ -227,7 +248,8 @@ NActors::IActor* CreateSaveStatisticsQuery(const NActors::TActorId& replyActorId
 
 void DispatchLoadStatisticsQuery(
         const TActorId& replyToActor, ui64 queryId,
-        const TString& database, const TPathId& pathId, EStatType statType, const TColumnTags& columnTags) {
+        const TString& database, const TPathId& pathId, EStatType statType, const TColumnTags& columnTags,
+        bool acceptSampledStatistics) {
     const TString serializedColumnTags = SerializeColumnTags(columnTags);
     YDB_LOG_DEBUG("[DispatchLoadStatisticsQuery]",
         {"queryId", queryId},
@@ -242,15 +264,21 @@ void DispatchLoadStatisticsQuery(
     readRowsRequest.set_path(statisticsTablePath);
 
     NYdb::TValueBuilder keys_builder;
-    keys_builder.BeginList()
-        .AddListItem()
+    keys_builder.BeginList();
+    const auto addKey = [&](const TString& key) {
+        keys_builder.AddListItem()
             .BeginStruct()
                 .AddMember("owner_id").Uint64(pathId.OwnerId)
                 .AddMember("local_path_id").Uint64(pathId.LocalPathId)
                 .AddMember("stat_type").Uint32(static_cast<ui32>(statType))
-                .AddMember("column_tags").String(serializedColumnTags)
-            .EndStruct()
-        .EndList();
+                .AddMember("column_tags").String(key)
+            .EndStruct();
+    };
+    addKey(serializedColumnTags);
+    if (acceptSampledStatistics) {
+        addKey(SampledStatisticKey(serializedColumnTags));
+    }
+    keys_builder.EndList();
     auto keys = keys_builder.Build();
     auto protoKeys = readRowsRequest.mutable_keys();
     *protoKeys->mutable_type() = NYdb::TProtoAccessor::GetProto(keys.GetType());
@@ -262,14 +290,16 @@ void DispatchLoadStatisticsQuery(
     auto rpcFuture = NRpcService::DoLocalRpc<TEvReadRowsRequest>(
         std::move(readRowsRequest), database, Nothing(), TActivationContext::ActorSystem(), true
     );
-    rpcFuture.Subscribe([replyTo = replyToActor, queryId, actorSystem](const NThreading::TFuture<Ydb::Table::ReadRowsResponse>& future) mutable {
+    rpcFuture.Subscribe([replyTo = replyToActor, queryId, actorSystem, acceptSampledStatistics](const NThreading::TFuture<Ydb::Table::ReadRowsResponse>& future) mutable {
         const auto& response = future.GetValueSync();
         auto query_response = std::make_unique<TEvStatistics::TEvLoadStatisticsQueryResponse>();
+        query_response->Status = response.status();
+        NYql::IssuesFromMessage(response.issues(), query_response->Issues);
 
         if (response.status() == Ydb::StatusIds::SUCCESS) {
             NYdb::TResultSetParser parser(response.result_set());
             const auto rowsCount = parser.RowsCount();
-            Y_ABORT_UNLESS(rowsCount < 2);
+            Y_ABORT_UNLESS(rowsCount <= (acceptSampledStatistics ? 2u : 1u));
 
             if (rowsCount == 0) {
                 YDB_LOG_WARN("[ReadRowsResponse]",
@@ -277,19 +307,33 @@ void DispatchLoadStatisticsQuery(
                     {"rowsCount", 0});
             }
 
-            query_response->Success = rowsCount > 0;
-
             while(parser.TryNextRow()) {
                 auto& col = parser.ColumnParser("data");
                 // may be not optional from versions before fix of bug https://github.com/ydb-platform/ydb/issues/15701
-                query_response->Data = col.GetKind() == NYdb::TTypeParser::ETypeKind::Optional
+                std::optional<TString> data = col.GetKind() == NYdb::TTypeParser::ETypeKind::Optional
                     ? col.GetOptionalString()
                     : col.GetString();
+                auto& keyColumn = parser.ColumnParser("column_tags");
+                const auto key = keyColumn.GetKind() == NYdb::TTypeParser::ETypeKind::Optional
+                    ? keyColumn.GetOptionalString().value_or(TString()) : keyColumn.GetString();
+                if (acceptSampledStatistics && TStringBuf(key).StartsWith(SampledStatisticPrefix)) {
+                    NKikimrStat::TSampledStatistic payload;
+                    if (data && payload.ParseFromString(*data) && payload.HasData() && payload.HasSampling()
+                            && payload.GetSampling().HasRequestedRate() && payload.GetSampling().HasEligibleUnits()
+                            && payload.GetSampling().HasSelectedUnits() && payload.GetSampling().HasSampleRows()) {
+                        query_response->Data = std::move(*payload.MutableData());
+                        query_response->Sampling = std::move(*payload.MutableSampling());
+                    }
+                } else if (!query_response->Sampling) {
+                    query_response->Data = std::move(data);
                 }
+            }
+            query_response->Success = query_response->Data.has_value();
         } else {
             YDB_LOG_ERROR("[ReadRowsResponse]",
                 {"queryId", queryId},
-                {"issues", NYql::IssuesFromMessageAsString(response.issues())});
+                {"status", response.status()},
+                {"issues", query_response->Issues.ToOneLineString()});
             query_response->Success = false;
         }
 

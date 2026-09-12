@@ -612,7 +612,8 @@ public:
                 auto analyzePromise = NewPromise<IKqpGateway::TGenericResult>();
 
                 TVector<TString> columns{analyzeOperation.columns().begin(), analyzeOperation.columns().end()};
-                IActor* analyzeActor = new TAnalyzeActor(Database, analyzeOperation.GetTablePath(), columns, analyzePromise);
+                IActor* analyzeActor = new TAnalyzeActor(Database, analyzeOperation.GetTablePath(), columns, analyzePromise,
+                    analyzeOperation.GetSampleRate());
 
                 auto actorSystem = TActivationContext::ActorSystem();
                 AnalyzeActorId = RegisterWithSameMailbox(analyzeActor);

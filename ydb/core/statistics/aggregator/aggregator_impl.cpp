@@ -1204,6 +1204,7 @@ void TStatisticsAggregator::StartAnalyzeActor(const TActorContext& ctx, const TS
     const ui64 maxStateBytes = std::max<ui64>(1, std::min<ui64>(
         StatisticsConfig.GetAnalyzeHistogramMaxStateBytes(),
         TAnalyzeActor::MaxStatisticSize));
+    const auto* table = ForceTraversalTable(operationId, pathId);
     auto analyzeActorConfig = TAnalyzeActor::TConfig{
         .MaxTotalScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxTotalScanActorsInFlight(),
         .MaxPerNodeScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxPerNodeScanActorsInFlight(),
@@ -1213,9 +1214,10 @@ void TStatisticsAggregator::StartAnalyzeActor(const TActorContext& ctx, const TS
         .CollectPrimaryKeyHistogram = StatisticsConfig.GetAnalyzeCollectPrimaryKeyHistogram(),
         .HistogramOversampleFactor = oversampleFactor,
         .HistogramMaxStateBytes = maxStateBytes,
+        .SampleRate = table ? table->SampleRate : 1.0,
     };
     AnalyzeActorId = ctx.Register(new TAnalyzeActor(
-        SelfId(), operationId, database, pathId, columnTags, analyzeActorConfig),
+        SelfId(), operationId, database, pathId, table ? table->ColumnTags : columnTags, analyzeActorConfig),
         TMailboxType::HTSwap, AppData()->BatchPoolId);
 }
 

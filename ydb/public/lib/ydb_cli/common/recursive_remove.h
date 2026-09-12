@@ -56,20 +56,48 @@ namespace NInternal {
 
     bool MightHaveDependents(NScheme::ESchemeEntryType type);
 
+    // Removes entries in parallel using a thread pool.
+    // Falls back to sequential execution for single-entry batches.
+    TStatus RemoveEntriesParallel(
+        const TVector<const NScheme::TSchemeEntry*>& entries,
+        TRemover& remover,
+        TProgressBar* progressBar
+    );
+
+    // Removes entries grouped by path depth, deepest first (for correct directory ordering).
+    // Within each depth level, entries are removed in parallel.
+    TStatus RemoveEntriesByDepth(
+        const TVector<const NScheme::TSchemeEntry*>& entries,
+        TRemover& remover,
+        TProgressBar* progressBar
+    );
+
     template <typename TIterator>
     TStatus RemovePathsRecursive(
         TIterator begin,
         TIterator end,
         TRemover& remover,
-        TProgressBar* progressBar
+        TProgressBar* progressBar,
+        bool parallel = true
     ) {
-        TVector<const NScheme::TSchemeEntry*> entriesToRemoveInSecondPass;
+        TVector<const NScheme::TSchemeEntry*> pass1, pass2;
         for (const NScheme::TSchemeEntry& entry : std::ranges::subrange(begin, end)) {
             if (MightHaveDependents(entry.Type)) {
-                entriesToRemoveInSecondPass.emplace_back(&entry);
-                continue;
+                pass2.push_back(&entry);
+            } else {
+                pass1.push_back(&entry);
             }
-            auto result = remover(entry);
+        }
+
+        if (parallel) {
+            if (auto result = RemoveEntriesParallel(pass1, remover, progressBar); !result.IsSuccess()) {
+                return result;
+            }
+            return RemoveEntriesByDepth(pass2, remover, progressBar);
+        }
+
+        for (const auto* entry : pass1) {
+            auto result = remover(*entry);
             if (!result.IsSuccess()) {
                 return result;
             }
@@ -77,7 +105,7 @@ namespace NInternal {
                 progressBar->AddProgress(1);
             }
         }
-        for (const auto* entry : entriesToRemoveInSecondPass) {
+        for (const auto* entry : pass2) {
             auto result = remover(*entry);
             if (!result.IsSuccess()) {
                 return result;
@@ -111,7 +139,8 @@ TStatus RemovePathsRecursive(
     if (settings.CreateProgressBar_) {
         progressBar = std::make_unique<TProgressBar>(end - begin);
     }
-    return NInternal::RemovePathsRecursive(begin, end, remover, progressBar.get());
+    const bool parallel = (settings.Prompt_ != ERecursiveRemovePrompt::Always);
+    return NInternal::RemovePathsRecursive(begin, end, remover, progressBar.get(), parallel);
 }
 
 }

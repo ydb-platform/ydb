@@ -4,8 +4,16 @@
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
 
+#include <library/cpp/threading/future/async.h>
+
 #include <util/string/builder.h>
 #include <util/system/type_name.h>
+#include <util/thread/pool.h>
+
+#include <algorithm>
+#include <atomic>
+#include <map>
+#include <mutex>
 
 namespace NYdb::NConsoleClient {
 
@@ -280,7 +288,92 @@ TStatus RemovePathRecursive(
     }
 }
 
+namespace {
+    constexpr size_t RemoveInflight = 10;
+}
+
 namespace NInternal {
+
+    TStatus RemoveEntriesParallel(
+        const TVector<const NScheme::TSchemeEntry*>& entries,
+        TRemover& remover,
+        TProgressBar* progressBar
+    ) {
+        if (entries.size() <= 1) {
+            for (const auto* entry : entries) {
+                auto result = remover(*entry);
+                if (!result.IsSuccess()) {
+                    return result;
+                }
+                if (progressBar) {
+                    progressBar->AddProgress(1);
+                }
+            }
+            return TStatus(EStatus::SUCCESS, {});
+        }
+
+        const size_t threads = std::min(RemoveInflight, entries.size());
+        TThreadPool pool(IThreadPool::TParams().SetThreadNamePrefix("SchemeRemove"));
+        pool.Start(threads);
+
+        std::atomic<bool> hasError{false};
+        std::mutex resultMutex;
+        TStatus firstError(EStatus::SUCCESS, {});
+        std::mutex progressMutex;
+
+        TVector<NThreading::TFuture<void>> futures;
+        futures.reserve(entries.size());
+
+        for (const auto* entry : entries) {
+            futures.push_back(NThreading::Async(
+                [entry, &remover, &hasError, &firstError, &resultMutex, progressBar, &progressMutex]() {
+                    if (hasError.load(std::memory_order_relaxed)) {
+                        return;
+                    }
+                    auto result = remover(*entry);
+                    if (!result.IsSuccess()) {
+                        std::lock_guard lock(resultMutex);
+                        if (!hasError.exchange(true)) {
+                            firstError = std::move(result);
+                        }
+                    } else if (progressBar) {
+                        std::lock_guard lock(progressMutex);
+                        progressBar->AddProgress(1);
+                    }
+                },
+                pool
+            ));
+        }
+
+        NThreading::WaitAll(futures).GetValueSync();
+        return firstError;
+    }
+
+    TStatus RemoveEntriesByDepth(
+        const TVector<const NScheme::TSchemeEntry*>& entries,
+        TRemover& remover,
+        TProgressBar* progressBar
+    ) {
+        if (entries.empty()) {
+            return TStatus(EStatus::SUCCESS, {});
+        }
+
+        // Group entries by path depth (number of '/' characters), process deepest first
+        // to ensure children are deleted before their parent directories.
+        std::map<size_t, TVector<const NScheme::TSchemeEntry*>, std::greater<size_t>> byDepth;
+        for (const auto* entry : entries) {
+            const size_t depth = std::count(entry->Name.begin(), entry->Name.end(), '/');
+            byDepth[depth].push_back(entry);
+        }
+
+        for (auto& [depth, group] : byDepth) {
+            auto result = RemoveEntriesParallel(group, remover, progressBar);
+            if (!result.IsSuccess()) {
+                return result;
+            }
+        }
+        return TStatus(EStatus::SUCCESS, {});
+    }
 
     TRemover CreateDefaultRemover(
         NScheme::TSchemeClient& schemeClient,

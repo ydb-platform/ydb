@@ -46,8 +46,13 @@ public:
                     }
                     SideEffects.Send(Self->SelfId(), new TEvHive::TEvInitiateDeleteStorage(tablet->Id));
                 } else {
+                    tablet->ConfirmedStorageVersion = tablet->TabletStorageInfo->Version;
                     tablet->State = ETabletState::ReadyToWork;
-                    db.Table<Schema::Tablet>().Key(tablet->Id).Update(NIceDb::TUpdate<Schema::Tablet::State>(ETabletState::ReadyToWork));
+                    db.Table<Schema::Tablet>().Key(tablet->Id).Update(
+                        NIceDb::TUpdate<Schema::Tablet::State>(ETabletState::ReadyToWork),
+                        NIceDb::TUpdate<Schema::Tablet::ConfirmedStorageVersion>(
+                            tablet->ConfirmedStorageVersion));
+                    tablet->NotifyStorageInfo(SideEffects);
                     if (tablet->IsBootingSuppressed()) {
                         // Use best effort to kill currently running tablet
                         SideEffects.Register(CreateTabletKiller(TabletId, /* nodeId */ 0, tablet->KnownGeneration));
@@ -55,6 +60,89 @@ public:
                         Self->Execute(Self->CreateForceRestartTablet(tablet->GetFullTabletId()));
                     }
                 }
+            } else if (msg->Status == NKikimrProto::ERROR && !tablet->IsDeleting() && msg->ActualGeneration >= tablet->KnownGeneration) {
+                Y_ABORT_UNLESS(!msg->IsTabletStorageInfoVersionObsolete); // only Hive can increment version, it cannot be obsolete
+                ui32 confirmedVersion = tablet->ConfirmedStorageVersion;
+
+                struct THistoryEntry {
+                    ui32 Channel;
+                    ui32 Generation;
+                };
+                TVector<THistoryEntry> entries;
+                auto rowset = db.Table<Schema::TabletChannelGen>().Range(tablet->Id).Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+                while (!rowset.EndOfSet()) {
+                    const ui32 generation = static_cast<ui32>(
+                        rowset.GetValue<Schema::TabletChannelGen::Generation>());
+                    const ui32 version =
+                        rowset.GetValueOrDefault<Schema::TabletChannelGen::Version>();
+                    if (!rowset.GetValueOrDefault<Schema::TabletChannelGen::DeletedAtGeneration>()
+                            && version > confirmedVersion) {
+                        entries.push_back({
+                            .Channel = static_cast<ui32>(
+                                rowset.GetValue<Schema::TabletChannelGen::Channel>()),
+                            .Generation = generation,
+                        });
+                    }
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+
+                std::unordered_set<ui32> affectedChannels;
+                for (const auto& entry : entries) {
+                    affectedChannels.insert(entry.Channel);
+                }
+                for (ui32 channel : affectedChannels) {
+                    tablet->ReleaseAllocationUnit(channel);
+                }
+                for (const auto& entry : entries) {
+                    db.Table<Schema::TabletChannelGen>().Key(
+                        tablet->Id, entry.Channel, entry.Generation).Delete();
+                    if (entry.Channel < tablet->TabletStorageInfo->Channels.size()) {
+                        auto& history = tablet->TabletStorageInfo->Channels[entry.Channel].History;
+                        auto& histogram =
+                            Self->TabletCounters->Percentile()[NHive::COUNTER_TABLET_CHANNEL_HISTORY_SIZE];
+                        if (!history.empty()) {
+                            histogram.DecrementFor(history.size());
+                        }
+                        std::erase_if(history, [&](const auto& item) {
+                            return item.FromGeneration == entry.Generation;
+                        });
+                        if (!history.empty()) {
+                            histogram.IncrementFor(history.size());
+                        }
+                    }
+                }
+                for (ui32 channel : affectedChannels) {
+                    tablet->ChannelProfileNewGroup.set(channel);
+                    db.Table<Schema::TabletChannel>().Key(tablet->Id, channel).Update(
+                        NIceDb::TUpdate<Schema::TabletChannel::NeedNewGroup>(true));
+                    tablet->AcquireAllocationUnit(channel);
+                }
+
+                Y_ABORT_UNLESS(msg->ActualGeneration < Max<ui32>());
+                tablet->KnownGeneration = msg->ActualGeneration + 1;
+                tablet->ChannelProfileReassignReason =
+                    NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_NO;
+                tablet->State = ETabletState::GroupAssignment;
+                db.Table<Schema::Tablet>().Key(tablet->Id).Update(
+                    NIceDb::TUpdate<Schema::Tablet::ConfirmedStorageVersion>(confirmedVersion),
+                    NIceDb::TUpdate<Schema::Tablet::KnownGeneration>(tablet->KnownGeneration),
+                    NIceDb::TUpdate<Schema::Tablet::ReassignReason>(
+                        tablet->ChannelProfileReassignReason),
+                    NIceDb::TUpdate<Schema::Tablet::State>(ETabletState::GroupAssignment));
+
+                YDB_LOG_WARN("THive::TTxBlockStorageResult::Execute rolling back unconfirmed storage",
+                    {"logPrefix", GetLogPrefix()},
+                    {"tabletId", TabletId},
+                    {"storageVersion", tablet->TabletStorageInfo->Version},
+                    {"confirmedStorageVersion", confirmedVersion},
+                    {"actualGeneration", msg->ActualGeneration},
+                    {"affectedChannels", affectedChannels});
+                tablet->InitiateAssignTabletGroups();
             } else {
                 YDB_LOG_WARN("THive::TTxBlockStorageResult::Execute retrying block storage operation",
                     {"logPrefix", GetLogPrefix()},

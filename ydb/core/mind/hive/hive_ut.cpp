@@ -7412,7 +7412,6 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(tabletId, tabletId2);
         MakeSureTabletIsDown(runtime, tabletId2, 0);
     }
-
     void SendGetTabletStorageInfo(TTestActorRuntime& runtime, ui64 hiveTablet, ui64 tabletId, ui32 nodeIndex) {
         TActorId senderB = runtime.AllocateEdgeActor(nodeIndex);
         runtime.SendToPipe(hiveTablet, senderB, new TEvHive::TEvGetTabletStorageInfo(tabletId), nodeIndex, GetPipeConfigWithRetries());
@@ -7436,6 +7435,96 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT(getTabletStorageResult);
         UNIT_ASSERT_VALUES_EQUAL(getTabletStorageResult->Record.GetStatus(), NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(getTabletStorageResult->Record.GetTabletID(), tabletId);
+    }
+
+    Y_UNIT_TEST(TestGetStorageInfoWaitsForStorageConfirmation) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 2);
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+
+        const ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet,
+            MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, TTabletTypes::Dummy, BINDED_CHANNELS), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        TVector<THolder<IEventHandle>> blockedResults;
+        auto previousObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvBlobStorage::TEvBlockResult::EventType) {
+                blockedResults.emplace_back(event.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        SendReassignTablet(runtime, hiveTablet, tabletId);
+        runtime.WaitFor("block storage request", [&] {
+            return !blockedResults.empty();
+        });
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvGetTabletStorageInfo(tabletId), 0,
+            GetPipeConfigWithRetries());
+        // Must register the request instead of replying instantly
+        TAutoPtr<IEventHandle> handle;
+        runtime.GrabEdgeEventRethrow<TEvHive::TEvGetTabletStorageInfoRegistered>(handle);
+
+        runtime.SetObserverFunc(previousObserver);
+        for (auto& result : blockedResults) {
+            runtime.Send(result.Release(), 0, true);
+        }
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        auto* confirmed = runtime.GrabEdgeEventRethrow<TEvHive::TEvGetTabletStorageInfoResult>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(confirmed->Record.GetStatus(), NKikimrProto::OK);
+    }
+
+    Y_UNIT_TEST(TestBlockStorageErrorRestartsReassignAtActualGeneration) {
+        const ui64 hiveTablet = MakeDefaultHiveID();
+
+        THiveInitialEventsFilter initialEventsFilter;
+
+        RunTestWithReboots({hiveTablet}, [&]() {
+            return initialEventsFilter.Prepare();
+        }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+            if (ENABLE_DETAILED_HIVE_LOG) {
+                Ctest << "At dispatch " << dispatchName << Endl;
+            }
+            TTestBasicRuntime runtime(1, false);
+            Setup(runtime, true, 2);
+            setup(runtime);
+            const ui64 testerTablet = MakeTabletID(false, 1);
+            CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+
+            const ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet,
+                MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, TTabletTypes::Dummy, BINDED_CHANNELS), 0, true);
+            MakeSureTabletIsUp(runtime, tabletId, 0);
+
+            static constexpr ui32 actualGeneration = 100;
+            bool errorInjected = false;
+            bool sawNewGeneration = false;
+            auto blockObserver = runtime.AddObserver<TEvBlobStorage::TEvBlock>([&](auto&& ev) {
+                if (errorInjected && ev->Get()->Generation > actualGeneration) {
+                    sawNewGeneration = true;
+                }
+            });
+            auto resultObserver = runtime.AddObserver<TEvBlobStorage::TEvBlockResult>([&](auto&& ev) {
+                if (!errorInjected) {
+                    errorInjected = true;
+                    ev->Get()->Status = NKikimrProto::ERROR;
+                    ev->Get()->ActualGeneration = actualGeneration;
+                    ev->Get()->ErrorReason = "injected generation race";
+                }
+            });
+
+            activeZone = true;
+            SendReassignTablet(runtime, hiveTablet, tabletId);
+            runtime.WaitFor("reassign above actual generation", [&] {
+                return sawNewGeneration;
+            });
+            MakeSureTabletIsUp(runtime, tabletId, 0);
+            activeZone = false;
+        });
     }
 
     Y_UNIT_TEST(TestGetStorageInfoDeleteTabletBeforeAssigned) {

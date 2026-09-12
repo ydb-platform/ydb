@@ -3,6 +3,7 @@ PY3_LIBRARY()
 PY_SRCS(
     __init__.py
     cli.py
+    formulas.py
     plan.py
     trace.py
     witness.py

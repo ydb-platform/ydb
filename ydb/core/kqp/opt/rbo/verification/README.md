@@ -147,10 +147,11 @@ Detailed replay mechanics and the retained original invocation are in the
 
 ## Localize and preserve findings
 
-The [sequential prefix localizer](tools/README.md) uses the same kernel with an
-explicit `OPTIMIZER_TRANSFORMATION_PREFIX` comparison scope. Prefix results
-are diagnostic, not normal Initial/Final proofs. Equivalence is not monotonic
-across transformations; binary search is not a sound substitute.
+The [transformation localizer](tools/README.md) checks both halves of each
+captured interval, then descends to every adjacent step. Equivalent endpoints
+do not prune an interval: transformations can cancel. Its explicit
+`OPTIMIZER_TRANSFORMATION_PAIR` scope is diagnostic, not a normal Initial/Final
+proof. The optional sequential strategy retains the earlier first-prefix scan.
 
 Preserve the exact query, snapshots, raw verdict, formula, inspector trace,
 confirmation streams, and relevant prefix captures. A model error and a runtime

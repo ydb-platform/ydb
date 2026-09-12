@@ -13,6 +13,7 @@ from ..rbo_verifier.ir import SnapshotError, load_snapshot
 from ..rbo_verifier.stages import TASKS
 from ..rbo_verifier.verify import SchemaMismatch, SolverError, VerificationError
 from .plan import InspectionError, render_snapshot
+from .formulas import prepare_formulas
 from .trace import TRACE_FORMAT, TRACE_VERSION, prepare
 from .witness import InvalidWitness
 
@@ -22,6 +23,12 @@ def parser() -> argparse.ArgumentParser:
     commands = result.add_subparsers(dest="command", required=True)
     plan = commands.add_parser("plan", help="render one normalized semantic snapshot")
     plan.add_argument("snapshot", type=Path)
+
+    formulas = commands.add_parser("formulas", help="export exact operator term DAGs without solving")
+    formulas.add_argument("before", type=Path)
+    formulas.add_argument("after", type=Path)
+    formulas.add_argument("--rows", type=int, default=2)
+    formulas.add_argument("--emit-smt", type=Path, help="also save the complete original SMT obligation")
 
     witness = commands.add_parser("witness", help="solve and render one concrete execution trace")
     witness.add_argument("before", type=Path)
@@ -51,6 +58,12 @@ def main(arguments: Sequence[str] | None = None) -> int:
             return 0
         if options.rows < 0:
             return _error("INVALID_ARGUMENT", "--rows must not be negative")
+        if options.command == "formulas":
+            prepared = prepare_formulas(options.before.read_bytes(), options.after.read_bytes(), options.rows)
+            if options.emit_smt is not None:
+                options.emit_smt.write_text(prepared.problem.formula(), encoding="utf-8")
+            print(json.dumps(prepared.document, sort_keys=True, separators=(",", ":")))
+            return 0
         if options.timeout_ms <= 0:
             return _error("INVALID_ARGUMENT", "--timeout-ms must be positive")
         if options.solver is None and options.emit_smt is None:

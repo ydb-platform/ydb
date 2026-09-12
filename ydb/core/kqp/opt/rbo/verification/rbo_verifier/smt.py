@@ -1413,6 +1413,11 @@ class Script:
         return dict(enumerate(self._string_universe.representatives))
 
     @property
+    def declarations(self) -> tuple[DeclarationRecord, ...]:
+        """Read-only declaration records in their original dependency order."""
+        return tuple(self._declarations)
+
+    @property
     def assertions(self) -> tuple[Term, ...]:
         return tuple(self._assertions)
 

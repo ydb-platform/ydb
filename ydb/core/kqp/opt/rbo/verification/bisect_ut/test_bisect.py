@@ -4,6 +4,7 @@ import json
 import subprocess
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from ydb.core.kqp.opt.rbo.verification.tools.bisect import localize
@@ -11,6 +12,7 @@ from ydb.core.kqp.opt.rbo.verification.tools.protocol import (
     PROTOCOL,
     Config,
     LocalizationError,
+    digest,
 )
 
 
@@ -25,6 +27,10 @@ class Harness:
         final_export_unsupported=False,
         mutate_initial_at=None,
         mutate_sequence_at=None,
+        states=None,
+        pair_verdicts=None,
+        mutate_cached=False,
+        verdict_overrides=None,
     ):
         self.events = events
         self.prefix_verdicts = prefix_verdicts
@@ -35,6 +41,11 @@ class Harness:
         self.mutate_sequence_at = mutate_sequence_at
         self.capture_ordinals = []
         self.verifier_diagnostics = []
+        self.verifier_pairs = []
+        self.states = states
+        self.pair_verdicts = pair_verdicts or {}
+        self.mutate_cached = mutate_cached
+        self.verdict_overrides = verdict_overrides or {}
 
     def __call__(self, arguments, timeout):
         del timeout
@@ -50,6 +61,8 @@ class Harness:
             arguments[arguments.index("--rbo-transformation-prefix-output") + 1]
         )
         self.capture_ordinals.append(ordinal)
+        if self.mutate_cached and ordinal == 2:
+            (output.parent / "prefix-000001" / "prefix.json").write_text("prefix 2", encoding="utf-8")
         initial = "different" if ordinal == self.mutate_initial_at else "stable"
         (output / "initial.json").write_text(initial, encoding="utf-8")
         prefix = self.events[:ordinal]
@@ -85,12 +98,25 @@ class Harness:
         return subprocess.CompletedProcess(arguments, 0, "capture output", "")
 
     def verify(self, arguments):
-        diagnostic = "--diagnostic-transformation-prefix" in arguments
+        pair = "--diagnostic-transformation-pair" in arguments
+        diagnostic = pair or "--diagnostic-transformation-prefix" in arguments
         self.verifier_diagnostics.append(diagnostic)
         Path(arguments[arguments.index("--emit-smt") + 1]).write_text(
             "(check-sat)\n", encoding="utf-8"
         )
-        if diagnostic:
+        if pair:
+            anchor = Path(arguments[arguments.index("--diagnostic-observation-snapshot") + 1])
+            if anchor.read_text(encoding="utf-8") != "stable":
+                raise AssertionError("pair comparison lost its initial observation anchor")
+            def ordinal(filename):
+                text = Path(filename).read_text(encoding="utf-8")
+                return 0 if text == "stable" else len(self.events) + 1 if text == "final" else int(text.split()[1])
+            left, right = ordinal(arguments[1]), ordinal(arguments[2])
+            self.verifier_pairs.append((left, right))
+            status = self.pair_verdicts.get((left, right)) or (
+                "VERIFIED_BOUNDED" if self.states[left] == self.states[right] else "COUNTEREXAMPLE"
+            )
+        elif diagnostic:
             ordinal = int(Path(arguments[2]).read_text(encoding="utf-8").split()[1])
             status = self.prefix_verdicts[ordinal - 1]
         else:
@@ -99,7 +125,10 @@ class Harness:
         if status in {"UNSUPPORTED", "UNKNOWN"}:
             verdict["reason"] = f"diagnostic {status.lower()}"
         if diagnostic:
-            verdict["comparison_scope"] = "OPTIMIZER_TRANSFORMATION_PREFIX"
+            verdict["comparison_scope"] = "OPTIMIZER_TRANSFORMATION_PAIR" if pair else "OPTIMIZER_TRANSFORMATION_PREFIX"
+        if pair:
+            verdict.update(observation_snapshot_sha256=digest(anchor), observation_kind="bag")
+        verdict.update(self.verdict_overrides)
         exit_code = {
             "VERIFIED_BOUNDED": 0,
             "COUNTEREXAMPLE": 1,
@@ -125,6 +154,7 @@ class SequentialLocalizationTest(unittest.TestCase):
             Path("z3"),
             root,
             max_events=10,
+            strategy="sequential",
         )
 
     def events(self, count=2):
@@ -287,6 +317,79 @@ class SequentialLocalizationTest(unittest.TestCase):
                 harness = Harness(events, [], "VERIFIED_BOUNDED")
                 with self.assertRaisesRegex(LocalizationError, "event 1 has an invalid kind"):
                     localize(self.config(Path(temporary) / "artifacts"), harness)
+
+    def test_midpoint_first_finds_multiple_changes_inside_equivalent_interval(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "artifacts"
+            config = replace(self.config(root), strategy="divide-and-conquer")
+            harness = Harness(self.events(4), [], "COUNTEREXAMPLE", states=[0, 1, 0, 2, 2, 2])
+            result = localize(config, harness)
+            self.assertEqual(json.loads((root / "result.json").read_text()), result)
+            for owner in [*result["boundaries"], *result["comparisons"]]:
+                for artifact in owner["artifacts"].values():
+                    self.assertEqual(digest(root / artifact["path"]), artifact["sha256"])
+
+        self.assertEqual(harness.capture_ordinals, [11, 2, 1, 3, 4])
+        self.assertEqual(harness.verifier_pairs, [(0, 2), (2, 5), (0, 1), (1, 2), (2, 3), (3, 5), (3, 4), (4, 5)])
+        self.assertEqual([finding["event"]["ordinal"] for finding in result["findings"]], [1, 2, 3])
+        self.assertEqual(result["status"], "LOCALIZED_FAILURES")
+        self.assertEqual(result["completeness"], "COMPLETE")
+        self.assertFalse(result["gaps"])
+
+    def test_all_steps_is_explicit_and_detects_cancelled_final_failure(self):
+        for all_steps in (False, True):
+            with self.subTest(all_steps=all_steps), tempfile.TemporaryDirectory() as temporary:
+                config = replace(self.config(Path(temporary) / "artifacts"), strategy="divide-and-conquer", all_steps=all_steps)
+                harness = Harness(self.events(), [], "VERIFIED_BOUNDED", states=[0, 1, 0, 0])
+                result = localize(config, harness)
+            if all_steps:
+                self.assertEqual([finding["event"]["ordinal"] for finding in result["findings"]], [1, 2])
+            else:
+                self.assertEqual(result["status"], "FINAL_VERIFIED_BOUNDED")
+                self.assertEqual(harness.capture_ordinals, [11])
+
+    def test_exhaustive_gaps_do_not_blame_rules_or_skip_other_intervals(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config = replace(self.config(Path(temporary) / "artifacts"), strategy="divide-and-conquer")
+            harness = Harness(self.events(4), [], "COUNTEREXAMPLE", states=[0, 1, 2, 3, 3, 3],
+                              export_gaps={2}, pair_verdicts={(3, 4): "UNKNOWN"})
+            result = localize(config, harness)
+        self.assertEqual([finding["event"]["ordinal"] for finding in result["findings"]], [1])
+        self.assertEqual(result["completeness"], "GAPS")
+        self.assertEqual([gap["comparison"] for gap in result["gaps"] if gap["adjacent"]], ["1:2", "2:3", "3:4"])
+        self.assertIn((4, 5), harness.verifier_pairs)
+
+    def test_exhaustive_capture_binding_and_final_suffix(self):
+        for mutation in (None, "initial", "sequence", "cached"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+                config = replace(self.config(Path(temporary) / "artifacts"), strategy="divide-and-conquer")
+                harness = Harness(self.events(), [], "COUNTEREXAMPLE", states=[0, 0, 0, 1],
+                                  mutate_initial_at=1 if mutation == "initial" else None,
+                                  mutate_sequence_at=1 if mutation == "sequence" else None,
+                                  mutate_cached=mutation == "cached")
+                if mutation:
+                    with self.assertRaisesRegex(LocalizationError, "snapshot changed|sequence changed"):
+                        localize(config, harness)
+                else:
+                    result = localize(config, harness)
+                    self.assertEqual(result["findings"], [{"comparison": "2:3", "status": "COUNTEREXAMPLE",
+                                                           "region": "GLOBAL_SUFFIX_AFTER_TRANSFORMATIONS"}])
+
+    def test_rejects_mismatched_or_invalid_verifier_bounds(self):
+        for field, value in (("row_bound", 0), ("task_bound", 3), ("row_bound", None), ("task_bound", True)):
+            with self.subTest(field=field, value=value), tempfile.TemporaryDirectory() as temporary:
+                harness = Harness(self.events(), [], "VERIFIED_BOUNDED", verdict_overrides={field: value})
+                with self.assertRaisesRegex(LocalizationError, field):
+                    localize(self.config(Path(temporary) / "artifacts"), harness)
+
+    def test_pair_requires_original_observation_receipt(self):
+        for overrides in ({"observation_snapshot_sha256": "0" * 64}, {"observation_kind": None}):
+            with self.subTest(overrides=overrides), tempfile.TemporaryDirectory() as temporary:
+                config = replace(self.config(Path(temporary) / "artifacts"), strategy="divide-and-conquer")
+                harness = Harness(self.events(), [], "COUNTEREXAMPLE", states=[0, 0, 0, 1],
+                                  verdict_overrides=overrides)
+                with self.assertRaisesRegex(LocalizationError, "observation"):
+                    localize(config, harness)
 
 
 if __name__ == "__main__":

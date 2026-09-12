@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
 from typing import Sequence
 
-from .ir import SnapshotError, load_snapshot
+from .ir import SnapshotError, load_snapshot, parse_snapshot
 from .bundle import build_bundle_problem, load_bundle
 from .diagnostics import NonemptyOutputObserver, diagnose_nonempty_outputs
 from .stages import TASKS
@@ -17,6 +18,7 @@ from .verify import (
     SolverError,
     VerificationError,
     build_problem,
+    build_transformation_pair_problem,
     build_transformation_prefix_problem,
     solve,
 )
@@ -43,10 +45,19 @@ def parser() -> argparse.ArgumentParser:
         type=Path,
         help="write the exact canonical SMT-LIB obligation, not the solver portfolio transcript",
     )
-    result.add_argument(
+    diagnostic = result.add_mutually_exclusive_group()
+    diagnostic.add_argument(
         "--diagnostic-transformation-prefix",
         action="store_true",
         help="compare the logical initial snapshot with one transformation prefix",
+    )
+    diagnostic.add_argument(
+        "--diagnostic-transformation-pair", action="store_true",
+        help="diagnostically compare two captured logical or staged transformation boundaries",
+    )
+    result.add_argument(
+        "--diagnostic-observation-snapshot", type=Path,
+        help="original logical initial snapshot defining pair bag/sequence observation (required with pair)",
     )
     return result
 
@@ -54,13 +65,16 @@ def parser() -> argparse.ArgumentParser:
 def main(arguments: Sequence[str] | None = None) -> int:
     options = parser().parse_args(arguments)
     comparison_scope = (
+        "OPTIMIZER_TRANSFORMATION_PAIR" if options.diagnostic_transformation_pair else
         "OPTIMIZER_TRANSFORMATION_PREFIX"
         if options.diagnostic_transformation_prefix
         else "BUFFERED_RESULT_BUNDLE" if options.bundle is not None else None
     )
+    if options.diagnostic_transformation_pair != (options.diagnostic_observation_snapshot is not None):
+        return _error("INVALID_ARGUMENT", "--diagnostic-transformation-pair requires --diagnostic-observation-snapshot, which is only valid with pair", comparison_scope)
     if options.bundle is not None:
-        if options.before is not None or options.after is not None or options.diagnostic_transformation_prefix:
-            return _error("INVALID_ARGUMENT", "--bundle excludes positional snapshots and transformation-prefix mode", comparison_scope)
+        if options.before is not None or options.after is not None or options.diagnostic_transformation_prefix or options.diagnostic_transformation_pair:
+            return _error("INVALID_ARGUMENT", "--bundle excludes positional snapshots and transformation diagnostic modes", comparison_scope)
     elif options.before is None or options.after is None:
         return _error("INVALID_ARGUMENT", "provide before and after snapshots, or --bundle", comparison_scope)
     if options.rows < 0:
@@ -85,7 +99,15 @@ def main(arguments: Sequence[str] | None = None) -> int:
 
     observer = NonemptyOutputObserver() if options.diagnose_nonempty_output else None
     observation_options = {} if observer is None else {"boundary_observer": observer}
+    observation_metadata: dict[str, object] = {}
     try:
+        if options.diagnostic_observation_snapshot is not None:
+            try:
+                source = options.diagnostic_observation_snapshot.read_bytes()
+                observation_metadata["observation_snapshot_sha256"] = hashlib.sha256(source).hexdigest()
+                observation_options["observation_snapshot"] = parse_snapshot(json.loads(source.decode("utf-8")))
+            except (OSError, UnicodeError, ValueError, RecursionError) as error:
+                raise SnapshotError(f"cannot load observation snapshot: {error}") from error
         if options.bundle is not None:
             problem = build_bundle_problem(
                 load_bundle(options.bundle), options.rows, options.timeout_ms, **observation_options,
@@ -93,8 +115,11 @@ def main(arguments: Sequence[str] | None = None) -> int:
         else:
             before = load_snapshot(options.before)
             after = load_snapshot(options.after)
-            builder = build_transformation_prefix_problem if options.diagnostic_transformation_prefix else build_problem
+            builder = (build_transformation_pair_problem if options.diagnostic_transformation_pair
+                       else build_transformation_prefix_problem if options.diagnostic_transformation_prefix else build_problem)
             problem = builder(before, after, options.rows, options.timeout_ms, **observation_options)
+        if problem.observation_kind is not None:
+            observation_metadata["observation_kind"] = problem.observation_kind
         if options.emit_smt is not None:
             options.emit_smt.write_text(problem.formula(), encoding="utf-8")
         if options.solver is None:
@@ -105,7 +130,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
                     "task_bound": TASKS,
                     **({"semantic_mode": problem.semantic_mode} if problem.semantic_mode is not None else {}),
                 },
-                comparison_scope,
+                comparison_scope, observation_metadata,
             )
             print(json.dumps(verdict, sort_keys=True))
             return 0
@@ -118,7 +143,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 "task_bound": TASKS,
                 "reason": str(error),
             },
-            comparison_scope,
+            comparison_scope, observation_metadata,
         )
         print(json.dumps(verdict, sort_keys=True))
         return 1
@@ -127,7 +152,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
     except SolverError as error:
         return _error("SOLVER_ERROR", str(error), comparison_scope)
 
-    verdict = _scoped(result.to_json(), comparison_scope)
+    verdict = _scoped(result.to_json(), comparison_scope, observation_metadata)
     if observer is not None:
         try:
             verdict["nonempty_output_diagnostic"] = diagnose_nonempty_outputs(
@@ -151,7 +176,12 @@ def _error(status: str, reason: str, comparison_scope: str | None = None) -> int
     return 2
 
 
-def _scoped(verdict: dict[str, object], comparison_scope: str | None) -> dict[str, object]:
+def _scoped(
+    verdict: dict[str, object], comparison_scope: str | None,
+    observation_metadata: dict[str, object] | None = None,
+) -> dict[str, object]:
+    if observation_metadata:
+        verdict = {**verdict, **observation_metadata}
     if comparison_scope is not None:
         return {**verdict, "comparison_scope": comparison_scope}
     return verdict

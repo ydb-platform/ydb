@@ -87,6 +87,7 @@ class Problem:
     preferred_branches: tuple[MismatchBranch, ...] | None = None
     semantic_mode: str | None = None
     abstract_integral_average: bool = False
+    observation_kind: str | None = None
 
     def witness_values(self) -> tuple[smt.Term, ...]:
         values: list[smt.Term] = []
@@ -304,6 +305,52 @@ def build_transformation_prefix_problem(
         boundary_observer,
         None,
     )
+
+
+def build_transformation_pair_problem(
+    before: Snapshot,
+    after: Snapshot,
+    row_bound: int,
+    timeout_ms: int | None = None,
+    *,
+    observation_snapshot: Snapshot,
+    boundary_observer: BoundaryObserver | None = None,
+) -> Problem:
+    """Compare two boundaries under the original logical query's observation.
+
+    Incidental intermediate ordering must not redefine query equivalence. Derive
+    bag/sequence semantics with the existing evaluator in an isolated script:
+    no anchor-only axioms, errors or exclusions constrain the pair obligation.
+    Physical row selection is retained, with independent execution choices and
+    shared routing contracts. Normal Initial/Final admission is unchanged.
+    """
+    if observation_snapshot.stage_graph is not None:
+        raise VerificationError("transformation-pair observation requires a logical initial snapshot")
+    before, after, observation_snapshot = _problem_snapshots((before, after, observation_snapshot))
+    _validate_pair(before, after, row_bound)
+    try:
+        observation_validated, _ = _validate_pair(observation_snapshot, before, row_bound)
+    except SchemaMismatch as error:
+        # An earlier boundary may already have drifted from the query schema;
+        # that is not a new schema defect in this adjacent transformation.
+        raise VerificationError(f"observation snapshot is incompatible with pair output: {error}") from error
+    try:
+        script = smt.Script(timeout_ms)
+        scalar = ScalarEncoder(script, semantic_mode=observation_snapshot.semantic_mode)
+        observed_order = _evaluate_boundary(
+            observation_snapshot, observation_validated,
+            Database(observation_snapshot, row_bound, script), scalar,
+            Router(script), "observation", [],
+        ).sequence
+    except (AnalysisError, RelationError, StageError, smt.SmtError) as error:
+        raise VerificationError(str(error)) from error
+    # Do not retain the discarded anchor DAG while constructing the pair.
+    del scalar, script
+    problem = _build_problem(
+        before, after, row_bound, timeout_ms, None, None, None,
+        boundary_observer, None, separate_stage_choices=True, observed_order=observed_order,
+    )
+    return replace(problem, observation_kind="sequence" if observed_order else "bag")
 
 
 def _integral_average_count_gt_two(
@@ -600,6 +647,9 @@ def _build_problem(
     after_edge_observer: EdgeObserver | None,
     boundary_observer: BoundaryObserver | None,
     comparison_observer: ComparisonObserver | None,
+    *,
+    separate_stage_choices: bool = False,
+    observed_order: bool | None = None,
 ) -> Problem:
     before, after = _problem_snapshots((before, after))
     before_validated, after_validated = _validate_pair(before, after, row_bound)
@@ -612,20 +662,22 @@ def _build_problem(
         before_family = _evaluate_boundary(
             before, before_validated, database, scalar, router, "before",
             soundness_exclusions, before_node_observer,
+            choice_scope="before" if separate_stage_choices else None,
         )
         after_family = _evaluate_boundary(
             after, after_validated, database, scalar, router, "after",
             soundness_exclusions, after_node_observer, after_edge_observer,
+            choice_scope="after" if separate_stage_choices else None,
         )
         if boundary_observer is not None:
             boundary_observer("before", before_family)
             boundary_observer("after", after_family)
         if comparison_observer is not None:
-            comparison = compare_families(before_family, after_family, scalar)
+            comparison = compare_families(before_family, after_family, scalar, observed_order=observed_order)
             comparison_observer(comparison)
             mismatch = comparison.mismatch
         else:
-            mismatch = family_mismatch(before_family, after_family, scalar)
+            mismatch = family_mismatch(before_family, after_family, scalar, observed_order=observed_order)
     except (AnalysisError, RelationError, StageError, smt.SmtError) as error:
         raise VerificationError(str(error)) from error
     return _finish_problem(

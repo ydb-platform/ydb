@@ -5405,8 +5405,11 @@ def _comparison_inputs(
     right: RelationFamily,
     script: smt.Script,
     scope: str,
+    observed_order: bool | None = None,
 ) -> tuple[RelationFamily, RelationFamily, bool]:
-    ordered = left.sequence
+    ordered = left.sequence if observed_order is None else observed_order
+    if ordered and not left.sequence:
+        left = _as_sequence_family(left, script, f"{scope}:left")
     if ordered and not right.sequence:
         right = _as_sequence_family(right, script, f"{scope}:right")
     left_choices = {
@@ -5993,6 +5996,8 @@ def compare_families(
     left: RelationFamily,
     right: RelationFamily,
     scalar: ScalarEncoder,
+    *,
+    observed_order: bool | None = None,
 ) -> FamilyComparison:
     """Expose the exact normalized outcome pairs used by family equivalence."""
 
@@ -6001,6 +6006,7 @@ def compare_families(
         right,
         scalar.script,
         "compare_families",
+        observed_order,
     )
     pair_equal = _outcome_equal_matrix(
         left,
@@ -6028,6 +6034,8 @@ def family_mismatch(
     left: RelationFamily,
     right: RelationFamily,
     scalar: ScalarEncoder,
+    *,
+    observed_order: bool | None = None,
 ) -> FamilyMismatch:
     """Return the canonical mismatch and exact independently solvable branches."""
 
@@ -6036,6 +6044,7 @@ def family_mismatch(
         right,
         scalar.script,
         "family_mismatch",
+        observed_order,
     )
     left_to_right_equal = _outcome_equal_matrix(
         left,

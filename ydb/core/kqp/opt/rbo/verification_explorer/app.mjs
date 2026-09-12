@@ -1,3 +1,8 @@
+import { h, svg, button, empty, badge, title, json, own } from './dom.mjs';
+import { familyCard } from './trace-view.mjs';
+import { witnessView } from './witness-view.mjs';
+import { formulaView } from './formula-view.mjs';
+import { localizationView } from './localization-view.mjs';
 import { loadArtifacts, parseLosslessJson } from './artifacts.mjs';
 import { topology, layout, shortTable, expression, summary } from './graph.mjs';
 
@@ -9,10 +14,10 @@ const state = {
   desk: 'fields',
   mode: 'operators',
   selected: null,
+  comparison: null,
   focus: false,
   slot: 0,
   scales: {},
-  outcomes: {},
 };
 const symbols = {
   scan: '▤',
@@ -27,57 +32,28 @@ const symbols = {
   empty_source: '∅',
   stage: '▦',
 };
-const title = (text) =>
-  String(text || '')
-    .replaceAll('_', ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-const json = (value) => JSON.stringify(value, null, 2);
-const own = (record, key, fallback) => (Object.hasOwn(record, key) ? record[key] : fallback);
-
-function h(tag, attrs = {}, ...children) {
-  const node = document.createElement(tag);
-  for (const [key, value] of Object.entries(attrs)) {
-    if (key.startsWith('on')) node.addEventListener(key.slice(2), value);
-    else if (key === 'class') node.className = value;
-    else if (key.startsWith('aria-') && value != null) node.setAttribute(key, String(value));
-    else if (value != null && value !== false) node.setAttribute(key, value === true ? '' : value);
-  }
-  for (const child of children.flat(Infinity))
-    if (child != null && child !== false)
-      node.append(child instanceof Node ? child : document.createTextNode(String(child)));
-  return node;
-}
-function svg(tag, attrs, ...children) {
-  const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
-  for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, String(value));
-  for (const child of children)
-    node.append(child instanceof Node ? child : document.createTextNode(String(child)));
-  return node;
-}
-function button(text, action, className = '', attrs = {}) {
-  return h('button', { class: className, onclick: action, type: 'button', ...attrs }, text);
-}
-function empty(message, detail = '') {
-  return h(
-    'div',
-    { class: 'empty' },
-    h('span', { class: 'empty-symbol' }, '⌘'),
-    h('p', {}, message),
-    detail && h('p', { class: 'small-note' }, detail),
-  );
-}
 function notice(message) {
   $('#notice').hidden = !message;
   $('#notice').textContent = message;
 }
 function active() {
+  if (state.comparison != null) return state.current.comparisons.find(pair => pair.id === state.comparison);
   return state.current?.results?.[state.slot] || state.current;
 }
 function snapshot(side) {
   return side === 'unpaired' ? active()?.snapshot : active()?.[side];
 }
 function sideLabel(side) {
-  return { before: 'Initial', after: 'Final', unpaired: 'Unpaired snapshot' }[side] || 'Unassigned boundary';
+  return { before: 'Before', after: 'After', unpaired: 'Unpaired snapshot' }[side] || 'Unassigned boundary';
+}
+function revealNode(side, id) {
+  if (!id) return;
+  state.tab = 'compare';
+  state.mode = 'operators';
+  state.selected = { side, id };
+  state.desk = 'rows';
+  state.focus = true;
+  render();
 }
 function statusInfo(verdict) {
   return own(
@@ -92,20 +68,18 @@ function statusInfo(verdict) {
     [verdict?.status ? title(verdict.status) : 'No saved verdict', 'neutral'],
   );
 }
-function badge(label, tone = '') {
-  return h('span', { class: `badge ${tone}` }, label);
-}
 function setCase(item) {
   state.current = item;
+  state.comparison = null;
+  state.tab = item.localization ? 'rules' : 'compare';
   state.slot = 0;
   state.scales = {};
-  state.outcomes = {};
   state.focus = false;
   const plan = (active()?.after || active()?.snapshot)?.plan;
   const node = plan?.nodes.find((n) => n.op === 'join') || plan?.nodes.find((n) => n.id === plan.root);
   state.selected = node ? { side: active()?.snapshot ? 'unpaired' : 'after', id: node.id } : null;
   state.mode = 'operators';
-  state.desk = 'fields';
+  state.desk = active()?.formulas ? 'formula' : 'fields';
   render();
 }
 
@@ -162,7 +136,8 @@ function renderHeader() {
     );
     return;
   }
-  const [label, tone] = statusInfo(item.verdict);
+  const selected = active();
+  const [label, tone] = statusInfo(selected.verdict);
   const before = snapshot('before'),
     after = snapshot('after');
   const metric = (value, label) => h('span', { class: 'metric' }, h('strong', {}, value ?? '—'), label);
@@ -187,7 +162,7 @@ function renderHeader() {
         h(
           'small',
           {},
-          item.verdict?.status === 'COUNTEREXAMPLE'
+          selected.verdict?.status === 'COUNTEREXAMPLE'
             ? 'Runtime confirmation not established'
             : 'Recorded verdict · not run by this app',
         ),
@@ -208,25 +183,31 @@ function renderHeader() {
           : `${before?.plan?.nodes?.length ?? '—'} → ${after?.plan?.nodes?.length ?? '—'}`,
         'operators',
       ),
-      metric(item.verdict?.row_bound ?? item.coverageBounds?.row_bound, 'rows / table'),
-      metric(item.verdict?.task_bound ?? item.coverageBounds?.task_bound, 'task bound'),
+      metric(selected.verdict?.row_bound ?? item.coverageBounds?.row_bound, 'rows / table'),
+      metric(selected.verdict?.task_bound ?? item.coverageBounds?.task_bound, 'task bound'),
       metric(item.revision?.slice(0, 11) || 'unrecorded', 'capture revision'),
     ),
   );
   const issues = [...new Set([...(item.issues || []), ...(active()?.issues || [])])];
   if (issues.length) $('#case-header').append(h('div', { class: 'callout warn' }, issues.join(' · ')));
 }
+function showRuleHistory() {
+  state.comparison = null; state.selected = null; state.scales = {}; state.focus = false;
+  state.tab = 'rules'; render();
+}
 function renderTabs() {
-  const count = Object.keys(state.current?.verdict?.witness || state.current?.trace?.witness || {}).length;
+  const count = Object.keys(active()?.verdict?.witness || active()?.trace?.witness || {}).length;
   $('#tabs').replaceChildren(
     ...[
       ['compare', 'Plan comparison', ''],
       ['witness', 'Counterexample', count || ''],
+      ['rules', 'Rule history', ''],
       ['evidence', 'Evidence & scope', ''],
     ].map(([id, label, n]) =>
       button(
         [label, n && h('span', { class: 'tab-count' }, n)],
         () => {
+          if (id === 'rules') { showRuleHistory(); return; }
           state.tab = id;
           renderTabs();
           renderView();
@@ -246,6 +227,11 @@ function renderView() {
     return;
   }
   const children = [];
+  if (state.comparison != null) children.push(h('div', {class: 'bundle-strip'},
+    badge(`Transformation boundaries ${active().interval.before} → ${active().interval.after}`, 'neutral'),
+    statusInfo(active().verdict || active().reported)[0],
+    !active().verdict && ' · report summary only',
+    button('Back to rule history', showRuleHistory, 'text-button')));
   if (state.current.results) {
     const select = h(
       'select',
@@ -274,7 +260,10 @@ function renderView() {
     );
   }
   children.push(
-    state.tab === 'compare' ? compareView() : state.tab === 'witness' ? witnessView() : evidenceView(),
+    state.tab === 'compare' ? compareView() : state.tab === 'witness' ? witnessView(active(), revealNode)
+      : state.tab === 'rules' ? localizationView(state.current, id => {
+        state.comparison = id; state.selected = null; state.tab = 'compare'; state.scales = {}; state.focus = false; render();
+      }) : evidenceView(),
   );
   view.replaceChildren(...children);
 }
@@ -428,6 +417,7 @@ function graphPanel(side) {
         v.scrollTop,
       ]);
       state.selected = { side, id: node.id };
+      state.desk = state.mode === 'operators' && active()?.formulas ? 'formula' : 'fields';
       renderView();
       for (const [s, left, top] of scroll) {
         const v = document.querySelector(`.graph-viewport[data-side="${s}"]`);
@@ -482,11 +472,7 @@ function graphPanel(side) {
       h(
         'small',
         {},
-        side === 'before'
-          ? 'Logical boundary'
-          : side === 'after'
-            ? 'Pre-physical boundary'
-            : 'Role not assigned',
+        snap ? (snap.stage_graph ? 'Staged snapshot' : 'Logical snapshot') : 'Snapshot unavailable',
       ),
     ),
     viewport,
@@ -550,7 +536,12 @@ function auditDesk() {
       ),
       h('pre', { class: 'raw' }, json(rawNode)),
     );
-  else if (state.desk === 'rows') {
+  else if (state.desk === 'formula') {
+    body.append(isStage ? empty('Choose an operator for its formula.', 'A stage is a routing boundary, not an operator.')
+      : active()?.interval && !active()?.formulas ? empty('No pair-specific operator formulas attached.',
+        'Rule diagnostics retain their canonical obligation.smt2, but operator formula export currently covers whole-query comparisons only. Its ordering scope must not be substituted for this anchored pair.')
+      : formulaView(active()?.formulas, side, node, snap));
+  } else if (state.desk === 'rows') {
     const events = active()?.trace?.trace?.[side]?.operators?.filter((event) => event.node === node.id) || [];
     if (!events.length)
       body.append(
@@ -560,7 +551,7 @@ function auditDesk() {
       for (const [i, event] of events.entries()) {
         body.append(
           h('div', { class: 'section-caption' }, scopeName(event.scope)),
-          familyCard(event.result, `${side}:${node.id}:${i}`, 'Modeled output'),
+          familyCard(event.result, 'Modeled output'),
         );
       }
   } else if (state.desk === 'source') {
@@ -695,7 +686,7 @@ function auditDesk() {
         h(
           'p',
           { class: 'small-note' },
-          '“Model rows” shows saved concrete probes. Symbolic predicates and row lineage are not exported by the current trace; this viewer does not reconstruct them.',
+          'Formula shows exported kernel terms; Model rows shows saved concrete values. No cross-plan row lineage is inferred.',
         ),
       );
       const neighbors = topology(snap).edges.filter((e) => e.to === node.id || e.from === node.id);
@@ -735,6 +726,7 @@ function auditDesk() {
       'div',
       { class: 'desk-tabs' },
       ...[
+        ['formula', 'Formula'],
         ['fields', 'Fields'],
         ['rows', 'Model rows'],
         ['raw', 'Raw IR'],
@@ -777,230 +769,8 @@ function scopeName(scope) {
           .join(' · ');
 }
 
-function cell(value) {
-  if (value === null) return h('span', { class: 'null-value' }, 'NULL');
-  if (value === undefined) return h('span', { class: 'null-value' }, 'not recorded');
-  if (typeof value === 'object') return json(value);
-  return String(value);
-}
-function tableView(columns, rows) {
-  if (!rows.length) return h('div', { class: 'empty-table' }, '∅  No rows');
-  return h(
-    'div',
-    { class: 'table-scroll' },
-    h(
-      'table',
-      {},
-      h('thead', {}, h('tr', {}, ...columns.map((c) => h('th', {}, c)))),
-      h('tbody', {}, ...rows.map((row) => h('tr', {}, ...row.map((value) => h('td', {}, cell(value)))))),
-    ),
-  );
-}
-function familyCard(family, key, heading) {
-  if (!family) return h('div', { class: 'data-card' }, empty('No outcome family recorded.'));
-  const outcomes = family.outcomes || [];
-  const index = Math.min(state.outcomes[key] || 0, Math.max(0, outcomes.length - 1));
-  const outcome = outcomes[index];
-  const select = h(
-    'select',
-    {
-      'aria-label': `${heading} outcome`,
-      onchange: (event) => {
-        state.outcomes[key] = Number(event.target.value);
-        renderView();
-      },
-    },
-    ...outcomes.map((o, i) =>
-      h(
-        'option',
-        { value: i, selected: i === index },
-        `Outcome ${o.index ?? i} · ${o.status || 'status unrecorded'}`,
-      ),
-    ),
-  );
-  const present = outcome?.rows?.filter((row) => row.present === true) || [];
-  const columns = family.columns || [];
-  const rows = present.map((row) => columns.map((c) => row.values?.find((v) => v.column === c.name)?.value));
-  const card = h(
-    'div',
-    { class: 'data-card' },
-    h(
-      'div',
-      { class: 'data-card-header' },
-      h('strong', {}, heading),
-      h('span', {}, `${outcomes.length} recorded outcomes`),
-    ),
-  );
-  if (!outcome) {
-    card.append(h('div', { class: 'empty-table' }, 'No enabled outcomes in this trace.'));
-    return card;
-  }
-  card.append(
-    h('div', { class: 'outcome-controls' }, select, badge(outcome.sequence ? 'Sequence' : 'Bag', 'neutral')),
-  );
-  if (outcome.status === 'error')
-    card.append(
-      h(
-        'div',
-        { class: 'callout error' },
-        'Query error. Candidate row payloads are not successful query output.',
-      ),
-    );
-  else if (outcome.status === 'success')
-    card.append(
-      tableView(
-        columns.map((c) => c.name),
-        rows,
-      ),
-    );
-  else card.append(h('div', { class: 'callout warn' }, 'Outcome status is not established.'));
-  card.append(
-    h(
-      'div',
-      { class: 'outcome-meta' },
-      `${present.length} present / ${outcome.rows?.length || 0} candidate slots · ${family.disabled_outcome_count || 0} disabled outcomes omitted`,
-      h(
-        'details',
-        {},
-        h('summary', {}, 'Choices, order and exact outcome'),
-        h('pre', { class: 'raw' }, json(outcome)),
-      ),
-    ),
-  );
-  return card;
-}
-function witnessView() {
-  const item = state.current,
-    trace = active()?.trace;
-  const witness = item.verdict?.witness || trace?.witness;
-  const section = h(
-    'div',
-    { class: 'workspace-content' },
-    h(
-      'div',
-      { class: 'content-heading' },
-      h(
-        'div',
-        {},
-        h('h2', {}, 'A small database. A visible disagreement.'),
-        h('p', {}, 'Recorded model values, not a simulation or a runtime replay.'),
-      ),
-      badge(trace?.trace ? 'Concrete trace available' : 'Trace unavailable', trace?.trace ? '' : 'neutral'),
-    ),
-  );
-  if (item.results)
-    section.append(
-      h(
-        'div',
-        { class: 'callout warn' },
-        'The current inspector does not export joint bundle traces. This slot cannot be treated as an independent counterexample.',
-      ),
-    );
-  if (!witness) {
-    section.append(
-      empty(
-        'No counterexample database is attached.',
-        'A bounded proof does not provide an example execution. Use the evidence panel to inspect reachability diagnostics and proof scope.',
-      ),
-    );
-    return section;
-  }
-  section.append(
-    h(
-      'div',
-      { class: 'callout warn' },
-      'A symbolic candidate is not a confirmed optimizer bug. Abstractions, the row bound and the exact captured boundary all matter.',
-    ),
-  );
-  const database = h('div', { class: 'witness-grid' });
-  for (const [table, rows] of Object.entries(witness)) {
-    const schema = snapshot('before')?.schema?.tables?.find((t) => t.name === table);
-    const columns = [
-      ...new Set([...(schema?.columns.map((c) => c.name) || []), ...rows.flatMap((row) => Object.keys(row))]),
-    ];
-    database.append(
-      h(
-        'div',
-        { class: 'data-card' },
-        h(
-          'div',
-          { class: 'data-card-header' },
-          h('strong', { title: table }, shortTable(table)),
-          h('span', {}, `${rows.length} rows`),
-        ),
-        tableView(
-          columns,
-          rows.map((row) => columns.map((c) => row[c])),
-        ),
-      ),
-    );
-  }
-  section.append(database);
-  if (!trace?.trace) {
-    section.append(
-      empty(
-        'The database is saved, but no operator trace is attached.',
-        'Generate an inspector trace with the saved verdict to keep the candidate database fixed.',
-      ),
-    );
-    return section;
-  }
-  section.append(
-    h(
-      'div',
-      { class: 'content-heading' },
-      h(
-        'div',
-        {},
-        h('h2', {}, 'At the result boundary'),
-        h(
-          'p',
-          {},
-          'An unmatched outcome has no equivalent outcome on the other side—not merely a different schedule.',
-        ),
-      ),
-    ),
-  );
-  for (const mismatch of trace.mismatches || [])
-    section.append(
-      h(
-        'div',
-        { class: 'callout error' },
-        `${title(mismatch.source)}${mismatch.outcome == null ? '' : ` outcome ${mismatch.outcome}`}: ${mismatch.reason || 'no matching outcome on the other side'}.`,
-      ),
-    );
-  section.append(
-    h(
-      'div',
-      { class: 'outcome-pair' },
-      familyCard(
-        trace.trace.comparison?.before || trace.trace.before?.boundary,
-        'boundary-before',
-        'Initial output',
-      ),
-      familyCard(
-        trace.trace.comparison?.after || trace.trace.after?.boundary,
-        'boundary-after',
-        'Final output',
-      ),
-    ),
-    h(
-      'details',
-      {},
-      h('summary', {}, 'Exact recorded mismatch descriptors'),
-      h('pre', { class: 'raw' }, json(trace.mismatches)),
-    ),
-    h(
-      'p',
-      { class: 'small-note' },
-      'Follow intermediate results in Plan comparison → select an operator → Model rows. Outcome indices are local; independent selections are not asserted to form one compatible global schedule.',
-    ),
-  );
-  return section;
-}
-
 function evidenceView() {
-  const item = state.current,
+  const item = active(),
     verdict = item.verdict;
   const hasPair = !!(snapshot('before') && snapshot('after'));
   const diagnostic = verdict?.nonempty_output_diagnostic;
@@ -1017,6 +787,7 @@ function evidenceView() {
     ),
     row('Row bound', verdict?.row_bound),
     row('Task bound', verdict?.task_bound),
+    row('Original-query observation', verdict?.observation_kind || item.observation_kind || item.localization?.observation_kind),
     row(
       'Semantic mode',
       hasPair
@@ -1074,6 +845,12 @@ function evidenceView() {
         h('pre', { class: 'raw' }, json(item.trace_producer)),
       ),
     );
+  if (item.formula_producer) right.append(h('details', {}, h('summary', {}, 'Formula producer'),
+    h('pre', {class: 'raw'}, json(item.formula_producer))));
+  const anchorHash = verdict?.observation_snapshot_sha256 || item.observation_snapshot_sha256
+    || item.localization?.observation_snapshot_sha256;
+  if (anchorHash) right.append(h('details', {}, h('summary', {}, 'Original observation snapshot SHA256'),
+    h('pre', {class: 'raw'}, anchorHash)));
   const section = h(
     'div',
     { class: 'workspace-content' },
@@ -1121,8 +898,8 @@ async function copy(text) {
 }
 async function openFiles(files) {
   try {
-    if (files.length > 256 || [...files].reduce((sum, f) => sum + f.size, 0) > 64 * 1024 * 1024)
-      throw new Error('Import at most 256 files and 64 MiB at once.');
+    if (files.length > 2048 || [...files].reduce((sum, f) => sum + f.size, 0) > 64 * 1024 * 1024)
+      throw new Error('Import at most 2,048 files and 64 MiB at once.');
     if ([...files].some((f) => f.size > 16 * 1024 * 1024))
       throw new Error('An artifact exceeds 16 MiB. Import snapshots and traces, not the full SMT formula.');
     const selected = await Promise.all(
@@ -1146,26 +923,54 @@ async function openFiles(files) {
     notice(`Could not open artifacts: ${error.message}`);
   }
 }
+
+async function openInvestigation(files) {
+  try {
+    const reports = [...files].filter(file => file.name === 'result.json');
+    if (reports.length !== 1) throw new Error('Choose one investigation folder containing exactly one result.json.');
+    const report = reports[0];
+    if (report.size > 16 * 1024 * 1024) throw new Error('Investigation report exceeds 16 MiB.');
+    const document = parseLosslessJson(await report.text());
+    if (document.format !== 'ydb-rbo-transformation-localization' || document.version !== 1)
+      throw new Error('Expected a divide-and-conquer localization report.');
+    const prefix = report.webkitRelativePath.slice(0, -report.name.length);
+    const paths = new Set([report.webkitRelativePath]);
+    for (const record of [...document.boundaries, ...document.comparisons])
+      for (const role of ['snapshot', 'verdict']) {
+        const path = record.artifacts?.[role]?.path;
+        if (typeof path === 'string') paths.add(prefix + path);
+      }
+    // Import only referenced evidence: no SMT, command logs, or duplicate
+    // initial snapshots from per-prefix reruns. Paths retain their directories.
+    await openFiles([...files].filter(file => paths.has(file.webkitRelativePath)));
+  } catch (error) { notice(`Could not open investigation: ${error.message}`); }
+}
 async function loadDemo() {
   try {
-    const response = await fetch('./demo/manifest.json');
+    let manifestPath = '.generated/manifest.json';
+    let response = await fetch(`./${manifestPath}`);
+    if (response.status === 404) {
+      manifestPath = 'demo/manifest.json';
+      response = await fetch(`./${manifestPath}`);
+    }
     if (!response.ok) throw new Error(`Example manifest: HTTP ${response.status}`);
     const bytes = new Uint8Array(await response.arrayBuffer());
     const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
     const manifest = parseLosslessJson(text);
     const names = new Set(
       manifest.cases.flatMap((item) =>
-        ['before', 'after', 'verdict', 'trace', 'query'].map((key) => item[key]).filter(Boolean),
+        ['before', 'after', 'verdict', 'trace', 'formulas', 'query'].map((key) => item[key]).filter(Boolean),
       ),
     );
-    const files = [{ name: 'manifest.json', text, bytes }];
+    const files = [{ name: manifestPath, text, bytes }];
     for (const name of names) {
       // Only the bundled manifest is fetched. Imported manifests never trigger I/O.
-      if (!/^[a-zA-Z0-9_.-]+$/.test(name)) throw new Error('Invalid bundled artifact filename');
-      const response = await fetch(`./demo/${name}`);
+      if (!/^(?:\.\.\/demo\/)?[a-zA-Z0-9_.-]+$/.test(name)) throw new Error('Invalid bundled artifact filename');
+      const path = name.startsWith('../demo/') ? name.slice(3) : `${manifestPath.split('/')[0]}/${name}`;
+      const response = await fetch(`./${path}`);
       if (!response.ok) throw new Error(`${name}: HTTP ${response.status}`);
       const bytes = new Uint8Array(await response.arrayBuffer());
-      files.push({ name, bytes, text: new TextDecoder('utf-8', { fatal: true }).decode(bytes) });
+      files.push({ name: path, bytes, text: new TextDecoder('utf-8', { fatal: true }).decode(bytes) });
     }
     const result = await loadArtifacts(files);
     if (!result.cases.length) throw new Error(result.issues.join(' · ') || 'No examples loaded');
@@ -1183,6 +988,8 @@ async function loadDemo() {
 
 $('#import-button').addEventListener('click', () => $('#file-input').click());
 $('#file-input').addEventListener('change', (event) => openFiles(event.target.files));
+$('#folder-button').addEventListener('click', () => $('#folder-input').click());
+$('#folder-input').addEventListener('change', event => openInvestigation(event.target.files));
 $('#demo-button').addEventListener('click', loadDemo);
 $('#search').addEventListener('input', renderCases);
 $('#help-button').addEventListener('click', () => $('#help-dialog').showModal());

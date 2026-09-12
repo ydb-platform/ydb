@@ -7,12 +7,13 @@ import json
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Literal, Mapping, Sequence
 
 
 PROTOCOL = "ydb-rbo-transformation-prefix-capture-v2"
 CAPTURE_MANIFEST = "capture.json"
 EVENT_KINDS = frozenset({"RULE_APPLICATION", "ATOMIC_STAGE_COMMIT"})
+TASK_BOUND = 2  # Supported verifier contract; the CLI has no configurable task bound.
 
 
 class LocalizationError(RuntimeError):
@@ -55,6 +56,8 @@ class Config:
     timeout_ms: int = 10_000
     capture_timeout_seconds: int = 300
     max_events: int = 10_000
+    strategy: str = "divide-and-conquer"
+    all_steps: bool = False
 
 
 CommandRunner = Callable[[Sequence[str], int], subprocess.CompletedProcess[str]]
@@ -89,16 +92,18 @@ def capture(
 
 def verify(
     config: Config,
-    initial: Path,
-    candidate: Path,
+    before: Path,
+    after: Path,
     directory: Path,
-    diagnostic: bool,
+    diagnostic: Literal["prefix", "pair"] | None,
     run: CommandRunner,
+    *,
+    observation: Path | None = None,
 ) -> Mapping[str, Any]:
     arguments = [
         str(config.verifier),
-        str(initial),
-        str(candidate),
+        str(before),
+        str(after),
         "--rows",
         str(config.rows),
         "--timeout-ms",
@@ -108,14 +113,33 @@ def verify(
         "--emit-smt",
         str(directory / "obligation.smt2"),
     ]
+    scope = f"OPTIMIZER_TRANSFORMATION_{diagnostic.upper()}" if diagnostic else None
     if diagnostic:
-        arguments.append("--diagnostic-transformation-prefix")
+        arguments.append(f"--diagnostic-transformation-{diagnostic}")
+    if diagnostic == "pair":
+        if observation is None:
+            raise LocalizationError("pair comparison requires the initial observation snapshot")
+        arguments.extend(("--diagnostic-observation-snapshot", str(observation)))
+    input_hashes = {path: digest(path) for path in (before, after, observation) if path is not None}
     process = run(arguments, max(30, config.timeout_ms // 1000 + 30))
     _save_process(directory / "verifier", process)
+    if any(digest(path) != expected for path, expected in input_hashes.items()):
+        raise LocalizationError("snapshot changed during verifier execution")
     verdict = _decode_verdict(process)
-    if diagnostic and verdict.get("comparison_scope") != "OPTIMIZER_TRANSFORMATION_PREFIX":
+    bounded = verdict["status"] in {"VERIFIED_BOUNDED", "COUNTEREXAMPLE", "SCHEMA_MISMATCH", "UNKNOWN"}
+    for field, expected in {"row_bound": config.rows, "task_bound": TASK_BOUND}.items():
+        if (bounded or field in verdict) and (type(verdict.get(field)) is not int or verdict[field] != expected):
+            raise LocalizationError(f"verifier {field} does not match requested bound {expected}")
+    if diagnostic == "pair":
+        field = "observation_snapshot_sha256"
+        if (bounded or field in verdict) and verdict.get(field) != input_hashes[observation]:
+            raise LocalizationError("verifier observation snapshot SHA256 does not match the initial anchor")
+        needs_kind = verdict["status"] in {"VERIFIED_BOUNDED", "COUNTEREXAMPLE", "UNKNOWN"}
+        if (needs_kind or "observation_kind" in verdict) and verdict.get("observation_kind") not in ("bag", "sequence"):
+            raise LocalizationError("verifier did not confirm the original observation kind")
+    if diagnostic and verdict.get("comparison_scope") != scope:
         raise LocalizationError(
-            "verifier did not confirm transformation-prefix comparison scope"
+            f"verifier did not confirm {scope} comparison scope"
         )
     if not diagnostic and "comparison_scope" in verdict:
         raise LocalizationError("normal final verifier unexpectedly reported a diagnostic scope")
@@ -133,14 +157,18 @@ def verify(
         raise LocalizationError(
             f"verifier status {verdict['status']} disagrees with exit code {process.returncode}"
         )
+    (directory / "verdict.json").write_text(
+        process.stdout if process.stdout.strip() else process.stderr, encoding="utf-8"
+    )
     return verdict
 
 
 def digest(path: Path) -> str:
     try:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
+        with path.open("rb") as stream:
+            return hashlib.file_digest(stream, "sha256").hexdigest()
     except OSError as error:
-        raise LocalizationError(f"cannot read captured initial snapshot {path}: {error}") from error
+        raise LocalizationError(f"cannot read captured artifact {path}: {error}") from error
 
 
 def required(path: Path | None) -> Path:
@@ -160,6 +188,10 @@ def validate_config(config: Config) -> None:
         raise LocalizationError("capture timeout must be positive")
     if config.max_events <= 0:
         raise LocalizationError("maximum event count must be positive")
+    if config.strategy not in {"sequential", "divide-and-conquer"}:
+        raise LocalizationError("unknown localization strategy")
+    if config.all_steps and config.strategy != "divide-and-conquer":
+        raise LocalizationError("--all-steps requires divide-and-conquer")
     if config.artifacts.exists():
         raise LocalizationError(f"artifact directory already exists: {config.artifacts}")
 
@@ -281,5 +313,8 @@ def _decode_verdict(process: subprocess.CompletedProcess[str]) -> Mapping[str, A
 
 
 def _save_process(prefix: Path, process: subprocess.CompletedProcess[str]) -> None:
+    prefix.with_suffix(".command.json").write_text(
+        json.dumps({"argv": process.args}, indent=2) + "\n", encoding="utf-8"
+    )
     prefix.with_suffix(".stdout").write_text(process.stdout, encoding="utf-8")
     prefix.with_suffix(".stderr").write_text(process.stderr, encoding="utf-8")

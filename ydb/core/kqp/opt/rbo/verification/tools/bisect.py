@@ -1,4 +1,4 @@
-"""Sequentially localize a failing RBO plan to transformation prefixes."""
+"""Localize captured transformations without assuming monotone equivalence."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from .protocol import (
     Config,
     Event,
     LocalizationError,
+    TASK_BOUND,
     capture,
     digest,
     required,
@@ -22,7 +23,7 @@ from .protocol import (
 
 
 def localize(config: Config, runner: CommandRunner | None = None) -> dict[str, Any]:
-    """Check final first; scan 1..N only after a supported final failure."""
+    """Check final first; investigate a failure (or an explicit all-step audit)."""
 
     validate_config(config)
     config.artifacts.mkdir(parents=True)
@@ -54,11 +55,17 @@ def localize(config: Config, runner: CommandRunner | None = None) -> dict[str, A
             completion.initial,
             required(completion.final),
             completion_dir,
-            False,
+            None,
             run,
         )
 
     status = final_verdict["status"]
+    if status not in {"VERIFIED_BOUNDED", "UNSUPPORTED", "UNKNOWN", "COUNTEREXAMPLE", "SCHEMA_MISMATCH"}:
+        raise LocalizationError(f"cannot localize final verifier status {status}")
+    if config.strategy == "divide-and-conquer" and (
+        config.all_steps or status in {"COUNTEREXAMPLE", "SCHEMA_MISMATCH"}
+    ):
+        return _divide_and_conquer(config, completion, final_verdict, run)
     if status in {"VERIFIED_BOUNDED", "UNSUPPORTED", "UNKNOWN"}:
         outcome = {
             "VERIFIED_BOUNDED": "FINAL_VERIFIED_BOUNDED",
@@ -93,7 +100,7 @@ def localize(config: Config, runner: CommandRunner | None = None) -> dict[str, A
             prefix.initial,
             required(prefix.prefix),
             directory,
-            True,
+            "prefix",
             run,
         )
         prefix_status = verdict["status"]
@@ -163,6 +170,141 @@ def localize(config: Config, runner: CommandRunner | None = None) -> dict[str, A
             "observed_failing_boundary": "FINAL",
         },
     )
+
+
+def _divide_and_conquer(
+    config: Config,
+    completion: Capture,
+    final_verdict: Mapping[str, Any],
+    run: CommandRunner,
+) -> dict[str, Any]:
+    """Check both halves before descending; even equivalent intervals are split.
+
+    Only adjacent comparisons attribute events. N events plus the final suffix
+    require N+1 adjacent checks; binary scheduling does not make this logarithmic.
+    """
+    events = completion.events
+    final = len(events) + 1
+    captures = {0: completion, final: completion}
+    directories = {0: config.artifacts / "completion", final: config.artifacts / "completion"}
+    snapshots = {0: completion.initial, final: completion.final}
+    snapshot_hashes = {ordinal: digest(path) for ordinal, path in snapshots.items() if path is not None}
+    comparisons: dict[tuple[int, int], dict[str, Any]] = {}
+    initial_digest = digest(completion.initial)
+
+    def artifacts(directory: Path, names: Mapping[str, str]) -> dict[str, Any]:
+        return {
+            role: {"path": str((directory / name).relative_to(config.artifacts)),
+                   "sha256": digest(directory / name)}
+            for role, name in names.items() if (directory / name).is_file()
+        }
+
+    def boundary(ordinal: int) -> Path | None:
+        if ordinal not in captures:
+            directory = config.artifacts / f"prefix-{ordinal:06d}"
+            directory.mkdir()
+            captured = capture(config, ordinal, directory, run)
+            _check_prefix(captured, events[:ordinal], initial_digest)
+            captures[ordinal] = captured
+            directories[ordinal] = directory
+            snapshots[ordinal] = captured.prefix
+            if captured.prefix is not None:
+                snapshot_hashes[ordinal] = digest(captured.prefix)
+        if snapshots[ordinal] is not None and digest(snapshots[ordinal]) != snapshot_hashes[ordinal]:
+            raise LocalizationError(f"cached snapshot changed at boundary {ordinal}")
+        return snapshots[ordinal]
+
+    def compare(left: int, right: int) -> dict[str, Any]:
+        if (left, right) in comparisons:
+            return comparisons[left, right]
+        before, after = boundary(left), boundary(right)
+        directory = config.artifacts / f"compare-{left:06d}-{right:06d}"
+        if (left, right) == (0, final):
+            directory = config.artifacts / "completion"
+            verdict = final_verdict
+        elif before is None or after is None:
+            verdict = {"status": "UNSUPPORTED", "source": "SNAPSHOT_EXPORT",
+                       "reason": "; ".join(f"boundary {ordinal}: {captures[ordinal].unsupported_reason}"
+                                           for ordinal in (left, right) if snapshots[ordinal] is None)}
+        else:
+            directory.mkdir()
+            verdict = verify(config, before, after, directory, "pair", run,
+                             observation=required(boundary(0)))
+        if verdict["status"] not in {"VERIFIED_BOUNDED", "COUNTEREXAMPLE", "SCHEMA_MISMATCH", "UNKNOWN", "UNSUPPORTED"}:
+            raise LocalizationError(f"cannot localize verifier status {verdict['status']}")
+        result = {
+            "id": f"{left}:{right}", "before": left, "after": right,
+            "adjacent": right == left + 1, "verifier": dict(verdict),
+            "artifacts": artifacts(directory, {"verdict": "verdict.json", "formula": "obligation.smt2",
+                                                "command": "verifier.command.json",
+                                                "stdout": "verifier.stdout", "stderr": "verifier.stderr"}),
+        }
+        comparisons[left, right] = result
+        return result
+
+    def descend(left: int, right: int) -> None:
+        if right - left <= 1:
+            return
+        middle = (left + right) // 2
+        compare(left, middle)
+        compare(middle, right)
+        descend(left, middle)
+        descend(middle, right)
+
+    compare(0, final)
+    descend(0, final)
+    findings, gaps = [], []
+    for comparison in comparisons.values():
+        left, right = comparison["before"], comparison["after"]
+        status = comparison["verifier"]["status"]
+        if status in {"UNKNOWN", "UNSUPPORTED"}:
+            gaps.append({"comparison": comparison["id"], "before": left, "after": right,
+                         "adjacent": comparison["adjacent"], "status": status})
+        elif comparison["adjacent"] and status in {"COUNTEREXAMPLE", "SCHEMA_MISMATCH"}:
+            finding = {"comparison": comparison["id"], "status": status}
+            if right <= len(events):
+                finding["event"] = events[right - 1].to_json()
+            else:
+                finding["region"] = "GLOBAL_SUFFIX_AFTER_TRANSFORMATIONS"
+            findings.append(finding)
+    boundaries = []
+    for ordinal in sorted(captures):
+        snapshot = boundary(ordinal)
+        directory = directories[ordinal]
+        names = {"capture": "capture.json", "command": "capture.command.json",
+                 "stdout": "capture.stdout", "stderr": "capture.stderr"}
+        if snapshot is not None:
+            names["snapshot"] = str(snapshot.relative_to(directory))
+        boundaries.append({"ordinal": ordinal, "kind": "INITIAL" if ordinal == 0 else "FINAL" if ordinal == final else "PREFIX",
+                           "status": "CAPTURED" if snapshot is not None else "UNSUPPORTED",
+                           "artifacts": artifacts(directory, names)})
+    # A timeout on a coarse interval does not leave an adjacent event unchecked.
+    incomplete = any(gap["adjacent"] for gap in gaps)
+    observation_kinds = {comparison["verifier"]["observation_kind"] for comparison in comparisons.values()
+                         if comparison["verifier"].get("comparison_scope") == "OPTIMIZER_TRANSFORMATION_PAIR"
+                         and "observation_kind" in comparison["verifier"]}
+    if len(observation_kinds) > 1:
+        raise LocalizationError("verifier observation kind changed across comparisons")
+    result = {
+        "format": "ydb-rbo-transformation-localization", "version": 1,
+        "status": "LOCALIZED_FAILURES" if findings else "LOCALIZATION_INCOMPLETE" if incomplete else "STEPS_VERIFIED_BOUNDED",
+        "strategy": "divide-and-conquer", "all_steps": config.all_steps,
+        "row_bound": config.rows, "task_bound": TASK_BOUND,
+        "timeout_ms": config.timeout_ms,
+        "comparison_scope": "OPTIMIZER_TRANSFORMATION_PAIR",
+        "observation_boundary": 0,
+        "observation_snapshot_sha256": snapshot_hashes[0],
+        "observation_kind": next(iter(observation_kinds), None),
+        "completeness": "GAPS" if incomplete else "COMPLETE",
+        "events_total": len(events), "events_attempted": len(events),
+        "events_checked": sum(comparison["adjacent"] and comparison["after"] <= len(events)
+                              and "verdict" in comparison["artifacts"] for comparison in comparisons.values()),
+        "final_verifier": dict(final_verdict), "artifacts": str(config.artifacts),
+        "events": [event.to_json() for event in events], "boundaries": boundaries,
+        "comparisons": list(comparisons.values()), "findings": findings, "gaps": gaps,
+    }
+    (config.artifacts / "result.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return result
 
 
 def _check_prefix(

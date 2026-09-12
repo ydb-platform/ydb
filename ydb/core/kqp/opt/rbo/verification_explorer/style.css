@@ -67,7 +67,7 @@ p {
   margin: 0;
 }
 h1 {
-  font: 36px/1.2 var(--serif);
+  font: 29px/1.2 var(--serif);
   letter-spacing: -1px;
 }
 h2 {
@@ -252,11 +252,18 @@ kbd {
 .text-button {
   font-size: 10px;
   background: none;
-  color: #9eb8a8;
+  color: var(--green);
   margin-top: 10px;
   padding: 7px;
 }
 .text-button:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+.sidebar .text-button {
+  color: #9eb8a8;
+}
+.sidebar .text-button:hover {
   color: white;
 }
 .sidebar-footer {
@@ -313,7 +320,7 @@ main {
   margin-left: 16px;
 }
 .case-header {
-  padding: 29px 34px 23px;
+  padding: 20px 28px 18px;
 }
 .eyebrow {
   display: block;
@@ -438,7 +445,7 @@ main {
 }
 .compare-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 330px;
+  grid-template-columns: minmax(0, 1fr) 430px;
   min-height: 590px;
 }
 .graph-workspace {
@@ -714,7 +721,9 @@ main {
 }
 .desk-tabs {
   display: flex;
-  gap: 18px;
+  gap: 14px;
+  overflow-x: auto;
+  white-space: nowrap;
   padding: 0 22px;
   border-bottom: 1px solid var(--line);
   height: 40px;
@@ -745,6 +754,40 @@ main {
 .field {
   margin-bottom: 15px;
 }
+.formula-view { display: grid; gap: 14px; min-width: 0; }
+.formula-view select { width: 100%; min-width: 0; padding: 7px; }
+.formula-controls { display: grid; gap: 10px; }
+.formula-location { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
+.formula-location strong { width: 100%; font-size: 11px; }
+.formula-readable { white-space: pre-wrap; overflow-wrap: anywhere; padding: 15px;
+  background: var(--mint); border-radius: 8px; font: 14px/1.8 var(--mono); }
+.formula-dag { display: grid; justify-items: center; gap: 15px; margin: 18px 0; }
+.formula-node { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--line);
+  border-radius: 7px; background: white; text-align: left; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.formula-node.current { border-color: var(--green); background: var(--mint); }
+.formula-node small { color: var(--muted); }
+.formula-symbols { display: grid; gap: 6px; margin: 12px 0; }
+.formula-symbol { display: flex; gap: 10px; text-align: left; background: none; padding: 4px 0; }
+.formula-symbol span { overflow-wrap: anywhere; min-width: 0; color: var(--green); font-size: 11px; }
+.formula-symbol code { flex-shrink: 0; }
+.formula-arguments { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; width: 100%; }
+.formula-arguments::before { content: '↓  ordered dependencies'; grid-column: 1 / -1; text-align: center; color: var(--muted); }
+.mismatch-panel { display: grid; gap: 15px; }
+.mismatch-detail { display: grid; gap: 15px; }
+.mismatch-table { border: 1px solid #e1c6bf; border-radius: 8px; }
+.mismatch-table th { white-space: normal; }
+.difference-value { background: #fff1eb; font-weight: 600; }
+.difference-value small { display: block; font-weight: normal; color: var(--muted); }
+.mismatch-slots { display: block; color: var(--muted); font-weight: normal; }
+.mismatch-select { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.witness-database { margin-top: 24px; }
+.witness-database summary { padding: 12px 0; cursor: pointer; font-weight: 600; }
+.rule-list { display: grid; gap: 8px; margin-top: 16px; }
+.rule-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 12px;
+  border: 1px solid var(--line); border-radius: 7px; background: white; text-align: left; }
+.rule-row strong { flex: 1; min-width: 160px; }
+.rule-row.failure { border-left: 4px solid var(--red); }
+.rule-row.gap { border-left: 4px solid var(--orange); }
 .field label {
   display: block;
   font-size: 9px;
@@ -1136,7 +1179,7 @@ summary {
     height: 610px;
   }
   .compare-layout {
-    grid-template-columns: minmax(0, 1fr) 360px;
+    grid-template-columns: minmax(0, 1fr) 480px;
   }
   .desk-body {
     max-height: 685px;
@@ -1149,7 +1192,7 @@ summary {
     padding-right: 12px;
   }
   .compare-layout {
-    grid-template-columns: minmax(0, 1fr) 290px;
+    grid-template-columns: minmax(0, 1fr) 380px;
   }
   .graph-workspace {
     padding: 15px 12px;
@@ -1238,7 +1281,7 @@ summary {
   .sidebar-footer,
   .section-label,
   .search,
-  .text-button {
+  .sidebar .text-button {
     display: none;
   }
   #case-list {

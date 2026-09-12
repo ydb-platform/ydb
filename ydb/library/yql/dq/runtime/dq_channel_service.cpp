@@ -1081,7 +1081,7 @@ TNodeState::~TNodeState() {
         LOG_D(LogPrefix << "DESTROYED, NodeActorId=" << NodeActorId);
     } else {
         LOG_E(LogPrefix << "DESTROYED, NodeActorId=" << NodeActorId << ", ID=" << InputDescriptors.size() << ", OD=" << OutputDescriptors.size());
-        FailDescriptors();
+        FailDescriptors("Node session destroyed with the channel still open");
     }
     *OutputBufferCount -= OutputDescriptors.size();
     *InputBufferCount -= InputDescriptors.size();
@@ -1092,9 +1092,9 @@ TNodeState::~TNodeState() {
     *OutputBufferWaiterMessages -= WaiterMessages.load();
 }
 
-void TNodeState::FailDescriptors() {
-    FailInputs(NActors::TActorId{}, 0);
-    FailOutputs(NActors::TActorId{}, 0);
+void TNodeState::FailDescriptors(const TString& reason) {
+    FailInputs(NActors::TActorId{}, 0, reason);
+    FailOutputs(reason);
 }
 
 void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor) {
@@ -1254,7 +1254,7 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
     item->State.store(TOutputItem::EState::Sent);
 }
 
-void TNodeState::FailInputs(const NActors::TActorId& outputNodeActorId, ui64 outputNodeGenMajor) {
+void TNodeState::FailInputs(const NActors::TActorId& outputNodeActorId, ui64 outputNodeGenMajor, const TString& reason) {
     if (InputDescriptors.empty()) {
         return;
     }
@@ -1264,11 +1264,19 @@ void TNodeState::FailInputs(const NActors::TActorId& outputNodeActorId, ui64 out
     for (auto& [info, descriptor] : InputDescriptors) {
         if (!descriptor->IsFinished() && descriptor->OutputNodeGenMajor) {
             if (descriptor->OutputNodeActorId != outputNodeActorId || descriptor->OutputNodeGenMajor != outputNodeGenMajor) {
-                descriptor->AbortChannel(
-                    TStringBuilder() << "OutputNodeActorId=" << descriptor->OutputNodeActorId << ", OutputNodeGenMajor=" << descriptor->OutputNodeGenMajor
-                    << " DO NOT MATCH outputNodeActorId=" << outputNodeActorId << ", outputNodeGenMajor=" << outputNodeGenMajor
-                    << ", Session=" << LogPrefix << ", Log=" << GetReconciliationLog()
-                );
+                TStringBuilder message;
+                message << reason
+                    << ", OutputNodeActorId=" << descriptor->OutputNodeActorId
+                    << ", OutputNodeGenMajor=" << descriptor->OutputNodeGenMajor;
+                // there is something to compare with only when a peer session has replaced the one this
+                // channel belongs to: the session teardown passes no peer at all and an empty id there
+                // reads as a generation mismatch which never happened
+                if (outputNodeActorId) {
+                    message << " DO NOT MATCH outputNodeActorId=" << outputNodeActorId
+                        << ", outputNodeGenMajor=" << outputNodeGenMajor;
+                }
+                message << ", Session=" << LogPrefix << ", Log=" << GetReconciliationLog();
+                descriptor->AbortChannel(message);
                 failedBuffers.push_back(info);
                 LOG_T(LogPrefix << "ID ERASE/FAIL, ChannelId=" << descriptor->Info.ChannelId
                     << ", OA=" << descriptor->Info.OutputActorId << ", IA=" << descriptor->Info.InputActorId
@@ -1289,14 +1297,14 @@ void TNodeState::FailInputs(const NActors::TActorId& outputNodeActorId, ui64 out
     }
 }
 
-void TNodeState::FailOutputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor) {
+void TNodeState::FailOutputs(const TString& reason) {
     if (OutputDescriptors.empty()) {
         return;
     }
 
     for (auto& [info, descriptor] : OutputDescriptors) {
         descriptor->AbortChannel(
-            TStringBuilder() << "PeerActorId=" << peerActorId << ", peerGenMajor=" << peerGenMajor
+            TStringBuilder() << reason
             << ", EF=" << descriptor->EarlyFinished.load()
             << ", FP=" << descriptor->FinishPushed.load()
             << ", F=" << descriptor->Finished.load()
@@ -1492,7 +1500,7 @@ void TNodeState::ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 g
         LOG_D(LogPrefix << "RECONNECTED, OutputNodeActorId=" << sender << ", PG=" << genMajor << '.' << genMinor);
     }
     OutputNodeGenMinor.store(genMinor);
-    FailInputs(OutputNodeActorId, OutputNodeGenMajor.load());
+    FailInputs(OutputNodeActorId, OutputNodeGenMajor.load(), "Peer node session has been replaced");
 }
 
 void TNodeState::HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) {
@@ -2193,7 +2201,8 @@ void TNodeState::DoReconciliation(char logSymbol) {
         AddReconciliationLog('X');
         LOG_E(LogPrefix << "RECONCILIATION FAILURE x" << ReconciliationCount);
         Terminating.store(true);
-        FailDescriptors();
+        FailDescriptors(TStringBuilder() << "Node session terminated, the peer has not answered "
+            << ReconciliationCount << " discoveries in a row");
         ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeActorId.NodeId()), NodeActorId,
             new TEvPrivate::TEvFreeNodeSession(NodeId)));
         return;

@@ -1625,7 +1625,6 @@ TTableClient::TTableClient(const TDriver& driver, const TClientSettings& setting
     : Impl_(new TImpl(CreateInternalInterface(driver), settings)) {
     Impl_->StartPeriodicSessionPoolTask();
     Impl_->StartPeriodicHostScanTask();
-    Impl_->InitStopper();
 }
 
 TAsyncCreateSessionResult TTableClient::CreateSession(const TCreateSessionSettings& settings) {

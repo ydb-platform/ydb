@@ -8,122 +8,62 @@ using namespace std::chrono_literals;
 
 namespace NYdb::inline Dev {
 
-constexpr TDeadline::Duration MAX_DEFERRED_CALL_DELAY = 10s; // The max delay between GetOperation calls for one operation
-
-TSimpleCbResult::TSimpleCbResult(TSimpleCb&& cb)
-    : UserResponseCb_(std::move(cb))
-{ }
-
-void TSimpleCbResult::Process(void*) {
-    UserResponseCb_();
-    delete this;
-}
+constexpr TDeadline::Duration MAX_DEFERRED_CALL_DELAY = 10s;
 
 TDeferredAction::TDeferredAction(const std::string& operationId,
-        TDeferredOperationCb&& userCb,
-        TGRpcConnectionsImpl* connection,
-        std::shared_ptr<IQueueClientContext> context,
-        TDeadline::Duration delay,
-        TDeadline globalDeadline,
-        TDbDriverStatePtr dbState,
-        const std::string& endpoint)
-    : TAlarmActionBase(std::move(userCb), connection, std::move(context))
+    TDeferredOperationCb&& userCb,
+    TGRpcConnectionsImpl* connection,
+    std::shared_ptr<IQueueClientContext> context,
+    TDeadline::Duration delay,
+    TDeadline globalDeadline,
+    TDbDriverStatePtr dbState,
+    const std::string& endpoint)
+    : UserResponseCb_(std::move(userCb))
+    , Connection_(connection)
+    , Context_(std::move(context))
+    , Deadline_(std::min(globalDeadline, TDeadline::AfterDuration(delay)))
     , NextDelay_(std::min(delay * 2, MAX_DEFERRED_CALL_DELAY))
     , GlobalDeadline_(globalDeadline)
-    , DbDriverState_(dbState)
+    , DbDriverState_(std::move(dbState))
     , OperationId_(operationId)
     , Endpoint_(endpoint)
 {
-    Deadline_ = std::min(GlobalDeadline_, TDeadline::AfterDuration(delay));
 }
 
-void TDeferredAction::OnAlarm() {
-    Y_ABORT_UNLESS(Connection_);
-
-    Ydb::Operations::GetOperationRequest getOperationRequest;
-    getOperationRequest.set_id(TStringType{OperationId_});
-
-    TRpcRequestSettings settings;
-    settings.PreferredEndpoint = TEndpointKey(Endpoint_, 0);
-    settings.Deadline = GlobalDeadline_;
-
-    Connection_->RunDeferred<Ydb::Operation::V1::OperationService, Ydb::Operations::GetOperationRequest, Ydb::Operations::GetOperationResponse>(
-        std::move(getOperationRequest),
-        std::move(UserResponseCb_),
-        &Ydb::Operation::V1::OperationService::Stub::AsyncGetOperation,
-        DbDriverState_,
-        NextDelay_,
-        settings,
-        true,
-        std::move(Context_));
+void TDeferredAction::Start() {
+    auto context = Context_;
+    const auto deadline = Deadline_;
+    GetSdkRuntime().ScheduleCallback(deadline,
+        [action = std::move(*this)](bool ok) mutable { action.Complete(ok); },
+        std::move(context));
 }
 
-void TDeferredAction::OnError() {
-    Y_ABORT_UNLESS(Connection_);
-    NYdbGrpc::TGrpcStatus status = {"Deferred timer interrupted", -1, true};
-    DbDriverState_->StatCollector.IncDiscoveryFailDueTransportError();
-
-    auto resp = new TGRpcErrorResponse<Ydb::Operations::Operation>(
-        std::move(status),
-        std::move(UserResponseCb_),
-        Connection_,
-        std::move(Context_),
-        Endpoint_);
-    Connection_->EnqueueResponse(resp);
-}
-
-TPeriodicAction::TPeriodicAction(
-    TPeriodicCb&& userCb,
-    TGRpcConnectionsImpl* connection,
-    std::shared_ptr<NYdbGrpc::IQueueClientContext> context,
-    TDeadline::Duration period)
-    : TAlarmActionBase(std::move(userCb), connection, std::move(context))
-    , Period_(period)
-{
-    Deadline_ = TDeadline::AfterDuration(period);
-}
-
-void TPeriodicAction::OnAlarm() {
-    NYdb::NIssue::TIssues issues;
-    if (!UserResponseCb_(std::move(issues), EStatus::SUCCESS)) {
+void TDeferredAction::Complete(bool ok) {
+    if (!ok) {
+        NYdbGrpc::TGrpcStatus status = {"Deferred timer interrupted", -1, true};
+        DbDriverState_->StatCollector.IncDiscoveryFailDueTransportError();
+        TPlainStatus plainStatus(status, Endpoint_, {});
+        if (!Endpoint_.empty()) {
+            plainStatus.Issues.AddIssue(NYdb::NIssue::TIssue("Grpc error response on endpoint " + Endpoint_));
+        }
+        Connection_->PostToResponseQueue(
+            [callback = std::move(UserResponseCb_), status = std::move(plainStatus)]() mutable {
+                auto runningCallback = std::move(callback);
+                runningCallback(nullptr, std::move(status));
+            });
         return;
     }
 
-    auto ctx = Connection_->CreateContext();
-    if (!ctx)
-        return;
-    Context_ = ctx;
-
-    auto action = MakeIntrusive<TPeriodicAction>(
+    Ydb::Operations::GetOperationRequest request;
+    request.set_id(TStringType{OperationId_});
+    TRpcRequestSettings settings;
+    settings.PreferredEndpoint = TEndpointKey(Endpoint_, 0);
+    settings.Deadline = GlobalDeadline_;
+    Connection_->RunDeferred<Ydb::Operation::V1::OperationService, Ydb::Operations::GetOperationRequest, Ydb::Operations::GetOperationResponse>(
+        std::move(request),
         std::move(UserResponseCb_),
-        Connection_,
-        Context_,
-        Period_);
-    action->Start();
-}
-
-void TPeriodicAction::OnError() {
-    NYdb::NIssue::TIssues issues;
-    issues.AddIssue(NYdb::NIssue::TIssue("Deferred timer interrupted"));
-    UserResponseCb_(std::move(issues), EStatus::CLIENT_INTERNAL_ERROR);
-}
-
-TDelayedAction::TDelayedAction(
-    TDelayedCb&& userCb,
-    TGRpcConnectionsImpl* connection,
-    std::shared_ptr<IQueueClientContext> context,
-    TDeadline deadline)
-    : TAlarmActionBase(std::move(userCb), connection, std::move(context))
-{
-    Deadline_ = deadline;
-}
-
-void TDelayedAction::OnAlarm() {
-    UserResponseCb_(true);
-}
-
-void TDelayedAction::OnError() {
-    UserResponseCb_(false);
+        &Ydb::Operation::V1::OperationService::Stub::AsyncGetOperation,
+        DbDriverState_, NextDelay_, settings, true, std::move(Context_));
 }
 
 } // namespace NYdb

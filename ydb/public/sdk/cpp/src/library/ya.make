@@ -7,6 +7,7 @@ RECURSE(
     operation_id
     persqueue/obfuscate
     persqueue/topic_parser_public
+    runtime
     string_utils/helpers
     time
     uuid

@@ -18,6 +18,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/types
     ydb/public/sdk/cpp/src/client/types/core_facility
     ydb/public/sdk/cpp/src/client/types/credentials
+    ydb/public/sdk/cpp/src/library/runtime
 )
 
 END()

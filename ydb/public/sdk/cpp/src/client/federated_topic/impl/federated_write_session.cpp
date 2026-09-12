@@ -341,11 +341,6 @@ void TFederatedWriteSessionImpl::ScheduleFederationStateUpdateImpl(TDuration del
     };
 
     UpdateStateDelayContext = Connections->CreateContext();
-    if (!UpdateStateDelayContext) {
-        CloseImpl(EStatus::TRANSPORT_UNAVAILABLE, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue("Could not update federation state")});
-        // TODO log DRIVER_IS_STOPPING_DESCRIPTION
-        return;
-    }
     Connections->ScheduleCallback(delay,
                                   std::move(cb),
                                   UpdateStateDelayContext);

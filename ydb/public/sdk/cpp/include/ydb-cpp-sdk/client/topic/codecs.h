@@ -30,14 +30,15 @@ enum class ECodec : uint32_t {
 };
 
 inline const std::string& GetCodecId(const ECodec codec) {
-    static std::unordered_map<ECodec, std::string> idByCodec{
+    // PersQueue compression tasks may still use these IDs during process teardown.
+    static const auto* idByCodec = new const std::unordered_map<ECodec, std::string>{
         {ECodec::RAW, std::string(1, '\0')},
         {ECodec::GZIP, "\1"},
         {ECodec::LZOP, "\2"},
         {ECodec::ZSTD, "\3"}
     };
-    Y_ABORT_UNLESS(idByCodec.contains(codec));
-    return idByCodec[codec];
+    Y_ABORT_UNLESS(idByCodec->contains(codec));
+    return idByCodec->at(codec);
 }
 
 struct TWriteBlockCompression {
@@ -115,8 +116,9 @@ public:
 class TCodecMap {
 public:
     static TCodecMap& GetTheCodecMap() {
-        static TCodecMap instance;
-        return instance;
+        // Registered codecs must outlive tasks on the process-wide runtime.
+        static auto* instance = new TCodecMap();
+        return *instance;
     }
 
     void Set(uint32_t codecId, std::unique_ptr<ICodec>&& codecImpl) {

@@ -401,9 +401,9 @@ class WorkloadManagerComputeSchedulerP3(WorkloadManagerComputeScheduler):
     @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:
         return [
-            ResourcePool('test_pool_30', ['testuser30'], total_cpu_limit_percent_per_node=30, resource_weight=4),
-            ResourcePool('test_pool_40', ['testuser40'], total_cpu_limit_percent_per_node=40, resource_weight=4),
-            ResourcePool('test_pool_50', ['testuser50'], total_cpu_limit_percent_per_node=50, resource_weight=4),
+            ResourcePool('test_pool_30', ['testuser30'], total_cpu_limit_percent_per_node=30),
+            ResourcePool('test_pool_40', ['testuser40'], total_cpu_limit_percent_per_node=40),
+            ResourcePool('test_pool_50', ['testuser50'], total_cpu_limit_percent_per_node=50),
         ]
 
 
@@ -413,7 +413,7 @@ class WorkloadManagerComputeSchedulerP1(WorkloadManagerComputeScheduler):
     @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:
         return [
-            ResourcePool('test_pool_100', ['testuser100'], total_cpu_limit_percent_per_node=100, resource_weight=4),
+            ResourcePool('test_pool_100', ['testuser100'], total_cpu_limit_percent_per_node=100),
         ]
 
 
@@ -523,7 +523,7 @@ class TestWorkloadManagerOltp100(WorkloadManagerOltp):
     @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:
         return [
-            ResourcePool(f'test_pool_{cls.tpcc_pool_perc}', [f'testuser{cls.tpcc_pool_perc}'], total_cpu_limit_percent_per_node=cls.tpcc_pool_perc, resource_weight=4),
+            ResourcePool(f'test_pool_{cls.tpcc_pool_perc}', [f'testuser{cls.tpcc_pool_perc}'], total_cpu_limit_percent_per_node=cls.tpcc_pool_perc),
         ]
 
     @classmethod
@@ -550,7 +550,7 @@ class WorkloadManagerOltpTpch20Base(WorkloadManagerTpchBase, WorkloadManagerOltp
     @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:
         return [
-            ResourcePool('test_pool_20', ['testuser20'], total_cpu_limit_percent_per_node=20, resource_weight=4),
+            ResourcePool('test_pool_20', ['testuser20'], total_cpu_limit_percent_per_node=20),
         ]
 
     @classmethod
@@ -578,7 +578,7 @@ class TestWorkloadManagerOltpAdHoc(WorkloadManagerOltp):
     @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:
         return [
-            ResourcePool('test_pool_10', ['testuser10'], total_cpu_limit_percent_per_node=10, resource_weight=4),
+            ResourcePool('test_pool_10', ['testuser10'], total_cpu_limit_percent_per_node=10),
         ]
 
     @classmethod

@@ -3,6 +3,7 @@ PY3TEST()
 TEST_SRCS(
     test_ydb_bench.py
     test_ydb_telemetry.py
+    test_hosts.py
 )
 
 PEERDIR(

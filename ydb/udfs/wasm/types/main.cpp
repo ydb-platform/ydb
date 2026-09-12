@@ -59,6 +59,45 @@ uint64_t* AllocHandles(size_t count) {
     return handles;
 }
 
+//! Sum of every Int64 in a List<List<Int64>>. Each item of the outer list is a
+//! list itself, read through the same range as the outer one: the item handle
+//! needs no unwrapping, only a non-owning view, since the range still owns it.
+int64_t SumNestedIntLists(uint64_t listH) {
+    TBridgeList outer(listH, /*owned*/ false);
+    int64_t sum = 0;
+    for (auto row : outer.Items()) {
+        TBridgeList inner(row.Get(), /*owned*/ false);
+        for (auto item : inner.Items()) {
+            sum += BridgeGetInt64(item.Get());
+            item.Reset();
+        }
+        row.Reset();
+    }
+    return sum;
+}
+
+//! Two-item Int64 list, typed from the declared result type: the items name a
+//! List<Int64> and nothing else, so the host has one candidate to pick.
+uint64_t MakeIntListInferred(int64_t first, int64_t second) {
+    uint64_t* items = AllocHandles(2);
+    items[0] = MakeInt64(first).Release();
+    items[1] = MakeInt64(second).Release();
+    const uint64_t list = BridgeMakeList(reinterpret_cast<uint64_t>(items), 2);
+    free(items);
+    return list;
+}
+
+//! Same list, but of the type `listType` names. Needed wherever the result
+//! declares several Lists the items cannot be told apart by.
+uint64_t MakeIntListOfType(uint64_t listType, int64_t first, int64_t second) {
+    uint64_t* items = AllocHandles(2);
+    items[0] = MakeInt64(first).Release();
+    items[1] = MakeInt64(second).Release();
+    const uint64_t list = BridgeMakeListTyped(listType, reinterpret_cast<uint64_t>(items), 2);
+    free(items);
+    return list;
+}
+
 } // namespace
 
 extern "C" {
@@ -220,6 +259,52 @@ __attribute__((visibility("default"))) void list_sum_int64(
     SetInt64(result, sum);
 }
 
+//! A nested container on the way in: List<List<Int64>> folded to one number.
+__attribute__((visibility("default"))) void nested_list_sum_int64(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t listH)
+{
+    SetInt64(result, SumNestedIntLists(listH));
+}
+
+//! Dict<String, List<List<Int64>>> -> Dict<String, Int64>: every key keeps its
+//! payload's total. The dict is walked with an iterator, and the pairs are
+//! collected before the call because BridgeMakeDict takes them all at once --
+//! which is also why the keys the iterator handed over are released only after
+//! that call has copied them.
+__attribute__((visibility("default"))) void dict_nested_list_sums(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t dictH)
+{
+    TBridgeValue resultType(BridgeGetResultType(), /*owned*/ true);
+    const int64_t length = BridgeDictLength(dictH);
+    if (length == 0) {
+        *result = BridgeMakeDict(resultType.Get(), /*pairsOff*/ 0, 0);
+        return;
+    }
+
+    uint64_t* pairs = AllocHandles(static_cast<size_t>(length) * 2);
+    TBridgeValue iter(BridgeDictMakeIterator(dictH), /*owned*/ true);
+    int64_t pairCount = 0;
+    uint64_t keyHandle = 0;
+    uint64_t payloadHandle = 0;
+    while (pairCount < length
+        && BridgeDictIterNext(iter.Get(), &keyHandle, &payloadHandle) != 0)
+    {
+        TBridgeValue payload(payloadHandle, /*owned*/ true);
+        pairs[pairCount * 2] = keyHandle;
+        pairs[pairCount * 2 + 1] = MakeInt64(SumNestedIntLists(payload.Get())).Release();
+        ++pairCount;
+    }
+
+    *result = BridgeMakeDict(
+        resultType.Get(),
+        reinterpret_cast<uint64_t>(pairs),
+        static_cast<int32_t>(pairCount));
+    for (int64_t i = 0; i < pairCount; ++i) {
+        BridgeUnref(pairs[i * 2]);
+    }
+    free(pairs);
+}
+
 __attribute__((visibility("default"))) void dict_get_int64(
     TExpressionContext* /*ctx*/, uint64_t* result, uint64_t dictH, uint64_t keyH)
 {
@@ -339,6 +424,81 @@ __attribute__((visibility("default"))) void make_variant_uint32(
     TExpressionContext* /*ctx*/, uint64_t* result)
 {
     *result = MakeVariant(0, TBridgeValue(BridgeMakeUint32(5))).Release();
+}
+
+// ---- makers: nested and repeated containers ----
+
+//! Nesting the declared result type resolves on its own. The guest builds
+//! bottom-up, so BridgeMakeList is called twice with the same result type in
+//! scope: Int64 items name the inner List<Int64>, and lists of them name the
+//! outer List<List<Int64>>.
+__attribute__((visibility("default"))) void make_nested_int_lists(
+    TExpressionContext* /*ctx*/, uint64_t* result)
+{
+    uint64_t* inner = AllocHandles(2);
+    inner[0] = MakeIntListInferred(1, 2);
+    inner[1] = MakeIntListInferred(3, 4);
+    *result = BridgeMakeList(reinterpret_cast<uint64_t>(inner), 2);
+    free(inner);
+}
+
+//! Two members of the same type: nothing about two Int64 items says which of
+//! the declared Lists they belong to, so each is named with BridgeTypeMember
+//! and built with BridgeMakeListTyped. The outer Tuple is the only two-member
+//! Tuple declared, which leaves BridgeMakeArray one candidate.
+__attribute__((visibility("default"))) void make_int_list_pair(
+    TExpressionContext* /*ctx*/, uint64_t* result)
+{
+    TBridgeValue resultType(BridgeGetResultType(), /*owned*/ true);
+    TBridgeValue firstType(BridgeTypeMember(resultType.Get(), 0), /*owned*/ true);
+    TBridgeValue secondType(BridgeTypeMember(resultType.Get(), 1), /*owned*/ true);
+
+    uint64_t* members = AllocHandles(2);
+    members[0] = MakeIntListOfType(firstType.Get(), 1, 2);
+    members[1] = MakeIntListOfType(secondType.Get(), 3, 4);
+    *result = BridgeMakeArray(reinterpret_cast<uint64_t>(members), 2);
+    free(members);
+}
+
+//! A Struct inside a Struct of the same member count: the inner one is named
+//! explicitly, while the outer is picked by its own members (a string and a
+//! struct fit no other declaration). Members go in declared order.
+__attribute__((visibility("default"))) void make_labelled_point(
+    TExpressionContext* /*ctx*/, uint64_t* result)
+{
+    static const char kLabel[] = "origin";
+    TBridgeValue resultType(BridgeGetResultType(), /*owned*/ true);
+    TBridgeValue pointType(BridgeTypeMember(resultType.Get(), 1), /*owned*/ true);
+
+    uint64_t* coords = AllocHandles(2);
+    coords[0] = MakeInt64(3).Release();
+    coords[1] = MakeInt64(4).Release();
+    const uint64_t point =
+        BridgeMakeStructTyped(pointType.Get(), reinterpret_cast<uint64_t>(coords), 2);
+    free(coords);
+
+    uint64_t* members = AllocHandles(2);
+    members[0] = MakeString(kLabel, static_cast<int64_t>(sizeof(kLabel) - 1)).Release();
+    members[1] = point;
+    *result = BridgeMakeStruct(reinterpret_cast<uint64_t>(members), 2);
+    free(members);
+}
+
+//! An Optional result: what the guest has to build sits under the wrapper, and
+//! BridgeTypeOptionalItem is what peels it before the members are named.
+__attribute__((visibility("default"))) void make_optional_int_list_pair(
+    TExpressionContext* /*ctx*/, uint64_t* result)
+{
+    TBridgeValue resultType(BridgeGetResultType(), /*owned*/ true);
+    TBridgeValue pairType(BridgeTypeOptionalItem(resultType.Get()), /*owned*/ true);
+    TBridgeValue firstType(BridgeTypeMember(pairType.Get(), 0), /*owned*/ true);
+    TBridgeValue secondType(BridgeTypeMember(pairType.Get(), 1), /*owned*/ true);
+
+    uint64_t* members = AllocHandles(2);
+    members[0] = MakeIntListOfType(firstType.Get(), 5, 6);
+    members[1] = MakeIntListOfType(secondType.Get(), 7, 8);
+    *result = BridgeMakeArrayTyped(pairType.Get(), reinterpret_cast<uint64_t>(members), 2);
+    free(members);
 }
 
 // ---- callable ----

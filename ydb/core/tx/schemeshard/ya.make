@@ -120,6 +120,7 @@ SRCS(
     schemeshard__notify.cpp
     schemeshard__op_traits.h
     schemeshard__operation.cpp
+    schemeshard_operation_registry.cpp
     schemeshard__operation.h
     schemeshard__op_traits.cpp
     schemeshard__operation_alter_bsv.cpp

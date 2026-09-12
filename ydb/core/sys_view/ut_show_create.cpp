@@ -1378,7 +1378,7 @@ Y_UNIT_TEST(Table) {
                 Key Uint64,
                 Text String,
                 PRIMARY KEY (Key),
-                INDEX fulltext_idx GLOBAL USING fulltext_plain ON (Text) WITH (tokenizer=standard, language=russian, use_filter_superlemmer=true)
+                INDEX fulltext_idx GLOBAL USING fulltext_plain ON (Text) WITH (tokenizer=standard, language="russian,english", use_filter_superlemmer=true)
             );
         )", "test_show_create"
     );

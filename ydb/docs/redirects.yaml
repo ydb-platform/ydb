@@ -1,4 +1,6 @@
 common:
+  - from: /reference/languages-and-apis/sqlc-ydb.md
+    to: /dev/sqlc-ydb.md
   - from: /concepts/architecture.md
     to: /concepts/architecture/index.md
   - from: /concepts/metadata-distribution.md

@@ -1,6 +1,6 @@
 # sqlc-ydb: typed code from YQL
 
-[sqlc-ydb](https://github.com/ydb-platform/sqlc-ydb) generates typed code for {{ ydb-short-name }} from a schema and [YQL](../../yql/reference/index.md) queries. You write SQL; the tool creates methods that bind parameters and read results through the selected SDK or driver. It is an independent project following the familiar [sqlc](https://sqlc.dev/) workflow.
+[sqlc-ydb](https://github.com/ydb-platform/sqlc-ydb) generates typed code for {{ ydb-short-name }} from a schema and [YQL](../yql/reference/index.md) queries. You write SQL; the tool creates methods that bind parameters and read results through the selected SDK or driver. It is an independent project following the familiar [sqlc](https://sqlc.dev/) workflow.
 
 This guide takes two queries through generation and execution with version 0.1.0: nine languages and 18 SDK/framework profiles. Select your language and framework once: the selection is synchronized across all four tabbed sections.
 
@@ -772,13 +772,13 @@ The following excerpts show actual generated row types or read methods for the s
 
 ## Prepare the application {#prepare}
 
-The generator does not create database tables. Apply `schema.sql` using your migration tool or the [YDB CLI](../ydb-cli/sql.md), then add a row for the single-query example:
+The generator does not create database tables. Apply `schema.sql` using your migration tool or the [YDB CLI](../reference/ydb-cli/sql.md), then add a row for the single-query example:
 
 ```yql
 UPSERT INTO authors (id, name) VALUES (42, "Alice");
 ```
 
-Add the selected SDK/driver dependencies and configure [authentication](../ydb-sdk/auth.md). The fragments below assume initialized connections or clients and imported generated code. See the [release examples](https://github.com/ydb-platform/sqlc-ydb/tree/v0.1.0/examples) for complete projects with dependencies and connection setup.
+Add the selected SDK/driver dependencies and configure [authentication](../reference/ydb-sdk/auth.md). The fragments below assume initialized connections or clients and imported generated code. See the [release examples](https://github.com/ydb-platform/sqlc-ydb/tree/v0.1.0/examples) for complete projects with dependencies and connection setup.
 
 ## 3. Execute a single query {#single-query}
 

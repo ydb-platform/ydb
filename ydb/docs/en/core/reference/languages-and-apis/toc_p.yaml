@@ -11,5 +11,3 @@ items:
     path: jdbc-driver/toc_p.yaml
 - name: Model Context Protocol
   href: mcp/index.md
-- name: sqlc-ydb
-  href: sqlc-ydb.md

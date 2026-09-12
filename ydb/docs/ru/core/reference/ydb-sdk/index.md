@@ -34,4 +34,4 @@
 - [Документация для разработчиков приложений](../../dev/index.md)
 - [Тестовые приложения](../../dev/example-app/index.md)
 - [Рецепты кода](../../recipes/ydb-sdk/index.md)
-- [Генерация типизированного кода запросов с sqlc-ydb](../languages-and-apis/sqlc-ydb.md)
+- [Генерация типизированного кода запросов с sqlc-ydb](../../dev/sqlc-ydb.md)

@@ -11,6 +11,8 @@ FORK_SUBTESTS()
 
 PEERDIR(
     ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/extension_common
+    ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections
     ydb/public/sdk/cpp/src/client/impl/observability
     ydb/public/sdk/cpp/src/client/impl/internal/sdk_runtime
     ydb/public/sdk/cpp/src/client/table
@@ -19,6 +21,7 @@ PEERDIR(
 
 SRCS(
     driver_ut.cpp
+    shared_executor_ut.cpp
 )
 
 END()

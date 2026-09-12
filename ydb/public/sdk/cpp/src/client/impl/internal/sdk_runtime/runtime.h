@@ -2,6 +2,7 @@
 
 #include <ydb/public/sdk/cpp/src/client/impl/internal/internal_header.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/executor/executor.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 #include <condition_variable>
@@ -76,6 +77,13 @@ private:
 
 class TSdkRuntime final {
 public:
+    // Each queue drains only its driver's callbacks and delegates post acceptance
+    // to the shared executor, selected on first use and retained without stopping.
+    IExecutor::TPtr CreateResponseQueue(
+        IExecutor::TPtr executor = {},
+        std::size_t threadCount = 0,
+        std::size_t maxQueueSize = 0);
+
     TDriverScope::TPtr CreateDriverScope(NYdbGrpc::IQueueClientContextProvider& contextProvider);
 
 private:

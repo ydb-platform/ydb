@@ -101,8 +101,8 @@ public:
         ctx.Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
     }
 
-    const TLogPrefix& GetLogPrefix() const {
-        static const TLogPrefix LogPrefix = YDB_LOG_CREATE_MESSAGE(
+    const TStructuredLogPrefix& GetLogPrefix() const {
+        static const TStructuredLogPrefix LogPrefix = YDB_LOG_CREATE_MESSAGE(
             {"actorClassName", "MonitoringProxy"});
         return LogPrefix;
     }
@@ -370,8 +370,7 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
         return OnRenderAppHtmlPageTx(ev, ctx);
     }
 
-    YDB_LOG_INFO_COMP(NKikimrServices::PERSQUEUE, "Handle",
-        {LogPrefix()},
+    LOG_I("Handle", 
         {"TEvRemoteHttpInfo", ev->Get()->Query});
 
     TMap<ui32, TActorId> res;

@@ -78,7 +78,7 @@ public:
     }
 };
 
-class TWindowedAutopartitioningManager : public IAutopartitioningManager {
+class TWindowedAutopartitioningManager : public IAutopartitioningManager, public TLogPrefix {
     static constexpr size_t Precision = 100;
 public:
     TWindowedAutopartitioningManager(const NKikimrPQ::TPQTabletConfig& config, ui32 partitionId, ui64 maxUsagePerSec, const ETag tag = ETag::BYTES)
@@ -93,7 +93,7 @@ public:
         RecreateSumMetric();
     }
 
-    NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
+    TStructuredLogPrefix LogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
             {"className", "TAutopartitioningManager"},
             {"partition", PartitionId});
@@ -101,9 +101,7 @@ public:
 
 protected:
     void OnWriteImpl(const TString& sourceId, ui64 delta, const TString& key = "") {
-        YDB_LOG_DEBUG("TAutopartitioningManager::OnWrite",
-            {LogPrefix()},
-            {"sourceId", sourceId},
+        LOG_D("TAutopartitioningManager::OnWrite", {"sourceId", sourceId},
             {"delta", delta},
             {"key", key},
             {"isEnabled", IsEnabled()},
@@ -180,8 +178,7 @@ protected:
             auto* partition = GetPartition();
             const auto& keyRange = partition->GetKeyRange();
 
-            YDB_LOG_DEBUG("TAutopartitioningManager::SplitBoundary KLL sketch enabled, no median key found, will split by middle of key range",
-                {LogPrefix()});
+            LOG_D("TAutopartitioningManager::SplitBoundary KLL sketch enabled, no median key found, will split by middle of key range");
             return MiddleOf(keyRange.GetFromBound(), keyRange.GetToBound());
         }
 
@@ -206,9 +203,7 @@ protected:
             || Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
         auto mergeEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
 
-        YDB_LOG_DEBUG("TPartition::CheckScaleStatus",
-            {LogPrefix()},
-            {"splitMergeAvgWriteBytes", SumMetric->GetValue()},
+        LOG_D("TPartition::CheckScaleStatus", {"splitMergeAvgWriteBytes", SumMetric->GetValue()},
             {"usagePercent", usagePercent},
             {"scaleThresholdSeconds", Config.GetPartitionStrategy().GetScaleThresholdSeconds()},
             {"totalPartitionWriteSpeed", MaxUsagePerSec},
@@ -221,13 +216,10 @@ protected:
                 >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent();
 
         if (splitEnabled && canSplit && shouldSplit) {
-            YDB_LOG_DEBUG("TPartition::CheckScaleStatus NEED_SPLIT",
-                {LogPrefix()});
+            LOG_D("TPartition::CheckScaleStatus NEED_SPLIT");
             return NKikimrPQ::EScaleStatus::NEED_SPLIT;
         } else if (mergeEnabled && usagePercent <= Config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent()) {
-            YDB_LOG_DEBUG("TPartition::CheckScaleStatus NEED_MERGE",
-                {LogPrefix()},
-                {"usagePercent", usagePercent});
+            LOG_D("TPartition::CheckScaleStatus NEED_MERGE", {"usagePercent", usagePercent});
             return NKikimrPQ::EScaleStatus::NEED_MERGE;
         }
         return NKikimrPQ::EScaleStatus::NORMAL;

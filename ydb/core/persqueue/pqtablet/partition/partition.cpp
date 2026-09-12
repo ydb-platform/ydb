@@ -196,7 +196,7 @@ const TString& TPartition::TopicName() const {
     return TopicConverter->GetClientsideName();
 }
 
-TLogPrefix TPartition::LogPrefix() const {
+TStructuredLogPrefix TPartition::BuildLogPrefix() const {
     TString state;
     if (CurrentStateFunc() == &TThis::StateInit) {
         state = "StateInit";
@@ -211,8 +211,8 @@ TLogPrefix TPartition::LogPrefix() const {
         {"actorState", state});
 }
 
-const TLogPrefix& TPartition::GetLogPrefix() const {
-    TMaybe<TLogPrefix>* logPrefix = &UnknownLogPrefix;
+const TStructuredLogPrefix& TPartition::GetLogPrefix() const {
+    TMaybe<TStructuredLogPrefix>* logPrefix = &UnknownLogPrefix;
     if (CurrentStateFunc() == &TThis::StateInit) {
         logPrefix = &InitLogPrefix;
     } else if (CurrentStateFunc() == &TThis::StateIdle) {
@@ -220,7 +220,7 @@ const TLogPrefix& TPartition::GetLogPrefix() const {
     }
 
     if (!logPrefix->Defined()) {
-        *logPrefix = LogPrefix();
+        *logPrefix = BuildLogPrefix();
     }
 
     return *(*logPrefix);
@@ -1011,7 +1011,6 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     LOG_I(
         "Init complete for topic partition generation",
         {"topicName", TopicName()},
-        {"partition", Partition},
         {"tabletGeneration", TabletGeneration},
         {"selfId", ctx.SelfID}
     );
@@ -1061,7 +1060,6 @@ void TPartition::InitComplete(const TActorContext& ctx) {
         LOG_D(
             "Init complete for topic",
             {"topicName", TopicName()},
-            {"partition", Partition},
             {"sourceId", s.first},
             {"seqNo", s.second.SeqNo},
             {"offset", s.second.Offset},
@@ -2372,7 +2370,6 @@ void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
     LOG_E(
         "Topic partition user readTimeStamp",
         {"topicName", TopicName()},
-        {"partition", Partition},
         {"readingForUser", ReadingForUser},
         {"error", ev->Get()->Error}
     );
@@ -2768,10 +2765,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         CompacterKvRequestInflight = false;
         LOG_D(
             "Topic partition Got compacter KV response, release RW lock",
-            {"clientSideName", TopicConverter->GetClientsideName()},
-                    {"partition",
-            Partition}
-        );
+            {"clientSideName", TopicConverter->GetClientsideName()});
         Send(ReadQuotaTrackerActor, new TEvPQ::TEvReleaseExclusiveLock());
         if (Compacter) {
             Compacter->ProcessResponse(ev);
@@ -2787,7 +2781,6 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         LOG_E(
             "OnWrite topic partition commands are not processed at all",
             {"topicName", TopicName()},
-            {"partition", Partition},
             {"reason", response.DebugString()}
         );
         ctx.Send(TabletActorId, new TEvents::TEvPoisonPill());
@@ -2799,9 +2792,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
             if (response.GetDeleteRangeResult(i).GetStatus() != NKikimrProto::OK) {
                 LOG_E(
                     "OnWrite topic partition delete range error",
-                    {"topicName", TopicName()},
-                    {"partition", Partition}
-                );
+                    {"topicName", TopicName()});
                 //TODO: if disk is full, could this be ok? delete must be ok, of course
                 ctx.Send(TabletActorId, new TEvents::TEvPoisonPill());
                 return;
@@ -2815,9 +2806,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
             if (response.GetWriteResult(i).GetStatus() != NKikimrProto::OK) {
                 LOG_E(
                     "OnWrite topic partition write error",
-                    {"topicName", TopicName()},
-                    {"partition", Partition}
-                );
+                    {"topicName", TopicName()});
                 ctx.Send(TabletActorId, new TEvents::TEvPoisonPill());
                 return;
             }
@@ -2832,7 +2821,6 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
             LOG_E(
                 "OnWrite topic partition are not processed at all, got KV error in CmdGetStatus",
                 {"topicName", TopicName()},
-                {"partition", Partition},
                 {"status", res.GetStatus()}
             );
             ctx.Send(TabletActorId, new TEvents::TEvPoisonPill());
@@ -3760,7 +3748,6 @@ TPartition::EProcessResult TPartition::BeginTransactionData(TTransaction& t,
         if (AffectedUsers.contains(consumer) && !GetPendingUserIfExists(consumer)) {
             LOG_W(
                 "Partition Consumer has been removed",
-                {"partition", Partition},
                 {"consumer", consumer}
             );
             issueMsg = (MakeTxReadErrorMessage(tx.TxId, TopicName(), Partition, consumer) << "Consumer has been removed");
@@ -3771,7 +3758,6 @@ TPartition::EProcessResult TPartition::BeginTransactionData(TTransaction& t,
         if (!UsersInfoStorage->GetIfExists(consumer)) {
             LOG_W(
                 "Partition Unknown consumer",
-                {"partition", Partition},
                 {"consumer", consumer}
             );
             issueMsg = (MakeTxReadErrorMessage(tx.TxId, TopicName(), Partition, consumer) << "Unknown consumer");
@@ -3790,7 +3776,6 @@ TPartition::EProcessResult TPartition::BeginTransactionData(TTransaction& t,
             if (IsActive() || operation.GetCommitOffsetsEnd() < GetEndOffset() || userInfo.Offset != i64(GetEndOffset())) {
                 LOG_W(
                     "Partition Consumer Bad request (session already dead) RequestSessionId CurrentSessionId",
-                    {"partition", Partition},
                     {"consumer", consumer},
                     {"operationReadSessionId", operation.GetReadSessionId()},
                     {"userInfoSession", userInfo.Session}
@@ -3804,7 +3789,6 @@ TPartition::EProcessResult TPartition::BeginTransactionData(TTransaction& t,
             if (!operation.GetForceCommit() && operation.GetCommitOffsetsBegin() > operation.GetCommitOffsetsEnd()) {
                 LOG_W(
                     "Partition Consumer Bad request (invalid range) Begin End",
-                    {"partition", Partition},
                     {"consumer", consumer},
                     {"operationCommitOffsetsBegin", operation.GetCommitOffsetsBegin()},
                     {"operationCommitOffsetsEnd", operation.GetCommitOffsetsEnd()}
@@ -3816,7 +3800,6 @@ TPartition::EProcessResult TPartition::BeginTransactionData(TTransaction& t,
             } else if (!operation.GetForceCommit() && userInfo.Offset != (i64)operation.GetCommitOffsetsBegin()) {
                 LOG_W(
                     "Partition Consumer Bad request (gap) Offset Begin",
-                    {"partition", Partition},
                     {"consumer", consumer},
                     {"userInfoOffset", userInfo.Offset},
                     {"operationCommitOffsetsBegin", operation.GetCommitOffsetsBegin()}
@@ -3828,7 +3811,6 @@ TPartition::EProcessResult TPartition::BeginTransactionData(TTransaction& t,
             } else if (!operation.GetForceCommit() && operation.GetCommitOffsetsEnd() > GetEndOffset()) {
                 LOG_W(
                     "Partition Consumer Bad request (behind the last offset) EndOffset End",
-                    {"partition", Partition},
                     {"consumer", consumer},
                     {"endOffset", GetEndOffset()},
                     {"operationCommitOffsetsEnd", operation.GetCommitOffsetsEnd()}
@@ -3840,7 +3822,6 @@ TPartition::EProcessResult TPartition::BeginTransactionData(TTransaction& t,
             } else if (IsCommitOffsetForbiddenForMLPConsumer(consumer, false)) {
                 LOG_W(
                     "Partition Consumer Bad request (changing commit offset for MLP consumer) EndOffset End",
-                    {"partition", Partition},
                     {"consumer", consumer},
                     {"endOffset", GetEndOffset()},
                     {"operationCommitOffsetsEnd", operation.GetCommitOffsetsEnd()}
@@ -4567,7 +4548,6 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
         LOG_D(
             "Topic partition user drop request",
             {"topicName", TopicName()},
-            {"partition", Partition},
             {"user", user}
         );
 
@@ -4634,7 +4614,6 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
         LOG_D(
             "Topic partition user reinit request with generation",
             {"topicName", TopicName()},
-            {"partition", Partition},
             {"actClientId", act.ClientId},
             {"readRuleGeneration", readRuleGeneration}
         );
@@ -4654,7 +4633,6 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
         LOG_W(
             "Commit to future - topic partition client EndOffset offset",
             {"topicName", TopicName()},
-            {"partition", Partition},
             {"actClientId", act.ClientId},
             {"endOffset", GetEndOffset()},
             {"offset", offset}
@@ -4709,7 +4687,6 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         LOG_D(
             "Topic partition user drop done",
             {"topicName", TopicName()},
-            {"partition", Partition},
             {"user", user}
         );
         PendingUsersInfo.erase(user);
@@ -4717,7 +4694,6 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         LOG_D(
             "Topic partition user reinit with generation done",
             {"topicName", TopicName()},
-            {"partition", Partition},
             {"user", user},
             {"readRuleGeneration", readRuleGeneration}
         );
@@ -4765,7 +4741,6 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         LOG_D(
             "Topic partition user is set to (startOffset session",
             {"topicName", TopicName()},
-            {"partition", Partition},
             {"user", user},
             {"operationType", (createSession || dropSession ? " session" : " offset")},
             {"offset", offset},
@@ -5163,7 +5138,6 @@ void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorConte
     LOG_D(
         "Got quota. Topic",
         {"topicName", TopicName()},
-        {"partition", Partition},
         {"cookie", cookie},
         {"accountWaitTime", ev->Get()->AccountQuotaWaitTime},
             {"partitionWaitTime", ev->Get()->PartitionQuotaWaitTime}
@@ -5238,7 +5212,6 @@ void TPartition::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext
         LOG_I(
             "SubDomainOutOfSpace was changed. Topic",
             {"topicName", TopicName()},
-            {"partition", Partition},
             {"subDomainOutOfSpace", SubDomainOutOfSpace}
         );
 
@@ -5255,7 +5228,6 @@ void TPartition::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const T
     if (Partition.InternalPartitionId != record.GetPartition()) {
         LOG_I(
             "TEvCheckPartitionStatusRequest for wrong partition Topic",
-            {"partition", record.GetPartition()},
             {"topicName", TopicName()},
             {"internalPartition", Partition}
         );
@@ -5432,10 +5404,7 @@ void TPartition::SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& re
         ("tablet_id", TabletId)("partition_id", Partition)("topic", TopicName());
     LOG_D(
         "Topic partition Acquire RW Lock",
-        {"clientSideName", TopicConverter->GetClientsideName()},
-            {"partition",
-        Partition}
-    );
+        {"clientSideName", TopicConverter->GetClientsideName()});
     Send(ReadQuotaTrackerActor, new TEvPQ::TEvAcquireExclusiveLock());
     CompacterKvRequestInflight = true;
     CompacterKvRequest = std::move(request);
@@ -5444,10 +5413,7 @@ void TPartition::SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& re
 void TPartition::Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr&) {
     LOG_D(
         "Topic partition Acquired RW Lock, send compacter KV request",
-        {"clientSideName", TopicConverter->GetClientsideName()},
-            {"partition",
-        Partition}
-    );
+        {"clientSideName", TopicConverter->GetClientsideName()});
     Send(BlobCache, CompacterKvRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
 }
 
@@ -5552,16 +5518,12 @@ void TPartition::Handle(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationReque
         "TEvCheckMessageDeduplicationRequest for partition deduplication IDs Topic",
         {"partitionId", partitionId},
         {"count", record.MessageDeduplicationIdSize()},
-        {"topicName", TopicName()},
-        {"partition", Partition}
-    );
+        {"topicName", TopicName()});
    if (Partition.InternalPartitionId != partitionId) {
         LOG_W(
             "TEvCheckMessageDeduplicationRequest for wrong partition Topic",
             {"partitionId", partitionId},
-            {"topicName", TopicName()},
-            {"partition", Partition}
-        );
+            {"topicName", TopicName()});
         return;
     }
     auto response = MakeHolder<NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationResponse>();

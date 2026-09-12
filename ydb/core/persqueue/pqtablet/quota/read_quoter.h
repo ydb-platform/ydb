@@ -47,7 +47,7 @@ public:
     void UpdateQuotaConfigImpl(bool totalQuotaUpdated, const TActorContext& ctx) override;
     IEventBase* MakeQuotaApprovedEvent(TRequestContext& context) override;
     void Bootstrap(const TActorContext& ctx) override;
-    TLogPrefix BuildLogPrefix() const override;
+    TStructuredLogPrefix BuildLogPrefix() const override;
 
 protected:
     void HandleQuotaRequestImpl(TRequestContext& context) override;

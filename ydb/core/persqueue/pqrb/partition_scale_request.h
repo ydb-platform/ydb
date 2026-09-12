@@ -4,6 +4,7 @@
 #include "ydb/core/persqueue/events/internal.h"
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/persqueue/common/logging.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/log.h>
@@ -13,7 +14,7 @@
 namespace NKikimr {
 namespace NPQ {
 
-class TPartitionScaleRequest: public NActors::TActorBootstrapped<TPartitionScaleRequest> {
+class TPartitionScaleRequest: public NActors::TActorBootstrapped<TPartitionScaleRequest>, public TLogPrefix {
     using TBase = NActors::TActorBootstrapped<TPartitionScaleRequest>;
 
 public:
@@ -54,7 +55,7 @@ private:
     }
     void SendProposeRequest(const NActors::TActorContext &ctx);
     void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const NActors::TActorContext &ctx);
-    NActors::NStructuredLog::TStructuredMessage LogPrefix() const;
+    TStructuredLogPrefix LogPrefix() const override;
     bool IsOurPipe(const TActorId& clientId) const;
     void ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, const TActorContext& ctx);
 

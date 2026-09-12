@@ -13,6 +13,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/persqueue/common/logging.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -98,7 +99,8 @@ private:
 
 
 class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
-                               public TTabletExecutedFlat {
+                               public TTabletExecutedFlat,
+                               public TLogPrefix {
     struct TTxPreInit;
     struct TTxInit;
     struct TTxWrite;
@@ -163,7 +165,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     void Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr &ev, const TActorContext& ctx);
     // End kafka integration
 
-    NActors::NStructuredLog::TStructuredMessage LogPrefix() const;
+    TStructuredLogPrefix LogPrefix() const override;
 
     TActorId GetPipeClient(const ui64 tabletId, const TActorContext&);
     void RequestTabletIfNeeded(const ui64 tabletId, const TActorContext&, bool pipeReconnected = false);

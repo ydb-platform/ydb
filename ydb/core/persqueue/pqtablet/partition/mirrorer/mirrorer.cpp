@@ -722,7 +722,7 @@ void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) {
     ScheduleWithIncreasingTimeout<TEvPQ::TEvCreateConsumer>(SelfId(), ConsumerInitInterval, CONSUMER_INIT_INTERVAL_MAX, ctx);
 }
 
-TLogPrefix TMirrorer::BuildLogPrefix() const {
+TStructuredLogPrefix TMirrorer::BuildLogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
         {"actorClassName", "Mirrorer"},
         {"topic", TopicConverter->GetPrintableString()},

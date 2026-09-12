@@ -20,7 +20,7 @@ public:
     void PassAway() override;
     void OnException(const std::exception& exc) override;
 
-    TLogPrefix BuildLogPrefix() const override;
+    TStructuredLogPrefix BuildLogPrefix() const override;
 
 private:
     using TPartitionWriterPtr = std::unique_ptr<TCachedPartitionWriter>;

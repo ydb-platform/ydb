@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/library/actors/core/log.h>
+#include <ydb/core/persqueue/common/logging.h>
 
 namespace NKikimr::NPQ {
 
-inline NActors::NStructuredLog::TStructuredMessage LogPrefix() { return {}; }
+inline TStructuredLogPrefix LogPrefix() { return {}; }
 
 } // namespace NKikimr::NPQ

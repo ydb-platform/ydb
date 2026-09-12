@@ -76,7 +76,7 @@ public:
             }));
     }
 
-    TLogPrefix BuildLogPrefix() const override {
+    TStructuredLogPrefix BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
             {"actorClassName", Strategy->GetName()});
     }

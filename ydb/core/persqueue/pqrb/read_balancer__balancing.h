@@ -60,7 +60,7 @@ struct TPartition {
 };
 
 // Multiple partitions balancing together always in one reading session
-struct TPartitionFamily {
+struct TPartitionFamily : TLogPrefix {
     friend struct TConsumer;
 
     enum class EStatus {
@@ -164,7 +164,7 @@ private:
     void LockPartition(ui32 partitionId, const TActorContext& ctx);
     std::unique_ptr<TEvPersQueue::TEvReleasePartition> MakeEvReleasePartition(ui32 partitionId) const;
     std::unique_ptr<TEvPersQueue::TEvLockPartition> MakeEvLockPartition(ui32 partitionId, ui32 step) const;
-    NActors::NStructuredLog::TStructuredMessage LogPrefix() const;
+    TStructuredLogPrefix LogPrefix() const override;
     void AssertInvariants() const;
 };
 
@@ -180,7 +180,7 @@ using TOrderedSessions = absl::btree_set<TSession*, SessionComparator>;
 
 // It contains all the logic of balancing the reading sessions of a single consumer: the distribution of partitions
 // across reading sessions, the uniformity of the load.
-struct TConsumer {
+struct TConsumer : TLogPrefix {
     friend struct TPartitionFamily;
 
     TBalancer& Balancer;
@@ -250,7 +250,7 @@ struct TConsumer {
     bool ScalingSupport() const;
 
 private:
-    NActors::NStructuredLog::TStructuredMessage LogPrefix() const;
+    TStructuredLogPrefix LogPrefix() const override;
 };
 
 struct TSession {
@@ -299,7 +299,7 @@ struct TSession {
 };
 
 
-class TBalancer {
+class TBalancer : public TLogPrefix {
     friend struct TConsumer;
 public:
     TBalancer(TPersQueueReadBalancer& topicActor);
@@ -349,7 +349,7 @@ public:
     void RenderApp(NApp::TNavigationBar&) const;
 
 private:
-    NActors::NStructuredLog::TStructuredMessage LogPrefix() const;
+    TStructuredLogPrefix LogPrefix() const override;
     ui32 NextStep();
 
 private:

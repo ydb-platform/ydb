@@ -21,7 +21,7 @@ void TBatchProcessor::Bootstrap(const NActors::TActorContext&) {
     Become(&TThis::StateWork);
 }
 
-TLogPrefix TBatchProcessor::BuildLogPrefix() const {
+TStructuredLogPrefix TBatchProcessor::BuildLogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
         {"actorClassName", "BatchProcessor"},
         {"selfId", SelfId()});

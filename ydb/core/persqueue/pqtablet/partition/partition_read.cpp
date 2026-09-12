@@ -488,8 +488,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
         const ui16 partNo = blobs[blobIdx].PartNo;
 
         if (blobs[blobIdx].Empty()) { // this is ok. Means that someone requested too much data or retention race
-            YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Not full answer here!",
-                {LogPrefix()});
+            LOG_D("Not full answer here!");
             const ui64 answerSize = answer->Response->ByteSize();
             if (userInfo && Destination != 0) {
                 userInfo->ReadDone(ctx, ctx.Now(), answerSize, cnt, ClientDC,
@@ -557,8 +556,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                 continue;
             }
 
-            YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "FormAnswer processing batch offset totakecount count size from batchStartIdx cbcount",
-                {LogPrefix()},
+            LOG_D("FormAnswer processing batch offset totakecount count size from batchStartIdx cbcount", 
                 {"offsetHeaderCount", (offset - header.GetCount())},
                 {"count", count},
                 {"headerCount", header.GetCount()},
@@ -645,8 +643,7 @@ TReadAnswer TReadInfo::FormAnswer(
     readResult->SetReadFromTimestampMs(ReadTimestampMs);
 
     AFL_ENSURE(endOffset <= (ui64)Max<i64>())("Max offset is too big", endOffset);
-    YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "FormAnswer for blobs",
-        {LogPrefix()},
+    LOG_D("FormAnswer for blobs", 
         {"blobsSize", Blobs.size()});
 
     if (!isActive && response->GetBlobs().empty()) {
@@ -800,7 +797,6 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
     LOG_D(
         "Waiting read cookie partition read timeout for offset",
         {"cookie", ev->Get()->Cookie},
-            {"partition", Partition},
             {"user", res->User},
             {"offset", res->Offset}
     );
@@ -893,8 +889,6 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
         LOG_E(
             "I was right, there could be rewinds and deletions at once! Topic partition readOffset readPartNo startOffset",
             {"clientSideName", TopicConverter->GetClientsideName()},
-                    {"partition",
-            Partition},
                     {"offset",
             read->Offset},
                     {"partNo", read->PartNo},
@@ -914,8 +908,6 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
         LOG_E(
             "Reading from too big offset - topic partition client EndOffset offset",
             {"clientSideName", TopicConverter->GetClientsideName()},
-                    {"partition",
-            Partition},
                     {"clientId",
             read->ClientId},
                     {"endOffset", GetEndOffset()},
@@ -984,8 +976,6 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
         "Read cookie Topic partition user offset partno count size endOffset max time lag ms effective offset",
         {"cookie", cookie},
         {"clientSideName", TopicConverter->GetClientsideName()},
-            {"partition",
-        Partition},
             {"user",
         user},
             {"offset",
@@ -1005,8 +995,6 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
                 LOG_D(
                     "Too big read timeout Topic partition user offset count size endOffset max time lag ms effective offset",
                     {"clientSideName", TopicConverter->GetClientsideName()},
-                                    {"partition",
-                    Partition},
                                     {"clientId",
                     read->ClientId},
                                     {"offset", read->Offset},
@@ -1051,8 +1039,6 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
     LOG_D(
         "Topic partition user readTimeStamp for offset initiated queuesize startOffset ReadingTimestamp rrg",
         {"clientSideName", TopicConverter->GetClientsideName()},
-            {"partition",
-        Partition},
             {"user",
         user},
             {"userInfoOffset",
@@ -1106,8 +1092,6 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
     LOG_D(
         "Topic partition user send read request for offset initiated queuesize startOffset ReadingTimestamp rrg",
         {"clientSideName", TopicConverter->GetClientsideName()},
-            {"partition",
-        Partition},
             {"user",
         user},
             {"userInfoOffset",
@@ -1142,10 +1126,7 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
     if (ev->Get()->IsInternal) {
         LOG_D(
             "Topic partition Got internal ProxyResponse",
-            {"clientSideName", TopicConverter->GetClientsideName()},
-                    {"partition",
-            Partition}
-        );
+            {"clientSideName", TopicConverter->GetClientsideName()});
         CompacterPartitionRequestInflight = false;
         if (Compacter) {
             Compacter->ProcessResponse(ev);
@@ -1159,8 +1140,6 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
         LOG_I(
             "Topic partition user readTimeStamp for other generation or no client info at all",
             {"clientSideName", TopicConverter->GetClientsideName()},
-                    {"partition",
-            Partition},
                     {"readingForUser",
             ReadingForUser}
         );
@@ -1172,8 +1151,6 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
     LOG_D(
         "Topic partition user readTimeStamp done, result queuesize startOffset",
         {"clientSideName", TopicConverter->GetClientsideName()},
-            {"partition",
-        Partition},
             {"readingForUser",
         ReadingForUser},
             {"userInfoWriteTimestampMilliSeconds",

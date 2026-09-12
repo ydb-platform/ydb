@@ -71,7 +71,7 @@ public:
         Become(&TThis::StateWork);
     }
 
-    TLogPrefix BuildLogPrefix() const override {
+    TStructuredLogPrefix BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
             {"actorClassName", "DeduplicationQueue"},
             {"topic", TopicName},
@@ -253,8 +253,8 @@ private:
                 TConstArrayRef(&messageDeduplicationId, 1));
             LOG_D(
                 "Send TEvCheckMessageDeduplicationRequest",
-                {"partition", parentPartition.PartitionId},
-                {"tabletId", tabletId},
+                {"parentPartitionId", parentPartition.PartitionId},
+                {"partitionTabletId", tabletId},
                 {"messageDeduplicationId", messageDeduplicationId}
             );
             auto forward = std::make_unique<TEvPipeCache::TEvForward>(

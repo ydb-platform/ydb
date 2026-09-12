@@ -42,7 +42,7 @@ public:
         Promise.SetValue(std::move(response));
     }
 
-    TLogPrefix BuildLogPrefix() const override {
+    TStructuredLogPrefix BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
             {"actorClassName", "CreateTopicInternal"},
             {"path", Path});

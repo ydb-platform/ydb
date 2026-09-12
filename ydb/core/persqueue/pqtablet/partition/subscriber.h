@@ -9,6 +9,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/common/blob_refcounter.h>
+#include <ydb/core/persqueue/common/logging.h>
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
@@ -24,7 +25,7 @@ struct TReadAnswer {
     TActorId ReplyTo;
 };
 
-struct TReadInfo {
+struct TReadInfo : TLogPrefix {
     TString User;
     TString ClientDC;
     ui64 Offset;
@@ -97,7 +98,7 @@ struct TReadInfo {
         return LastOffset != 0 && Offset >= LastOffset;
     }
 
-    NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
+    TStructuredLogPrefix LogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
             {"className", "TReadInfo"},
             {"user", User},

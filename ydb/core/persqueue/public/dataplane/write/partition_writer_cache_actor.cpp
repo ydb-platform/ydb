@@ -27,7 +27,7 @@ void TPartitionWriterCacheActor::Bootstrap(const TActorContext& ctx)
     this->Become(&TPartitionWriterCacheActor::StateWork);
 }
 
-TLogPrefix TPartitionWriterCacheActor::BuildLogPrefix() const {
+TStructuredLogPrefix TPartitionWriterCacheActor::BuildLogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
         {"actorClassName", "PartitionWriterCache"},
         {"tabletId", TabletId},

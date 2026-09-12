@@ -50,7 +50,7 @@ public:
         Become(&TTopicOffsetsActor::StateWork);
     }
 
-    TLogPrefix BuildLogPrefix() const override {
+    TStructuredLogPrefix BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
             {"actorClassName", "TopicOffsetsActor"},
             {"path", Settings.Path});

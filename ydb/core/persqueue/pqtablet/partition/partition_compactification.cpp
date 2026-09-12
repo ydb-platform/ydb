@@ -3,28 +3,6 @@
 #include "partition_util.h"
 #include <ydb/library/actors/core/log.h>
 
-#undef NPQ_LOG_PREFIX
-#undef LOG
-#undef LOG_T
-#undef LOG_D
-#undef LOG_I
-#undef LOG_N
-#undef LOG_W
-#undef LOG_E
-#undef LOG_C
-#undef LOG_A
-
-#define NPQ_LOG_PREFIX this->LogPrefix()
-#define LOG(level, T, ...) YDB_LOG_COMP(level, NKikimrServices::PERSQUEUE, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
-#define LOG_T(T, ...) YDB_LOG_TRACE_COMP(NKikimrServices::PERSQUEUE, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
-#define LOG_D(T, ...) YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
-#define LOG_I(T, ...) YDB_LOG_INFO_COMP(NKikimrServices::PERSQUEUE, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
-#define LOG_N(T, ...) YDB_LOG_NOTICE_COMP(NKikimrServices::PERSQUEUE, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
-#define LOG_W(T, ...) YDB_LOG_WARN_COMP(NKikimrServices::PERSQUEUE, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
-#define LOG_E(T, ...) YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
-#define LOG_C(T, ...) YDB_LOG_CRIT_COMP(NKikimrServices::PERSQUEUE, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
-#define LOG_A(T, ...) YDB_LOG_ALERT_COMP(NKikimrServices::PERSQUEUE, T, NPQ_LOG_PREFIX, ##__VA_ARGS__)
-
 namespace NKikimr::NPQ {
 std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(const TActorId& selfId, ui64 nextRequestCookie, ui64 startOffset, ui64 lastOffset, TMaybe<ui64> nextPartNo = Nothing()) {
     auto evRead = std::make_unique<TEvPQ::TEvRead>(
@@ -64,21 +42,21 @@ const char* CompactionStepName(TPartitionCompaction::EStep step) {
 
 } // namespace
 
-TLogPrefix TPartitionCompaction::MakeLogPrefix(const TPartition* actor, const char* compactionStep) {
-    TLogPrefix prefix = MakeNpqLogPrefix(actor->LogBuilder(), actor->GetLogPrefix());
+TStructuredLogPrefix TPartitionCompaction::MakeLogPrefix(const TPartition* actor, const char* compactionStep) {
+    TStructuredLogPrefix prefix = MakeNpqLogPrefix(actor->LogBuilder(), actor->GetLogPrefix());
     prefix.AppendMessage(YDB_LOG_CREATE_MESSAGE({"compactionStep", compactionStep}));
     return prefix;
 }
 
-TLogPrefix TPartitionCompaction::LogPrefix() const {
+TStructuredLogPrefix TPartitionCompaction::LogPrefix() const {
     return MakeLogPrefix(PartitionActor, CompactionStepName(Step));
 }
 
-TLogPrefix TPartitionCompaction::TReadState::LogPrefix() const {
+TStructuredLogPrefix TPartitionCompaction::TReadState::LogPrefix() const {
     return MakeLogPrefix(PartitionActor, "reading");
 }
 
-TLogPrefix TPartitionCompaction::TCompactState::LogPrefix() const {
+TStructuredLogPrefix TPartitionCompaction::TCompactState::LogPrefix() const {
     return MakeLogPrefix(PartitionActor, "compacting");
 }
 
@@ -145,8 +123,7 @@ void TPartitionCompaction::ProcessResponse(TEvPQ::TEvError::TPtr& ev) {
     LOG_E(
         "Compaction for topic proxy ERROR",
         {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
-            {"partition", PartitionActor->Partition},
-            {"response", ev->Get()->Error}
+        {"response", ev->Get()->Error}
     );
     PartitionActor->Send(PartitionActor->TabletActorId, new TEvents::TEvPoison());
     Step = EStep::PENDING;
@@ -157,8 +134,7 @@ void TPartitionCompaction::ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev) {
     LOG_D(
         "Compaction for topic proxy response",
         {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
-            {"partition", PartitionActor->Partition},
-            {"cookie", ev->Get()->Cookie}
+        {"cookie", ev->Get()->Cookie}
     );
     if (ev->Get()->Cookie != PartRequestCookie) {
         return;
@@ -217,16 +193,12 @@ void TPartitionCompaction::ProcessResponse(TEvKeyValue::TEvResponse::TPtr& ev) {
     AFL_ENSURE(!PartitionActor->CompacterKvRequestInflight);
     LOG_D(
         "Compaction for topic Process KV response",
-        {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
-            {"partition", PartitionActor->Partition}
-    );
+        {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()});
     if (CompactState) {
         if (!CompactState->ProcessKVResponse(ev)) {
             LOG_E(
                 "Compaction for topic Process KV response: BAD Status",
-                {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
-                            {"partition", PartitionActor->Partition}
-            );
+                {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()});
 
             PartitionActor->Send(PartitionActor->TabletActorId, new TEvents::TEvPoison());
             return;
@@ -411,7 +383,6 @@ TPartitionCompaction::EStep TPartitionCompaction::TReadState::ContinueIfPossible
     LOG_D(
         "Compaction for topic Send EvRead (Read state)",
         {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
-            {"partition", PartitionActor->Partition},
             {"fromOffset", OffsetToRead},
             {"nextPartNo", NextPartNo}
     );
@@ -475,7 +446,6 @@ TPartitionCompaction::TCompactState::TCompactState(
     LOG_D(
         "Compaction for topic Created compact state. first head",
         {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
-            {"partition", PartitionActor->Partition},
             {"startOffset", partitionActor->CompactionBlobEncoder.StartOffset},
             {"offset", FirstHeadOffset},
             {"endOffset", partitionActor->BlobEncoder.EndOffset}
@@ -511,7 +481,6 @@ TPartitionCompaction::EStep TPartitionCompaction::TCompactState::ContinueIfPossi
         LOG_D(
             "Compaction for topic Send EvRead (Compact state)",
             {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
-                    {"partition", PartitionActor->Partition},
                     {"fromOffset", currKey.GetOffset()},
                     {"currKeyPartNo", currKey.GetPartNo()}
         );
@@ -657,7 +626,6 @@ bool TPartitionCompaction::TCompactState::ProcessReadResult(NKikimrClient::TCmdR
     LOG_D(
         "Compaction for topic process read result in CompState starting isTruncatedBlob",
         {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
-            {"partition", PartitionActor->Partition},
             {"from", readResult.GetResult(0).GetOffset()},
             {"readResultResult0PartNo", readResult.GetResult(0).GetPartNo()},
             {"isTruncatedBlob", isTruncatedBlob}
@@ -804,7 +772,6 @@ bool TPartitionCompaction::TCompactState::ProcessReadResult(NKikimrClient::TCmdR
             LOG_D(
                 "Compaction for topic LastPart processed read result in CompState starting res.GetOffset() isTruncatedBlob hasNonZeroParts keepMessage LastBatch",
                 {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
-                            {"partition", PartitionActor->Partition},
                             {"from", readResult.GetResult(0).GetOffset()},
                             {"readResultResult0PartNo", readResult.GetResult(0).GetPartNo()},
                             {"offset", res.GetOffset()},
@@ -845,7 +812,6 @@ bool TPartitionCompaction::TCompactState::ProcessReadResult(NKikimrClient::TCmdR
     LOG_D(
         "Compaction for topic processed read result in CompState starting isTruncatedBlob hasNonZeroParts isMiddlePartOfMessage",
         {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
-            {"partition", PartitionActor->Partition},
             {"from", readResult.GetResult(0).GetOffset()},
             {"readResultResult0PartNo", readResult.GetResult(0).GetPartNo()},
             {"isTruncatedBlob", isTruncatedBlob},
@@ -904,7 +870,6 @@ void TPartitionCompaction::TCompactState::AddDeleteRange(const TKey& key) {
     LOG_D(
         "Compaction for topic add CmdDeleteRange for key",
         {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
-            {"partition", PartitionActor->Partition},
             {"key", key}
     );
 
@@ -971,7 +936,6 @@ void TPartitionCompaction::TCompactState::SendCommit(ui64 cookie) {
     LOG_D(
         "Compaction for topic commit",
         {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
-            {"partition", PartitionActor->Partition},
             {"offset", MaxOffset}
     );
     PartitionActor->CompacterPartitionRequestInflight = true;

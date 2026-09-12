@@ -48,7 +48,7 @@ public:
     {
     }
 
-    TLogPrefix BuildLogPrefix() const override {
+    TStructuredLogPrefix BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE({"actorClassName", "prefix"});
     }
 
@@ -62,8 +62,8 @@ public:
         LOG_E("error");
         LOG_C("crit");
         LOG_A("alert");
-        const TLogPrefix& first = GetLogPrefix();
-        const TLogPrefix& second = GetLogPrefix();
+        const TStructuredLogPrefix& first = GetLogPrefix();
+        const TStructuredLogPrefix& second = GetLogPrefix();
         Y_UNUSED(second);
         Send(Parent, new TEvText(TStringBuilder() << StructuredLogPrefixText(LogBuilder()) << StructuredLogPrefixText(first)));
     }
@@ -94,7 +94,7 @@ public:
     {
     }
 
-    TLogPrefix BuildLogPrefix() const override {
+    TStructuredLogPrefix BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE({"actorClassName", "exc"});
     }
 
@@ -149,7 +149,7 @@ public:
     {
     }
 
-    TLogPrefix BuildLogPrefix() const override {
+    TStructuredLogPrefix BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE({"actorClassName", "tablet"});
     }
 
@@ -175,7 +175,7 @@ public:
     {
     }
 
-    TLogPrefix BuildLogPrefix() const override {
+    TStructuredLogPrefix BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE({"actorClassName", "pipe"});
     }
 

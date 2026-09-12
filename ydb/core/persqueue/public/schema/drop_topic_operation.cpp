@@ -31,7 +31,7 @@ public:
         DoDescribe();
     }
 
-    TLogPrefix BuildLogPrefix() const override {
+    TStructuredLogPrefix BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
             {"actorClassName", "DropTopic"},
             {"path", Settings.Path});

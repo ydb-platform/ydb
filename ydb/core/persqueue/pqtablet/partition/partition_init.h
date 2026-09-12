@@ -6,6 +6,7 @@
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
 
+#include <ydb/core/persqueue/common/logging.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -30,7 +31,7 @@ struct TInitializionContext {
  * This class execute independent steps of parttition actor initialization.
  * Each initialization step makes its own decision whether to perform it or not.
  */
-class TInitializer {
+class TInitializer : public TLogPrefix {
     friend TInitializerStep;
 
 public:
@@ -47,7 +48,7 @@ protected:
 private:
     void DoNext(const TActorContext& ctx);
 
-    NActors::NStructuredLog::TStructuredMessage LogPrefix() const;
+    TStructuredLogPrefix LogPrefix() const override;
 
     TPartition* Partition;
 
@@ -62,7 +63,7 @@ private:
  * Its is independent initialization step.
  * Step begin a execution when method Execute called and ends it after metheod Done called.
  */
-class TInitializerStep {
+class TInitializerStep : public TLogPrefix {
 public:
     TInitializerStep(TInitializer* initializer, TString name, bool skipNewPartition);
     virtual ~TInitializerStep() = default;
@@ -83,7 +84,7 @@ public:
 protected:
     void Done(const TActorContext& ctx);
 
-    NActors::NStructuredLog::TStructuredMessage LogPrefix() const;
+    TStructuredLogPrefix LogPrefix() const override;
 
 private:
     TInitializer* Initializer;

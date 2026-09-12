@@ -92,7 +92,7 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
     }
 }
 
-NActors::NStructuredLog::TStructuredMessage TDistributedTransaction::LogPrefix() const
+TStructuredLogPrefix TDistributedTransaction::LogPrefix() const
 {
     return YDB_LOG_CREATE_MESSAGE(
         {"txId", TxId});
@@ -252,8 +252,7 @@ void TDistributedTransaction::OnPlanStep(ui64 step)
 
 void TDistributedTransaction::OnTxCalcPredicateResult(const TEvPQ::TEvTxCalcPredicateResult& event)
 {
-    YDB_LOG_DEBUG("Handle TEvTxCalcPredicateResult",
-        {LogPrefix()});
+    LOG_D("Handle TEvTxCalcPredicateResult");
 
     TMaybe<EDecision> decision;
 
@@ -288,8 +287,7 @@ void UpdatePartitionsData(NKikimrPQ::TPartitions& partitionsData, NKikimrPQ::TPa
 
 void TDistributedTransaction::OnProposePartitionConfigResult(TEvPQ::TEvProposePartitionConfigResult& event)
 {
-    YDB_LOG_DEBUG("Handle TEvProposePartitionConfigResult",
-        {LogPrefix()});
+    LOG_D("Handle TEvProposePartitionConfigResult");
 
     UpdatePartitionsData(PartitionsData, event.Data);
 
@@ -311,9 +309,7 @@ void TDistributedTransaction::OnPartitionResult(const E& event, TMaybe<EDecision
 
     ++PartitionRepliesCount;
 
-    YDB_LOG_DEBUG("Partition responses ",
-        {LogPrefix()},
-        {"partitionRepliesCount", PartitionRepliesCount},
+    LOG_D("Partition responses ", {"partitionRepliesCount", PartitionRepliesCount},
         {"partitionRepliesExpected", PartitionRepliesExpected});
 }
 
@@ -321,9 +317,7 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
                                         const TActorId& sender,
                                         std::unique_ptr<TEvTxProcessing::TEvReadSetAck> ack)
 {
-    YDB_LOG_DEBUG("Handle TEvReadSet",
-        {LogPrefix()},
-        {"txId", TxId});
+    LOG_D("Handle TEvReadSet");
 
     TX_ENSURE((Step == Max<ui64>()) || (event.HasStep() && (Step == event.GetStep())));
     TX_ENSURE(event.HasTxId() && (TxId == event.GetTxId()));
@@ -340,9 +334,7 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
             p.SetPredicate(data.GetDecision() == NKikimrTx::TReadSetData::DECISION_COMMIT);
             ++ReadSetCount;
 
-            YDB_LOG_DEBUG("Predicates ",
-                {LogPrefix()},
-                {"readSetCount", ReadSetCount},
+            LOG_D("Predicates ", {"readSetCount", ReadSetCount},
                 {"predicatesReceivedSize", PredicatesReceived.size()});
         }
 
@@ -362,9 +354,7 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
 
 void TDistributedTransaction::OnReadSetAck(const NKikimrTx::TEvReadSetAck& event)
 {
-    YDB_LOG_DEBUG("Handle TEvReadSetAck",
-        {LogPrefix()},
-        {"txId", TxId});
+    LOG_D("Handle TEvReadSetAck");
 
     TX_ENSURE(event.HasStep() && (Step == event.GetStep()));
     TX_ENSURE(event.HasTxId() && (TxId == event.GetTxId()));
@@ -378,9 +368,7 @@ void TDistributedTransaction::OnReadSetAck(ui64 tabletId)
         PredicateRecipients[tabletId] = true;
         ++PredicateAcksCount;
 
-        YDB_LOG_DEBUG("Predicate acks",
-            {LogPrefix()},
-            {"predicateAcksCount", PredicateAcksCount},
+        LOG_D("Predicate acks", {"predicateAcksCount", PredicateAcksCount},
             {"predicateRecipientsSize", PredicateRecipients.size()});
     }
 }
@@ -428,9 +416,7 @@ bool TDistributedTransaction::HaveParticipantsDecision() const
 
 bool TDistributedTransaction::HaveAllRecipientsReceive() const
 {
-    YDB_LOG_DEBUG("HaveAllRecipientsReceive",
-        {LogPrefix()},
-        {"predicateAcks", PredicateAcksCount},
+    LOG_D("HaveAllRecipientsReceive", {"predicateAcks", PredicateAcksCount},
         {"predicateRecipientsSize", PredicateRecipients.size()});
     return PredicateRecipients.size() == PredicateAcksCount;
 }
@@ -439,9 +425,7 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
                                           EState state)
 {
     auto tx = Serialize(state);
-    YDB_LOG_DEBUG("Save tx",
-        {LogPrefix()},
-        {"tx", tx.ShortDebugString()});
+    LOG_D("Save tx", {"tx", tx.ShortDebugString()});
 
     TString value;
     TX_ENSURE(tx.SerializeToString(&value));

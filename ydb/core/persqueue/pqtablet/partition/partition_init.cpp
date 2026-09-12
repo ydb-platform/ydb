@@ -64,8 +64,7 @@ void TInitializer::Next(const TActorContext& ctx) {
 }
 
 void TInitializer::Done(const TActorContext& ctx) {
-    YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Initializing completed",
-        {LogPrefix()});
+    LOG_D("Initializing completed");
     InProgress = false;
     Partition->InitComplete(ctx);
 }
@@ -85,13 +84,12 @@ void TInitializer::DoNext(const TActorContext& ctx) {
         }
     }
 
-    YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Start initializing step",
-        {LogPrefix()},
+    LOG_D("Start initializing step", 
         {"currentStepGetName", CurrentStep->Get()->Name});
     CurrentStep->Get()->Execute(ctx);
 }
 
-NActors::NStructuredLog::TStructuredMessage TInitializer::LogPrefix() const {
+TStructuredLogPrefix TInitializer::LogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
         {"className", "Initializer"},
         {"topic", Partition->TopicName()},
@@ -115,8 +113,7 @@ void TInitializerStep::Done(const TActorContext& ctx) {
 
 void TInitializerStep::RestartTablet(const std::string_view message) const {
     if (NActors::TlsActivationContext) {
-        YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, "Restarting tablet",
-            {LogPrefix()},
+        LOG_E("Restarting tablet", 
             {"partitionTabletId", Partition()->TabletId},
             {"message", message});
     }
@@ -145,7 +142,7 @@ TInitializionContext& TInitializerStep::GetContext() {
     return Initializer->Ctx;
 }
 
-NActors::NStructuredLog::TStructuredMessage TInitializerStep::LogPrefix() const {
+TStructuredLogPrefix TInitializerStep::LogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
         {"className", Name},
         {"topic", Partition()->TopicName()},
@@ -547,7 +544,7 @@ THashSet<TString> FilterBlobsMetaData(const TVector<NKikimrClient::TKeyValueResp
 
     for (size_t i = 0; i < keys.size(); ++i) {
         if (NActors::TlsActivationContext) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Dump key[index]",
+            YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Dump key[index]", 
                 {LogPrefix()},
                 {"index", i},
                 {"value", keys[i]});
@@ -560,7 +557,7 @@ THashSet<TString> FilterBlobsMetaData(const TVector<NKikimrClient::TKeyValueResp
     for (auto& k : keys) {
         if (filtered.empty()) {
             if (NActors::TlsActivationContext) {
-                YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Add key",
+                YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Add key", 
                     {LogPrefix()},
                     {"k", k});
             }
@@ -574,7 +571,7 @@ THashSet<TString> FilterBlobsMetaData(const TVector<NKikimrClient::TKeyValueResp
                     if (lastKey.GetCount() < candidate.GetCount()) {
                         // candidate содержит lastKey
                         if (NActors::TlsActivationContext) {
-                            YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Replace key",
+                            YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Replace key", 
                                 {LogPrefix()},
                                 {"filteredBack", filtered.back()},
                                 {"k", k});
@@ -585,7 +582,7 @@ THashSet<TString> FilterBlobsMetaData(const TVector<NKikimrClient::TKeyValueResp
                         if (lastKey.GetInternalPartsCount() < candidate.GetInternalPartsCount()) {
                             // candidate содержит lastKey
                             if (NActors::TlsActivationContext) {
-                                YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Replace key",
+                                YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Replace key", 
                                     {LogPrefix()},
                                     {"filteredBack", filtered.back()},
                                     {"k", k});
@@ -595,7 +592,7 @@ THashSet<TString> FilterBlobsMetaData(const TVector<NKikimrClient::TKeyValueResp
                         } else {
                             // lastKey содержит candidate
                             if (NActors::TlsActivationContext) {
-                                YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Ignore key",
+                                YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Ignore key", 
                                     {LogPrefix()},
                                     {"k", k});
                             }
@@ -603,7 +600,7 @@ THashSet<TString> FilterBlobsMetaData(const TVector<NKikimrClient::TKeyValueResp
                     } else {
                         // lastKey содержит candidate
                         if (NActors::TlsActivationContext) {
-                            YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Ignore key",
+                            YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Ignore key", 
                                 {LogPrefix()},
                                 {"k", k});
                         }
@@ -611,14 +608,14 @@ THashSet<TString> FilterBlobsMetaData(const TVector<NKikimrClient::TKeyValueResp
                 } else if (lastKey.GetPartNo() > candidate.GetPartNo()) {
                     // lastKey содержит candidate
                     if (NActors::TlsActivationContext) {
-                        YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Ignore key",
+                        YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Ignore key", 
                             {LogPrefix()},
                             {"k", k});
                     }
                 } else {
                     // candidate после lastKey
                     if (NActors::TlsActivationContext) {
-                        YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Add key",
+                        YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Add key", 
                             {LogPrefix()},
                             {"k", k});
                     }
@@ -629,14 +626,14 @@ THashSet<TString> FilterBlobsMetaData(const TVector<NKikimrClient::TKeyValueResp
                 if (const ui64 nextOffset = lastKey.GetOffset() + lastKey.GetCount(); nextOffset > candidate.GetOffset()) {
                     // lastKey содержит candidate
                     if (NActors::TlsActivationContext) {
-                        YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Ignore key",
+                        YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Ignore key", 
                             {LogPrefix()},
                             {"k", k});
                     }
                 } else {
                     // candidate после lastKey или пропуск между lastKey и candidate
                     if (NActors::TlsActivationContext) {
-                        YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Add key",
+                        YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Add key", 
                             {LogPrefix()},
                             {"k", k});
                     }
@@ -673,7 +670,7 @@ static void CheckKeysTimestampOrder(const std::deque<TDataKey>& keys) {
         prev = curr++;
     }
     if (disorderPairCount > 0) {
-        YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, "Data keys have misarranged timestamps;",
+        YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, "Data keys have misarranged timestamps;", 
             {LogPrefix()},
             {"disorderPairCount", disorderPairCount},
             {"sample", sample});
@@ -698,13 +695,11 @@ void TInitDataRangeStep::FillBlobsMetaData(const TActorContext&) {
         for (ui32 i = 0; i < range.PairSize(); ++i) {
             const auto& pair = range.GetPair(i);
             PQ_INIT_ENSURE(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
-            YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Check key",
-                {LogPrefix()},
+            LOG_D("Check key", 
                 {"key", pair.GetKey()});
             const auto k = TKey::FromString(pair.GetKey(), PartitionId());
             if (!actualKeys.contains(pair.GetKey())) {
-                YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Unknown key will be deleted",
-                    {LogPrefix()},
+                LOG_D("Unknown key will be deleted", 
                     {"key", pair.GetKey()});
                 GetContext().DeletedKeys.emplace_back(k.ToString());
                 continue;
@@ -730,8 +725,7 @@ void TInitDataRangeStep::FillBlobsMetaData(const TActorContext&) {
                 bodySize += pair.GetValueSize();
             }
 
-            YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Got data offset count size so eo",
-                {LogPrefix()},
+            LOG_D("Got data offset count size so eo", 
                 {"kOffset", k.GetOffset()},
                 {"kCount", k.GetCount()},
                 {"valueSize", pair.GetValueSize()},
@@ -804,19 +798,13 @@ void TInitDataRangeStep::NormalizeOffsetsForEmptyData() {
     // WARN when meta claims a non-empty range while keys are gone: partition would stay
     // inconsistent (offset range without blobs) until we collapse to endOffset (#49507).
     if (startOffset < endOffset) {
-        YDB_LOG_WARN_COMP(NKikimrServices::PERSQUEUE,
-            "No data keys during partition init; normalizing empty partition offsets",
-            {LogPrefix()},
+        LOG_W("No data keys during partition init; normalizing empty partition offsets", 
             {"tablet_id", Partition()->TabletId},
-            {"partition", Partition()->Partition},
             {"metaStartOffset", startOffset},
             {"metaEndOffset", endOffset});
     } else {
-        YDB_LOG_INFO_COMP(NKikimrServices::PERSQUEUE,
-            "No data keys during partition init; normalizing empty partition offsets",
-            {LogPrefix()},
+        LOG_I("No data keys during partition init; normalizing empty partition offsets", 
             {"tablet_id", Partition()->TabletId},
-            {"partition", Partition()->Partition},
             {"metaStartOffset", startOffset},
             {"metaEndOffset", endOffset});
     }
@@ -1116,8 +1104,7 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                 PQ_INIT_ENSURE(!dataKeysHead[currentLevel].NeedCompaction())
                     ("c", currentLevel);
 
-                YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Read res partition offset endOffset key valuesize expected",
-                    {LogPrefix()},
+                LOG_D("Read res partition offset endOffset key valuesize expected", 
                     {"offset", offset},
                     {"partitionBlobEncoderEndOffset", Partition()->BlobEncoder.EndOffset},
                     {"keyOffset", key.GetOffset()},
@@ -1131,8 +1118,7 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                 PQ_INIT_ENSURE(size == read.GetValue().size())("size", size)("read.GetValue().size()", read.GetValue().size());
 
                 for (TBlobIterator it(key, read.GetValue()); it.IsValid(); it.Next()) {
-                    YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Add batch",
-                        {LogPrefix()});
+                    LOG_D("Add batch");
                     head.AddBatch(it.GetBatch());
                 }
                 head.PackedSize += size;
@@ -1165,8 +1151,7 @@ TInitEndWriteTimestampStep::TInitEndWriteTimestampStep(TInitializer* initializer
 void TInitEndWriteTimestampStep::Execute(const TActorContext &ctx) {
     if (Partition()->EndWriteTimestamp != TInstant::Zero() ||
         (Partition()->BlobEncoder.IsEmpty() && Partition()->CompactionBlobEncoder.IsEmpty())) {
-        YDB_LOG_INFO_COMP(NKikimrServices::PERSQUEUE, "Initializing EndWriteTimestamp skipped because already initialized",
-            {LogPrefix()});
+        LOG_I("Initializing EndWriteTimestamp skipped because already initialized");
         return Done(ctx);
     }
 
@@ -1182,8 +1167,7 @@ void TInitEndWriteTimestampStep::Execute(const TActorContext &ctx) {
         Partition()->PendingWriteTimestamp = Partition()->EndWriteTimestamp;
     }
 
-    YDB_LOG_INFO_COMP(NKikimrServices::PERSQUEUE, "Initializing EndWriteTimestamp from keys completed. Value",
-        {LogPrefix()},
+    LOG_I("Initializing EndWriteTimestamp from keys completed. Value", 
         {"partitionEndWriteTimestamp", Partition()->EndWriteTimestamp});
 
     return Done(ctx);
@@ -1318,7 +1302,6 @@ void TPartition::Initialize(const TActorContext& ctx) {
 
     LOG_I(
         "Bootstrapping",
-        {"partition", Partition},
         {"selfId", ctx.SelfID}
     );
 
@@ -1661,7 +1644,7 @@ static void RequestRange(const TActorContext& ctx, const TActorId& dst, const TP
         AddCmdDeleteRange(*request, TKeyPrefix::TypeTmpData, partition);
     }
 
-    YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Read range request. From",
+    YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Read range request. From", 
         {LogPrefix()},
         {"from", from},
         {"to", to});

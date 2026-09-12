@@ -50,9 +50,7 @@ void TPersQueueReadBalancer::EnqueuePartitionsLocationRequest(
         .Cookie = ev->Cookie,
     });
 
-    YDB_LOG_DEBUG("Enqueue GetPartitionsLocation request",
-        {LogPrefix()},
-        {"queueSize", PartitionsLocationQueue.size()},
+    LOG_D("Enqueue GetPartitionsLocation request", {"queueSize", PartitionsLocationQueue.size()},
         {"timeout", timeout},
         {"deadline", PartitionsLocationQueue.back().Deadline});
 
@@ -72,9 +70,7 @@ void TPersQueueReadBalancer::ProcessPartitionsLocationQueue(const TActorContext&
         }
 
         if (request.Deadline <= now) {
-            YDB_LOG_DEBUG("GetPartitionsLocation request expired",
-                {LogPrefix()},
-                {"sender", request.Sender});
+            LOG_D("GetPartitionsLocation request expired", {"sender", request.Sender});
             SendPartitionsLocationError(request.Sender, ctx, request.Cookie);
             continue;
         }
@@ -146,9 +142,7 @@ bool TPersQueueReadBalancer::TryRespondPartitionsLocation(
         pResponse->SetNodeId(*iter->second.NodeId);
         pResponse->SetGeneration(*iter->second.Generation);
 
-        YDB_LOG_DEBUG("The partition location was added to response",
-            {LogPrefix()},
-            {"partitionTabletId", tabletId},
+        LOG_D("The partition location was added to response", {"partitionTabletId", tabletId},
             {"partitionId", partitionId},
             {"nodeId", pResponse->GetNodeId()},
             {"generation", pResponse->GetGeneration()});

@@ -9,6 +9,7 @@
 #include <ydb/core/tx/tx_processing.h>
 
 #include <ydb/library/actors/core/actorid.h>
+#include <ydb/core/persqueue/common/logging.h>
 #include <ydb/library/actors/core/log.h>
 
 #include <util/generic/hash.h>
@@ -19,8 +20,11 @@
 
 namespace NKikimr::NPQ {
 
-struct TDistributedTransaction {
-    TDistributedTransaction() = default;
+struct TDistributedTransaction : TLogPrefix {
+    TDistributedTransaction()
+        : TLogPrefix(NKikimrServices::PQ_TX)
+    {
+    }
     explicit TDistributedTransaction(const NKikimrPQ::TTransaction& tx);
 
     void OnProposeTransaction(const NKikimrPQ::TEvProposeTransaction& event,
@@ -103,7 +107,7 @@ struct TDistributedTransaction {
     template<class E>
     void OnPartitionResult(const E& event, TMaybe<EDecision> decision);
 
-    NActors::NStructuredLog::TStructuredMessage LogPrefix() const;
+    TStructuredLogPrefix LogPrefix() const override;
 
     THashMap<ui64, TVector<NKikimrTx::TEvReadSet>> OutputMsgs;
 

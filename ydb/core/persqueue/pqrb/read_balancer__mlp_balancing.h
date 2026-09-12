@@ -19,7 +19,7 @@ struct TPrepareGetPartitionResponse {
     TNextPartitionPersistChanges PersistChanges;
 };
 
-class TMLPConsumer {
+class TMLPConsumer : public TLogPrefix {
 public:
     struct TMetrics {
         ui64 Messages = 0;
@@ -52,7 +52,7 @@ public:
 
     const NKikimrPQ::TPQTabletConfig& GetConfig() const;
     const TPartitionGraph& GetPartitionGraph() const;
-    NActors::NStructuredLog::TStructuredMessage LogPrefix() const;
+    TStructuredLogPrefix LogPrefix() const override;
 
 private:
     TDuration GetReceiveAttemptIdPeriod() const;
@@ -85,7 +85,7 @@ private:
     TMetrics Metrics;
 };
 
-class TMLPBalancer {
+class TMLPBalancer : public TLogPrefix {
 public:
     explicit TMLPBalancer(TPersQueueReadBalancer& topicActor);
 
@@ -121,7 +121,7 @@ public:
     const NKikimrPQ::TPQTabletConfig& GetConfig() const;
     const TPartitionGraph& GetPartitionGraph() const;
     const std::vector<ui32>& GetActivePartitions() const;
-    NActors::NStructuredLog::TStructuredMessage LogPrefix() const;
+    TStructuredLogPrefix LogPrefix() const override;
 
 private:
     TPersQueueReadBalancer& TopicActor;

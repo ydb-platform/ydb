@@ -20,7 +20,7 @@ public:
     void PassAway() override;
 
 protected:
-    TLogPrefix BuildLogPrefix() const override {
+    TStructuredLogPrefix BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
             {"actorClassName", "MLPDescriber"},
             {"topic", Settings.TopicName},

@@ -81,18 +81,27 @@ Y_UNIT_TEST_SUITE(JsonValue) {
         UNIT_ASSERT_VALUES_EQUAL(ExtractJsonValue(input, "$.absent"), "<null>;<null>;<null>;");
     }
 
-    Y_UNIT_TEST(HandlesBinaryJsonAndDictionaryStrings) {
+    Y_UNIT_TEST(UsesNativeStringDictionary) {
         std::vector<TString> dictionaryDocs;
         for (ui32 index = 0; index < 40; ++index) {
             dictionaryDocs.emplace_back(TStringBuilder() << R"({"s":")" << (index % 2 ? "x" : "yy") << R"("})");
         }
         auto dictionaryInput = BuildSubColumns(dictionaryDocs, BuildSettings(1, 1024));
+        auto accessor = dictionaryInput->GetPathAccessor("$.s", dictionaryInput->GetRecordsCount()).DetachResult();
+        const auto& source = accessor->GetChunkedArrayAccessor();
+        UNIT_ASSERT(source->GetType() == NAccessor::IChunkedArray::EType::Dictionary);
+        UNIT_ASSERT(source->GetDataType()->id() == arrow::Type::STRING);
+        // Extract array provides the same instance as directly calling GetPathAccessor
+        UNIT_ASSERT_VALUES_EQUAL(TTestGetJsonPath().ExtractArray(dictionaryInput, "$.s").get(), source.get());
+
         TString dictionaryExpected;
         for (ui32 index = 0; index < dictionaryDocs.size(); ++index) {
             dictionaryExpected.append(index % 2 ? "x;" : "yy;");
         }
         UNIT_ASSERT_VALUES_EQUAL(ExtractJsonValue(dictionaryInput, "$.s"), dictionaryExpected);
+    }
 
+    Y_UNIT_TEST(HandlesBinaryJson) {
         auto binaryJsonInput = BuildSubColumns({ R"({"value":"x"})", R"({"value":1})" }, BuildSettings(0, 1024));
         UNIT_ASSERT_VALUES_EQUAL(ExtractJsonValue(binaryJsonInput, "$.value"), "x;1;");
     }

@@ -1,3 +1,4 @@
+#include <ydb/core/statistics/ut_common/ut_common.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
@@ -7748,6 +7749,94 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             UNIT_ASSERT_C(result.GetIssues().ToString().contains("Cannot truncate table with async indexes"),
                 "Unexpected error message: " << result.GetIssues().ToString());
         }
+    }
+
+    void DoTestPreSharding(bool serverless, bool multiCol, bool unique) {
+        using namespace NStat;
+
+        TTestEnv env(1, 1, true);
+        if (serverless) {
+            CreateDatabase(env, "Shared", 1, true);
+            CreateServerlessDatabase(env, "Database", "/Root/Shared");
+        } else {
+            CreateDatabase(env, "Database");
+        }
+        TTableClient db(env.GetDriver());
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/Database/TestTable` (
+                    id Uint64 not null,
+                    name String not null,
+                    data String not null,
+                    PRIMARY KEY (id),
+                    STATISTICS name_hist ON (name) WITH (EQ_HEIGHT_HISTOGRAM)
+                )
+                WITH (PARTITION_AT_KEYS = (5));
+            )").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const TString query1 = "UPSERT INTO `/Root/Database/TestTable` (id, name, data) VALUES "
+                "(0, \"alice\", \"0\"),"
+                "(1, \"bob\", \"1\"),"
+                "(2, \"carter\", \"2\"),"
+                "(3, \"donald\", \"3\"),"
+                "(4, \"edgar\", \"4\"),"
+                "(5, \"felix\", \"5\"),"
+                "(6, \"george\", \"6\"),"
+                "(7, \"harry\", \"7\"),"
+                "(8, \"ian\", \"8\"),"
+                "(9, \"john\", \"9\");";
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery("ANALYZE `/Root/Database/TestTable`").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto driver = MakeHolder<NYdb::TDriver>(NYdb::TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetDatabase("/Root/Database")
+                .SetDiscoveryMode(NYdb::EDiscoveryMode::Off));
+            TTableClient db(*driver);
+            auto connres = db.CreateSession().GetValueSync();
+            UNIT_ASSERT_C(connres.GetIssues().Empty(), connres.GetIssues().ToString());
+            auto session = connres.GetSession();
+            const TString q = Sprintf(
+                "ALTER TABLE `/Root/Database/TestTable` ADD INDEX name_idx GLOBAL %s ON (name%s)",
+                unique ? "UNIQUE" : "",
+                multiCol ? ", data" : ""
+            );
+            auto result = session.ExecuteSchemeQuery(q).GetValueSync();
+            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            // Check index shard count
+            auto runtime = env.GetServer().GetRuntime();
+            auto shards = GetTableShards(&env.GetServer(), runtime->AllocateEdgeActor(), "/Root/Database/TestTable/name_idx/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(PreSharding, Unique) {
+        DoTestPreSharding(false, false, Unique);
+    }
+
+    Y_UNIT_TEST(PreShardingMultiCol) {
+        DoTestPreSharding(false, true, false);
+    }
+
+    Y_UNIT_TEST(PreShardingServerless) {
+        DoTestPreSharding(true, true, false);
     }
 
 }

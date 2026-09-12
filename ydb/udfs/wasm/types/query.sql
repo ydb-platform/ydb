@@ -20,6 +20,11 @@ SELECT
     -- Manifest maps plain "decimal" to Decimal(35,0); scale must match.
     BridgeTypes::ReadDecimalChecksum(Decimal("12345", 35, 0)) AS read_decimal,
     BridgeTypes::ListSumInt64(AsList(1l, 2l, 3l)) AS list_sum,
+    BridgeTypes::NestedListSumInt64(AsList(AsList(1l, 2l), AsList(3l, 4l, 5l))) AS nested_list_sum,
+    BridgeTypes::DictNestedListSums(
+        AsDict(
+            AsTuple("a", AsList(AsList(1l, 2l), AsList(3l))),
+            AsTuple("b", AsList(AsList(10l, 20l))))) AS dict_nested_sums,
     BridgeTypes::DictGetInt64(AsDict(AsTuple("k", 42l)), "k") AS dict_get,
     BridgeTypes::TupleKindSum(AsTuple(1l, "x", 1.0f)) AS tuple_kind_sum,
     BridgeTypes::StructGetScore(AsStruct(1 AS id, 2.5f AS score, "n" AS name)) AS struct_score,
@@ -28,6 +33,12 @@ SELECT
     BridgeTypes::MakeGreetingStruct() AS greeting,
     BridgeTypes::MakeIntList() AS int_list,
     BridgeTypes::MakeNameDict() AS name_dict,
+    -- Nested and repeated containers: the first is typed by inference alone,
+    -- the rest name the container they build (BridgeMake*Typed).
+    BridgeTypes::MakeNestedIntLists() AS nested_int_lists,
+    BridgeTypes::MakeIntListPair() AS int_list_pair,
+    BridgeTypes::MakeLabelledPoint() AS labelled_point,
+    BridgeTypes::MakeOptionalIntListPair() AS optional_int_list_pair,
     -- Way() returns the alternative index; the ydb CLI cannot format Variant.
     Way(BridgeTypes::MakeVariantUint32()) AS variant_uint32,
     BridgeTypes::RunCallableInt64(($x) -> { RETURN $x + 1; }, 41l) AS run_callable;

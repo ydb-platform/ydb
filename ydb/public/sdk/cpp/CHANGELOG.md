@@ -1,3 +1,5 @@
+* Added optional `TRetryOperationSettings::StopToken` for cooperative cancellation between retry attempts.
+
 * Added `EQ_HEIGHT_HISTOGRAM` to `EMultiColumnStatisticsType`.
 
 # v3.22.0

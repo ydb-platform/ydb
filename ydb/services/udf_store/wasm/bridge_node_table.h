@@ -179,10 +179,16 @@ private:
     NYql::NUdf::ITypeInfoHelper::TPtr TypeInfoHelper_;
 };
 
-//! Family the node's value will present to MiniKQL, which is not always the
-//! family of its own kind: an Optional node is a wrapper, and MiniKQL reads
-//! what the guest put inside it. Nothing when the payload has no name here --
-//! an Optional built over a handle whose kind was never recorded.
+//! Kind the node's value will present to MiniKQL, which is not always the kind
+//! of the node itself: an Optional node is a wrapper, and MiniKQL reads what
+//! the guest put inside it. Nothing when the payload has no name here -- an
+//! Optional built over a handle whose kind was never recorded.
+std::optional<EBridgeValueKind> BridgeNodeValueKind(
+    const TWasmBridgeNodeTable::TNode& node,
+    const NYql::NUdf::ITypeInfoHelper* helper);
+
+//! Family of BridgeNodeValueKind: what a declared slot is compared against,
+//! since MiniKQL stores the kinds inside one family alike.
 std::optional<EBridgeKindFamily> BridgeNodeValueFamily(
     const TWasmBridgeNodeTable::TNode& node,
     const NYql::NUdf::ITypeInfoHelper* helper);

@@ -882,6 +882,10 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
 
     attempts = len(load_config.get("values", ())) or MAX_AUTOMATIC_SEARCH_ATTEMPTS
     measurement_runs = attempts * measurement_config["repetitions"] + measurement_config["verification_repetitions"]
+    if "search" in load_config and load_config["objective"]["type"] == "latency-slo":
+        measurement_runs = attempts * (
+            measurement_config["repetitions"] + measurement_config["verification_repetitions"]
+        )
     effective_warmup = workload_effective_warmup_seconds(workload, measurement_config["warmup"])
     computed_timeout = 300 + measurement_runs * (effective_warmup + measurement_config["duration"] + 10)
     timeout_explicit = "timeout" in value

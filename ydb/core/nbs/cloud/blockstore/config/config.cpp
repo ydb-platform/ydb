@@ -50,6 +50,7 @@ TStorageConfig::TStorageConfig(
     xxx(CheckChecksumBeforeWrite,           bool,     false                   )\
     xxx(CheckChecksumWhenRead,              bool,     false                   )\
     xxx(IdleSpinUs,                         ui32,     10                      )\
+    xxx(IntegrityChecksumCacheBytes,        ui64,     64_MB                   )\
     xxx(CopyRangeBandwidthMbs,              ui32,     200                     )\
     xxx(VChunkCountersUpdateInterval,       TDuration, TDuration::Seconds(15) )\
 

@@ -12,14 +12,14 @@
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <cmath>
+
 namespace NKikimr::NConveyorComposite {
 
 class TWorker: public NActors::TActorBootstrapped<TWorker> {
 private:
     using TBase = NActors::TActorBootstrapped<TWorker>;
-    const double CPUHardLimit = 1;
-    YDB_READONLY(double, CPUSoftLimit, 1);
-    ui64 CPULimitGeneration = 0;
+    YDB_READONLY(double, CPULimit, 1);
     bool WaitWakeUp = false;
     std::optional<TDuration> ForwardDuration;
     const NActors::TActorId DistributorId;
@@ -31,6 +31,7 @@ private:
     void ExecuteTask(std::vector<TWorkerTask>&& workerTasks);
     void HandleMain(TEvInternal::TEvNewTask::TPtr& ev);
     void HandleMain(NActors::TEvents::TEvWakeup::TPtr& ev);
+    void HandleMain(NActors::TEvents::TEvPoisonPill::TPtr& ev);
     void OnWakeup();
 
 public:
@@ -38,6 +39,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvInternal::TEvNewTask, HandleMain);
             hFunc(NActors::TEvents::TEvWakeup, HandleMain);
+            hFunc(NActors::TEvents::TEvPoisonPill, HandleMain);
             default:
             YDB_LOG_ERROR_COMP(NKikimrServices::TX_CONVEYOR, "Unexpected event for task executor",
                 {"evType", ev->GetTypeRewrite()});
@@ -49,16 +51,14 @@ public:
         Become(&TWorker::StateMain);
     }
 
-    TWorker(const TString& poolName, const double cpuHardLimit, const NActors::TActorId& distributorId, const ui64 workerIdx,
+    TWorker(const TString& poolName, const double cpuLimit, const NActors::TActorId& distributorId, const ui64 workerIdx,
         const ui64 workersPoolId)
         : TBase("COMPOSITE_CONVEYOR::" + poolName + "::WORKER")
-        , CPUHardLimit(cpuHardLimit)
-        , CPUSoftLimit(cpuHardLimit)
+        , CPULimit(cpuLimit)
         , DistributorId(distributorId)
         , WorkerIdx(workerIdx)
         , WorkersPoolId(workersPoolId) {
-        AFL_VERIFY(0 < CPUHardLimit);
-        AFL_VERIFY(CPUHardLimit <= 1);
+        AFL_VERIFY(std::isfinite(CPULimit) && 0 < CPULimit && CPULimit <= 1);
     }
 };
 

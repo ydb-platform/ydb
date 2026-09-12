@@ -98,7 +98,7 @@ In addition to the main processes, Distconf works closely with other system comp
   Database nodes subscribe to [`TEvNodeWardenDynamicConfigPush`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/nodewarden/node_warden_events.h#L75) events to receive real-time configuration updates.
 - **Self-Heal**
 
-  When using Distconf for a [static group](../concepts/glossary.md#static-group), [Self-Heal](../maintenance/manual/selfheal.md) works similarly to [dynamic groups](../concepts/glossary.md#dynamic-group).
+  When using Distconf for a [static group](../concepts/glossary.md#static-group), [Self-Heal](../devops/concepts/selfheal-storage.md) works similarly to [dynamic groups](../concepts/glossary.md#dynamic-group).
 
 - **Local YAML files on nodes**
 

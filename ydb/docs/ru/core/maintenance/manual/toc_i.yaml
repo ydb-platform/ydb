@@ -5,10 +5,6 @@ items:
   href: node_restarting.md
 - name: Включение и выключение Scrubbing
   href: scrubbing.md
-- name: Работа с SelfHeal
-  href: selfheal.md
-- name: Self Heal State Storage
-  href: selfheal_statestorage.md
 - name: Декомиссия ЦОД
   href: ../../devops/deployment-options/manual/decommissioning.md
 - name: Декомиссия групп с использованием виртуальных групп

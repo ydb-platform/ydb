@@ -17,7 +17,7 @@ To manage resources, the user has access to the [storage group](../../concepts/g
 | `mirror-3of4` | 1 | 8* (10+ recommended) | 8 | 4 |
 | `none` | 1 | 1 | 1 | 1 |
 
-* Values of 8 for `block-4-2` and `mirror-3of4`, and 3 for `mirror-3-dc` are the minimum number of racks required to ensure cluster operability. With this configuration, the cluster starts and operates, but has no margin for self-healing: if a rack fails, its VDisks have nowhere to migrate within the failure model, and any additional failure may lead to data unavailability. Additional racks are needed by the [SelfHeal](../../maintenance/manual/selfheal.md) mechanism to move VDisks from a failed rack to the remaining equipment while preserving fault tolerance guarantees. Therefore, for practical operation, it is recommended to use at least 10 racks for `block-4-2` and `mirror-3of4`, and at least 4 racks for `mirror-3-dc`. For more details on storage modes and fault tolerance guarantees, see [{#T}](../../concepts/topology.md).
+* Values of 8 for `block-4-2` and `mirror-3of4`, and 3 for `mirror-3-dc` are the minimum number of racks required to ensure cluster operability. With this configuration, the cluster starts and operates, but has no margin for self-healing: if a rack fails, its VDisks have nowhere to migrate within the failure model, and any additional failure may lead to data unavailability. Additional racks are needed by the [SelfHeal](selfheal-storage.md) mechanism to move VDisks from a failed rack to the remaining equipment while preserving fault tolerance guarantees. Therefore, for practical operation, it is recommended to use at least 10 racks for `block-4-2` and `mirror-3of4`, and at least 4 racks for `mirror-3-dc`. For more details on storage modes and fault tolerance guarantees, see [{#T}](../../concepts/topology.md).
 
 ** For the `mirror-3-dc` mode in normal operation `RF = 3` (3 data copies). When one data center is unavailable, writing goes to 4 copies (2 in each remaining data center), and the load on the remaining DCs doubles. If a DC may be unavailable for a long time (or data centers are taken out for maintenance one by one), `RF = 6` must be provisioned. If only short-term failures are acceptable (recovery is faster than the system can overwrite a significant portion of data), `RF = 3` is sufficient. For more details on storage modes and fault tolerance guarantees, see [{#T}](../../concepts/topology.md).
 
@@ -131,7 +131,7 @@ To estimate the required equipment, perform the following steps.
    ```
 
 
-   The reserve of empty slots is necessary for the normal operation of the [SelfHeal](../../maintenance/manual/selfheal.md) mechanism, which performs automatic reconfiguration of storage groups to replace failed or long-unavailable disks.
+   The reserve of empty slots is necessary for the normal operation of the [SelfHeal](selfheal-storage.md) mechanism, which performs automatic reconfiguration of storage groups to replace failed or long-unavailable disks.
 
    The first term `MaxSlotsInRack` is the maximum number of slots in one failure domain. For a homogeneous cluster `MaxSlotsInRack = DisksPerRack × ExpectedSlotCount`, for a heterogeneous one — `MaxSlotsInRack = max_i(DisksPerRack_i × ExpectedSlotCount)`. This reserve is necessary so that when the most capacious domain fails, its VDisks can fit on the remaining equipment.
 
@@ -238,4 +238,4 @@ Thus, a cluster of 30 servers and 120 SSD disks of 3.2 TB each in `block-4-2` mo
 
 * [{#T}](../../concepts/topology.md)
 * [{#T}](system-requirements.md)
-* [{#T}](../../maintenance/manual/selfheal.md)
+* [{#T}](selfheal-storage.md)

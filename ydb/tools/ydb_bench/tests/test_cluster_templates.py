@@ -64,6 +64,7 @@ class ClusterTemplatesTest(unittest.TestCase):
     def test_invalid_nodes_do_not_write(self):
         for field, value in (
             ("host_id", "missing"),
+            ("host_id", []),
             ("vcpu", True),
             ("role", "unknown"),
             ("sector_map", {"count": 0, "size_gib": 64}),
@@ -78,6 +79,155 @@ class ClusterTemplatesTest(unittest.TestCase):
                 with self.assertRaises(BenchmarkError):
                     self.store.save(item, {"amd", "sas"})
         self.assertFalse(self.store.path.exists())
+
+    def test_three_views_roundtrip_and_legacy_migration(self):
+        legacy = cluster_templates.validate_template(self.value, {"amd", "sas"})
+        self.assertEqual(legacy["host_ids"], ["amd", "sas"])
+        self.assertEqual(legacy["data_centers"], [])
+        self.assertEqual(legacy["nodes"][0]["tenant"], "")
+        legacy["host_ids"].append("empty-host")
+        legacy["data_centers"] = [
+            {"name": "dc-1", "racks": ["rack-1", "empty-rack"]},
+            {"name": "empty-dc", "racks": []},
+        ]
+        legacy["tenants"] = [{"path": "/Root/orders", "storage_kind": "ssd", "storage_groups": 2}]
+        legacy["nodes"][1].update(
+            tenant="/Root/orders", location={"data_center": "dc-1", "rack": "rack-1", "body": "server-1"}
+        )
+        saved = self.store.save(legacy, {"amd", "sas", "empty-host"})
+        legacy["nodes"][1]["location"]["body"] = "compute-1"
+        for field in ("host_ids", "data_centers", "tenants", "nodes"):
+            self.assertEqual(saved[field], legacy[field])
+        self.assertEqual(cluster_templates.ClusterTemplateStore(self.root).list(), [saved])
+
+    def test_invalid_placement_references(self):
+        for field, value in (
+            ("host_ids", ["amd"]),
+            ("host_ids", ["amd", "sas", "unknown"]),
+            ("host_ids", ["amd", "amd", "sas"]),
+            ("data_centers", [{"name": "dc", "racks": ["r", "r"]}]),
+            ("data_centers", [{"name": "dc", "racks": []}, {"name": "dc", "racks": []}]),
+            ("tenants", [{"path": "/Root/../bad", "storage_kind": "ssd", "storage_groups": 1}]),
+            ("tenants", [{"path": "/Root/a", "storage_kind": "ssd", "storage_groups": 0}]),
+        ):
+            with self.subTest(field=field, value=value):
+                with self.assertRaises(BenchmarkError):
+                    self.store.save(dict(self.value, **{field: value}), {"amd", "sas"})
+        for node_index, updates in (
+            (0, {"tenant": "/Root/a"}),
+            (1, {"tenant": "/Root/missing"}),
+            (1, {"location": {"data_center": "missing"}}),
+            (1, {"location": {"data_center": "dc", "rack": "missing"}}),
+            (1, {"location": {"body": "server"}}),
+        ):
+            value = copy.deepcopy(self.value)
+            value["data_centers"] = [{"name": "dc", "racks": ["r"]}]
+            value["tenants"] = [{"path": "/Root/a", "storage_kind": "ssd", "storage_groups": 1}]
+            value["nodes"][node_index].update(updates)
+            with self.assertRaises(BenchmarkError):
+                self.store.save(value, {"amd", "sas"})
+        self.assertFalse(self.store.path.exists())
+
+    def test_cli_has_only_physical_placement(self):
+        value = copy.deepcopy(self.value)
+        value["data_centers"] = [{"name": "dc", "racks": ["r"]}]
+        value["tenants"] = [{"path": "/Root/a", "storage_kind": "ssd", "storage_groups": 1}]
+        node = value["nodes"][1]
+        node["role"] = "cli"
+        saved = cluster_templates.validate_template(value, {"amd", "sas"})
+        self.assertEqual(saved["nodes"][1]["tenant"], "")
+        self.assertFalse(any(saved["nodes"][1]["location"].values()))
+        for update in (
+            {"tenant": "/Root/a"},
+            {"location": {"data_center": "dc"}},
+            {"location": {"data_center": "dc", "rack": "r", "body": "server"}},
+        ):
+            invalid = copy.deepcopy(value)
+            invalid["nodes"][1].update(update)
+            with self.assertRaises(BenchmarkError):
+                cluster_templates.validate_template(invalid, {"amd", "sas"})
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required")
+    def test_moves_change_only_the_selected_view(self):
+        script = cluster_templates_ui.JS.split("function ctDefaultNode")[0] + r"""
+const assert=require('assert');
+const n={name:'compute',host_id:'amd',role:'dynamic',vcpu:8,affinity:{kind:'manual',cpus:[0,1]},tenant:'/Root/a',
+  location:{data_center:'dc',rack:'r1',body:'server'}};
+const record={nodes:[n],host_ids:['amd','sas'],data_centers:[{name:'dc',racks:['r1','r2']}],tenants:[{path:'/Root/a'},{path:'/Root/b'}]};
+const original=JSON.stringify(n);
+assert.throws(()=>ctMoveNode(record,0,'physical','sas'));assert.equal(JSON.stringify(n),original);
+ctMoveNode(record,0,'logical',['dc','r2']);assert.equal(n.host_id,'amd');assert.equal(n.tenant,'/Root/a');assert.equal(n.location.body,'compute');
+ctMoveNode(record,0,'tenants','/Root/b');assert.equal(n.location.rack,'r2');assert.equal(n.host_id,'amd');
+ctMoveNode(record,0,'physical','sas',true);assert.equal(n.affinity.mode,'none');assert.equal(n.location.rack,'r2');assert.equal(n.tenant,'/Root/b');
+n.affinity={kind:'strategy',mode:'pack-numa',count:8};ctMoveNode(record,0,'physical','amd');assert.equal(n.affinity.mode,'pack-numa');
+for(const [view,target] of [['physical','missing'],['logical',['dc','missing']],['tenants','/Root/missing']]){
+  const before=JSON.stringify(n);assert.throws(()=>ctMoveNode(record,0,view,target));assert.equal(JSON.stringify(n),before);
+}
+n.role='static';assert.throws(()=>ctMoveNode(record,0,'tenants','/Root/a'));
+n.role='cli';
+for(const [view,target] of [['logical',['dc','r1']],['tenants','/Root/a']]){
+  const before=JSON.stringify(n);assert.throws(()=>ctMoveNode(record,0,view,target));assert.equal(JSON.stringify(n),before);
+}
+ctMoveNode(record,0,'physical','sas');assert.equal(n.host_id,'sas');
+"""
+        subprocess.check_call([shutil.which("node"), "-e", script], timeout=10)
+        subprocess.run(
+            [shutil.which("node"), "--check"], input=cluster_templates_ui.JS, text=True, check=True, timeout=10
+        )
+
+    def test_default_rack_and_individual_bodies(self):
+        value = copy.deepcopy(self.value)
+        value["data_centers"] = [{"name": "dc", "racks": []}]
+        for node in value["nodes"]:
+            node["location"] = {"data_center": "dc"}
+        saved = self.store.save(value, {"amd", "sas"})
+        self.assertEqual(saved["data_centers"], [{"name": "dc", "racks": ["rack-1"]}])
+        for node in saved["nodes"]:
+            self.assertEqual(node["location"], {"data_center": "dc", "rack": "rack-1", "body": node["name"]})
+            node["location"]["body"] = "shared-old-body"
+        updated = self.store.save(saved, {"amd", "sas"})
+        self.assertEqual([n["location"]["body"] for n in updated["nodes"]], ["storage-1", "compute-1"])
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required")
+    def test_removal_preserves_nodes_and_other_placements(self):
+        script = cluster_templates_ui.JS.split("async function renderClusterTemplates")[0] + r"""
+const assert=require('assert');
+const make=()=>({host_ids:['a','b','empty'],data_centers:[{name:'dc',racks:['r1','r2']}],tenants:[{path:'/Root/a'}],nodes:[
+  {name:'n1',role:'dynamic',host_id:'a',vcpu:8,affinity:{kind:'manual',cpus:[0]},tenant:'/Root/a',location:{data_center:'dc',rack:'r1',body:'n1'}},
+  {name:'n2',role:'static',host_id:'a',affinity:{kind:'strategy',mode:'pack-numa',count:8},tenant:'',location:{data_center:'dc',rack:'r2',body:'n2'}}]});
+let r=make();ctRemoveLocation(r,'dc','r1');assert.equal(r.nodes.length,2);assert.equal(r.nodes[0].location.data_center,'');
+assert.equal(r.nodes[0].tenant,'/Root/a');assert.equal(r.nodes[0].host_id,'a');assert.equal(r.nodes[1].location.rack,'r2');
+assert.deepEqual(r.data_centers[0].racks,['r2']);ctRemoveLocation(r,'dc');assert.deepEqual(r.data_centers,[]);
+assert.equal(r.nodes[1].location.data_center,'');
+r=make();ctRemoveTenant(r,'/Root/a');assert.equal(r.nodes.length,2);assert.equal(r.nodes[0].tenant,'');
+assert.equal(r.nodes[0].location.rack,'r1');assert.equal(r.nodes[0].host_id,'a');assert.deepEqual(r.tenants,[]);
+r=make();const before=JSON.stringify(r);assert.throws(()=>ctRemoveHost(r,'a','a'));assert.equal(JSON.stringify(r),before);
+assert.throws(()=>ctRemoveHost(r,'a','missing'));assert.equal(JSON.stringify(r),before);
+ctRemoveHost(r,'empty');assert.deepEqual(r.host_ids,['a','b']);ctRemoveHost(r,'a','b');assert.deepEqual(r.host_ids,['b']);
+assert.equal(r.nodes.length,2);assert(r.nodes.every(n=>n.host_id==='b'));assert.equal(r.nodes[0].affinity.mode,'none');
+assert.equal(r.nodes[1].affinity.mode,'pack-numa');assert.equal(r.nodes[0].tenant,'/Root/a');assert.equal(r.nodes[0].location.rack,'r1');
+const n=r.nodes[0];n.name='renamed';ctNormalizeNodePlacement(n);assert.equal(n.location.body,'renamed');
+assert.throws(()=>ctMoveNode(r,0,'logical',['dc','']));
+"""
+        subprocess.check_call([shutil.which("node"), "-e", script], timeout=10)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required")
+    def test_node_rename_rejects_collision_before_mutating_body(self):
+        script = cluster_templates_ui.JS.split("async function renderClusterTemplates")[0] + r"""
+const assert=require('assert');
+const a={name:'a',role:'static',tenant:'',location:{data_center:'dc',rack:'r1',body:'a'}};
+const b={name:'b',role:'dynamic',tenant:'/Root/t',location:{data_center:'dc2',rack:'r2',body:'b'}};
+const record={nodes:[a,b]};
+for(const invalid of ['a',' a ','','   ','x'.repeat(81)]){
+  const before=JSON.stringify(record);assert.throws(()=>ctRenameNode(record,b,invalid));assert.equal(JSON.stringify(record),before);
+}
+ctRenameNode(record,b,' b ');assert.equal(b.name,'b');
+ctRenameNode(record,b,' renamed ');assert.equal(b.name,'renamed');assert.equal(b.location.body,'renamed');
+assert.equal(b.location.data_center,'dc2');assert.equal(b.location.rack,'r2');assert.equal(b.tenant,'/Root/t');
+assert.equal(a.name,'a');assert.equal(a.location.body,'a');
+b.role='cli';ctRenameNode(record,b,'load');assert.equal(b.location.body,'');assert.equal(b.tenant,'');
+"""
+        subprocess.check_call([shutil.which("node"), "-e", script], timeout=10)
 
     def test_shared_affinity_roundtrip(self):
         for scope in ("chiplet", "numa"):

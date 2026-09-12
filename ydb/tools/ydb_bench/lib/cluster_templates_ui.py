@@ -3,9 +3,19 @@
 CSS = r"""
 .ct-hosts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:16px}
 .ct-host{padding:12px;background:var(--panel);border:1px solid var(--line);border-radius:6px;min-width:0}
+.ct-zone-header{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem}
+.ct-zone-header>strong{min-width:0;overflow-wrap:anywhere}
 .ct-node{display:block;width:100%;text-align:left;margin:8px 0;padding:10px;overflow-wrap:anywhere}
 .ct-node span{display:block;color:var(--muted);margin-top:4px}
 .ct-node[aria-pressed=true]{border-color:var(--accent);box-shadow:inset 3px 0 var(--accent)}
+.ct-node[draggable=true]{cursor:grab}.ct-host.ct-drop{outline:2px solid var(--accent);background:var(--panel)}
+.ct-empty{color:var(--muted);padding:14px 0}.ct-placement-tabs{display:flex;gap:.35rem;margin:16px 0;border-bottom:1px solid var(--line)}
+.ct-placement-tabs button{padding:.6rem .8rem;border:1px solid transparent;border-radius:6px 6px 0 0;background:transparent;color:var(--muted);margin-bottom:-1px}
+.ct-placement-tabs button[aria-pressed=true]{background:#fff;color:var(--text);font-weight:650;border-color:var(--line);border-bottom-color:#fff}
+.ct-rack{margin-top:12px;padding:10px;border:1px solid var(--line);border-radius:4px;min-height:70px}
+.ct-dialog{width:min(440px,calc(100vw - 32px));border:1px solid var(--line);border-radius:6px;padding:20px}
+.ct-dialog::backdrop{background:#0004}
+.ct-create-actions{justify-content:flex-end}
 .ct-editor{border-top:1px solid var(--line);margin-top:20px;padding-top:16px}
 .ct-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(190px,100%),1fr));gap:12px}
 .ct-fields label{display:grid;gap:5px;min-width:0}.ct-fields input,.ct-fields select{width:100%;min-width:0}
@@ -88,10 +98,63 @@ async function ctResolvePlacements(nodes,load){
   }));
   return result;
 }
+function ctMoveNode(record,index,kind,target,resetManual=false){
+  const n=record.nodes[index];if(!n)throw Error('Node no longer exists');
+  if(n.role==='cli'&&kind!=='physical')throw Error('CLI load generators only have physical placement');
+  if(kind==='physical'){
+    if(!record.host_ids.includes(target))throw Error('Select a template host');
+    if(n.host_id===target)return;
+    if(n.affinity.kind==='manual'&&!resetManual)throw Error('Clear the manual CPU mask before moving to another host');
+    if(n.affinity.kind==='manual')n.affinity={kind:'strategy',mode:'none',count:n.vcpu||8};
+    n.host_id=target;
+  }else if(kind==='logical'){
+    const [dc,rack]=target;
+    if((dc&&!record.data_centers.some(d=>d.name===dc&&(!rack||d.racks.includes(rack))))||(!dc&&rack))throw Error('Unknown rack');
+    if(dc&&!rack)throw Error('Select a rack');
+    n.location={data_center:dc,rack,body:rack?n.name:''};
+  }else if(kind==='tenants'){
+    if(n.role==='static')throw Error('Static nodes are shared cluster infrastructure');
+    if(target&&!record.tenants.some(t=>t.path===target))throw Error('Unknown tenant');
+    n.tenant=target;
+  }else throw Error('Unknown placement view');
+}
 function ctDefaultNode(host,role,index){
   return {name:role+'-'+index,role,host_id:host,binary:'bundled',vcpu:8,
     actor_system:{use_shared_threads:false,use_united_pool:false,use_ring_queue:true},
     sector_map:{count:1,size_gib:64},affinity:{kind:'strategy',mode:'none',count:8}};
+}
+function ctNormalizeNodePlacement(n){
+  n.location??={data_center:'',rack:'',body:''};n.tenant??='';
+  if(n.role==='cli')n.location={data_center:'',rack:'',body:''};
+  if(n.role!=='dynamic')n.tenant='';
+  if(n.role!=='cli')n.location.body=n.location.rack?n.name:'';
+}
+function ctRenameNode(record,node,value){
+  const name=value.trim();
+  if(!name||name.length>80)throw Error('Node name must contain 1 to 80 characters');
+  if(record.nodes.some(other=>other!==node&&other.name.trim()===name))throw Error('Node names must be unique');
+  node.name=name;ctNormalizeNodePlacement(node);
+}
+function ctRemoveLocation(record,dcName,rack){
+  const dc=record.data_centers.find(d=>d.name===dcName);
+  if(!dc||rack!==undefined&&!dc.racks.includes(rack))throw Error('Location no longer exists');
+  record.nodes.forEach(n=>{
+    if(n.location?.data_center===dcName&&(rack===undefined||n.location.rack===rack))n.location={data_center:'',rack:'',body:''};
+  });
+  if(rack===undefined)record.data_centers=record.data_centers.filter(d=>d!==dc);
+  else dc.racks=dc.racks.filter(r=>r!==rack);
+}
+function ctRemoveTenant(record,path){
+  if(!record.tenants.some(t=>t.path===path))throw Error('Tenant no longer exists');
+  record.nodes.forEach(n=>{if(n.tenant===path)n.tenant=''});
+  record.tenants=record.tenants.filter(t=>t.path!==path);
+}
+function ctRemoveHost(record,host,target){
+  if(!record.host_ids.includes(host))throw Error('Host no longer exists');
+  const nodes=record.nodes.filter(n=>n.host_id===host);
+  if(nodes.length&&(!record.host_ids.includes(target)||target===host))throw Error('Select another template host for these nodes');
+  nodes.forEach(n=>ctMoveNode(record,record.nodes.indexOf(n),'physical',target,true));
+  record.host_ids=record.host_ids.filter(h=>h!==host);
 }
 function ctAffinityLabel(value){const a=ctNormalizeAffinity(value);return a.kind==='manual'?'CPU '+cpuRanges(a.cpus):
   a.mode==='none'?'No pinning':a.mode+' · '+a.count+' CPU';}
@@ -113,11 +176,17 @@ async function renderClusterTemplates(id){
       return;
     }
     let record=id==='new'?{name:'New cluster',nodes:[ctDefaultNode(directory.local.id,'static',1),
-      ctDefaultNode(hosts[1]?.id||directory.local.id,'dynamic',1),ctDefaultNode(directory.local.id,'cli',1)]}:
+      ctDefaultNode(directory.local.id,'dynamic',1),ctDefaultNode(directory.local.id,'cli',1)]}:
       JSON.parse(JSON.stringify(records.find(r=>r.id===id)||null));
     if(!record)throw Error('Template no longer exists');
     record.nodes.forEach(n=>n.affinity=ctNormalizeAffinity(n.affinity));
-    let selected=0,saving=false;
+    record.host_ids??=[...new Set(record.nodes.map(n=>n.host_id))];record.data_centers??=[];record.tenants??=[];
+    record.nodes.forEach(ctNormalizeNodePlacement);
+    record.nodes.forEach(n=>{
+      const dc=record.data_centers.find(dc=>dc.name===n.location.data_center);
+      if(dc&&!n.location.rack){if(!dc.racks.length)dc.racks.push('rack-1');n.location.rack=dc.racks[0];ctNormalizeNodePlacement(n)}
+    });
+    let selected=0,saving=false,view='physical',dragged=null;
     let previewVersion=0;
     const topology=async(host,affinity,excluded=[])=>{
       const query=affinity?.kind==='strategy'?'?mode='+enc(affinity.mode)+'&cpus='+enc(affinity.count)+'&exclude='+enc(excluded.join(',')):'';
@@ -134,27 +203,86 @@ async function renderClusterTemplates(id){
           target.className=p.supported?'':'error'}
       });
     }
+    function dialog(title,fields,submit){
+      const pop=document.createElement('dialog');pop.className='ct-dialog';pop.setAttribute('aria-label',title);
+      pop.innerHTML='<form><h3>'+esc(title)+'</h3><div class=ct-fields>'+fields+'</div><p class=error role=alert></p>'+
+        '<div class=ct-pop-footer><button type=button>Cancel</button><button class=primary type=submit>'+esc(title)+'</button></div></form>';
+      app.appendChild(pop);pop.onclose=()=>pop.remove();pop.querySelector('[type=button]').onclick=()=>pop.close();
+      pop.querySelector('form').onsubmit=e=>{e.preventDefault();try{submit(new FormData(e.currentTarget));pop.close();draw()}
+        catch(error){pop.querySelector('[role=alert]').textContent=error.message}};pop.showModal();
+    }
+    function move(index,kind,target){
+      const n=record.nodes[index];
+      if(kind==='physical'&&n.host_id!==target&&n.affinity.kind==='manual'){
+        draw();
+        dialog('Move node','<p>Move '+esc(n.name)+' to '+esc(hostName(target))+' and clear its manual CPU mask? '+
+          'Select affinity again on the destination host.</p>',()=>ctMoveNode(record,index,kind,target,true));return;
+      }
+      try{ctMoveNode(record,index,kind,target);draw()}catch(e){app.querySelector('#ct-error').innerHTML=displayError(e)}
+    }
     function draw(){
       if(!active())return;
+      if(view!=='physical'&&record.nodes[selected]?.role==='cli')selected=record.nodes.findIndex(n=>n.role!=='cli');
+      if(view==='physical'&&selected<0&&record.nodes.length)selected=0;
       const n=record.nodes[selected];
-      const groups=[...new Set(record.nodes.map(n=>n.host_id))];
+      const targets=[];
+      const card=(node,i)=>'<button class=ct-node draggable=true data-ct-node="'+i+'" aria-pressed="'+(selected===i)+'">'+esc(node.name)+' · '+esc(node.role)+
+        '<span>'+esc(hostName(node.host_id))+(node.role==='cli'?' · Load generator':
+        ' · '+esc([node.location?.data_center,node.location?.rack,node.location?.body].filter(Boolean).join(' / ')||'No logical location')+
+        ' · '+esc(node.role==='static'?'Shared infrastructure':node.tenant||'No tenant'))+'</span>'+
+        '<span>'+(node.role==='cli'?'':esc(node.vcpu)+' vCPU · ')+esc(ctAffinityLabel(node.affinity))+'</span>'+
+        '<span data-ct-plan="'+i+'">Calculating placement…</span></button>';
+      const cards=filter=>record.nodes.map((node,i)=>(view==='physical'||node.role!=='cli')&&filter(node)?card(node,i):'').join('')||'<p class=ct-empty>No nodes</p>';
+      const zone=(title,target,filter,actions='',description='')=>{
+        const index=targets.push(target)-1;
+        const content=view==='logical'&&target[1]?record.nodes.map((node,i)=>node.role!=='cli'&&filter(node)?
+          '<div class=ct-rack><span class=muted>Body · '+esc(node.name)+'</span>'+card(node,i)+'</div>':'').join('')||
+          '<p class=ct-empty>No nodes</p>':cards(filter);
+        return '<section class=ct-host data-ct-drop="'+index+'"><div class=ct-zone-header><strong>'+esc(title)+'</strong>'+
+          (actions?'<div class=runs-actions>'+actions+'</div>':'')+'</div>'+
+          (description?'<p class=muted>'+esc(description)+'</p>':'')+content+'</section>';
+      };
+      let layout='';
+      if(view==='physical')layout=record.host_ids.map((host,i)=>zone(hostName(host),host,node=>node.host_id===host,
+        '<button data-ct-delete-host="'+i+'">Remove host</button>')).join('');
+      if(view==='logical'){
+        layout=record.data_centers.map((dc,i)=>'<section class=ct-host><div class=runs-toolbar><strong>'+esc(dc.name)+
+          '</strong><div class=runs-actions><button data-ct-rack="'+i+'">+ Rack</button>'+
+          '<button data-ct-delete-dc="'+i+'">Delete DC</button></div></div>'+dc.racks.map((rack,j)=>
+            zone(rack,[dc.name,rack],node=>node.location?.data_center===dc.name&&node.location?.rack===rack,
+              '<button data-ct-delete-rack="'+i+':'+j+'">Delete rack</button>')).join('')+'</section>').join('')+
+          (record.nodes.some(n=>n.role!=='cli'&&!n.location?.data_center)?zone('Unassigned',['',''],node=>!node.location?.data_center):'');
+      }
+      if(view==='tenants')layout=record.tenants.map((tenant,i)=>zone(tenant.path,tenant.path,node=>node.role!=='static'&&node.tenant===tenant.path,
+        '<button data-ct-tenant="'+i+'">Edit</button><button data-ct-delete-tenant="'+i+'">Delete tenant</button>',
+        tenant.storage_kind.toUpperCase()+' · '+tenant.storage_groups+' storage groups')).join('')+
+        (record.nodes.some(n=>n.role==='dynamic'&&!n.tenant)?zone('Unassigned','',node=>node.role==='dynamic'&&!node.tenant):'')+
+        '<section class=ct-host><strong>Shared cluster infrastructure</strong>'+cards(node=>node.role==='static')+'</section>';
       app.innerHTML=shell('cluster-templates',
         '<div class=runs-toolbar><a href="#cluster-templates">Cluster templates</a><div class=runs-actions>'+
         '<button id=ct-copy>Copy template</button>'+(record.id?'<button id=ct-delete>Delete</button>':'')+
         '<button id=ct-save class=primary>Save template</button></div></div><div id=ct-error></div>'+
         '<div class=ct-fields><label>Template name<input id=ct-name maxlength=200 value="'+esc(record.name)+'"></label></div>'+
-        '<p class=muted>Placement only · does not start a cluster</p><div class=ct-hosts>'+groups.map(host=>
-          '<section class=ct-host><strong>'+esc(hostName(host))+'</strong>'+record.nodes.map((node,i)=>node.host_id!==host?'':
-            '<button class=ct-node data-ct-node="'+i+'" aria-pressed="'+(selected===i)+'">'+esc(node.name)+' · '+esc(node.role)+
-            '<span>'+(node.role==='cli'?'':esc(node.vcpu)+' vCPU · ')+esc(ctAffinityLabel(node.affinity))+'</span>'+
-            '<span data-ct-plan="'+i+'">Calculating placement…</span></button>').join('')+
-          '</section>').join('')+'</div><p><button id=ct-add>Add node</button></p>'+
+        '<p class=muted>Placement only · does not start a cluster</p><div class="profile-tabs ct-placement-tabs">'+
+        ['physical','logical','tenants'].map(v=>'<button data-ct-view="'+v+'" class="'+(view===v?'active':'')+'" aria-pressed="'+(view===v)+'">'+
+          v[0].toUpperCase()+v.slice(1)+'</button>').join('')+'</div><div class="runs-toolbar ct-create-actions">'+
+        (view==='physical'?'<button id=ct-add '+(!record.host_ids.length?'disabled':'')+'>Add node</button>':'')+'<button id=ct-group>'+
+        (view==='physical'?'Add host':view==='logical'?'+ DC':'Create tenant')+'</button></div><div class=ct-hosts>'+layout+'</div>'+
         (n?'<section class=ct-editor><div class=runs-toolbar><strong>'+esc(n.name)+'</strong><div class=runs-actions>'+
-          '<button id=ct-duplicate>Duplicate node</button><button id=ct-remove>Remove node</button></div></div><div class=ct-fields>'+
+          (view==='physical'?'<button id=ct-duplicate>Duplicate node</button>':'')+
+          '<button id=ct-remove>Remove node</button></div></div><div class=ct-fields>'+
           '<label>Name<input data-ct-field=name maxlength=80 value="'+esc(n.name)+'"></label><label>Type<select data-ct-field=role>'+
           ['static','dynamic','cli'].map(v=>'<option '+(n.role===v?'selected':'')+'>'+v+'</option>').join('')+'</select></label>'+
           '<label>Host<select data-ct-field=host_id>'+(!hosts.some(h=>h.id===n.host_id)?'<option value="'+esc(n.host_id)+'">Unavailable host</option>':'')+
-          hosts.map(h=>'<option value="'+esc(h.id)+'" '+(n.host_id===h.id?'selected':'')+'>'+esc(h.name)+'</option>').join('')+'</select></label>'+
+          hosts.filter(h=>record.host_ids.includes(h.id)).map(h=>'<option value="'+esc(h.id)+'" '+(n.host_id===h.id?'selected':'')+'>'+esc(h.name)+'</option>').join('')+'</select></label>'+
+          (n.role==='cli'?'':'<label>DC<select data-ct-location=data_center><option value="">Unassigned</option>'+record.data_centers.map(dc=>
+            '<option '+(n.location?.data_center===dc.name?'selected':'')+'>'+esc(dc.name)+'</option>').join('')+'</select></label>'+
+          '<label>Rack<select data-ct-location=rack '+(!n.location?.data_center?'disabled':'')+'>'+
+          (record.data_centers.find(dc=>dc.name===n.location?.data_center)?.racks||[]).map(rack=>
+            '<option '+(n.location?.rack===rack?'selected':'')+'>'+esc(rack)+'</option>').join('')+'</select></label>'+
+          '<label>Body<input readonly value="'+esc(n.location?.rack?n.name:'Unassigned')+'"></label>')+
+          (n.role!=='dynamic'?'':'<label>Tenant<select id=ct-node-tenant><option value="">Unassigned</option>'+record.tenants.map(t=>
+            '<option '+(n.tenant===t.path?'selected':'')+'>'+esc(t.path)+'</option>').join('')+'</select></label>')+
           '<label>Binary · bundled, version or path<input data-ct-field=binary value="'+esc(n.binary)+'"></label>'+
           (n.role!=='cli'?'<label>Actor-system vCPU<input type=number min=1 max=65536 data-ct-field=vcpu value="'+n.vcpu+'"></label>':'')+
           '<label>CPU affinity<button id=ct-affinity aria-haspopup=dialog>'+esc(ctAffinityLabel(n.affinity))+'</button></label>'+
@@ -164,22 +292,104 @@ async function renderClusterTemplates(id){
             '<label><input type=checkbox data-ct-flag="'+k+'" '+(n.actor_system[k]?'checked':'')+'>'+esc(k)+'</label>').join('')+'</div>':'')+'</section>':''));
       const error=e=>{if(active())app.querySelector('#ct-error').innerHTML=displayError(e)};
       app.querySelector('#ct-name').oninput=e=>record.name=e.target.value;
-      app.querySelectorAll('[data-ct-node]').forEach(b=>b.onclick=()=>{selected=+b.dataset.ctNode;draw()});
+      app.querySelectorAll('[data-ct-view]').forEach(b=>b.onclick=()=>{view=b.dataset.ctView;draw()});
+      const clearDrag=()=>{dragged=null;app.querySelectorAll('.ct-drop').forEach(b=>b.classList.remove('ct-drop'))};
+      app.onkeydown=e=>{if(e.key==='Escape')clearDrag()};
+      app.querySelectorAll('[data-ct-node]').forEach(b=>{
+        b.onclick=()=>{selected=+b.dataset.ctNode;draw()};
+        b.ondragstart=e=>{dragged=+b.dataset.ctNode;e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',record.nodes[dragged].name)};
+        b.ondragend=clearDrag;
+      });
+      app.querySelectorAll('[data-ct-drop]').forEach(b=>{
+        const valid=()=>dragged!==null&&(view==='physical'||record.nodes[dragged].role!=='cli')&&(view!=='tenants'||record.nodes[dragged].role==='dynamic');
+        b.ondragover=e=>{if(valid()){e.preventDefault();e.stopPropagation();e.dataTransfer.dropEffect='move';b.classList.add('ct-drop')}};
+        b.ondragleave=e=>{if(!b.contains(e.relatedTarget))b.classList.remove('ct-drop')};
+        b.ondrop=e=>{e.preventDefault();e.stopPropagation();if(valid()){const index=dragged;clearDrag();move(index,view,targets[+b.dataset.ctDrop])}};
+      });
+      app.querySelectorAll('[data-ct-location]').forEach(f=>f.onchange=()=>{
+        if(f.dataset.ctLocation==='data_center'){
+          const dc=record.data_centers.find(dc=>dc.name===f.value);
+          if(dc&&!dc.racks.length)dc.racks.push('rack-1');
+          move(selected,'logical',[f.value,dc?.racks[0]||'']);
+        }else move(selected,'logical',[n.location.data_center,f.value]);
+      });
+      const tenantSelect=app.querySelector('#ct-node-tenant');if(tenantSelect)tenantSelect.onchange=()=>move(selected,'tenants',tenantSelect.value);
       app.querySelectorAll('[data-ct-field]').forEach(f=>f.onchange=()=>{
-        const field=f.dataset.ctField;n[field]=f.type==='number'?Number(f.value):f.value;
-        if(field==='role'){n.vcpu??=8;n.actor_system??=ctDefaultNode('',n.role,1).actor_system;n.sector_map??={count:1,size_gib:64}}
-        if(field==='host_id')n.affinity={kind:'strategy',mode:'none',count:8};
+        const field=f.dataset.ctField;if(field==='host_id'){move(selected,'physical',f.value);return}
+        if(field==='name'){
+          try{ctRenameNode(record,n,f.value);draw()}catch(e){draw();error(e)}
+          return;
+        }
+        n[field]=f.type==='number'?Number(f.value):f.value;
+        if(field==='role'){n.vcpu??=8;n.actor_system??=ctDefaultNode('',n.role,1).actor_system;n.sector_map??={count:1,size_gib:64};ctNormalizeNodePlacement(n)}
         draw();
       });
       app.querySelectorAll('[data-ct-disk]').forEach(f=>f.onchange=()=>n.sector_map[f.dataset.ctDisk]=Number(f.value));
       app.querySelectorAll('[data-ct-flag]').forEach(f=>f.onchange=()=>n.actor_system[f.dataset.ctFlag]=f.checked);
       const unique=role=>{let i=1;while(record.nodes.some(n=>n.name===role+'-'+i))i++;return role+'-'+i};
-      app.querySelector('#ct-add').onclick=()=>{if(record.nodes.length>=64)return error('At most 64 nodes');
-        const node=ctDefaultNode(directory.local.id,'dynamic',1);node.name=unique('dynamic');record.nodes.push(node);selected=record.nodes.length-1;draw()};
+      const add=app.querySelector('#ct-add');if(add)add.onclick=()=>{if(record.nodes.length>=64)return error('At most 64 nodes');
+        const node=ctDefaultNode(record.host_ids[0],'dynamic',1);node.location={data_center:'',rack:'',body:''};node.tenant='';
+        node.name=unique('dynamic');record.nodes.push(node);selected=record.nodes.length-1;draw()};
+      const addName=(title,existing,submit)=>dialog(title,'<label>Name<input name=name required maxlength=80 autofocus></label>',data=>{
+        const name=data.get('name').trim();if(!name||existing.includes(name))throw Error('Enter a unique name');
+        if(existing.length>=64)throw Error('At most 64 entries');submit(name);
+      });
+      const editTenant=index=>{
+        const t=record.tenants[index]||{path:'/Root/',storage_kind:'ssd',storage_groups:1};
+        dialog(index===undefined?'Create tenant':'Edit tenant','<label>Database path<input name=path required maxlength=80 value="'+esc(t.path)+'"></label>'+
+          '<label>Storage kind<select name=kind>'+['ssd','hdd'].map(k=>'<option '+(t.storage_kind===k?'selected':'')+'>'+k+'</option>').join('')+'</select></label>'+
+          '<label>Storage groups<input name=groups type=number min=1 max=64 required value="'+t.storage_groups+'"></label>',data=>{
+            const path=data.get('path').trim();
+            if(!/^\/Root\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/.test(path))throw Error('Use /Root/name with valid path components');
+            if(record.tenants.some((v,i)=>i!==index&&v.path===path))throw Error('Tenant already exists');
+            const value={path,storage_kind:data.get('kind'),storage_groups:Number(data.get('groups'))};
+            if(index===undefined){if(record.tenants.length>=64)throw Error('At most 64 tenants');record.tenants.push(value)}
+            else{record.tenants[index]=value;record.nodes.forEach(n=>{if(n.tenant===t.path)n.tenant=path})}
+          });
+      };
+      app.querySelectorAll('[data-ct-tenant]').forEach(b=>b.onclick=()=>editTenant(+b.dataset.ctTenant));
+      app.querySelectorAll('[data-ct-delete-tenant]').forEach(b=>b.onclick=()=>{
+        const t=record.tenants[+b.dataset.ctDeleteTenant],count=record.nodes.filter(n=>n.tenant===t.path).length;
+        const remove=()=>ctRemoveTenant(record,t.path);
+        if(count)dialog('Delete tenant','<p>'+count+' nodes will have no tenant. Physical and logical placement will be kept.</p>',remove);
+        else{remove();draw()}
+      });
+      app.querySelectorAll('[data-ct-delete-host]').forEach(b=>b.onclick=()=>{
+        const host=record.host_ids[+b.dataset.ctDeleteHost],nodes=record.nodes.filter(n=>n.host_id===host);
+        if(!nodes.length){ctRemoveHost(record,host);draw();return}
+        const destinations=record.host_ids.filter(h=>h!==host);
+        if(!destinations.length){error('Add another host to the template before removing a host with nodes');return}
+        dialog('Remove host','<p>Move '+nodes.length+' nodes to another host. Logical placement and tenants will be kept. '+
+          'Manual CPU masks will be cleared; placement strategies will be recalculated.</p><label>Destination host<select name=host>'+
+          destinations.map(h=>'<option value="'+esc(h)+'">'+esc(hostName(h))+'</option>').join('')+'</select></label>',
+          data=>ctRemoveHost(record,host,data.get('host')));
+      });
+      app.querySelectorAll('[data-ct-rack]').forEach(b=>b.onclick=()=>{
+        const dc=record.data_centers[+b.dataset.ctRack];addName('Add rack',dc.racks,name=>dc.racks.push(name));
+      });
+      const deleteLocation=(dc,rack)=>{
+        const count=record.nodes.filter(n=>n.location?.data_center===dc.name&&(rack===undefined||n.location.rack===rack)).length;
+        const remove=()=>ctRemoveLocation(record,dc.name,rack);
+        if(count)dialog(rack===undefined?'Delete DC':'Delete rack','<p>'+count+' nodes will move to Unassigned. '+
+          'Physical placement and tenant assignments will be kept.</p>',remove);
+        else{remove();draw()}
+      };
+      app.querySelectorAll('[data-ct-delete-dc]').forEach(b=>b.onclick=()=>deleteLocation(record.data_centers[+b.dataset.ctDeleteDc]));
+      app.querySelectorAll('[data-ct-delete-rack]').forEach(b=>b.onclick=()=>{
+        const [i,j]=b.dataset.ctDeleteRack.split(':').map(Number),dc=record.data_centers[i];deleteLocation(dc,dc.racks[j]);
+      });
+      const group=app.querySelector('#ct-group'),available=hosts.filter(h=>!record.host_ids.includes(h.id));
+      group.disabled=view==='physical'&&!available.length;
+      group.onclick=()=>{
+        if(view==='tenants'){editTenant();return}
+        if(view==='logical'){addName('Add DC',record.data_centers.map(dc=>dc.name),name=>record.data_centers.push({name,racks:['rack-1']}));return}
+        dialog('Add host','<label>Host<select name=host>'+available.map(h=>'<option value="'+esc(h.id)+'">'+esc(h.name)+'</option>').join('')+'</select></label>',
+          data=>{if(record.host_ids.length>=64)throw Error('At most 64 hosts');record.host_ids.push(data.get('host'))});
+      };
       if(n){
         app.querySelector('#ct-remove').onclick=()=>{record.nodes.splice(selected,1);selected=Math.max(0,selected-1);draw()};
-        app.querySelector('#ct-duplicate').onclick=()=>{if(record.nodes.length>=64)return error('At most 64 nodes');
-          const copy=JSON.parse(JSON.stringify(n));copy.name=unique(n.role);record.nodes.push(copy);selected=record.nodes.length-1;draw()};
+        const duplicate=app.querySelector('#ct-duplicate');if(duplicate)duplicate.onclick=()=>{if(record.nodes.length>=64)return error('At most 64 nodes');
+          const copy=JSON.parse(JSON.stringify(n));copy.name=unique(n.role);ctNormalizeNodePlacement(copy);record.nodes.push(copy);selected=record.nodes.length-1;draw()};
         app.querySelector('#ct-affinity').onclick=e=>openAffinity(n,e.currentTarget);
       }
       app.querySelector('#ct-copy').onclick=()=>{delete record.id;delete record.revision;record.name+=' copy';draw()};

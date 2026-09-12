@@ -1,6 +1,7 @@
 """Saved placement specifications; deliberately does not launch cluster processes."""
 
 import json
+import re
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -51,6 +52,15 @@ def validate_affinity(value):
     return result
 
 
+def _names(value, label):
+    if not isinstance(value, list) or len(value) > 64:
+        raise BenchmarkError("{} must be a list of at most 64 entries".format(label))
+    result = [_text(item, label, 80) for item in value]
+    if len(set(result)) != len(result):
+        raise BenchmarkError("{} must be unique".format(label))
+    return result
+
+
 def validate_template(value, host_ids):
     if not isinstance(value, dict):
         raise BenchmarkError("Template must be an object")
@@ -58,6 +68,41 @@ def validate_template(value, host_ids):
     nodes = value.get("nodes")
     if not isinstance(nodes, list) or not 1 <= len(nodes) <= 64:
         raise BenchmarkError("A template must contain 1 to 64 nodes")
+    selected_hosts = value.get("host_ids")
+    if selected_hosts is None:
+        selected_hosts = list(
+            dict.fromkeys(
+                node["host_id"] for node in nodes if isinstance(node, dict) and isinstance(node.get("host_id"), str)
+            )
+        )
+    selected_hosts = _names(selected_hosts, "Template hosts")
+    if any(host not in host_ids for host in selected_hosts):
+        raise BenchmarkError("Select registered template hosts")
+    centers = value.get("data_centers", [])
+    if not isinstance(centers, list) or len(centers) > 64 or any(not isinstance(dc, dict) for dc in centers):
+        raise BenchmarkError("Data centers must be a list of at most 64 objects")
+    dc_names = _names([dc.get("name") for dc in centers], "Data center names")
+    centers = [
+        {"name": name, "racks": _names(dc.get("racks", []), "Rack names")} for name, dc in zip(dc_names, centers)
+    ]
+    racks = {dc["name"]: dc["racks"] for dc in centers}
+    tenants = value.get("tenants", [])
+    if not isinstance(tenants, list) or len(tenants) > 64 or any(not isinstance(t, dict) for t in tenants):
+        raise BenchmarkError("Tenants must be a list of at most 64 objects")
+    paths = _names([t.get("path") for t in tenants], "Tenant paths")
+    normalized_tenants = []
+    for path, tenant in zip(paths, tenants):
+        if not re.fullmatch(r"/Root/[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*", path):
+            raise BenchmarkError("Tenant path must start with /Root/ and contain valid path components")
+        if tenant.get("storage_kind") not in ("ssd", "hdd"):
+            raise BenchmarkError("Tenant storage kind must be ssd or hdd")
+        normalized_tenants.append(
+            {
+                "path": path,
+                "storage_kind": tenant["storage_kind"],
+                "storage_groups": _integer(tenant.get("storage_groups"), "Storage groups", 64),
+            }
+        )
     result, names = [], set()
     for node in nodes:
         if not isinstance(node, dict):
@@ -69,7 +114,7 @@ def validate_template(value, host_ids):
         role, host = node.get("role"), node.get("host_id")
         if role not in ("static", "dynamic", "cli"):
             raise BenchmarkError("Unknown node role")
-        if not isinstance(host, str) or host not in host_ids:
+        if not isinstance(host, str) or host not in selected_hosts:
             raise BenchmarkError("Select a registered host for every node")
         item = {
             "name": node_name,
@@ -78,6 +123,25 @@ def validate_template(value, host_ids):
             "binary": _text(node.get("binary"), "Binary path or version", 1000),
             "affinity": validate_affinity(node.get("affinity")),
         }
+        location = node.get("location", {})
+        if not isinstance(location, dict):
+            raise BenchmarkError("Logical location must be an object")
+        dc, rack, body = (location.get(key, "") for key in ("data_center", "rack", "body"))
+        if any(not isinstance(part, str) for part in (dc, rack, body)):
+            raise BenchmarkError("Logical location fields must be strings")
+        if role == "cli" and any((dc, rack, body)):
+            raise BenchmarkError("CLI load generators cannot have a logical location")
+        if (dc and dc not in racks) or (rack and rack not in racks.get(dc, [])) or (body and not rack):
+            raise BenchmarkError("Select an existing data center and rack for the logical server")
+        if dc and not rack:
+            if not racks[dc]:
+                racks[dc].append("rack-1")
+            rack = racks[dc][0]
+        item["location"] = {"data_center": dc, "rack": rack, "body": node_name if rack else ""}
+        tenant = node.get("tenant", "")
+        if not isinstance(tenant, str) or (tenant and (tenant not in paths or role != "dynamic")):
+            raise BenchmarkError("Only dynamic nodes can be assigned to an existing tenant")
+        item["tenant"] = tenant
         if role != "cli":
             item["vcpu"] = _integer(node.get("vcpu"), "Actor-system vCPU")
             flags = node.get("actor_system", {})
@@ -98,7 +162,14 @@ def validate_template(value, host_ids):
                 "size_gib": _integer(disk.get("size_gib"), "SectorMap size", 1048576),
             }
         result.append(item)
-    return {"schema_version": 1, "name": name, "nodes": result}
+    return {
+        "schema_version": 2,
+        "name": name,
+        "nodes": result,
+        "host_ids": selected_hosts,
+        "data_centers": centers,
+        "tenants": normalized_tenants,
+    }
 
 
 class ClusterTemplateStore:

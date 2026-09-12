@@ -172,7 +172,7 @@ namespace NKikimr::NStorage {
                         return ReplaceStorageConfig(op.Command.GetReplaceStorageConfig());
 
                     case TQuery::kBootstrapCluster:
-                        return BootstrapCluster(op.Command.GetBootstrapCluster().GetSelfAssemblyUUID());
+                        return BootstrapCluster(op.Command.GetBootstrapCluster());
 
                     case TQuery::kSwitchBridgeClusterState:
                         return SwitchBridgeClusterState(op.Command.GetSwitchBridgeClusterState());

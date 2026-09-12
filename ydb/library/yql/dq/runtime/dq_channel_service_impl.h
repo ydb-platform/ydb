@@ -803,6 +803,11 @@ public:
 
     void HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
 
+    // A debug session is created quiescent and discovers its peer only when this is called, so that every
+    // debug session of a test can be registered first. A discovery makes the service of the peer create a
+    // session of its own, and CreateDebugNodeState refuses to replace one.
+    void StartSession();
+
     void PauseChannelData();
     void ResumeChannelData();
     void PauseChannelAck();
@@ -816,6 +821,16 @@ public:
 
     std::atomic<bool> ChannelDataPaused;
     std::atomic<bool> ChannelAckPaused;
+    // Lose exactly the data message with this SeqNo and nothing else, 0 for none. Unlike DataLossProbability
+    // it is applied when the message would be delivered to the session rather than when it arrives, so a
+    // message which is already waiting in the pending queue can still be named - which is what makes the
+    // injection independent of how fast the peer happened to deliver it.
+    std::atomic<ui64> DropDataSeqNo = 0;
+    // Lose the acks which confirm up to this SeqNo, 0 for none. Only an OK ack is ever dropped: a RESEND
+    // is the answer the peer is waiting for and dropping it would stall the session instead of the channel.
+    std::atomic<ui64> DropOkAckUpToSeqNo = 0;
+    // Data which has arrived and has not been delivered to the session yet, for a test to wait on.
+    std::atomic<ui64> PendingDataCount = 0;
     std::atomic<double> DataLossProbability;
     std::atomic<ui64> DataLossCount;
     std::atomic<double> AckLossProbability;
@@ -1325,34 +1340,46 @@ public:
         if (NodeState->ShouldLooseData()) {
             return;
         }
-        if (NodeState->ChannelDataPaused.load()) {
+        // anything which arrives while something is still pending is pending too, or a message would
+        // overtake the ones which arrived before it and a replay of an exact count would be bypassed
+        if (NodeState->ChannelDataPaused.load() || !PendingChannelData.empty()) {
             PendingChannelData.emplace(ev.Release());
-        } else {
-            while (!PendingChannelData.empty()) {
-                NodeState->HandleData(PendingChannelData.front());
-                PendingChannelData.pop();
-            }
-            if (NodeState->IsNullMode()) {
-                NodeState->HandleNullMode(ev);
-            } else {
-                NodeState->HandleData(ev);
-            }
+            NodeState->PendingDataCount++;
+            return;
         }
+        DeliverChannelData(ev);
     }
 
     void Handle(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
         if (NodeState->ShouldLooseAck()) {
             return;
         }
-        if (NodeState->ChannelAckPaused.load()) {
+        if (NodeState->ChannelAckPaused.load() || !PendingChannelAck.empty()) {
             PendingChannelAck.emplace(ev.Release());
-        } else {
-            while (!PendingChannelAck.empty()) {
-                NodeState->HandleAck(PendingChannelAck.front());
-                PendingChannelAck.pop();
-            }
-            NodeState->HandleAck(ev);
+            return;
         }
+        DeliverChannelAck(ev);
+    }
+
+    void DeliverChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
+        if (auto seqNo = NodeState->DropDataSeqNo.load(); seqNo && ev->Get()->Record.GetSeqNo() == seqNo) {
+            NodeState->DropDataSeqNo.store(0);
+            return; // lost on the wire
+        }
+        if (NodeState->IsNullMode()) {
+            NodeState->HandleNullMode(ev);
+        } else {
+            NodeState->HandleData(ev);
+        }
+    }
+
+    void DeliverChannelAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+        if (auto seqNo = NodeState->DropOkAckUpToSeqNo.load(); seqNo && record.GetSeqNo() <= seqNo
+            && record.GetStatus() == NYql::NDqProto::TEvChannelAckV2::OK) {
+            return; // lost on the wire, a RESEND is never dropped
+        }
+        NodeState->HandleAck(ev);
     }
 
     void Handle(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
@@ -1374,22 +1401,23 @@ public:
     void Handle(TEvPrivate::TEvProcessPending::TPtr& ev) {
         auto maxCount = ev->Get()->MaxCount;
 
-        if (!NodeState->ChannelDataPaused.load()) {
+        // A replay of an exact count (maxCount != 0) ignores the pause on purpose: replaying a known number
+        // of messages while the session stays paused is what lets a test reach one state and stop there.
+        // Draining everything (maxCount == 0) is what a resume does, and it respects the pause of the other
+        // queue, which may well still be held.
+        if (maxCount || !NodeState->ChannelDataPaused.load()) {
             while (!PendingChannelData.empty()) {
-                if (NodeState->IsNullMode()) {
-                    NodeState->HandleNullMode(PendingChannelData.front());
-                } else {
-                    NodeState->HandleData(PendingChannelData.front());
-                }
+                DeliverChannelData(PendingChannelData.front());
                 PendingChannelData.pop();
+                NodeState->PendingDataCount--;
                 if (maxCount && --maxCount == 0) {
                     return;
                 }
             }
         }
-        if (!NodeState->ChannelAckPaused.load()) {
+        if (maxCount || !NodeState->ChannelAckPaused.load()) {
             while (!PendingChannelAck.empty()) {
-                NodeState->HandleAck(PendingChannelAck.front());
+                DeliverChannelAck(PendingChannelAck.front());
                 PendingChannelAck.pop();
                 if (maxCount && --maxCount == 0) {
                     return;

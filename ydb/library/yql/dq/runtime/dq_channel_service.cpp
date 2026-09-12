@@ -2377,6 +2377,11 @@ void TDebugNodeState::HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     SendAck(evAck, ev->Cookie);
 }
 
+void TDebugNodeState::StartSession() {
+    ActorSystem->Send(new NActors::IEventHandle(NodeActorId, NodeActorId,
+        new TEvPrivate::TEvReconciliation(GenMajor, GenMinor, ReconciliationCount)));
+}
+
 void TDebugNodeState::PauseChannelData() {
     ChannelDataPaused.store(true);
 }
@@ -2472,7 +2477,9 @@ std::shared_ptr<TDebugNodeState> TDqChannelService::CreateDebugNodeState(ui32 no
     nodeState->LogPrefix = TStringBuilder() << '[' << nodeState->NodeActorId.NodeId() << "=>" << nodeId << "] ";
     NodeStates.emplace(nodeId, nodeState);
     LOG_N(nodeState->LogPrefix << "CREATED/DEBUG, NodeActorId=" << nodeState->NodeActorId);
-    ActorSystem->Send(new NActors::IEventHandle(nodeState->NodeActorId, nodeState->NodeActorId, new TEvPrivate::TEvReconciliation(nodeState->GenMajor, nodeState->GenMinor, nodeState->ReconciliationCount)));
+    // The session discovers its peer only when TDebugNodeState::StartSession is called. Discovering it here
+    // would make the service of the peer create a session of its own before a test has registered the debug
+    // session it means to use there, and the Y_ENSURE above would then fail on that peer.
     return nodeState;
 }
 

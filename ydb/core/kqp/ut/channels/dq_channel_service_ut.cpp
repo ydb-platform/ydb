@@ -645,6 +645,15 @@ struct TSessionTest : public TLoadTest {
         return bytes;
     }
 
+    static std::vector<ui64> GetQueueSeqNos(const std::shared_ptr<TNodeState>& state) {
+        std::lock_guard lock(state->Mutex);
+        std::vector<ui64> result;
+        for (const auto& item : state->Queue) {
+            result.push_back(item->SeqNo);
+        }
+        return result;
+    }
+
     static TString GetReconciliationLog(const std::shared_ptr<TNodeState>& state) {
         std::lock_guard lock(state->Mutex);
         return state->GetReconciliationLog();
@@ -806,6 +815,7 @@ struct TDiscoveryResendTrapTest : public TSessionTest {
 
         // must precede anything which would create a regular receiver session
         auto receiver = Service1->CreateDebugNodeState(senderNodeId);
+        receiver->StartSession();
 
         // warm up: both node sessions are reconciled and idle afterwards
         StartChannel(1, true);
@@ -825,6 +835,11 @@ struct TDiscoveryResendTrapTest : public TSessionTest {
             "the sender did not send 2 messages");
         auto frontSeqNo = GetFrontSeqNo(sender);
 
+        // both of them must have reached the receiver before the reconciliation below: the queue of the
+        // sender only says they were sent, and the replay has nothing to replay until they are there
+        UNIT_ASSERT_C(WaitFor([&]() { return receiver->PendingDataCount.load() >= 2; }, TDuration::Seconds(10)),
+            "the messages did not reach the receiver");
+
         // the discovery of the minor reconciliation must reach the receiver after it has processed c
         std::unique_lock serviceLock(Service1->Mutex);
 
@@ -832,12 +847,11 @@ struct TDiscoveryResendTrapTest : public TSessionTest {
         UNIT_ASSERT_C(WaitFor([&]() { return GetGenMinor(sender) == genMinor + 1; }, TDuration::Seconds(5)),
             "the sender did not start a minor reconciliation");
 
-        // the receiver processes c alone; its ack carries the old GenMinor and is ignored by the sender
-        receiver->ChannelDataPaused.store(false);
+        // the receiver processes c alone; its ack carries the old GenMinor and is ignored by the sender.
+        // The session stays paused throughout: unpausing it would deliver whatever arrives meanwhile as well
         receiver->ProcessPending(1);
         UNIT_ASSERT_C(WaitFor([&]() { return GetInputCount(receiver) == 1; }, TDuration::Seconds(5)),
             "the receiver did not process the 1st message");
-        receiver->ChannelDataPaused.store(true);
         auto confirmedSeqNo = GetConfirmedSeqNo(receiver);
         UNIT_ASSERT_VALUES_EQUAL_C(confirmedSeqNo, frontSeqNo, "the receiver confirmed something else than the queue front");
 
@@ -888,9 +902,13 @@ struct TInflightLeakTest : public TSessionTest {
         auto senderNodeId = Runtime->GetNodeId(0);
         auto receiverNodeId = Runtime->GetNodeId(1);
 
-        // both must precede anything which would create a regular session for the same peer
+        // both must precede anything which would create a regular session for the same peer, and neither
+        // may discover its peer before both are registered - a discovery makes the service of the peer
+        // create a session of its own and CreateDebugNodeState refuses to replace one
         auto sender = Service0->CreateDebugNodeState(receiverNodeId);
         auto receiver = Service1->CreateDebugNodeState(senderNodeId);
+        sender->StartSession();
+        receiver->StartSession();
 
         ProducerSettings = TWorkerSettings{ .MessageCount = 1, .MinMessageSize = 10, .MaxMessageSize = 20 };
         ConsumerSettings = ProducerSettings;
@@ -901,31 +919,30 @@ struct TInflightLeakTest : public TSessionTest {
         WaitSettled(sender);
         UNIT_ASSERT_VALUES_EQUAL_C(sender->InflightBytes.load(), 0, "the warm up already leaked");
 
-        // 4 messages, the producer stalls in the middle for long enough to set the loss up between them
-        ProducerSettings = TWorkerSettings{ .MessageCount = 4, .MinMessageSize = 10, .MaxMessageSize = 20,
-            .PauseMessageIndex = 2, .PauseDelayMs = 2000 };
-        ConsumerSettings = TWorkerSettings{ .MessageCount = 4, .MinMessageSize = 10, .MaxMessageSize = 20 };
+        ProducerSettings = TWorkerSettings{ .MessageCount = 4, .MinMessageSize = 10, .MaxMessageSize = 20 };
+        ConsumerSettings = ProducerSettings;
 
-        // nothing is processed at the receiver until the whole batch is there
+        // nothing is delivered at the receiver until the whole batch is there, so every message of it can be
+        // named below instead of being picked by whichever happens to arrive next
         receiver->PauseChannelData();
         auto channel = StartChannel(2, false);
 
-        // the 1st two messages (plus the leading one of the batch) have arrived and wait in the pending
-        // queue; the next arrival - the 3rd message - is dropped on the wire
-        UNIT_ASSERT_C(WaitFor([&]() { return GetQueueSize(sender) >= 2; }, TDuration::Seconds(5)),
-            "the sender did not send the 1st half of the batch");
-        receiver->SetLossProbability(1.0, 1, 0.0, 0);
-
-        // the batch is 4 messages plus the finish one
-        UNIT_ASSERT_C(WaitFor([&]() { return GetQueueSize(sender) >= 5; }, TDuration::Seconds(10)),
-            "the sender did not send the whole batch");
-        auto frontSeqNo = GetFrontSeqNo(sender);
+        // the batch is 4 messages plus the finish one; no ack can come back while the receiver is paused,
+        // so the sender holds all 5 of them
+        UNIT_ASSERT_C(WaitFor([&]() { return receiver->PendingDataCount.load() >= 5; }, TDuration::Seconds(10)),
+            "the batch did not reach the receiver");
+        auto seqNos = GetQueueSeqNos(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(seqNos.size(), 5, "the sender does not hold the whole batch");
+        auto frontSeqNo = seqNos.front();
         auto queueBytes = GetQueueBytes(sender);
         UNIT_ASSERT_VALUES_EQUAL_C(sender->InflightBytes.load(), queueBytes, "unexpected inflight bytes before the loss");
 
-        // the acks of the 1st two messages never reach the sender, so they stay in its queue; the
-        // receiver confirms them, misses the 3rd message and asks to resend from it
-        sender->SetLossProbability(0.0, 0, 1.0, 2);
+        // the 3rd message of the batch is lost on the wire and the acks of the 1st two never reach the
+        // sender, so it still holds them when the receiver, which has confirmed both, asks to resend from
+        // the 3rd - the ack which pops a prefix and then returns through StartReconciliation(false, 'R')
+        receiver->DropDataSeqNo.store(seqNos[2]);
+        sender->DropOkAckUpToSeqNo.store(seqNos[1]);
+
         receiver->ResumeChannelData();
         StartConsumer(channel);
 

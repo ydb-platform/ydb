@@ -1,3 +1,4 @@
+$round = ($x,$_y) -> {return $x;};
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
 PRAGMA YqlSelect = 'force';
